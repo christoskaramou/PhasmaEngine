@@ -254,10 +254,14 @@ namespace pe
         bool IsPushConstantBinding(const D3D12_SHADER_INPUT_BIND_DESC &binding, const SourceBindings &sourceBindings)
         {
             const std::string name = binding.Name ? binding.Name : "";
-            return binding.Type == D3D_SIT_CBUFFER &&
-                   binding.BindPoint == 0 &&
-                   binding.Space == 0 &&
-                   sourceBindings.pushConstants.find(name) != sourceBindings.pushConstants.end();
+            if (binding.Type != D3D_SIT_CBUFFER || binding.BindPoint != 0 || binding.Space != 0)
+                return false;
+            if (sourceBindings.pushConstants.find(name) != sourceBindings.pushConstants.end())
+                return true;
+            // DXC compiles `[[vk::push_constant]] T pc;` to an unattached cbuffer
+            // reflected as "$Globals" at b0/space0; accept it whenever the source
+            // declared a push-constant block.
+            return name == "$Globals" && !sourceBindings.pushConstants.empty();
         }
 
         uint32_t CountMaskComponents(BYTE mask)

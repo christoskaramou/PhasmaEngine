@@ -379,6 +379,9 @@ namespace pe
                 PE_ERROR("RHI::Init: Dx12RhiImpl::Init failed");
                 return;
             }
+            // Surface owns m_actualExtent used by RHI::GetWidth/Height; create it
+            // before any code path that queries window size goes through RHII.
+            m_surface = Surface::Create(m_window);
             m_caps = dx->GetCaps();
             m_gpuName = dx->GetAdapterName();
             m_maxUniformBufferSize = D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16u;
@@ -971,6 +974,10 @@ namespace pe
 
     ::PeFormat RHI::GetDepthFormat()
     {
+        // DX12 path: support a fixed widely-available depth format until a
+        // backend-virtual depth-format query lands.
+        if (GetApi() == PE_GRAPHICS_API_DX12)
+            return PE_FORMAT_D32_SFLOAT;
         return FromVkFormat(GetDepthFormatVk());
     }
 

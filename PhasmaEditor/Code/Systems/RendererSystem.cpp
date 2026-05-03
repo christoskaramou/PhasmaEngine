@@ -41,6 +41,22 @@
 
 namespace pe
 {
+    namespace
+    {
+        ::PeFormat GetSwapchainSurfaceFormat()
+        {
+            if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            {
+                Swapchain *swapchain = RHII.GetSwapchain();
+                if (swapchain && swapchain->GetImageCount() > 0 && swapchain->GetImage(0))
+                    return swapchain->GetImage(0)->GetFormat();
+                return PE_FORMAT_R8G8B8A8_UNORM;
+            }
+
+            return pe::FromVkFormat(RHII.GetSurface()->GetFormat());
+        }
+    } // namespace
+
     void RendererSystem::LoadResources(CommandBuffer *cmd)
     {
         m_skyBoxDay.LoadSkyBox(cmd, Path::Assets + "Skyboxes/golden_gate_hills/golden_gate_hills_4k.hdr");
@@ -71,78 +87,99 @@ namespace pe
 
         EventSystem::DispatchEvent(EventType::SetWindowTitle, title);
 
-        if (isDx12)
+        Queue *queue = RHII.GetMainQueue();
+        CommandBuffer *initCmd = cmd;
+        const bool ownsInitCmd = isDx12 && initCmd == nullptr;
+        if (ownsInitCmd)
         {
-            const uint32_t imageCount = RHII.GetSwapchainImageCount();
-            m_cmds.resize(imageCount, nullptr);
-            m_acquireSemaphores.reserve(imageCount);
-            m_submitSemaphores.reserve(imageCount);
-            for (uint32_t i = 0; i < imageCount; i++)
-            {
-                m_acquireSemaphores.push_back(Semaphore::Create(false, "AcquireSemaphore_" + std::to_string(i)));
-                m_submitSemaphores.push_back(Semaphore::Create(false, "SubmitSemaphore_" + std::to_string(i)));
-            }
-            return;
+            initCmd = queue->AcquireCommandBuffer();
+            initCmd->Begin();
         }
 
-        // Create all render targets
-        CreateRenderTargets();
+        // Create all render targets (depth/shadow targets are needed by Culling/Depth/Shadow on DX12 too)
+        CreateRenderTargets(isDx12);
 
-        // Load Skyboxes
-        LoadResources(cmd);
+        // Skybox / IBL not used by 14a passes; defer for DX12 until later 14b+ tasks
+        if (!isDx12)
+            LoadResources(initCmd);
 
-        // Create render components
+        // 14a: only Culling/Shadow/Depth render-pass components are wired on DX12.
+        // The remaining editor passes still depend on Vulkan-only init paths.
         m_renderPassComponents[ID::GetTypeID<CullingPass>()] = CreateGlobalComponent<CullingPass>();
         m_renderPassComponents[ID::GetTypeID<ShadowPass>()] = CreateGlobalComponent<ShadowPass>();
         m_renderPassComponents[ID::GetTypeID<DepthPass>()] = CreateGlobalComponent<DepthPass>();
-        m_renderPassComponents[ID::GetTypeID<GbufferOpaquePass>()] = CreateGlobalComponent<GbufferOpaquePass>();
-        m_renderPassComponents[ID::GetTypeID<GbufferTransparentPass>()] = CreateGlobalComponent<GbufferTransparentPass>();
-        m_renderPassComponents[ID::GetTypeID<LightOpaquePass>()] = CreateGlobalComponent<LightOpaquePass>();
-        m_renderPassComponents[ID::GetTypeID<LightTransparentPass>()] = CreateGlobalComponent<LightTransparentPass>();
-        m_renderPassComponents[ID::GetTypeID<AabbsPass>()] = CreateGlobalComponent<AabbsPass>();
-        m_renderPassComponents[ID::GetTypeID<ParticleComputePass>()] = CreateGlobalComponent<ParticleComputePass>();
-        m_renderPassComponents[ID::GetTypeID<ParticlePass>()] = CreateGlobalComponent<ParticlePass>();
-        m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
-        m_renderPassComponents[ID::GetTypeID<SharpenPass>()] = CreateGlobalComponent<SharpenPass>();
-        m_renderPassComponents[ID::GetTypeID<RayTracingPass>()] = CreateGlobalComponent<RayTracingPass>();
-        m_renderPassComponents[ID::GetTypeID<GridPass>()] = CreateGlobalComponent<GridPass>();
+        if (!isDx12)
+        {
+            m_renderPassComponents[ID::GetTypeID<GbufferOpaquePass>()] = CreateGlobalComponent<GbufferOpaquePass>();
+            m_renderPassComponents[ID::GetTypeID<GbufferTransparentPass>()] = CreateGlobalComponent<GbufferTransparentPass>();
+            m_renderPassComponents[ID::GetTypeID<LightOpaquePass>()] = CreateGlobalComponent<LightOpaquePass>();
+            m_renderPassComponents[ID::GetTypeID<LightTransparentPass>()] = CreateGlobalComponent<LightTransparentPass>();
+            m_renderPassComponents[ID::GetTypeID<AabbsPass>()] = CreateGlobalComponent<AabbsPass>();
+            m_renderPassComponents[ID::GetTypeID<ParticleComputePass>()] = CreateGlobalComponent<ParticleComputePass>();
+            m_renderPassComponents[ID::GetTypeID<ParticlePass>()] = CreateGlobalComponent<ParticlePass>();
+            m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
+            m_renderPassComponents[ID::GetTypeID<SharpenPass>()] = CreateGlobalComponent<SharpenPass>();
+            m_renderPassComponents[ID::GetTypeID<RayTracingPass>()] = CreateGlobalComponent<RayTracingPass>();
+            m_renderPassComponents[ID::GetTypeID<GridPass>()] = CreateGlobalComponent<GridPass>();
+        }
 
         for (auto &renderPassComponent : m_renderPassComponents)
         {
             renderPassComponent->Init();
             renderPassComponent->UpdatePassInfo();
-            renderPassComponent->CreateUniforms(cmd);
+            renderPassComponent->CreateUniforms(initCmd);
         }
 
         // Init GUI
-        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+        if (!isDx12)
             m_gui.Init();
 
         uint32_t imageCount = RHII.GetSwapchainImageCount();
         m_cmds.resize(imageCount, nullptr);
-        for (uint32_t i = 0; i < imageCount; i++)
+        if (!isDx12)
         {
-            ImageBarrierInfo barrierInfo{};
-            barrierInfo.image = RHII.GetSwapchain()->GetImage(i);
-            barrierInfo.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
-            barrierInfo.stageFlags = PE_STAGE_ALL_COMMANDS;
-            barrierInfo.accessMask = PE_ACCESS_NONE;
-            cmd->ImageBarrier(barrierInfo); // transition from undefined to present
+            for (uint32_t i = 0; i < imageCount; i++)
+            {
+                ImageBarrierInfo barrierInfo{};
+                barrierInfo.image = RHII.GetSwapchain()->GetImage(i);
+                barrierInfo.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
+                barrierInfo.stageFlags = PE_STAGE_ALL_COMMANDS;
+                barrierInfo.accessMask = PE_ACCESS_NONE;
+                initCmd->ImageBarrier(barrierInfo); // transition from undefined to present
+            }
         }
 
-        m_scene.UploadBuffers(cmd);
+        m_scene.UploadBuffers(initCmd);
+
+        // On DX12 PostProcessSystem isn't initialized yet, so cache pointers and build
+        // the (3-pass) render graph here. On Vulkan PostProcessSystem::Init does this.
+        if (isDx12)
+        {
+            CacheGlobalComponents();
+            BuildRenderGraph();
+        }
 
         m_acquireSemaphores.reserve(imageCount);
         m_submitSemaphores.reserve(imageCount);
         for (uint32_t i = 0; i < imageCount; i++)
         {
             Semaphore *acquireSemaphore = Semaphore::Create(false, "AcquireSemaphore_" + std::to_string(i));
-            acquireSemaphore->SetStageFlags(vk::PipelineStageFlagBits2::eColorAttachmentOutput | vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eRayTracingShaderKHR | vk::PipelineStageFlagBits2::eTransfer);
+            if (!isDx12)
+                acquireSemaphore->SetStageFlags(vk::PipelineStageFlagBits2::eColorAttachmentOutput | vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eRayTracingShaderKHR | vk::PipelineStageFlagBits2::eTransfer);
             m_acquireSemaphores.push_back(acquireSemaphore);
 
             Semaphore *submitSemaphore = Semaphore::Create(false, "SubmitSemaphore_" + std::to_string(i));
-            submitSemaphore->SetStageFlags(vk::PipelineStageFlagBits2::eAllCommands);
+            if (!isDx12)
+                submitSemaphore->SetStageFlags(vk::PipelineStageFlagBits2::eAllCommands);
             m_submitSemaphores.push_back(submitSemaphore);
+        }
+
+        if (ownsInitCmd)
+        {
+            initCmd->End();
+            queue->Submit(1, &initCmd, nullptr, nullptr);
+            initCmd->Wait();
+            initCmd->Return();
         }
     }
 
@@ -177,10 +214,10 @@ namespace pe
 
     void RendererSystem::Update()
     {
-        // GUI
-        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
-            return;
+        const bool isVulkan = RHII.GetApi() == PE_GRAPHICS_API_VULKAN;
 
+        // GUI is Vulkan-only until Task 14e wires the DX12 ImGui backend
+        if (isVulkan)
         {
             PE_PROFILE_SCOPE("GUI");
             m_gui.Update();
@@ -272,6 +309,15 @@ namespace pe
         const bool renderSSAO = gs.ssao && renderRaster;
         const bool needDepth = renderRaster || needVelocity || gs.dof || gs.motion_blur || gs.draw_aabbs || gs.draw_grid;
         const bool needGBuffer = renderRaster || needVelocity || renderSSR || renderSSAO;
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+            m_renderGraphPassEnabled.fill(false);
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Culling)] = true;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Shadow)] = gs.shadows && renderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Depth)] = true;
+            return;
+        }
 
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Culling)] = true;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Shadow)] = gs.shadows && renderRaster;
@@ -399,25 +445,7 @@ namespace pe
     {
         CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
         const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
-        Image *dx12SwapchainImage = nullptr;
-        if (isDx12)
-        {
-            dx12SwapchainImage = RHII.GetSwapchain()->GetImage(imageIndex);
-
-            // Single-frame bootstrap graph. The normal editor pass set comes online
-            // in the later DX12 pass-enablement tasks.
-            m_renderGraph.Clear();
-            m_renderGraph.AddPass(0, 0, "Dx12BootstrapClear", []()
-                                  { return true; }, [dx12SwapchainImage](CommandBuffer *cmd)
-                                  {
-                                      Attachment attachment{};
-                                      attachment.image = dx12SwapchainImage;
-                                      attachment.loadOp = PE_LOAD_OP_CLEAR;
-                                      attachment.storeOp = PE_STORE_OP_STORE;
-                                      cmd->BeginPass(1, &attachment, "DX12BootstrapClear");
-                                      cmd->EndPass(); });
-            m_renderGraph.Compile();
-        }
+        Image *dx12SwapchainImage = isDx12 ? RHII.GetSwapchain()->GetImage(imageIndex) : nullptr;
 
         // Set scene on all scene-dependent passes before execution.
         auto setScene = [this](auto *pass)
@@ -444,15 +472,22 @@ namespace pe
 
         if (isDx12)
         {
-            // No m_displayRT or screenshot path on DX12 yet; the bootstrap pass writes
-            // straight into the swapchain image, so just transition it back to PRESENT.
+            // No display blit on DX12 yet (Task 14b+ enables GBuffer/Light/Tonemap).
+            // Clear the acquired swapchain image so the frame produces a defined
+            // pixel and transition it back to PRESENT.
+            Attachment attachment{};
+            attachment.image = dx12SwapchainImage;
+            attachment.loadOp = PE_LOAD_OP_CLEAR;
+            attachment.storeOp = PE_STORE_OP_STORE;
+            cmd->BeginPass(1, &attachment, "DX12FinalClear");
+            cmd->EndPass();
+
             ImageBarrierInfo presentBarrier{};
             presentBarrier.image = dx12SwapchainImage;
             presentBarrier.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
             presentBarrier.stageFlags = PE_STAGE_ALL_COMMANDS;
             presentBarrier.accessMask = PE_ACCESS_NONE;
             cmd->ImageBarrier(presentBarrier);
-            m_renderGraph.Clear();
         }
         else
         {
@@ -790,7 +825,7 @@ namespace pe
         return sampledImage;
     }
 
-    void RendererSystem::CreateRenderTargets()
+    void RendererSystem::CreateRenderTargets(bool dx12Task14aOnly)
     {
         for (auto &framebuffer : CommandBuffer::GetFramebuffers())
             Framebuffer::Destroy(framebuffer.second);
@@ -806,8 +841,14 @@ namespace pe
 
         Settings::Get<GlobalSettings>().rendering_images.clear();
 
-        ::PeFormat surfaceFormat = pe::FromVkFormat(RHII.GetSurface()->GetFormat());
+        const ::PeFormat surfaceFormat = GetSwapchainSurfaceFormat();
         m_depthStencil = CreateDepthStencilTarget("depthStencil", RHII.GetDepthFormat(), PE_IMAGE_USAGE_TRANSFER_DST);
+        if (dx12Task14aOnly)
+        {
+            m_displayRT = CreateRenderTarget("display", surfaceFormat, PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST, false);
+            return;
+        }
+
         m_viewportRT = CreateRenderTarget("viewport", surfaceFormat, PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST);
         m_displayRT = CreateRenderTarget("display", surfaceFormat, PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST, false);
         m_screenshotRT = CreateRenderTarget("screenshot", surfaceFormat, PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST, false);
@@ -836,7 +877,7 @@ namespace pe
         Surface *surface = RHII.GetSurface();
         RHII.CreateSwapchain(surface);
 
-        CreateRenderTargets();
+        CreateRenderTargets(RHII.GetApi() == PE_GRAPHICS_API_DX12);
 
         for (auto &rc : m_renderPassComponents)
             rc->Resize(width, height);
