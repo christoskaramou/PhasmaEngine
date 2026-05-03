@@ -1,7 +1,9 @@
 #pragma once
 
+#include "API/DX12/Dx12DescriptorHeap.h"
 #include "API/RHI_Internal.h"
 
+#include <memory>
 #include <wrl/client.h>
 
 namespace D3D12MA
@@ -28,6 +30,11 @@ namespace pe
         IDXGIFactory6 *GetFactory() const { return m_factory.Get(); }
         IDXGIAdapter4 *GetAdapter() const { return m_adapter.Get(); }
         D3D12MA::Allocator *GetAllocator() const { return m_d3d12Allocator; }
+        Dx12DescriptorHeap *GetCbvSrvUavHeap() const { return m_cbvSrvUavHeap.get(); }
+        Dx12DescriptorHeap *GetSamplerHeap() const { return m_samplerHeap.get(); }
+        Dx12DescriptorHeap *GetCbvSrvUavStagingHeap() const { return m_cbvSrvUavStagingHeap.get(); }
+        Dx12DescriptorHeap *GetRtvStagingHeap() const { return m_rtvStagingHeap.get(); }
+        Dx12DescriptorHeap *GetDsvStagingHeap() const { return m_dsvStagingHeap.get(); }
         const RHI::Caps &GetCaps() const { return m_caps; }
         const std::string &GetAdapterName() const { return m_adapterName; }
 
@@ -38,6 +45,11 @@ namespace pe
         Microsoft::WRL::ComPtr<IDXGIAdapter4> m_adapter;
         Microsoft::WRL::ComPtr<ID3D12Device> m_device;
         D3D12MA::Allocator *m_d3d12Allocator = nullptr;
+        std::unique_ptr<Dx12DescriptorHeap> m_cbvSrvUavHeap;
+        std::unique_ptr<Dx12DescriptorHeap> m_samplerHeap;
+        std::unique_ptr<Dx12DescriptorHeap> m_cbvSrvUavStagingHeap;
+        std::unique_ptr<Dx12DescriptorHeap> m_rtvStagingHeap;
+        std::unique_ptr<Dx12DescriptorHeap> m_dsvStagingHeap;
         Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_graphicsQueue;
         Microsoft::WRL::ComPtr<ID3D12Fence> m_frameFence;
         std::array<Microsoft::WRL::ComPtr<ID3D12CommandAllocator>, 2> m_clearAllocators;
