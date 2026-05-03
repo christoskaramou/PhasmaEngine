@@ -1,23 +1,13 @@
 #include "API/Command.h"
-#include "API/Buffer.h"
-#include "API/Descriptor.h"
+#include "API/CommandBuffer_Internal.h"
 #include "API/Event.h"
 #include "API/Framebuffer.h"
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
-#include "API/Vulkan/RHI_Vulkan.h"
-#include "API/Vulkan/Helpers_Vulkan.h"
 #include "API/RenderPass.h"
 #include "API/Semaphore.h"
-#include "API/Vulkan/VulkanBufferImpl.h"
-#include "API/Vulkan/VulkanDescriptorImpl.h"
-#include "API/Vulkan/VulkanImageImpl.h"
-#include "API/Vulkan/VulkanImageViewImpl.h"
-#include "API/Vulkan/VulkanPipelineImpl.h"
-#include "API/Vulkan/VulkanRHITypeUtils.h"
-#include "API/Vulkan/VulkanSamplerImpl.h"
 
 namespace pe
 {
@@ -31,14 +21,8 @@ namespace pe
           m_name{name},
           m_threadId{std::this_thread::get_id()}
     {
-        vk::CommandBufferAllocateInfo cbai{};
-        cbai.commandPool = m_commandPool->ApiHandle();
-        cbai.level = vk::CommandBufferLevel::ePrimary;
-        cbai.commandBufferCount = 1;
-
-        m_apiHandle = VulkanRhi::Device().allocateCommandBuffers(cbai)[0];
-
-        Debug::SetObjectName(m_apiHandle, name);
+        m_impl = CreateCommandBufferImpl(this, commandPool, name);
+        PE_ERROR_IF(!m_impl, "CommandBuffer: backend has no command-buffer implementation (DX12 raw bypass should never reach here pre-T10b)");
     }
 
     CommandBuffer::~CommandBuffer()
@@ -59,151 +43,44 @@ namespace pe
         for (auto &gpuTimerInfo : m_gpuTimerInfos)
             GpuTimer::Destroy(gpuTimerInfo.timer);
 #endif
+
+        delete m_impl;
+        m_impl = nullptr;
     }
 
     void CommandBuffer::Begin()
     {
-        PE_ERROR_IF(m_recording, "CommandBuffer::Begin: CommandBuffer is already recording!");
-        PE_ERROR_IF(m_threadId != std::this_thread::get_id(), "CommandBuffer::Begin: CommandBuffer is used in a different thread!");
-
-        Reset();
-
-        vk::CommandBufferBeginInfo beginInfo{};
-        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-        m_apiHandle.begin(beginInfo);
-        m_recording = true;
-
-        BeginDebugRegion(m_name);
+        m_impl->Begin();
     }
 
     void CommandBuffer::End()
     {
-        EndDebugRegion();
-
-        PE_ERROR_IF(!m_recording, "CommandBuffer::End: CommandBuffer is not in recording state!");
-        PE_ERROR_IF(m_threadId != std::this_thread::get_id(), "CommandBuffer::End: CommandBuffer is used in a different thread!");
-
-        m_apiHandle.end();
-        m_recording = false;
+        m_impl->End();
     }
 
     void CommandBuffer::Reset()
     {
-        m_attachmentCount = 0;
-        m_attachments = nullptr;
-        m_renderPass = nullptr;
-        m_framebuffer = nullptr;
-        m_dynamicPass = false;
-        m_boundPipeline = nullptr;
-        m_boundVertexBuffer = nullptr;
-        m_boundVertexBufferOffset = -1;
-        m_boundVertexBufferFirstBinding = UINT32_MAX;
-        m_boundVertexBufferBindingCount = UINT32_MAX;
-        m_boundIndexBuffer = nullptr;
-        m_boundIndexBufferOffset = -1;
-
-        // A buffer reaching Reset() with pending callbacks means the prior recording was
-        // abandoned without Wait() — never submitted, or submitted but never waited and
-        // now being recycled. Either way the GPU isn't using whatever those callbacks
-        // hold (staging allocations, refcounts), so run them before reuse to avoid
-        // leaking pinned resources into the next recording's lifetime.
-        if (!m_afterWaitCallbacks.IsEmpty())
-        {
-            m_afterWaitCallbacks.ReverseInvoke();
-            m_afterWaitCallbacks.Clear();
-        }
-
-        PE_ERROR_IF(!(m_commandPool->GetFlags() & vk::CommandPoolCreateFlagBits::eResetCommandBuffer), "CommandBuffer::Reset: CommandPool does not have the reset flag!");
-        m_apiHandle.reset();
-
-#if PE_DEBUG_MODE
-        m_gpuTimerInfosCount = 0;
-        while (!m_gpuTimerIdsStack.empty())
-            m_gpuTimerIdsStack.pop();
-        // Cached timers may carry m_inUse=true from an abandoned recording.
-        for (auto &info : m_gpuTimerInfos)
-            if (info.timer)
-                info.timer->ResetState();
-#endif
+        m_impl->Reset();
     }
 
     void CommandBuffer::SetDepthBias(float constantFactor, float clamp, float slopeFactor)
     {
-        m_apiHandle.setDepthBias(constantFactor, clamp, slopeFactor);
+        m_impl->SetDepthBias(constantFactor, clamp, slopeFactor);
     }
 
     void CommandBuffer::BlitImage(Image *src, Image *dst, const vk::ImageBlit &region, vk::Filter filter)
     {
-        dst->Blit(this, src, region, filter);
+        m_impl->BlitImage(src, dst, region, filter);
     }
 
     void CommandBuffer::ClearColors(std::vector<Image *> images)
     {
-        std::vector<ImageBarrierInfo> barriers(images.size());
-        for (uint32_t i = 0; i < images.size(); i++)
-        {
-            barriers[i].image = images[i];
-            barriers[i].layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            barriers[i].stageFlags = PE_STAGE_TRANSFER;
-            barriers[i].accessMask = PE_ACCESS_TRANSFER_WRITE;
-        }
-        Image::Barriers(this, barriers);
-
-        for (uint32_t i = 0; i < images.size(); i++)
-        {
-            Image *image = images[i];
-            const vec4 &color = image->m_clearColor;
-
-            vk::ClearColorValue clearValue{};
-            clearValue.float32[0] = color[0];
-            clearValue.float32[1] = color[1];
-            clearValue.float32[2] = color[2];
-            clearValue.float32[3] = color[3];
-
-            vk::ImageSubresourceRange range{};
-            range.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(image->GetFormat()));
-            range.baseMipLevel = 0;
-            range.levelCount = 1;
-            range.baseArrayLayer = 0;
-            range.layerCount = 1;
-
-            BeginDebugRegion("Clear Color: " + image->m_name);
-            m_apiHandle.clearColorImage(pe::GetVulkanImage(image), vk::ImageLayout::eTransferDstOptimal, &clearValue, 1, &range);
-            EndDebugRegion();
-        }
+        m_impl->ClearColors(std::move(images));
     }
 
     void CommandBuffer::ClearDepthStencils(std::vector<Image *> images)
     {
-        std::vector<ImageBarrierInfo> barriers(images.size());
-        for (uint32_t i = 0; i < images.size(); i++)
-        {
-            barriers[i].image = images[i];
-            barriers[i].layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            barriers[i].stageFlags = PE_STAGE_TRANSFER;
-            barriers[i].accessMask = PE_ACCESS_TRANSFER_WRITE;
-        }
-        Image::Barriers(this, barriers);
-
-        for (uint32_t i = 0; i < images.size(); i++)
-        {
-            Image *image = images[i];
-
-            vk::ClearDepthStencilValue clearValue{};
-            clearValue.depth = image->m_clearColor[0];
-            clearValue.stencil = static_cast<uint32_t>(image->m_clearColor[1]);
-
-            vk::ImageSubresourceRange range{};
-            range.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(image->GetFormat()));
-            range.baseMipLevel = 0;
-            range.levelCount = 1;
-            range.baseArrayLayer = 0;
-            range.layerCount = 1;
-
-            BeginDebugRegion("Clear Depth: " + image->m_name);
-            m_apiHandle.clearDepthStencilImage(pe::GetVulkanImage(image), vk::ImageLayout::eTransferDstOptimal, &clearValue, 1, &range);
-            EndDebugRegion();
-        }
+        m_impl->ClearDepthStencils(std::move(images));
     }
 
     // Note: We don't care about the actual images, having the Attachment struct for convenience
@@ -277,181 +154,12 @@ namespace pe
 
     void CommandBuffer::BeginPass(uint32_t count, Attachment *attachments, const std::string &name, bool skipDynamicPass)
     {
-        BeginDebugRegion(name + "_pass");
-        m_dynamicPass = Settings::Get<GlobalSettings>().dynamic_rendering && !skipDynamicPass;
-        m_attachmentCount = count;
-        m_attachments = attachments;
-
-        std::vector<ImageBarrierInfo> attachmentBarriers;
-        attachmentBarriers.reserve(count);
-
-        if (m_dynamicPass)
-        {
-            std::vector<vk::RenderingAttachmentInfo> colorInfos;
-            colorInfos.reserve(count);
-            vk::RenderingAttachmentInfo depthInfo{};
-            bool hasDepth = false;
-            bool hasStencil = false;
-
-            for (uint32_t i = 0; i < count; i++)
-            {
-                const Attachment &attachment = attachments[i];
-
-                ImageBarrierInfo barrier{};
-                barrier.image = attachment.image;
-                barrier.layout = PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-
-                const vk::Format attVkFormat = pe::ToVkFormat(attachment.image->GetFormat());
-                if (VulkanHelpers::HasDepthOrStencil(attVkFormat))
-                {
-                    hasDepth |= VulkanHelpers::HasDepth(attVkFormat);
-                    hasStencil |= VulkanHelpers::HasStencil(attVkFormat);
-
-                    const vec4 &clearColor = attachment.image->m_clearColor;
-                    const float clearDepth = clearColor[0];
-                    uint32_t clearStencil = static_cast<uint32_t>(clearColor[1]);
-
-                    depthInfo.imageView = pe::GetVulkanImageView(attachment.image->GetRTV());
-                    depthInfo.imageLayout = vk::ImageLayout::eAttachmentOptimal;
-                    depthInfo.loadOp = ToVkLoadOp(attachment.loadOp);
-                    depthInfo.storeOp = ToVkStoreOp(attachment.storeOp);
-                    depthInfo.clearValue.depthStencil = vk::ClearDepthStencilValue{clearDepth, clearStencil};
-
-                    barrier.stageFlags = PE_STAGE_EARLY_FRAGMENT_TESTS | PE_STAGE_LATE_FRAGMENT_TESTS;
-                    if (attachment.loadOp == PE_LOAD_OP_LOAD)
-                        barrier.accessMask = PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ;
-                    else
-                        barrier.accessMask = PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE;
-                }
-                else
-                {
-                    const vec4 &clearColor = attachment.image->m_clearColor;
-
-                    vk::RenderingAttachmentInfo colorInfo{};
-                    colorInfo.imageView = pe::GetVulkanImageView(attachment.image->GetRTV());
-                    colorInfo.imageLayout = vk::ImageLayout::eAttachmentOptimal;
-                    colorInfo.loadOp = ToVkLoadOp(attachment.loadOp);
-                    colorInfo.storeOp = ToVkStoreOp(attachment.storeOp);
-                    colorInfo.clearValue.color = {clearColor[0], clearColor[1], clearColor[2], clearColor[3]};
-                    colorInfos.push_back(colorInfo);
-
-                    barrier.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
-                    if (attachment.loadOp == PE_LOAD_OP_LOAD)
-                        barrier.accessMask = PE_ACCESS_COLOR_ATTACHMENT_READ;
-                    else
-                        barrier.accessMask = PE_ACCESS_COLOR_ATTACHMENT_WRITE;
-                }
-
-                attachmentBarriers.push_back(barrier);
-            }
-
-            Image::Barriers(this, attachmentBarriers);
-
-            vk::RenderingInfo renderingInfo{};
-            renderingInfo.renderArea = {0, 0, attachments[0].image->GetWidth(), attachments[0].image->GetHeight()};
-            renderingInfo.layerCount = 1;
-            renderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorInfos.size());
-            renderingInfo.pColorAttachments = colorInfos.data();
-            renderingInfo.pDepthAttachment = hasDepth ? &depthInfo : nullptr;
-            renderingInfo.pStencilAttachment = hasStencil ? &depthInfo : nullptr;
-
-            m_apiHandle.beginRendering(renderingInfo);
-        }
-        else
-        {
-            std::vector<vk::ClearValue> clearValues(count);
-            uint32_t clearOps = 0;
-
-            for (uint32_t i = 0; i < count; i++)
-            {
-                const Attachment &attachment = attachments[i];
-                Image *renderTarget = attachment.image;
-                if (VulkanHelpers::HasDepthOrStencil(pe::ToVkFormat(renderTarget->GetFormat())) && (attachment.loadOp == PE_LOAD_OP_CLEAR || attachment.stencilLoadOp == PE_LOAD_OP_CLEAR))
-                {
-                    const float clearDepth = renderTarget->m_clearColor[0];
-                    uint32_t clearStencil = static_cast<uint32_t>(renderTarget->m_clearColor[1]);
-                    clearValues[clearOps].depthStencil = vk::ClearDepthStencilValue{clearDepth, clearStencil};
-                    clearOps++;
-                }
-                else if (attachment.loadOp == PE_LOAD_OP_CLEAR)
-                {
-                    const vec4 &clearColor = renderTarget->m_clearColor;
-                    clearValues[clearOps].color = {clearColor[0], clearColor[1], clearColor[2], clearColor[3]};
-                    clearOps++;
-                }
-
-                ImageBarrierInfo barrier{};
-                barrier.image = attachment.image;
-                barrier.layout = PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-                if (VulkanHelpers::HasDepthOrStencil(pe::ToVkFormat(renderTarget->GetFormat())))
-                {
-                    barrier.stageFlags = PE_STAGE_EARLY_FRAGMENT_TESTS | PE_STAGE_LATE_FRAGMENT_TESTS;
-                    barrier.accessMask = PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE;
-                }
-                else
-                {
-                    barrier.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
-                    barrier.accessMask = PE_ACCESS_COLOR_ATTACHMENT_WRITE;
-                }
-                attachmentBarriers.push_back(barrier);
-            }
-
-            Image::Barriers(this, attachmentBarriers);
-
-            m_renderPass = GetRenderPass(count, attachments);
-            m_framebuffer = GetFramebuffer(m_renderPass, count, attachments);
-
-            vk::RenderPassBeginInfo rpi{};
-            rpi.renderPass = m_renderPass->ApiHandle();
-            rpi.framebuffer = m_framebuffer->ApiHandle();
-            rpi.renderArea.offset = vk::Offset2D{0, 0};
-            rpi.renderArea.extent = vk::Extent2D{m_framebuffer->GetWidth(), m_framebuffer->GetHeight()};
-            rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
-            rpi.pClearValues = clearValues.data();
-
-            vk::SubpassBeginInfo sbi{};
-            sbi.contents = vk::SubpassContents::eInline;
-
-            m_apiHandle.beginRenderPass2(rpi, sbi);
-        }
+        m_impl->BeginPass(count, attachments, name, skipDynamicPass);
     }
 
     void CommandBuffer::EndPass()
     {
-        // in favor of tracking image layout, stage and access, we need to set the correct access mask for the last operation
-        // attachments with AttachmentLoadOp::Load will have the ReadBit access mask and it is used for waiting to read/load the attachment
-        // but after the render pass is done, the correct access mask should be the WriteBit since it is the last operation
-        // so set the correct track info access mask here before any other access operation happen
-        for (uint32_t i = 0; i < m_attachmentCount; i++)
-        {
-            const Attachment &attachment = m_attachments[i];
-            if (attachment.loadOp == PE_LOAD_OP_LOAD)
-            {
-                attachment.image->m_trackInfos[0][0].accessMask = VulkanHelpers::HasDepth(pe::ToVkFormat(attachment.image->GetFormat()))
-                                                                      ? PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE
-                                                                      : PE_ACCESS_COLOR_ATTACHMENT_WRITE;
-            }
-        }
-
-        if (m_dynamicPass)
-            m_apiHandle.endRendering();
-        else
-            m_apiHandle.endRenderPass();
-
-        EndDebugRegion();
-
-        m_attachmentCount = 0;
-        m_attachments = nullptr;
-        m_renderPass = nullptr;
-        m_framebuffer = nullptr;
-        m_dynamicPass = false;
-        m_boundPipeline = nullptr;
-        m_boundVertexBuffer = nullptr;
-        m_boundVertexBufferOffset = -1;
-        m_boundVertexBufferFirstBinding = UINT32_MAX;
-        m_boundVertexBufferBindingCount = UINT32_MAX;
-        m_boundIndexBuffer = nullptr;
-        m_boundIndexBufferOffset = -1;
+        m_impl->EndPass();
     }
 
     Pipeline *CommandBuffer::GetPipeline(RenderPass *renderPass, PassInfo &passInfo)
@@ -503,396 +211,144 @@ namespace pe
         s_pipelines.clear();
     }
 
-    void CommandBuffer::BindGraphicsPipeline()
-    {
-        m_apiHandle.bindPipeline(vk::PipelineBindPoint::eGraphics, GetVulkanPipeline(m_boundPipeline));
-    }
-
-    void CommandBuffer::BindComputePipeline()
-    {
-        m_apiHandle.bindPipeline(vk::PipelineBindPoint::eCompute, GetVulkanPipeline(m_boundPipeline));
-    }
-
-    void CommandBuffer::BindRayTracingPipeline()
-    {
-        m_apiHandle.bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, GetVulkanPipeline(m_boundPipeline));
-    }
-
     void CommandBuffer::BindPipeline(PassInfo &passInfo, bool bindDescriptors)
     {
-        Pipeline *pipeline = GetPipeline(m_renderPass, passInfo);
-        if (pipeline == m_boundPipeline)
-            return;
-
-        m_boundPipeline = pipeline;
-
-        if (passInfo.pCompShader)
-        {
-            BindComputePipeline();
-        }
-        else if (passInfo.acceleration.rayGen)
-        {
-            BindRayTracingPipeline();
-        }
-        else
-        {
-            BindGraphicsPipeline();
-        }
-
-        if (bindDescriptors)
-        {
-            // auto bind descriptor sets
-            auto descriptors = passInfo.GetDescriptors(RHII.GetFrameIndex());
-            uint32_t count = static_cast<uint32_t>(descriptors.size());
-            BindDescriptors(count, descriptors.data());
-        }
+        m_impl->BindPipeline(passInfo, bindDescriptors);
     }
 
     void CommandBuffer::BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding, uint32_t bindingCount)
     {
-        if (m_boundVertexBuffer == buffer &&
-            m_boundVertexBufferOffset == offset &&
-            m_boundVertexBufferFirstBinding == firstBinding &&
-            m_boundVertexBufferBindingCount == bindingCount)
-            return;
-
-        m_boundVertexBuffer = buffer;
-        m_boundVertexBufferOffset = offset;
-        m_boundVertexBufferFirstBinding = firstBinding;
-        m_boundVertexBufferBindingCount = bindingCount;
-
-        vk::Buffer buff = pe::GetVulkanBuffer(buffer);
-        m_apiHandle.bindVertexBuffers(firstBinding, bindingCount, &buff, &offset);
+        m_impl->BindVertexBuffer(buffer, offset, firstBinding, bindingCount);
     }
 
     void CommandBuffer::BindIndexBuffer(Buffer *buffer, size_t offset)
     {
-        if (m_boundIndexBuffer == buffer && m_boundIndexBufferOffset == offset)
-            return;
-
-        m_boundIndexBuffer = buffer;
-        m_apiHandle.bindIndexBuffer(pe::GetVulkanBuffer(buffer), offset, vk::IndexType::eUint32);
-    }
-
-    void CommandBuffer::BatchBindDescriptors(vk::PipelineBindPoint point, uint32_t count, Descriptor *const *descriptors)
-    {
-        std::vector<vk::DescriptorSet> dsets;
-        dsets.reserve(count);
-
-        uint32_t start = 0;
-        while (start < count)
-        {
-            // skip nulls
-            while (start < count && !descriptors[start])
-                ++start;
-
-            if (start >= count)
-                break;
-
-            dsets.clear();
-
-            uint32_t end = start;
-            while (end < count && descriptors[end])
-            {
-                dsets.push_back(pe::GetVulkanDescriptorSet(descriptors[end]));
-                ++end;
-            }
-
-            m_apiHandle.bindDescriptorSets(
-                point,
-                GetVulkanPipelineLayout(m_boundPipeline),
-                start,
-                static_cast<uint32_t>(dsets.size()),
-                dsets.data(),
-                0, nullptr);
-
-            start = end;
-        }
-    }
-
-    void CommandBuffer::BindGraphicsDescriptors(uint32_t count, Descriptor *const *descriptors)
-    {
-        BatchBindDescriptors(vk::PipelineBindPoint::eGraphics, count, descriptors);
-    }
-
-    void CommandBuffer::BindComputeDescriptors(uint32_t count, Descriptor *const *descriptors)
-    {
-        BatchBindDescriptors(vk::PipelineBindPoint::eCompute, count, descriptors);
-    }
-
-    void CommandBuffer::BindRayTracingDescriptors(uint32_t count, Descriptor *const *descriptors)
-    {
-        BatchBindDescriptors(vk::PipelineBindPoint::eRayTracingKHR, count, descriptors);
+        m_impl->BindIndexBuffer(buffer, offset);
     }
 
     void CommandBuffer::BindDescriptors(uint32_t count, Descriptor *const *descriptors)
     {
-        PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::BindDescriptors: No bound pipeline found!");
-
-        if (m_boundPipeline->m_info.pCompShader)
-        {
-            BindComputeDescriptors(count, descriptors);
-        }
-        else if (m_boundPipeline->m_info.acceleration.rayGen)
-        {
-            BindRayTracingDescriptors(count, descriptors);
-        }
-        else
-        {
-            BindGraphicsDescriptors(count, descriptors);
-        }
+        m_impl->BindDescriptors(count, descriptors);
     }
 
     void CommandBuffer::PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info)
     {
-        PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::PushDescriptor: No bound pipeline found!");
-
-        std::vector<vk::WriteDescriptorSet> writes{};
-        std::vector<std::vector<vk::DescriptorImageInfo>> imageInfo{};
-        std::vector<std::vector<vk::DescriptorBufferInfo>> bufferInfo{};
-        imageInfo.resize(info.size());
-        bufferInfo.resize(info.size());
-        writes.resize(info.size());
-
-        for (uint32_t i = 0; i < info.size(); i++)
-        {
-            writes[i] = vk::WriteDescriptorSet{};
-            writes[i].dstBinding = info[i].binding;
-            writes[i].dstArrayElement = 0;
-            writes[i].descriptorType = ToVkDescriptorType(info[i].type);
-            if (info[i].views.size() > 0)
-            {
-                imageInfo[i].resize(info[i].views.size());
-                for (uint32_t j = 0; j < info[i].views.size(); j++)
-                {
-                    imageInfo[i][j] = vk::DescriptorImageInfo{};
-                    imageInfo[i][j].imageView = pe::GetVulkanImageView(info[i].views[j]);
-                    imageInfo[i][j].imageLayout = ToVkImageLayout(info[i].imageLayout);
-                    imageInfo[i][j].sampler = info[i].type == PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ? pe::GetVulkanSampler(info[i].samplers[j]) : vk::Sampler{};
-                }
-
-                writes[i].descriptorCount = static_cast<uint32_t>(imageInfo[i].size());
-                writes[i].pImageInfo = imageInfo[i].data();
-            }
-            else if (info[i].buffers.size() > 0)
-            {
-                bufferInfo[i].resize(info[i].buffers.size());
-                for (uint32_t j = 0; j < info[i].buffers.size(); j++)
-                {
-                    bufferInfo[i][j] = vk::DescriptorBufferInfo{};
-                    bufferInfo[i][j].buffer = pe::GetVulkanBuffer(info[i].buffers[j]);
-                    bufferInfo[i][j].offset = info[i].offsets.size() > 0 ? info[i].offsets[j] : 0;
-                    bufferInfo[i][j].range = info[i].ranges.size() > 0 ? info[i].ranges[j] : vk::WholeSize;
-                }
-
-                writes[i].descriptorCount = static_cast<uint32_t>(bufferInfo[i].size());
-                writes[i].pBufferInfo = bufferInfo[i].data();
-            }
-            else if (info[i].samplers.size() > 0 && info[i].type != PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-            {
-                imageInfo[i].resize(info[i].samplers.size());
-                for (uint32_t j = 0; j < info[i].samplers.size(); j++)
-                {
-                    imageInfo[i][j] = vk::DescriptorImageInfo{};
-                    imageInfo[i][j].imageView = nullptr;
-                    imageInfo[i][j].imageLayout = vk::ImageLayout::eUndefined;
-                    imageInfo[i][j].sampler = pe::GetVulkanSampler(info[i].samplers[j]);
-                }
-
-                writes[i].descriptorCount = static_cast<uint32_t>(imageInfo[i].size());
-                writes[i].pImageInfo = imageInfo[i].data();
-            }
-            else
-            {
-                PE_ERROR("[Command] PushDescriptor: No views or buffers or samplers found!");
-            }
-        }
-
-        // vkCmdPushDescriptorSetKHR is part of VK_KHR_push_descriptor extension, has to be loaded
-        static auto vkCmdPushDescriptorSetKHR = (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(VulkanRhi::Device(), "vkCmdPushDescriptorSetKHR");
-        PE_ERROR_IF(!vkCmdPushDescriptorSetKHR, "CommandBuffer::PushDescriptor: vkCmdPushDescriptorSetKHR not found!");
-
-        vkCmdPushDescriptorSetKHR(m_apiHandle,
-                                  m_boundPipeline->m_info.pCompShader ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                  GetVulkanPipelineLayout(m_boundPipeline),
-                                  set,
-                                  static_cast<uint32_t>(writes.size()),
-                                  reinterpret_cast<const VkWriteDescriptorSet *>(writes.data()));
+        m_impl->PushDescriptor(set, info);
     }
 
     void CommandBuffer::SetViewport(float x, float y, float width, float height)
     {
-        vk::Viewport viewport{};
-        viewport.x = x;
-        viewport.y = y;
-        viewport.width = width;
-        viewport.height = height;
-        viewport.minDepth = 0.f;
-        viewport.maxDepth = 1.f;
-
-        m_apiHandle.setViewport(0, 1, &viewport);
+        m_impl->SetViewport(x, y, width, height);
     }
 
     void CommandBuffer::SetScissor(int x, int y, uint32_t width, uint32_t height)
     {
-        vk::Rect2D scissor{};
-        scissor.offset = vk::Offset2D{x, y};
-        scissor.extent = vk::Extent2D{width, height};
-
-        m_apiHandle.setScissor(0, 1, &scissor);
+        m_impl->SetScissor(x, y, width, height);
     }
 
     void CommandBuffer::SetLineWidth(float width)
     {
-        m_apiHandle.setLineWidth(width);
+        m_impl->SetLineWidth(width);
     }
 
     void CommandBuffer::SetDepthTestEnable(uint32_t enable)
     {
-        m_apiHandle.setDepthTestEnable(enable);
+        m_impl->SetDepthTestEnable(enable);
     }
 
     void CommandBuffer::SetDepthWriteEnable(uint32_t enable)
     {
-        m_apiHandle.setDepthWriteEnable(enable);
+        m_impl->SetDepthWriteEnable(enable);
     }
 
     void CommandBuffer::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
     {
-        m_apiHandle.dispatch(groupCountX, groupCountY, groupCountZ);
+        m_impl->Dispatch(groupCountX, groupCountY, groupCountZ);
     }
 
     void CommandBuffer::PushConstants()
     {
-        PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::PushConstants: No bound pipeline found!");
-
-        const auto &stages = m_boundPipeline->m_info.m_pushConstantStages;
-        const auto &offsets = m_boundPipeline->m_info.m_pushConstantOffsets;
-        const auto &sizes = m_boundPipeline->m_info.m_pushConstantSizes;
-
-        for (size_t i = 0; i < stages.size(); i++)
-        {
-            m_apiHandle.pushConstants(GetVulkanPipelineLayout(m_boundPipeline),
-                                      stages[i],
-                                      offsets[i],
-                                      sizes[i],
-                                      m_pushConstants.Data());
-        }
+        m_impl->PushConstants(m_pushConstants);
     }
 
     void CommandBuffer::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {
-        m_apiHandle.draw(vertexCount, instanceCount, firstVertex, firstInstance);
+        m_impl->Draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     void CommandBuffer::DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
     {
-        m_apiHandle.drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+        m_impl->DrawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
     void CommandBuffer::DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
-        m_apiHandle.drawIndirect(pe::GetVulkanBuffer(indirectBuffer), offset, drawCount, stride);
+        m_impl->DrawIndirect(indirectBuffer, offset, drawCount, stride);
     }
 
     void CommandBuffer::DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
-        m_apiHandle.drawIndexedIndirect(pe::GetVulkanBuffer(indirectBuffer), offset, drawCount, stride);
+        m_impl->DrawIndexedIndirect(indirectBuffer, offset, drawCount, stride);
     }
 
     void CommandBuffer::DrawIndexedIndirectCount(Buffer *indirectBuffer, size_t offset, Buffer *countBuffer, size_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
     {
-        m_apiHandle.drawIndexedIndirectCount(pe::GetVulkanBuffer(indirectBuffer), offset, pe::GetVulkanBuffer(countBuffer), countBufferOffset, maxDrawCount, stride);
+        m_impl->DrawIndexedIndirectCount(indirectBuffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
     }
 
     void CommandBuffer::FillBuffer(Buffer *buffer, size_t offset, size_t size, uint32_t data)
     {
-        m_apiHandle.fillBuffer(pe::GetVulkanBuffer(buffer), offset, size, data);
-
-        // Record the transfer write so the next Buffer::Barrier emits srcStage=Clear,
-        // srcAccess=TransferWrite. Without this, subsequent barriers inherit a stale
-        // src state and readers at compute stage race with the fill.
-        BufferTrackInfo &trackInfo = buffer->GetTrackInfo();
-        trackInfo.stageMask = PE_STAGE_CLEAR;
-        trackInfo.accessMask = PE_ACCESS_TRANSFER_WRITE;
+        m_impl->FillBuffer(buffer, offset, size, data);
     }
 
     void CommandBuffer::TraceRays(uint32_t width, uint32_t height, uint32_t depth)
     {
-        PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::TraceRays: No bound pipeline found!");
-        m_apiHandle.traceRaysKHR(GetVulkanRgenRegion(m_boundPipeline),
-                                 GetVulkanMissRegion(m_boundPipeline),
-                                 GetVulkanHitRegion(m_boundPipeline),
-                                 GetVulkanCallRegion(m_boundPipeline),
-                                 width, height, depth);
+        m_impl->TraceRays(width, height, depth);
     }
 
     void CommandBuffer::BuildAccelerationStructures(uint32_t infoCount, const vk::AccelerationStructureBuildGeometryInfoKHR *pInfos, const vk::AccelerationStructureBuildRangeInfoKHR **ppBuildRangeInfos)
     {
-        m_apiHandle.buildAccelerationStructuresKHR(infoCount, pInfos, ppBuildRangeInfos);
+        m_impl->BuildAccelerationStructures(infoCount, pInfos, ppBuildRangeInfos);
     }
 
     void CommandBuffer::BufferBarrier(const BufferBarrierInfo &info)
     {
-        Buffer::Barrier(this, info);
+        m_impl->BufferBarrier(info);
     }
 
     void CommandBuffer::BufferBarriers(const std::vector<BufferBarrierInfo> &infos)
     {
-        Buffer::Barriers(this, infos);
+        m_impl->BufferBarriers(infos);
     }
 
     void CommandBuffer::ImageBarrier(const ImageBarrierInfo &info)
     {
-        Image::Barrier(this, info);
+        m_impl->ImageBarrier(info);
     }
 
     void CommandBuffer::ImageBarriers(const std::vector<ImageBarrierInfo> &infos)
     {
-        Image::Barriers(this, infos);
+        m_impl->ImageBarriers(infos);
     }
 
     void CommandBuffer::MemoryBarrier(const MemoryBarrierInfo &info)
     {
-        vk::MemoryBarrier2 barrier{};
-        barrier.srcStageMask = ToVkPipelineStageFlags(info.srcStageMask);
-        barrier.srcAccessMask = ToVkAccessFlags(info.srcAccessMask);
-        barrier.dstStageMask = ToVkPipelineStageFlags(info.dstStageMask);
-        barrier.dstAccessMask = ToVkAccessFlags(info.dstAccessMask);
-
-        vk::DependencyInfo dependencyInfo{};
-        dependencyInfo.memoryBarrierCount = 1;
-        dependencyInfo.pMemoryBarriers = &barrier;
-
-        m_apiHandle.pipelineBarrier2(dependencyInfo);
+        m_impl->MemoryBarrier(info);
     }
 
     void CommandBuffer::MemoryBarriers(const std::vector<MemoryBarrierInfo> &infos)
     {
-        std::vector<vk::MemoryBarrier2> barriers(infos.size());
-        for (size_t i = 0; i < infos.size(); ++i)
-        {
-            barriers[i].srcStageMask = ToVkPipelineStageFlags(infos[i].srcStageMask);
-            barriers[i].srcAccessMask = ToVkAccessFlags(infos[i].srcAccessMask);
-            barriers[i].dstStageMask = ToVkPipelineStageFlags(infos[i].dstStageMask);
-            barriers[i].dstAccessMask = ToVkAccessFlags(infos[i].dstAccessMask);
-        }
-
-        vk::DependencyInfo dependencyInfo{};
-        dependencyInfo.memoryBarrierCount = static_cast<uint32_t>(barriers.size());
-        dependencyInfo.pMemoryBarriers = barriers.data();
-
-        m_apiHandle.pipelineBarrier2(dependencyInfo);
+        m_impl->MemoryBarriers(infos);
     }
 
     void CommandBuffer::CopyBuffer(Buffer *src, Buffer *dst, const size_t size, size_t srcOffset, size_t dstOffset)
     {
-        dst->CopyBuffer(this, src, size, srcOffset, dstOffset);
+        m_impl->CopyBuffer(src, dst, size, srcOffset, dstOffset);
     }
 
     void CommandBuffer::CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t dstOffset)
     {
-        buffer->CopyBufferStaged(this, data, size, dstOffset);
+        m_impl->CopyBufferStaged(buffer, data, size, dstOffset);
     }
 
     void CommandBuffer::CopyDataToImageStaged(Image *image,
@@ -902,22 +358,22 @@ namespace pe
                                               uint32_t layerCount,
                                               uint32_t mipLevel)
     {
-        image->CopyDataToImageStaged(this, data, size, baseArrayLayer, layerCount, mipLevel);
+        m_impl->CopyDataToImageStaged(image, data, size, baseArrayLayer, layerCount, mipLevel);
     }
 
     void CommandBuffer::CopyImage(Image *src, Image *dst)
     {
-        dst->CopyImage(this, src);
+        m_impl->CopyImage(src, dst);
     }
 
     void CommandBuffer::CopyImageToBuffer(Image *src, Buffer *dst)
     {
-        src->CopyToBuffer(this, dst);
+        m_impl->CopyImageToBuffer(src, dst);
     }
 
     void CommandBuffer::GenerateMipMaps(Image *image)
     {
-        image->GenerateMipMaps(this);
+        m_impl->GenerateMipMaps(image);
     }
 
     void CommandBuffer::SetEvent(Image *image,
@@ -925,7 +381,7 @@ namespace pe
                                  PeBarrierSync srcStage, PeBarrierSync dstStage,
                                  PeBarrierAccess srcAccess, PeBarrierAccess dstAccess)
     {
-        m_event->Set(this, image, srcLayout, dstLayout, srcStage, dstStage, srcAccess, dstAccess);
+        m_impl->SetEvent(m_event, image, srcLayout, dstLayout, srcStage, dstStage, srcAccess, dstAccess);
     }
 
     void CommandBuffer::WaitEvent()
@@ -940,17 +396,17 @@ namespace pe
 
     void CommandBuffer::BeginDebugRegion(const std::string &name)
     {
-        Debug::BeginCmdRegion(this, name);
+        m_impl->BeginDebugRegion(name);
     }
 
     void CommandBuffer::InsertDebugLabel(const std::string &name)
     {
-        Debug::InsertCmdLabel(this, name);
+        m_impl->InsertDebugLabel(name);
     }
 
     void CommandBuffer::EndDebugRegion()
     {
-        Debug::EndCmdRegion(this);
+        m_impl->EndDebugRegion();
     }
 
     Queue *CommandBuffer::GetQueue() const

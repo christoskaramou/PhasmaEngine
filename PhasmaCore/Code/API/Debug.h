@@ -40,6 +40,7 @@ namespace pe
     private:
         friend class CommandBuffer;
         friend class Queue;
+        friend struct VulkanCommandBufferImpl;
 
         static void SetObjectName(const VkDebugUtilsObjectNameInfoEXT &info);
         static void BeginQueueRegion(Queue *queue, const std::string &name);
@@ -72,6 +73,7 @@ namespace pe
     private:
         friend class CommandBuffer;
         friend class Queue;
+        friend struct VulkanCommandBufferImpl;
 
         static void SetObjectName(const VkDebugUtilsObjectNameInfoEXT &info) {}
         static void BeginQueueRegion(Queue *queue, const std::string &name) {}

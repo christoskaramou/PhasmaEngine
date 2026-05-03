@@ -55,6 +55,7 @@ namespace pe
 
     private:
         friend class CommandBuffer;
+        friend struct VulkanCommandBufferImpl;
         friend struct VulkanBufferImpl;
         friend struct Dx12BufferImpl;
 

@@ -95,6 +95,8 @@ namespace pe
     class CommandBuffer : public PeHandle<CommandBuffer, vk::CommandBuffer>
     {
     public:
+        struct Impl;
+
         CommandBuffer(CommandPool *commandPool, const std::string &name);
         ~CommandBuffer();
 
@@ -176,20 +178,14 @@ namespace pe
 
     private:
         friend class Queue;
-
-        void BindGraphicsPipeline();
-        void BindComputePipeline();
-        void BindRayTracingPipeline();
-        void BindGraphicsDescriptors(uint32_t count, Descriptor *const *descriptors);
-        void BindComputeDescriptors(uint32_t count, Descriptor *const *descriptors);
-        void BindRayTracingDescriptors(uint32_t count, Descriptor *const *descriptors);
-        void BatchBindDescriptors(vk::PipelineBindPoint point, uint32_t count, Descriptor *const *descriptors);
+        friend struct VulkanCommandBufferImpl;
 
         // Resources
         inline static std::unordered_map<size_t, RenderPass *> s_renderPasses{};
         inline static std::unordered_map<size_t, Framebuffer *> s_framebuffers{};
         inline static std::unordered_map<size_t, Pipeline *> s_pipelines{};
 
+        Impl *m_impl{};
         std::mutex m_WaitMutex{};
         size_t m_id;
         CommandPool *m_commandPool;

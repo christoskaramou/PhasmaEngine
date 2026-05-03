@@ -129,6 +129,7 @@ namespace pe
         friend class CommandBuffer;
         friend class Pipeline;
         friend class Shader;
+        friend struct VulkanCommandBufferImpl;
         friend struct VulkanPipelineImpl;
         friend struct Dx12PipelineImpl;
 
@@ -158,6 +159,7 @@ namespace pe
 
     private:
         friend class CommandBuffer;
+        friend struct VulkanCommandBufferImpl;
         friend struct VulkanPipelineImpl;
         friend struct Dx12PipelineImpl;
 

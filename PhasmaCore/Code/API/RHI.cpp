@@ -416,6 +416,7 @@ namespace pe
         m_stagingManager = new StagingManager();
 
 #ifdef PE_TRACY
+        if (GetApi() != PE_GRAPHICS_API_DX12)
         {
             CommandBuffer *cmd = m_mainQueue->AcquireCommandBuffer();
             auto &d = VULKAN_HPP_DEFAULT_DISPATCHER;

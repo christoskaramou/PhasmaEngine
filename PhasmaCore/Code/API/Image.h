@@ -130,6 +130,7 @@ namespace pe
     private:
         friend class CommandBuffer;
         friend class Swapchain;
+        friend struct VulkanCommandBufferImpl;
         friend struct VulkanImageImpl;
         friend struct VulkanSwapchainImpl;
         friend struct Dx12ImageImpl;
