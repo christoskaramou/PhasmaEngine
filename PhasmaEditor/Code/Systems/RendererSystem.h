@@ -136,7 +136,6 @@ namespace pe
     protected:
         void LoadResources(CommandBuffer *cmd);
         CommandBuffer *RecordPasses(uint32_t imageIndex);
-        void DrawDx12Clear();
         void Upsample(CommandBuffer *cmd, PeFilter filter);
         void CreateRenderTargets();
         RenderGraph m_renderGraph;

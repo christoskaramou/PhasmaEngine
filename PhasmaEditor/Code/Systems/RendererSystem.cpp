@@ -347,6 +347,7 @@ namespace pe
     void RendererSystem::BuildRenderGraph()
     {
         m_renderGraph.Clear();
+
         UpdateRenderGraphPassStates();
 
         auto isPassEnabled = [this](RenderGraphPassId passId)
@@ -397,8 +398,28 @@ namespace pe
     CommandBuffer *RendererSystem::RecordPasses(uint32_t imageIndex)
     {
         CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
+        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        Image *dx12SwapchainImage = nullptr;
+        if (isDx12)
+        {
+            dx12SwapchainImage = RHII.GetSwapchain()->GetImage(imageIndex);
 
-        // Set scene on all scene-dependent passes before execution
+            // Single-frame bootstrap graph. The normal editor pass set comes online
+            // in the later DX12 pass-enablement tasks.
+            m_renderGraph.Clear();
+            m_renderGraph.AddPass(0, 0, "Dx12BootstrapClear", []()
+                                  { return true; }, [dx12SwapchainImage](CommandBuffer *cmd)
+                                  {
+                                      Attachment attachment{};
+                                      attachment.image = dx12SwapchainImage;
+                                      attachment.loadOp = PE_LOAD_OP_CLEAR;
+                                      attachment.storeOp = PE_STORE_OP_STORE;
+                                      cmd->BeginPass(1, &attachment, "DX12BootstrapClear");
+                                      cmd->EndPass(); });
+            m_renderGraph.Compile();
+        }
+
+        // Set scene on all scene-dependent passes before execution.
         auto setScene = [this](auto *pass)
         {
             if (pass)
@@ -420,34 +441,50 @@ namespace pe
             PE_PROFILE_SCOPE("Render Graph Execute");
             m_renderGraph.Execute(cmd);
         }
+
+        if (isDx12)
         {
-            PE_PROFILE_SCOPE("Blit To Swapchain");
-            BlitToSwapchain(cmd, m_displayRT, imageIndex);
+            // No m_displayRT or screenshot path on DX12 yet; the bootstrap pass writes
+            // straight into the swapchain image, so just transition it back to PRESENT.
+            ImageBarrierInfo presentBarrier{};
+            presentBarrier.image = dx12SwapchainImage;
+            presentBarrier.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
+            presentBarrier.stageFlags = PE_STAGE_ALL_COMMANDS;
+            presentBarrier.accessMask = PE_ACCESS_NONE;
+            cmd->ImageBarrier(presentBarrier);
+            m_renderGraph.Clear();
         }
-
-        EventSystem::QueuedEvent screenshotEvt;
-        if (EventSystem::PeekAndPop(EventType::Screenshot, screenshotEvt))
+        else
         {
-            m_screenshotPath = screenshotEvt.payload.has_value()
-                                   ? std::any_cast<std::string>(screenshotEvt.payload)
-                                   : std::string();
+            {
+                PE_PROFILE_SCOPE("Blit To Swapchain");
+                BlitToSwapchain(cmd, m_displayRT, imageIndex);
+            }
 
-            cmd->CopyImage(m_displayRT, m_screenshotRT);
+            EventSystem::QueuedEvent screenshotEvt;
+            if (EventSystem::PeekAndPop(EventType::Screenshot, screenshotEvt))
+            {
+                m_screenshotPath = screenshotEvt.payload.has_value()
+                                       ? std::any_cast<std::string>(screenshotEvt.payload)
+                                       : std::string();
 
-            uint32_t w = m_screenshotRT->GetWidth();
-            uint32_t h = m_screenshotRT->GetHeight();
-            size_t bufferSize = static_cast<size_t>(w) * h * 4;
+                cmd->CopyImage(m_displayRT, m_screenshotRT);
 
-            Buffer::Destroy(m_screenshotBuffer);
-            m_screenshotBuffer = Buffer::Create({
-                .size = bufferSize,
-                .usage = PE_BUFFER_USAGE_TRANSFER_DST,
-                .memoryUsage = PE_MEMORY_USAGE_GPU_TO_CPU,
-                .name = "ScreenshotStaging",
-            });
+                uint32_t w = m_screenshotRT->GetWidth();
+                uint32_t h = m_screenshotRT->GetHeight();
+                size_t bufferSize = static_cast<size_t>(w) * h * 4;
 
-            cmd->CopyImageToBuffer(m_screenshotRT, m_screenshotBuffer);
-            m_screenshotPending = true;
+                Buffer::Destroy(m_screenshotBuffer);
+                m_screenshotBuffer = Buffer::Create({
+                    .size = bufferSize,
+                    .usage = PE_BUFFER_USAGE_TRANSFER_DST,
+                    .memoryUsage = PE_MEMORY_USAGE_GPU_TO_CPU,
+                    .name = "ScreenshotStaging",
+                });
+
+                cmd->CopyImageToBuffer(m_screenshotRT, m_screenshotBuffer);
+                m_screenshotPending = true;
+            }
         }
 
 #ifdef PE_TRACY
@@ -464,11 +501,6 @@ namespace pe
     {
         try
         {
-            if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-            {
-                DrawDx12Clear();
-                return;
-            }
             uint32_t frame = RHII.GetFrameIndex();
 
             Semaphore *acquireSemaphore = m_acquireSemaphores[frame];
@@ -508,39 +540,6 @@ namespace pe
         {
             // Just ignore and try again
         }
-    }
-
-    void RendererSystem::DrawDx12Clear()
-    {
-        const uint32_t frame = RHII.GetFrameIndex();
-        Swapchain *swapchain = RHII.GetSwapchain();
-        Semaphore *acquireSemaphore = m_acquireSemaphores[frame];
-        const uint32_t imageIndex = swapchain->AquireNextImage(acquireSemaphore);
-        Image *swapchainImage = swapchain->GetImage(imageIndex);
-
-        CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
-        cmd->Begin();
-
-        Attachment attachment{};
-        attachment.image = swapchainImage;
-        attachment.loadOp = PE_LOAD_OP_CLEAR;
-        attachment.storeOp = PE_STORE_OP_STORE;
-        cmd->BeginPass(1, &attachment, "DX12BootstrapClear");
-        cmd->EndPass();
-
-        ImageBarrierInfo presentBarrier{};
-        presentBarrier.image = swapchainImage;
-        presentBarrier.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
-        presentBarrier.stageFlags = PE_STAGE_ALL_COMMANDS;
-        presentBarrier.accessMask = PE_ACCESS_NONE;
-        cmd->ImageBarrier(presentBarrier);
-        cmd->End();
-
-        m_cmds[frame] = cmd;
-        Semaphore *submitSemaphore = m_submitSemaphores[imageIndex];
-        Queue *queue = RHII.GetMainQueue();
-        queue->Submit(1, &cmd, acquireSemaphore, submitSemaphore);
-        queue->Present(swapchain, imageIndex, submitSemaphore);
     }
 
     void RendererSystem::SaveScreenshot()
