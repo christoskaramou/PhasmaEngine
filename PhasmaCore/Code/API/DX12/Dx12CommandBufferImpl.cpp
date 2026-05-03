@@ -59,6 +59,29 @@ namespace pe
                         "Dx12CommandBufferImpl::%s: image '%s' needs an RTV view", what, image->GetName().c_str());
             return impl->GetCpuHandle();
         }
+
+        bool IndirectRangeFits(size_t bufferSize, size_t offset, uint32_t drawCount, uint32_t stride, uint32_t requiredSize)
+        {
+            if (offset > bufferSize)
+                return false;
+            if (drawCount == 0)
+                return true;
+
+            const size_t available = bufferSize - offset;
+            const size_t commandCount = static_cast<size_t>(drawCount);
+            const size_t commandStride = static_cast<size_t>(stride);
+            if (commandCount > 1 && commandStride > (std::numeric_limits<size_t>::max() - requiredSize) / (commandCount - 1))
+                return false;
+
+            const size_t requiredBytes = (commandCount - 1) * commandStride + requiredSize;
+            return requiredBytes <= available;
+        }
+
+        void ValidateIndirectDrawState(Pipeline *pipeline, const char *what)
+        {
+            PE_ERROR_IF(!pipeline, "Dx12CommandBufferImpl::%s: No bound pipeline found!", what);
+            PE_ERROR_IF(IsComputePipeline(pipeline), "Dx12CommandBufferImpl::%s: bound pipeline is compute", what);
+        }
     } // namespace
 
     Dx12CommandBufferImpl::Dx12CommandBufferImpl(CommandBuffer *owner, CommandPool *commandPool, const std::string &name)
@@ -159,6 +182,48 @@ namespace pe
             m_cmdList->SetDescriptorHeaps(count, heaps);
 
         m_heapsBound = true;
+    }
+
+    ID3D12CommandSignature *Dx12CommandBufferImpl::GetDrawIndirectSignature(uint32_t stride)
+    {
+        if (m_drawIndirectSignature && m_drawIndirectSignatureStride == stride)
+            return m_drawIndirectSignature.Get();
+
+        D3D12_INDIRECT_ARGUMENT_DESC argument{};
+        argument.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+
+        D3D12_COMMAND_SIGNATURE_DESC desc{};
+        desc.ByteStride = stride;
+        desc.NumArgumentDescs = 1;
+        desc.pArgumentDescs = &argument;
+
+        Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+        PE_ERROR_IF(!rhi || !rhi->GetDevice(), "Dx12CommandBufferImpl::GetDrawIndirectSignature: DX12 device unavailable");
+        m_drawIndirectSignature.Reset();
+        PE_CHECK(rhi->GetDevice()->CreateCommandSignature(&desc, nullptr, IID_PPV_ARGS(&m_drawIndirectSignature)));
+        m_drawIndirectSignatureStride = stride;
+        return m_drawIndirectSignature.Get();
+    }
+
+    ID3D12CommandSignature *Dx12CommandBufferImpl::GetDrawIndexedIndirectSignature(uint32_t stride)
+    {
+        if (m_drawIndexedIndirectSignature && m_drawIndexedIndirectSignatureStride == stride)
+            return m_drawIndexedIndirectSignature.Get();
+
+        D3D12_INDIRECT_ARGUMENT_DESC argument{};
+        argument.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
+
+        D3D12_COMMAND_SIGNATURE_DESC desc{};
+        desc.ByteStride = stride;
+        desc.NumArgumentDescs = 1;
+        desc.pArgumentDescs = &argument;
+
+        Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+        PE_ERROR_IF(!rhi || !rhi->GetDevice(), "Dx12CommandBufferImpl::GetDrawIndexedIndirectSignature: DX12 device unavailable");
+        m_drawIndexedIndirectSignature.Reset();
+        PE_CHECK(rhi->GetDevice()->CreateCommandSignature(&desc, nullptr, IID_PPV_ARGS(&m_drawIndexedIndirectSignature)));
+        m_drawIndexedIndirectSignatureStride = stride;
+        return m_drawIndexedIndirectSignature.Get();
     }
 
     void Dx12CommandBufferImpl::FlushBarriers()
@@ -617,17 +682,71 @@ namespace pe
         FlushBarriers();
         m_cmdList->DrawIndexedInstanced(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
-    void Dx12CommandBufferImpl::DrawIndirect(Buffer *, size_t, uint32_t, uint32_t)
+    void Dx12CommandBufferImpl::DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
-        DX12_CMD_NOT_IMPLEMENTED("DrawIndirect");
+        static_assert(PE_DRAW_INDIRECT_COMMAND_SIZE == sizeof(D3D12_DRAW_ARGUMENTS));
+        ValidateIndirectDrawState(m_owner->m_boundPipeline, "DrawIndirect");
+        PE_ERROR_IF(!indirectBuffer, "Dx12CommandBufferImpl::DrawIndirect: null indirect buffer");
+        PE_ERROR_IF(stride < PE_DRAW_INDIRECT_COMMAND_SIZE,
+                    "Dx12CommandBufferImpl::DrawIndirect: stride %u is smaller than D3D12_DRAW_ARGUMENTS (%u)",
+                    stride, PE_DRAW_INDIRECT_COMMAND_SIZE);
+        PE_ERROR_IF(!IndirectRangeFits(indirectBuffer->Size(), offset, drawCount, stride, PE_DRAW_INDIRECT_COMMAND_SIZE),
+                    "Dx12CommandBufferImpl::DrawIndirect: argument range exceeds buffer size");
+        if (drawCount == 0)
+            return;
+
+        FlushBarriers();
+        m_cmdList->ExecuteIndirect(GetDrawIndirectSignature(stride),
+                                   drawCount,
+                                   Dx12BufferImpl::From(indirectBuffer)->GetResource(),
+                                   static_cast<UINT64>(offset),
+                                   nullptr,
+                                   0);
     }
-    void Dx12CommandBufferImpl::DrawIndexedIndirect(Buffer *, size_t, uint32_t, uint32_t)
+    void Dx12CommandBufferImpl::DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
-        DX12_CMD_NOT_IMPLEMENTED("DrawIndexedIndirect");
+        static_assert(PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE == sizeof(D3D12_DRAW_INDEXED_ARGUMENTS));
+        ValidateIndirectDrawState(m_owner->m_boundPipeline, "DrawIndexedIndirect");
+        PE_ERROR_IF(!indirectBuffer, "Dx12CommandBufferImpl::DrawIndexedIndirect: null indirect buffer");
+        PE_ERROR_IF(stride < PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
+                    "Dx12CommandBufferImpl::DrawIndexedIndirect: stride %u is smaller than D3D12_DRAW_INDEXED_ARGUMENTS (%u)",
+                    stride, PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
+        PE_ERROR_IF(!IndirectRangeFits(indirectBuffer->Size(), offset, drawCount, stride, PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE),
+                    "Dx12CommandBufferImpl::DrawIndexedIndirect: argument range exceeds buffer size");
+        if (drawCount == 0)
+            return;
+
+        FlushBarriers();
+        m_cmdList->ExecuteIndirect(GetDrawIndexedIndirectSignature(stride),
+                                   drawCount,
+                                   Dx12BufferImpl::From(indirectBuffer)->GetResource(),
+                                   static_cast<UINT64>(offset),
+                                   nullptr,
+                                   0);
     }
-    void Dx12CommandBufferImpl::DrawIndexedIndirectCount(Buffer *, size_t, Buffer *, size_t, uint32_t, uint32_t)
+    void Dx12CommandBufferImpl::DrawIndexedIndirectCount(Buffer *indirectBuffer, size_t offset, Buffer *countBuffer, size_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
     {
-        DX12_CMD_NOT_IMPLEMENTED("DrawIndexedIndirectCount");
+        static_assert(PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE == sizeof(D3D12_DRAW_INDEXED_ARGUMENTS));
+        ValidateIndirectDrawState(m_owner->m_boundPipeline, "DrawIndexedIndirectCount");
+        PE_ERROR_IF(!indirectBuffer, "Dx12CommandBufferImpl::DrawIndexedIndirectCount: null indirect buffer");
+        PE_ERROR_IF(!countBuffer, "Dx12CommandBufferImpl::DrawIndexedIndirectCount: null count buffer");
+        PE_ERROR_IF(stride < PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
+                    "Dx12CommandBufferImpl::DrawIndexedIndirectCount: stride %u is smaller than D3D12_DRAW_INDEXED_ARGUMENTS (%u)",
+                    stride, PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
+        PE_ERROR_IF(!IndirectRangeFits(indirectBuffer->Size(), offset, maxDrawCount, stride, PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE),
+                    "Dx12CommandBufferImpl::DrawIndexedIndirectCount: argument range exceeds buffer size");
+        PE_ERROR_IF(countBufferOffset > countBuffer->Size() || sizeof(uint32_t) > countBuffer->Size() - countBufferOffset,
+                    "Dx12CommandBufferImpl::DrawIndexedIndirectCount: count range exceeds buffer size");
+        if (maxDrawCount == 0)
+            return;
+
+        FlushBarriers();
+        m_cmdList->ExecuteIndirect(GetDrawIndexedIndirectSignature(stride),
+                                   maxDrawCount,
+                                   Dx12BufferImpl::From(indirectBuffer)->GetResource(),
+                                   static_cast<UINT64>(offset),
+                                   Dx12BufferImpl::From(countBuffer)->GetResource(),
+                                   static_cast<UINT64>(countBufferOffset));
     }
 
     void Dx12CommandBufferImpl::FillBuffer(Buffer *buffer, size_t offset, size_t size, uint32_t data)
