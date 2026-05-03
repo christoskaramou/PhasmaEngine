@@ -127,10 +127,11 @@ namespace pe
 
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.camPos = vec4(camera->GetPosition(), 1.0f);
-        m_ubo.ssao = gSettings.ssao;
-        m_ubo.ssr = gSettings.ssr;
-        m_ubo.tonemapping = gSettings.tonemapping;
-        m_ubo.fsr2 = gSettings.taa;
+        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        m_ubo.ssao = !isDx12 && gSettings.ssao;
+        m_ubo.ssr = !isDx12 && gSettings.ssr;
+        m_ubo.tonemapping = !isDx12 && gSettings.tonemapping;
+        m_ubo.fsr2 = !isDx12 && gSettings.taa;
         m_ubo.IBL = gSettings.IBL;
         m_ubo.IBL_intensity = gSettings.IBL_intensity;
         m_ubo.lights_intensity = gSettings.lights_intensity;
@@ -146,7 +147,8 @@ namespace pe
 
     void LightOpaquePass::DeclareInputs(RGBuilder &builder)
     {
-        bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
+        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        const bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
         builder.Read(m_depthStencilRT);
@@ -155,7 +157,8 @@ namespace pe
         builder.Read(m_srmRT);
         builder.Read(m_velocityRT);
         builder.Read(m_emissiveRT);
-        builder.Read(m_ssaoRT);
+        if (!isDx12)
+            builder.Read(m_ssaoRT);
         builder.Read(m_transparencyRT);
 
         if (shadowsEnabled)
@@ -313,10 +316,11 @@ namespace pe
 
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.camPos = vec4(camera->GetPosition(), 1.0f);
-        m_ubo.ssao = gSettings.ssao;
-        m_ubo.ssr = gSettings.ssr;
-        m_ubo.tonemapping = gSettings.tonemapping;
-        m_ubo.fsr2 = gSettings.taa;
+        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        m_ubo.ssao = !isDx12 && gSettings.ssao;
+        m_ubo.ssr = !isDx12 && gSettings.ssr;
+        m_ubo.tonemapping = !isDx12 && gSettings.tonemapping;
+        m_ubo.fsr2 = !isDx12 && gSettings.taa;
         m_ubo.IBL = gSettings.IBL;
         m_ubo.IBL_intensity = gSettings.IBL_intensity;
         m_ubo.lights_intensity = gSettings.lights_intensity;
@@ -332,6 +336,8 @@ namespace pe
 
     void LightTransparentPass::DeclareInputs(RGBuilder &builder)
     {
+        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        const bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
         builder.Read(m_depthStencilRT);
@@ -340,11 +346,15 @@ namespace pe
         builder.Read(m_srmRT);
         builder.Read(m_velocityRT);
         builder.Read(m_emissiveRT);
-        builder.Read(m_ssaoRT);
+        if (!isDx12)
+            builder.Read(m_ssaoRT);
         builder.Read(m_transparencyRT);
 
-        for (auto *tex : shadows.m_textures)
-            builder.Read(tex);
+        if (shadowsEnabled)
+        {
+            for (auto *tex : shadows.m_textures)
+                builder.Read(tex);
+        }
     }
 
     void LightTransparentPass::ExecutePass(CommandBuffer *cmd)

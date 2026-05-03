@@ -14,7 +14,7 @@ TexSamplerDecl(0, 0, Depth)
 TexSamplerDecl(1, 0, Normal)
 TexSamplerDecl(2, 0, Albedo)
 TexSamplerDecl(3, 0, MetRough)
-[[vk::binding(4, 0)]] cbuffer LightSystemUBO
+[[vk::binding(4, 0)]] cbuffer LightSystemUBO : register(b4, space0)
 {
 
     uint cb_numDirectionalLights;
@@ -28,7 +28,7 @@ TexSamplerDecl(3, 0, MetRough)
 };
 TexSamplerDecl(5, 0, Ssao)
 TexSamplerDecl(6, 0, Emission)
-[[vk::binding(7, 0)]] cbuffer PassUBO
+[[vk::binding(7, 0)]] cbuffer PassUBO : register(b7, space0)
 {
     float4x4    cb_invViewProj;
     float4      cb_camPos;

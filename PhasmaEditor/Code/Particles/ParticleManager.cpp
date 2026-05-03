@@ -7,6 +7,38 @@
 
 namespace pe
 {
+    namespace
+    {
+        PeMemoryUsage ParticleBufferMemoryUsage()
+        {
+            return RHII.GetApi() == PE_GRAPHICS_API_DX12 ? PE_MEMORY_USAGE_GPU_ONLY : PE_MEMORY_USAGE_CPU_TO_GPU;
+        }
+
+        void ZeroParticleBuffer(Buffer *buffer)
+        {
+            if (!buffer)
+                return;
+
+            if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            {
+                Queue *queue = RHII.GetMainQueue();
+                CommandBuffer *cmd = queue->AcquireCommandBuffer();
+                cmd->Begin();
+                cmd->FillBuffer(buffer, 0, buffer->Size(), 0);
+                cmd->End();
+                queue->Submit(1, &cmd, nullptr, nullptr);
+                cmd->Wait();
+                cmd->Return();
+                return;
+            }
+
+            buffer->Map();
+            buffer->Zero();
+            buffer->Flush();
+            buffer->Unmap();
+        }
+    } // namespace
+
     ParticleManager::ParticleManager()
     {
     }
@@ -27,14 +59,10 @@ namespace pe
         m_particleBuffer = Buffer::Create({
             .size = bufferSize,
             .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_VERTEX_BUFFER,
-            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+            .memoryUsage = ParticleBufferMemoryUsage(),
             .name = "particle_buffer",
         });
-
-        m_particleBuffer->Map();
-        m_particleBuffer->Zero();
-        m_particleBuffer->Flush();
-        m_particleBuffer->Unmap();
+        ZeroParticleBuffer(m_particleBuffer);
 
         // Create emitter buffer (start with space for 16 emitters, will resize if needed)
         size_t emitterBufferSize = 16 * sizeof(ParticleEmitter);
@@ -107,14 +135,10 @@ namespace pe
                 m_particleBuffer = Buffer::Create({
                     .size = bufferSize,
                     .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_VERTEX_BUFFER,
-                    .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                    .memoryUsage = ParticleBufferMemoryUsage(),
                     .name = "particle_buffer",
                 });
-
-                m_particleBuffer->Map();
-                m_particleBuffer->Zero();
-                m_particleBuffer->Flush();
-                m_particleBuffer->Unmap();
+                ZeroParticleBuffer(m_particleBuffer);
             }
         }
 

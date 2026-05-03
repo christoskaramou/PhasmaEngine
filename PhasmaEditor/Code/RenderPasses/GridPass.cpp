@@ -21,7 +21,7 @@ namespace pe
         m_attachments.resize(1);
         m_attachments[0] = {};
         m_attachments[0].image = m_viewportRT;
-        m_attachments[0].loadOp = RHII.GetApi() == PE_GRAPHICS_API_DX12 ? PE_LOAD_OP_CLEAR : PE_LOAD_OP_LOAD;
+        m_attachments[0].loadOp = PE_LOAD_OP_LOAD;
         m_attachments[0].storeOp = PE_STORE_OP_STORE;
     }
 

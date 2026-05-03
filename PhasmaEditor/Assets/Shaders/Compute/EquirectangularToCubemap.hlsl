@@ -1,9 +1,9 @@
 
 #include "../Common/Common.hlsl"
 
-RWTexture2DArray<float4> outCubeMap : register(u0);
-Texture2D<float4> inEquirectangular : register(t1);
-SamplerState samplerLinear : register(s2);
+[[vk::binding(0)]] RWTexture2DArray<float4> outCubeMap : register(u0);
+[[vk::binding(1)]] Texture2D<float4> inEquirectangular : register(t1);
+[[vk::binding(2)]] SamplerState samplerLinear : register(s2);
 
 float2 SampleSphericalMap(float3 v)
 {

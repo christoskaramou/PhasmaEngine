@@ -30,6 +30,15 @@ namespace pe
         barrier.accessMask = PE_ACCESS_SHADER_WRITE;
 
         cmd->BeginDebugRegion("Downsampler::Dispatch Command_" + std::to_string(s_currentIndex));
+        cmd->FillBuffer(s_atomicCounter[s_currentIndex], 0, sizeof(s_counter), 0);
+
+        BufferBarrierInfo counterBarrier{};
+        counterBarrier.buffer = s_atomicCounter[s_currentIndex];
+        counterBarrier.stageMask = PE_STAGE_COMPUTE_SHADER;
+        counterBarrier.accessMask = PE_ACCESS_SHADER_WRITE;
+        counterBarrier.size = PE_WHOLE_SIZE;
+        cmd->BufferBarrier(counterBarrier);
+
         cmd->ImageBarrier(barrier);
         cmd->BindPipeline(*s_passInfo, false);
         cmd->BindDescriptors(1, &s_DSet[s_currentIndex]);
@@ -92,7 +101,7 @@ namespace pe
             s_atomicCounter[i] = Buffer::Create({
                 .size = sizeof(s_counter),
                 .usage = PE_BUFFER_USAGE_STORAGE_BUFFER,
-                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY,
                 .name = "Downsample_storage_buffer_" + std::to_string(i),
             });
 

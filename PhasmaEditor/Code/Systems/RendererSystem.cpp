@@ -98,12 +98,10 @@ namespace pe
 
         CreateRenderTargets();
 
-        // Skybox / IBL are consumed by Light/post passes that are still Vulkan-only.
-        if (!isDx12)
-            LoadResources(initCmd);
+        // Skybox / IBL are consumed by the Light pass. DX12 reaches that slice in 14c.
+        LoadResources(initCmd);
 
-        // 14b: Culling/Shadow/Depth/GBuffer/Aabbs/Grid render-pass components are wired on DX12.
-        // Light/Particles/TAA/Sharpen/RayTracing remain Vulkan-only until later 14c+ tasks.
+        // 14c: DX12 wires the raster lighting and particle passes. Post/TAA/Sharpen/RT stay Vulkan-only.
         m_renderPassComponents[ID::GetTypeID<CullingPass>()] = CreateGlobalComponent<CullingPass>();
         m_renderPassComponents[ID::GetTypeID<ShadowPass>()] = CreateGlobalComponent<ShadowPass>();
         m_renderPassComponents[ID::GetTypeID<DepthPass>()] = CreateGlobalComponent<DepthPass>();
@@ -111,12 +109,12 @@ namespace pe
         m_renderPassComponents[ID::GetTypeID<GbufferTransparentPass>()] = CreateGlobalComponent<GbufferTransparentPass>();
         m_renderPassComponents[ID::GetTypeID<AabbsPass>()] = CreateGlobalComponent<AabbsPass>();
         m_renderPassComponents[ID::GetTypeID<GridPass>()] = CreateGlobalComponent<GridPass>();
+        m_renderPassComponents[ID::GetTypeID<LightOpaquePass>()] = CreateGlobalComponent<LightOpaquePass>();
+        m_renderPassComponents[ID::GetTypeID<LightTransparentPass>()] = CreateGlobalComponent<LightTransparentPass>();
+        m_renderPassComponents[ID::GetTypeID<ParticleComputePass>()] = CreateGlobalComponent<ParticleComputePass>();
+        m_renderPassComponents[ID::GetTypeID<ParticlePass>()] = CreateGlobalComponent<ParticlePass>();
         if (!isDx12)
         {
-            m_renderPassComponents[ID::GetTypeID<LightOpaquePass>()] = CreateGlobalComponent<LightOpaquePass>();
-            m_renderPassComponents[ID::GetTypeID<LightTransparentPass>()] = CreateGlobalComponent<LightTransparentPass>();
-            m_renderPassComponents[ID::GetTypeID<ParticleComputePass>()] = CreateGlobalComponent<ParticleComputePass>();
-            m_renderPassComponents[ID::GetTypeID<ParticlePass>()] = CreateGlobalComponent<ParticlePass>();
             m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
             m_renderPassComponents[ID::GetTypeID<SharpenPass>()] = CreateGlobalComponent<SharpenPass>();
             m_renderPassComponents[ID::GetTypeID<RayTracingPass>()] = CreateGlobalComponent<RayTracingPass>();
@@ -311,14 +309,25 @@ namespace pe
 
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
         {
-            // Task 14b: Culling/Shadow/Depth + GBuffer + Aabbs/Grid debug overlays.
-            // Light/Particles/post/ImGui/RayTracing remain disabled until 14c+.
+            // DX12 Phase 1 keeps ray tracing and post/ImGui disabled, but falls back to
+            // the raster path even when a user setting requests RT-only rendering.
+            const bool dx12RayTracing = RHII.GetCaps().rayTracing && renderRayTracing;
+            const bool dx12RenderRaster = renderRaster || !dx12RayTracing;
+            const bool dx12NeedDepth = dx12RenderRaster || gs.draw_aabbs || gs.draw_grid;
+            const bool dx12NeedGBuffer = dx12RenderRaster;
+
             m_renderGraphPassEnabled.fill(false);
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Culling)] = true;
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Shadow)] = gs.shadows && renderRaster;
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Depth)] = needDepth;
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GBufferOpaque)] = needGBuffer;
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GBufferTransparent)] = gs.render_mode == RenderMode::Raster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Shadow)] = gs.shadows && dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Depth)] = dx12NeedDepth;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GBufferOpaque)] = dx12NeedGBuffer;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightOpaque)] = dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GBufferTransparent)] = dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightTransparent)] = dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::RayTracing)] = dx12RayTracing;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::ParticleCompute)] = dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Particle)] = dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] = dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Aabbs)] = gs.draw_aabbs;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)] = gs.draw_grid;
             return;
@@ -477,13 +486,20 @@ namespace pe
 
         if (isDx12)
         {
-            // Task 14b: GridPass is the only enabled pass that produces the display image.
-            // When it ran, blit display->swapchain. Otherwise the swapchain is still
-            // undefined for this frame, so clear it to produce a defined pixel.
-            const bool gridProducedDisplay = m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)];
-            if (gridProducedDisplay)
+            const bool displayProduced =
+                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] ||
+                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)];
+            const bool viewportProduced =
+                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightOpaque)] ||
+                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightTransparent)];
+
+            if (displayProduced)
             {
                 BlitToSwapchain(cmd, m_displayRT, imageIndex);
+            }
+            else if (viewportProduced)
+            {
+                BlitToSwapchain(cmd, m_viewportRT, imageIndex);
             }
             else
             {
@@ -715,7 +731,10 @@ namespace pe
                                               vec4 clearColor)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
-        float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
+        // DX12 currently only has same-size image blits. Keep render targets full-size
+        // until the shader blit path can handle scaled viewport/display copies.
+        const bool canUseRenderTargetScale = RHII.GetApi() != PE_GRAPHICS_API_DX12;
+        float rtScale = useRenderTergetScale && canUseRenderTargetScale ? gSettings.render_scale : 1.f;
 
         uint32_t width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
         uint32_t heigth = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
@@ -754,7 +773,10 @@ namespace pe
                                                     uint32_t clearStencil)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
-        float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
+        // Keep DX12 color/depth attachments at one size so the current copy/blit path
+        // never requires a scaling blit.
+        const bool canUseRenderTargetScale = RHII.GetApi() != PE_GRAPHICS_API_DX12;
+        float rtScale = useRenderTergetScale && canUseRenderTargetScale ? gSettings.render_scale : 1.f;
 
         ImageDesc desc{};
         desc.width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
