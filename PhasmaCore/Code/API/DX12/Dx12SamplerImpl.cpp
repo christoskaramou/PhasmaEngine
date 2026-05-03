@@ -1,5 +1,6 @@
 #include "API/DX12/Dx12SamplerImpl.h"
 
+#include "API/DX12/Dx12DescriptorHeap.h"
 #include "API/DX12/Dx12RhiImpl.h"
 #include "API/DX12/Dx12Translate.h"
 #include "API/RHI.h"
@@ -98,13 +99,11 @@ namespace pe
         PE_ERROR_IF(!rhi || !rhi->GetDevice(), "Dx12SamplerImpl requires an initialized DX12 device");
         ID3D12Device *device = rhi->GetDevice();
 
-        D3D12_DESCRIPTOR_HEAP_DESC heapDesc{};
-        heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
-        heapDesc.NumDescriptors = 1;
-        heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-        HRESULT hr = device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&m_heap));
-        PE_ERROR_IF(FAILED(hr), "Dx12SamplerImpl: CreateDescriptorHeap failed (0x%08X)", static_cast<unsigned>(hr));
-        m_cpuHandle = m_heap->GetCPUDescriptorHandleForHeapStart();
+        m_heap = rhi->GetSamplerHeap();
+        PE_ERROR_IF(!m_heap, "Dx12SamplerImpl requires the DX12 sampler heap");
+        m_slot = m_heap->Allocate();
+        m_cpuHandle = m_heap->GetCpuHandle(m_slot);
+        m_gpuHandle = m_heap->GetGpuHandle(m_slot);
 
         D3D12_SAMPLER_DESC samplerDesc{};
         samplerDesc.Filter = Filter(desc);
@@ -119,11 +118,14 @@ namespace pe
         FillBorderColor(desc.borderColor, samplerDesc.BorderColor);
 
         device->CreateSampler(&samplerDesc, m_cpuHandle);
+    }
 
-        if (owner && !owner->m_name.empty())
+    Dx12SamplerImpl::~Dx12SamplerImpl()
+    {
+        if (m_heap && m_slot != UINT32_MAX)
         {
-            std::wstring name(owner->m_name.begin(), owner->m_name.end());
-            m_heap->SetName(name.c_str());
+            m_heap->Free(m_slot);
+            m_slot = UINT32_MAX;
         }
     }
 } // namespace pe

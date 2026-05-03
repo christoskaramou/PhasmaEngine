@@ -9,19 +9,19 @@ namespace pe
 {
     namespace
     {
-        D3D12_DESCRIPTOR_HEAP_TYPE HeapTypeForKind(Dx12ImageViewKind kind)
+        Dx12DescriptorHeap *HeapForKind(Dx12RhiImpl *rhi, Dx12ImageViewKind kind)
         {
             switch (kind)
             {
             case Dx12ImageViewKind::Rtv:
-                return D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+                return rhi->GetRtvStagingHeap();
             case Dx12ImageViewKind::Dsv:
-                return D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+                return rhi->GetDsvStagingHeap();
             case Dx12ImageViewKind::Srv:
             case Dx12ImageViewKind::Uav:
-                return D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+                return rhi->GetCbvSrvUavStagingHeap();
             default:
-                return D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+                return rhi->GetCbvSrvUavStagingHeap();
             }
         }
 
@@ -263,13 +263,10 @@ namespace pe
         const auto *image = Dx12ImageImpl::From(owner->m_parent);
         ID3D12Device *device = rhi->GetDevice();
 
-        D3D12_DESCRIPTOR_HEAP_DESC heapDesc{};
-        heapDesc.Type = HeapTypeForKind(kind);
-        heapDesc.NumDescriptors = 1;
-        heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-        HRESULT hr = device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&m_heap));
-        PE_ERROR_IF(FAILED(hr), "Dx12ImageViewImpl: CreateDescriptorHeap failed (0x%08X)", static_cast<unsigned>(hr));
-        m_cpuHandle = m_heap->GetCPUDescriptorHandleForHeapStart();
+        m_heap = HeapForKind(rhi, kind);
+        PE_ERROR_IF(!m_heap, "Dx12ImageViewImpl requires an initialized descriptor staging heap");
+        m_slot = m_heap->Allocate();
+        m_cpuHandle = m_heap->GetCpuHandle(m_slot);
 
         const DXGI_FORMAT format = ViewFormat(desc, image, kind);
         switch (kind)
@@ -302,6 +299,15 @@ namespace pe
             device->CreateDepthStencilView(image->GetResource(), &dsv, m_cpuHandle);
             break;
         }
+        }
+    }
+
+    Dx12ImageViewImpl::~Dx12ImageViewImpl()
+    {
+        if (m_heap && m_slot != UINT32_MAX)
+        {
+            m_heap->Free(m_slot);
+            m_slot = UINT32_MAX;
         }
     }
 

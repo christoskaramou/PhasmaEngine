@@ -40,6 +40,7 @@ namespace pe
 
     private:
         friend struct VulkanDescriptorPoolImpl;
+        friend struct Dx12DescriptorPoolImpl;
 
         DescriptorPool(const DescriptorPoolDesc &desc, const std::string &name);
         ~DescriptorPool();
@@ -136,6 +137,7 @@ namespace pe
 
     private:
         friend struct VulkanDescriptorLayoutImpl;
+        friend struct Dx12DescriptorLayoutImpl;
 
         DescriptorLayout(const std::vector<DescriptorBindingInfo> &bindingInfos,
                          PeShaderStageFlags stage,
@@ -210,6 +212,7 @@ namespace pe
 
     private:
         friend struct VulkanDescriptorImpl;
+        friend struct Dx12DescriptorImpl;
 
         Descriptor(const std::vector<DescriptorBindingInfo> &bindingInfos,
                    PeShaderStageFlags stage,
