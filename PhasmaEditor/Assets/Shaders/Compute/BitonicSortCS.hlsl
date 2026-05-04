@@ -33,7 +33,7 @@ void mainCS(uint3 DTid : SV_DispatchThreadID)
     float keyI = SortKeys[i];
     float keyJ = SortKeys[j];
 
-    bool shouldSwap = ascending ? (keyI < keyJ) : (keyI > keyJ);
+    bool shouldSwap = ascending ? (keyI > keyJ) : (keyI < keyJ);
 
     if (shouldSwap)
     {

@@ -1361,9 +1361,9 @@ namespace pe
             {
                 ToolDefinition tool;
                 tool.name = "take_screenshot";
-                tool.description = "Takes a screenshot of the current editor state and returns it as a base64 PNG image for visual inspection. "
-                                   "The image is embedded in the tool result and is visible to vision-capable models. "
-                                   "Use this to see the current layout before deciding where to click with inject_mouse_input.";
+                tool.description = "Captures the current editor frame and writes a downscaled PNG (max 1024 px, cursor overlay drawn) to disk. "
+                                   "Returns metadata only: path, width, height, bytes, cursor_x, cursor_y, mime_type. The image is NOT embedded in the response. "
+                                   "Pair with query_imgui_windows for layout, then click via inject_mouse_input.";
                 tool.inputSchema = schema::Object({});
                 tool.handler = [runtime](const nlohmann::json &, Context &) -> CallToolResult
                 {

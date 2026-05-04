@@ -299,8 +299,10 @@ namespace pe
     {
         const auto &gs = Settings::Get<GlobalSettings>();
 
-        const bool renderRaster = gs.render_mode != RenderMode::RayTracing;
-        const bool renderRayTracing = gs.render_mode != RenderMode::Raster;
+        // No TLAS: fall back to raster so m_display still gets painted.
+        const bool hasRTGeom = m_scene.GetTLAS() != nullptr;
+        const bool renderRaster = (gs.render_mode != RenderMode::RayTracing) || !hasRTGeom;
+        const bool renderRayTracing = (gs.render_mode != RenderMode::Raster) && hasRTGeom;
         const bool needVelocity = gs.taa || gs.motion_blur;
         const bool renderSSR = gs.ssr && renderRaster;
         const bool renderSSAO = gs.ssao && renderRaster;

@@ -86,6 +86,20 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
         fragColor += ibl * cb_IBL_intensity;
     }
 
+    float transmissionWeight = saturate(material.transmission);
+    if (transmissionWeight > 0.0f)
+    {
+        float3 incident = -V;
+        float3 normalOffset = normal - incident * dot(normal, incident);
+        float3 transmissionDir = normalize(incident + normalOffset * 0.18f);
+
+        float cubeWidth, cubeHeight, cubeLevels;
+        Cube.GetDimensions(0, cubeWidth, cubeHeight, cubeLevels);
+        float transmissionMip = material.roughness * material.roughness * max(0.0f, cubeLevels - 1.0f);
+        float3 transmitted = Cube.SampleLevel(sampler_Cube, transmissionDir, transmissionMip).rgb * material.albedo;
+        fragColor = lerp(fragColor, transmitted, transmissionWeight * 0.8f);
+    }
+
     // Add emmission
     output.color.rgb = fragColor + emmission;
     output.color.a   = albedo.a;
