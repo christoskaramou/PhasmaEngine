@@ -100,7 +100,7 @@ namespace pe
         {
             s_atomicCounter[i] = Buffer::Create({
                 .size = sizeof(s_counter),
-                .usage = PE_BUFFER_USAGE_STORAGE_BUFFER,
+                .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
                 .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY,
                 .name = "Downsample_storage_buffer_" + std::to_string(i),
             });
