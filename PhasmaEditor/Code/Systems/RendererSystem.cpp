@@ -116,6 +116,7 @@ namespace pe
         if (isDx12)
         {
             m_renderPassComponents[ID::GetTypeID<SSRPass>()] = CreateGlobalComponent<SSRPass>();
+            m_renderPassComponents[ID::GetTypeID<FXAAPass>()] = CreateGlobalComponent<FXAAPass>();
             m_renderPassComponents[ID::GetTypeID<TonemapPass>()] = CreateGlobalComponent<TonemapPass>();
         }
         if (!isDx12)
@@ -344,6 +345,7 @@ namespace pe
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::ParticleCompute)] = dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Particle)] = dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::SSR)] = gs.ssr && dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::FXAA)] = gs.fxaa && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] = dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Tonemap)] = gs.tonemapping && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Aabbs)] = gs.draw_aabbs;
