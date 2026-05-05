@@ -198,6 +198,10 @@ namespace pe
             args.push_back(L"-spirv");
             args.push_back(L"-fspv-target-env=vulkan1.3");
 
+            const bool isLibraryTarget =
+                (stage & (PE_SHADER_STAGE_RAYGEN_KHR | PE_SHADER_STAGE_ANY_HIT_KHR | PE_SHADER_STAGE_CLOSEST_HIT_KHR |
+                          PE_SHADER_STAGE_MISS_KHR | PE_SHADER_STAGE_INTERSECTION_KHR | PE_SHADER_STAGE_CALLABLE_KHR)) != 0;
+
             args.push_back(L"-T");
             if (stage == PE_SHADER_STAGE_VERTEX)
                 args.push_back(L"vs_6_3");
@@ -205,8 +209,7 @@ namespace pe
                 args.push_back(L"ps_6_3");
             else if (stage == PE_SHADER_STAGE_COMPUTE)
                 args.push_back(L"cs_6_3");
-            else if (stage & (PE_SHADER_STAGE_RAYGEN_KHR | PE_SHADER_STAGE_ANY_HIT_KHR | PE_SHADER_STAGE_CLOSEST_HIT_KHR |
-                              PE_SHADER_STAGE_MISS_KHR | PE_SHADER_STAGE_INTERSECTION_KHR | PE_SHADER_STAGE_CALLABLE_KHR))
+            else if (isLibraryTarget)
                 args.push_back(L"lib_6_3");
             else
             {
@@ -217,9 +220,14 @@ namespace pe
             args.push_back(L"-fspv-preserve-bindings");
             args.push_back(L"-fspv-preserve-interface");
 
-            args.push_back(L"-E");
+            // Library targets export every [shader(...)] function;
+            // passing -E with lib_6_* is rejected by DXC.
             std::wstring entryName = ConvertUtf8ToWide(owner->GetEntryName());
-            args.push_back(entryName.c_str());
+            if (!isLibraryTarget)
+            {
+                args.push_back(L"-E");
+                args.push_back(entryName.c_str());
+            }
 
             args.push_back(DXC_ARG_WARNINGS_ARE_ERRORS);
             args.push_back(DXC_ARG_PACK_MATRIX_ROW_MAJOR);
@@ -280,7 +288,7 @@ namespace pe
             DxcBuffer sourceBuffer;
             sourceBuffer.Ptr = pSource->GetBufferPointer();
             sourceBuffer.Size = pSource->GetBufferSize();
-            sourceBuffer.Encoding = 0;
+            sourceBuffer.Encoding = DXC_CP_UTF8;
 
             IDxcResult *result = nullptr;
             hr = dxc_compiler->Compile(&sourceBuffer,
@@ -288,6 +296,16 @@ namespace pe
                                        static_cast<uint32_t>(args.size()),
                                        include_handler,
                                        IID_PPV_ARGS(&result));
+
+            if (FAILED(hr) || !result)
+            {
+                if (result)
+                    PrintDxcError(result);
+                PE_ERROR("[Shader] dxc_compiler->Compile failed (hr=0x%08lx) for '%s'",
+                         static_cast<unsigned long>(hr),
+                         owner->GetCache().GetSourcePath().c_str());
+                return false;
+            }
 
             HRESULT compileStatus;
             result->GetStatus(&compileStatus);

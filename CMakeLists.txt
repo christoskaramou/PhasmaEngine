@@ -11,6 +11,8 @@ endif()
 # so they match the rest of the editor build and imported Windows dependencies.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
+# Static libs linked into PhasmaEditorModule need PIC on ELF targets.
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 project(PhasmaEditor C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
