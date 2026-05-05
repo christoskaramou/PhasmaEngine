@@ -121,6 +121,8 @@ namespace pe
             m_renderPassComponents[ID::GetTypeID<BloomBrightFilterPass>()] = CreateGlobalComponent<BloomBrightFilterPass>();
             m_renderPassComponents[ID::GetTypeID<BloomGaussianBlurHorizontalPass>()] = CreateGlobalComponent<BloomGaussianBlurHorizontalPass>();
             m_renderPassComponents[ID::GetTypeID<BloomGaussianBlurVerticalPass>()] = CreateGlobalComponent<BloomGaussianBlurVerticalPass>();
+            m_renderPassComponents[ID::GetTypeID<DOFPass>()] = CreateGlobalComponent<DOFPass>();
+            m_renderPassComponents[ID::GetTypeID<MotionBlurPass>()] = CreateGlobalComponent<MotionBlurPass>();
         }
         if (!isDx12)
         {
@@ -354,6 +356,8 @@ namespace pe
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomBF)] = gs.bloom && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomH)] = gs.bloom && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomV)] = gs.bloom && dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::DOF)] = gs.dof && dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::MotionBlur)] = gs.motion_blur && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Aabbs)] = gs.draw_aabbs;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)] = gs.draw_grid;
             return;
@@ -516,6 +520,8 @@ namespace pe
                 m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] ||
                 m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Tonemap)] ||
                 m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomV)] ||
+                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::DOF)] ||
+                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::MotionBlur)] ||
                 m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)];
             const bool viewportProduced =
                 m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightOpaque)] ||
