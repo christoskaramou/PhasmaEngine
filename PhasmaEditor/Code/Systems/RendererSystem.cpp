@@ -43,6 +43,8 @@ namespace pe
 {
     namespace
     {
+        constexpr size_t kDx12TextureDataPitchAlignment = 256;
+
         ::PeFormat GetSwapchainSurfaceFormat()
         {
             if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
@@ -54,6 +56,20 @@ namespace pe
             }
 
             return pe::FromVkFormat(RHII.GetSurface()->GetFormat());
+        }
+
+        size_t GetScreenshotRowPitch(uint32_t width)
+        {
+            const size_t rowBytes = static_cast<size_t>(width) * 4;
+            if (RHII.GetApi() != PE_GRAPHICS_API_DX12)
+                return rowBytes;
+
+            return (rowBytes + kDx12TextureDataPitchAlignment - 1) & ~(kDx12TextureDataPitchAlignment - 1);
+        }
+
+        bool IsBgra8Format(::PeFormat format)
+        {
+            return format == PE_FORMAT_B8G8R8A8_UNORM || format == PE_FORMAT_B8G8R8A8_SRGB;
         }
     } // namespace
 
@@ -516,24 +532,12 @@ namespace pe
 
         if (isDx12)
         {
-            const bool displayProduced =
-                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] ||
-                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Tonemap)] ||
-                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomV)] ||
-                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::DOF)] ||
-                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::MotionBlur)] ||
-                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)];
-            const bool viewportProduced =
-                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightOpaque)] ||
-                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightTransparent)];
+            Image *frameOutputImage = GetFrameOutputImage();
 
-            if (displayProduced)
+            if (frameOutputImage)
             {
-                BlitToSwapchain(cmd, m_displayRT, imageIndex);
-            }
-            else if (viewportProduced)
-            {
-                BlitToSwapchain(cmd, m_viewportRT, imageIndex);
+                BlitToSwapchain(cmd, frameOutputImage, imageIndex);
+                QueueScreenshotReadback(cmd, frameOutputImage);
             }
             else
             {
@@ -543,6 +547,8 @@ namespace pe
                 attachment.storeOp = PE_STORE_OP_STORE;
                 cmd->BeginPass(1, &attachment, "DX12FinalClear");
                 cmd->EndPass();
+
+                QueueScreenshotReadback(cmd, dx12SwapchainImage);
 
                 ImageBarrierInfo presentBarrier{};
                 presentBarrier.image = dx12SwapchainImage;
@@ -559,30 +565,7 @@ namespace pe
                 BlitToSwapchain(cmd, m_displayRT, imageIndex);
             }
 
-            EventSystem::QueuedEvent screenshotEvt;
-            if (EventSystem::PeekAndPop(EventType::Screenshot, screenshotEvt))
-            {
-                m_screenshotPath = screenshotEvt.payload.has_value()
-                                       ? std::any_cast<std::string>(screenshotEvt.payload)
-                                       : std::string();
-
-                cmd->CopyImage(m_displayRT, m_screenshotRT);
-
-                uint32_t w = m_screenshotRT->GetWidth();
-                uint32_t h = m_screenshotRT->GetHeight();
-                size_t bufferSize = static_cast<size_t>(w) * h * 4;
-
-                Buffer::Destroy(m_screenshotBuffer);
-                m_screenshotBuffer = Buffer::Create({
-                    .size = bufferSize,
-                    .usage = PE_BUFFER_USAGE_TRANSFER_DST,
-                    .memoryUsage = PE_MEMORY_USAGE_GPU_TO_CPU,
-                    .name = "ScreenshotStaging",
-                });
-
-                cmd->CopyImageToBuffer(m_screenshotRT, m_screenshotBuffer);
-                m_screenshotPending = true;
-            }
+            QueueScreenshotReadback(cmd, m_displayRT);
         }
 
 #ifdef PE_TRACY
@@ -593,6 +576,56 @@ namespace pe
         cmd->End();
 
         return cmd;
+    }
+
+    Image *RendererSystem::GetFrameOutputImage() const
+    {
+        const bool displayProduced =
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] ||
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Tonemap)] ||
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomV)] ||
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::DOF)] ||
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::MotionBlur)] ||
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)];
+        if (displayProduced)
+            return m_displayRT;
+
+        const bool viewportProduced =
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightOpaque)] ||
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightTransparent)];
+        if (viewportProduced)
+            return m_viewportRT;
+
+        return nullptr;
+    }
+
+    void RendererSystem::QueueScreenshotReadback(CommandBuffer *cmd, Image *sourceImage)
+    {
+        EventSystem::QueuedEvent screenshotEvt;
+        if (!sourceImage || !EventSystem::PeekAndPop(EventType::Screenshot, screenshotEvt))
+            return;
+
+        m_screenshotPath = screenshotEvt.payload.has_value()
+                               ? std::any_cast<std::string>(screenshotEvt.payload)
+                               : std::string();
+
+        cmd->CopyImage(sourceImage, m_screenshotRT);
+
+        uint32_t w = m_screenshotRT->GetWidth();
+        uint32_t h = m_screenshotRT->GetHeight();
+        m_screenshotRowPitch = GetScreenshotRowPitch(w);
+        size_t bufferSize = m_screenshotRowPitch * h;
+
+        Buffer::Destroy(m_screenshotBuffer);
+        m_screenshotBuffer = Buffer::Create({
+            .size = bufferSize,
+            .usage = PE_BUFFER_USAGE_TRANSFER_DST,
+            .memoryUsage = PE_MEMORY_USAGE_GPU_TO_CPU,
+            .name = "ScreenshotStaging",
+        });
+
+        cmd->CopyImageToBuffer(m_screenshotRT, m_screenshotBuffer);
+        m_screenshotPending = true;
     }
 
     void RendererSystem::Draw()
@@ -671,15 +704,23 @@ namespace pe
             path = dir + "screenshot_" + buf + ".png";
         }
 
-        // Convert BGRA to RGBA for PNG encoding
         size_t pixelCount = static_cast<size_t>(w) * h;
         std::vector<uint8_t> rgba(pixelCount * 4);
-        for (size_t i = 0; i < pixelCount; i++)
+        const size_t rowPitch = m_screenshotRowPitch ? m_screenshotRowPitch : static_cast<size_t>(w) * 4;
+        const bool isBgra = IsBgra8Format(m_screenshotRT->GetFormat());
+        for (uint32_t y = 0; y < h; ++y)
         {
-            rgba[i * 4 + 0] = pixels[i * 4 + 2]; // R
-            rgba[i * 4 + 1] = pixels[i * 4 + 1]; // G
-            rgba[i * 4 + 2] = pixels[i * 4 + 0]; // B
-            rgba[i * 4 + 3] = pixels[i * 4 + 3]; // A
+            const uint8_t *srcRow = pixels + static_cast<size_t>(y) * rowPitch;
+            uint8_t *dstRow = rgba.data() + static_cast<size_t>(y) * w * 4;
+            for (uint32_t x = 0; x < w; ++x)
+            {
+                const uint8_t *src = srcRow + static_cast<size_t>(x) * 4;
+                uint8_t *dst = dstRow + static_cast<size_t>(x) * 4;
+                dst[0] = isBgra ? src[2] : src[0];
+                dst[1] = src[1];
+                dst[2] = isBgra ? src[0] : src[2];
+                dst[3] = src[3];
+            }
         }
 
         auto pngData = pmcp::EncodeRGBA_PNG(rgba.data(), static_cast<int>(w), static_cast<int>(h));
@@ -700,6 +741,7 @@ namespace pe
 
         m_screenshotBuffer->Unmap();
         Buffer::Destroy(m_screenshotBuffer);
+        m_screenshotRowPitch = 0;
     }
 
     void RendererSystem::DrawPlatformWindows()

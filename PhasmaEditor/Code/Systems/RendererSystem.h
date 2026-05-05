@@ -138,6 +138,8 @@ namespace pe
         CommandBuffer *RecordPasses(uint32_t imageIndex);
         void Upsample(CommandBuffer *cmd, PeFilter filter);
         void CreateRenderTargets();
+        Image *GetFrameOutputImage() const;
+        void QueueScreenshotReadback(CommandBuffer *cmd, Image *sourceImage);
         RenderGraph m_renderGraph;
 
         Image *m_displayRT = nullptr;
@@ -145,6 +147,7 @@ namespace pe
         Image *m_depthStencil = nullptr;
         Image *m_screenshotRT = nullptr;
         bool m_screenshotPending = false;
+        size_t m_screenshotRowPitch = 0;
         std::string m_screenshotPath;
         std::string m_screenshotSavedPath;
         Buffer *m_screenshotBuffer = nullptr;
