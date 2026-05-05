@@ -113,6 +113,8 @@ namespace pe
         m_renderPassComponents[ID::GetTypeID<LightTransparentPass>()] = CreateGlobalComponent<LightTransparentPass>();
         m_renderPassComponents[ID::GetTypeID<ParticleComputePass>()] = CreateGlobalComponent<ParticleComputePass>();
         m_renderPassComponents[ID::GetTypeID<ParticlePass>()] = CreateGlobalComponent<ParticlePass>();
+        if (isDx12)
+            m_renderPassComponents[ID::GetTypeID<SSRPass>()] = CreateGlobalComponent<SSRPass>();
         if (!isDx12)
         {
             m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
@@ -130,6 +132,8 @@ namespace pe
         // Init GUI
         if (!isDx12)
             m_gui.Init();
+        else
+            m_gui.InitAgentServices();
 
         uint32_t imageCount = RHII.GetSwapchainImageCount();
         m_cmds.resize(imageCount, nullptr);
@@ -219,6 +223,11 @@ namespace pe
             PE_PROFILE_SCOPE("GUI");
             m_gui.Update();
         }
+        else
+        {
+            PE_PROFILE_SCOPE("GUI Agent Actions");
+            m_gui.PumpMainThreadActions();
+        }
 
         // Flush any deferred GPU work (primitive batching, async load completion)
         // MUST happen before Scene::Update() so that rebuilt buffers exist
@@ -264,6 +273,8 @@ namespace pe
                 return isPassEnabled(RenderGraphPassId::Aabbs);
             if (rc == m_particleComputePass || rc == m_particlePass)
                 return true;
+            if (rc == m_ssrPass)
+                return isPassEnabled(RenderGraphPassId::SSR);
             if (rc == m_taaPass)
                 return isPassEnabled(RenderGraphPassId::TAA);
             if (rc == m_sharpenPass)
@@ -329,6 +340,7 @@ namespace pe
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::RayTracing)] = dx12RayTracing;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::ParticleCompute)] = dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Particle)] = dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::SSR)] = gs.ssr && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] = dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Aabbs)] = gs.draw_aabbs;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)] = gs.draw_grid;
@@ -843,10 +855,11 @@ namespace pe
     Image *RendererSystem::CreateFSSampledImage(bool useRenderTergetScale)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
-        float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
+        const bool canUseRenderTargetScale = RHII.GetApi() != PE_GRAPHICS_API_DX12;
+        float rtScale = useRenderTergetScale && canUseRenderTargetScale ? gSettings.render_scale : 1.f;
 
         ImageDesc desc{};
-        desc.format = pe::FromVkFormat(RHII.GetSurface()->GetFormat());
+        desc.format = GetSwapchainSurfaceFormat();
         desc.width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
         desc.height = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
         desc.usage = PE_IMAGE_USAGE_TRANSFER_DST | PE_IMAGE_USAGE_SAMPLED;

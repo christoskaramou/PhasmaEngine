@@ -36,7 +36,6 @@ namespace pe
         m_passInfo->name = "ParticleGraphicsPipeline";
         m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Particle/ParticleVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
         m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Particle/ParticlePS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
-        m_passInfo->topology = PE_TOPOLOGY_TRIANGLE_LIST;
         m_passInfo->cullMode = PE_CULL_MODE_NONE;
         m_passInfo->blendEnable = true;
         m_passInfo->colorBlendAttachments = {BlendState::ParticlesBlend};

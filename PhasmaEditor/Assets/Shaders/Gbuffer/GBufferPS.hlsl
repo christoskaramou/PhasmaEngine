@@ -90,7 +90,7 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
         emissive *= GetEmissive(id, uv).xyz;
     }
 
-    output.normal = normalWS * 0.5f + 0.5f;
+    output.normal = float4(normalWS * 0.5f + 0.5f, 1.0f);
     output.albedo = float4(combinedColor.xyz, combinedColor.a);
     float transmission = (pc.passType == 2) ? 1.0f : 0.0f;
     output.metRough = float4(occlusion, roughness, metallic, transmission);

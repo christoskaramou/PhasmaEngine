@@ -48,6 +48,7 @@ namespace pe
         m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
         m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Gbuffer/LightingPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = definesFrag});
         m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
+        m_passInfo->cullMode = PE_CULL_MODE_NONE;
         m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
         m_passInfo->depthTestEnable = false;
@@ -129,7 +130,7 @@ namespace pe
         m_ubo.camPos = vec4(camera->GetPosition(), 1.0f);
         const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
         m_ubo.ssao = !isDx12 && gSettings.ssao;
-        m_ubo.ssr = !isDx12 && gSettings.ssr;
+        m_ubo.ssr = gSettings.ssr;
         m_ubo.tonemapping = !isDx12 && gSettings.tonemapping;
         m_ubo.fsr2 = !isDx12 && gSettings.taa;
         m_ubo.IBL = gSettings.IBL;
@@ -239,6 +240,7 @@ namespace pe
         m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
         m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Gbuffer/LightingPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = definesFrag});
         m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
+        m_passInfo->cullMode = PE_CULL_MODE_NONE;
         m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->blendEnable = true;
         m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
@@ -318,7 +320,7 @@ namespace pe
         m_ubo.camPos = vec4(camera->GetPosition(), 1.0f);
         const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
         m_ubo.ssao = !isDx12 && gSettings.ssao;
-        m_ubo.ssr = !isDx12 && gSettings.ssr;
+        m_ubo.ssr = gSettings.ssr;
         m_ubo.tonemapping = !isDx12 && gSettings.tonemapping;
         m_ubo.fsr2 = !isDx12 && gSettings.taa;
         m_ubo.IBL = gSettings.IBL;

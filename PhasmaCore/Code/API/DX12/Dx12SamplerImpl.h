@@ -18,13 +18,10 @@ namespace pe
         static const Dx12SamplerImpl *TryFrom(const Sampler *sampler) { return sampler && sampler->m_impl ? From(sampler) : nullptr; }
 
         D3D12_CPU_DESCRIPTOR_HANDLE GetCpuHandle() const { return m_cpuHandle; }
-        D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHandle() const { return m_gpuHandle; }
-        uint32_t GetShaderVisibleSlot() const { return m_slot; }
 
         Sampler *m_owner = nullptr;
         class Dx12DescriptorHeap *m_heap = nullptr;
         D3D12_CPU_DESCRIPTOR_HANDLE m_cpuHandle{};
-        D3D12_GPU_DESCRIPTOR_HANDLE m_gpuHandle{};
         uint32_t m_slot = UINT32_MAX;
     };
 } // namespace pe

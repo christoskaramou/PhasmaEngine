@@ -1553,16 +1553,7 @@ namespace pe
 
         m_afterCommandWaitToken = EventSystem::RegisterCallbackWithToken(EventType::AfterCommandWait, std::move(AddGpuTimerInfo));
 
-        m_editorToolRuntime = std::make_unique<EditorToolRuntime>(
-            [this](std::function<void()> fn)
-            {
-                QueueMainThreadAction(std::move(fn));
-            },
-            RHII.GetWindow());
-        m_editorMcp = std::make_unique<EditorMcp>(m_editorToolRuntime.get(), this);
-        LoadAgentConfig();
-        if (m_mcpStartEnabled)
-            m_editorMcp->Start();
+        InitAgentServices();
 
         auto properties = std::make_shared<Properties>();
         auto profiler = std::make_shared<ProfilerWidget>();
@@ -1642,6 +1633,23 @@ namespace pe
         m_initialized = true;
     }
 
+    void GUI::InitAgentServices()
+    {
+        if (m_editorToolRuntime && m_editorMcp)
+            return;
+
+        m_editorToolRuntime = std::make_unique<EditorToolRuntime>(
+            [this](std::function<void()> fn)
+            {
+                QueueMainThreadAction(std::move(fn));
+            },
+            RHII.GetWindow());
+        m_editorMcp = std::make_unique<EditorMcp>(m_editorToolRuntime.get(), this);
+        LoadAgentConfig();
+        if (m_mcpStartEnabled)
+            m_editorMcp->Start();
+    }
+
     void GUI::ApplyStartupLayout(bool restoreLastScene)
     {
         SDL_PumpEvents();
@@ -1702,23 +1710,26 @@ namespace pe
         ImGui::RenderPlatformWindowsDefault();
     }
 
+    void GUI::PumpMainThreadActions()
+    {
+        std::vector<std::function<void()>> mainThreadActions;
+        {
+            std::lock_guard lock(m_mainThreadActionMutex);
+            mainThreadActions.swap(m_pendingMainThreadActions);
+        }
+        for (auto &fn : mainThreadActions)
+            fn();
+    }
+
     void GUI::Update()
     {
-        if (!m_initialized)
-            return;
-
         // Drain the MCP/tool action queue before the render-state guard so that
         // queued tool calls (screenshot, Lua exec, mouse input) are never starved
         // when the editor window is minimised or rendering is paused.
-        {
-            std::vector<std::function<void()>> mainThreadActions;
-            {
-                std::lock_guard lock(m_mainThreadActionMutex);
-                mainThreadActions.swap(m_pendingMainThreadActions);
-            }
-            for (auto &fn : mainThreadActions)
-                fn();
-        }
+        PumpMainThreadActions();
+
+        if (!m_initialized)
+            return;
 
         if (!m_render)
             return;

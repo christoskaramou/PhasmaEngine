@@ -21,7 +21,9 @@ namespace pe
         ~GUI();
 
         void Init();
+        void InitAgentServices();
         void Update();
+        void PumpMainThreadActions();
         void ExecutePass(CommandBuffer *cmd);
         void DrawPlatformWindows();
         bool Render() const { return m_initialized && m_render; }
@@ -42,6 +44,7 @@ namespace pe
 
         // Called after the window is shown to apply the correct layout
         void ApplyStartupLayout(bool restoreLastScene = true);
+        void LoadEditorConfig();
 
         // Hot-reload UI state persistence
         std::string TakeUISnapshot() const;
@@ -94,7 +97,6 @@ namespace pe
         void Stop();
         void NewScene();
         void SaveEditorConfig();
-        void LoadEditorConfig();
         void LoadAgentConfig();
 
         bool m_showExitConfirmation = false;

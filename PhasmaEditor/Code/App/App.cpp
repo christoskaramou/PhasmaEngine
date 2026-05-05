@@ -81,20 +81,14 @@ namespace pe
         m_window = Window::Adopt(RHII.GetWindow());
 
         const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
-        if (isDx12)
-        {
-            CreateGlobalSystem<RendererSystem>()->Init(nullptr);
-            m_window->Show();
-            m_window->Maximize();
-            return;
-        }
 
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
 
         cmd->Begin();
         CreateGlobalSystem<RendererSystem>()->Init(cmd);
-        CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
+        if (!isDx12)
+            CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
 #ifdef PE_PHYSICS
         CreateGlobalSystem<PhysicsSystem>()->Init(nullptr);
 #endif
@@ -114,9 +108,12 @@ namespace pe
 
         queue->WaitIdle();
 
-        // Render frames so everything is initialized before destroying the splash screen
-        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
-            Frame();
+        if (!isDx12)
+        {
+            // Render frames so everything is initialized before destroying the splash screen.
+            for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
+                Frame();
+        }
 
         std::string snapPath = Path::Executable + "reload_state.json";
         std::string hotReloadSnapshot;
@@ -163,8 +160,14 @@ namespace pe
 
         m_window->Show();
         m_window->Maximize();
-        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+        if (!isDx12)
+        {
             GetGlobalSystem<RendererSystem>()->GetGUI().ApplyStartupLayout(!shouldRestoreHotReloadSnapshot);
+        }
+        else if (!shouldRestoreHotReloadSnapshot)
+        {
+            GetGlobalSystem<RendererSystem>()->GetGUI().LoadEditorConfig();
+        }
 
         if (hasHotReloadSnapshot)
         {

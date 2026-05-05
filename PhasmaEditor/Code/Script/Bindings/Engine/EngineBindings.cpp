@@ -9,6 +9,14 @@
 
 namespace pe
 {
+    namespace
+    {
+        bool HasImGuiContext()
+        {
+            return ImGui::GetCurrentContext() != nullptr;
+        }
+    } // namespace
+
     static struct EngineBindings
     {
         EngineBindings()
@@ -70,16 +78,20 @@ namespace pe
                 });
 
                 engine.set_function("is_popup_open", []() -> bool {
+                    if (!HasImGuiContext())
+                        return false;
                     return ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
                 });
 
                 engine.set_function("want_capture_keyboard", []() -> bool {
+                    if (!HasImGuiContext())
+                        return false;
                     return ImGui::GetIO().WantCaptureKeyboard;
                 });
 
                 // Returns the name of the currently focused ImGui window, or "" if none.
                 engine.set_function("get_focused_window", []() -> std::string {
-                    ImGuiWindow *w = ImGui::GetCurrentContext() ? ImGui::GetCurrentContext()->NavWindow : nullptr;
+                    ImGuiWindow *w = HasImGuiContext() ? ImGui::GetCurrentContext()->NavWindow : nullptr;
                     return (w && w->Name) ? std::string(w->Name) : std::string();
                 });
 
@@ -96,6 +108,8 @@ namespace pe
 
                 // Pass -1 to clear keyboard focus (equivalent to ImGui::SetKeyboardFocusHere(-1))
                 imgui.set_function("set_keyboard_focus_here", [](int offset) {
+                    if (!HasImGuiContext())
+                        return;
                     ImGui::SetKeyboardFocusHere(offset);
                 });
 

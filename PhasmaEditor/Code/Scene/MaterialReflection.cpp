@@ -1,5 +1,6 @@
 #include "Scene/MaterialReflection.h"
 #include "Scene/PassInfoAsset.h"
+#include "API/RHI.h"
 #include "API/Shader.h"
 #include "API/Reflection.h"
 #include "API/Vulkan/VulkanReflection.h"
@@ -12,6 +13,9 @@ namespace pe
     MaterialLayout ReflectMaterialLayout(const PassInfoAsset &passInfo)
     {
         MaterialLayout layout;
+
+        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+            return layout;
 
         const PassVariant *surface = passInfo.GetVariant("surface");
         if (!surface || !surface->HasShaders())

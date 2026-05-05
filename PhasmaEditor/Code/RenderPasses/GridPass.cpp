@@ -34,9 +34,7 @@ namespace pe
         // Dynamic States
         m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR, PE_DYNAMIC_STATE_DEPTH_TEST_ENABLE, PE_DYNAMIC_STATE_DEPTH_WRITE_ENABLE};
 
-        m_passInfo->topology = PE_TOPOLOGY_TRIANGLE_LIST; // Fullscreen triangle
         m_passInfo->cullMode = PE_CULL_MODE_NONE;
-        m_passInfo->polygonMode = PE_POLYGON_MODE_FILL;
 
         // Blending (Alpha Blend)
         m_passInfo->colorBlendAttachments = {BlendState::Default};

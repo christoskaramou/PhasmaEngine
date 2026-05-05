@@ -92,15 +92,25 @@ namespace pe
             rtv.ptr += rtvStride;
         }
 
-        m_owner->m_width = desc.width;
-        m_owner->m_height = desc.height;
+        uint32_t width = desc.width;
+        uint32_t height = desc.height;
+        if (!m_backbuffers.empty() && m_backbuffers[0])
+        {
+            const D3D12_RESOURCE_DESC backbufferDesc = m_backbuffers[0]->GetDesc();
+            width = static_cast<uint32_t>(backbufferDesc.Width);
+            height = static_cast<uint32_t>(backbufferDesc.Height);
+        }
+        PE_ERROR_IF(width == 0 || height == 0, "Dx12SwapchainImpl: invalid backbuffer extent %ux%u", width, height);
+
+        m_owner->m_width = width;
+        m_owner->m_height = height;
         m_owner->m_images.resize(bbCount);
         for (uint32_t i = 0; i < bbCount; ++i)
         {
             Image *img = new Image();
             img->m_impl = CreateDx12SwapchainImageImpl(img, m_backbuffers[i].Get(), m_format);
-            img->m_width = desc.width;
-            img->m_height = desc.height;
+            img->m_width = width;
+            img->m_height = height;
             img->m_depth = 1;
             img->m_mipLevels = 1;
             img->m_arrayLayers = 1;

@@ -9,7 +9,7 @@ TexSamplerDecl(3, 0, MetallicRoughness)
 TexSamplerDecl(4, 0, Albedo)
 
 // Camera Buffer
-[[vk::binding(5, 0)]] cbuffer Camera
+[[vk::binding(5, 0)]] cbuffer Camera : register(b5, space0)
 {
     float4 cb_camPos;
     float4 cb_camFront;

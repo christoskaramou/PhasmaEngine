@@ -146,8 +146,8 @@ struct VS_OUTPUT_Position_Uv_ID
 {
     float2 uv : TEXCOORD0;
     float alphaFactor : TEXCOORD1;
+    nointerpolation uint id : TEXCOORD2;
     float4 position : SV_POSITION;
-    uint id : SV_InstanceID;
 };
 
 struct VS_OUTPUT_Gbuffer
@@ -159,8 +159,8 @@ struct VS_OUTPUT_Gbuffer
     float4 positionCS : POSITION0;
     float4 prevPositionCS : POSITION1;
     float4 positionWS : POSITION2;
+    nointerpolation uint id : TEXCOORD5;
     float4 position : SV_POSITION;
-    uint id : SV_InstanceID;
 };
 
 struct VS_OUTPUT_AABB
@@ -180,7 +180,7 @@ struct PS_INPUT_Gbuffer
     float4 positionCS : POSITION0;
     float4 prevPositionCS : POSITION1;
     float4 positionWS : POSITION2;
-    uint id : SV_InstanceID;
+    nointerpolation uint id : TEXCOORD5;
 };
 
 struct PS_INPUT_Position_Uv
@@ -193,8 +193,8 @@ struct PS_INPUT_Position_Uv_ID
 {
     float2 uv : TEXCOORD0;
     float alphaFactor : TEXCOORD1;
+    nointerpolation uint id : TEXCOORD2;
     float4 position : SV_POSITION;
-    uint id : SV_InstanceID;
 };
 
 struct PS_INPUT_UV
@@ -209,7 +209,7 @@ struct PS_INPUT_Color
 
 struct PS_OUTPUT_Gbuffer
 {
-    float3 normal : SV_TARGET0;
+    float4 normal : SV_TARGET0;
     float4 albedo : SV_TARGET1;
     float4 metRough : SV_TARGET2;
     float2 velocity : SV_TARGET3;

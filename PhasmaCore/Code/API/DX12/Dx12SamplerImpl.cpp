@@ -99,11 +99,10 @@ namespace pe
         PE_ERROR_IF(!rhi || !rhi->GetDevice(), "Dx12SamplerImpl requires an initialized DX12 device");
         ID3D12Device *device = rhi->GetDevice();
 
-        m_heap = rhi->GetSamplerHeap();
-        PE_ERROR_IF(!m_heap, "Dx12SamplerImpl requires the DX12 sampler heap");
+        m_heap = rhi->GetSamplerStagingHeap();
+        PE_ERROR_IF(!m_heap, "Dx12SamplerImpl requires the DX12 sampler staging heap");
         m_slot = m_heap->Allocate();
         m_cpuHandle = m_heap->GetCpuHandle(m_slot);
-        m_gpuHandle = m_heap->GetGpuHandle(m_slot);
 
         D3D12_SAMPLER_DESC samplerDesc{};
         samplerDesc.Filter = Filter(desc);
@@ -112,7 +111,7 @@ namespace pe
         samplerDesc.AddressW = pe_dx12::AddressMode(desc.addressModeW);
         samplerDesc.MipLODBias = desc.mipLodBias;
         samplerDesc.MaxAnisotropy = MaxAnisotropy(desc);
-        samplerDesc.ComparisonFunc = pe_dx12::CompareOp(desc.compareOp);
+        samplerDesc.ComparisonFunc = desc.compareEnable ? pe_dx12::CompareOp(desc.compareOp) : D3D12_COMPARISON_FUNC_NONE;
         samplerDesc.MinLOD = desc.minLod;
         samplerDesc.MaxLOD = desc.maxLod;
         FillBorderColor(desc.borderColor, samplerDesc.BorderColor);

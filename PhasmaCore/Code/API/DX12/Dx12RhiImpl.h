@@ -30,6 +30,7 @@ namespace pe
         Dx12DescriptorHeap *GetCbvSrvUavHeap() const { return m_cbvSrvUavHeap.get(); }
         Dx12DescriptorHeap *GetSamplerHeap() const { return m_samplerHeap.get(); }
         Dx12DescriptorHeap *GetCbvSrvUavStagingHeap() const { return m_cbvSrvUavStagingHeap.get(); }
+        Dx12DescriptorHeap *GetSamplerStagingHeap() const { return m_samplerStagingHeap.get(); }
         Dx12DescriptorHeap *GetRtvStagingHeap() const { return m_rtvStagingHeap.get(); }
         Dx12DescriptorHeap *GetDsvStagingHeap() const { return m_dsvStagingHeap.get(); }
         Dx12RootSignature *GetSharedRootSig() const { return m_sharedRootSignature.get(); }
@@ -44,6 +45,7 @@ namespace pe
         std::unique_ptr<Dx12DescriptorHeap> m_cbvSrvUavHeap;
         std::unique_ptr<Dx12DescriptorHeap> m_samplerHeap;
         std::unique_ptr<Dx12DescriptorHeap> m_cbvSrvUavStagingHeap;
+        std::unique_ptr<Dx12DescriptorHeap> m_samplerStagingHeap;
         std::unique_ptr<Dx12DescriptorHeap> m_rtvStagingHeap;
         std::unique_ptr<Dx12DescriptorHeap> m_dsvStagingHeap;
         std::unique_ptr<Dx12RootSignature> m_sharedRootSignature;

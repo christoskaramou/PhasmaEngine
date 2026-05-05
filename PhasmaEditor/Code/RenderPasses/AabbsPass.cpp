@@ -82,14 +82,14 @@ namespace pe
         cmd->BeginDebugRegion("Aabbs");
 
         cmd->BeginPass(2, m_attachments.data(), "AabbsPass");
-        cmd->BindIndexBuffer(m_scene->GetBuffer(), m_scene->GetAabbIndicesOffset());
-        cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetAabbVerticesOffset());
         cmd->SetViewport(0.f, 0.f, m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_viewportRT->GetWidth(), m_viewportRT->GetHeight());
         cmd->SetLineWidth(1.f + gSettings.render_scale * gSettings.render_scale);
         cmd->SetDepthTestEnable(gSettings.aabbs_depth_aware);
         cmd->SetDepthWriteEnable(false);
         cmd->BindPipeline(*m_passInfo);
+        cmd->BindIndexBuffer(m_scene->GetBuffer(), m_scene->GetAabbIndicesOffset());
+        cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetAabbVerticesOffset());
 
         for (uint32_t i = 0; i < m_scene->GetNodeCount(); i++)
         {

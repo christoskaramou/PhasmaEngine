@@ -8,10 +8,43 @@
 #include "API/RHI.h"
 #include "API/Reflection.h"
 
+#include <sstream>
+#include <vector>
+
 namespace pe
 {
     namespace
     {
+        std::string DrainInfoQueue(ID3D12Device *device)
+        {
+            Microsoft::WRL::ComPtr<ID3D12InfoQueue> infoQueue;
+            if (!device || FAILED(device->QueryInterface(IID_PPV_ARGS(&infoQueue))))
+                return {};
+
+            const UINT64 count = infoQueue->GetNumStoredMessages();
+            if (count == 0)
+                return {};
+
+            std::ostringstream out;
+            const UINT64 first = count > 8 ? count - 8 : 0;
+            for (UINT64 i = first; i < count; ++i)
+            {
+                SIZE_T messageLength = 0;
+                if (FAILED(infoQueue->GetMessage(i, nullptr, &messageLength)) || messageLength == 0)
+                    continue;
+
+                std::vector<char> storage(messageLength);
+                auto *message = reinterpret_cast<D3D12_MESSAGE *>(storage.data());
+                if (FAILED(infoQueue->GetMessage(i, message, &messageLength)) || !message->pDescription)
+                    continue;
+
+                if (out.tellp() > 0)
+                    out << " | ";
+                out << message->pDescription;
+            }
+            return out.str();
+        }
+
         D3D12_RASTERIZER_DESC MakeRasterizerDesc(const PassInfo &info)
         {
             D3D12_RASTERIZER_DESC desc{};
@@ -161,7 +194,17 @@ namespace pe
         desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
         HRESULT hr = rhi->GetDevice()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&m_pso));
-        PE_ERROR_IF(FAILED(hr), "Dx12PipelineImpl: CreateGraphicsPipelineState failed (0x%08X)", static_cast<unsigned>(hr));
+        const std::string infoQueueMessages = FAILED(hr) ? DrainInfoQueue(rhi->GetDevice()) : std::string{};
+        PE_ERROR_IF(FAILED(hr),
+                    "Dx12PipelineImpl('%s'): CreateGraphicsPipelineState failed (0x%08X, colorTargets=%u, depthFormat=%d, depthTest=%d, depthWrite=%d)%s%s",
+                    info.name.c_str(),
+                    static_cast<unsigned>(hr),
+                    desc.NumRenderTargets,
+                    static_cast<int>(info.depthFormat),
+                    info.depthTestEnable ? 1 : 0,
+                    info.depthWriteEnable ? 1 : 0,
+                    infoQueueMessages.empty() ? "" : ": ",
+                    infoQueueMessages.c_str());
     }
 } // namespace pe
 
