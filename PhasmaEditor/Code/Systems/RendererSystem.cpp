@@ -118,6 +118,9 @@ namespace pe
             m_renderPassComponents[ID::GetTypeID<SSRPass>()] = CreateGlobalComponent<SSRPass>();
             m_renderPassComponents[ID::GetTypeID<FXAAPass>()] = CreateGlobalComponent<FXAAPass>();
             m_renderPassComponents[ID::GetTypeID<TonemapPass>()] = CreateGlobalComponent<TonemapPass>();
+            m_renderPassComponents[ID::GetTypeID<BloomBrightFilterPass>()] = CreateGlobalComponent<BloomBrightFilterPass>();
+            m_renderPassComponents[ID::GetTypeID<BloomGaussianBlurHorizontalPass>()] = CreateGlobalComponent<BloomGaussianBlurHorizontalPass>();
+            m_renderPassComponents[ID::GetTypeID<BloomGaussianBlurVerticalPass>()] = CreateGlobalComponent<BloomGaussianBlurVerticalPass>();
         }
         if (!isDx12)
         {
@@ -326,8 +329,8 @@ namespace pe
 
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
         {
-            // DX12 Phase 1 keeps ray tracing and post/ImGui disabled, but falls back to
-            // the raster path even when a user setting requests RT-only rendering.
+            // DX12 Phase 1 keeps unsupported post/ImGui paths disabled, but falls back
+            // to raster when a user setting requests RT-only rendering.
             const bool dx12RayTracing = RHII.GetCaps().rayTracing && renderRayTracing;
             const bool dx12RenderRaster = renderRaster || !dx12RayTracing;
             const bool dx12NeedDepth = dx12RenderRaster || gs.draw_aabbs || gs.draw_grid;
@@ -348,6 +351,9 @@ namespace pe
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::FXAA)] = gs.fxaa && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] = dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Tonemap)] = gs.tonemapping && dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomBF)] = gs.bloom && dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomH)] = gs.bloom && dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomV)] = gs.bloom && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Aabbs)] = gs.draw_aabbs;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)] = gs.draw_grid;
             return;
@@ -509,6 +515,7 @@ namespace pe
             const bool displayProduced =
                 m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] ||
                 m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Tonemap)] ||
+                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomV)] ||
                 m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)];
             const bool viewportProduced =
                 m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightOpaque)] ||

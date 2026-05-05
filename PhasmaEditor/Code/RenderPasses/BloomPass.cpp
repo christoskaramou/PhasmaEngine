@@ -27,9 +27,12 @@ namespace pe
         m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
         m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Bloom/BrightFilterPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
         m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
-        m_passInfo->cullMode = PE_CULL_MODE_BACK;
+        m_passInfo->cullMode = PE_CULL_MODE_NONE;
         m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->colorFormats = {m_brightFilterRT->GetFormat()};
+        m_passInfo->depthTestEnable = false;
+        m_passInfo->depthWriteEnable = false;
+        m_passInfo->stencilTestEnable = false;
         m_passInfo->Update();
     }
 
@@ -86,9 +89,12 @@ namespace pe
         m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
         m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Bloom/GaussianBlurHPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
         m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
-        m_passInfo->cullMode = PE_CULL_MODE_BACK;
+        m_passInfo->cullMode = PE_CULL_MODE_NONE;
         m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->colorFormats = {m_gaussianBlurHorizontalRT->GetFormat()};
+        m_passInfo->depthTestEnable = false;
+        m_passInfo->depthWriteEnable = false;
+        m_passInfo->stencilTestEnable = false;
         m_passInfo->Update();
     }
 
@@ -151,10 +157,13 @@ namespace pe
         m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
         m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Bloom/GaussianBlurVPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
         m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
-        m_passInfo->cullMode = PE_CULL_MODE_BACK;
+        m_passInfo->cullMode = PE_CULL_MODE_NONE;
         m_passInfo->blendEnable = true;
         m_passInfo->colorBlendAttachments = {BlendState::AdditiveColor};
         m_passInfo->colorFormats = {m_displayRT->GetFormat()};
+        m_passInfo->depthTestEnable = false;
+        m_passInfo->depthWriteEnable = false;
+        m_passInfo->stencilTestEnable = false;
         m_passInfo->Update();
     }
 
