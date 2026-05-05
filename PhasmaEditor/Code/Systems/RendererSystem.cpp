@@ -140,6 +140,7 @@ namespace pe
             m_renderPassComponents[ID::GetTypeID<DOFPass>()] = CreateGlobalComponent<DOFPass>();
             m_renderPassComponents[ID::GetTypeID<MotionBlurPass>()] = CreateGlobalComponent<MotionBlurPass>();
             m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
+            m_renderPassComponents[ID::GetTypeID<SharpenPass>()] = CreateGlobalComponent<SharpenPass>();
         }
         if (!isDx12)
         {
@@ -369,6 +370,7 @@ namespace pe
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::SSR)] = gs.ssr && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::FXAA)] = gs.fxaa && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::TAA)] = gs.taa && dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Sharpen)] = gs.taa && gs.cas_sharpening && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] = !gs.taa && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Tonemap)] = gs.tonemapping && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomBF)] = gs.bloom && dx12RenderRaster;
@@ -585,6 +587,7 @@ namespace pe
         const bool displayProduced =
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] ||
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::TAA)] ||
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Sharpen)] ||
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Tonemap)] ||
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomV)] ||
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::DOF)] ||

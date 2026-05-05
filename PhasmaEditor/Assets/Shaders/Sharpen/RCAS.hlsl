@@ -8,7 +8,7 @@ struct PushConstants
 [[vk::push_constant]] ConstantBuffer<PushConstants> pc;
 
 [[vk::binding(0)]] Texture2D<float4> in_color : register(t0);
-[[vk::binding(1)]] RWTexture2D<float4> out_color : register(u0);
+[[vk::binding(1)]] RWTexture2D<float4> out_color : register(u1);
 
 // CAS Algorithm
 // R.C.A.S. - Robust Contrast Adaptive Sharpening
@@ -57,6 +57,11 @@ void RCAS(int2 coord, float sharpness)
 [numthreads(8, 8, 1)]
 void main(uint3 id : SV_DispatchThreadID)
 {
+    uint width, height;
+    out_color.GetDimensions(width, height);
+    if (id.x >= width || id.y >= height)
+        return;
+
     int2 coord = int2(id.xy);
     RCAS(coord, pc.sharpness);
 }
