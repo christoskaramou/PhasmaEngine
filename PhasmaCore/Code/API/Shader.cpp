@@ -450,6 +450,14 @@ namespace pe
         args.push_back(L"-fspv-target-env=vulkan1.3");
 
         // Shader stage
+        const bool isLibraryTarget =
+            static_cast<bool>(m_shaderStage & (vk::ShaderStageFlagBits::eRaygenKHR |
+                                               vk::ShaderStageFlagBits::eAnyHitKHR |
+                                               vk::ShaderStageFlagBits::eClosestHitKHR |
+                                               vk::ShaderStageFlagBits::eMissKHR |
+                                               vk::ShaderStageFlagBits::eIntersectionKHR |
+                                               vk::ShaderStageFlagBits::eCallableKHR));
+
         args.push_back(L"-T");
         if (m_shaderStage == vk::ShaderStageFlagBits::eVertex)
         {
@@ -463,12 +471,7 @@ namespace pe
         {
             args.push_back(L"cs_6_3");
         }
-        else if (m_shaderStage & (vk::ShaderStageFlagBits::eRaygenKHR |
-                                  vk::ShaderStageFlagBits::eAnyHitKHR |
-                                  vk::ShaderStageFlagBits::eClosestHitKHR |
-                                  vk::ShaderStageFlagBits::eMissKHR |
-                                  vk::ShaderStageFlagBits::eIntersectionKHR |
-                                  vk::ShaderStageFlagBits::eCallableKHR))
+        else if (isLibraryTarget)
         {
             args.push_back(L"lib_6_3");
         }
@@ -480,10 +483,14 @@ namespace pe
         args.push_back(L"-fspv-preserve-interface");
         // args.push_back(L"-fspv-reflect");
 
-        // Entry point
-        args.push_back(L"-E");
+        // Library targets export every [shader(...)] function;
+        // passing -E with lib_6_* is rejected by DXC.
         std::wstring entryName = ConvertUtf8ToWide(GetEntryName());
-        args.push_back(entryName.c_str());
+        if (!isLibraryTarget)
+        {
+            args.push_back(L"-E");
+            args.push_back(entryName.c_str());
+        }
 
         args.push_back(DXC_ARG_WARNINGS_ARE_ERRORS);   //-WX
         args.push_back(DXC_ARG_PACK_MATRIX_ROW_MAJOR); //-Zpr
@@ -550,7 +557,7 @@ namespace pe
         DxcBuffer sourceBuffer;
         sourceBuffer.Ptr = pSource->GetBufferPointer();
         sourceBuffer.Size = pSource->GetBufferSize();
-        sourceBuffer.Encoding = 0;
+        sourceBuffer.Encoding = DXC_CP_UTF8;
 
         IDxcResult *result = nullptr;
         hr = dxc_compiler->Compile(
@@ -559,6 +566,16 @@ namespace pe
             static_cast<uint32_t>(args.size()),
             include_handler,
             IID_PPV_ARGS(&result));
+
+        if (FAILED(hr) || !result)
+        {
+            if (result)
+                PrintDxcError(result);
+            PE_ERROR("[Shader] dxc_compiler->Compile failed (hr=0x%08lx) for '%s'",
+                     static_cast<unsigned long>(hr),
+                     m_cache.GetSourcePath().c_str());
+            return false;
+        }
 
         HRESULT compileStatus;
         result->GetStatus(&compileStatus);
