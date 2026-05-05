@@ -101,7 +101,7 @@ namespace pe
         // Skybox / IBL are consumed by the Light pass. DX12 reaches that slice in 14c.
         LoadResources(initCmd);
 
-        // 14c: DX12 wires the raster lighting and particle passes. Post/TAA/Sharpen/RT stay Vulkan-only.
+        // DX12 Phase 1 wires bounded raster/post slices here while keeping TAA/Sharpen/RT Vulkan-only.
         m_renderPassComponents[ID::GetTypeID<CullingPass>()] = CreateGlobalComponent<CullingPass>();
         m_renderPassComponents[ID::GetTypeID<ShadowPass>()] = CreateGlobalComponent<ShadowPass>();
         m_renderPassComponents[ID::GetTypeID<DepthPass>()] = CreateGlobalComponent<DepthPass>();
@@ -114,7 +114,10 @@ namespace pe
         m_renderPassComponents[ID::GetTypeID<ParticleComputePass>()] = CreateGlobalComponent<ParticleComputePass>();
         m_renderPassComponents[ID::GetTypeID<ParticlePass>()] = CreateGlobalComponent<ParticlePass>();
         if (isDx12)
+        {
             m_renderPassComponents[ID::GetTypeID<SSRPass>()] = CreateGlobalComponent<SSRPass>();
+            m_renderPassComponents[ID::GetTypeID<TonemapPass>()] = CreateGlobalComponent<TonemapPass>();
+        }
         if (!isDx12)
         {
             m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
@@ -342,6 +345,7 @@ namespace pe
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Particle)] = dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::SSR)] = gs.ssr && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] = dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Tonemap)] = gs.tonemapping && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Aabbs)] = gs.draw_aabbs;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)] = gs.draw_grid;
             return;
@@ -502,6 +506,7 @@ namespace pe
         {
             const bool displayProduced =
                 m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] ||
+                m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Tonemap)] ||
                 m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)];
             const bool viewportProduced =
                 m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightOpaque)] ||
