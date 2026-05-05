@@ -30,6 +30,7 @@ namespace pe
         Microsoft::WRL::ComPtr<D3D12MA::Allocation> m_allocation;
         Microsoft::WRL::ComPtr<ID3D12Resource> m_resource;
         D3D12_HEAP_TYPE m_heapType = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_STATES m_state = D3D12_RESOURCE_STATE_COMMON;
         bool m_allowsUnorderedAccess = false;
         void *m_mapped = nullptr;
     };

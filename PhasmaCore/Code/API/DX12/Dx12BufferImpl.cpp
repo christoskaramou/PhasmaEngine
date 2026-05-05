@@ -88,9 +88,10 @@ namespace pe
 
         D3D12_RESOURCE_DESC resourceDesc = BufferResourceDesc(owner->m_size, desc.usage, m_heapType);
         m_allowsUnorderedAccess = (resourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) != 0;
+        m_state = InitialStateForHeap(m_heapType);
         HRESULT hr = rhi->GetAllocator()->CreateResource(&allocationDesc,
                                                          &resourceDesc,
-                                                         InitialStateForHeap(m_heapType),
+                                                         m_state,
                                                          nullptr,
                                                          &m_allocation,
                                                          IID_PPV_ARGS(&m_resource));

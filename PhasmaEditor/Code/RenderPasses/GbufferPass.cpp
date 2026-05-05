@@ -165,19 +165,12 @@ namespace pe
             cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
             cmd->SetConstants(pushConstants);
             cmd->PushConstants();
-            if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-            {
-                cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(), 0, m_scene->GetMeshCount());
-            }
-            else
-            {
-                cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 0 * sizeof(uint32_t), m_scene->GetMeshCount());
-                cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 1 * sizeof(uint32_t), m_scene->GetMeshCount());
+            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 0 * sizeof(uint32_t), m_scene->GetMeshCount());
+            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 1 * sizeof(uint32_t), m_scene->GetMeshCount());
 
-                cmd->BindPipeline(*m_passInfoDS, false);
-                cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 5 * sizeof(uint32_t), m_scene->GetMeshCount());
-                cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 6 * sizeof(uint32_t), m_scene->GetMeshCount());
-            }
+            cmd->BindPipeline(*m_passInfoDS, false);
+            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 5 * sizeof(uint32_t), m_scene->GetMeshCount());
+            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 6 * sizeof(uint32_t), m_scene->GetMeshCount());
 
             cmd->EndPass();
         }
@@ -333,10 +326,7 @@ namespace pe
         cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
         cmd->SetConstants(pushConstants);
         cmd->PushConstants();
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-            cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(), 0, m_scene->GetMeshCount());
-        else
-            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaBlend(frame), 0, m_scene->GetCullingCountersBuffer(frame), 2 * sizeof(uint32_t), m_scene->GetMeshCount());
+        cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaBlend(frame), 0, m_scene->GetCullingCountersBuffer(frame), 2 * sizeof(uint32_t), m_scene->GetMeshCount());
         cmd->EndPass();
 
         pushConstants.passType = 2u;
@@ -348,10 +338,7 @@ namespace pe
         cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
         cmd->SetConstants(pushConstants);
         cmd->PushConstants();
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-            cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(), 0, m_scene->GetMeshCount());
-        else
-            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectTransmission(frame), 0, m_scene->GetCullingCountersBuffer(frame), 3 * sizeof(uint32_t), m_scene->GetMeshCount());
+        cmd->DrawIndexedIndirectCount(m_scene->GetIndirectTransmission(frame), 0, m_scene->GetCullingCountersBuffer(frame), 3 * sizeof(uint32_t), m_scene->GetMeshCount());
         cmd->EndPass();
 
         m_scene = nullptr;

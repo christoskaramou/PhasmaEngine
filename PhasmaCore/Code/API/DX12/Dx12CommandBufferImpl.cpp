@@ -82,6 +82,105 @@ namespace pe
             PE_ERROR_IF(!pipeline, "Dx12CommandBufferImpl::%s: No bound pipeline found!", what);
             PE_ERROR_IF(IsComputePipeline(pipeline), "Dx12CommandBufferImpl::%s: bound pipeline is compute", what);
         }
+
+        bool IsReadOnlyBufferState(D3D12_RESOURCE_STATES state)
+        {
+            constexpr D3D12_RESOURCE_STATES writeStates =
+                D3D12_RESOURCE_STATE_COPY_DEST |
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS |
+                D3D12_RESOURCE_STATE_STREAM_OUT |
+                D3D12_RESOURCE_STATE_RENDER_TARGET |
+                D3D12_RESOURCE_STATE_DEPTH_WRITE;
+            return (state & writeStates) == 0;
+        }
+
+        D3D12_RESOURCE_STATES ToD3D12BufferState(PeAccessFlags accessMask)
+        {
+            if (accessMask & (PE_ACCESS_SHADER_WRITE | PE_ACCESS_SHADER_STORAGE_WRITE))
+                return D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            if (accessMask & (PE_ACCESS_TRANSFER_WRITE | PE_ACCESS_HOST_WRITE))
+                return D3D12_RESOURCE_STATE_COPY_DEST;
+
+            D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COMMON;
+            if (accessMask & PE_ACCESS_TRANSFER_READ)
+                state |= D3D12_RESOURCE_STATE_COPY_SOURCE;
+            if (accessMask & PE_ACCESS_INDEX_READ)
+                state |= D3D12_RESOURCE_STATE_INDEX_BUFFER;
+            if (accessMask & (PE_ACCESS_VERTEX_ATTRIBUTE_READ | PE_ACCESS_UNIFORM_READ))
+                state |= D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+            if (accessMask & (PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_SAMPLED_READ | PE_ACCESS_SHADER_STORAGE_READ))
+                state |= D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
+            if (accessMask & PE_ACCESS_INDIRECT_COMMAND_READ)
+                state |= D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
+            if (state == D3D12_RESOURCE_STATE_COMMON && (accessMask & PE_ACCESS_MEMORY_READ))
+                state = D3D12_RESOURCE_STATE_GENERIC_READ;
+            return state;
+        }
+
+        void PushBufferTransition(std::vector<D3D12_RESOURCE_BARRIER> &batch,
+                                  Dx12BufferImpl *buf,
+                                  D3D12_RESOURCE_STATES requested)
+        {
+            if (!buf || !buf->GetResource() || buf->m_heapType != D3D12_HEAP_TYPE_DEFAULT)
+                return;
+
+            const D3D12_RESOURCE_STATES before = buf->m_state;
+            D3D12_RESOURCE_STATES after = requested;
+            if (before != D3D12_RESOURCE_STATE_COMMON &&
+                requested != D3D12_RESOURCE_STATE_COMMON &&
+                IsReadOnlyBufferState(before) &&
+                IsReadOnlyBufferState(requested))
+            {
+                after = before | requested;
+            }
+
+            if (before == after)
+                return;
+
+            D3D12_RESOURCE_BARRIER rb{};
+            rb.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            rb.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            rb.Transition.pResource = buf->GetResource();
+            rb.Transition.StateBefore = before;
+            rb.Transition.StateAfter = after;
+            rb.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+            batch.push_back(rb);
+
+            buf->m_state = after;
+        }
+
+        void PushBufferUAV(std::vector<D3D12_RESOURCE_BARRIER> &batch,
+                           Dx12BufferImpl *buf)
+        {
+            if (!buf || !buf->GetResource() || !buf->AllowsUnorderedAccess())
+                return;
+
+            D3D12_RESOURCE_BARRIER rb{};
+            rb.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+            rb.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            rb.UAV.pResource = buf->GetResource();
+            batch.push_back(rb);
+        }
+
+        void PushBufferBarrier(std::vector<D3D12_RESOURCE_BARRIER> &batch,
+                               const BufferBarrierInfo &info)
+        {
+            if (!info.buffer)
+                return;
+
+            Dx12BufferImpl *buf = Dx12BufferImpl::From(info.buffer);
+            const BufferTrackInfo previous = info.buffer->GetTrackInfo();
+            const bool previousUavWrite = (previous.accessMask & (PE_ACCESS_SHADER_WRITE | PE_ACCESS_SHADER_STORAGE_WRITE)) != 0;
+            if (previousUavWrite && (buf->m_state & D3D12_RESOURCE_STATE_UNORDERED_ACCESS))
+                PushBufferUAV(batch, buf);
+
+            PushBufferTransition(batch, buf, ToD3D12BufferState(info.accessMask));
+
+            BufferTrackInfo &trackInfo = info.buffer->GetTrackInfo();
+            trackInfo.stageMask = info.stageMask;
+            trackInfo.accessMask = info.accessMask;
+            trackInfo.queueFamilyIndex = info.queueFamilyIndex;
+        }
     } // namespace
 
     Dx12CommandBufferImpl::Dx12CommandBufferImpl(CommandBuffer *owner, CommandPool *commandPool, const std::string &name)
@@ -505,6 +604,8 @@ namespace pe
         PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::BindVertexBuffer: no bound pipeline (DX12 needs stride from PSO reflection)");
         PE_ERROR_IF(offset > buffer->Size(), "Dx12CommandBufferImpl::BindVertexBuffer: offset exceeds buffer size");
 
+        PushBufferTransition(m_barrierBatch, Dx12BufferImpl::From(buffer), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+
         m_owner->m_boundVertexBuffer = buffer;
         m_owner->m_boundVertexBufferOffset = offset;
         m_owner->m_boundVertexBufferFirstBinding = firstBinding;
@@ -536,6 +637,8 @@ namespace pe
 
         PE_ERROR_IF(!buffer, "Dx12CommandBufferImpl::BindIndexBuffer: null buffer");
         PE_ERROR_IF(offset > buffer->Size(), "Dx12CommandBufferImpl::BindIndexBuffer: offset exceeds buffer size");
+
+        PushBufferTransition(m_barrierBatch, Dx12BufferImpl::From(buffer), D3D12_RESOURCE_STATE_INDEX_BUFFER);
 
         m_owner->m_boundIndexBuffer = buffer;
         m_owner->m_boundIndexBufferOffset = offset;
@@ -694,6 +797,7 @@ namespace pe
         if (drawCount == 0)
             return;
 
+        PushBufferTransition(m_barrierBatch, Dx12BufferImpl::From(indirectBuffer), D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
         FlushBarriers();
         m_cmdList->ExecuteIndirect(GetDrawIndirectSignature(stride),
                                    drawCount,
@@ -715,6 +819,7 @@ namespace pe
         if (drawCount == 0)
             return;
 
+        PushBufferTransition(m_barrierBatch, Dx12BufferImpl::From(indirectBuffer), D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
         FlushBarriers();
         m_cmdList->ExecuteIndirect(GetDrawIndexedIndirectSignature(stride),
                                    drawCount,
@@ -739,6 +844,8 @@ namespace pe
         if (maxDrawCount == 0)
             return;
 
+        PushBufferTransition(m_barrierBatch, Dx12BufferImpl::From(indirectBuffer), D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+        PushBufferTransition(m_barrierBatch, Dx12BufferImpl::From(countBuffer), D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
         FlushBarriers();
         m_cmdList->ExecuteIndirect(GetDrawIndexedIndirectSignature(stride),
                                    maxDrawCount,
@@ -771,6 +878,8 @@ namespace pe
         if (!size)
             return;
 
+        PushBufferTransition(m_barrierBatch, Dx12BufferImpl::From(src), D3D12_RESOURCE_STATE_COPY_SOURCE);
+        PushBufferTransition(m_barrierBatch, Dx12BufferImpl::From(dst), D3D12_RESOURCE_STATE_COPY_DEST);
         FlushBarriers();
         m_cmdList->CopyBufferRegion(Dx12BufferImpl::From(dst)->GetResource(),
                                     static_cast<UINT64>(dstOffset),
@@ -843,37 +952,17 @@ namespace pe
             img->m_state = after;
         }
 
-        // Push a UAV barrier for a buffer. We use this whenever the engine
-        // requests a buffer-memory barrier; the legacy DX12 model can only
-        // synchronize UAV-to-UAV access; transfer/upload sync is implicit on the
-        // copy queue. Non-UAV buffers receive the barrier as a no-op-effective
-        // hazard guard until the enhanced-barrier path lands.
-        void PushBufferUAV(std::vector<D3D12_RESOURCE_BARRIER> &batch,
-                           Dx12BufferImpl *buf)
-        {
-            D3D12_RESOURCE_BARRIER rb{};
-            rb.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-            rb.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-            rb.UAV.pResource = buf->GetResource();
-            batch.push_back(rb);
-        }
     } // namespace
 
     void Dx12CommandBufferImpl::BufferBarrier(const BufferBarrierInfo &info)
     {
-        if (!info.buffer)
-            return;
-        PushBufferUAV(m_barrierBatch, Dx12BufferImpl::From(info.buffer));
+        PushBufferBarrier(m_barrierBatch, info);
     }
     void Dx12CommandBufferImpl::BufferBarriers(const std::vector<BufferBarrierInfo> &infos)
     {
         m_barrierBatch.reserve(m_barrierBatch.size() + infos.size());
         for (const auto &info : infos)
-        {
-            if (!info.buffer)
-                continue;
-            PushBufferUAV(m_barrierBatch, Dx12BufferImpl::From(info.buffer));
-        }
+            PushBufferBarrier(m_barrierBatch, info);
     }
     void Dx12CommandBufferImpl::ImageBarrier(const ImageBarrierInfo &info)
     {

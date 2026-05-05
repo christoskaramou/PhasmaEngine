@@ -689,12 +689,12 @@ namespace pe
             cmd->FillBuffer(m_sortKeysTransmission[frame], 0, sortKeySize, 0x7F7FFFFF);
         }
 
-        auto addTransferToComputeBarrier = [&](Buffer *buffer, uint64_t size)
+        auto addComputeAccessBarrier = [&](Buffer *buffer, uint64_t size)
         {
             BufferBarrierInfo barrier{};
             barrier.buffer = buffer;
-            barrier.stageMask = PE_STAGE_TRANSFER | PE_STAGE_COMPUTE_SHADER;
-            barrier.accessMask = PE_ACCESS_TRANSFER_WRITE | PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE;
+            barrier.stageMask = PE_STAGE_COMPUTE_SHADER;
+            barrier.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE;
             barrier.size = size;
             barrier.offset = 0;
             cmd->BufferBarrier(barrier);
@@ -702,17 +702,22 @@ namespace pe
 
         BufferBarrierInfo countersBarrier{};
         countersBarrier.buffer = m_cullingCountersBuffers[frame];
-        countersBarrier.stageMask = PE_STAGE_TRANSFER | PE_STAGE_COMPUTE_SHADER;
-        countersBarrier.accessMask = PE_ACCESS_TRANSFER_WRITE | PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE;
+        countersBarrier.stageMask = PE_STAGE_COMPUTE_SHADER;
+        countersBarrier.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE;
         countersBarrier.size = 7 * sizeof(uint32_t);
         countersBarrier.offset = 0;
         cmd->BufferBarrier(countersBarrier);
+        addComputeAccessBarrier(m_indirectOpaqueSS[frame], indirectSize);
+        addComputeAccessBarrier(m_indirectAlphaCutSS[frame], indirectSize);
+        addComputeAccessBarrier(m_indirectOpaqueDS[frame], indirectSize);
+        addComputeAccessBarrier(m_indirectAlphaCutDS[frame], indirectSize);
+        addComputeAccessBarrier(m_indirectSelected[frame], indirectSize);
         if (hasTransparentMeshes)
         {
-            addTransferToComputeBarrier(m_indirectAlphaBlend[frame], indirectSize);
-            addTransferToComputeBarrier(m_indirectTransmission[frame], indirectSize);
-            addTransferToComputeBarrier(m_sortKeysAlphaBlend[frame], sortKeySize);
-            addTransferToComputeBarrier(m_sortKeysTransmission[frame], sortKeySize);
+            addComputeAccessBarrier(m_indirectAlphaBlend[frame], indirectSize);
+            addComputeAccessBarrier(m_indirectTransmission[frame], indirectSize);
+            addComputeAccessBarrier(m_sortKeysAlphaBlend[frame], sortKeySize);
+            addComputeAccessBarrier(m_sortKeysTransmission[frame], sortKeySize);
         }
 
         cmd->BindPipeline(*passInfo);
@@ -864,8 +869,8 @@ namespace pe
         {
             BufferBarrierInfo barrier{};
             barrier.buffer = buffer;
-            barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_DRAW_INDIRECT;
-            barrier.accessMask = PE_ACCESS_SHADER_WRITE | PE_ACCESS_INDIRECT_COMMAND_READ;
+            barrier.stageMask = PE_STAGE_DRAW_INDIRECT;
+            barrier.accessMask = PE_ACCESS_INDIRECT_COMMAND_READ;
             barrier.size = static_cast<uint64_t>(m_indirectCapacity) * sizeof(vk::DrawIndexedIndirectCommand);
             barrier.offset = 0;
             cmd->BufferBarrier(barrier);
@@ -881,8 +886,8 @@ namespace pe
         }
         addIndirectBarrier(m_indirectSelected[frame]);
 
-        countersBarrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_DRAW_INDIRECT;
-        countersBarrier.accessMask = PE_ACCESS_SHADER_WRITE | PE_ACCESS_INDIRECT_COMMAND_READ;
+        countersBarrier.stageMask = PE_STAGE_DRAW_INDIRECT;
+        countersBarrier.accessMask = PE_ACCESS_INDIRECT_COMMAND_READ;
         cmd->BufferBarrier(countersBarrier);
     }
 
