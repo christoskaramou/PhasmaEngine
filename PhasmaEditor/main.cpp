@@ -141,6 +141,8 @@ int main(int argc, char *argv[])
                 }
             }
         }
+
+        api = PE_GRAPHICS_API_DX12;
         // SDL and graphics device live here — they survive module reloads.
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
         {

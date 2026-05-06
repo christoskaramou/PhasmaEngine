@@ -1144,20 +1144,25 @@ namespace pe
 
     GpuMemorySnapshot RHI::GetGpuMemorySnapshot()
     {
+        return m_impl->GetGpuMemorySnapshot();
+    }
+
+    GpuMemorySnapshot VulkanRhiImpl::GetGpuMemorySnapshot()
+    {
         GpuMemorySnapshot snap{};
 
         static bool s_extMemoryBudgetChecked = false;
         static bool s_extMemoryBudgetAvailable = false;
         if (!s_extMemoryBudgetChecked)
         {
-            s_extMemoryBudgetAvailable = IsDeviceExtensionValid(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+            s_extMemoryBudgetAvailable = RHII.IsDeviceExtensionValid(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
             s_extMemoryBudgetChecked = true;
         }
 
         if (!s_extMemoryBudgetAvailable)
             return snap;
 
-        auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
+        auto *vk = this;
 
         // --- Vulkan heaps/budgets baseline ---
         ::vk::PhysicalDeviceMemoryBudgetPropertiesEXT memBudget{};

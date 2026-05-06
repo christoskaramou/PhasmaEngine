@@ -220,4 +220,49 @@ namespace pe
     }
 
     void Dx12RhiImpl::NextFrame() {}
+
+    GpuMemorySnapshot Dx12RhiImpl::GetGpuMemorySnapshot()
+    {
+        GpuMemorySnapshot snap{};
+        if (!m_adapter || !m_d3d12Allocator)
+            return snap;
+
+        ComPtr<IDXGIAdapter3> adapter3;
+        if (FAILED(m_adapter.As(&adapter3)))
+            return snap;
+
+        DXGI_ADAPTER_DESC3 desc{};
+        m_adapter->GetDesc3(&desc);
+
+        DXGI_QUERY_VIDEO_MEMORY_INFO local{};
+        DXGI_QUERY_VIDEO_MEMORY_INFO nonlocal{};
+        adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &local);
+        adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &nonlocal);
+
+        D3D12MA::TotalStatistics stats{};
+        m_d3d12Allocator->CalculateStatistics(&stats);
+
+        const bool uma = m_d3d12Allocator->IsUMA();
+
+        // LOCAL maps to vram. On UMA, LOCAL covers the full unified pool, so size
+        // becomes dedicated + shared and the host segment stays empty.
+        snap.vram.size = uma ? (desc.DedicatedVideoMemory + desc.SharedSystemMemory) : desc.DedicatedVideoMemory;
+        snap.vram.budget = local.Budget;
+        snap.vram.used = local.CurrentUsage;
+        snap.vram.app = stats.MemorySegmentGroup[0].Stats.BlockBytes;
+        snap.vram.heaps = 1;
+        snap.vram.other = (snap.vram.used > snap.vram.app) ? (snap.vram.used - snap.vram.app) : 0;
+
+        if (!uma)
+        {
+            snap.host.size = desc.SharedSystemMemory;
+            snap.host.budget = nonlocal.Budget;
+            snap.host.used = nonlocal.CurrentUsage;
+            snap.host.app = stats.MemorySegmentGroup[1].Stats.BlockBytes;
+            snap.host.heaps = 1;
+            snap.host.other = (snap.host.used > snap.host.app) ? (snap.host.used - snap.host.app) : 0;
+        }
+
+        return snap;
+    }
 } // namespace pe

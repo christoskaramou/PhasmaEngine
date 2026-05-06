@@ -418,18 +418,21 @@ namespace pe
 
     void Debug::BeginCmdRegion(CommandBuffer *cmd, const std::string &name)
     {
-        if (!vkCmdBeginDebugUtilsLabelEXT)
-            return;
-
-        VkDebugUtilsLabelEXT label{};
-        label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
-        label.pNext = VK_NULL_HANDLE;
-        label.pLabelName = name.c_str();
-        label.color[0] = color.x;
-        label.color[1] = color.y;
-        label.color[2] = color.z;
-        label.color[3] = color.w;
-        vkCmdBeginDebugUtilsLabelEXT(GetVulkanCommandBuffer(cmd), &label);
+        // The Vulkan debug-utils label is opt-in (extension may be absent and the
+        // pointer null on DX12). The timer machinery below must run regardless so
+        // GpuTimer samples populate on every backend.
+        if (vkCmdBeginDebugUtilsLabelEXT)
+        {
+            VkDebugUtilsLabelEXT label{};
+            label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
+            label.pNext = VK_NULL_HANDLE;
+            label.pLabelName = name.c_str();
+            label.color[0] = color.x;
+            label.color[1] = color.y;
+            label.color[2] = color.z;
+            label.color[3] = color.w;
+            vkCmdBeginDebugUtilsLabelEXT(GetVulkanCommandBuffer(cmd), &label);
+        }
 
         if (cmd->m_gpuTimerInfos.size() < cmd->m_gpuTimerInfosCount + 1)
         {
@@ -478,10 +481,8 @@ namespace pe
 
     void Debug::EndCmdRegion(CommandBuffer *cmd)
     {
-        if (!vkCmdEndDebugUtilsLabelEXT)
-            return;
-
-        vkCmdEndDebugUtilsLabelEXT(GetVulkanCommandBuffer(cmd));
+        if (vkCmdEndDebugUtilsLabelEXT)
+            vkCmdEndDebugUtilsLabelEXT(GetVulkanCommandBuffer(cmd));
 
         cmd->m_gpuTimerInfos[cmd->m_gpuTimerIdsStack.top()].timer->End();
         cmd->m_gpuTimerIdsStack.pop();

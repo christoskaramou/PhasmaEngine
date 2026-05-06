@@ -54,14 +54,10 @@ namespace pe
         beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
         m_apiHandle.begin(beginInfo);
         m_owner->m_recording = true;
-
-        BeginDebugRegion(m_owner->m_name);
     }
 
     void VulkanCommandBufferImpl::End()
     {
-        EndDebugRegion();
-
         PE_ERROR_IF(!m_owner->m_recording, "CommandBuffer::End: CommandBuffer is not in recording state!");
         PE_ERROR_IF(m_owner->m_threadId != std::this_thread::get_id(), "CommandBuffer::End: CommandBuffer is used in a different thread!");
 

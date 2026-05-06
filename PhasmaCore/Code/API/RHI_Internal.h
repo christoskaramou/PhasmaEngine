@@ -11,5 +11,6 @@ namespace pe
         virtual void Shutdown() = 0;
         virtual void WaitDeviceIdle() = 0;
         virtual void NextFrame() = 0;
+        virtual GpuMemorySnapshot GetGpuMemorySnapshot() = 0;
     };
 } // namespace pe

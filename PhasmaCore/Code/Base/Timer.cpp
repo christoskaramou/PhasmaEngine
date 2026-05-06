@@ -1,8 +1,11 @@
 #include "Base/Timer.h"
-#include "API/Command.h"
 #include "API/RHI.h"
-#include "API/Vulkan/RHI_Vulkan.h"
-#include "API/Vulkan/VulkanCommandBufferImpl.h"
+#include "API/Vulkan/VulkanGpuTimerImpl.h"
+#include "Base/Timer_Internal.h"
+
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12GpuTimerImpl.h"
+#endif
 
 namespace pe
 {
@@ -80,83 +83,54 @@ namespace pe
     }
 
     GpuTimer::GpuTimer(const std::string &name)
-        : m_queries{},
-          m_cmd{nullptr},
-          m_resultsReady{false},
-          m_inUse{false}
     {
-        VkPhysicalDeviceProperties gpuProps;
-        vkGetPhysicalDeviceProperties(VulkanRhi::Gpu(), &gpuProps);
-        PE_ERROR_IF(!gpuProps.limits.timestampComputeAndGraphics, "Timestamps not supported");
-
-        m_timestampPeriod = gpuProps.limits.timestampPeriod;
-
-        VkQueryPoolCreateInfo qpci{};
-        qpci.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-        qpci.queryType = VK_QUERY_TYPE_TIMESTAMP;
-        qpci.queryCount = 2;
-
-        VkQueryPool pool;
-        PE_CHECK(vkCreateQueryPool(VulkanRhi::Device(), &qpci, nullptr, &pool));
-        m_apiHandle = pool;
-
-        Debug::SetObjectName(m_apiHandle, name);
+        switch (RHII.GetApi())
+        {
+        case PE_GRAPHICS_API_VULKAN:
+        {
+            auto vk = std::make_unique<VulkanGpuTimerImpl>(name);
+            m_apiHandle = reinterpret_cast<void *>(static_cast<VkQueryPool>(vk->ApiHandle()));
+            m_impl = std::move(vk);
+            break;
+        }
+#if defined(PE_WIN32)
+        case PE_GRAPHICS_API_DX12:
+        {
+            auto dx = std::make_unique<Dx12GpuTimerImpl>(name);
+            m_apiHandle = dx.get();
+            m_impl = std::move(dx);
+            break;
+        }
+#endif
+        default:
+            PE_ERROR("GpuTimer: unsupported graphics API");
+        }
     }
 
-    GpuTimer::~GpuTimer()
-    {
-        if (m_apiHandle)
-            vkDestroyQueryPool(VulkanRhi::Device(), m_apiHandle, nullptr);
-    }
+    GpuTimer::~GpuTimer() = default;
 
     void GpuTimer::Start(CommandBuffer *cmd)
     {
-        PE_ERROR_IF(m_inUse, "GpuTimer::Start() called before End()");
-
-        m_cmd = cmd;
-        vkCmdResetQueryPool(GetVulkanCommandBuffer(m_cmd), m_apiHandle, 0, 2);
-        vkCmdWriteTimestamp(GetVulkanCommandBuffer(m_cmd), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, m_apiHandle, 0);
-        m_resultsReady = false;
-        m_inUse = true;
+        m_impl->Start(cmd);
     }
-
     void GpuTimer::End()
     {
-        PE_ERROR_IF(!m_inUse, "GpuTimer::End() called before Start()");
-
-        vkCmdWriteTimestamp(GetVulkanCommandBuffer(m_cmd), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_apiHandle, 1);
-        m_resultsReady = false;
-        m_inUse = false;
+        m_impl->End();
     }
-
     float GpuTimer::GetTime()
     {
-        PE_ERROR_IF(m_inUse, "GpuTimer::GetTime() called before End()");
-
-        if (!m_resultsReady)
-        {
-            VkResult res = vkGetQueryPoolResults(VulkanRhi::Device(),
-                                                 m_apiHandle,
-                                                 0,
-                                                 2,
-                                                 2 * sizeof(uint64_t),
-                                                 &m_queries,
-                                                 sizeof(uint64_t),
-                                                 VK_QUERY_RESULT_64_BIT);
-
-            if (res != VK_SUCCESS)
-                return 0.f;
-
-            m_cmd = nullptr;
-            m_resultsReady = true;
-        }
-
-        return static_cast<float>(m_queries[1] - m_queries[0]) * m_timestampPeriod * 1e-6f; // ms
+        return m_impl->GetTime();
     }
-
     double GpuTimer::GetStartTimeMs() const
     {
-        // m_queries[0] is valid after GetTime() has been called successfully.
-        return static_cast<double>(m_queries[0]) * static_cast<double>(m_timestampPeriod) * 1e-6;
+        return m_impl->GetStartTimeMs();
+    }
+    CommandBuffer *GpuTimer::GetCommandBuffer() const
+    {
+        return m_impl->GetCommandBuffer();
+    }
+    void GpuTimer::ResetState()
+    {
+        m_impl->ResetState();
     }
 } // namespace pe

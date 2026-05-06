@@ -55,10 +55,15 @@ namespace pe
     void CommandBuffer::Begin()
     {
         m_impl->Begin();
+        // Neutral outer debug-region wrap: drives the per-frame GpuTimer that
+        // ProfilerWidget reads, and gives every per-pass timer a depth >= 1
+        // (the GPU/Table widget hides depth==0 entries).
+        BeginDebugRegion(m_name);
     }
 
     void CommandBuffer::End()
     {
+        EndDebugRegion();
         m_impl->End();
     }
 

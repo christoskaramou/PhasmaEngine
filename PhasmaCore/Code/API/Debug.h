@@ -41,6 +41,7 @@ namespace pe
         friend class CommandBuffer;
         friend class Queue;
         friend struct VulkanCommandBufferImpl;
+        friend struct Dx12CommandBufferImpl;
 
         static void SetObjectName(const VkDebugUtilsObjectNameInfoEXT &info);
         static void BeginQueueRegion(Queue *queue, const std::string &name);

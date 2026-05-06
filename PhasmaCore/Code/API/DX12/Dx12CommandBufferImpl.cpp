@@ -4,6 +4,7 @@
 
 #include "API/Buffer.h"
 #include "API/DX12/Dx12BufferImpl.h"
+#include "API/Debug.h"
 #include "API/DX12/Dx12DescriptorHeap.h"
 #include "API/DX12/Dx12DescriptorImpl.h"
 #include "API/DX12/Dx12ImageImpl.h"
@@ -259,6 +260,16 @@ namespace pe
         m_barrierBatch.clear();
         m_heapsBound = false;
         m_lastTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+
+#if PE_DEBUG_MODE
+        m_owner->m_gpuTimerInfosCount = 0;
+        while (!m_owner->m_gpuTimerIdsStack.empty())
+            m_owner->m_gpuTimerIdsStack.pop();
+        // Cached timers may carry m_inUse=true from an abandoned recording.
+        for (auto &info : m_owner->m_gpuTimerInfos)
+            if (info.timer)
+                info.timer->ResetState();
+#endif
     }
 
     void Dx12CommandBufferImpl::BindShaderVisibleHeaps()
@@ -335,15 +346,15 @@ namespace pe
     }
 
     // ----------------------------------------------------------------------
-    // T10b in progress. Pipeline/descriptor binding, push constants, viewport,
-    // scissor, vertex/index input, basic non-indirect draws, compute dispatch,
-    // transfer copies, staged uploads, and the legacy image/buffer barrier batch
-    // are implemented below. Surfaces still gated by DX12_CMD_NOT_IMPLEMENTED
-    // (blits, ray tracing, push descriptors, events) wait for their own
-    // dedicated slices.
+    // Surfaces still gated by DX12_CMD_CARVE_OUT are audited-unreachable on
+    // DX12 today: TraceRays (RT explicitly out of Phase 1 — caps.rayTracing
+    // == false), PushDescriptor (zero callers tree-wide), SetEvent (only
+    // reachable via the Lua CommandBindings::SetEvent shim, no script in
+    // the repo invokes it). Macro fires PE_ERROR if a future caller hits
+    // them so we notice instead of silently no-oping.
     // ----------------------------------------------------------------------
 
-#define DX12_CMD_NOT_IMPLEMENTED(name) PE_ERROR("Dx12CommandBufferImpl::" name " not implemented (T10b in progress)")
+#define DX12_CMD_CARVE_OUT(name) PE_ERROR("Dx12CommandBufferImpl::" name " is a DX12 carve-out (unreachable today; audited 2026-05-06)")
 
     void Dx12CommandBufferImpl::BlitImage(Image *src, Image *dst, const ImageBlit &region, PeFilter filter)
     {
@@ -698,7 +709,7 @@ namespace pe
     }
     void Dx12CommandBufferImpl::PushDescriptor(uint32_t, const std::vector<PushDescriptorInfo> &)
     {
-        DX12_CMD_NOT_IMPLEMENTED("PushDescriptor");
+        DX12_CMD_CARVE_OUT("PushDescriptor");
     }
 
     void Dx12CommandBufferImpl::SetViewport(float x, float y, float width, float height)
@@ -923,7 +934,7 @@ namespace pe
 
     void Dx12CommandBufferImpl::TraceRays(uint32_t, uint32_t, uint32_t)
     {
-        DX12_CMD_NOT_IMPLEMENTED("TraceRays");
+        DX12_CMD_CARVE_OUT("TraceRays");
     }
 
     namespace
@@ -968,10 +979,13 @@ namespace pe
     {
         if (!info.image)
             return;
+        BeginDebugRegion("ImageBarrier");
         PushImageTransition(m_barrierBatch, Dx12ImageImpl::From(info.image), info.layout);
+        EndDebugRegion();
     }
     void Dx12CommandBufferImpl::ImageBarriers(const std::vector<ImageBarrierInfo> &infos)
     {
+        BeginDebugRegion("ImageGroupBarrier");
         m_barrierBatch.reserve(m_barrierBatch.size() + infos.size());
         for (const auto &info : infos)
         {
@@ -979,6 +993,7 @@ namespace pe
                 continue;
             PushImageTransition(m_barrierBatch, Dx12ImageImpl::From(info.image), info.layout);
         }
+        EndDebugRegion();
     }
     void Dx12CommandBufferImpl::MemoryBarrier(const MemoryBarrierInfo &)
     {
@@ -1010,20 +1025,25 @@ namespace pe
                                          PeBarrierSync, PeBarrierSync,
                                          PeBarrierAccess, PeBarrierAccess)
     {
-        DX12_CMD_NOT_IMPLEMENTED("SetEvent");
+        DX12_CMD_CARVE_OUT("SetEvent");
     }
 
-    void Dx12CommandBufferImpl::BeginDebugRegion(const std::string &)
-    { /* no-op (PIX integration is a later slice) */
+    void Dx12CommandBufferImpl::BeginDebugRegion(const std::string &name)
+    {
+        // PIX label integration is a later slice; the call still drives the
+        // GpuTimer Start that ProfilerWidget/profiler_snapshot read.
+        Debug::BeginCmdRegion(m_owner, name);
     }
-    void Dx12CommandBufferImpl::InsertDebugLabel(const std::string &)
-    { /* no-op */
+    void Dx12CommandBufferImpl::InsertDebugLabel(const std::string &name)
+    {
+        Debug::InsertCmdLabel(m_owner, name);
     }
     void Dx12CommandBufferImpl::EndDebugRegion()
-    { /* no-op */
+    {
+        Debug::EndCmdRegion(m_owner);
     }
 
-#undef DX12_CMD_NOT_IMPLEMENTED
+#undef DX12_CMD_CARVE_OUT
 } // namespace pe
 
 #endif // PE_WIN32

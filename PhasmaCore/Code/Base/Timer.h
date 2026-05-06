@@ -77,9 +77,11 @@ namespace pe
     };
 
     class CommandBuffer;
-    class GpuTimer : public PeHandle<GpuTimer, vk::QueryPool>
+    class GpuTimer : public PeHandle<GpuTimer, void *>
     {
     public:
+        class Impl;
+
         GpuTimer(const std::string &name);
         ~GpuTimer();
 
@@ -87,20 +89,12 @@ namespace pe
         void End();
         float GetTime();
         double GetStartTimeMs() const; // absolute start timestamp in ms (valid after GetTime())
-        CommandBuffer *GetCommandBuffer() const { return m_cmd; }
+        CommandBuffer *GetCommandBuffer() const;
         // Discard in-flight Start() if the parent command buffer was reset.
-        void ResetState()
-        {
-            m_inUse = false;
-            m_resultsReady = false;
-        }
+        void ResetState();
 
     private:
-        uint64_t m_queries[2];
-        float m_timestampPeriod;
-        CommandBuffer *m_cmd;
-        bool m_resultsReady;
-        bool m_inUse;
+        std::unique_ptr<Impl> m_impl;
 
         inline static std::stack<GpuTimer *> s_gpuTimers{};
     };

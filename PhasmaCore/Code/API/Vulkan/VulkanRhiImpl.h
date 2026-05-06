@@ -10,6 +10,7 @@ namespace pe
         void Shutdown() override;
         void WaitDeviceIdle() override;
         void NextFrame() override;
+        GpuMemorySnapshot GetGpuMemorySnapshot() override;
 
         vk::Instance m_instance{};
         vk::PhysicalDevice m_gpu{};

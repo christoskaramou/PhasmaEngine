@@ -21,6 +21,7 @@ namespace pe
         void Shutdown() override;
         void WaitDeviceIdle() override;
         void NextFrame() override;
+        GpuMemorySnapshot GetGpuMemorySnapshot() override;
 
         ID3D12Device *GetDevice() const { return m_device.Get(); }
         ID3D12CommandQueue *GetGraphicsQueue() const { return m_graphicsQueue.Get(); }
