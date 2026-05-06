@@ -56,6 +56,9 @@ namespace pe
         void *LoadAndRegisterIcon(CommandBuffer *cmd, const std::string &path, Image *&outIcon)
         {
             outIcon = Image::LoadRGBA8(cmd, path);
+            if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+                return nullptr;
+
             if (outIcon && outIcon->GetSampler() && outIcon->GetSRV())
             {
                 return (void *)ImGui_ImplVulkan_AddTexture(
@@ -298,7 +301,7 @@ namespace pe
             if (pair.second)
             {
                 void *ds = nullptr;
-                if (pair.second->GetSampler() && pair.second->GetSRV())
+                if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN && pair.second->GetSampler() && pair.second->GetSRV())
                 {
                     ds = (void *)ImGui_ImplVulkan_AddTexture(
                         pe::GetVulkanSampler(pair.second->GetSampler()),

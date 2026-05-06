@@ -20,6 +20,9 @@
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui_impl_sdl2.h"
 #include "imgui/imgui_impl_vulkan.h"
+#if defined(PE_WIN32)
+#include "GUI/Backends/imgui_impl_dx12.h"
+#endif
 #ifdef NDEBUG
 #include "Window/SplashScreen.h"
 #endif
@@ -160,14 +163,7 @@ namespace pe
 
         m_window->Show();
         m_window->Maximize();
-        if (!isDx12)
-        {
-            GetGlobalSystem<RendererSystem>()->GetGUI().ApplyStartupLayout(!shouldRestoreHotReloadSnapshot);
-        }
-        else if (!shouldRestoreHotReloadSnapshot)
-        {
-            GetGlobalSystem<RendererSystem>()->GetGUI().LoadEditorConfig();
-        }
+        GetGlobalSystem<RendererSystem>()->GetGUI().ApplyStartupLayout(!shouldRestoreHotReloadSnapshot);
 
         if (hasHotReloadSnapshot)
         {
@@ -194,7 +190,7 @@ namespace pe
         std::string flagPath = Path::Executable + "reload.flag";
         const bool isReload = std::filesystem::exists(flagPath);
 
-        if (isReload && RHII.GetApi() != PE_GRAPHICS_API_DX12)
+        if (isReload)
         {
             if (auto *rs = GetGlobalSystem<RendererSystem>())
             {
@@ -238,15 +234,6 @@ namespace pe
         if (!rendererSystem)
             return;
 
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-        {
-            RHII.NextFrame();
-            rendererSystem->WaitPreviousFrameCommands();
-            rendererSystem->Draw();
-            rendererSystem->WaitAllFramesCommands();
-            return;
-        }
-
         // The last normal Frame() submitted GPU work that may still be in-flight.
         // Drain everything before touching the same semaphores/images again.
         rendererSystem->WaitAllFramesCommands();
@@ -255,7 +242,12 @@ namespace pe
         rendererSystem->WaitPreviousFrameCommands();
 
         ImGui_ImplSDL2_NewFrame();
-        ImGui_ImplVulkan_NewFrame();
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+            ImGui_ImplVulkan_NewFrame();
+#if defined(PE_WIN32)
+        else if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            ImGui_ImplDX12_NewFrame();
+#endif
         ImGui::NewFrame();
         ImGuizmo::BeginFrame();
 
@@ -276,6 +268,12 @@ namespace pe
         rendererSystem->WaitAllFramesCommands();
     }
 
+    void App::ReleaseImGuiContext()
+    {
+        if (auto *rs = GetGlobalSystem<RendererSystem>())
+            rs->GetGUI().ReleaseImGuiOwnership();
+    }
+
     bool App::Frame()
     {
         Profiler::BeginFrame();
@@ -285,6 +283,8 @@ namespace pe
         m_frameTimer.Tick();
 
         const bool isVulkan = RHII.GetApi() == PE_GRAPHICS_API_VULKAN;
+        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        const bool hasImGuiRenderer = isVulkan || isDx12;
 
         auto rendererSystem = GetGlobalSystem<RendererSystem>();
         {
@@ -293,11 +293,16 @@ namespace pe
         }
 
         // Start ImGui frame
-        if (isVulkan)
+        if (hasImGuiRenderer)
         {
             PE_PROFILE_SCOPE("ImGui New Frame");
             ImGui_ImplSDL2_NewFrame();
-            ImGui_ImplVulkan_NewFrame();
+            if (isVulkan)
+                ImGui_ImplVulkan_NewFrame();
+#if defined(PE_WIN32)
+            else
+                ImGui_ImplDX12_NewFrame();
+#endif
             ImGui::NewFrame();
             ImGuizmo::BeginFrame();
         }
@@ -319,7 +324,7 @@ namespace pe
         }
 
         // Get ImGui render data ready
-        if (isVulkan)
+        if (hasImGuiRenderer)
             ImGui::Render();
         m_frameTimer.CountUpdatesStamp();
 

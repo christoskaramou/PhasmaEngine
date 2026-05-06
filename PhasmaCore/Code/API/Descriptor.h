@@ -58,6 +58,7 @@ namespace pe
         uint32_t dxSpace = 0;
         PeImageLayout imageLayout = PE_IMAGE_LAYOUT_UNDEFINED;
         PeBindingType type = PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        uint32_t structuredStride = 0;
         bool bindless = false;
         std::string name{};
     };
@@ -107,6 +108,7 @@ namespace pe
                 hash.Combine(info.dxSpace);
                 hash.Combine(static_cast<uint32_t>(info.imageLayout));
                 hash.Combine(static_cast<uint32_t>(info.type));
+                hash.Combine(info.structuredStride);
                 hash.Combine(info.bindless);
             }
 

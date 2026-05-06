@@ -54,6 +54,7 @@ namespace pe
     std::atomic_bool GUIState::s_modelLoading{false};
 
     void *GUIState::s_viewportTextureId = nullptr;
+    uint32_t GUIState::s_dx12ViewportSlot = UINT32_MAX;
     bool GUIState::s_sceneViewFloating = false;
     bool GUIState::s_sceneViewRedockQueued = false;
     bool GUIState::s_sceneViewFocused = false;

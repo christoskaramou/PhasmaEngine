@@ -1,5 +1,7 @@
 #include "App/EditorModule.h"
 #include "App/App.h"
+#include "GUI/GUI.h"
+#include "imgui/imgui.h"
 
 namespace
 {
@@ -25,5 +27,29 @@ extern "C"
     {
         delete g_app;
         g_app = nullptr;
+    }
+
+    PE_EDITOR_MODULE_API void *GetImGuiContextEditorModule()
+    {
+        ImGuiContext *ctx = ImGui::GetCurrentContext();
+        if (!ctx)
+            return nullptr;
+
+        ImGuiIO &io = ImGui::GetIO();
+        if (io.IniFilename)
+            ImGui::SaveIniSettingsToDisk(io.IniFilename);
+        if (g_app)
+            g_app->ReleaseImGuiContext();
+
+        return static_cast<void *>(ctx);
+    }
+
+    PE_EDITOR_MODULE_API void InitEditorModuleWithContext(void *imguiCtx)
+    {
+        ImGuiContext *ctx = static_cast<ImGuiContext *>(imguiCtx);
+        ImGui::SetCurrentContext(ctx);
+        pe::GUI::SetHotReloadContext(ctx);
+        if (!g_app)
+            g_app = new pe::App();
     }
 }

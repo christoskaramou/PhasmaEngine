@@ -116,7 +116,11 @@ struct VS_INPUT_Depth
     float2 uv : TEXCOORD0;
     uint4 joints : BLENDINDICES;
     float4 weights : BLENDWEIGHT;
+#if defined(PE_DX12)
+    uint id : SV_StartInstanceLocation;
+#else
     uint id : SV_InstanceID;
+#endif
 };
 
 struct VS_INPUT_Gbuffer
@@ -128,7 +132,11 @@ struct VS_INPUT_Gbuffer
     float4 color : COLOR;
     uint4 joints : BLENDINDICES;
     float4 weights : BLENDWEIGHT;
+#if defined(PE_DX12)
+    uint id : SV_StartInstanceLocation;
+#else
     uint id : SV_InstanceID;
+#endif
 };
 
 struct VS_OUTPUT_Position

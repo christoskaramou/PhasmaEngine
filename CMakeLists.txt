@@ -209,6 +209,9 @@ target_link_libraries(PhasmaEditorModule PRIVATE
 if(PE_PHYSICS AND TARGET Jolt)
     target_link_libraries(PhasmaEditorModule PRIVATE Jolt)
 endif()
+if(WIN32)
+    target_link_libraries(PhasmaEditorModule PRIVATE d3dcompiler.lib)
+endif()
 
 option(PE_AUDIO "Enable miniaudio integration" ON)
 if(PE_AUDIO)

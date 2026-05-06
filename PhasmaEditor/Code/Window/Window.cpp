@@ -16,6 +16,21 @@
 
 namespace pe
 {
+    namespace
+    {
+        void GetBackendDrawableSize(SDL_Window *window, PeGraphicsApi api, int &width, int &height)
+        {
+            if (api == PE_GRAPHICS_API_VULKAN)
+            {
+                SDL_Vulkan_GetDrawableSize(window, &width, &height);
+                return;
+            }
+
+            // SDL2 lacks SDL_GetWindowSizeInPixels (SDL3 only), so DX12 uses window size while Vulkan keeps high-DPI drawable size.
+            SDL_GetWindowSize(window, &width, &height);
+        }
+    } // namespace
+
     Window::Window(int x, int y, int w, int h, uint32_t flags) : m_owned(true)
     {
         m_apiHandle = SDL_CreateWindow("", x, y, w, h, flags);
@@ -108,7 +123,6 @@ namespace pe
 
     bool Window::ProcessEvents()
     {
-        const bool isVulkan = RHII.GetApi() == PE_GRAPHICS_API_VULKAN;
         RendererSystem *rendererSystem = GetGlobalSystem<RendererSystem>();
         PostProcessSystem *postProcessSystem =
             HasGlobalSystem<PostProcessSystem>() ? GetGlobalSystem<PostProcessSystem>() : nullptr;
@@ -120,8 +134,7 @@ namespace pe
             if (sdlEvent.type == SDL_QUIT)
                 EventSystem::PushEvent(EventType::RequestExit);
 
-            if (isVulkan)
-                ImGui_ImplSDL2_ProcessEvent(&sdlEvent);
+            ImGui_ImplSDL2_ProcessEvent(&sdlEvent);
 
             if (sdlEvent.type == SDL_WINDOWEVENT && sdlEvent.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
                 EventSystem::PushEvent(EventType::Resize);
@@ -157,7 +170,7 @@ namespace pe
                 }
                 case EventType::RequestExit:
                 {
-                    if (isVulkan)
+                    if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
                         rendererSystem->GetGUI().TriggerExitConfirmation();
                     else
                         return false;
@@ -211,13 +224,10 @@ namespace pe
                 }
                 case EventType::Resize:
                 {
-                    if (!isVulkan)
-                        break;
-
                     if (!isMinimized())
                     {
                         int w, h;
-                        SDL_Vulkan_GetDrawableSize(m_apiHandle, &w, &h);
+                        GetBackendDrawableSize(m_apiHandle, RHII.GetApi(), w, h);
                         rendererSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
                         if (postProcessSystem)
                             postProcessSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
@@ -363,7 +373,7 @@ namespace pe
 
     void Window::GetDrawableSize(int &width, int &height)
     {
-        SDL_Vulkan_GetDrawableSize(m_apiHandle, &width, &height);
+        GetBackendDrawableSize(m_apiHandle, RHII.GetApi(), width, height);
     }
 
     void Window::Show()

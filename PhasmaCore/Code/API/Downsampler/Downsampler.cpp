@@ -95,6 +95,7 @@ namespace pe
 
         bindingInfos[2].binding = 14;
         bindingInfos[2].type = PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        bindingInfos[2].structuredStride = sizeof(s_counter);
 
         for (uint32_t i = 0; i < MAX_DESCRIPTORS_PER_CMD; i++)
         {

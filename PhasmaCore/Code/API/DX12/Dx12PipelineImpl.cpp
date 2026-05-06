@@ -50,7 +50,7 @@ namespace pe
             D3D12_RASTERIZER_DESC desc{};
             desc.FillMode = pe_dx12::FillMode(info.polygonMode);
             desc.CullMode = pe_dx12::CullMode(info.cullMode);
-            desc.FrontCounterClockwise = FALSE;
+            desc.FrontCounterClockwise = TRUE;
             desc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
             desc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
             desc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
@@ -112,8 +112,21 @@ namespace pe
         PE_ERROR_IF(!rhi->GetSharedRootSig(), "Dx12PipelineImpl requires the shared DX12 root signature");
         PE_ERROR_IF(info.acceleration.rayGen, "Dx12PipelineImpl: ray tracing pipelines are disabled for Phase 1");
 
+        info.m_pushConstantStages.clear();
+        info.m_pushConstantOffsets.clear();
+        info.m_pushConstantSizes.clear();
+
         if (info.pCompShader)
         {
+            const PushConstantDesc &pushConstantComp = info.pCompShader->GetPushConstantDesc();
+            if (pushConstantComp.size > 0)
+            {
+                PE_ERROR_IF(pushConstantComp.size > RHII.GetMaxPushConstantsSize(), "DX12 compute push constant size is greater than maxPushConstantsSize");
+                info.m_pushConstantStages.push_back(PE_SHADER_STAGE_COMPUTE);
+                info.m_pushConstantOffsets.push_back(0);
+                info.m_pushConstantSizes.push_back(static_cast<uint32_t>(pushConstantComp.size));
+            }
+
             D3D12_COMPUTE_PIPELINE_STATE_DESC desc{};
             desc.pRootSignature = rhi->GetSharedRootSig()->Get();
             desc.CS = GetDx12ShaderBytecode(info.pCompShader);
@@ -122,10 +135,6 @@ namespace pe
             PE_ERROR_IF(FAILED(hr), "Dx12PipelineImpl: CreateComputePipelineState failed (0x%08X)", static_cast<unsigned>(hr));
             return;
         }
-
-        info.m_pushConstantStages.clear();
-        info.m_pushConstantOffsets.clear();
-        info.m_pushConstantSizes.clear();
 
         const PushConstantDesc &pushConstantVert = info.pVertShader ? info.pVertShader->GetPushConstantDesc() : PushConstantDesc{};
         const PushConstantDesc &pushConstantFrag = info.pFragShader ? info.pFragShader->GetPushConstantDesc() : PushConstantDesc{};

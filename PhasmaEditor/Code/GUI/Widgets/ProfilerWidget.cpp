@@ -133,8 +133,9 @@ namespace pe
 
     ProfilerWidget::~ProfilerWidget()
     {
-        for (auto &[img, ds] : m_rtDescriptorCache)
-            ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)ds);
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+            for (auto &[img, ds] : m_rtDescriptorCache)
+                ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)ds);
     }
 
     // ─── RT descriptor cache for hover previews ──────────────────────────────────
@@ -142,6 +143,8 @@ namespace pe
     void *ProfilerWidget::GetRTDescriptor(Image *image)
     {
         if (!image || !image->HasSRV() || !image->GetSampler())
+            return nullptr;
+        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
             return nullptr;
 
         auto it = m_rtDescriptorCache.find(image);
@@ -215,8 +218,9 @@ namespace pe
             Image *viewportRT = rs->GetRenderTarget("viewport");
             if (viewportRT != m_viewportRTSnapshot && !m_rtDescriptorCache.empty())
             {
-                for (auto &[img, ds] : m_rtDescriptorCache)
-                    ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)ds);
+                if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+                    for (auto &[img, ds] : m_rtDescriptorCache)
+                        ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)ds);
                 m_rtDescriptorCache.clear();
             }
             m_viewportRTSnapshot = viewportRT;

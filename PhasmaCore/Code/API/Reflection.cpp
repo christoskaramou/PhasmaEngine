@@ -187,6 +187,7 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = desc.count;
+            info.structuredStride = desc.structuredStride;
             switch (desc.kind)
             {
             case PeBufferKind::Structured:

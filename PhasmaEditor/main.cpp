@@ -13,6 +13,8 @@ static constexpr const char *k_moduleName = "PhasmaEditorModule.dll";
 using TickFunc = bool (*)();
 using RenderReloadFunc = void (*)();
 using DestroyFunc = void (*)();
+using GetImGuiCtxFunc = void *(*)();
+using InitWithCtxFunc = void (*)(void *);
 
 namespace
 {
@@ -22,6 +24,8 @@ namespace
         TickFunc tick = nullptr;
         RenderReloadFunc renderReload = nullptr;
         DestroyFunc destroy = nullptr;
+        GetImGuiCtxFunc getImguiCtx = nullptr;
+        InitWithCtxFunc initWithCtx = nullptr;
         std::string loadedPath;
     };
 
@@ -49,6 +53,8 @@ namespace
         m.tick = reinterpret_cast<TickFunc>(dlsym(m.lib, "TickEditorModule"));
         m.renderReload = reinterpret_cast<RenderReloadFunc>(dlsym(m.lib, "RenderReloadFrameEditorModule"));
         m.destroy = reinterpret_cast<DestroyFunc>(dlsym(m.lib, "DestroyEditorModule"));
+        m.getImguiCtx = reinterpret_cast<GetImGuiCtxFunc>(dlsym(m.lib, "GetImGuiContextEditorModule"));
+        m.initWithCtx = reinterpret_cast<InitWithCtxFunc>(dlsym(m.lib, "InitEditorModuleWithContext"));
 #elif defined(PE_WIN32)
         static int s_gen = 0;
         char versioned[256];
@@ -67,6 +73,10 @@ namespace
             reinterpret_cast<RenderReloadFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "RenderReloadFrameEditorModule"));
         m.destroy =
             reinterpret_cast<DestroyFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "DestroyEditorModule"));
+        m.getImguiCtx =
+            reinterpret_cast<GetImGuiCtxFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "GetImGuiContextEditorModule"));
+        m.initWithCtx =
+            reinterpret_cast<InitWithCtxFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "InitEditorModuleWithContext"));
 #endif
         if (!m.tick || !m.renderReload || !m.destroy)
         {
@@ -131,7 +141,6 @@ int main(int argc, char *argv[])
                 }
             }
         }
-
         // SDL and graphics device live here — they survive module reloads.
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
         {
@@ -141,7 +150,8 @@ int main(int argc, char *argv[])
 
         SDL_DisplayMode dm;
         SDL_GetDesktopDisplayMode(0, &dm);
-        uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+        uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI |
+                               SDL_WINDOW_MAXIMIZED; // Sizes initial DX12 swapchain before the existing maximize call.
         if (api == PE_GRAPHICS_API_VULKAN)
             windowFlags |= SDL_WINDOW_VULKAN;
         SDL_Window *sdlWindow = SDL_CreateWindow("PhasmaEditor", 100, 100, dm.w - 100, dm.h - 100, windowFlags);
@@ -175,6 +185,7 @@ int main(int argc, char *argv[])
             if (pe::EventSystem::PeekAndPop(pe::EventType::ReloadModule, ev))
             {
                 mod.renderReload(); // drain in-flight frames and show "Reloading..." overlay
+                void *imguiCtx = mod.getImguiCtx ? mod.getImguiCtx() : nullptr;
                 std::ofstream(pe::Path::Executable + "reload.flag").close();
                 mod.destroy();
                 pe::ThreadPool::FW.WaitIdle();
@@ -185,6 +196,8 @@ int main(int argc, char *argv[])
                     PE_ERROR("Reload failed");
                     break;
                 }
+                if (imguiCtx && mod.initWithCtx)
+                    mod.initWithCtx(imguiCtx);
             }
         }
 

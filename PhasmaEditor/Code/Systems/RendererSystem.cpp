@@ -117,7 +117,7 @@ namespace pe
         // Skybox / IBL are consumed by the Light pass. DX12 reaches that slice in 14c.
         LoadResources(initCmd);
 
-        // DX12 Phase 1 wires bounded raster/post slices here while keeping TAA/Sharpen/RT Vulkan-only.
+        // DX12 Phase 1 wires bounded raster/post/editor slices here while keeping RT Vulkan-only.
         m_renderPassComponents[ID::GetTypeID<CullingPass>()] = CreateGlobalComponent<CullingPass>();
         m_renderPassComponents[ID::GetTypeID<ShadowPass>()] = CreateGlobalComponent<ShadowPass>();
         m_renderPassComponents[ID::GetTypeID<DepthPass>()] = CreateGlobalComponent<DepthPass>();
@@ -157,10 +157,7 @@ namespace pe
         }
 
         // Init GUI
-        if (!isDx12)
-            m_gui.Init();
-        else
-            m_gui.InitAgentServices();
+        m_gui.Init();
 
         uint32_t imageCount = RHII.GetSwapchainImageCount();
         m_cmds.resize(imageCount, nullptr);
@@ -242,10 +239,10 @@ namespace pe
 
     void RendererSystem::Update()
     {
-        const bool isVulkan = RHII.GetApi() == PE_GRAPHICS_API_VULKAN;
+        const bool hasEditorGui = RHII.GetApi() == PE_GRAPHICS_API_VULKAN ||
+                                  RHII.GetApi() == PE_GRAPHICS_API_DX12;
 
-        // GUI is Vulkan-only until Task 14e wires the DX12 ImGui backend
-        if (isVulkan)
+        if (hasEditorGui)
         {
             PE_PROFILE_SCOPE("GUI");
             m_gui.Update();
@@ -349,8 +346,8 @@ namespace pe
 
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
         {
-            // DX12 Phase 1 keeps unsupported post/ImGui paths disabled, but falls back
-            // to raster when a user setting requests RT-only rendering.
+            // DX12 Phase 1 enables the carved raster/post/GUI slice, but falls
+            // back to raster when a user setting requests RT-only rendering.
             const bool dx12RayTracing = RHII.GetCaps().rayTracing && renderRayTracing;
             const bool dx12RenderRaster = renderRaster || !dx12RayTracing;
             const bool dx12NeedDepth = dx12RenderRaster || gs.draw_aabbs || gs.draw_grid;
@@ -380,6 +377,7 @@ namespace pe
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::MotionBlur)] = gs.motion_blur && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Aabbs)] = gs.draw_aabbs;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)] = gs.draw_grid;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GUI)] = m_gui.Render();
             return;
         }
 
@@ -407,7 +405,7 @@ namespace pe
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::DOF)] = gs.dof;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::MotionBlur)] = gs.motion_blur;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)] = gs.draw_grid;
-        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GUI)] = RHII.GetApi() == PE_GRAPHICS_API_VULKAN && m_gui.Render();
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GUI)] = m_gui.Render();
     }
 
     void RendererSystem::WaitPreviousFrameCommands()
@@ -592,7 +590,8 @@ namespace pe
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomV)] ||
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::DOF)] ||
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::MotionBlur)] ||
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)];
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)] ||
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GUI)];
         if (displayProduced)
             return m_displayRT;
 

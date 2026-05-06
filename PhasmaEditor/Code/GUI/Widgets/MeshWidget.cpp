@@ -25,6 +25,9 @@ namespace pe
 
     MeshWidget::~MeshWidget()
     {
+        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+            return;
+
         for (auto &pair : m_textureDescriptors)
         {
             if (pair.second)
@@ -581,6 +584,9 @@ namespace pe
 
     void *MeshWidget::GetDescriptor(Image *image)
     {
+        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+            return nullptr;
+
         if (m_textureDescriptors.find(image) == m_textureDescriptors.end())
         {
             if (!image->HasSRV())

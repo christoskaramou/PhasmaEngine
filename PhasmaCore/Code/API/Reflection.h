@@ -89,6 +89,7 @@ namespace pe
         int dxSpace = INT32_MIN;
         uint32_t count = 1;
         size_t bufferSize = 0;
+        uint32_t structuredStride = 0;
         PeBufferKind kind = PeBufferKind::StorageRW;
     };
 

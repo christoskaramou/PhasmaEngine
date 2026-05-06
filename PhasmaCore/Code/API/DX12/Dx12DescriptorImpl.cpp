@@ -27,9 +27,14 @@ namespace pe
             return static_cast<uint32_t>((size + alignment - 1) & ~(alignment - 1));
         }
 
-        D3D12_BUFFER_UAV BufferUav(const DescriptorUpdateInfo &updateInfo, uint32_t index, uint64_t rangeBytes)
+        uint64_t BufferOffsetBytes(const DescriptorUpdateInfo &updateInfo, uint32_t index)
         {
-            const uint64_t offset = index < updateInfo.offsets.size() ? updateInfo.offsets[index] : 0;
+            return index < updateInfo.offsets.size() ? updateInfo.offsets[index] : 0;
+        }
+
+        D3D12_BUFFER_UAV RawBufferUav(const DescriptorUpdateInfo &updateInfo, uint32_t index, uint64_t rangeBytes)
+        {
+            const uint64_t offset = BufferOffsetBytes(updateInfo, index);
             D3D12_BUFFER_UAV uav{};
             uav.FirstElement = offset / sizeof(uint32_t);
             uav.NumElements = static_cast<UINT>(rangeBytes / sizeof(uint32_t));
@@ -39,14 +44,53 @@ namespace pe
             return uav;
         }
 
-        D3D12_BUFFER_SRV BufferSrv(const DescriptorUpdateInfo &updateInfo, uint32_t index, uint64_t rangeBytes)
+        D3D12_BUFFER_SRV RawBufferSrv(const DescriptorUpdateInfo &updateInfo, uint32_t index, uint64_t rangeBytes)
         {
-            const uint64_t offset = index < updateInfo.offsets.size() ? updateInfo.offsets[index] : 0;
+            const uint64_t offset = BufferOffsetBytes(updateInfo, index);
             D3D12_BUFFER_SRV srv{};
             srv.FirstElement = offset / sizeof(uint32_t);
             srv.NumElements = static_cast<UINT>(rangeBytes / sizeof(uint32_t));
             srv.StructureByteStride = 0;
             srv.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+            return srv;
+        }
+
+        D3D12_BUFFER_UAV StructuredBufferUav(const DescriptorUpdateInfo &updateInfo,
+                                             const DescriptorBindingInfo &bindingInfo,
+                                             uint32_t index,
+                                             uint64_t rangeBytes)
+        {
+            const uint32_t stride = bindingInfo.structuredStride;
+            const uint64_t offset = BufferOffsetBytes(updateInfo, index);
+            PE_ERROR_IF(stride == 0, "DX12 structured UAV '%s' has no reflected element stride", bindingInfo.name.c_str());
+            PE_ERROR_IF(offset % stride != 0, "DX12 structured UAV '%s' offset is not stride-aligned", bindingInfo.name.c_str());
+            PE_ERROR_IF(rangeBytes < stride, "DX12 structured UAV '%s' range is smaller than one element", bindingInfo.name.c_str());
+
+            D3D12_BUFFER_UAV uav{};
+            uav.FirstElement = offset / stride;
+            uav.NumElements = static_cast<UINT>(rangeBytes / stride);
+            uav.StructureByteStride = stride;
+            uav.CounterOffsetInBytes = 0;
+            uav.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+            return uav;
+        }
+
+        D3D12_BUFFER_SRV StructuredBufferSrv(const DescriptorUpdateInfo &updateInfo,
+                                             const DescriptorBindingInfo &bindingInfo,
+                                             uint32_t index,
+                                             uint64_t rangeBytes)
+        {
+            const uint32_t stride = bindingInfo.structuredStride;
+            const uint64_t offset = BufferOffsetBytes(updateInfo, index);
+            PE_ERROR_IF(stride == 0, "DX12 structured SRV '%s' has no reflected element stride", bindingInfo.name.c_str());
+            PE_ERROR_IF(offset % stride != 0, "DX12 structured SRV '%s' offset is not stride-aligned", bindingInfo.name.c_str());
+            PE_ERROR_IF(rangeBytes < stride, "DX12 structured SRV '%s' range is smaller than one element", bindingInfo.name.c_str());
+
+            D3D12_BUFFER_SRV srv{};
+            srv.FirstElement = offset / stride;
+            srv.NumElements = static_cast<UINT>(rangeBytes / stride);
+            srv.StructureByteStride = stride;
+            srv.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
             return srv;
         }
 
@@ -376,10 +420,12 @@ namespace pe
                              bindingInfo.type == PE_DESCRIPTOR_TYPE_BYTE_ADDRESS_BUFFER)
                     {
                         D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
-                        srv.Format = DXGI_FORMAT_R32_TYPELESS;
+                        srv.Format = bindingInfo.type == PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER ? DXGI_FORMAT_UNKNOWN : DXGI_FORMAT_R32_TYPELESS;
                         srv.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
                         srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-                        srv.Buffer = BufferSrv(updateInfo, j, rangeBytes);
+                        srv.Buffer = bindingInfo.type == PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER
+                                         ? StructuredBufferSrv(updateInfo, bindingInfo, j, rangeBytes)
+                                         : RawBufferSrv(updateInfo, j, rangeBytes);
                         device->CreateShaderResourceView(bufferImpl->GetResource(), &srv, dst);
                     }
                     else
@@ -388,9 +434,11 @@ namespace pe
                                     "Dx12DescriptorImpl: buffer '%s' is bound as a UAV but was not created with ALLOW_UNORDERED_ACCESS. Use GPU-only memory for DX12 writable storage buffers.",
                                     buffer ? buffer->GetName().c_str() : "<null>");
                         D3D12_UNORDERED_ACCESS_VIEW_DESC uav{};
-                        uav.Format = DXGI_FORMAT_R32_TYPELESS;
+                        uav.Format = bindingInfo.structuredStride > 0 ? DXGI_FORMAT_UNKNOWN : DXGI_FORMAT_R32_TYPELESS;
                         uav.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-                        uav.Buffer = BufferUav(updateInfo, j, rangeBytes);
+                        uav.Buffer = bindingInfo.structuredStride > 0
+                                         ? StructuredBufferUav(updateInfo, bindingInfo, j, rangeBytes)
+                                         : RawBufferUav(updateInfo, j, rangeBytes);
                         device->CreateUnorderedAccessView(bufferImpl->GetResource(), nullptr, &uav, dst);
                     }
                 }

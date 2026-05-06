@@ -1,5 +1,6 @@
 #include "Particles.h"
 #include "API/Image.h"
+#include "API/RHI.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
 #include "API/Vulkan/VulkanSamplerImpl.h"
 #include "Camera/Camera.h"
@@ -125,7 +126,7 @@ namespace pe
         if (currentItem >= 0 && currentItem < static_cast<int>(pm->GetTextures().size()))
         {
             Image *img = pm->GetTextures()[currentItem];
-            if (img && img->GetSRV() && img->GetSampler())
+            if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN && img && img->GetSRV() && img->GetSampler())
             {
                 void *imgPtr = (void *)img;
                 if (m_textureCache.find(imgPtr) == m_textureCache.end())

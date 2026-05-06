@@ -79,6 +79,7 @@ namespace pe
         ID3D12GraphicsCommandList *Get() const { return m_cmdList.Get(); }
 
         void FlushBarriers();
+        void InvalidateShaderVisibleHeapBinding() { m_heapsBound = false; }
 
         CommandBuffer *m_owner{};
         Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_allocator;

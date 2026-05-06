@@ -37,6 +37,7 @@ namespace pe
 
         // SceneView State
         static void *s_viewportTextureId;
+        static uint32_t s_dx12ViewportSlot; // CBV/SRV/UAV shader-visible slot backing s_viewportTextureId on DX12; UINT32_MAX = unused
         static bool s_sceneViewFloating;
         static bool s_sceneViewRedockQueued;
         static bool s_sceneViewFocused;

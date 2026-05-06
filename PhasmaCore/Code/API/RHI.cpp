@@ -396,15 +396,8 @@ namespace pe
 
             int sdlW = 0, sdlH = 0;
             SDL_GetWindowSize(window, &sdlW, &sdlH);
-            SwapchainDesc scDesc{};
-            scDesc.window = window;
-            scDesc.surface = nullptr;
-            scDesc.width = static_cast<uint32_t>(sdlW);
-            scDesc.height = static_cast<uint32_t>(sdlH);
-            scDesc.presentMode = PE_PRESENT_MODE_FIFO;
-            scDesc.backbufferCount = 2;
-            scDesc.name = "RHI_swapchain";
-            m_swapchain = Swapchain::Create(scDesc);
+            m_surface->SetActualExtent({0, 0, static_cast<uint32_t>(sdlW), static_cast<uint32_t>(sdlH)});
+            CreateSwapchain(m_surface);
             Downsampler::Init();
             m_deletionQueues.resize(GetSwapchainImageCount());
             for (auto &queue : m_deletionQueues)
@@ -948,6 +941,13 @@ namespace pe
     void RHI::CreateSwapchain(Surface *surface)
     {
         SwapchainDesc desc{};
+        if (surface)
+        {
+            // DX12 consumes SwapchainDesc dimensions directly; Vulkan refreshes from surface capabilities.
+            const Rect2Du &extent = surface->GetActualExtent();
+            desc.width = extent.width;
+            desc.height = extent.height;
+        }
         desc.window = m_window;
         desc.surface = surface;
         desc.presentMode = surface ? surface->GetPresentMode() : PE_PRESENT_MODE_FIFO;
@@ -1251,7 +1251,7 @@ namespace pe
         // Set Window Title
         std::string title = "PhasmaEngine";
         title += " - Device: " + GetGpuName();
-        title += " - API: Vulkan";
+        title += m_api == PE_GRAPHICS_API_VULKAN ? " - API: Vulkan" : " - API: DX12";
         title += " - Present Mode: " + std::string(PresentModeToString(m_surface->GetPresentMode()));
 #if PE_DEBUG
         title += " - Debug";

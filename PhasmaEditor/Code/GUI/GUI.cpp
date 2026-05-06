@@ -15,6 +15,13 @@
 #include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/VulkanQueueImpl.h"
 #include "API/Vulkan/VulkanRenderPassImpl.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12CommandBufferImpl.h"
+#include "API/DX12/Dx12DescriptorHeap.h"
+#include "API/DX12/Dx12RhiImpl.h"
+#include "API/DX12/Dx12Translate.h"
+#include "Backends/imgui_impl_dx12.h"
+#endif
 #include "GUIState.h"
 #include "Helpers.h"
 #include "Particles/ParticleManager.h"
@@ -64,6 +71,8 @@ namespace pe
 {
     namespace
     {
+        ImGuiContext *s_hotReloadCtx = nullptr;
+
         bool IsScriptTestFailureLine(const std::string &line)
         {
             return line.find("[FAIL]") != std::string::npos ||
@@ -256,10 +265,24 @@ namespace pe
         if (m_indexThread.joinable())
             m_indexThread.join();
 
+        const bool isVulkan = RHII.GetApi() == PE_GRAPHICS_API_VULKAN;
+        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+
         if (GUIState::s_viewportTextureId)
         {
-            if (m_initialized)
+            if (m_initialized && isVulkan)
+            {
                 ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)GUIState::s_viewportTextureId);
+            }
+#if defined(PE_WIN32)
+            else if (m_initialized && isDx12 && GUIState::s_dx12ViewportSlot != UINT32_MAX)
+            {
+                Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+                if (rhi && rhi->GetCbvSrvUavHeap())
+                    rhi->GetCbvSrvUavHeap()->Free(GUIState::s_dx12ViewportSlot);
+                GUIState::s_dx12ViewportSlot = UINT32_MAX;
+            }
+#endif
             GUIState::s_viewportTextureId = nullptr;
         }
 
@@ -271,9 +294,18 @@ namespace pe
         Image::Destroy(GUIState::s_sceneViewImage);
         if (m_initialized)
         {
+#if defined(PE_WIN32)
+            if (isDx12)
+                ImGui_ImplDX12_Shutdown();
+            else
+                ImGui_ImplVulkan_Shutdown();
+#else
+            (void)isDx12;
             ImGui_ImplVulkan_Shutdown();
+#endif
             ImGui_ImplSDL2_Shutdown();
-            ImGui::DestroyContext();
+            if (m_ownsImGuiContext)
+                ImGui::DestroyContext();
         }
     }
 
@@ -299,6 +331,11 @@ namespace pe
             if (it != ui.end() && it->is_boolean())
                 *w->GetOpen() = it->get<bool>();
         }
+    }
+
+    void GUI::SetHotReloadContext(ImGuiContext *ctx)
+    {
+        s_hotReloadCtx = ctx;
     }
 
     bool GUI::IsMcpServerRunning() const
@@ -1348,7 +1385,9 @@ namespace pe
 
     void GUI::Init()
     {
-        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+        const bool isVulkan = RHII.GetApi() == PE_GRAPHICS_API_VULKAN;
+        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        if (!isVulkan && !isDx12)
             return;
 
         auto &gSettings = Settings::Get<GlobalSettings>();
@@ -1378,57 +1417,119 @@ namespace pe
 
         m_hasIniFile = std::filesystem::exists("imgui.ini");
 
-        ImGui::CreateContext();
+        if (s_hotReloadCtx)
+        {
+            ImGui::SetCurrentContext(s_hotReloadCtx);
+            m_ownsImGuiContext = false;
+            s_hotReloadCtx = nullptr;
+        }
+
+        if (!ImGui::GetCurrentContext())
+        {
+            ImGui::CreateContext();
+            m_ownsImGuiContext = true;
+        }
+
         ImGuiIO &io = ImGui::GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // Enable docking
-        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable multiple viewports
-        io.ConfigFlags |= ImGuiConfigFlags_IsSRGB;          // Enable SRGB support
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+        io.ConfigFlags |= ImGuiConfigFlags_IsSRGB;
+        if (isVulkan)
+            io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+        else
+            io.ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;
 
         ImGui::StyleColorsClassic();
-
-        ImGui_ImplSDL2_InitForVulkan(RHII.GetWindow());
-
-        // Verify the SDL2 backend supports platform windows
-        PE_ERROR_IF(!(io.BackendFlags & ImGuiBackendFlags_PlatformHasViewports),
-                    "SDL2 backend doesn't support platform viewports!");
 
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
         m_attachment->image = renderer->GetDisplayRT();
         m_attachment->loadOp = PE_LOAD_OP_LOAD;
-        VkFormat format = static_cast<VkFormat>(RHII.GetSurface()->GetFormat());
         Queue *queue = RHII.GetMainQueue();
 
-        ImGui_ImplVulkan_InitInfo init_info{};
-        init_info.Instance = VulkanRhi::Instance();
-        init_info.PhysicalDevice = VulkanRhi::Gpu();
-        init_info.Device = VulkanRhi::Device();
-        init_info.QueueFamily = queue->GetFamilyId();
-        init_info.Queue = pe::GetVulkanQueue(queue);
-        init_info.PipelineCache = nullptr;
-        init_info.DescriptorPool = pe::GetVulkanDescriptorPool(RHII.GetDescriptorPool());
-        init_info.Subpass = 0;
-        init_info.MinImageCount = RHII.GetSwapchainImageCount();
-        init_info.ImageCount = RHII.GetSwapchainImageCount();
-        init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-        init_info.Allocator = nullptr;
-        init_info.CheckVkResultFn = nullptr;
-        // if (gSettings.dynamic_rendering)
-        // {
-        //     init_info.UseDynamicRendering = true;
-        //     init_info.PipelineRenderingCreateInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
-        //     init_info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
-        //     init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &format;
-        // }
-        // else
+        if (isVulkan)
         {
-            RenderPass *renderPass = CommandBuffer::GetRenderPass(1, m_attachment.get());
-            init_info.UseDynamicRendering = false;
-            init_info.RenderPass = pe::GetVulkanRenderPass(renderPass);
+            ImGui_ImplSDL2_InitForVulkan(RHII.GetWindow());
+
+            PE_ERROR_IF(!(io.BackendFlags & ImGuiBackendFlags_PlatformHasViewports),
+                        "SDL2 backend doesn't support platform viewports!");
+
+            ImGui_ImplVulkan_InitInfo init_info{};
+            init_info.Instance = VulkanRhi::Instance();
+            init_info.PhysicalDevice = VulkanRhi::Gpu();
+            init_info.Device = VulkanRhi::Device();
+            init_info.QueueFamily = queue->GetFamilyId();
+            init_info.Queue = pe::GetVulkanQueue(queue);
+            init_info.PipelineCache = nullptr;
+            init_info.DescriptorPool = pe::GetVulkanDescriptorPool(RHII.GetDescriptorPool());
+            init_info.Subpass = 0;
+            init_info.MinImageCount = RHII.GetSwapchainImageCount();
+            init_info.ImageCount = RHII.GetSwapchainImageCount();
+            init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+            init_info.Allocator = nullptr;
+            init_info.CheckVkResultFn = nullptr;
+            {
+                RenderPass *renderPass = CommandBuffer::GetRenderPass(1, m_attachment.get());
+                init_info.UseDynamicRendering = false;
+                init_info.RenderPass = pe::GetVulkanRenderPass(renderPass);
+            }
+
+            ImGui_ImplVulkan_Init(&init_info);
         }
+#if defined(PE_WIN32)
+        else
+        {
+            Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+            PE_ERROR_IF(!rhi || !rhi->GetDevice() || !rhi->GetGraphicsQueue(), "GUI::Init: DX12 RHI is not initialized");
+            PE_ERROR_IF(!rhi->GetCbvSrvUavHeap(), "GUI::Init: DX12 CBV/SRV/UAV heap is not initialized");
+            PE_ERROR_IF(!m_attachment->image, "GUI::Init: display RT must exist before ImGui DX12 init (RTV format is required)");
 
-        ImGui_ImplVulkan_Init(&init_info);
+            ImGui_ImplSDL2_InitForD3D(RHII.GetWindow());
 
-        // Load ALL fonts upfront for dynamic style switching
+            ImGui_ImplDX12_InitInfo init_info{};
+            init_info.Device = rhi->GetDevice();
+            init_info.CommandQueue = rhi->GetGraphicsQueue();
+            init_info.NumFramesInFlight = static_cast<int>(RHII.GetSwapchainImageCount());
+            init_info.RTVFormat = pe_dx12::Format(m_attachment->image->GetFormat());
+            init_info.DSVFormat = DXGI_FORMAT_UNKNOWN;
+            init_info.SrvDescriptorHeap = rhi->GetCbvSrvUavHeap()->Get();
+            init_info.UserData = this;
+            init_info.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo *info,
+                                                D3D12_CPU_DESCRIPTOR_HANDLE *outCpu,
+                                                D3D12_GPU_DESCRIPTOR_HANDLE *outGpu)
+            {
+                GUI *gui = static_cast<GUI *>(info->UserData);
+                Dx12RhiImpl *dx12 = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+                PE_ERROR_IF(!gui || !dx12 || !dx12->GetCbvSrvUavHeap(), "GUI DX12 descriptor allocation requires an initialized heap");
+
+                uint32_t slot = dx12->GetCbvSrvUavHeap()->Allocate();
+                *outCpu = dx12->GetCbvSrvUavHeap()->GetCpuHandle(slot);
+                *outGpu = dx12->GetCbvSrvUavHeap()->GetGpuHandle(slot);
+                gui->m_dx12ImGuiSlots.emplace(static_cast<uint64_t>(outGpu->ptr), slot);
+            };
+            init_info.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo *info,
+                                               D3D12_CPU_DESCRIPTOR_HANDLE,
+                                               D3D12_GPU_DESCRIPTOR_HANDLE gpu)
+            {
+                GUI *gui = static_cast<GUI *>(info->UserData);
+                Dx12RhiImpl *dx12 = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+                if (!gui || !dx12 || !dx12->GetCbvSrvUavHeap())
+                    return;
+
+                auto it = gui->m_dx12ImGuiSlots.find(static_cast<uint64_t>(gpu.ptr));
+                if (it == gui->m_dx12ImGuiSlots.end())
+                    return;
+
+                dx12->GetCbvSrvUavHeap()->Free(it->second);
+                gui->m_dx12ImGuiSlots.erase(it);
+            };
+
+            ImGui_ImplDX12_Init(&init_info);
+        }
+#endif
+
+        // Load ALL fonts upfront for dynamic style switching. A hot-reload context
+        // already owns its font atlas, so reuse its first font instead of appending
+        // duplicate font data on every DLL swap.
+        if (m_ownsImGuiContext)
         {
             static const ImWchar icon_ranges[] = {0xf000, 0xf8ff, 0}; // FontAwesome range
             std::string iconFontPath = Path::Assets + "Fonts/fa-solid-900.ttf";
@@ -1515,8 +1616,19 @@ namespace pe
             GUIState::s_fontDark = GUIState::s_fontLight;
             GUIState::s_fontModern = GUIState::s_fontLight;
         }
+        else if (io.Fonts && io.Fonts->Fonts.Size > 0)
+        {
+            ImFont *font = io.Fonts->Fonts[0];
+            GUIState::s_fontClassic = font;
+            GUIState::s_fontUnity = font;
+            GUIState::s_fontUnreal = font;
+            GUIState::s_fontLight = font;
+            GUIState::s_fontDark = font;
+            GUIState::s_fontModern = font;
+        }
 
-        ImGui_ImplVulkan_CreateFontsTexture();
+        if (isVulkan)
+            ImGui_ImplVulkan_CreateFontsTexture();
 
         if (GUIState::s_guiStyle == GUIStyle::Classic)
             ui::ApplyClassicTheme();
@@ -1697,13 +1809,31 @@ namespace pe
         }
 
         cmd->BeginPass(1, m_attachment.get(), "GUI", true);
-        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), GetVulkanCommandBuffer(cmd));
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+        {
+            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), GetVulkanCommandBuffer(cmd));
+        }
+#if defined(PE_WIN32)
+        else if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+            Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+            Dx12CommandBufferImpl *dx12Cmd = Dx12CommandBufferImpl::From(cmd);
+            ID3D12DescriptorHeap *heap = rhi && rhi->GetCbvSrvUavHeap() ? rhi->GetCbvSrvUavHeap()->Get() : nullptr;
+            PE_ERROR_IF(!heap || !dx12Cmd || !dx12Cmd->Get(), "GUI::ExecutePass: DX12 command state is not initialized");
+
+            dx12Cmd->Get()->SetDescriptorHeaps(1, &heap);
+            ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), dx12Cmd->Get());
+            dx12Cmd->InvalidateShaderVisibleHeapBinding();
+        }
+#endif
         cmd->EndPass();
     }
 
     void GUI::DrawPlatformWindows()
     {
         if (!m_initialized)
+            return;
+        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
             return;
 
         ImGui::UpdatePlatformWindows();

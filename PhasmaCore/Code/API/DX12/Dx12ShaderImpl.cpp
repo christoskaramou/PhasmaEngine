@@ -4,6 +4,8 @@
 
 #include "dxc/dxcapi.h"
 
+#include <array>
+
 namespace pe
 {
     namespace
@@ -14,6 +16,7 @@ namespace pe
         {
             int set = INT32_MIN;
             int binding = INT32_MIN;
+            uint32_t structuredStride = 0;
         };
 
         struct SourceBindings
@@ -21,6 +24,276 @@ namespace pe
             std::unordered_map<std::string, SourceBinding> resources;
             std::unordered_set<std::string> pushConstants;
         };
+
+        struct HlslStructDefinition
+        {
+            std::string body;
+            uint32_t size = 0;
+            bool resolving = false;
+            bool resolved = false;
+        };
+
+        std::string Trim(const std::string &text)
+        {
+            const size_t begin = text.find_first_not_of(" \t\r\n");
+            if (begin == std::string::npos)
+                return {};
+            const size_t end = text.find_last_not_of(" \t\r\n");
+            return text.substr(begin, end - begin + 1);
+        }
+
+        std::string StripComments(const std::string &code)
+        {
+            std::string out;
+            out.reserve(code.size());
+
+            bool inLineComment = false;
+            bool inBlockComment = false;
+            for (size_t i = 0; i < code.size(); ++i)
+            {
+                const char c = code[i];
+                const char next = (i + 1 < code.size()) ? code[i + 1] : '\0';
+
+                if (inLineComment)
+                {
+                    if (c == '\n')
+                    {
+                        inLineComment = false;
+                        out += '\n';
+                    }
+                    else
+                    {
+                        out += ' ';
+                    }
+                    continue;
+                }
+
+                if (inBlockComment)
+                {
+                    if (c == '*' && next == '/')
+                    {
+                        inBlockComment = false;
+                        out += "  ";
+                        ++i;
+                    }
+                    else
+                    {
+                        out += (c == '\n') ? '\n' : ' ';
+                    }
+                    continue;
+                }
+
+                if (c == '/' && next == '/')
+                {
+                    inLineComment = true;
+                    out += "  ";
+                    ++i;
+                    continue;
+                }
+
+                if (c == '/' && next == '*')
+                {
+                    inBlockComment = true;
+                    out += "  ";
+                    ++i;
+                    continue;
+                }
+
+                out += c;
+            }
+
+            return out;
+        }
+
+        size_t FindMatchingBrace(const std::string &text, size_t openBrace)
+        {
+            uint32_t depth = 0;
+            for (size_t i = openBrace; i < text.size(); ++i)
+            {
+                if (text[i] == '{')
+                    ++depth;
+                else if (text[i] == '}')
+                {
+                    --depth;
+                    if (depth == 0)
+                        return i;
+                }
+            }
+            return std::string::npos;
+        }
+
+        std::unordered_map<std::string, HlslStructDefinition> ParseHlslStructDefinitions(const std::string &shaderCode)
+        {
+            std::unordered_map<std::string, HlslStructDefinition> structs;
+            const std::string code = StripComments(shaderCode);
+            const std::regex structRegex(R"(\bstruct\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{)");
+
+            auto searchStart = code.cbegin();
+            std::smatch match;
+            while (std::regex_search(searchStart, code.cend(), match, structRegex))
+            {
+                const size_t matchOffset = static_cast<size_t>(std::distance(code.cbegin(), searchStart)) + static_cast<size_t>(match.position(0));
+                const size_t openBrace = code.find('{', matchOffset);
+                if (openBrace == std::string::npos)
+                    break;
+
+                const size_t closeBrace = FindMatchingBrace(code, openBrace);
+                if (closeBrace == std::string::npos)
+                    break;
+
+                HlslStructDefinition definition{};
+                definition.body = code.substr(openBrace + 1, closeBrace - openBrace - 1);
+                structs[match[1].str()] = std::move(definition);
+                searchStart = code.cbegin() + static_cast<std::ptrdiff_t>(closeBrace + 1);
+            }
+
+            return structs;
+        }
+
+        std::vector<std::string> SplitDeclarators(const std::string &declarators)
+        {
+            std::vector<std::string> result;
+            size_t begin = 0;
+            while (begin < declarators.size())
+            {
+                const size_t comma = declarators.find(',', begin);
+                const size_t end = comma == std::string::npos ? declarators.size() : comma;
+                result.push_back(Trim(declarators.substr(begin, end - begin)));
+                if (comma == std::string::npos)
+                    break;
+                begin = comma + 1;
+            }
+            return result;
+        }
+
+        uint32_t ResolveHlslTypeSize(const std::string &typeName,
+                                     std::unordered_map<std::string, HlslStructDefinition> &structs);
+
+        uint32_t ResolveBuiltinHlslTypeSize(const std::string &typeName)
+        {
+            static const std::regex typeRegex(R"(^(bool|int|uint|float|half|double)([1-4])?(?:x([1-4]))?$)");
+            std::smatch match;
+            if (!std::regex_match(typeName, match, typeRegex))
+                return 0;
+
+            const std::string scalar = match[1].str();
+            uint32_t componentSize = sizeof(uint32_t);
+            if (scalar == "half")
+                componentSize = sizeof(uint16_t);
+            else if (scalar == "double")
+                componentSize = sizeof(double);
+
+            uint32_t components = 1;
+            if (match[2].matched)
+                components *= static_cast<uint32_t>(std::stoul(match[2].str()));
+            if (match[3].matched)
+                components *= static_cast<uint32_t>(std::stoul(match[3].str()));
+            return componentSize * components;
+        }
+
+        uint32_t ArrayMultiplier(const std::string &declarator)
+        {
+            uint32_t multiplier = 1;
+            static const std::regex arrayRegex(R"(\[\s*(\d+)\s*\])");
+            for (std::sregex_iterator it(declarator.begin(), declarator.end(), arrayRegex), end; it != end; ++it)
+                multiplier *= static_cast<uint32_t>(std::stoul((*it)[1].str()));
+            return multiplier;
+        }
+
+        std::string RemoveLeadingHlslQualifiers(std::string declaration)
+        {
+            static const std::array<std::string, 5> qualifiers = {
+                "row_major",
+                "column_major",
+                "precise",
+                "static",
+                "const",
+            };
+
+            bool removed = true;
+            while (removed)
+            {
+                removed = false;
+                declaration = Trim(declaration);
+                for (const std::string &qualifier : qualifiers)
+                {
+                    if (declaration == qualifier)
+                        return {};
+                    const std::string prefix = qualifier + " ";
+                    if (declaration.rfind(prefix, 0) == 0)
+                    {
+                        declaration = declaration.substr(prefix.size());
+                        removed = true;
+                        break;
+                    }
+                }
+            }
+
+            return declaration;
+        }
+
+        uint32_t ResolveHlslStructSize(const std::string &body,
+                                       std::unordered_map<std::string, HlslStructDefinition> &structs)
+        {
+            uint32_t size = 0;
+            std::stringstream stream(body);
+            std::string statement;
+            static const std::regex declarationRegex(R"(^([A-Za-z_][A-Za-z0-9_]*)(?:\s+(.+))$)");
+
+            while (std::getline(stream, statement, ';'))
+            {
+                statement = RemoveLeadingHlslQualifiers(statement);
+                if (statement.empty())
+                    continue;
+
+                std::smatch match;
+                if (!std::regex_match(statement, match, declarationRegex))
+                    continue;
+
+                const std::string memberType = match[1].str();
+                const uint32_t memberSize = ResolveHlslTypeSize(memberType, structs);
+                PE_ERROR_IF(memberSize == 0,
+                            "DX12 reflection: unsupported StructuredBuffer member type '%s'",
+                            memberType.c_str());
+
+                for (std::string declarator : SplitDeclarators(match[2].str()))
+                {
+                    const size_t semanticPos = declarator.find(':');
+                    if (semanticPos != std::string::npos)
+                        declarator = declarator.substr(0, semanticPos);
+                    declarator = Trim(declarator);
+                    if (!declarator.empty())
+                        size += memberSize * ArrayMultiplier(declarator);
+                }
+            }
+
+            return size;
+        }
+
+        uint32_t ResolveHlslTypeSize(const std::string &typeName,
+                                     std::unordered_map<std::string, HlslStructDefinition> &structs)
+        {
+            if (const uint32_t builtinSize = ResolveBuiltinHlslTypeSize(typeName))
+                return builtinSize;
+
+            auto it = structs.find(typeName);
+            if (it == structs.end())
+                return 0;
+
+            HlslStructDefinition &definition = it->second;
+            if (definition.resolved)
+                return definition.size;
+
+            PE_ERROR_IF(definition.resolving,
+                        "DX12 reflection: recursive StructuredBuffer element type '%s' is unsupported",
+                        typeName.c_str());
+
+            definition.resolving = true;
+            definition.size = ResolveHlslStructSize(definition.body, structs);
+            definition.resolving = false;
+            definition.resolved = true;
+            return definition.size;
+        }
 
         std::wstring ConvertUtf8ToWide(const std::string &str)
         {
@@ -48,7 +321,7 @@ namespace pe
         LPCWSTR GetStageProfile(PeShaderStageFlags stage)
         {
             if (stage == PE_SHADER_STAGE_VERTEX)
-                return L"vs_6_6";
+                return L"vs_6_8";
             if (stage == PE_SHADER_STAGE_FRAGMENT)
                 return L"ps_6_6";
             if (stage == PE_SHADER_STAGE_COMPUTE)
@@ -159,7 +432,7 @@ namespace pe
             };
 
             Microsoft::WRL::ComPtr<IDxcBlobEncoding> source;
-            const std::string shaderCode = prepareDx12ShaderCode(owner->GetCache().GetShaderCode());
+            const std::string shaderCode = "#define PE_DX12 1\n" + prepareDx12ShaderCode(owner->GetCache().GetShaderCode());
             hr = utils->CreateBlob(shaderCode.data(), static_cast<uint32_t>(shaderCode.size()), CP_UTF8, &source);
             if (FAILED(hr))
             {
@@ -374,14 +647,17 @@ namespace pe
         SourceBindings ExtractSourceBindings(const std::string &shaderCode)
         {
             SourceBindings bindings;
+            auto structDefinitions = ParseHlslStructDefinitions(shaderCode);
 
             std::stringstream stream(shaderCode);
             std::string line;
             bool pendingPushConstant = false;
             const std::regex bindingRegex(R"(\[\[vk::binding\(\s*(\d+)\s*(?:,\s*(\d+))?\s*\)\]\])");
             const std::regex bufferNameRegex(R"(\b[ct]buffer\s+([A-Za-z_][A-Za-z0-9_]*))");
+            const std::regex structuredResourceRegex(
+                R"(\b(?:globallycoherent\s+)?(?:(?:RW|Append|Consume)StructuredBuffer|StructuredBuffer)\s*<\s*([A-Za-z_][A-Za-z0-9_]*)\s*>\s+([A-Za-z_][A-Za-z0-9_]*))");
             const std::regex resourceNameRegex(
-                R"(\b(?:globallycoherent\s+)?(?:RW)?(?:Texture\w*|StructuredBuffer|ByteAddressBuffer|RaytracingAccelerationStructure|SamplerState|SamplerComparisonState|ConstantBuffer)(?:\s*<[^>]*>)?\s+([A-Za-z_][A-Za-z0-9_]*))");
+                R"(\b(?:globallycoherent\s+)?(?:(?:RW|Append|Consume)?StructuredBuffer|(?:RW)?(?:Texture\w*|ByteAddressBuffer|Buffer)|RaytracingAccelerationStructure|SamplerState|SamplerComparisonState|ConstantBuffer)(?:\s*<[^>]*>)?\s+([A-Za-z_][A-Za-z0-9_]*))");
             const std::regex macroRegex(R"(\b(?:TexSamplerDecl|CubeSamplerDecl)\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*\))");
             const std::regex pushConstantRegex(R"((?:(?:ConstantBuffer\s*<\s*([A-Za-z_][A-Za-z0-9_]*)\s*>)|([A-Za-z_][A-Za-z0-9_]*))\s+([A-Za-z_][A-Za-z0-9_]*))");
 
@@ -431,6 +707,19 @@ namespace pe
 
                 const std::string afterBinding = bindingMatch.suffix().str();
                 std::smatch nameMatch;
+                if (std::regex_search(afterBinding, nameMatch, structuredResourceRegex))
+                {
+                    const std::string elementType = nameMatch[1].str();
+                    const std::string resourceName = nameMatch[2].str();
+                    binding.structuredStride = ResolveHlslTypeSize(elementType, structDefinitions);
+                    PE_ERROR_IF(binding.structuredStride == 0,
+                                "DX12 reflection: could not resolve StructuredBuffer '%s' element type '%s'",
+                                resourceName.c_str(),
+                                elementType.c_str());
+                    bindings.resources[resourceName] = binding;
+                    continue;
+                }
+
                 if (std::regex_search(afterBinding, nameMatch, bufferNameRegex) ||
                     std::regex_search(afterBinding, nameMatch, resourceNameRegex))
                 {
@@ -641,6 +930,13 @@ namespace pe
                 desc.kind = (binding.Type == D3D_SIT_BYTEADDRESS)
                                 ? PeBufferKind::ByteAddress
                                 : PeBufferKind::Structured;
+                if (desc.kind == PeBufferKind::Structured)
+                {
+                    desc.structuredStride = sourceBinding.structuredStride;
+                    PE_ERROR_IF(desc.structuredStride == 0,
+                                "DX12 reflection: StructuredBuffer '%s' has no element stride",
+                                name.c_str());
+                }
                 refl.m_storageBuffers.push_back(desc);
                 break;
             }
@@ -666,6 +962,13 @@ namespace pe
                 desc.count = count;
                 FillBindingMetadata(desc, sourceBinding, binding);
                 desc.kind = PeBufferKind::StorageRW;
+                if (binding.Type != D3D_SIT_UAV_RWBYTEADDRESS)
+                {
+                    desc.structuredStride = sourceBinding.structuredStride;
+                    PE_ERROR_IF(desc.structuredStride == 0,
+                                "DX12 reflection: RWStructuredBuffer '%s' has no element stride",
+                                name.c_str());
+                }
                 refl.m_storageBuffers.push_back(desc);
                 break;
             }

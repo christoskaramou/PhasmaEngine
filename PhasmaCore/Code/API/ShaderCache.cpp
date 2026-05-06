@@ -59,7 +59,7 @@ namespace pe
         m_hash.Combine(definesHash);
         m_hash.Combine(static_cast<uint32_t>(RHII.GetApi()));
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-            m_hash.Combine(2u); // DX12 source-register rewrite/reflection contract version.
+            m_hash.Combine(4u); // DX12 source-register rewrite/reflection contract version.
 
         m_tempFilePath = Path::Executable;
         m_tempFilePath += "ShaderCache/";

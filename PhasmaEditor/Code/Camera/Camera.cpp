@@ -1,5 +1,6 @@
 #include "Camera/Camera.h"
 #include "API/Image.h"
+#include "API/RHI.h"
 #include "RenderPasses/TAAPass.h"
 #include "Systems/RendererSystem.h"
 
@@ -92,7 +93,7 @@ namespace pe
 
         m_projection = mat4(0.0f);
         m_projection[0][0] = 1.0f / (aspect * tanHalfFovy);
-        m_projection[1][1] = 1.0f / tanHalfFovy; // Vulkan Y-flip
+        m_projection[1][1] = 1.0f / tanHalfFovy;
         m_projection[2][2] = 0.0f;
         m_projection[2][3] = 1.0f;
         m_projection[3][2] = m_nearPlane;
@@ -124,20 +125,24 @@ namespace pe
 
     void Camera::Move(CameraDirection direction, float speed)
     {
+        const vec3 strafeRight = (RHII.GetApi() == PE_GRAPHICS_API_DX12) ? m_right : -m_right;
+
         if (direction == CameraDirection::FORWARD)
             m_position += m_front * speed;
         if (direction == CameraDirection::BACKWARD)
             m_position -= m_front * speed;
         if (direction == CameraDirection::RIGHT)
-            m_position -= m_right * speed;
+            m_position += strafeRight * speed;
         if (direction == CameraDirection::LEFT)
-            m_position += m_right * speed;
+            m_position -= strafeRight * speed;
     }
 
     void Camera::Rotate(float xoffset, float yoffset)
     {
-        const float x = radians(yoffset * m_rotationSpeed);  // pitch
-        const float y = radians(-xoffset * m_rotationSpeed); // yaw
+        const float yawSign = (RHII.GetApi() == PE_GRAPHICS_API_DX12) ? 1.0f : -1.0f;
+
+        const float x = radians(yoffset * m_rotationSpeed);           // pitch
+        const float y = radians(yawSign * xoffset * m_rotationSpeed); // yaw
 
         m_euler.x += x;
         m_euler.y += y;

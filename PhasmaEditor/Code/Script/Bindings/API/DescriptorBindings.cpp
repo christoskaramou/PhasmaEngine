@@ -72,6 +72,7 @@ namespace pe
                         info.type = Lookup(entry.get_or<std::string>("type", "combined_image_sampler"), s_descriptorTypeMap, PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
                         info.imageLayout = Lookup(entry.get_or<std::string>("layout", "undefined"), s_descImageLayoutMap, PE_IMAGE_LAYOUT_UNDEFINED);
                         info.bindless = entry.get_or("bindless", false);
+                        info.structuredStride = entry.get_or("structured_stride", uint32_t{0});
                         info.name = entry.get_or<std::string>("name", "");
                         info.dxRegister = entry.get_or("dx_register", static_cast<uint32_t>(-1));
                         info.dxSpace = entry.get_or("dx_space", uint32_t{0});
@@ -98,6 +99,7 @@ namespace pe
                         info.type = Lookup(entry.get_or<std::string>("type", "combined_image_sampler"), s_descriptorTypeMap, PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
                         info.imageLayout = Lookup(entry.get_or<std::string>("layout", "undefined"), s_descImageLayoutMap, PE_IMAGE_LAYOUT_UNDEFINED);
                         info.bindless = entry.get_or("bindless", false);
+                        info.structuredStride = entry.get_or("structured_stride", uint32_t{0});
                         info.name = entry.get_or<std::string>("name", "");
                         info.dxRegister = entry.get_or("dx_register", static_cast<uint32_t>(-1));
                         info.dxSpace = entry.get_or("dx_space", uint32_t{0});
@@ -224,6 +226,7 @@ namespace pe
                         entry["binding"] = infos[i].binding;
                         entry["count"] = infos[i].count;
                         entry["type"] = static_cast<uint32_t>(infos[i].type);
+                        entry["structured_stride"] = infos[i].structuredStride;
                         entry["bindless"] = infos[i].bindless;
                         entry["name"] = infos[i].name;
                         t[i + 1] = entry;

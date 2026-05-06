@@ -3,6 +3,7 @@
 #include "Widget.h"
 
 struct ImGuiStyle;
+struct ImGuiContext;
 
 namespace pe
 {
@@ -49,6 +50,8 @@ namespace pe
         // Hot-reload UI state persistence
         std::string TakeUISnapshot() const;
         void RestoreUISnapshot(const std::string &jsonStr);
+        static void SetHotReloadContext(ImGuiContext *ctx);
+        void ReleaseImGuiOwnership() { m_ownsImGuiContext = false; }
 
         // Thread-safe GpuTimer access
         std::vector<GpuTimerSample> PopGpuTimerInfos();
@@ -123,6 +126,7 @@ namespace pe
         bool m_dockspaceInitialized;
         bool m_requestDockReset;
         bool m_hasIniFile = false;
+        bool m_ownsImGuiContext = true;
 
         // Undo/Redo state tracking
         bool m_wasAnyItemActive = false;
@@ -153,5 +157,9 @@ namespace pe
         std::string m_playModeSnapshot;
 
         EventSystem::CallbackToken m_afterCommandWaitToken{0};
+
+#if defined(PE_WIN32)
+        std::unordered_map<uint64_t, uint32_t> m_dx12ImGuiSlots;
+#endif
     };
 } // namespace pe
