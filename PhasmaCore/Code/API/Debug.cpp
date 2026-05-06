@@ -10,7 +10,7 @@
 #endif
 #include "RenderDoc/renderdoc_app.h"
 
-#define PE_RENDER_DOC 1
+#define PE_RENDER_DOC 0
 
 #if defined(WIN32) && PE_RENDER_DOC == 1
 #include <Windows.h>
