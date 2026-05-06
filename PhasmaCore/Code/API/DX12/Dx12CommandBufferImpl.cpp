@@ -258,6 +258,7 @@ namespace pe
         }
 
         m_barrierBatch.clear();
+        m_pendingImageBarrierRegion.clear();
         m_heapsBound = false;
         m_lastTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
 
@@ -341,8 +342,23 @@ namespace pe
         if (m_barrierBatch.empty())
             return;
 
+        const bool markImageBarrier = !m_pendingImageBarrierRegion.empty();
+        if (markImageBarrier)
+            BeginDebugRegion(m_pendingImageBarrierRegion);
+
         m_cmdList->ResourceBarrier(static_cast<UINT>(m_barrierBatch.size()), m_barrierBatch.data());
+
+        if (markImageBarrier)
+            EndDebugRegion();
+
         m_barrierBatch.clear();
+        m_pendingImageBarrierRegion.clear();
+    }
+
+    void Dx12CommandBufferImpl::MarkPendingImageBarrierRegion(const char *name)
+    {
+        if (m_pendingImageBarrierRegion.empty() || std::string{name} == "ImageGroupBarrier")
+            m_pendingImageBarrierRegion = name;
     }
 
     // ----------------------------------------------------------------------
@@ -942,14 +958,14 @@ namespace pe
         // Push a transition barrier for a single image into the batch.
         // No-op when the source and destination states already match; DX12
         // rejects no-op transitions with a debug-layer error.
-        void PushImageTransition(std::vector<D3D12_RESOURCE_BARRIER> &batch,
+        bool PushImageTransition(std::vector<D3D12_RESOURCE_BARRIER> &batch,
                                  Dx12ImageImpl *img,
                                  PeImageLayout newLayout)
         {
             const D3D12_RESOURCE_STATES before = img->m_state;
             const D3D12_RESOURCE_STATES after = pe_dx12::ToD3D12ResourceState(newLayout);
             if (before == after)
-                return;
+                return false;
 
             D3D12_RESOURCE_BARRIER rb{};
             rb.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -961,6 +977,7 @@ namespace pe
             batch.push_back(rb);
 
             img->m_state = after;
+            return true;
         }
 
     } // namespace
@@ -979,21 +996,19 @@ namespace pe
     {
         if (!info.image)
             return;
-        BeginDebugRegion("ImageBarrier");
-        PushImageTransition(m_barrierBatch, Dx12ImageImpl::From(info.image), info.layout);
-        EndDebugRegion();
+        if (PushImageTransition(m_barrierBatch, Dx12ImageImpl::From(info.image), info.layout))
+            MarkPendingImageBarrierRegion("ImageBarrier");
     }
     void Dx12CommandBufferImpl::ImageBarriers(const std::vector<ImageBarrierInfo> &infos)
     {
-        BeginDebugRegion("ImageGroupBarrier");
         m_barrierBatch.reserve(m_barrierBatch.size() + infos.size());
         for (const auto &info : infos)
         {
             if (!info.image)
                 continue;
-            PushImageTransition(m_barrierBatch, Dx12ImageImpl::From(info.image), info.layout);
+            if (PushImageTransition(m_barrierBatch, Dx12ImageImpl::From(info.image), info.layout))
+                MarkPendingImageBarrierRegion("ImageGroupBarrier");
         }
-        EndDebugRegion();
     }
     void Dx12CommandBufferImpl::MemoryBarrier(const MemoryBarrierInfo &)
     {

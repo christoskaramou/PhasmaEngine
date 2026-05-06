@@ -66,6 +66,12 @@ namespace pe
             PE_ERROR("Dx12RhiImpl::Init: CreateDXGIFactory2 failed");
             return false;
         }
+        BOOL allowTearing = FALSE;
+        if (SUCCEEDED(m_factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING,
+                                                     &allowTearing, sizeof(allowTearing))))
+        {
+            m_allowTearing = allowTearing != FALSE;
+        }
 
         for (UINT i = 0;
              m_factory->EnumAdapterByGpuPreference(i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
@@ -236,8 +242,15 @@ namespace pe
 
         DXGI_QUERY_VIDEO_MEMORY_INFO local{};
         DXGI_QUERY_VIDEO_MEMORY_INFO nonlocal{};
-        adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &local);
-        adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &nonlocal);
+        // Phase-1 DX12 is single-node only: every device object and queue uses
+        // NodeMask 0, so node 0 is the active DXGI memory node for now.
+        constexpr UINT memoryNode = 0;
+        const HRESULT localHr = adapter3->QueryVideoMemoryInfo(memoryNode, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &local);
+        const HRESULT nonlocalHr = adapter3->QueryVideoMemoryInfo(memoryNode, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &nonlocal);
+        if (FAILED(localHr))
+            PE_WARN("Dx12RhiImpl::GetGpuMemorySnapshot: LOCAL QueryVideoMemoryInfo failed (0x%08X)", static_cast<unsigned>(localHr));
+        if (FAILED(nonlocalHr))
+            PE_WARN("Dx12RhiImpl::GetGpuMemorySnapshot: NON_LOCAL QueryVideoMemoryInfo failed (0x%08X)", static_cast<unsigned>(nonlocalHr));
 
         D3D12MA::TotalStatistics stats{};
         m_d3d12Allocator->CalculateStatistics(&stats);

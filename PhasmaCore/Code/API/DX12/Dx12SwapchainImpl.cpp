@@ -35,12 +35,9 @@ namespace pe
         HWND hwnd = HwndFromSdlWindow(desc.window);
         PE_ERROR_IF(!hwnd, "Dx12SwapchainImpl: SDL window has no HWND");
 
-        BOOL tearing = FALSE;
-        if (SUCCEEDED(factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING,
-                                                   &tearing, sizeof(tearing))))
-        {
-            m_allowTearing = (tearing != FALSE);
-        }
+        m_allowTearing = rhi->SupportsAllowTearing();
+        const bool useImmediate = m_owner->m_presentMode == PE_PRESENT_MODE_IMMEDIATE && m_allowTearing;
+        m_owner->m_presentMode = useImmediate ? PE_PRESENT_MODE_IMMEDIATE : PE_PRESENT_MODE_FIFO;
 
         const uint32_t bbCount = desc.backbufferCount < 2 ? 2 : desc.backbufferCount;
 
@@ -163,8 +160,11 @@ namespace pe
 
     void Dx12SwapchainImpl::Present()
     {
-        const HRESULT hr = m_swapchain->Present(1, 0);
-        PE_ERROR_IF(FAILED(hr), "Dx12SwapchainImpl: Present failed");
+        const bool immediate = m_owner->GetPresentMode() == PE_PRESENT_MODE_IMMEDIATE && m_allowTearing;
+        const UINT syncInterval = immediate ? 0u : 1u;
+        const UINT flags = immediate ? DXGI_PRESENT_ALLOW_TEARING : 0u;
+        const HRESULT hr = m_swapchain->Present(syncInterval, flags);
+        PE_ERROR_IF(FAILED(hr), "Dx12SwapchainImpl: Present failed (0x%08X)", static_cast<unsigned>(hr));
         m_currentBackbuffer = m_swapchain->GetCurrentBackBufferIndex();
     }
 } // namespace pe

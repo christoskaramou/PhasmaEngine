@@ -418,10 +418,12 @@ namespace pe
 
     void Debug::BeginCmdRegion(CommandBuffer *cmd, const std::string &name)
     {
+        const bool isVulkan = RHII.GetApi() == PE_GRAPHICS_API_VULKAN;
+
         // The Vulkan debug-utils label is opt-in (extension may be absent and the
         // pointer null on DX12). The timer machinery below must run regardless so
         // GpuTimer samples populate on every backend.
-        if (vkCmdBeginDebugUtilsLabelEXT)
+        if (isVulkan && vkCmdBeginDebugUtilsLabelEXT)
         {
             VkDebugUtilsLabelEXT label{};
             label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
@@ -452,19 +454,22 @@ namespace pe
         cmd->m_gpuTimerInfosCount++;
 
 #ifdef PE_TRACY
-        auto *scope = new tracy::VkCtxScope(
-            VulkanRhi::TracyContext(),
-            __LINE__, __FILE__, strlen(__FILE__),
-            __FUNCTION__, strlen(__FUNCTION__),
-            name.c_str(), name.size(),
-            static_cast<VkCommandBuffer>(GetVulkanCommandBuffer(cmd)), true);
-        cmd->m_tracyGpuScopes.push_back(scope);
+        if (isVulkan)
+        {
+            auto *scope = new tracy::VkCtxScope(
+                VulkanRhi::TracyContext(),
+                __LINE__, __FILE__, strlen(__FILE__),
+                __FUNCTION__, strlen(__FUNCTION__),
+                name.c_str(), name.size(),
+                static_cast<VkCommandBuffer>(GetVulkanCommandBuffer(cmd)), true);
+            cmd->m_tracyGpuScopes.push_back(scope);
+        }
 #endif
     }
 
     void Debug::InsertCmdLabel(CommandBuffer *cmd, const std::string &name)
     {
-        if (!vkCmdInsertDebugUtilsLabelEXT)
+        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN || !vkCmdInsertDebugUtilsLabelEXT)
             return;
 
         VkDebugUtilsLabelEXT label{};
@@ -481,7 +486,7 @@ namespace pe
 
     void Debug::EndCmdRegion(CommandBuffer *cmd)
     {
-        if (vkCmdEndDebugUtilsLabelEXT)
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN && vkCmdEndDebugUtilsLabelEXT)
             vkCmdEndDebugUtilsLabelEXT(GetVulkanCommandBuffer(cmd));
 
         cmd->m_gpuTimerInfos[cmd->m_gpuTimerIdsStack.top()].timer->End();

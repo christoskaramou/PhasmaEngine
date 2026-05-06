@@ -90,6 +90,7 @@ namespace pe
         void BindShaderVisibleHeaps();
         ID3D12CommandSignature *GetDrawIndirectSignature(uint32_t stride);
         ID3D12CommandSignature *GetDrawIndexedIndirectSignature(uint32_t stride);
+        void MarkPendingImageBarrierRegion(const char *name);
 
         bool m_heapsBound = false;
         D3D12_PRIMITIVE_TOPOLOGY m_lastTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
@@ -97,6 +98,7 @@ namespace pe
         Microsoft::WRL::ComPtr<ID3D12CommandSignature> m_drawIndexedIndirectSignature;
         uint32_t m_drawIndirectSignatureStride = 0;
         uint32_t m_drawIndexedIndirectSignatureStride = 0;
+        std::string m_pendingImageBarrierRegion;
     };
 
     inline ID3D12GraphicsCommandList *GetDx12CommandList(CommandBuffer *cmd)

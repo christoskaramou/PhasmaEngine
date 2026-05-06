@@ -2,6 +2,8 @@
 
 #if defined(PE_WIN32)
 
+#include "API/DX12/Dx12RhiImpl.h"
+#include "API/RHI.h"
 #include "API/Surface.h"
 
 namespace pe
@@ -33,9 +35,10 @@ namespace pe
 
     std::vector<PePresentMode> Dx12SurfaceImpl::GetSupportedPresentModes() const
     {
-        // DXGI tearing capability is probed at swapchain-creation time inside Dx12SwapchainImpl.
-        // FIFO maps to vsync; IMMEDIATE maps to DXGI_PRESENT_ALLOW_TEARING when supported.
-        return {PE_PRESENT_MODE_FIFO, PE_PRESENT_MODE_IMMEDIATE};
+        auto *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+        if (rhi && rhi->SupportsAllowTearing())
+            return {PE_PRESENT_MODE_FIFO, PE_PRESENT_MODE_IMMEDIATE};
+        return {PE_PRESENT_MODE_FIFO};
     }
 } // namespace pe
 
