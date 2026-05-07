@@ -39,6 +39,7 @@ namespace pe
     class AabbsPass;
     class TAAPass;
     class SharpenPass;
+    class UpsamplePass;
     class TonemapPass;
     class BloomBrightFilterPass;
     class BloomGaussianBlurHorizontalPass;
@@ -136,7 +137,6 @@ namespace pe
     protected:
         void LoadResources(CommandBuffer *cmd);
         CommandBuffer *RecordPasses(uint32_t imageIndex);
-        void Upsample(CommandBuffer *cmd, PeFilter filter);
         void CreateRenderTargets();
         Image *GetFrameOutputImage() const;
         void QueueScreenshotReadback(CommandBuffer *cmd, Image *sourceImage);
@@ -178,6 +178,7 @@ namespace pe
         AabbsPass *m_aabbsPass = nullptr;
         TAAPass *m_taaPass = nullptr;
         SharpenPass *m_sharpenPass = nullptr;
+        UpsamplePass *m_upsamplePass = nullptr;
         TonemapPass *m_tonemapPass = nullptr;
         BloomBrightFilterPass *m_bloomBrightFilterPass = nullptr;
         BloomGaussianBlurHorizontalPass *m_bloomGaussianBlurHorizontalPass = nullptr;

@@ -38,6 +38,7 @@
 #include "RenderPasses/SharpenPass.h"
 #include "RenderPasses/TAAPass.h"
 #include "RenderPasses/TonemapPass.h"
+#include "RenderPasses/UpsamplePass.h"
 
 namespace pe
 {
@@ -129,6 +130,7 @@ namespace pe
         m_renderPassComponents[ID::GetTypeID<LightTransparentPass>()] = CreateGlobalComponent<LightTransparentPass>();
         m_renderPassComponents[ID::GetTypeID<ParticleComputePass>()] = CreateGlobalComponent<ParticleComputePass>();
         m_renderPassComponents[ID::GetTypeID<ParticlePass>()] = CreateGlobalComponent<ParticlePass>();
+        m_renderPassComponents[ID::GetTypeID<UpsamplePass>()] = CreateGlobalComponent<UpsamplePass>();
         if (isDx12)
         {
             m_renderPassComponents[ID::GetTypeID<SSRPass>()] = CreateGlobalComponent<SSRPass>();
@@ -228,6 +230,7 @@ namespace pe
         m_aabbsPass = world->GetComponent<AabbsPass>();
         m_taaPass = world->GetComponent<TAAPass>();
         m_sharpenPass = world->GetComponent<SharpenPass>();
+        m_upsamplePass = world->GetComponent<UpsamplePass>();
         m_tonemapPass = world->GetComponent<TonemapPass>();
         m_bloomBrightFilterPass = world->GetComponent<BloomBrightFilterPass>();
         m_bloomGaussianBlurHorizontalPass = world->GetComponent<BloomGaussianBlurHorizontalPass>();
@@ -303,6 +306,8 @@ namespace pe
                 return isPassEnabled(RenderGraphPassId::TAA);
             if (rc == m_sharpenPass)
                 return isPassEnabled(RenderGraphPassId::Sharpen);
+            if (rc == m_upsamplePass)
+                return isPassEnabled(RenderGraphPassId::Upsample);
             if (rc == m_rayTracingPass)
                 return isPassEnabled(RenderGraphPassId::RayTracing);
             if (rc == m_gridPass)
@@ -486,9 +491,7 @@ namespace pe
         addPass(RenderGraphPassId::Aabbs, 1200, "Aabbs", m_aabbsPass);
         addPass(RenderGraphPassId::TAA, 1300, "TAA", m_taaPass);
         addPass(RenderGraphPassId::Sharpen, 1400, "Sharpen", m_sharpenPass);
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::Upsample), 1500, "Upsample", isPassEnabled(RenderGraphPassId::Upsample),
-                              [this](CommandBuffer *cmd)
-                              { Upsample(cmd, PE_FILTER_LINEAR); });
+        addPass(RenderGraphPassId::Upsample, 1500, "Upsample", m_upsamplePass);
         addPass(RenderGraphPassId::Tonemap, 1600, "Tonemap", m_tonemapPass);
         addPass(RenderGraphPassId::BloomBF, 1700, "BloomBF", m_bloomBrightFilterPass);
         addPass(RenderGraphPassId::BloomH, 1800, "BloomH", m_bloomGaussianBlurHorizontalPass);
@@ -791,19 +794,6 @@ namespace pe
         Buffer::Destroy(m_screenshotBuffer);
     }
 
-    void RendererSystem::Upsample(CommandBuffer *cmd, PeFilter filter)
-    {
-        ImageBlit region{};
-        region.srcOffsets[1] = {static_cast<int32_t>(m_viewportRT->GetWidth()), static_cast<int32_t>(m_viewportRT->GetHeight()), 1};
-        region.srcSubresource.aspectMask = PE_IMAGE_ASPECT_COLOR;
-        region.srcSubresource.layerCount = 1;
-        region.dstOffsets[1] = {static_cast<int32_t>(m_displayRT->GetWidth()), static_cast<int32_t>(m_displayRT->GetHeight()), 1};
-        region.dstSubresource.aspectMask = PE_IMAGE_ASPECT_COLOR;
-        region.dstSubresource.layerCount = 1;
-
-        cmd->BlitImage(m_viewportRT, m_displayRT, region, filter);
-    }
-
     Image *RendererSystem::CreateRenderTarget(const std::string &name,
                                               ::PeFormat format,
                                               PeImageUsageFlags usage,
@@ -812,10 +802,7 @@ namespace pe
                                               vec4 clearColor)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
-        // DX12 currently only has same-size image blits. Keep render targets full-size
-        // until the shader blit path can handle scaled viewport/display copies.
-        const bool canUseRenderTargetScale = RHII.GetApi() != PE_GRAPHICS_API_DX12;
-        float rtScale = useRenderTergetScale && canUseRenderTargetScale ? gSettings.render_scale : 1.f;
+        float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
 
         uint32_t width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
         uint32_t heigth = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
@@ -854,10 +841,7 @@ namespace pe
                                                     uint32_t clearStencil)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
-        // Keep DX12 color/depth attachments at one size so the current copy/blit path
-        // never requires a scaling blit.
-        const bool canUseRenderTargetScale = RHII.GetApi() != PE_GRAPHICS_API_DX12;
-        float rtScale = useRenderTergetScale && canUseRenderTargetScale ? gSettings.render_scale : 1.f;
+        float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
 
         ImageDesc desc{};
         desc.width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
@@ -922,8 +906,7 @@ namespace pe
     Image *RendererSystem::CreateFSSampledImage(bool useRenderTergetScale)
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
-        const bool canUseRenderTargetScale = RHII.GetApi() != PE_GRAPHICS_API_DX12;
-        float rtScale = useRenderTergetScale && canUseRenderTargetScale ? gSettings.render_scale : 1.f;
+        float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
 
         ImageDesc desc{};
         desc.format = GetSwapchainSurfaceFormat();
@@ -1002,7 +985,7 @@ namespace pe
         region.srcOffsets[1] = {static_cast<int32_t>(src->GetWidth()), static_cast<int32_t>(src->GetHeight()), 1};
         region.srcSubresource.aspectMask = PE_IMAGE_ASPECT_COLOR;
         region.srcSubresource.layerCount = 1;
-        region.dstOffsets[1] = {static_cast<int32_t>(src->GetWidth()), static_cast<int32_t>(src->GetHeight()), 1};
+        region.dstOffsets[1] = {static_cast<int32_t>(swapchainImage->GetWidth()), static_cast<int32_t>(swapchainImage->GetHeight()), 1};
         region.dstSubresource.aspectMask = PE_IMAGE_ASPECT_COLOR;
         region.dstSubresource.layerCount = 1;
 
