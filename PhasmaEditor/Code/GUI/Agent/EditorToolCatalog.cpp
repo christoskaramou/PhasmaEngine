@@ -71,6 +71,7 @@ namespace pe
         void AppendProjectFileTools(std::vector<ToolDefinition> &tools, const std::string &projectRoot);
         void AppendWorkspaceTools(std::vector<ToolDefinition> &tools, EditorToolRuntime *runtime,
                                   const std::function<void(const std::string &)> &onFeatureRequest);
+        void AppendEditorActionTools(std::vector<ToolDefinition> &tools, EditorToolRuntime *runtime);
         void AppendCodebaseManagementTools(std::vector<ToolDefinition> &tools, GUI *gui);
         void AppendCodebaseTools(std::vector<ToolDefinition> &tools,
                                  const std::shared_ptr<pmcp::BM25Index> &codebaseBM25);
@@ -104,6 +105,7 @@ namespace pe
 
         AppendProjectFileTools(tools, projectRoot);
         AppendWorkspaceTools(tools, context.runtime, context.onFeatureRequest);
+        AppendEditorActionTools(tools, context.runtime);
         AppendCodebaseManagementTools(tools, context.gui);
         AppendCodebaseTools(tools, context.codebaseBM25);
         AppendVisualTools(tools, context.runtime, context.gui);
@@ -964,6 +966,75 @@ namespace pe
                     file << content;
 
                     return CallToolResult::Json(nlohmann::json{{"status", "removed"}, {"title", title}});
+                };
+                tools.push_back(std::move(tool));
+            }
+        }
+
+        void AppendEditorActionTools(std::vector<ToolDefinition> &tools, EditorToolRuntime *runtime)
+        {
+            {
+                ToolDefinition tool;
+                tool.name = "list_editor_actions";
+                tool.description = "Lists editor windows and named editor actions that can be invoked without mouse input. "
+                                   "Prefer this plus invoke_editor_action/toggle_editor_window over screenshots and injected mouse clicks.";
+                tool.inputSchema = schema::Object({});
+                tool.handler = [runtime](const nlohmann::json &, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->QueryEditorActions());
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "toggle_editor_window";
+                tool.description = "Opens, closes, or toggles an editor window by name or id. "
+                                   "Use list_editor_actions to discover ids like window.console, window.properties, window.viewport. "
+                                   "state defaults to toggle; accepted states are toggle, open, and closed.";
+                tool.inputSchema = schema::Object({
+                    {"window", "Window name or id, e.g. 'Console', 'Properties', or 'window.console'", schema::String(), true},
+                    {"state", "toggle, open, or closed (default: toggle)", schema::String()},
+                    {"open", "Optional boolean override for exact open/closed state", schema::Boolean()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->SetEditorWindowOpen(args.value("window", ""), args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "invoke_editor_action";
+                tool.description = "Invokes a named editor action without mouse input. "
+                                   "Call list_editor_actions first, then pass an action id such as file.save_scene, "
+                                   "layout.reset, gizmo.grid, play.start, or status.console_errors. "
+                                   "Common optional arguments include state/open for toggles, path for file actions, "
+                                   "discard_unsaved for scene load/new/exit, overwrite for save, steps for undo/redo, "
+                                   "and style/preset/scale for layout actions.";
+                tool.inputSchema = schema::Object({
+                    {"action", "Action id from list_editor_actions", schema::String(), true},
+                    {"state", "toggle, open, closed, on, or off for toggle actions", schema::String()},
+                    {"open", "Optional boolean for window/toggle actions", schema::Boolean()},
+                    {"path", "Optional path for load/save actions", schema::String()},
+                    {"discard_unsaved", "Allow new/load/exit to discard unsaved scene changes", schema::Boolean()},
+                    {"overwrite", "Allow save_scene with path to overwrite an existing file", schema::Boolean()},
+                    {"full_rebuild", "Force codebase index rebuild for connection.index_codebase", schema::Boolean()},
+                    {"steps", "Undo/redo step count", schema::Integer()},
+                    {"style", "Style id for layout.style, e.g. classic, dark, light, modern, unity, unreal", schema::String()},
+                    {"preset", "Font preset for layout.font, e.g. small, medium, large, extra_large", schema::String()},
+                    {"scale", "Exact ImGui font scale for layout.font", schema::Number()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->InvokeEditorAction(args.value("action", ""), args.dump()));
                 };
                 tools.push_back(std::move(tool));
             }

@@ -95,6 +95,208 @@ namespace pe
             return line;
         }
 
+        std::string SlugifyEditorToken(const std::string &value)
+        {
+            std::string out;
+            out.reserve(value.size());
+            bool separator = false;
+            for (unsigned char c : value)
+            {
+                if (std::isalnum(c) || c == '_')
+                {
+                    out.push_back(static_cast<char>(std::tolower(c)));
+                    separator = false;
+                }
+                else if (!out.empty() && !separator)
+                {
+                    out.push_back('_');
+                    separator = true;
+                }
+            }
+            while (!out.empty() && out.back() == '_')
+                out.pop_back();
+            return out;
+        }
+
+        std::string NormalizeEditorActionId(const std::string &value)
+        {
+            std::string out;
+            out.reserve(value.size());
+            bool separator = false;
+            for (unsigned char c : value)
+            {
+                if (std::isalnum(c) || c == '_')
+                {
+                    out.push_back(static_cast<char>(std::tolower(c)));
+                    separator = false;
+                }
+                else if (!out.empty() && !separator)
+                {
+                    out.push_back('.');
+                    separator = true;
+                }
+            }
+            while (!out.empty() && out.back() == '.')
+                out.pop_back();
+            return out;
+        }
+
+        std::string NormalizeWindowSelector(const std::string &value)
+        {
+            std::string id = NormalizeEditorActionId(value);
+            if (id.rfind("window.", 0) == 0)
+                id = id.substr(7);
+            std::replace(id.begin(), id.end(), '.', '_');
+            return id;
+        }
+
+        nlohmann::json ParseEditorActionArgs(const std::string &argsJson)
+        {
+            if (argsJson.empty())
+                return nlohmann::json::object();
+
+            nlohmann::json args = nlohmann::json::parse(argsJson, nullptr, false);
+            return args.is_object() ? args : nlohmann::json::object();
+        }
+
+        bool ResolveRequestedBool(bool current, const nlohmann::json &args, bool &value, std::string &error)
+        {
+            if (args.contains("open"))
+            {
+                if (!args["open"].is_boolean())
+                {
+                    error = "open must be a boolean";
+                    return false;
+                }
+                value = args["open"].get<bool>();
+                return true;
+            }
+
+            std::string state = args.value("state", "toggle");
+            std::transform(state.begin(), state.end(), state.begin(),
+                           [](unsigned char c)
+                           { return static_cast<char>(std::tolower(c)); });
+
+            if (state == "toggle")
+                value = !current;
+            else if (state == "open" || state == "show" || state == "shown" || state == "on" || state == "true")
+                value = true;
+            else if (state == "closed" || state == "close" || state == "hide" || state == "hidden" || state == "off" || state == "false")
+                value = false;
+            else
+            {
+                error = "state must be toggle, open, or closed";
+                return false;
+            }
+            return true;
+        }
+
+        const char *StyleId(GUIStyle style)
+        {
+            switch (style)
+            {
+            case GUIStyle::Classic:
+                return "classic";
+            case GUIStyle::Dark:
+                return "dark";
+            case GUIStyle::Light:
+                return "light";
+            case GUIStyle::Modern:
+                return "modern";
+            case GUIStyle::Unity:
+                return "unity";
+            case GUIStyle::Unreal:
+                return "unreal";
+            default:
+                return "unknown";
+            }
+        }
+
+        const char *StyleLabel(GUIStyle style)
+        {
+            switch (style)
+            {
+            case GUIStyle::Classic:
+                return "Classic";
+            case GUIStyle::Dark:
+                return "Dark";
+            case GUIStyle::Light:
+                return "Light";
+            case GUIStyle::Modern:
+                return "Modern";
+            case GUIStyle::Unity:
+                return "Unity";
+            case GUIStyle::Unreal:
+                return "Unreal";
+            default:
+                return "Unknown";
+            }
+        }
+
+        bool ApplyEditorStyle(const std::string &styleId, std::string &error)
+        {
+            std::string style = NormalizeEditorActionId(styleId);
+            if (style.rfind("layout.style.", 0) == 0)
+                style = style.substr(13);
+
+            if (style == "classic")
+            {
+                GUIState::s_guiStyle = GUIStyle::Classic;
+                ui::ApplyClassicTheme();
+            }
+            else if (style == "dark")
+            {
+                GUIState::s_guiStyle = GUIStyle::Dark;
+                ui::ApplyDarkTheme();
+            }
+            else if (style == "light")
+            {
+                GUIState::s_guiStyle = GUIStyle::Light;
+                ui::ApplyLightTheme();
+            }
+            else if (style == "modern")
+            {
+                GUIState::s_guiStyle = GUIStyle::Modern;
+                ui::ApplyModernTheme();
+            }
+            else if (style == "unity")
+            {
+                GUIState::s_guiStyle = GUIStyle::Unity;
+                ui::ApplyUnityTheme();
+            }
+            else if (style == "unreal")
+            {
+                GUIState::s_guiStyle = GUIStyle::Unreal;
+                ui::ApplyUnrealTheme();
+            }
+            else
+            {
+                error = "unknown style: " + styleId;
+                return false;
+            }
+            return true;
+        }
+
+        float FontScaleForPreset(const std::string &preset, bool &ok)
+        {
+            std::string value = NormalizeEditorActionId(preset);
+            if (value.rfind("layout.font.", 0) == 0)
+                value = value.substr(12);
+
+            ok = true;
+            if (value == "small")
+                return 0.85f;
+            if (value == "medium")
+                return 1.0f;
+            if (value == "large")
+                return 1.25f;
+            if (value == "extra.large" || value == "extra_large" || value == "extra")
+                return 1.5f;
+
+            ok = false;
+            return 1.0f;
+        }
+
         void WriteAgentConfigFile(const std::string &path, const nlohmann::json &j)
         {
             std::filesystem::create_directories(std::filesystem::path(path).parent_path());
@@ -357,6 +559,520 @@ namespace pe
 
         CancelCodebaseIndexing();
         m_editorMcp->Stop();
+    }
+
+    std::string GUI::QueryEditorActions()
+    {
+        nlohmann::json result;
+        result["windows"] = nlohmann::json::array();
+        result["actions"] = nlohmann::json::array();
+        result["state"] = {
+            {"mcp_running", IsMcpServerRunning()},
+            {"play_mode", GUIState::s_playMode},
+            {"paused", GUIState::s_isPaused},
+            {"viewport_floating", GUIState::s_sceneViewFloating},
+            {"style", StyleId(GUIState::s_guiStyle)},
+            {"font_scale", ImGui::GetIO().FontGlobalScale},
+            {"render_enabled", m_render},
+        };
+
+        auto addAction = [&](const std::string &id, const std::string &label, const std::string &category,
+                             const std::string &kind, bool enabled, bool checked, bool hasChecked)
+        {
+            nlohmann::json action = {
+                {"id", id},
+                {"label", label},
+                {"category", category},
+                {"kind", kind},
+                {"enabled", enabled},
+            };
+            if (hasChecked)
+                action["checked"] = checked;
+            result["actions"].push_back(std::move(action));
+        };
+
+        auto addWindow = [&](const std::string &name, bool open, bool floating)
+        {
+            const std::string id = "window." + SlugifyEditorToken(name);
+            nlohmann::json window = {
+                {"id", id},
+                {"name", name},
+                {"open", open},
+            };
+            if (name == "Viewport")
+                window["floating"] = floating;
+            result["windows"].push_back(std::move(window));
+            addAction(id, name, "Window", "toggle", true, open, true);
+        };
+
+        for (auto &widget : m_menuWindowWidgets)
+            addWindow(widget->GetName(), *widget->GetOpen(), false);
+
+        if (auto *sceneView = GetWidget<SceneView>())
+            addWindow(sceneView->GetName(), *sceneView->GetOpen(), GUIState::s_sceneViewFloating);
+
+        addWindow("Dear ImGui Demo", m_show_demo_window, false);
+
+        auto &undoRedo = UndoRedo::Instance();
+        auto &globalSettings = Settings::Get<GlobalSettings>();
+        addAction("file.load_model", "Load ModelAsset", "File", "command", !GUIState::s_modelLoading.load(), false, false);
+        addAction("file.new_scene", "New Scene", "File", "command", true, false, false);
+        addAction("file.load_scene", "Load Scene", "File", "command", true, false, false);
+        addAction("file.save_scene", "Save Scene", "File", "command", true, false, false);
+        addAction("file.save_scene_as", "Save Scene As", "File", "command", true, false, false);
+        addAction("file.reload_module", "Reload Module", "File", "command", true, false, false);
+        addAction("file.exit", "Exit", "File", "command", true, false, false);
+
+        addAction("edit.undo", "Undo", "Edit", "command", undoRedo.CanUndo(), false, false);
+        addAction("edit.redo", "Redo", "Edit", "command", undoRedo.CanRedo(), false, false);
+
+        addAction("connection.mcp.toggle", "MCP Server", "Connection", "toggle", true, IsMcpServerRunning(), true);
+        addAction("connection.mcp.start", "Start MCP Server", "Connection", "command", !IsMcpServerRunning(), false, false);
+        addAction("connection.mcp.stop", "Stop MCP Server", "Connection", "command", IsMcpServerRunning(), false, false);
+        addAction("connection.index_codebase", "Index Codebase", "Connection", "command", !m_isIndexing.load(), false, false);
+        addAction("connection.rebuild_codebase_index", "Rebuild Codebase Index", "Connection", "command", !m_isIndexing.load(), false, false);
+
+        addAction("viewport.floating", "Viewport Floating", "Window", "toggle", true, GUIState::s_sceneViewFloating, true);
+        addAction("viewport.redock", "Redock Viewport", "Window", "command", GUIState::s_sceneViewFloating, false, false);
+
+        addAction("gizmo.transform", "Transform Gizmo", "Gizmos", "toggle", true, GUIState::s_useTransformGizmo, true);
+        addAction("gizmo.lights", "Light Gizmos", "Gizmos", "toggle", true, GUIState::s_useLightGizmos, true);
+        addAction("gizmo.cameras", "Camera Gizmos", "Gizmos", "toggle", true, GUIState::s_useCameraGizmos, true);
+        addAction("gizmo.grid", "Grid", "Gizmos", "toggle", true, globalSettings.draw_grid, true);
+
+        for (GUIStyle style : {GUIStyle::Classic, GUIStyle::Dark, GUIStyle::Light, GUIStyle::Modern, GUIStyle::Unity, GUIStyle::Unreal})
+        {
+            const std::string id = std::string("layout.style.") + StyleId(style);
+            addAction(id, StyleLabel(style), "Layout", "choice", true, GUIState::s_guiStyle == style, true);
+        }
+        addAction("layout.font.small", "Small Font", "Layout", "choice", true, ImGui::GetIO().FontGlobalScale < 0.95f, true);
+        addAction("layout.font.medium", "Medium Font", "Layout", "choice", true,
+                  ImGui::GetIO().FontGlobalScale >= 0.95f && ImGui::GetIO().FontGlobalScale < 1.15f, true);
+        addAction("layout.font.large", "Large Font", "Layout", "choice", true,
+                  ImGui::GetIO().FontGlobalScale >= 1.15f && ImGui::GetIO().FontGlobalScale < 1.35f, true);
+        addAction("layout.font.extra_large", "Extra Large Font", "Layout", "choice", true, ImGui::GetIO().FontGlobalScale >= 1.35f, true);
+        addAction("layout.reset", "Reset to Default Layout", "Layout", "command", true, false, false);
+
+        addAction("play.start", "Play", "Toolbar", "command", !GUIState::s_playMode, false, false);
+        addAction("play.stop", "Stop", "Toolbar", "command", GUIState::s_playMode, false, false);
+        addAction("play.pause", "Pause", "Toolbar", "toggle", GUIState::s_playMode, GUIState::s_isPaused, true);
+
+        addAction("status.console_errors", "Show Console Errors", "Status", "command", GetWidget<Console>() != nullptr, false, false);
+        addAction("status.console_warnings", "Show Console Warnings", "Status", "command", GetWidget<Console>() != nullptr, false, false);
+        addAction("help.imgui_demo", "Dear ImGui Demo", "Help", "toggle", true, m_show_demo_window, true);
+
+        auto *scriptSystem = GetGlobalSystem<ScriptSystem>();
+        const bool hasScriptTests = scriptSystem && !scriptSystem->GetTestScriptPaths().empty();
+        addAction("help.run_script_tests_all", "Run All Script Tests", "Help", "command", hasScriptTests, false, false);
+        addAction("editor.render.toggle", "Toggle Editor Rendering", "Editor", "toggle", true, m_render, true);
+
+        return result.dump();
+    }
+
+    std::string GUI::SetEditorWindowOpen(const std::string &windowName, const std::string &argsJson)
+    {
+        const nlohmann::json args = ParseEditorActionArgs(argsJson);
+        const std::string target = NormalizeWindowSelector(windowName);
+
+        auto setOpen = [&](const std::string &name, bool &open, bool focusWhenOpened) -> std::string
+        {
+            bool newOpen = open;
+            std::string error;
+            if (!ResolveRequestedBool(open, args, newOpen, error))
+                return nlohmann::json{{"error", error}}.dump();
+
+            open = newOpen;
+            if (open && focusWhenOpened)
+                ImGui::SetWindowFocus(name.c_str());
+
+            return nlohmann::json{
+                {"ok", true},
+                {"id", "window." + SlugifyEditorToken(name)},
+                {"name", name},
+                {"open", open},
+            }
+                .dump();
+        };
+
+        for (auto &widget : m_menuWindowWidgets)
+        {
+            if (SlugifyEditorToken(widget->GetName()) == target)
+                return setOpen(widget->GetName(), *widget->GetOpen(), true);
+        }
+
+        if (auto *sceneView = GetWidget<SceneView>())
+        {
+            if (SlugifyEditorToken(sceneView->GetName()) == target || target == "scene_view")
+                return setOpen(sceneView->GetName(), *sceneView->GetOpen(), true);
+        }
+
+        if (target == "dear_imgui_demo" || target == "imgui_demo" || target == "demo")
+            return setOpen("Dear ImGui Demo", m_show_demo_window, false);
+
+        nlohmann::json known = nlohmann::json::array();
+        for (auto &widget : m_menuWindowWidgets)
+            known.push_back(widget->GetName());
+        known.push_back("Viewport");
+        known.push_back("Dear ImGui Demo");
+        return nlohmann::json{{"error", "unknown editor window: " + windowName}, {"known_windows", known}}.dump();
+    }
+
+    std::string GUI::InvokeEditorAction(const std::string &actionId, const std::string &argsJson)
+    {
+        const std::string action = NormalizeEditorActionId(actionId);
+        const nlohmann::json args = ParseEditorActionArgs(argsJson);
+
+        auto ok = [&](nlohmann::json extra = nlohmann::json::object())
+        {
+            extra["ok"] = true;
+            extra["action"] = action;
+            return extra.dump();
+        };
+
+        if (action.rfind("window.", 0) == 0)
+            return SetEditorWindowOpen(action, argsJson);
+
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+
+        if (action == "file.load_model")
+        {
+            if (GUIState::s_modelLoading.load())
+                return R"({"error":"model load already in progress"})";
+
+            std::string path = args.value("path", "");
+            if (!path.empty())
+            {
+                std::filesystem::path modelPath(path);
+                if (modelPath.is_relative())
+                {
+                    std::filesystem::path fromAssets = std::filesystem::path(Path::Assets) / modelPath;
+                    std::filesystem::path fromObjects = std::filesystem::path(Path::Assets) / "Objects" / modelPath;
+                    modelPath = std::filesystem::exists(fromAssets) ? fromAssets : fromObjects;
+                }
+                if (!std::filesystem::exists(modelPath))
+                    return nlohmann::json{{"error", "model file not found: " + modelPath.string()}}.dump();
+
+                GUIState::s_modelLoading = true;
+                const std::string loadPath = modelPath.string();
+                ThreadPool::GUI.Enqueue([loadPath]()
+                                        {
+                    try
+                    {
+                        if (ModelAsset *m = ModelAsset::Load(loadPath))
+                            EventSystem::PushEvent(EventType::ModelLoaded, m);
+                    }
+                    catch (const std::exception &e)
+                    {
+                        PE_WARN("[Scene] Failed to load model: %s", e.what());
+                    }
+                    GUIState::s_modelLoading = false; });
+                return ok({{"status", "loading"}, {"path", loadPath}});
+            }
+
+            auto *fs = GetWidget<FileSelector>();
+            if (!fs)
+                return R"({"error":"FileSelector not available"})";
+
+            std::vector<std::string> exts;
+            for (const char *ext : FileBrowser::s_modelExtensionsVec)
+                exts.push_back(ext);
+            fs->OpenSelection([](const std::string &selectedPath)
+                              {
+                GUIState::s_modelLoading = true;
+                ThreadPool::GUI.Enqueue([selectedPath]()
+                {
+                    try
+                    {
+                        if (ModelAsset *m = ModelAsset::Load(selectedPath))
+                            EventSystem::PushEvent(EventType::ModelLoaded, m);
+                    }
+                    catch (const std::exception &e)
+                    {
+                        PE_WARN("[Scene] Failed to load model: %s", e.what());
+                    }
+                    GUIState::s_modelLoading = false;
+                });
+                return true; },
+                              exts);
+            return ok({{"status", "dialog_opened"}});
+        }
+
+        if (action == "file.new_scene")
+        {
+            if (renderer && args.value("discard_unsaved", false))
+            {
+                renderer->GetScene().NewScene();
+                UndoRedo::Instance().Clear();
+                return ok();
+            }
+            NewScene();
+            return ok();
+        }
+
+        if (action == "file.load_scene")
+        {
+            std::string path = args.value("path", "");
+            if (path.empty())
+            {
+                if (renderer && renderer->GetScene().IsDirty())
+                    m_showSaveBeforeLoad = true;
+                else
+                    OpenLoadSceneDialog();
+                return ok({{"status", "dialog_opened"}});
+            }
+
+            if (!renderer)
+                return R"({"error":"renderer not available"})";
+            if (renderer->GetScene().IsDirty() && !args.value("discard_unsaved", false))
+                return R"({"error":"scene has unsaved changes; pass discard_unsaved=true to load anyway"})";
+
+            std::filesystem::path scenePath(path);
+            if (scenePath.is_relative())
+            {
+                std::filesystem::path fromAssets = std::filesystem::path(Path::Assets) / scenePath;
+                std::filesystem::path fromScenes = std::filesystem::path(Path::Assets) / "Scenes" / scenePath;
+                scenePath = std::filesystem::exists(fromAssets) ? fromAssets : fromScenes;
+            }
+            if (!std::filesystem::exists(scenePath))
+                return nlohmann::json{{"error", "scene file not found: " + scenePath.string()}}.dump();
+
+            renderer->WaitAllFramesCommands();
+            renderer->GetScene().LoadScene(scenePath.string());
+            UndoRedo::Instance().Clear();
+            return ok({{"path", scenePath.string()}});
+        }
+
+        if (action == "file.save_scene")
+        {
+            if (!renderer)
+                return R"({"error":"renderer not available"})";
+
+            std::string path = args.value("path", "");
+            if (!path.empty())
+            {
+                std::filesystem::path savePath(path);
+                if (savePath.is_relative())
+                    savePath = std::filesystem::path(Path::Assets) / "Scenes" / savePath;
+                if (savePath.extension() != ".pescene")
+                    savePath += ".pescene";
+                if (std::filesystem::exists(savePath) && !args.value("overwrite", false))
+                    return nlohmann::json{{"error", "file exists; pass overwrite=true to replace: " + savePath.string()}}.dump();
+
+                renderer->GetScene().SaveScene(savePath);
+                renderer->GetScene().ClearDirty();
+                return ok({{"path", savePath.string()}});
+            }
+
+            Scene &scene = renderer->GetScene();
+            if (!scene.GetScenePath().empty())
+            {
+                scene.SaveScene(scene.GetScenePath());
+                scene.ClearDirty();
+                return ok({{"path", scene.GetScenePath().string()}});
+            }
+
+            ShowSaveSceneMenuItem_Action();
+            return ok({{"status", "dialog_opened"}});
+        }
+
+        if (action == "file.save_scene_as")
+        {
+            ShowSaveSceneMenuItem_Action();
+            return ok({{"status", "dialog_opened"}});
+        }
+
+        if (action == "file.reload_module")
+        {
+            EventSystem::PushEvent(EventType::ReloadModule);
+            return ok();
+        }
+
+        if (action == "file.exit")
+        {
+            if (args.value("discard_unsaved", false))
+            {
+                SaveEditorConfig();
+                EventSystem::PushEvent(EventType::Quit);
+            }
+            else
+            {
+                TriggerExitConfirmation();
+            }
+            return ok();
+        }
+
+        if (action == "edit.undo" || action == "edit.redo")
+        {
+            if (!renderer)
+                return R"({"error":"renderer not available"})";
+
+            auto &undoRedo = UndoRedo::Instance();
+            int steps = std::max(1, args.value("steps", 1));
+            if (action == "edit.undo")
+            {
+                if (!undoRedo.CanUndo())
+                    return R"({"error":"nothing to undo"})";
+                undoRedo.UndoTo(renderer->GetScene(), static_cast<size_t>(steps));
+            }
+            else
+            {
+                if (!undoRedo.CanRedo())
+                    return R"({"error":"nothing to redo"})";
+                undoRedo.RedoTo(renderer->GetScene(), static_cast<size_t>(steps));
+            }
+            return ok({{"steps", steps}});
+        }
+
+        if (action == "connection.mcp.toggle" || action == "connection.mcp.start" || action == "connection.mcp.stop")
+        {
+            bool enabled = !IsMcpServerRunning();
+            if (action == "connection.mcp.start")
+                enabled = true;
+            else if (action == "connection.mcp.stop")
+                enabled = false;
+            SetMcpServerEnabled(enabled);
+            return ok({{"mcp_running", IsMcpServerRunning()}});
+        }
+
+        if (action == "connection.index_codebase" || action == "connection.rebuild_codebase_index")
+        {
+            StartCodebaseIndexing(action == "connection.rebuild_codebase_index" || args.value("full_rebuild", false));
+            return ok({{"status", "indexing"}});
+        }
+
+        if (action == "viewport.floating")
+        {
+            bool value = GUIState::s_sceneViewFloating;
+            std::string error;
+            if (!ResolveRequestedBool(GUIState::s_sceneViewFloating, args, value, error))
+                return nlohmann::json{{"error", error}}.dump();
+            GUIState::s_sceneViewFloating = value;
+            if (!GUIState::s_sceneViewFloating)
+                GUIState::s_sceneViewRedockQueued = true;
+            return ok({{"floating", GUIState::s_sceneViewFloating}});
+        }
+
+        if (action == "viewport.redock")
+        {
+            GUIState::s_sceneViewFloating = false;
+            GUIState::s_sceneViewRedockQueued = true;
+            return ok({{"floating", false}});
+        }
+
+        auto toggleBool = [&](bool &target) -> std::string
+        {
+            bool value = target;
+            std::string error;
+            if (!ResolveRequestedBool(target, args, value, error))
+                return nlohmann::json{{"error", error}}.dump();
+            target = value;
+            return ok({{"value", target}});
+        };
+
+        if (action == "gizmo.transform")
+            return toggleBool(GUIState::s_useTransformGizmo);
+        if (action == "gizmo.lights")
+            return toggleBool(GUIState::s_useLightGizmos);
+        if (action == "gizmo.cameras")
+            return toggleBool(GUIState::s_useCameraGizmos);
+        if (action == "gizmo.grid")
+            return toggleBool(Settings::Get<GlobalSettings>().draw_grid);
+
+        if (action.rfind("layout.style.", 0) == 0 || action == "layout.style")
+        {
+            std::string error;
+            const std::string style = action == "layout.style" ? args.value("style", "") : action;
+            if (!ApplyEditorStyle(style, error))
+                return nlohmann::json{{"error", error}}.dump();
+            return ok({{"style", StyleId(GUIState::s_guiStyle)}});
+        }
+
+        if (action.rfind("layout.font.", 0) == 0 || action == "layout.font")
+        {
+            if (args.contains("scale") && args["scale"].is_number())
+            {
+                ImGui::GetIO().FontGlobalScale = args["scale"].get<float>();
+                return ok({{"font_scale", ImGui::GetIO().FontGlobalScale}});
+            }
+
+            bool presetOk = false;
+            const std::string preset = action == "layout.font" ? args.value("preset", "") : action;
+            float scale = FontScaleForPreset(preset, presetOk);
+            if (!presetOk)
+                return nlohmann::json{{"error", "unknown font preset: " + preset}}.dump();
+
+            ImGui::GetIO().FontGlobalScale = scale;
+            return ok({{"font_scale", scale}});
+        }
+
+        if (action == "layout.reset")
+        {
+            m_requestDockReset = true;
+            return ok();
+        }
+
+        if (action == "play.start")
+        {
+            if (!GUIState::s_playMode)
+                Play();
+            return ok({{"play_mode", GUIState::s_playMode}, {"paused", GUIState::s_isPaused}});
+        }
+
+        if (action == "play.stop")
+        {
+            if (GUIState::s_playMode)
+                Stop();
+            return ok({{"play_mode", GUIState::s_playMode}, {"paused", GUIState::s_isPaused}});
+        }
+
+        if (action == "play.pause")
+        {
+            if (!GUIState::s_playMode)
+                return R"({"error":"not in play mode"})";
+
+            bool value = GUIState::s_isPaused;
+            std::string error;
+            if (!ResolveRequestedBool(GUIState::s_isPaused, args, value, error))
+                return nlohmann::json{{"error", error}}.dump();
+            GUIState::s_isPaused = value;
+            return ok({{"paused", GUIState::s_isPaused}});
+        }
+
+        if (action == "status.console_errors" || action == "status.console_warnings")
+        {
+            auto *console = GetWidget<Console>();
+            if (!console)
+                return R"({"error":"Console not available"})";
+            console->FocusWithFilter(action == "status.console_errors" ? "[ERROR]" : "[WARN]");
+            return ok();
+        }
+
+        if (action == "help.imgui_demo")
+            return toggleBool(m_show_demo_window);
+
+        if (action == "help.run_script_tests_all")
+        {
+            auto *scriptSystem = GetGlobalSystem<ScriptSystem>();
+            if (!scriptSystem)
+                return R"({"error":"ScriptSystem not available"})";
+            const auto tests = scriptSystem->GetTestScriptPaths();
+            if (tests.empty())
+                return R"({"error":"no script tests available"})";
+            RunScriptTests(tests, "all script tests");
+            return ok({{"count", static_cast<int>(tests.size())}});
+        }
+
+        if (action == "editor.render.toggle")
+        {
+            bool value = m_render;
+            std::string error;
+            if (!ResolveRequestedBool(m_render, args, value, error))
+                return nlohmann::json{{"error", error}}.dump();
+            m_render = value;
+            return ok({{"render_enabled", m_render}});
+        }
+
+        return nlohmann::json{{"error", "unknown editor action: " + actionId}}.dump();
     }
 
     static std::atomic_bool s_modelLoading = false;

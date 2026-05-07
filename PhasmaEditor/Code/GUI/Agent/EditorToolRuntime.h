@@ -24,6 +24,9 @@ namespace pe
         std::string TakeProfilerSnapshot() const;
         std::string QueryImGuiWindows() const;
         std::string InjectMouseInput(const std::string &args) const;
+        std::string QueryEditorActions() const;
+        std::string SetEditorWindowOpen(const std::string &windowName, const std::string &args) const;
+        std::string InvokeEditorAction(const std::string &actionId, const std::string &args) const;
         std::string ReloadModule() const;
 
     private:

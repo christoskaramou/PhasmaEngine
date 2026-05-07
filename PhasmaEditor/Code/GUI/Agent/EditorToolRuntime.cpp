@@ -1207,6 +1207,111 @@ namespace pe
         return state->result;
     }
 
+    std::string EditorToolRuntime::QueryEditorActions() const
+    {
+        struct State
+        {
+            std::mutex mtx;
+            std::condition_variable cv;
+            bool done = false;
+            std::string result;
+        };
+        auto state = std::make_shared<State>();
+
+        QueueAction([state]()
+                    {
+            auto *renderer = GetGlobalSystem<RendererSystem>();
+            if (!renderer)
+                state->result = "{\"error\":\"renderer not available\"}";
+            else
+                state->result = renderer->GetGUI().QueryEditorActions();
+            {
+                std::lock_guard lock(state->mtx);
+                state->done = true;
+            }
+            state->cv.notify_one(); });
+
+        {
+            std::unique_lock lock(state->mtx);
+            if (!state->cv.wait_for(lock, std::chrono::seconds(5), [&state]
+                                    { return state->done; }))
+                return "{\"error\":\"timeout waiting for editor actions\"}";
+        }
+        return state->result;
+    }
+
+    std::string EditorToolRuntime::SetEditorWindowOpen(const std::string &windowName, const std::string &args) const
+    {
+        if (windowName.empty())
+            return "{\"error\":\"missing window\"}";
+
+        struct State
+        {
+            std::mutex mtx;
+            std::condition_variable cv;
+            bool done = false;
+            std::string result;
+        };
+        auto state = std::make_shared<State>();
+
+        QueueAction([state, windowName, args]()
+                    {
+            auto *renderer = GetGlobalSystem<RendererSystem>();
+            if (!renderer)
+                state->result = "{\"error\":\"renderer not available\"}";
+            else
+                state->result = renderer->GetGUI().SetEditorWindowOpen(windowName, args);
+            {
+                std::lock_guard lock(state->mtx);
+                state->done = true;
+            }
+            state->cv.notify_one(); });
+
+        {
+            std::unique_lock lock(state->mtx);
+            if (!state->cv.wait_for(lock, std::chrono::seconds(5), [&state]
+                                    { return state->done; }))
+                return "{\"error\":\"timeout waiting for editor window action\"}";
+        }
+        return state->result;
+    }
+
+    std::string EditorToolRuntime::InvokeEditorAction(const std::string &actionId, const std::string &args) const
+    {
+        if (actionId.empty())
+            return "{\"error\":\"missing action\"}";
+
+        struct State
+        {
+            std::mutex mtx;
+            std::condition_variable cv;
+            bool done = false;
+            std::string result;
+        };
+        auto state = std::make_shared<State>();
+
+        QueueAction([state, actionId, args]()
+                    {
+            auto *renderer = GetGlobalSystem<RendererSystem>();
+            if (!renderer)
+                state->result = "{\"error\":\"renderer not available\"}";
+            else
+                state->result = renderer->GetGUI().InvokeEditorAction(actionId, args);
+            {
+                std::lock_guard lock(state->mtx);
+                state->done = true;
+            }
+            state->cv.notify_one(); });
+
+        {
+            std::unique_lock lock(state->mtx);
+            if (!state->cv.wait_for(lock, std::chrono::seconds(5), [&state]
+                                    { return state->done; }))
+                return "{\"error\":\"timeout waiting for editor action\"}";
+        }
+        return state->result;
+    }
+
     std::string EditorToolRuntime::ReloadModule() const
     {
         QueueAction([]()

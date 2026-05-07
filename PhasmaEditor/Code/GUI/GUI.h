@@ -42,6 +42,9 @@ namespace pe
         pmcp::CodebaseIndexStatus GetCodebaseStatus() const { return m_codebase.GetStatus(); }
         std::shared_ptr<pmcp::BM25Index> GetCodebaseBM25Shared() const { return m_codebase.GetCodebaseBM25Shared(); }
         void SetMcpServerEnabled(bool enabled);
+        std::string QueryEditorActions();
+        std::string SetEditorWindowOpen(const std::string &windowName, const std::string &argsJson);
+        std::string InvokeEditorAction(const std::string &actionId, const std::string &argsJson);
 
         // Called after the window is shown to apply the correct layout
         void ApplyStartupLayout(bool restoreLastScene = true);
