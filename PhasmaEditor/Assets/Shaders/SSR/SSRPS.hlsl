@@ -28,8 +28,8 @@ static const float SSR_ANGLE_THRESHOLD = 0.1;
 
 float2 GetUVFromViewPos(float3 view_position)
 {
-    float4 uv = mul(float4(view_position, 1.0), cb_projection);
-    return (uv.xy / uv.w) * 0.5f + 0.5f;
+    float4 clip = mul(float4(view_position, 1.0), cb_projection);
+    return NdcToUv(clip.xy / clip.w);
 }
 
 // Fresnel-Schlick approximation

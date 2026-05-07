@@ -18,6 +18,20 @@ using InitWithCtxFunc = void (*)(void *);
 
 namespace
 {
+    bool ParseDisplayIndex(const char *value, int &displayIndex)
+    {
+        if (!value || *value == '\0')
+            return false;
+
+        char *end = nullptr;
+        long parsed = std::strtol(value, &end, 10);
+        if (*end != '\0' || parsed < 0 || parsed > std::numeric_limits<int>::max())
+            return false;
+
+        displayIndex = static_cast<int>(parsed);
+        return true;
+    }
+
     struct ModuleHandle
     {
         void *lib = nullptr;
@@ -116,6 +130,7 @@ int main(int argc, char *argv[])
     try
     {
         PeGraphicsApi api = PE_GRAPHICS_API_VULKAN;
+        int displayIndex = 0;
         for (int i = 1; i < argc; ++i)
         {
             if (std::strcmp(argv[i], "--api") == 0 && i + 1 < argc)
@@ -140,7 +155,18 @@ int main(int argc, char *argv[])
                     return 1;
                 }
             }
+            else if ((std::strcmp(argv[i], "--display") == 0 || std::strcmp(argv[i], "--screen") == 0) && i + 1 < argc)
+            {
+                if (!ParseDisplayIndex(argv[++i], displayIndex))
+                {
+                    PE_ERROR("Invalid display index: %s", argv[i]);
+                    return 1;
+                }
+            }
         }
+
+        // api = PE_GRAPHICS_API_DX12;
+        // displayIndex = 1;
 
         // SDL and graphics device live here — they survive module reloads.
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
@@ -149,13 +175,42 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        SDL_DisplayMode dm;
-        SDL_GetDesktopDisplayMode(0, &dm);
+        const int displayCount = SDL_GetNumVideoDisplays();
+        if (displayCount <= 0)
+        {
+            PE_ERROR("[SDL] no video displays found: %s", SDL_GetError());
+            SDL_Quit();
+            return 1;
+        }
+        if (displayIndex >= displayCount)
+        {
+            PE_ERROR("Invalid --display %d; SDL reports %d display(s)", displayIndex, displayCount);
+            SDL_Quit();
+            return 1;
+        }
+
+        SDL_Rect displayBounds{};
+        if (SDL_GetDisplayBounds(displayIndex, &displayBounds) != 0)
+        {
+            PE_ERROR("[SDL] SDL_GetDisplayBounds(%d) failed: %s", displayIndex, SDL_GetError());
+            SDL_Quit();
+            return 1;
+        }
+
+        int windowWidth = displayBounds.w > 100 ? displayBounds.w - 100 : displayBounds.w;
+        int windowHeight = displayBounds.h > 100 ? displayBounds.h - 100 : displayBounds.h;
         uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI |
                                SDL_WINDOW_MAXIMIZED; // Sizes initial DX12 swapchain before the existing maximize call.
         if (api == PE_GRAPHICS_API_VULKAN)
             windowFlags |= SDL_WINDOW_VULKAN;
-        SDL_Window *sdlWindow = SDL_CreateWindow("PhasmaEditor", 100, 100, dm.w - 100, dm.h - 100, windowFlags);
+        PE_INFO("Creating window on display %d/%d at (%d, %d) size %dx%d",
+                displayIndex, displayCount, displayBounds.x, displayBounds.y, displayBounds.w, displayBounds.h);
+        SDL_Window *sdlWindow = SDL_CreateWindow("PhasmaEditor",
+                                                 SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex),
+                                                 SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex),
+                                                 windowWidth,
+                                                 windowHeight,
+                                                 windowFlags);
         if (!sdlWindow)
         {
             PE_ERROR("[SDL] %s", SDL_GetError());

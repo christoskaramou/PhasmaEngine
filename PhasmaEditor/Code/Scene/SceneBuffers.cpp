@@ -722,8 +722,9 @@ namespace pe
     void Scene::CreateMeshConstants(CommandBuffer *cmd)
     {
         Buffer::Destroy(m_meshConstants);
+        const size_t meshConstantsCapacity = std::max<size_t>(1, m_meshCount);
         m_meshConstants = Buffer::Create({
-            .size = m_meshCount * sizeof(Mesh_Constants),
+            .size = meshConstantsCapacity * sizeof(Mesh_Constants),
             .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
             .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
             .name = "Scene_meshConstants",

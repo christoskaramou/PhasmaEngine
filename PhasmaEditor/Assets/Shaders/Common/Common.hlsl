@@ -53,10 +53,27 @@ float PDsrand(float2 n)
 
 // inverse_projection gives view space
 // inverse_view_projection gives world space
+float2 UvToNdc(float2 UV)
+{
+    float2 ndc = UV * 2.0 - 1.0;
+#if defined(PE_DX12)
+    ndc.y = -ndc.y;
+#endif
+    return ndc;
+}
+
+float2 NdcToUv(float2 ndc)
+{
+#if defined(PE_DX12)
+    ndc.y = -ndc.y;
+#endif
+    return ndc * 0.5 + 0.5;
+}
+
 float3 GetPosFromUV(float2 UV, float depth, float4x4 mat)
 {
     float4 ndcPos;
-    ndcPos.xy = UV * 2.0 - 1.0;
+    ndcPos.xy = UvToNdc(UV);
     ndcPos.z = depth;
     ndcPos.w = 1.0;
 
