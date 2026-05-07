@@ -169,9 +169,6 @@ static const float4x4 biasMat = float4x4(
 float SampleShadowMap(int i, float zBias, float3 worldPos)
 {
     float4 coords   = mul(float4(worldPos, 1.0), mul(cb_cascades[i], biasMat));
-#if defined(PE_DX12)
-    coords.y        = coords.w - coords.y;
-#endif
     coords.z        += zBias;
     
     // TOTO: fix this annoying looking code snippet

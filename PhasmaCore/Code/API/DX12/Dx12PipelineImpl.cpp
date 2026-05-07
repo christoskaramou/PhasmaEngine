@@ -50,7 +50,7 @@ namespace pe
             D3D12_RASTERIZER_DESC desc{};
             desc.FillMode = pe_dx12::FillMode(info.polygonMode);
             desc.CullMode = pe_dx12::CullMode(info.cullMode);
-            desc.FrontCounterClockwise = TRUE;
+            desc.FrontCounterClockwise = FALSE;
             desc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
             desc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
             desc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;

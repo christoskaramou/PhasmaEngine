@@ -102,10 +102,20 @@ namespace pe
 
         PE_INFO("DX12 device created on '%s'", m_adapterName.c_str());
 
+        D3D12_FEATURE_DATA_D3D12_OPTIONS13 options13{};
+        HRESULT hr = m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS13, &options13, sizeof(options13));
+        if (FAILED(hr) || options13.InvertedViewportHeightFlipsYSupported == FALSE)
+        {
+            PE_ERROR("Dx12RhiImpl::Init: runtime lacks D3D12 OPTIONS13 inverted viewport Y-flip support");
+            return false;
+        }
+        m_invertedViewportHeightFlipsY = true;
+        PE_INFO("DX12 inverted viewport height flips Y: supported");
+
         D3D12MA::ALLOCATOR_DESC allocatorDesc{};
         allocatorDesc.pDevice = m_device.Get();
         allocatorDesc.pAdapter = m_adapter.Get();
-        HRESULT hr = D3D12MA::CreateAllocator(&allocatorDesc, &m_d3d12Allocator);
+        hr = D3D12MA::CreateAllocator(&allocatorDesc, &m_d3d12Allocator);
         if (FAILED(hr))
         {
             PE_ERROR("Dx12RhiImpl::Init: D3D12MA::CreateAllocator failed");

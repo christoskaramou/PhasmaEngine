@@ -555,9 +555,8 @@ namespace pe
         const ImVec2 imageSize = ComputeAspectFitSize(panel, targetAspect);
 
         CenterCursorForImage(panel, imageSize);
-        const bool flipViewportY = RHII.GetApi() == PE_GRAPHICS_API_DX12;
-        const ImVec2 uv0(0.0f, flipViewportY ? 1.0f : 0.0f);
-        const ImVec2 uv1(1.0f, flipViewportY ? 0.0f : 1.0f);
+        const ImVec2 uv0(0.0f, 0.0f);
+        const ImVec2 uv1(1.0f, 1.0f);
         ImGui::Image((ImTextureID)(intptr_t)GUIState::s_viewportTextureId, imageSize, uv0, uv1);
 
         const ImVec2 imageMin = ImGui::GetItemRectMin();

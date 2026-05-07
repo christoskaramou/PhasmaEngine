@@ -55,18 +55,11 @@ float PDsrand(float2 n)
 // inverse_view_projection gives world space
 float2 UvToNdc(float2 UV)
 {
-    float2 ndc = UV * 2.0 - 1.0;
-#if defined(PE_DX12)
-    ndc.y = -ndc.y;
-#endif
-    return ndc;
+    return UV * 2.0 - 1.0;
 }
 
 float2 NdcToUv(float2 ndc)
 {
-#if defined(PE_DX12)
-    ndc.y = -ndc.y;
-#endif
     return ndc * 0.5 + 0.5;
 }
 
