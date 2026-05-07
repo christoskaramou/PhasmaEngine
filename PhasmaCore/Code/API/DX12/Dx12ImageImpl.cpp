@@ -9,6 +9,7 @@
 #include "API/DX12/Dx12Translate.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
+#include "Base/Math.h"
 
 namespace pe
 {
@@ -122,7 +123,7 @@ namespace pe
             {
                 D3D12_CLEAR_VALUE clear{};
                 clear.Format = viewFormat;
-                clear.DepthStencil.Depth = 1.0f;
+                clear.DepthStencil.Depth = Color::Depth;
                 clear.DepthStencil.Stencil = 0;
                 return clear;
             }

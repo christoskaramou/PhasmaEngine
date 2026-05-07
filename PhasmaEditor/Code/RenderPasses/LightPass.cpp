@@ -183,7 +183,7 @@ namespace pe
         cmd->SetConstantAt(5, m_viewportRT->GetHeight_f());             // framebuffer height
         cmd->SetConstantAt(6, 0u);                                      // is transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
-            cmd->SetConstantAt(i + 7, shadows.m_viewZ[i]); // shadowmap cascade distances
+            cmd->SetConstantAt(i + 8, shadows.m_viewZ[i]); // shadowmap cascade distances
 
         cmd->BeginPass(1, m_attachments.data(), "LightOpaquePass");
         cmd->BindPipeline(*m_passInfo);
@@ -373,7 +373,7 @@ namespace pe
         cmd->SetConstantAt(5, m_viewportRT->GetHeight_f());             // framebuffer height
         cmd->SetConstantAt(6, 1u);                                      // transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
-            cmd->SetConstantAt(i + 7, shadows.m_viewZ[i]); // shadowmap cascade distances
+            cmd->SetConstantAt(i + 8, shadows.m_viewZ[i]); // shadowmap cascade distances
 
         cmd->BeginPass(1, m_attachments.data(), "LightTransparentPass");
         cmd->BindPipeline(*m_passInfo);

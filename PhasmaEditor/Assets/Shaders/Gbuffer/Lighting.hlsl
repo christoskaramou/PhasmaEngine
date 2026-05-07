@@ -170,7 +170,7 @@ float SampleShadowMap(int i, float zBias, float3 worldPos)
 {
     float4 coords   = mul(float4(worldPos, 1.0), mul(cb_cascades[i], biasMat));
     coords.z        += zBias;
-    
+
     // TOTO: fix this annoying looking code snippet
     // Randomly figured how to fix a bug, possibly in the Vulkan or AMD driver (or there is something in my code that other GPU drivers are forgiving)
     // that causes the cascades to be sampled incorrectly, square like artifacts in between cascades and in the middle of the view

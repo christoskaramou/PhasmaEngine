@@ -52,7 +52,7 @@ struct PushConstants_Lighting
     uint num_area_lights;
     float2 framebufferSize;
     uint passType;
-    float max_cascade_dist[SHADOWMAP_CASCADES];
+    float4 max_cascade_dist;
 };
 #endif
 
