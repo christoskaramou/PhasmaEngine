@@ -184,6 +184,55 @@ constexpr const char *PeFormatName(::PeFormat format)
     }
 }
 
+constexpr bool PeFormatIsDepthAndStencil(::PeFormat format)
+{
+    switch (format)
+    {
+    case PE_FORMAT_D24_UNORM_S8_UINT:
+    case PE_FORMAT_D32_SFLOAT_S8_UINT:
+        return true;
+    default:
+        return false;
+    }
+}
+
+constexpr bool PeFormatIsDepthOnly(::PeFormat format)
+{
+    switch (format)
+    {
+    case PE_FORMAT_D32_SFLOAT:
+        return true;
+    default:
+        return false;
+    }
+}
+
+constexpr bool PeFormatIsStencilOnly(::PeFormat format)
+{
+    switch (format)
+    {
+    case PE_FORMAT_S8_UINT:
+        return true;
+    default:
+        return false;
+    }
+}
+
+constexpr bool PeFormatHasDepth(::PeFormat format)
+{
+    return PeFormatIsDepthOnly(format) || PeFormatIsDepthAndStencil(format);
+}
+
+constexpr bool PeFormatHasStencil(::PeFormat format)
+{
+    return PeFormatIsStencilOnly(format) || PeFormatIsDepthAndStencil(format);
+}
+
+constexpr bool PeFormatHasDepthOrStencil(::PeFormat format)
+{
+    return PeFormatHasDepth(format) || PeFormatHasStencil(format);
+}
+
 enum PeImageLayout : uint32_t
 {
     PE_IMAGE_LAYOUT_UNDEFINED = 0,
@@ -427,6 +476,22 @@ constexpr PeImageAspectFlags PE_IMAGE_ASPECT_NONE = 0u;
 constexpr PeImageAspectFlags PE_IMAGE_ASPECT_COLOR = 1u << 0;
 constexpr PeImageAspectFlags PE_IMAGE_ASPECT_DEPTH = 1u << 1;
 constexpr PeImageAspectFlags PE_IMAGE_ASPECT_STENCIL = 1u << 2;
+
+constexpr PeImageAspectFlags PeFormatAspectMask(::PeFormat format)
+{
+    PeImageAspectFlags flags = PE_IMAGE_ASPECT_NONE;
+
+    if (PeFormatHasDepth(format))
+        flags |= PE_IMAGE_ASPECT_DEPTH;
+
+    if (PeFormatHasStencil(format))
+        flags |= PE_IMAGE_ASPECT_STENCIL;
+
+    if (flags == PE_IMAGE_ASPECT_NONE)
+        flags = PE_IMAGE_ASPECT_COLOR;
+
+    return flags;
+}
 
 namespace pe
 {

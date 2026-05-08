@@ -1,9 +1,7 @@
 #include "ECS/Component.h"
 #include "API/Command.h"
-#include "API/Vulkan/Helpers_Vulkan.h"
 #include "API/Pipeline.h"
 #include "API/RenderGraph.h"
-#include "API/Vulkan/VulkanImageImpl.h"
 
 namespace pe
 {
@@ -23,7 +21,7 @@ namespace pe
         {
             if (!att.image)
                 continue;
-            if (VulkanHelpers::HasDepth(pe::ToVkFormat(att.image->GetFormat())))
+            if (::PeFormatHasDepth(att.image->GetFormat()))
                 builder.OutputDepth(att.image);
             else
                 builder.OutputColor(att.image);

@@ -1,37 +1,37 @@
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
-#include "API/Vulkan/Helpers_Vulkan.h"
+#include "API/RHITypes.h"
 
 namespace pe
 {
-    static const std::unordered_map<std::string_view, vk::Format> s_helperFormatMap = {
-        {"rgba8", vk::Format::eR8G8B8A8Unorm},
-        {"rgba8_srgb", vk::Format::eR8G8B8A8Srgb},
-        {"bgra8", vk::Format::eB8G8R8A8Unorm},
-        {"rgba16f", vk::Format::eR16G16B16A16Sfloat},
-        {"rgba32f", vk::Format::eR32G32B32A32Sfloat},
-        {"r8", vk::Format::eR8Unorm},
-        {"r16f", vk::Format::eR16Sfloat},
-        {"r32f", vk::Format::eR32Sfloat},
-        {"d32f", vk::Format::eD32Sfloat},
-        {"d24_s8", vk::Format::eD24UnormS8Uint},
-        {"d32f_s8", vk::Format::eD32SfloatS8Uint},
-        {"s8", vk::Format::eS8Uint},
+    static const std::unordered_map<std::string_view, ::PeFormat> s_helperFormatMap = {
+        {"rgba8", PE_FORMAT_R8G8B8A8_UNORM},
+        {"rgba8_srgb", PE_FORMAT_R8G8B8A8_SRGB},
+        {"bgra8", PE_FORMAT_B8G8R8A8_UNORM},
+        {"rgba16f", PE_FORMAT_R16G16B16A16_SFLOAT},
+        {"rgba32f", PE_FORMAT_R32G32B32A32_SFLOAT},
+        {"r8", PE_FORMAT_R8_UNORM},
+        {"r16f", PE_FORMAT_R16_SFLOAT},
+        {"r32f", PE_FORMAT_R32_SFLOAT},
+        {"d32f", PE_FORMAT_D32_SFLOAT},
+        {"d24_s8", PE_FORMAT_D24_UNORM_S8_UINT},
+        {"d32f_s8", PE_FORMAT_D32_SFLOAT_S8_UINT},
+        {"s8", PE_FORMAT_S8_UINT},
     };
 
-    static const std::unordered_map<std::string_view, vk::AccessFlags2> s_helperAccessMap = {
-        {"none", vk::AccessFlagBits2::eNone},
-        {"shader_read", vk::AccessFlagBits2::eShaderRead},
-        {"shader_write", vk::AccessFlagBits2::eShaderWrite},
-        {"color_read", vk::AccessFlagBits2::eColorAttachmentRead},
-        {"color_write", vk::AccessFlagBits2::eColorAttachmentWrite},
-        {"depth_read", vk::AccessFlagBits2::eDepthStencilAttachmentRead},
-        {"depth_write", vk::AccessFlagBits2::eDepthStencilAttachmentWrite},
-        {"transfer_read", vk::AccessFlagBits2::eTransferRead},
-        {"transfer_write", vk::AccessFlagBits2::eTransferWrite},
-        {"host_write", vk::AccessFlagBits2::eHostWrite},
-        {"memory_read", vk::AccessFlagBits2::eMemoryRead},
-        {"memory_write", vk::AccessFlagBits2::eMemoryWrite},
+    static const std::unordered_map<std::string_view, PeAccessFlags> s_helperAccessMap = {
+        {"none", PE_ACCESS_NONE},
+        {"shader_read", PE_ACCESS_SHADER_READ},
+        {"shader_write", PE_ACCESS_SHADER_WRITE},
+        {"color_read", PE_ACCESS_COLOR_ATTACHMENT_READ},
+        {"color_write", PE_ACCESS_COLOR_ATTACHMENT_WRITE},
+        {"depth_read", PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ},
+        {"depth_write", PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE},
+        {"transfer_read", PE_ACCESS_TRANSFER_READ},
+        {"transfer_write", PE_ACCESS_TRANSFER_WRITE},
+        {"host_write", PE_ACCESS_HOST_WRITE},
+        {"memory_read", PE_ACCESS_MEMORY_READ},
+        {"memory_write", PE_ACCESS_MEMORY_WRITE},
     };
 
     static struct HelpersBindings
@@ -42,46 +42,46 @@ namespace pe
                                       {
                 // IsDepthAndStencil
                 lua.set_function("is_depth_and_stencil", [](const std::string &fmt) -> bool {
-                    return VulkanHelpers::IsDepthAndStencil(Lookup(fmt, s_helperFormatMap, vk::Format::eUndefined));
+                    return ::PeFormatIsDepthAndStencil(Lookup(fmt, s_helperFormatMap, PE_FORMAT_UNDEFINED));
                 });
 
                 // IsDepthOnly
                 lua.set_function("is_depth_only", [](const std::string &fmt) -> bool {
-                    return VulkanHelpers::IsDepthOnly(Lookup(fmt, s_helperFormatMap, vk::Format::eUndefined));
+                    return ::PeFormatIsDepthOnly(Lookup(fmt, s_helperFormatMap, PE_FORMAT_UNDEFINED));
                 });
 
                 // IsStencilOnly
                 lua.set_function("is_stencil_only", [](const std::string &fmt) -> bool {
-                    return VulkanHelpers::IsStencilOnly(Lookup(fmt, s_helperFormatMap, vk::Format::eUndefined));
+                    return ::PeFormatIsStencilOnly(Lookup(fmt, s_helperFormatMap, PE_FORMAT_UNDEFINED));
                 });
 
                 // HasDepth
                 lua.set_function("has_depth", [](const std::string &fmt) -> bool {
-                    return VulkanHelpers::HasDepth(Lookup(fmt, s_helperFormatMap, vk::Format::eUndefined));
+                    return ::PeFormatHasDepth(Lookup(fmt, s_helperFormatMap, PE_FORMAT_UNDEFINED));
                 });
 
                 // HasStencil
                 lua.set_function("has_stencil", [](const std::string &fmt) -> bool {
-                    return VulkanHelpers::HasStencil(Lookup(fmt, s_helperFormatMap, vk::Format::eUndefined));
+                    return ::PeFormatHasStencil(Lookup(fmt, s_helperFormatMap, PE_FORMAT_UNDEFINED));
                 });
 
                 // HasDepthOrStencil
                 lua.set_function("has_depth_or_stencil", [](const std::string &fmt) -> bool {
-                    return VulkanHelpers::HasDepthOrStencil(Lookup(fmt, s_helperFormatMap, vk::Format::eUndefined));
+                    return ::PeFormatHasDepthOrStencil(Lookup(fmt, s_helperFormatMap, PE_FORMAT_UNDEFINED));
                 });
 
                 // GetAspectMask
                 lua.set_function("get_aspect_mask", [](const std::string &fmt) -> std::string {
-                    vk::ImageAspectFlags flags = VulkanHelpers::GetAspectMask(Lookup(fmt, s_helperFormatMap, vk::Format::eUndefined));
+                    PeImageAspectFlags flags = ::PeFormatAspectMask(Lookup(fmt, s_helperFormatMap, PE_FORMAT_UNDEFINED));
                     std::string result;
-                    if (flags & vk::ImageAspectFlagBits::eColor)
+                    if (flags & PE_IMAGE_ASPECT_COLOR)
                         result += "color";
-                    if (flags & vk::ImageAspectFlagBits::eDepth)
+                    if (flags & PE_IMAGE_ASPECT_DEPTH)
                     {
                         if (!result.empty()) result += "|";
                         result += "depth";
                     }
-                    if (flags & vk::ImageAspectFlagBits::eStencil)
+                    if (flags & PE_IMAGE_ASPECT_STENCIL)
                     {
                         if (!result.empty()) result += "|";
                         result += "stencil";
@@ -91,7 +91,7 @@ namespace pe
 
                 // IsReadOnlyAccess
                 lua.set_function("is_read_only_access", [](const std::string &access) -> bool {
-                    return VulkanHelpers::IsReadOnlyAccess(LookupFlags<vk::AccessFlags2>(access, s_helperAccessMap));
+                    return ::IsReadOnlyAccess(LookupFlags<PeAccessFlags>(access, s_helperAccessMap));
                 }); });
         }
     } s_helpersBindings;
