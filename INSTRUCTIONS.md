@@ -32,7 +32,7 @@ Backend is selected at process launch via `--api {vulkan,dx12}` (default: vulkan
 
 | Var | Effect |
 |---|---|
-| `PE_DX12_DEBUG=1` | Enable the D3D12 debug layer (auto-on in non-Release builds). |
+| `PE_DX12_DEBUG=1` | Enable the D3D12 debug layer (auto-on in non-Release builds) and the throttled warning/error info-queue callback. |
 | `PE_DX12_GBV=1` | Enable GPU-Based Validation. Slow; catches resource-state mismatches. |
 | `PE_DX12_BREAK=1` | Break on debug-layer `ERROR` / `CORRUPTION` severity (non-Release only). |
 
@@ -40,7 +40,7 @@ DRED auto-breadcrumbs + page-fault tracking are forced on for `PE_DEBUG` / `PE_R
 
 ### Backend-specific gaps and carve-outs
 
-- **SSAO (FFX-CACAO)** — Vulkan-only today. CACAO's D3D12 `InitContext` triggers `DXGI_ERROR_DEVICE_REMOVED`; engine-side carve is correct but the upstream init path needs `ID3D12InfoQueue` instrumentation to diagnose. State + resume recipe in MemPalace drawer `phasmaengine/design/2026-05-05-rhi-phase1-t14d-ssao-PARKED-cacao-init-device-removed`.
+- **SSAO (FFX-CACAO)** — Vulkan-only today. CACAO's D3D12 `InitContext` triggers `DXGI_ERROR_DEVICE_REMOVED`; engine-side carve is correct, and `Dx12RhiImpl` now registers an `ID3D12InfoQueue1` callback when the debug layer is active so the next retry should capture warning/error messages. State + resume recipe in MemPalace drawer `phasmaengine/design/2026-05-05-rhi-phase1-t14d-ssao-PARKED-cacao-init-device-removed`.
 - **Ray tracing** — `caps.rayTracing == false` on DX12 by design; RT pass is skipped. DXR is a separate Phase.
 - **`CommandBuffer::PushDescriptor` / `SetEvent`** — `PE_ERROR` carve-outs on DX12. Audited 2026-05-06: zero callers tree-wide (PushDescriptor) / no Lua script invokes the binding (SetEvent). Implement when a real caller arrives.
 

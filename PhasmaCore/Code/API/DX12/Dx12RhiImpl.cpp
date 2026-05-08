@@ -24,6 +24,65 @@ namespace pe
         return out;
     }
 
+    static const char *D3D12MessageSeverityName(D3D12_MESSAGE_SEVERITY severity)
+    {
+        switch (severity)
+        {
+        case D3D12_MESSAGE_SEVERITY_CORRUPTION:
+            return "corruption";
+        case D3D12_MESSAGE_SEVERITY_ERROR:
+            return "error";
+        case D3D12_MESSAGE_SEVERITY_WARNING:
+            return "warning";
+        case D3D12_MESSAGE_SEVERITY_INFO:
+            return "info";
+        case D3D12_MESSAGE_SEVERITY_MESSAGE:
+            return "message";
+        default:
+            return "unknown";
+        }
+    }
+
+    static bool ShouldLogD3D12Message(D3D12_MESSAGE_CATEGORY category,
+                                      D3D12_MESSAGE_SEVERITY severity,
+                                      D3D12_MESSAGE_ID id,
+                                      uint32_t &repeatCount)
+    {
+        static std::mutex s_messageCountsMutex;
+        static std::unordered_map<uint64_t, uint32_t> s_messageCounts;
+
+        const uint64_t key = (static_cast<uint64_t>(severity) << 48) |
+                             (static_cast<uint64_t>(category) << 32) |
+                             static_cast<uint32_t>(id);
+
+        std::lock_guard<std::mutex> lock(s_messageCountsMutex);
+        repeatCount = ++s_messageCounts[key];
+        return repeatCount <= 4;
+    }
+
+    static void CALLBACK Dx12InfoQueueMessageCallback(D3D12_MESSAGE_CATEGORY category,
+                                                      D3D12_MESSAGE_SEVERITY severity,
+                                                      D3D12_MESSAGE_ID id,
+                                                      LPCSTR description,
+                                                      void * /*context*/)
+    {
+        if (severity != D3D12_MESSAGE_SEVERITY_CORRUPTION &&
+            severity != D3D12_MESSAGE_SEVERITY_ERROR &&
+            severity != D3D12_MESSAGE_SEVERITY_WARNING)
+            return;
+
+        uint32_t repeatCount = 0;
+        if (!ShouldLogD3D12Message(category, severity, id, repeatCount))
+            return;
+
+        PE_WARN("DX12 debug layer %s [category=%u id=%d]: %s%s",
+                D3D12MessageSeverityName(severity),
+                static_cast<uint32_t>(category),
+                static_cast<int32_t>(id),
+                description ? description : "",
+                repeatCount == 4 ? " (further repeats suppressed)" : "");
+    }
+
     bool Dx12RhiImpl::Init(SDL_Window * /*window*/)
     {
         // Debug interfaces must be acquired before D3D12CreateDevice.
@@ -102,8 +161,42 @@ namespace pe
 
         PE_INFO("DX12 device created on '%s'", m_adapterName.c_str());
 
+        HRESULT hr = S_OK;
+#if !defined(PE_RELEASE)
+        const bool dx12DebugLayerActive = true;
+#else
+        const bool dx12DebugLayerActive =
+            EnvFlagOn("PE_DX12_DEBUG");
+#endif
+
+        if (dx12DebugLayerActive)
+        {
+            ComPtr<ID3D12InfoQueue1> infoQueue;
+            if (SUCCEEDED(m_device.As(&infoQueue)))
+            {
+                hr = infoQueue->RegisterMessageCallback(Dx12InfoQueueMessageCallback,
+                                                        D3D12_MESSAGE_CALLBACK_FLAG_NONE,
+                                                        nullptr,
+                                                        &m_infoQueueCallbackCookie);
+                if (SUCCEEDED(hr))
+                {
+                    m_infoQueueCallback = infoQueue;
+                    PE_INFO("DX12 info-queue callback registered");
+                }
+                else
+                {
+                    PE_WARN("Dx12RhiImpl::Init: RegisterMessageCallback failed (0x%08X)",
+                            static_cast<unsigned>(hr));
+                }
+            }
+            else
+            {
+                PE_WARN("Dx12RhiImpl::Init: ID3D12InfoQueue1 unavailable; debug messages require PIX or manual queue draining");
+            }
+        }
+
         D3D12_FEATURE_DATA_D3D12_OPTIONS13 options13{};
-        HRESULT hr = m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS13, &options13, sizeof(options13));
+        hr = m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS13, &options13, sizeof(options13));
         if (FAILED(hr) || options13.InvertedViewportHeightFlipsYSupported == FALSE)
         {
             PE_ERROR("Dx12RhiImpl::Init: runtime lacks D3D12 OPTIONS13 inverted viewport Y-flip support");
@@ -223,6 +316,12 @@ namespace pe
     void Dx12RhiImpl::Shutdown()
     {
         WaitDeviceIdle();
+        if (m_infoQueueCallback && m_infoQueueCallbackCookie)
+        {
+            m_infoQueueCallback->UnregisterMessageCallback(m_infoQueueCallbackCookie);
+            m_infoQueueCallbackCookie = 0;
+        }
+        m_infoQueueCallback.Reset();
         if (m_fenceEvent)
         {
             CloseHandle(m_fenceEvent);

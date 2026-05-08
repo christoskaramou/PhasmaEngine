@@ -5,9 +5,9 @@
 #include "API/RHI_Internal.h"
 
 #include <d3d12.h>
+#include <d3d12sdklayers.h>
 #include <dxgi1_6.h>
 #include <windows.h>
-#include <memory>
 #include <wrl/client.h>
 
 namespace D3D12MA
@@ -59,6 +59,8 @@ namespace pe
         std::unique_ptr<Dx12RootSignature> m_sharedRootSignature;
         Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_graphicsQueue;
         Microsoft::WRL::ComPtr<ID3D12Fence> m_frameFence;
+        Microsoft::WRL::ComPtr<ID3D12InfoQueue1> m_infoQueueCallback;
+        DWORD m_infoQueueCallbackCookie = 0;
         HANDLE m_fenceEvent = nullptr;
         uint64_t m_fenceValue = 0;
         std::string m_adapterName;
