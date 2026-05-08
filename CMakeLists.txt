@@ -188,6 +188,19 @@ if(PE_PHYSICS AND TARGET Jolt)
     target_compile_definitions(PhasmaEditorModule PRIVATE PE_PHYSICS)
 endif()
 
+if(WIN32)
+    target_compile_definitions(PhasmaEditorModule PRIVATE FFX_CACAO_ENABLE_D3D12)
+    target_include_directories(PhasmaEditorModule PRIVATE
+        "${PE_EDITOR_THIRD_PARTY_DIR}/CacaoCompat"
+        "${PE_EDITOR_THIRD_PARTY_DIR}/CacaoCompat/DirectXHeaders/include"
+        "${PE_EDITOR_THIRD_PARTY_DIR}/CacaoCompat/DirectXHeaders/include/directx"
+    )
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        set_source_files_properties(${CACAO_SRC_FILES} PROPERTIES
+            COMPILE_FLAGS "-Wno-address-of-temporary")
+    endif()
+endif()
+
 target_precompile_headers(PhasmaEditorModule PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
 
 target_include_directories(PhasmaEditorModule PRIVATE

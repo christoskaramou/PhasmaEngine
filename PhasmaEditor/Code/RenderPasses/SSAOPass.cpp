@@ -10,19 +10,115 @@
 #include "Camera/Camera.h"
 #include "Systems/RendererSystem.h"
 
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12CommandBufferImpl.h"
+#include "API/DX12/Dx12ImageImpl.h"
+#include "API/DX12/Dx12RhiImpl.h"
+#include "API/DX12/Dx12Translate.h"
+#endif
+
 namespace pe
 {
     FFX_CACAO_VkContext *m_context = nullptr;
+#if defined(PE_WIN32)
+    FFX_CACAO_D3D12Context *m_d3d12Context = nullptr;
+
+    namespace
+    {
+        D3D12_SHADER_RESOURCE_VIEW_DESC MakeSrvDesc2D(DXGI_FORMAT format)
+        {
+            D3D12_SHADER_RESOURCE_VIEW_DESC desc{};
+            desc.Format = format;
+            desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+            desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            desc.Texture2D.MostDetailedMip = 0;
+            desc.Texture2D.MipLevels = 1;
+            return desc;
+        }
+
+        D3D12_SHADER_RESOURCE_VIEW_DESC MakeDepthSrvDesc2D(DXGI_FORMAT format)
+        {
+            return MakeSrvDesc2D(pe_dx12::DepthToSRVFormat(format));
+        }
+
+        D3D12_UNORDERED_ACCESS_VIEW_DESC MakeUavDesc2D(DXGI_FORMAT format)
+        {
+            D3D12_UNORDERED_ACCESS_VIEW_DESC desc{};
+            desc.Format = format;
+            desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+            desc.Texture2D.MipSlice = 0;
+            return desc;
+        }
+
+        void ResyncSsaoStateAfterCacaoDraw(Image *ssaoRT)
+        {
+            if (Dx12ImageImpl *impl = Dx12ImageImpl::TryFrom(ssaoRT))
+                impl->m_state = D3D12_RESOURCE_STATE_GENERIC_READ;
+        }
+
+        void TransitionSsaoForCacaoDraw(CommandBuffer *cmd, Image *ssaoRT)
+        {
+            Dx12ImageImpl *impl = Dx12ImageImpl::From(ssaoRT);
+            constexpr D3D12_RESOURCE_STATES after = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            if (impl->m_state == after)
+                return;
+
+            D3D12_RESOURCE_BARRIER barrier{};
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            barrier.Transition.pResource = impl->GetResource();
+            barrier.Transition.StateBefore = impl->m_state;
+            barrier.Transition.StateAfter = after;
+            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+            GetDx12CommandList(cmd)->ResourceBarrier(1, &barrier);
+            impl->m_state = after;
+        }
+    } // namespace
+#endif
 
     void SSAOPass::Init()
     {
+        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+        m_ssaoRT = rs->GetRenderTarget("ssao");
+        m_normalRT = rs->GetRenderTarget("normal");
+        m_depth = rs->GetDepthStencilTarget("depthStencil");
+
+#if defined(PE_WIN32)
+        if (isDx12)
+        {
+            if (!m_d3d12Context)
+            {
+                size_t contextSize = FFX_CACAO_D3D12GetContextSize();
+                m_d3d12Context = (FFX_CACAO_D3D12Context *)malloc(contextSize);
+                assert(m_d3d12Context);
+                PE_INFO("SSAO: initializing FFX-CACAO D3D12 context");
+                PE_CHECK(FFX_CACAO_D3D12InitContext(m_d3d12Context, GetDx12Device()));
+
+                Dx12ImageImpl *depthImpl = Dx12ImageImpl::From(m_depth);
+                Dx12ImageImpl *normalImpl = Dx12ImageImpl::From(m_normalRT);
+                Dx12ImageImpl *ssaoImpl = Dx12ImageImpl::From(m_ssaoRT);
+
+                FFX_CACAO_D3D12ScreenSizeInfo screenSizeInfo{};
+                screenSizeInfo.width = m_ssaoRT->GetWidth();
+                screenSizeInfo.height = m_ssaoRT->GetHeight();
+                screenSizeInfo.depthBufferResource = depthImpl->GetResource();
+                screenSizeInfo.depthBufferSrvDesc = MakeDepthSrvDesc2D(depthImpl->GetViewFormat());
+                screenSizeInfo.normalBufferResource = normalImpl->GetResource();
+                screenSizeInfo.normalBufferSrvDesc = MakeSrvDesc2D(normalImpl->GetViewFormat());
+                screenSizeInfo.outputResource = ssaoImpl->GetResource();
+                screenSizeInfo.outputUavDesc = MakeUavDesc2D(ssaoImpl->GetViewFormat());
+                screenSizeInfo.useDownsampledSsao = FFX_CACAO_FALSE;
+                PE_INFO("SSAO: initializing FFX-CACAO D3D12 screen resources");
+                PE_CHECK(FFX_CACAO_D3D12InitScreenSizeDependentResources(m_d3d12Context, &screenSizeInfo));
+            }
+            return;
+        }
+#endif
+
         if (!m_context)
         {
-            RendererSystem *rs = GetGlobalSystem<RendererSystem>();
-            m_ssaoRT = rs->GetRenderTarget("ssao");
-            m_normalRT = rs->GetRenderTarget("normal");
-            m_depth = rs->GetDepthStencilTarget("depthStencil");
-
             size_t ffxCacaoContextSize = FFX_CACAO_VkGetContextSize();
             m_context = (FFX_CACAO_VkContext *)malloc(ffxCacaoContextSize);
             assert(m_context);
@@ -48,6 +144,7 @@ namespace pe
         auto &gSettings = Settings::Get<GlobalSettings>();
         if (gSettings.ssao)
         {
+            const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
             Camera *camera = GetGlobalSystem<RendererSystem>()->GetScene().GetActiveCamera();
             mat4 projection = camera->GetProjection();
             memcpy(&m_proj.elements[0][0], &projection[0].x, sizeof(m_proj));
@@ -99,6 +196,13 @@ namespace pe
                 /* bilateralSimilarityDistanceSigma  */ 0.01f,
             };
 
+#if defined(PE_WIN32)
+            if (isDx12 && m_d3d12Context)
+            {
+                PE_CHECK(FFX_CACAO_D3D12UpdateSettings(m_d3d12Context, &cacaoSettings));
+                return;
+            }
+#endif
             PE_CHECK(FFX_CACAO_VkUpdateSettings(m_context, &cacaoSettings));
         }
     }
@@ -120,6 +224,8 @@ namespace pe
 
     void SSAOPass::ExecutePass(CommandBuffer *cmd)
     {
+        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+
         MemoryBarrierInfo barrier{};
         barrier.srcAccessMask = PE_ACCESS_SHADER_WRITE;
         barrier.dstAccessMask = PE_ACCESS_NONE;
@@ -128,18 +234,59 @@ namespace pe
 
         cmd->BeginDebugRegion("SSAOPass");
         cmd->MemoryBarrier(barrier);
+
+#if defined(PE_WIN32)
+        if (isDx12)
+        {
+            Dx12CommandBufferImpl *cmdImpl = Dx12CommandBufferImpl::From(cmd);
+            cmdImpl->FlushBarriers();
+            TransitionSsaoForCacaoDraw(cmd, m_ssaoRT);
+            PE_CHECK(FFX_CACAO_D3D12Draw(m_d3d12Context, GetDx12CommandList(cmd), &m_proj, &m_normalsToView));
+            cmdImpl->InvalidateShaderVisibleHeapBinding();
+            ResyncSsaoStateAfterCacaoDraw(m_ssaoRT);
+            cmd->EndDebugRegion();
+            return;
+        }
+#endif
+
         PE_CHECK(FFX_CACAO_VkDraw(m_context, GetVulkanCommandBuffer(cmd), &m_proj, &m_normalsToView));
         cmd->EndDebugRegion();
     }
 
     void SSAOPass::Resize(uint32_t width, uint32_t height)
     {
-        PE_CHECK(FFX_CACAO_VkDestroyScreenSizeDependentResources(m_context));
+        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
 
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         m_ssaoRT = rs->GetRenderTarget("ssao");
         m_normalRT = rs->GetRenderTarget("normal");
         m_depth = rs->GetDepthStencilTarget("depthStencil");
+
+#if defined(PE_WIN32)
+        if (isDx12)
+        {
+            PE_CHECK(FFX_CACAO_D3D12DestroyScreenSizeDependentResources(m_d3d12Context));
+
+            Dx12ImageImpl *depthImpl = Dx12ImageImpl::From(m_depth);
+            Dx12ImageImpl *normalImpl = Dx12ImageImpl::From(m_normalRT);
+            Dx12ImageImpl *ssaoImpl = Dx12ImageImpl::From(m_ssaoRT);
+
+            FFX_CACAO_D3D12ScreenSizeInfo screenSizeInfo{};
+            screenSizeInfo.width = m_ssaoRT->GetWidth();
+            screenSizeInfo.height = m_ssaoRT->GetHeight();
+            screenSizeInfo.depthBufferResource = depthImpl->GetResource();
+            screenSizeInfo.depthBufferSrvDesc = MakeDepthSrvDesc2D(depthImpl->GetViewFormat());
+            screenSizeInfo.normalBufferResource = normalImpl->GetResource();
+            screenSizeInfo.normalBufferSrvDesc = MakeSrvDesc2D(normalImpl->GetViewFormat());
+            screenSizeInfo.outputResource = ssaoImpl->GetResource();
+            screenSizeInfo.outputUavDesc = MakeUavDesc2D(ssaoImpl->GetViewFormat());
+            screenSizeInfo.useDownsampledSsao = FFX_CACAO_FALSE;
+            PE_CHECK(FFX_CACAO_D3D12InitScreenSizeDependentResources(m_d3d12Context, &screenSizeInfo));
+            return;
+        }
+#endif
+
+        PE_CHECK(FFX_CACAO_VkDestroyScreenSizeDependentResources(m_context));
 
         FFX_CACAO_VkScreenSizeInfo screenSizeInfo = {};
         screenSizeInfo.width = m_ssaoRT->GetWidth();
@@ -153,9 +300,22 @@ namespace pe
 
     void SSAOPass::Destroy()
     {
-        PE_CHECK(FFX_CACAO_VkDestroyScreenSizeDependentResources(m_context));
-        PE_CHECK(FFX_CACAO_VkDestroyContext(m_context));
-        free(m_context);
-        m_context = nullptr;
+#if defined(PE_WIN32)
+        if (m_d3d12Context)
+        {
+            PE_CHECK(FFX_CACAO_D3D12DestroyScreenSizeDependentResources(m_d3d12Context));
+            PE_CHECK(FFX_CACAO_D3D12DestroyContext(m_d3d12Context));
+            free(m_d3d12Context);
+            m_d3d12Context = nullptr;
+            return;
+        }
+#endif
+        if (m_context)
+        {
+            PE_CHECK(FFX_CACAO_VkDestroyScreenSizeDependentResources(m_context));
+            PE_CHECK(FFX_CACAO_VkDestroyContext(m_context));
+            free(m_context);
+            m_context = nullptr;
+        }
     }
 } // namespace pe

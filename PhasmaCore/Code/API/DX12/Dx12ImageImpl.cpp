@@ -10,6 +10,8 @@
 #include "API/RHI.h"
 #include "API/StagingManager.h"
 
+#include <D3D12MemAlloc.h>
+
 namespace pe
 {
     namespace

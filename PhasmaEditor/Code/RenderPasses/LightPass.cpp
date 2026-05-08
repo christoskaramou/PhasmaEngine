@@ -129,7 +129,7 @@ namespace pe
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.camPos = vec4(camera->GetPosition(), 1.0f);
         const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
-        m_ubo.ssao = !isDx12 && gSettings.ssao;
+        m_ubo.ssao = gSettings.ssao;
         m_ubo.ssr = gSettings.ssr;
         m_ubo.tonemapping = !isDx12 && gSettings.tonemapping;
         m_ubo.fsr2 = !isDx12 && gSettings.taa;
@@ -148,7 +148,6 @@ namespace pe
 
     void LightOpaquePass::DeclareInputs(RGBuilder &builder)
     {
-        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
         const bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
@@ -158,8 +157,7 @@ namespace pe
         builder.Read(m_srmRT);
         builder.Read(m_velocityRT);
         builder.Read(m_emissiveRT);
-        if (!isDx12)
-            builder.Read(m_ssaoRT);
+        builder.Read(m_ssaoRT);
         builder.Read(m_transparencyRT);
 
         if (shadowsEnabled)
@@ -319,7 +317,7 @@ namespace pe
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.camPos = vec4(camera->GetPosition(), 1.0f);
         const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
-        m_ubo.ssao = !isDx12 && gSettings.ssao;
+        m_ubo.ssao = gSettings.ssao;
         m_ubo.ssr = gSettings.ssr;
         m_ubo.tonemapping = !isDx12 && gSettings.tonemapping;
         m_ubo.fsr2 = !isDx12 && gSettings.taa;
@@ -338,7 +336,6 @@ namespace pe
 
     void LightTransparentPass::DeclareInputs(RGBuilder &builder)
     {
-        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
         const bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
@@ -348,8 +345,7 @@ namespace pe
         builder.Read(m_srmRT);
         builder.Read(m_velocityRT);
         builder.Read(m_emissiveRT);
-        if (!isDx12)
-            builder.Read(m_ssaoRT);
+        builder.Read(m_ssaoRT);
         builder.Read(m_transparencyRT);
 
         if (shadowsEnabled)

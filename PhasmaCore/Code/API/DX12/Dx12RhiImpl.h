@@ -2,6 +2,7 @@
 
 #include "API/DX12/Dx12DescriptorHeap.h"
 #include "API/DX12/Dx12RootSignature.h"
+#include "API/RHI.h"
 #include "API/RHI_Internal.h"
 
 #include <d3d12.h>
@@ -66,4 +67,10 @@ namespace pe
         std::string m_adapterName;
         RHI::Caps m_caps{};
     };
+
+    inline ID3D12Device *GetDx12Device()
+    {
+        Dx12RhiImpl *impl = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+        return impl ? impl->GetDevice() : nullptr;
+    }
 } // namespace pe

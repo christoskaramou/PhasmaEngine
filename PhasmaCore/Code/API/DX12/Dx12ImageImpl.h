@@ -2,8 +2,13 @@
 
 #include "API/Image_Internal.h"
 
-#include <D3D12MemAlloc.h>
+#include <d3d12.h>
 #include <wrl/client.h>
+
+namespace D3D12MA
+{
+    class Allocation;
+}
 
 namespace pe
 {
@@ -46,4 +51,16 @@ namespace pe
     };
 
     Image::Impl *CreateDx12SwapchainImageImpl(Image *owner, ID3D12Resource *externalResource, DXGI_FORMAT format);
+
+    inline ID3D12Resource *GetDx12Image(Image *image)
+    {
+        Dx12ImageImpl *impl = Dx12ImageImpl::TryFrom(image);
+        return impl ? impl->GetResource() : nullptr;
+    }
+
+    inline ID3D12Resource *GetDx12Image(const Image *image)
+    {
+        const Dx12ImageImpl *impl = Dx12ImageImpl::TryFrom(image);
+        return impl ? impl->GetResource() : nullptr;
+    }
 } // namespace pe
