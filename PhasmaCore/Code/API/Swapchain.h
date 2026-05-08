@@ -11,6 +11,10 @@ namespace pe
     class Dx12RhiImpl;
 #endif
 
+    struct SwapchainOutOfDateError
+    {
+    };
+
     struct SwapchainDesc
     {
         SDL_Window *window = nullptr;

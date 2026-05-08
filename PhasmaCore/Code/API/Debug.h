@@ -51,6 +51,7 @@ namespace pe
         static void ShowOrLaunchReplayUI();
         static uint32_t GetNumCaptures(); // returns the total number of RenderDoc captures saved to disk since the app started
         static bool IsCaptureApiAvailable();
+        static void CollectGpuTrace(CommandBuffer *cmd);
 
     private:
         friend class CommandBuffer;
@@ -97,6 +98,7 @@ namespace pe
         static void ShowOrLaunchReplayUI() {}
         static uint32_t GetNumCaptures() { return 0; }
         static bool IsCaptureApiAvailable() { return false; }
+        static void CollectGpuTrace(CommandBuffer *cmd);
 
     private:
         friend class CommandBuffer;

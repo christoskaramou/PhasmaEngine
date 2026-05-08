@@ -706,5 +706,16 @@ namespace pe
         }
 #endif
     }
+
 #endif
+
+    void Debug::CollectGpuTrace(CommandBuffer *cmd)
+    {
+#ifdef PE_TRACY
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+            TracyVkCollect(VulkanRhi::TracyContext(), static_cast<VkCommandBuffer>(GetVulkanCommandBuffer(cmd)));
+#else
+        (void)cmd;
+#endif
+    }
 } // namespace pe

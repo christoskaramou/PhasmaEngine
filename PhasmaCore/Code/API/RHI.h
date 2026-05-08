@@ -111,6 +111,7 @@ namespace pe
         size_t AlignUniform(size_t size) { return Align(size, m_minUniformBufferOffsetAlignment); }
         size_t AlignStorage(size_t size) { return Align(size, m_minStorageBufferOffsetAlignment); }
         size_t AlignStorageAs(size_t size, size_t alignment) { return AlignStorage(Align(size, alignment)); } // Aligned also to min storage alignment
+        size_t AlignTextureRowPitch(size_t rowBytes) { return Align(rowBytes, m_textureDataPitchAlignment); }
         uint32_t GetMaxPushConstantsSize() { return m_maxPushConstantsSize; }
         const Caps &GetCaps() const { return m_caps; }
         const std::string &GetGpuName() { return m_gpuName; }
@@ -133,6 +134,7 @@ namespace pe
         float GetWidthf() const;
         float GetHeightf() const;
 
+        ::PeFormat GetSwapchainFormat();
         ::PeFormat GetDepthFormat();
 
     private:
@@ -153,6 +155,7 @@ namespace pe
         uint32_t m_maxStorageBufferSize;
         uint64_t m_minUniformBufferOffsetAlignment;
         uint64_t m_minStorageBufferOffsetAlignment;
+        uint64_t m_textureDataPitchAlignment = 1;
         uint32_t m_maxPushConstantsSize;
         uint32_t m_maxDrawIndirectCount;
 

@@ -372,6 +372,7 @@ namespace pe
         m_api = api;
         m_window = window;
         m_frameCounter = 0;
+        m_textureDataPitchAlignment = 1;
 
         if (api == PE_GRAPHICS_API_DX12)
         {
@@ -392,6 +393,7 @@ namespace pe
             m_maxStorageBufferSize = std::numeric_limits<uint32_t>::max();
             m_minUniformBufferOffsetAlignment = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
             m_minStorageBufferOffsetAlignment = D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT;
+            m_textureDataPitchAlignment = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
             m_maxPushConstantsSize = m_caps.maxPushConstantsBytes;
             m_maxDrawIndirectCount = std::numeric_limits<uint32_t>::max();
             m_mainQueue = Queue::Create(0, "Main_queue");
@@ -974,6 +976,17 @@ namespace pe
         descPoolsizes[4].type = PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         descPoolsizes[4].descriptorCount = maxDescriptorSets;
         m_descriptorPool = DescriptorPool::Create(descPoolsizes, "RHI_descriptor_pool", maxDescriptorSets);
+    }
+
+    ::PeFormat RHI::GetSwapchainFormat()
+    {
+        if (m_swapchain && m_swapchain->GetImageCount() > 0 && m_swapchain->GetImage(0))
+            return m_swapchain->GetImage(0)->GetFormat();
+
+        if (m_surface)
+            return m_surface->GetFormat();
+
+        return PE_FORMAT_R8G8B8A8_UNORM;
     }
 
     ::PeFormat RHI::GetDepthFormat()

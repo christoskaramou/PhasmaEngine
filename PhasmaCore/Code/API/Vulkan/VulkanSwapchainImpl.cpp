@@ -115,9 +115,16 @@ namespace pe
 
     uint32_t VulkanSwapchainImpl::AquireNextImage(Semaphore *semaphore)
     {
-        auto result = VulkanRhi::Device().acquireNextImageKHR(m_swapchain, UINT64_MAX, pe::GetVulkanSemaphore(semaphore), nullptr);
-        PE_ERROR_IF(result.result != vk::Result::eSuccess && result.result != vk::Result::eSuboptimalKHR,
-                    "Failed to acquire swapchain image");
-        return result.value;
+        try
+        {
+            auto result = VulkanRhi::Device().acquireNextImageKHR(m_swapchain, UINT64_MAX, pe::GetVulkanSemaphore(semaphore), nullptr);
+            PE_ERROR_IF(result.result != vk::Result::eSuccess && result.result != vk::Result::eSuboptimalKHR,
+                        "Failed to acquire swapchain image");
+            return result.value;
+        }
+        catch (const vk::OutOfDateKHRError &)
+        {
+            throw SwapchainOutOfDateError{};
+        }
     }
 } // namespace pe

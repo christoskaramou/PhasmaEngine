@@ -1,19 +1,12 @@
 #include "RendererSystem.h"
-#ifdef PE_TRACY
-#include <tracy/TracyVulkan.hpp>
-#endif
 #include "PhasmaMCP/Utils.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
+#include "API/Debug.h"
 #include "API/Framebuffer.h"
 #include "API/Image.h"
-#include "API/Vulkan/VulkanCommandBufferImpl.h"
-#include "API/Vulkan/VulkanImageImpl.h"
-#include "API/Vulkan/Helpers_Vulkan.h"
-#include "API/Vulkan/VulkanSamplerImpl.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
-#include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Semaphore.h"
 #include "API/Shader.h"
 #include "API/StagingManager.h"
@@ -44,28 +37,10 @@ namespace pe
 {
     namespace
     {
-        constexpr size_t kDx12TextureDataPitchAlignment = 256;
-
-        ::PeFormat GetSwapchainSurfaceFormat()
-        {
-            if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-            {
-                Swapchain *swapchain = RHII.GetSwapchain();
-                if (swapchain && swapchain->GetImageCount() > 0 && swapchain->GetImage(0))
-                    return swapchain->GetImage(0)->GetFormat();
-                return PE_FORMAT_R8G8B8A8_UNORM;
-            }
-
-            return RHII.GetSurface()->GetFormat();
-        }
-
         size_t GetScreenshotRowPitch(uint32_t width)
         {
             const size_t rowBytes = static_cast<size_t>(width) * 4;
-            if (RHII.GetApi() != PE_GRAPHICS_API_DX12)
-                return rowBytes;
-
-            return (rowBytes + kDx12TextureDataPitchAlignment - 1) & ~(kDx12TextureDataPitchAlignment - 1);
+            return RHII.AlignTextureRowPitch(rowBytes);
         }
 
         bool IsBgra8Format(::PeFormat format)
@@ -575,10 +550,7 @@ namespace pe
             QueueScreenshotReadback(cmd, m_displayRT);
         }
 
-#ifdef PE_TRACY
-        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
-            TracyVkCollect(VulkanRhi::TracyContext(), static_cast<VkCommandBuffer>(GetVulkanCommandBuffer(cmd)));
-#endif
+        Debug::CollectGpuTrace(cmd);
 
         cmd->End();
 
@@ -677,7 +649,7 @@ namespace pe
                 m_screenshotPending = false;
             }
         }
-        catch (vk::OutOfDateKHRError &)
+        catch (const SwapchainOutOfDateError &)
         {
             // Just ignore and try again
         }
@@ -913,7 +885,7 @@ namespace pe
         float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
 
         ImageDesc desc{};
-        desc.format = GetSwapchainSurfaceFormat();
+        desc.format = RHII.GetSwapchainFormat();
         desc.width = static_cast<uint32_t>(RHII.GetWidthf() * rtScale);
         desc.height = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
         desc.usage = PE_IMAGE_USAGE_TRANSFER_DST | PE_IMAGE_USAGE_SAMPLED;
@@ -945,7 +917,7 @@ namespace pe
 
         Settings::Get<GlobalSettings>().rendering_images.clear();
 
-        const ::PeFormat surfaceFormat = GetSwapchainSurfaceFormat();
+        const ::PeFormat surfaceFormat = RHII.GetSwapchainFormat();
         m_depthStencil = CreateDepthStencilTarget("depthStencil", RHII.GetDepthFormat(), PE_IMAGE_USAGE_TRANSFER_DST);
         m_viewportRT = CreateRenderTarget("viewport", surfaceFormat, PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST);
         m_displayRT = CreateRenderTarget("display", surfaceFormat, PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST, false);
