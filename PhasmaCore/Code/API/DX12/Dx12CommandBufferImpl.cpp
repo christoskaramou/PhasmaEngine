@@ -117,6 +117,43 @@ namespace pe
             return state;
         }
 
+        bool CoalescePendingTransition(std::vector<D3D12_RESOURCE_BARRIER> &batch,
+                                       ID3D12Resource *resource,
+                                       UINT subresource,
+                                       D3D12_RESOURCE_STATES after,
+                                       bool *transitionPending = nullptr)
+        {
+            if (transitionPending)
+                *transitionPending = false;
+
+            for (auto it = batch.rbegin(); it != batch.rend(); ++it)
+            {
+                D3D12_RESOURCE_BARRIER &rb = *it;
+                if (rb.Type == D3D12_RESOURCE_BARRIER_TYPE_UAV &&
+                    (!rb.UAV.pResource || rb.UAV.pResource == resource))
+                    return false;
+
+                if (rb.Type != D3D12_RESOURCE_BARRIER_TYPE_TRANSITION ||
+                    rb.Transition.pResource != resource ||
+                    rb.Transition.Subresource != subresource)
+                    continue;
+
+                rb.Transition.StateAfter = after;
+                if (rb.Transition.StateBefore == rb.Transition.StateAfter)
+                {
+                    auto eraseIt = it.base();
+                    --eraseIt;
+                    batch.erase(eraseIt);
+                }
+                else if (transitionPending)
+                {
+                    *transitionPending = true;
+                }
+                return true;
+            }
+            return false;
+        }
+
         void PushBufferTransition(std::vector<D3D12_RESOURCE_BARRIER> &batch,
                                   Dx12BufferImpl *buf,
                                   D3D12_RESOURCE_STATES requested)
@@ -136,6 +173,12 @@ namespace pe
 
             if (before == after)
                 return;
+
+            if (CoalescePendingTransition(batch, buf->GetResource(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, after))
+            {
+                buf->m_state = after;
+                return;
+            }
 
             D3D12_RESOURCE_BARRIER rb{};
             rb.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -339,7 +382,10 @@ namespace pe
     void Dx12CommandBufferImpl::FlushBarriers()
     {
         if (m_barrierBatch.empty())
+        {
+            m_pendingImageBarrierRegion.clear();
             return;
+        }
 
         const bool markImageBarrier = !m_pendingImageBarrierRegion.empty();
         if (markImageBarrier)
@@ -957,17 +1003,34 @@ namespace pe
 
     namespace
     {
-        // Push a transition barrier for a single image into the batch.
-        // No-op when the source and destination states already match; DX12
-        // rejects no-op transitions with a debug-layer error.
-        bool PushImageTransition(std::vector<D3D12_RESOURCE_BARRIER> &batch,
-                                 Dx12ImageImpl *img,
-                                 PeImageLayout newLayout)
+        bool HasWriteAccess(PeBarrierAccess accessMask)
+        {
+            constexpr PeBarrierAccess writeMask =
+                PE_ACCESS_SHADER_WRITE |
+                PE_ACCESS_SHADER_STORAGE_WRITE |
+                PE_ACCESS_COLOR_ATTACHMENT_WRITE |
+                PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE |
+                PE_ACCESS_TRANSFER_WRITE |
+                PE_ACCESS_HOST_WRITE |
+                PE_ACCESS_MEMORY_WRITE |
+                PE_ACCESS_ACCELERATION_STRUCTURE_WRITE_KHR;
+            return (accessMask & writeMask) != 0;
+        }
+
+        bool PushImageStateTransition(std::vector<D3D12_RESOURCE_BARRIER> &batch,
+                                      Dx12ImageImpl *img,
+                                      D3D12_RESOURCE_STATES after)
         {
             const D3D12_RESOURCE_STATES before = img->m_state;
-            const D3D12_RESOURCE_STATES after = pe_dx12::ToD3D12ResourceState(newLayout);
             if (before == after)
                 return false;
+
+            bool transitionPending = false;
+            if (CoalescePendingTransition(batch, img->GetResource(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, after, &transitionPending))
+            {
+                img->m_state = after;
+                return transitionPending;
+            }
 
             D3D12_RESOURCE_BARRIER rb{};
             rb.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -981,8 +1044,30 @@ namespace pe
             img->m_state = after;
             return true;
         }
-
     } // namespace
+
+    void Dx12CommandBufferImpl::PrepareImageForFirstWrite(Dx12ImageImpl *img,
+                                                          D3D12_RESOURCE_STATES requestedState,
+                                                          PeBarrierAccess accessMask)
+    {
+        if (!img || !img->GetResource() || !img->m_needsFirstUseDiscard || !HasWriteAccess(accessMask))
+            return;
+
+        const D3D12_RESOURCE_STATES discardState = img->m_firstUseDiscardState;
+        if (discardState == D3D12_RESOURCE_STATE_COMMON)
+            return;
+
+        if (PushImageStateTransition(m_barrierBatch, img, discardState))
+            FlushBarriers();
+        else if (!m_barrierBatch.empty())
+            FlushBarriers();
+
+        m_cmdList->DiscardResource(img->GetResource(), nullptr);
+        img->m_needsFirstUseDiscard = false;
+
+        if (requestedState != discardState)
+            PushImageStateTransition(m_barrierBatch, img, requestedState);
+    }
 
     void Dx12CommandBufferImpl::BufferBarrier(const BufferBarrierInfo &info)
     {
@@ -998,7 +1083,10 @@ namespace pe
     {
         if (!info.image)
             return;
-        if (PushImageTransition(m_barrierBatch, Dx12ImageImpl::From(info.image), info.layout))
+        Dx12ImageImpl *img = Dx12ImageImpl::From(info.image);
+        const D3D12_RESOURCE_STATES after = pe_dx12::ToD3D12ResourceState(info.layout);
+        PrepareImageForFirstWrite(img, after, info.accessMask);
+        if (PushImageStateTransition(m_barrierBatch, img, after))
             MarkPendingImageBarrierRegion("ImageBarrier");
     }
     void Dx12CommandBufferImpl::ImageBarriers(const std::vector<ImageBarrierInfo> &infos)
@@ -1008,7 +1096,10 @@ namespace pe
         {
             if (!info.image)
                 continue;
-            if (PushImageTransition(m_barrierBatch, Dx12ImageImpl::From(info.image), info.layout))
+            Dx12ImageImpl *img = Dx12ImageImpl::From(info.image);
+            const D3D12_RESOURCE_STATES after = pe_dx12::ToD3D12ResourceState(info.layout);
+            PrepareImageForFirstWrite(img, after, info.accessMask);
+            if (PushImageStateTransition(m_barrierBatch, img, after))
                 MarkPendingImageBarrierRegion("ImageGroupBarrier");
         }
     }

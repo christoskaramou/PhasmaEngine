@@ -223,6 +223,11 @@ namespace pe
 
         D3D12_RESOURCE_DESC resourceDesc = TextureResourceDesc(desc, m_resourceFormat);
         std::optional<D3D12_CLEAR_VALUE> clear = OptimizedClearValue(desc, m_viewFormat);
+        m_needsFirstUseDiscard = (resourceDesc.Flags & (D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)) != 0;
+        if (resourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)
+            m_firstUseDiscardState = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+        else if (resourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)
+            m_firstUseDiscardState = D3D12_RESOURCE_STATE_RENDER_TARGET;
 
         D3D12MA::ALLOCATION_DESC allocationDesc{};
         allocationDesc.HeapType = D3D12_HEAP_TYPE_DEFAULT;

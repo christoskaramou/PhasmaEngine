@@ -54,6 +54,7 @@ namespace pe
             samplerInfo.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
             Sampler *sampler = Sampler::Create(samplerInfo, "TAA_History_Linear");
             m_historyImage->SetSampler(sampler);
+            m_resetHistory = true;
         }
 
         if (!m_taaResolved)
@@ -123,7 +124,8 @@ namespace pe
     {
         Image *taaOutput = m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
         builder.ReadCompute(m_viewportRT);
-        builder.ReadCompute(m_historyImage);
+        if (!m_resetHistory)
+            builder.ReadCompute(m_historyImage);
         builder.ReadCompute(m_velocityRT);
         builder.WriteCompute(taaOutput);
     }

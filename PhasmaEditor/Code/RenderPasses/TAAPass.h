@@ -27,18 +27,18 @@ namespace pe
         void RequestHistoryReset() { m_resetHistory = true; }
 
     private:
-        Image *m_viewportRT;
-        Image *m_displayRT;
-        Image *m_depthStencil;
-        Image *m_velocityRT;
+        Image *m_viewportRT = nullptr;
+        Image *m_displayRT = nullptr;
+        Image *m_depthStencil = nullptr;
+        Image *m_velocityRT = nullptr;
 
-        Image *m_historyImage;
-        Image *m_taaResolved;
+        Image *m_historyImage = nullptr;
+        Image *m_taaResolved = nullptr;
 
         vec2 m_jitter;
         vec2 m_projectionJitter;
-        int m_jitterPhaseCount;
-        int m_jitterIndex;
+        int m_jitterPhaseCount = 0;
+        int m_jitterIndex = 0;
         bool m_casSharpeningEnabled{false};
         bool m_resetHistory{false};
     };

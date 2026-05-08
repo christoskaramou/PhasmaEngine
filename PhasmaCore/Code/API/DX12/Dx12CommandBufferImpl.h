@@ -11,6 +11,8 @@
 
 namespace pe
 {
+    struct Dx12ImageImpl;
+
     struct Dx12CommandBufferImpl final : public CommandBuffer::Impl
     {
         Dx12CommandBufferImpl(CommandBuffer *owner, CommandPool *commandPool, const std::string &name);
@@ -93,6 +95,7 @@ namespace pe
         ID3D12CommandSignature *GetDrawIndirectSignature(uint32_t stride);
         ID3D12CommandSignature *GetDrawIndexedIndirectSignature(uint32_t stride);
         void MarkPendingImageBarrierRegion(const char *name);
+        void PrepareImageForFirstWrite(Dx12ImageImpl *img, D3D12_RESOURCE_STATES requestedState, PeBarrierAccess accessMask);
 
         bool m_heapsBound = false;
         D3D12_PRIMITIVE_TOPOLOGY m_lastTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
