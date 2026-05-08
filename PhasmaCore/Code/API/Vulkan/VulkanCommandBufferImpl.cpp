@@ -33,7 +33,7 @@ namespace pe
         cbai.commandBufferCount = 1;
 
         m_apiHandle = VulkanRhi::Device().allocateCommandBuffers(cbai)[0];
-        m_owner->m_apiHandle = m_apiHandle;
+        m_owner->m_apiHandle = detail::ToUintPtr(m_apiHandle);
 
         Debug::SetObjectName(m_apiHandle, name);
     }
@@ -91,7 +91,7 @@ namespace pe
             m_owner->m_afterWaitCallbacks.Clear();
         }
 
-        PE_ERROR_IF(!(m_owner->m_commandPool->GetFlags() & vk::CommandPoolCreateFlagBits::eResetCommandBuffer), "CommandBuffer::Reset: CommandPool does not have the reset flag!");
+        PE_ERROR_IF(!(m_owner->m_commandPool->GetFlags() & PE_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER), "CommandBuffer::Reset: CommandPool does not have the reset flag!");
         m_apiHandle.reset();
 
 #if PE_DEBUG_MODE

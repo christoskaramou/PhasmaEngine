@@ -33,6 +33,8 @@ namespace pe
 {
     App::App() : m_frameTimer(FrameTimer::Instance())
     {
+        Path::Init();
+
         auto shaderCallback = [](size_t fileEvent)
         {
             EventSystem::PushEvent(EventType::CompileShaders, fileEvent);

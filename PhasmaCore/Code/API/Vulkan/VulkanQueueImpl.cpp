@@ -5,6 +5,7 @@
 #include "API/Swapchain.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
+#include "API/Vulkan/VulkanRHITypeUtils.h"
 #include "API/Vulkan/VulkanSemaphoreImpl.h"
 #include "API/Vulkan/VulkanSwapchainImpl.h"
 
@@ -20,7 +21,7 @@ namespace pe
           m_name{name}
     {
         m_apiHandle = VulkanRhi::Device().getQueue(familyId, 0);
-        m_owner->m_apiHandle = m_apiHandle;
+        m_owner->m_apiHandle = detail::ToUintPtr(m_apiHandle);
         Debug::SetObjectName(m_apiHandle, m_name);
     }
 
@@ -45,14 +46,14 @@ namespace pe
         if (wait)
         {
             waitSemaphoreSubmitInfo.semaphore = GetVulkanSemaphore(wait);
-            waitSemaphoreSubmitInfo.stageMask = wait->GetStageFlags();
+            waitSemaphoreSubmitInfo.stageMask = ToVkPipelineStageFlags(wait->GetStageFlags());
         }
 
         if (signal)
         {
             vk::SemaphoreSubmitInfo info{};
             info.semaphore = GetVulkanSemaphore(signal);
-            info.stageMask = signal->GetStageFlags();
+            info.stageMask = ToVkPipelineStageFlags(signal->GetStageFlags());
             signalSemaphoreSubmitInfos.push_back(info);
         }
 

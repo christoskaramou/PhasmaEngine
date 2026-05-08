@@ -2,6 +2,7 @@
 
 #include <webgpu/webgpu.h>
 #include "API/Image.h"
+#include "API/Vulkan/VulkanHeaders.h"
 
 namespace pe
 {

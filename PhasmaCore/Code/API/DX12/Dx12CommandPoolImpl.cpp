@@ -6,7 +6,7 @@
 
 namespace pe
 {
-    Dx12CommandPoolImpl::Dx12CommandPoolImpl(CommandPool *owner, Queue *, vk::CommandPoolCreateFlags, const std::string &)
+    Dx12CommandPoolImpl::Dx12CommandPoolImpl(CommandPool *owner, Queue *, PeCommandPoolCreateFlags, const std::string &)
         : m_owner{owner}
     {
     }

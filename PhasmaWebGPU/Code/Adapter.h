@@ -3,6 +3,7 @@
 #include <webgpu/webgpu.h>
 #include "WGPULimits.h"
 #include "API/RHI.h"
+#include "API/Vulkan/VulkanHeaders.h"
 
 struct WGPUAdapterChainedCaps
 {

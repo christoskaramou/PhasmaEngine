@@ -7,16 +7,16 @@ namespace pe
     class Swapchain;
     class Queue;
 
-    class CommandPool : public PeHandle<CommandPool, vk::CommandPool>
+    class CommandPool : public PeHandle<CommandPool, PeBackendHandle>
     {
     public:
         struct Impl;
 
-        CommandPool(Queue *queue, vk::CommandPoolCreateFlags flags, const std::string &name);
+        CommandPool(Queue *queue, PeCommandPoolCreateFlags flags, const std::string &name);
         ~CommandPool();
 
         Queue *GetQueue() { return m_queue; }
-        vk::CommandPoolCreateFlags GetFlags() { return m_flags; }
+        PeCommandPoolCreateFlags GetFlags() const { return m_flags; }
         void Reset();
 
     private:
@@ -28,11 +28,11 @@ namespace pe
 
         Impl *m_impl{};
         Queue *m_queue;
-        vk::CommandPoolCreateFlags m_flags;
+        PeCommandPoolCreateFlags m_flags;
         std::stack<CommandBuffer *> m_freeCmdStack{};
     };
 
-    class Queue : public PeHandle<Queue, vk::Queue>
+    class Queue : public PeHandle<Queue, PeBackendHandle>
     {
     public:
         struct Impl;
@@ -49,7 +49,7 @@ namespace pe
         void EndDebugRegion();
         uint32_t GetFamilyId() const { return m_familyId; }
         Semaphore *GetSubmissionsSemaphore() const { return m_submissionsSemaphore; }
-        CommandBuffer *AcquireCommandBuffer(vk::CommandPoolCreateFlags flags = vk::CommandPoolCreateFlagBits::eTransient);
+        CommandBuffer *AcquireCommandBuffer(PeCommandPoolCreateFlags flags = PE_COMMAND_POOL_CREATE_TRANSIENT);
         void ReturnCommandBuffer(CommandBuffer *cmd);
         uint64_t GetSubmissionCount() const { return m_submission.load(std::memory_order_acquire); }
 

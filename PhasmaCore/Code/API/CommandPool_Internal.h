@@ -11,5 +11,5 @@ namespace pe
         virtual void Reset() = 0;
     };
 
-    CommandPool::Impl *CreateCommandPoolImpl(CommandPool *owner, Queue *queue, vk::CommandPoolCreateFlags flags, const std::string &name);
+    CommandPool::Impl *CreateCommandPoolImpl(CommandPool *owner, Queue *queue, PeCommandPoolCreateFlags flags, const std::string &name);
 } // namespace pe

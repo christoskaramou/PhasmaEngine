@@ -5,6 +5,7 @@
 #include "API/Image.h"
 #include "RenderPipeline.h"
 #include "UsageTracker.h"
+#include "API/Vulkan/VulkanHeaders.h"
 
 struct WGPUCommandEncoderImpl;
 struct WGPUDeviceImpl;

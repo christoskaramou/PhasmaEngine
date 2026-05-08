@@ -19,7 +19,7 @@ namespace pe
         }
 
         m_apiHandle = VulkanRhi::Device().createSemaphore(si);
-        m_owner->m_apiHandle = m_apiHandle;
+        m_owner->m_apiHandle = detail::ToUintPtr(m_apiHandle);
         Debug::SetObjectName(m_apiHandle, name);
     }
 

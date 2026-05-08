@@ -4,13 +4,6 @@
 
 #undef MemoryBarrier
 
-#ifdef PE_TRACY
-namespace tracy
-{
-    class VkCtxScope;
-}
-#endif
-
 namespace pe
 {
     class RenderPass;
@@ -92,7 +85,7 @@ namespace pe
         uint8_t m_data[N];
     };
 
-    class CommandBuffer : public PeHandle<CommandBuffer, vk::CommandBuffer>
+    class CommandBuffer : public PeHandle<CommandBuffer, PeBackendHandle>
     {
     public:
         struct Impl;
@@ -218,7 +211,7 @@ namespace pe
         std::vector<GpuTimerInfo> m_gpuTimerInfos{};
         std::stack<size_t> m_gpuTimerIdsStack{};
 #ifdef PE_TRACY
-        std::vector<tracy::VkCtxScope *> m_tracyGpuScopes;
+        std::vector<void *> m_tracyGpuScopes;
 #endif
 #endif
     };

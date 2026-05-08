@@ -234,22 +234,24 @@ namespace pe
     const vec4 color{0.0f, 0.0f, 0.0f, 1.0f};
 
     // Get function pointers for the debug report extensions from the device
-    void Debug::Init(vk::Instance instance)
+    void Debug::Init()
     {
         PE_ERROR_IF(s_instance, "Already initialized!");
+        vk::Instance instance = VulkanRhi::Instance();
         PE_ERROR_IF(!instance, "Invalid instance!");
 
-        s_instance = instance;
+        s_instance = detail::ToUintPtr(instance);
 
-        vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(s_instance, "vkCreateDebugUtilsMessengerEXT");
-        vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(s_instance, "vkDestroyDebugUtilsMessengerEXT");
-        vkSetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetInstanceProcAddr(s_instance, "vkSetDebugUtilsObjectNameEXT");
-        vkQueueBeginDebugUtilsLabelEXT = (PFN_vkQueueBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(s_instance, "vkQueueBeginDebugUtilsLabelEXT");
-        vkQueueInsertDebugUtilsLabelEXT = (PFN_vkQueueInsertDebugUtilsLabelEXT)vkGetInstanceProcAddr(s_instance, "vkQueueInsertDebugUtilsLabelEXT");
-        vkQueueEndDebugUtilsLabelEXT = (PFN_vkQueueEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(s_instance, "vkQueueEndDebugUtilsLabelEXT");
-        vkCmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(s_instance, "vkCmdBeginDebugUtilsLabelEXT");
-        vkCmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(s_instance, "vkCmdEndDebugUtilsLabelEXT");
-        vkCmdInsertDebugUtilsLabelEXT = (PFN_vkCmdInsertDebugUtilsLabelEXT)vkGetInstanceProcAddr(s_instance, "vkCmdInsertDebugUtilsLabelEXT");
+        VkInstance instanceVk = reinterpret_cast<VkInstance>(s_instance);
+        vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instanceVk, "vkCreateDebugUtilsMessengerEXT");
+        vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instanceVk, "vkDestroyDebugUtilsMessengerEXT");
+        vkSetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetInstanceProcAddr(instanceVk, "vkSetDebugUtilsObjectNameEXT");
+        vkQueueBeginDebugUtilsLabelEXT = (PFN_vkQueueBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(instanceVk, "vkQueueBeginDebugUtilsLabelEXT");
+        vkQueueInsertDebugUtilsLabelEXT = (PFN_vkQueueInsertDebugUtilsLabelEXT)vkGetInstanceProcAddr(instanceVk, "vkQueueInsertDebugUtilsLabelEXT");
+        vkQueueEndDebugUtilsLabelEXT = (PFN_vkQueueEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(instanceVk, "vkQueueEndDebugUtilsLabelEXT");
+        vkCmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(instanceVk, "vkCmdBeginDebugUtilsLabelEXT");
+        vkCmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(instanceVk, "vkCmdEndDebugUtilsLabelEXT");
+        vkCmdInsertDebugUtilsLabelEXT = (PFN_vkCmdInsertDebugUtilsLabelEXT)vkGetInstanceProcAddr(instanceVk, "vkCmdInsertDebugUtilsLabelEXT");
     }
 
     std::string GetDebugMessageString(VkDebugUtilsMessageTypeFlagsEXT value)
@@ -330,8 +332,8 @@ namespace pe
         dumci.pfnUserCallback = MessageCallback;
 
         VkDebugUtilsMessengerEXT debugMessengerVK;
-        vkCreateDebugUtilsMessengerEXT(s_instance, &dumci, nullptr, &debugMessengerVK);
-        s_debugMessenger = debugMessengerVK;
+        vkCreateDebugUtilsMessengerEXT(reinterpret_cast<VkInstance>(s_instance), &dumci, nullptr, &debugMessengerVK);
+        s_debugMessenger = detail::ToUintPtr(debugMessengerVK);
 #endif
     }
 
@@ -340,7 +342,9 @@ namespace pe
 #if defined(_DEBUG) && PE_DEBUG_MESSENGER == 1
         if (s_debugMessenger)
         {
-            vkDestroyDebugUtilsMessengerEXT(s_instance, s_debugMessenger, nullptr);
+            vkDestroyDebugUtilsMessengerEXT(reinterpret_cast<VkInstance>(s_instance),
+                                            (VkDebugUtilsMessengerEXT)s_debugMessenger,
+                                            nullptr);
         }
 #endif
     }
@@ -348,8 +352,8 @@ namespace pe
     void Debug::Destroy()
     {
         DestroyDebugMessenger();
-        s_instance = nullptr;
-        s_debugMessenger = nullptr;
+        s_instance = 0;
+        s_debugMessenger = 0;
         vkCreateDebugUtilsMessengerEXT = nullptr;
         vkDestroyDebugUtilsMessengerEXT = nullptr;
         vkSetDebugUtilsObjectNameEXT = nullptr;
@@ -361,10 +365,17 @@ namespace pe
         vkCmdInsertDebugUtilsLabelEXT = nullptr;
     }
 
-    void Debug::SetObjectName(const VkDebugUtilsObjectNameInfoEXT &info)
+    void Debug::SetObjectNameRaw(uint32_t objectType, uint64_t objectHandle, const char *name)
     {
         if (!vkSetDebugUtilsObjectNameEXT)
             return;
+
+        VkDebugUtilsObjectNameInfoEXT info{};
+        info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+        info.pNext = nullptr;
+        info.objectType = static_cast<VkObjectType>(objectType);
+        info.objectHandle = objectHandle;
+        info.pObjectName = name;
 
 #if !defined(PE_TRACK_RESOURCES_NOSPAM)
         if (info.pObjectName)
@@ -495,7 +506,7 @@ namespace pe
 #ifdef PE_TRACY
         if (!cmd->m_tracyGpuScopes.empty())
         {
-            delete cmd->m_tracyGpuScopes.back();
+            delete static_cast<tracy::VkCtxScope *>(cmd->m_tracyGpuScopes.back());
             cmd->m_tracyGpuScopes.pop_back();
         }
 #endif

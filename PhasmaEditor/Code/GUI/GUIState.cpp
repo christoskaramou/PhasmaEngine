@@ -2,6 +2,11 @@
 
 #include <filesystem>
 
+#if defined(_WIN32)
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
 #if !defined(_WIN32)
 #include <sys/wait.h>
 #include <unistd.h>

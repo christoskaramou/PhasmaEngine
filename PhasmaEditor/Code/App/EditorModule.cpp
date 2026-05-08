@@ -1,5 +1,6 @@
 #include "App/EditorModule.h"
 #include "App/App.h"
+#include "Base/Path.h"
 #include "GUI/GUI.h"
 #include "imgui/imgui.h"
 
@@ -12,6 +13,7 @@ extern "C"
 {
     PE_EDITOR_MODULE_API bool TickEditorModule()
     {
+        pe::Path::Init();
         if (!g_app)
             g_app = new pe::App();
         return g_app->Frame();
@@ -46,6 +48,7 @@ extern "C"
 
     PE_EDITOR_MODULE_API void InitEditorModuleWithContext(void *imguiCtx)
     {
+        pe::Path::Init();
         ImGuiContext *ctx = static_cast<ImGuiContext *>(imguiCtx);
         ImGui::SetCurrentContext(ctx);
         pe::GUI::SetHotReloadContext(ctx);

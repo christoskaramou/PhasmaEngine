@@ -14,6 +14,8 @@ namespace pe
 
     void Log::Init()
     {
+        Path::Init();
+
         std::lock_guard<std::mutex> lock(GetLogMutex());
         if (!s_file)
         {
@@ -40,6 +42,8 @@ namespace pe
 
     void Log::Dispatch(const std::string &msg, LogType type)
     {
+        Path::Init();
+
         std::lock_guard<std::mutex> lock(GetLogMutex());
 
         std::string prefix = "";

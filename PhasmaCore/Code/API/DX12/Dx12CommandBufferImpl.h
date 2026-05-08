@@ -7,6 +7,8 @@
 #include <d3d12.h>
 #include <wrl/client.h>
 
+#undef MemoryBarrier
+
 namespace pe
 {
     struct Dx12CommandBufferImpl final : public CommandBuffer::Impl

@@ -27,10 +27,14 @@
 #include "API/Surface.h"
 #include "API/Swapchain.h"
 
+#include "SDL2/SDL_vulkan.h"
+
 #include <limits>
 
 // System + Process RAM (Windows)
 #if defined(PE_WIN32)
+#include <psapi.h>
+#include <windows.h>
 #pragma comment(lib, "psapi.lib")
 #endif
 
@@ -39,6 +43,8 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 namespace pe
 {
     RHI &RHII = *RHI::Get();
+
+    vk::Format GetVulkanDepthFormat();
 
     static inline uint32_t VkVendorID(const vk::PhysicalDevice &gpu)
     {
@@ -647,7 +653,7 @@ namespace pe
 
             VULKAN_HPP_DEFAULT_DISPATCHER.init(vk->m_instance);
         }
-        Debug::Init(vk->m_instance);
+        Debug::Init();
         Debug::CreateDebugMessenger();
     }
 
@@ -978,16 +984,16 @@ namespace pe
         // backend-virtual depth-format query lands.
         if (GetApi() == PE_GRAPHICS_API_DX12)
             return PE_FORMAT_D32_SFLOAT;
-        return FromVkFormat(GetDepthFormatVk());
+        return FromVkFormat(GetVulkanDepthFormat());
     }
 
-    vk::Format RHI::GetDepthFormatVk()
+    vk::Format GetVulkanDepthFormat()
     {
         static ::vk::Format depthFormat = ::vk::Format::eUndefined;
 
         if (depthFormat == ::vk::Format::eUndefined)
         {
-            auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
+            auto *vk = static_cast<VulkanRhiImpl *>(RHII.GetImpl());
             std::vector<::vk::Format> candidates = {
                 ::vk::Format::eD32Sfloat,
                 ::vk::Format::eD32SfloatS8Uint,

@@ -15,6 +15,8 @@
 #include "API/DX12/Dx12DescriptorHeap.h"
 #include "API/DX12/Dx12ImageViewImpl.h"
 #include "API/DX12/Dx12RhiImpl.h"
+#include <windows.h>
+#include <shellapi.h>
 #endif
 
 namespace pe

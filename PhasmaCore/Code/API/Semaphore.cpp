@@ -23,7 +23,7 @@ namespace pe
 
     Semaphore::Semaphore(bool timeline, const std::string &name)
         : m_timeline{timeline},
-          m_stageFlags{vk::PipelineStageFlagBits2::eNone}
+          m_stageFlags{PE_STAGE_NONE}
     {
         m_impl = CreateSemaphoreImpl(this, timeline, name);
     }

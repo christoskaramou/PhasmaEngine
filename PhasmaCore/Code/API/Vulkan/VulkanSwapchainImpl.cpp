@@ -45,8 +45,10 @@ namespace pe
         vk::SwapchainCreateInfoKHR swapchainCreateInfo{};
         swapchainCreateInfo.surface = pe::GetVulkanSurface(surface);
         swapchainCreateInfo.minImageCount = capabilities.minImageCount + 1;
-        swapchainCreateInfo.imageFormat = surface->GetFormat();
-        swapchainCreateInfo.imageColorSpace = surface->GetColorSpace();
+        const vk::Format surfaceFormat = ToVkFormat(surface->GetFormat());
+        const vk::ColorSpaceKHR surfaceColorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
+        swapchainCreateInfo.imageFormat = surfaceFormat;
+        swapchainCreateInfo.imageColorSpace = surfaceColorSpace;
         swapchainCreateInfo.imageExtent = chosenExtent;
         swapchainCreateInfo.imageArrayLayers = 1;
         vk::ImageUsageFlags swapchainUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
@@ -59,7 +61,7 @@ namespace pe
         swapchainCreateInfo.clipped = VK_TRUE;
 
         m_swapchain = VulkanRhi::Device().createSwapchainKHR(swapchainCreateInfo);
-        m_vkFormat = surface->GetFormat();
+        m_vkFormat = surfaceFormat;
 
         auto imagesVK = VulkanRhi::Device().getSwapchainImagesKHR(m_swapchain);
 
@@ -68,10 +70,10 @@ namespace pe
         {
             Image *img = new Image();
             img->m_impl = CreateSwapchainImageImpl(img, imagesVK[i]);
-            VulkanImageImpl::From(img)->m_vkFormat = surface->GetFormat();
+            VulkanImageImpl::From(img)->m_vkFormat = surfaceFormat;
             img->m_width = chosenExtent.width;
             img->m_height = chosenExtent.height;
-            img->m_format = pe::FromVkFormat(surface->GetFormat());
+            img->m_format = surface->GetFormat();
             img->m_usage = PE_IMAGE_USAGE_COLOR_ATTACHMENT | PE_IMAGE_USAGE_TRANSFER_DST;
             img->m_name = "Swapchain_image_" + std::to_string(i);
             img->m_trackInfos.resize(1);
@@ -88,7 +90,7 @@ namespace pe
         {
             ImageViewDesc imageViewCreateInfo{};
             imageViewCreateInfo.viewType = PE_IMAGE_VIEW_TYPE_2D;
-            imageViewCreateInfo.format = pe::FromVkFormat(surface->GetFormat());
+            imageViewCreateInfo.format = surface->GetFormat();
             imageViewCreateInfo.aspectMask = PE_IMAGE_ASPECT_COLOR;
             imageViewCreateInfo.baseMipLevel = 0;
             imageViewCreateInfo.levelCount = 1;

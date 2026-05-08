@@ -8,7 +8,7 @@ namespace pe
 {
     struct Dx12CommandPoolImpl final : public CommandPool::Impl
     {
-        Dx12CommandPoolImpl(CommandPool *owner, Queue *queue, vk::CommandPoolCreateFlags flags, const std::string &name);
+        Dx12CommandPoolImpl(CommandPool *owner, Queue *queue, PeCommandPoolCreateFlags flags, const std::string &name);
         ~Dx12CommandPoolImpl() override = default;
 
         static Dx12CommandPoolImpl *From(CommandPool *cp) { return static_cast<Dx12CommandPoolImpl *>(cp->m_impl); }

@@ -198,7 +198,7 @@ namespace pe
     void Scene::CreateIndirectBuffers(CommandBuffer *cmd)
     {
         uint32_t indirectCount = 0;
-        std::vector<vk::DrawIndexedIndirectCommand> indirectCommands;
+        std::vector<PeDrawIndexedIndirectCommand> indirectCommands;
         indirectCommands.reserve(m_meshCount);
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
@@ -221,7 +221,7 @@ namespace pe
 
                 m_nodeRuntime[i].meshRefIndirect[slot] = indirectCount;
 
-                vk::DrawIndexedIndirectCommand indirectCommand{};
+                PeDrawIndexedIndirectCommand indirectCommand{};
                 indirectCommand.indexCount = mesh.indexCount;
                 indirectCommand.instanceCount = 1;
                 indirectCommand.firstIndex = mesh.indexOffset;
@@ -241,13 +241,13 @@ namespace pe
 
         const uint32_t indirectBufferCount = std::max(1u, indirectCount);
         m_indirectAll = Buffer::Create({
-            .size = indirectBufferCount * sizeof(vk::DrawIndexedIndirectCommand),
+            .size = indirectBufferCount * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
             .usage = PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
             .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
             .name = "indirect_Geometry_buffer_all",
         });
         if (indirectCount > 0)
-            cmd->CopyBufferStaged(m_indirectAll, indirectCommands.data(), indirectCommands.size() * sizeof(vk::DrawIndexedIndirectCommand), 0);
+            cmd->CopyBufferStaged(m_indirectAll, indirectCommands.data(), indirectCommands.size() * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE, 0);
 
         if (indirectCount > 0)
         {
@@ -255,7 +255,7 @@ namespace pe
             indirectBarrierInfo.buffer = m_indirectAll;
             indirectBarrierInfo.stageMask = PE_STAGE_DRAW_INDIRECT | PE_STAGE_COMPUTE_SHADER;
             indirectBarrierInfo.accessMask = PE_ACCESS_INDIRECT_COMMAND_READ | PE_ACCESS_SHADER_READ;
-            indirectBarrierInfo.size = indirectCount * sizeof(vk::DrawIndexedIndirectCommand);
+            indirectBarrierInfo.size = indirectCount * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
             indirectBarrierInfo.offset = 0;
             cmd->BufferBarrier(indirectBarrierInfo);
         }
@@ -266,7 +266,7 @@ namespace pe
             for (uint32_t i = 0; i < vec.size(); ++i)
             {
                 vec[i] = Buffer::Create({
-                    .size = m_indirectCapacity * sizeof(vk::DrawIndexedIndirectCommand),
+                    .size = m_indirectCapacity * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
                     .usage = PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
                     .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
                     .name = name + std::to_string(i),

@@ -28,7 +28,7 @@ namespace pe
     // active RHI backend selected at RHI::Init(). Defined in the active backend's
     // translation unit (currently Vulkan/VulkanImageImpl.cpp).
     Image::Impl *CreateImageImpl(Image *owner, const ImageDesc &desc);
-    // CreateSwapchainImageImpl(vk::Image) is Vulkan-private — declared in Vulkan/VulkanImageImpl.h.
+    // Native swapchain image wrapping is backend-private.
     void Image_Barrier_Backend(CommandBuffer *cmd, const ImageBarrierInfo &info);
     void Image_Barriers_Backend(CommandBuffer *cmd, const std::vector<ImageBarrierInfo> &infos);
 } // namespace pe

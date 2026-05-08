@@ -6,6 +6,8 @@
 #include "API/ImageView.h"
 #include "API/RHI.h"
 
+#include "SDL2/SDL_syswm.h"
+
 namespace pe
 {
     using Microsoft::WRL::ComPtr;

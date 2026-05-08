@@ -2,14 +2,6 @@
 
 #include "API/RHITypes.h"
 
-#ifdef PE_TRACY
-namespace tracy
-{
-    class VkCtx;
-}
-using TracyVkCtx = tracy::VkCtx *;
-#endif
-
 namespace pe
 {
     class CommandPool;
@@ -61,12 +53,6 @@ namespace pe
         void Push(std::function<void()> &&deletor);
         void Flush();
     };
-
-    struct VulkanRhi;
-    struct VulkanRhiImpl;
-#if defined(PE_WIN32)
-    class Dx12RhiImpl;
-#endif
 
     class RHI : public NoCopy, public NoMove
     {
@@ -151,9 +137,6 @@ namespace pe
 
     private:
         RHI() = default;
-
-        friend struct VulkanRhi;
-        vk::Format GetDepthFormatVk();
 
         std::string m_gpuName;
         DescriptorPool *m_descriptorPool;

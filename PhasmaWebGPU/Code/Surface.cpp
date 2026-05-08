@@ -7,6 +7,7 @@
 #include "API/Queue.h"
 #include "API/Command.h"
 #include "API/Image.h"
+#include "API/Vulkan/VulkanImageImpl.h"
 
 extern "C" void wgpuDeviceAddRef(WGPUDevice);
 extern "C" void wgpuDeviceRelease(WGPUDevice);
@@ -87,7 +88,7 @@ extern "C"
 
         if (surface->surface)
         {
-            WGPUTextureFormat nativeFmt = pwgpu::FromVkFormat(static_cast<VkFormat>(surface->surface->GetFormat()));
+            WGPUTextureFormat nativeFmt = pwgpu::FromVkFormat(static_cast<VkFormat>(pe::ToVkFormat(surface->surface->GetFormat())));
             if (nativeFmt != WGPUTextureFormat_Undefined && config->format != nativeFmt)
             {
                 PE_WARN("[WebGPU] wgpuSurfaceConfigure: requested format does not match native surface format");
@@ -196,7 +197,7 @@ extern "C"
 
         if (surface->surface)
         {
-            WGPUTextureFormat surfFmt = pwgpu::FromVkFormat(static_cast<VkFormat>(surface->surface->GetFormat()));
+            WGPUTextureFormat surfFmt = pwgpu::FromVkFormat(static_cast<VkFormat>(pe::ToVkFormat(surface->surface->GetFormat())));
             if (surfFmt != WGPUTextureFormat_Undefined)
                 formats.push_back(surfFmt);
         }
@@ -285,8 +286,7 @@ extern "C"
             syncCmd->ImageBarrier(barrier);
 
             syncCmd->End();
-            surface->acquireSemaphore->SetStageFlags(
-                vk::PipelineStageFlagBits2::eColorAttachmentOutput);
+            surface->acquireSemaphore->SetStageFlags(PE_STAGE_COLOR_ATTACHMENT_OUTPUT);
             surface->device->peQueue->Submit(1, &syncCmd, surface->acquireSemaphore, nullptr);
             syncCmd->Wait();
             syncCmd->Return();
@@ -300,7 +300,7 @@ extern "C"
         tex->device = surface->device;
         if (tex->device)
             wgpuDeviceAddRef(tex->device);
-        tex->format = pwgpu::FromVkFormat(static_cast<VkFormat>(surface->surface->GetFormat()));
+        tex->format = pwgpu::FromVkFormat(static_cast<VkFormat>(pe::ToVkFormat(surface->surface->GetFormat())));
         tex->usage = static_cast<WGPUTextureUsage>(surface->configuration.usage);
         tex->dimension = WGPUTextureDimension_2D;
         tex->size = {extent.width, extent.height, 1};

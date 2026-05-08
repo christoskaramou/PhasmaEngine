@@ -12,6 +12,8 @@
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_sdl2.h"
 
+#include "SDL2/SDL_vulkan.h"
+
 #include "Script/ScriptSystem.h"
 
 namespace pe

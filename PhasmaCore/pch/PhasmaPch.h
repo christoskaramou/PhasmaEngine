@@ -13,6 +13,7 @@
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <deque>
 #include <execution>
 #include <filesystem>
@@ -49,19 +50,8 @@
 #include <vector>
 
 #include "SDL2/SDL.h"
-#include "SDL2/SDL_syswm.h"
-#include "SDL2/SDL_vulkan.h"
-#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
-#include "vulkan/vulkan.hpp"
-#include "vma/vk_mem_alloc.h"
 #if defined(PE_WIN32)
-#include <d3d12.h>
-#include <d3dcompiler.h>
-#include <dxgi1_6.h>
 #include <share.h>
-#include <shellapi.h>
-#include <psapi.h>
-#include <windows.h>
 #elif defined(PE_LINUX)
 #include <cxxabi.h>
 #include <dlfcn.h>

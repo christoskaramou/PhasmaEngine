@@ -2,7 +2,7 @@
 
 namespace pe
 {
-    class Semaphore : public PeHandle<Semaphore, vk::Semaphore>
+    class Semaphore : public PeHandle<Semaphore, PeBackendHandle>
     {
     public:
         struct Impl;
@@ -15,9 +15,9 @@ namespace pe
         bool WaitTimeout(uint64_t value, uint64_t timeoutNS);
         void Signal(uint64_t value);
         uint64_t GetValue();
-        void SetStageFlags(vk::PipelineStageFlags2 flags) { m_stageFlags = flags; }
-        void AddStageFlags(vk::PipelineStageFlags2 flags) { m_stageFlags |= flags; }
-        vk::PipelineStageFlags2 GetStageFlags() { return m_stageFlags; }
+        void SetStageFlags(PeBarrierSync flags) { m_stageFlags = flags; }
+        void AddStageFlags(PeBarrierSync flags) { m_stageFlags |= flags; }
+        PeBarrierSync GetStageFlags() const { return m_stageFlags; }
 
     private:
         friend struct VulkanSemaphoreImpl;
@@ -27,6 +27,6 @@ namespace pe
 
         Impl *m_impl{};
         const bool m_timeline;
-        vk::PipelineStageFlags2 m_stageFlags;
+        PeBarrierSync m_stageFlags;
     };
 } // namespace pe

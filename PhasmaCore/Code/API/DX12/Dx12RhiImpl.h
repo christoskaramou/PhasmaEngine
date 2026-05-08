@@ -4,6 +4,9 @@
 #include "API/DX12/Dx12RootSignature.h"
 #include "API/RHI_Internal.h"
 
+#include <d3d12.h>
+#include <dxgi1_6.h>
+#include <windows.h>
 #include <memory>
 #include <wrl/client.h>
 

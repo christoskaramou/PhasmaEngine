@@ -56,7 +56,7 @@ namespace pe
                 return PE_FORMAT_R8G8B8A8_UNORM;
             }
 
-            return pe::FromVkFormat(RHII.GetSurface()->GetFormat());
+            return RHII.GetSurface()->GetFormat();
         }
 
         size_t GetScreenshotRowPitch(uint32_t width)
@@ -192,12 +192,12 @@ namespace pe
         {
             Semaphore *acquireSemaphore = Semaphore::Create(false, "AcquireSemaphore_" + std::to_string(i));
             if (!isDx12)
-                acquireSemaphore->SetStageFlags(vk::PipelineStageFlagBits2::eColorAttachmentOutput | vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eRayTracingShaderKHR | vk::PipelineStageFlagBits2::eTransfer);
+                acquireSemaphore->SetStageFlags(PE_STAGE_COLOR_ATTACHMENT_OUTPUT | PE_STAGE_COMPUTE_SHADER | PE_STAGE_RAY_TRACING_SHADER_KHR | PE_STAGE_TRANSFER);
             m_acquireSemaphores.push_back(acquireSemaphore);
 
             Semaphore *submitSemaphore = Semaphore::Create(false, "SubmitSemaphore_" + std::to_string(i));
             if (!isDx12)
-                submitSemaphore->SetStageFlags(vk::PipelineStageFlagBits2::eAllCommands);
+                submitSemaphore->SetStageFlags(PE_STAGE_ALL_COMMANDS);
             m_submitSemaphores.push_back(submitSemaphore);
         }
 

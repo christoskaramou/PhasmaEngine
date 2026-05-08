@@ -1,5 +1,7 @@
 #pragma once
 
+#include "API/Vulkan/VulkanHeaders.h"
+
 #include "API/Pipeline_Internal.h"
 
 namespace pe

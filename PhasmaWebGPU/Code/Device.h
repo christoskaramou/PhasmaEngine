@@ -4,6 +4,7 @@
 #include <future>
 #include "ErrorScope.h"
 #include "WGPULimits.h"
+#include "API/Vulkan/VulkanHeaders.h"
 
 namespace pe
 {

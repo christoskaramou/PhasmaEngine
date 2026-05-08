@@ -12,11 +12,16 @@
 #include "API/Descriptor.h"
 #include "API/Queue.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
+#include "API/Vulkan/VulkanCommandPoolImpl.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
+#include "API/Vulkan/VulkanEventImpl.h"
 #include "API/Vulkan/VulkanFramebufferImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanPipelineImpl.h"
+#include "API/Vulkan/VulkanQueueImpl.h"
 #include "API/Vulkan/VulkanRenderPassImpl.h"
+#include "API/Vulkan/VulkanSemaphoreImpl.h"
 #include "API/Vulkan/VulkanSwapchainImpl.h"
 
 namespace pe
@@ -42,7 +47,7 @@ namespace pe
                     if (p) Debug::SetObjectName(GetVulkanImage(p), name);
                 });
                 debug.set_function("set_command_buffer_name", [](CommandBuffer &cmd, const std::string &name) {
-                    Debug::SetObjectName(cmd.ApiHandle(), name);
+                    Debug::SetObjectName(GetVulkanCommandBuffer(&cmd), name);
                 });
                 debug.set_function("set_pipeline_name", [](Pipeline &pipe, const std::string &name) {
                     Debug::SetObjectName(GetVulkanPipeline(&pipe), name);
@@ -51,10 +56,10 @@ namespace pe
                     Debug::SetObjectName(pe::GetVulkanRenderPass(&rp), name);
                 });
                 debug.set_function("set_semaphore_name", [](Semaphore &sem, const std::string &name) {
-                    Debug::SetObjectName(sem.ApiHandle(), name);
+                    Debug::SetObjectName(GetVulkanSemaphore(&sem), name);
                 });
                 debug.set_function("set_event_name", [](Event &ev, const std::string &name) {
-                    Debug::SetObjectName(ev.ApiHandle(), name);
+                    Debug::SetObjectName(GetVulkanEvent(&ev), name);
                 });
                 debug.set_function("set_framebuffer_name", [](Framebuffer &fb, const std::string &name) {
                     Debug::SetObjectName(pe::GetVulkanFramebuffer(&fb), name);
@@ -63,13 +68,13 @@ namespace pe
                     Debug::SetObjectName(pe::GetVulkanDescriptorSet(&desc), name);
                 });
                 debug.set_function("set_queue_name", [](Queue &q, const std::string &name) {
-                    Debug::SetObjectName(q.ApiHandle(), name);
+                    Debug::SetObjectName(GetVulkanQueue(&q), name);
                 });
                 debug.set_function("set_swapchain_name", [](Swapchain &sw, const std::string &name) {
                     Debug::SetObjectName(pe::GetVulkanSwapchain(&sw), name);
                 });
                 debug.set_function("set_command_pool_name", [](CommandPool &cp, const std::string &name) {
-                    Debug::SetObjectName(cp.ApiHandle(), name);
+                    Debug::SetObjectName(GetVulkanCommandPool(&cp), name);
                 });
 
                 // Frame capture (RenderDoc / GPU debugger)

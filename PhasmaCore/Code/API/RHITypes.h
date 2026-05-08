@@ -7,6 +7,8 @@ enum PeGraphicsApi : uint32_t
     PE_GRAPHICS_API_COUNT
 };
 
+using PeBackendHandle = uintptr_t;
+
 enum PeFormat : uint32_t
 {
     PE_FORMAT_UNDEFINED = 0,
@@ -121,6 +123,16 @@ enum PePresentMode : uint32_t
     PE_PRESENT_MODE_FIFO_RELAXED,  // vsync with late-frame tear
     PE_PRESENT_MODE_COUNT
 };
+
+enum PeColorSpace : uint32_t
+{
+    PE_COLOR_SPACE_SRGB_NONLINEAR = 0,
+    PE_COLOR_SPACE_COUNT
+};
+
+using PeCommandPoolCreateFlags = uint32_t;
+constexpr PeCommandPoolCreateFlags PE_COMMAND_POOL_CREATE_TRANSIENT = 1u << 0;
+constexpr PeCommandPoolCreateFlags PE_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER = 1u << 1;
 
 enum PeCullMode : uint32_t
 {
@@ -246,11 +258,28 @@ enum PeFilter : uint32_t
     PE_FILTER_COUNT
 };
 
-// Indirect-draw command sizes are fixed by both Vulkan and D3D12 specs:
-// VkDrawIndirectCommand / D3D12_DRAW_ARGUMENTS = 4 * uint32 = 16 bytes
-// VkDrawIndexedIndirectCommand / D3D12_DRAW_INDEXED_ARGUMENTS = 5 * uint32 = 20 bytes
+struct PeDrawIndirectCommand
+{
+    uint32_t vertexCount = 0;
+    uint32_t instanceCount = 0;
+    uint32_t firstVertex = 0;
+    uint32_t firstInstance = 0;
+};
+
+struct PeDrawIndexedIndirectCommand
+{
+    uint32_t indexCount = 0;
+    uint32_t instanceCount = 0;
+    uint32_t firstIndex = 0;
+    int32_t vertexOffset = 0;
+    uint32_t firstInstance = 0;
+};
+
+// Indirect-draw command layouts are fixed by the supported graphics APIs.
 constexpr uint32_t PE_DRAW_INDIRECT_COMMAND_SIZE = 16u;
 constexpr uint32_t PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE = 20u;
+static_assert(sizeof(PeDrawIndirectCommand) == PE_DRAW_INDIRECT_COMMAND_SIZE);
+static_assert(sizeof(PeDrawIndexedIndirectCommand) == PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
 
 enum PeSamplerAddressMode : uint32_t
 {

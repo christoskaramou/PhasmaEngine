@@ -1,5 +1,7 @@
 #pragma once
 
+#include "API/Vulkan/VulkanHeaders.h"
+
 namespace pe::VulkanHelpers
 {
     inline static bool IsDepthAndStencil(vk::Format format)

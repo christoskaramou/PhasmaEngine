@@ -1,12 +1,14 @@
 #pragma once
 
+#include "API/Vulkan/VulkanHeaders.h"
+
 #include "API/CommandPool_Internal.h"
 
 namespace pe
 {
     struct VulkanCommandPoolImpl final : public CommandPool::Impl
     {
-        VulkanCommandPoolImpl(CommandPool *owner, Queue *queue, vk::CommandPoolCreateFlags flags, const std::string &name);
+        VulkanCommandPoolImpl(CommandPool *owner, Queue *queue, PeCommandPoolCreateFlags flags, const std::string &name);
         ~VulkanCommandPoolImpl() override;
 
         static VulkanCommandPoolImpl *From(CommandPool *cp) { return static_cast<VulkanCommandPoolImpl *>(cp->m_impl); }

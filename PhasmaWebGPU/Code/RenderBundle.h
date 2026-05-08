@@ -4,6 +4,7 @@
 #include <functional>
 #include "RenderPipeline.h"
 #include "UsageTracker.h"
+#include "API/Vulkan/VulkanHeaders.h"
 
 struct WGPUDeviceImpl;
 struct WGPUBindGroupImpl;

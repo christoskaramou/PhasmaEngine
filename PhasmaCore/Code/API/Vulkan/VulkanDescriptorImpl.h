@@ -1,5 +1,7 @@
 #pragma once
 
+#include "API/Vulkan/VulkanHeaders.h"
+
 #include "API/Descriptor_Internal.h"
 
 namespace pe

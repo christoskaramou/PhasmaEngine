@@ -17,9 +17,9 @@ namespace pe
             {
                 return reinterpret_cast<uintptr_t>(v);
             }
-            else if constexpr (requires { typename T::CType; }) // Vulkan-Hpp handles (vk::Buffer etc.)
+            else if constexpr (requires { typename T::CType; })
             {
-                using CType = typename T::CType;         // e.g. VkBuffer
+                using CType = typename T::CType;
                 return ToUintPtr(static_cast<CType>(v)); // explicit cast works in all modes
             }
             else

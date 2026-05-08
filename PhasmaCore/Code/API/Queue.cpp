@@ -15,7 +15,7 @@
 
 namespace pe
 {
-    CommandPool::Impl *CreateCommandPoolImpl(CommandPool *owner, Queue *queue, vk::CommandPoolCreateFlags flags, const std::string &name)
+    CommandPool::Impl *CreateCommandPoolImpl(CommandPool *owner, Queue *queue, PeCommandPoolCreateFlags flags, const std::string &name)
     {
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
         {
@@ -43,7 +43,7 @@ namespace pe
         return new VulkanQueueImpl(owner, familyId, name);
     }
 
-    CommandPool::CommandPool(Queue *queue, vk::CommandPoolCreateFlags flags, const std::string &name)
+    CommandPool::CommandPool(Queue *queue, PeCommandPoolCreateFlags flags, const std::string &name)
         : m_queue(queue), m_flags(flags)
     {
         m_impl = CreateCommandPoolImpl(this, queue, flags, name);
@@ -124,7 +124,7 @@ namespace pe
         Debug::EndQueueRegion(this);
     }
 
-    CommandBuffer *Queue::AcquireCommandBuffer(vk::CommandPoolCreateFlags flags)
+    CommandBuffer *Queue::AcquireCommandBuffer(PeCommandPoolCreateFlags flags)
     {
         std::lock_guard<std::mutex> lock(m_cmdMutex);
 
@@ -139,7 +139,7 @@ namespace pe
 
         // ResetCommandBuffer is always set, we use the same command pool per command buffer types
         // TODO: Find a better way to handle this, maybe reset the command pool at the end of the frame for specific command buffers
-        flags |= vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+        flags |= PE_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER;
         CommandPool *cp = nullptr;
         for (auto *commandPool : commandPools)
         {

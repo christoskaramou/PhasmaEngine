@@ -10,7 +10,7 @@ namespace pe
     class Debug
     {
     public:
-        static void Init(vk::Instance instance);
+        static void Init();
         static void CreateDebugMessenger();
         static void DestroyDebugMessenger();
         static void Destroy();
@@ -21,14 +21,7 @@ namespace pe
                 return;
 
             uint64_t handle64 = static_cast<uint64_t>(detail::ToUintPtr(handle));
-
-            VkDebugUtilsObjectNameInfoEXT info{};
-            info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-            info.pNext = nullptr;
-            info.objectType = static_cast<VkObjectType>(HANDLE::objectType);
-            info.objectHandle = handle64;
-            info.pObjectName = name.c_str();
-            SetObjectName(info);
+            SetObjectNameRaw(static_cast<uint32_t>(HANDLE::objectType), handle64, name.c_str());
         }
         static void InitCaptureApi();
         static void DestroyCaptureApi();
@@ -43,7 +36,7 @@ namespace pe
         friend struct VulkanCommandBufferImpl;
         friend struct Dx12CommandBufferImpl;
 
-        static void SetObjectName(const VkDebugUtilsObjectNameInfoEXT &info);
+        static void SetObjectNameRaw(uint32_t objectType, uint64_t objectHandle, const char *name);
         static void BeginQueueRegion(Queue *queue, const std::string &name);
         static void InsertQueueLabel(Queue *queue, const std::string &name);
         static void EndQueueRegion(Queue *queue);
@@ -51,14 +44,14 @@ namespace pe
         static void InsertCmdLabel(CommandBuffer *cmd, const std::string &name);
         static void EndCmdRegion(CommandBuffer *cmd);
 
-        inline static vk::Instance s_instance;
-        inline static VkDebugUtilsMessengerEXT s_debugMessenger;
+        inline static PeBackendHandle s_instance;
+        inline static PeBackendHandle s_debugMessenger;
     };
 #else
     class Debug
     {
     public:
-        static void Init(vk::Instance instance) {}
+        static void Init() {}
         static void CreateDebugMessenger() {}
         static void DestroyDebugMessenger() {}
         static void Destroy() {}
@@ -77,7 +70,7 @@ namespace pe
         friend struct VulkanCommandBufferImpl;
         friend struct Dx12CommandBufferImpl;
 
-        static void SetObjectName(const VkDebugUtilsObjectNameInfoEXT &info) {}
+        static void SetObjectNameRaw(uint32_t, uint64_t, const char *) {}
         static void BeginQueueRegion(Queue *queue, const std::string &name) {}
         static void InsertQueueLabel(Queue *queue, const std::string &name) {}
         static void EndQueueRegion(Queue *queue) {}

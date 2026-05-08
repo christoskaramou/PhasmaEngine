@@ -3,6 +3,8 @@
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 
+#include "SDL2/SDL_vulkan.h"
+
 namespace pe
 {
     VulkanSurfaceImpl::VulkanSurfaceImpl(Surface *owner, SDL_Window *window)
@@ -26,18 +28,18 @@ namespace pe
 
         // Find format
         auto formats = VulkanRhi::Gpu().getSurfaceFormatsKHR(m_apiHandle);
-        m_owner->m_format = vk::Format::eUndefined;
+        m_owner->m_format = PE_FORMAT_UNDEFINED;
         for (const auto &format : formats)
         {
             if ((format.format == vk::Format::eB8G8R8A8Unorm || format.format == vk::Format::eR8G8B8A8Unorm) &&
                 format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
             {
-                m_owner->m_format = format.format;
-                m_owner->m_colorSpace = format.colorSpace;
+                m_owner->m_format = FromVkFormat(format.format);
+                m_owner->m_colorSpace = PE_COLOR_SPACE_SRGB_NONLINEAR;
                 break;
             }
         }
-        PE_ERROR_IF(m_owner->m_format == vk::Format::eUndefined, "Surface format not found");
+        PE_ERROR_IF(m_owner->m_format == PE_FORMAT_UNDEFINED, "Surface format not found");
     }
 
     VulkanSurfaceImpl::~VulkanSurfaceImpl()

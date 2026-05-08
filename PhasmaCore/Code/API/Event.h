@@ -17,9 +17,11 @@ namespace pe
         PeBarrierAccess dstAccess;
     };
 
-    class Event : public PeHandle<Event, vk::Event>
+    class Event : public PeHandle<Event, PeBackendHandle>
     {
     public:
+        struct Impl;
+
         Event(const std::string &name);
         ~Event();
 
@@ -32,6 +34,9 @@ namespace pe
         bool IsSet() const { return m_set; }
 
     private:
+        friend struct VulkanEventImpl;
+
+        Impl *m_impl{};
         CommandBuffer *m_cmd = nullptr;
         EventSetInfoImage m_infoImage{};
         bool m_set = false;

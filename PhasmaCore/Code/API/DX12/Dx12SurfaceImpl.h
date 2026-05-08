@@ -4,6 +4,8 @@
 
 #if defined(PE_WIN32)
 
+#include <windows.h>
+
 namespace pe
 {
     struct Dx12SurfaceImpl final : public Surface::Impl

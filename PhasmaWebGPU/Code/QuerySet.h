@@ -2,6 +2,7 @@
 
 #include <webgpu/webgpu.h>
 #include "API/RHI.h"
+#include "API/Vulkan/VulkanHeaders.h"
 
 struct WGPUDeviceImpl;
 

@@ -2,6 +2,7 @@
 
 #include <webgpu/webgpu.h>
 #include "BindGroup.h"
+#include "API/Vulkan/VulkanHeaders.h"
 
 struct WGPUPipelineLayoutImpl
 {

@@ -8,41 +8,51 @@ namespace pe
         inline static std::string Executable;
         inline static std::string Assets;
 
-    private:
-        // Helper to initialize static variables
-        class Constructor
+        static void Init()
         {
-        public:
-            Constructor()
-            {
+            static std::once_flag s_once;
+            std::call_once(s_once,
+                           []()
+                           {
 #if defined(PE_WIN32)
-                char str[MAX_PATH];
-                GetModuleFileNameA(nullptr, str, MAX_PATH);
-                Executable = std::filesystem::path(str).remove_filename().string();
+                               char *str = nullptr;
+                               _get_pgmptr(&str);
+                               if (str)
+                                   Executable = std::filesystem::path(str).remove_filename().string();
 #else
-                char str[PATH_MAX];
-                ssize_t length = readlink("/proc/self/exe", str, sizeof(str) - 1);
-                if (length >= 0)
-                {
-                    str[length] = '\0'; // Null-terminate the string
-                    Executable = std::filesystem::path(str).remove_filename().string();
-                }
+                               char str[PATH_MAX];
+                               ssize_t length = readlink("/proc/self/exe", str, sizeof(str) - 1);
+                               if (length >= 0)
+                               {
+                                   str[length] = '\0';
+                                   Executable = std::filesystem::path(str).remove_filename().string();
+                               }
 #endif
 
-                if (!std::filesystem::exists(Executable))
-                    Executable = std::filesystem::current_path().string();
+                               if (!std::filesystem::exists(Executable))
+                                   Executable = std::filesystem::current_path().string();
 
-                std::replace(Executable.begin(), Executable.end(), '\\', '/');
+                               std::replace(Executable.begin(), Executable.end(), '\\', '/');
 
-                if (std::filesystem::exists(Executable + "../PhasmaEditor/Assets"))
-                    Assets = Executable + "../PhasmaEditor/Assets/";
-                else if (std::filesystem::exists(Executable + "../../PhasmaEditor/Assets"))
-                    Assets = Executable + "../../PhasmaEditor/Assets/";
-                else if (std::filesystem::exists(Executable + "Assets"))
-                    Assets = Executable + "Assets/";
-            }
-        };
+                               if (std::filesystem::exists(Executable + "../PhasmaEditor/Assets"))
+                                   Assets = Executable + "../PhasmaEditor/Assets/";
+                               else if (std::filesystem::exists(Executable + "../../PhasmaEditor/Assets"))
+                                   Assets = Executable + "../../PhasmaEditor/Assets/";
+                               else if (std::filesystem::exists(Executable + "Assets"))
+                                   Assets = Executable + "Assets/";
+                           });
+        }
 
-        inline static Constructor s_constructor;
+        static const std::string &ExecutablePath()
+        {
+            Init();
+            return Executable;
+        }
+
+        static const std::string &AssetsPath()
+        {
+            Init();
+            return Assets;
+        }
     };
 } // namespace pe

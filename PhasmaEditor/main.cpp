@@ -1,4 +1,5 @@
 #include "Base/Log.h"
+#include "Base/Path.h"
 #include "Base/EventSystem.h"
 #include "Base/ThreadPool.h"
 #include "API/RHI.h"
@@ -7,6 +8,7 @@
 #include <dlfcn.h>
 static constexpr const char *k_moduleName = "libPhasmaEditorModule.so";
 #elif defined(PE_WIN32)
+#include <windows.h>
 static constexpr const char *k_moduleName = "PhasmaEditorModule.dll";
 #endif
 
@@ -125,6 +127,7 @@ namespace
 
 int main(int argc, char *argv[])
 {
+    pe::Path::Init();
     pe::Log::Init();
 
     try

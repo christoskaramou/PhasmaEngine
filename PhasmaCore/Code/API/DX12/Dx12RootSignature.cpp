@@ -1,5 +1,7 @@
 #include "API/DX12/Dx12RootSignature.h"
 
+#include <d3dcompiler.h>
+
 namespace pe
 {
     Dx12RootSignature::Dx12RootSignature(ID3D12Device *device)

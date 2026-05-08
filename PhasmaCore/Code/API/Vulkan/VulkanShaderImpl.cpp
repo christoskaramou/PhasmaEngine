@@ -2,6 +2,11 @@
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "shaderc/shaderc.hpp"
+#if defined(PE_WIN32)
+#include <windows.h>
+#include <unknwn.h>
+#include <objidl.h>
+#endif
 #include "dxc/dxcapi.h"
 
 namespace pe

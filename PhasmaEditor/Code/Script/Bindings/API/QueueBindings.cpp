@@ -20,7 +20,7 @@ namespace pe
 
                 // GetFlags
                 cpType["get_flags"] = [](CommandPool &cp) -> uint32_t {
-                    return static_cast<uint32_t>(static_cast<vk::CommandPoolCreateFlags::MaskType>(cp.GetFlags()));
+                    return cp.GetFlags();
                 };
 
                 // Reset

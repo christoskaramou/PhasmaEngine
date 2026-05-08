@@ -21,8 +21,8 @@ namespace pe
         void SetPresentMode(PePresentMode preferredMode);
         const Rect2Du &GetActualExtent() const { return m_actualExtent; }
         void SetActualExtent(const Rect2Du &extent) { m_actualExtent = extent; }
-        vk::Format GetFormat() const { return m_format; }
-        vk::ColorSpaceKHR GetColorSpace() const { return m_colorSpace; }
+        ::PeFormat GetFormat() const { return m_format; }
+        ::PeColorSpace GetColorSpace() const { return m_colorSpace; }
         PePresentMode GetPresentMode() const { return m_presentMode; }
         std::vector<PePresentMode> GetSupportedPresentModes() const;
 
@@ -34,8 +34,8 @@ namespace pe
 
         Impl *m_impl{};
         Rect2Du m_actualExtent{};
-        vk::Format m_format{vk::Format::eUndefined};
-        vk::ColorSpaceKHR m_colorSpace{};
+        ::PeFormat m_format{PE_FORMAT_UNDEFINED};
+        ::PeColorSpace m_colorSpace{PE_COLOR_SPACE_SRGB_NONLINEAR};
         PePresentMode m_presentMode{PE_PRESENT_MODE_FIFO};
     };
 } // namespace pe

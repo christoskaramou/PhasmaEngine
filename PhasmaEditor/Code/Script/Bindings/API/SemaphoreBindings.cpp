@@ -4,18 +4,18 @@
 
 namespace pe
 {
-    static const std::unordered_map<std::string_view, vk::PipelineStageFlags2> s_semStageMap = {
-        {"none", vk::PipelineStageFlagBits2::eNone},
-        {"vertex", vk::PipelineStageFlagBits2::eVertexShader},
-        {"fragment", vk::PipelineStageFlagBits2::eFragmentShader},
-        {"early_fragment", vk::PipelineStageFlagBits2::eEarlyFragmentTests},
-        {"late_fragment", vk::PipelineStageFlagBits2::eLateFragmentTests},
-        {"color_output", vk::PipelineStageFlagBits2::eColorAttachmentOutput},
-        {"compute", vk::PipelineStageFlagBits2::eComputeShader},
-        {"transfer", vk::PipelineStageFlagBits2::eTransfer},
-        {"bottom_of_pipe", vk::PipelineStageFlagBits2::eBottomOfPipe},
-        {"all_graphics", vk::PipelineStageFlagBits2::eAllGraphics},
-        {"all_commands", vk::PipelineStageFlagBits2::eAllCommands},
+    static const std::unordered_map<std::string_view, PeBarrierSync> s_semStageMap = {
+        {"none", PE_STAGE_NONE},
+        {"vertex", PE_STAGE_VERTEX_SHADER},
+        {"fragment", PE_STAGE_FRAGMENT_SHADER},
+        {"early_fragment", PE_STAGE_EARLY_FRAGMENT_TESTS},
+        {"late_fragment", PE_STAGE_LATE_FRAGMENT_TESTS},
+        {"color_output", PE_STAGE_COLOR_ATTACHMENT_OUTPUT},
+        {"compute", PE_STAGE_COMPUTE_SHADER},
+        {"transfer", PE_STAGE_TRANSFER},
+        {"bottom_of_pipe", PE_STAGE_BOTTOM_OF_PIPE},
+        {"all_graphics", PE_STAGE_ALL_GRAPHICS},
+        {"all_commands", PE_STAGE_ALL_COMMANDS},
     };
 
     static struct SemaphoreBindings
@@ -48,17 +48,17 @@ namespace pe
 
                 // SetStageFlags
                 semType["set_stage_flags"] = [](Semaphore &s, const std::string &flags) {
-                    s.SetStageFlags(LookupFlags<vk::PipelineStageFlags2>(flags, s_semStageMap));
+                    s.SetStageFlags(LookupFlags<PeBarrierSync>(flags, s_semStageMap));
                 };
 
                 // AddStageFlags
                 semType["add_stage_flags"] = [](Semaphore &s, const std::string &flags) {
-                    s.AddStageFlags(LookupFlags<vk::PipelineStageFlags2>(flags, s_semStageMap));
+                    s.AddStageFlags(LookupFlags<PeBarrierSync>(flags, s_semStageMap));
                 };
 
                 // GetStageFlags
                 semType["get_stage_flags"] = [](Semaphore &s) -> uint64_t {
-                    return static_cast<uint64_t>(static_cast<vk::PipelineStageFlags2::MaskType>(s.GetStageFlags()));
+                    return static_cast<uint64_t>(s.GetStageFlags());
                 }; });
         }
     } s_semaphoreBindings;
