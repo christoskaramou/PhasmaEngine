@@ -6,7 +6,6 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
-#include "API/Vulkan/VulkanImageImpl.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe

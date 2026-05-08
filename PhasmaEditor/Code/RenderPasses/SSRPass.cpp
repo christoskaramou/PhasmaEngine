@@ -6,7 +6,6 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
-#include "API/Vulkan/VulkanImageImpl.h"
 #include "Camera/Camera.h"
 #include "Systems/RendererSystem.h"
 
