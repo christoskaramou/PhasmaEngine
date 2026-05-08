@@ -577,6 +577,14 @@ constexpr PeShaderStageFlags PE_SHADER_STAGE_CALLABLE_KHR = 1u << 13;
 constexpr PeShaderStageFlags PE_SHADER_STAGE_ALL = ~0u;
 constexpr uint32_t PE_SHADER_STAGE_BIT_COUNT = 14;
 
+using PeAccelerationStructureBuildFlags = uint32_t;
+constexpr PeAccelerationStructureBuildFlags PE_ACCELERATION_STRUCTURE_BUILD_ALLOW_UPDATE = 1u << 0;
+constexpr PeAccelerationStructureBuildFlags PE_ACCELERATION_STRUCTURE_BUILD_ALLOW_COMPACTION = 1u << 1;
+constexpr PeAccelerationStructureBuildFlags PE_ACCELERATION_STRUCTURE_BUILD_PREFER_FAST_TRACE = 1u << 2;
+constexpr PeAccelerationStructureBuildFlags PE_ACCELERATION_STRUCTURE_BUILD_PREFER_FAST_BUILD = 1u << 3;
+constexpr PeAccelerationStructureBuildFlags PE_ACCELERATION_STRUCTURE_BUILD_LOW_MEMORY = 1u << 4;
+constexpr uint32_t PE_ACCELERATION_STRUCTURE_BUILD_BIT_COUNT = 5;
+
 using PePipelineStageFlags = uint64_t;
 constexpr PePipelineStageFlags PE_STAGE_NONE = 0ULL;
 constexpr PePipelineStageFlags PE_STAGE_TOP_OF_PIPE = 1ULL << 0;

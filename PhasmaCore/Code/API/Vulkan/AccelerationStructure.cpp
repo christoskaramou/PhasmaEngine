@@ -9,6 +9,25 @@
 
 namespace pe
 {
+    namespace
+    {
+        vk::BuildAccelerationStructureFlagsKHR ToVkAccelerationStructureBuildFlags(PeAccelerationStructureBuildFlags flags)
+        {
+            vk::BuildAccelerationStructureFlagsKHR vkFlags{};
+            if (flags & PE_ACCELERATION_STRUCTURE_BUILD_ALLOW_UPDATE)
+                vkFlags |= vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate;
+            if (flags & PE_ACCELERATION_STRUCTURE_BUILD_ALLOW_COMPACTION)
+                vkFlags |= vk::BuildAccelerationStructureFlagBitsKHR::eAllowCompaction;
+            if (flags & PE_ACCELERATION_STRUCTURE_BUILD_PREFER_FAST_TRACE)
+                vkFlags |= vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+            if (flags & PE_ACCELERATION_STRUCTURE_BUILD_PREFER_FAST_BUILD)
+                vkFlags |= vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastBuild;
+            if (flags & PE_ACCELERATION_STRUCTURE_BUILD_LOW_MEMORY)
+                vkFlags |= vk::BuildAccelerationStructureFlagBitsKHR::eLowMemory;
+            return vkFlags;
+        }
+    } // namespace
+
     void BuildAccelerationStructures(CommandBuffer *cmd,
                                      uint32_t infoCount,
                                      const vk::AccelerationStructureBuildGeometryInfoKHR *pInfos,
@@ -17,16 +36,16 @@ namespace pe
         GetVulkanCommandBuffer(cmd).buildAccelerationStructuresKHR(infoCount, pInfos, ppBuildRangeInfos);
     }
 
-    vk::AccelerationStructureBuildSizesInfoKHR AccelerationStructure::GetBuildSizes(
+    vk::AccelerationStructureBuildSizesInfoKHR GetVulkanAccelerationStructureBuildSizes(
         const std::vector<vk::AccelerationStructureGeometryKHR> &geometries,
         const std::vector<uint32_t> &maxPrimitiveCounts,
         vk::AccelerationStructureTypeKHR accelerationStructureType,
-        vk::BuildAccelerationStructureFlagsKHR flags,
+        PeAccelerationStructureBuildFlags flags,
         vk::AccelerationStructureBuildTypeKHR type)
     {
         vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
         buildInfo.type = accelerationStructureType;
-        buildInfo.flags = flags;
+        buildInfo.flags = ToVkAccelerationStructureBuildFlags(flags);
         buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
         buildInfo.geometryCount = static_cast<uint32_t>(geometries.size());
         buildInfo.pGeometries = geometries.data();
@@ -51,7 +70,7 @@ namespace pe
     {
         if (m_apiHandle)
         {
-            VulkanRhi::Device().destroyAccelerationStructureKHR(m_apiHandle);
+            VulkanRhi::Device().destroyAccelerationStructureKHR(GetVulkanAccelerationStructure(this));
         }
 
         if (!m_externalBuffer)
@@ -79,16 +98,17 @@ namespace pe
         });
     }
 
-    void AccelerationStructure::BuildBLAS(CommandBuffer *cmd,
-                                          const std::vector<vk::AccelerationStructureGeometryKHR> &geometries,
-                                          const std::vector<vk::AccelerationStructureBuildRangeInfoKHR> &buildRanges,
-                                          const std::vector<uint32_t> &maxPrimitiveCounts,
-                                          vk::BuildAccelerationStructureFlagsKHR flags,
-                                          vk::DeviceAddress scratchAddress)
+    void BuildVulkanBLAS(AccelerationStructure *as,
+                         CommandBuffer *cmd,
+                         const std::vector<vk::AccelerationStructureGeometryKHR> &geometries,
+                         const std::vector<vk::AccelerationStructureBuildRangeInfoKHR> &buildRanges,
+                         const std::vector<uint32_t> &maxPrimitiveCounts,
+                         PeAccelerationStructureBuildFlags flags,
+                         vk::DeviceAddress scratchAddress)
     {
         vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
         buildInfo.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
-        buildInfo.flags = flags;
+        buildInfo.flags = ToVkAccelerationStructureBuildFlags(flags);
         buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
         buildInfo.geometryCount = static_cast<uint32_t>(geometries.size());
         buildInfo.pGeometries = geometries.data();
@@ -100,13 +120,13 @@ namespace pe
             maxPrimitiveCounts.data(),
             &sizeInfo);
 
-        if (!m_externalBuffer)
-            CreateBuffer(sizeInfo.accelerationStructureSize);
+        if (!AccelerationStructureAccess::IsExternalBuffer(as))
+            AccelerationStructureAccess::CreateBuffer(as, sizeInfo.accelerationStructureSize);
 
         if (!scratchAddress)
         {
-            CreateScratchBuffer(sizeInfo.buildScratchSize);
-            buildInfo.scratchData.deviceAddress = m_scratchBuffer->GetDeviceAddress();
+            AccelerationStructureAccess::CreateScratchBuffer(as, sizeInfo.buildScratchSize);
+            buildInfo.scratchData.deviceAddress = AccelerationStructureAccess::GetScratchBuffer(as)->GetDeviceAddress();
         }
         else
         {
@@ -114,17 +134,19 @@ namespace pe
         }
 
         vk::AccelerationStructureCreateInfoKHR createInfo{};
-        createInfo.buffer = GetVulkanBuffer(m_buffer);
-        createInfo.offset = m_offset;
+        createInfo.buffer = GetVulkanBuffer(AccelerationStructureAccess::GetBuffer(as));
+        createInfo.offset = AccelerationStructureAccess::GetOffset(as);
         createInfo.size = sizeInfo.accelerationStructureSize;
         createInfo.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
-        m_apiHandle = VulkanRhi::Device().createAccelerationStructureKHR(createInfo);
+        vk::AccelerationStructureKHR apiHandle = VulkanRhi::Device().createAccelerationStructureKHR(createInfo);
+        as->ApiHandle() = detail::ToUintPtr(apiHandle);
 
         vk::AccelerationStructureDeviceAddressInfoKHR addressInfo{};
-        addressInfo.accelerationStructure = m_apiHandle;
-        m_deviceAddress = VulkanRhi::Device().getAccelerationStructureAddressKHR(&addressInfo);
+        addressInfo.accelerationStructure = apiHandle;
+        AccelerationStructureAccess::SetDeviceAddress(
+            as, VulkanRhi::Device().getAccelerationStructureAddressKHR(&addressInfo));
 
-        buildInfo.dstAccelerationStructure = m_apiHandle;
+        buildInfo.dstAccelerationStructure = apiHandle;
 
         const vk::AccelerationStructureBuildRangeInfoKHR *pBuildRanges = buildRanges.data();
         BuildAccelerationStructures(cmd, 1, &buildInfo, &pBuildRanges);
@@ -141,8 +163,8 @@ namespace pe
     void AccelerationStructure::BuildTLAS(CommandBuffer *cmd,
                                           uint32_t instanceCount,
                                           Buffer *instanceBuffer,
-                                          vk::BuildAccelerationStructureFlagsKHR flags,
-                                          vk::DeviceAddress scratchAddress)
+                                          PeAccelerationStructureBuildFlags flags,
+                                          uint64_t scratchAddress)
     {
         vk::AccelerationStructureGeometryInstancesDataKHR instancesVk{};
         instancesVk.data.deviceAddress = instanceBuffer->GetDeviceAddress();
@@ -152,11 +174,11 @@ namespace pe
         geometry.geometry.instances = instancesVk;
 
         // Add eAllowUpdate to enable subsequent UpdateTLAS calls
-        vk::BuildAccelerationStructureFlagsKHR buildFlags = flags | vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate;
+        PeAccelerationStructureBuildFlags buildFlags = flags | PE_ACCELERATION_STRUCTURE_BUILD_ALLOW_UPDATE;
 
         vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
         buildInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
-        buildInfo.flags = buildFlags;
+        buildInfo.flags = ToVkAccelerationStructureBuildFlags(buildFlags);
         buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
         buildInfo.geometryCount = 1;
         buildInfo.pGeometries = &geometry;
@@ -187,13 +209,14 @@ namespace pe
         createInfo.offset = m_offset;
         createInfo.size = sizeInfo.accelerationStructureSize;
         createInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
-        m_apiHandle = VulkanRhi::Device().createAccelerationStructureKHR(createInfo);
+        vk::AccelerationStructureKHR apiHandle = VulkanRhi::Device().createAccelerationStructureKHR(createInfo);
+        m_apiHandle = detail::ToUintPtr(apiHandle);
 
         vk::AccelerationStructureDeviceAddressInfoKHR addressInfo{};
-        addressInfo.accelerationStructure = m_apiHandle;
+        addressInfo.accelerationStructure = apiHandle;
         m_deviceAddress = VulkanRhi::Device().getAccelerationStructureAddressKHR(&addressInfo);
 
-        buildInfo.dstAccelerationStructure = m_apiHandle;
+        buildInfo.dstAccelerationStructure = apiHandle;
 
         vk::AccelerationStructureBuildRangeInfoKHR buildRange{};
         buildRange.primitiveCount = instanceCount;
@@ -216,7 +239,7 @@ namespace pe
     void AccelerationStructure::UpdateTLAS(CommandBuffer *cmd,
                                            uint32_t instanceCount,
                                            Buffer *instanceBuffer,
-                                           vk::DeviceAddress scratchAddress)
+                                           uint64_t scratchAddress)
     {
         if (!m_apiHandle)
             return; // Must have been built first
@@ -232,8 +255,9 @@ namespace pe
         buildInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
         buildInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate | vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
         buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eUpdate; // In-place update
-        buildInfo.srcAccelerationStructure = m_apiHandle;
-        buildInfo.dstAccelerationStructure = m_apiHandle;
+        vk::AccelerationStructureKHR apiHandle = GetVulkanAccelerationStructure(this);
+        buildInfo.srcAccelerationStructure = apiHandle;
+        buildInfo.dstAccelerationStructure = apiHandle;
         buildInfo.geometryCount = 1;
         buildInfo.pGeometries = &geometry;
 

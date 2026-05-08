@@ -48,8 +48,8 @@ namespace pe
         std::vector<BlasBuildReq> buildReqs;
         buildReqs.reserve(m_meshes.size());
 
-        static constexpr vk::BuildAccelerationStructureFlagsKHR kBlasFlags =
-            vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+        static constexpr PeAccelerationStructureBuildFlags kBlasFlags =
+            PE_ACCELERATION_STRUCTURE_BUILD_PREFER_FAST_TRACE;
 
         bool hasSkeleton = GetSkeleton().GetBoneCount() > 0;
 
@@ -87,7 +87,7 @@ namespace pe
             rangeInfo.firstVertex = 0;
             rangeInfo.transformOffset = 0;
 
-            auto sizeInfo = AccelerationStructure::GetBuildSizes(
+            auto sizeInfo = GetVulkanAccelerationStructureBuildSizes(
                 {geometry},
                 {rangeInfo.primitiveCount},
                 vk::AccelerationStructureTypeKHR::eBottomLevel,
@@ -140,8 +140,8 @@ namespace pe
 
             std::string name = "BLAS_mesh" + std::to_string(req.meshIndex);
             req.createdBlas = new AccelerationStructure(name, m_blasMergedBuffer, currentOffset);
-            req.createdBlas->BuildBLAS(cmd, {req.geometry}, {req.range}, {req.range.primitiveCount},
-                                       kBlasFlags, m_scratchBuffer->GetDeviceAddress());
+            BuildVulkanBLAS(req.createdBlas, cmd, {req.geometry}, {req.range}, {req.range.primitiveCount},
+                            kBlasFlags, m_scratchBuffer->GetDeviceAddress());
             m_blases.push_back(req.createdBlas);
             m_blasByMesh[req.meshIndex] = req.createdBlas;
 
@@ -214,8 +214,8 @@ namespace pe
         }
 
         // --- Build TLAS size info ---
-        static constexpr vk::BuildAccelerationStructureFlagsKHR kTlasFlags =
-            vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+        static constexpr PeAccelerationStructureBuildFlags kTlasFlags =
+            PE_ACCELERATION_STRUCTURE_BUILD_PREFER_FAST_TRACE;
 
         vk::AccelerationStructureGeometryKHR tlasGeom{};
         tlasGeom.geometryType = vk::GeometryTypeKHR::eInstances;
@@ -226,11 +226,11 @@ namespace pe
 
         // Must include eAllowUpdate here — UpdateTLASTransformations needs updateScratchSize bytes,
         // which can exceed buildScratchSize on some hardware at high instance counts.
-        auto tlasSizes = AccelerationStructure::GetBuildSizes(
+        auto tlasSizes = GetVulkanAccelerationStructureBuildSizes(
             {tlasGeom},
             {m_rtInstanceCount},
             vk::AccelerationStructureTypeKHR::eTopLevel,
-            kTlasFlags | vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate,
+            kTlasFlags | PE_ACCELERATION_STRUCTURE_BUILD_ALLOW_UPDATE,
             vk::AccelerationStructureBuildTypeKHR::eDevice);
 
         vk::PhysicalDeviceAccelerationStructurePropertiesKHR asProps{};

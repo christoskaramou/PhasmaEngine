@@ -1,7 +1,7 @@
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
+#include "API/AccelerationStructure.h"
 #include "API/Descriptor.h"
-#include "API/Vulkan/AccelerationStructure.h"
 #include "API/Image.h"
 #include "API/Buffer.h"
 

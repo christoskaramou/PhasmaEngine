@@ -4,7 +4,7 @@
 #include "Scene/SelectionManager.h"
 #include "Camera/Camera.h"
 #include "Systems/AnimationSystem.h"
-#include "API/Vulkan/AccelerationStructure.h"
+#include "API/AccelerationStructure.h"
 #include "API/Buffer.h"
 #include "API/Pipeline.h"
 #include "API/Descriptor.h"
@@ -677,7 +677,7 @@ namespace pe
         uint32_t frame = RHII.GetFrameIndex();
         const bool hasTransparentMeshes = m_hasTransparentMeshes;
 
-        uint64_t indirectSize = static_cast<uint64_t>(m_indirectCapacity) * sizeof(vk::DrawIndexedIndirectCommand);
+        uint64_t indirectSize = static_cast<uint64_t>(m_indirectCapacity) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
         uint64_t sortKeySize = static_cast<uint64_t>(m_indirectCapacity) * sizeof(float);
 
         cmd->FillBuffer(m_cullingCountersBuffers[frame], 0, 7 * sizeof(uint32_t), 0);
@@ -871,7 +871,7 @@ namespace pe
             barrier.buffer = buffer;
             barrier.stageMask = PE_STAGE_DRAW_INDIRECT;
             barrier.accessMask = PE_ACCESS_INDIRECT_COMMAND_READ;
-            barrier.size = static_cast<uint64_t>(m_indirectCapacity) * sizeof(vk::DrawIndexedIndirectCommand);
+            barrier.size = static_cast<uint64_t>(m_indirectCapacity) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
             barrier.offset = 0;
             cmd->BufferBarrier(barrier);
         };

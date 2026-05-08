@@ -1,17 +1,17 @@
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
-#include "API/Vulkan/AccelerationStructure.h"
+#include "API/AccelerationStructure.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 
 namespace pe
 {
-    static const std::unordered_map<std::string_view, vk::BuildAccelerationStructureFlagBitsKHR> s_asBuildFlagsMap = {
-        {"allow_update", vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate},
-        {"allow_compaction", vk::BuildAccelerationStructureFlagBitsKHR::eAllowCompaction},
-        {"prefer_fast_trace", vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace},
-        {"prefer_fast_build", vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastBuild},
-        {"low_memory", vk::BuildAccelerationStructureFlagBitsKHR::eLowMemory},
+    static const std::unordered_map<std::string_view, PeAccelerationStructureBuildFlags> s_asBuildFlagsMap = {
+        {"allow_update", PE_ACCELERATION_STRUCTURE_BUILD_ALLOW_UPDATE},
+        {"allow_compaction", PE_ACCELERATION_STRUCTURE_BUILD_ALLOW_COMPACTION},
+        {"prefer_fast_trace", PE_ACCELERATION_STRUCTURE_BUILD_PREFER_FAST_TRACE},
+        {"prefer_fast_build", PE_ACCELERATION_STRUCTURE_BUILD_PREFER_FAST_BUILD},
+        {"low_memory", PE_ACCELERATION_STRUCTURE_BUILD_LOW_MEMORY},
     };
 
     static struct AccelerationStructureBindings
@@ -39,12 +39,12 @@ namespace pe
                     [](AccelerationStructure &as, CommandBuffer *cmd, uint32_t instanceCount,
                        Buffer *instanceBuffer, const std::string &flags) {
                         as.BuildTLAS(cmd, instanceCount, instanceBuffer,
-                                     LookupFlags<vk::BuildAccelerationStructureFlagsKHR>(flags, s_asBuildFlagsMap));
+                                     LookupFlags<PeAccelerationStructureBuildFlags>(flags, s_asBuildFlagsMap));
                     },
                     [](AccelerationStructure &as, CommandBuffer *cmd, uint32_t instanceCount,
                        Buffer *instanceBuffer, const std::string &flags, uint64_t scratchAddress) {
                         as.BuildTLAS(cmd, instanceCount, instanceBuffer,
-                                     LookupFlags<vk::BuildAccelerationStructureFlagsKHR>(flags, s_asBuildFlagsMap),
+                                     LookupFlags<PeAccelerationStructureBuildFlags>(flags, s_asBuildFlagsMap),
                                      scratchAddress);
                     });
 

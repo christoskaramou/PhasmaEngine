@@ -325,7 +325,7 @@ namespace pe
                 auto &accelerationStructures = accelerationInfos.emplace_back(std::vector<vk::AccelerationStructureKHR>{});
                 accelerationStructures.reserve(updateInfo.accelerationStructures.size());
                 for (AccelerationStructure *as : updateInfo.accelerationStructures)
-                    accelerationStructures.push_back(as ? as->ApiHandle() : vk::AccelerationStructureKHR{});
+                    accelerationStructures.push_back(GetVulkanAccelerationStructure(as));
 
                 auto &accelerationWrite = accelerationWrites.emplace_back();
                 accelerationWrite.accelerationStructureCount = static_cast<uint32_t>(accelerationStructures.size());

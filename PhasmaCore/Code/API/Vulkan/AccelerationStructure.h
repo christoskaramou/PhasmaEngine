@@ -1,58 +1,54 @@
 #pragma once
 
+#include "API/AccelerationStructure.h"
 #include "API/Vulkan/VulkanHeaders.h"
+
+#include <type_traits>
 
 namespace pe
 {
-    class CommandBuffer;
-    class Buffer;
-
-    class AccelerationStructure : public PeHandle<AccelerationStructure, vk::AccelerationStructureKHR>
+    struct AccelerationStructureAccess
     {
-    public:
-        static vk::AccelerationStructureBuildSizesInfoKHR GetBuildSizes(
-            const std::vector<vk::AccelerationStructureGeometryKHR> &geometries,
-            const std::vector<uint32_t> &maxPrimitiveCounts,
-            vk::AccelerationStructureTypeKHR accelerationStructureType,
-            vk::BuildAccelerationStructureFlagsKHR flags,
-            vk::AccelerationStructureBuildTypeKHR type);
-
-        AccelerationStructure(const std::string &name, Buffer *buffer = nullptr, uint64_t offset = 0);
-        ~AccelerationStructure();
-
-        // BLAS
-        void BuildBLAS(CommandBuffer *cmd,
-                       const std::vector<vk::AccelerationStructureGeometryKHR> &geometries,
-                       const std::vector<vk::AccelerationStructureBuildRangeInfoKHR> &buildRanges,
-                       const std::vector<uint32_t> &maxPrimitiveCounts,
-                       vk::BuildAccelerationStructureFlagsKHR flags,
-                       vk::DeviceAddress scratchAddress = 0);
-
-        // TLAS
-        void BuildTLAS(CommandBuffer *cmd,
-                       uint32_t instanceCount,
-                       Buffer *instanceBuffer,
-                       vk::BuildAccelerationStructureFlagsKHR flags,
-                       vk::DeviceAddress scratchAddress = 0);
-
-        void UpdateTLAS(CommandBuffer *cmd,
-                        uint32_t instanceCount,
-                        Buffer *instanceBuffer,
-                        vk::DeviceAddress scratchAddress = 0);
-
-        uint64_t GetDeviceAddress() const;
-
-    private:
-        void CreateBuffer(size_t size);
-        void CreateScratchBuffer(size_t size);
-
-        Buffer *m_buffer = nullptr;
-        uint64_t m_offset = 0;
-        bool m_externalBuffer = false;
-        Buffer *m_scratchBuffer = nullptr;
-        std::string m_name;
-        uint64_t m_deviceAddress = 0;
+        static void CreateBuffer(AccelerationStructure *as, size_t size) { as->CreateBuffer(size); }
+        static void CreateScratchBuffer(AccelerationStructure *as, size_t size) { as->CreateScratchBuffer(size); }
+        static Buffer *GetBuffer(AccelerationStructure *as) { return as->m_buffer; }
+        static Buffer *GetScratchBuffer(AccelerationStructure *as) { return as->m_scratchBuffer; }
+        static uint64_t GetOffset(AccelerationStructure *as) { return as->m_offset; }
+        static bool IsExternalBuffer(AccelerationStructure *as) { return as->m_externalBuffer; }
+        static void SetDeviceAddress(AccelerationStructure *as, uint64_t address) { as->m_deviceAddress = address; }
     };
+
+    template <typename VkHandle>
+    inline VkHandle VulkanAccelerationStructureFromBackendHandle(PeBackendHandle handle)
+    {
+        if constexpr (std::is_pointer_v<VkHandle>)
+            return reinterpret_cast<VkHandle>(handle);
+        else
+            return static_cast<VkHandle>(handle);
+    }
+
+    inline vk::AccelerationStructureKHR GetVulkanAccelerationStructure(const AccelerationStructure *as)
+    {
+        if (!as)
+            return vk::AccelerationStructureKHR{};
+
+        return vk::AccelerationStructureKHR{VulkanAccelerationStructureFromBackendHandle<VkAccelerationStructureKHR>(as->ApiHandle())};
+    }
+
+    vk::AccelerationStructureBuildSizesInfoKHR GetVulkanAccelerationStructureBuildSizes(
+        const std::vector<vk::AccelerationStructureGeometryKHR> &geometries,
+        const std::vector<uint32_t> &maxPrimitiveCounts,
+        vk::AccelerationStructureTypeKHR accelerationStructureType,
+        PeAccelerationStructureBuildFlags flags,
+        vk::AccelerationStructureBuildTypeKHR type);
+
+    void BuildVulkanBLAS(AccelerationStructure *as,
+                         CommandBuffer *cmd,
+                         const std::vector<vk::AccelerationStructureGeometryKHR> &geometries,
+                         const std::vector<vk::AccelerationStructureBuildRangeInfoKHR> &buildRanges,
+                         const std::vector<uint32_t> &maxPrimitiveCounts,
+                         PeAccelerationStructureBuildFlags flags,
+                         vk::DeviceAddress scratchAddress = 0);
 
     // Vulkan-private RT-build entry. Called by AccelerationStructure::Build*; not part
     // of the neutral CommandBuffer surface (DXR, when added, will get its own entry).
