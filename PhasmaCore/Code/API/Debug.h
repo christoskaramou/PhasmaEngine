@@ -4,6 +4,16 @@ namespace pe
 {
     class Queue;
     class CommandBuffer;
+    class CommandPool;
+    class Buffer;
+    class Image;
+    class Pipeline;
+    class RenderPass;
+    class Semaphore;
+    class Event;
+    class Framebuffer;
+    class Descriptor;
+    class Swapchain;
     struct GpuTimerInfo;
 
 #if PE_DEBUG_MODE
@@ -23,6 +33,18 @@ namespace pe
             uint64_t handle64 = static_cast<uint64_t>(detail::ToUintPtr(handle));
             SetObjectNameRaw(static_cast<uint32_t>(HANDLE::objectType), handle64, name.c_str());
         }
+        static void SetObjectName(Buffer *buffer, const std::string &name);
+        static void SetObjectName(Image *image, const std::string &name);
+        static void SetObjectName(CommandBuffer *cmd, const std::string &name);
+        static void SetObjectName(Pipeline *pipeline, const std::string &name);
+        static void SetObjectName(RenderPass *renderPass, const std::string &name);
+        static void SetObjectName(Semaphore *semaphore, const std::string &name);
+        static void SetObjectName(Event *event, const std::string &name);
+        static void SetObjectName(Framebuffer *framebuffer, const std::string &name);
+        static void SetObjectName(Descriptor *descriptor, const std::string &name);
+        static void SetObjectName(Queue *queue, const std::string &name);
+        static void SetObjectName(Swapchain *swapchain, const std::string &name);
+        static void SetObjectName(CommandPool *commandPool, const std::string &name);
         static void InitCaptureApi();
         static void DestroyCaptureApi();
         static void TriggerMultiFrameCapture(uint32_t numFrames);
@@ -59,6 +81,18 @@ namespace pe
         static void DestroyCaptureApi() {}
         template <class HANDLE>
         static void SetObjectName(const HANDLE &handle, const std::string &name) {}
+        static void SetObjectName(Buffer *buffer, const std::string &name) {}
+        static void SetObjectName(Image *image, const std::string &name) {}
+        static void SetObjectName(CommandBuffer *cmd, const std::string &name) {}
+        static void SetObjectName(Pipeline *pipeline, const std::string &name) {}
+        static void SetObjectName(RenderPass *renderPass, const std::string &name) {}
+        static void SetObjectName(Semaphore *semaphore, const std::string &name) {}
+        static void SetObjectName(Event *event, const std::string &name) {}
+        static void SetObjectName(Framebuffer *framebuffer, const std::string &name) {}
+        static void SetObjectName(Descriptor *descriptor, const std::string &name) {}
+        static void SetObjectName(Queue *queue, const std::string &name) {}
+        static void SetObjectName(Swapchain *swapchain, const std::string &name) {}
+        static void SetObjectName(CommandPool *commandPool, const std::string &name) {}
         static void TriggerMultiFrameCapture(uint32_t) {}
         static void ShowOrLaunchReplayUI() {}
         static uint32_t GetNumCaptures() { return 0; }

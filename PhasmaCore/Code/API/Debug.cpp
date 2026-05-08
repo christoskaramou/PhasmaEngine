@@ -1,10 +1,37 @@
 #include "API/Debug.h"
+#include "API/Buffer.h"
 #include "API/Command.h"
+#include "API/Descriptor.h"
+#include "API/Event.h"
+#include "API/Framebuffer.h"
+#include "API/Image.h"
+#include "API/Pipeline.h"
 #include "API/Queue.h"
+#include "API/RenderPass.h"
 #include "API/RHI.h"
+#include "API/Semaphore.h"
+#include "API/Swapchain.h"
+#include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
+#include "API/Vulkan/VulkanCommandPoolImpl.h"
+#include "API/Vulkan/VulkanDescriptorImpl.h"
+#include "API/Vulkan/VulkanEventImpl.h"
+#include "API/Vulkan/VulkanFramebufferImpl.h"
+#include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanPipelineImpl.h"
 #include "API/Vulkan/VulkanQueueImpl.h"
+#include "API/Vulkan/VulkanRenderPassImpl.h"
+#include "API/Vulkan/VulkanSemaphoreImpl.h"
+#include "API/Vulkan/VulkanSwapchainImpl.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12BufferImpl.h"
+#include "API/DX12/Dx12CommandBufferImpl.h"
+#include "API/DX12/Dx12ImageImpl.h"
+#include "API/DX12/Dx12PipelineImpl.h"
+#include "API/DX12/Dx12QueueImpl.h"
+#include "API/DX12/Dx12SemaphoreImpl.h"
+#endif
 #ifdef PE_TRACY
 #include <tracy/TracyVulkan.hpp>
 #endif
@@ -231,6 +258,20 @@ namespace pe
 
     const vec4 color{0.0f, 0.0f, 0.0f, 1.0f};
 
+#if defined(PE_WIN32)
+    namespace
+    {
+        void SetDx12ObjectName(ID3D12Object *object, const std::string &name)
+        {
+            if (!object || name.empty())
+                return;
+
+            const std::wstring wname(name.begin(), name.end());
+            object->SetName(wname.c_str());
+        }
+    } // namespace
+#endif
+
     // Get function pointers for the debug report extensions from the device
     void Debug::Init()
     {
@@ -381,6 +422,162 @@ namespace pe
 #endif
 
         vkSetDebugUtilsObjectNameEXT(VulkanRhi::Device(), &info);
+    }
+
+    void Debug::SetObjectName(Buffer *buffer, const std::string &name)
+    {
+        if (!buffer || name.empty())
+            return;
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+        {
+            Debug::SetObjectName(GetVulkanBuffer(buffer), name);
+            return;
+        }
+
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            SetDx12ObjectName(Dx12BufferImpl::From(buffer)->GetResource(), name);
+#endif
+    }
+
+    void Debug::SetObjectName(Image *image, const std::string &name)
+    {
+        if (!image || name.empty())
+            return;
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+        {
+            Debug::SetObjectName(GetVulkanImage(image), name);
+            return;
+        }
+
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            SetDx12ObjectName(GetDx12Image(image), name);
+#endif
+    }
+
+    void Debug::SetObjectName(CommandBuffer *cmd, const std::string &name)
+    {
+        if (!cmd || name.empty())
+            return;
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+        {
+            Debug::SetObjectName(GetVulkanCommandBuffer(cmd), name);
+            return;
+        }
+
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            SetDx12ObjectName(GetDx12CommandList(cmd), name);
+#endif
+    }
+
+    void Debug::SetObjectName(Pipeline *pipeline, const std::string &name)
+    {
+        if (!pipeline || name.empty())
+            return;
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+        {
+            Debug::SetObjectName(GetVulkanPipeline(pipeline), name);
+            return;
+        }
+
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            SetDx12ObjectName(GetDx12Pipeline(pipeline), name);
+#endif
+    }
+
+    void Debug::SetObjectName(RenderPass *renderPass, const std::string &name)
+    {
+        if (!renderPass || name.empty())
+            return;
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+            Debug::SetObjectName(GetVulkanRenderPass(renderPass), name);
+    }
+
+    void Debug::SetObjectName(Semaphore *semaphore, const std::string &name)
+    {
+        if (!semaphore || name.empty())
+            return;
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+        {
+            Debug::SetObjectName(GetVulkanSemaphore(semaphore), name);
+            return;
+        }
+
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            SetDx12ObjectName(GetDx12Fence(semaphore), name);
+#endif
+    }
+
+    void Debug::SetObjectName(Event *event, const std::string &name)
+    {
+        if (!event || name.empty())
+            return;
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+            Debug::SetObjectName(GetVulkanEvent(event), name);
+    }
+
+    void Debug::SetObjectName(Framebuffer *framebuffer, const std::string &name)
+    {
+        if (!framebuffer || name.empty())
+            return;
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+            Debug::SetObjectName(GetVulkanFramebuffer(framebuffer), name);
+    }
+
+    void Debug::SetObjectName(Descriptor *descriptor, const std::string &name)
+    {
+        if (!descriptor || name.empty())
+            return;
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+            Debug::SetObjectName(GetVulkanDescriptorSet(descriptor), name);
+    }
+
+    void Debug::SetObjectName(Queue *queue, const std::string &name)
+    {
+        if (!queue || name.empty())
+            return;
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+        {
+            Debug::SetObjectName(GetVulkanQueue(queue), name);
+            return;
+        }
+
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            SetDx12ObjectName(Dx12QueueImpl::From(queue)->m_queue, name);
+#endif
+    }
+
+    void Debug::SetObjectName(Swapchain *swapchain, const std::string &name)
+    {
+        if (!swapchain || name.empty())
+            return;
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+            Debug::SetObjectName(GetVulkanSwapchain(swapchain), name);
+    }
+
+    void Debug::SetObjectName(CommandPool *commandPool, const std::string &name)
+    {
+        if (!commandPool || name.empty())
+            return;
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+            Debug::SetObjectName(GetVulkanCommandPool(commandPool), name);
     }
 
     void Debug::BeginQueueRegion(Queue *queue, const std::string &name)

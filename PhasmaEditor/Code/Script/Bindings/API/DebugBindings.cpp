@@ -11,18 +11,6 @@
 #include "API/Framebuffer.h"
 #include "API/Descriptor.h"
 #include "API/Queue.h"
-#include "API/Vulkan/VulkanBufferImpl.h"
-#include "API/Vulkan/VulkanCommandBufferImpl.h"
-#include "API/Vulkan/VulkanCommandPoolImpl.h"
-#include "API/Vulkan/VulkanDescriptorImpl.h"
-#include "API/Vulkan/VulkanEventImpl.h"
-#include "API/Vulkan/VulkanFramebufferImpl.h"
-#include "API/Vulkan/VulkanImageImpl.h"
-#include "API/Vulkan/VulkanPipelineImpl.h"
-#include "API/Vulkan/VulkanQueueImpl.h"
-#include "API/Vulkan/VulkanRenderPassImpl.h"
-#include "API/Vulkan/VulkanSemaphoreImpl.h"
-#include "API/Vulkan/VulkanSwapchainImpl.h"
 
 namespace pe
 {
@@ -40,41 +28,41 @@ namespace pe
 
                 // Object naming
                 debug.set_function("set_buffer_name", [](Buffer &buf, const std::string &name) {
-                    Debug::SetObjectName(GetVulkanBuffer(&buf), name);
+                    Debug::SetObjectName(&buf, name);
                 });
                 debug.set_function("set_image_name", [](std::shared_ptr<LuaImage> img, const std::string &name) {
                     Image *p = img ? img->Get() : nullptr;
-                    if (p) Debug::SetObjectName(GetVulkanImage(p), name);
+                    Debug::SetObjectName(p, name);
                 });
                 debug.set_function("set_command_buffer_name", [](CommandBuffer &cmd, const std::string &name) {
-                    Debug::SetObjectName(GetVulkanCommandBuffer(&cmd), name);
+                    Debug::SetObjectName(&cmd, name);
                 });
                 debug.set_function("set_pipeline_name", [](Pipeline &pipe, const std::string &name) {
-                    Debug::SetObjectName(GetVulkanPipeline(&pipe), name);
+                    Debug::SetObjectName(&pipe, name);
                 });
                 debug.set_function("set_render_pass_name", [](RenderPass &rp, const std::string &name) {
-                    Debug::SetObjectName(pe::GetVulkanRenderPass(&rp), name);
+                    Debug::SetObjectName(&rp, name);
                 });
                 debug.set_function("set_semaphore_name", [](Semaphore &sem, const std::string &name) {
-                    Debug::SetObjectName(GetVulkanSemaphore(&sem), name);
+                    Debug::SetObjectName(&sem, name);
                 });
                 debug.set_function("set_event_name", [](Event &ev, const std::string &name) {
-                    Debug::SetObjectName(GetVulkanEvent(&ev), name);
+                    Debug::SetObjectName(&ev, name);
                 });
                 debug.set_function("set_framebuffer_name", [](Framebuffer &fb, const std::string &name) {
-                    Debug::SetObjectName(pe::GetVulkanFramebuffer(&fb), name);
+                    Debug::SetObjectName(&fb, name);
                 });
                 debug.set_function("set_descriptor_name", [](Descriptor &desc, const std::string &name) {
-                    Debug::SetObjectName(pe::GetVulkanDescriptorSet(&desc), name);
+                    Debug::SetObjectName(&desc, name);
                 });
                 debug.set_function("set_queue_name", [](Queue &q, const std::string &name) {
-                    Debug::SetObjectName(GetVulkanQueue(&q), name);
+                    Debug::SetObjectName(&q, name);
                 });
                 debug.set_function("set_swapchain_name", [](Swapchain &sw, const std::string &name) {
-                    Debug::SetObjectName(pe::GetVulkanSwapchain(&sw), name);
+                    Debug::SetObjectName(&sw, name);
                 });
                 debug.set_function("set_command_pool_name", [](CommandPool &cp, const std::string &name) {
-                    Debug::SetObjectName(GetVulkanCommandPool(&cp), name);
+                    Debug::SetObjectName(&cp, name);
                 });
 
                 // Frame capture (RenderDoc / GPU debugger)
