@@ -7,6 +7,16 @@
 
 namespace pe
 {
+    static void UpdateLightingDescriptorSets()
+    {
+        if (auto *pass = GetGlobalComponent<LightOpaquePass>())
+            pass->UpdateDescriptorSets();
+        if (auto *pass = GetGlobalComponent<LightTransparentPass>())
+            pass->UpdateDescriptorSets();
+        if (auto *pass = GetGlobalComponent<RayTracingPass>())
+            pass->UpdateDescriptorSets();
+    }
+
     GlobalWidget::GlobalWidget() : Widget("Global")
     {
     }
@@ -142,24 +152,14 @@ namespace pe
             if (gSettings.render_mode == RenderMode::Raster)
                 gSettings.shadows = gSettings.day;
 
-            LightOpaquePass &lightOpaquePass = *GetGlobalComponent<LightOpaquePass>();
-            lightOpaquePass.UpdateDescriptorSets();
-            LightTransparentPass &lightTransparentPass = *GetGlobalComponent<LightTransparentPass>();
-            lightTransparentPass.UpdateDescriptorSets();
-            RayTracingPass &rayTracingPass = *GetGlobalComponent<RayTracingPass>();
-            rayTracingPass.UpdateDescriptorSets();
+            UpdateLightingDescriptorSets();
         }
 
         if (gSettings.render_mode != RenderMode::RayTracing)
         {
             if (ImGui::Checkbox("Cast Shadows", &gSettings.shadows))
             {
-                LightOpaquePass &lightOpaquePass = *GetGlobalComponent<LightOpaquePass>();
-                lightOpaquePass.UpdateDescriptorSets();
-                LightTransparentPass &lightTransparentPass = *GetGlobalComponent<LightTransparentPass>();
-                lightTransparentPass.UpdateDescriptorSets();
-                RayTracingPass &rayTracingPass = *GetGlobalComponent<RayTracingPass>();
-                rayTracingPass.UpdateDescriptorSets();
+                UpdateLightingDescriptorSets();
             }
         }
         else
