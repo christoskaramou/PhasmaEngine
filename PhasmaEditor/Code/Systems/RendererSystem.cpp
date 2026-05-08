@@ -814,6 +814,7 @@ namespace pe
         desc.usage = usage | PE_IMAGE_USAGE_COLOR_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE | PE_IMAGE_USAGE_TRANSFER_DST;
         if (useMips)
             desc.mipLevels = static_cast<uint32_t>(std::floor(std::log2(width > heigth ? width : heigth))) + 1;
+        desc.clearColor = clearColor;
         desc.name = name;
         Image *rt = Image::Create(desc);
         rt->SetClearColor(clearColor);
@@ -848,9 +849,10 @@ namespace pe
         desc.height = static_cast<uint32_t>(RHII.GetHeightf() * rtScale);
         desc.usage = usage | PE_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_TRANSFER_DST;
         desc.format = format;
+        desc.clearColor = vec4(clearDepth, static_cast<float>(clearStencil), 0.f, 0.f);
         desc.name = name;
         Image *depth = Image::Create(desc);
-        depth->SetClearColor(vec4(clearDepth, static_cast<float>(clearStencil), 0.f, 0.f));
+        depth->SetClearColor(desc.clearColor);
 
         depth->CreateRTV();
         depth->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);

@@ -429,6 +429,7 @@ namespace pe
           m_usage{desc.usage},
           m_samples{desc.samples},
           m_imageType{desc.imageType},
+          m_clearColor{desc.clearColor},
           m_name{desc.name},
           m_srvs(desc.mipLevels, nullptr),
           m_uavs(desc.mipLevels, nullptr)

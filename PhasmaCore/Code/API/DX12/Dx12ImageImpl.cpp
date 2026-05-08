@@ -122,8 +122,8 @@ namespace pe
             {
                 D3D12_CLEAR_VALUE clear{};
                 clear.Format = viewFormat;
-                clear.DepthStencil.Depth = Color::Depth;
-                clear.DepthStencil.Stencil = 0;
+                clear.DepthStencil.Depth = desc.clearColor[0];
+                clear.DepthStencil.Stencil = static_cast<UINT8>(desc.clearColor[1]);
                 return clear;
             }
 
@@ -131,10 +131,10 @@ namespace pe
             {
                 D3D12_CLEAR_VALUE clear{};
                 clear.Format = viewFormat;
-                clear.Color[0] = 0.0f;
-                clear.Color[1] = 0.0f;
-                clear.Color[2] = 0.0f;
-                clear.Color[3] = 1.0f;
+                clear.Color[0] = desc.clearColor[0];
+                clear.Color[1] = desc.clearColor[1];
+                clear.Color[2] = desc.clearColor[2];
+                clear.Color[3] = desc.clearColor[3];
                 return clear;
             }
 

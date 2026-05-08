@@ -27,6 +27,7 @@ namespace pe
         bool array2DCompatible = false; // 3D image accessible as 2D-array view
         bool mutableFormat = false;     // view created with format that differs from desc.format
         bool tilingLinear = false;
+        vec4 clearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
         std::string name;
     };
 

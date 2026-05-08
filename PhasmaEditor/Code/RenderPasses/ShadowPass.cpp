@@ -24,9 +24,10 @@ namespace pe
             desc.width = Settings::Get<GlobalSettings>().shadow_map_size;
             desc.height = Settings::Get<GlobalSettings>().shadow_map_size;
             desc.usage = PE_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_TRANSFER_DST;
+            desc.clearColor = vec4(Color::Depth, Color::Stencil, 0.0f, 1.0f);
             desc.name = "ShadowMap_" + std::to_string(i++);
             texture = Image::Create(desc);
-            texture->SetClearColor(vec4(Color::Depth, Color::Stencil, 0.0f, 1.0f));
+            texture->SetClearColor(desc.clearColor);
 
             texture->CreateRTV();
             texture->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
