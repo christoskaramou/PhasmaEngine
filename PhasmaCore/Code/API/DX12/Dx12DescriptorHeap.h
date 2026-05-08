@@ -1,8 +1,6 @@
 #pragma once
 
-#include <cstdint>
 #include <d3d12.h>
-#include <vector>
 #include <wrl/client.h>
 
 namespace pe

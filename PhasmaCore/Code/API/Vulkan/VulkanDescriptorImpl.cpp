@@ -1,6 +1,5 @@
 #include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/AccelerationStructure.h"
-#include "API/Debug.h"
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12DescriptorImpl.h"
 #endif

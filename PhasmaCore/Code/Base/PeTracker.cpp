@@ -1,8 +1,4 @@
 #include "Base/PeTracker.h"
-#include <algorithm>
-#include <deque>
-#include <mutex>
-#include <unordered_map>
 
 namespace pe
 {

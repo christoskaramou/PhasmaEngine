@@ -14,8 +14,6 @@
 
 #if defined(WIN32) && PE_RENDER_DOC == 1
 #include <Windows.h>
-#elif defined(__linux__) && PE_RENDER_DOC == 1
-#include <dlfcn.h>
 #endif
 
 namespace pe

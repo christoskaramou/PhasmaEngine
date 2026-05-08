@@ -1,5 +1,4 @@
 #include "API/Vulkan/VulkanCommandPoolImpl.h"
-#include "API/Debug.h"
 #include "API/Queue.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 

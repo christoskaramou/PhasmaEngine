@@ -9,7 +9,6 @@
 #include "API/DX12/Dx12Translate.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
-#include "Base/Math.h"
 
 namespace pe
 {

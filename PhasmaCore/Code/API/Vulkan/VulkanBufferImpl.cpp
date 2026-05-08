@@ -4,7 +4,6 @@
 #include "API/DX12/Dx12CommandBufferImpl.h"
 #endif
 #include "API/Command.h"
-#include "API/Debug.h"
 #include "API/Vulkan/Helpers_Vulkan.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"

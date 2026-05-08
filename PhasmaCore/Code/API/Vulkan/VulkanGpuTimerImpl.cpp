@@ -1,7 +1,6 @@
 #include "API/Vulkan/VulkanGpuTimerImpl.h"
 
 #include "API/Command.h"
-#include "API/Debug.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"

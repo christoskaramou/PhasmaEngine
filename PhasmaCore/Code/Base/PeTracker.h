@@ -1,7 +1,5 @@
 #pragma once
 #include "Base/PhasmaExport.h"
-#include <typeinfo>
-#include <vector>
 
 namespace pe
 {

@@ -4,8 +4,6 @@
 
 #include "dxc/dxcapi.h"
 
-#include <array>
-
 namespace pe
 {
     namespace

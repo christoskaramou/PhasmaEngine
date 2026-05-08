@@ -1,9 +1,5 @@
 #pragma once
 
-#include "Base/Base.h"
-#include "ECS/Entity.h"
-#include "ECS/System.h"
-
 namespace pe
 {
     class RHI;

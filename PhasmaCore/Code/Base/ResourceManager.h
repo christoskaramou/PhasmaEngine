@@ -1,5 +1,4 @@
 #pragma once
-#include "Base/Resource.h"
 
 namespace pe
 {

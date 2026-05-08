@@ -2,7 +2,6 @@
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12SamplerImpl.h"
 #endif
-#include "API/Debug.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"

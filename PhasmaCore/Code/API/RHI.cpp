@@ -29,8 +29,6 @@
 
 #include "SDL2/SDL_vulkan.h"
 
-#include <limits>
-
 // System + Process RAM (Windows)
 #if defined(PE_WIN32)
 #include <psapi.h>

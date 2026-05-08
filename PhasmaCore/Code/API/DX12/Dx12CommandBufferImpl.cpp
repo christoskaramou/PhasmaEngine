@@ -4,7 +4,6 @@
 
 #include "API/Buffer.h"
 #include "API/DX12/Dx12BufferImpl.h"
-#include "API/Debug.h"
 #include "API/DX12/Dx12DescriptorHeap.h"
 #include "API/DX12/Dx12DescriptorImpl.h"
 #include "API/DX12/Dx12ImageImpl.h"

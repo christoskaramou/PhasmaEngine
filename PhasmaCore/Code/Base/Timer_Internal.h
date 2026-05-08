@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Base/Timer.h"
-
 namespace pe
 {
     class CommandBuffer;
