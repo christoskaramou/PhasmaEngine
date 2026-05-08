@@ -40,7 +40,7 @@ DRED auto-breadcrumbs + page-fault tracking are forced on for `PE_DEBUG` / `PE_R
 
 ### Backend-specific gaps and carve-outs
 
-- **SSAO (FFX-CACAO)** — Vulkan-only today. CACAO's D3D12 `InitContext` triggers `DXGI_ERROR_DEVICE_REMOVED`; engine-side carve is correct, and `Dx12RhiImpl` now registers an `ID3D12InfoQueue1` callback when the debug layer is active so the next retry should capture warning/error messages. State + resume recipe in MemPalace drawer `phasmaengine/design/2026-05-05-rhi-phase1-t14d-ssao-PARKED-cacao-init-device-removed`.
+- **SSAO (FFX-CACAO)** — enabled on both backends as of `809c2aa5` (2026-05-08). DX12 routes through CACAO's D3D12 path with engine-owned compatibility inputs vendored under `PhasmaEditor/third_party/CacaoCompat/` (DirectX-Headers v1.614.0 subset + locally-built DXIL + `UserMarker` stub). `SSAOPass` transitions the AO target to `UNORDERED_ACCESS` before CACAO's external draw, invalidates the shader-visible heap cache afterwards, and resyncs the engine state for `LightPass` sampling. Landing drawer: `phasmaengine/dx12-handoff/2026-05-08-dx12-ssao-landed-cacaocompat-relocated`.
 - **Ray tracing** — `caps.rayTracing == false` on DX12 by design; RT pass is skipped. DXR is a separate Phase.
 - **`CommandBuffer::PushDescriptor` / `SetEvent`** — `PE_ERROR` carve-outs on DX12. Audited 2026-05-06: zero callers tree-wide (PushDescriptor) / no Lua script invokes the binding (SetEvent). Implement when a real caller arrives.
 
