@@ -11,6 +11,11 @@
 #include "GUI/IconsFontAwesome.h"
 #include "Scene/ModelAsset.h"
 #include "imgui/imgui_impl_vulkan.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12DescriptorHeap.h"
+#include "API/DX12/Dx12ImageViewImpl.h"
+#include "API/DX12/Dx12RhiImpl.h"
+#endif
 
 namespace pe
 {
@@ -53,20 +58,9 @@ namespace pe
             return ".../" + toStr(parent.filename()) + "/" + toStr(name);
         }
 
-        void *LoadAndRegisterIcon(CommandBuffer *cmd, const std::string &path, Image *&outIcon)
+        void LoadIcon(CommandBuffer *cmd, const std::string &path, Image *&outIcon)
         {
             outIcon = Image::LoadRGBA8(cmd, path);
-            if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
-                return nullptr;
-
-            if (outIcon && outIcon->GetSampler() && outIcon->GetSRV())
-            {
-                return (void *)ImGui_ImplVulkan_AddTexture(
-                    pe::GetVulkanSampler(outIcon->GetSampler()),
-                    pe::GetVulkanImageView(outIcon->GetSRV()),
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            }
-            return nullptr;
         }
 
         struct CopyTask
@@ -172,6 +166,19 @@ namespace pe
     FileBrowser::~FileBrowser()
     {
         EventSystem::UnregisterCallback(EventType::FileDrop, m_fileDropToken);
+
+        ReleaseImGuiTexture(m_folderIconDS);
+        ReleaseImGuiTexture(m_fileIconDS);
+        ReleaseImGuiTexture(m_txtIconDS);
+        ReleaseImGuiTexture(m_shaderIconDS);
+        ReleaseImGuiTexture(m_modelIconDS);
+        ReleaseImGuiTexture(m_scriptIconDS);
+        ReleaseImGuiTexture(m_imageIconDS);
+
+        for (auto &pair : m_fileDescriptors)
+            ReleaseImGuiTexture(pair.second);
+        m_fileDescriptors.clear();
+
         Image::Destroy(m_folderIcon);
         Image::Destroy(m_fileIcon);
         Image::Destroy(m_txtIcon);
@@ -183,7 +190,6 @@ namespace pe
         for (auto &pair : m_fileCache)
             Image::Destroy(pair.second);
         m_fileCache.clear();
-        m_fileDescriptors.clear();
     }
 
     void FileBrowser::Init(GUI *gui)
@@ -198,18 +204,26 @@ namespace pe
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
 
-        m_folderIconDS = LoadAndRegisterIcon(cmd, Path::Assets + "Icons/folder_icon.png", m_folderIcon);
-        m_fileIconDS = LoadAndRegisterIcon(cmd, Path::Assets + "Icons/file_icon.png", m_fileIcon);
-        m_txtIconDS = LoadAndRegisterIcon(cmd, Path::Assets + "Icons/txt_icon.png", m_txtIcon);
-        m_shaderIconDS = LoadAndRegisterIcon(cmd, Path::Assets + "Icons/shader_icon.png", m_shaderIcon);
-        m_modelIconDS = LoadAndRegisterIcon(cmd, Path::Assets + "Icons/model_icon.png", m_modelIcon);
-        m_scriptIconDS = LoadAndRegisterIcon(cmd, Path::Assets + "Icons/script_icon.png", m_scriptIcon);
-        m_imageIconDS = LoadAndRegisterIcon(cmd, Path::Assets + "Icons/image_icon.png", m_imageIcon);
+        LoadIcon(cmd, Path::Assets + "Icons/folder_icon.png", m_folderIcon);
+        LoadIcon(cmd, Path::Assets + "Icons/file_icon.png", m_fileIcon);
+        LoadIcon(cmd, Path::Assets + "Icons/txt_icon.png", m_txtIcon);
+        LoadIcon(cmd, Path::Assets + "Icons/shader_icon.png", m_shaderIcon);
+        LoadIcon(cmd, Path::Assets + "Icons/model_icon.png", m_modelIcon);
+        LoadIcon(cmd, Path::Assets + "Icons/script_icon.png", m_scriptIcon);
+        LoadIcon(cmd, Path::Assets + "Icons/image_icon.png", m_imageIcon);
 
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
         cmd->Return();
+
+        m_folderIconDS = RegisterImageForImGui(m_folderIcon);
+        m_fileIconDS = RegisterImageForImGui(m_fileIcon);
+        m_txtIconDS = RegisterImageForImGui(m_txtIcon);
+        m_shaderIconDS = RegisterImageForImGui(m_shaderIcon);
+        m_modelIconDS = RegisterImageForImGui(m_modelIcon);
+        m_scriptIconDS = RegisterImageForImGui(m_scriptIcon);
+        m_imageIconDS = RegisterImageForImGui(m_imageIcon);
 
         m_fileDropToken = EventSystem::RegisterCallbackWithToken(EventType::FileDrop, [this](const std::any &data)
                                                                  {
@@ -300,15 +314,7 @@ namespace pe
         {
             if (pair.second)
             {
-                void *ds = nullptr;
-                if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN && pair.second->GetSampler() && pair.second->GetSRV())
-                {
-                    ds = (void *)ImGui_ImplVulkan_AddTexture(
-                        pe::GetVulkanSampler(pair.second->GetSampler()),
-                        pe::GetVulkanImageView(pair.second->GetSRV()),
-                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-                }
-
+                void *ds = RegisterImageForImGui(pair.second);
                 m_fileCache[pair.first] = pair.second;
                 m_fileDescriptors[pair.first] = ds;
             }
@@ -319,6 +325,72 @@ namespace pe
             m_pendingFiles.erase(pair.first);
         }
         m_loadedQueue.clear();
+    }
+
+    void *FileBrowser::RegisterImageForImGui(Image *image)
+    {
+        if (!image || !image->GetSampler() || !image->GetSRV())
+            return nullptr;
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+        {
+            return (void *)ImGui_ImplVulkan_AddTexture(
+                pe::GetVulkanSampler(image->GetSampler()),
+                pe::GetVulkanImageView(image->GetSRV()),
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        }
+
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+            Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+            if (!rhi || !rhi->GetDevice() || !rhi->GetCbvSrvUavHeap())
+                return nullptr;
+
+            const Dx12ImageViewImpl *srv = Dx12ImageViewImpl::From(image->GetSRV());
+            if (!srv)
+                return nullptr;
+
+            const uint32_t slot = rhi->GetCbvSrvUavHeap()->Allocate();
+            rhi->GetDevice()->CopyDescriptorsSimple(1,
+                                                    rhi->GetCbvSrvUavHeap()->GetCpuHandle(slot),
+                                                    srv->GetCpuHandle(),
+                                                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+            const D3D12_GPU_DESCRIPTOR_HANDLE gpu = rhi->GetCbvSrvUavHeap()->GetGpuHandle(slot);
+            void *textureID = reinterpret_cast<void *>(gpu.ptr);
+            m_dx12TextureSlots[textureID] = slot;
+            return textureID;
+        }
+#endif
+
+        return nullptr;
+    }
+
+    void FileBrowser::ReleaseImGuiTexture(void *&textureID)
+    {
+        if (!textureID)
+            return;
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+        {
+            ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)textureID);
+        }
+#if defined(PE_WIN32)
+        else if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+            auto it = m_dx12TextureSlots.find(textureID);
+            if (it != m_dx12TextureSlots.end())
+            {
+                Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+                if (rhi && rhi->GetCbvSrvUavHeap())
+                    rhi->GetCbvSrvUavHeap()->Free(it->second);
+                m_dx12TextureSlots.erase(it);
+            }
+        }
+#endif
+
+        textureID = nullptr;
     }
 
     void FileBrowser::TryStartCopy(const std::vector<std::filesystem::path> &sources)

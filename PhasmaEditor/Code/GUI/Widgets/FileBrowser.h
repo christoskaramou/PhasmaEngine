@@ -53,6 +53,8 @@ namespace pe
 
         void *GetIconForFile(const std::filesystem::path &path);
         void ProcessLoadedImages();
+        void *RegisterImageForImGui(Image *image);
+        void ReleaseImGuiTexture(void *&textureID);
         void DrawDirectoryContent(const std::filesystem::path &path,
                                   std::function<void(const std::filesystem::path &)> onDoubleClick = nullptr,
                                   std::function<bool(const std::filesystem::path &)> filter = nullptr,
@@ -85,6 +87,9 @@ namespace pe
         // Thumbnail Cache
         std::unordered_map<std::string, Image *> m_fileCache;
         std::unordered_map<std::string, void *> m_fileDescriptors;
+#if defined(PE_WIN32)
+        std::unordered_map<void *, uint32_t> m_dx12TextureSlots;
+#endif
         std::unordered_set<std::string> m_pendingFiles;
         std::vector<std::pair<std::string, Image *>> m_loadedQueue;
         std::mutex m_queueMutex;
