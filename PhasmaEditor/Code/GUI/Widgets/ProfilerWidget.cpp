@@ -2,14 +2,11 @@
 #include "API/Debug.h"
 #include "API/Image.h"
 #include "API/RHI.h"
-#include "API/Vulkan/VulkanImageViewImpl.h"
-#include "API/Vulkan/VulkanSamplerImpl.h"
 #include "Base/EventSystem.h"
 #include "Base/Path.h"
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
 #include "Systems/RendererSystem.h"
-#include "imgui/imgui_impl_vulkan.h"
 
 namespace pe
 {
@@ -133,9 +130,11 @@ namespace pe
 
     ProfilerWidget::~ProfilerWidget()
     {
-        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
-            for (auto &[img, ds] : m_rtDescriptorCache)
-                ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)ds);
+        if (!m_gui)
+            return;
+
+        for (auto &[img, ds] : m_rtDescriptorCache)
+            m_gui->ReleaseImageTexture(ds);
     }
 
     // ─── RT descriptor cache for hover previews ──────────────────────────────────
@@ -144,18 +143,14 @@ namespace pe
     {
         if (!image || !image->HasSRV() || !image->GetSampler())
             return nullptr;
-        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+        if (!m_gui)
             return nullptr;
 
         auto it = m_rtDescriptorCache.find(image);
         if (it != m_rtDescriptorCache.end())
             return it->second;
 
-        void *ds = (void *)ImGui_ImplVulkan_AddTexture(
-            pe::GetVulkanSampler(image->GetSampler()),
-            pe::GetVulkanImageView(image->GetSRV()),
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
+        void *ds = m_gui->RegisterImageTexture(image);
         m_rtDescriptorCache[image] = ds;
         return ds;
     }
@@ -218,9 +213,9 @@ namespace pe
             Image *viewportRT = rs->GetRenderTarget("viewport");
             if (viewportRT != m_viewportRTSnapshot && !m_rtDescriptorCache.empty())
             {
-                if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+                if (m_gui)
                     for (auto &[img, ds] : m_rtDescriptorCache)
-                        ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)ds);
+                        m_gui->ReleaseImageTexture(ds);
                 m_rtDescriptorCache.clear();
             }
             m_viewportRTSnapshot = viewportRT;

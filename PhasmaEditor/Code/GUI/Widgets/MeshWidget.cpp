@@ -3,9 +3,6 @@
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
-#include "API/Vulkan/VulkanImageImpl.h"
-#include "API/Vulkan/VulkanImageViewImpl.h"
-#include "API/Vulkan/VulkanSamplerImpl.h"
 #include "FileSelector.h"
 #include "GUI/GUI.h"
 #include "Scene/Material.h"
@@ -15,7 +12,6 @@
 #include "Scene/SelectionManager.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui.h"
-#include "imgui/imgui_impl_vulkan.h"
 
 namespace pe
 {
@@ -25,13 +21,10 @@ namespace pe
 
     MeshWidget::~MeshWidget()
     {
-        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
-            return;
-
         for (auto &pair : m_textureDescriptors)
         {
-            if (pair.second)
-                ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)pair.second);
+            if (m_gui)
+                m_gui->ReleaseImageTexture(pair.second);
         }
     }
 
@@ -478,7 +471,7 @@ namespace pe
                                 ImGui::BeginTooltip();
                                 ImGui::Text("%s", img->GetName().c_str());
                                 ImGui::Text("Resolution: %ux%u", img->GetWidth(), img->GetHeight());
-                                ImGui::Text("Format: %s", vk::to_string(pe::ToVkFormat(img->GetFormat())).c_str());
+                                ImGui::Text("Format: %s", ::PeFormatName(img->GetFormat()));
                                 ImGui::Text("Mips: %u", img->GetMipLevels());
                                 float aspect = img->GetWidth_f() / img->GetHeight_f();
                                 ImGui::Image((ImTextureID)desc, ImVec2(256 * aspect, 256));
@@ -584,7 +577,7 @@ namespace pe
 
     void *MeshWidget::GetDescriptor(Image *image)
     {
-        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+        if (!m_gui)
             return nullptr;
 
         if (m_textureDescriptors.find(image) == m_textureDescriptors.end())
@@ -606,10 +599,7 @@ namespace pe
             if (!image->GetSampler())
                 return nullptr;
 
-            m_textureDescriptors[image] = (void *)ImGui_ImplVulkan_AddTexture(
-                pe::GetVulkanSampler(image->GetSampler()),
-                pe::GetVulkanImageView(image->GetSRV()),
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            m_textureDescriptors[image] = m_gui->RegisterImageTexture(image);
         }
 
         return m_textureDescriptors[image];

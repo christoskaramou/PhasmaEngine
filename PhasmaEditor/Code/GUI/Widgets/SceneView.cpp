@@ -1,8 +1,5 @@
 #include "SceneView.h"
 #include "API/Image.h"
-#include "API/RHI.h"
-#include "API/Vulkan/VulkanImageViewImpl.h"
-#include "API/Vulkan/VulkanSamplerImpl.h"
 #include "Base/ThreadPool.h"
 #include "Camera/Camera.h"
 #include "GUI/GUI.h"
@@ -15,13 +12,7 @@
 #include "Scene/SelectionManager.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/ImGuizmo.h"
-#include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_internal.h"
-#if defined(PE_WIN32)
-#include "API/DX12/Dx12DescriptorHeap.h"
-#include "API/DX12/Dx12ImageViewImpl.h"
-#include "API/DX12/Dx12RhiImpl.h"
-#endif
 
 namespace pe
 {
@@ -54,28 +45,18 @@ namespace pe
         return open;
     }
 
-    static void DestroyViewportTextureId()
+    static void DestroyViewportTextureId(GUI *gui)
     {
         if (!GUIState::s_viewportTextureId)
             return;
 
-        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
-        {
-            ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)GUIState::s_viewportTextureId);
-        }
-#if defined(PE_WIN32)
-        else if (RHII.GetApi() == PE_GRAPHICS_API_DX12 && GUIState::s_dx12ViewportSlot != UINT32_MAX)
-        {
-            Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
-            if (rhi && rhi->GetCbvSrvUavHeap())
-                rhi->GetCbvSrvUavHeap()->Free(GUIState::s_dx12ViewportSlot);
-            GUIState::s_dx12ViewportSlot = UINT32_MAX;
-        }
-#endif
-        GUIState::s_viewportTextureId = nullptr;
+        if (gui)
+            gui->ReleaseImageTexture(GUIState::s_viewportTextureId);
+        else
+            GUIState::s_viewportTextureId = nullptr;
     }
 
-    static void RecreateSceneViewImage(RendererSystem *renderer, Image *displayRT)
+    static void RecreateSceneViewImage(GUI *gui, RendererSystem *renderer, Image *displayRT)
     {
         if (!displayRT)
             return;
@@ -83,24 +64,24 @@ namespace pe
         Image::Destroy(GUIState::s_sceneViewImage);
         GUIState::s_sceneViewImage = renderer->CreateFSSampledImage(false);
 
-        DestroyViewportTextureId();
+        DestroyViewportTextureId(gui);
     }
 
-    static bool EnsureSceneViewImageMatchesDisplay(RendererSystem *renderer, Image *displayRT)
+    static bool EnsureSceneViewImageMatchesDisplay(GUI *gui, RendererSystem *renderer, Image *displayRT)
     {
         if (!displayRT)
             return false;
 
         if (!GUIState::s_sceneViewImage)
         {
-            RecreateSceneViewImage(renderer, displayRT);
+            RecreateSceneViewImage(gui, renderer, displayRT);
             return true;
         }
 
         if (GUIState::s_sceneViewImage->GetWidth() != displayRT->GetWidth() ||
             GUIState::s_sceneViewImage->GetHeight() != displayRT->GetHeight())
         {
-            RecreateSceneViewImage(renderer, displayRT);
+            RecreateSceneViewImage(gui, renderer, displayRT);
             return true;
         }
 
@@ -112,55 +93,16 @@ namespace pe
         return GUIState::s_sceneViewImage ? GUIState::s_sceneViewImage : displayRT;
     }
 
-    static bool EnsureViewportTextureId(Image *sceneTexture)
+    static bool EnsureViewportTextureId(GUI *gui, Image *sceneTexture)
     {
-        if (!sceneTexture || !sceneTexture->HasSRV())
+        if (!gui || !sceneTexture || !sceneTexture->HasSRV())
             return false;
 
         if (GUIState::s_viewportTextureId)
             return true;
 
-        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
-        {
-            if (!sceneTexture->GetSampler())
-                return false;
-
-            VkSampler sampler = pe::GetVulkanSampler(sceneTexture->GetSampler());
-            VkImageView view = pe::GetVulkanImageView(sceneTexture->GetSRV());
-            if (!sampler || !view)
-                return false;
-
-            GUIState::s_viewportTextureId =
-                (void *)ImGui_ImplVulkan_AddTexture(sampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-            return GUIState::s_viewportTextureId != nullptr;
-        }
-
-#if defined(PE_WIN32)
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-        {
-            Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
-            if (!rhi || !rhi->GetDevice() || !rhi->GetCbvSrvUavHeap())
-                return false;
-
-            const Dx12ImageViewImpl *srv = Dx12ImageViewImpl::From(sceneTexture->GetSRV());
-            if (!srv)
-                return false;
-
-            const uint32_t slot = rhi->GetCbvSrvUavHeap()->Allocate();
-            rhi->GetDevice()->CopyDescriptorsSimple(1,
-                                                    rhi->GetCbvSrvUavHeap()->GetCpuHandle(slot),
-                                                    srv->GetCpuHandle(),
-                                                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-            const D3D12_GPU_DESCRIPTOR_HANDLE gpu = rhi->GetCbvSrvUavHeap()->GetGpuHandle(slot);
-            GUIState::s_dx12ViewportSlot = slot;
-            GUIState::s_viewportTextureId = reinterpret_cast<void *>(gpu.ptr);
-            return true;
-        }
-#endif
-
-        return false;
+        GUIState::s_viewportTextureId = gui->RegisterImageTexture(sceneTexture);
+        return GUIState::s_viewportTextureId != nullptr;
     }
 
     static ImVec2 ComputeAspectFitSize(ImVec2 panel, float targetAspect)
@@ -521,7 +463,7 @@ namespace pe
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
         Image *displayRT = renderer ? renderer->GetDisplayRT() : nullptr;
 
-        if (!EnsureSceneViewImageMatchesDisplay(renderer, displayRT))
+        if (!EnsureSceneViewImageMatchesDisplay(m_gui, renderer, displayRT))
         {
             ImGui::TextDisabled("Initializing viewport...");
             ImGui::End();
@@ -536,7 +478,7 @@ namespace pe
             return;
         }
 
-        if (!EnsureViewportTextureId(sceneTexture))
+        if (!EnsureViewportTextureId(m_gui, sceneTexture))
         {
             ImGui::TextDisabled("Initializing viewport...");
             ImGui::End();

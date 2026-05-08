@@ -3,18 +3,12 @@
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
-#include "API/Vulkan/VulkanImageViewImpl.h"
-#include "API/Vulkan/VulkanSamplerImpl.h"
 #include "GUI/GUI.h"
 #include "GUI/GUIState.h"
 #include "GUI/Helpers.h"
 #include "GUI/IconsFontAwesome.h"
 #include "Scene/ModelAsset.h"
-#include "imgui/imgui_impl_vulkan.h"
 #if defined(PE_WIN32)
-#include "API/DX12/Dx12DescriptorHeap.h"
-#include "API/DX12/Dx12ImageViewImpl.h"
-#include "API/DX12/Dx12RhiImpl.h"
 #include <windows.h>
 #include <shellapi.h>
 #endif
@@ -331,42 +325,10 @@ namespace pe
 
     void *FileBrowser::RegisterImageForImGui(Image *image)
     {
-        if (!image || !image->GetSampler() || !image->GetSRV())
+        if (!m_gui)
             return nullptr;
 
-        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
-        {
-            return (void *)ImGui_ImplVulkan_AddTexture(
-                pe::GetVulkanSampler(image->GetSampler()),
-                pe::GetVulkanImageView(image->GetSRV()),
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        }
-
-#if defined(PE_WIN32)
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-        {
-            Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
-            if (!rhi || !rhi->GetDevice() || !rhi->GetCbvSrvUavHeap())
-                return nullptr;
-
-            const Dx12ImageViewImpl *srv = Dx12ImageViewImpl::From(image->GetSRV());
-            if (!srv)
-                return nullptr;
-
-            const uint32_t slot = rhi->GetCbvSrvUavHeap()->Allocate();
-            rhi->GetDevice()->CopyDescriptorsSimple(1,
-                                                    rhi->GetCbvSrvUavHeap()->GetCpuHandle(slot),
-                                                    srv->GetCpuHandle(),
-                                                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-            const D3D12_GPU_DESCRIPTOR_HANDLE gpu = rhi->GetCbvSrvUavHeap()->GetGpuHandle(slot);
-            void *textureID = reinterpret_cast<void *>(gpu.ptr);
-            m_dx12TextureSlots[textureID] = slot;
-            return textureID;
-        }
-#endif
-
-        return nullptr;
+        return m_gui->RegisterImageTexture(image);
     }
 
     void FileBrowser::ReleaseImGuiTexture(void *&textureID)
@@ -374,25 +336,10 @@ namespace pe
         if (!textureID)
             return;
 
-        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
-        {
-            ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)textureID);
-        }
-#if defined(PE_WIN32)
-        else if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-        {
-            auto it = m_dx12TextureSlots.find(textureID);
-            if (it != m_dx12TextureSlots.end())
-            {
-                Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
-                if (rhi && rhi->GetCbvSrvUavHeap())
-                    rhi->GetCbvSrvUavHeap()->Free(it->second);
-                m_dx12TextureSlots.erase(it);
-            }
-        }
-#endif
-
-        textureID = nullptr;
+        if (m_gui)
+            m_gui->ReleaseImageTexture(textureID);
+        else
+            textureID = nullptr;
     }
 
     void FileBrowser::TryStartCopy(const std::vector<std::filesystem::path> &sources)

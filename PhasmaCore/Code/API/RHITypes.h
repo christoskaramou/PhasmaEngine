@@ -79,6 +79,111 @@ enum PeFormat : uint32_t
     PE_FORMAT_COUNT
 };
 
+constexpr const char *PeFormatName(::PeFormat format)
+{
+    switch (format)
+    {
+    case PE_FORMAT_UNDEFINED:
+        return "UNDEFINED";
+    case PE_FORMAT_R8_UNORM:
+        return "R8_UNORM";
+    case PE_FORMAT_R8_SINT:
+        return "R8_SINT";
+    case PE_FORMAT_R8_UINT:
+        return "R8_UINT";
+    case PE_FORMAT_R16_SFLOAT:
+        return "R16_SFLOAT";
+    case PE_FORMAT_R16_SINT:
+        return "R16_SINT";
+    case PE_FORMAT_R16_UINT:
+        return "R16_UINT";
+    case PE_FORMAT_R32_SFLOAT:
+        return "R32_SFLOAT";
+    case PE_FORMAT_R32_SINT:
+        return "R32_SINT";
+    case PE_FORMAT_R32_UINT:
+        return "R32_UINT";
+    case PE_FORMAT_R16G16_SFLOAT:
+        return "R16G16_SFLOAT";
+    case PE_FORMAT_R32G32_SFLOAT:
+        return "R32G32_SFLOAT";
+    case PE_FORMAT_R32G32_SINT:
+        return "R32G32_SINT";
+    case PE_FORMAT_R32G32_UINT:
+        return "R32G32_UINT";
+    case PE_FORMAT_R16G16B16_SFLOAT:
+        return "R16G16B16_SFLOAT";
+    case PE_FORMAT_R16G16B16_SINT:
+        return "R16G16B16_SINT";
+    case PE_FORMAT_R16G16B16_UINT:
+        return "R16G16B16_UINT";
+    case PE_FORMAT_R32G32B32_SFLOAT:
+        return "R32G32B32_SFLOAT";
+    case PE_FORMAT_R32G32B32_SINT:
+        return "R32G32B32_SINT";
+    case PE_FORMAT_R32G32B32_UINT:
+        return "R32G32B32_UINT";
+    case PE_FORMAT_R8G8B8A8_UNORM:
+        return "R8G8B8A8_UNORM";
+    case PE_FORMAT_R8G8B8A8_SRGB:
+        return "R8G8B8A8_SRGB";
+    case PE_FORMAT_B8G8R8A8_UNORM:
+        return "B8G8R8A8_UNORM";
+    case PE_FORMAT_B8G8R8A8_SRGB:
+        return "B8G8R8A8_SRGB";
+    case PE_FORMAT_R16G16B16A16_SFLOAT:
+        return "R16G16B16A16_SFLOAT";
+    case PE_FORMAT_R32G32B32A32_SFLOAT:
+        return "R32G32B32A32_SFLOAT";
+    case PE_FORMAT_R32G32B32A32_SINT:
+        return "R32G32B32A32_SINT";
+    case PE_FORMAT_R32G32B32A32_UINT:
+        return "R32G32B32A32_UINT";
+    case PE_FORMAT_A2B10G10R10_UNORM_PACK32:
+        return "A2B10G10R10_UNORM_PACK32";
+    case PE_FORMAT_B10G11R11_UFLOAT_PACK32:
+        return "B10G11R11_UFLOAT_PACK32";
+    case PE_FORMAT_D32_SFLOAT:
+        return "D32_SFLOAT";
+    case PE_FORMAT_D24_UNORM_S8_UINT:
+        return "D24_UNORM_S8_UINT";
+    case PE_FORMAT_D32_SFLOAT_S8_UINT:
+        return "D32_SFLOAT_S8_UINT";
+    case PE_FORMAT_S8_UINT:
+        return "S8_UINT";
+    case PE_FORMAT_BC1_RGBA_UNORM:
+        return "BC1_RGBA_UNORM";
+    case PE_FORMAT_BC1_RGBA_SRGB:
+        return "BC1_RGBA_SRGB";
+    case PE_FORMAT_BC2_UNORM:
+        return "BC2_UNORM";
+    case PE_FORMAT_BC2_SRGB:
+        return "BC2_SRGB";
+    case PE_FORMAT_BC3_UNORM:
+        return "BC3_UNORM";
+    case PE_FORMAT_BC3_SRGB:
+        return "BC3_SRGB";
+    case PE_FORMAT_BC4_UNORM:
+        return "BC4_UNORM";
+    case PE_FORMAT_BC4_SNORM:
+        return "BC4_SNORM";
+    case PE_FORMAT_BC5_UNORM:
+        return "BC5_UNORM";
+    case PE_FORMAT_BC5_SNORM:
+        return "BC5_SNORM";
+    case PE_FORMAT_BC6H_UFLOAT:
+        return "BC6H_UFLOAT";
+    case PE_FORMAT_BC6H_SFLOAT:
+        return "BC6H_SFLOAT";
+    case PE_FORMAT_BC7_UNORM:
+        return "BC7_UNORM";
+    case PE_FORMAT_BC7_SRGB:
+        return "BC7_SRGB";
+    default:
+        return "UNKNOWN";
+    }
+}
+
 enum PeImageLayout : uint32_t
 {
     PE_IMAGE_LAYOUT_UNDEFINED = 0,

@@ -26,6 +26,8 @@ namespace pe
         void Update();
         void PumpMainThreadActions();
         void ExecutePass(CommandBuffer *cmd);
+        void *RegisterImageTexture(Image *image);
+        void ReleaseImageTexture(void *&textureID);
         void DrawPlatformWindows();
         bool Render() const { return m_initialized && m_render; }
         void ToggleRender() { m_render = !m_render; }
@@ -160,9 +162,5 @@ namespace pe
         std::string m_playModeSnapshot;
 
         EventSystem::CallbackToken m_afterCommandWaitToken{0};
-
-#if defined(PE_WIN32)
-        std::unordered_map<uint64_t, uint32_t> m_dx12ImGuiSlots;
-#endif
     };
 } // namespace pe

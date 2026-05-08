@@ -87,9 +87,6 @@ namespace pe
         // Thumbnail Cache
         std::unordered_map<std::string, Image *> m_fileCache;
         std::unordered_map<std::string, void *> m_fileDescriptors;
-#if defined(PE_WIN32)
-        std::unordered_map<void *, uint32_t> m_dx12TextureSlots;
-#endif
         std::unordered_set<std::string> m_pendingFiles;
         std::vector<std::pair<std::string, Image *>> m_loadedQueue;
         std::mutex m_queueMutex;

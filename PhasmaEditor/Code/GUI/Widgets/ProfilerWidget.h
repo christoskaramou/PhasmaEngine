@@ -125,7 +125,7 @@ namespace pe
         Timer m_delay;
         bool m_firstFrame = true;
 
-        // RT descriptor cache for hover image previews (Image* → VkDescriptorSet as void*)
+        // RT descriptor cache for hover image previews (Image* -> ImTextureID as void*)
         std::unordered_map<Image *, void *> m_rtDescriptorCache;
         Image *m_viewportRTSnapshot = nullptr; // detect render-target recreation on resize
     };

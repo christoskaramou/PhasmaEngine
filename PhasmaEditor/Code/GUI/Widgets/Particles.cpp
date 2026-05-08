@@ -1,8 +1,5 @@
 #include "Particles.h"
 #include "API/Image.h"
-#include "API/RHI.h"
-#include "API/Vulkan/VulkanImageViewImpl.h"
-#include "API/Vulkan/VulkanSamplerImpl.h"
 #include "Camera/Camera.h"
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
@@ -12,10 +9,18 @@
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui.h"
-#include "imgui/imgui_impl_vulkan.h"
 
 namespace pe
 {
+    Particles::~Particles()
+    {
+        if (!m_gui)
+            return;
+
+        for (auto &[image, textureID] : m_textureCache)
+            m_gui->ReleaseImageTexture(textureID);
+    }
+
     void Particles::DrawEmitterControls(ParticleManager *pm, size_t i)
     {
         auto &emitters = pm->GetEmitters();
@@ -126,17 +131,11 @@ namespace pe
         if (currentItem >= 0 && currentItem < static_cast<int>(pm->GetTextures().size()))
         {
             Image *img = pm->GetTextures()[currentItem];
-            if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN && img && img->GetSRV() && img->GetSampler())
+            if (img && img->GetSRV() && img->GetSampler() && m_gui)
             {
-                void *imgPtr = (void *)img;
-                if (m_textureCache.find(imgPtr) == m_textureCache.end())
-                {
-                    m_textureCache[imgPtr] = (void *)ImGui_ImplVulkan_AddTexture(
-                        pe::GetVulkanSampler(img->GetSampler()),
-                        pe::GetVulkanImageView(img->GetSRV()),
-                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-                }
-                textureID = m_textureCache[imgPtr];
+                if (m_textureCache.find(img) == m_textureCache.end())
+                    m_textureCache[img] = m_gui->RegisterImageTexture(img);
+                textureID = m_textureCache[img];
             }
         }
 
