@@ -79,11 +79,61 @@ static void uncapturedError(WGPUDevice const *device, WGPUErrorType type,
     g_errors++;
 }
 
-int main(int /*argc*/, char * /*argv*/[])
+static const char *GetOptionValue(const char *argument, const char *prefix)
+{
+    if (!argument || !prefix)
+        return nullptr;
+
+    size_t prefixLength = strlen(prefix);
+    return strncmp(argument, prefix, prefixLength) == 0 ? argument + prefixLength : nullptr;
+}
+
+static bool ParseApiName(const char *value, PeGraphicsApi &api)
+{
+    if (!value)
+        return false;
+    if (strcmp(value, "vulkan") == 0)
+    {
+        api = PE_GRAPHICS_API_VULKAN;
+        return true;
+    }
+    if (strcmp(value, "dx12") == 0)
+    {
+#if defined(PE_WIN32)
+        api = PE_GRAPHICS_API_DX12;
+        return true;
+#else
+        fprintf(stderr, "DX12 backend is Windows-only; use --api vulkan\n");
+        return false;
+#endif
+    }
+
+    fprintf(stderr, "Unknown --api value: %s (expected: vulkan, dx12)\n", value);
+    return false;
+}
+
+int main(int argc, char *argv[])
 {
     pe::Log::Init();
     setvbuf(stdout, nullptr, _IONBF, 0);
     printf("=== PhasmaWebGPU Smoke Test ===\n\n");
+
+    PeGraphicsApi api = PE_GRAPHICS_API_VULKAN;
+    for (int i = 1; i < argc; i++)
+    {
+        if (strcmp(argv[i], "--api") == 0)
+        {
+            if (i + 1 >= argc || !ParseApiName(argv[++i], api))
+                return 1;
+            continue;
+        }
+        if (const char *value = GetOptionValue(argv[i], "--api="))
+        {
+            if (!ParseApiName(value, api))
+                return 1;
+            continue;
+        }
+    }
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
     {
@@ -92,6 +142,8 @@ int main(int /*argc*/, char * /*argv*/[])
     }
 
     uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_VULKAN;
+    if (api == PE_GRAPHICS_API_DX12)
+        windowFlags &= ~SDL_WINDOW_VULKAN;
     SDL_Window *window = SDL_CreateWindow("WebGPU Smoke Test", 0, 0, 64, 64, windowFlags);
     if (!window)
     {
@@ -101,8 +153,8 @@ int main(int /*argc*/, char * /*argv*/[])
     }
 
     pe::EventSystem::Init();
-    pe::RHII.Init(window);
-    printf("[RHI] Vulkan initialized on %s\n\n", pe::RHII.GetGpuName().c_str());
+    pe::RHII.Init(window, api);
+    printf("[RHI] %s initialized on %s\n\n", PeGraphicsApiName(pe::RHII.GetApi()), pe::RHII.GetGpuName().c_str());
 
     // 1. Instance
 

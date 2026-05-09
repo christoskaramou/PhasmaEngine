@@ -283,8 +283,10 @@ extern "C"
         }
 
         pe::RHI *rhi = instance ? instance->rhi : &pe::RHII;
-        if (!rhi || !pe::VulkanRhi::Gpu())
+        if (!rhi)
             return trackError("PhasmaWebGPU: pe::RHI is not initialized");
+        if (rhi->GetApi() != PE_GRAPHICS_API_VULKAN || !pe::VulkanRhi::Gpu())
+            return trackError("PhasmaWebGPU: WebGPU adapter discovery is currently Vulkan-only");
 
         auto *adapter = new WGPUAdapterImpl();
         adapter->rhi = rhi;

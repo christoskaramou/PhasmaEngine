@@ -251,6 +251,11 @@ namespace pe
         PE_CHECK(m_cmdList->Close());
     }
 
+    ID3D12Resource *GetDx12BufferResource(Buffer *buffer)
+    {
+        return buffer ? Dx12BufferImpl::From(buffer)->GetResource() : nullptr;
+    }
+
     void Dx12CommandBufferImpl::Begin()
     {
         PE_ERROR_IF(m_owner->m_recording, "CommandBuffer::Begin: CommandBuffer is already recording!");

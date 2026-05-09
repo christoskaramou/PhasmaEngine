@@ -29,6 +29,30 @@ namespace
         return strncmp(argument, prefix, prefixLength) == 0 ? argument + prefixLength : nullptr;
     }
 
+    bool ParseApiName(const char *value, PeGraphicsApi &api)
+    {
+        if (!value)
+            return false;
+        if (strcmp(value, "vulkan") == 0)
+        {
+            api = PE_GRAPHICS_API_VULKAN;
+            return true;
+        }
+        if (strcmp(value, "dx12") == 0)
+        {
+#if defined(PE_WIN32)
+            api = PE_GRAPHICS_API_DX12;
+            return true;
+#else
+            fprintf(stderr, "DX12 backend is Windows-only; use --api vulkan\n");
+            return false;
+#endif
+        }
+
+        fprintf(stderr, "Unknown --api value: %s (expected: vulkan, dx12)\n", value);
+        return false;
+    }
+
     RequestResult<WGPUAdapter> RequestAdapter(WGPUInstance instance)
     {
         RequestResult<WGPUAdapter> result{};
@@ -187,8 +211,22 @@ namespace pwgpu::test
         m_ctx.exeDir = GetExecutableDir(argc > 0 ? argv[0] : nullptr);
         m_ctx.shaderDir = GetShaderDir(m_ctx.exeDir, m_desc.sampleName);
 
+        PeGraphicsApi api = PE_GRAPHICS_API_VULKAN;
         for (int i = 1; i < argc; i++)
         {
+            if (strcmp(argv[i], "--api") == 0)
+            {
+                if (i + 1 >= argc || !ParseApiName(argv[++i], api))
+                    return false;
+                continue;
+            }
+            if (const char *value = GetOptionValue(argv[i], "--api="))
+            {
+                if (!ParseApiName(value, api))
+                    return false;
+                continue;
+            }
+
             if (const char *value = GetOptionValue(argv[i], "--exit-after-frames="))
                 m_exitAfterFrames = static_cast<uint64_t>(strtoull(value, nullptr, 10));
 
@@ -202,12 +240,16 @@ namespace pwgpu::test
             return false;
         }
 
+        uint32_t windowFlags = m_desc.windowFlags;
+        if (api == PE_GRAPHICS_API_DX12)
+            windowFlags &= ~SDL_WINDOW_VULKAN;
+
         m_ctx.window = SDL_CreateWindow(m_desc.windowTitle,
                                         SDL_WINDOWPOS_CENTERED,
                                         SDL_WINDOWPOS_CENTERED,
                                         static_cast<int>(m_desc.initialWidth),
                                         static_cast<int>(m_desc.initialHeight),
-                                        m_desc.windowFlags);
+                                        windowFlags);
         if (!m_ctx.window)
         {
             fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
@@ -216,7 +258,7 @@ namespace pwgpu::test
         }
 
         pe::EventSystem::Init();
-        pe::RHII.Init(m_ctx.window);
+        pe::RHII.Init(m_ctx.window, api);
         m_ctx.gpuName = pe::RHII.GetGpuName();
 
         m_ctx.instance = wgpuCreateInstance(nullptr);

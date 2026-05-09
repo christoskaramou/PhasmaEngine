@@ -112,6 +112,8 @@ namespace pe
     {
         return cmd ? Dx12CommandBufferImpl::From(cmd)->Get() : nullptr;
     }
+
+    ID3D12Resource *GetDx12BufferResource(Buffer *buffer);
 } // namespace pe
 
 #endif // PE_WIN32

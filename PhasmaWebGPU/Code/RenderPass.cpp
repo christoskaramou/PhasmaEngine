@@ -1202,7 +1202,6 @@ extern "C"
         rpe->occlusionQueryActive = true;
         rpe->activeOcclusionIndex = queryIndex;
         rpe->usedOcclusionIndices.insert(queryIndex);
-        rpe->occlusionQuerySet->beganIndices.insert(queryIndex);
 
         // Pool is host-reset at createQuerySet, but slots written by prior submits
         // are left "available" and re-begin violates VUID-vkCmdBeginQuery-None-00807.
