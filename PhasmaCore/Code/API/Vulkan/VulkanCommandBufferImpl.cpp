@@ -552,15 +552,15 @@ namespace pe
                                   reinterpret_cast<const VkWriteDescriptorSet *>(writes.data()));
     }
 
-    void VulkanCommandBufferImpl::SetViewport(float x, float y, float width, float height)
+    void VulkanCommandBufferImpl::SetViewport(float x, float y, float width, float height, float minDepth, float maxDepth)
     {
         vk::Viewport viewport{};
         viewport.x = x;
         viewport.y = y;
         viewport.width = width;
         viewport.height = height;
-        viewport.minDepth = 0.f;
-        viewport.maxDepth = 1.f;
+        viewport.minDepth = minDepth;
+        viewport.maxDepth = maxDepth;
 
         m_apiHandle.setViewport(0, 1, &viewport);
     }
@@ -572,6 +572,16 @@ namespace pe
         scissor.extent = vk::Extent2D{width, height};
 
         m_apiHandle.setScissor(0, 1, &scissor);
+    }
+
+    void VulkanCommandBufferImpl::SetBlendConstants(const float constants[4])
+    {
+        m_apiHandle.setBlendConstants(constants);
+    }
+
+    void VulkanCommandBufferImpl::SetStencilReference(uint32_t reference)
+    {
+        m_apiHandle.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, reference);
     }
 
     void VulkanCommandBufferImpl::SetLineWidth(float width)

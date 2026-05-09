@@ -30,8 +30,10 @@ namespace pe
         virtual void PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info) = 0;
 
         // Dynamic state
-        virtual void SetViewport(float x, float y, float width, float height) = 0;
+        virtual void SetViewport(float x, float y, float width, float height, float minDepth, float maxDepth) = 0;
         virtual void SetScissor(int x, int y, uint32_t width, uint32_t height) = 0;
+        virtual void SetBlendConstants(const float constants[4]) = 0;
+        virtual void SetStencilReference(uint32_t reference) = 0;
         virtual void SetLineWidth(float width) = 0;
         virtual void SetDepthBias(float constantFactor, float clamp, float slopeFactor) = 0;
         virtual void SetDepthTestEnable(uint32_t enable) = 0;

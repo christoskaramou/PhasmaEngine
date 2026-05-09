@@ -822,9 +822,7 @@ extern "C"
             return;
         }
 
-        vk::Buffer vkBuf = pe::GetVulkanBuffer(buffer->peBuffer);
-        vk::DeviceSize vkOffset = static_cast<vk::DeviceSize>(offset);
-        pe::GetVulkanCommandBuffer(rpe->cmd).bindVertexBuffers(slot, 1, &vkBuf, &vkOffset);
+        rpe->cmd->BindVertexBuffer(buffer->peBuffer, static_cast<size_t>(offset), slot, 1);
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -923,7 +921,7 @@ extern "C"
         }
         rpe->drawCount++;
         OpenRenderingIfNeeded(rpe);
-        pe::GetVulkanCommandBuffer(rpe->cmd).draw(vertexCount, instanceCount, firstVertex, firstInstance);
+        rpe->cmd->Draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     void wgpuRenderPassEncoderDrawIndexed(WGPURenderPassEncoder rpe, uint32_t indexCount,
@@ -957,7 +955,7 @@ extern "C"
         }
         rpe->drawCount++;
         OpenRenderingIfNeeded(rpe);
-        pe::GetVulkanCommandBuffer(rpe->cmd).drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
+        rpe->cmd->DrawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
     }
 
     void wgpuRenderPassEncoderDrawIndirect(WGPURenderPassEncoder rpe, WGPUBuffer buffer, uint64_t offset)
@@ -1005,7 +1003,7 @@ extern "C"
             rpe->invalid = true;
             return;
         }
-        constexpr uint64_t kDrawArgsSize = sizeof(VkDrawIndirectCommand);
+        constexpr uint64_t kDrawArgsSize = PE_DRAW_INDIRECT_COMMAND_SIZE;
         if (offset > buffer->size || kDrawArgsSize > buffer->size - offset)
         {
             char buf[224];
@@ -1042,7 +1040,7 @@ extern "C"
 
         rpe->drawCount++;
         OpenRenderingIfNeeded(rpe);
-        pe::GetVulkanCommandBuffer(rpe->cmd).drawIndirect(pe::GetVulkanBuffer(buffer->peBuffer), offset, 1, sizeof(VkDrawIndirectCommand));
+        rpe->cmd->DrawIndirect(buffer->peBuffer, static_cast<size_t>(offset), 1, PE_DRAW_INDIRECT_COMMAND_SIZE);
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -1092,7 +1090,7 @@ extern "C"
             rpe->invalid = true;
             return;
         }
-        constexpr uint64_t kDrawArgsSize = sizeof(VkDrawIndexedIndirectCommand);
+        constexpr uint64_t kDrawArgsSize = PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
         if (offset > buffer->size || kDrawArgsSize > buffer->size - offset)
         {
             char buf[224];
@@ -1130,7 +1128,8 @@ extern "C"
 
         rpe->drawCount++;
         OpenRenderingIfNeeded(rpe);
-        pe::GetVulkanCommandBuffer(rpe->cmd).drawIndexedIndirect(pe::GetVulkanBuffer(buffer->peBuffer), offset, 1, sizeof(VkDrawIndexedIndirectCommand));
+        rpe->cmd->DrawIndexedIndirect(buffer->peBuffer, static_cast<size_t>(offset), 1,
+                                      PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -1155,8 +1154,7 @@ extern "C"
             return;
         }
 
-        vk::Viewport vp{x, y, width, height, minDepth, maxDepth};
-        pe::GetVulkanCommandBuffer(rpe->cmd).setViewport(0, 1, &vp);
+        rpe->cmd->SetViewport(x, y, width, height, minDepth, maxDepth);
     }
 
     void wgpuRenderPassEncoderSetScissorRect(WGPURenderPassEncoder rpe,
@@ -1172,8 +1170,7 @@ extern "C"
             return;
         }
 
-        vk::Rect2D scissor{{static_cast<int32_t>(x), static_cast<int32_t>(y)}, {width, height}};
-        pe::GetVulkanCommandBuffer(rpe->cmd).setScissor(0, 1, &scissor);
+        rpe->cmd->SetScissor(static_cast<int32_t>(x), static_cast<int32_t>(y), width, height);
     }
 
     void wgpuRenderPassEncoderSetBlendConstant(WGPURenderPassEncoder rpe, WGPUColor const *color)
@@ -1185,7 +1182,7 @@ extern "C"
 
         float constants[4] = {static_cast<float>(color->r), static_cast<float>(color->g),
                               static_cast<float>(color->b), static_cast<float>(color->a)};
-        pe::GetVulkanCommandBuffer(rpe->cmd).setBlendConstants(constants);
+        rpe->cmd->SetBlendConstants(constants);
     }
 
     void wgpuRenderPassEncoderSetStencilReference(WGPURenderPassEncoder rpe, uint32_t reference)
@@ -1193,8 +1190,7 @@ extern "C"
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderSetStencilReference"))
             return;
 
-        pe::GetVulkanCommandBuffer(rpe->cmd).setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack,
-                                                                 reference & kStencilReferenceMask);
+        rpe->cmd->SetStencilReference(reference & kStencilReferenceMask);
     }
 
     void wgpuRenderPassEncoderBeginOcclusionQuery(WGPURenderPassEncoder rpe, uint32_t queryIndex)

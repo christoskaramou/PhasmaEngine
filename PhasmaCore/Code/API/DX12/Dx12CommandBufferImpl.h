@@ -38,8 +38,10 @@ namespace pe
         void BindDescriptors(uint32_t count, Descriptor *const *descriptors) override;
         void PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info) override;
 
-        void SetViewport(float x, float y, float width, float height) override;
+        void SetViewport(float x, float y, float width, float height, float minDepth, float maxDepth) override;
         void SetScissor(int x, int y, uint32_t width, uint32_t height) override;
+        void SetBlendConstants(const float constants[4]) override;
+        void SetStencilReference(uint32_t reference) override;
         void SetLineWidth(float width) override;
         void SetDepthBias(float constantFactor, float clamp, float slopeFactor) override;
         void SetDepthTestEnable(uint32_t enable) override;

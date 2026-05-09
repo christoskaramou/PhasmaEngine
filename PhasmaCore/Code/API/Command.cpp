@@ -245,14 +245,24 @@ namespace pe
         m_impl->PushDescriptor(set, info);
     }
 
-    void CommandBuffer::SetViewport(float x, float y, float width, float height)
+    void CommandBuffer::SetViewport(float x, float y, float width, float height, float minDepth, float maxDepth)
     {
-        m_impl->SetViewport(x, y, width, height);
+        m_impl->SetViewport(x, y, width, height, minDepth, maxDepth);
     }
 
     void CommandBuffer::SetScissor(int x, int y, uint32_t width, uint32_t height)
     {
         m_impl->SetScissor(x, y, width, height);
+    }
+
+    void CommandBuffer::SetBlendConstants(const float constants[4])
+    {
+        m_impl->SetBlendConstants(constants);
+    }
+
+    void CommandBuffer::SetStencilReference(uint32_t reference)
+    {
+        m_impl->SetStencilReference(reference);
     }
 
     void CommandBuffer::SetLineWidth(float width)

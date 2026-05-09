@@ -777,7 +777,7 @@ namespace pe
         DX12_CMD_CARVE_OUT("PushDescriptor");
     }
 
-    void Dx12CommandBufferImpl::SetViewport(float x, float y, float width, float height)
+    void Dx12CommandBufferImpl::SetViewport(float x, float y, float width, float height, float minDepth, float maxDepth)
     {
         const auto *rhi = static_cast<const Dx12RhiImpl *>(RHII.GetImpl());
         const bool flipY = rhi && rhi->SupportsInvertedViewportHeightFlipsY();
@@ -787,8 +787,8 @@ namespace pe
         vp.TopLeftY = flipY ? y + height : y;
         vp.Width = width;
         vp.Height = flipY ? -height : height;
-        vp.MinDepth = 0.0f;
-        vp.MaxDepth = 1.0f;
+        vp.MinDepth = minDepth;
+        vp.MaxDepth = maxDepth;
         m_cmdList->RSSetViewports(1, &vp);
     }
     void Dx12CommandBufferImpl::SetScissor(int x, int y, uint32_t width, uint32_t height)
@@ -799,6 +799,14 @@ namespace pe
         rect.right = x + static_cast<LONG>(width);
         rect.bottom = y + static_cast<LONG>(height);
         m_cmdList->RSSetScissorRects(1, &rect);
+    }
+    void Dx12CommandBufferImpl::SetBlendConstants(const float constants[4])
+    {
+        m_cmdList->OMSetBlendFactor(constants);
+    }
+    void Dx12CommandBufferImpl::SetStencilReference(uint32_t reference)
+    {
+        m_cmdList->OMSetStencilRef(reference);
     }
     void Dx12CommandBufferImpl::SetLineWidth(float)
     {

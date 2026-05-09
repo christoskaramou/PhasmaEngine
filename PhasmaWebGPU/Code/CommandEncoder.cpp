@@ -1325,20 +1325,16 @@ extern "C"
         // transitions collapse into one vkCmdPipelineBarrier2 call.
         rpe->deferredAttachmentBarriers = std::move(barriers);
 
-        // Vulkan dynamic state persists across begin/endRendering; WebGPU §14 resets at pass start.
+        // Dynamic state persists across native pass boundaries; WebGPU §14 resets at pass start.
         // These commands are valid outside dynamic-rendering scope, so set defaults now — user
         // set* commands issued before the first draw will then override correctly.
-        vk::Viewport defaultVp{0.0f, 0.0f,
-                               static_cast<float>(attachW), static_cast<float>(attachH),
-                               0.0f, 1.0f};
-        pe::GetVulkanCommandBuffer(enc->cmd).setViewport(0, 1, &defaultVp);
-
-        vk::Rect2D defaultScissor{{0, 0}, {attachW, attachH}};
-        pe::GetVulkanCommandBuffer(enc->cmd).setScissor(0, 1, &defaultScissor);
+        enc->cmd->SetViewport(0.0f, 0.0f, static_cast<float>(attachW),
+                              static_cast<float>(attachH));
+        enc->cmd->SetScissor(0, 0, attachW, attachH);
 
         const float zeroBlend[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-        pe::GetVulkanCommandBuffer(enc->cmd).setBlendConstants(zeroBlend);
-        pe::GetVulkanCommandBuffer(enc->cmd).setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, 0);
+        enc->cmd->SetBlendConstants(zeroBlend);
+        enc->cmd->SetStencilReference(0);
 
         // Defer beginRendering so bind-group barriers can be emitted outside
         // the Vulkan dynamic-rendering scope on first draw-scope command.

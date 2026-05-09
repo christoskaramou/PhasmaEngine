@@ -106,8 +106,10 @@ namespace pe
         void BindIndexBuffer(Buffer *buffer, size_t offset, PeIndexType indexType = PE_INDEX_TYPE_UINT32);
         void BindDescriptors(uint32_t count, Descriptor *const *descriptors);
         void PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info);
-        void SetViewport(float x, float y, float width, float height);
+        void SetViewport(float x, float y, float width, float height, float minDepth = 0.0f, float maxDepth = 1.0f);
         void SetScissor(int x, int y, uint32_t width, uint32_t height);
+        void SetBlendConstants(const float constants[4]);
+        void SetStencilReference(uint32_t reference);
         void SetLineWidth(float width);
         void SetDepthBias(float constantFactor, float clamp, float slopeFactor);
         void SetDepthTestEnable(uint32_t enable);
