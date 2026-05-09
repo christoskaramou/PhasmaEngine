@@ -15,4 +15,6 @@ namespace pe
         virtual CommandBuffer *GetCommandBuffer() const = 0;
         virtual void ResetState() = 0;
     };
+
+    std::unique_ptr<GpuTimer::Impl> CreateGpuTimerImpl(const std::string &name);
 } // namespace pe

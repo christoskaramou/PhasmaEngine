@@ -1,11 +1,5 @@
 #include "Base/Timer.h"
-#include "API/RHI.h"
-#include "API/Vulkan/VulkanGpuTimerImpl.h"
 #include "Base/Timer_Internal.h"
-
-#if defined(PE_WIN32)
-#include "API/DX12/Dx12GpuTimerImpl.h"
-#endif
 
 namespace pe
 {
@@ -84,27 +78,9 @@ namespace pe
 
     GpuTimer::GpuTimer(const std::string &name)
     {
-        switch (RHII.GetApi())
-        {
-        case PE_GRAPHICS_API_VULKAN:
-        {
-            auto vk = std::make_unique<VulkanGpuTimerImpl>(name);
-            m_apiHandle = reinterpret_cast<void *>(static_cast<VkQueryPool>(vk->ApiHandle()));
-            m_impl = std::move(vk);
-            break;
-        }
-#if defined(PE_WIN32)
-        case PE_GRAPHICS_API_DX12:
-        {
-            auto dx = std::make_unique<Dx12GpuTimerImpl>(name);
-            m_apiHandle = dx.get();
-            m_impl = std::move(dx);
-            break;
-        }
-#endif
-        default:
-            PE_ERROR("GpuTimer: unsupported graphics API");
-        }
+        m_impl = CreateGpuTimerImpl(name);
+        PE_ERROR_IF(!m_impl, "GpuTimer: backend returned null Impl from CreateGpuTimerImpl");
+        m_apiHandle = m_impl.get();
     }
 
     GpuTimer::~GpuTimer() = default;
