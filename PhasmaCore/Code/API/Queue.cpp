@@ -16,36 +16,49 @@ namespace pe
 {
     CommandPool::Impl *CreateCommandPoolImpl(CommandPool *owner, Queue *queue, PeCommandPoolCreateFlags flags, const std::string &name)
     {
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        const PeGraphicsApi api = RHII.GetApi();
+        switch (api)
         {
+        case PE_GRAPHICS_API_VULKAN:
+            return new VulkanCommandPoolImpl(owner, queue, flags, name);
+        case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             return new Dx12CommandPoolImpl(owner, queue, flags, name);
 #else
             PE_ERROR("CreateCommandPoolImpl: DX12 backend is Windows-only");
             return nullptr;
 #endif
+        default:
+            PE_ERROR("CreateCommandPoolImpl: unsupported graphics api %u", static_cast<uint32_t>(api));
+            return nullptr;
         }
-        return new VulkanCommandPoolImpl(owner, queue, flags, name);
     }
 
     Queue::Impl *CreateQueueImpl(Queue *owner, uint32_t familyId, const std::string &name)
     {
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        const PeGraphicsApi api = RHII.GetApi();
+        switch (api)
         {
+        case PE_GRAPHICS_API_VULKAN:
+            return new VulkanQueueImpl(owner, familyId, name);
+        case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             return new Dx12QueueImpl(owner, familyId, name);
 #else
             PE_ERROR("CreateQueueImpl: DX12 backend is Windows-only");
             return nullptr;
 #endif
+        default:
+            PE_ERROR("CreateQueueImpl: unsupported graphics api %u", static_cast<uint32_t>(api));
+            return nullptr;
         }
-        return new VulkanQueueImpl(owner, familyId, name);
     }
 
     CommandPool::CommandPool(Queue *queue, PeCommandPoolCreateFlags flags, const std::string &name)
         : m_queue(queue), m_flags(flags)
     {
         m_impl = CreateCommandPoolImpl(this, queue, flags, name);
+        PE_ERROR_IF(!m_impl, "CommandPool: backend returned null Impl from CreateCommandPoolImpl");
     }
 
     CommandPool::~CommandPool()
@@ -71,6 +84,7 @@ namespace pe
           m_submissionsSemaphore{Semaphore::Create(true, name + "_submissionsSemaphore")}
     {
         m_impl = CreateQueueImpl(this, familyId, name);
+        PE_ERROR_IF(!m_impl, "Queue: backend returned null Impl from CreateQueueImpl");
     }
 
     Queue::~Queue()
