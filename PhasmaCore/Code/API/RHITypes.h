@@ -7,6 +7,19 @@ enum PeGraphicsApi : uint32_t
     PE_GRAPHICS_API_COUNT
 };
 
+constexpr const char *PeGraphicsApiName(PeGraphicsApi api)
+{
+    switch (api)
+    {
+    case PE_GRAPHICS_API_VULKAN:
+        return "Vulkan";
+    case PE_GRAPHICS_API_DX12:
+        return "DX12";
+    default:
+        return "Unknown";
+    }
+}
+
 using PeBackendHandle = uintptr_t;
 
 enum PeFormat : uint32_t

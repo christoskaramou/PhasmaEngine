@@ -30,6 +30,7 @@ namespace pe
         void ReleaseImageTexture(void *&textureID);
         void DrawPlatformWindows();
         bool Render() const { return m_initialized && m_render; }
+        bool IsInitialized() const { return m_initialized; }
         void ToggleRender() { m_render = !m_render; }
         void TriggerExitConfirmation();
         void RequestDockReset() { m_requestDockReset = true; }

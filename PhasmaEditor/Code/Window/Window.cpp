@@ -172,7 +172,7 @@ namespace pe
                 }
                 case EventType::RequestExit:
                 {
-                    if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+                    if (rendererSystem->GetGUI().IsInitialized())
                         rendererSystem->GetGUI().TriggerExitConfirmation();
                     else
                         return false;

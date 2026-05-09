@@ -47,6 +47,16 @@ namespace pe
         {
             return format == PE_FORMAT_B8G8R8A8_UNORM || format == PE_FORMAT_B8G8R8A8_SRGB;
         }
+
+        bool UsesDx12RenderOrchestration()
+        {
+            return RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        }
+
+        bool SupportsRayTracingPass()
+        {
+            return RHII.GetCaps().rayTracing;
+        }
     } // namespace
 
     void RendererSystem::LoadResources(CommandBuffer *cmd)
@@ -60,12 +70,12 @@ namespace pe
 
     void RendererSystem::Init(CommandBuffer *cmd)
     {
-        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        const bool isDx12 = UsesDx12RenderOrchestration();
 
         // Set Window Title
         std::string title = "PhasmaEngine";
         title += " - Device: " + RHII.GetGpuName();
-        title += isDx12 ? " - API: DX12" : " - API: Vulkan";
+        title += " - API: " + std::string(PeGraphicsApiName(RHII.GetApi()));
         title += " - Present Mode: " + std::string(RHII.PresentModeToString(RHII.GetSwapchain()->GetPresentMode()));
 #if PE_DEBUG
         title += " - Debug";
@@ -93,7 +103,7 @@ namespace pe
         // Skybox / IBL are consumed by the Light pass. DX12 reaches that slice in 14c.
         LoadResources(initCmd);
 
-        // DX12 Phase 1 wires bounded raster/post/editor slices here while keeping RT Vulkan-only.
+        // DX12 Phase 1 wires bounded raster/post/editor slices here; RT follows RHI caps.
         m_renderPassComponents[ID::GetTypeID<CullingPass>()] = CreateGlobalComponent<CullingPass>();
         m_renderPassComponents[ID::GetTypeID<ShadowPass>()] = CreateGlobalComponent<ShadowPass>();
         m_renderPassComponents[ID::GetTypeID<DepthPass>()] = CreateGlobalComponent<DepthPass>();
@@ -124,8 +134,9 @@ namespace pe
         {
             m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
             m_renderPassComponents[ID::GetTypeID<SharpenPass>()] = CreateGlobalComponent<SharpenPass>();
-            m_renderPassComponents[ID::GetTypeID<RayTracingPass>()] = CreateGlobalComponent<RayTracingPass>();
         }
+        if (SupportsRayTracingPass())
+            m_renderPassComponents[ID::GetTypeID<RayTracingPass>()] = CreateGlobalComponent<RayTracingPass>();
 
         for (auto &renderPassComponent : m_renderPassComponents)
         {
@@ -218,18 +229,9 @@ namespace pe
 
     void RendererSystem::Update()
     {
-        const bool hasEditorGui = RHII.GetApi() == PE_GRAPHICS_API_VULKAN ||
-                                  RHII.GetApi() == PE_GRAPHICS_API_DX12;
-
-        if (hasEditorGui)
         {
             PE_PROFILE_SCOPE("GUI");
             m_gui.Update();
-        }
-        else
-        {
-            PE_PROFILE_SCOPE("GUI Agent Actions");
-            m_gui.PumpMainThreadActions();
         }
 
         // Flush any deferred GPU work (primitive batching, async load completion)
@@ -316,7 +318,7 @@ namespace pe
         const auto &gs = Settings::Get<GlobalSettings>();
 
         // No TLAS: fall back to raster so m_display still gets painted.
-        const bool hasRTGeom = m_scene.GetTLAS() != nullptr;
+        const bool hasRTGeom = SupportsRayTracingPass() && m_scene.GetTLAS() != nullptr;
         const bool renderRaster = (gs.render_mode != RenderMode::RayTracing) || !hasRTGeom;
         const bool renderRayTracing = (gs.render_mode != RenderMode::Raster) && hasRTGeom;
         const bool needVelocity = gs.taa || gs.motion_blur;
@@ -325,11 +327,11 @@ namespace pe
         const bool needDepth = renderRaster || needVelocity || gs.dof || gs.motion_blur || gs.draw_aabbs || gs.draw_grid;
         const bool needGBuffer = renderRaster || needVelocity || renderSSR || renderSSAO;
 
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        if (UsesDx12RenderOrchestration())
         {
             // DX12 Phase 1 enables the carved raster/post/GUI slice, but falls
             // back to raster when a user setting requests RT-only rendering.
-            const bool dx12RayTracing = RHII.GetCaps().rayTracing && renderRayTracing;
+            const bool dx12RayTracing = renderRayTracing;
             const bool dx12RenderRaster = renderRaster || !dx12RayTracing;
             const bool dx12NeedDepth = dx12RenderRaster || gs.draw_aabbs || gs.draw_grid;
             const bool dx12NeedGBuffer = dx12RenderRaster;
@@ -486,7 +488,7 @@ namespace pe
     CommandBuffer *RendererSystem::RecordPasses(uint32_t imageIndex)
     {
         CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
-        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        const bool isDx12 = UsesDx12RenderOrchestration();
         Image *dx12SwapchainImage = isDx12 ? RHII.GetSwapchain()->GetImage(imageIndex) : nullptr;
 
         // Set scene on all scene-dependent passes before execution.

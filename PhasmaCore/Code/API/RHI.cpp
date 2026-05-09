@@ -1273,7 +1273,7 @@ namespace pe
         // Set Window Title
         std::string title = "PhasmaEngine";
         title += " - Device: " + GetGpuName();
-        title += m_api == PE_GRAPHICS_API_VULKAN ? " - API: Vulkan" : " - API: DX12";
+        title += " - API: " + std::string(PeGraphicsApiName(m_api));
         title += " - Present Mode: " + std::string(PresentModeToString(m_surface->GetPresentMode()));
 #if PE_DEBUG
         title += " - Debug";
