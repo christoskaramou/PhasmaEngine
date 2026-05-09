@@ -4,6 +4,7 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "Base/Log.h"
+#include "GUI/Backends/GUIBackend.h"
 #include "GUI/UndoRedo.h"
 #include "Scene/ModelAsset.h"
 #include "Script/ScriptSystem.h"
@@ -18,11 +19,6 @@
 #include "Systems/AnimationSystem.h"
 #include "Window/Window.h"
 #include "imgui/ImGuizmo.h"
-#include "imgui/imgui_impl_sdl2.h"
-#include "imgui/imgui_impl_vulkan.h"
-#if defined(PE_WIN32)
-#include "GUI/Backends/imgui_impl_dx12.h"
-#endif
 #ifdef NDEBUG
 #include "Window/SplashScreen.h"
 #endif
@@ -235,6 +231,8 @@ namespace pe
         auto *rendererSystem = GetGlobalSystem<RendererSystem>();
         if (!rendererSystem)
             return;
+        if (!GUIBackend::IsSupported())
+            return;
 
         // The last normal Frame() submitted GPU work that may still be in-flight.
         // Drain everything before touching the same semaphores/images again.
@@ -243,13 +241,7 @@ namespace pe
         RHII.NextFrame();
         rendererSystem->WaitPreviousFrameCommands();
 
-        ImGui_ImplSDL2_NewFrame();
-        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
-            ImGui_ImplVulkan_NewFrame();
-#if defined(PE_WIN32)
-        else if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-            ImGui_ImplDX12_NewFrame();
-#endif
+        GUIBackend::NewFrame();
         ImGui::NewFrame();
         ImGuizmo::BeginFrame();
 
@@ -284,9 +276,7 @@ namespace pe
 
         m_frameTimer.Tick();
 
-        const bool isVulkan = RHII.GetApi() == PE_GRAPHICS_API_VULKAN;
-        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
-        const bool hasImGuiRenderer = isVulkan || isDx12;
+        const bool hasImGuiRenderer = GUIBackend::IsSupported();
 
         auto rendererSystem = GetGlobalSystem<RendererSystem>();
         {
@@ -298,13 +288,7 @@ namespace pe
         if (hasImGuiRenderer)
         {
             PE_PROFILE_SCOPE("ImGui New Frame");
-            ImGui_ImplSDL2_NewFrame();
-            if (isVulkan)
-                ImGui_ImplVulkan_NewFrame();
-#if defined(PE_WIN32)
-            else
-                ImGui_ImplDX12_NewFrame();
-#endif
+            GUIBackend::NewFrame();
             ImGui::NewFrame();
             ImGuizmo::BeginFrame();
         }
@@ -336,7 +320,7 @@ namespace pe
                 PE_PROFILE_SCOPE("Draw");
                 rendererSystem->Draw();
             }
-            if (isVulkan)
+            if (GUIBackend::SupportsPlatformWindows())
             {
                 PE_PROFILE_SCOPE("ImGui Draw Platform Windows");
                 rendererSystem->DrawPlatformWindows();

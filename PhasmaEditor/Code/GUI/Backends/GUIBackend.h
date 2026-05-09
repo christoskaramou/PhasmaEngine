@@ -13,6 +13,7 @@ namespace pe
         void ConfigureIO();
         void Init(Attachment *attachment);
         void Shutdown();
+        void NewFrame();
         void CreateFontsTexture();
         void RenderDrawData(CommandBuffer *cmd);
         void *RegisterImageTexture(Image *image);

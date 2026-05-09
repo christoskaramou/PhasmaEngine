@@ -156,6 +156,22 @@ namespace pe::GUIBackend
         ImGui_ImplSDL2_Shutdown();
     }
 
+    void NewFrame()
+    {
+        ImGui_ImplSDL2_NewFrame();
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+        {
+            ImGui_ImplVulkan_NewFrame();
+            return;
+        }
+
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            ImGui_ImplDX12_NewFrame();
+#endif
+    }
+
     void CreateFontsTexture()
     {
         if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
