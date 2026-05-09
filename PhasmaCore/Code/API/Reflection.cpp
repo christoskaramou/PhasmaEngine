@@ -12,6 +12,27 @@ namespace pe
 {
     namespace
     {
+        void PopulateReflectionForBackend(Reflection &reflection, Shader *shader)
+        {
+            const PeGraphicsApi api = RHII.GetApi();
+            switch (api)
+            {
+            case PE_GRAPHICS_API_VULKAN:
+                PopulateReflectionFromSpirv(reflection, shader);
+                return;
+            case PE_GRAPHICS_API_DX12:
+#if defined(PE_WIN32)
+                PopulateReflectionFromDxil(reflection, shader);
+#else
+                PE_ERROR("PopulateReflectionForBackend: DX12 reflection is Windows-only");
+#endif
+                return;
+            default:
+                PE_ERROR("PopulateReflectionForBackend: unsupported graphics api %u", static_cast<uint32_t>(api));
+                return;
+            }
+        }
+
         template <typename T>
         void FillDxRegisterInfo(DescriptorBindingInfo &info, const T &desc)
         {
@@ -22,17 +43,7 @@ namespace pe
 
     void Reflection::Init(Shader *shader)
     {
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-        {
-#if defined(PE_WIN32)
-            PopulateReflectionFromDxil(*this, shader);
-#else
-            PE_ERROR("[Shader] DX12 reflection is Windows-only");
-#endif
-            return;
-        }
-
-        PopulateReflectionFromSpirv(*this, shader);
+        PopulateReflectionForBackend(*this, shader);
     }
 
     std::vector<VertexInputBinding> Reflection::GetVertexBindings() const

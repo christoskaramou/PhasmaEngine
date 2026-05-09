@@ -10,16 +10,22 @@ namespace pe
 {
     Swapchain::Impl *CreateSwapchainImpl(Swapchain *owner, const SwapchainDesc &desc)
     {
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        const PeGraphicsApi api = RHII.GetApi();
+        switch (api)
         {
+        case PE_GRAPHICS_API_VULKAN:
+            return new VulkanSwapchainImpl(owner, desc);
+        case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             return new Dx12SwapchainImpl(owner, desc);
 #else
             PE_ERROR("CreateSwapchainImpl: DX12 backend is Windows-only");
             return nullptr;
 #endif
+        default:
+            PE_ERROR("CreateSwapchainImpl: unsupported graphics api %u", static_cast<uint32_t>(api));
+            return nullptr;
         }
-        return new VulkanSwapchainImpl(owner, desc);
     }
 
     Swapchain *Swapchain::Create(const SwapchainDesc &desc)
@@ -70,6 +76,7 @@ namespace pe
           m_name{desc.name}
     {
         m_impl = CreateSwapchainImpl(this, desc);
+        PE_ERROR_IF(!m_impl, "Swapchain: backend returned null Impl from CreateSwapchainImpl");
     }
 
     Swapchain::~Swapchain()

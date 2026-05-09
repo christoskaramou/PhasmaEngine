@@ -14,16 +14,22 @@ namespace pe
                                              RenderPass *renderPass,
                                              const std::string &name)
     {
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        const PeGraphicsApi api = RHII.GetApi();
+        switch (api)
         {
+        case PE_GRAPHICS_API_VULKAN:
+            return new VulkanFramebufferImpl(owner, width, height, views, renderPass, name);
+        case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             return new Dx12FramebufferImpl(owner, width, height, views, renderPass, name);
 #else
             PE_ERROR("CreateFramebufferImpl: DX12 backend is Windows-only");
             return nullptr;
 #endif
+        default:
+            PE_ERROR("CreateFramebufferImpl: unsupported graphics api %u", static_cast<uint32_t>(api));
+            return nullptr;
         }
-        return new VulkanFramebufferImpl(owner, width, height, views, renderPass, name);
     }
 
     Framebuffer *Framebuffer::Create(uint32_t width,
@@ -74,6 +80,7 @@ namespace pe
           m_name{name}
     {
         m_impl = CreateFramebufferImpl(this, width, height, views, renderPass, name);
+        PE_ERROR_IF(!m_impl, "Framebuffer: backend returned null Impl from CreateFramebufferImpl");
     }
 
     Framebuffer::~Framebuffer()

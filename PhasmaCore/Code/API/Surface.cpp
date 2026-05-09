@@ -9,16 +9,22 @@ namespace pe
 {
     Surface::Impl *CreateSurfaceImpl(Surface *owner, SDL_Window *window)
     {
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        const PeGraphicsApi api = RHII.GetApi();
+        switch (api)
         {
+        case PE_GRAPHICS_API_VULKAN:
+            return new VulkanSurfaceImpl(owner, window);
+        case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             return new Dx12SurfaceImpl(owner, window);
 #else
             PE_ERROR("CreateSurfaceImpl: DX12 backend is Windows-only");
             return nullptr;
 #endif
+        default:
+            PE_ERROR("CreateSurfaceImpl: unsupported graphics api %u", static_cast<uint32_t>(api));
+            return nullptr;
         }
-        return new VulkanSurfaceImpl(owner, window);
     }
 
     Surface *Surface::Create(SDL_Window *window)
@@ -59,6 +65,7 @@ namespace pe
     Surface::Surface(SDL_Window *window)
     {
         m_impl = CreateSurfaceImpl(this, window);
+        PE_ERROR_IF(!m_impl, "Surface: backend returned null Impl from CreateSurfaceImpl");
         SetPresentMode(PE_PRESENT_MODE_FIFO);
     }
 

@@ -10,16 +10,22 @@ namespace pe
 {
     RenderPass::Impl *CreateRenderPassImpl(RenderPass *owner, uint32_t count, Attachment *attachments, const std::string &name)
     {
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        const PeGraphicsApi api = RHII.GetApi();
+        switch (api)
         {
+        case PE_GRAPHICS_API_VULKAN:
+            return new VulkanRenderPassImpl(owner, count, attachments, name);
+        case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             return new Dx12RenderPassImpl(owner, count, attachments, name);
 #else
             PE_ERROR("CreateRenderPassImpl: DX12 backend is Windows-only");
             return nullptr;
 #endif
+        default:
+            PE_ERROR("CreateRenderPassImpl: unsupported graphics api %u", static_cast<uint32_t>(api));
+            return nullptr;
         }
-        return new VulkanRenderPassImpl(owner, count, attachments, name);
     }
 
     RenderPass *RenderPass::Create(uint32_t count, Attachment *attachments, const std::string &name)
@@ -61,6 +67,7 @@ namespace pe
         : m_name{name}
     {
         m_impl = CreateRenderPassImpl(this, count, attachments, name);
+        PE_ERROR_IF(!m_impl, "RenderPass: backend returned null Impl from CreateRenderPassImpl");
     }
 
     RenderPass::~RenderPass()
