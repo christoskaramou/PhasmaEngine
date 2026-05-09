@@ -1,4 +1,5 @@
 #include "Device.h"
+#include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "Buffer.h"
@@ -1063,23 +1064,12 @@ extern "C"
                 cmd->Begin();
                 cmd->FillBuffer(buf->peBuffer, 0, static_cast<size_t>(fillSize), 0);
 
-                // vkCmdFillBuffer writes at eClear/eTransferWrite. Without a trailing
-                // barrier, a later submit's vkCmdCopyBuffer2 (writeBuffer / staged copy)
-                // into the same VkBuffer trips a sync2 WAW hazard across submits.
-                vk::BufferMemoryBarrier2 bmb{};
-                bmb.srcStageMask = vk::PipelineStageFlagBits2::eClear;
-                bmb.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-                bmb.dstStageMask = vk::PipelineStageFlagBits2::eAllCommands;
-                bmb.dstAccessMask = vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite;
-                bmb.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                bmb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                bmb.buffer = pe::GetVulkanBuffer(buf->peBuffer);
-                bmb.offset = 0;
-                bmb.size = fillSize;
-                vk::DependencyInfo dep{};
-                dep.bufferMemoryBarrierCount = 1;
-                dep.pBufferMemoryBarriers = &bmb;
-                pe::GetVulkanCommandBuffer(cmd).pipelineBarrier2(dep);
+                pe::MemoryBarrierInfo fillBarrier{};
+                fillBarrier.srcStageMask = PE_STAGE_CLEAR;
+                fillBarrier.srcAccessMask = PE_ACCESS_TRANSFER_WRITE;
+                fillBarrier.dstStageMask = PE_STAGE_ALL_COMMANDS;
+                fillBarrier.dstAccessMask = PE_ACCESS_MEMORY_READ | PE_ACCESS_MEMORY_WRITE;
+                cmd->MemoryBarrier(fillBarrier);
 
                 cmd->End();
                 device->queue->peQueue->Submit(1, &cmd, nullptr, nullptr);
@@ -2705,6 +2695,9 @@ extern "C"
 
         while (!pl->bindGroupLayouts.empty() && pl->bindGroupLayouts.back() == nullptr)
             pl->bindGroupLayouts.pop_back();
+
+        if (device->rhi && device->rhi->GetApi() != PE_GRAPHICS_API_VULKAN)
+            return pl;
 
         for (auto *bglPtr : pl->bindGroupLayouts)
         {

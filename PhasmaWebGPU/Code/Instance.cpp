@@ -19,6 +19,8 @@ namespace
 
     static bool EnsureRhiInitialized()
     {
+        if (pe::RHII.GetImpl())
+            return true; // Already initialized by the embedding app/test.
         if (pe::VulkanRhi::Gpu())
             return true; // Already initialized (e.g. by PhasmaEditor).
 
@@ -92,20 +94,42 @@ namespace
         }
     }
 
-    WGPUAdapterType VkDeviceTypeToAdapterType(VkPhysicalDeviceType t)
+    WGPUAdapterType PeAdapterTypeToWebGPU(pe::GpuAdapterType t)
     {
         switch (t)
         {
-        case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+        case pe::GpuAdapterType::IntegratedGpu:
             return WGPUAdapterType_IntegratedGPU;
-        case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+        case pe::GpuAdapterType::DiscreteGpu:
             return WGPUAdapterType_DiscreteGPU;
-        case VK_PHYSICAL_DEVICE_TYPE_CPU:
+        case pe::GpuAdapterType::Cpu:
             return WGPUAdapterType_CPU;
-        case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
-        case VK_PHYSICAL_DEVICE_TYPE_OTHER:
         default:
             return WGPUAdapterType_Unknown;
+        }
+    }
+
+    WGPUBackendType PeApiToWebGPUBackend(PeGraphicsApi api)
+    {
+        switch (api)
+        {
+        case PE_GRAPHICS_API_DX12:
+            return WGPUBackendType_D3D12;
+        case PE_GRAPHICS_API_VULKAN:
+        default:
+            return WGPUBackendType_Vulkan;
+        }
+    }
+
+    const char *PeApiDriverDescription(PeGraphicsApi api)
+    {
+        switch (api)
+        {
+        case PE_GRAPHICS_API_DX12:
+            return "D3D12";
+        case PE_GRAPHICS_API_VULKAN:
+        default:
+            return "Vulkan";
         }
     }
 
@@ -277,97 +301,134 @@ extern "C"
         {
             if (options->forceFallbackAdapter)
                 return trackError("PhasmaWebGPU: no fallback (software) adapter available");
-            if (options->backendType != WGPUBackendType_Undefined &&
-                options->backendType != WGPUBackendType_Vulkan)
-                return trackError("PhasmaWebGPU: only WGPUBackendType_Vulkan is available on this host");
         }
 
         pe::RHI *rhi = instance ? instance->rhi : &pe::RHII;
         if (!rhi)
             return trackError("PhasmaWebGPU: pe::RHI is not initialized");
-        if (rhi->GetApi() != PE_GRAPHICS_API_VULKAN || !pe::VulkanRhi::Gpu())
-            return trackError("PhasmaWebGPU: WebGPU adapter discovery is currently Vulkan-only");
+
+        const WGPUBackendType activeBackend = PeApiToWebGPUBackend(rhi->GetApi());
+        if (options && options->backendType != WGPUBackendType_Undefined &&
+            options->backendType != activeBackend)
+            return trackError("PhasmaWebGPU: requested backend is not the active pe::RHI backend");
+        if (rhi->GetApi() == PE_GRAPHICS_API_VULKAN && !pe::VulkanRhi::Gpu())
+            return trackError("PhasmaWebGPU: Vulkan pe::RHI is missing a physical device");
+        if (rhi->GetApi() != PE_GRAPHICS_API_VULKAN &&
+            rhi->GetApi() != PE_GRAPHICS_API_DX12)
+            return trackError("PhasmaWebGPU: active pe::RHI backend is not supported");
 
         auto *adapter = new WGPUAdapterImpl();
         adapter->rhi = rhi;
         adapter->instance = instance;
         wgpuInstanceAddRef(instance);
-        adapter->gpu = pe::VulkanRhi::Gpu();
+        adapter->adapterInfo = rhi->GetGpuAdapterInfo();
+        adapter->featureSupport = rhi->GetGpuFeatureSupport();
+        adapter->deviceName = rhi->GetGpuName();
+        adapter->vendorName = VendorIdToString(adapter->adapterInfo.vendorId);
+        adapter->architecture = "";
+        adapter->driverDescription = PeApiDriverDescription(rhi->GetApi());
+        adapter->adapterType = PeAdapterTypeToWebGPU(adapter->adapterInfo.type);
+        adapter->backendType = activeBackend;
 
-        VkPhysicalDevice vkGpu = static_cast<VkPhysicalDevice>(adapter->gpu);
-        vkGetPhysicalDeviceProperties(vkGpu, &adapter->vkProps);
-        vkGetPhysicalDeviceFeatures(vkGpu, &adapter->vkFeatures);
-
-        // Extended caps outside core VkPhysicalDeviceFeatures (shaderFloat16,
-        // 16-bit storage/input-output, depthClipEnable).
-        // Safe to chain unsupported extension structs — the driver leaves the bool as 0.
-        VkPhysicalDeviceVulkan11Features vk11Features{};
-        vk11Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
-        VkPhysicalDeviceVulkan12Features vk12Features{};
-        vk12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-        VkPhysicalDeviceDepthClipEnableFeaturesEXT depthClipFeatures{};
-        depthClipFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT;
-        vk11Features.pNext = &vk12Features;
-        vk12Features.pNext = &depthClipFeatures;
-        VkPhysicalDeviceFeatures2 features2{};
-        features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-        features2.pNext = &vk11Features;
-        vkGetPhysicalDeviceFeatures2(vkGpu, &features2);
-        adapter->chainedCaps.shaderFloat16 = vk12Features.shaderFloat16 != 0;
-        adapter->chainedCaps.storageInputOutput16 = vk11Features.storageInputOutput16 != 0;
-        adapter->chainedCaps.depthClipEnable = depthClipFeatures.depthClipEnable != 0;
-
-        VkPhysicalDeviceVulkan11Properties vk11Props{};
-        vk11Props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES;
-        VkPhysicalDeviceVulkan13Properties vk13Props{};
-        vk13Props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES;
-        vk11Props.pNext = &vk13Props;
-        VkPhysicalDeviceProperties2 props2{};
-        props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-        props2.pNext = &vk11Props;
-        vkGetPhysicalDeviceProperties2(vkGpu, &props2);
-
-        constexpr VkSubgroupFeatureFlags kRequiredOps =
-            VK_SUBGROUP_FEATURE_BASIC_BIT |
-            VK_SUBGROUP_FEATURE_VOTE_BIT |
-            VK_SUBGROUP_FEATURE_BALLOT_BIT |
-            VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
-            VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
-            VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT |
-            VK_SUBGROUP_FEATURE_QUAD_BIT;
-        const bool opsSupported =
-            (vk11Props.subgroupSupportedOperations & kRequiredOps) == kRequiredOps;
-        const bool computeStage =
-            (vk11Props.subgroupSupportedStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0;
-        adapter->chainedCaps.subgroups = opsSupported && computeStage;
-
-        if (adapter->chainedCaps.subgroups)
+        if (rhi->GetApi() == PE_GRAPHICS_API_VULKAN)
         {
-            if (vk13Props.minSubgroupSize != 0 && vk13Props.maxSubgroupSize != 0)
+            adapter->gpu = pe::VulkanRhi::Gpu();
+
+            VkPhysicalDevice vkGpu = static_cast<VkPhysicalDevice>(adapter->gpu);
+            vkGetPhysicalDeviceProperties(vkGpu, &adapter->vkProps);
+            vkGetPhysicalDeviceFeatures(vkGpu, &adapter->vkFeatures);
+
+            adapter->adapterInfo.vendorId = adapter->vkProps.vendorID;
+            adapter->adapterInfo.deviceId = adapter->vkProps.deviceID;
+            adapter->deviceName = adapter->vkProps.deviceName;
+            adapter->vendorName = VendorIdToString(adapter->vkProps.vendorID);
+            adapter->adapterType = PeAdapterTypeToWebGPU(adapter->adapterInfo.type);
+
+            // Extended caps outside core VkPhysicalDeviceFeatures (shaderFloat16,
+            // 16-bit storage/input-output, depthClipEnable).
+            // Safe to chain unsupported extension structs — the driver leaves the bool as 0.
+            VkPhysicalDeviceVulkan11Features vk11Features{};
+            vk11Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+            VkPhysicalDeviceVulkan12Features vk12Features{};
+            vk12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+            VkPhysicalDeviceDepthClipEnableFeaturesEXT depthClipFeatures{};
+            depthClipFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT;
+            vk11Features.pNext = &vk12Features;
+            vk12Features.pNext = &depthClipFeatures;
+            VkPhysicalDeviceFeatures2 features2{};
+            features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+            features2.pNext = &vk11Features;
+            vkGetPhysicalDeviceFeatures2(vkGpu, &features2);
+            adapter->chainedCaps.shaderFloat16 = vk12Features.shaderFloat16 != 0;
+            adapter->chainedCaps.storageInputOutput16 = vk11Features.storageInputOutput16 != 0;
+            adapter->chainedCaps.depthClipEnable = depthClipFeatures.depthClipEnable != 0;
+            adapter->featureSupport.textureCompressionBC =
+                adapter->vkFeatures.textureCompressionBC != 0;
+            adapter->featureSupport.textureCompressionETC2 =
+                adapter->vkFeatures.textureCompressionETC2 != 0;
+            adapter->featureSupport.textureCompressionASTC =
+                adapter->vkFeatures.textureCompressionASTC_LDR != 0;
+            adapter->featureSupport.drawIndirectFirstInstance =
+                adapter->vkFeatures.drawIndirectFirstInstance != 0;
+            adapter->featureSupport.timestampQuery =
+                adapter->vkProps.limits.timestampComputeAndGraphics != 0;
+            adapter->featureSupport.dualSourceBlending =
+                adapter->vkFeatures.dualSrcBlend != 0;
+            adapter->featureSupport.shaderClipDistance =
+                adapter->vkFeatures.shaderClipDistance != 0;
+            adapter->featureSupport.shaderFloat16 = adapter->chainedCaps.shaderFloat16;
+            adapter->featureSupport.storageInputOutput16 =
+                adapter->chainedCaps.storageInputOutput16;
+            adapter->featureSupport.depthClipControl = adapter->chainedCaps.depthClipEnable;
+            adapter->featureSupport.depthClamp = adapter->vkFeatures.depthClamp != 0;
+            adapter->featureSupport.geometryShader = adapter->vkFeatures.geometryShader != 0;
+
+            VkPhysicalDeviceVulkan11Properties vk11Props{};
+            vk11Props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES;
+            VkPhysicalDeviceVulkan13Properties vk13Props{};
+            vk13Props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES;
+            vk11Props.pNext = &vk13Props;
+            VkPhysicalDeviceProperties2 props2{};
+            props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+            props2.pNext = &vk11Props;
+            vkGetPhysicalDeviceProperties2(vkGpu, &props2);
+
+            constexpr VkSubgroupFeatureFlags kRequiredOps =
+                VK_SUBGROUP_FEATURE_BASIC_BIT |
+                VK_SUBGROUP_FEATURE_VOTE_BIT |
+                VK_SUBGROUP_FEATURE_BALLOT_BIT |
+                VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
+                VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
+                VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT |
+                VK_SUBGROUP_FEATURE_QUAD_BIT;
+            const bool opsSupported =
+                (vk11Props.subgroupSupportedOperations & kRequiredOps) == kRequiredOps;
+            const bool computeStage =
+                (vk11Props.subgroupSupportedStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0;
+            adapter->chainedCaps.subgroups = opsSupported && computeStage;
+
+            if (adapter->chainedCaps.subgroups)
             {
-                adapter->chainedCaps.subgroupMinSize = vk13Props.minSubgroupSize;
-                adapter->chainedCaps.subgroupMaxSize = vk13Props.maxSubgroupSize;
-            }
-            else if (vk11Props.subgroupSize != 0)
-            {
-                adapter->chainedCaps.subgroupMinSize = vk11Props.subgroupSize;
-                adapter->chainedCaps.subgroupMaxSize = vk11Props.subgroupSize;
+                if (vk13Props.minSubgroupSize != 0 && vk13Props.maxSubgroupSize != 0)
+                {
+                    adapter->chainedCaps.subgroupMinSize = vk13Props.minSubgroupSize;
+                    adapter->chainedCaps.subgroupMaxSize = vk13Props.maxSubgroupSize;
+                }
+                else if (vk11Props.subgroupSize != 0)
+                {
+                    adapter->chainedCaps.subgroupMinSize = vk11Props.subgroupSize;
+                    adapter->chainedCaps.subgroupMaxSize = vk11Props.subgroupSize;
+                }
             }
         }
-
-        adapter->deviceName = adapter->vkProps.deviceName;
-        adapter->vendorName = VendorIdToString(adapter->vkProps.vendorID);
-        adapter->architecture = "";
-        adapter->driverDescription = "Vulkan";
-        adapter->adapterType = VkDeviceTypeToAdapterType(adapter->vkProps.deviceType);
-        adapter->backendType = WGPUBackendType_Vulkan;
 
         pwgpu_PopulateAdapterFeatureCache(*adapter);
 
         // Spec §4.2.1: adapter must expose BC or (ETC2 AND ASTC).
-        const bool hasBC = adapter->vkFeatures.textureCompressionBC != 0;
-        const bool hasETC2 = adapter->vkFeatures.textureCompressionETC2 != 0;
-        const bool hasASTC = adapter->vkFeatures.textureCompressionASTC_LDR != 0;
+        const bool hasBC = adapter->featureSupport.textureCompressionBC &&
+                           adapter->textureCompressionBcFullySupported;
+        const bool hasETC2 = adapter->featureSupport.textureCompressionETC2;
+        const bool hasASTC = adapter->featureSupport.textureCompressionASTC;
         if (!hasBC && !(hasETC2 && hasASTC))
         {
             delete adapter;

@@ -65,6 +65,37 @@ namespace pe
         uint32_t maxComputeWorkgroupsPerDimension = 0;
     };
 
+    enum class GpuAdapterType
+    {
+        Unknown,
+        IntegratedGpu,
+        DiscreteGpu,
+        Cpu,
+    };
+
+    struct GpuAdapterInfo
+    {
+        uint32_t vendorId = 0;
+        uint32_t deviceId = 0;
+        GpuAdapterType type = GpuAdapterType::Unknown;
+    };
+
+    struct GpuFeatureSupport
+    {
+        bool textureCompressionBC = false;
+        bool textureCompressionETC2 = false;
+        bool textureCompressionASTC = false;
+        bool drawIndirectFirstInstance = false;
+        bool timestampQuery = false;
+        bool dualSourceBlending = false;
+        bool shaderClipDistance = false;
+        bool shaderFloat16 = false;
+        bool storageInputOutput16 = false;
+        bool depthClipControl = false;
+        bool depthClamp = false;
+        bool geometryShader = false;
+    };
+
     struct SystemProcMem
     {
         // System
@@ -147,6 +178,8 @@ namespace pe
         uint32_t GetMaxPushConstantsSize() { return m_maxPushConstantsSize; }
         const Caps &GetCaps() const { return m_caps; }
         const GpuLimits &GetGpuLimits() const { return m_gpuLimits; }
+        const GpuAdapterInfo &GetGpuAdapterInfo() const { return m_gpuAdapterInfo; }
+        const GpuFeatureSupport &GetGpuFeatureSupport() const { return m_gpuFeatureSupport; }
         const std::string &GetGpuName() { return m_gpuName; }
         DescriptorPool *GetDescriptorPool() { return m_descriptorPool; }
         Queue *GetMainQueue() { return m_mainQueue; }
@@ -194,6 +227,8 @@ namespace pe
 
         Caps m_caps;
         GpuLimits m_gpuLimits;
+        GpuAdapterInfo m_gpuAdapterInfo;
+        GpuFeatureSupport m_gpuFeatureSupport;
         PeGraphicsApi m_api = PE_GRAPHICS_API_VULKAN;
         Impl *m_impl = nullptr;
     };

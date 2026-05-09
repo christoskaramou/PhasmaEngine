@@ -25,7 +25,8 @@ extern "C"
                 if (bgl)
                     wgpuBindGroupLayoutRelease(bgl);
             }
-            if (pl->device && pl->device->rhi)
+            if (pl->device && pl->device->rhi &&
+                pl->device->rhi->GetApi() == PE_GRAPHICS_API_VULKAN)
             {
                 auto vkDev = pe::VulkanRhi::Device();
                 if (pl->backendLayout != 0)

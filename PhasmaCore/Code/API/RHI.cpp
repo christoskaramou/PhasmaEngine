@@ -57,6 +57,52 @@ namespace pe
         return gpu.getProperties().vendorID; // 0x10DE NVIDIA, 0x1002 AMD, 0x8086 Intel
     }
 
+#if defined(PE_WIN32)
+    static bool Dx12FormatSupportsTextureSample(ID3D12Device *device, DXGI_FORMAT format)
+    {
+        if (!device)
+            return false;
+
+        D3D12_FEATURE_DATA_FORMAT_SUPPORT support{};
+        support.Format = format;
+        if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,
+                                               &support,
+                                               sizeof(support))))
+            return false;
+
+        constexpr D3D12_FORMAT_SUPPORT1 kRequired =
+            D3D12_FORMAT_SUPPORT1_TEXTURE2D | D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE;
+        return (support.Support1 & kRequired) == kRequired;
+    }
+
+    static bool Dx12SupportsAllBcTextureSamples(ID3D12Device *device)
+    {
+        static constexpr DXGI_FORMAT kBcFormats[] = {
+            DXGI_FORMAT_BC1_UNORM,
+            DXGI_FORMAT_BC1_UNORM_SRGB,
+            DXGI_FORMAT_BC2_UNORM,
+            DXGI_FORMAT_BC2_UNORM_SRGB,
+            DXGI_FORMAT_BC3_UNORM,
+            DXGI_FORMAT_BC3_UNORM_SRGB,
+            DXGI_FORMAT_BC4_UNORM,
+            DXGI_FORMAT_BC4_SNORM,
+            DXGI_FORMAT_BC5_UNORM,
+            DXGI_FORMAT_BC5_SNORM,
+            DXGI_FORMAT_BC6H_UF16,
+            DXGI_FORMAT_BC6H_SF16,
+            DXGI_FORMAT_BC7_UNORM,
+            DXGI_FORMAT_BC7_UNORM_SRGB,
+        };
+
+        for (DXGI_FORMAT format : kBcFormats)
+        {
+            if (!Dx12FormatSupportsTextureSample(device, format))
+                return false;
+        }
+        return true;
+    }
+#endif
+
     static bool GetVkPciBusId(vk::PhysicalDevice gpu, uint32_t &domain, uint32_t &bus, uint32_t &device, uint32_t &function)
     {
 #if defined(VK_EXT_pci_bus_info)
@@ -381,6 +427,10 @@ namespace pe
         m_window = window;
         m_frameCounter = 0;
         m_textureDataPitchAlignment = 1;
+        m_caps = {};
+        m_gpuAdapterInfo = {};
+        m_gpuFeatureSupport = {};
+        m_gpuLimits = {};
 
         if (api == PE_GRAPHICS_API_DX12)
         {
@@ -398,6 +448,25 @@ namespace pe
             m_caps = dx->GetCaps();
             SyncRayTracingSettingsToCaps(m_caps);
             m_gpuName = dx->GetAdapterName();
+
+            DXGI_ADAPTER_DESC3 adapterDesc{};
+            if (dx->GetAdapter())
+            {
+                dx->GetAdapter()->GetDesc3(&adapterDesc);
+                m_gpuAdapterInfo.vendorId = adapterDesc.VendorId;
+                m_gpuAdapterInfo.deviceId = adapterDesc.DeviceId;
+                if (adapterDesc.Flags & DXGI_ADAPTER_FLAG3_SOFTWARE)
+                    m_gpuAdapterInfo.type = GpuAdapterType::Cpu;
+                else if (adapterDesc.DedicatedVideoMemory > 0)
+                    m_gpuAdapterInfo.type = GpuAdapterType::DiscreteGpu;
+                else
+                    m_gpuAdapterInfo.type = GpuAdapterType::IntegratedGpu;
+            }
+
+            m_gpuFeatureSupport.textureCompressionBC =
+                Dx12SupportsAllBcTextureSamples(dx->GetDevice());
+            m_gpuFeatureSupport.drawIndirectFirstInstance = true;
+            m_gpuFeatureSupport.timestampQuery = true;
             m_maxUniformBufferSize = D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16u;
             m_maxStorageBufferSize = std::numeric_limits<uint32_t>::max();
             m_minUniformBufferOffsetAlignment = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
@@ -761,6 +830,52 @@ namespace pe
         ::vk::PhysicalDeviceProperties2 gpuPropertiesVK{};
         gpuPropertiesVK.pNext = &pushDescriptorProperties;
         vk->m_gpu.getProperties2(&gpuPropertiesVK);
+
+        const vk::PhysicalDeviceFeatures gpuFeatures = vk->m_gpu.getFeatures();
+        VkPhysicalDeviceVulkan11Features vk11Features{};
+        vk11Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+        VkPhysicalDeviceVulkan12Features vk12Features{};
+        vk12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+        VkPhysicalDeviceDepthClipEnableFeaturesEXT depthClipFeatures{};
+        depthClipFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT;
+        vk11Features.pNext = &vk12Features;
+        vk12Features.pNext = &depthClipFeatures;
+        VkPhysicalDeviceFeatures2 features2{};
+        features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        features2.pNext = &vk11Features;
+        vkGetPhysicalDeviceFeatures2(static_cast<VkPhysicalDevice>(vk->m_gpu), &features2);
+
+        m_gpuAdapterInfo.vendorId = gpuPropertiesVK.properties.vendorID;
+        m_gpuAdapterInfo.deviceId = gpuPropertiesVK.properties.deviceID;
+        switch (gpuPropertiesVK.properties.deviceType)
+        {
+        case vk::PhysicalDeviceType::eIntegratedGpu:
+            m_gpuAdapterInfo.type = GpuAdapterType::IntegratedGpu;
+            break;
+        case vk::PhysicalDeviceType::eDiscreteGpu:
+            m_gpuAdapterInfo.type = GpuAdapterType::DiscreteGpu;
+            break;
+        case vk::PhysicalDeviceType::eCpu:
+            m_gpuAdapterInfo.type = GpuAdapterType::Cpu;
+            break;
+        default:
+            m_gpuAdapterInfo.type = GpuAdapterType::Unknown;
+            break;
+        }
+
+        m_gpuFeatureSupport.textureCompressionBC = gpuFeatures.textureCompressionBC != 0;
+        m_gpuFeatureSupport.textureCompressionETC2 = gpuFeatures.textureCompressionETC2 != 0;
+        m_gpuFeatureSupport.textureCompressionASTC = gpuFeatures.textureCompressionASTC_LDR != 0;
+        m_gpuFeatureSupport.drawIndirectFirstInstance = gpuFeatures.drawIndirectFirstInstance != 0;
+        m_gpuFeatureSupport.timestampQuery =
+            gpuPropertiesVK.properties.limits.timestampComputeAndGraphics != 0;
+        m_gpuFeatureSupport.dualSourceBlending = gpuFeatures.dualSrcBlend != 0;
+        m_gpuFeatureSupport.shaderClipDistance = gpuFeatures.shaderClipDistance != 0;
+        m_gpuFeatureSupport.shaderFloat16 = vk12Features.shaderFloat16 != 0;
+        m_gpuFeatureSupport.storageInputOutput16 = vk11Features.storageInputOutput16 != 0;
+        m_gpuFeatureSupport.depthClipControl = depthClipFeatures.depthClipEnable != 0;
+        m_gpuFeatureSupport.depthClamp = gpuFeatures.depthClamp != 0;
+        m_gpuFeatureSupport.geometryShader = gpuFeatures.geometryShader != 0;
 
         m_gpuName = gpuPropertiesVK.properties.deviceName.data();
         m_maxUniformBufferSize = gpuPropertiesVK.properties.limits.maxUniformBufferRange;

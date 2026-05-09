@@ -112,6 +112,19 @@ static bool ParseApiName(const char *value, PeGraphicsApi &api)
     return false;
 }
 
+static const char *BackendName(WGPUBackendType backend)
+{
+    switch (backend)
+    {
+    case WGPUBackendType_D3D12:
+        return "D3D12";
+    case WGPUBackendType_Vulkan:
+        return "Vulkan";
+    default:
+        return "Unknown";
+    }
+}
+
 int main(int argc, char *argv[])
 {
     pe::Log::Init();
@@ -190,9 +203,10 @@ int main(int argc, char *argv[])
     {
         WGPUAdapterInfo info{};
         wgpuAdapterGetInfo(adapter, &info);
-        printf("  GPU: %.*s  vendor: %.*s  backend: Vulkan\n",
+        printf("  GPU: %.*s  vendor: %.*s  backend: %s\n",
                static_cast<int>(info.device.length), info.device.data,
-               static_cast<int>(info.vendor.length), info.vendor.data);
+               static_cast<int>(info.vendor.length), info.vendor.data,
+               BackendName(info.backendType));
         wgpuAdapterInfoFreeMembers(info);
     }
 
@@ -327,8 +341,33 @@ int main(int argc, char *argv[])
     cpDesc.layout = pipelineLayout;
     cpDesc.compute.module = shaderModule;
     cpDesc.compute.entryPoint = {"main", WGPU_STRLEN};
+    const int errorsBeforeComputePipeline = g_errors;
     WGPUComputePipeline computePipeline = wgpuDeviceCreateComputePipeline(device, &cpDesc);
-    CHECK(computePipeline != nullptr, "compute pipeline created");
+    if (g_errors == errorsBeforeComputePipeline)
+        CHECK(computePipeline != nullptr, "compute pipeline created");
+
+    if (g_errors > 0)
+    {
+        fprintf(stderr, "Stopping after compute pipeline creation error.\n");
+        wgpuDeviceDestroy(device);
+        if (computePipeline)
+            wgpuComputePipelineRelease(computePipeline);
+        wgpuShaderModuleRelease(shaderModule);
+        wgpuPipelineLayoutRelease(pipelineLayout);
+        wgpuBindGroupLayoutRelease(bgl);
+        wgpuBufferRelease(readbackBuf);
+        wgpuBufferRelease(outputBuf);
+        wgpuBufferRelease(inputBuf);
+        wgpuQueueRelease(queue);
+        wgpuDeviceRelease(device);
+        wgpuAdapterRelease(adapter);
+        wgpuInstanceRelease(instance);
+        pe::RHII.WaitDeviceIdle();
+        pe::RHII.Destroy();
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
 
     // 8. Bind Group
 

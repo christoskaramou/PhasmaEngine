@@ -3,7 +3,6 @@
 #include "Instance.h"
 #include "Utils.h"
 #include "WGPULimits.h"
-#include "API/Vulkan/RHI_Vulkan.h"
 
 namespace
 {
@@ -15,28 +14,28 @@ namespace
         case WGPUFeatureName_CoreFeaturesAndLimits:
             return true;
         case WGPUFeatureName_TextureCompressionBC:
-            return a.vkFeatures.textureCompressionBC != 0 &&
+            return a.featureSupport.textureCompressionBC &&
                    a.textureCompressionBcFullySupported;
         case WGPUFeatureName_TextureCompressionBCSliced3D:
             return a.textureCompressionBCSliced3D;
         case WGPUFeatureName_TextureCompressionETC2:
-            return a.vkFeatures.textureCompressionETC2 != 0;
+            return a.featureSupport.textureCompressionETC2;
         case WGPUFeatureName_TextureCompressionASTC:
-            return a.vkFeatures.textureCompressionASTC_LDR != 0;
+            return a.featureSupport.textureCompressionASTC;
         case WGPUFeatureName_TextureCompressionASTCSliced3D:
             return a.textureCompressionASTCSliced3D;
         case WGPUFeatureName_IndirectFirstInstance:
-            return a.vkFeatures.drawIndirectFirstInstance != 0;
+            return a.featureSupport.drawIndirectFirstInstance;
         case WGPUFeatureName_TimestampQuery:
-            return a.vkProps.limits.timestampComputeAndGraphics != 0;
+            return a.featureSupport.timestampQuery;
         case WGPUFeatureName_DualSourceBlending:
-            return a.vkFeatures.dualSrcBlend != 0;
+            return a.featureSupport.dualSourceBlending;
         case WGPUFeatureName_ClipDistances:
-            return a.vkFeatures.shaderClipDistance != 0;
+            return a.featureSupport.shaderClipDistance;
         case WGPUFeatureName_ShaderF16:
-            return a.chainedCaps.shaderFloat16 && a.chainedCaps.storageInputOutput16;
+            return a.featureSupport.shaderFloat16 && a.featureSupport.storageInputOutput16;
         case WGPUFeatureName_DepthClipControl:
-            return a.chainedCaps.depthClipEnable;
+            return a.featureSupport.depthClipControl;
         case WGPUFeatureName_BGRA8UnormStorage:
             return a.bgra8UnormStorage;
         case WGPUFeatureName_Float32Filterable:
@@ -139,7 +138,7 @@ void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
             a.resolvedStencil8 = VK_FORMAT_D32_SFLOAT_S8_UINT;
 
         a.depth32FloatStencil8 = fmtSupportsDepth(VK_FORMAT_D32_SFLOAT_S8_UINT);
-        a.primitiveIndex = a.vkFeatures.geometryShader != 0;
+        a.primitiveIndex = a.featureSupport.geometryShader;
 
         auto fmtBlendable = [&](VkFormat fmt) -> bool
         {
@@ -267,12 +266,17 @@ void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
             return r == VK_SUCCESS;
         };
         a.textureCompressionBCSliced3D =
-            a.vkFeatures.textureCompressionBC != 0 &&
+            a.featureSupport.textureCompressionBC &&
             a.textureCompressionBcFullySupported &&
             supports3DSampled(VK_FORMAT_BC1_RGBA_UNORM_BLOCK);
         a.textureCompressionASTCSliced3D =
-            a.vkFeatures.textureCompressionASTC_LDR != 0 &&
+            a.featureSupport.textureCompressionASTC &&
             supports3DSampled(VK_FORMAT_ASTC_4x4_UNORM_BLOCK);
+    }
+    else
+    {
+        a.textureCompressionBcFullySupported = a.featureSupport.textureCompressionBC;
+        a.primitiveIndex = a.featureSupport.geometryShader;
     }
 
     a.supportedFeatures.clear();
@@ -331,8 +335,8 @@ extern "C"
         info->description = pwgpu::ToStringView(adapter->driverDescription);
         info->backendType = adapter->backendType;
         info->adapterType = adapter->adapterType;
-        info->vendorID = adapter->vkProps.vendorID;
-        info->deviceID = adapter->vkProps.deviceID;
+        info->vendorID = adapter->adapterInfo.vendorId;
+        info->deviceID = adapter->adapterInfo.deviceId;
         info->subgroupMinSize = adapter->chainedCaps.subgroupMinSize;
         info->subgroupMaxSize = adapter->chainedCaps.subgroupMaxSize;
 
@@ -379,6 +383,8 @@ extern "C"
 
         if (!adapter || adapter->consumed)
             return trackError("PhasmaWebGPU: adapter is null, expired, or already consumed by a prior requestDevice");
+        if (!adapter->rhi)
+            return trackError("PhasmaWebGPU: adapter has no backing pe::RHI");
 
         if (adapter->supportedFeatures.empty())
             pwgpu_PopulateAdapterFeatureCache(*adapter);
@@ -406,7 +412,7 @@ extern "C"
             }
         }
 
-        const bool canFulfill = adapter->rhi && pe::VulkanRhi::Device();
+        const bool canFulfill = adapter->rhi && adapter->rhi->GetMainQueue();
 
         auto *dev = new WGPUDeviceImpl();
         dev->instance = inst;
@@ -450,13 +456,13 @@ extern "C"
         dev->adapterDescription = adapter->driverDescription;
         dev->adapterType = adapter->adapterType;
         dev->adapterBackend = adapter->backendType;
-        dev->adapterVendorID = adapter->vkProps.vendorID;
-        dev->adapterDeviceID = adapter->vkProps.deviceID;
+        dev->adapterVendorID = adapter->adapterInfo.vendorId;
+        dev->adapterDeviceID = adapter->adapterInfo.deviceId;
         dev->resolvedDepth24Plus = adapter->resolvedDepth24Plus;
         dev->resolvedDepth24PlusStencil8 = adapter->resolvedDepth24PlusStencil8;
         dev->resolvedStencil8 = adapter->resolvedStencil8;
-        dev->supportsDepthClamp = adapter->vkFeatures.depthClamp != 0;
-        dev->supportsDepthClipEnable = adapter->chainedCaps.depthClipEnable;
+        dev->supportsDepthClamp = adapter->featureSupport.depthClamp;
+        dev->supportsDepthClipEnable = adapter->featureSupport.depthClipControl;
 
         if (descriptor)
         {

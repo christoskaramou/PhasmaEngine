@@ -1,5 +1,6 @@
 #include "WGPULimits.h"
 #include "API/RHI.h"
+#include <algorithm>
 
 namespace pwgpu
 {
@@ -44,9 +45,13 @@ namespace pwgpu
                                   out.maxStorageBuffersPerShaderStage +
                                   out.maxStorageTexturesPerShaderStage +
                                   out.maxUniformBuffersPerShaderStage;
-        out.maxBindingsPerBindGroup = perStage * 2u;
+        const WGPULimits defaults = DefaultLimits();
+        out.maxBindingsPerBindGroup =
+            std::max(perStage * 2u, defaults.maxBindingsPerBindGroup);
 
-        out.maxBindGroupsPlusVertexBuffers = out.maxBindGroups + out.maxVertexBuffers;
+        out.maxBindGroupsPlusVertexBuffers =
+            std::max(out.maxBindGroups + out.maxVertexBuffers,
+                     defaults.maxBindGroupsPlusVertexBuffers);
     }
 
     namespace

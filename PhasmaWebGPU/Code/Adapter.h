@@ -26,6 +26,8 @@ struct WGPUAdapterImpl
     pe::RHI *rhi = nullptr;
     vk::PhysicalDevice gpu{};
 
+    pe::GpuAdapterInfo adapterInfo{};
+    pe::GpuFeatureSupport featureSupport{};
     VkPhysicalDeviceProperties vkProps{};
     VkPhysicalDeviceFeatures vkFeatures{};
     WGPUAdapterChainedCaps chainedCaps{};
