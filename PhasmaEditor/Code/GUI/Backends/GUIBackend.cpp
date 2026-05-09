@@ -1,4 +1,4 @@
-#include "GUIBackend.h"
+#include "GUI/Backends/GUIBackend.h"
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/Queue.h"
@@ -17,7 +17,7 @@
 #include "API/DX12/Dx12ImageViewImpl.h"
 #include "API/DX12/Dx12RhiImpl.h"
 #include "API/DX12/Dx12Translate.h"
-#include "Backends/imgui_impl_dx12.h"
+#include "imgui_impl_dx12.h"
 #endif
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_sdl2.h"

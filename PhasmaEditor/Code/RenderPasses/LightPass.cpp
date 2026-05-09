@@ -8,6 +8,7 @@
 #include "API/RenderPass.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
+#include "RenderPasses/Backends/LightPassBackend.h"
 #include "ShadowPass.h"
 #include "Systems/RendererSystem.h"
 
@@ -127,11 +128,12 @@ namespace pe
 
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.camPos = vec4(camera->GetPosition(), 1.0f);
-        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        const LightPassBackend::PostProcessFeatures postProcessFeatures =
+            LightPassBackend::ResolvePostProcessFeatures(gSettings.tonemapping, gSettings.taa);
         m_ubo.ssao = gSettings.ssao;
         m_ubo.ssr = gSettings.ssr;
-        m_ubo.tonemapping = !isDx12 && gSettings.tonemapping;
-        m_ubo.fsr2 = !isDx12 && gSettings.taa;
+        m_ubo.tonemapping = postProcessFeatures.tonemapping;
+        m_ubo.fsr2 = postProcessFeatures.fsr2;
         m_ubo.IBL = gSettings.IBL;
         m_ubo.IBL_intensity = gSettings.IBL_intensity;
         m_ubo.lights_intensity = gSettings.lights_intensity;
@@ -315,11 +317,12 @@ namespace pe
 
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.camPos = vec4(camera->GetPosition(), 1.0f);
-        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        const LightPassBackend::PostProcessFeatures postProcessFeatures =
+            LightPassBackend::ResolvePostProcessFeatures(gSettings.tonemapping, gSettings.taa);
         m_ubo.ssao = gSettings.ssao;
         m_ubo.ssr = gSettings.ssr;
-        m_ubo.tonemapping = !isDx12 && gSettings.tonemapping;
-        m_ubo.fsr2 = !isDx12 && gSettings.taa;
+        m_ubo.tonemapping = postProcessFeatures.tonemapping;
+        m_ubo.fsr2 = postProcessFeatures.fsr2;
         m_ubo.IBL = gSettings.IBL;
         m_ubo.IBL_intensity = gSettings.IBL_intensity;
         m_ubo.lights_intensity = gSettings.lights_intensity;

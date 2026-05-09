@@ -6,7 +6,7 @@
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
-#include "GUIBackend.h"
+#include "GUI/Backends/GUIBackend.h"
 #include "GUIState.h"
 #include "Helpers.h"
 #include "Particles/ParticleManager.h"

@@ -1,12 +1,6 @@
 #include "Scene/MaterialReflection.h"
+#include "Scene/Backends/MaterialReflectionBackend.h"
 #include "Scene/PassInfoAsset.h"
-#include "API/RHI.h"
-#include "API/Shader.h"
-#include "API/Reflection.h"
-#include "API/Vulkan/VulkanReflection.h"
-#include "API/Vulkan/VulkanShaderImpl.h"
-#include "Base/Path.h"
-#include "spirv_cross/spirv_cross.hpp"
 
 namespace pe
 {
@@ -14,98 +8,20 @@ namespace pe
     {
         MaterialLayout layout;
 
-        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
-            return layout;
-
         const PassVariant *surface = passInfo.GetVariant("surface");
         if (!surface || !surface->HasShaders())
             return layout;
 
-        struct ShaderRefl
-        {
-            Shader *shader;
-            const Reflection *refl;
-        };
-        std::vector<ShaderRefl> stages;
-        auto destroyStages = [&]()
-        {
-            for (auto &[shader, refl] : stages)
-            {
-                (void)refl;
-                Shader::Destroy(shader);
-            }
-            stages.clear();
-        };
-
-        if (!surface->vertexShader.empty())
-        {
-            Shader *vs = Shader::Create({.sourcePath = Path::Assets + surface->vertexShader, .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
-            if (vs)
-                stages.push_back({vs, &vs->GetReflection()});
-        }
-        if (!surface->fragmentShader.empty())
-        {
-            Shader *fs = Shader::Create({.sourcePath = Path::Assets + surface->fragmentShader, .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
-            if (fs)
-                stages.push_back({fs, &fs->GetReflection()});
-        }
-
-        // Reflect the raw SPIR-V struct to get member offsets
-        std::vector<StructMemberInfo> rawMembers;
-        uint32_t rawTotalSize = 0;
-
-        auto reflectRawStruct = [&](Shader *shader, const std::string &bufferName)
-        {
-            spirv_cross::Compiler compiler{GetVulkanShaderSpirv(shader), GetVulkanShaderSpirvSizeWords(shader)};
-            auto resources = compiler.get_shader_resources();
-
-            for (const auto &sbuf : resources.storage_buffers)
-            {
-                std::string name = compiler.get_name(sbuf.id);
-                if (name.empty())
-                    name = compiler.get_fallback_name(sbuf.id);
-                if (name != bufferName)
-                    continue;
-
-                const auto &blockType = compiler.get_type(sbuf.base_type_id);
-                const spirv_cross::SPIRType *structType = &blockType;
-
-                if (blockType.member_types.size() == 1)
-                {
-                    const auto &memberType = compiler.get_type(blockType.member_types[0]);
-                    if (!memberType.array.empty() && memberType.basetype == spirv_cross::SPIRType::Struct)
-                        structType = &memberType;
-                }
-
-                rawMembers = ReflectStructMembersFromSpirv(compiler, *structType);
-                rawTotalSize = static_cast<uint32_t>(compiler.get_declared_struct_size(*structType));
-                rawTotalSize = (rawTotalSize + 3u) & ~3u;
-                return true;
-            }
-            return false;
-        };
-
-        if (!surface->materialBufferName.empty())
-        {
-            for (const auto &[shader, refl] : stages)
-            {
-                if (reflectRawStruct(shader, surface->materialBufferName))
-                    break;
-            }
-        }
-
-        if (rawMembers.empty())
-        {
-            destroyStages();
+        const ReflectedMaterialResources reflected = ReflectMaterialResourcesForBackend(*surface);
+        if (reflected.rawMembers.empty())
             return layout;
-        }
 
         // Parse annotation
         MaterialAnnotation ann = ParseMaterialAnnotation(surface->materialAnnotation);
 
         // Build a lookup of raw struct members by name
         std::unordered_map<std::string, const StructMemberInfo *> memberByName;
-        for (const auto &m : rawMembers)
+        for (const auto &m : reflected.rawMembers)
             memberByName[m.name] = &m;
 
         if (!ann.fieldHints.empty())
@@ -176,13 +92,13 @@ namespace pe
                 layout.fields.push_back(field);
                 layout.structMembers.push_back(expanded);
             }
-            layout.totalByteSize = rawTotalSize;
+            layout.totalByteSize = reflected.totalByteSize;
         }
         else
         {
             // No annotation: fall back to raw struct members
-            layout.structMembers = rawMembers;
-            for (const auto &member : rawMembers)
+            layout.structMembers = reflected.rawMembers;
+            for (const auto &member : reflected.rawMembers)
             {
                 MaterialFieldDesc field;
                 field.name = member.name;
@@ -201,48 +117,24 @@ namespace pe
 
                 layout.fields.push_back(field);
             }
-            layout.totalByteSize = rawTotalSize;
+            layout.totalByteSize = reflected.totalByteSize;
         }
 
-        // Scan for pe_tex_ prefixed separate images (bindless texture slots)
-        for (const auto &[shader, refl] : stages)
+        layout.textureSlots = reflected.textureSlots;
+        for (MaterialTextureSlot &slot : layout.textureSlots)
         {
-            spirv_cross::Compiler compiler{GetVulkanShaderSpirv(shader), GetVulkanShaderSpirvSizeWords(shader)};
-            auto resources = compiler.get_shader_resources();
-
-            for (const auto &img : resources.separate_images)
+            const std::string idxFieldName = slot.bindingName + "_idx";
+            for (const auto &field : layout.fields)
             {
-                std::string name = compiler.get_name(img.id);
-                if (name.empty())
-                    name = compiler.get_fallback_name(img.id);
-                if (!name.starts_with("pe_tex_"))
-                    continue;
-
-                uint32_t descSet = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
-                uint32_t descBinding = compiler.get_decoration(img.id, spv::DecorationBinding);
-
-                MaterialTextureSlot slot;
-                slot.bindingName = name;
-                slot.set = static_cast<int>(descSet);
-                slot.binding = static_cast<int>(descBinding);
-
-                // Find matching uint index field in reflected struct (name + "_idx")
-                std::string idxFieldName = name + "_idx";
-                for (const auto &field : layout.fields)
+                if (field.name == idxFieldName && field.baseType == StructMemberBaseType::UInt)
                 {
-                    if (field.name == idxFieldName && field.baseType == StructMemberBaseType::UInt)
-                    {
-                        slot.byteOffset = field.offset;
-                        break;
-                    }
+                    slot.byteOffset = field.offset;
+                    break;
                 }
-
-                layout.textureSlots.push_back(slot);
             }
         }
 
         layout.valid = !layout.fields.empty() || !layout.textureSlots.empty();
-        destroyStages();
         return layout;
     }
 } // namespace pe
