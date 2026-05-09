@@ -1,7 +1,53 @@
 #include "WGPULimits.h"
+#include "API/RHI.h"
 
 namespace pwgpu
 {
+
+    void FillLimitsFromCore(WGPULimits &out, const pe::GpuLimits &limits)
+    {
+        out.nextInChain = nullptr;
+        out.maxTextureDimension1D = limits.maxTextureDimension1D;
+        out.maxTextureDimension2D = limits.maxTextureDimension2D;
+        out.maxTextureDimension3D = limits.maxTextureDimension3D;
+        out.maxTextureArrayLayers = limits.maxTextureArrayLayers;
+        out.maxBindGroups = limits.maxBindGroups;
+        out.maxDynamicUniformBuffersPerPipelineLayout = limits.maxDynamicUniformBuffersPerPipelineLayout;
+        out.maxDynamicStorageBuffersPerPipelineLayout = limits.maxDynamicStorageBuffersPerPipelineLayout;
+        out.maxSampledTexturesPerShaderStage = limits.maxSampledTexturesPerShaderStage;
+        out.maxSamplersPerShaderStage = limits.maxSamplersPerShaderStage;
+        out.maxStorageBuffersPerShaderStage = limits.maxStorageBuffersPerShaderStage;
+        out.maxStorageTexturesPerShaderStage = limits.maxStorageTexturesPerShaderStage;
+        out.maxUniformBuffersPerShaderStage = limits.maxUniformBuffersPerShaderStage;
+        out.maxUniformBufferBindingSize = limits.maxUniformBufferBindingSize;
+        out.maxStorageBufferBindingSize = limits.maxStorageBufferBindingSize;
+        out.minUniformBufferOffsetAlignment = limits.minUniformBufferOffsetAlignment;
+        out.minStorageBufferOffsetAlignment = limits.minStorageBufferOffsetAlignment;
+        out.maxVertexBuffers = limits.maxVertexBuffers;
+        out.maxBufferSize = limits.maxBufferSize;
+        out.maxVertexAttributes = limits.maxVertexAttributes;
+        out.maxVertexBufferArrayStride = limits.maxVertexBufferArrayStride;
+        out.maxInterStageShaderVariables = limits.maxInterStageShaderVariables;
+        out.maxColorAttachments = limits.maxColorAttachments;
+        // RHI exposes backend limits; WebGPU derives this non-native aggregate.
+        out.maxColorAttachmentBytesPerSample = 64;
+        out.maxComputeWorkgroupStorageSize = limits.maxComputeWorkgroupStorageSize;
+        out.maxComputeInvocationsPerWorkgroup = limits.maxComputeInvocationsPerWorkgroup;
+        out.maxComputeWorkgroupSizeX = limits.maxComputeWorkgroupSizeX;
+        out.maxComputeWorkgroupSizeY = limits.maxComputeWorkgroupSizeY;
+        out.maxComputeWorkgroupSizeZ = limits.maxComputeWorkgroupSizeZ;
+        out.maxComputeWorkgroupsPerDimension = limits.maxComputeWorkgroupsPerDimension;
+        out.maxImmediateSize = 0;
+
+        const uint32_t perStage = out.maxSampledTexturesPerShaderStage +
+                                  out.maxSamplersPerShaderStage +
+                                  out.maxStorageBuffersPerShaderStage +
+                                  out.maxStorageTexturesPerShaderStage +
+                                  out.maxUniformBuffersPerShaderStage;
+        out.maxBindingsPerBindGroup = perStage * 2u;
+
+        out.maxBindGroupsPlusVertexBuffers = out.maxBindGroups + out.maxVertexBuffers;
+    }
 
     namespace
     {

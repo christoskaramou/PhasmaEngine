@@ -405,6 +405,34 @@ namespace pe
             m_textureDataPitchAlignment = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
             m_maxPushConstantsSize = m_caps.maxPushConstantsBytes;
             m_maxDrawIndirectCount = std::numeric_limits<uint32_t>::max();
+            m_gpuLimits.maxTextureDimension1D = D3D12_REQ_TEXTURE1D_U_DIMENSION;
+            m_gpuLimits.maxTextureDimension2D = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+            m_gpuLimits.maxTextureDimension3D = D3D12_REQ_TEXTURE3D_U_V_OR_W_DIMENSION;
+            m_gpuLimits.maxTextureArrayLayers = D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION;
+            m_gpuLimits.maxBindGroups = 4;
+            m_gpuLimits.maxDynamicUniformBuffersPerPipelineLayout = 8;
+            m_gpuLimits.maxDynamicStorageBuffersPerPipelineLayout = 4;
+            m_gpuLimits.maxSampledTexturesPerShaderStage = D3D12_COMMONSHADER_INPUT_RESOURCE_REGISTER_COUNT;
+            m_gpuLimits.maxSamplersPerShaderStage = D3D12_COMMONSHADER_SAMPLER_SLOT_COUNT;
+            m_gpuLimits.maxStorageBuffersPerShaderStage = D3D12_PS_CS_UAV_REGISTER_COUNT;
+            m_gpuLimits.maxStorageTexturesPerShaderStage = 4;
+            m_gpuLimits.maxUniformBuffersPerShaderStage = D3D12_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT;
+            m_gpuLimits.maxUniformBufferBindingSize = m_maxUniformBufferSize;
+            m_gpuLimits.maxStorageBufferBindingSize = m_maxStorageBufferSize;
+            m_gpuLimits.minUniformBufferOffsetAlignment = static_cast<uint32_t>(m_minUniformBufferOffsetAlignment);
+            m_gpuLimits.minStorageBufferOffsetAlignment = static_cast<uint32_t>(m_minStorageBufferOffsetAlignment);
+            m_gpuLimits.maxVertexBuffers = D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT;
+            m_gpuLimits.maxBufferSize = m_maxStorageBufferSize;
+            m_gpuLimits.maxVertexAttributes = D3D12_IA_VERTEX_INPUT_STRUCTURE_ELEMENT_COUNT;
+            m_gpuLimits.maxVertexBufferArrayStride = 2048;
+            m_gpuLimits.maxInterStageShaderVariables = 16;
+            m_gpuLimits.maxColorAttachments = D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT;
+            m_gpuLimits.maxComputeWorkgroupStorageSize = 32768;
+            m_gpuLimits.maxComputeInvocationsPerWorkgroup = D3D12_CS_THREAD_GROUP_MAX_THREADS_PER_GROUP;
+            m_gpuLimits.maxComputeWorkgroupSizeX = D3D12_CS_THREAD_GROUP_MAX_X;
+            m_gpuLimits.maxComputeWorkgroupSizeY = D3D12_CS_THREAD_GROUP_MAX_Y;
+            m_gpuLimits.maxComputeWorkgroupSizeZ = D3D12_CS_THREAD_GROUP_MAX_Z;
+            m_gpuLimits.maxComputeWorkgroupsPerDimension = D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION;
             m_mainQueue = Queue::Create(0, "Main_queue");
             m_stagingManager = new StagingManager();
             CreateDescriptorPool(150);
@@ -744,6 +772,39 @@ namespace pe
 
         m_caps.maxPushConstantsBytes = m_maxPushConstantsSize;
         m_caps.maxBindlessTextures = gpuPropertiesVK.properties.limits.maxPerStageDescriptorSampledImages;
+
+        const auto &limits = gpuPropertiesVK.properties.limits;
+        m_gpuLimits.maxTextureDimension1D = limits.maxImageDimension1D;
+        m_gpuLimits.maxTextureDimension2D = limits.maxImageDimension2D;
+        m_gpuLimits.maxTextureDimension3D = limits.maxImageDimension3D;
+        m_gpuLimits.maxTextureArrayLayers = limits.maxImageArrayLayers;
+        m_gpuLimits.maxBindGroups = limits.maxBoundDescriptorSets;
+        m_gpuLimits.maxDynamicUniformBuffersPerPipelineLayout = limits.maxDescriptorSetUniformBuffersDynamic;
+        m_gpuLimits.maxDynamicStorageBuffersPerPipelineLayout = limits.maxDescriptorSetStorageBuffersDynamic;
+        m_gpuLimits.maxSampledTexturesPerShaderStage = limits.maxPerStageDescriptorSampledImages;
+        m_gpuLimits.maxSamplersPerShaderStage = limits.maxPerStageDescriptorSamplers;
+        m_gpuLimits.maxStorageBuffersPerShaderStage = limits.maxPerStageDescriptorStorageBuffers;
+        m_gpuLimits.maxStorageTexturesPerShaderStage = limits.maxPerStageDescriptorStorageImages;
+        m_gpuLimits.maxUniformBuffersPerShaderStage = limits.maxPerStageDescriptorUniformBuffers;
+        m_gpuLimits.maxUniformBufferBindingSize = limits.maxUniformBufferRange;
+        m_gpuLimits.maxStorageBufferBindingSize = limits.maxStorageBufferRange;
+        m_gpuLimits.minUniformBufferOffsetAlignment = static_cast<uint32_t>(limits.minUniformBufferOffsetAlignment);
+        m_gpuLimits.minStorageBufferOffsetAlignment = static_cast<uint32_t>(limits.minStorageBufferOffsetAlignment);
+        m_gpuLimits.maxVertexBuffers = limits.maxVertexInputBindings;
+        m_gpuLimits.maxBufferSize = limits.maxStorageBufferRange;
+        m_gpuLimits.maxVertexAttributes = limits.maxVertexInputAttributes;
+        m_gpuLimits.maxVertexBufferArrayStride = limits.maxVertexInputBindingStride;
+        m_gpuLimits.maxInterStageShaderVariables = limits.maxVertexOutputComponents / 4;
+        m_gpuLimits.maxColorAttachments = limits.maxColorAttachments;
+        m_gpuLimits.maxComputeWorkgroupStorageSize = limits.maxComputeSharedMemorySize;
+        m_gpuLimits.maxComputeInvocationsPerWorkgroup = limits.maxComputeWorkGroupInvocations;
+        m_gpuLimits.maxComputeWorkgroupSizeX = limits.maxComputeWorkGroupSize[0];
+        m_gpuLimits.maxComputeWorkgroupSizeY = limits.maxComputeWorkGroupSize[1];
+        m_gpuLimits.maxComputeWorkgroupSizeZ = limits.maxComputeWorkGroupSize[2];
+        m_gpuLimits.maxComputeWorkgroupsPerDimension =
+            std::min(limits.maxComputeWorkGroupCount[0],
+                     std::min(limits.maxComputeWorkGroupCount[1],
+                              limits.maxComputeWorkGroupCount[2]));
     }
 
     bool RHI::IsInstanceExtensionValid(const char *name)

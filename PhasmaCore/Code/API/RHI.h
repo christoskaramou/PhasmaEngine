@@ -33,6 +33,38 @@ namespace pe
         MemoryInfo host; // non-DEVICE_LOCAL
     };
 
+    struct GpuLimits
+    {
+        uint32_t maxTextureDimension1D = 0;
+        uint32_t maxTextureDimension2D = 0;
+        uint32_t maxTextureDimension3D = 0;
+        uint32_t maxTextureArrayLayers = 0;
+        uint32_t maxBindGroups = 0;
+        uint32_t maxDynamicUniformBuffersPerPipelineLayout = 0;
+        uint32_t maxDynamicStorageBuffersPerPipelineLayout = 0;
+        uint32_t maxSampledTexturesPerShaderStage = 0;
+        uint32_t maxSamplersPerShaderStage = 0;
+        uint32_t maxStorageBuffersPerShaderStage = 0;
+        uint32_t maxStorageTexturesPerShaderStage = 0;
+        uint32_t maxUniformBuffersPerShaderStage = 0;
+        uint32_t maxUniformBufferBindingSize = 0;
+        uint32_t maxStorageBufferBindingSize = 0;
+        uint32_t minUniformBufferOffsetAlignment = 0;
+        uint32_t minStorageBufferOffsetAlignment = 0;
+        uint32_t maxVertexBuffers = 0;
+        uint64_t maxBufferSize = 0;
+        uint32_t maxVertexAttributes = 0;
+        uint32_t maxVertexBufferArrayStride = 0;
+        uint32_t maxInterStageShaderVariables = 0;
+        uint32_t maxColorAttachments = 0;
+        uint32_t maxComputeWorkgroupStorageSize = 0;
+        uint32_t maxComputeInvocationsPerWorkgroup = 0;
+        uint32_t maxComputeWorkgroupSizeX = 0;
+        uint32_t maxComputeWorkgroupSizeY = 0;
+        uint32_t maxComputeWorkgroupSizeZ = 0;
+        uint32_t maxComputeWorkgroupsPerDimension = 0;
+    };
+
     struct SystemProcMem
     {
         // System
@@ -114,6 +146,7 @@ namespace pe
         size_t AlignTextureRowPitch(size_t rowBytes) { return Align(rowBytes, m_textureDataPitchAlignment); }
         uint32_t GetMaxPushConstantsSize() { return m_maxPushConstantsSize; }
         const Caps &GetCaps() const { return m_caps; }
+        const GpuLimits &GetGpuLimits() const { return m_gpuLimits; }
         const std::string &GetGpuName() { return m_gpuName; }
         DescriptorPool *GetDescriptorPool() { return m_descriptorPool; }
         Queue *GetMainQueue() { return m_mainQueue; }
@@ -160,6 +193,7 @@ namespace pe
         uint32_t m_maxDrawIndirectCount;
 
         Caps m_caps;
+        GpuLimits m_gpuLimits;
         PeGraphicsApi m_api = PE_GRAPHICS_API_VULKAN;
         Impl *m_impl = nullptr;
     };

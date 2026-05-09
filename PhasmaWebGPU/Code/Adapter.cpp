@@ -1,8 +1,8 @@
 #include "Adapter.h"
 #include "Device.h"
 #include "Instance.h"
-#include "WGPULimits.h"
 #include "Utils.h"
+#include "WGPULimits.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 
 namespace
@@ -336,9 +336,9 @@ extern "C"
 
     WGPUStatus wgpuAdapterGetLimits(WGPUAdapter adapter, WGPULimits *limits)
     {
-        if (!adapter || !limits)
+        if (!adapter || !adapter->rhi || !limits)
             return WGPUStatus_Error;
-        pwgpu::FillLimits(*limits, adapter->vkProps.limits);
+        pwgpu::FillLimitsFromCore(*limits, adapter->rhi->GetGpuLimits());
         return WGPUStatus_Success;
     }
 
@@ -389,7 +389,7 @@ extern "C"
         }
 
         WGPULimits adapterLim{};
-        pwgpu::FillLimits(adapterLim, adapter->vkProps.limits);
+        pwgpu::FillLimitsFromCore(adapterLim, adapter->rhi->GetGpuLimits());
 
         if (descriptor && descriptor->requiredLimits)
         {

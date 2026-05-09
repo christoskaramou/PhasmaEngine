@@ -1,62 +1,15 @@
 #pragma once
 
+#include <string>
 #include <webgpu/webgpu.h>
-#include "API/Vulkan/VulkanHeaders.h"
+
+namespace pe
+{
+    struct GpuLimits;
+}
 
 namespace pwgpu
 {
-
-    inline void FillLimits(WGPULimits &out, const VkPhysicalDeviceLimits &vk)
-    {
-        out.nextInChain = nullptr;
-        out.maxTextureDimension1D = vk.maxImageDimension1D;
-        out.maxTextureDimension2D = vk.maxImageDimension2D;
-        out.maxTextureDimension3D = vk.maxImageDimension3D;
-        out.maxTextureArrayLayers = vk.maxImageArrayLayers;
-        out.maxBindGroups = vk.maxBoundDescriptorSets;
-        out.maxDynamicUniformBuffersPerPipelineLayout = vk.maxDescriptorSetUniformBuffersDynamic;
-        out.maxDynamicStorageBuffersPerPipelineLayout = vk.maxDescriptorSetStorageBuffersDynamic;
-        out.maxSampledTexturesPerShaderStage = vk.maxPerStageDescriptorSampledImages;
-        out.maxSamplersPerShaderStage = vk.maxPerStageDescriptorSamplers;
-        out.maxStorageBuffersPerShaderStage = vk.maxPerStageDescriptorStorageBuffers;
-        out.maxStorageTexturesPerShaderStage = vk.maxPerStageDescriptorStorageImages;
-        out.maxUniformBuffersPerShaderStage = vk.maxPerStageDescriptorUniformBuffers;
-        out.maxUniformBufferBindingSize = vk.maxUniformBufferRange;
-        out.maxStorageBufferBindingSize = vk.maxStorageBufferRange;
-        out.minUniformBufferOffsetAlignment = static_cast<uint32_t>(vk.minUniformBufferOffsetAlignment);
-        out.minStorageBufferOffsetAlignment = static_cast<uint32_t>(vk.minStorageBufferOffsetAlignment);
-        out.maxVertexBuffers = vk.maxVertexInputBindings;
-        out.maxBufferSize = vk.maxStorageBufferRange;
-        out.maxVertexAttributes = vk.maxVertexInputAttributes;
-        out.maxVertexBufferArrayStride = vk.maxVertexInputBindingStride;
-        out.maxInterStageShaderVariables = vk.maxVertexOutputComponents / 4;
-        out.maxColorAttachments = vk.maxColorAttachments;
-        // Vulkan has no direct analogue; 64 is the Dawn/wgpu-native value (≥ spec default 32).
-        out.maxColorAttachmentBytesPerSample = 64;
-        out.maxComputeWorkgroupStorageSize = vk.maxComputeSharedMemorySize;
-        out.maxComputeInvocationsPerWorkgroup = vk.maxComputeWorkGroupInvocations;
-        out.maxComputeWorkgroupSizeX = vk.maxComputeWorkGroupSize[0];
-        out.maxComputeWorkgroupSizeY = vk.maxComputeWorkGroupSize[1];
-        out.maxComputeWorkgroupSizeZ = vk.maxComputeWorkGroupSize[2];
-        // Scalar per-dimension limit: min across axes so every axis reaches this value.
-        {
-            const uint32_t cx = vk.maxComputeWorkGroupCount[0];
-            const uint32_t cy = vk.maxComputeWorkGroupCount[1];
-            const uint32_t cz = vk.maxComputeWorkGroupCount[2];
-            out.maxComputeWorkgroupsPerDimension = std::min(cx, std::min(cy, cz));
-        }
-        out.maxImmediateSize = 0;
-
-        // ×2 = render pipeline shader stage count (spec §4.2.1 derived quantity).
-        const uint32_t perStage = out.maxSampledTexturesPerShaderStage +
-                                  out.maxSamplersPerShaderStage +
-                                  out.maxStorageBuffersPerShaderStage +
-                                  out.maxStorageTexturesPerShaderStage +
-                                  out.maxUniformBuffersPerShaderStage;
-        out.maxBindingsPerBindGroup = perStage * 2u;
-
-        out.maxBindGroupsPlusVertexBuffers = out.maxBindGroups + out.maxVertexBuffers;
-    }
 
     inline WGPULimits DefaultLimits()
     {
@@ -99,6 +52,8 @@ namespace pwgpu
     WGPUStatus ValidateRequestedLimits(const WGPULimits &adapterLim,
                                        const WGPULimits &requested,
                                        std::string &outFirstBadLimit);
+
+    void FillLimitsFromCore(WGPULimits &out, const pe::GpuLimits &limits);
 
     // Spec §4.2.1 default-or-better sweep: maximum limits must be ≥ default,
     // alignment limits must be ≤ default and power-of-two.
