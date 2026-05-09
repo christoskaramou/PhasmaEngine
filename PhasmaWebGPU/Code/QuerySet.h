@@ -22,9 +22,3 @@ struct WGPUQuerySetImpl
     // eWait on an unbegun slot stalls forever; resolveQuerySet copies only these.
     std::unordered_set<uint32_t> beganIndices;
 };
-
-template <typename BackendHandle>
-inline BackendHandle QuerySetBackendQueryPoolHandle(WGPUQuerySet querySet)
-{
-    return querySet ? PeFromBackendHandle<BackendHandle>(querySet->backendQueryPool) : BackendHandle{};
-}

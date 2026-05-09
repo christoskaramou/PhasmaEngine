@@ -9,6 +9,7 @@
 #include "Sampler.h"
 #include "BindGroup.h"
 #include "PipelineLayout.h"
+#include "PipelineCreation.h"
 #include "Reflect.h"
 #include "ShaderModule.h"
 #include "RenderPipeline.h"
@@ -18,6 +19,7 @@
 #include "API/Queue.h"
 #include "RenderBundle.h"
 #include "QuerySet.h"
+#include "QueryCommands.h"
 #include "WGPULimits.h"
 #include "Wgsl.h"
 #include "Utils.h"
@@ -1339,13 +1341,10 @@ extern "C"
         }
         tex->textureBindingViewDimension = tbvd;
 
-        VkFormat vkFmt = pwgpu::ToVkFormat(fmt);
-        if (fmt == WGPUTextureFormat_Depth24Plus)
-            vkFmt = device->resolvedDepth24Plus;
-        else if (fmt == WGPUTextureFormat_Depth24PlusStencil8)
-            vkFmt = device->resolvedDepth24PlusStencil8;
-        else if (fmt == WGPUTextureFormat_Stencil8)
-            vkFmt = device->resolvedStencil8;
+        VkFormat vkFmt = pwgpu::ResolveVkTextureFormat(fmt,
+                                                       device->resolvedDepth24Plus,
+                                                       device->resolvedDepth24PlusStencil8,
+                                                       device->resolvedStencil8);
 
         pe::ImageDesc imageDesc{};
         imageDesc.format = pe::FromVkFormat(static_cast<vk::Format>(vkFmt));
@@ -3295,8 +3294,6 @@ extern "C"
         if (!computeBakedSpirv.empty())
             computeSpirv = &computeBakedSpirv;
 
-        auto vkDev = pe::VulkanRhi::Device();
-
         if (autoLayout)
         {
             std::vector<pwgpu::AutoLayoutStageInput> stages(1);
@@ -3398,57 +3395,27 @@ extern "C"
             }
         }
 
-        vk::ShaderModuleCreateInfo smci{};
-        smci.codeSize = computeSpirv->size() * sizeof(uint32_t);
-        smci.pCode = computeSpirv->data();
-        vk::ShaderModule vkShaderModule;
-        try
+        pwgpu::ComputePipelineBackendDesc backendDesc{};
+        backendDesc.device = device;
+        backendDesc.layout = pipeLayout;
+        backendDesc.spirv = computeSpirv;
+        backendDesc.entryPoint = entryPointName.c_str();
+        pwgpu::PipelineCreationResult backendPipeline =
+            pwgpu::CreateWebGPUComputePipelineBackend(backendDesc);
+        if (!backendPipeline.Succeeded())
         {
-            vkShaderModule = vkDev.createShaderModule(smci);
-        }
-        catch (...)
-        {
-            device->reportError(WGPUErrorType_Internal,
-                                pwgpu::ToStringView("createComputePipeline: failed to create VkShaderModule"));
+            device->reportError(backendPipeline.errorType,
+                                pwgpu::ToStringView(backendPipeline.message));
             if (autoLayout)
                 wgpuPipelineLayoutRelease(pipeLayout);
             return MakeInvalidComputePipeline(device, labelStr);
         }
 
-        vk::ComputePipelineCreateInfo cpci{};
-        cpci.stage.stage = vk::ShaderStageFlagBits::eCompute;
-        cpci.stage.module = vkShaderModule;
-        cpci.stage.pName = entryPointName.c_str();
-        cpci.layout = vk::PipelineLayout{PeFromBackendHandle<VkPipelineLayout>(pipeLayout->backendLayout)};
-
-        vk::Pipeline vkPipeline;
-        try
-        {
-            auto result = vkDev.createComputePipeline(nullptr, cpci);
-            if (result.result != vk::Result::eSuccess)
-            {
-                vkDev.destroyShaderModule(vkShaderModule);
-                device->reportError(WGPUErrorType_Internal,
-                                    pwgpu::ToStringView("createComputePipeline: vkCreateComputePipelines failed"));
-                return MakeInvalidComputePipeline(device, labelStr);
-            }
-            vkPipeline = result.value;
-        }
-        catch (...)
-        {
-            vkDev.destroyShaderModule(vkShaderModule);
-            device->reportError(WGPUErrorType_Internal,
-                                pwgpu::ToStringView("createComputePipeline: vkCreateComputePipelines threw"));
-            return MakeInvalidComputePipeline(device, labelStr);
-        }
-
-        vkDev.destroyShaderModule(vkShaderModule);
-
         auto *cp = new WGPUComputePipelineImpl();
         cp->device = device;
         if (labelStr)
             cp->label = labelStr;
-        cp->backendPipeline = PeToBackendHandle(static_cast<VkPipeline>(vkPipeline));
+        cp->backendPipeline = backendPipeline.backendPipeline;
         cp->layout = pipeLayout;
         cp->entryPoint = entryPointName;
         cp->workgroupInvocations = pipelineWorkgroupInvocations;
@@ -3498,7 +3465,6 @@ extern "C"
             return nullptr;
 
         const char *labelStr = descriptor->label.data ? descriptor->label.data : nullptr;
-        auto vkDev = pe::VulkanRhi::Device();
         const auto &limits = device->limits;
 
         if (!pwgpu::ValidateChainedStruct(
@@ -3641,6 +3607,9 @@ extern "C"
         auto primTopology = descriptor->primitive.topology;
         if (primTopology == WGPUPrimitiveTopology(0))
             primTopology = WGPUPrimitiveTopology_TriangleList;
+        auto cullMode = descriptor->primitive.cullMode;
+        if (cullMode == WGPUCullMode(0))
+            cullMode = WGPUCullMode_None;
         if (!ValidatePrimitiveState(device, descriptor->primitive))
             return MakeInvalidRenderPipeline(device, labelStr);
 
@@ -4041,8 +4010,6 @@ extern "C"
             }
         }
 
-        std::vector<vk::PipelineColorBlendAttachmentState> blendAttachments;
-        std::vector<vk::Format> colorVkFormats;
         uint32_t colorAttachmentBytesPerSample = 0;
         bool usesDualSourceBlending = false;
 
@@ -4072,12 +4039,9 @@ extern "C"
             for (size_t i = 0; i < descriptor->fragment->targetCount; ++i)
             {
                 const auto &ct = descriptor->fragment->targets[i];
-                vk::PipelineColorBlendAttachmentState ba{};
 
                 if (ct.format == WGPUTextureFormat_Undefined)
                 {
-                    blendAttachments.push_back(ba);
-                    colorVkFormats.push_back(vk::Format::eUndefined);
                     continue;
                 }
 
@@ -4174,8 +4138,6 @@ extern "C"
                     return MakeInvalidRenderPipeline(device, labelStr);
                 }
 
-                ba.colorWriteMask = vk::ColorComponentFlags(static_cast<uint32_t>(ct.writeMask));
-
                 if (ct.blend)
                 {
                     const bool f32Blendable =
@@ -4226,8 +4188,6 @@ extern "C"
                         }
                     }
 
-                    ba.blendEnable = VK_TRUE;
-
                     auto colorOp = ct.blend->color.operation;
                     if (colorOp == WGPUBlendOperation(0))
                         colorOp = WGPUBlendOperation_Add;
@@ -4238,10 +4198,6 @@ extern "C"
                     if (colorDst == WGPUBlendFactor(0))
                         colorDst = WGPUBlendFactor_Zero;
 
-                    ba.colorBlendOp = pwgpu::ToVkBlendOp(colorOp);
-                    ba.srcColorBlendFactor = pwgpu::ToVkBlendFactor(colorSrc);
-                    ba.dstColorBlendFactor = pwgpu::ToVkBlendFactor(colorDst);
-
                     auto alphaOp = ct.blend->alpha.operation;
                     if (alphaOp == WGPUBlendOperation(0))
                         alphaOp = WGPUBlendOperation_Add;
@@ -4251,10 +4207,6 @@ extern "C"
                     auto alphaDst = ct.blend->alpha.dstFactor;
                     if (alphaDst == WGPUBlendFactor(0))
                         alphaDst = WGPUBlendFactor_Zero;
-
-                    ba.alphaBlendOp = pwgpu::ToVkBlendOp(alphaOp);
-                    ba.srcAlphaBlendFactor = pwgpu::ToVkBlendFactor(alphaSrc);
-                    ba.dstAlphaBlendFactor = pwgpu::ToVkBlendFactor(alphaDst);
 
                     auto isDualSrc = [](WGPUBlendFactor f)
                     {
@@ -4282,9 +4234,6 @@ extern "C"
                         usesDualSourceBlending = true;
                     }
                 }
-
-                blendAttachments.push_back(ba);
-                colorVkFormats.push_back(static_cast<vk::Format>(pwgpu::ToVkFormat(ct.format)));
             }
 
             if (usesDualSourceBlending && descriptor->fragment->targetCount > 1)
@@ -4355,286 +4304,35 @@ extern "C"
             return MakeInvalidRenderPipeline(device, labelStr);
         }
 
-        std::vector<vk::PipelineShaderStageCreateInfo> stages;
-        std::vector<vk::ShaderModule> tempModules;
-        stages.reserve(2);
-
-        auto createModule = [&](const std::vector<uint32_t> &spirv) -> vk::ShaderModule
+        pwgpu::RenderPipelineBackendDesc backendDesc{};
+        backendDesc.device = device;
+        backendDesc.layout = pipeLayout;
+        backendDesc.descriptor = descriptor;
+        backendDesc.vertexSpirv = vertSpirv;
+        backendDesc.vertexEntryPoint = vertEntry.c_str();
+        backendDesc.fragmentSpirv = fragSpirv;
+        backendDesc.fragmentEntryPoint = hasFragment ? fragEntry.c_str() : nullptr;
+        backendDesc.primitiveTopology = primTopology;
+        backendDesc.sampleCount = msCount;
+        backendDesc.hasFragment = hasFragment;
+        backendDesc.hasDepthStencil = hasDepthStencil;
+        backendDesc.fragmentWritesFragDepth = fragBuiltins.hasFragDepth;
+        pwgpu::PipelineCreationResult backendPipeline =
+            pwgpu::CreateWebGPURenderPipelineBackend(backendDesc);
+        if (!backendPipeline.Succeeded())
         {
-            vk::ShaderModuleCreateInfo ci{};
-            ci.codeSize = spirv.size() * sizeof(uint32_t);
-            ci.pCode = spirv.data();
-            return vkDev.createShaderModule(ci);
-        };
-
-        vk::ShaderModule vkVertModule;
-        try
-        {
-            vkVertModule = createModule(*vertSpirv);
-        }
-        catch (...)
-        {
-            device->reportError(WGPUErrorType_Internal,
-                                pwgpu::ToStringView("createRenderPipeline: failed to create vertex VkShaderModule"));
+            device->reportError(backendPipeline.errorType,
+                                pwgpu::ToStringView(backendPipeline.message));
+            if (autoLayout)
+                wgpuPipelineLayoutRelease(pipeLayout);
             return MakeInvalidRenderPipeline(device, labelStr);
         }
-        tempModules.push_back(vkVertModule);
-
-        vk::PipelineShaderStageCreateInfo vertStage{};
-        vertStage.stage = vk::ShaderStageFlagBits::eVertex;
-        vertStage.module = vkVertModule;
-        vertStage.pName = vertEntry.c_str();
-        stages.push_back(vertStage);
-
-        if (hasFragment)
-        {
-            vk::ShaderModule vkFragModule;
-            try
-            {
-                vkFragModule = createModule(*fragSpirv);
-            }
-            catch (...)
-            {
-                for (auto m : tempModules)
-                    vkDev.destroyShaderModule(m);
-                device->reportError(WGPUErrorType_Internal,
-                                    pwgpu::ToStringView("createRenderPipeline: failed to create fragment VkShaderModule"));
-                return MakeInvalidRenderPipeline(device, labelStr);
-            }
-            tempModules.push_back(vkFragModule);
-
-            vk::PipelineShaderStageCreateInfo fragStage{};
-            fragStage.stage = vk::ShaderStageFlagBits::eFragment;
-            fragStage.module = vkFragModule;
-            fragStage.pName = fragEntry.c_str();
-            stages.push_back(fragStage);
-        }
-
-        std::vector<vk::VertexInputBindingDescription> vertBindings;
-        std::vector<vk::VertexInputAttributeDescription> vertAttrs;
-
-        for (uint32_t slot = 0; slot < descriptor->vertex.bufferCount; ++slot)
-        {
-            const auto &vbuf = descriptor->vertex.buffers[slot];
-            if (vbuf.attributeCount == 0 && vbuf.arrayStride == 0)
-                continue;
-
-            vk::VertexInputBindingDescription binding{};
-            binding.binding = slot;
-            binding.stride = static_cast<uint32_t>(vbuf.arrayStride);
-            binding.inputRate = (vbuf.stepMode == WGPUVertexStepMode_Instance)
-                                    ? vk::VertexInputRate::eInstance
-                                    : vk::VertexInputRate::eVertex;
-            vertBindings.push_back(binding);
-
-            for (size_t a = 0; a < vbuf.attributeCount; ++a)
-            {
-                vk::VertexInputAttributeDescription attr{};
-                attr.location = vbuf.attributes[a].shaderLocation;
-                attr.binding = slot;
-                attr.format = static_cast<vk::Format>(pwgpu::VertexFormatToVk(vbuf.attributes[a].format));
-                attr.offset = static_cast<uint32_t>(vbuf.attributes[a].offset);
-                vertAttrs.push_back(attr);
-            }
-        }
-
-        vk::PipelineVertexInputStateCreateInfo vertexInputState{};
-        vertexInputState.vertexBindingDescriptionCount = static_cast<uint32_t>(vertBindings.size());
-        vertexInputState.pVertexBindingDescriptions = vertBindings.data();
-        vertexInputState.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertAttrs.size());
-        vertexInputState.pVertexAttributeDescriptions = vertAttrs.data();
-
-        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
-        inputAssembly.topology = pwgpu::ToVkTopology(primTopology);
-        inputAssembly.primitiveRestartEnable = pwgpu::IsStripTopology(primTopology) ? VK_TRUE : VK_FALSE;
-
-        vk::PipelineViewportStateCreateInfo viewportState{};
-        viewportState.viewportCount = 1;
-        viewportState.scissorCount = 1;
-
-        auto frontFace = descriptor->primitive.frontFace;
-        if (frontFace == WGPUFrontFace(0))
-            frontFace = WGPUFrontFace_CCW;
-        auto cullMode = descriptor->primitive.cullMode;
-        if (cullMode == WGPUCullMode(0))
-            cullMode = WGPUCullMode_None;
-
-        vk::PipelineRasterizationStateCreateInfo rasterState{};
-        rasterState.depthClampEnable = VK_FALSE;
-        rasterState.rasterizerDiscardEnable = (!hasFragment && !hasDepthStencil) ? VK_TRUE : VK_FALSE;
-        rasterState.polygonMode = vk::PolygonMode::eFill;
-        rasterState.cullMode = pwgpu::ToVkCullMode(cullMode);
-        rasterState.frontFace = (frontFace == WGPUFrontFace_CW)
-                                    ? vk::FrontFace::eClockwise
-                                    : vk::FrontFace::eCounterClockwise;
-        rasterState.lineWidth = 1.0f;
-
-        if (hasDepthStencil)
-        {
-            bool hasBias = (descriptor->depthStencil->depthBias != 0 ||
-                            descriptor->depthStencil->depthBiasSlopeScale != 0.0f ||
-                            descriptor->depthStencil->depthBiasClamp != 0.0f);
-            rasterState.depthBiasEnable = hasBias ? VK_TRUE : VK_FALSE;
-            rasterState.depthBiasConstantFactor = static_cast<float>(descriptor->depthStencil->depthBias);
-            rasterState.depthBiasSlopeFactor = descriptor->depthStencil->depthBiasSlopeScale;
-            rasterState.depthBiasClamp = descriptor->depthStencil->depthBiasClamp;
-        }
-
-        vk::PipelineRasterizationDepthClipStateCreateInfoEXT depthClipState{};
-        const bool needsUnclippedDepth =
-            descriptor->primitive.unclippedDepth &&
-            DeviceHasFeature(device, WGPUFeatureName_DepthClipControl);
-        const bool needsFragDepthClamp =
-            fragBuiltins.hasFragDepth && device->supportsDepthClamp && device->supportsDepthClipEnable;
-        if (needsUnclippedDepth || needsFragDepthClamp)
-        {
-            // WebGPU always clamps fragment-written depth to the viewport range.
-            // For unclippedDepth=true it also disables primitive near/far clipping.
-            // VK_EXT_depth_clip_enable lets us keep clipping enabled for the former
-            // while still using Vulkan depth clamp for fragment depth values.
-            depthClipState.depthClipEnable = needsUnclippedDepth ? VK_FALSE : VK_TRUE;
-            depthClipState.pNext = rasterState.pNext;
-            rasterState.pNext = &depthClipState;
-            rasterState.depthClampEnable = VK_TRUE;
-        }
-
-        vk::PipelineMultisampleStateCreateInfo multisampleState{};
-        multisampleState.rasterizationSamples = pwgpu::ToVkSampleCount(msCount);
-        uint32_t msMask = descriptor->multisample.mask;
-        multisampleState.pSampleMask = &msMask;
-        multisampleState.alphaToCoverageEnable = descriptor->multisample.alphaToCoverageEnabled ? VK_TRUE : VK_FALSE;
-
-        vk::PipelineDepthStencilStateCreateInfo depthStencilState{};
-        if (hasDepthStencil)
-        {
-            const auto &ds = *descriptor->depthStencil;
-            bool hasDepthAspect = pwgpu::HasDepthAspect(ds.format);
-
-            depthStencilState.depthTestEnable = hasDepthAspect ? VK_TRUE : VK_FALSE;
-            depthStencilState.depthWriteEnable = (ds.depthWriteEnabled == WGPUOptionalBool_True) ? VK_TRUE : VK_FALSE;
-
-            auto dc = ds.depthCompare;
-            if (dc == WGPUCompareFunction_Undefined)
-                dc = WGPUCompareFunction_Always;
-            depthStencilState.depthCompareOp = pwgpu::ToVkCompareOp(dc);
-
-            bool hasStencilAspect = pwgpu::HasStencilAspect(ds.format);
-            depthStencilState.stencilTestEnable = hasStencilAspect ? VK_TRUE : VK_FALSE;
-
-            auto mapFace = [](const WGPUStencilFaceState &face, uint32_t readMask, uint32_t writeMask) -> vk::StencilOpState
-            {
-                vk::StencilOpState s{};
-                auto cmp = face.compare;
-                if (cmp == WGPUCompareFunction_Undefined || cmp == WGPUCompareFunction(0))
-                    cmp = WGPUCompareFunction_Always;
-                s.compareOp = pwgpu::ToVkCompareOp(cmp);
-
-                auto fail = face.failOp;
-                if (fail == WGPUStencilOperation(0))
-                    fail = WGPUStencilOperation_Keep;
-                s.failOp = pwgpu::ToVkStencilOp(fail);
-
-                auto dfail = face.depthFailOp;
-                if (dfail == WGPUStencilOperation(0))
-                    dfail = WGPUStencilOperation_Keep;
-                s.depthFailOp = pwgpu::ToVkStencilOp(dfail);
-
-                auto pass = face.passOp;
-                if (pass == WGPUStencilOperation(0))
-                    pass = WGPUStencilOperation_Keep;
-                s.passOp = pwgpu::ToVkStencilOp(pass);
-
-                s.compareMask = readMask;
-                s.writeMask = writeMask;
-                s.reference = 0;
-                return s;
-            };
-
-            // IDL default 0xFFFFFFFF; auto-gen marshaller zero-fills missing uint32.
-            uint32_t stencilRead = ds.stencilReadMask ? ds.stencilReadMask : 0xFFFFFFFFu;
-            uint32_t stencilWrite = ds.stencilWriteMask ? ds.stencilWriteMask : 0xFFFFFFFFu;
-            depthStencilState.front = mapFace(ds.stencilFront, stencilRead, stencilWrite);
-            depthStencilState.back = mapFace(ds.stencilBack, stencilRead, stencilWrite);
-        }
-
-        vk::PipelineColorBlendStateCreateInfo colorBlendState{};
-        colorBlendState.logicOpEnable = VK_FALSE;
-        colorBlendState.attachmentCount = static_cast<uint32_t>(blendAttachments.size());
-        colorBlendState.pAttachments = blendAttachments.data();
-
-        std::vector<vk::DynamicState> dynStates = {
-            vk::DynamicState::eViewport,
-            vk::DynamicState::eScissor,
-        };
-        if (hasDepthStencil && pwgpu::HasStencilAspect(descriptor->depthStencil->format))
-            dynStates.push_back(vk::DynamicState::eStencilReference);
-        dynStates.push_back(vk::DynamicState::eBlendConstants);
-
-        vk::PipelineDynamicStateCreateInfo dynamicState{};
-        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynStates.size());
-        dynamicState.pDynamicStates = dynStates.data();
-
-        vk::PipelineRenderingCreateInfo renderingInfo{};
-        renderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorVkFormats.size());
-        renderingInfo.pColorAttachmentFormats = colorVkFormats.data();
-        if (hasDepthStencil)
-        {
-            vk::Format dsVkFmt = static_cast<vk::Format>(pwgpu::ToVkFormat(descriptor->depthStencil->format));
-            if (pwgpu::HasDepthAspect(descriptor->depthStencil->format))
-                renderingInfo.depthAttachmentFormat = dsVkFmt;
-            if (pwgpu::HasStencilAspect(descriptor->depthStencil->format))
-                renderingInfo.stencilAttachmentFormat = dsVkFmt;
-        }
-
-        vk::GraphicsPipelineCreateInfo pipeInfo{};
-        pipeInfo.pNext = &renderingInfo;
-        pipeInfo.stageCount = static_cast<uint32_t>(stages.size());
-        pipeInfo.pStages = stages.data();
-        pipeInfo.pVertexInputState = &vertexInputState;
-        pipeInfo.pInputAssemblyState = &inputAssembly;
-        pipeInfo.pViewportState = &viewportState;
-        pipeInfo.pRasterizationState = &rasterState;
-        pipeInfo.pMultisampleState = &multisampleState;
-        pipeInfo.pDepthStencilState = hasDepthStencil ? &depthStencilState : nullptr;
-        pipeInfo.pColorBlendState = &colorBlendState;
-        pipeInfo.pDynamicState = &dynamicState;
-        pipeInfo.layout = vk::PipelineLayout{PeFromBackendHandle<VkPipelineLayout>(pipeLayout->backendLayout)};
-        pipeInfo.renderPass = nullptr;
-        pipeInfo.subpass = 0;
-        pipeInfo.basePipelineHandle = nullptr;
-        pipeInfo.basePipelineIndex = -1;
-
-        vk::Pipeline vkPipeline;
-        try
-        {
-            auto result = vkDev.createGraphicsPipeline(nullptr, pipeInfo);
-            if (result.result != vk::Result::eSuccess)
-            {
-                for (auto m : tempModules)
-                    vkDev.destroyShaderModule(m);
-                device->reportError(WGPUErrorType_Internal,
-                                    pwgpu::ToStringView("createRenderPipeline: vkCreateGraphicsPipelines failed"));
-                return MakeInvalidRenderPipeline(device, labelStr);
-            }
-            vkPipeline = result.value;
-        }
-        catch (const std::exception &e)
-        {
-            for (auto m : tempModules)
-                vkDev.destroyShaderModule(m);
-            std::string msg = std::string("createRenderPipeline: vkCreateGraphicsPipelines threw: ") + e.what();
-            device->reportError(WGPUErrorType_Internal, pwgpu::ToStringView(msg));
-            return MakeInvalidRenderPipeline(device, labelStr);
-        }
-
-        for (auto m : tempModules)
-            vkDev.destroyShaderModule(m);
 
         auto *rp = new WGPURenderPipelineImpl();
         rp->device = device;
         if (labelStr)
             rp->label = labelStr;
-        rp->backendPipeline = PeToBackendHandle(static_cast<VkPipeline>(vkPipeline));
+        rp->backendPipeline = backendPipeline.backendPipeline;
         rp->layout = pipeLayout;
         rp->sampleCount = msCount;
         rp->vertexEntryPoint = vertEntry;
@@ -4884,33 +4582,26 @@ extern "C"
         if (descriptor->count > 4096)
             return makeInvalid("createQuerySet: count exceeds maxQueryCount");
 
-        vk::QueryType vkType;
         switch (descriptor->type)
         {
         case WGPUQueryType_Occlusion:
-            vkType = vk::QueryType::eOcclusion;
             break;
         case WGPUQueryType_Timestamp:
             if (!DeviceHasFeature(device, WGPUFeatureName_TimestampQuery))
                 return makeInvalid("createQuerySet: 'timestamp-query' feature not enabled");
-            vkType = vk::QueryType::eTimestamp;
             break;
         default:
             return makeInvalid("createQuerySet: unsupported query type");
         }
 
-        vk::QueryPool pool{};
+        PeBackendHandle backendQueryPool = 0;
         if (descriptor->count > 0)
         {
-            vk::QueryPoolCreateInfo ci{};
-            ci.queryType = vkType;
-            ci.queryCount = descriptor->count;
-
-            pool = pe::VulkanRhi::Device().createQueryPool(ci);
-            if (!pool)
-                return makeInvalid("createQuerySet: VkQueryPool creation failed");
-
-            pe::VulkanRhi::Device().resetQueryPool(pool, 0, descriptor->count);
+            pwgpu::QueryBackendResult backend =
+                pwgpu::CreateWebGPUQuerySetBackend(device, descriptor->type, descriptor->count);
+            if (!backend.Succeeded())
+                return makeInvalid(backend.message.c_str());
+            backendQueryPool = backend.backendQueryPool;
         }
 
         auto *qs = new WGPUQuerySetImpl();
@@ -4918,7 +4609,7 @@ extern "C"
         wgpuDeviceAddRef(device);
         qs->type = descriptor->type;
         qs->count = descriptor->count;
-        qs->backendQueryPool = PeToBackendHandle(static_cast<VkQueryPool>(pool));
+        qs->backendQueryPool = backendQueryPool;
         if (descriptor->label.data)
             qs->label = pwgpu::ToString(descriptor->label);
         return qs;

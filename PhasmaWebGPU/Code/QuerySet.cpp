@@ -1,5 +1,5 @@
 #include "QuerySet.h"
-#include "API/Vulkan/RHI_Vulkan.h"
+#include "QueryCommands.h"
 #include "Device.h"
 #include "Utils.h"
 
@@ -22,10 +22,7 @@ extern "C"
         if (qs->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
             if (qs->backendQueryPool != 0 && qs->device && qs->device->rhi)
-            {
-                pe::VulkanRhi::Device().destroyQueryPool(
-                    vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(qs)});
-            }
+                pwgpu::DestroyWebGPUQuerySetBackend(qs);
             if (qs->device)
                 wgpuDeviceRelease(qs->device);
             delete qs;

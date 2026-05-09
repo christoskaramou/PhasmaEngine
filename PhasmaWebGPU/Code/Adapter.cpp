@@ -110,7 +110,12 @@ void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
             return (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0;
         };
 
-        if (fmtSupportsDepth(VK_FORMAT_X8_D24_UNORM_PACK32))
+        // WebGPU depth24plus has an opaque representation and may be backed by
+        // depth32float. Prefer that core PeFormat-compatible path until the RHI
+        // grows a neutral X8_D24_UNORM_PACK32 format.
+        if (fmtSupportsDepth(VK_FORMAT_D32_SFLOAT))
+            a.resolvedDepth24Plus = VK_FORMAT_D32_SFLOAT;
+        else if (fmtSupportsDepth(VK_FORMAT_X8_D24_UNORM_PACK32))
             a.resolvedDepth24Plus = VK_FORMAT_X8_D24_UNORM_PACK32;
         else
             a.resolvedDepth24Plus = VK_FORMAT_D32_SFLOAT;

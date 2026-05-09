@@ -8,6 +8,7 @@
 #include "Texture.h"
 #include "RenderBundle.h"
 #include "QuerySet.h"
+#include "QueryCommands.h"
 #include "Device.h"
 #include "FormatInfo.h"
 #include "Utils.h"
@@ -1212,18 +1213,13 @@ extern "C"
         if (isFirstQueryThisPass && !rpe->renderingActive &&
             rpe->occlusionQuerySet->backendQueryPool != 0 && rpe->occlusionQuerySet->count > 0)
         {
-            pe::GetVulkanCommandBuffer(rpe->cmd).resetQueryPool(
-                vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(rpe->occlusionQuerySet)},
-                0, rpe->occlusionQuerySet->count);
+            pwgpu::ResetWebGPUQuerySet(rpe->cmd, rpe->occlusionQuerySet,
+                                       0, rpe->occlusionQuerySet->count);
         }
 
         OpenRenderingIfNeeded(rpe);
         if (rpe->occlusionQuerySet->backendQueryPool != 0)
-        {
-            pe::GetVulkanCommandBuffer(rpe->cmd).beginQuery(
-                vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(rpe->occlusionQuerySet)},
-                queryIndex, vk::QueryControlFlags{});
-        }
+            pwgpu::BeginWebGPUOcclusionQuery(rpe->cmd, rpe->occlusionQuerySet, queryIndex);
     }
 
     void wgpuRenderPassEncoderEndOcclusionQuery(WGPURenderPassEncoder rpe)
@@ -1242,11 +1238,7 @@ extern "C"
         uint32_t lastIndex = rpe->activeOcclusionIndex;
         rpe->activeOcclusionIndex = UINT32_MAX;
         if (rpe->occlusionQuerySet && rpe->occlusionQuerySet->backendQueryPool != 0)
-        {
-            pe::GetVulkanCommandBuffer(rpe->cmd).endQuery(
-                vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(rpe->occlusionQuerySet)},
-                lastIndex);
-        }
+            pwgpu::EndWebGPUOcclusionQuery(rpe->cmd, rpe->occlusionQuerySet, lastIndex);
     }
 
     void wgpuRenderPassEncoderExecuteBundles(WGPURenderPassEncoder rpe,
@@ -1442,9 +1434,7 @@ extern "C"
         {
             PE_WARN("[WebGPU] wgpuRenderPassEncoderEnd: auto-closing active occlusion query");
             uint32_t lastIndex = rpe->activeOcclusionIndex;
-            pe::GetVulkanCommandBuffer(rpe->cmd).endQuery(
-                vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(rpe->occlusionQuerySet)},
-                lastIndex);
+            pwgpu::EndWebGPUOcclusionQuery(rpe->cmd, rpe->occlusionQuerySet, lastIndex);
             rpe->occlusionQueryActive = false;
             rpe->activeOcclusionIndex = UINT32_MAX;
         }
@@ -1467,10 +1457,8 @@ extern "C"
         if (rpe->timestampQuerySet && rpe->endTimestampIndex != UINT32_MAX &&
             rpe->endTimestampIndex < rpe->timestampQuerySet->count)
         {
-            pe::GetVulkanCommandBuffer(rpe->cmd).writeTimestamp2(
-                vk::PipelineStageFlagBits2::eAllCommands,
-                vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(rpe->timestampQuerySet)},
-                rpe->endTimestampIndex);
+            pwgpu::WriteWebGPUTimestamp(rpe->cmd, rpe->timestampQuerySet,
+                                        rpe->endTimestampIndex);
         }
 
         if (rpe->parent)

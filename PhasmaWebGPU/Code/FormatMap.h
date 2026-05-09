@@ -217,6 +217,24 @@ namespace pwgpu
         }
     }
 
+    inline VkFormat ResolveVkTextureFormat(WGPUTextureFormat f,
+                                           VkFormat resolvedDepth24Plus,
+                                           VkFormat resolvedDepth24PlusStencil8,
+                                           VkFormat resolvedStencil8)
+    {
+        switch (f)
+        {
+        case WGPUTextureFormat_Depth24Plus:
+            return resolvedDepth24Plus;
+        case WGPUTextureFormat_Depth24PlusStencil8:
+            return resolvedDepth24PlusStencil8;
+        case WGPUTextureFormat_Stencil8:
+            return resolvedStencil8;
+        default:
+            return ToVkFormat(f);
+        }
+    }
+
     inline WGPUTextureFormat FromVkFormat(VkFormat f)
     {
         switch (f)

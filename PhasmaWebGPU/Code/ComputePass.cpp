@@ -6,6 +6,7 @@
 #include "BindGroup.h"
 #include "Buffer.h"
 #include "QuerySet.h"
+#include "QueryCommands.h"
 #include "Device.h"
 #include "Texture.h"
 #include "Utils.h"
@@ -674,10 +675,8 @@ extern "C"
         if (cpe->timestampQuerySet && cpe->endTimestampIndex != UINT32_MAX &&
             cpe->timestampQuerySet->backendQueryPool != 0)
         {
-            pe::GetVulkanCommandBuffer(cpe->cmd).writeTimestamp2(
-                vk::PipelineStageFlagBits2::eAllCommands,
-                vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(cpe->timestampQuerySet)},
-                cpe->endTimestampIndex);
+            pwgpu::WriteWebGPUTimestamp(cpe->cmd, cpe->timestampQuerySet,
+                                        cpe->endTimestampIndex);
         }
 
         if (cpe->parent)

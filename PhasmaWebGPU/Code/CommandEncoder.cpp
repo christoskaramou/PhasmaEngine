@@ -7,6 +7,7 @@
 #include "Buffer.h"
 #include "Texture.h"
 #include "QuerySet.h"
+#include "QueryCommands.h"
 #include "Device.h"
 #include "FormatMap.h"
 #include "Utils.h"
@@ -950,27 +951,23 @@ extern "C"
                 tw->beginningOfPassWriteIndex < tw->querySet->count &&
                 tw->querySet->backendQueryPool != 0)
             {
-                pe::GetVulkanCommandBuffer(enc->cmd).resetQueryPool(
-                    vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(tw->querySet)},
-                    tw->beginningOfPassWriteIndex, 1);
+                pwgpu::ResetWebGPUQuerySet(enc->cmd, tw->querySet,
+                                           tw->beginningOfPassWriteIndex, 1);
             }
             if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                 tw->endOfPassWriteIndex < tw->querySet->count &&
                 tw->querySet->backendQueryPool != 0)
             {
-                pe::GetVulkanCommandBuffer(enc->cmd).resetQueryPool(
-                    vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(tw->querySet)},
-                    tw->endOfPassWriteIndex, 1);
+                pwgpu::ResetWebGPUQuerySet(enc->cmd, tw->querySet,
+                                           tw->endOfPassWriteIndex, 1);
             }
 
             if (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                 tw->beginningOfPassWriteIndex < tw->querySet->count)
             {
                 rpe->beginTimestampIndex = tw->beginningOfPassWriteIndex;
-                pe::GetVulkanCommandBuffer(enc->cmd).writeTimestamp2(
-                    vk::PipelineStageFlagBits2::eAllCommands,
-                    vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(tw->querySet)},
-                    tw->beginningOfPassWriteIndex);
+                pwgpu::WriteWebGPUTimestamp(enc->cmd, tw->querySet,
+                                            tw->beginningOfPassWriteIndex);
             }
             if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                 tw->endOfPassWriteIndex < tw->querySet->count)
@@ -1421,27 +1418,23 @@ extern "C"
                     tw->beginningOfPassWriteIndex < tw->querySet->count &&
                     tw->querySet->backendQueryPool != 0)
                 {
-                    pe::GetVulkanCommandBuffer(enc->cmd).resetQueryPool(
-                        vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(tw->querySet)},
-                        tw->beginningOfPassWriteIndex, 1);
+                    pwgpu::ResetWebGPUQuerySet(enc->cmd, tw->querySet,
+                                               tw->beginningOfPassWriteIndex, 1);
                 }
                 if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                     tw->endOfPassWriteIndex < tw->querySet->count &&
                     tw->querySet->backendQueryPool != 0)
                 {
-                    pe::GetVulkanCommandBuffer(enc->cmd).resetQueryPool(
-                        vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(tw->querySet)},
-                        tw->endOfPassWriteIndex, 1);
+                    pwgpu::ResetWebGPUQuerySet(enc->cmd, tw->querySet,
+                                               tw->endOfPassWriteIndex, 1);
                 }
 
                 if (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                     tw->beginningOfPassWriteIndex < tw->querySet->count)
                 {
                     cpe->beginTimestampIndex = tw->beginningOfPassWriteIndex;
-                    pe::GetVulkanCommandBuffer(enc->cmd).writeTimestamp2(
-                        vk::PipelineStageFlagBits2::eAllCommands,
-                        vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(tw->querySet)},
-                        tw->beginningOfPassWriteIndex);
+                    pwgpu::WriteWebGPUTimestamp(enc->cmd, tw->querySet,
+                                                tw->beginningOfPassWriteIndex);
                 }
                 if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                     tw->endOfPassWriteIndex < tw->querySet->count)
@@ -2417,41 +2410,7 @@ extern "C"
             dst->internalState == BufferInternalState::Destroyed || !dst->peBuffer)
             return;
 
-        // eWait on an unbegun query stalls forever; zero-fill the range and eWait-copy
-        // only begun indices so unused slots resolve to 0 per WebGPU §23.6.
-        pe::GetVulkanCommandBuffer(enc->cmd).fillBuffer(
-            pe::GetVulkanBuffer(dst->peBuffer), dstOffset,
-            static_cast<uint64_t>(queryCount) * sizeof(uint64_t), 0u);
-
-        vk::MemoryBarrier2 fillToCopy{};
-        fillToCopy.srcStageMask = vk::PipelineStageFlagBits2::eClear;
-        fillToCopy.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-        fillToCopy.dstStageMask = vk::PipelineStageFlagBits2::eCopy;
-        fillToCopy.dstAccessMask = vk::AccessFlagBits2::eTransferWrite;
-        vk::MemoryBarrier2 workToCopy{};
-        workToCopy.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
-        workToCopy.srcAccessMask = vk::AccessFlagBits2::eMemoryWrite;
-        workToCopy.dstStageMask = vk::PipelineStageFlagBits2::eCopy;
-        workToCopy.dstAccessMask = vk::AccessFlagBits2::eTransferRead | vk::AccessFlagBits2::eTransferWrite;
-        vk::MemoryBarrier2 mbs[2] = {fillToCopy, workToCopy};
-        vk::DependencyInfo dep{};
-        dep.memoryBarrierCount = 2;
-        dep.pMemoryBarriers = mbs;
-        pe::GetVulkanCommandBuffer(enc->cmd).pipelineBarrier2(dep);
-
-        const uint32_t rangeEnd = firstQuery + queryCount;
-        for (uint32_t idx : querySet->beganIndices)
-        {
-            if (idx < firstQuery || idx >= rangeEnd)
-                continue;
-            const uint64_t slotOffset = dstOffset +
-                                        static_cast<uint64_t>(idx - firstQuery) * sizeof(uint64_t);
-            pe::GetVulkanCommandBuffer(enc->cmd).copyQueryPoolResults(
-                vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(querySet)}, idx, 1,
-                pe::GetVulkanBuffer(dst->peBuffer), slotOffset,
-                sizeof(uint64_t),
-                vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
-        }
+        pwgpu::ResolveWebGPUQuerySet(enc->cmd, querySet, firstQuery, queryCount, dst, dstOffset);
     }
 
     void wgpuCommandEncoderWriteTimestamp(WGPUCommandEncoder enc, WGPUQuerySet querySet, uint32_t queryIndex)
@@ -2491,11 +2450,8 @@ extern "C"
             return;
 
         // Per VUID-vkCmdWriteTimestamp2-None-03864: reset the slot before reuse.
-        pe::GetVulkanCommandBuffer(enc->cmd)
-            .resetQueryPool(vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(querySet)}, queryIndex, 1);
-        pe::GetVulkanCommandBuffer(enc->cmd).writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands,
-                                                             vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(querySet)},
-                                                             queryIndex);
+        pwgpu::ResetWebGPUQuerySet(enc->cmd, querySet, queryIndex, 1);
+        pwgpu::WriteWebGPUTimestamp(enc->cmd, querySet, queryIndex);
     }
 
     void wgpuCommandEncoderInsertDebugMarker(WGPUCommandEncoder enc, WGPUStringView markerLabel)
