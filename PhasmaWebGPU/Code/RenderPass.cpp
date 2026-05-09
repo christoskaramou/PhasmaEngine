@@ -8,7 +8,7 @@
 #include "RenderBundle.h"
 #include "QuerySet.h"
 #include "Device.h"
-#include "FormatMap.h"
+#include "FormatInfo.h"
 #include "Utils.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"

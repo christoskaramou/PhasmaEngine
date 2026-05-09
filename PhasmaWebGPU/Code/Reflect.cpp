@@ -1,7 +1,7 @@
 #include "Reflect.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "BindGroup.h"
-#include "FormatMap.h"
+#include "FormatInfo.h"
 #include "PipelineLayout.h"
 #include "Device.h"
 #include "API/RHI.h"

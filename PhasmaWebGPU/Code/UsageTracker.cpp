@@ -1,7 +1,7 @@
 #include "UsageTracker.h"
 #include "BindGroup.h"
 #include "Texture.h"
-#include "FormatMap.h"
+#include "FormatInfo.h"
 
 namespace pwgpu
 {
