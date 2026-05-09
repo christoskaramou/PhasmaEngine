@@ -27,6 +27,14 @@
 
 namespace pe
 {
+    namespace
+    {
+        bool UsesDx12StartupOrchestration()
+        {
+            return RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        }
+    } // namespace
+
     App::App() : m_frameTimer(FrameTimer::Instance())
     {
         Path::Init();
@@ -73,22 +81,21 @@ namespace pe
 
         // On hot-reload reload_state.json already exists — skip splash screen.
         const bool isHotReload = std::filesystem::exists(Path::Executable + "reload_state.json");
+        const bool usesDx12StartupOrchestration = UsesDx12StartupOrchestration();
 #ifdef NDEBUG
-        if (!isHotReload && RHII.GetApi() != PE_GRAPHICS_API_DX12)
+        if (!isHotReload && !usesDx12StartupOrchestration)
             m_splashScreen = SplashScreen::Create(SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS);
 #endif
 
         // Adopt the SDL window that was created by the launcher.
         m_window = Window::Adopt(RHII.GetWindow());
 
-        const bool isDx12 = RHII.GetApi() == PE_GRAPHICS_API_DX12;
-
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
 
         cmd->Begin();
         CreateGlobalSystem<RendererSystem>()->Init(cmd);
-        if (!isDx12)
+        if (!usesDx12StartupOrchestration)
             CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
 #ifdef PE_PHYSICS
         CreateGlobalSystem<PhysicsSystem>()->Init(nullptr);
@@ -109,7 +116,7 @@ namespace pe
 
         queue->WaitIdle();
 
-        if (!isDx12)
+        if (!usesDx12StartupOrchestration)
         {
             // Render frames so everything is initialized before destroying the splash screen.
             for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
