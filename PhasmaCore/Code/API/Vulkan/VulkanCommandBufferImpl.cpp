@@ -79,6 +79,7 @@ namespace pe
         m_owner->m_boundVertexBufferBindingCount = UINT32_MAX;
         m_owner->m_boundIndexBuffer = nullptr;
         m_owner->m_boundIndexBufferOffset = -1;
+        m_owner->m_boundIndexBufferType = PE_INDEX_TYPE_UINT32;
 
         // A buffer reaching Reset() with pending callbacks means the prior recording was
         // abandoned without Wait() — never submitted, or submitted but never waited and
@@ -361,6 +362,7 @@ namespace pe
         m_owner->m_boundVertexBufferBindingCount = UINT32_MAX;
         m_owner->m_boundIndexBuffer = nullptr;
         m_owner->m_boundIndexBufferOffset = -1;
+        m_owner->m_boundIndexBufferType = PE_INDEX_TYPE_UINT32;
     }
 
     static void BatchBindDescriptorsVk(vk::CommandBuffer apiHandle, Pipeline *boundPipeline, vk::PipelineBindPoint point, uint32_t count, Descriptor *const *descriptors)
@@ -446,13 +448,16 @@ namespace pe
         m_apiHandle.bindVertexBuffers(firstBinding, bindingCount, &buff, &offset);
     }
 
-    void VulkanCommandBufferImpl::BindIndexBuffer(Buffer *buffer, size_t offset)
+    void VulkanCommandBufferImpl::BindIndexBuffer(Buffer *buffer, size_t offset, PeIndexType indexType)
     {
-        if (m_owner->m_boundIndexBuffer == buffer && m_owner->m_boundIndexBufferOffset == offset)
+        if (m_owner->m_boundIndexBuffer == buffer && m_owner->m_boundIndexBufferOffset == offset &&
+            m_owner->m_boundIndexBufferType == indexType)
             return;
 
         m_owner->m_boundIndexBuffer = buffer;
-        m_apiHandle.bindIndexBuffer(pe::GetVulkanBuffer(buffer), offset, vk::IndexType::eUint32);
+        m_owner->m_boundIndexBufferOffset = offset;
+        m_owner->m_boundIndexBufferType = indexType;
+        m_apiHandle.bindIndexBuffer(pe::GetVulkanBuffer(buffer), offset, ToVkIndexType(indexType));
     }
 
     void VulkanCommandBufferImpl::BindDescriptors(uint32_t count, Descriptor *const *descriptors)

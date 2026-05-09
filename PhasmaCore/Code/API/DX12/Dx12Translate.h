@@ -72,6 +72,19 @@ namespace pe_dx12
         return Formats[f];
     }
 
+    inline DXGI_FORMAT IndexFormat(PeIndexType indexType)
+    {
+        switch (indexType)
+        {
+        case PE_INDEX_TYPE_UINT16:
+            return DXGI_FORMAT_R16_UINT;
+        case PE_INDEX_TYPE_UINT32:
+            return DXGI_FORMAT_R32_UINT;
+        default:
+            return DXGI_FORMAT_R32_UINT;
+        }
+    }
+
     inline PeFormat FromFormat(DXGI_FORMAT f)
     {
         for (int i = 0; i < PE_FORMAT_COUNT; ++i)

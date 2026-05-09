@@ -103,7 +103,7 @@ namespace pe
         void EndPass();
         void BindPipeline(PassInfo &passInfo, bool bindDescriptors = true);
         void BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding = 0, uint32_t bindingCount = 1);
-        void BindIndexBuffer(Buffer *buffer, size_t offset);
+        void BindIndexBuffer(Buffer *buffer, size_t offset, PeIndexType indexType = PE_INDEX_TYPE_UINT32);
         void BindDescriptors(uint32_t count, Descriptor *const *descriptors);
         void PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info);
         void SetViewport(float x, float y, float width, float height);
@@ -200,6 +200,7 @@ namespace pe
         uint32_t m_boundVertexBufferBindingCount;
         Buffer *m_boundIndexBuffer;
         size_t m_boundIndexBufferOffset;
+        PeIndexType m_boundIndexBufferType;
         PushConstantsBlock<128> m_pushConstants{};
         bool m_dynamicPass = false;
         std::thread::id m_threadId; // the thread that created this command buffer, used for synchronization

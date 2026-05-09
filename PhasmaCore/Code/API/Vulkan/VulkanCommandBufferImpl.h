@@ -27,7 +27,7 @@ namespace pe
 
         void BindPipeline(PassInfo &passInfo, bool bindDescriptors) override;
         void BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding, uint32_t bindingCount) override;
-        void BindIndexBuffer(Buffer *buffer, size_t offset) override;
+        void BindIndexBuffer(Buffer *buffer, size_t offset, PeIndexType indexType) override;
         void BindDescriptors(uint32_t count, Descriptor *const *descriptors) override;
         void PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info) override;
 

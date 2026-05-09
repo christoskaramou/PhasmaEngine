@@ -147,10 +147,10 @@ namespace pwgpu
 
     static bool RecordCompressedZeroCopy(pe::CommandBuffer *cmd, WGPUTextureImpl *tex,
                                          const std::vector<std::pair<uint32_t, uint32_t>> &mipLayerPairs,
-                                         vk::ImageAspectFlags aspectMask)
+                                         PeImageAspectFlags aspectMask)
     {
         if (!pwgpu::IsCompressedFormat(tex->format) ||
-            aspectMask != vk::ImageAspectFlagBits::eColor)
+            aspectMask != PE_IMAGE_ASPECT_COLOR)
             return false;
 
         if (mipLayerPairs.empty())
@@ -221,10 +221,18 @@ namespace pwgpu
     // images use zero-buffer copies because Vulkan forbids clearing compressed images.
     void RecordZeroInitTextureSubresources(pe::CommandBuffer *cmd, WGPUTextureImpl *tex,
                                            const std::vector<std::pair<uint32_t, uint32_t>> &mipLayerPairs,
-                                           vk::ImageAspectFlags aspectMask)
+                                           PeImageAspectFlags aspectMask)
     {
         if (!cmd || !tex || !tex->image || mipLayerPairs.empty())
             return;
+
+        vk::ImageAspectFlags vkAspectMask{};
+        if (aspectMask & PE_IMAGE_ASPECT_COLOR)
+            vkAspectMask |= vk::ImageAspectFlagBits::eColor;
+        if (aspectMask & PE_IMAGE_ASPECT_DEPTH)
+            vkAspectMask |= vk::ImageAspectFlagBits::eDepth;
+        if (aspectMask & PE_IMAGE_ASPECT_STENCIL)
+            vkAspectMask |= vk::ImageAspectFlagBits::eStencil;
 
         // Compute bounding box for the layout transition. A layout transition on
         // already-initialized neighbors is safe (data is preserved); only the actual zero
@@ -257,7 +265,7 @@ namespace pwgpu
         for (const auto &p : mipLayerPairs)
         {
             vk::ImageSubresourceRange r{};
-            r.aspectMask = aspectMask;
+            r.aspectMask = vkAspectMask;
             r.baseMipLevel = p.first;
             r.levelCount = 1;
             r.baseArrayLayer = p.second;
@@ -323,13 +331,13 @@ namespace pwgpu
                 if (toClear.empty())
                     continue;
 
-                vk::ImageAspectFlags aspectMask{};
+                PeImageAspectFlags aspectMask = PE_IMAGE_ASPECT_NONE;
                 if (a == kAspectDepth)
-                    aspectMask = vk::ImageAspectFlagBits::eDepth;
+                    aspectMask = PE_IMAGE_ASPECT_DEPTH;
                 else if (a == kAspectStencil)
-                    aspectMask = vk::ImageAspectFlagBits::eStencil;
+                    aspectMask = PE_IMAGE_ASPECT_STENCIL;
                 else
-                    aspectMask = vk::ImageAspectFlagBits::eColor;
+                    aspectMask = PE_IMAGE_ASPECT_COLOR;
 
                 RecordZeroInitTextureSubresources(cmd, tex, toClear, aspectMask);
                 emittedAny = true;
@@ -383,13 +391,13 @@ namespace pwgpu
         cmd->Begin();
         for (const auto &entry : work)
         {
-            vk::ImageAspectFlags aspectMask{};
+            PeImageAspectFlags aspectMask = PE_IMAGE_ASPECT_NONE;
             if (entry.first == kAspectDepth)
-                aspectMask = vk::ImageAspectFlagBits::eDepth;
+                aspectMask = PE_IMAGE_ASPECT_DEPTH;
             else if (entry.first == kAspectStencil)
-                aspectMask = vk::ImageAspectFlagBits::eStencil;
+                aspectMask = PE_IMAGE_ASPECT_STENCIL;
             else
-                aspectMask = vk::ImageAspectFlagBits::eColor;
+                aspectMask = PE_IMAGE_ASPECT_COLOR;
             RecordZeroInitTextureSubresources(cmd, tex, entry.second, aspectMask);
         }
         cmd->End();

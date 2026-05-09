@@ -25,7 +25,7 @@ namespace pe
         // Pipeline + bindings
         virtual void BindPipeline(PassInfo &passInfo, bool bindDescriptors) = 0;
         virtual void BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding, uint32_t bindingCount) = 0;
-        virtual void BindIndexBuffer(Buffer *buffer, size_t offset) = 0;
+        virtual void BindIndexBuffer(Buffer *buffer, size_t offset, PeIndexType indexType) = 0;
         virtual void BindDescriptors(uint32_t count, Descriptor *const *descriptors) = 0;
         virtual void PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info) = 0;
 

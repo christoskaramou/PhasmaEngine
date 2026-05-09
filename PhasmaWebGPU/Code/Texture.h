@@ -2,7 +2,7 @@
 
 #include <webgpu/webgpu.h>
 #include "API/Image.h"
-#include "API/Vulkan/VulkanHeaders.h"
+#include "API/RHITypes.h"
 
 namespace pe
 {
@@ -71,11 +71,11 @@ namespace pwgpu
                                     const std::vector<uint8_t> &aspects);
 
     // Records zero initialization for exact (mip, layer) subresources. Compressed
-    // color formats are initialized by copying zero blocks because Vulkan forbids
-    // vkCmdClearColorImage on compressed images.
+    // color formats are initialized by copying zero blocks because backend clear
+    // commands may not support compressed images.
     void RecordZeroInitTextureSubresources(pe::CommandBuffer *cmd, WGPUTextureImpl *tex,
                                            const std::vector<std::pair<uint32_t, uint32_t>> &mipLayerPairs,
-                                           vk::ImageAspectFlags aspectMask);
+                                           PeImageAspectFlags aspectMask);
 } // namespace pwgpu
 
 struct WGPUTextureViewImpl

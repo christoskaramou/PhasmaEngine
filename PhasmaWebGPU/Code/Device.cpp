@@ -1452,17 +1452,17 @@ extern "C"
                 for (uint32_t layer = 0; layer < imageDesc.arrayLayers; ++layer)
                     subresources.emplace_back(mip, layer);
 
-            vk::ImageAspectFlags aspect{};
+            PeImageAspectFlags aspect = PE_IMAGE_ASPECT_NONE;
             if (pwgpu::IsDepthStencilFormat(fmt))
             {
                 if (pwgpu::HasDepthAspect(fmt))
-                    aspect |= vk::ImageAspectFlagBits::eDepth;
+                    aspect |= PE_IMAGE_ASPECT_DEPTH;
                 if (pwgpu::HasStencilAspect(fmt))
-                    aspect |= vk::ImageAspectFlagBits::eStencil;
+                    aspect |= PE_IMAGE_ASPECT_STENCIL;
             }
             else
             {
-                aspect = vk::ImageAspectFlagBits::eColor;
+                aspect = PE_IMAGE_ASPECT_COLOR;
             }
             pwgpu::RecordZeroInitTextureSubresources(cmd, tex, subresources, aspect);
 
@@ -2717,7 +2717,8 @@ extern "C"
             {
                 vk::DescriptorSetLayoutCreateInfo emptyCI{};
                 auto emptyLayout = pe::VulkanRhi::Device().createDescriptorSetLayout(emptyCI);
-                pl->ownedEmptySetLayouts.push_back(emptyLayout);
+                pl->ownedEmptyBackendLayouts.push_back(
+                    PeToBackendHandle(static_cast<VkDescriptorSetLayout>(emptyLayout)));
                 vkSetLayouts.push_back(emptyLayout);
             }
         }
@@ -2726,7 +2727,8 @@ extern "C"
             vk::PipelineLayoutCreateInfo ci{};
             ci.setLayoutCount = static_cast<uint32_t>(vkSetLayouts.size());
             ci.pSetLayouts = vkSetLayouts.empty() ? nullptr : vkSetLayouts.data();
-            pl->vkLayout = pe::VulkanRhi::Device().createPipelineLayout(ci);
+            vk::PipelineLayout layout = pe::VulkanRhi::Device().createPipelineLayout(ci);
+            pl->backendLayout = PeToBackendHandle(static_cast<VkPipelineLayout>(layout));
         }
 
         return pl;
@@ -3417,7 +3419,7 @@ extern "C"
         cpci.stage.stage = vk::ShaderStageFlagBits::eCompute;
         cpci.stage.module = vkShaderModule;
         cpci.stage.pName = entryPointName.c_str();
-        cpci.layout = pipeLayout->vkLayout;
+        cpci.layout = vk::PipelineLayout{PeFromBackendHandle<VkPipelineLayout>(pipeLayout->backendLayout)};
 
         vk::Pipeline vkPipeline;
         try
@@ -3446,7 +3448,7 @@ extern "C"
         cp->device = device;
         if (labelStr)
             cp->label = labelStr;
-        cp->vkPipeline = vkPipeline;
+        cp->backendPipeline = PeToBackendHandle(static_cast<VkPipeline>(vkPipeline));
         cp->layout = pipeLayout;
         cp->entryPoint = entryPointName;
         cp->workgroupInvocations = pipelineWorkgroupInvocations;
@@ -4596,7 +4598,7 @@ extern "C"
         pipeInfo.pDepthStencilState = hasDepthStencil ? &depthStencilState : nullptr;
         pipeInfo.pColorBlendState = &colorBlendState;
         pipeInfo.pDynamicState = &dynamicState;
-        pipeInfo.layout = pipeLayout->vkLayout;
+        pipeInfo.layout = vk::PipelineLayout{PeFromBackendHandle<VkPipelineLayout>(pipeLayout->backendLayout)};
         pipeInfo.renderPass = nullptr;
         pipeInfo.subpass = 0;
         pipeInfo.basePipelineHandle = nullptr;
@@ -4632,7 +4634,7 @@ extern "C"
         rp->device = device;
         if (labelStr)
             rp->label = labelStr;
-        rp->vkPipeline = vkPipeline;
+        rp->backendPipeline = PeToBackendHandle(static_cast<VkPipeline>(vkPipeline));
         rp->layout = pipeLayout;
         rp->sampleCount = msCount;
         rp->vertexEntryPoint = vertEntry;
@@ -4916,7 +4918,7 @@ extern "C"
         wgpuDeviceAddRef(device);
         qs->type = descriptor->type;
         qs->count = descriptor->count;
-        qs->queryPool = static_cast<VkQueryPool>(pool);
+        qs->backendQueryPool = PeToBackendHandle(static_cast<VkQueryPool>(pool));
         if (descriptor->label.data)
             qs->label = pwgpu::ToString(descriptor->label);
         return qs;

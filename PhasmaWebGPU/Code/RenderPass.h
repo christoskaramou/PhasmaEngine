@@ -3,9 +3,9 @@
 #include <webgpu/webgpu.h>
 #include "API/Command.h"
 #include "API/Image.h"
+#include "API/RHITypes.h"
 #include "RenderPipeline.h"
 #include "UsageTracker.h"
-#include "API/Vulkan/VulkanHeaders.h"
 
 struct WGPUCommandEncoderImpl;
 struct WGPUDeviceImpl;
@@ -13,6 +13,34 @@ struct WGPUBindGroupImpl;
 struct WGPUTextureViewImpl;
 struct WGPUQuerySetImpl;
 struct WGPURenderBundleImpl;
+
+enum class WGPURenderPassAttachmentStoreOp : uint8_t
+{
+    Store,
+    DontCare,
+    None
+};
+
+struct WGPURenderPassAttachmentInfo
+{
+    PeBackendHandle imageView = 0;
+    PeImageLayout imageLayout = PE_IMAGE_LAYOUT_UNDEFINED;
+    PeLoadOp loadOp = PE_LOAD_OP_DONT_CARE;
+    WGPURenderPassAttachmentStoreOp storeOp = WGPURenderPassAttachmentStoreOp::DontCare;
+
+    PeBackendHandle resolveImageView = 0;
+    PeImageLayout resolveImageLayout = PE_IMAGE_LAYOUT_UNDEFINED;
+    bool resolveAverage = true;
+
+    bool hasClearColor = false;
+    WGPUTextureFormat clearColorFormat = WGPUTextureFormat_Undefined;
+    WGPUColor clearColor{};
+
+    bool hasClearDepth = false;
+    float clearDepth = 0.0f;
+    bool hasClearStencil = false;
+    uint32_t clearStencil = 0;
+};
 
 struct WGPURenderPassEncoderImpl
 {
@@ -36,9 +64,9 @@ struct WGPURenderPassEncoderImpl
     // beginRendering is deferred until the first draw-scope command so bind-group
     // barriers (including layout transitions) can be emitted outside the Vulkan
     // dynamic-rendering scope, where they are forbidden.
-    std::vector<vk::RenderingAttachmentInfo> deferredColorAttachments;
-    vk::RenderingAttachmentInfo deferredDepthAtt{};
-    vk::RenderingAttachmentInfo deferredStencilAtt{};
+    std::vector<WGPURenderPassAttachmentInfo> deferredColorAttachments;
+    WGPURenderPassAttachmentInfo deferredDepthAtt{};
+    WGPURenderPassAttachmentInfo deferredStencilAtt{};
     bool deferredHasDepth = false;
     bool deferredHasStencil = false;
     uint32_t deferredRenderWidth = 0;

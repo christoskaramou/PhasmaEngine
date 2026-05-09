@@ -9,7 +9,6 @@
 #include "QuerySet.h"
 #include "Device.h"
 #include "FormatMap.h"
-#include "FormatMap.h"
 #include "Utils.h"
 #include "API/Image.h"
 #include "API/Buffer.h"
@@ -106,7 +105,7 @@ namespace
         if (!querySet)
             return MakePassBeginValidationMessage(kind, "timestampWrites.querySet is null");
         // §19.2 checks query-set destruction when recorded work is submitted.
-        if (querySet->invalid || querySet->queryPool == VK_NULL_HANDLE)
+        if (querySet->invalid || querySet->backendQueryPool == 0)
             return MakePassBeginValidationMessage(kind, "timestampWrites.querySet is invalid");
         if (querySet->device != device)
             return MakePassBeginValidationMessage(kind, "timestampWrites.querySet belongs to a different device");
@@ -135,32 +134,6 @@ namespace
             return;
         if (enc->deferredErrorMessage.empty())
             enc->deferredErrorMessage = msg ? msg : "";
-    }
-
-    void SetColorClearValueForFormat(vk::ClearColorValue &dst, WGPUTextureFormat format,
-                                     const WGPUColor &src)
-    {
-        switch (pwgpu::GetColorFormatSampleType(format))
-        {
-        case pwgpu::ColorSampleType::Uint:
-            dst.uint32[0] = static_cast<uint32_t>(src.r);
-            dst.uint32[1] = static_cast<uint32_t>(src.g);
-            dst.uint32[2] = static_cast<uint32_t>(src.b);
-            dst.uint32[3] = static_cast<uint32_t>(src.a);
-            break;
-        case pwgpu::ColorSampleType::Sint:
-            dst.int32[0] = static_cast<int32_t>(src.r);
-            dst.int32[1] = static_cast<int32_t>(src.g);
-            dst.int32[2] = static_cast<int32_t>(src.b);
-            dst.int32[3] = static_cast<int32_t>(src.a);
-            break;
-        default:
-            dst.float32[0] = static_cast<float>(src.r);
-            dst.float32[1] = static_cast<float>(src.g);
-            dst.float32[2] = static_cast<float>(src.b);
-            dst.float32[3] = static_cast<float>(src.a);
-            break;
-        }
     }
 
     bool EncoderOpen(WGPUCommandEncoder enc, const char *apiName)
@@ -904,7 +877,7 @@ extern "C"
             auto *oqs = descriptor->occlusionQuerySet;
             if (oqs->device != enc->device)
                 return makeInvalidPass("beginRenderPass: occlusionQuerySet belongs to a different device");
-            if (oqs->invalid || oqs->queryPool == VK_NULL_HANDLE)
+            if (oqs->invalid || oqs->backendQueryPool == 0)
                 return makeInvalidPass("beginRenderPass: occlusionQuerySet is invalid");
             if (oqs->type != WGPUQueryType_Occlusion)
                 return makeInvalidPass("beginRenderPass: occlusionQuerySet.type must be occlusion");
@@ -975,17 +948,19 @@ extern "C"
             // Reset both slots here (outside any render pass) before the begin-write.
             if (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                 tw->beginningOfPassWriteIndex < tw->querySet->count &&
-                tw->querySet->queryPool)
+                tw->querySet->backendQueryPool != 0)
             {
                 pe::GetVulkanCommandBuffer(enc->cmd).resetQueryPool(
-                    tw->querySet->queryPool, tw->beginningOfPassWriteIndex, 1);
+                    vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(tw->querySet)},
+                    tw->beginningOfPassWriteIndex, 1);
             }
             if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                 tw->endOfPassWriteIndex < tw->querySet->count &&
-                tw->querySet->queryPool)
+                tw->querySet->backendQueryPool != 0)
             {
                 pe::GetVulkanCommandBuffer(enc->cmd).resetQueryPool(
-                    tw->querySet->queryPool, tw->endOfPassWriteIndex, 1);
+                    vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(tw->querySet)},
+                    tw->endOfPassWriteIndex, 1);
             }
 
             if (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
@@ -994,14 +969,15 @@ extern "C"
                 rpe->beginTimestampIndex = tw->beginningOfPassWriteIndex;
                 pe::GetVulkanCommandBuffer(enc->cmd).writeTimestamp2(
                     vk::PipelineStageFlagBits2::eAllCommands,
-                    tw->querySet->queryPool, tw->beginningOfPassWriteIndex);
+                    vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(tw->querySet)},
+                    tw->beginningOfPassWriteIndex);
             }
             if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                 tw->endOfPassWriteIndex < tw->querySet->count)
                 rpe->endTimestampIndex = tw->endOfPassWriteIndex;
         }
 
-        std::vector<vk::RenderingAttachmentInfo> colorAttachments;
+        std::vector<WGPURenderPassAttachmentInfo> colorAttachments;
         std::vector<pe::ImageBarrierInfo> barriers;
         colorAttachments.reserve(colorCount);
 
@@ -1010,11 +986,7 @@ extern "C"
             auto &ca = descriptor->colorAttachments[i];
             if (!ca.view)
             {
-                vk::RenderingAttachmentInfo nullAtt{};
-                nullAtt.imageView = VK_NULL_HANDLE;
-                nullAtt.imageLayout = vk::ImageLayout::eUndefined;
-                nullAtt.loadOp = vk::AttachmentLoadOp::eDontCare;
-                nullAtt.storeOp = vk::AttachmentStoreOp::eDontCare;
+                WGPURenderPassAttachmentInfo nullAtt{};
                 colorAttachments.push_back(nullAtt);
                 continue;
             }
@@ -1091,14 +1063,20 @@ extern "C"
                 }
             }
 
-            vk::RenderingAttachmentInfo att{};
-            att.imageView = attachmentImageView;
-            att.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-            att.loadOp = (ca.loadOp == WGPULoadOp_Clear) ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad;
-            att.storeOp = (ca.storeOp == WGPUStoreOp_Store) ? vk::AttachmentStoreOp::eStore : vk::AttachmentStoreOp::eDontCare;
+            WGPURenderPassAttachmentInfo att{};
+            att.imageView = PeToBackendHandle(static_cast<VkImageView>(attachmentImageView));
+            att.imageLayout = PE_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            att.loadOp = (ca.loadOp == WGPULoadOp_Clear) ? PE_LOAD_OP_CLEAR : PE_LOAD_OP_LOAD;
+            att.storeOp = (ca.storeOp == WGPUStoreOp_Store)
+                              ? WGPURenderPassAttachmentStoreOp::Store
+                              : WGPURenderPassAttachmentStoreOp::DontCare;
 
             if (ca.loadOp == WGPULoadOp_Clear)
-                SetColorClearValueForFormat(att.clearValue.color, view->format, ca.clearValue);
+            {
+                att.hasClearColor = true;
+                att.clearColorFormat = view->format;
+                att.clearColor = ca.clearValue;
+            }
 
             if (ca.resolveTarget)
             {
@@ -1118,18 +1096,17 @@ extern "C"
                 rt->refCount.fetch_add(1, std::memory_order_relaxed);
                 rpe->retainedViews.push_back(rt);
 
-                att.resolveMode = pwgpu::IsBlendableFormat(view->format)
-                                      ? vk::ResolveModeFlagBits::eAverage
-                                      : vk::ResolveModeFlagBits::eSampleZero;
-                att.resolveImageView = pe::GetVulkanImageView(rt->view);
-                att.resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+                att.resolveAverage = pwgpu::IsBlendableFormat(view->format);
+                att.resolveImageView =
+                    PeToBackendHandle(static_cast<VkImageView>(pe::GetVulkanImageView(rt->view)));
+                att.resolveImageLayout = PE_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             }
 
             colorAttachments.push_back(att);
         }
 
-        vk::RenderingAttachmentInfo depthAtt{};
-        vk::RenderingAttachmentInfo stencilAtt{};
+        WGPURenderPassAttachmentInfo depthAtt{};
+        WGPURenderPassAttachmentInfo stencilAtt{};
         bool hasDepthAttachment = false;
         bool hasStencilAttachment = false;
         if (dsa)
@@ -1152,8 +1129,6 @@ extern "C"
             else if (hasStencil && !hasDepth)
                 dsBarrierLayout = dsa->stencilReadOnly ? PE_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL
                                                        : PE_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
-
-            vk::ImageLayout dsLayout = pe::ToVkImageLayout(dsBarrierLayout);
 
             pe::ImageBarrierInfo dsBarrier{};
             dsBarrier.image = dsView->texture->image;
@@ -1204,49 +1179,61 @@ extern "C"
             if (hasDepth)
             {
                 hasDepthAttachment = true;
-                depthAtt.imageView = pe::GetVulkanImageView(dsView->view);
-                depthAtt.imageLayout = dsLayout;
+                depthAtt.imageView =
+                    PeToBackendHandle(static_cast<VkImageView>(pe::GetVulkanImageView(dsView->view)));
+                depthAtt.imageLayout = dsBarrierLayout;
 
                 if (!dsa->depthReadOnly)
                 {
-                    depthAtt.loadOp = (dsa->depthLoadOp == WGPULoadOp_Clear) ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad;
-                    depthAtt.storeOp = (dsa->depthStoreOp == WGPUStoreOp_Store) ? vk::AttachmentStoreOp::eStore : vk::AttachmentStoreOp::eDontCare;
+                    depthAtt.loadOp = (dsa->depthLoadOp == WGPULoadOp_Clear) ? PE_LOAD_OP_CLEAR : PE_LOAD_OP_LOAD;
+                    depthAtt.storeOp = (dsa->depthStoreOp == WGPUStoreOp_Store)
+                                           ? WGPURenderPassAttachmentStoreOp::Store
+                                           : WGPURenderPassAttachmentStoreOp::DontCare;
                 }
                 else
                 {
-                    depthAtt.loadOp = vk::AttachmentLoadOp::eLoad;
-                    depthAtt.storeOp = vk::AttachmentStoreOp::eNone;
+                    depthAtt.loadOp = PE_LOAD_OP_LOAD;
+                    depthAtt.storeOp = WGPURenderPassAttachmentStoreOp::None;
                 }
 
                 if (dsa->depthLoadOp == WGPULoadOp_Clear)
-                    depthAtt.clearValue.depthStencil.depth = dsa->depthClearValue;
+                {
+                    depthAtt.hasClearDepth = true;
+                    depthAtt.clearDepth = dsa->depthClearValue;
+                }
             }
 
             if (hasStencil)
             {
                 hasStencilAttachment = true;
-                stencilAtt.imageView = pe::GetVulkanImageView(dsView->view);
-                stencilAtt.imageLayout = dsLayout;
+                stencilAtt.imageView =
+                    PeToBackendHandle(static_cast<VkImageView>(pe::GetVulkanImageView(dsView->view)));
+                stencilAtt.imageLayout = dsBarrierLayout;
 
                 if (!dsa->stencilReadOnly)
                 {
-                    stencilAtt.loadOp = (dsa->stencilLoadOp == WGPULoadOp_Clear) ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad;
-                    stencilAtt.storeOp = (dsa->stencilStoreOp == WGPUStoreOp_Store) ? vk::AttachmentStoreOp::eStore : vk::AttachmentStoreOp::eDontCare;
+                    stencilAtt.loadOp = (dsa->stencilLoadOp == WGPULoadOp_Clear) ? PE_LOAD_OP_CLEAR : PE_LOAD_OP_LOAD;
+                    stencilAtt.storeOp = (dsa->stencilStoreOp == WGPUStoreOp_Store)
+                                             ? WGPURenderPassAttachmentStoreOp::Store
+                                             : WGPURenderPassAttachmentStoreOp::DontCare;
                 }
                 else
                 {
-                    stencilAtt.loadOp = vk::AttachmentLoadOp::eLoad;
-                    stencilAtt.storeOp = vk::AttachmentStoreOp::eNone;
+                    stencilAtt.loadOp = PE_LOAD_OP_LOAD;
+                    stencilAtt.storeOp = WGPURenderPassAttachmentStoreOp::None;
                 }
 
                 if (dsa->stencilLoadOp == WGPULoadOp_Clear)
-                    stencilAtt.clearValue.depthStencil.stencil = dsa->stencilClearValue;
+                {
+                    stencilAtt.hasClearStencil = true;
+                    stencilAtt.clearStencil = dsa->stencilClearValue;
+                }
             }
         }
 
         // §23.x lazy initialization: any attachment with loadOp=Load whose subresource
         // is currently uninitialized must be cleared before the pass reads it. Convert
-        // those slots from Load to Clear(0) — clearValue stays whatever color we set,
+        // those slots from Load to Clear(0) — clear color stays whatever color we set,
         // because the barrier transitions are unchanged and the pass overwrites anyway.
         // Per-attachment, also mark post-pass state at JS-call time: storeOp=Store marks
         // initialized; storeOp=Discard marks uninitialized; readOnly DS marks initialized.
@@ -1272,11 +1259,10 @@ extern "C"
                 pwgpu::RangeHasAnyUninitialized(view->texture, view->baseMipLevel, 1,
                                                 baseLayer, layerCount, aspects))
             {
-                colorAttachments[i].loadOp = vk::AttachmentLoadOp::eClear;
-                colorAttachments[i].clearValue.color.float32[0] = 0.0f;
-                colorAttachments[i].clearValue.color.float32[1] = 0.0f;
-                colorAttachments[i].clearValue.color.float32[2] = 0.0f;
-                colorAttachments[i].clearValue.color.float32[3] = 0.0f;
+                colorAttachments[i].loadOp = PE_LOAD_OP_CLEAR;
+                colorAttachments[i].hasClearColor = true;
+                colorAttachments[i].clearColorFormat = view->format;
+                colorAttachments[i].clearColor = WGPUColor{0.0, 0.0, 0.0, 0.0};
             }
 
             // Post-pass: storeOp=Store leaves the subresource initialized (rendering
@@ -1307,8 +1293,9 @@ extern "C"
                 if (!dsa->depthReadOnly && dsa->depthLoadOp == WGPULoadOp_Load &&
                     pwgpu::RangeHasAnyUninitialized(dsView->texture, bM, mC, bL, lC, dAspect))
                 {
-                    depthAtt.loadOp = vk::AttachmentLoadOp::eClear;
-                    depthAtt.clearValue.depthStencil.depth = 0.0f;
+                    depthAtt.loadOp = PE_LOAD_OP_CLEAR;
+                    depthAtt.hasClearDepth = true;
+                    depthAtt.clearDepth = 0.0f;
                 }
                 if (dsa->depthReadOnly ||
                     (dsa->depthStoreOp == WGPUStoreOp_Store && dsa->depthLoadOp != WGPULoadOp_Undefined))
@@ -1321,8 +1308,9 @@ extern "C"
                 if (!dsa->stencilReadOnly && dsa->stencilLoadOp == WGPULoadOp_Load &&
                     pwgpu::RangeHasAnyUninitialized(dsView->texture, bM, mC, bL, lC, sAspect))
                 {
-                    stencilAtt.loadOp = vk::AttachmentLoadOp::eClear;
-                    stencilAtt.clearValue.depthStencil.stencil = 0u;
+                    stencilAtt.loadOp = PE_LOAD_OP_CLEAR;
+                    stencilAtt.hasClearStencil = true;
+                    stencilAtt.clearStencil = 0u;
                 }
                 if (dsa->stencilReadOnly ||
                     (dsa->stencilStoreOp == WGPUStoreOp_Store && dsa->stencilLoadOp != WGPULoadOp_Undefined))
@@ -1435,17 +1423,19 @@ extern "C"
                 // unavailable before write. Reset reused slots here.
                 if (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                     tw->beginningOfPassWriteIndex < tw->querySet->count &&
-                    tw->querySet->queryPool)
+                    tw->querySet->backendQueryPool != 0)
                 {
                     pe::GetVulkanCommandBuffer(enc->cmd).resetQueryPool(
-                        tw->querySet->queryPool, tw->beginningOfPassWriteIndex, 1);
+                        vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(tw->querySet)},
+                        tw->beginningOfPassWriteIndex, 1);
                 }
                 if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                     tw->endOfPassWriteIndex < tw->querySet->count &&
-                    tw->querySet->queryPool)
+                    tw->querySet->backendQueryPool != 0)
                 {
                     pe::GetVulkanCommandBuffer(enc->cmd).resetQueryPool(
-                        tw->querySet->queryPool, tw->endOfPassWriteIndex, 1);
+                        vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(tw->querySet)},
+                        tw->endOfPassWriteIndex, 1);
                 }
 
                 if (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
@@ -1454,7 +1444,8 @@ extern "C"
                     cpe->beginTimestampIndex = tw->beginningOfPassWriteIndex;
                     pe::GetVulkanCommandBuffer(enc->cmd).writeTimestamp2(
                         vk::PipelineStageFlagBits2::eAllCommands,
-                        tw->querySet->queryPool, tw->beginningOfPassWriteIndex);
+                        vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(tw->querySet)},
+                        tw->beginningOfPassWriteIndex);
                 }
                 if (tw->endOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                     tw->endOfPassWriteIndex < tw->querySet->count)
@@ -2426,7 +2417,7 @@ extern "C"
         enc->retained.usedBuffers.push_back(dst);
 
         // Destroyed resources defer to queue.submit() per spec.
-        if (querySet->destroyed || !querySet->queryPool ||
+        if (querySet->destroyed || querySet->backendQueryPool == 0 ||
             dst->internalState == BufferInternalState::Destroyed || !dst->peBuffer)
             return;
 
@@ -2460,7 +2451,7 @@ extern "C"
             const uint64_t slotOffset = dstOffset +
                                         static_cast<uint64_t>(idx - firstQuery) * sizeof(uint64_t);
             pe::GetVulkanCommandBuffer(enc->cmd).copyQueryPoolResults(
-                querySet->queryPool, idx, 1,
+                vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(querySet)}, idx, 1,
                 pe::GetVulkanBuffer(dst->peBuffer), slotOffset,
                 sizeof(uint64_t),
                 vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
@@ -2500,13 +2491,15 @@ extern "C"
         wgpuQuerySetAddRef(querySet);
         enc->retained.querySets.push_back(querySet);
 
-        if (querySet->destroyed || !querySet->queryPool)
+        if (querySet->destroyed || querySet->backendQueryPool == 0)
             return;
 
         // Per VUID-vkCmdWriteTimestamp2-None-03864: reset the slot before reuse.
-        pe::GetVulkanCommandBuffer(enc->cmd).resetQueryPool(querySet->queryPool, queryIndex, 1);
+        pe::GetVulkanCommandBuffer(enc->cmd)
+            .resetQueryPool(vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(querySet)}, queryIndex, 1);
         pe::GetVulkanCommandBuffer(enc->cmd).writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands,
-                                                             querySet->queryPool, queryIndex);
+                                                             vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(querySet)},
+                                                             queryIndex);
     }
 
     void wgpuCommandEncoderInsertDebugMarker(WGPUCommandEncoder enc, WGPUStringView markerLabel)

@@ -21,6 +21,8 @@ namespace pe
     vk::PrimitiveTopology ToVkTopology(PeTopology topology);
     PeTopology FromVkTopology(vk::PrimitiveTopology topology);
 
+    vk::IndexType ToVkIndexType(PeIndexType indexType);
+
     vk::PolygonMode ToVkPolygonMode(PePolygonMode mode);
     PePolygonMode FromVkPolygonMode(vk::PolygonMode mode);
 

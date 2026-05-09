@@ -8,6 +8,7 @@
 #include "RenderBundle.h"
 #include "QuerySet.h"
 #include "Device.h"
+#include "FormatMap.h"
 #include "Utils.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
@@ -122,6 +123,83 @@ namespace
                                   std::vector<pe::ImageBarrierInfo> &imageBarriers,
                                   std::vector<pe::BufferBarrierInfo> &bufferBarriers);
 
+    vk::AttachmentLoadOp ToVkLoadOp(PeLoadOp op)
+    {
+        switch (op)
+        {
+        case PE_LOAD_OP_CLEAR:
+            return vk::AttachmentLoadOp::eClear;
+        case PE_LOAD_OP_LOAD:
+            return vk::AttachmentLoadOp::eLoad;
+        case PE_LOAD_OP_DONT_CARE:
+        default:
+            return vk::AttachmentLoadOp::eDontCare;
+        }
+    }
+
+    vk::AttachmentStoreOp ToVkStoreOp(WGPURenderPassAttachmentStoreOp op)
+    {
+        switch (op)
+        {
+        case WGPURenderPassAttachmentStoreOp::Store:
+            return vk::AttachmentStoreOp::eStore;
+        case WGPURenderPassAttachmentStoreOp::None:
+            return vk::AttachmentStoreOp::eNone;
+        case WGPURenderPassAttachmentStoreOp::DontCare:
+        default:
+            return vk::AttachmentStoreOp::eDontCare;
+        }
+    }
+
+    void SetColorClearValueForFormat(vk::ClearColorValue &dst, WGPUTextureFormat format,
+                                     const WGPUColor &src)
+    {
+        switch (pwgpu::GetColorFormatSampleType(format))
+        {
+        case pwgpu::ColorSampleType::Uint:
+            dst.uint32[0] = static_cast<uint32_t>(src.r);
+            dst.uint32[1] = static_cast<uint32_t>(src.g);
+            dst.uint32[2] = static_cast<uint32_t>(src.b);
+            dst.uint32[3] = static_cast<uint32_t>(src.a);
+            break;
+        case pwgpu::ColorSampleType::Sint:
+            dst.int32[0] = static_cast<int32_t>(src.r);
+            dst.int32[1] = static_cast<int32_t>(src.g);
+            dst.int32[2] = static_cast<int32_t>(src.b);
+            dst.int32[3] = static_cast<int32_t>(src.a);
+            break;
+        default:
+            dst.float32[0] = static_cast<float>(src.r);
+            dst.float32[1] = static_cast<float>(src.g);
+            dst.float32[2] = static_cast<float>(src.b);
+            dst.float32[3] = static_cast<float>(src.a);
+            break;
+        }
+    }
+
+    vk::RenderingAttachmentInfo ToVkRenderingAttachment(const WGPURenderPassAttachmentInfo &src)
+    {
+        vk::RenderingAttachmentInfo dst{};
+        dst.imageView = vk::ImageView{PeFromBackendHandle<VkImageView>(src.imageView)};
+        dst.imageLayout = pe::ToVkImageLayout(src.imageLayout);
+        dst.loadOp = ToVkLoadOp(src.loadOp);
+        dst.storeOp = ToVkStoreOp(src.storeOp);
+        if (src.resolveImageView != 0)
+        {
+            dst.resolveMode = src.resolveAverage ? vk::ResolveModeFlagBits::eAverage
+                                                 : vk::ResolveModeFlagBits::eSampleZero;
+            dst.resolveImageView = vk::ImageView{PeFromBackendHandle<VkImageView>(src.resolveImageView)};
+            dst.resolveImageLayout = pe::ToVkImageLayout(src.resolveImageLayout);
+        }
+        if (src.hasClearColor)
+            SetColorClearValueForFormat(dst.clearValue.color, src.clearColorFormat, src.clearColor);
+        if (src.hasClearDepth)
+            dst.clearValue.depthStencil.depth = src.clearDepth;
+        if (src.hasClearStencil)
+            dst.clearValue.depthStencil.stencil = src.clearStencil;
+        return dst;
+    }
+
     // Deferred beginRendering: Vulkan dynamic rendering forbids image layout
     // transitions inside the rendering scope. By deferring beginRendering until
     // the first draw-scope command, we merge attachment barriers and bind-group
@@ -147,17 +225,29 @@ namespace
             rpe->bindGroupBarriersEmitted = true;
         }
 
+        std::vector<vk::RenderingAttachmentInfo> colorAttachments;
+        colorAttachments.reserve(rpe->deferredColorAttachments.size());
+        for (const auto &attachment : rpe->deferredColorAttachments)
+            colorAttachments.push_back(ToVkRenderingAttachment(attachment));
+
+        vk::RenderingAttachmentInfo depthAttachment{};
+        if (rpe->deferredHasDepth)
+            depthAttachment = ToVkRenderingAttachment(rpe->deferredDepthAtt);
+        vk::RenderingAttachmentInfo stencilAttachment{};
+        if (rpe->deferredHasStencil)
+            stencilAttachment = ToVkRenderingAttachment(rpe->deferredStencilAtt);
+
         vk::RenderingInfo renderingInfo{};
         renderingInfo.renderArea = vk::Rect2D{{0, 0},
                                               {rpe->deferredRenderWidth, rpe->deferredRenderHeight}};
         renderingInfo.layerCount = 1;
         renderingInfo.colorAttachmentCount =
-            static_cast<uint32_t>(rpe->deferredColorAttachments.size());
-        renderingInfo.pColorAttachments = rpe->deferredColorAttachments.data();
+            static_cast<uint32_t>(colorAttachments.size());
+        renderingInfo.pColorAttachments = colorAttachments.data();
         if (rpe->deferredHasDepth)
-            renderingInfo.pDepthAttachment = &rpe->deferredDepthAtt;
+            renderingInfo.pDepthAttachment = &depthAttachment;
         if (rpe->deferredHasStencil)
-            renderingInfo.pStencilAttachment = &rpe->deferredStencilAtt;
+            renderingInfo.pStencilAttachment = &stencilAttachment;
 
         pe::GetVulkanCommandBuffer(rpe->cmd).beginRendering(renderingInfo);
         rpe->renderingActive = true;
@@ -394,7 +484,7 @@ extern "C"
     {
         if (!PassOpen(rpe, "wgpuRenderPassEncoderSetPipeline"))
             return;
-        if (!pipeline || pipeline->invalid || pipeline->vkPipeline == VK_NULL_HANDLE)
+        if (!pipeline || pipeline->invalid || pipeline->backendPipeline == 0)
         {
             ReportPassValidation(rpe,
                                  "wgpuRenderPassEncoderSetPipeline: pipeline is null or invalid");
@@ -443,12 +533,15 @@ extern "C"
         wgpuRenderPipelineAddRef(pipeline);
         rpe->retainedPipelines.push_back(pipeline);
 
-        pe::GetVulkanCommandBuffer(rpe->cmd).bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->vkPipeline);
+        pe::GetVulkanCommandBuffer(rpe->cmd).bindPipeline(
+            vk::PipelineBindPoint::eGraphics,
+            vk::Pipeline{PeFromBackendHandle<VkPipeline>(pipeline->backendPipeline)});
 
         if (pipeline->layout)
         {
             auto &bgls = pipeline->layout->bindGroupLayouts;
-            vk::PipelineLayout vkLayout(pipeline->layout->vkLayout);
+            vk::PipelineLayout vkLayout{
+                PeFromBackendHandle<VkPipelineLayout>(pipeline->layout->backendLayout)};
             for (size_t i = 0; i < rpe->currentBindGroups.size() && i < bgls.size(); ++i)
             {
                 auto *bg = rpe->currentBindGroups[i];
@@ -639,7 +732,8 @@ extern "C"
         if (!BglGroupEquivalent(group->layout, bgls[groupIndex]))
             return;
 
-        vk::PipelineLayout vkLayout(rpe->pipeline->layout->vkLayout);
+        vk::PipelineLayout vkLayout{
+            PeFromBackendHandle<VkPipelineLayout>(rpe->pipeline->layout->backendLayout)};
         vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(group->descriptor);
 
         pe::GetVulkanCommandBuffer(rpe->cmd).bindDescriptorSets(
@@ -808,8 +902,7 @@ extern "C"
             return;
         }
 
-        vk::IndexType indexType = (format == WGPUIndexFormat_Uint16) ? vk::IndexType::eUint16 : vk::IndexType::eUint32;
-        pe::GetVulkanCommandBuffer(rpe->cmd).bindIndexBuffer(pe::GetVulkanBuffer(buffer->peBuffer), offset, indexType);
+        rpe->cmd->BindIndexBuffer(buffer->peBuffer, offset, pwgpu::ToPeIndexType(format));
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -1144,16 +1237,20 @@ extern "C"
         // A pass that binds occlusionQuerySet but never calls beginQuery emits no
         // reset, preserving prior-submission slot data (multi_resolve CTS semantics).
         if (isFirstQueryThisPass && !rpe->renderingActive &&
-            rpe->occlusionQuerySet->queryPool && rpe->occlusionQuerySet->count > 0)
+            rpe->occlusionQuerySet->backendQueryPool != 0 && rpe->occlusionQuerySet->count > 0)
         {
             pe::GetVulkanCommandBuffer(rpe->cmd).resetQueryPool(
-                rpe->occlusionQuerySet->queryPool, 0, rpe->occlusionQuerySet->count);
+                vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(rpe->occlusionQuerySet)},
+                0, rpe->occlusionQuerySet->count);
         }
 
         OpenRenderingIfNeeded(rpe);
-        if (rpe->occlusionQuerySet->queryPool)
+        if (rpe->occlusionQuerySet->backendQueryPool != 0)
+        {
             pe::GetVulkanCommandBuffer(rpe->cmd).beginQuery(
-                rpe->occlusionQuerySet->queryPool, queryIndex, vk::QueryControlFlags{});
+                vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(rpe->occlusionQuerySet)},
+                queryIndex, vk::QueryControlFlags{});
+        }
     }
 
     void wgpuRenderPassEncoderEndOcclusionQuery(WGPURenderPassEncoder rpe)
@@ -1171,9 +1268,12 @@ extern "C"
 
         uint32_t lastIndex = rpe->activeOcclusionIndex;
         rpe->activeOcclusionIndex = UINT32_MAX;
-        if (rpe->occlusionQuerySet && rpe->occlusionQuerySet->queryPool)
+        if (rpe->occlusionQuerySet && rpe->occlusionQuerySet->backendQueryPool != 0)
+        {
             pe::GetVulkanCommandBuffer(rpe->cmd).endQuery(
-                rpe->occlusionQuerySet->queryPool, lastIndex);
+                vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(rpe->occlusionQuerySet)},
+                lastIndex);
+        }
     }
 
     void wgpuRenderPassEncoderExecuteBundles(WGPURenderPassEncoder rpe,
@@ -1283,9 +1383,8 @@ extern "C"
 
             rpe->drawCount += bundle->drawCount;
 
-            vk::CommandBuffer vkCmd = pe::GetVulkanCommandBuffer(rpe->cmd);
             for (auto &command : bundle->commands)
-                command(vkCmd);
+                command(rpe->cmd);
         }
 
         rpe->pipeline = nullptr;
@@ -1370,7 +1469,9 @@ extern "C"
         {
             PE_WARN("[WebGPU] wgpuRenderPassEncoderEnd: auto-closing active occlusion query");
             uint32_t lastIndex = rpe->activeOcclusionIndex;
-            pe::GetVulkanCommandBuffer(rpe->cmd).endQuery(rpe->occlusionQuerySet->queryPool, lastIndex);
+            pe::GetVulkanCommandBuffer(rpe->cmd).endQuery(
+                vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(rpe->occlusionQuerySet)},
+                lastIndex);
             rpe->occlusionQueryActive = false;
             rpe->activeOcclusionIndex = UINT32_MAX;
         }
@@ -1395,7 +1496,8 @@ extern "C"
         {
             pe::GetVulkanCommandBuffer(rpe->cmd).writeTimestamp2(
                 vk::PipelineStageFlagBits2::eAllCommands,
-                rpe->timestampQuerySet->queryPool, rpe->endTimestampIndex);
+                vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(rpe->timestampQuerySet)},
+                rpe->endTimestampIndex);
         }
 
         if (rpe->parent)

@@ -6,6 +6,7 @@
 #include "Device.h"
 #include "Utils.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 
 extern "C" void wgpuDeviceRelease(WGPUDevice);
 extern "C" void wgpuRenderPipelineAddRef(WGPURenderPipeline);
@@ -136,7 +137,7 @@ extern "C"
     {
         if (!EncoderOpen(rbe, "wgpuRenderBundleEncoderSetPipeline"))
             return;
-        if (!pipeline || pipeline->invalid || pipeline->vkPipeline == VK_NULL_HANDLE)
+        if (!pipeline || pipeline->invalid || pipeline->backendPipeline == 0)
         {
             ReportEncoderValidation(rbe,
                                     "wgpuRenderBundleEncoderSetPipeline: pipeline is null or invalid");
@@ -220,14 +221,16 @@ extern "C"
         wgpuRenderPipelineAddRef(pipeline);
         rbe->retainedPipelines.push_back(pipeline);
 
-        VkPipeline vkp = pipeline->vkPipeline;
-        rbe->commands.push_back([vkp](vk::CommandBuffer cmd)
-                                { cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, vkp); });
+        VkPipeline vkp = PeFromBackendHandle<VkPipeline>(pipeline->backendPipeline);
+        rbe->commands.push_back([vkp](pe::CommandBuffer *cmd)
+                                { pe::GetVulkanCommandBuffer(cmd).bindPipeline(
+                                      vk::PipelineBindPoint::eGraphics, vk::Pipeline{vkp}); });
 
         if (pipeline->layout)
         {
             auto &bgls = pipeline->layout->bindGroupLayouts;
-            VkPipelineLayout vkLayout = pipeline->layout->vkLayout;
+            VkPipelineLayout vkLayout =
+                PeFromBackendHandle<VkPipelineLayout>(pipeline->layout->backendLayout);
             for (size_t i = 0; i < rbe->currentBindGroups.size() && i < bgls.size(); ++i)
             {
                 auto *bg = rbe->currentBindGroups[i];
@@ -242,8 +245,8 @@ extern "C"
                     (i < rbe->currentDynamicOffsets.size())
                         ? rbe->currentDynamicOffsets[i]
                         : std::vector<uint32_t>{};
-                rbe->commands.push_back([vkLayout, groupIndex, ds, dynOffsets](vk::CommandBuffer cmd)
-                                        { cmd.bindDescriptorSets(
+                rbe->commands.push_back([vkLayout, groupIndex, ds, dynOffsets](pe::CommandBuffer *cmd)
+                                        { pe::GetVulkanCommandBuffer(cmd).bindDescriptorSets(
                                               vk::PipelineBindPoint::eGraphics,
                                               vk::PipelineLayout(vkLayout), groupIndex,
                                               1, &ds,
@@ -421,12 +424,13 @@ extern "C"
         if (!BglGroupEquivalent(group->layout, bgls[groupIndex]))
             return;
 
-        VkPipelineLayout vkLayout = rbe->pipeline->layout->vkLayout;
+        VkPipelineLayout vkLayout =
+            PeFromBackendHandle<VkPipelineLayout>(rbe->pipeline->layout->backendLayout);
         vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(group->descriptor);
         std::vector<uint32_t> dynOffsets(dynamicOffsets, dynamicOffsets + dynamicOffsetCount);
 
-        rbe->commands.push_back([vkLayout, groupIndex, ds, dynOffsets](vk::CommandBuffer cmd)
-                                { cmd.bindDescriptorSets(
+        rbe->commands.push_back([vkLayout, groupIndex, ds, dynOffsets](pe::CommandBuffer *cmd)
+                                { pe::GetVulkanCommandBuffer(cmd).bindDescriptorSets(
                                       vk::PipelineBindPoint::eGraphics,
                                       vk::PipelineLayout(vkLayout), groupIndex,
                                       1, &ds,
@@ -512,11 +516,8 @@ extern "C"
         if (!buffer->peBuffer)
             return;
 
-        vk::Buffer vkBuf = pe::GetVulkanBuffer(buffer->peBuffer);
-        vk::DeviceSize vkOffset = static_cast<vk::DeviceSize>(offset);
-
-        rbe->commands.push_back([vkBuf, slot, vkOffset](vk::CommandBuffer cmd)
-                                { cmd.bindVertexBuffers(slot, 1, &vkBuf, &vkOffset); });
+        rbe->commands.push_back([buffer, slot, offset](pe::CommandBuffer *cmd)
+                                { cmd->BindVertexBuffer(buffer->peBuffer, static_cast<size_t>(offset), slot, 1); });
     }
 
     void wgpuRenderBundleEncoderSetIndexBuffer(WGPURenderBundleEncoder rbe, WGPUBuffer buffer,
@@ -593,11 +594,10 @@ extern "C"
         if (!buffer->peBuffer)
             return;
 
-        vk::Buffer vkBuf = pe::GetVulkanBuffer(buffer->peBuffer);
-        vk::IndexType indexType = (format == WGPUIndexFormat_Uint16) ? vk::IndexType::eUint16 : vk::IndexType::eUint32;
-
-        rbe->commands.push_back([vkBuf, offset, indexType](vk::CommandBuffer cmd)
-                                { cmd.bindIndexBuffer(vkBuf, offset, indexType); });
+        pe::Buffer *peBuffer = buffer->peBuffer;
+        PeIndexType indexType = pwgpu::ToPeIndexType(format);
+        rbe->commands.push_back([peBuffer, offset, indexType](pe::CommandBuffer *cmd)
+                                { cmd->BindIndexBuffer(peBuffer, offset, indexType); });
     }
 
     void wgpuRenderBundleEncoderDraw(WGPURenderBundleEncoder rbe, uint32_t vertexCount,
@@ -617,8 +617,8 @@ extern "C"
         }
 
         rbe->drawCount++;
-        rbe->commands.push_back([vertexCount, instanceCount, firstVertex, firstInstance](vk::CommandBuffer cmd)
-                                { cmd.draw(vertexCount, instanceCount, firstVertex, firstInstance); });
+        rbe->commands.push_back([vertexCount, instanceCount, firstVertex, firstInstance](pe::CommandBuffer *cmd)
+                                { cmd->Draw(vertexCount, instanceCount, firstVertex, firstInstance); });
     }
 
     void wgpuRenderBundleEncoderDrawIndexed(WGPURenderBundleEncoder rbe, uint32_t indexCount,
@@ -652,8 +652,8 @@ extern "C"
         }
 
         rbe->drawCount++;
-        rbe->commands.push_back([indexCount, instanceCount, firstIndex, baseVertex, firstInstance](vk::CommandBuffer cmd)
-                                { cmd.drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance); });
+        rbe->commands.push_back([indexCount, instanceCount, firstIndex, baseVertex, firstInstance](pe::CommandBuffer *cmd)
+                                { cmd->DrawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance); });
     }
 
     void wgpuRenderBundleEncoderDrawIndirect(WGPURenderBundleEncoder rbe, WGPUBuffer buffer, uint64_t offset)
@@ -693,7 +693,7 @@ extern "C"
             rbe->invalid = true;
             return;
         }
-        constexpr uint64_t kDrawArgsSize = sizeof(VkDrawIndirectCommand);
+        constexpr uint64_t kDrawArgsSize = PE_DRAW_INDIRECT_COMMAND_SIZE;
         if (offset > buffer->size || kDrawArgsSize > buffer->size - offset)
         {
             ReportEncoderValidation(rbe,
@@ -726,10 +726,9 @@ extern "C"
         if (!buffer->peBuffer)
             return;
 
-        vk::Buffer vkBuf = pe::GetVulkanBuffer(buffer->peBuffer);
         rbe->drawCount++;
-        rbe->commands.push_back([vkBuf, offset](vk::CommandBuffer cmd)
-                                { cmd.drawIndirect(vkBuf, offset, 1, sizeof(VkDrawIndirectCommand)); });
+        rbe->commands.push_back([buffer, offset](pe::CommandBuffer *cmd)
+                                { cmd->DrawIndirect(buffer->peBuffer, offset, 1, PE_DRAW_INDIRECT_COMMAND_SIZE); });
     }
 
     void wgpuRenderBundleEncoderDrawIndexedIndirect(WGPURenderBundleEncoder rbe, WGPUBuffer buffer, uint64_t offset)
@@ -770,7 +769,7 @@ extern "C"
             rbe->invalid = true;
             return;
         }
-        constexpr uint64_t kDrawArgsSize = sizeof(VkDrawIndexedIndirectCommand);
+        constexpr uint64_t kDrawArgsSize = PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
         if (offset > buffer->size || kDrawArgsSize > buffer->size - offset)
         {
             ReportEncoderValidation(rbe,
@@ -803,10 +802,9 @@ extern "C"
         if (!buffer->peBuffer)
             return;
 
-        vk::Buffer vkBuf = pe::GetVulkanBuffer(buffer->peBuffer);
         rbe->drawCount++;
-        rbe->commands.push_back([vkBuf, offset](vk::CommandBuffer cmd)
-                                { cmd.drawIndexedIndirect(vkBuf, offset, 1, sizeof(VkDrawIndexedIndirectCommand)); });
+        rbe->commands.push_back([buffer, offset](pe::CommandBuffer *cmd)
+                                { cmd->DrawIndexedIndirect(buffer->peBuffer, offset, 1, PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE); });
     }
 
     WGPURenderBundle wgpuRenderBundleEncoderFinish(WGPURenderBundleEncoder rbe,
@@ -894,11 +892,8 @@ extern "C"
             return;
 
         std::string str = pwgpu::ToString(label);
-        rbe->commands.push_back([str](vk::CommandBuffer cmd)
-                                {
-            vk::DebugUtilsLabelEXT labelInfo{};
-            labelInfo.pLabelName = str.c_str();
-            cmd.insertDebugUtilsLabelEXT(labelInfo); });
+        rbe->commands.push_back([str](pe::CommandBuffer *cmd)
+                                { cmd->InsertDebugLabel(str); });
     }
 
     void wgpuRenderBundleEncoderPushDebugGroup(WGPURenderBundleEncoder rbe, WGPUStringView groupLabel)
@@ -908,11 +903,8 @@ extern "C"
         rbe->debugGroupDepth++;
 
         std::string str = pwgpu::ToString(groupLabel);
-        rbe->commands.push_back([str](vk::CommandBuffer cmd)
-                                {
-            vk::DebugUtilsLabelEXT labelInfo{};
-            labelInfo.pLabelName = str.c_str();
-            cmd.beginDebugUtilsLabelEXT(labelInfo); });
+        rbe->commands.push_back([str](pe::CommandBuffer *cmd)
+                                { cmd->BeginDebugRegion(str); });
     }
 
     void wgpuRenderBundleEncoderPopDebugGroup(WGPURenderBundleEncoder rbe)
@@ -928,8 +920,8 @@ extern "C"
         }
         rbe->debugGroupDepth--;
 
-        rbe->commands.push_back([](vk::CommandBuffer cmd)
-                                { cmd.endDebugUtilsLabelEXT(); });
+        rbe->commands.push_back([](pe::CommandBuffer *cmd)
+                                { cmd->EndDebugRegion(); });
     }
 
     void wgpuRenderBundleEncoderSetLabel(WGPURenderBundleEncoder rbe, WGPUStringView label)

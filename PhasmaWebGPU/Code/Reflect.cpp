@@ -1481,7 +1481,8 @@ namespace pwgpu
             {
                 vk::DescriptorSetLayoutCreateInfo emptyCI{};
                 auto emptyLayout = vkDev.createDescriptorSetLayout(emptyCI);
-                pl->ownedEmptySetLayouts.push_back(emptyLayout);
+                pl->ownedEmptyBackendLayouts.push_back(
+                    PeToBackendHandle(static_cast<VkDescriptorSetLayout>(emptyLayout)));
                 vkSetLayouts[s] = emptyLayout;
                 continue;
             }
@@ -1545,7 +1546,8 @@ namespace pwgpu
             {
                 vk::DescriptorSetLayoutCreateInfo emptyCI{};
                 auto emptyLayout = vkDev.createDescriptorSetLayout(emptyCI);
-                pl->ownedEmptySetLayouts.push_back(emptyLayout);
+                pl->ownedEmptyBackendLayouts.push_back(
+                    PeToBackendHandle(static_cast<VkDescriptorSetLayout>(emptyLayout)));
                 vkSetLayouts[s] = emptyLayout;
             }
         }
@@ -1553,7 +1555,8 @@ namespace pwgpu
         vk::PipelineLayoutCreateInfo ci{};
         ci.setLayoutCount = static_cast<uint32_t>(vkSetLayouts.size());
         ci.pSetLayouts = vkSetLayouts.empty() ? nullptr : vkSetLayouts.data();
-        pl->vkLayout = vkDev.createPipelineLayout(ci);
+        vk::PipelineLayout layout = vkDev.createPipelineLayout(ci);
+        pl->backendLayout = PeToBackendHandle(static_cast<VkPipelineLayout>(layout));
         return pl;
     }
 

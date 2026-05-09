@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <type_traits>
+
 enum PeGraphicsApi : uint32_t
 {
     PE_GRAPHICS_API_VULKAN = 0,
@@ -21,6 +24,26 @@ constexpr const char *PeGraphicsApiName(PeGraphicsApi api)
 }
 
 using PeBackendHandle = uintptr_t;
+
+template <typename Handle>
+inline PeBackendHandle PeToBackendHandle(Handle handle)
+{
+    static_assert(sizeof(Handle) <= sizeof(PeBackendHandle), "Backend handle does not fit in PeBackendHandle");
+    if constexpr (std::is_pointer_v<Handle>)
+        return reinterpret_cast<PeBackendHandle>(handle);
+    else
+        return static_cast<PeBackendHandle>(handle);
+}
+
+template <typename Handle>
+inline Handle PeFromBackendHandle(PeBackendHandle handle)
+{
+    static_assert(sizeof(Handle) <= sizeof(PeBackendHandle), "PeBackendHandle does not fit in backend handle");
+    if constexpr (std::is_pointer_v<Handle>)
+        return reinterpret_cast<Handle>(handle);
+    else
+        return static_cast<Handle>(handle);
+}
 
 enum PeFormat : uint32_t
 {
@@ -280,6 +303,13 @@ enum PeStoreOp : uint32_t
     PE_STORE_OP_STORE = 0,
     PE_STORE_OP_DONT_CARE,
     PE_STORE_OP_COUNT
+};
+
+enum PeIndexType : uint32_t
+{
+    PE_INDEX_TYPE_UINT16 = 0,
+    PE_INDEX_TYPE_UINT32,
+    PE_INDEX_TYPE_COUNT
 };
 
 enum PePresentMode : uint32_t

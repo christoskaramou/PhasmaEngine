@@ -28,10 +28,12 @@ extern "C"
             if (pl->device && pl->device->rhi)
             {
                 auto vkDev = pe::VulkanRhi::Device();
-                if (pl->vkLayout != VK_NULL_HANDLE)
-                    vkDev.destroyPipelineLayout(pl->vkLayout);
-                for (auto emptyLayout : pl->ownedEmptySetLayouts)
-                    vkDev.destroyDescriptorSetLayout(emptyLayout);
+                if (pl->backendLayout != 0)
+                    vkDev.destroyPipelineLayout(
+                        vk::PipelineLayout{PeFromBackendHandle<VkPipelineLayout>(pl->backendLayout)});
+                for (auto emptyLayout : pl->ownedEmptyBackendLayouts)
+                    vkDev.destroyDescriptorSetLayout(
+                        vk::DescriptorSetLayout{PeFromBackendHandle<VkDescriptorSetLayout>(emptyLayout)});
             }
             WGPUDeviceImpl *dev = pl->device;
             delete pl;

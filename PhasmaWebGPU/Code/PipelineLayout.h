@@ -1,8 +1,10 @@
 #pragma once
 
 #include <webgpu/webgpu.h>
-#include "BindGroup.h"
-#include "API/Vulkan/VulkanHeaders.h"
+#include "API/RHITypes.h"
+
+struct WGPUDeviceImpl;
+struct WGPUBindGroupLayoutImpl;
 
 struct WGPUPipelineLayoutImpl
 {
@@ -10,8 +12,8 @@ struct WGPUPipelineLayoutImpl
     std::string label;
     WGPUDeviceImpl *device = nullptr;
 
-    VkPipelineLayout vkLayout = VK_NULL_HANDLE;
+    PeBackendHandle backendLayout = 0;
     std::vector<WGPUBindGroupLayoutImpl *> bindGroupLayouts;
-    std::vector<vk::DescriptorSetLayout> ownedEmptySetLayouts;
+    std::vector<PeBackendHandle> ownedEmptyBackendLayouts;
     bool invalid = false;
 };

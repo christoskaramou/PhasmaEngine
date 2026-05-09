@@ -1,6 +1,7 @@
 #pragma once
 
 #include <webgpu/webgpu.h>
+#include "API/RHITypes.h"
 
 struct WGPUDeviceImpl;
 
@@ -26,6 +27,19 @@ namespace pwgpu
     inline WGPUStringView ToStringView(const std::string &s)
     {
         return {s.data(), s.size()};
+    }
+
+    inline PeIndexType ToPeIndexType(WGPUIndexFormat format)
+    {
+        switch (format)
+        {
+        case WGPUIndexFormat_Uint16:
+            return PE_INDEX_TYPE_UINT16;
+        case WGPUIndexFormat_Uint32:
+            return PE_INDEX_TYPE_UINT32;
+        default:
+            return PE_INDEX_TYPE_UINT32;
+        }
     }
 
     template <typename T>

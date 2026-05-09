@@ -292,6 +292,7 @@ namespace pe
         m_owner->m_boundVertexBufferBindingCount = UINT32_MAX;
         m_owner->m_boundIndexBuffer = nullptr;
         m_owner->m_boundIndexBufferOffset = -1;
+        m_owner->m_boundIndexBufferType = PE_INDEX_TYPE_UINT32;
 
         if (!m_owner->m_afterWaitCallbacks.IsEmpty())
         {
@@ -618,6 +619,7 @@ namespace pe
         m_owner->m_boundVertexBufferBindingCount = UINT32_MAX;
         m_owner->m_boundIndexBuffer = nullptr;
         m_owner->m_boundIndexBufferOffset = -1;
+        m_owner->m_boundIndexBufferType = PE_INDEX_TYPE_UINT32;
     }
 
     void Dx12CommandBufferImpl::BindPipeline(PassInfo &passInfo, bool bindDescriptors)
@@ -702,9 +704,10 @@ namespace pe
         m_cmdList->IASetVertexBuffers(firstBinding, bindingCount, views.data());
     }
 
-    void Dx12CommandBufferImpl::BindIndexBuffer(Buffer *buffer, size_t offset)
+    void Dx12CommandBufferImpl::BindIndexBuffer(Buffer *buffer, size_t offset, PeIndexType indexType)
     {
-        if (m_owner->m_boundIndexBuffer == buffer && m_owner->m_boundIndexBufferOffset == offset)
+        if (m_owner->m_boundIndexBuffer == buffer && m_owner->m_boundIndexBufferOffset == offset &&
+            m_owner->m_boundIndexBufferType == indexType)
             return;
 
         PE_ERROR_IF(!buffer, "Dx12CommandBufferImpl::BindIndexBuffer: null buffer");
@@ -714,13 +717,14 @@ namespace pe
 
         m_owner->m_boundIndexBuffer = buffer;
         m_owner->m_boundIndexBufferOffset = offset;
+        m_owner->m_boundIndexBufferType = indexType;
 
         const Dx12BufferImpl *bufImpl = Dx12BufferImpl::From(buffer);
 
         D3D12_INDEX_BUFFER_VIEW view{};
         view.BufferLocation = bufImpl->GetResource()->GetGPUVirtualAddress() + offset;
         view.SizeInBytes = static_cast<UINT>(buffer->Size() - offset);
-        view.Format = DXGI_FORMAT_R32_UINT;
+        view.Format = IndexFormat(indexType);
 
         m_cmdList->IASetIndexBuffer(&view);
     }

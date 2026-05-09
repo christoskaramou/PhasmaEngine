@@ -295,6 +295,20 @@ namespace pe
         }
     }
 
+    vk::IndexType ToVkIndexType(PeIndexType indexType)
+    {
+        switch (indexType)
+        {
+        case PE_INDEX_TYPE_UINT16:
+            return vk::IndexType::eUint16;
+        case PE_INDEX_TYPE_UINT32:
+            return vk::IndexType::eUint32;
+        default:
+            PE_ERROR("Unknown PeIndexType: %u", static_cast<uint32_t>(indexType));
+            return vk::IndexType::eUint32;
+        }
+    }
+
     vk::PolygonMode ToVkPolygonMode(PePolygonMode mode)
     {
         switch (mode)

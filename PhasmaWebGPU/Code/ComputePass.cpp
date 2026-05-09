@@ -215,7 +215,7 @@ extern "C"
             cpe->invalid = true;
             return;
         }
-        if (pipeline->invalid || pipeline->vkPipeline == VK_NULL_HANDLE)
+        if (pipeline->invalid || pipeline->backendPipeline == 0)
         {
             cpe->invalid = true;
             return;
@@ -226,12 +226,15 @@ extern "C"
         wgpuComputePipelineAddRef(pipeline);
         cpe->retainedPipelines.push_back(pipeline);
 
-        pe::GetVulkanCommandBuffer(cpe->cmd).bindPipeline(vk::PipelineBindPoint::eCompute, pipeline->vkPipeline);
+        pe::GetVulkanCommandBuffer(cpe->cmd).bindPipeline(
+            vk::PipelineBindPoint::eCompute,
+            vk::Pipeline{PeFromBackendHandle<VkPipeline>(pipeline->backendPipeline)});
 
         if (pipeline->layout)
         {
             auto &bgls = pipeline->layout->bindGroupLayouts;
-            vk::PipelineLayout vkLayout(pipeline->layout->vkLayout);
+            vk::PipelineLayout vkLayout{
+                PeFromBackendHandle<VkPipelineLayout>(pipeline->layout->backendLayout)};
             for (size_t i = 0; i < cpe->currentBindGroups.size() && i < bgls.size(); ++i)
             {
                 auto *bg = cpe->currentBindGroups[i];
@@ -402,7 +405,8 @@ extern "C"
             return;
         }
 
-        vk::PipelineLayout vkLayout(cpe->pipeline->layout->vkLayout);
+        vk::PipelineLayout vkLayout{
+            PeFromBackendHandle<VkPipelineLayout>(cpe->pipeline->layout->backendLayout)};
         vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(group->descriptor);
 
         pe::GetVulkanCommandBuffer(cpe->cmd).bindDescriptorSets(
@@ -678,11 +682,12 @@ extern "C"
             PE_WARN("[WebGPU] wgpuComputePassEncoderEnd: %u debug group(s) still open", cpe->debugGroupDepth);
 
         if (cpe->timestampQuerySet && cpe->endTimestampIndex != UINT32_MAX &&
-            cpe->timestampQuerySet->queryPool != VK_NULL_HANDLE)
+            cpe->timestampQuerySet->backendQueryPool != 0)
         {
             pe::GetVulkanCommandBuffer(cpe->cmd).writeTimestamp2(
                 vk::PipelineStageFlagBits2::eAllCommands,
-                cpe->timestampQuerySet->queryPool, cpe->endTimestampIndex);
+                vk::QueryPool{QuerySetBackendQueryPoolHandle<VkQueryPool>(cpe->timestampQuerySet)},
+                cpe->endTimestampIndex);
         }
 
         if (cpe->parent)

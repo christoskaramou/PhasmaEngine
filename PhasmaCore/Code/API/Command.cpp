@@ -230,9 +230,9 @@ namespace pe
         m_impl->BindVertexBuffer(buffer, offset, firstBinding, bindingCount);
     }
 
-    void CommandBuffer::BindIndexBuffer(Buffer *buffer, size_t offset)
+    void CommandBuffer::BindIndexBuffer(Buffer *buffer, size_t offset, PeIndexType indexType)
     {
-        m_impl->BindIndexBuffer(buffer, offset);
+        m_impl->BindIndexBuffer(buffer, offset, indexType);
     }
 
     void CommandBuffer::BindDescriptors(uint32_t count, Descriptor *const *descriptors)

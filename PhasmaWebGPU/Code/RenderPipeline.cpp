@@ -21,8 +21,11 @@ extern "C"
             return;
         if (rp->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
-            if (rp->device && rp->device->rhi && rp->vkPipeline != VK_NULL_HANDLE)
-                pe::VulkanRhi::Device().destroyPipeline(rp->vkPipeline);
+            if (rp->device && rp->device->rhi && rp->backendPipeline != 0)
+            {
+                pe::VulkanRhi::Device().destroyPipeline(
+                    vk::Pipeline{PeFromBackendHandle<VkPipeline>(rp->backendPipeline)});
+            }
             if (rp->layout)
                 wgpuPipelineLayoutRelease(rp->layout);
             WGPUDeviceImpl *dev = rp->device;

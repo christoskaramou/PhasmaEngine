@@ -2,15 +2,15 @@
 
 #include <webgpu/webgpu.h>
 #include <functional>
+#include "API/Command.h"
 #include "RenderPipeline.h"
 #include "UsageTracker.h"
-#include "API/Vulkan/VulkanHeaders.h"
 
 struct WGPUDeviceImpl;
 struct WGPUBindGroupImpl;
 struct WGPUBufferImpl;
 
-using BundleCommand = std::function<void(vk::CommandBuffer)>;
+using BundleCommand = std::function<void(pe::CommandBuffer *)>;
 
 struct WGPURenderBundleImpl
 {

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <webgpu/webgpu.h>
-#include "API/Vulkan/VulkanHeaders.h"
+#include "API/RHITypes.h"
 
 struct WGPUDeviceImpl;
 struct WGPUPipelineLayoutImpl;
@@ -28,7 +28,7 @@ struct WGPURenderPipelineImpl
     WGPUDeviceImpl *device = nullptr;
     bool invalid = false;
 
-    VkPipeline vkPipeline = VK_NULL_HANDLE;
+    PeBackendHandle backendPipeline = 0;
     WGPUPipelineLayoutImpl *layout = nullptr;
 
     bool writesDepth = false;
