@@ -927,9 +927,15 @@ namespace pe
 
     void Scene::FlushPendingGpuWork()
     {
-        const bool rtSupport = Settings::Get<GlobalSettings>().ray_tracing_support;
+        const bool rtSupport = RHII.GetCaps().rayTracing;
+        if (!rtSupport)
+        {
+            m_blasDirty = false;
+            m_tlasDirty = false;
+        }
+
         const bool anyDirty = m_geometryDirty || m_instancesDirty || m_materialDirty ||
-                              m_texturesDirty || m_blasDirty || m_tlasDirty;
+                              m_texturesDirty || (rtSupport && (m_blasDirty || m_tlasDirty));
         if (!anyDirty)
             return;
 

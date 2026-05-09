@@ -1,4 +1,5 @@
 #include "Script/ScriptSystem.h"
+#include "API/RHI.h"
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/RayTracingPass.h"
 
@@ -135,11 +136,12 @@ namespace pe
                 settings_table.set_function("set_render_mode", [](const std::string &mode) {
                     auto it = s_renderModeMap.find(std::string_view(mode));
                     if (it != s_renderModeMap.end())
-                        Settings::Get<GlobalSettings>().render_mode = it->second;
+                        Settings::Get<GlobalSettings>().render_mode =
+                            ClampRenderModeToRayTracingSupport(it->second, RHII.GetCaps().rayTracing);
                 });
 
                 settings_table.set_function("is_ray_tracing_supported", []() -> bool {
-                    return Settings::Get<GlobalSettings>().ray_tracing_support;
+                    return RHII.GetCaps().rayTracing;
                 });
 
                 settings_table.set_function("get_depth_bias", [](sol::this_state ts) -> sol::table {

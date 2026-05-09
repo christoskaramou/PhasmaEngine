@@ -1155,7 +1155,8 @@ namespace pe
             if (settings.HasMember("draw_aabbs"))
                 gSettings.draw_aabbs = settings["draw_aabbs"].GetBool();
             if (settings.HasMember("render_mode"))
-                gSettings.render_mode = static_cast<RenderMode>(settings["render_mode"].GetInt());
+                gSettings.render_mode = ClampRenderModeToRayTracingSupport(
+                    static_cast<RenderMode>(settings["render_mode"].GetInt()), RHII.GetCaps().rayTracing);
             if (settings.HasMember("present_mode"))
             {
                 gSettings.preferred_present_mode = static_cast<PePresentMode>(settings["present_mode"].GetInt());
@@ -2789,7 +2790,8 @@ namespace pe
             if (settings.HasMember("draw_aabbs"))
                 gSettings.draw_aabbs = settings["draw_aabbs"].GetBool();
             if (settings.HasMember("render_mode"))
-                gSettings.render_mode = static_cast<RenderMode>(settings["render_mode"].GetInt());
+                gSettings.render_mode = ClampRenderModeToRayTracingSupport(
+                    static_cast<RenderMode>(settings["render_mode"].GetInt()), RHII.GetCaps().rayTracing);
             if (settings.HasMember("present_mode"))
             {
                 gSettings.preferred_present_mode = static_cast<PePresentMode>(settings["present_mode"].GetInt());

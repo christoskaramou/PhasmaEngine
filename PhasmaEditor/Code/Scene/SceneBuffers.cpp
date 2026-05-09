@@ -27,7 +27,7 @@ namespace pe
 
         // Geometry buffer was recreated — existing BLAS handles are invalid.
         // Mark dirty so FlushPendingGpuWork rebuilds acceleration structures.
-        if (Settings::Get<GlobalSettings>().ray_tracing_support)
+        if (RHII.GetCaps().rayTracing)
             m_blasDirty = true;
     }
 
@@ -55,11 +55,15 @@ namespace pe
         m_positionsOffset = m_verticesOffset + m_verticesCount * sizeof(Vertex);
         m_aabbVerticesOffset = m_positionsOffset + m_positionsCount * sizeof(PositionUvVertex);
 
+        PeBufferUsageFlags geometryUsage = PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_INDEX_BUFFER |
+                                           PE_BUFFER_USAGE_VERTEX_BUFFER | PE_BUFFER_USAGE_STORAGE_BUFFER |
+                                           PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS;
+        if (RHII.GetCaps().rayTracing)
+            geometryUsage |= PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR;
+
         m_buffer = Buffer::Create({
             .size = m_aabbVerticesOffset + sizeof(AabbVertex) * m_aabbVerticesCount,
-            .usage = PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_INDEX_BUFFER | PE_BUFFER_USAGE_VERTEX_BUFFER |
-                     PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS |
-                     PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR,
+            .usage = geometryUsage,
             .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
             .name = "combined_Geometry_buffer",
         });

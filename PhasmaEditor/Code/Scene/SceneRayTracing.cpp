@@ -9,8 +9,19 @@
 
 namespace pe
 {
+    namespace
+    {
+        bool SupportsVulkanSceneRayTracing()
+        {
+            return RHII.GetApi() == PE_GRAPHICS_API_VULKAN && RHII.GetCaps().rayTracing;
+        }
+    } // namespace
+
     void Scene::BuildAllBLASes(CommandBuffer *cmd)
     {
+        if (!SupportsVulkanSceneRayTracing())
+            return;
+
         // Cleanup old BLAS resources
         for (auto *blas : m_blases)
             RHII.AddToDeletionQueue([blas]()
@@ -151,6 +162,9 @@ namespace pe
 
     void Scene::BuildTLASFromInstances(CommandBuffer *cmd)
     {
+        if (!SupportsVulkanSceneRayTracing())
+            return;
+
         // Cleanup old TLAS resources (keep BLAS — caller manages those)
         RHII.AddToDeletionQueue([t = m_tlas]()
                                 { AccelerationStructure *as = t; AccelerationStructure::Destroy(as); });
@@ -351,12 +365,18 @@ namespace pe
 
     void Scene::BuildAccelerationStructures(CommandBuffer *cmd)
     {
+        if (!SupportsVulkanSceneRayTracing())
+            return;
+
         BuildAllBLASes(cmd);
         BuildTLASFromInstances(cmd);
     }
 
     void Scene::RebuildTLASOnly()
     {
+        if (!SupportsVulkanSceneRayTracing())
+            return;
+
         if (m_blasByMesh.empty())
             return;
 
@@ -380,6 +400,9 @@ namespace pe
 
     void Scene::UpdateTLASTransformations(CommandBuffer *cmd)
     {
+        if (!SupportsVulkanSceneRayTracing())
+            return;
+
         if (!m_tlas || !m_instanceBuffer || !m_scratchBuffer)
             return;
 

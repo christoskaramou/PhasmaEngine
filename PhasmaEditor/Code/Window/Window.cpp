@@ -314,7 +314,8 @@ namespace pe
                 {
                     rendererSystem->WaitAllFramesCommands();
                     auto mode = std::any_cast<RenderMode>(event.payload);
-                    Settings::Get<GlobalSettings>().render_mode = mode;
+                    Settings::Get<GlobalSettings>().render_mode =
+                        ClampRenderModeToRayTracingSupport(mode, RHII.GetCaps().rayTracing);
                     break;
                 }
                 default:

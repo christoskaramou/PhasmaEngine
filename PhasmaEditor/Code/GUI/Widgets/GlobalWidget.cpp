@@ -193,10 +193,12 @@ namespace pe
 
         {
             const char *rtModeNames[] = {"Raster", "Hybrid", "Ray Tracing"};
-            int currentMode = static_cast<int>(gSettings.render_mode);
+            const bool rtSupported = RHII.GetCaps().rayTracing;
+            int currentMode = static_cast<int>(ClampRenderModeToRayTracingSupport(gSettings.render_mode, rtSupported));
+            const int modeCount = rtSupported ? 3 : 1;
 
             ImGui::Text("Render Mode");
-            if (ImGui::Combo("##RenderMode", &currentMode, rtModeNames, 3))
+            if (ImGui::Combo("##RenderMode", &currentMode, rtModeNames, modeCount))
             {
                 if (currentMode != static_cast<int>(gSettings.render_mode))
                     EventSystem::PushEvent(EventType::SetRenderMode, static_cast<RenderMode>(currentMode));

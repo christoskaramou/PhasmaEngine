@@ -26,6 +26,20 @@ namespace pe
         RayTracing = 2 // Full Ray Tracing
     };
 
+    inline RenderMode ClampRenderModeToRayTracingSupport(RenderMode mode, bool rayTracingSupported)
+    {
+        switch (mode)
+        {
+        case RenderMode::Raster:
+            return RenderMode::Raster;
+        case RenderMode::Hybrid:
+        case RenderMode::RayTracing:
+            return rayTracingSupported ? mode : RenderMode::Raster;
+        default:
+            return rayTracingSupported ? RenderMode::Hybrid : RenderMode::Raster;
+        }
+    }
+
     struct LoadingInfo
     {
     public:

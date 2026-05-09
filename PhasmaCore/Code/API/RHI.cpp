@@ -26,6 +26,7 @@
 #include "API/StagingManager.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
+#include "Base/Settings.h"
 
 #include "SDL2/SDL_vulkan.h"
 
@@ -43,6 +44,13 @@ namespace pe
     RHI &RHII = *RHI::Get();
 
     vk::Format GetVulkanDepthFormat();
+
+    static void SyncRayTracingSettingsToCaps(const RHI::Caps &caps)
+    {
+        auto &settings = Settings::Get<GlobalSettings>();
+        settings.ray_tracing_support = caps.rayTracing;
+        settings.render_mode = ClampRenderModeToRayTracingSupport(settings.render_mode, caps.rayTracing);
+    }
 
     static inline uint32_t VkVendorID(const vk::PhysicalDevice &gpu)
     {
@@ -388,6 +396,7 @@ namespace pe
             // before any code path that queries window size goes through RHII.
             m_surface = Surface::Create(m_window);
             m_caps = dx->GetCaps();
+            SyncRayTracingSettingsToCaps(m_caps);
             m_gpuName = dx->GetAdapterName();
             m_maxUniformBufferSize = D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16u;
             m_maxStorageBufferSize = std::numeric_limits<uint32_t>::max();
@@ -424,6 +433,7 @@ namespace pe
         FindGpu();
         CreateSurface();
         CreateDevice();
+        SyncRayTracingSettingsToCaps(m_caps);
         CreateAllocator();
         CreateSwapchain(m_surface);
         CreateDescriptorPool(150); // General purpose descriptor pool
@@ -806,12 +816,10 @@ namespace pe
             deviceExtensions.push_back(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
             deviceExtensions.push_back(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
             deviceExtensions.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
-            Settings::Get<GlobalSettings>().ray_tracing_support = true;
             m_caps.rayTracing = true;
         }
         else
         {
-            Settings::Get<GlobalSettings>().ray_tracing_support = false;
             m_caps.rayTracing = false;
         }
 

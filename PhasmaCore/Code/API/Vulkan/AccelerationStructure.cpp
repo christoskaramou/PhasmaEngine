@@ -26,6 +26,11 @@ namespace pe
                 vkFlags |= vk::BuildAccelerationStructureFlagBitsKHR::eLowMemory;
             return vkFlags;
         }
+
+        bool SupportsVulkanAccelerationStructures()
+        {
+            return RHII.GetApi() == PE_GRAPHICS_API_VULKAN && RHII.GetCaps().rayTracing;
+        }
     } // namespace
 
     void BuildAccelerationStructures(CommandBuffer *cmd,
@@ -33,6 +38,12 @@ namespace pe
                                      const vk::AccelerationStructureBuildGeometryInfoKHR *pInfos,
                                      const vk::AccelerationStructureBuildRangeInfoKHR *const *ppBuildRangeInfos)
     {
+        if (!SupportsVulkanAccelerationStructures())
+        {
+            PE_ERROR("Vulkan acceleration-structure build requested without Vulkan ray-tracing support");
+            return;
+        }
+
         GetVulkanCommandBuffer(cmd).buildAccelerationStructuresKHR(infoCount, pInfos, ppBuildRangeInfos);
     }
 
@@ -43,6 +54,12 @@ namespace pe
         PeAccelerationStructureBuildFlags flags,
         vk::AccelerationStructureBuildTypeKHR type)
     {
+        if (!SupportsVulkanAccelerationStructures())
+        {
+            PE_ERROR("Vulkan acceleration-structure sizing requested without Vulkan ray-tracing support");
+            return {};
+        }
+
         vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
         buildInfo.type = accelerationStructureType;
         buildInfo.flags = ToVkAccelerationStructureBuildFlags(flags);
@@ -106,6 +123,12 @@ namespace pe
                          PeAccelerationStructureBuildFlags flags,
                          vk::DeviceAddress scratchAddress)
     {
+        if (!SupportsVulkanAccelerationStructures())
+        {
+            PE_ERROR("Vulkan BLAS build requested without Vulkan ray-tracing support");
+            return;
+        }
+
         vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
         buildInfo.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
         buildInfo.flags = ToVkAccelerationStructureBuildFlags(flags);
@@ -166,6 +189,12 @@ namespace pe
                                           PeAccelerationStructureBuildFlags flags,
                                           uint64_t scratchAddress)
     {
+        if (!SupportsVulkanAccelerationStructures())
+        {
+            PE_ERROR("AccelerationStructure::BuildTLAS requested without Vulkan ray-tracing support");
+            return;
+        }
+
         vk::AccelerationStructureGeometryInstancesDataKHR instancesVk{};
         instancesVk.data.deviceAddress = instanceBuffer->GetDeviceAddress();
 
@@ -241,6 +270,12 @@ namespace pe
                                            Buffer *instanceBuffer,
                                            uint64_t scratchAddress)
     {
+        if (!SupportsVulkanAccelerationStructures())
+        {
+            PE_ERROR("AccelerationStructure::UpdateTLAS requested without Vulkan ray-tracing support");
+            return;
+        }
+
         if (!m_apiHandle)
             return; // Must have been built first
 
