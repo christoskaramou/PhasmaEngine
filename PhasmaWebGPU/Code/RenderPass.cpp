@@ -1,6 +1,7 @@
 #include "RenderPass.h"
 #include "CommandEncoder.h"
 #include "RenderPipeline.h"
+#include "PipelineBinding.h"
 #include "PipelineLayout.h"
 #include "BindGroup.h"
 #include "Buffer.h"
@@ -533,34 +534,16 @@ extern "C"
         wgpuRenderPipelineAddRef(pipeline);
         rpe->retainedPipelines.push_back(pipeline);
 
-        pe::GetVulkanCommandBuffer(rpe->cmd).bindPipeline(
-            vk::PipelineBindPoint::eGraphics,
-            vk::Pipeline{PeFromBackendHandle<VkPipeline>(pipeline->backendPipeline)});
+        if (!pwgpu::BindWebGPURenderPipeline(rpe->cmd, pipeline))
+        {
+            rpe->invalid = true;
+            return;
+        }
 
         if (pipeline->layout)
-        {
-            auto &bgls = pipeline->layout->bindGroupLayouts;
-            vk::PipelineLayout vkLayout{
-                PeFromBackendHandle<VkPipelineLayout>(pipeline->layout->backendLayout)};
-            for (size_t i = 0; i < rpe->currentBindGroups.size() && i < bgls.size(); ++i)
-            {
-                auto *bg = rpe->currentBindGroups[i];
-                if (!bg || !bg->descriptor || !bgls[i])
-                    continue;
-                if (!BglGroupEquivalent(bg->layout, bgls[i]))
-                    continue;
-                vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(bg->descriptor);
-                const std::vector<uint32_t> *dynOffsets =
-                    (i < rpe->currentDynamicOffsets.size())
-                        ? &rpe->currentDynamicOffsets[i]
-                        : nullptr;
-                pe::GetVulkanCommandBuffer(rpe->cmd).bindDescriptorSets(
-                    vk::PipelineBindPoint::eGraphics, vkLayout,
-                    static_cast<uint32_t>(i), 1, &ds,
-                    dynOffsets ? static_cast<uint32_t>(dynOffsets->size()) : 0u,
-                    (dynOffsets && !dynOffsets->empty()) ? dynOffsets->data() : nullptr);
-            }
-        }
+            pwgpu::RebindWebGPUCompatibleBindGroups(
+                rpe->cmd, pwgpu::PipelineBindingPoint::Render,
+                pipeline->layout, rpe->currentBindGroups, &rpe->currentDynamicOffsets);
     }
 
     void wgpuRenderPassEncoderSetBindGroup(WGPURenderPassEncoder rpe, uint32_t groupIndex,
@@ -636,7 +619,7 @@ extern "C"
             rpe->currentBindGroups[groupIndex] = group;
             if (rpe->currentDynamicOffsets.size() <= groupIndex)
                 rpe->currentDynamicOffsets.resize(groupIndex + 1);
-            if (dynamicOffsetCount > 0)
+            if (dynamicOffsetCount > 0 && dynamicOffsets)
                 rpe->currentDynamicOffsets[groupIndex].assign(
                     dynamicOffsets, dynamicOffsets + dynamicOffsetCount);
             else
@@ -732,15 +715,9 @@ extern "C"
         if (!BglGroupEquivalent(group->layout, bgls[groupIndex]))
             return;
 
-        vk::PipelineLayout vkLayout{
-            PeFromBackendHandle<VkPipelineLayout>(rpe->pipeline->layout->backendLayout)};
-        vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(group->descriptor);
-
-        pe::GetVulkanCommandBuffer(rpe->cmd).bindDescriptorSets(
-            vk::PipelineBindPoint::eGraphics,
-            vkLayout, groupIndex,
-            1, &ds,
-            static_cast<uint32_t>(dynamicOffsetCount), dynamicOffsets);
+        pwgpu::BindWebGPUBindGroup(rpe->cmd, pwgpu::PipelineBindingPoint::Render,
+                                   rpe->pipeline->layout, groupIndex, group,
+                                   dynamicOffsetCount, dynamicOffsets);
     }
 
     void wgpuRenderPassEncoderSetVertexBuffer(WGPURenderPassEncoder rpe, uint32_t slot,

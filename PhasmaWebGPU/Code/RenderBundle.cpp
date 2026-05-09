@@ -1,12 +1,11 @@
 #include "RenderBundle.h"
 #include "RenderPipeline.h"
+#include "PipelineBinding.h"
 #include "PipelineLayout.h"
 #include "BindGroup.h"
 #include "Buffer.h"
 #include "Device.h"
 #include "Utils.h"
-#include "API/Vulkan/RHI_Vulkan.h"
-#include "API/Vulkan/VulkanCommandBufferImpl.h"
 
 extern "C" void wgpuDeviceRelease(WGPUDevice);
 extern "C" void wgpuRenderPipelineAddRef(WGPURenderPipeline);
@@ -221,16 +220,12 @@ extern "C"
         wgpuRenderPipelineAddRef(pipeline);
         rbe->retainedPipelines.push_back(pipeline);
 
-        VkPipeline vkp = PeFromBackendHandle<VkPipeline>(pipeline->backendPipeline);
-        rbe->commands.push_back([vkp](pe::CommandBuffer *cmd)
-                                { pe::GetVulkanCommandBuffer(cmd).bindPipeline(
-                                      vk::PipelineBindPoint::eGraphics, vk::Pipeline{vkp}); });
+        rbe->commands.push_back([pipeline](pe::CommandBuffer *cmd)
+                                { pwgpu::BindWebGPURenderPipeline(cmd, pipeline); });
 
         if (pipeline->layout)
         {
             auto &bgls = pipeline->layout->bindGroupLayouts;
-            VkPipelineLayout vkLayout =
-                PeFromBackendHandle<VkPipelineLayout>(pipeline->layout->backendLayout);
             for (size_t i = 0; i < rbe->currentBindGroups.size() && i < bgls.size(); ++i)
             {
                 auto *bg = rbe->currentBindGroups[i];
@@ -239,18 +234,17 @@ extern "C"
                 if (!BglGroupEquivalent(bg->layout, bgls[i]))
                     continue;
 
-                vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(bg->descriptor);
                 const uint32_t groupIndex = static_cast<uint32_t>(i);
                 std::vector<uint32_t> dynOffsets =
                     (i < rbe->currentDynamicOffsets.size())
                         ? rbe->currentDynamicOffsets[i]
                         : std::vector<uint32_t>{};
-                rbe->commands.push_back([vkLayout, groupIndex, ds, dynOffsets](pe::CommandBuffer *cmd)
-                                        { pe::GetVulkanCommandBuffer(cmd).bindDescriptorSets(
-                                              vk::PipelineBindPoint::eGraphics,
-                                              vk::PipelineLayout(vkLayout), groupIndex,
-                                              1, &ds,
-                                              static_cast<uint32_t>(dynOffsets.size()),
+                auto *layout = pipeline->layout;
+                rbe->commands.push_back([layout, groupIndex, bg, dynOffsets](pe::CommandBuffer *cmd)
+                                        { pwgpu::BindWebGPUBindGroup(
+                                              cmd, pwgpu::PipelineBindingPoint::Render,
+                                              layout, groupIndex, bg,
+                                              dynOffsets.size(),
                                               dynOffsets.empty() ? nullptr : dynOffsets.data()); });
             }
         }
@@ -328,7 +322,7 @@ extern "C"
             rbe->currentBindGroups[groupIndex] = group;
             if (rbe->currentDynamicOffsets.size() <= groupIndex)
                 rbe->currentDynamicOffsets.resize(groupIndex + 1);
-            if (dynamicOffsetCount > 0)
+            if (dynamicOffsetCount > 0 && dynamicOffsets)
                 rbe->currentDynamicOffsets[groupIndex].assign(
                     dynamicOffsets, dynamicOffsets + dynamicOffsetCount);
             else
@@ -424,17 +418,16 @@ extern "C"
         if (!BglGroupEquivalent(group->layout, bgls[groupIndex]))
             return;
 
-        VkPipelineLayout vkLayout =
-            PeFromBackendHandle<VkPipelineLayout>(rbe->pipeline->layout->backendLayout);
-        vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(group->descriptor);
-        std::vector<uint32_t> dynOffsets(dynamicOffsets, dynamicOffsets + dynamicOffsetCount);
+        std::vector<uint32_t> dynOffsets;
+        if (dynamicOffsetCount > 0 && dynamicOffsets)
+            dynOffsets.assign(dynamicOffsets, dynamicOffsets + dynamicOffsetCount);
 
-        rbe->commands.push_back([vkLayout, groupIndex, ds, dynOffsets](pe::CommandBuffer *cmd)
-                                { pe::GetVulkanCommandBuffer(cmd).bindDescriptorSets(
-                                      vk::PipelineBindPoint::eGraphics,
-                                      vk::PipelineLayout(vkLayout), groupIndex,
-                                      1, &ds,
-                                      static_cast<uint32_t>(dynOffsets.size()),
+        auto *layout = rbe->pipeline->layout;
+        rbe->commands.push_back([layout, groupIndex, group, dynOffsets](pe::CommandBuffer *cmd)
+                                { pwgpu::BindWebGPUBindGroup(
+                                      cmd, pwgpu::PipelineBindingPoint::Render,
+                                      layout, groupIndex, group,
+                                      dynOffsets.size(),
                                       dynOffsets.empty() ? nullptr : dynOffsets.data()); });
     }
 

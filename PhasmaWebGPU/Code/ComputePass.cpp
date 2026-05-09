@@ -1,6 +1,7 @@
 #include "ComputePass.h"
 #include "CommandEncoder.h"
 #include "ComputePipeline.h"
+#include "PipelineBinding.h"
 #include "PipelineLayout.h"
 #include "BindGroup.h"
 #include "Buffer.h"
@@ -226,28 +227,16 @@ extern "C"
         wgpuComputePipelineAddRef(pipeline);
         cpe->retainedPipelines.push_back(pipeline);
 
-        pe::GetVulkanCommandBuffer(cpe->cmd).bindPipeline(
-            vk::PipelineBindPoint::eCompute,
-            vk::Pipeline{PeFromBackendHandle<VkPipeline>(pipeline->backendPipeline)});
+        if (!pwgpu::BindWebGPUComputePipeline(cpe->cmd, pipeline))
+        {
+            cpe->invalid = true;
+            return;
+        }
 
         if (pipeline->layout)
-        {
-            auto &bgls = pipeline->layout->bindGroupLayouts;
-            vk::PipelineLayout vkLayout{
-                PeFromBackendHandle<VkPipelineLayout>(pipeline->layout->backendLayout)};
-            for (size_t i = 0; i < cpe->currentBindGroups.size() && i < bgls.size(); ++i)
-            {
-                auto *bg = cpe->currentBindGroups[i];
-                if (!bg || !bg->descriptor || !bgls[i])
-                    continue;
-                if (!BglGroupEquivalent(bg->layout, bgls[i]))
-                    continue;
-                vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(bg->descriptor);
-                pe::GetVulkanCommandBuffer(cpe->cmd).bindDescriptorSets(
-                    vk::PipelineBindPoint::eCompute, vkLayout,
-                    static_cast<uint32_t>(i), 1, &ds, 0, nullptr);
-            }
-        }
+            pwgpu::RebindWebGPUCompatibleBindGroups(
+                cpe->cmd, pwgpu::PipelineBindingPoint::Compute,
+                pipeline->layout, cpe->currentBindGroups, &cpe->currentDynamicOffsets);
     }
 
     // ---- §14.1 setBindGroup ----
@@ -305,6 +294,13 @@ extern "C"
             if (cpe->currentBindGroups.size() <= groupIndex)
                 cpe->currentBindGroups.resize(groupIndex + 1, nullptr);
             cpe->currentBindGroups[groupIndex] = group;
+            if (cpe->currentDynamicOffsets.size() <= groupIndex)
+                cpe->currentDynamicOffsets.resize(groupIndex + 1);
+            if (dynamicOffsetCount > 0 && dynamicOffsets)
+                cpe->currentDynamicOffsets[groupIndex].assign(
+                    dynamicOffsets, dynamicOffsets + dynamicOffsetCount);
+            else
+                cpe->currentDynamicOffsets[groupIndex].clear();
         }
 
         if (group)
@@ -405,15 +401,9 @@ extern "C"
             return;
         }
 
-        vk::PipelineLayout vkLayout{
-            PeFromBackendHandle<VkPipelineLayout>(cpe->pipeline->layout->backendLayout)};
-        vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(group->descriptor);
-
-        pe::GetVulkanCommandBuffer(cpe->cmd).bindDescriptorSets(
-            vk::PipelineBindPoint::eCompute,
-            vkLayout, groupIndex,
-            1, &ds,
-            static_cast<uint32_t>(dynamicOffsetCount), dynamicOffsets);
+        pwgpu::BindWebGPUBindGroup(cpe->cmd, pwgpu::PipelineBindingPoint::Compute,
+                                   cpe->pipeline->layout, groupIndex, group,
+                                   dynamicOffsetCount, dynamicOffsets);
     }
 
     // ---- §16.1.2 dispatchWorkgroups ----

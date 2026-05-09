@@ -35,5 +35,6 @@ struct WGPUComputePassEncoderImpl
     std::vector<WGPUBufferImpl *> usedBuffers;
 
     std::vector<WGPUBindGroupImpl *> currentBindGroups;
+    std::vector<std::vector<uint32_t>> currentDynamicOffsets;
     bool usageScopeValid = true;
 };
