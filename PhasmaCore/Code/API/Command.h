@@ -36,6 +36,7 @@ namespace pe
     struct Attachment
     {
         Image *image = nullptr;
+        ImageView *view = nullptr;
         PeLoadOp loadOp = PE_LOAD_OP_CLEAR;
         PeStoreOp storeOp = PE_STORE_OP_STORE;
         PeLoadOp stencilLoadOp = PE_LOAD_OP_DONT_CARE;

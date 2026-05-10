@@ -17,6 +17,8 @@
 
 namespace pwgpu
 {
+    void DestroyNativeImageViews(WGPUTextureViewImpl *view);
+
     // §23.x lazy initialization key packing.
     static uint64_t MakeSubresourceKey(uint32_t mip, uint32_t layer, uint8_t aspect)
     {
@@ -189,6 +191,24 @@ namespace pwgpu
         ::PeFormat peFormat = pe::FromVkFormat(static_cast<vk::Format>(vkFormat));
         return peFormat == texture->image->GetFormat() ? PE_FORMAT_UNDEFINED : peFormat;
     }
+
+#if defined(PE_WIN32)
+    static pe::ImageView *CreateDx12TextureView(WGPUTextureImpl *texture,
+                                                const WGPUTextureViewDescriptor &resolved,
+                                                pe::Dx12ImageViewKind kind,
+                                                const std::string &name)
+    {
+        pe::ImageViewDesc ivDesc{};
+        ivDesc.viewType = pwgpu::ToPeImageViewType(resolved.dimension);
+        ivDesc.format = pwgpu::ToPeTextureViewFormat(texture, resolved.format);
+        ivDesc.aspectMask = pwgpu::ToPeAspectMask(resolved.format, resolved.aspect);
+        ivDesc.baseMipLevel = resolved.baseMipLevel;
+        ivDesc.levelCount = resolved.mipLevelCount;
+        ivDesc.baseArrayLayer = resolved.baseArrayLayer;
+        ivDesc.layerCount = resolved.arrayLayerCount;
+        return pe::Dx12ImageViewImpl::Create(texture->image, ivDesc, kind, name);
+    }
+#endif
 
     static vk::DeviceSize CompressedSubresourceByteSize(WGPUTextureImpl *tex, uint32_t mip)
     {
@@ -488,6 +508,71 @@ namespace pwgpu
         q->lastSubmissionSerial.store(serial, std::memory_order_release);
         tex->lastUsageSerial.store(serial, std::memory_order_release);
     }
+
+    pe::ImageView *TextureBindingImageView(WGPUTextureViewImpl *view)
+    {
+        if (!view)
+            return nullptr;
+        if (view->textureBindingView || view->storageBindingView || view->renderAttachmentView)
+            return view->textureBindingView;
+        return view->view;
+    }
+
+    pe::ImageView *StorageBindingImageView(WGPUTextureViewImpl *view)
+    {
+        if (!view)
+            return nullptr;
+        if (view->textureBindingView || view->storageBindingView || view->renderAttachmentView)
+            return view->storageBindingView;
+        return view->view;
+    }
+
+    pe::ImageView *RenderAttachmentImageView(WGPUTextureViewImpl *view)
+    {
+        if (!view)
+            return nullptr;
+        if (view->textureBindingView || view->storageBindingView || view->renderAttachmentView)
+            return view->renderAttachmentView;
+        return view->view;
+    }
+
+    bool HasNativeImageView(WGPUTextureViewImpl *view)
+    {
+        return view && (view->view || view->textureBindingView ||
+                        view->storageBindingView || view->renderAttachmentView);
+    }
+
+    void DestroyNativeImageViews(WGPUTextureViewImpl *view)
+    {
+        if (!view)
+            return;
+
+        pe::ImageView *destroyed[4]{};
+        uint32_t destroyedCount = 0;
+        auto destroyOne = [&](pe::ImageView *&nativeView)
+        {
+            if (!nativeView)
+                return;
+            for (uint32_t i = 0; i < destroyedCount; ++i)
+            {
+                if (destroyed[i] == nativeView)
+                {
+                    nativeView = nullptr;
+                    return;
+                }
+            }
+
+            pe::ImageView *toDestroy = nativeView;
+            destroyed[destroyedCount++] = toDestroy;
+            pe::ImageView::Destroy(toDestroy);
+            nativeView = nullptr;
+        };
+
+        destroyOne(view->view);
+        destroyOne(view->textureBindingView);
+        destroyOne(view->storageBindingView);
+        destroyOne(view->renderAttachmentView);
+    }
 } // namespace pwgpu
 
 void TeardownTextureGpuResources(WGPUTextureImpl *texture)
@@ -496,11 +581,7 @@ void TeardownTextureGpuResources(WGPUTextureImpl *texture)
         std::lock_guard<std::mutex> lock(texture->childViewsMutex);
         for (auto *cv : texture->childViews)
         {
-            if (cv && cv->view)
-            {
-                pe::ImageView::Destroy(cv->view);
-                cv->view = nullptr;
-            }
+            pwgpu::DestroyNativeImageViews(cv);
         }
         texture->childViews.clear();
     }
@@ -901,36 +982,44 @@ extern "C"
 #if defined(PE_WIN32)
             if (pe::RHII.GetApi() == PE_GRAPHICS_API_DX12)
             {
-                pe::ImageViewDesc ivDesc{};
-                ivDesc.viewType = pwgpu::ToPeImageViewType(resolved.dimension);
-                ivDesc.format = pwgpu::ToPeTextureViewFormat(texture, resolved.format);
-                ivDesc.aspectMask = pwgpu::ToPeAspectMask(resolved.format, resolved.aspect);
-                ivDesc.baseMipLevel = resolved.baseMipLevel;
-                ivDesc.levelCount = resolved.mipLevelCount;
-                ivDesc.baseArrayLayer = resolved.baseArrayLayer;
-                ivDesc.layerCount = resolved.arrayLayerCount;
+                bool nativeCreationFailed = false;
+                auto createNative = [&](pe::ImageView *&slot,
+                                        pe::Dx12ImageViewKind kind,
+                                        const char *suffix)
+                {
+                    try
+                    {
+                        slot = pwgpu::CreateDx12TextureView(texture,
+                                                            resolved,
+                                                            kind,
+                                                            viewName + suffix);
+                        if (!slot)
+                            nativeCreationFailed = true;
+                        if (!view->view)
+                            view->view = slot;
+                    }
+                    catch (...)
+                    {
+                        slot = nullptr;
+                        nativeCreationFailed = true;
+                    }
+                };
 
-                pe::Dx12ImageViewKind kind = pe::Dx12ImageViewKind::Srv;
+                if (viewUsage & WGPUTextureUsage_TextureBinding)
+                    createNative(view->textureBindingView, pe::Dx12ImageViewKind::Srv, "_srv");
                 if (viewUsage & WGPUTextureUsage_StorageBinding)
-                    kind = pe::Dx12ImageViewKind::Uav;
-                else if (viewUsage & WGPUTextureUsage_TextureBinding)
-                    kind = pe::Dx12ImageViewKind::Srv;
-                else if (viewUsage & WGPUTextureUsage_RenderAttachment)
-                    kind = pwgpu::IsDepthStencilFormat(resolved.format)
-                               ? pe::Dx12ImageViewKind::Dsv
-                               : pe::Dx12ImageViewKind::Rtv;
+                    createNative(view->storageBindingView, pe::Dx12ImageViewKind::Uav, "_uav");
+                if (viewUsage & WGPUTextureUsage_RenderAttachment)
+                {
+                    createNative(view->renderAttachmentView,
+                                 pwgpu::IsDepthStencilFormat(resolved.format)
+                                     ? pe::Dx12ImageViewKind::Dsv
+                                     : pe::Dx12ImageViewKind::Rtv,
+                                 "_attachment");
+                }
 
-                try
-                {
-                    view->view = pe::Dx12ImageViewImpl::Create(texture->image,
-                                                               ivDesc,
-                                                               kind,
-                                                               viewName);
-                }
-                catch (...)
-                {
-                    view->view = nullptr;
-                }
+                if (nativeCreationFailed)
+                    pwgpu::DestroyNativeImageViews(view);
             }
             else
 #endif
@@ -1008,6 +1097,9 @@ extern "C"
                 try
                 {
                     view->view = pe::VulkanImageViewImpl::Create(texture->image, ivci, viewName);
+                    view->textureBindingView = view->view;
+                    view->storageBindingView = view->view;
+                    view->renderAttachmentView = view->view;
                 }
                 catch (...)
                 {
@@ -1015,7 +1107,7 @@ extern "C"
                 }
             }
 
-            if (!view->view && texture->device)
+            if (!pwgpu::HasNativeImageView(view) && texture->device)
             {
                 texture->device->reportError(
                     WGPUErrorType_Validation,
@@ -1023,7 +1115,7 @@ extern "C"
             }
         }
 
-        if (view->view)
+        if (pwgpu::HasNativeImageView(view))
         {
             std::lock_guard<std::mutex> lock(texture->childViewsMutex);
             texture->childViews.push_back(view);
@@ -1096,8 +1188,7 @@ extern "C"
                 auto &cv = view->texture->childViews;
                 cv.erase(std::remove(cv.begin(), cv.end(), view), cv.end());
             }
-            if (view->view)
-                pe::ImageView::Destroy(view->view);
+            pwgpu::DestroyNativeImageViews(view);
             if (view->texture)
                 wgpuTextureRelease(view->texture);
             delete view;

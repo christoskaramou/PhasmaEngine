@@ -3,6 +3,10 @@
 #include "Base/Path.h"
 #include "Base/EventSystem.h"
 #include "API/RHI.h"
+#include "Texture.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12ImageViewImpl.h"
+#endif
 #include <SDL.h>
 #include <cstdio>
 #include <cstring>
@@ -473,9 +477,67 @@ int main(int argc, char *argv[])
     }
     wgpuBufferUnmap(readbackBuf);
 
-    // 12. Cleanup
+    // 12. Multi-kind texture view descriptors
 
-    printf("\n--- 12. Cleanup ---\n");
+    printf("\n--- 12. Multi-kind Texture View ---\n");
+
+    WGPUTextureDescriptor multiTexDesc{};
+    multiTexDesc.label = {"multi_kind_texture", WGPU_STRLEN};
+    multiTexDesc.usage = WGPUTextureUsage_TextureBinding |
+                         WGPUTextureUsage_StorageBinding |
+                         WGPUTextureUsage_RenderAttachment;
+    multiTexDesc.dimension = WGPUTextureDimension_2D;
+    multiTexDesc.size = {1, 1, 1};
+    multiTexDesc.format = WGPUTextureFormat_RGBA8Unorm;
+    multiTexDesc.mipLevelCount = 1;
+    multiTexDesc.sampleCount = 1;
+    WGPUTexture multiTex = wgpuDeviceCreateTexture(device, &multiTexDesc);
+    CHECK(multiTex != nullptr, "multi-kind texture created");
+
+    WGPUTextureViewDescriptor multiViewDesc{};
+    multiViewDesc.label = {"multi_kind_view", WGPU_STRLEN};
+    multiViewDesc.format = WGPUTextureFormat_RGBA8Unorm;
+    multiViewDesc.dimension = WGPUTextureViewDimension_2D;
+    multiViewDesc.aspect = WGPUTextureAspect_All;
+    multiViewDesc.baseMipLevel = 0;
+    multiViewDesc.mipLevelCount = 1;
+    multiViewDesc.baseArrayLayer = 0;
+    multiViewDesc.arrayLayerCount = 1;
+    multiViewDesc.usage = multiTexDesc.usage;
+    WGPUTextureView multiView = multiTex ? wgpuTextureCreateView(multiTex, &multiViewDesc) : nullptr;
+    CHECK(multiView != nullptr, "multi-kind texture view created");
+
+#if defined(PE_WIN32)
+    if (pe::RHII.GetApi() == PE_GRAPHICS_API_DX12 && multiView)
+    {
+        pe::ImageView *srvView = pwgpu::TextureBindingImageView(multiView);
+        pe::ImageView *uavView = pwgpu::StorageBindingImageView(multiView);
+        pe::ImageView *rtvView = pwgpu::RenderAttachmentImageView(multiView);
+        CHECK(srvView != nullptr, "DX12 multi-kind view has SRV descriptor");
+        CHECK(uavView != nullptr, "DX12 multi-kind view has UAV descriptor");
+        CHECK(rtvView != nullptr, "DX12 multi-kind view has RTV descriptor");
+        CHECK(srvView != uavView && srvView != rtvView && uavView != rtvView,
+              "DX12 multi-kind descriptors are distinct");
+        if (srvView && uavView && rtvView)
+        {
+            CHECK(pe::Dx12ImageViewImpl::From(srvView)->GetKind() == pe::Dx12ImageViewKind::Srv,
+                  "DX12 texture binding selects SRV");
+            CHECK(pe::Dx12ImageViewImpl::From(uavView)->GetKind() == pe::Dx12ImageViewKind::Uav,
+                  "DX12 storage binding selects UAV");
+            CHECK(pe::Dx12ImageViewImpl::From(rtvView)->GetKind() == pe::Dx12ImageViewKind::Rtv,
+                  "DX12 render attachment selects RTV");
+        }
+    }
+#endif
+
+    if (multiView)
+        wgpuTextureViewRelease(multiView);
+    if (multiTex)
+        wgpuTextureRelease(multiTex);
+
+    // 13. Cleanup
+
+    printf("\n--- 13. Cleanup ---\n");
 
     wgpuDeviceDestroy(device);
     wgpuCommandBufferRelease(cmdBuf);

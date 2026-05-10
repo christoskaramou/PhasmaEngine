@@ -221,7 +221,7 @@ namespace pe
                     const float clearDepth = clearColor[0];
                     uint32_t clearStencil = static_cast<uint32_t>(clearColor[1]);
 
-                    depthInfo.imageView = pe::GetVulkanImageView(attachment.image->GetRTV());
+                    depthInfo.imageView = pe::GetVulkanImageView(attachment.view ? attachment.view : attachment.image->GetRTV());
                     depthInfo.imageLayout = vk::ImageLayout::eAttachmentOptimal;
                     depthInfo.loadOp = ToVkLoadOp(attachment.loadOp);
                     depthInfo.storeOp = ToVkStoreOp(attachment.storeOp);
@@ -238,7 +238,7 @@ namespace pe
                     const vec4 &clearColor = attachment.image->m_clearColor;
 
                     vk::RenderingAttachmentInfo colorInfo{};
-                    colorInfo.imageView = pe::GetVulkanImageView(attachment.image->GetRTV());
+                    colorInfo.imageView = pe::GetVulkanImageView(attachment.view ? attachment.view : attachment.image->GetRTV());
                     colorInfo.imageLayout = vk::ImageLayout::eAttachmentOptimal;
                     colorInfo.loadOp = ToVkLoadOp(attachment.loadOp);
                     colorInfo.storeOp = ToVkStoreOp(attachment.storeOp);

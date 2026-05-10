@@ -2316,6 +2316,8 @@ extern "C"
 
                 if (!(tv->usage & WGPUTextureUsage_TextureBinding))
                     return makeInvalid("textureView missing TEXTURE_BINDING usage");
+                if (!pwgpu::TextureBindingImageView(tv))
+                    return makeInvalid("textureView native TEXTURE_BINDING view is invalid");
 
                 if (le.texture.multisampled)
                 {
@@ -2407,6 +2409,8 @@ extern "C"
 
                 if (!(tv->usage & WGPUTextureUsage_StorageBinding))
                     return makeInvalid("textureView missing STORAGE_BINDING usage");
+                if (!pwgpu::StorageBindingImageView(tv))
+                    return makeInvalid("textureView native STORAGE_BINDING view is invalid");
 
                 if (tv->mipLevelCount != 1)
                     return makeInvalid("storageTexture view must have mipLevelCount = 1");
@@ -2495,14 +2499,14 @@ extern "C"
                 }
                 else if (le.texture.sampleType != WGPUTextureSampleType_BindingNotUsed && entry.textureView)
                 {
-                    if (entry.textureView->view)
-                        bg->descriptor->SetImageView(entry.binding, entry.textureView->view);
+                    if (pe::ImageView *nativeView = pwgpu::TextureBindingImageView(entry.textureView))
+                        bg->descriptor->SetImageView(entry.binding, nativeView);
                     bg->textureUses.push_back({entry.textureView, pwgpu::SubresourceUsageKind::Sampled});
                 }
                 else if (le.storageTexture.access != WGPUStorageTextureAccess_BindingNotUsed && entry.textureView)
                 {
-                    if (entry.textureView->view)
-                        bg->descriptor->SetImageView(entry.binding, entry.textureView->view);
+                    if (pe::ImageView *nativeView = pwgpu::StorageBindingImageView(entry.textureView))
+                        bg->descriptor->SetImageView(entry.binding, nativeView);
                     auto kind = (le.storageTexture.access == WGPUStorageTextureAccess_ReadOnly)
                                     ? pwgpu::SubresourceUsageKind::ReadOnlyStorage
                                 : (le.storageTexture.access == WGPUStorageTextureAccess_ReadWrite)
@@ -2514,10 +2518,11 @@ extern "C"
                 {
                     pe::Sampler *sampler =
                         GetOrCreateExternalTextureSampler(bg, entry.textureView);
-                    if (entry.textureView->view && sampler)
+                    pe::ImageView *nativeView = pwgpu::TextureBindingImageView(entry.textureView);
+                    if (nativeView && sampler)
                     {
                         bg->descriptor->SetImageView(
-                            entry.binding, entry.textureView->view, sampler);
+                            entry.binding, nativeView, sampler);
                     }
                     bg->textureUses.push_back(
                         {entry.textureView, pwgpu::SubresourceUsageKind::Sampled});

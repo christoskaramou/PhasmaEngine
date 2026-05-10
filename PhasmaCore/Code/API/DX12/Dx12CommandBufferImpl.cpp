@@ -43,14 +43,17 @@ namespace pe
                    fmt == PE_FORMAT_S8_UINT;
         }
 
-        D3D12_CPU_DESCRIPTOR_HANDLE GetAttachmentCpuHandle(Image *image, bool depthStencil, const char *what)
+        D3D12_CPU_DESCRIPTOR_HANDLE GetAttachmentCpuHandle(Image *image, ImageView *attachmentView, bool depthStencil, const char *what)
         {
             PE_ERROR_IF(!image, "Dx12CommandBufferImpl::%s: null attachment image", what);
-            if (!image->HasRTV())
+            if (!attachmentView && !image->HasRTV())
                 image->CreateRTV();
 
-            ImageView *view = image->GetRTV();
+            ImageView *view = attachmentView ? attachmentView : image->GetRTV();
             PE_ERROR_IF(!view, "Dx12CommandBufferImpl::%s: image '%s' has no RTV/DSV view",
+                        what, image->GetName().c_str());
+            PE_ERROR_IF(view->GetParent() != image,
+                        "Dx12CommandBufferImpl::%s: attachment view does not belong to image '%s'",
                         what, image->GetName().c_str());
             const Dx12ImageViewImpl *impl = Dx12ImageViewImpl::From(view);
             PE_ERROR_IF(depthStencil && impl->GetKind() != Dx12ImageViewKind::Dsv,
@@ -457,7 +460,7 @@ namespace pe
         {
             const vec4 &c = image->m_clearColor;
             const float color[4] = {c[0], c[1], c[2], c[3]};
-            const D3D12_CPU_DESCRIPTOR_HANDLE rtv = GetAttachmentCpuHandle(image, false, "ClearColors");
+            const D3D12_CPU_DESCRIPTOR_HANDLE rtv = GetAttachmentCpuHandle(image, nullptr, false, "ClearColors");
             m_cmdList->ClearRenderTargetView(rtv, color, 0, nullptr);
         }
     }
@@ -486,7 +489,7 @@ namespace pe
             D3D12_CLEAR_FLAGS flags = D3D12_CLEAR_FLAG_DEPTH;
             if (HasStencilComponent(image->GetFormat()))
                 flags |= D3D12_CLEAR_FLAG_STENCIL;
-            const D3D12_CPU_DESCRIPTOR_HANDLE dsv = GetAttachmentCpuHandle(image, true, "ClearDepthStencils");
+            const D3D12_CPU_DESCRIPTOR_HANDLE dsv = GetAttachmentCpuHandle(image, nullptr, true, "ClearDepthStencils");
             m_cmdList->ClearDepthStencilView(dsv, flags, depth, stencil, 0, nullptr);
         }
     }
@@ -534,7 +537,7 @@ namespace pe
                 barrier.accessMask = (att.loadOp == PE_LOAD_OP_LOAD)
                                          ? PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ
                                          : PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE;
-                dsvHandle = GetAttachmentCpuHandle(att.image, true, "BeginPass");
+                dsvHandle = GetAttachmentCpuHandle(att.image, att.view, true, "BeginPass");
                 hasDsv = true;
             }
             else
@@ -547,7 +550,7 @@ namespace pe
                 barrier.accessMask = (att.loadOp == PE_LOAD_OP_LOAD)
                                          ? PE_ACCESS_COLOR_ATTACHMENT_READ
                                          : PE_ACCESS_COLOR_ATTACHMENT_WRITE;
-                rtvHandles[rtvCount++] = GetAttachmentCpuHandle(att.image, false, "BeginPass");
+                rtvHandles[rtvCount++] = GetAttachmentCpuHandle(att.image, att.view, false, "BeginPass");
             }
 
             attachmentBarriers.push_back(barrier);
@@ -578,14 +581,14 @@ namespace pe
 
                 const float depth = att.image->m_clearColor[0];
                 const uint8_t stencil = static_cast<uint8_t>(att.image->m_clearColor[1]);
-                m_cmdList->ClearDepthStencilView(GetAttachmentCpuHandle(att.image, true, "BeginPass"),
+                m_cmdList->ClearDepthStencilView(GetAttachmentCpuHandle(att.image, att.view, true, "BeginPass"),
                                                  flags, depth, stencil, 0, nullptr);
             }
             else if (att.loadOp == PE_LOAD_OP_CLEAR)
             {
                 const vec4 &c = att.image->m_clearColor;
                 const float color[4] = {c[0], c[1], c[2], c[3]};
-                m_cmdList->ClearRenderTargetView(GetAttachmentCpuHandle(att.image, false, "BeginPass"),
+                m_cmdList->ClearRenderTargetView(GetAttachmentCpuHandle(att.image, att.view, false, "BeginPass"),
                                                  color, 0, nullptr);
             }
         }

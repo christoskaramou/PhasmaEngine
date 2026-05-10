@@ -129,7 +129,12 @@ namespace pe
         Hash hash;
         hash.Combine(reinterpret_cast<std::intptr_t>(renderPass));
         for (uint32_t i = 0; i < count; i++)
-            hash.Combine(reinterpret_cast<std::intptr_t>(attachments[i].image));
+        {
+            const std::intptr_t attachmentKey = attachments[i].view
+                                                    ? reinterpret_cast<std::intptr_t>(attachments[i].view)
+                                                    : reinterpret_cast<std::intptr_t>(attachments[i].image);
+            hash.Combine(attachmentKey);
+        }
 
         auto it = s_framebuffers.find(hash);
         if (it != s_framebuffers.end())
@@ -144,9 +149,9 @@ namespace pe
             for (uint32_t i = 0; i < count; i++)
             {
                 Image *image = attachments[i].image;
-                if (!image->HasRTV())
+                if (!attachments[i].view && !image->HasRTV())
                     image->CreateRTV();
-                views.push_back(image->GetRTV());
+                views.push_back(attachments[i].view ? attachments[i].view : image->GetRTV());
             }
 
             std::string name = "Auto_Gen_Framebuffer_" + std::to_string(s_framebuffers.size());

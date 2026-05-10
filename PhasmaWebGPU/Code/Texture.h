@@ -76,13 +76,22 @@ namespace pwgpu
     void RecordZeroInitTextureSubresources(pe::CommandBuffer *cmd, WGPUTextureImpl *tex,
                                            const std::vector<std::pair<uint32_t, uint32_t>> &mipLayerPairs,
                                            PeImageAspectFlags aspectMask);
+
+    pe::ImageView *TextureBindingImageView(WGPUTextureViewImpl *view);
+    pe::ImageView *StorageBindingImageView(WGPUTextureViewImpl *view);
+    pe::ImageView *RenderAttachmentImageView(WGPUTextureViewImpl *view);
+    bool HasNativeImageView(WGPUTextureViewImpl *view);
 } // namespace pwgpu
 
 struct WGPUTextureViewImpl
 {
     std::atomic<uint32_t> refCount{1};
     std::string label;
+    // Legacy non-null marker; use role-specific accessors for binding/render use.
     pe::ImageView *view = nullptr;
+    pe::ImageView *textureBindingView = nullptr;
+    pe::ImageView *storageBindingView = nullptr;
+    pe::ImageView *renderAttachmentView = nullptr;
     WGPUTextureImpl *texture = nullptr;
     WGPUTextureFormat format = WGPUTextureFormat_Undefined;
     WGPUTextureViewDimension dimension = WGPUTextureViewDimension_2D;

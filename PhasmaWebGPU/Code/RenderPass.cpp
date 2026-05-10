@@ -256,6 +256,7 @@ namespace
 
             pe::Attachment att{};
             att.image = image;
+            att.view = pwgpu::RenderAttachmentImageView(info.textureView);
             att.loadOp = info.loadOp;
             att.storeOp = ToPeStoreOp(info.storeOp);
             rpe->dx12OpenAttachments.push_back(att);
@@ -279,6 +280,7 @@ namespace
 
             pe::Attachment att{};
             att.image = image;
+            att.view = pwgpu::RenderAttachmentImageView(dsInfo->textureView);
             att.loadOp = rpe->deferredHasDepth ? rpe->deferredDepthAtt.loadOp
                                                : PE_LOAD_OP_DONT_CARE;
             att.storeOp = rpe->deferredHasDepth ? ToPeStoreOp(rpe->deferredDepthAtt.storeOp)

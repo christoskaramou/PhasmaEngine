@@ -610,7 +610,7 @@ extern "C"
                 return makeInvalidPass("view has no texture or view is invalid");
             if (view->texture->destroyed)
                 return makeDeferredPass(view);
-            if (!view->view)
+            if (!pwgpu::RenderAttachmentImageView(view))
                 return makeInvalidPass("view is invalid");
             if (view->texture->device != enc->device)
             {
@@ -679,7 +679,7 @@ extern "C"
             if (ca.resolveTarget)
             {
                 auto *rt = ca.resolveTarget;
-                if (!rt->texture || !rt->view || rt->texture->invalid)
+                if (!rt->texture || !pwgpu::RenderAttachmentImageView(rt) || rt->texture->invalid)
                     return makeInvalidPass("beginRenderPass: resolveTarget is invalid");
                 if (rt->texture->device != enc->device)
                 {
@@ -777,7 +777,7 @@ extern "C"
                     "beginRenderPass: depthStencilAttachment.view is invalid");
             if (dsa->view->texture->destroyed)
                 return makeDeferredPass(dsa->view);
-            if (!dsa->view->view || dsa->view->texture->invalid)
+            if (!pwgpu::RenderAttachmentImageView(dsa->view) || dsa->view->texture->invalid)
                 return makeInvalidPass(
                     "beginRenderPass: depthStencilAttachment.view is invalid");
 
