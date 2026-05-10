@@ -4,8 +4,75 @@
 #include "Utils.h"
 #include "WGPULimits.h"
 
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12RhiImpl.h"
+#endif
+
 namespace
 {
+
+#if defined(PE_WIN32)
+    bool Dx12FormatSupports(ID3D12Device *device,
+                            DXGI_FORMAT format,
+                            D3D12_FORMAT_SUPPORT1 required1,
+                            D3D12_FORMAT_SUPPORT2 required2 = D3D12_FORMAT_SUPPORT2_NONE)
+    {
+        if (!device || format == DXGI_FORMAT_UNKNOWN)
+            return false;
+
+        D3D12_FEATURE_DATA_FORMAT_SUPPORT support{};
+        support.Format = format;
+        if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &support, sizeof(support))))
+            return false;
+
+        const UINT support1 = static_cast<UINT>(support.Support1);
+        const UINT support2 = static_cast<UINT>(support.Support2);
+        const UINT mask1 = static_cast<UINT>(required1);
+        const UINT mask2 = static_cast<UINT>(required2);
+        return (support1 & mask1) == mask1 && (support2 & mask2) == mask2;
+    }
+
+    bool Dx12FormatStorageReadWrite(ID3D12Device *device, DXGI_FORMAT format)
+    {
+        constexpr auto required1 = static_cast<D3D12_FORMAT_SUPPORT1>(
+            D3D12_FORMAT_SUPPORT1_TEXTURE2D | D3D12_FORMAT_SUPPORT1_TEXTURE3D |
+            D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW);
+        constexpr auto required2 = static_cast<D3D12_FORMAT_SUPPORT2>(
+            D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD | D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE);
+        return Dx12FormatSupports(device, format, required1, required2);
+    }
+
+    bool Dx12FormatRenderBlend(ID3D12Device *device, DXGI_FORMAT format)
+    {
+        constexpr auto required1 = static_cast<D3D12_FORMAT_SUPPORT1>(
+            D3D12_FORMAT_SUPPORT1_TEXTURE2D | D3D12_FORMAT_SUPPORT1_RENDER_TARGET |
+            D3D12_FORMAT_SUPPORT1_BLENDABLE | D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RENDERTARGET);
+        return Dx12FormatSupports(device, format, required1);
+    }
+
+    bool Dx12FormatResolve(ID3D12Device *device, DXGI_FORMAT format)
+    {
+        constexpr auto required1 = static_cast<D3D12_FORMAT_SUPPORT1>(
+            D3D12_FORMAT_SUPPORT1_TEXTURE2D | D3D12_FORMAT_SUPPORT1_RENDER_TARGET |
+            D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RENDERTARGET |
+            D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RESOLVE);
+        return Dx12FormatSupports(device, format, required1);
+    }
+
+    bool Dx12FormatSampled(ID3D12Device *device, DXGI_FORMAT format)
+    {
+        constexpr auto required1 = static_cast<D3D12_FORMAT_SUPPORT1>(
+            D3D12_FORMAT_SUPPORT1_TEXTURE2D | D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE);
+        return Dx12FormatSupports(device, format, required1);
+    }
+
+    bool Dx12FormatDepth(ID3D12Device *device, DXGI_FORMAT format)
+    {
+        constexpr auto required1 = static_cast<D3D12_FORMAT_SUPPORT1>(
+            D3D12_FORMAT_SUPPORT1_TEXTURE2D | D3D12_FORMAT_SUPPORT1_DEPTH_STENCIL);
+        return Dx12FormatSupports(device, format, required1);
+    }
+#endif
 
     bool AdapterSupportsFeature(const WGPUAdapterImpl &a, WGPUFeatureName feature)
     {
@@ -273,6 +340,100 @@ void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
             a.featureSupport.textureCompressionASTC &&
             supports3DSampled(VK_FORMAT_ASTC_4x4_UNORM_BLOCK);
     }
+#if defined(PE_WIN32)
+    else if (a.rhi && a.rhi->GetApi() == PE_GRAPHICS_API_DX12)
+    {
+        auto *dx12 = static_cast<pe::Dx12RhiImpl *>(a.rhi->GetImpl());
+        ID3D12Device *device = dx12 ? dx12->GetDevice() : nullptr;
+
+        a.depth32FloatStencil8 = Dx12FormatDepth(device, DXGI_FORMAT_D32_FLOAT_S8X24_UINT);
+        a.float32Blendable = Dx12FormatRenderBlend(device, DXGI_FORMAT_R32_FLOAT) &&
+                             Dx12FormatRenderBlend(device, DXGI_FORMAT_R32G32_FLOAT) &&
+                             Dx12FormatRenderBlend(device, DXGI_FORMAT_R32G32B32A32_FLOAT);
+        a.bgra8UnormStorage = Dx12FormatStorageReadWrite(device, DXGI_FORMAT_B8G8R8A8_UNORM);
+        a.float32Filterable = Dx12FormatSampled(device, DXGI_FORMAT_R32_FLOAT) &&
+                              Dx12FormatSampled(device, DXGI_FORMAT_R32G32_FLOAT) &&
+                              Dx12FormatSampled(device, DXGI_FORMAT_R32G32B32A32_FLOAT);
+        a.rg11b10UfloatRenderable = Dx12FormatRenderBlend(device, DXGI_FORMAT_R11G11B10_FLOAT);
+
+        a.textureFormatsTier1 =
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R8_UNORM) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R8_SNORM) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R8_UINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R8_SINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R8G8_UNORM) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R8G8_SNORM) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R8G8_UINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R8G8_SINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16_UINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16_SINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16_FLOAT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16G16_UINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16G16_SINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16G16_FLOAT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R10G10B10A2_UINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R10G10B10A2_UNORM) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R11G11B10_FLOAT) &&
+            Dx12FormatRenderBlend(device, DXGI_FORMAT_R8_SNORM) &&
+            Dx12FormatRenderBlend(device, DXGI_FORMAT_R8G8_SNORM) &&
+            Dx12FormatRenderBlend(device, DXGI_FORMAT_R8G8B8A8_SNORM) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16_UNORM) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16_SNORM) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16G16_UNORM) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16G16_SNORM) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16G16B16A16_UNORM) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16G16B16A16_SNORM) &&
+            Dx12FormatRenderBlend(device, DXGI_FORMAT_R16_UNORM) &&
+            Dx12FormatRenderBlend(device, DXGI_FORMAT_R16_SNORM) &&
+            Dx12FormatRenderBlend(device, DXGI_FORMAT_R16G16_UNORM) &&
+            Dx12FormatRenderBlend(device, DXGI_FORMAT_R16G16_SNORM) &&
+            Dx12FormatRenderBlend(device, DXGI_FORMAT_R16G16B16A16_UNORM) &&
+            Dx12FormatRenderBlend(device, DXGI_FORMAT_R16G16B16A16_SNORM) &&
+            Dx12FormatResolve(device, DXGI_FORMAT_R8_SNORM) &&
+            Dx12FormatResolve(device, DXGI_FORMAT_R8G8_SNORM) &&
+            Dx12FormatResolve(device, DXGI_FORMAT_R8G8B8A8_SNORM);
+
+        a.textureFormatsTier2 =
+            a.textureFormatsTier1 &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R8_UNORM) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R8_UINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R8_SINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R8G8B8A8_UNORM) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R8G8B8A8_UINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R8G8B8A8_SINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16_UINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16_SINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16_FLOAT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16G16B16A16_UINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16G16B16A16_SINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R16G16B16A16_FLOAT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R32G32B32A32_UINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R32G32B32A32_SINT) &&
+            Dx12FormatStorageReadWrite(device, DXGI_FORMAT_R32G32B32A32_FLOAT);
+
+        a.textureCompressionBcFullySupported =
+            a.featureSupport.textureCompressionBC &&
+            Dx12FormatSampled(device, DXGI_FORMAT_BC1_UNORM) &&
+            Dx12FormatSampled(device, DXGI_FORMAT_BC1_UNORM_SRGB) &&
+            Dx12FormatSampled(device, DXGI_FORMAT_BC2_UNORM) &&
+            Dx12FormatSampled(device, DXGI_FORMAT_BC2_UNORM_SRGB) &&
+            Dx12FormatSampled(device, DXGI_FORMAT_BC3_UNORM) &&
+            Dx12FormatSampled(device, DXGI_FORMAT_BC3_UNORM_SRGB) &&
+            Dx12FormatSampled(device, DXGI_FORMAT_BC4_UNORM) &&
+            Dx12FormatSampled(device, DXGI_FORMAT_BC4_SNORM) &&
+            Dx12FormatSampled(device, DXGI_FORMAT_BC5_UNORM) &&
+            Dx12FormatSampled(device, DXGI_FORMAT_BC5_SNORM) &&
+            Dx12FormatSampled(device, DXGI_FORMAT_BC6H_UF16) &&
+            Dx12FormatSampled(device, DXGI_FORMAT_BC6H_SF16) &&
+            Dx12FormatSampled(device, DXGI_FORMAT_BC7_UNORM) &&
+            Dx12FormatSampled(device, DXGI_FORMAT_BC7_UNORM_SRGB);
+        a.textureCompressionBCSliced3D =
+            a.textureCompressionBcFullySupported &&
+            Dx12FormatSupports(device, DXGI_FORMAT_BC1_UNORM, D3D12_FORMAT_SUPPORT1_TEXTURE3D);
+        a.textureCompressionASTCSliced3D = false;
+        a.primitiveIndex = a.featureSupport.geometryShader;
+    }
+#endif
     else
     {
         a.textureCompressionBcFullySupported = a.featureSupport.textureCompressionBC;

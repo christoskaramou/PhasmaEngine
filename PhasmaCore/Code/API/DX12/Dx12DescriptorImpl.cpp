@@ -219,13 +219,14 @@ namespace pe
             else if (bindingInfo.type == PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER ||
                      bindingInfo.type == PE_DESCRIPTOR_TYPE_BYTE_ADDRESS_BUFFER)
             {
+                const bool useStructured = bindingInfo.type == PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER &&
+                                           bindingInfo.structuredStride > 0;
                 D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
-                srv.Format = bindingInfo.type == PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER ? DXGI_FORMAT_UNKNOWN : DXGI_FORMAT_R32_TYPELESS;
+                srv.Format = useStructured ? DXGI_FORMAT_UNKNOWN : DXGI_FORMAT_R32_TYPELESS;
                 srv.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
                 srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-                srv.Buffer = bindingInfo.type == PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER
-                                 ? StructuredBufferSrv(offset, bindingInfo, rangeBytes)
-                                 : RawBufferSrv(offset, rangeBytes);
+                srv.Buffer = useStructured ? StructuredBufferSrv(offset, bindingInfo, rangeBytes)
+                                           : RawBufferSrv(offset, rangeBytes);
                 device->CreateShaderResourceView(bufferImpl->GetResource(), &srv, dst);
             }
             else
@@ -635,13 +636,14 @@ namespace pe
                     else if (bindingInfo.type == PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER ||
                              bindingInfo.type == PE_DESCRIPTOR_TYPE_BYTE_ADDRESS_BUFFER)
                     {
+                        const bool useStructured = bindingInfo.type == PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER &&
+                                                   bindingInfo.structuredStride > 0;
                         D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
-                        srv.Format = bindingInfo.type == PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER ? DXGI_FORMAT_UNKNOWN : DXGI_FORMAT_R32_TYPELESS;
+                        srv.Format = useStructured ? DXGI_FORMAT_UNKNOWN : DXGI_FORMAT_R32_TYPELESS;
                         srv.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
                         srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-                        srv.Buffer = bindingInfo.type == PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER
-                                         ? StructuredBufferSrv(updateInfo, bindingInfo, j, rangeBytes)
-                                         : RawBufferSrv(updateInfo, j, rangeBytes);
+                        srv.Buffer = useStructured ? StructuredBufferSrv(updateInfo, bindingInfo, j, rangeBytes)
+                                                   : RawBufferSrv(updateInfo, j, rangeBytes);
                         device->CreateShaderResourceView(bufferImpl->GetResource(), &srv, dst);
                     }
                     else
