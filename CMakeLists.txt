@@ -197,7 +197,8 @@ if(WIN32)
     )
     if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
         set_source_files_properties(${CACAO_SRC_FILES} PROPERTIES
-            COMPILE_FLAGS "/permissive /Zc:gotoScope-")
+            COMPILE_FLAGS "/permissive /Zc:gotoScope-"
+            SKIP_PRECOMPILE_HEADERS ON)
     elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set_source_files_properties(${CACAO_SRC_FILES} PROPERTIES
             COMPILE_FLAGS "-Wno-address-of-temporary")
