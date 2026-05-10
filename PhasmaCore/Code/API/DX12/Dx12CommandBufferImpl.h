@@ -36,6 +36,12 @@ namespace pe
         void BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding, uint32_t bindingCount) override;
         void BindIndexBuffer(Buffer *buffer, size_t offset, PeIndexType indexType) override;
         void BindDescriptors(uint32_t count, Descriptor *const *descriptors) override;
+        void BindExternalRenderPipeline(ID3D12PipelineState *pipeline,
+                                        D3D12_PRIMITIVE_TOPOLOGY topology,
+                                        const std::vector<uint32_t> &vertexBindingStrides);
+        void BindExternalRenderDescriptors(uint32_t count, Descriptor *const *descriptors);
+        void BindExternalComputePipeline(ID3D12PipelineState *pipeline);
+        void BindExternalComputeDescriptors(uint32_t count, Descriptor *const *descriptors);
         void PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info) override;
 
         void SetViewport(float x, float y, float width, float height, float minDepth, float maxDepth) override;
@@ -48,6 +54,7 @@ namespace pe
         void SetDepthWriteEnable(uint32_t enable) override;
 
         void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
+        void DispatchExternalCompute(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
         void PushConstants(const PushConstantsBlock<128> &constants) override;
 
         void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override;
@@ -94,12 +101,16 @@ namespace pe
 
     private:
         void BindShaderVisibleHeaps();
+        void BindDescriptorTables(uint32_t count, Descriptor *const *descriptors, bool compute);
         ID3D12CommandSignature *GetDrawIndirectSignature(uint32_t stride);
         ID3D12CommandSignature *GetDrawIndexedIndirectSignature(uint32_t stride);
         void MarkPendingImageBarrierRegion(const char *name);
         void PrepareImageForFirstWrite(Dx12ImageImpl *img, D3D12_RESOURCE_STATES requestedState, PeBarrierAccess accessMask);
 
         bool m_heapsBound = false;
+        bool m_externalRenderPipelineBound = false;
+        bool m_externalComputePipelineBound = false;
+        std::vector<uint32_t> m_externalVertexBindingStrides;
         D3D12_PRIMITIVE_TOPOLOGY m_lastTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
         Microsoft::WRL::ComPtr<ID3D12CommandSignature> m_drawIndirectSignature;
         Microsoft::WRL::ComPtr<ID3D12CommandSignature> m_drawIndexedIndirectSignature;

@@ -300,7 +300,7 @@ extern "C"
         tex->device = surface->device;
         if (tex->device)
             wgpuDeviceAddRef(tex->device);
-        tex->format = pwgpu::FromVkFormat(static_cast<VkFormat>(pe::ToVkFormat(surface->surface->GetFormat())));
+        tex->format = surface->configuration.format;
         tex->usage = static_cast<WGPUTextureUsage>(surface->configuration.usage);
         tex->dimension = WGPUTextureDimension_2D;
         tex->size = {extent.width, extent.height, 1};

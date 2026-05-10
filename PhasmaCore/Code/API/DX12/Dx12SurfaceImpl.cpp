@@ -3,6 +3,7 @@
 #if defined(PE_WIN32)
 
 #include "API/DX12/Dx12RhiImpl.h"
+#include "API/DX12/Dx12Translate.h"
 #include "API/RHI.h"
 #include "API/Surface.h"
 
@@ -33,6 +34,8 @@ namespace pe
         int w = 0, h = 0;
         SDL_GetWindowSize(window, &w, &h);
         m_owner->m_actualExtent = Rect2Du{0, 0, static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
+        // Initial default before swapchain creation; Dx12SwapchainImpl refreshes this from GetDesc1().
+        m_owner->m_format = pe_dx12::FromFormat(DXGI_FORMAT_R8G8B8A8_UNORM);
     }
 
     std::vector<PePresentMode> Dx12SurfaceImpl::GetSupportedPresentModes() const

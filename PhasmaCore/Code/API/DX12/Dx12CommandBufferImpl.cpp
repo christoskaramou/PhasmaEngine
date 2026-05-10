@@ -308,6 +308,9 @@ namespace pe
         m_barrierBatch.clear();
         m_pendingImageBarrierRegion.clear();
         m_heapsBound = false;
+        m_externalRenderPipelineBound = false;
+        m_externalComputePipelineBound = false;
+        m_externalVertexBindingStrides.clear();
         m_lastTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
 
 #if PE_DEBUG_MODE
@@ -635,6 +638,9 @@ namespace pe
         if (pipeline != m_owner->m_boundPipeline)
         {
             m_owner->m_boundPipeline = pipeline;
+            m_externalRenderPipelineBound = false;
+            m_externalComputePipelineBound = false;
+            m_externalVertexBindingStrides.clear();
 
             Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
             PE_ERROR_IF(!rhi || !rhi->GetSharedRootSig(), "Dx12CommandBufferImpl::BindPipeline: shared root signature unavailable");
@@ -680,7 +686,7 @@ namespace pe
             return;
 
         PE_ERROR_IF(!buffer, "Dx12CommandBufferImpl::BindVertexBuffer: null buffer");
-        PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::BindVertexBuffer: no bound pipeline (DX12 needs stride from PSO reflection)");
+        PE_ERROR_IF(!m_owner->m_boundPipeline && !m_externalRenderPipelineBound, "Dx12CommandBufferImpl::BindVertexBuffer: no bound pipeline (DX12 needs stride from PSO reflection)");
         PE_ERROR_IF(offset > buffer->Size(), "Dx12CommandBufferImpl::BindVertexBuffer: offset exceeds buffer size");
 
         PushBufferTransition(m_barrierBatch, Dx12BufferImpl::From(buffer), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
@@ -690,7 +696,6 @@ namespace pe
         m_owner->m_boundVertexBufferFirstBinding = firstBinding;
         m_owner->m_boundVertexBufferBindingCount = bindingCount;
 
-        const Dx12PipelineImpl *pipelineImpl = Dx12PipelineImpl::From(m_owner->m_boundPipeline);
         const Dx12BufferImpl *bufImpl = Dx12BufferImpl::From(buffer);
 
         std::vector<D3D12_VERTEX_BUFFER_VIEW> views(bindingCount);
@@ -700,7 +705,17 @@ namespace pe
             D3D12_VERTEX_BUFFER_VIEW &view = views[i];
             view.BufferLocation = bufImpl->GetResource()->GetGPUVirtualAddress() + offset;
             view.SizeInBytes = static_cast<UINT>(buffer->Size() - offset);
-            view.StrideInBytes = pipelineImpl->GetVertexBindingStride(binding);
+            if (m_externalRenderPipelineBound)
+            {
+                view.StrideInBytes = binding < m_externalVertexBindingStrides.size()
+                                         ? m_externalVertexBindingStrides[binding]
+                                         : 0;
+            }
+            else
+            {
+                const Dx12PipelineImpl *pipelineImpl = Dx12PipelineImpl::From(m_owner->m_boundPipeline);
+                view.StrideInBytes = pipelineImpl->GetVertexBindingStride(binding);
+            }
             PE_ERROR_IF(view.StrideInBytes == 0,
                         "Dx12CommandBufferImpl::BindVertexBuffer: stride for binding %u is zero (pipeline reflection produced no input)",
                         binding);
@@ -739,9 +754,72 @@ namespace pe
         PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::BindDescriptors: No bound pipeline found!");
         PE_ERROR_IF(count > 0 && !descriptors, "Dx12CommandBufferImpl::BindDescriptors: null descriptor array");
 
-        BindShaderVisibleHeaps();
-
         const bool compute = IsComputePipeline(m_owner->m_boundPipeline);
+        BindDescriptorTables(count, descriptors, compute);
+    }
+
+    void Dx12CommandBufferImpl::BindExternalRenderPipeline(ID3D12PipelineState *pipeline,
+                                                           D3D12_PRIMITIVE_TOPOLOGY topology,
+                                                           const std::vector<uint32_t> &vertexBindingStrides)
+    {
+        PE_ERROR_IF(!pipeline, "Dx12CommandBufferImpl::BindExternalRenderPipeline: null pipeline");
+
+        Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+        PE_ERROR_IF(!rhi || !rhi->GetSharedRootSig(), "Dx12CommandBufferImpl::BindExternalRenderPipeline: shared root signature unavailable");
+
+        m_owner->m_boundPipeline = nullptr;
+        m_owner->m_boundVertexBuffer = nullptr;
+        m_owner->m_boundVertexBufferOffset = -1;
+        m_owner->m_boundVertexBufferFirstBinding = UINT32_MAX;
+        m_owner->m_boundVertexBufferBindingCount = UINT32_MAX;
+        m_externalRenderPipelineBound = true;
+        m_externalComputePipelineBound = false;
+        m_externalVertexBindingStrides = vertexBindingStrides;
+
+        BindShaderVisibleHeaps();
+        m_cmdList->SetPipelineState(pipeline);
+        m_cmdList->SetGraphicsRootSignature(rhi->GetSharedRootSig()->Get());
+        if (topology != m_lastTopology)
+        {
+            m_cmdList->IASetPrimitiveTopology(topology);
+            m_lastTopology = topology;
+        }
+    }
+
+    void Dx12CommandBufferImpl::BindExternalRenderDescriptors(uint32_t count, Descriptor *const *descriptors)
+    {
+        PE_ERROR_IF(!m_externalRenderPipelineBound, "Dx12CommandBufferImpl::BindExternalRenderDescriptors: no external render pipeline bound");
+        PE_ERROR_IF(count > 0 && !descriptors, "Dx12CommandBufferImpl::BindExternalRenderDescriptors: null descriptor array");
+        BindDescriptorTables(count, descriptors, false);
+    }
+
+    void Dx12CommandBufferImpl::BindExternalComputePipeline(ID3D12PipelineState *pipeline)
+    {
+        PE_ERROR_IF(!pipeline, "Dx12CommandBufferImpl::BindExternalComputePipeline: null pipeline");
+
+        Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+        PE_ERROR_IF(!rhi || !rhi->GetSharedRootSig(), "Dx12CommandBufferImpl::BindExternalComputePipeline: shared root signature unavailable");
+
+        m_owner->m_boundPipeline = nullptr;
+        m_externalRenderPipelineBound = false;
+        m_externalComputePipelineBound = true;
+        m_externalVertexBindingStrides.clear();
+
+        BindShaderVisibleHeaps();
+        m_cmdList->SetPipelineState(pipeline);
+        m_cmdList->SetComputeRootSignature(rhi->GetSharedRootSig()->Get());
+    }
+
+    void Dx12CommandBufferImpl::BindExternalComputeDescriptors(uint32_t count, Descriptor *const *descriptors)
+    {
+        PE_ERROR_IF(!m_externalComputePipelineBound, "Dx12CommandBufferImpl::BindExternalComputeDescriptors: no external compute pipeline bound");
+        PE_ERROR_IF(count > 0 && !descriptors, "Dx12CommandBufferImpl::BindExternalComputeDescriptors: null descriptor array");
+        BindDescriptorTables(count, descriptors, true);
+    }
+
+    void Dx12CommandBufferImpl::BindDescriptorTables(uint32_t count, Descriptor *const *descriptors, bool compute)
+    {
+        BindShaderVisibleHeaps();
 
         for (uint32_t i = 0; i < count; ++i)
         {
@@ -841,6 +919,12 @@ namespace pe
         FlushBarriers();
         m_cmdList->Dispatch(groupCountX, groupCountY, groupCountZ);
     }
+    void Dx12CommandBufferImpl::DispatchExternalCompute(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+    {
+        PE_ERROR_IF(!m_externalComputePipelineBound, "Dx12CommandBufferImpl::DispatchExternalCompute: no external compute pipeline bound");
+        FlushBarriers();
+        m_cmdList->Dispatch(groupCountX, groupCountY, groupCountZ);
+    }
     void Dx12CommandBufferImpl::PushConstants(const PushConstantsBlock<128> &constants)
     {
         PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::PushConstants: No bound pipeline found!");
@@ -864,15 +948,19 @@ namespace pe
 
     void Dx12CommandBufferImpl::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {
-        PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::Draw: No bound pipeline found!");
-        PE_ERROR_IF(IsComputePipeline(m_owner->m_boundPipeline), "Dx12CommandBufferImpl::Draw: bound pipeline is compute");
+        if (m_owner->m_boundPipeline)
+            PE_ERROR_IF(IsComputePipeline(m_owner->m_boundPipeline), "Dx12CommandBufferImpl::Draw: bound pipeline is compute");
+        else
+            PE_ERROR_IF(!m_externalRenderPipelineBound, "Dx12CommandBufferImpl::Draw: no external render pipeline bound");
         FlushBarriers();
         m_cmdList->DrawInstanced(vertexCount, instanceCount, firstVertex, firstInstance);
     }
     void Dx12CommandBufferImpl::DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
     {
-        PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::DrawIndexed: No bound pipeline found!");
-        PE_ERROR_IF(IsComputePipeline(m_owner->m_boundPipeline), "Dx12CommandBufferImpl::DrawIndexed: bound pipeline is compute");
+        if (m_owner->m_boundPipeline)
+            PE_ERROR_IF(IsComputePipeline(m_owner->m_boundPipeline), "Dx12CommandBufferImpl::DrawIndexed: bound pipeline is compute");
+        else
+            PE_ERROR_IF(!m_externalRenderPipelineBound, "Dx12CommandBufferImpl::DrawIndexed: no external render pipeline bound");
         FlushBarriers();
         m_cmdList->DrawIndexedInstanced(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }

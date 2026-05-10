@@ -564,20 +564,12 @@ extern "C"
 
             if (size > 0)
             {
-                vk::BufferMemoryBarrier2 bmb{};
-                bmb.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-                bmb.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-                bmb.dstStageMask = vk::PipelineStageFlagBits2::eAllCommands;
-                bmb.dstAccessMask = vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite;
-                bmb.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                bmb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                bmb.buffer = pe::GetVulkanBuffer(backing);
-                bmb.offset = static_cast<vk::DeviceSize>(bufferOffset);
-                bmb.size = static_cast<vk::DeviceSize>(size);
-                vk::DependencyInfo dep{};
-                dep.bufferMemoryBarrierCount = 1;
-                dep.pBufferMemoryBarriers = &bmb;
-                pe::GetVulkanCommandBuffer(cmd).pipelineBarrier2(dep);
+                pe::MemoryBarrierInfo uploadBarrier{};
+                uploadBarrier.srcStageMask = PE_STAGE_TRANSFER;
+                uploadBarrier.srcAccessMask = PE_ACCESS_TRANSFER_WRITE;
+                uploadBarrier.dstStageMask = PE_STAGE_ALL_COMMANDS;
+                uploadBarrier.dstAccessMask = PE_ACCESS_MEMORY_READ | PE_ACCESS_MEMORY_WRITE;
+                cmd->MemoryBarrier(uploadBarrier);
 
                 pe::BufferTrackInfo &trackInfo = backing->GetTrackInfo();
                 trackInfo.stageMask = PE_STAGE_ALL_COMMANDS;

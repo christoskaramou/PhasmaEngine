@@ -1,9 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Once;
 
+use naga::back::hlsl;
 use naga::back::pipeline_constants::process_overrides;
 use naga::back::spv;
 use naga::back::PipelineConstants;
+use naga::front::spv as spv_front;
 use naga::front::wgsl;
 use naga::proc::{BoundsCheckPolicies, BoundsCheckPolicy, ResolveContext, TypeResolution};
 use naga::valid::{Capabilities, ValidationFlags, Validator};
@@ -12874,10 +12876,8 @@ fn main() {
         assert!(
             r.is_ok(),
             "compile failed: {:?}",
-            r.err().map(|msgs| msgs
-                .iter()
-                .map(|m| m.message.clone())
-                .collect::<Vec<_>>())
+            r.err()
+                .map(|msgs| msgs.iter().map(|m| m.message.clone()).collect::<Vec<_>>())
         );
     }
 }
@@ -13117,4 +13117,86 @@ pub fn bake_wgsl_with_constants(
     strip_workgroup_explicit_layout(&mut words);
     rewrite_signed_mod_to_remainder(&mut words);
     Some(words)
+}
+
+fn hlsl_stage_from_str(stage: &str) -> Option<naga::ShaderStage> {
+    match stage {
+        "vertex" => Some(naga::ShaderStage::Vertex),
+        "fragment" => Some(naga::ShaderStage::Fragment),
+        "compute" => Some(naga::ShaderStage::Compute),
+        _ => None,
+    }
+}
+
+fn apply_dx12_webgpu_binding_map(options: &mut hlsl::Options, module: &naga::Module) {
+    for (_, global) in module.global_variables.iter() {
+        let Some(binding) = global.binding else {
+            continue;
+        };
+
+        let register = if matches!(global.space, naga::AddressSpace::Uniform) && binding.group == 0
+        {
+            binding.binding + 1
+        } else {
+            binding.binding
+        };
+
+        options.binding_map.insert(
+            binding,
+            hlsl::BindTarget {
+                space: binding.group as u8,
+                register,
+                ..Default::default()
+            },
+        );
+    }
+}
+
+pub fn spirv_to_hlsl(
+    words: &[u32],
+    entry_point: Option<&str>,
+    stage: Option<&str>,
+) -> Option<String> {
+    if words.is_empty() {
+        return None;
+    }
+
+    let parse_options = spv_front::Options {
+        adjust_coordinate_space: false,
+        strict_capabilities: false,
+        block_ctx_dump_prefix: None,
+    };
+
+    let module = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        spv_front::Frontend::new(words.iter().copied(), &parse_options).parse()
+    }))
+    .ok()
+    .and_then(Result::ok)?;
+
+    let info = Validator::new(ValidationFlags::all(), hlsl::supported_capabilities())
+        .validate(&module)
+        .ok()?;
+
+    let mut options = hlsl::Options::default();
+    options.shader_model = hlsl::ShaderModel::V6_6;
+    options.fake_missing_bindings = false;
+    apply_dx12_webgpu_binding_map(&mut options, &module);
+
+    let pipeline_options = hlsl::PipelineOptions {
+        entry_point: match (entry_point, stage.and_then(hlsl_stage_from_str)) {
+            (Some(name), Some(shader_stage)) if !name.is_empty() => {
+                Some((shader_stage, name.to_string()))
+            }
+            _ => None,
+        },
+    };
+
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut output = String::new();
+        let mut writer = hlsl::Writer::new(&mut output, &options, &pipeline_options);
+        writer.write(&module, &info, None).ok()?;
+        Some(output)
+    }))
+    .ok()
+    .flatten()
 }

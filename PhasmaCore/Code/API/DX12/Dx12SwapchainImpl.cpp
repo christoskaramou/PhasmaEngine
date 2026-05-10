@@ -2,9 +2,11 @@
 #include "API/DX12/Dx12ImageImpl.h"
 #include "API/DX12/Dx12ImageViewImpl.h"
 #include "API/DX12/Dx12RhiImpl.h"
+#include "API/DX12/Dx12Translate.h"
 #include "API/Image.h"
 #include "API/ImageView.h"
 #include "API/RHI.h"
+#include "API/Surface.h"
 
 #include "SDL2/SDL_syswm.h"
 
@@ -42,6 +44,14 @@ namespace pe
         m_owner->m_presentMode = useImmediate ? PE_PRESENT_MODE_IMMEDIATE : PE_PRESENT_MODE_FIFO;
 
         const uint32_t bbCount = desc.backbufferCount < 2 ? 2 : desc.backbufferCount;
+        m_format = desc.surface ? pe_dx12::Format(desc.surface->GetFormat()) : DXGI_FORMAT_R8G8B8A8_UNORM;
+        if (m_format == DXGI_FORMAT_UNKNOWN)
+        {
+            PE_WARN("Dx12SwapchainImpl: unsupported surface format %u; falling back to R8G8B8A8_UNORM",
+                    desc.surface ? static_cast<uint32_t>(desc.surface->GetFormat())
+                                 : static_cast<uint32_t>(PE_FORMAT_UNDEFINED));
+            m_format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        }
 
         DXGI_SWAP_CHAIN_DESC1 sc{};
         sc.Width = desc.width;
@@ -66,6 +76,16 @@ namespace pe
 
         hr = sc1.As(&m_swapchain);
         PE_ERROR_IF(FAILED(hr), "Dx12SwapchainImpl: IDXGISwapChain3 not available");
+
+        DXGI_SWAP_CHAIN_DESC1 actualDesc{};
+        if (SUCCEEDED(m_swapchain->GetDesc1(&actualDesc)) && actualDesc.Format != DXGI_FORMAT_UNKNOWN)
+            m_format = actualDesc.Format;
+        const ::PeFormat imageFormat = pe_dx12::FromFormat(m_format);
+        PE_ERROR_IF(imageFormat == PE_FORMAT_UNDEFINED,
+                    "Dx12SwapchainImpl: unsupported swapchain format %u",
+                    static_cast<uint32_t>(m_format));
+        if (desc.surface)
+            desc.surface->m_format = imageFormat;
 
         m_currentBackbuffer = m_swapchain->GetCurrentBackBufferIndex();
 
@@ -113,7 +133,7 @@ namespace pe
             img->m_depth = 1;
             img->m_mipLevels = 1;
             img->m_arrayLayers = 1;
-            img->m_format = PE_FORMAT_R8G8B8A8_UNORM;
+            img->m_format = imageFormat;
             img->m_usage = PE_IMAGE_USAGE_COLOR_ATTACHMENT | PE_IMAGE_USAGE_TRANSFER_DST;
             img->m_samples = PE_SAMPLE_COUNT_1;
             img->m_imageType = PE_IMAGE_TYPE_2D;

@@ -31,6 +31,7 @@ namespace pwgpu
                              WGPUBindGroupImpl *group,
                              size_t dynamicOffsetCount,
                              const uint32_t *dynamicOffsets);
+    bool DispatchWebGPUCompute(pe::CommandBuffer *cmd, uint32_t x, uint32_t y, uint32_t z);
     void RebindWebGPUCompatibleBindGroups(
         pe::CommandBuffer *cmd,
         PipelineBindingPoint point,

@@ -12,6 +12,7 @@
 #include "Device.h"
 #include "FormatInfo.h"
 #include "Utils.h"
+#include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 
@@ -202,6 +203,104 @@ namespace
         return dst;
     }
 
+    PeStoreOp ToPeStoreOp(WGPURenderPassAttachmentStoreOp op)
+    {
+        return op == WGPURenderPassAttachmentStoreOp::Store
+                   ? PE_STORE_OP_STORE
+                   : PE_STORE_OP_DONT_CARE;
+    }
+
+    void SetDx12ColorClear(pe::Image *image, const WGPURenderPassAttachmentInfo &att)
+    {
+        if (!image || !att.hasClearColor)
+            return;
+        image->SetClearColor(vec4(static_cast<float>(att.clearColor.r),
+                                  static_cast<float>(att.clearColor.g),
+                                  static_cast<float>(att.clearColor.b),
+                                  static_cast<float>(att.clearColor.a)));
+    }
+
+    void SetDx12DepthStencilClear(pe::Image *image,
+                                  const WGPURenderPassAttachmentInfo &depthAtt,
+                                  const WGPURenderPassAttachmentInfo &stencilAtt,
+                                  bool hasDepth,
+                                  bool hasStencil)
+    {
+        if (!image)
+            return;
+
+        vec4 clear = image->GetClearColor();
+        if (hasDepth && depthAtt.hasClearDepth)
+            clear[0] = depthAtt.clearDepth;
+        if (hasStencil && stencilAtt.hasClearStencil)
+            clear[1] = static_cast<float>(stencilAtt.clearStencil);
+        image->SetClearColor(clear);
+    }
+
+    void OpenDx12RenderingIfNeeded(WGPURenderPassEncoder rpe)
+    {
+        if (!rpe)
+            return;
+
+        rpe->dx12OpenAttachments.clear();
+        rpe->dx12OpenAttachments.reserve(rpe->deferredColorAttachments.size() + 1);
+
+        for (const auto &info : rpe->deferredColorAttachments)
+        {
+            if (!info.textureView || !info.textureView->texture ||
+                !info.textureView->texture->image)
+                continue;
+
+            pe::Image *image = info.textureView->texture->image;
+            SetDx12ColorClear(image, info);
+
+            pe::Attachment att{};
+            att.image = image;
+            att.loadOp = info.loadOp;
+            att.storeOp = ToPeStoreOp(info.storeOp);
+            rpe->dx12OpenAttachments.push_back(att);
+        }
+
+        const WGPURenderPassAttachmentInfo *dsInfo = nullptr;
+        if (rpe->deferredHasDepth)
+            dsInfo = &rpe->deferredDepthAtt;
+        else if (rpe->deferredHasStencil)
+            dsInfo = &rpe->deferredStencilAtt;
+
+        if (dsInfo && dsInfo->textureView && dsInfo->textureView->texture &&
+            dsInfo->textureView->texture->image)
+        {
+            pe::Image *image = dsInfo->textureView->texture->image;
+            SetDx12DepthStencilClear(image,
+                                     rpe->deferredDepthAtt,
+                                     rpe->deferredStencilAtt,
+                                     rpe->deferredHasDepth,
+                                     rpe->deferredHasStencil);
+
+            pe::Attachment att{};
+            att.image = image;
+            att.loadOp = rpe->deferredHasDepth ? rpe->deferredDepthAtt.loadOp
+                                               : PE_LOAD_OP_DONT_CARE;
+            att.storeOp = rpe->deferredHasDepth ? ToPeStoreOp(rpe->deferredDepthAtt.storeOp)
+                                                : PE_STORE_OP_DONT_CARE;
+            att.stencilLoadOp = rpe->deferredHasStencil ? rpe->deferredStencilAtt.loadOp
+                                                        : PE_LOAD_OP_DONT_CARE;
+            att.stencilStoreOp = rpe->deferredHasStencil
+                                     ? ToPeStoreOp(rpe->deferredStencilAtt.storeOp)
+                                     : PE_STORE_OP_DONT_CARE;
+            rpe->dx12OpenAttachments.push_back(att);
+        }
+
+        const std::string passName = rpe->label.empty() ? "webgpu_render_pass" : rpe->label;
+        rpe->cmd->BeginPass(static_cast<uint32_t>(rpe->dx12OpenAttachments.size()),
+                            rpe->dx12OpenAttachments.empty()
+                                ? nullptr
+                                : rpe->dx12OpenAttachments.data(),
+                            passName,
+                            false);
+        rpe->renderingActive = true;
+    }
+
     // Deferred beginRendering: Vulkan dynamic rendering forbids image layout
     // transitions inside the rendering scope. By deferring beginRendering until
     // the first draw-scope command, we merge attachment barriers and bind-group
@@ -225,6 +324,12 @@ namespace
                 rpe->cmd->ImageBarriers(imageBarriers);
 
             rpe->bindGroupBarriersEmitted = true;
+        }
+
+        if (pe::RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+            OpenDx12RenderingIfNeeded(rpe);
+            return;
         }
 
         std::vector<vk::RenderingAttachmentInfo> colorAttachments;
@@ -1449,7 +1554,10 @@ extern "C"
             OpenRenderingIfNeeded(rpe);
         if (rpe->renderingActive)
         {
-            pe::GetVulkanCommandBuffer(rpe->cmd).endRendering();
+            if (pe::RHII.GetApi() == PE_GRAPHICS_API_DX12)
+                rpe->cmd->EndPass();
+            else
+                pe::GetVulkanCommandBuffer(rpe->cmd).endRendering();
             rpe->renderingActive = false;
         }
 

@@ -10,6 +10,9 @@
 #include "API/Semaphore.h"
 #include "API/Command.h"
 #include "API/StagingManager.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12ImageViewImpl.h"
+#endif
 #include <cstring>
 
 namespace pwgpu
@@ -129,6 +132,64 @@ namespace pwgpu
         return std::max(1u, base >> mip);
     }
 
+    static PeImageViewType ToPeImageViewType(WGPUTextureViewDimension dimension)
+    {
+        switch (dimension)
+        {
+        case WGPUTextureViewDimension_1D:
+            return PE_IMAGE_VIEW_TYPE_1D;
+        case WGPUTextureViewDimension_2D:
+            return PE_IMAGE_VIEW_TYPE_2D;
+        case WGPUTextureViewDimension_2DArray:
+            return PE_IMAGE_VIEW_TYPE_2D_ARRAY;
+        case WGPUTextureViewDimension_Cube:
+            return PE_IMAGE_VIEW_TYPE_CUBE;
+        case WGPUTextureViewDimension_CubeArray:
+            return PE_IMAGE_VIEW_TYPE_CUBE_ARRAY;
+        case WGPUTextureViewDimension_3D:
+            return PE_IMAGE_VIEW_TYPE_3D;
+        default:
+            return PE_IMAGE_VIEW_TYPE_2D;
+        }
+    }
+
+    static PeImageAspectFlags ToPeAspectMask(WGPUTextureFormat format, WGPUTextureAspect aspect)
+    {
+        if (!HasDepthAspect(format) && !HasStencilAspect(format))
+            return PE_IMAGE_ASPECT_COLOR;
+
+        PeImageAspectFlags mask = PE_IMAGE_ASPECT_NONE;
+        if (aspect == WGPUTextureAspect_DepthOnly || aspect == WGPUTextureAspect_All)
+        {
+            if (HasDepthAspect(format))
+                mask |= PE_IMAGE_ASPECT_DEPTH;
+        }
+        if (aspect == WGPUTextureAspect_StencilOnly || aspect == WGPUTextureAspect_All)
+        {
+            if (HasStencilAspect(format))
+                mask |= PE_IMAGE_ASPECT_STENCIL;
+        }
+        return mask;
+    }
+
+    static ::PeFormat ToPeTextureViewFormat(WGPUTextureImpl *texture, WGPUTextureFormat format)
+    {
+        if (!texture || !texture->image || format == texture->format)
+            return PE_FORMAT_UNDEFINED;
+
+        VkFormat vkFormat = ToVkFormat(format);
+        if (texture->device)
+        {
+            vkFormat = ResolveVkTextureFormat(format,
+                                              texture->device->resolvedDepth24Plus,
+                                              texture->device->resolvedDepth24PlusStencil8,
+                                              texture->device->resolvedStencil8);
+        }
+
+        ::PeFormat peFormat = pe::FromVkFormat(static_cast<vk::Format>(vkFormat));
+        return peFormat == texture->image->GetFormat() ? PE_FORMAT_UNDEFINED : peFormat;
+    }
+
     static vk::DeviceSize CompressedSubresourceByteSize(WGPUTextureImpl *tex, uint32_t mip)
     {
         uint32_t blockW = 1;
@@ -225,6 +286,23 @@ namespace pwgpu
     {
         if (!cmd || !tex || !tex->image || mipLayerPairs.empty())
             return;
+
+#if defined(PE_WIN32)
+        if (pe::RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+            if ((aspectMask & (PE_IMAGE_ASPECT_DEPTH | PE_IMAGE_ASPECT_STENCIL)) != 0 &&
+                (tex->image->GetUsage() & PE_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT) != 0)
+            {
+                cmd->ClearDepthStencils({tex->image});
+            }
+            else if ((aspectMask & PE_IMAGE_ASPECT_COLOR) != 0 &&
+                     (tex->image->GetUsage() & PE_IMAGE_USAGE_COLOR_ATTACHMENT) != 0)
+            {
+                cmd->ClearColors({tex->image});
+            }
+            return;
+        }
+#endif
 
         vk::ImageAspectFlags vkAspectMask{};
         if (aspectMask & PE_IMAGE_ASPECT_COLOR)
@@ -817,86 +895,124 @@ extern "C"
             WGPUTextureUsage_RenderAttachment;
         if (texture->image && (viewUsage & kVkViewableUsages) != 0)
         {
-            VkFormat vkFmt;
-            // Combined depth-stencil VkImages aren't created with MUTABLE_FORMAT_BIT,
-            // so an aspect-only view (e.g. depth24plus over depth24plus-stencil8)
-            // must keep the image's format; aspectMask alone selects the plane.
-            const bool combinedDS =
-                pwgpu::HasDepthAspect(texture->format) && pwgpu::HasStencilAspect(texture->format);
-            if (resolved.format == texture->format || combinedDS)
-                vkFmt = static_cast<VkFormat>(pe::ToVkFormat(texture->image->GetFormat()));
-            else
-                vkFmt = pwgpu::ToVkFormat(resolved.format);
-            vk::ImageViewType vkViewType = vk::ImageViewType::e2D;
-            switch (resolved.dimension)
-            {
-            case WGPUTextureViewDimension_1D:
-                vkViewType = vk::ImageViewType::e1D;
-                break;
-            case WGPUTextureViewDimension_2D:
-                vkViewType = vk::ImageViewType::e2D;
-                break;
-            case WGPUTextureViewDimension_2DArray:
-                vkViewType = vk::ImageViewType::e2DArray;
-                break;
-            case WGPUTextureViewDimension_Cube:
-                vkViewType = vk::ImageViewType::eCube;
-                break;
-            case WGPUTextureViewDimension_CubeArray:
-                vkViewType = vk::ImageViewType::eCubeArray;
-                break;
-            case WGPUTextureViewDimension_3D:
-                vkViewType = vk::ImageViewType::e3D;
-                break;
-            default:
-                break;
-            }
-
-            vk::ImageViewCreateInfo ivci{};
-            ivci.image = pe::GetVulkanImage(texture->image);
-            ivci.viewType = vkViewType;
-            ivci.format = static_cast<vk::Format>(vkFmt);
-            ivci.subresourceRange.aspectMask = pwgpu::ToVkAspect(resolved.aspect, resolved.format);
-            ivci.subresourceRange.baseMipLevel = resolved.baseMipLevel;
-            ivci.subresourceRange.levelCount = resolved.mipLevelCount;
-            ivci.subresourceRange.baseArrayLayer = resolved.baseArrayLayer;
-            ivci.subresourceRange.layerCount = resolved.arrayLayerCount;
-
-            auto toVkSwizzle = [](WGPUComponentSwizzle s, vk::ComponentSwizzle identity)
-            {
-                switch (s)
-                {
-                case WGPUComponentSwizzle_Zero:
-                    return vk::ComponentSwizzle::eZero;
-                case WGPUComponentSwizzle_One:
-                    return vk::ComponentSwizzle::eOne;
-                case WGPUComponentSwizzle_R:
-                    return vk::ComponentSwizzle::eR;
-                case WGPUComponentSwizzle_G:
-                    return vk::ComponentSwizzle::eG;
-                case WGPUComponentSwizzle_B:
-                    return vk::ComponentSwizzle::eB;
-                case WGPUComponentSwizzle_A:
-                    return vk::ComponentSwizzle::eA;
-                default:
-                    return identity;
-                }
-            };
-            ivci.components.r = toVkSwizzle(sR, vk::ComponentSwizzle::eR);
-            ivci.components.g = toVkSwizzle(sG, vk::ComponentSwizzle::eG);
-            ivci.components.b = toVkSwizzle(sB, vk::ComponentSwizzle::eB);
-            ivci.components.a = toVkSwizzle(sA, vk::ComponentSwizzle::eA);
-
             const std::string viewName = view->label.empty()
                                              ? (texture->label + "_view")
                                              : view->label;
-            try
+#if defined(PE_WIN32)
+            if (pe::RHII.GetApi() == PE_GRAPHICS_API_DX12)
             {
-                view->view = pe::VulkanImageViewImpl::Create(texture->image, ivci, viewName);
+                pe::ImageViewDesc ivDesc{};
+                ivDesc.viewType = pwgpu::ToPeImageViewType(resolved.dimension);
+                ivDesc.format = pwgpu::ToPeTextureViewFormat(texture, resolved.format);
+                ivDesc.aspectMask = pwgpu::ToPeAspectMask(resolved.format, resolved.aspect);
+                ivDesc.baseMipLevel = resolved.baseMipLevel;
+                ivDesc.levelCount = resolved.mipLevelCount;
+                ivDesc.baseArrayLayer = resolved.baseArrayLayer;
+                ivDesc.layerCount = resolved.arrayLayerCount;
+
+                pe::Dx12ImageViewKind kind = pe::Dx12ImageViewKind::Srv;
+                if (viewUsage & WGPUTextureUsage_StorageBinding)
+                    kind = pe::Dx12ImageViewKind::Uav;
+                else if (viewUsage & WGPUTextureUsage_TextureBinding)
+                    kind = pe::Dx12ImageViewKind::Srv;
+                else if (viewUsage & WGPUTextureUsage_RenderAttachment)
+                    kind = pwgpu::IsDepthStencilFormat(resolved.format)
+                               ? pe::Dx12ImageViewKind::Dsv
+                               : pe::Dx12ImageViewKind::Rtv;
+
+                try
+                {
+                    view->view = pe::Dx12ImageViewImpl::Create(texture->image,
+                                                               ivDesc,
+                                                               kind,
+                                                               viewName);
+                }
+                catch (...)
+                {
+                    view->view = nullptr;
+                }
             }
-            catch (...)
+            else
+#endif
             {
-                view->view = nullptr;
+                VkFormat vkFmt;
+                // Combined depth-stencil VkImages aren't created with MUTABLE_FORMAT_BIT,
+                // so an aspect-only view (e.g. depth24plus over depth24plus-stencil8)
+                // must keep the image's format; aspectMask alone selects the plane.
+                const bool combinedDS =
+                    pwgpu::HasDepthAspect(texture->format) && pwgpu::HasStencilAspect(texture->format);
+                if (resolved.format == texture->format || combinedDS)
+                    vkFmt = static_cast<VkFormat>(pe::ToVkFormat(texture->image->GetFormat()));
+                else
+                    vkFmt = pwgpu::ToVkFormat(resolved.format);
+                vk::ImageViewType vkViewType = vk::ImageViewType::e2D;
+                switch (resolved.dimension)
+                {
+                case WGPUTextureViewDimension_1D:
+                    vkViewType = vk::ImageViewType::e1D;
+                    break;
+                case WGPUTextureViewDimension_2D:
+                    vkViewType = vk::ImageViewType::e2D;
+                    break;
+                case WGPUTextureViewDimension_2DArray:
+                    vkViewType = vk::ImageViewType::e2DArray;
+                    break;
+                case WGPUTextureViewDimension_Cube:
+                    vkViewType = vk::ImageViewType::eCube;
+                    break;
+                case WGPUTextureViewDimension_CubeArray:
+                    vkViewType = vk::ImageViewType::eCubeArray;
+                    break;
+                case WGPUTextureViewDimension_3D:
+                    vkViewType = vk::ImageViewType::e3D;
+                    break;
+                default:
+                    break;
+                }
+
+                vk::ImageViewCreateInfo ivci{};
+                ivci.image = pe::GetVulkanImage(texture->image);
+                ivci.viewType = vkViewType;
+                ivci.format = static_cast<vk::Format>(vkFmt);
+                ivci.subresourceRange.aspectMask = pwgpu::ToVkAspect(resolved.aspect, resolved.format);
+                ivci.subresourceRange.baseMipLevel = resolved.baseMipLevel;
+                ivci.subresourceRange.levelCount = resolved.mipLevelCount;
+                ivci.subresourceRange.baseArrayLayer = resolved.baseArrayLayer;
+                ivci.subresourceRange.layerCount = resolved.arrayLayerCount;
+
+                auto toVkSwizzle = [](WGPUComponentSwizzle s, vk::ComponentSwizzle identity)
+                {
+                    switch (s)
+                    {
+                    case WGPUComponentSwizzle_Zero:
+                        return vk::ComponentSwizzle::eZero;
+                    case WGPUComponentSwizzle_One:
+                        return vk::ComponentSwizzle::eOne;
+                    case WGPUComponentSwizzle_R:
+                        return vk::ComponentSwizzle::eR;
+                    case WGPUComponentSwizzle_G:
+                        return vk::ComponentSwizzle::eG;
+                    case WGPUComponentSwizzle_B:
+                        return vk::ComponentSwizzle::eB;
+                    case WGPUComponentSwizzle_A:
+                        return vk::ComponentSwizzle::eA;
+                    default:
+                        return identity;
+                    }
+                };
+                ivci.components.r = toVkSwizzle(sR, vk::ComponentSwizzle::eR);
+                ivci.components.g = toVkSwizzle(sG, vk::ComponentSwizzle::eG);
+                ivci.components.b = toVkSwizzle(sB, vk::ComponentSwizzle::eB);
+                ivci.components.a = toVkSwizzle(sA, vk::ComponentSwizzle::eA);
+
+                try
+                {
+                    view->view = pe::VulkanImageViewImpl::Create(texture->image, ivci, viewName);
+                }
+                catch (...)
+                {
+                    view->view = nullptr;
+                }
             }
 
             if (!view->view && texture->device)

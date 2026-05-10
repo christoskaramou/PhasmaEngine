@@ -17,6 +17,12 @@ namespace pwgpu
 {
     namespace
     {
+        bool IsUniformDescriptorType(PeBindingType type)
+        {
+            return type == PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
+                   type == PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        }
+
         // Per-binding reflected info from one stage. We merge across stages into
         // WGPUBindGroupLayoutEntryResolved with OR'd visibility.
         struct ReflectedBinding
@@ -685,6 +691,20 @@ namespace pwgpu
             }
         }
     } // namespace
+
+    void ApplyDx12WebGPURegisterRemap(pe::DescriptorBindingInfo &info)
+    {
+        if (pe::RHII.GetApi() != PE_GRAPHICS_API_DX12 ||
+            info.dxSpace != 0 ||
+            !IsUniformDescriptorType(info.type))
+        {
+            return;
+        }
+
+        const uint32_t baseRegister =
+            info.dxRegister == static_cast<uint32_t>(-1) ? info.binding : info.dxRegister;
+        info.dxRegister = baseRegister + 1u;
+    }
 
     static uint64_t RoundUp(uint64_t alignment, uint64_t value)
     {
@@ -1533,6 +1553,7 @@ namespace pwgpu
                 if (rb.visibility & WGPUShaderStage_Compute)
                     entryStages |= PE_SHADER_STAGE_COMPUTE;
                 stageMask |= entryStages;
+                ApplyDx12WebGPURegisterRemap(info);
                 infos.push_back(info);
             }
             bgl->bindingInfos = infos;

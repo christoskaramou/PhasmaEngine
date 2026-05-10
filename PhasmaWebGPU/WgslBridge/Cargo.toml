@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["staticlib"]
 
 [dependencies]
-naga = { version = "29", features = ["wgsl-in", "spv-out"] }
+naga = { version = "29", features = ["wgsl-in", "spv-in", "spv-out", "hlsl-out"] }
 
 [profile.release]
 lto = true

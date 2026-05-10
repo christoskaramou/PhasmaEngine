@@ -23,11 +23,13 @@ enum class WGPURenderPassAttachmentStoreOp : uint8_t
 
 struct WGPURenderPassAttachmentInfo
 {
+    WGPUTextureViewImpl *textureView = nullptr;
     PeBackendHandle imageView = 0;
     PeImageLayout imageLayout = PE_IMAGE_LAYOUT_UNDEFINED;
     PeLoadOp loadOp = PE_LOAD_OP_DONT_CARE;
     WGPURenderPassAttachmentStoreOp storeOp = WGPURenderPassAttachmentStoreOp::DontCare;
 
+    WGPUTextureViewImpl *resolveTextureView = nullptr;
     PeBackendHandle resolveImageView = 0;
     PeImageLayout resolveImageLayout = PE_IMAGE_LAYOUT_UNDEFINED;
     bool resolveAverage = true;
@@ -96,6 +98,7 @@ struct WGPURenderPassEncoderImpl
 
     std::vector<WGPUTextureViewImpl *> retainedViews;
     std::vector<pe::ImageView *> ownedSliceViews;
+    std::vector<pe::Attachment> dx12OpenAttachments;
 
     std::vector<WGPURenderPipelineImpl *> retainedPipelines;
     std::vector<WGPUBindGroupImpl *> retainedBindGroups;

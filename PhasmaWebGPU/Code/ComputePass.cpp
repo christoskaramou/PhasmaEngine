@@ -554,7 +554,8 @@ extern "C"
         ValidateDispatchUsageScope(cpe);
         EmitDispatchResourceBarriers(cpe);
 
-        pe::GetVulkanCommandBuffer(cpe->cmd).dispatch(x, y, z);
+        if (!pwgpu::DispatchWebGPUCompute(cpe->cmd, x, y, z))
+            cpe->invalid = true;
     }
 
     void wgpuComputePassEncoderDispatchWorkgroupsIndirect(WGPUComputePassEncoder cpe,

@@ -145,6 +145,34 @@ namespace pwgpu::Wgsl
 #endif
     }
 
+    std::string SpirvToHlsl(const std::vector<uint32_t> &spirv,
+                            const std::string &entryPoint,
+                            const char *stage)
+    {
+#if defined(PE_WEBGPU_WGSL) && PE_WEBGPU_WGSL
+        if (spirv.empty())
+            return {};
+
+        size_t byteCount = 0;
+        const char *hlsl = naga_spirv_to_hlsl(
+            spirv.data(), spirv.size(),
+            entryPoint.empty() ? nullptr : entryPoint.c_str(),
+            stage,
+            &byteCount);
+        if (!hlsl)
+            return {};
+
+        std::string out(hlsl, hlsl + byteCount);
+        naga_string_free(hlsl);
+        return out;
+#else
+        (void)spirv;
+        (void)entryPoint;
+        (void)stage;
+        return {};
+#endif
+    }
+
     void PopulateReflectionMeta(WGPUShaderModuleImpl *module, const CompileResult &result)
     {
 #if defined(PE_WEBGPU_WGSL) && PE_WEBGPU_WGSL

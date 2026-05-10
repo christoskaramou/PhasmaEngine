@@ -20,6 +20,9 @@ namespace pwgpu::Wgsl
                                                       size_t constantCount,
                                                       const WGPUConstantEntry *constants,
                                                       const std::string &entryPoint);
+    PWGPU_API std::string SpirvToHlsl(const std::vector<uint32_t> &spirv,
+                                      const std::string &entryPoint,
+                                      const char *stage);
 
     PWGPU_API void PopulateReflectionMeta(WGPUShaderModuleImpl *module,
                                           const CompileResult &result);

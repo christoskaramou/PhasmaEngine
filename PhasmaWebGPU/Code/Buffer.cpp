@@ -2,6 +2,7 @@
 #include "Device.h"
 #include "Instance.h"
 #include "Utils.h"
+#include "API/Command.h"
 #include "API/Queue.h"
 #include "API/Semaphore.h"
 
@@ -36,6 +37,47 @@ namespace
                       message ? pwgpu::ToStringView(message) : WGPUStringView{nullptr, 0},
                       info.userdata1,
                       info.userdata2);
+    }
+
+    void UploadMappedAtCreationData(WGPUBuffer buffer, std::vector<uint8_t> data)
+    {
+        if (!buffer || data.empty() || !buffer->peBuffer || !buffer->device ||
+            !buffer->device->queue || !buffer->device->queue->peQueue)
+            return;
+
+        WGPUQueueImpl *queue = buffer->device->queue;
+        queue->RecyclePendingSubmits();
+
+        // WebGPU entry points are treated as single-threaded per device here; only the
+        // pending-submit list is shared with completion/recycle work.
+        pe::CommandBuffer *cmd = queue->peQueue->AcquireCommandBuffer();
+        cmd->Begin();
+        cmd->CopyBufferStaged(buffer->peBuffer,
+                              data.data(),
+                              data.size(),
+                              0);
+
+        pe::MemoryBarrierInfo uploadBarrier{};
+        uploadBarrier.srcStageMask = PE_STAGE_TRANSFER;
+        uploadBarrier.srcAccessMask = PE_ACCESS_TRANSFER_WRITE;
+        uploadBarrier.dstStageMask = PE_STAGE_ALL_COMMANDS;
+        uploadBarrier.dstAccessMask = PE_ACCESS_MEMORY_READ | PE_ACCESS_MEMORY_WRITE;
+        cmd->MemoryBarrier(uploadBarrier);
+
+        pe::BufferTrackInfo &trackInfo = buffer->peBuffer->GetTrackInfo();
+        trackInfo.stageMask = PE_STAGE_ALL_COMMANDS;
+        trackInfo.accessMask = PE_ACCESS_MEMORY_READ | PE_ACCESS_MEMORY_WRITE;
+
+        cmd->End();
+        queue->peQueue->Submit(1, &cmd, nullptr, nullptr);
+
+        const uint64_t serial = queue->peQueue->GetSubmissionCount();
+        {
+            std::lock_guard<std::mutex> lock(queue->pendingMutex);
+            queue->pendingSubmits.push_back({cmd, serial});
+        }
+        queue->lastSubmissionSerial.store(serial, std::memory_order_release);
+        buffer->lastUsageSerial.store(serial, std::memory_order_release);
     }
 } // namespace
 
@@ -172,7 +214,7 @@ extern "C"
                     uint8_t *data = nullptr;
                     if (buffer->peBuffer)
                         data = static_cast<uint8_t *>(buffer->peBuffer->Data());
-                    else if (!buffer->shadowData.empty())
+                    if (!data && !buffer->shadowData.empty())
                         data = buffer->shadowData.data();
                     result = data ? data + offset : nullptr;
                     if (result)
@@ -201,7 +243,7 @@ extern "C"
         WGPUStatus status = WGPUStatus_Error;
         {
             std::lock_guard<std::mutex> lock(buffer->stateMutex);
-            if (buffer->mapState != WGPUBufferMapState_Mapped || !buffer->peBuffer)
+            if (buffer->mapState != WGPUBufferMapState_Mapped)
             { /* status stays Error, no device-scope report needed */
             }
             else if ((buffer->mappedMode & WGPUMapMode_Read) == 0)
@@ -215,7 +257,11 @@ extern "C"
             }
             else
             {
-                const uint8_t *src = static_cast<const uint8_t *>(buffer->peBuffer->Data());
+                const uint8_t *src = buffer->peBuffer
+                                         ? static_cast<const uint8_t *>(buffer->peBuffer->Data())
+                                         : nullptr;
+                if (!src && !buffer->shadowData.empty())
+                    src = buffer->shadowData.data();
                 if (src)
                 {
                     std::memcpy(data, src + offset, size);
@@ -238,7 +284,7 @@ extern "C"
         WGPUStatus status = WGPUStatus_Error;
         {
             std::lock_guard<std::mutex> lock(buffer->stateMutex);
-            if (buffer->mapState != WGPUBufferMapState_Mapped || !buffer->peBuffer)
+            if (buffer->mapState != WGPUBufferMapState_Mapped)
             { /* status stays Error, no device-scope report needed */
             }
             else if ((buffer->mappedMode & WGPUMapMode_Write) == 0)
@@ -252,7 +298,11 @@ extern "C"
             }
             else
             {
-                uint8_t *dst = static_cast<uint8_t *>(buffer->peBuffer->Data());
+                uint8_t *dst = buffer->peBuffer
+                                   ? static_cast<uint8_t *>(buffer->peBuffer->Data())
+                                   : nullptr;
+                if (!dst && !buffer->shadowData.empty())
+                    dst = buffer->shadowData.data();
                 if (dst)
                 {
                     std::memcpy(dst + offset, data, size);
@@ -510,6 +560,7 @@ extern "C"
         WGPUBufferMapCallbackInfo pendingCallback{};
         bool hadPending = false;
         bool shouldFlush = false;
+        std::vector<uint8_t> mappedAtCreationUpload;
         {
             std::lock_guard<std::mutex> lock(buffer->stateMutex);
 
@@ -527,7 +578,12 @@ extern "C"
             else if (buffer->mapState == WGPUBufferMapState_Mapped)
             {
                 if ((buffer->mappedMode & WGPUMapMode_Write) && buffer->peBuffer)
-                    shouldFlush = true;
+                {
+                    if (buffer->hostVisible)
+                        shouldFlush = true;
+                    else if (!buffer->shadowData.empty())
+                        mappedAtCreationUpload = std::move(buffer->shadowData);
+                }
                 buffer->mapState = WGPUBufferMapState_Unmapped;
                 buffer->mappedOffset = 0;
                 buffer->mappedSize = 0;
@@ -546,6 +602,9 @@ extern "C"
                 buffer->internalState != BufferInternalState::Destroyed)
                 buffer->internalState = BufferInternalState::Available;
         }
+
+        if (!mappedAtCreationUpload.empty())
+            UploadMappedAtCreationData(buffer, std::move(mappedAtCreationUpload));
 
         if (hadPending)
             FireMapCallback(pendingCallback, WGPUMapAsyncStatus_Aborted, "Buffer unmapped");

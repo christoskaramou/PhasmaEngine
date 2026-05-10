@@ -7,6 +7,11 @@
 #include <string>
 #include <vector>
 
+namespace pe
+{
+    struct DescriptorBindingInfo;
+}
+
 struct WGPUDeviceImpl;
 struct WGPUPipelineLayoutImpl;
 
@@ -29,6 +34,8 @@ namespace pwgpu
             return kind < other.kind;
         }
     };
+
+    void ApplyDx12WebGPURegisterRemap(pe::DescriptorBindingInfo &info);
 
     struct AutoLayoutStageInput
     {

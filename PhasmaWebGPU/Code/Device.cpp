@@ -997,8 +997,13 @@ extern "C"
         if (!peUsage)
             peUsage = PE_BUFFER_USAGE_TRANSFER_SRC;
 
+        const bool dx12MappedStorageNeedsStaging =
+            pe::RHII.GetApi() == PE_GRAPHICS_API_DX12 &&
+            mappedAtCreation &&
+            (usage & WGPUBufferUsage_Storage) != 0;
         const bool needsHostAccess =
-            (usage & (WGPUBufferUsage_MapRead | WGPUBufferUsage_MapWrite)) != 0 || mappedAtCreation;
+            (usage & (WGPUBufferUsage_MapRead | WGPUBufferUsage_MapWrite)) != 0 ||
+            (mappedAtCreation && !dx12MappedStorageNeedsStaging);
 
         if (!needsHostAccess)
             peUsage |= PE_BUFFER_USAGE_TRANSFER_DST;
@@ -1054,6 +1059,10 @@ extern "C"
         {
             std::memset(buf->peBuffer->Data(), 0, static_cast<size_t>(size));
             buf->peBuffer->Flush();
+        }
+        else if (mappedAtCreation && !needsHostAccess && size > 0)
+        {
+            buf->shadowData.assign(static_cast<size_t>(size), 0);
         }
         else if (!needsHostAccess && size > 0 && device->queue && device->queue->peQueue)
         {
@@ -2073,6 +2082,7 @@ extern "C"
                 info.type = PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             }
 
+            pwgpu::ApplyDx12WebGPURegisterRemap(info);
             bindings.push_back(info);
         }
 
@@ -4329,6 +4339,7 @@ extern "C"
         rp->layout = pipeLayout;
         rp->sampleCount = msCount;
         rp->vertexEntryPoint = vertEntry;
+        rp->primitiveTopology = primTopology;
         if (hasFragment)
             rp->fragmentEntryPoint = fragEntry;
 

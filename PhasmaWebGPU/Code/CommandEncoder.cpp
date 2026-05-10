@@ -13,6 +13,7 @@
 #include "Utils.h"
 #include "API/Image.h"
 #include "API/Buffer.h"
+#include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 
@@ -543,6 +544,10 @@ extern "C"
         };
 
         size_t colorCount = descriptor->colorAttachmentCount;
+        const bool dx12Backend =
+            enc->device && enc->device->rhi
+                ? enc->device->rhi->GetApi() == PE_GRAPHICS_API_DX12
+                : pe::RHII.GetApi() == PE_GRAPHICS_API_DX12;
         uint32_t maxColorAttachments = enc->device ? enc->device->limits.maxColorAttachments : 8;
         if (colorCount > maxColorAttachments)
         {
@@ -660,6 +665,9 @@ extern "C"
                 if (ca.depthSlice >= mipDepth)
                     return makeInvalidPass(
                         "beginRenderPass: depthSlice must be < depth of attachment mip level");
+                if (dx12Backend)
+                    return makeInvalidPass(
+                        "beginRenderPass: DX12 backend does not support 3d color attachment depthSlice yet");
             }
             else
             {
@@ -993,11 +1001,14 @@ extern "C"
             // For 3D views, create a temporary 2D slice view targeting the specific depthSlice.
             // Vulkan dynamic rendering requires a 2D view; a 3D VkImageView is not valid as a
             // color attachment. The image must have VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT.
-            vk::ImageView attachmentImageView = pe::GetVulkanImageView(view->view);
+            vk::ImageView attachmentImageView{};
+            if (!dx12Backend)
+                attachmentImageView = pe::GetVulkanImageView(view->view);
             pe::ImageView *sliceView = nullptr;
             uint32_t barrierBaseLayer = view->baseArrayLayer;
 
-            if (view->dimension == WGPUTextureViewDimension_3D &&
+            if (!dx12Backend &&
+                view->dimension == WGPUTextureViewDimension_3D &&
                 ca.depthSlice != WGPU_DEPTH_SLICE_UNDEFINED)
             {
                 vk::ImageViewCreateInfo sliceIvci{};
@@ -1061,7 +1072,9 @@ extern "C"
             }
 
             WGPURenderPassAttachmentInfo att{};
-            att.imageView = PeToBackendHandle(static_cast<VkImageView>(attachmentImageView));
+            att.textureView = view;
+            if (!dx12Backend)
+                att.imageView = PeToBackendHandle(static_cast<VkImageView>(attachmentImageView));
             att.imageLayout = PE_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             att.loadOp = (ca.loadOp == WGPULoadOp_Clear) ? PE_LOAD_OP_CLEAR : PE_LOAD_OP_LOAD;
             att.storeOp = (ca.storeOp == WGPUStoreOp_Store)
@@ -1094,8 +1107,10 @@ extern "C"
                 rpe->retainedViews.push_back(rt);
 
                 att.resolveAverage = pwgpu::IsBlendableFormat(view->format);
-                att.resolveImageView =
-                    PeToBackendHandle(static_cast<VkImageView>(pe::GetVulkanImageView(rt->view)));
+                att.resolveTextureView = rt;
+                if (!dx12Backend)
+                    att.resolveImageView =
+                        PeToBackendHandle(static_cast<VkImageView>(pe::GetVulkanImageView(rt->view)));
                 att.resolveImageLayout = PE_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             }
 
@@ -1176,8 +1191,10 @@ extern "C"
             if (hasDepth)
             {
                 hasDepthAttachment = true;
-                depthAtt.imageView =
-                    PeToBackendHandle(static_cast<VkImageView>(pe::GetVulkanImageView(dsView->view)));
+                depthAtt.textureView = dsView;
+                if (!dx12Backend)
+                    depthAtt.imageView =
+                        PeToBackendHandle(static_cast<VkImageView>(pe::GetVulkanImageView(dsView->view)));
                 depthAtt.imageLayout = dsBarrierLayout;
 
                 if (!dsa->depthReadOnly)
@@ -1203,8 +1220,10 @@ extern "C"
             if (hasStencil)
             {
                 hasStencilAttachment = true;
-                stencilAtt.imageView =
-                    PeToBackendHandle(static_cast<VkImageView>(pe::GetVulkanImageView(dsView->view)));
+                stencilAtt.textureView = dsView;
+                if (!dx12Backend)
+                    stencilAtt.imageView =
+                        PeToBackendHandle(static_cast<VkImageView>(pe::GetVulkanImageView(dsView->view)));
                 stencilAtt.imageLayout = dsBarrierLayout;
 
                 if (!dsa->stencilReadOnly)

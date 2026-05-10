@@ -29,6 +29,7 @@ namespace pe
     private:
         friend struct VulkanSurfaceImpl;
 #if defined(PE_WIN32)
+        friend class Dx12SwapchainImpl;
         friend struct Dx12SurfaceImpl;
 #endif
 

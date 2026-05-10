@@ -4,8 +4,8 @@ use std::ptr;
 use std::slice;
 
 use crate::{
-    bake_wgsl_with_constants, compile_with_meta, install_panic_suppression, BindingRef,
-    EntryPointMeta, OverrideInfo, WgslCompileResult, WgslMessage,
+    bake_wgsl_with_constants, compile_with_meta, install_panic_suppression, spirv_to_hlsl,
+    BindingRef, EntryPointMeta, OverrideInfo, WgslCompileResult, WgslMessage,
 };
 
 #[repr(C)]
@@ -556,6 +556,55 @@ pub extern "C" fn naga_bake_free(spirv: *const u32) {
     if !spirv.is_null() {
         unsafe {
             free(spirv.cast_mut().cast::<c_void>());
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn naga_spirv_to_hlsl(
+    words: *const u32,
+    word_count: usize,
+    entry_point: *const c_char,
+    stage: *const c_char,
+    out_len: *mut usize,
+) -> *const c_char {
+    install_panic_suppression();
+    if !out_len.is_null() {
+        unsafe {
+            *out_len = 0;
+        }
+    }
+    if words.is_null() || word_count == 0 {
+        return ptr::null();
+    }
+
+    let words_slice = unsafe { slice::from_raw_parts(words, word_count) };
+    let entry_point = unsafe { cstr_to_string(entry_point) };
+    let stage = unsafe { cstr_to_string(stage) };
+    let Some(hlsl) = spirv_to_hlsl(words_slice, entry_point.as_deref(), stage.as_deref()) else {
+        return ptr::null();
+    };
+
+    let bytes = hlsl.as_bytes();
+    let dst = unsafe { malloc(bytes.len() + 1).cast::<c_char>() };
+    if dst.is_null() {
+        return ptr::null();
+    }
+    unsafe {
+        ptr::copy_nonoverlapping(bytes.as_ptr(), dst.cast::<u8>(), bytes.len());
+        *dst.add(bytes.len()) = 0;
+        if !out_len.is_null() {
+            *out_len = bytes.len();
+        }
+    }
+    dst
+}
+
+#[no_mangle]
+pub extern "C" fn naga_string_free(text: *const c_char) {
+    if !text.is_null() {
+        unsafe {
+            free(text.cast_mut().cast::<c_void>());
         }
     }
 }

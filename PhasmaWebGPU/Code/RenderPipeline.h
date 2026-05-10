@@ -38,6 +38,7 @@ struct WGPURenderPipelineImpl
     WGPUTextureFormat depthStencilFormat = WGPUTextureFormat_Undefined;
     std::string vertexEntryPoint;
     std::string fragmentEntryPoint;
+    WGPUPrimitiveTopology primitiveTopology = WGPUPrimitiveTopology_TriangleList;
 
     std::vector<VertexBufferLayoutInfo> vertexBufferLayouts;
 };
