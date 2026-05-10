@@ -4,6 +4,7 @@
 #include "Base/EventSystem.h"
 #include "API/GraphicsApiSelection.h"
 #include "API/RHI.h"
+#include "Common/RunOptions.h"
 #include <SDL.h>
 #include <cstring>
 #include <cmath>
@@ -110,6 +111,13 @@ int main(int argc, char *argv[])
     setvbuf(stdout, nullptr, _IONBF, 0);
     printf("=== PhasmaWebGPU Render Test ===\n\n");
 
+    const pwgpu::test::RunOptions runOptions = pwgpu::test::ParseRunOptions(argc, argv);
+    if (!runOptions.Succeeded())
+    {
+        fprintf(stderr, "%s\n", runOptions.error.c_str());
+        return 1;
+    }
+
     const pe::GraphicsApiSelection apiSelection = pe::ResolveGraphicsApi(argc, argv);
     if (!apiSelection.Succeeded())
     {
@@ -124,12 +132,24 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    std::string displayError;
+    if (!pwgpu::test::ValidateDisplayIndex(runOptions.displayIndex, displayError))
+    {
+        fprintf(stderr, "%s\n", displayError.c_str());
+        SDL_Quit();
+        return 1;
+    }
+
     const int kWidth = 800, kHeight = 600;
     uint32_t windowFlags = SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE;
     if (api == PE_GRAPHICS_API_DX12)
         windowFlags &= ~SDL_WINDOW_VULKAN;
-    SDL_Window *window = SDL_CreateWindow("WebGPU Render Test", SDL_WINDOWPOS_CENTERED,
-                                          SDL_WINDOWPOS_CENTERED, kWidth, kHeight, windowFlags);
+    SDL_Window *window = SDL_CreateWindow("WebGPU Render Test",
+                                          SDL_WINDOWPOS_CENTERED_DISPLAY(runOptions.displayIndex),
+                                          SDL_WINDOWPOS_CENTERED_DISPLAY(runOptions.displayIndex),
+                                          kWidth,
+                                          kHeight,
+                                          windowFlags);
     if (!window)
     {
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
@@ -320,6 +340,7 @@ int main(int argc, char *argv[])
     Uint64 startTicks = SDL_GetPerformanceCounter();
     Uint64 freq = SDL_GetPerformanceFrequency();
     bool running = true;
+    uint64_t frameCount = 0;
 
     while (running)
     {
@@ -400,6 +421,12 @@ int main(int argc, char *argv[])
         wgpuCommandEncoderRelease(encoder);
         wgpuTextureViewRelease(swapView);
         wgpuTextureRelease(surfTex.texture);
+
+        ++frameCount;
+        if (runOptions.exitAfterFrames > 0 && frameCount >= runOptions.exitAfterFrames)
+            running = false;
+        if (runOptions.exitAfterSeconds > 0.0 && elapsed >= runOptions.exitAfterSeconds)
+            running = false;
     }
 
     // Cleanup

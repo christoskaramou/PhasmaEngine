@@ -1,5 +1,6 @@
 #include "SampleApp.h"
 
+#include "RunOptions.h"
 #include "SampleUtils.h"
 
 #include "API/GraphicsApiSelection.h"
@@ -17,15 +18,6 @@ namespace
         T handle = nullptr;
         std::string message;
     };
-
-    const char *GetOptionValue(const char *argument, const char *prefix)
-    {
-        if (!argument || !prefix)
-            return nullptr;
-
-        size_t prefixLength = strlen(prefix);
-        return strncmp(argument, prefix, prefixLength) == 0 ? argument + prefixLength : nullptr;
-    }
 
     RequestResult<WGPUAdapter> RequestAdapter(WGPUInstance instance)
     {
@@ -185,6 +177,13 @@ namespace pwgpu::test
         m_ctx.exeDir = GetExecutableDir(argc > 0 ? argv[0] : nullptr);
         m_ctx.shaderDir = GetShaderDir(m_ctx.exeDir, m_desc.sampleName);
 
+        const RunOptions runOptions = ParseRunOptions(argc, argv);
+        if (!runOptions.Succeeded())
+        {
+            fprintf(stderr, "%s\n", runOptions.error.c_str());
+            return false;
+        }
+
         const pe::GraphicsApiSelection apiSelection = pe::ResolveGraphicsApi(argc, argv);
         if (!apiSelection.Succeeded())
         {
@@ -192,19 +191,20 @@ namespace pwgpu::test
             return false;
         }
         PeGraphicsApi api = apiSelection.api;
-
-        for (int i = 1; i < argc; i++)
-        {
-            if (const char *value = GetOptionValue(argv[i], "--exit-after-frames="))
-                m_exitAfterFrames = static_cast<uint64_t>(strtoull(value, nullptr, 10));
-
-            if (const char *value = GetOptionValue(argv[i], "--exit-after-seconds="))
-                m_exitAfterSeconds = strtod(value, nullptr);
-        }
+        m_exitAfterFrames = runOptions.exitAfterFrames;
+        m_exitAfterSeconds = runOptions.exitAfterSeconds;
 
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
         {
             fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
+            return false;
+        }
+
+        std::string displayError;
+        if (!ValidateDisplayIndex(runOptions.displayIndex, displayError))
+        {
+            fprintf(stderr, "%s\n", displayError.c_str());
+            ShutdownCommon();
             return false;
         }
 
@@ -213,8 +213,8 @@ namespace pwgpu::test
             windowFlags &= ~SDL_WINDOW_VULKAN;
 
         m_ctx.window = SDL_CreateWindow(m_desc.windowTitle,
-                                        SDL_WINDOWPOS_CENTERED,
-                                        SDL_WINDOWPOS_CENTERED,
+                                        SDL_WINDOWPOS_CENTERED_DISPLAY(runOptions.displayIndex),
+                                        SDL_WINDOWPOS_CENTERED_DISPLAY(runOptions.displayIndex),
                                         static_cast<int>(m_desc.initialWidth),
                                         static_cast<int>(m_desc.initialHeight),
                                         windowFlags);

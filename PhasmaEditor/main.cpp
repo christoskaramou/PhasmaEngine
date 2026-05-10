@@ -84,12 +84,10 @@ namespace
             PE_ERROR("LoadLibraryA failed: %lu", ::GetLastError());
             return m;
         }
-        m.tick =
-            reinterpret_cast<TickFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "TickEditorModule"));
-        m.renderReload =
-            reinterpret_cast<RenderReloadFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "RenderReloadFrameEditorModule"));
-        m.destroy =
-            reinterpret_cast<DestroyFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "DestroyEditorModule"));
+        m.tick = reinterpret_cast<TickFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "TickEditorModule"));
+        m.renderReload = reinterpret_cast<RenderReloadFunc>(
+            ::GetProcAddress(static_cast<HMODULE>(m.lib), "RenderReloadFrameEditorModule"));
+        m.destroy = reinterpret_cast<DestroyFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "DestroyEditorModule"));
         m.getImguiCtx =
             reinterpret_cast<GetImGuiCtxFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "GetImGuiContextEditorModule"));
         m.initWithCtx =
@@ -158,7 +156,7 @@ int main(int argc, char *argv[])
                 PeGraphicsApiName(api),
                 pe::GraphicsApiSelectionSourceName(apiSelection.source));
 
-        // SDL and graphics device live here — they survive module reloads.
+        // SDL and graphics device live here; they survive module reloads.
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
         {
             PE_ERROR("[SDL] %s", SDL_GetError());
@@ -194,7 +192,12 @@ int main(int argc, char *argv[])
         if (api == PE_GRAPHICS_API_VULKAN)
             windowFlags |= SDL_WINDOW_VULKAN;
         PE_INFO("Creating window on display %d/%d at (%d, %d) size %dx%d",
-                displayIndex, displayCount, displayBounds.x, displayBounds.y, displayBounds.w, displayBounds.h);
+                displayIndex,
+                displayCount,
+                displayBounds.x,
+                displayBounds.y,
+                displayBounds.w,
+                displayBounds.h);
         SDL_Window *sdlWindow = SDL_CreateWindow("PhasmaEditor",
                                                  SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex),
                                                  SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex),
@@ -256,11 +259,11 @@ int main(int argc, char *argv[])
     }
     catch (const std::exception &e)
     {
-        pe::Log::Error(std::string("Unhandled exception in launcher: ") + e.what());
+        pe::Log::Error(std::string("Unhandled exception in editor host: ") + e.what());
     }
     catch (...)
     {
-        pe::Log::Error("Unhandled non-standard exception in launcher");
+        pe::Log::Error("Unhandled non-standard exception in editor host");
     }
     return 1;
 }

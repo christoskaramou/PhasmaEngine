@@ -7,6 +7,7 @@
 #include "API/RHI.h"
 #include "RenderPass.h"
 #include "Texture.h"
+#include "Common/RunOptions.h"
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12ImageViewImpl.h"
 #endif
@@ -102,6 +103,13 @@ int main(int argc, char *argv[])
     setvbuf(stdout, nullptr, _IONBF, 0);
     printf("=== PhasmaWebGPU Smoke Test ===\n\n");
 
+    const pwgpu::test::RunOptions runOptions = pwgpu::test::ParseRunOptions(argc, argv);
+    if (!runOptions.Succeeded())
+    {
+        fprintf(stderr, "%s\n", runOptions.error.c_str());
+        return 1;
+    }
+
     const pe::GraphicsApiSelection apiSelection = pe::ResolveGraphicsApi(argc, argv);
     if (!apiSelection.Succeeded())
     {
@@ -116,10 +124,23 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    std::string displayError;
+    if (!pwgpu::test::ValidateDisplayIndex(runOptions.displayIndex, displayError))
+    {
+        fprintf(stderr, "%s\n", displayError.c_str());
+        SDL_Quit();
+        return 1;
+    }
+
     uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_VULKAN;
     if (api == PE_GRAPHICS_API_DX12)
         windowFlags &= ~SDL_WINDOW_VULKAN;
-    SDL_Window *window = SDL_CreateWindow("WebGPU Smoke Test", 0, 0, 64, 64, windowFlags);
+    SDL_Window *window = SDL_CreateWindow("WebGPU Smoke Test",
+                                          SDL_WINDOWPOS_CENTERED_DISPLAY(runOptions.displayIndex),
+                                          SDL_WINDOWPOS_CENTERED_DISPLAY(runOptions.displayIndex),
+                                          64,
+                                          64,
+                                          windowFlags);
     if (!window)
     {
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());

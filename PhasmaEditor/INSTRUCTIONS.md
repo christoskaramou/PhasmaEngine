@@ -1,6 +1,6 @@
 # PhasmaEditor — Instructions
 
-Supplements the root `INSTRUCTIONS.md`. PhasmaEditor is the desktop editor executable — links PhasmaCore, Assimp, MeshOptimizer, Jolt, ImGui, Lua. All editor code lives in `PhasmaEditorModule.dll` (hot-reloaded); `PhasmaEditor.exe` is a thin launcher.
+Supplements the root `INSTRUCTIONS.md`. PhasmaEditor is the desktop editor executable — links PhasmaCore, Assimp, MeshOptimizer, Jolt, ImGui, Lua. All editor code lives in `PhasmaEditorModule.dll` (hot-reloaded); `PhasmaEditor.exe` is the editor host, while `PhasmaLauncher` is the standalone target/backend/sample selector.
 
 For render-pass / scene / model-loading code patterns, read the actual files in `Code/RenderPasses/`, `Code/Scene/`, `Code/Systems/`. The patterns don't rot when you read source directly.
 

@@ -826,12 +826,28 @@ extern "C"
         const uint32_t dstMipD = is3D ? std::max(1u, destination->texture->size.depthOrArrayLayers >> destination->mipLevel)
                                       : destination->texture->size.depthOrArrayLayers;
         const bool dstFullCoverage =
-            destination->origin.x == 0 && destination->origin.y == 0 && destination->origin.z == 0 &&
+            destination->origin.x == 0 && destination->origin.y == 0 &&
             writeSize->width == dstMipW && writeSize->height == dstMipH &&
-            writeSize->depthOrArrayLayers == dstMipD;
+            (is3D
+                 ? (destination->origin.z == 0 && writeSize->depthOrArrayLayers == dstMipD)
+                 : (destination->origin.z + writeSize->depthOrArrayLayers <= dstMipD));
         const uint32_t dstBaseLayer = is3D ? 0u : destination->origin.z;
         const uint32_t dstLayerCount = is3D ? 1u : writeSize->depthOrArrayLayers;
         auto dstAspects = pwgpu::AspectsForView(fmt, destination->aspect);
+        const bool useDx12Upload = pe::RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        if (useDx12Upload)
+        {
+            if (pwgpu::HasDepthAspect(fmt) || pwgpu::HasStencilAspect(fmt))
+            {
+                fail("DX12 writeTexture depth/stencil uploads are not implemented");
+                return;
+            }
+            if (!dstFullCoverage)
+            {
+                fail("DX12 writeTexture partial subresource uploads are not implemented");
+                return;
+            }
+        }
 
         pe::CommandBuffer *cmd = queue->peQueue->AcquireCommandBuffer();
         cmd->Begin();
@@ -888,8 +904,7 @@ extern "C"
         const uint64_t tightRowsPerImage = heightInBlocks;
         const uint64_t tightBytesPerImage = tightBytesPerRow * tightRowsPerImage;
         const uint64_t stagingBytes = tightBytesPerImage * copyDepth;
-        pe::StagingAllocation alloc = pe::RHII.GetStagingManager()->Allocate(stagingBytes);
-        if (stagingBytes > 0 && data)
+        auto copyTightRows = [&](uint8_t *dstBase)
         {
             const bool bprProvided = (dataLayout->bytesPerRow != WGPU_COPY_STRIDE_UNDEFINED);
             const bool rpiProvided = (dataLayout->rowsPerImage != WGPU_COPY_STRIDE_UNDEFINED);
@@ -898,7 +913,6 @@ extern "C"
             const uint64_t srcBytesPerImage = srcBytesPerRow * srcRowsPerImage;
             const uint8_t *srcBase =
                 static_cast<const uint8_t *>(data) + static_cast<size_t>(dataLayout->offset);
-            uint8_t *dstBase = static_cast<uint8_t *>(alloc.data);
             for (uint32_t z = 0; z < copyDepth; ++z)
             {
                 for (uint32_t y = 0; y < heightInBlocks; ++y)
@@ -908,7 +922,47 @@ extern "C"
                     std::memcpy(dstRow, srcRow, static_cast<size_t>(tightBytesPerRow));
                 }
             }
+        };
+
+        if (useDx12Upload)
+        {
+            std::vector<uint8_t> tightData(static_cast<size_t>(stagingBytes));
+            if (stagingBytes > 0 && data)
+                copyTightRows(tightData.data());
+
+            if (stagingBytes > 0)
+            {
+                cmd->CopyDataToImageStaged(image,
+                                           tightData.data(),
+                                           tightData.size(),
+                                           dstBaseLayer,
+                                           dstLayerCount,
+                                           destination->mipLevel);
+            }
+
+            pwgpu::MarkRangeInitialized(destination->texture,
+                                        destination->mipLevel,
+                                        1,
+                                        dstBaseLayer,
+                                        dstLayerCount,
+                                        dstAspects);
+
+            cmd->End();
+            queue->peQueue->Submit(1, &cmd, nullptr, nullptr);
+
+            const uint64_t serial = queue->peQueue->GetSubmissionCount();
+            {
+                std::lock_guard<std::mutex> lock(queue->pendingMutex);
+                queue->pendingSubmits.push_back({cmd, serial});
+            }
+            queue->lastSubmissionSerial.store(serial, std::memory_order_release);
+            destination->texture->lastUsageSerial.store(serial, std::memory_order_release);
+            return;
         }
+
+        pe::StagingAllocation alloc = pe::RHII.GetStagingManager()->Allocate(stagingBytes);
+        if (stagingBytes > 0 && data)
+            copyTightRows(static_cast<uint8_t *>(alloc.data));
         if (stagingBytes > 0)
             alloc.buffer->Flush(stagingBytes, 0);
 

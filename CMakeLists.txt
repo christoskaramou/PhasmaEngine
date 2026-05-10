@@ -243,16 +243,17 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     )
 endif()
 
-# PhasmaEditor (thin launcher EXE)
+# PhasmaEditor (editor host EXE)
 add_executable(PhasmaEditor "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/main.cpp")
 
 target_precompile_headers(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
 
-target_include_directories(PhasmaEditor PRIVATE
+set(PHASMA_EDITOR_HOST_INCLUDES
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor"
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code"
 )
 
+target_include_directories(PhasmaEditor PRIVATE ${PHASMA_EDITOR_HOST_INCLUDES})
 target_link_libraries(PhasmaEditor PRIVATE PhasmaCore)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(PhasmaEditor PRIVATE dl)
@@ -263,6 +264,24 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 add_dependencies(PhasmaEditor PhasmaEditorModule)
+
+# PhasmaLauncher (pre-launch target/sample/backend selector)
+add_executable(PhasmaLauncher "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Launcher.cpp")
+
+target_precompile_headers(PhasmaLauncher PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
+target_include_directories(PhasmaLauncher PRIVATE ${PHASMA_EDITOR_HOST_INCLUDES})
+target_link_libraries(PhasmaLauncher PRIVATE PhasmaCore)
+if(WIN32)
+    target_link_libraries(PhasmaLauncher PRIVATE user32.lib comdlg32.lib)
+endif()
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set_target_properties(PhasmaLauncher PROPERTIES
+        BUILD_RPATH "$ORIGIN"
+        INSTALL_RPATH "$ORIGIN"
+    )
+endif()
+
+add_dependencies(PhasmaLauncher PhasmaEditor)
 
 # Copy assets to build directory (re-runs when assets change)
 set(ASSETS_COPY_STAMP "${CMAKE_CURRENT_BINARY_DIR}/AssetsCopy.stamp")
@@ -276,6 +295,7 @@ add_custom_command(
 )
 add_custom_target(PhasmaEditorAssets ALL DEPENDS "${ASSETS_COPY_STAMP}")
 add_dependencies(PhasmaEditor PhasmaEditorAssets)
+add_dependencies(PhasmaLauncher PhasmaEditorAssets)
 
 # Copy DLLs for Windows
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
