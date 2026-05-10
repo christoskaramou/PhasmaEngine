@@ -7,10 +7,7 @@
 #include "Base/Log.h"
 
 #include <cmath>
-#include <cstdio>
 #include <cstring>
-#include <functional>
-#include <vector>
 
 namespace
 {

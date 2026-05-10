@@ -2,8 +2,6 @@
 // Utah teapot geometry used by the upstream a-buffer sample.
 #pragma once
 
-#include <cstdint>
-
 namespace pwgpu::test::teapot
 {
     inline constexpr uint32_t kVertexCount = 792;

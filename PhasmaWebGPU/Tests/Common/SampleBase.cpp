@@ -2,8 +2,6 @@
 
 #include "SampleUtils.h"
 
-#include <cstdio>
-
 namespace pwgpu::test
 {
     bool SampleBase::Init(SampleContext &)

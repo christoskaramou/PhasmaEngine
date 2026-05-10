@@ -1,7 +1,6 @@
 #pragma once
 
 #include <webgpu/webgpu.h>
-#include <future>
 #include "ErrorScope.h"
 #include "WGPULimits.h"
 #include "API/Vulkan/VulkanHeaders.h"

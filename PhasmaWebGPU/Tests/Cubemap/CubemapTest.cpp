@@ -7,9 +7,7 @@
 
 #include "Base/Log.h"
 
-#include <array>
 #include <cmath>
-#include <cstdio>
 
 namespace
 {

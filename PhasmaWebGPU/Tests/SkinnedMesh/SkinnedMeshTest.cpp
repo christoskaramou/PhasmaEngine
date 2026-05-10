@@ -11,14 +11,8 @@
 #define _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING
 #include "rapidjson/document.h"
 
-#include <array>
 #include <cmath>
-#include <cstdint>
-#include <cstdio>
 #include <cstring>
-#include <string>
-#include <unordered_map>
-#include <vector>
 
 namespace
 {

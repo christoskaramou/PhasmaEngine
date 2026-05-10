@@ -4,7 +4,6 @@
 #include "Base/EventSystem.h"
 #include "API/RHI.h"
 #include <SDL.h>
-#include <cstdio>
 #include <cstring>
 #include <cmath>
 

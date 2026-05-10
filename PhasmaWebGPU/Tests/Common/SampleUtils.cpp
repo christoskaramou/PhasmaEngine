@@ -1,8 +1,6 @@
 #include "SampleUtils.h"
 
-#include <cstdio>
 #include <cstring>
-#include <vector>
 
 namespace pwgpu::test
 {

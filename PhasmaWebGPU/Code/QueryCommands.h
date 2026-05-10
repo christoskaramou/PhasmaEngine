@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstdint>
-#include <string>
 #include <webgpu/webgpu.h>
 #include "API/RHITypes.h"
 

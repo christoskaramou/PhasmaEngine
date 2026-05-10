@@ -11,12 +11,8 @@
 #include "../Common/SampleUtils.h"
 #include "../SampleShaderUtils.h"
 
-#include <algorithm>
-#include <array>
 #include <cmath>
-#include <cstdio>
 #include <cstring>
-#include <string>
 
 namespace
 {

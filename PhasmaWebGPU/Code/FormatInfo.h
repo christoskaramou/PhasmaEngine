@@ -2,9 +2,7 @@
 
 #include <webgpu/webgpu.h>
 
-#include <algorithm>
 #include <cstddef>
-#include <cstdint>
 
 namespace pwgpu
 {

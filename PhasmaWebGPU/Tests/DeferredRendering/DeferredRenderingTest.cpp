@@ -4,12 +4,7 @@
 #include "../SampleShaderUtils.h"
 
 #include <cmath>
-#include <cstdint>
 #include <cstring>
-#include <cstdio>
-#include <random>
-#include <string>
-#include <vector>
 
 namespace
 {

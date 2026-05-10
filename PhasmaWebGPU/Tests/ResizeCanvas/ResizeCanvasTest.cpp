@@ -4,7 +4,6 @@
 
 #include "Base/Log.h"
 
-#include <cstdio>
 #include <cmath>
 
 namespace

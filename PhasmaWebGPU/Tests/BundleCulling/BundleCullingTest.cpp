@@ -25,15 +25,8 @@
 
 #include "Base/Log.h"
 
-#include <algorithm>
-#include <array>
 #include <cmath>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
-#include <string>
-#include <vector>
 
 namespace
 {

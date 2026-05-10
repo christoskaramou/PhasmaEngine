@@ -4,9 +4,6 @@
 
 #include <SDL.h>
 #include <cstddef>
-#include <cstdint>
-#include <utility>
-#include <vector>
 #include <webgpu/webgpu.h>
 
 namespace pwgpu::test

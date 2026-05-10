@@ -1,11 +1,6 @@
 #pragma once
 
 #include <webgpu/webgpu.h>
-#include <cstdint>
-#include <map>
-#include <set>
-#include <string>
-#include <vector>
 
 namespace pe
 {

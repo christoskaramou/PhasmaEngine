@@ -1,6 +1,5 @@
 #pragma once
 
-#include <string>
 #include <webgpu/webgpu.h>
 
 namespace pe

@@ -14,12 +14,6 @@
 #endif
 
 #include <cstring>
-#include <cstdio>
-#include <filesystem>
-#include <fstream>
-#include <string>
-#include <string_view>
-#include <vector>
 #include <webgpu/webgpu.h>
 
 namespace pwgpu::test

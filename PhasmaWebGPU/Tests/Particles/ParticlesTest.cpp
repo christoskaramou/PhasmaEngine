@@ -7,12 +7,8 @@
 #include "../Common/SampleUtils.h"
 #include "../SampleShaderUtils.h"
 
-#include <algorithm>
 #include <cmath>
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
-#include <vector>
 
 namespace
 {

@@ -1,8 +1,6 @@
 #pragma once
 
 #include <webgpu/webgpu.h>
-#include <string>
-#include <unordered_map>
 
 struct WGPUTextureImpl;
 struct WGPUTextureViewImpl;

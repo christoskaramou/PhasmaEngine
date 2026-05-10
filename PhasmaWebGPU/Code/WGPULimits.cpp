@@ -1,6 +1,5 @@
 #include "WGPULimits.h"
 #include "API/RHI.h"
-#include <algorithm>
 
 namespace pwgpu
 {

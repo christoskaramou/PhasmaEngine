@@ -22,10 +22,7 @@
 #include "../ABuffer/TeapotMesh.h"
 
 #include <cmath>
-#include <cstdint>
-#include <cstdio>
 #include <cstring>
-#include <vector>
 
 namespace
 {

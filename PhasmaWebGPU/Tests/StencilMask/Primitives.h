@@ -1,8 +1,6 @@
 #pragma once
 
 #include <cmath>
-#include <cstdint>
-#include <vector>
 
 namespace pwgpu::test::primitives
 {

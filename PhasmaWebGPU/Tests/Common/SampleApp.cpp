@@ -6,10 +6,7 @@
 #include "Base/EventSystem.h"
 #include "Base/Log.h"
 
-#include <cstdlib>
 #include <cstring>
-#include <cstdio>
-#include <string>
 
 namespace
 {

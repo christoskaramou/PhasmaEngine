@@ -1,7 +1,6 @@
 #pragma once
 
 #include <webgpu/webgpu.h>
-#include <functional>
 #include "API/Command.h"
 #include "RenderPipeline.h"
 #include "UsageTracker.h"

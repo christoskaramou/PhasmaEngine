@@ -5,9 +5,7 @@
 
 #include "Base/Log.h"
 
-#include <array>
 #include <cmath>
-#include <cstdio>
 #include <cstring>
 
 namespace

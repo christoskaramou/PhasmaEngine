@@ -14,18 +14,9 @@
 #include "dxc/dxcapi.h"
 #endif
 
-#include <algorithm>
-#include <array>
 #include <cstring>
 #include <exception>
-#include <filesystem>
-#include <fstream>
 #include <iomanip>
-#include <mutex>
-#include <sstream>
-#include <string_view>
-#include <unordered_map>
-#include <utility>
 
 namespace pwgpu
 {

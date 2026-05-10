@@ -4,8 +4,6 @@
 
 #include "Base/Log.h"
 
-#include <cstdio>
-
 namespace
 {
     constexpr uint32_t kWidth = 1280;

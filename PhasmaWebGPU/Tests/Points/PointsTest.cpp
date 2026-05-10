@@ -6,7 +6,6 @@
 #include "Base/Log.h"
 
 #include <cmath>
-#include <cstdio>
 #include <cstring>
 
 namespace

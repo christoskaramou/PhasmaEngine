@@ -9,10 +9,6 @@
 
 #include "spirv_cross/spirv_cross.hpp"
 
-#include <map>
-#include <set>
-#include <vector>
-
 namespace pwgpu
 {
     namespace

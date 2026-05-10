@@ -1,8 +1,6 @@
 #pragma once
 
 #include <cstddef>
-#include <cstdint>
-#include <string>
 #include <webgpu/webgpu.h>
 
 namespace pwgpu::test

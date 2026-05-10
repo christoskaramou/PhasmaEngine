@@ -10,9 +10,7 @@
 #include "API/DX12/Dx12ImageViewImpl.h"
 #endif
 #include <SDL.h>
-#include <cstdio>
 #include <cstring>
-#include <cstdlib>
 
 // clang-format off
 static const uint32_t kDoubleShaderSpirv[] = {
@@ -724,9 +722,237 @@ int main(int argc, char *argv[])
     if (tex3d)
         wgpuTextureRelease(tex3d);
 
-    // 14. Multi-kind texture view descriptors
+    // 14. Sampled/storage-only texture zero init
 
-    printf("\n--- 14. Multi-kind Texture View ---\n");
+    printf("\n--- 14. Sampled/Storage Texture Zero Init ---\n");
+
+    WGPUTextureDescriptor sampledZeroDesc{};
+    sampledZeroDesc.label = {"zero_init_sampled", WGPU_STRLEN};
+    sampledZeroDesc.usage = WGPUTextureUsage_TextureBinding;
+    sampledZeroDesc.dimension = WGPUTextureDimension_2D;
+    sampledZeroDesc.size = {2, 2, 1};
+    sampledZeroDesc.format = WGPUTextureFormat_RGBA8Unorm;
+    sampledZeroDesc.mipLevelCount = 1;
+    sampledZeroDesc.sampleCount = 1;
+    WGPUTexture sampledZeroTex = wgpuDeviceCreateTexture(device, &sampledZeroDesc);
+    CHECK(sampledZeroTex != nullptr, "sampled-only zero-init texture created");
+
+    WGPUTextureViewDescriptor sampledZeroViewDesc{};
+    sampledZeroViewDesc.label = {"zero_init_sampled_view", WGPU_STRLEN};
+    sampledZeroViewDesc.format = WGPUTextureFormat_RGBA8Unorm;
+    sampledZeroViewDesc.dimension = WGPUTextureViewDimension_2D;
+    sampledZeroViewDesc.aspect = WGPUTextureAspect_All;
+    sampledZeroViewDesc.baseMipLevel = 0;
+    sampledZeroViewDesc.mipLevelCount = 1;
+    sampledZeroViewDesc.baseArrayLayer = 0;
+    sampledZeroViewDesc.arrayLayerCount = 1;
+    sampledZeroViewDesc.usage = WGPUTextureUsage_TextureBinding;
+    WGPUTextureView sampledZeroView =
+        sampledZeroTex ? wgpuTextureCreateView(sampledZeroTex, &sampledZeroViewDesc) : nullptr;
+    CHECK(sampledZeroView != nullptr, "sampled-only zero-init view created");
+
+    WGPUTextureDescriptor storageZeroDesc{};
+    storageZeroDesc.label = {"zero_init_storage", WGPU_STRLEN};
+    storageZeroDesc.usage = WGPUTextureUsage_StorageBinding;
+    storageZeroDesc.dimension = WGPUTextureDimension_2D;
+    storageZeroDesc.size = {2, 2, 1};
+    storageZeroDesc.format = WGPUTextureFormat_R32Uint;
+    storageZeroDesc.mipLevelCount = 1;
+    storageZeroDesc.sampleCount = 1;
+    WGPUTexture storageZeroTex = wgpuDeviceCreateTexture(device, &storageZeroDesc);
+    CHECK(storageZeroTex != nullptr, "storage-only zero-init texture created");
+
+    WGPUTextureViewDescriptor storageZeroViewDesc{};
+    storageZeroViewDesc.label = {"zero_init_storage_view", WGPU_STRLEN};
+    storageZeroViewDesc.format = WGPUTextureFormat_R32Uint;
+    storageZeroViewDesc.dimension = WGPUTextureViewDimension_2D;
+    storageZeroViewDesc.aspect = WGPUTextureAspect_All;
+    storageZeroViewDesc.baseMipLevel = 0;
+    storageZeroViewDesc.mipLevelCount = 1;
+    storageZeroViewDesc.baseArrayLayer = 0;
+    storageZeroViewDesc.arrayLayerCount = 1;
+    storageZeroViewDesc.usage = WGPUTextureUsage_StorageBinding;
+    WGPUTextureView storageZeroView =
+        storageZeroTex ? wgpuTextureCreateView(storageZeroTex, &storageZeroViewDesc) : nullptr;
+    CHECK(storageZeroView != nullptr, "storage-only zero-init view created");
+
+    const char *zeroInitWgsl = R"(
+@group(0) @binding(0) var sampled_tex: texture_2d<f32>;
+@group(0) @binding(1) var storage_tex: texture_storage_2d<r32uint, read_write>;
+@group(0) @binding(2) var<storage, read_write> result: array<u32>;
+
+@compute @workgroup_size(1)
+fn main() {
+    let sampled_value = textureLoad(sampled_tex, vec2<i32>(0, 0), 0);
+    let storage_value = textureLoad(storage_tex, vec2<i32>(0, 0));
+    result[0] = select(0u, 1u, all(sampled_value == vec4<f32>(0.0, 0.0, 0.0, 0.0)));
+    result[1] = select(0u, 1u, storage_value.x == 0u);
+}
+)";
+
+    WGPUShaderSourceWGSL zeroInitSource{};
+    zeroInitSource.chain.sType = WGPUSType_ShaderSourceWGSL;
+    zeroInitSource.code = {zeroInitWgsl, WGPU_STRLEN};
+
+    WGPUShaderModuleDescriptor zeroInitShaderDesc{};
+    zeroInitShaderDesc.label = {"zero_init_shader", WGPU_STRLEN};
+    zeroInitShaderDesc.nextInChain = &zeroInitSource.chain;
+    WGPUShaderModule zeroInitShader = wgpuDeviceCreateShaderModule(device, &zeroInitShaderDesc);
+    CHECK(zeroInitShader != nullptr, "zero-init shader module created");
+
+    WGPUBindGroupLayoutEntry zeroInitEntries[3] = {};
+    zeroInitEntries[0].binding = 0;
+    zeroInitEntries[0].visibility = WGPUShaderStage_Compute;
+    zeroInitEntries[0].texture.sampleType = WGPUTextureSampleType_Float;
+    zeroInitEntries[0].texture.viewDimension = WGPUTextureViewDimension_2D;
+
+    zeroInitEntries[1].binding = 1;
+    zeroInitEntries[1].visibility = WGPUShaderStage_Compute;
+    zeroInitEntries[1].storageTexture.access = WGPUStorageTextureAccess_ReadWrite;
+    zeroInitEntries[1].storageTexture.format = WGPUTextureFormat_R32Uint;
+    zeroInitEntries[1].storageTexture.viewDimension = WGPUTextureViewDimension_2D;
+
+    zeroInitEntries[2].binding = 2;
+    zeroInitEntries[2].visibility = WGPUShaderStage_Compute;
+    zeroInitEntries[2].buffer.type = WGPUBufferBindingType_Storage;
+    zeroInitEntries[2].buffer.minBindingSize = sizeof(uint32_t) * 2;
+
+    WGPUBindGroupLayoutDescriptor zeroInitBglDesc{};
+    zeroInitBglDesc.label = {"zero_init_bgl", WGPU_STRLEN};
+    zeroInitBglDesc.entryCount = 3;
+    zeroInitBglDesc.entries = zeroInitEntries;
+    WGPUBindGroupLayout zeroInitBgl = wgpuDeviceCreateBindGroupLayout(device, &zeroInitBglDesc);
+    CHECK(zeroInitBgl != nullptr, "zero-init bind group layout created");
+
+    WGPUPipelineLayoutDescriptor zeroInitPlDesc{};
+    zeroInitPlDesc.label = {"zero_init_pl", WGPU_STRLEN};
+    zeroInitPlDesc.bindGroupLayoutCount = 1;
+    zeroInitPlDesc.bindGroupLayouts = &zeroInitBgl;
+    WGPUPipelineLayout zeroInitPipelineLayout =
+        zeroInitBgl ? wgpuDeviceCreatePipelineLayout(device, &zeroInitPlDesc) : nullptr;
+    CHECK(zeroInitPipelineLayout != nullptr, "zero-init pipeline layout created");
+
+    WGPUComputePipelineDescriptor zeroInitCpDesc{};
+    zeroInitCpDesc.label = {"zero_init_pipeline", WGPU_STRLEN};
+    zeroInitCpDesc.layout = zeroInitPipelineLayout;
+    zeroInitCpDesc.compute.module = zeroInitShader;
+    zeroInitCpDesc.compute.entryPoint = {"main", WGPU_STRLEN};
+    const int errorsBeforeZeroInitPipeline = g_errors;
+    WGPUComputePipeline zeroInitPipeline =
+        (zeroInitShader && zeroInitPipelineLayout)
+            ? wgpuDeviceCreateComputePipeline(device, &zeroInitCpDesc)
+            : nullptr;
+    if (g_errors == errorsBeforeZeroInitPipeline)
+        CHECK(zeroInitPipeline != nullptr, "zero-init compute pipeline created");
+
+    WGPUBindGroupEntry zeroInitBgEntries[3] = {};
+    zeroInitBgEntries[0].binding = 0;
+    zeroInitBgEntries[0].textureView = sampledZeroView;
+    zeroInitBgEntries[1].binding = 1;
+    zeroInitBgEntries[1].textureView = storageZeroView;
+    zeroInitBgEntries[2].binding = 2;
+    zeroInitBgEntries[2].buffer = outputBuf;
+    zeroInitBgEntries[2].offset = 0;
+    zeroInitBgEntries[2].size = sizeof(uint32_t) * 2;
+
+    WGPUBindGroupDescriptor zeroInitBgDesc{};
+    zeroInitBgDesc.label = {"zero_init_bg", WGPU_STRLEN};
+    zeroInitBgDesc.layout = zeroInitBgl;
+    zeroInitBgDesc.entryCount = 3;
+    zeroInitBgDesc.entries = zeroInitBgEntries;
+    WGPUBindGroup zeroInitBindGroup =
+        (zeroInitBgl && sampledZeroView && storageZeroView)
+            ? wgpuDeviceCreateBindGroup(device, &zeroInitBgDesc)
+            : nullptr;
+    CHECK(zeroInitBindGroup != nullptr, "zero-init bind group created");
+
+    if (zeroInitPipeline && zeroInitBindGroup)
+    {
+        WGPUCommandEncoderDescriptor zeroInitCeDesc{};
+        zeroInitCeDesc.label = {"zero_init_encoder", WGPU_STRLEN};
+        WGPUCommandEncoder zeroInitEncoder = wgpuDeviceCreateCommandEncoder(device, &zeroInitCeDesc);
+        CHECK(zeroInitEncoder != nullptr, "zero-init command encoder created");
+
+        WGPUComputePassDescriptor zeroInitPassDesc{};
+        zeroInitPassDesc.label = {"zero_init_pass", WGPU_STRLEN};
+        WGPUComputePassEncoder zeroInitPass =
+            zeroInitEncoder ? wgpuCommandEncoderBeginComputePass(zeroInitEncoder, &zeroInitPassDesc) : nullptr;
+        CHECK(zeroInitPass != nullptr, "zero-init compute pass begun");
+
+        if (zeroInitPass)
+        {
+            wgpuComputePassEncoderSetPipeline(zeroInitPass, zeroInitPipeline);
+            wgpuComputePassEncoderSetBindGroup(zeroInitPass, 0, zeroInitBindGroup, 0, nullptr);
+            wgpuComputePassEncoderDispatchWorkgroups(zeroInitPass, 1, 1, 1);
+            wgpuComputePassEncoderEnd(zeroInitPass);
+        }
+
+        if (zeroInitEncoder)
+            wgpuCommandEncoderCopyBufferToBuffer(zeroInitEncoder, outputBuf, 0, readbackBuf, 0, sizeof(uint32_t) * 2);
+
+        WGPUCommandBufferDescriptor zeroInitCbDesc{};
+        zeroInitCbDesc.label = {"zero_init_cmd", WGPU_STRLEN};
+        WGPUCommandBuffer zeroInitCmdBuf =
+            zeroInitEncoder ? wgpuCommandEncoderFinish(zeroInitEncoder, &zeroInitCbDesc) : nullptr;
+        CHECK(zeroInitCmdBuf != nullptr, "zero-init command buffer finished");
+
+        if (zeroInitCmdBuf)
+        {
+            wgpuQueueSubmit(queue, 1, &zeroInitCmdBuf);
+
+            mapDone = false;
+            WGPUFuture zeroInitMapFuture =
+                wgpuBufferMapAsync(readbackBuf, WGPUMapMode_Read, 0, sizeof(uint32_t) * 2, mapCb);
+            WGPUFutureWaitInfo zeroInitWaitInfo{zeroInitMapFuture, WGPU_FALSE};
+            wgpuInstanceWaitAny(instance, 1, &zeroInitWaitInfo, UINT64_MAX);
+            CHECK(mapDone, "zero-init readback buffer map succeeded");
+
+            if (mapDone)
+            {
+                const void *data =
+                    wgpuBufferGetConstMappedRange(readbackBuf, 0, sizeof(uint32_t) * 2);
+                CHECK(data != nullptr, "zero-init readback mapped range non-null");
+
+                if (data)
+                {
+                    const auto *results = static_cast<const uint32_t *>(data);
+                    CHECK(results[0] == 1, "sampled-only texture reads as zero");
+                    CHECK(results[1] == 1, "storage-only texture reads as zero");
+                }
+            }
+            wgpuBufferUnmap(readbackBuf);
+        }
+
+        if (zeroInitCmdBuf)
+            wgpuCommandBufferRelease(zeroInitCmdBuf);
+        if (zeroInitPass)
+            wgpuComputePassEncoderRelease(zeroInitPass);
+        if (zeroInitEncoder)
+            wgpuCommandEncoderRelease(zeroInitEncoder);
+    }
+
+    if (zeroInitBindGroup)
+        wgpuBindGroupRelease(zeroInitBindGroup);
+    if (zeroInitPipeline)
+        wgpuComputePipelineRelease(zeroInitPipeline);
+    if (zeroInitPipelineLayout)
+        wgpuPipelineLayoutRelease(zeroInitPipelineLayout);
+    if (zeroInitBgl)
+        wgpuBindGroupLayoutRelease(zeroInitBgl);
+    if (zeroInitShader)
+        wgpuShaderModuleRelease(zeroInitShader);
+    if (storageZeroView)
+        wgpuTextureViewRelease(storageZeroView);
+    if (storageZeroTex)
+        wgpuTextureRelease(storageZeroTex);
+    if (sampledZeroView)
+        wgpuTextureViewRelease(sampledZeroView);
+    if (sampledZeroTex)
+        wgpuTextureRelease(sampledZeroTex);
+
+    // 15. Multi-kind texture view descriptors
+
+    printf("\n--- 15. Multi-kind Texture View ---\n");
 
     WGPUTextureDescriptor multiTexDesc{};
     multiTexDesc.label = {"multi_kind_texture", WGPU_STRLEN};
@@ -782,9 +1008,9 @@ int main(int argc, char *argv[])
     if (multiTex)
         wgpuTextureRelease(multiTex);
 
-    // 15. Cleanup
+    // 16. Cleanup
 
-    printf("\n--- 15. Cleanup ---\n");
+    printf("\n--- 16. Cleanup ---\n");
 
     wgpuDeviceDestroy(device);
     wgpuCommandBufferRelease(cmdBuf);

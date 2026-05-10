@@ -5,8 +5,6 @@
 #include "../SampleShaderUtils.h"
 
 #include <cmath>
-#include <cstdint>
-#include <cstdio>
 #include <cstring>
 
 namespace

@@ -7,10 +7,7 @@
 #include "../Common/SampleUtils.h"
 #include "../SampleShaderUtils.h"
 
-#include <cstdint>
-#include <cstdio>
 #include <cstring>
-#include <string>
 
 namespace
 {

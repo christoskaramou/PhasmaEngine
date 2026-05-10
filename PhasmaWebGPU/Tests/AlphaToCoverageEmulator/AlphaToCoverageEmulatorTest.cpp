@@ -37,7 +37,6 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <cmath>
-#include <cstdio>
 #include <cstring>
 
 namespace

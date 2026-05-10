@@ -3,7 +3,6 @@
 #include "SampleContext.h"
 
 #include <SDL.h>
-#include <cstdint>
 #include <webgpu/webgpu.h>
 
 namespace pwgpu::test

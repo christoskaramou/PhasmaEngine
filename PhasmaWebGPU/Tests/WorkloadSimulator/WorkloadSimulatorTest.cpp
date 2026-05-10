@@ -6,9 +6,6 @@
 #include "../Common/SampleUtils.h"
 #include "../SampleShaderUtils.h"
 
-#include <algorithm>
-#include <cstdio>
-
 namespace
 {
     // Upstream initial HTML control values.

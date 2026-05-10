@@ -10,9 +10,6 @@
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 
-#include <map>
-#include <utility>
-
 #if defined(PE_WIN32)
 #include "API/Buffer.h"
 #include "API/Command.h"

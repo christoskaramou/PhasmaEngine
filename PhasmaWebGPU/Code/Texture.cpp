@@ -210,7 +210,7 @@ namespace pwgpu
     }
 #endif
 
-    static vk::DeviceSize CompressedSubresourceByteSize(WGPUTextureImpl *tex, uint32_t mip)
+    static uint64_t SubresourceTightByteSize(WGPUTextureImpl *tex, uint32_t mip)
     {
         uint32_t blockW = 1;
         uint32_t blockH = 1;
@@ -223,7 +223,7 @@ namespace pwgpu
                                   : 1u;
         const uint64_t blocksX = (static_cast<uint64_t>(mipW) + blockW - 1u) / blockW;
         const uint64_t blocksY = (static_cast<uint64_t>(mipH) + blockH - 1u) / blockH;
-        return static_cast<vk::DeviceSize>(blocksX * blocksY * mipD * footprint);
+        return blocksX * blocksY * mipD * footprint;
     }
 
     static bool RecordCompressedZeroCopy(pe::CommandBuffer *cmd, WGPUTextureImpl *tex,
@@ -247,7 +247,7 @@ namespace pwgpu
         vk::DeviceSize maxBytes = 0;
         for (const auto &p : mipLayerPairs)
         {
-            const vk::DeviceSize bytes = CompressedSubresourceByteSize(tex, p.first);
+            const vk::DeviceSize bytes = static_cast<vk::DeviceSize>(SubresourceTightByteSize(tex, p.first));
             if (bytes > maxBytes)
                 maxBytes = bytes;
         }
@@ -297,6 +297,46 @@ namespace pwgpu
         return true;
     }
 
+#if defined(PE_WIN32)
+    static bool RecordDx12ZeroCopy(pe::CommandBuffer *cmd, WGPUTextureImpl *tex,
+                                   const std::vector<std::pair<uint32_t, uint32_t>> &mipLayerPairs,
+                                   PeImageAspectFlags aspectMask)
+    {
+        if (aspectMask != PE_IMAGE_ASPECT_COLOR || tex->sampleCount != 1)
+            return false;
+
+        std::vector<std::pair<uint32_t, uint32_t>> pairs = mipLayerPairs;
+        std::sort(pairs.begin(), pairs.end());
+        pairs.erase(std::unique(pairs.begin(), pairs.end()), pairs.end());
+
+        size_t i = 0;
+        while (i < pairs.size())
+        {
+            const uint32_t mip = pairs[i].first;
+            const uint32_t firstLayer = pairs[i].second;
+            uint32_t layerCount = 1;
+            while (i + layerCount < pairs.size() &&
+                   pairs[i + layerCount].first == mip &&
+                   pairs[i + layerCount].second == firstLayer + layerCount)
+            {
+                ++layerCount;
+            }
+
+            const uint64_t bytesPerSubresource = SubresourceTightByteSize(tex, mip);
+            if (bytesPerSubresource > 0)
+            {
+                std::vector<uint8_t> zeros(static_cast<size_t>(bytesPerSubresource) * layerCount, 0);
+                cmd->CopyDataToImageStaged(tex->image, zeros.data(), zeros.size(),
+                                           firstLayer, layerCount, mip);
+            }
+
+            i += layerCount;
+        }
+
+        return true;
+    }
+#endif
+
     // Records zeroing covering only the explicitly enumerated (mip, layer) subresources
     // for a single aspect. Clear commands handle ordinary formats; compressed color
     // images use zero-buffer copies because Vulkan forbids clearing compressed images.
@@ -320,6 +360,8 @@ namespace pwgpu
             {
                 cmd->ClearColors({tex->image});
             }
+            else
+                RecordDx12ZeroCopy(cmd, tex, mipLayerPairs, aspectMask);
             return;
         }
 #endif

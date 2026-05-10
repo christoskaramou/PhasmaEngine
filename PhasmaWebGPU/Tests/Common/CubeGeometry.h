@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstdint>
-
 namespace pwgpu::test::cube
 {
     inline constexpr uint32_t kVertexStride = 10 * sizeof(float);

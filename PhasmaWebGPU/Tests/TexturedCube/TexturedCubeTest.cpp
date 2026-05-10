@@ -9,7 +9,6 @@
 #include "Base/Log.h"
 
 #include <cmath>
-#include <cstdio>
 
 namespace
 {

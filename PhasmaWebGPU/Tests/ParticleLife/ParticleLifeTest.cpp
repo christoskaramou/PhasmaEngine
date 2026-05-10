@@ -19,11 +19,7 @@
 #include "Base/Log.h"
 
 #include <cmath>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
-#include <vector>
 
 namespace
 {

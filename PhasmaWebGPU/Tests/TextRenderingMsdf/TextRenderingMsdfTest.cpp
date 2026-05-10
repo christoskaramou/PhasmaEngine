@@ -12,12 +12,7 @@
 #include "rapidjson/document.h"
 
 #include <cmath>
-#include <cstdint>
-#include <cstdio>
 #include <cstring>
-#include <string>
-#include <unordered_map>
-#include <vector>
 
 // 1:1 C++ port of webgpu-samples/sample/textRenderingMsdf.
 // Inlines the msdfText.ts helper classes (MsdfFont / MsdfText / MsdfTextRenderer)

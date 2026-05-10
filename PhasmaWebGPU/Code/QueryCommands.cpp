@@ -12,8 +12,6 @@
 #include "API/DX12/Dx12RhiImpl.h"
 #endif
 
-#include <utility>
-
 namespace pwgpu
 {
     namespace

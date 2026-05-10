@@ -1,8 +1,5 @@
 #pragma once
 
-#include <set>
-#include <string>
-#include <vector>
 #include <webgpu/webgpu.h>
 #include "API/Shader.h"
 
