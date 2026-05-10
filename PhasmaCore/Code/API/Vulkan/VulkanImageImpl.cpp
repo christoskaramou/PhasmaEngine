@@ -481,7 +481,7 @@ namespace pe
     } // namespace
 
     VulkanImageImpl::VulkanImageImpl(Image *owner, const ImageDesc &desc)
-        : m_owner{owner}
+        : m_owner{owner}, m_imageType{desc.imageType}
     {
         const vk::Format vkFormat = ToVkFormat(desc.format);
         m_vkFormat = vkFormat;
@@ -854,7 +854,8 @@ namespace pe
         barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
         barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
-        barrier.subresourceRange.layerCount = arrayLayers;
+        barrier.subresourceRange.layerCount =
+            impl->m_imageType == PE_IMAGE_TYPE_3D ? VK_REMAINING_ARRAY_LAYERS : arrayLayers;
 
         vk::DependencyInfo depInfo{};
         depInfo.imageMemoryBarrierCount = 1;
@@ -924,7 +925,8 @@ namespace pe
             barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
             barrier.subresourceRange.levelCount = mipLevels;
             barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
-            barrier.subresourceRange.layerCount = arrayLayers;
+            barrier.subresourceRange.layerCount =
+                impl->m_imageType == PE_IMAGE_TYPE_3D ? VK_REMAINING_ARRAY_LAYERS : arrayLayers;
             barriers.push_back(barrier);
 
             for (uint32_t i = 0; i < arrayLayers; i++)

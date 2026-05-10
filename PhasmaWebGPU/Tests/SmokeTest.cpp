@@ -2,7 +2,9 @@
 #include "Base/Log.h"
 #include "Base/Path.h"
 #include "Base/EventSystem.h"
+#include "API/ImageView.h"
 #include "API/RHI.h"
+#include "RenderPass.h"
 #include "Texture.h"
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12ImageViewImpl.h"
@@ -255,23 +257,27 @@ int main(int argc, char *argv[])
 
     const uint32_t kCount = 64;
     const uint64_t kBufSize = kCount * sizeof(uint32_t);
+    const uint64_t kInputBufSize = kBufSize * 2;
 
     WGPUBufferDescriptor inDesc{};
     inDesc.label = {"input", WGPU_STRLEN};
-    inDesc.size = kBufSize;
+    inDesc.size = kInputBufSize;
     inDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc;
     inDesc.mappedAtCreation = WGPU_TRUE;
     WGPUBuffer inputBuf = wgpuDeviceCreateBuffer(device, &inDesc);
     CHECK(inputBuf != nullptr, "input buffer created");
 
     {
-        void *mapped = wgpuBufferGetMappedRange(inputBuf, 0, kBufSize);
+        void *mapped = wgpuBufferGetMappedRange(inputBuf, 0, kInputBufSize);
         CHECK(mapped != nullptr, "input buffer mapped range");
         if (mapped)
         {
             auto *p = static_cast<uint32_t *>(mapped);
             for (uint32_t i = 0; i < kCount; i++)
+            {
                 p[i] = i + 1;
+                p[kCount + i] = 1000 + i;
+            }
         }
         wgpuBufferUnmap(inputBuf);
     }
@@ -477,9 +483,250 @@ int main(int argc, char *argv[])
     }
     wgpuBufferUnmap(readbackBuf);
 
-    // 12. Multi-kind texture view descriptors
+    // 12. Dynamic offset bind group
 
-    printf("\n--- 12. Multi-kind Texture View ---\n");
+    printf("\n--- 12. Dynamic Offset Bind Group ---\n");
+
+    WGPUBindGroupLayoutEntry dynBglEntries[2] = {};
+    dynBglEntries[0].binding = 0;
+    dynBglEntries[0].visibility = WGPUShaderStage_Compute;
+    dynBglEntries[0].buffer.type = WGPUBufferBindingType_Storage;
+    dynBglEntries[0].buffer.hasDynamicOffset = WGPU_TRUE;
+    dynBglEntries[0].buffer.minBindingSize = kBufSize;
+
+    dynBglEntries[1].binding = 1;
+    dynBglEntries[1].visibility = WGPUShaderStage_Compute;
+    dynBglEntries[1].buffer.type = WGPUBufferBindingType_Storage;
+    dynBglEntries[1].buffer.minBindingSize = kBufSize;
+
+    WGPUBindGroupLayoutDescriptor dynBglDesc{};
+    dynBglDesc.label = {"dynamic_compute_bgl", WGPU_STRLEN};
+    dynBglDesc.entryCount = 2;
+    dynBglDesc.entries = dynBglEntries;
+    WGPUBindGroupLayout dynBgl = wgpuDeviceCreateBindGroupLayout(device, &dynBglDesc);
+    CHECK(dynBgl != nullptr, "dynamic bind group layout created");
+
+    WGPUPipelineLayoutDescriptor dynPlDesc{};
+    dynPlDesc.label = {"dynamic_compute_pl", WGPU_STRLEN};
+    dynPlDesc.bindGroupLayoutCount = 1;
+    dynPlDesc.bindGroupLayouts = &dynBgl;
+    WGPUPipelineLayout dynPipelineLayout = wgpuDeviceCreatePipelineLayout(device, &dynPlDesc);
+    CHECK(dynPipelineLayout != nullptr, "dynamic pipeline layout created");
+
+    WGPUComputePipelineDescriptor dynCpDesc{};
+    dynCpDesc.label = {"dynamic_double_pipeline", WGPU_STRLEN};
+    dynCpDesc.layout = dynPipelineLayout;
+    dynCpDesc.compute.module = shaderModule;
+    dynCpDesc.compute.entryPoint = {"main", WGPU_STRLEN};
+    const int errorsBeforeDynamicPipeline = g_errors;
+    WGPUComputePipeline dynComputePipeline = wgpuDeviceCreateComputePipeline(device, &dynCpDesc);
+    if (g_errors == errorsBeforeDynamicPipeline)
+        CHECK(dynComputePipeline != nullptr, "dynamic compute pipeline created");
+
+    WGPUBindGroupEntry dynBgEntries[2] = {};
+    dynBgEntries[0].binding = 0;
+    dynBgEntries[0].buffer = inputBuf;
+    dynBgEntries[0].offset = 0;
+    dynBgEntries[0].size = kBufSize;
+
+    dynBgEntries[1].binding = 1;
+    dynBgEntries[1].buffer = outputBuf;
+    dynBgEntries[1].offset = 0;
+    dynBgEntries[1].size = kBufSize;
+
+    WGPUBindGroupDescriptor dynBgDesc{};
+    dynBgDesc.label = {"dynamic_compute_bg", WGPU_STRLEN};
+    dynBgDesc.layout = dynBgl;
+    dynBgDesc.entryCount = 2;
+    dynBgDesc.entries = dynBgEntries;
+    WGPUBindGroup dynBindGroup = wgpuDeviceCreateBindGroup(device, &dynBgDesc);
+    CHECK(dynBindGroup != nullptr, "dynamic bind group created");
+
+    if (dynComputePipeline && dynBindGroup)
+    {
+        WGPUCommandEncoderDescriptor dynCeDesc{};
+        dynCeDesc.label = {"dynamic_smoke_encoder", WGPU_STRLEN};
+        WGPUCommandEncoder dynEncoder = wgpuDeviceCreateCommandEncoder(device, &dynCeDesc);
+        CHECK(dynEncoder != nullptr, "dynamic command encoder created");
+
+        WGPUComputePassDescriptor dynPassDesc{};
+        dynPassDesc.label = {"dynamic_smoke_compute_pass", WGPU_STRLEN};
+        WGPUComputePassEncoder dynPass =
+            dynEncoder ? wgpuCommandEncoderBeginComputePass(dynEncoder, &dynPassDesc) : nullptr;
+        CHECK(dynPass != nullptr, "dynamic compute pass begun");
+
+        if (dynPass)
+        {
+            const uint32_t dynamicOffset = static_cast<uint32_t>(kBufSize);
+            wgpuComputePassEncoderSetPipeline(dynPass, dynComputePipeline);
+            wgpuComputePassEncoderSetBindGroup(dynPass, 0, dynBindGroup, 1, &dynamicOffset);
+            wgpuComputePassEncoderDispatchWorkgroups(dynPass, 1, 1, 1);
+            wgpuComputePassEncoderEnd(dynPass);
+        }
+
+        if (dynEncoder)
+            wgpuCommandEncoderCopyBufferToBuffer(dynEncoder, outputBuf, 0, readbackBuf, 0, kBufSize);
+
+        WGPUCommandBufferDescriptor dynCbDesc{};
+        dynCbDesc.label = {"dynamic_smoke_cmdbuf", WGPU_STRLEN};
+        WGPUCommandBuffer dynCmdBuf =
+            dynEncoder ? wgpuCommandEncoderFinish(dynEncoder, &dynCbDesc) : nullptr;
+        CHECK(dynCmdBuf != nullptr, "dynamic command buffer finished");
+
+        if (dynCmdBuf)
+        {
+            wgpuQueueSubmit(queue, 1, &dynCmdBuf);
+
+            mapDone = false;
+            WGPUFuture dynMapFuture =
+                wgpuBufferMapAsync(readbackBuf, WGPUMapMode_Read, 0, kBufSize, mapCb);
+            WGPUFutureWaitInfo dynWaitInfo{dynMapFuture, WGPU_FALSE};
+            wgpuInstanceWaitAny(instance, 1, &dynWaitInfo, UINT64_MAX);
+            CHECK(mapDone, "dynamic readback buffer map succeeded");
+
+            if (mapDone)
+            {
+                const void *data = wgpuBufferGetConstMappedRange(readbackBuf, 0, kBufSize);
+                CHECK(data != nullptr, "dynamic readback mapped range non-null");
+
+                if (data)
+                {
+                    const auto *results = static_cast<const uint32_t *>(data);
+                    bool allCorrect = true;
+                    for (uint32_t i = 0; i < kCount; i++)
+                    {
+                        uint32_t expected = (1000 + i) * 2;
+                        if (results[i] != expected)
+                        {
+                            fprintf(stderr,
+                                    "  DYNAMIC MISMATCH at [%u]: got %u, expected %u\n",
+                                    i, results[i], expected);
+                            allCorrect = false;
+                        }
+                    }
+                    CHECK(allCorrect, "dynamic offset selects second input slice");
+                }
+            }
+            wgpuBufferUnmap(readbackBuf);
+        }
+
+        if (dynCmdBuf)
+            wgpuCommandBufferRelease(dynCmdBuf);
+        if (dynPass)
+            wgpuComputePassEncoderRelease(dynPass);
+        if (dynEncoder)
+            wgpuCommandEncoderRelease(dynEncoder);
+    }
+
+    if (dynBindGroup)
+        wgpuBindGroupRelease(dynBindGroup);
+    if (dynComputePipeline)
+        wgpuComputePipelineRelease(dynComputePipeline);
+    if (dynPipelineLayout)
+        wgpuPipelineLayoutRelease(dynPipelineLayout);
+    if (dynBgl)
+        wgpuBindGroupLayoutRelease(dynBgl);
+
+    // 13. 3D color attachment depthSlice
+
+    printf("\n--- 13. 3D Color Attachment depthSlice ---\n");
+
+    WGPUTextureDescriptor tex3dDesc{};
+    tex3dDesc.label = {"color_attachment_3d", WGPU_STRLEN};
+    tex3dDesc.usage = WGPUTextureUsage_RenderAttachment;
+    tex3dDesc.dimension = WGPUTextureDimension_3D;
+    tex3dDesc.size = {2, 2, 4};
+    tex3dDesc.format = WGPUTextureFormat_RGBA8Unorm;
+    tex3dDesc.mipLevelCount = 1;
+    tex3dDesc.sampleCount = 1;
+    WGPUTexture tex3d = wgpuDeviceCreateTexture(device, &tex3dDesc);
+    CHECK(tex3d != nullptr, "3D render attachment texture created");
+
+    WGPUTextureViewDescriptor view3dDesc{};
+    view3dDesc.label = {"color_attachment_3d_view", WGPU_STRLEN};
+    view3dDesc.format = WGPUTextureFormat_RGBA8Unorm;
+    view3dDesc.dimension = WGPUTextureViewDimension_3D;
+    view3dDesc.aspect = WGPUTextureAspect_All;
+    view3dDesc.baseMipLevel = 0;
+    view3dDesc.mipLevelCount = 1;
+    view3dDesc.baseArrayLayer = 0;
+    view3dDesc.arrayLayerCount = 1;
+    view3dDesc.usage = WGPUTextureUsage_RenderAttachment;
+    WGPUTextureView view3d = tex3d ? wgpuTextureCreateView(tex3d, &view3dDesc) : nullptr;
+    CHECK(view3d != nullptr, "3D render attachment view created");
+
+    WGPUCommandBuffer pass3dCmdBuf = nullptr;
+    if (view3d)
+    {
+        const int errorsBefore3d = g_errors;
+
+        WGPUCommandEncoderDescriptor pass3dEncoderDesc{};
+        pass3dEncoderDesc.label = {"depth_slice_encoder", WGPU_STRLEN};
+        WGPUCommandEncoder pass3dEncoder = wgpuDeviceCreateCommandEncoder(device, &pass3dEncoderDesc);
+        CHECK(pass3dEncoder != nullptr, "3D depthSlice command encoder created");
+
+        WGPURenderPassColorAttachment color3d{};
+        color3d.view = view3d;
+        color3d.depthSlice = 2;
+        color3d.loadOp = WGPULoadOp_Clear;
+        color3d.storeOp = WGPUStoreOp_Store;
+        color3d.clearValue = {0.25, 0.5, 0.75, 1.0};
+
+        WGPURenderPassDescriptor pass3dDesc{};
+        pass3dDesc.label = {"depth_slice_render_pass", WGPU_STRLEN};
+        pass3dDesc.colorAttachmentCount = 1;
+        pass3dDesc.colorAttachments = &color3d;
+        WGPURenderPassEncoder pass3d =
+            pass3dEncoder ? wgpuCommandEncoderBeginRenderPass(pass3dEncoder, &pass3dDesc) : nullptr;
+        CHECK(pass3d != nullptr, "3D depthSlice render pass begun");
+
+        if (pass3d)
+        {
+            CHECK(!pass3d->ownedSliceViews.empty(), "3D depthSlice owns a slice attachment view");
+            if (!pass3d->ownedSliceViews.empty())
+            {
+                const pe::ImageViewDesc &sliceDesc = pass3d->ownedSliceViews.front()->GetDesc();
+                CHECK(sliceDesc.baseMipLevel == 0, "3D depthSlice view targets mip 0");
+                CHECK(sliceDesc.baseArrayLayer == 2, "3D depthSlice view targets slice 2");
+                CHECK(sliceDesc.layerCount == 1, "3D depthSlice view targets one slice");
+#if defined(PE_WIN32)
+                if (pe::RHII.GetApi() == PE_GRAPHICS_API_DX12)
+                {
+                    CHECK(pe::Dx12ImageViewImpl::From(pass3d->ownedSliceViews.front())->GetKind() ==
+                              pe::Dx12ImageViewKind::Rtv,
+                          "DX12 3D depthSlice view is an RTV");
+                }
+#endif
+            }
+            wgpuRenderPassEncoderEnd(pass3d);
+        }
+
+        WGPUCommandBufferDescriptor pass3dCbDesc{};
+        pass3dCbDesc.label = {"depth_slice_cmd", WGPU_STRLEN};
+        pass3dCmdBuf = pass3dEncoder ? wgpuCommandEncoderFinish(pass3dEncoder, &pass3dCbDesc) : nullptr;
+        CHECK(pass3dCmdBuf != nullptr, "3D depthSlice command buffer finished");
+        CHECK(g_errors == errorsBefore3d, "3D depthSlice pass encoded without validation errors");
+
+        if (pass3d)
+            wgpuRenderPassEncoderRelease(pass3d);
+        if (pass3dEncoder)
+            wgpuCommandEncoderRelease(pass3dEncoder);
+    }
+
+    if (pass3dCmdBuf)
+    {
+        wgpuQueueSubmit(queue, 1, &pass3dCmdBuf);
+        wgpuCommandBufferRelease(pass3dCmdBuf);
+    }
+
+    if (view3d)
+        wgpuTextureViewRelease(view3d);
+    if (tex3d)
+        wgpuTextureRelease(tex3d);
+
+    // 14. Multi-kind texture view descriptors
+
+    printf("\n--- 14. Multi-kind Texture View ---\n");
 
     WGPUTextureDescriptor multiTexDesc{};
     multiTexDesc.label = {"multi_kind_texture", WGPU_STRLEN};
@@ -535,9 +782,9 @@ int main(int argc, char *argv[])
     if (multiTex)
         wgpuTextureRelease(multiTex);
 
-    // 13. Cleanup
+    // 15. Cleanup
 
-    printf("\n--- 13. Cleanup ---\n");
+    printf("\n--- 15. Cleanup ---\n");
 
     wgpuDeviceDestroy(device);
     wgpuCommandBufferRelease(cmdBuf);

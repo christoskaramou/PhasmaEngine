@@ -20,13 +20,21 @@ namespace pe
 {
     class Semaphore;
     class CommandBuffer;
+    class ImageView;
 } // namespace pe
 
 // A submitted command buffer awaiting GPU completion before it can be recycled.
 struct WGPUPendingSubmit
 {
+    WGPUPendingSubmit() = default;
+    WGPUPendingSubmit(pe::CommandBuffer *submittedCmd, uint64_t submittedSerial)
+        : cmd(submittedCmd), serial(submittedSerial)
+    {
+    }
+
     pe::CommandBuffer *cmd = nullptr;
     uint64_t serial = 0; // Submission serial this cmd was submitted at.
+    std::vector<pe::ImageView *> nativeImageViews;
 };
 
 struct WGPUQueueImpl

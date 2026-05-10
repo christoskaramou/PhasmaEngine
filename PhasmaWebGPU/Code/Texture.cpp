@@ -1011,11 +1011,16 @@ extern "C"
                     createNative(view->storageBindingView, pe::Dx12ImageViewKind::Uav, "_uav");
                 if (viewUsage & WGPUTextureUsage_RenderAttachment)
                 {
-                    createNative(view->renderAttachmentView,
-                                 pwgpu::IsDepthStencilFormat(resolved.format)
-                                     ? pe::Dx12ImageViewKind::Dsv
-                                     : pe::Dx12ImageViewKind::Rtv,
-                                 "_attachment");
+                    // A 3D color attachment view needs the render pass depthSlice
+                    // before DX12 can create the RTV; beginRenderPass owns that slice view.
+                    if (resolved.dimension != WGPUTextureViewDimension_3D)
+                    {
+                        createNative(view->renderAttachmentView,
+                                     pwgpu::IsDepthStencilFormat(resolved.format)
+                                         ? pe::Dx12ImageViewKind::Dsv
+                                         : pe::Dx12ImageViewKind::Rtv,
+                                     "_attachment");
+                    }
                 }
 
                 if (nativeCreationFailed)
@@ -1107,7 +1112,13 @@ extern "C"
                 }
             }
 
-            if (!pwgpu::HasNativeImageView(view) && texture->device)
+            bool deferredNativeView = false;
+#if defined(PE_WIN32)
+            deferredNativeView = pe::RHII.GetApi() == PE_GRAPHICS_API_DX12 &&
+                                 resolved.dimension == WGPUTextureViewDimension_3D &&
+                                 (viewUsage & WGPUTextureUsage_RenderAttachment) != 0;
+#endif
+            if (!deferredNativeView && !pwgpu::HasNativeImageView(view) && texture->device)
             {
                 texture->device->reportError(
                     WGPUErrorType_Validation,

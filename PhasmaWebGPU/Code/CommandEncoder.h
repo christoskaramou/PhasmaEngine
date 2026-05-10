@@ -15,6 +15,11 @@ struct WGPURenderBundleImpl;
 struct WGPUBufferImpl;
 struct WGPUTextureImpl;
 
+namespace pe
+{
+    class ImageView;
+}
+
 struct RetainedResources
 {
     std::vector<WGPURenderPipelineImpl *> renderPipelines;
@@ -25,6 +30,7 @@ struct RetainedResources
     std::vector<WGPURenderBundleImpl *> renderBundles;
     std::vector<WGPUBufferImpl *> usedBuffers;   // buffers touched by this command encoder
     std::vector<WGPUTextureImpl *> usedTextures; // textures touched by this command encoder
+    std::vector<pe::ImageView *> nativeImageViews;
 
     void MergeFrom(RetainedResources &other);
     void ReleaseAll();

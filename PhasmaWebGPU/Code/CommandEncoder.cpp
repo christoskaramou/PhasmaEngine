@@ -12,10 +12,16 @@
 #include "FormatMap.h"
 #include "Utils.h"
 #include "API/Image.h"
+#include "API/ImageView.h"
 #include "API/Buffer.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12ImageViewImpl.h"
+#endif
+
+#undef MemoryBarrier
 
 extern "C" void wgpuRenderPipelineRelease(WGPURenderPipeline);
 extern "C" void wgpuComputePipelineRelease(WGPUComputePipeline);
@@ -35,6 +41,7 @@ void RetainedResources::MergeFrom(RetainedResources &other)
     renderBundles.insert(renderBundles.end(), other.renderBundles.begin(), other.renderBundles.end());
     usedBuffers.insert(usedBuffers.end(), other.usedBuffers.begin(), other.usedBuffers.end());
     usedTextures.insert(usedTextures.end(), other.usedTextures.begin(), other.usedTextures.end());
+    nativeImageViews.insert(nativeImageViews.end(), other.nativeImageViews.begin(), other.nativeImageViews.end());
     other.renderPipelines.clear();
     other.computePipelines.clear();
     other.bindGroups.clear();
@@ -43,6 +50,7 @@ void RetainedResources::MergeFrom(RetainedResources &other)
     other.renderBundles.clear();
     other.usedBuffers.clear();
     other.usedTextures.clear();
+    other.nativeImageViews.clear();
 }
 
 void RetainedResources::ReleaseAll()
@@ -59,12 +67,15 @@ void RetainedResources::ReleaseAll()
         wgpuTextureViewRelease(tv);
     for (auto *rb : renderBundles)
         wgpuRenderBundleRelease(rb);
+    for (auto *view : nativeImageViews)
+        pe::ImageView::Destroy(view);
     renderPipelines.clear();
     computePipelines.clear();
     bindGroups.clear();
     querySets.clear();
     textureViews.clear();
     renderBundles.clear();
+    nativeImageViews.clear();
 }
 
 namespace
@@ -204,6 +215,50 @@ namespace
                                  : tex->size.depthOrArrayLayers;
         return copySize.depthOrArrayLayers == fullDepth;
     }
+
+    ::PeFormat ToPeTextureViewFormat(WGPUTextureViewImpl *view)
+    {
+        if (!view || !view->texture || !view->texture->image ||
+            view->format == view->texture->format)
+            return PE_FORMAT_UNDEFINED;
+
+        const ::PeFormat format = pe::FromVkFormat(
+            static_cast<vk::Format>(pwgpu::ToVkFormat(view->format)));
+        return format == view->texture->image->GetFormat() ? PE_FORMAT_UNDEFINED : format;
+    }
+
+#if defined(PE_WIN32)
+    pe::ImageView *CreateDx12ColorAttachmentSliceView(WGPUTextureViewImpl *view,
+                                                      uint32_t depthSlice,
+                                                      size_t attachmentIndex)
+    {
+        if (!view || !view->texture || !view->texture->image)
+            return nullptr;
+
+        pe::ImageViewDesc desc{};
+        desc.viewType = PE_IMAGE_VIEW_TYPE_3D;
+        desc.format = ToPeTextureViewFormat(view);
+        desc.aspectMask = PE_IMAGE_ASPECT_COLOR;
+        desc.baseMipLevel = view->baseMipLevel;
+        desc.levelCount = 1;
+        desc.baseArrayLayer = depthSlice;
+        desc.layerCount = 1;
+
+        try
+        {
+            return pe::Dx12ImageViewImpl::Create(
+                view->texture->image,
+                desc,
+                pe::Dx12ImageViewKind::Rtv,
+                "wgpu_3d_slice_rtv_" + std::to_string(attachmentIndex));
+        }
+        catch (...)
+        {
+            PE_WARN("[WebGPU] beginRenderPass: failed to create DX12 RTV slice view for 3D attachment %zu", attachmentIndex);
+            return nullptr;
+        }
+    }
+#endif
 
     bool ValidateTextureCopyRange(const WGPUTextureImpl *tex, uint32_t mipLevel,
                                   const WGPUOrigin3D &origin, const WGPUExtent3D &copySize)
@@ -610,7 +665,9 @@ extern "C"
                 return makeInvalidPass("view has no texture or view is invalid");
             if (view->texture->destroyed)
                 return makeDeferredPass(view);
-            if (!pwgpu::RenderAttachmentImageView(view))
+            const bool dx12Deferred3DAttachmentView =
+                dx12Backend && view->dimension == WGPUTextureViewDimension_3D;
+            if (!dx12Deferred3DAttachmentView && !pwgpu::RenderAttachmentImageView(view))
                 return makeInvalidPass("view is invalid");
             if (view->texture->device != enc->device)
             {
@@ -665,9 +722,6 @@ extern "C"
                 if (ca.depthSlice >= mipDepth)
                     return makeInvalidPass(
                         "beginRenderPass: depthSlice must be < depth of attachment mip level");
-                if (dx12Backend)
-                    return makeInvalidPass(
-                        "beginRenderPass: DX12 backend does not support 3d color attachment depthSlice yet");
             }
             else
             {
@@ -998,44 +1052,61 @@ extern "C"
 
             auto *view = ca.view;
 
-            // For 3D views, create a temporary 2D slice view targeting the specific depthSlice.
-            // Vulkan dynamic rendering requires a 2D view; a 3D VkImageView is not valid as a
-            // color attachment. The image must have VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT.
+            // For 3D views, create a temporary native view targeting the specific depthSlice.
+            // Vulkan dynamic rendering requires a 2D view; DX12 uses a TEXTURE3D RTV
+            // with FirstWSlice set to the WebGPU depthSlice.
             vk::ImageView attachmentImageView{};
             if (!dx12Backend)
                 attachmentImageView = pe::GetVulkanImageView(view->view);
             pe::ImageView *sliceView = nullptr;
+            pe::ImageView *attachmentCoreView = nullptr;
             uint32_t barrierBaseLayer = view->baseArrayLayer;
 
-            if (!dx12Backend &&
-                view->dimension == WGPUTextureViewDimension_3D &&
+            if (view->dimension == WGPUTextureViewDimension_3D &&
                 ca.depthSlice != WGPU_DEPTH_SLICE_UNDEFINED)
             {
-                vk::ImageViewCreateInfo sliceIvci{};
-                sliceIvci.image = pe::GetVulkanImage(view->texture->image);
-                sliceIvci.viewType = vk::ImageViewType::e2D;
-                sliceIvci.format = static_cast<vk::Format>(pwgpu::ToVkFormat(view->format));
-                sliceIvci.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-                sliceIvci.subresourceRange.baseMipLevel = view->baseMipLevel;
-                sliceIvci.subresourceRange.levelCount = 1;
-                sliceIvci.subresourceRange.baseArrayLayer = ca.depthSlice;
-                sliceIvci.subresourceRange.layerCount = 1;
+                if (dx12Backend)
+                {
+#if defined(PE_WIN32)
+                    sliceView = CreateDx12ColorAttachmentSliceView(view, ca.depthSlice, i);
+                    if (sliceView)
+                    {
+                        attachmentCoreView = sliceView;
+                        rpe->ownedSliceViews.push_back(sliceView);
+                    }
+#endif
+                }
+                else
+                {
+                    vk::ImageViewCreateInfo sliceIvci{};
+                    sliceIvci.image = pe::GetVulkanImage(view->texture->image);
+                    sliceIvci.viewType = vk::ImageViewType::e2D;
+                    sliceIvci.format = static_cast<vk::Format>(pwgpu::ToVkFormat(view->format));
+                    sliceIvci.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+                    sliceIvci.subresourceRange.baseMipLevel = view->baseMipLevel;
+                    sliceIvci.subresourceRange.levelCount = 1;
+                    sliceIvci.subresourceRange.baseArrayLayer = ca.depthSlice;
+                    sliceIvci.subresourceRange.layerCount = 1;
 
-                try
-                {
-                    sliceView = pe::VulkanImageViewImpl::Create(view->texture->image, sliceIvci, "wgpu_3d_slice");
-                }
-                catch (...)
-                {
-                    PE_WARN("[WebGPU] beginRenderPass: failed to create 2D slice view for 3D attachment %zu", i);
-                }
+                    try
+                    {
+                        sliceView = pe::VulkanImageViewImpl::Create(view->texture->image, sliceIvci, "wgpu_3d_slice");
+                    }
+                    catch (...)
+                    {
+                        PE_WARN("[WebGPU] beginRenderPass: failed to create 2D slice view for 3D attachment %zu", i);
+                    }
 
-                if (sliceView)
-                {
-                    attachmentImageView = pe::GetVulkanImageView(sliceView);
-                    rpe->ownedSliceViews.push_back(sliceView);
-                    // Vulkan 3D images have arrayLayers=1; barrier stays at layer 0.
+                    if (sliceView)
+                    {
+                        attachmentImageView = pe::GetVulkanImageView(sliceView);
+                        rpe->ownedSliceViews.push_back(sliceView);
+                    }
                 }
+                // Core 3D images have arrayLayers=1; barriers stay at layer 0.
+                if (!sliceView)
+                    return makeInvalidPass(
+                        "beginRenderPass: failed to create 3d depthSlice attachment view");
             }
 
             pe::ImageBarrierInfo barrier{};
@@ -1073,6 +1144,7 @@ extern "C"
 
             WGPURenderPassAttachmentInfo att{};
             att.textureView = view;
+            att.attachmentView = attachmentCoreView;
             if (!dx12Backend)
                 att.imageView = PeToBackendHandle(static_cast<VkImageView>(attachmentImageView));
             att.imageLayout = PE_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;

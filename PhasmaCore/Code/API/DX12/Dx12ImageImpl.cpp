@@ -563,13 +563,17 @@ namespace pe
         }
 
         ImageViewDesc viewInfo{};
-        viewInfo.viewType = PE_IMAGE_VIEW_TYPE_2D;
+        viewInfo.viewType = image->m_imageType == PE_IMAGE_TYPE_3D
+                                ? PE_IMAGE_VIEW_TYPE_3D
+                                : PE_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = image->GetFormat();
         viewInfo.aspectMask = AspectForFormat(m_viewFormat);
         viewInfo.baseMipLevel = 0;
         viewInfo.levelCount = image->GetMipLevels();
         viewInfo.baseArrayLayer = 0;
-        viewInfo.layerCount = image->GetArrayLayers();
+        viewInfo.layerCount = image->m_imageType == PE_IMAGE_TYPE_3D
+                                  ? image->m_depth
+                                  : image->GetArrayLayers();
 
         const Dx12ImageViewKind kind = (image->GetUsage() & PE_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT)
                                            ? Dx12ImageViewKind::Dsv

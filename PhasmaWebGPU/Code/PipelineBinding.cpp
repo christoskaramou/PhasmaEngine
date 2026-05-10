@@ -1,6 +1,7 @@
 #include "PipelineBinding.h"
 
 #include "BindGroup.h"
+#include "Buffer.h"
 #include "ComputePipeline.h"
 #include "PipelineLayout.h"
 #include "RenderPipeline.h"
@@ -9,8 +10,17 @@
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 
+#include <map>
+#include <utility>
+
 #if defined(PE_WIN32)
+#include "API/Buffer.h"
+#include "API/Command.h"
 #include "API/DX12/Dx12CommandBufferImpl.h"
+#include "API/DX12/Dx12DescriptorHeap.h"
+#include "API/DX12/Dx12DescriptorImpl.h"
+#include "API/DX12/Dx12RhiImpl.h"
+#include "API/DX12/Dx12RootSignature.h"
 #include <d3d12.h>
 #endif
 
@@ -49,6 +59,134 @@ namespace pwgpu
             default:
                 return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
             }
+        }
+
+        struct Dx12DynamicPatch
+        {
+            pe::Dx12DescriptorImpl::DynamicBufferBinding binding{};
+        };
+
+        struct Dx12DynamicTable
+        {
+            uint32_t dxSpace = 0;
+            uint32_t firstSlot = pe::Dx12DescriptorImpl::InvalidSlot;
+            uint32_t count = 0;
+            D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle{};
+        };
+
+        const pe::DescriptorBindingInfo *FindBindingInfo(WGPUBindGroupImpl *group, uint32_t binding)
+        {
+            if (!group || !group->layout)
+                return nullptr;
+
+            for (const pe::DescriptorBindingInfo &info : group->layout->bindingInfos)
+                if (info.binding == binding)
+                    return &info;
+            return nullptr;
+        }
+
+        bool BindDx12DynamicTables(pe::CommandBuffer *cmd,
+                                   PipelineBindingPoint point,
+                                   WGPUBindGroupImpl *group,
+                                   size_t dynamicOffsetCount,
+                                   const uint32_t *dynamicOffsets)
+        {
+            if (!cmd || !group || dynamicOffsetCount == 0)
+                return true;
+            if (!dynamicOffsets || dynamicOffsetCount != group->dynamicBindings.size())
+                return false;
+
+            const pe::Dx12DescriptorImpl *descriptorImpl =
+                pe::Dx12DescriptorImpl::TryFrom(group->descriptor);
+            if (!descriptorImpl)
+                return false;
+
+            std::map<uint32_t, std::vector<Dx12DynamicPatch>> patchesBySpace;
+            for (size_t i = 0; i < dynamicOffsetCount; ++i)
+            {
+                const WGPUBindGroupImpl::DynamicBinding &dynamicBinding =
+                    group->dynamicBindings[i];
+                const pe::DescriptorBindingInfo *bindingInfo =
+                    FindBindingInfo(group, dynamicBinding.binding);
+                if (!bindingInfo)
+                    return false;
+
+                Dx12DynamicPatch patch{};
+                patch.binding.binding = dynamicBinding.binding;
+                patch.binding.buffer = dynamicBinding.buffer ? dynamicBinding.buffer->peBuffer : nullptr;
+                patch.binding.offset =
+                    dynamicBinding.baseOffset + static_cast<uint64_t>(dynamicOffsets[i]);
+                patch.binding.range = dynamicBinding.bindingSize;
+                if (!patch.binding.buffer)
+                    return false;
+                patchesBySpace[bindingInfo->dxSpace].push_back(patch);
+            }
+
+            std::vector<Dx12DynamicTable> dynamicTables;
+            dynamicTables.reserve(patchesBySpace.size());
+            for (const auto &[dxSpace, patches] : patchesBySpace)
+            {
+                Dx12DynamicTable table{};
+                std::vector<pe::Dx12DescriptorImpl::DynamicBufferBinding> dynamicBindings;
+                dynamicBindings.reserve(patches.size());
+                for (const Dx12DynamicPatch &patch : patches)
+                    dynamicBindings.push_back(patch.binding);
+
+                if (!descriptorImpl->CreateDynamicCbvSrvUavTable(
+                        dxSpace,
+                        dynamicBindings.data(),
+                        static_cast<uint32_t>(dynamicBindings.size()),
+                        table.firstSlot,
+                        table.count,
+                        table.gpuHandle))
+                {
+                    auto *rhi = static_cast<pe::Dx12RhiImpl *>(pe::RHII.GetImpl());
+                    if (rhi && rhi->GetCbvSrvUavHeap())
+                    {
+                        for (const Dx12DynamicTable &allocated : dynamicTables)
+                            rhi->GetCbvSrvUavHeap()->FreeRange(allocated.firstSlot, allocated.count);
+                    }
+                    return false;
+                }
+                table.dxSpace = dxSpace;
+                dynamicTables.push_back(table);
+            }
+
+            auto freeDynamicTables = [&dynamicTables]()
+            {
+                auto *rhi = static_cast<pe::Dx12RhiImpl *>(pe::RHII.GetImpl());
+                if (!rhi || !rhi->GetCbvSrvUavHeap())
+                    return;
+                for (const Dx12DynamicTable &table : dynamicTables)
+                    rhi->GetCbvSrvUavHeap()->FreeRange(table.firstSlot, table.count);
+            };
+
+            ID3D12GraphicsCommandList *list = pe::GetDx12CommandList(cmd);
+            if (!list)
+            {
+                freeDynamicTables();
+                return false;
+            }
+
+            for (const Dx12DynamicTable &table : dynamicTables)
+            {
+                const uint32_t rootIdx = pe::Dx12CbvSrvUavRootIndex(table.dxSpace);
+                if (point == PipelineBindingPoint::Compute)
+                    list->SetComputeRootDescriptorTable(rootIdx, table.gpuHandle);
+                else
+                    list->SetGraphicsRootDescriptorTable(rootIdx, table.gpuHandle);
+            }
+
+            cmd->AddAfterWaitCallback(
+                [dynamicTables = std::move(dynamicTables)]()
+                {
+                    auto *rhi = static_cast<pe::Dx12RhiImpl *>(pe::RHII.GetImpl());
+                    if (!rhi || !rhi->GetCbvSrvUavHeap())
+                        return;
+                    for (const Dx12DynamicTable &table : dynamicTables)
+                        rhi->GetCbvSrvUavHeap()->FreeRange(table.firstSlot, table.count);
+                });
+            return true;
         }
 #endif
     } // namespace
@@ -149,8 +287,6 @@ namespace pwgpu
         }
         case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
-            if (dynamicOffsetCount != 0)
-                return BackendUnsupported("dynamic-offset bind group bind");
             if (point == PipelineBindingPoint::Compute)
             {
                 pe::Dx12CommandBufferImpl::From(cmd)->BindExternalComputeDescriptors(
@@ -161,7 +297,8 @@ namespace pwgpu
                 pe::Dx12CommandBufferImpl::From(cmd)->BindExternalRenderDescriptors(
                     1, &group->descriptor);
             }
-            return true;
+            return BindDx12DynamicTables(
+                cmd, point, group, dynamicOffsetCount, dynamicOffsets);
 #else
             return BackendUnsupported("bind group bind");
 #endif

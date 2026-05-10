@@ -48,8 +48,23 @@ namespace pe
 
         static constexpr uint32_t InvalidSlot = UINT32_MAX;
 
+        struct DynamicBufferBinding
+        {
+            uint32_t binding = InvalidSlot;
+            Buffer *buffer = nullptr;
+            uint64_t offset = 0;
+            uint64_t range = 0;
+        };
+
         uint32_t GetCbvSrvUavSlot(uint32_t binding, uint32_t arrayIndex = 0) const;
         uint32_t GetSamplerSlot(uint32_t binding, uint32_t arrayIndex = 0) const;
+        bool GetCbvSrvUavTableInfo(uint32_t dxSpace, uint32_t &baseSlot, uint32_t &count) const;
+        bool CreateDynamicCbvSrvUavTable(uint32_t dxSpace,
+                                         const DynamicBufferBinding *dynamicBindings,
+                                         uint32_t dynamicBindingCount,
+                                         uint32_t &firstSlot,
+                                         uint32_t &count,
+                                         D3D12_GPU_DESCRIPTOR_HANDLE &gpuHandle) const;
         D3D12_GPU_DESCRIPTOR_HANDLE GetCbvSrvUavGpuHandle(uint32_t binding, uint32_t arrayIndex = 0) const;
         D3D12_GPU_DESCRIPTOR_HANDLE GetSamplerGpuHandle(uint32_t binding, uint32_t arrayIndex = 0) const;
         D3D12_GPU_DESCRIPTOR_HANDLE GetCbvSrvUavTableGpuHandle(uint32_t dxSpace) const;

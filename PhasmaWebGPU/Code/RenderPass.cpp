@@ -256,7 +256,8 @@ namespace
 
             pe::Attachment att{};
             att.image = image;
-            att.view = pwgpu::RenderAttachmentImageView(info.textureView);
+            att.view = info.attachmentView ? info.attachmentView
+                                           : pwgpu::RenderAttachmentImageView(info.textureView);
             att.loadOp = info.loadOp;
             att.storeOp = ToPeStoreOp(info.storeOp);
             rpe->dx12OpenAttachments.push_back(att);
@@ -1596,6 +1597,11 @@ extern "C"
                 rpe->parent->retained.textureViews.end(),
                 rpe->retainedViews.begin(), rpe->retainedViews.end());
             rpe->retainedViews.clear();
+
+            rpe->parent->retained.nativeImageViews.insert(
+                rpe->parent->retained.nativeImageViews.end(),
+                rpe->ownedSliceViews.begin(), rpe->ownedSliceViews.end());
+            rpe->ownedSliceViews.clear();
 
             if (rpe->timestampQuerySet)
             {

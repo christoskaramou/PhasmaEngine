@@ -38,6 +38,7 @@ namespace pe
         vk::Image m_image;
         VmaAllocation m_allocation{}; // null for swapchain-wrapped images
         vk::Format m_vkFormat{vk::Format::eUndefined};
+        PeImageType m_imageType{PE_IMAGE_TYPE_2D};
         bool m_externallyOwned{false};
     };
 

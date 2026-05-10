@@ -12,11 +12,14 @@
 #include "API/Queue.h"
 #include "API/Semaphore.h"
 #include "API/Image.h"
+#include "API/ImageView.h"
 #include "API/Buffer.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
+
+#undef MemoryBarrier
 
 pe::Semaphore *WGPUQueueImpl::GetSemaphore() const
 {
@@ -39,6 +42,8 @@ void WGPUQueueImpl::RecyclePendingSubmits()
             {
                 it->cmd->Wait();
                 it->cmd->Return();
+                for (auto *view : it->nativeImageViews)
+                    pe::ImageView::Destroy(view);
                 it = pendingSubmits.erase(it);
             }
             else
@@ -401,8 +406,14 @@ extern "C"
 
         {
             std::lock_guard<std::mutex> lock(queue->pendingMutex);
-            for (auto *cmd : cmds)
-                queue->pendingSubmits.push_back({cmd, serial});
+            for (size_t i = 0; i < cmds.size(); ++i)
+            {
+                WGPUPendingSubmit pending{};
+                pending.cmd = cmds[i];
+                pending.serial = serial;
+                pending.nativeImageViews = std::move(validCBs[i]->retained.nativeImageViews);
+                queue->pendingSubmits.push_back(std::move(pending));
+            }
         }
 
         queue->lastSubmissionSerial.store(serial, std::memory_order_release);

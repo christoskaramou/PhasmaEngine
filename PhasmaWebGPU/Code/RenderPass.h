@@ -25,6 +25,7 @@ struct WGPURenderPassAttachmentInfo
 {
     WGPUTextureViewImpl *textureView = nullptr;
     PeBackendHandle imageView = 0;
+    pe::ImageView *attachmentView = nullptr;
     PeImageLayout imageLayout = PE_IMAGE_LAYOUT_UNDEFINED;
     PeLoadOp loadOp = PE_LOAD_OP_DONT_CARE;
     WGPURenderPassAttachmentStoreOp storeOp = WGPURenderPassAttachmentStoreOp::DontCare;

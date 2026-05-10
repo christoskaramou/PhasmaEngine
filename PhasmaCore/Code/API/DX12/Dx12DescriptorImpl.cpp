@@ -55,6 +55,27 @@ namespace pe
             return srv;
         }
 
+        D3D12_BUFFER_UAV RawBufferUav(uint64_t offset, uint64_t rangeBytes)
+        {
+            D3D12_BUFFER_UAV uav{};
+            uav.FirstElement = offset / sizeof(uint32_t);
+            uav.NumElements = static_cast<UINT>(rangeBytes / sizeof(uint32_t));
+            uav.StructureByteStride = 0;
+            uav.CounterOffsetInBytes = 0;
+            uav.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
+            return uav;
+        }
+
+        D3D12_BUFFER_SRV RawBufferSrv(uint64_t offset, uint64_t rangeBytes)
+        {
+            D3D12_BUFFER_SRV srv{};
+            srv.FirstElement = offset / sizeof(uint32_t);
+            srv.NumElements = static_cast<UINT>(rangeBytes / sizeof(uint32_t));
+            srv.StructureByteStride = 0;
+            srv.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+            return srv;
+        }
+
         D3D12_BUFFER_UAV StructuredBufferUav(const DescriptorUpdateInfo &updateInfo,
                                              const DescriptorBindingInfo &bindingInfo,
                                              uint32_t index,
@@ -82,6 +103,41 @@ namespace pe
         {
             const uint32_t stride = bindingInfo.structuredStride;
             const uint64_t offset = BufferOffsetBytes(updateInfo, index);
+            PE_ERROR_IF(stride == 0, "DX12 structured SRV '%s' has no reflected element stride", bindingInfo.name.c_str());
+            PE_ERROR_IF(offset % stride != 0, "DX12 structured SRV '%s' offset is not stride-aligned", bindingInfo.name.c_str());
+            PE_ERROR_IF(rangeBytes < stride, "DX12 structured SRV '%s' range is smaller than one element", bindingInfo.name.c_str());
+
+            D3D12_BUFFER_SRV srv{};
+            srv.FirstElement = offset / stride;
+            srv.NumElements = static_cast<UINT>(rangeBytes / stride);
+            srv.StructureByteStride = stride;
+            srv.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+            return srv;
+        }
+
+        D3D12_BUFFER_UAV StructuredBufferUav(uint64_t offset,
+                                             const DescriptorBindingInfo &bindingInfo,
+                                             uint64_t rangeBytes)
+        {
+            const uint32_t stride = bindingInfo.structuredStride;
+            PE_ERROR_IF(stride == 0, "DX12 structured UAV '%s' has no reflected element stride", bindingInfo.name.c_str());
+            PE_ERROR_IF(offset % stride != 0, "DX12 structured UAV '%s' offset is not stride-aligned", bindingInfo.name.c_str());
+            PE_ERROR_IF(rangeBytes < stride, "DX12 structured UAV '%s' range is smaller than one element", bindingInfo.name.c_str());
+
+            D3D12_BUFFER_UAV uav{};
+            uav.FirstElement = offset / stride;
+            uav.NumElements = static_cast<UINT>(rangeBytes / stride);
+            uav.StructureByteStride = stride;
+            uav.CounterOffsetInBytes = 0;
+            uav.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+            return uav;
+        }
+
+        D3D12_BUFFER_SRV StructuredBufferSrv(uint64_t offset,
+                                             const DescriptorBindingInfo &bindingInfo,
+                                             uint64_t rangeBytes)
+        {
+            const uint32_t stride = bindingInfo.structuredStride;
             PE_ERROR_IF(stride == 0, "DX12 structured SRV '%s' has no reflected element stride", bindingInfo.name.c_str());
             PE_ERROR_IF(offset % stride != 0, "DX12 structured SRV '%s' offset is not stride-aligned", bindingInfo.name.c_str());
             PE_ERROR_IF(rangeBytes < stride, "DX12 structured SRV '%s' range is smaller than one element", bindingInfo.name.c_str());
@@ -139,6 +195,52 @@ namespace pe
             if (!IsSamplerDescriptor(info.type))
                 return 0;
             return info.dxRegister + std::max(1u, info.count);
+        }
+
+        void WriteBufferDescriptor(ID3D12Device *device,
+                                   D3D12_CPU_DESCRIPTOR_HANDLE dst,
+                                   const DescriptorBindingInfo &bindingInfo,
+                                   Buffer *buffer,
+                                   uint64_t offset,
+                                   uint64_t rangeBytes)
+        {
+            PE_ERROR_IF(!device, "Dx12DescriptorImpl: DX12 device unavailable");
+            PE_ERROR_IF(!buffer, "Dx12DescriptorImpl: null buffer for binding %u", bindingInfo.binding);
+            const Dx12BufferImpl *bufferImpl = Dx12BufferImpl::From(buffer);
+
+            if (bindingInfo.type == PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
+                bindingInfo.type == PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
+            {
+                D3D12_CONSTANT_BUFFER_VIEW_DESC cbv{};
+                cbv.BufferLocation = bufferImpl->GetResource()->GetGPUVirtualAddress() + offset;
+                cbv.SizeInBytes = AlignCbvSize(rangeBytes);
+                device->CreateConstantBufferView(&cbv, dst);
+            }
+            else if (bindingInfo.type == PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER ||
+                     bindingInfo.type == PE_DESCRIPTOR_TYPE_BYTE_ADDRESS_BUFFER)
+            {
+                D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
+                srv.Format = bindingInfo.type == PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER ? DXGI_FORMAT_UNKNOWN : DXGI_FORMAT_R32_TYPELESS;
+                srv.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+                srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                srv.Buffer = bindingInfo.type == PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER
+                                 ? StructuredBufferSrv(offset, bindingInfo, rangeBytes)
+                                 : RawBufferSrv(offset, rangeBytes);
+                device->CreateShaderResourceView(bufferImpl->GetResource(), &srv, dst);
+            }
+            else
+            {
+                PE_ERROR_IF(!bufferImpl->AllowsUnorderedAccess(),
+                            "Dx12DescriptorImpl: buffer '%s' is bound as a UAV but was not created with ALLOW_UNORDERED_ACCESS. Use GPU-only memory for DX12 writable storage buffers.",
+                            buffer ? buffer->GetName().c_str() : "<null>");
+                D3D12_UNORDERED_ACCESS_VIEW_DESC uav{};
+                uav.Format = bindingInfo.structuredStride > 0 ? DXGI_FORMAT_UNKNOWN : DXGI_FORMAT_R32_TYPELESS;
+                uav.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+                uav.Buffer = bindingInfo.structuredStride > 0
+                                 ? StructuredBufferUav(offset, bindingInfo, rangeBytes)
+                                 : RawBufferUav(offset, rangeBytes);
+                device->CreateUnorderedAccessView(bufferImpl->GetResource(), nullptr, &uav, dst);
+            }
         }
     } // namespace
 
@@ -305,6 +407,120 @@ namespace pe
         if (!slots || arrayIndex >= slots->samplerSlots.size())
             return InvalidSlot;
         return slots->samplerSlots[arrayIndex];
+    }
+
+    bool Dx12DescriptorImpl::GetCbvSrvUavTableInfo(uint32_t dxSpace, uint32_t &baseSlot, uint32_t &count) const
+    {
+        const TableSlots *table = FindTable(dxSpace);
+        if (!table || table->cbvSrvUavBaseSlot == InvalidSlot || table->cbvSrvUavCount == 0)
+            return false;
+        baseSlot = table->cbvSrvUavBaseSlot;
+        count = table->cbvSrvUavCount;
+        return true;
+    }
+
+    bool Dx12DescriptorImpl::CreateDynamicCbvSrvUavTable(uint32_t dxSpace,
+                                                         const DynamicBufferBinding *dynamicBindings,
+                                                         uint32_t dynamicBindingCount,
+                                                         uint32_t &firstSlot,
+                                                         uint32_t &count,
+                                                         D3D12_GPU_DESCRIPTOR_HANDLE &gpuHandle) const
+    {
+        auto *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+        if (!rhi || !rhi->GetDevice() || !rhi->GetCbvSrvUavHeap())
+            return false;
+
+        uint32_t sourceBase = InvalidSlot;
+        uint32_t tableCount = 0;
+        if (!GetCbvSrvUavTableInfo(dxSpace, sourceBase, tableCount))
+            return false;
+
+        auto findDynamicBinding = [&](uint32_t binding) -> const DynamicBufferBinding *
+        {
+            for (uint32_t i = 0; i < dynamicBindingCount; ++i)
+                if (dynamicBindings[i].binding == binding)
+                    return &dynamicBindings[i];
+            return nullptr;
+        };
+
+        Dx12DescriptorHeap *heap = rhi->GetCbvSrvUavHeap();
+        const uint32_t dynamicBase = heap->AllocateRange(tableCount);
+        auto freeOnFailure = [&]()
+        {
+            heap->FreeRange(dynamicBase, tableCount);
+        };
+
+        const std::vector<DescriptorBindingInfo> &bindingInfos = m_owner->GetBindingInfos();
+        const std::vector<DescriptorUpdateInfo> &boundResources = m_owner->GetBoundResources();
+
+        for (uint32_t i = 0; i < bindingInfos.size(); ++i)
+        {
+            const DescriptorBindingInfo &bindingInfo = bindingInfos[i];
+            if (bindingInfo.dxSpace != dxSpace || !IsCbvSrvUavDescriptor(bindingInfo.type))
+                continue;
+
+            const DynamicBufferBinding *dynamicBinding = findDynamicBinding(bindingInfo.binding);
+            if (dynamicBinding)
+            {
+                const uint32_t sourceSlot = GetCbvSrvUavSlot(bindingInfo.binding);
+                if (sourceSlot == InvalidSlot || sourceSlot < sourceBase || sourceSlot >= sourceBase + tableCount)
+                {
+                    freeOnFailure();
+                    return false;
+                }
+                const D3D12_CPU_DESCRIPTOR_HANDLE dst =
+                    heap->GetCpuHandle(dynamicBase + (sourceSlot - sourceBase));
+                WriteBufferDescriptor(rhi->GetDevice(), dst, bindingInfo, dynamicBinding->buffer,
+                                      dynamicBinding->offset, dynamicBinding->range);
+                continue;
+            }
+
+            if (i >= boundResources.size())
+                continue;
+
+            const DescriptorUpdateInfo &updateInfo = boundResources[i];
+            if (!updateInfo.views.empty())
+            {
+                for (uint32_t j = 0; j < updateInfo.views.size(); ++j)
+                {
+                    const uint32_t sourceSlot = GetCbvSrvUavSlot(updateInfo.binding, j);
+                    if (sourceSlot == InvalidSlot || sourceSlot < sourceBase || sourceSlot >= sourceBase + tableCount)
+                    {
+                        freeOnFailure();
+                        return false;
+                    }
+                    const auto *view = Dx12ImageViewImpl::From(updateInfo.views[j]);
+                    rhi->GetDevice()->CopyDescriptorsSimple(
+                        1,
+                        heap->GetCpuHandle(dynamicBase + (sourceSlot - sourceBase)),
+                        view->GetCpuHandle(),
+                        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                }
+            }
+            else if (!updateInfo.buffers.empty())
+            {
+                for (uint32_t j = 0; j < updateInfo.buffers.size(); ++j)
+                {
+                    const uint32_t sourceSlot = GetCbvSrvUavSlot(updateInfo.binding, j);
+                    if (sourceSlot == InvalidSlot || sourceSlot < sourceBase || sourceSlot >= sourceBase + tableCount)
+                    {
+                        freeOnFailure();
+                        return false;
+                    }
+                    Buffer *buffer = updateInfo.buffers[j];
+                    const uint64_t offset = j < updateInfo.offsets.size() ? updateInfo.offsets[j] : 0;
+                    const uint64_t rangeBytes = BufferRangeBytes(buffer, updateInfo, j);
+                    const D3D12_CPU_DESCRIPTOR_HANDLE dst =
+                        heap->GetCpuHandle(dynamicBase + (sourceSlot - sourceBase));
+                    WriteBufferDescriptor(rhi->GetDevice(), dst, bindingInfo, buffer, offset, rangeBytes);
+                }
+            }
+        }
+
+        firstSlot = dynamicBase;
+        count = tableCount;
+        gpuHandle = heap->GetGpuHandle(dynamicBase);
+        return true;
     }
 
     D3D12_GPU_DESCRIPTOR_HANDLE Dx12DescriptorImpl::GetCbvSrvUavGpuHandle(uint32_t binding, uint32_t arrayIndex) const
