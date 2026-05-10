@@ -104,6 +104,14 @@ if (PE_WEBGPU_TESTS)
     endif()
     set_target_properties(WebGPUWgslSmokeTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
+    if (WIN32)
+        add_executable(WebGPUDxilCacheHashTest "${CMAKE_CURRENT_SOURCE_DIR}/Tests/DxilCacheHashTest.cpp")
+        target_link_libraries(WebGPUDxilCacheHashTest PRIVATE PhasmaWebGPU)
+        target_precompile_headers(WebGPUDxilCacheHashTest REUSE_FROM PhasmaWebGPU)
+        target_include_directories(WebGPUDxilCacheHashTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Code")
+        set_target_properties(WebGPUDxilCacheHashTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+    endif()
+
     # pe_add_webgpu_sample(
     #   TARGET <exe name, must start with WebGPU>
     #   DIR <subfolder under Tests/>
