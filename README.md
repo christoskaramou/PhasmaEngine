@@ -66,6 +66,16 @@ Toggle the server from **Connection → MCP Server** in the editor. The **Connec
 
 PhasmaEngine uses CMake to configure and generate project files. The CMakeLists.txt is in the root folder.
 
+## GitHub Release Builds
+
+The `latest` GitHub prerelease publishes prebuilt packages from the same commit:
+
+- `PhasmaEngine-Windows-Vulkan.zip` launches `PhasmaEditor.exe --api vulkan`
+- `PhasmaEngine-Windows-DX12.zip` launches `PhasmaEditor.exe --api dx12`
+- `PhasmaEngine-Linux-Vulkan.tar.gz` includes `Launch-PhasmaEditor-Vulkan.sh`, which runs `./PhasmaEditor --api vulkan`
+
+The Windows packages contain the same runtime files; the included launcher script selects the graphics backend. DX12 is Windows-only, so the Linux package ships the Vulkan backend.
+
 **CMake:**
 Download [CMake](https://cmake.org/download/) and install it.
 See [CMake documentation](https://cmake.org/runningcmake/) for more information.

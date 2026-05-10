@@ -1,4 +1,4 @@
-name: Phasma_vulkan_
+name: Phasma prebuilds
 
 on:
   push:
@@ -26,36 +26,195 @@ jobs:
     - name: Test
       working-directory: ${{github.workspace}}/build
       run: ctest -C ${{env.BUILD_TYPE}}
-        
-    - name: Archive artifact
-      uses: thedoctor0/zip-release@b57d897cb5d60cb78b51a507f63fa184cfe35554 # v0.7.6
-      with:
-        type: 'zip'
-        filename: 'PhasmaEngine.zip'
-        directory: ${{github.workspace}}/build/Release/
-      
+
+    - name: Prepare release packages
+      run: |
+        $ErrorActionPreference = "Stop"
+
+        $runtime = Join-Path "${{ github.workspace }}" "build\${{ env.BUILD_TYPE }}"
+        $outDir = Join-Path "${{ github.workspace }}" "release-packages"
+        New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+        $packages = @(
+          @{
+            Name = "PhasmaEngine-Windows-Vulkan"
+            Api = "vulkan"
+            Label = "Vulkan"
+            Note = "This is the default PhasmaEditor backend and works on Windows and Linux-capable Vulkan GPUs."
+          },
+          @{
+            Name = "PhasmaEngine-Windows-DX12"
+            Api = "dx12"
+            Label = "DX12"
+            Note = "This package launches PhasmaEditor with the DirectX 12 backend. DX12 is Windows-only."
+          }
+        )
+
+        foreach ($package in $packages) {
+          $stage = Join-Path $outDir $package.Name
+          if (Test-Path $stage) {
+            Remove-Item -Recurse -Force $stage
+          }
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+          Copy-Item -Path (Join-Path $runtime "*") -Destination $stage -Recurse -Force
+          Remove-Item -Force -ErrorAction SilentlyContinue `
+            (Join-Path $stage "PhasmaEngine.log"), `
+            (Join-Path $stage "PhasmaEditorModule_*.dll")
+
+          $launcherName = "Launch-PhasmaEditor-$($package.Label).cmd"
+          $launcher = @"
+        @echo off
+        cd /d "%~dp0"
+        PhasmaEditor.exe --api $($package.Api) %*
+        "@
+          Set-Content -Path (Join-Path $stage $launcherName) -Value $launcher -Encoding ascii
+
+          $readme = @"
+        PhasmaEngine Windows $($package.Label) prebuild
+
+        Run:
+          $launcherName
+
+        Backend:
+          PhasmaEditor.exe --api $($package.Api)
+
+        $($package.Note)
+
+        The Vulkan and DX12 release zips are built from the same commit and binary set.
+        The launch script selects the backend at process startup.
+        "@
+          Set-Content -Path (Join-Path $stage "README_RELEASE.txt") -Value $readme -Encoding ascii
+
+          $zip = Join-Path $outDir "$($package.Name).zip"
+          Remove-Item -Force -ErrorAction SilentlyContinue $zip
+          Compress-Archive -Path $stage -DestinationPath $zip -Force
+        }
+
     - name: Upload artifact
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
-        name: PhasmaEngine
-        path: ${{github.workspace}}/build/Release/PhasmaEngine.zip
-      
+        name: PhasmaEngine-Windows-Prebuilds
+        path: ${{github.workspace}}/release-packages/*.zip
+        if-no-files-found: error
+
+  build_linux:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+    - name: Install Linux build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          ninja-build \
+          libasound2-dev \
+          libdbus-1-dev \
+          libegl1-mesa-dev \
+          libgl1-mesa-dev \
+          libibus-1.0-dev \
+          libpulse-dev \
+          libudev-dev \
+          libwayland-dev \
+          libx11-dev \
+          libxcursor-dev \
+          libxext-dev \
+          libxfixes-dev \
+          libxi-dev \
+          libxinerama-dev \
+          libxkbcommon-dev \
+          libxrandr-dev \
+          libxrender-dev \
+          libxss-dev \
+          libxxf86vm-dev
+
+    - name: Configure CMake
+      run: cmake -S ${{github.workspace}} -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+    - name: Test
+      working-directory: ${{github.workspace}}/build
+      run: ctest -C ${{env.BUILD_TYPE}}
+
+    - name: Prepare release package
+      run: |
+        set -euo pipefail
+
+        runtime="${{ github.workspace }}/build/${{ env.BUILD_TYPE }}"
+        out_dir="${{ github.workspace }}/release-packages"
+        stage="${out_dir}/PhasmaEngine-Linux-Vulkan"
+
+        rm -rf "$stage"
+        mkdir -p "$stage"
+        cp -a "$runtime"/. "$stage"/
+        rm -f "$stage"/PhasmaEngine.log "$stage"/libPhasmaEditorModule_*.so
+
+        cp -a "${{ github.workspace }}"/PhasmaCore/Libs/assimp/libassimp.so* "$stage"/
+        cp -a "${{ github.workspace }}"/PhasmaCore/Libs/dx/libdxcompiler.so "$stage"/
+        cp -a "${{ github.workspace }}"/PhasmaCore/Libs/spirv/libshaderc_shared.so* "$stage"/
+        cp -a "${{ github.workspace }}"/PhasmaCore/Libs/vulkan/libvulkan.so* "$stage"/
+
+        cat > "$stage/Launch-PhasmaEditor-Vulkan.sh" <<'SH'
+        #!/usr/bin/env bash
+        set -e
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        export LD_LIBRARY_PATH="$SCRIPT_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        exec "$SCRIPT_DIR/PhasmaEditor" --api vulkan "$@"
+        SH
+        chmod +x "$stage/Launch-PhasmaEditor-Vulkan.sh" "$stage/PhasmaEditor"
+
+        cat > "$stage/README_RELEASE.txt" <<'TXT'
+        PhasmaEngine Linux Vulkan prebuild
+
+        Run:
+          ./Launch-PhasmaEditor-Vulkan.sh
+
+        Backend:
+          ./PhasmaEditor --api vulkan
+
+        DX12 is Windows-only. This Linux package ships the Vulkan backend.
+        TXT
+
+        tar -C "$out_dir" -czf "$out_dir/PhasmaEngine-Linux-Vulkan.tar.gz" "PhasmaEngine-Linux-Vulkan"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: PhasmaEngine-Linux-Prebuilds
+        path: ${{github.workspace}}/release-packages/*.tar.gz
+        if-no-files-found: error
+
   pre-release:
     name: "release"
     runs-on: "windows-latest"
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    concurrency:
+      group: release-latest
+      cancel-in-progress: true
     needs:
       - build_phasma
+      - build_linux
     permissions:
       contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-    
-      - name: Download PhasmaEngine.zip
+
+      - name: Download Windows release packages
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: PhasmaEngine
-      
+          name: PhasmaEngine-Windows-Prebuilds
+          path: release-packages
+
+      - name: Download Linux release packages
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: PhasmaEngine-Linux-Prebuilds
+          path: release-packages
+
       - name: Automatic Release
         uses: "marvinpinto/action-automatic-releases@d68defdd11f9dcc7f52f35c1b7c236ee7513bcc1" # latest
         with:
@@ -64,7 +223,7 @@ jobs:
           prerelease: true
           title: "Development Build"
           files: |
-            PhasmaEngine.zip
+            release-packages/PhasmaEngine-Windows-Vulkan.zip
+            release-packages/PhasmaEngine-Windows-DX12.zip
+            release-packages/PhasmaEngine-Linux-Vulkan.tar.gz
             LICENSE
-        
-      
