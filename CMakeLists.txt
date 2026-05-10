@@ -195,7 +195,10 @@ if(WIN32)
         "${PE_EDITOR_THIRD_PARTY_DIR}/CacaoCompat/DirectXHeaders/include"
         "${PE_EDITOR_THIRD_PARTY_DIR}/CacaoCompat/DirectXHeaders/include/directx"
     )
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        set_source_files_properties(${CACAO_SRC_FILES} PROPERTIES
+            COMPILE_FLAGS "/permissive /Zc:gotoScope-")
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set_source_files_properties(${CACAO_SRC_FILES} PROPERTIES
             COMPILE_FLAGS "-Wno-address-of-temporary")
     endif()
