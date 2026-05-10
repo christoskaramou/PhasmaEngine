@@ -2,6 +2,7 @@
 #include "Base/Log.h"
 #include "Base/Path.h"
 #include "Base/EventSystem.h"
+#include "API/GraphicsApiSelection.h"
 #include "API/RHI.h"
 #include <SDL.h>
 #include <cstring>
@@ -103,11 +104,19 @@ static void uncapturedError(WGPUDevice const * /*device*/, WGPUErrorType type,
             message.data ? message.data : "");
 }
 
-int main(int /*argc*/, char * /*argv*/[])
+int main(int argc, char *argv[])
 {
     pe::Log::Init();
     setvbuf(stdout, nullptr, _IONBF, 0);
     printf("=== PhasmaWebGPU Render Test ===\n\n");
+
+    const pe::GraphicsApiSelection apiSelection = pe::ResolveGraphicsApi(argc, argv);
+    if (!apiSelection.Succeeded())
+    {
+        fprintf(stderr, "%s\n", apiSelection.error.c_str());
+        return 1;
+    }
+    PeGraphicsApi api = apiSelection.api;
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
     {
@@ -117,6 +126,8 @@ int main(int /*argc*/, char * /*argv*/[])
 
     const int kWidth = 800, kHeight = 600;
     uint32_t windowFlags = SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE;
+    if (api == PE_GRAPHICS_API_DX12)
+        windowFlags &= ~SDL_WINDOW_VULKAN;
     SDL_Window *window = SDL_CreateWindow("WebGPU Render Test", SDL_WINDOWPOS_CENTERED,
                                           SDL_WINDOWPOS_CENTERED, kWidth, kHeight, windowFlags);
     if (!window)
@@ -127,8 +138,8 @@ int main(int /*argc*/, char * /*argv*/[])
     }
 
     pe::EventSystem::Init();
-    pe::RHII.Init(window);
-    printf("[RHI] Vulkan initialized on %s\n\n", pe::RHII.GetGpuName().c_str());
+    pe::RHII.Init(window, api);
+    printf("[RHI] %s initialized on %s\n\n", PeGraphicsApiName(pe::RHII.GetApi()), pe::RHII.GetGpuName().c_str());
 
     WGPUInstance instance = wgpuCreateInstance(nullptr);
 

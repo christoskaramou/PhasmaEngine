@@ -26,7 +26,7 @@ Before finishing a session that changed code a wiki page describes, update the p
 
 ## Multi-backend RHI (Vulkan + DX12)
 
-Backend is selected at process launch via `--api {vulkan,dx12}` (default: vulkan). Parsed in `PhasmaEditor/main.cpp`. DX12 is **Windows-only**; on Linux only `--api vulkan` is supported.
+Backend selection is resolved by `PhasmaCore/Code/API/GraphicsApiSelection.*`: explicit CLI `--api {vulkan,dx12}` wins, then `PHASMA_API`, then optional `phasma_settings.json` next to the executable (`graphics_api` or `api`), then the built-in Vulkan default. Invalid or unsupported CLI/env values hard-fail; unsupported persisted config values warn and fall back to Vulkan. DX12 is **Windows-only**; on Linux only Vulkan is supported.
 
 ### DX12 validation knobs (env vars, parsed in `Dx12RhiImpl::Init`)
 

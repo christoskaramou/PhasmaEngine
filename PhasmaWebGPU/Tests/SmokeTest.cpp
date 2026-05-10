@@ -2,6 +2,7 @@
 #include "Base/Log.h"
 #include "Base/Path.h"
 #include "Base/EventSystem.h"
+#include "API/GraphicsApiSelection.h"
 #include "API/ImageView.h"
 #include "API/RHI.h"
 #include "RenderPass.h"
@@ -10,7 +11,6 @@
 #include "API/DX12/Dx12ImageViewImpl.h"
 #endif
 #include <SDL.h>
-#include <cstring>
 
 // clang-format off
 static const uint32_t kDoubleShaderSpirv[] = {
@@ -83,39 +83,6 @@ static void uncapturedError(WGPUDevice const *device, WGPUErrorType type,
     g_errors++;
 }
 
-static const char *GetOptionValue(const char *argument, const char *prefix)
-{
-    if (!argument || !prefix)
-        return nullptr;
-
-    size_t prefixLength = strlen(prefix);
-    return strncmp(argument, prefix, prefixLength) == 0 ? argument + prefixLength : nullptr;
-}
-
-static bool ParseApiName(const char *value, PeGraphicsApi &api)
-{
-    if (!value)
-        return false;
-    if (strcmp(value, "vulkan") == 0)
-    {
-        api = PE_GRAPHICS_API_VULKAN;
-        return true;
-    }
-    if (strcmp(value, "dx12") == 0)
-    {
-#if defined(PE_WIN32)
-        api = PE_GRAPHICS_API_DX12;
-        return true;
-#else
-        fprintf(stderr, "DX12 backend is Windows-only; use --api vulkan\n");
-        return false;
-#endif
-    }
-
-    fprintf(stderr, "Unknown --api value: %s (expected: vulkan, dx12)\n", value);
-    return false;
-}
-
 static const char *BackendName(WGPUBackendType backend)
 {
     switch (backend)
@@ -135,22 +102,13 @@ int main(int argc, char *argv[])
     setvbuf(stdout, nullptr, _IONBF, 0);
     printf("=== PhasmaWebGPU Smoke Test ===\n\n");
 
-    PeGraphicsApi api = PE_GRAPHICS_API_VULKAN;
-    for (int i = 1; i < argc; i++)
+    const pe::GraphicsApiSelection apiSelection = pe::ResolveGraphicsApi(argc, argv);
+    if (!apiSelection.Succeeded())
     {
-        if (strcmp(argv[i], "--api") == 0)
-        {
-            if (i + 1 >= argc || !ParseApiName(argv[++i], api))
-                return 1;
-            continue;
-        }
-        if (const char *value = GetOptionValue(argv[i], "--api="))
-        {
-            if (!ParseApiName(value, api))
-                return 1;
-            continue;
-        }
+        fprintf(stderr, "%s\n", apiSelection.error.c_str());
+        return 1;
     }
+    PeGraphicsApi api = apiSelection.api;
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
     {

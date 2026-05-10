@@ -2,6 +2,7 @@
 
 #include "SampleUtils.h"
 
+#include "API/GraphicsApiSelection.h"
 #include "API/RHI.h"
 #include "Base/EventSystem.h"
 #include "Base/Log.h"
@@ -24,30 +25,6 @@ namespace
 
         size_t prefixLength = strlen(prefix);
         return strncmp(argument, prefix, prefixLength) == 0 ? argument + prefixLength : nullptr;
-    }
-
-    bool ParseApiName(const char *value, PeGraphicsApi &api)
-    {
-        if (!value)
-            return false;
-        if (strcmp(value, "vulkan") == 0)
-        {
-            api = PE_GRAPHICS_API_VULKAN;
-            return true;
-        }
-        if (strcmp(value, "dx12") == 0)
-        {
-#if defined(PE_WIN32)
-            api = PE_GRAPHICS_API_DX12;
-            return true;
-#else
-            fprintf(stderr, "DX12 backend is Windows-only; use --api vulkan\n");
-            return false;
-#endif
-        }
-
-        fprintf(stderr, "Unknown --api value: %s (expected: vulkan, dx12)\n", value);
-        return false;
     }
 
     RequestResult<WGPUAdapter> RequestAdapter(WGPUInstance instance)
@@ -208,22 +185,16 @@ namespace pwgpu::test
         m_ctx.exeDir = GetExecutableDir(argc > 0 ? argv[0] : nullptr);
         m_ctx.shaderDir = GetShaderDir(m_ctx.exeDir, m_desc.sampleName);
 
-        PeGraphicsApi api = PE_GRAPHICS_API_VULKAN;
+        const pe::GraphicsApiSelection apiSelection = pe::ResolveGraphicsApi(argc, argv);
+        if (!apiSelection.Succeeded())
+        {
+            fprintf(stderr, "%s\n", apiSelection.error.c_str());
+            return false;
+        }
+        PeGraphicsApi api = apiSelection.api;
+
         for (int i = 1; i < argc; i++)
         {
-            if (strcmp(argv[i], "--api") == 0)
-            {
-                if (i + 1 >= argc || !ParseApiName(argv[++i], api))
-                    return false;
-                continue;
-            }
-            if (const char *value = GetOptionValue(argv[i], "--api="))
-            {
-                if (!ParseApiName(value, api))
-                    return false;
-                continue;
-            }
-
             if (const char *value = GetOptionValue(argv[i], "--exit-after-frames="))
                 m_exitAfterFrames = static_cast<uint64_t>(strtoull(value, nullptr, 10));
 
