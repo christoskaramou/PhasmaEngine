@@ -197,6 +197,53 @@ namespace pe
             return info.dxRegister + std::max(1u, info.count);
         }
 
+        void ValidateDescriptorCapacity(const DescriptorBindingInfo &info)
+        {
+            const uint32_t descriptorCount = std::max(1u, info.count);
+            PE_ERROR_IF(info.dxRegister == static_cast<uint32_t>(-1),
+                        "DX12 descriptor binding '%s' has no DX register",
+                        info.name.empty() ? "<unnamed>" : info.name.c_str());
+
+            auto errorIfOverflow = [&](uint64_t registerEnd, const char *rangeType)
+            {
+                PE_ERROR_IF(registerEnd > DX12_DESCRIPTORS_PER_TYPE,
+                            "DX12 %s binding '%s' at register %u/space%u with count %u exceeds per-space capacity %u",
+                            rangeType,
+                            info.name.empty() ? "<unnamed>" : info.name.c_str(),
+                            info.dxRegister,
+                            info.dxSpace,
+                            descriptorCount,
+                            DX12_DESCRIPTORS_PER_TYPE);
+            };
+
+            switch (info.type)
+            {
+            case PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            case PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+            {
+                const uint32_t cbvBase = Dx12CbvBaseRegister(info.dxSpace);
+                PE_ERROR_IF(info.dxSpace == 0 && info.dxRegister == 0,
+                            "DX12 CBV b0/space0 is reserved for push constants");
+                PE_ERROR_IF(info.dxRegister < cbvBase, "DX12 CBV register is below the table base");
+                errorIfOverflow(static_cast<uint64_t>(info.dxRegister - cbvBase) + descriptorCount, "CBV");
+                break;
+            }
+            case PE_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+            case PE_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+            case PE_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            case PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+                errorIfOverflow(static_cast<uint64_t>(info.dxRegister) + descriptorCount, "UAV");
+                break;
+            default:
+                if (IsCbvSrvUavDescriptor(info.type))
+                    errorIfOverflow(static_cast<uint64_t>(info.dxRegister) + descriptorCount, "SRV");
+                break;
+            }
+
+            if (IsSamplerDescriptor(info.type))
+                errorIfOverflow(static_cast<uint64_t>(info.dxRegister) + descriptorCount, "sampler");
+        }
+
         void WriteBufferDescriptor(ID3D12Device *device,
                                    D3D12_CPU_DESCRIPTOR_HANDLE dst,
                                    const DescriptorBindingInfo &bindingInfo,
@@ -324,10 +371,7 @@ namespace pe
                         "DX12 descriptor space %u exceeds supported count %u",
                         info.dxSpace,
                         DX12_DESCRIPTOR_SPACE_COUNT);
-            PE_ERROR_IF(info.dxRegister >= DX12_DESCRIPTORS_PER_TYPE,
-                        "DX12 descriptor register %u exceeds supported count %u",
-                        info.dxRegister,
-                        DX12_DESCRIPTORS_PER_TYPE);
+            ValidateDescriptorCapacity(info);
 
             Required &required = requiredBySpace[info.dxSpace];
             required.cbvSrvUavCount = std::max(required.cbvSrvUavCount, CbvSrvUavTableEnd(info));

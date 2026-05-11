@@ -6,8 +6,6 @@ namespace pe
 {
     namespace
     {
-        constexpr uint32_t MAX_COUNT_PER_BINDING = 500; // open / unbounded array fallback for partially bound arrays
-
         std::string GetResourceName(const spirv_cross::Compiler &compiler, spirv_cross::ID id)
         {
             std::string name = compiler.get_name(id);
@@ -24,10 +22,10 @@ namespace pe
             if (typeInfo.array_size_literal[0])
             {
                 if (typeInfo.array[0] == 0)
-                    return MAX_COUNT_PER_BINDING; // Open array
+                    return PE_MAX_DESCRIPTORS_PER_BINDING; // Open array
                 return typeInfo.array[0];
             }
-            return MAX_COUNT_PER_BINDING; // Unbounded — partially bound at runtime
+            return PE_MAX_DESCRIPTORS_PER_BINDING; // Unbounded — partially bound at runtime
         }
 
         const std::unordered_map<spirv_cross::SPIRType::BaseType, size_t> &TypeSizeMap()

@@ -8,8 +8,6 @@ namespace pe
 {
     namespace
     {
-        constexpr uint32_t MAX_COUNT_PER_BINDING = 500;
-
         struct SourceBinding
         {
             int set = INT32_MIN;
@@ -519,7 +517,7 @@ namespace pe
 
         uint32_t GetBindingCount(UINT bindCount)
         {
-            return bindCount == 0 ? MAX_COUNT_PER_BINDING : bindCount;
+            return bindCount == 0 ? PE_MAX_DESCRIPTORS_PER_BINDING : bindCount;
         }
 
         bool IsPushConstantBinding(const D3D12_SHADER_INPUT_BIND_DESC &binding, const SourceBindings &sourceBindings)

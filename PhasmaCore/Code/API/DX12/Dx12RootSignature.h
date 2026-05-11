@@ -1,12 +1,16 @@
 #pragma once
 
+#include "API/RHITypes.h"
+
 #include <d3d12.h>
 #include <wrl/client.h>
 
 namespace pe
 {
     constexpr uint32_t DX12_DESCRIPTOR_SPACE_COUNT = 4;
-    constexpr uint32_t DX12_DESCRIPTORS_PER_TYPE = 64;
+    constexpr uint32_t DX12_DESCRIPTORS_PER_TYPE = 512;
+    static_assert(DX12_DESCRIPTORS_PER_TYPE >= PE_MAX_DESCRIPTORS_PER_BINDING,
+                  "DX12 descriptor ranges must cover the unbounded-array reflection fallback");
     constexpr uint32_t DX12_CBV_TABLE_OFFSET = 0;
     constexpr uint32_t DX12_SRV_TABLE_OFFSET = DX12_DESCRIPTORS_PER_TYPE;
     constexpr uint32_t DX12_UAV_TABLE_OFFSET = DX12_DESCRIPTORS_PER_TYPE * 2;

@@ -10,6 +10,8 @@ enum PeGraphicsApi : uint32_t
     PE_GRAPHICS_API_COUNT
 };
 
+constexpr uint32_t PE_MAX_DESCRIPTORS_PER_BINDING = 500;
+
 constexpr const char *PeGraphicsApiName(PeGraphicsApi api)
 {
     switch (api)
