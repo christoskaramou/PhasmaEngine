@@ -185,7 +185,10 @@ namespace pe
         }
     }
 
-    void VulkanCommandBufferImpl::BeginPass(uint32_t count, Attachment *attachments, const std::string &name, bool skipDynamicPass)
+    void VulkanCommandBufferImpl::BeginPass(uint32_t count,
+                                            Attachment *attachments,
+                                            const std::string &name,
+                                            bool skipDynamicPass)
     {
         BeginDebugRegion(name + "_pass");
         m_owner->m_dynamicPass = Settings::Get<GlobalSettings>().dynamic_rendering && !skipDynamicPass;

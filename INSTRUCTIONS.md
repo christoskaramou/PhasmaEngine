@@ -32,11 +32,12 @@ Backend selection is resolved by `PhasmaCore/Code/API/GraphicsApiSelection.*`: e
 
 | Var | Effect |
 |---|---|
-| `PE_DX12_DEBUG=1` | Enable the D3D12 debug layer (auto-on in non-Release builds) and the throttled warning/error info-queue callback. |
+| `PE_DX12_DEBUG=1` / `0` | Enable / suppress the D3D12 debug layer and throttled warning/error info-queue callback. Defaults on in non-Release builds, off in Release. |
 | `PE_DX12_GBV=1` | Enable GPU-Based Validation. Slow; catches resource-state mismatches. |
 | `PE_DX12_BREAK=1` | Break on debug-layer `ERROR` / `CORRUPTION` severity (non-Release only). |
+| `PE_DX12_DRED=1` / `0` | Enable / suppress DRED auto-breadcrumbs and page-fault tracking. Defaults on for `PE_DEBUG` / `PE_RELWITHDEBINFO`, off in Release. |
 
-DRED auto-breadcrumbs + page-fault tracking are forced on for `PE_DEBUG` / `PE_RELWITHDEBINFO` builds.
+DRED auto-breadcrumbs + page-fault tracking default on for `PE_DEBUG` / `PE_RELWITHDEBINFO` builds.
 
 ### Backend-specific gaps and carve-outs
 

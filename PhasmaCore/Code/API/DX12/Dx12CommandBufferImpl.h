@@ -29,7 +29,10 @@ namespace pe
         void ClearColors(std::vector<Image *> images) override;
         void ClearDepthStencils(std::vector<Image *> images) override;
 
-        void BeginPass(uint32_t count, Attachment *attachments, const std::string &name, bool skipDynamicPass) override;
+        void BeginPass(uint32_t count,
+                       Attachment *attachments,
+                       const std::string &name,
+                       bool skipDynamicPass) override;
         void EndPass() override;
 
         void BindPipeline(PassInfo &passInfo, bool bindDescriptors) override;

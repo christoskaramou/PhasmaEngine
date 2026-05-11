@@ -166,7 +166,10 @@ namespace pe
         }
     }
 
-    void CommandBuffer::BeginPass(uint32_t count, Attachment *attachments, const std::string &name, bool skipDynamicPass)
+    void CommandBuffer::BeginPass(uint32_t count,
+                                  Attachment *attachments,
+                                  const std::string &name,
+                                  bool skipDynamicPass)
     {
         m_impl->BeginPass(count, attachments, name, skipDynamicPass);
     }

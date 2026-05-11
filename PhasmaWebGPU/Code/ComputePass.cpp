@@ -228,7 +228,7 @@ extern "C"
         wgpuComputePipelineAddRef(pipeline);
         cpe->retainedPipelines.push_back(pipeline);
 
-        if (!pwgpu::BindWebGPUComputePipeline(cpe->cmd, pipeline))
+        if (!pwgpu::BindWebGPUComputePipeline(cpe->cmd, pipeline, &cpe->bindingCache))
         {
             cpe->invalid = true;
             return;
@@ -237,7 +237,8 @@ extern "C"
         if (pipeline->layout)
             pwgpu::RebindWebGPUCompatibleBindGroups(
                 cpe->cmd, pwgpu::PipelineBindingPoint::Compute,
-                pipeline->layout, cpe->currentBindGroups, &cpe->currentDynamicOffsets);
+                pipeline->layout, cpe->currentBindGroups, &cpe->currentDynamicOffsets,
+                &cpe->bindingCache);
     }
 
     // ---- §14.1 setBindGroup ----
@@ -404,7 +405,7 @@ extern "C"
 
         pwgpu::BindWebGPUBindGroup(cpe->cmd, pwgpu::PipelineBindingPoint::Compute,
                                    cpe->pipeline->layout, groupIndex, group,
-                                   dynamicOffsetCount, dynamicOffsets);
+                                   dynamicOffsetCount, dynamicOffsets, &cpe->bindingCache);
     }
 
     // ---- §16.1.2 dispatchWorkgroups ----

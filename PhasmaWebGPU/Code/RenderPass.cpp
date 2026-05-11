@@ -50,8 +50,9 @@ namespace
             const VertexBufferBinding &binding = rpe->boundVertexBuffers[slot];
             if (!binding.bound || !binding.buffer || !binding.buffer->peBuffer)
                 continue;
-            rpe->cmd->BindVertexBuffer(
-                binding.buffer->peBuffer, static_cast<size_t>(binding.offset), slot, 1);
+            pwgpu::BindWebGPUVertexBuffer(
+                rpe->cmd, binding.buffer->peBuffer, static_cast<size_t>(binding.offset), slot, 1,
+                &rpe->bindingCache);
         }
     }
 
@@ -220,6 +221,16 @@ namespace
         return dst;
     }
 
+    void AdjustRenderingAttachmentForScope(vk::RenderingAttachmentInfo &attachment,
+                                           bool reopen,
+                                           bool preserveAfterScope)
+    {
+        if (reopen)
+            attachment.loadOp = vk::AttachmentLoadOp::eLoad;
+        if (preserveAfterScope)
+            attachment.storeOp = vk::AttachmentStoreOp::eStore;
+    }
+
     PeStoreOp ToPeStoreOp(WGPURenderPassAttachmentStoreOp op)
     {
         return op == WGPURenderPassAttachmentStoreOp::Store
@@ -319,6 +330,8 @@ namespace
                             passName,
                             false);
         rpe->renderingActive = true;
+        rpe->renderingActiveUsesSecondaryContents = false;
+        rpe->renderingScopeWasOpened = true;
     }
 
     // Deferred beginRendering: Vulkan dynamic rendering forbids image layout
@@ -326,7 +339,7 @@ namespace
     // the first draw-scope command, we merge attachment barriers and bind-group
     // barriers into a single vkCmdPipelineBarrier2 emitted just before
     // beginRendering — the lazy-barrier pattern used in PhasmaCore.
-    void OpenRenderingIfNeeded(WGPURenderPassEncoder rpe)
+    void OpenRenderingIfNeeded(WGPURenderPassEncoder rpe, bool secondaryContents = false)
     {
         if (!rpe || rpe->renderingActive)
             return;
@@ -355,16 +368,33 @@ namespace
         std::vector<vk::RenderingAttachmentInfo> colorAttachments;
         colorAttachments.reserve(rpe->deferredColorAttachments.size());
         for (const auto &attachment : rpe->deferredColorAttachments)
+        {
             colorAttachments.push_back(ToVkRenderingAttachment(attachment));
+            AdjustRenderingAttachmentForScope(colorAttachments.back(),
+                                              rpe->renderingScopeWasOpened,
+                                              secondaryContents);
+        }
 
         vk::RenderingAttachmentInfo depthAttachment{};
         if (rpe->deferredHasDepth)
+        {
             depthAttachment = ToVkRenderingAttachment(rpe->deferredDepthAtt);
+            AdjustRenderingAttachmentForScope(depthAttachment,
+                                              rpe->renderingScopeWasOpened,
+                                              secondaryContents);
+        }
         vk::RenderingAttachmentInfo stencilAttachment{};
         if (rpe->deferredHasStencil)
+        {
             stencilAttachment = ToVkRenderingAttachment(rpe->deferredStencilAtt);
+            AdjustRenderingAttachmentForScope(stencilAttachment,
+                                              rpe->renderingScopeWasOpened,
+                                              secondaryContents);
+        }
 
         vk::RenderingInfo renderingInfo{};
+        if (secondaryContents)
+            renderingInfo.flags |= vk::RenderingFlagBits::eContentsSecondaryCommandBuffers;
         renderingInfo.renderArea = vk::Rect2D{{0, 0},
                                               {rpe->deferredRenderWidth, rpe->deferredRenderHeight}};
         renderingInfo.layerCount = 1;
@@ -378,6 +408,8 @@ namespace
 
         pe::GetVulkanCommandBuffer(rpe->cmd).beginRendering(renderingInfo);
         rpe->renderingActive = true;
+        rpe->renderingActiveUsesSecondaryContents = secondaryContents;
+        rpe->renderingScopeWasOpened = true;
     }
 
     bool RenderingActive(WGPURenderPassEncoder rpe, const char *apiName)
@@ -660,7 +692,7 @@ extern "C"
         wgpuRenderPipelineAddRef(pipeline);
         rpe->retainedPipelines.push_back(pipeline);
 
-        if (!pwgpu::BindWebGPURenderPipeline(rpe->cmd, pipeline))
+        if (!pwgpu::BindWebGPURenderPipeline(rpe->cmd, pipeline, &rpe->bindingCache))
         {
             rpe->invalid = true;
             return;
@@ -669,7 +701,8 @@ extern "C"
         if (pipeline->layout)
             pwgpu::RebindWebGPUCompatibleBindGroups(
                 rpe->cmd, pwgpu::PipelineBindingPoint::Render,
-                pipeline->layout, rpe->currentBindGroups, &rpe->currentDynamicOffsets);
+                pipeline->layout, rpe->currentBindGroups, &rpe->currentDynamicOffsets,
+                &rpe->bindingCache);
 
         BindStoredVertexBuffers(rpe);
     }
@@ -845,7 +878,7 @@ extern "C"
 
         pwgpu::BindWebGPUBindGroup(rpe->cmd, pwgpu::PipelineBindingPoint::Render,
                                    rpe->pipeline->layout, groupIndex, group,
-                                   dynamicOffsetCount, dynamicOffsets);
+                                   dynamicOffsetCount, dynamicOffsets, &rpe->bindingCache);
     }
 
     void wgpuRenderPassEncoderSetVertexBuffer(WGPURenderPassEncoder rpe, uint32_t slot,
@@ -932,7 +965,9 @@ extern "C"
         if (rpe->pipeline &&
             slot < rpe->pipeline->vertexBufferLayouts.size() &&
             rpe->pipeline->vertexBufferLayouts[slot].used)
-            rpe->cmd->BindVertexBuffer(buffer->peBuffer, static_cast<size_t>(offset), slot, 1);
+            pwgpu::BindWebGPUVertexBuffer(
+                rpe->cmd, buffer->peBuffer, static_cast<size_t>(offset), slot, 1,
+                &rpe->bindingCache);
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -1010,7 +1045,9 @@ extern "C"
             return;
         }
 
-        rpe->cmd->BindIndexBuffer(buffer->peBuffer, offset, pwgpu::ToPeIndexType(format));
+        pwgpu::BindWebGPUIndexBuffer(
+            rpe->cmd, buffer->peBuffer, static_cast<size_t>(offset), pwgpu::ToPeIndexType(format),
+            &rpe->bindingCache);
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -1031,7 +1068,7 @@ extern "C"
         }
         rpe->drawCount++;
         OpenRenderingIfNeeded(rpe);
-        rpe->cmd->Draw(vertexCount, instanceCount, firstVertex, firstInstance);
+        pwgpu::DrawWebGPU(rpe->cmd, vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     void wgpuRenderPassEncoderDrawIndexed(WGPURenderPassEncoder rpe, uint32_t indexCount,
@@ -1065,7 +1102,8 @@ extern "C"
         }
         rpe->drawCount++;
         OpenRenderingIfNeeded(rpe);
-        rpe->cmd->DrawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
+        pwgpu::DrawIndexedWebGPU(
+            rpe->cmd, indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
     }
 
     void wgpuRenderPassEncoderDrawIndirect(WGPURenderPassEncoder rpe, WGPUBuffer buffer, uint64_t offset)
@@ -1377,6 +1415,15 @@ extern "C"
     {
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderExecuteBundles"))
             return;
+        if (bundleCount == 0)
+            return;
+        if (!bundles)
+        {
+            ReportPassValidation(rpe,
+                                 "wgpuRenderPassEncoderExecuteBundles: bundles is null but bundleCount > 0");
+            rpe->invalid = true;
+            return;
+        }
 
         for (size_t i = 0; i < bundleCount; i++)
         {
@@ -1443,6 +1490,22 @@ extern "C"
             }
         }
 
+        bool canUseVulkanNativeBundles =
+            pe::RHII.GetApi() == PE_GRAPHICS_API_VULKAN && !rpe->renderingActive;
+        if (canUseVulkanNativeBundles)
+        {
+            for (size_t i = 0; i < bundleCount; ++i)
+            {
+                if (!pwgpu::EnsureVulkanNativeRenderBundle(
+                        bundles[i], rpe->deferredRenderWidth, rpe->deferredRenderHeight,
+                        rpe->colorFormats, rpe->depthStencilFormat, rpe->sampleCount))
+                {
+                    canUseVulkanNativeBundles = false;
+                    break;
+                }
+            }
+        }
+
         if (!rpe->renderingActive)
         {
             std::vector<pe::ImageBarrierInfo> bundleImageBarriers;
@@ -1461,7 +1524,11 @@ extern "C"
                 rpe->cmd->ImageBarriers(bundleImageBarriers);
         }
 
-        OpenRenderingIfNeeded(rpe);
+        OpenRenderingIfNeeded(rpe, canUseVulkanNativeBundles);
+        std::vector<vk::CommandBuffer> nativeBundles;
+        if (canUseVulkanNativeBundles)
+            nativeBundles.reserve(bundleCount);
+
         for (size_t i = 0; i < bundleCount; i++)
         {
             auto *bundle = bundles[i];
@@ -1479,12 +1546,32 @@ extern "C"
 
             rpe->drawCount += bundle->drawCount;
 
-            for (auto &command : bundle->commands)
-                command(rpe->cmd);
+            if (canUseVulkanNativeBundles)
+            {
+                nativeBundles.push_back(vk::CommandBuffer{
+                    PeFromBackendHandle<VkCommandBuffer>(
+                        bundle->vulkanSecondaryCommandBuffer)});
+            }
+            else
+            {
+                pwgpu::WebGPUBindingCache bundleBindingCache;
+                for (auto &command : bundle->commands)
+                    command(rpe->cmd, &bundleBindingCache);
+            }
+        }
+
+        if (canUseVulkanNativeBundles && !nativeBundles.empty())
+        {
+            pe::GetVulkanCommandBuffer(rpe->cmd).executeCommands(
+                static_cast<uint32_t>(nativeBundles.size()), nativeBundles.data());
+            pe::GetVulkanCommandBuffer(rpe->cmd).endRendering();
+            rpe->renderingActive = false;
+            rpe->renderingActiveUsesSecondaryContents = false;
         }
 
         rpe->pipeline = nullptr;
         rpe->bindingStateInvalidated = true;
+        rpe->bindingCache = {};
     }
 
     void wgpuRenderPassEncoderInsertDebugMarker(WGPURenderPassEncoder rpe, WGPUStringView label)
@@ -1577,7 +1664,7 @@ extern "C"
             rpe->deferredResourceError ||
             (rpe->invalid && !rpe->deferredResourceError) ||
             !rpe->usageScopeValid;
-        if (!rpe->renderingActive && !skipGpuWork)
+        if (!rpe->renderingActive && !rpe->renderingScopeWasOpened && !skipGpuWork)
             OpenRenderingIfNeeded(rpe);
         if (rpe->renderingActive)
         {
@@ -1586,6 +1673,7 @@ extern "C"
             else
                 pe::GetVulkanCommandBuffer(rpe->cmd).endRendering();
             rpe->renderingActive = false;
+            rpe->renderingActiveUsesSecondaryContents = false;
         }
 
         if (rpe->timestampQuerySet && rpe->endTimestampIndex != UINT32_MAX &&

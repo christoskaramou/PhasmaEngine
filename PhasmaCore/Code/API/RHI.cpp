@@ -825,10 +825,20 @@ namespace pe
                   { return a.score > b.score; });
         vk->m_gpu = gpuScores.front().gpu;
 
+        const bool descriptorBufferExtensionAvailable =
+            IsDeviceExtensionValid(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
+
         ::vk::PhysicalDevicePushDescriptorPropertiesKHR pushDescriptorProperties{};
+        VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptorBufferProperties{};
+        descriptorBufferProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
 
         ::vk::PhysicalDeviceProperties2 gpuPropertiesVK{};
         gpuPropertiesVK.pNext = &pushDescriptorProperties;
+        if (descriptorBufferExtensionAvailable)
+        {
+            descriptorBufferProperties.pNext = gpuPropertiesVK.pNext;
+            gpuPropertiesVK.pNext = &descriptorBufferProperties;
+        }
         vk->m_gpu.getProperties2(&gpuPropertiesVK);
 
         const vk::PhysicalDeviceFeatures gpuFeatures = vk->m_gpu.getFeatures();
@@ -867,8 +877,7 @@ namespace pe
         m_gpuFeatureSupport.textureCompressionETC2 = gpuFeatures.textureCompressionETC2 != 0;
         m_gpuFeatureSupport.textureCompressionASTC = gpuFeatures.textureCompressionASTC_LDR != 0;
         m_gpuFeatureSupport.drawIndirectFirstInstance = gpuFeatures.drawIndirectFirstInstance != 0;
-        m_gpuFeatureSupport.timestampQuery =
-            gpuPropertiesVK.properties.limits.timestampComputeAndGraphics != 0;
+        m_gpuFeatureSupport.timestampQuery = gpuPropertiesVK.properties.limits.timestampComputeAndGraphics != 0;
         m_gpuFeatureSupport.dualSourceBlending = gpuFeatures.dualSrcBlend != 0;
         m_gpuFeatureSupport.shaderClipDistance = gpuFeatures.shaderClipDistance != 0;
         m_gpuFeatureSupport.shaderFloat16 = vk12Features.shaderFloat16 != 0;
@@ -920,6 +929,21 @@ namespace pe
             std::min(limits.maxComputeWorkGroupCount[0],
                      std::min(limits.maxComputeWorkGroupCount[1],
                               limits.maxComputeWorkGroupCount[2]));
+
+        m_caps.descriptorBuffer = {};
+        if (descriptorBufferExtensionAvailable)
+        {
+            auto &db = m_caps.descriptorBuffer;
+            db.descriptorBufferOffsetAlignment = descriptorBufferProperties.descriptorBufferOffsetAlignment;
+            db.samplerDescriptorSize = descriptorBufferProperties.samplerDescriptorSize;
+            db.combinedImageSamplerDescriptorSize = descriptorBufferProperties.combinedImageSamplerDescriptorSize;
+            db.sampledImageDescriptorSize = descriptorBufferProperties.sampledImageDescriptorSize;
+            db.storageImageDescriptorSize = descriptorBufferProperties.storageImageDescriptorSize;
+            db.uniformBufferDescriptorSize = descriptorBufferProperties.uniformBufferDescriptorSize;
+            db.robustUniformBufferDescriptorSize = descriptorBufferProperties.robustUniformBufferDescriptorSize;
+            db.storageBufferDescriptorSize = descriptorBufferProperties.storageBufferDescriptorSize;
+            db.robustStorageBufferDescriptorSize = descriptorBufferProperties.robustStorageBufferDescriptorSize;
+        }
     }
 
     bool RHI::IsInstanceExtensionValid(const char *name)
@@ -1062,19 +1086,39 @@ namespace pe
         rayQueryFeatures.pNext = &rayTracingPipelineFeatures;
 
         const bool depthClipExtAvailable = IsDeviceExtensionValid(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
+        const bool descriptorBufferExtAvailable = IsDeviceExtensionValid(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
         vk::PhysicalDeviceDepthClipEnableFeaturesEXT depthClipFeatures{};
         if (depthClipExtAvailable)
             depthClipFeatures.pNext = &rayQueryFeatures;
+
+        VkPhysicalDeviceDescriptorBufferFeaturesEXT supportedDescriptorBufferFeatures{};
+        supportedDescriptorBufferFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
+        VkPhysicalDeviceDescriptorBufferFeaturesEXT requestedDescriptorBufferFeatures{};
+        requestedDescriptorBufferFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
 
         vk::PhysicalDeviceFeatures2 deviceFeatures2{};
         deviceFeatures2.pNext = depthClipExtAvailable
                                     ? static_cast<void *>(&depthClipFeatures)
                                     : static_cast<void *>(&rayQueryFeatures);
+        if (descriptorBufferExtAvailable)
+        {
+            supportedDescriptorBufferFeatures.pNext = deviceFeatures2.pNext;
+            deviceFeatures2.pNext = &supportedDescriptorBufferFeatures;
+        }
 
         vk->m_gpu.getFeatures2(&deviceFeatures2);
 
         if (depthClipExtAvailable && depthClipFeatures.depthClipEnable)
             deviceExtensions.push_back(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
+        m_caps.descriptorBuffer.supported = false;
+        m_caps.descriptorBuffer.robustBufferAccess = deviceFeatures2.features.robustBufferAccess != 0;
+        if (descriptorBufferExtAvailable &&
+            supportedDescriptorBufferFeatures.descriptorBuffer)
+        {
+            deviceExtensions.push_back(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
+            m_caps.descriptorBuffer.supported = true;
+            requestedDescriptorBufferFeatures.descriptorBuffer = VK_TRUE;
+        }
 
         Settings::Get<GlobalSettings>().dynamic_rendering &= static_cast<bool>(deviceFeatures13.dynamicRendering);
         m_caps.dynamicRendering = static_cast<bool>(deviceFeatures13.dynamicRendering);
@@ -1092,6 +1136,15 @@ namespace pe
         PE_ERROR_IF(!deviceFeatures2.features.shaderInt64, "Int64 is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures2.features.multiDrawIndirect, "Multi draw indirect is not supported!");
         PE_ERROR_IF(!deviceFeatures2.features.drawIndirectFirstInstance, "Draw indirect first instance is not supported!");
+
+        deviceFeatures2.pNext = depthClipExtAvailable
+                                    ? static_cast<void *>(&depthClipFeatures)
+                                    : static_cast<void *>(&rayQueryFeatures);
+        if (m_caps.descriptorBuffer.supported)
+        {
+            requestedDescriptorBufferFeatures.pNext = deviceFeatures2.pNext;
+            deviceFeatures2.pNext = &requestedDescriptorBufferFeatures;
+        }
 
         vk::DeviceCreateInfo deviceCreateInfo{};
         deviceCreateInfo.queueCreateInfoCount = 1;

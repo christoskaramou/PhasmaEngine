@@ -39,6 +39,10 @@ namespace pe
                 vkUsage |= vk::BufferUsageFlagBits2::eAccelerationStructureBuildInputReadOnlyKHR;
             if (usage & PE_BUFFER_USAGE_SHADER_BINDING_TABLE_KHR)
                 vkUsage |= vk::BufferUsageFlagBits2::eShaderBindingTableKHR;
+            if (usage & PE_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER)
+                vkUsage |= vk::BufferUsageFlagBits2::eResourceDescriptorBufferEXT;
+            if (usage & PE_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER)
+                vkUsage |= vk::BufferUsageFlagBits2::eSamplerDescriptorBufferEXT;
             return vkUsage;
         }
 

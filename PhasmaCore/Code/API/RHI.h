@@ -124,12 +124,28 @@ namespace pe
 
         struct Caps
         {
+            struct DescriptorBuffer
+            {
+                bool supported = false;
+                bool robustBufferAccess = false;
+                uint64_t descriptorBufferOffsetAlignment = 1;
+                size_t samplerDescriptorSize = 0;
+                size_t combinedImageSamplerDescriptorSize = 0;
+                size_t sampledImageDescriptorSize = 0;
+                size_t storageImageDescriptorSize = 0;
+                size_t uniformBufferDescriptorSize = 0;
+                size_t robustUniformBufferDescriptorSize = 0;
+                size_t storageBufferDescriptorSize = 0;
+                size_t robustStorageBufferDescriptorSize = 0;
+            };
+
             bool rayTracing = false;
             bool dynamicRendering = false;
             bool indirectCount = false;
             bool meshShaders = false;
             uint32_t maxPushConstantsBytes = 0;
             uint32_t maxBindlessTextures = 0;
+            DescriptorBuffer descriptorBuffer{};
         };
 
         static RHI *Get()

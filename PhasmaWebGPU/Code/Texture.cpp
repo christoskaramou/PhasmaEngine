@@ -690,7 +690,7 @@ extern "C"
         else
         {
             wgpuTextureAddRef(texture);
-            std::lock_guard<std::mutex> lock(texture->device->pendingTextureDeletionsMutex);
+            std::lock_guard<std::mutex> lock(texture->device->pendingResourceDeletionsMutex);
             texture->device->pendingTextureDeletions.push_back({texture, lastUsage});
         }
     }

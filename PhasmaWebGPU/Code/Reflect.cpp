@@ -1,6 +1,7 @@
 #include "Reflect.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "BindGroup.h"
+#include "DescriptorBuffer.h"
 #include "FormatInfo.h"
 #include "PipelineLayout.h"
 #include "Device.h"
@@ -1535,15 +1536,6 @@ namespace pwgpu
         device->refCount.fetch_add(1, std::memory_order_relaxed);
         pl->bindGroupLayouts.resize(numSets, nullptr);
 
-        const bool useVulkanBackend = device->rhi && device->rhi->GetApi() == PE_GRAPHICS_API_VULKAN;
-        vk::Device vkDev{};
-        std::vector<vk::DescriptorSetLayout> vkSetLayouts;
-        if (useVulkanBackend)
-        {
-            vkDev = pe::VulkanRhi::Device();
-            vkSetLayouts.resize(numSets, VK_NULL_HANDLE);
-        }
-
         for (uint32_t s = 0; s < numSets; ++s)
         {
             auto *bgl = new WGPUBindGroupLayoutImpl();
@@ -1554,17 +1546,7 @@ namespace pwgpu
 
             auto it = merged.find(s);
             if (it == merged.end() || it->second.empty())
-            {
-                if (useVulkanBackend)
-                {
-                    vk::DescriptorSetLayoutCreateInfo emptyCI{};
-                    auto emptyLayout = vkDev.createDescriptorSetLayout(emptyCI);
-                    pl->ownedEmptyBackendLayouts.push_back(
-                        PeToBackendHandle(static_cast<VkDescriptorSetLayout>(emptyLayout)));
-                    vkSetLayouts[s] = emptyLayout;
-                }
                 continue;
-            }
 
             std::vector<pe::DescriptorBindingInfo> infos;
             PeShaderStageFlags stageMask{};
@@ -1620,29 +1602,15 @@ namespace pwgpu
             if (!infos.empty())
             {
                 bgl->layout = pe::DescriptorLayout::Create(infos, stageMask, "auto_bgl");
-                if (useVulkanBackend)
-                    vkSetLayouts[s] = pe::GetVulkanDescriptorLayout(bgl->layout);
-            }
-            else
-            {
-                if (useVulkanBackend)
-                {
-                    vk::DescriptorSetLayoutCreateInfo emptyCI{};
-                    auto emptyLayout = vkDev.createDescriptorSetLayout(emptyCI);
-                    pl->ownedEmptyBackendLayouts.push_back(
-                        PeToBackendHandle(static_cast<VkDescriptorSetLayout>(emptyLayout)));
-                    vkSetLayouts[s] = emptyLayout;
-                }
+                pwgpu::CreateDescriptorBufferLayout(bgl);
             }
         }
 
-        if (useVulkanBackend)
+        if (!pwgpu::CreateWebGPUPipelineLayoutBackend(pl))
         {
-            vk::PipelineLayoutCreateInfo ci{};
-            ci.setLayoutCount = static_cast<uint32_t>(vkSetLayouts.size());
-            ci.pSetLayouts = vkSetLayouts.empty() ? nullptr : vkSetLayouts.data();
-            vk::PipelineLayout layout = vkDev.createPipelineLayout(ci);
-            pl->backendLayout = PeToBackendHandle(static_cast<VkPipelineLayout>(layout));
+            errMsg = "auto-layout: native pipeline layout creation failed";
+            wgpuPipelineLayoutRelease(pl);
+            return nullptr;
         }
         return pl;
     }

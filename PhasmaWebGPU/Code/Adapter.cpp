@@ -3,6 +3,7 @@
 #include "Instance.h"
 #include "Utils.h"
 #include "WGPULimits.h"
+#include "API/Buffer.h"
 
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12RhiImpl.h"
@@ -635,6 +636,65 @@ extern "C"
         dev->resolvedStencil8 = adapter->resolvedStencil8;
         dev->supportsDepthClamp = adapter->featureSupport.depthClamp;
         dev->supportsDepthClipEnable = adapter->featureSupport.depthClipControl;
+        if (adapter->rhi && adapter->rhi->GetApi() == PE_GRAPHICS_API_VULKAN)
+        {
+            const auto &coreDb = adapter->rhi->GetCaps().descriptorBuffer;
+            dev->descriptorBuffer.supported = coreDb.supported;
+            dev->descriptorBuffer.robustBufferAccess = coreDb.robustBufferAccess;
+            dev->descriptorBuffer.descriptorBufferOffsetAlignment =
+                coreDb.descriptorBufferOffsetAlignment;
+            dev->descriptorBuffer.samplerDescriptorSize = coreDb.samplerDescriptorSize;
+            dev->descriptorBuffer.combinedImageSamplerDescriptorSize =
+                coreDb.combinedImageSamplerDescriptorSize;
+            dev->descriptorBuffer.sampledImageDescriptorSize =
+                coreDb.sampledImageDescriptorSize;
+            dev->descriptorBuffer.storageImageDescriptorSize =
+                coreDb.storageImageDescriptorSize;
+            dev->descriptorBuffer.uniformBufferDescriptorSize =
+                coreDb.uniformBufferDescriptorSize;
+            dev->descriptorBuffer.robustUniformBufferDescriptorSize =
+                coreDb.robustUniformBufferDescriptorSize;
+            dev->descriptorBuffer.storageBufferDescriptorSize =
+                coreDb.storageBufferDescriptorSize;
+            dev->descriptorBuffer.robustStorageBufferDescriptorSize =
+                coreDb.robustStorageBufferDescriptorSize;
+
+            if (dev->descriptorBuffer.supported)
+            {
+                constexpr uint64_t kDescriptorBufferBytes = 64ull * 1024ull * 1024ull;
+                try
+                {
+                    dev->descriptorBuffer.buffer = pe::Buffer::Create({
+                        .size = kDescriptorBufferBytes,
+                        .usage = PE_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER |
+                                 PE_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER |
+                                 PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS,
+                        .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT,
+                        .name = "WebGPU_descriptor_buffer",
+                    });
+                    dev->descriptorBuffer.buffer->Map();
+                    dev->descriptorBuffer.bufferSize = kDescriptorBufferBytes;
+                    dev->descriptorBuffer.enabled =
+                        dev->descriptorBuffer.buffer->Data() != nullptr;
+                    if (!dev->descriptorBuffer.enabled)
+                    {
+                        PE_WARN("[WebGPU] descriptor buffer allocation produced no mapped data; falling back to classic descriptors");
+                        pe::Buffer::Destroy(dev->descriptorBuffer.buffer);
+                        dev->descriptorBuffer.buffer = nullptr;
+                        dev->descriptorBuffer.bufferSize = 0;
+                    }
+                }
+                catch (...)
+                {
+                    PE_WARN("[WebGPU] descriptor buffer creation failed; falling back to classic descriptors");
+                    if (dev->descriptorBuffer.buffer)
+                        pe::Buffer::Destroy(dev->descriptorBuffer.buffer);
+                    dev->descriptorBuffer.buffer = nullptr;
+                    dev->descriptorBuffer.enabled = false;
+                    dev->descriptorBuffer.bufferSize = 0;
+                }
+            }
+        }
 
         if (descriptor)
         {

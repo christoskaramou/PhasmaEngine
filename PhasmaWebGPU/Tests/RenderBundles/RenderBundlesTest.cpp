@@ -1,13 +1,19 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "third_party/stb/stb_image.h"
 
+#include "../Common/RunOptions.h"
 #include "../Common/SampleApp.h"
 #include "../Common/SampleBase.h"
 #include "../Common/SampleUtils.h"
 #include "../SampleShaderUtils.h"
 
+#include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <limits>
 
 namespace
 {
@@ -26,6 +32,89 @@ namespace
     //   pos (3f) + normal (3f) + uv (2f) = 32B stride.
     constexpr uint32_t kSphereVertexFloatCount = 8;
     constexpr uint32_t kSphereVertexStride = kSphereVertexFloatCount * sizeof(float);
+
+    enum class ReplayMode
+    {
+        Bundle,
+        Direct
+    };
+
+    struct RenderBundlesOptions
+    {
+        ReplayMode mode = ReplayMode::Bundle;
+        bool benchmark = false;
+        uint64_t warmupFrames = 60;
+        uint64_t measureFrames = 300;
+    };
+
+    const char *ReplayModeName(ReplayMode mode)
+    {
+        return mode == ReplayMode::Direct ? "direct" : "bundle";
+    }
+
+    bool ParseUint64Option(const char *value, uint64_t &out)
+    {
+        if (!value || *value == '\0')
+            return false;
+
+        char *end = nullptr;
+        unsigned long long parsed = std::strtoull(value, &end, 10);
+        if (*end != '\0')
+            return false;
+
+        out = static_cast<uint64_t>(parsed);
+        return true;
+    }
+
+    bool ParseOptions(int argc, char *argv[], RenderBundlesOptions &options)
+    {
+        for (int i = 1; i < argc; ++i)
+        {
+            const char *arg = argv[i];
+            if (std::strcmp(arg, "--rb-direct") == 0)
+            {
+                options.mode = ReplayMode::Direct;
+            }
+            else if (std::strcmp(arg, "--rb-bundle") == 0)
+            {
+                options.mode = ReplayMode::Bundle;
+            }
+            else if (std::strcmp(arg, "--rb-benchmark") == 0)
+            {
+                options.benchmark = true;
+            }
+            else if (const char *value = pwgpu::test::GetOptionValue(arg, "--rb-mode="))
+            {
+                if (std::strcmp(value, "direct") == 0)
+                    options.mode = ReplayMode::Direct;
+                else if (std::strcmp(value, "bundle") == 0)
+                    options.mode = ReplayMode::Bundle;
+                else
+                {
+                    fprintf(stderr, "Invalid --rb-mode value: %s\n", value);
+                    return false;
+                }
+            }
+            else if (const char *value = pwgpu::test::GetOptionValue(arg, "--rb-warmup-frames="))
+            {
+                if (!ParseUint64Option(value, options.warmupFrames))
+                {
+                    fprintf(stderr, "Invalid --rb-warmup-frames value: %s\n", value);
+                    return false;
+                }
+            }
+            else if (const char *value = pwgpu::test::GetOptionValue(arg, "--rb-measure-frames="))
+            {
+                if (!ParseUint64Option(value, options.measureFrames) || options.measureFrames == 0)
+                {
+                    fprintf(stderr, "Invalid --rb-measure-frames value: %s\n", value);
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
 
     struct SphereMesh
     {
@@ -182,6 +271,11 @@ namespace
     class RenderBundlesSample final : public pwgpu::test::SampleBase
     {
     public:
+        explicit RenderBundlesSample(RenderBundlesOptions options)
+            : m_options(options)
+        {
+        }
+
         bool Init(pwgpu::test::SampleContext &ctx) override
         {
             std::srand(0xA57E401D);
@@ -217,15 +311,23 @@ namespace
 
             // Encode the bundle once. Because the scene content never changes
             // shape (same draws, same buffers, same bind groups), we only need
-            // to re-record the bundle when the asteroid count changes — which
+            // to re-record the bundle when the asteroid count changes, which
             // never happens in this port.
-            if (!UpdateRenderBundle(ctx))
+            if (m_options.mode == ReplayMode::Bundle && !UpdateRenderBundle(ctx))
                 return false;
 
             fprintf(stdout,
-                    "[RenderBundles] planet + %u asteroids, bundle draws=%zu\n",
+                    "[RenderBundles] mode=%s planet + %u asteroids, draws=%zu\n",
+                    ReplayModeName(m_options.mode),
                     kAsteroidCount,
                     m_renderables.size());
+            if (m_options.benchmark)
+            {
+                fprintf(stdout,
+                        "[RenderBundles] benchmark warmup=%llu measure=%llu\n",
+                        static_cast<unsigned long long>(m_options.warmupFrames),
+                        static_cast<unsigned long long>(m_options.measureFrames));
+            }
             return true;
         }
 
@@ -283,7 +385,8 @@ namespace
 
         bool Execute(pwgpu::test::SampleContext &, pwgpu::test::SampleFrame &frame) override
         {
-            if (!m_pipeline || !m_depthView || !m_renderBundle)
+            if (!m_pipeline || !m_depthView ||
+                (m_options.mode == ReplayMode::Bundle && !m_renderBundle))
                 return true;
 
             WGPURenderPassColorAttachment colorAttachment{};
@@ -309,11 +412,30 @@ namespace
             passDesc.colorAttachments = &colorAttachment;
             passDesc.depthStencilAttachment = &depthAttachment;
 
+            const auto replayStart = m_options.benchmark
+                                         ? std::chrono::steady_clock::now()
+                                         : std::chrono::steady_clock::time_point{};
             WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(frame.encoder, &passDesc);
-            wgpuRenderPassEncoderExecuteBundles(pass, 1, &m_renderBundle);
+            if (m_options.mode == ReplayMode::Bundle)
+            {
+                wgpuRenderPassEncoderExecuteBundles(pass, 1, &m_renderBundle);
+                if (!m_options.benchmark)
+                    RecordOneInlineDraw(pass);
+            }
+            else
+            {
+                RecordDirect(pass);
+            }
             wgpuRenderPassEncoderEnd(pass);
             wgpuRenderPassEncoderRelease(pass);
-            return true;
+            if (m_options.benchmark)
+            {
+                const auto replayEnd = std::chrono::steady_clock::now();
+                const double replayMs =
+                    std::chrono::duration<double, std::milli>(replayEnd - replayStart).count();
+                RecordBenchmarkFrame(frame.frameIndex, replayMs);
+            }
+            return !m_benchmarkComplete;
         }
 
         void Shutdown(pwgpu::test::SampleContext &) override
@@ -766,6 +888,75 @@ namespace
             return m_renderBundle != nullptr;
         }
 
+        void RecordDirect(WGPURenderPassEncoder pass)
+        {
+            wgpuRenderPassEncoderSetPipeline(pass, m_pipeline);
+            wgpuRenderPassEncoderSetBindGroup(pass, 0, m_sceneBindGroup, 0, nullptr);
+
+            for (const Renderable &r : m_renderables)
+                RecordRenderable(pass, r);
+        }
+
+        void RecordOneInlineDraw(WGPURenderPassEncoder pass)
+        {
+            if (m_renderables.empty())
+                return;
+            wgpuRenderPassEncoderSetPipeline(pass, m_pipeline);
+            wgpuRenderPassEncoderSetBindGroup(pass, 0, m_sceneBindGroup, 0, nullptr);
+            RecordRenderable(pass, m_renderables.front(), 0);
+        }
+
+        void RecordRenderable(WGPURenderPassEncoder pass,
+                              const Renderable &r,
+                              uint32_t indexCountOverride = UINT32_MAX)
+        {
+            if (!r.mesh)
+                return;
+            wgpuRenderPassEncoderSetBindGroup(pass, 1, r.bindGroup, 0, nullptr);
+            wgpuRenderPassEncoderSetVertexBuffer(pass,
+                                                 0,
+                                                 r.mesh->vertexBuffer,
+                                                 0,
+                                                 r.mesh->vertexBufferSize);
+            wgpuRenderPassEncoderSetIndexBuffer(pass,
+                                                r.mesh->indexBuffer,
+                                                WGPUIndexFormat_Uint16,
+                                                0,
+                                                r.mesh->indexBufferSize);
+            const uint32_t indexCount = indexCountOverride == UINT32_MAX
+                                            ? r.mesh->indexCount
+                                            : indexCountOverride;
+            wgpuRenderPassEncoderDrawIndexed(pass, indexCount, 1, 0, 0, 0);
+        }
+
+        void RecordBenchmarkFrame(uint64_t frameIndex, double replayMs)
+        {
+            if (!m_options.benchmark ||
+                frameIndex < m_options.warmupFrames ||
+                m_benchmarkFrames >= m_options.measureFrames)
+                return;
+
+            m_benchmarkFrames++;
+            m_benchmarkReplayMs += replayMs;
+            m_benchmarkMinReplayMs = std::min(m_benchmarkMinReplayMs, replayMs);
+            m_benchmarkMaxReplayMs = std::max(m_benchmarkMaxReplayMs, replayMs);
+
+            if (m_benchmarkFrames < m_options.measureFrames)
+                return;
+
+            const double avgReplayMs =
+                m_benchmarkReplayMs / static_cast<double>(m_benchmarkFrames);
+            fprintf(stdout,
+                    "[RenderBundles] result mode=%s frames=%llu avg_replay_ms=%.4f "
+                    "min_replay_ms=%.4f max_replay_ms=%.4f\n",
+                    ReplayModeName(m_options.mode),
+                    static_cast<unsigned long long>(m_benchmarkFrames),
+                    avgReplayMs,
+                    m_benchmarkMinReplayMs,
+                    m_benchmarkMaxReplayMs);
+            m_benchmarkComplete = true;
+        }
+
         void ReleaseDepthTarget()
         {
             if (m_depthView)
@@ -805,6 +996,13 @@ namespace
 
         WGPUTexture m_depthTexture = nullptr;
         WGPUTextureView m_depthView = nullptr;
+
+        RenderBundlesOptions m_options{};
+        uint64_t m_benchmarkFrames = 0;
+        double m_benchmarkReplayMs = 0.0;
+        double m_benchmarkMinReplayMs = std::numeric_limits<double>::max();
+        double m_benchmarkMaxReplayMs = 0.0;
+        bool m_benchmarkComplete = false;
     };
 
     pwgpu::test::SampleAppDesc MakeRenderBundlesDesc()
@@ -820,7 +1018,11 @@ namespace
 
 int main(int argc, char *argv[])
 {
-    RenderBundlesSample sample;
+    RenderBundlesOptions options{};
+    if (!ParseOptions(argc, argv, options))
+        return 1;
+
+    RenderBundlesSample sample(options);
     pwgpu::test::SampleApp app(sample, MakeRenderBundlesDesc());
     return app.Run(argc, argv);
 }

@@ -2,6 +2,7 @@
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
+#include "API/Vulkan/VulkanRHITypeUtils.h"
 #include "Buffer.h"
 #include "Texture.h"
 #include "API/Semaphore.h"
@@ -16,8 +17,8 @@
 #include "RenderPipeline.h"
 #include "ComputePipeline.h"
 #include "CommandEncoder.h"
+#include "DescriptorBuffer.h"
 #include "Instance.h"
-#include "API/Queue.h"
 #include "RenderBundle.h"
 #include "QuerySet.h"
 #include "QueryCommands.h"
@@ -492,6 +493,170 @@ namespace
             bindGroup->ownedSamplers.push_back(sampler);
         return sampler;
     }
+
+    const pe::DescriptorBindingInfo *
+    DescriptorBindingInfoForBinding(const WGPUBindGroupLayoutImpl *layout, uint32_t binding)
+    {
+        if (!layout)
+            return nullptr;
+        for (const auto &info : layout->bindingInfos)
+        {
+            if (info.binding == binding)
+                return &info;
+        }
+        return nullptr;
+    }
+
+    bool DescriptorBufferBindingOffset(const WGPUBindGroupLayoutImpl *layout,
+                                       uint32_t binding,
+                                       uint64_t &outOffset)
+    {
+        if (!layout)
+            return false;
+        for (size_t i = 0; i < layout->bindingInfos.size() &&
+                           i < layout->descriptorBufferBindingOffsets.size();
+             ++i)
+        {
+            if (layout->bindingInfos[i].binding == binding)
+            {
+                outOffset = layout->descriptorBufferBindingOffsets[i];
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool WriteDescriptorBufferBytes(WGPUBindGroupImpl *bg,
+                                    uint32_t binding,
+                                    PeBindingType type,
+                                    const VkDescriptorGetInfoEXT &getInfo)
+    {
+        if (!bg || !bg->descriptorBufferValid || !bg->device ||
+            !bg->device->descriptorBuffer.buffer ||
+            !bg->device->descriptorBuffer.buffer->Data())
+            return false;
+
+        const size_t descriptorSize =
+            pwgpu::DescriptorBufferDescriptorSize(bg->device, type);
+        if (descriptorSize == 0)
+            return false;
+
+        uint64_t bindingOffset = 0;
+        if (!DescriptorBufferBindingOffset(bg->layout, binding, bindingOffset))
+            return false;
+        if (bindingOffset + descriptorSize > bg->layout->descriptorBufferLayoutSize)
+            return false;
+
+        auto *base = static_cast<uint8_t *>(bg->device->descriptorBuffer.buffer->Data());
+        void *dst = base + bg->descriptorBufferOffset + bindingOffset;
+        VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDescriptorEXT(
+            static_cast<VkDevice>(pe::VulkanRhi::Device()),
+            &getInfo,
+            descriptorSize,
+            dst);
+        return true;
+    }
+
+    bool WriteDescriptorBufferBinding(WGPUBindGroupImpl *bg,
+                                      const WGPUBindGroupLayoutEntryResolved &le,
+                                      const WGPUBindGroupEntry &entry,
+                                      pe::Sampler *externalTextureSampler = nullptr)
+    {
+        const pe::DescriptorBindingInfo *bindingInfo =
+            DescriptorBindingInfoForBinding(bg ? bg->layout : nullptr, le.binding);
+        if (!bindingInfo)
+            return false;
+
+        VkDescriptorGetInfoEXT getInfo{};
+        getInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+        getInfo.type = static_cast<VkDescriptorType>(pe::ToVkDescriptorType(bindingInfo->type));
+
+        if (le.buffer.type != WGPUBufferBindingType_BindingNotUsed && entry.buffer &&
+            entry.buffer->peBuffer)
+        {
+            uint64_t offset = entry.offset;
+            uint64_t size = entry.size;
+            if (offset > entry.buffer->size)
+                return false;
+            if (size == WGPU_WHOLE_SIZE)
+            {
+                size = entry.buffer->size - offset;
+            }
+            else if (size > entry.buffer->size - offset)
+            {
+                return false;
+            }
+
+            VkDescriptorAddressInfoEXT addressInfo{};
+            addressInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT;
+            addressInfo.address = entry.buffer->peBuffer->GetDeviceAddress() + offset;
+            addressInfo.range = size;
+            addressInfo.format = VK_FORMAT_UNDEFINED;
+
+            if (bindingInfo->type == PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+                getInfo.data.pUniformBuffer = &addressInfo;
+            else
+                // Storage, structured, and byte-address buffer descriptors all use
+                // VkDescriptorAddressInfoEXT bytes in VK_EXT_descriptor_buffer.
+                getInfo.data.pStorageBuffer = &addressInfo;
+
+            return WriteDescriptorBufferBytes(bg, le.binding, bindingInfo->type, getInfo);
+        }
+
+        if (le.sampler.type != WGPUSamplerBindingType_BindingNotUsed && entry.sampler &&
+            entry.sampler->sampler)
+        {
+            VkSampler sampler = static_cast<VkSampler>(
+                pe::GetVulkanSampler(entry.sampler->sampler));
+            getInfo.data.pSampler = &sampler;
+            return WriteDescriptorBufferBytes(bg, le.binding, bindingInfo->type, getInfo);
+        }
+
+        if (le.texture.sampleType != WGPUTextureSampleType_BindingNotUsed &&
+            entry.textureView)
+        {
+            pe::ImageView *nativeView = pwgpu::TextureBindingImageView(entry.textureView);
+            if (!nativeView)
+                return false;
+            VkDescriptorImageInfo imageInfo{};
+            imageInfo.imageView = static_cast<VkImageView>(pe::GetVulkanImageView(nativeView));
+            imageInfo.imageLayout = static_cast<VkImageLayout>(
+                pe::ToVkImageLayout(bindingInfo->imageLayout));
+            getInfo.data.pSampledImage = &imageInfo;
+            return WriteDescriptorBufferBytes(bg, le.binding, bindingInfo->type, getInfo);
+        }
+
+        if (le.storageTexture.access != WGPUStorageTextureAccess_BindingNotUsed &&
+            entry.textureView)
+        {
+            pe::ImageView *nativeView = pwgpu::StorageBindingImageView(entry.textureView);
+            if (!nativeView)
+                return false;
+            VkDescriptorImageInfo imageInfo{};
+            imageInfo.imageView = static_cast<VkImageView>(pe::GetVulkanImageView(nativeView));
+            imageInfo.imageLayout = static_cast<VkImageLayout>(
+                pe::ToVkImageLayout(bindingInfo->imageLayout));
+            getInfo.data.pStorageImage = &imageInfo;
+            return WriteDescriptorBufferBytes(bg, le.binding, bindingInfo->type, getInfo);
+        }
+
+        if (le.hasExternalTexture && entry.textureView && externalTextureSampler)
+        {
+            pe::ImageView *nativeView = pwgpu::TextureBindingImageView(entry.textureView);
+            if (!nativeView)
+                return false;
+            VkDescriptorImageInfo imageInfo{};
+            imageInfo.sampler = static_cast<VkSampler>(
+                pe::GetVulkanSampler(externalTextureSampler));
+            imageInfo.imageView = static_cast<VkImageView>(pe::GetVulkanImageView(nativeView));
+            imageInfo.imageLayout = static_cast<VkImageLayout>(
+                pe::ToVkImageLayout(bindingInfo->imageLayout));
+            getInfo.data.pCombinedImageSampler = &imageInfo;
+            return WriteDescriptorBufferBytes(bg, le.binding, bindingInfo->type, getInfo);
+        }
+
+        return false;
+    }
 } // namespace
 
 void WGPUDeviceImpl::reportError(WGPUErrorType type, WGPUStringView message)
@@ -588,7 +753,7 @@ namespace pwgpu
 
 extern void TeardownTextureGpuResources(WGPUTextureImpl *texture);
 
-void WGPUDeviceImpl::ReclaimCompletedTextureDeletions()
+void WGPUDeviceImpl::ReclaimCompletedDeferredResources()
 {
     if (!queue)
         return;
@@ -596,8 +761,10 @@ void WGPUDeviceImpl::ReclaimCompletedTextureDeletions()
     const uint64_t completed = sem ? sem->GetValue() : 0;
 
     std::vector<WGPUTextureImpl *> releaseAfter;
+    std::vector<WGPUDescriptorBufferState::FreeSlice> slicesToFree;
+    std::vector<PeBackendHandle> commandPoolsToDestroy;
     {
-        std::lock_guard<std::mutex> lock(pendingTextureDeletionsMutex);
+        std::lock_guard<std::mutex> lock(pendingResourceDeletionsMutex);
         auto it = pendingTextureDeletions.begin();
         while (it != pendingTextureDeletions.end())
         {
@@ -611,6 +778,46 @@ void WGPUDeviceImpl::ReclaimCompletedTextureDeletions()
             {
                 ++it;
             }
+        }
+
+        auto sliceIt = pendingDescriptorBufferSlices.begin();
+        while (sliceIt != pendingDescriptorBufferSlices.end())
+        {
+            if (sliceIt->serial <= completed)
+            {
+                slicesToFree.push_back({sliceIt->offset, sliceIt->size});
+                sliceIt = pendingDescriptorBufferSlices.erase(sliceIt);
+            }
+            else
+            {
+                ++sliceIt;
+            }
+        }
+
+        auto poolIt = pendingVulkanCommandPoolDeletions.begin();
+        while (poolIt != pendingVulkanCommandPoolDeletions.end())
+        {
+            if (poolIt->serial <= completed)
+            {
+                commandPoolsToDestroy.push_back(poolIt->commandPool);
+                poolIt = pendingVulkanCommandPoolDeletions.erase(poolIt);
+            }
+            else
+            {
+                ++poolIt;
+            }
+        }
+    }
+    for (const auto &slice : slicesToFree)
+        pwgpu::FreeDescriptorBufferSlice(this, slice.offset, slice.size);
+    if (pe::RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+    {
+        for (PeBackendHandle commandPool : commandPoolsToDestroy)
+        {
+            if (commandPool == 0)
+                continue;
+            pe::VulkanRhi::Device().destroyCommandPool(
+                vk::CommandPool{PeFromBackendHandle<VkCommandPool>(commandPool)});
         }
     }
     for (auto *tex : releaseAfter)
@@ -639,11 +846,13 @@ extern "C"
                     device->queue->peQueue->WaitIdle();
                     device->queue->RecyclePendingSubmits();
                 }
-                device->ReclaimCompletedTextureDeletions();
+                device->ReclaimCompletedDeferredResources();
                 device->queue->device = nullptr;
                 wgpuQueueRelease(device->queue);
                 device->queue = nullptr;
             }
+            if (device->descriptorBuffer.buffer)
+                pe::Buffer::Destroy(device->descriptorBuffer.buffer);
             WGPUInstance inst = device->instance;
             delete device;
             if (inst)
@@ -985,6 +1194,9 @@ extern "C"
             peUsage |= PE_BUFFER_USAGE_UNIFORM_BUFFER;
         if (usage & WGPUBufferUsage_Storage)
             peUsage |= PE_BUFFER_USAGE_STORAGE_BUFFER;
+        if (device->descriptorBuffer.enabled &&
+            (usage & (WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage)))
+            peUsage |= PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS;
         if (usage & WGPUBufferUsage_Indirect)
             peUsage |= PE_BUFFER_USAGE_INDIRECT_BUFFER;
         if (usage & WGPUBufferUsage_QueryResolve)
@@ -2123,6 +2335,7 @@ extern "C"
             bgl->layout = pe::DescriptorLayout::Create(
                 bindings, combinedStages,
                 bgl->label.empty() ? "wgpu_bgl" : bgl->label);
+            pwgpu::CreateDescriptorBufferLayout(bgl);
         }
 
         return bgl;
@@ -2477,7 +2690,30 @@ extern "C"
             }
         }
 
-        // Create pe::Descriptor (VkDescriptorSet) if the layout has a VkDescriptorSetLayout.
+        bool descriptorBufferWritesOk = true;
+        if (descriptor->layout->descriptorBufferLayout != 0)
+        {
+            if (!pwgpu::AllocateDescriptorBufferSlice(
+                    device,
+                    descriptor->layout->descriptorBufferLayoutSize,
+                    bg->descriptorBufferOffset,
+                    bg->descriptorBufferSize))
+            {
+                device->reportError(
+                    WGPUErrorType_OutOfMemory,
+                    pwgpu::ToStringView("wgpuDeviceCreateBindGroup: descriptor buffer allocation failed"));
+                bg->invalid = true;
+                return bg;
+            }
+            bg->descriptorBufferValid = true;
+            auto *base = static_cast<uint8_t *>(device->descriptorBuffer.buffer->Data());
+            std::memset(base + bg->descriptorBufferOffset, 0,
+                        static_cast<size_t>(bg->descriptorBufferSize));
+        }
+
+        // Keep the classic descriptor set even when a descriptor-buffer slice is
+        // materialized; the same bind group may be rebound through a classic
+        // pipeline layout later in its lifetime.
         if (descriptor->layout->layout && !descriptor->layout->bindingInfos.empty())
         {
             bg->descriptor = pe::Descriptor::Create(
@@ -2502,6 +2738,9 @@ extern "C"
                         size = entry.buffer->size - offset;
                     if (entry.buffer->peBuffer)
                         bg->descriptor->SetBuffer(entry.binding, entry.buffer->peBuffer, offset, size);
+                    if (bg->descriptorBufferValid)
+                        descriptorBufferWritesOk &=
+                            WriteDescriptorBufferBinding(bg, le, entry);
                     pwgpu::BufferUsageKind bufKind = pwgpu::BufferUsageKind::None;
                     switch (le.buffer.type)
                     {
@@ -2525,17 +2764,26 @@ extern "C"
                 {
                     if (entry.sampler->sampler)
                         bg->descriptor->SetSampler(entry.binding, entry.sampler->sampler);
+                    if (bg->descriptorBufferValid)
+                        descriptorBufferWritesOk &=
+                            WriteDescriptorBufferBinding(bg, le, entry);
                 }
                 else if (le.texture.sampleType != WGPUTextureSampleType_BindingNotUsed && entry.textureView)
                 {
                     if (pe::ImageView *nativeView = pwgpu::TextureBindingImageView(entry.textureView))
                         bg->descriptor->SetImageView(entry.binding, nativeView);
+                    if (bg->descriptorBufferValid)
+                        descriptorBufferWritesOk &=
+                            WriteDescriptorBufferBinding(bg, le, entry);
                     bg->textureUses.push_back({entry.textureView, pwgpu::SubresourceUsageKind::Sampled});
                 }
                 else if (le.storageTexture.access != WGPUStorageTextureAccess_BindingNotUsed && entry.textureView)
                 {
                     if (pe::ImageView *nativeView = pwgpu::StorageBindingImageView(entry.textureView))
                         bg->descriptor->SetImageView(entry.binding, nativeView);
+                    if (bg->descriptorBufferValid)
+                        descriptorBufferWritesOk &=
+                            WriteDescriptorBufferBinding(bg, le, entry);
                     auto kind = (le.storageTexture.access == WGPUStorageTextureAccess_ReadOnly)
                                     ? pwgpu::SubresourceUsageKind::ReadOnlyStorage
                                 : (le.storageTexture.access == WGPUStorageTextureAccess_ReadWrite)
@@ -2553,12 +2801,38 @@ extern "C"
                         bg->descriptor->SetImageView(
                             entry.binding, nativeView, sampler);
                     }
+                    if (bg->descriptorBufferValid)
+                        descriptorBufferWritesOk &=
+                            WriteDescriptorBufferBinding(bg, le, entry, sampler);
                     bg->textureUses.push_back(
                         {entry.textureView, pwgpu::SubresourceUsageKind::Sampled});
                 }
             }
 
             bg->descriptor->Update();
+        }
+
+        if (bg->descriptorBufferValid)
+        {
+            if (descriptorBufferWritesOk)
+            {
+                device->descriptorBuffer.buffer->Flush(
+                    static_cast<size_t>(bg->descriptorBufferSize),
+                    static_cast<size_t>(bg->descriptorBufferOffset));
+            }
+            else
+            {
+                device->reportError(
+                    WGPUErrorType_Internal,
+                    pwgpu::ToStringView("wgpuDeviceCreateBindGroup: descriptor buffer materialization failed"));
+                pwgpu::FreeDescriptorBufferSlice(device,
+                                                 bg->descriptorBufferOffset,
+                                                 bg->descriptorBufferSize);
+                bg->descriptorBufferValid = false;
+                bg->descriptorBufferOffset = 0;
+                bg->descriptorBufferSize = 0;
+                bg->invalid = true;
+            }
         }
 
         std::sort(bg->dynamicBindings.begin(), bg->dynamicBindings.end(),
@@ -2734,38 +3008,8 @@ extern "C"
         if (dynamicStorageBuffers > limits.maxDynamicStorageBuffersPerPipelineLayout)
             return makeInvalid("exceeds maxDynamicStorageBuffersPerPipelineLayout");
 
-        std::vector<vk::DescriptorSetLayout> vkSetLayouts;
-        vkSetLayouts.reserve(pl->bindGroupLayouts.size());
-
-        while (!pl->bindGroupLayouts.empty() && pl->bindGroupLayouts.back() == nullptr)
-            pl->bindGroupLayouts.pop_back();
-
-        if (device->rhi && device->rhi->GetApi() != PE_GRAPHICS_API_VULKAN)
-            return pl;
-
-        for (auto *bglPtr : pl->bindGroupLayouts)
-        {
-            if (bglPtr && bglPtr->layout)
-            {
-                vkSetLayouts.push_back(pe::GetVulkanDescriptorLayout(bglPtr->layout));
-            }
-            else
-            {
-                vk::DescriptorSetLayoutCreateInfo emptyCI{};
-                auto emptyLayout = pe::VulkanRhi::Device().createDescriptorSetLayout(emptyCI);
-                pl->ownedEmptyBackendLayouts.push_back(
-                    PeToBackendHandle(static_cast<VkDescriptorSetLayout>(emptyLayout)));
-                vkSetLayouts.push_back(emptyLayout);
-            }
-        }
-
-        {
-            vk::PipelineLayoutCreateInfo ci{};
-            ci.setLayoutCount = static_cast<uint32_t>(vkSetLayouts.size());
-            ci.pSetLayouts = vkSetLayouts.empty() ? nullptr : vkSetLayouts.data();
-            vk::PipelineLayout layout = pe::VulkanRhi::Device().createPipelineLayout(ci);
-            pl->backendLayout = PeToBackendHandle(static_cast<VkPipelineLayout>(layout));
-        }
+        if (!pwgpu::CreateWebGPUPipelineLayoutBackend(pl))
+            return makeInvalid("native pipeline layout creation failed");
 
         return pl;
     }

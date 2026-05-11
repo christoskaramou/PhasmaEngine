@@ -2,6 +2,7 @@
 
 #include <webgpu/webgpu.h>
 #include "API/Command.h"
+#include "PipelineBinding.h"
 #include "UsageTracker.h"
 
 struct WGPUCommandEncoderImpl;
@@ -36,5 +37,6 @@ struct WGPUComputePassEncoderImpl
 
     std::vector<WGPUBindGroupImpl *> currentBindGroups;
     std::vector<std::vector<uint32_t>> currentDynamicOffsets;
+    pwgpu::WebGPUBindingCache bindingCache;
     bool usageScopeValid = true;
 };

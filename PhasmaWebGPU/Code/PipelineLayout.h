@@ -6,6 +6,12 @@
 struct WGPUDeviceImpl;
 struct WGPUBindGroupLayoutImpl;
 
+enum class WGPUBindingModel
+{
+    Classic,
+    DescriptorBuffer
+};
+
 struct WGPUPipelineLayoutImpl
 {
     std::atomic<uint32_t> refCount{1};
@@ -15,5 +21,6 @@ struct WGPUPipelineLayoutImpl
     PeBackendHandle backendLayout = 0;
     std::vector<WGPUBindGroupLayoutImpl *> bindGroupLayouts;
     std::vector<PeBackendHandle> ownedEmptyBackendLayouts;
+    WGPUBindingModel bindingModel = WGPUBindingModel::Classic;
     bool invalid = false;
 };

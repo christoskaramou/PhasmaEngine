@@ -876,6 +876,8 @@ namespace pwgpu
             }
 
             vk::ComputePipelineCreateInfo cpci{};
+            if (desc.layout->bindingModel == WGPUBindingModel::DescriptorBuffer)
+                cpci.flags |= vk::PipelineCreateFlagBits::eDescriptorBufferEXT;
             cpci.stage.stage = vk::ShaderStageFlagBits::eCompute;
             cpci.stage.module = shaderModule;
             cpci.stage.pName = desc.entryPoint;
@@ -1216,6 +1218,8 @@ namespace pwgpu
             }
 
             vk::GraphicsPipelineCreateInfo pipeInfo{};
+            if (desc.layout->bindingModel == WGPUBindingModel::DescriptorBuffer)
+                pipeInfo.flags |= vk::PipelineCreateFlagBits::eDescriptorBufferEXT;
             pipeInfo.pNext = &renderingInfo;
             pipeInfo.stageCount = static_cast<uint32_t>(stages.size());
             pipeInfo.pStages = stages.data();

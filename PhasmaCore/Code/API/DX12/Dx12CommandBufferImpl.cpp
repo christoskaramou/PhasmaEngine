@@ -499,7 +499,10 @@ namespace pe
         }
     }
 
-    void Dx12CommandBufferImpl::BeginPass(uint32_t count, Attachment *attachments, const std::string &name, bool /*skipDynamicPass*/)
+    void Dx12CommandBufferImpl::BeginPass(uint32_t count,
+                                          Attachment *attachments,
+                                          const std::string &name,
+                                          bool /*skipDynamicPass*/)
     {
         PE_ERROR_IF(count > 0 && !attachments, "Dx12CommandBufferImpl::BeginPass: null attachments");
 

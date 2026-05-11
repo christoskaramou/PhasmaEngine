@@ -4,6 +4,7 @@
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/RHITypes.h"
+#include "PipelineBinding.h"
 #include "RenderPipeline.h"
 #include "UsageTracker.h"
 
@@ -62,6 +63,8 @@ struct WGPURenderPassEncoderImpl
     WGPURenderPipelineImpl *pipeline = nullptr;
     uint32_t debugGroupDepth = 0;
     bool renderingActive = false;
+    bool renderingActiveUsesSecondaryContents = false;
+    bool renderingScopeWasOpened = false;
     bool bindingStateInvalidated = false;
 
     // beginRendering is deferred until the first draw-scope command so bind-group
@@ -118,6 +121,7 @@ struct WGPURenderPassEncoderImpl
 
     std::vector<WGPUBindGroupImpl *> currentBindGroups;
     std::vector<std::vector<uint32_t>> currentDynamicOffsets;
+    pwgpu::WebGPUBindingCache bindingCache;
 
     std::vector<VertexBufferBinding> boundVertexBuffers;
 };

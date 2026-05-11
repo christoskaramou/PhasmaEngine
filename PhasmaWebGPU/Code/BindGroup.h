@@ -28,6 +28,9 @@ struct WGPUBindGroupLayoutImpl
     pe::DescriptorLayout *layout = nullptr;
     std::vector<pe::DescriptorBindingInfo> bindingInfos;
     PeShaderStageFlags stage = {};
+    PeBackendHandle descriptorBufferLayout = 0;
+    uint64_t descriptorBufferLayoutSize = 0;
+    std::vector<uint64_t> descriptorBufferBindingOffsets;
 
     std::vector<WGPUBindGroupLayoutEntryResolved> entries;
     uint32_t dynamicOffsetCount = 0;
@@ -55,6 +58,10 @@ struct WGPUBindGroupImpl
 
     pe::Descriptor *descriptor = nullptr;
     WGPUBindGroupLayoutImpl *layout = nullptr;
+    uint64_t descriptorBufferOffset = 0;
+    uint64_t descriptorBufferSize = 0;
+    bool descriptorBufferValid = false;
+    std::atomic<uint64_t> lastUsageSerial{0};
     bool invalid = false;
     bool invalidFromDestroyedResource = false; // §3.3 — defer to queue.submit
 

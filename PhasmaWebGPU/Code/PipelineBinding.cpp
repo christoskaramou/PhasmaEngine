@@ -3,12 +3,18 @@
 #include "BindGroup.h"
 #include "Buffer.h"
 #include "ComputePipeline.h"
+#include "Device.h"
 #include "PipelineLayout.h"
 #include "RenderPipeline.h"
 
+#include "API/Buffer.h"
 #include "API/RHI.h"
+#include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
+#include "API/Vulkan/VulkanRHITypeUtils.h"
+
+#include <algorithm>
 
 #if defined(PE_WIN32)
 #include "API/Buffer.h"
@@ -37,6 +43,170 @@ namespace pwgpu
             PE_ERROR("[WebGPU] %s has no %s backend binding path yet",
                      operation, PeGraphicsApiName(pe::RHII.GetApi()));
             return false;
+        }
+
+        std::vector<WebGPUBindGroupCacheEntry> &BindGroupCacheForPoint(
+            WebGPUBindingCache &cache, PipelineBindingPoint point)
+        {
+            return point == PipelineBindingPoint::Compute
+                       ? cache.computeBindGroups
+                       : cache.renderBindGroups;
+        }
+
+        bool DynamicOffsetsEqual(const std::vector<uint32_t> &cached,
+                                 size_t dynamicOffsetCount,
+                                 const uint32_t *dynamicOffsets)
+        {
+            if (cached.size() != dynamicOffsetCount)
+                return false;
+            if (dynamicOffsetCount == 0)
+                return true;
+            if (!dynamicOffsets)
+                return false;
+            return std::equal(cached.begin(), cached.end(), dynamicOffsets);
+        }
+
+        bool IsCachedBindGroup(WebGPUBindingCache *cache,
+                               PipelineBindingPoint point,
+                               WGPUPipelineLayoutImpl *layout,
+                               uint32_t groupIndex,
+                               WGPUBindGroupImpl *group,
+                               size_t dynamicOffsetCount,
+                               const uint32_t *dynamicOffsets)
+        {
+            if (!cache)
+                return false;
+
+            const auto &entries =
+                point == PipelineBindingPoint::Compute
+                    ? cache->computeBindGroups
+                    : cache->renderBindGroups;
+            if (groupIndex >= entries.size())
+                return false;
+
+            const WebGPUBindGroupCacheEntry &entry = entries[groupIndex];
+            return entry.layout == layout &&
+                   entry.group == group &&
+                   DynamicOffsetsEqual(entry.dynamicOffsets, dynamicOffsetCount, dynamicOffsets);
+        }
+
+        void CacheBindGroup(WebGPUBindingCache *cache,
+                            PipelineBindingPoint point,
+                            WGPUPipelineLayoutImpl *layout,
+                            uint32_t groupIndex,
+                            WGPUBindGroupImpl *group,
+                            size_t dynamicOffsetCount,
+                            const uint32_t *dynamicOffsets)
+        {
+            if (!cache)
+                return;
+
+            auto &entries = BindGroupCacheForPoint(*cache, point);
+            if (entries.size() <= groupIndex)
+                entries.resize(groupIndex + 1);
+
+            WebGPUBindGroupCacheEntry &entry = entries[groupIndex];
+            entry.layout = layout;
+            entry.group = group;
+            if (dynamicOffsetCount > 0 && dynamicOffsets)
+                entry.dynamicOffsets.assign(dynamicOffsets, dynamicOffsets + dynamicOffsetCount);
+            else
+                entry.dynamicOffsets.clear();
+        }
+
+        bool IsCachedVertexBuffer(WebGPUBindingCache *cache,
+                                  uint32_t firstBinding,
+                                  pe::Buffer *buffer,
+                                  size_t offset,
+                                  uint32_t bindingCount)
+        {
+            if (!cache || firstBinding >= cache->vertexBuffers.size())
+                return false;
+
+            const WebGPUVertexBufferCacheEntry &entry =
+                cache->vertexBuffers[firstBinding];
+            return entry.buffer == buffer &&
+                   entry.offset == offset &&
+                   entry.bindingCount == bindingCount;
+        }
+
+        void CacheVertexBuffer(WebGPUBindingCache *cache,
+                               uint32_t firstBinding,
+                               pe::Buffer *buffer,
+                               size_t offset,
+                               uint32_t bindingCount)
+        {
+            if (!cache)
+                return;
+
+            if (cache->vertexBuffers.size() <= firstBinding)
+                cache->vertexBuffers.resize(firstBinding + 1);
+
+            WebGPUVertexBufferCacheEntry &entry = cache->vertexBuffers[firstBinding];
+            entry.buffer = buffer;
+            entry.offset = offset;
+            entry.bindingCount = bindingCount;
+        }
+
+        bool IsCachedIndexBuffer(WebGPUBindingCache *cache,
+                                 pe::Buffer *buffer,
+                                 size_t offset,
+                                 PeIndexType indexType)
+        {
+            return cache &&
+                   cache->indexBuffer == buffer &&
+                   cache->indexBufferOffset == offset &&
+                   cache->indexBufferType == indexType;
+        }
+
+        void CacheIndexBuffer(WebGPUBindingCache *cache,
+                              pe::Buffer *buffer,
+                              size_t offset,
+                              PeIndexType indexType)
+        {
+            if (!cache)
+                return;
+
+            cache->indexBuffer = buffer;
+            cache->indexBufferOffset = offset;
+            cache->indexBufferType = indexType;
+        }
+
+        void NoteBindingModel(WebGPUBindingCache *cache, WGPUPipelineLayoutImpl *layout)
+        {
+            if (!cache || !layout)
+                return;
+
+            const bool descriptorBufferModel =
+                layout->bindingModel == WGPUBindingModel::DescriptorBuffer;
+            if (cache->hasDescriptorBufferModel &&
+                cache->descriptorBufferModel != descriptorBufferModel)
+            {
+                cache->renderBindGroups.clear();
+                cache->computeBindGroups.clear();
+            }
+            cache->hasDescriptorBufferModel = true;
+            cache->descriptorBufferModel = descriptorBufferModel;
+        }
+
+        bool EnsureDescriptorBufferBound(pe::CommandBuffer *cmd,
+                                         WGPUDeviceImpl *device,
+                                         WebGPUBindingCache *cache)
+        {
+            if (!cmd || !device || !device->descriptorBuffer.enabled ||
+                !device->descriptorBuffer.buffer)
+                return false;
+            if (cache && cache->descriptorBufferBound)
+                return true;
+
+            vk::DescriptorBufferBindingInfoEXT bindingInfo{};
+            bindingInfo.address = device->descriptorBuffer.buffer->GetDeviceAddress();
+            bindingInfo.usage = vk::BufferUsageFlagBits::eResourceDescriptorBufferEXT |
+                                vk::BufferUsageFlagBits::eSamplerDescriptorBufferEXT;
+            pe::GetVulkanCommandBuffer(cmd).bindDescriptorBuffersEXT(1, &bindingInfo);
+            if (cache)
+                cache->descriptorBufferBound = true;
+            return true;
         }
 
 #if defined(PE_WIN32)
@@ -191,7 +361,9 @@ namespace pwgpu
 #endif
     } // namespace
 
-    bool BindWebGPURenderPipeline(pe::CommandBuffer *cmd, WGPURenderPipelineImpl *pipeline)
+    bool BindWebGPURenderPipeline(pe::CommandBuffer *cmd,
+                                  WGPURenderPipelineImpl *pipeline,
+                                  WebGPUBindingCache *cache)
     {
         if (!cmd || !pipeline || pipeline->backendPipeline == 0)
             return false;
@@ -199,9 +371,13 @@ namespace pwgpu
         switch (pe::RHII.GetApi())
         {
         case PE_GRAPHICS_API_VULKAN:
+            if (cache && cache->renderPipeline == pipeline)
+                return true;
             pe::GetVulkanCommandBuffer(cmd).bindPipeline(
                 vk::PipelineBindPoint::eGraphics,
                 vk::Pipeline{PeFromBackendHandle<VkPipeline>(pipeline->backendPipeline)});
+            if (cache)
+                cache->renderPipeline = pipeline;
             return true;
         case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
@@ -228,7 +404,9 @@ namespace pwgpu
         }
     }
 
-    bool BindWebGPUComputePipeline(pe::CommandBuffer *cmd, WGPUComputePipelineImpl *pipeline)
+    bool BindWebGPUComputePipeline(pe::CommandBuffer *cmd,
+                                   WGPUComputePipelineImpl *pipeline,
+                                   WebGPUBindingCache *cache)
     {
         if (!cmd || !pipeline || pipeline->backendPipeline == 0)
             return false;
@@ -236,9 +414,13 @@ namespace pwgpu
         switch (pe::RHII.GetApi())
         {
         case PE_GRAPHICS_API_VULKAN:
+            if (cache && cache->computePipeline == pipeline)
+                return true;
             pe::GetVulkanCommandBuffer(cmd).bindPipeline(
                 vk::PipelineBindPoint::eCompute,
                 vk::Pipeline{PeFromBackendHandle<VkPipeline>(pipeline->backendPipeline)});
+            if (cache)
+                cache->computePipeline = pipeline;
             return true;
         case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
@@ -259,9 +441,10 @@ namespace pwgpu
                              uint32_t groupIndex,
                              WGPUBindGroupImpl *group,
                              size_t dynamicOffsetCount,
-                             const uint32_t *dynamicOffsets)
+                             const uint32_t *dynamicOffsets,
+                             WebGPUBindingCache *cache)
     {
-        if (!cmd || !layout || !group || !group->descriptor)
+        if (!cmd || !layout || !group)
             return false;
 
         const auto &bgls = layout->bindGroupLayouts;
@@ -277,12 +460,48 @@ namespace pwgpu
             if (layout->backendLayout == 0)
                 return false;
 
+            NoteBindingModel(cache, layout);
+
+            if (layout->bindingModel == WGPUBindingModel::DescriptorBuffer)
+            {
+                if (!group->descriptorBufferValid || dynamicOffsetCount != 0)
+                    return false;
+
+                if (IsCachedBindGroup(cache, point, layout, groupIndex, group,
+                                      dynamicOffsetCount, dynamicOffsets))
+                    return true;
+
+                if (!EnsureDescriptorBufferBound(cmd, layout->device, cache))
+                    return false;
+
+                vk::PipelineLayout vkLayout{
+                    PeFromBackendHandle<VkPipelineLayout>(layout->backendLayout)};
+                const uint32_t bufferIndex = 0;
+                const vk::DeviceSize offset =
+                    static_cast<vk::DeviceSize>(group->descriptorBufferOffset);
+                pe::GetVulkanCommandBuffer(cmd).setDescriptorBufferOffsetsEXT(
+                    ToVkBindPoint(point), vkLayout, groupIndex, 1,
+                    &bufferIndex, &offset);
+                CacheBindGroup(cache, point, layout, groupIndex, group,
+                               dynamicOffsetCount, dynamicOffsets);
+                return true;
+            }
+
+            if (!group->descriptor)
+                return false;
+
+            if (IsCachedBindGroup(cache, point, layout, groupIndex, group,
+                                  dynamicOffsetCount, dynamicOffsets))
+                return true;
+
             vk::PipelineLayout vkLayout{
                 PeFromBackendHandle<VkPipelineLayout>(layout->backendLayout)};
             vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(group->descriptor);
             pe::GetVulkanCommandBuffer(cmd).bindDescriptorSets(
                 ToVkBindPoint(point), vkLayout, groupIndex, 1, &ds,
                 static_cast<uint32_t>(dynamicOffsetCount), dynamicOffsets);
+            CacheBindGroup(cache, point, layout, groupIndex, group,
+                           dynamicOffsetCount, dynamicOffsets);
             return true;
         }
         case PE_GRAPHICS_API_DX12:
@@ -290,6 +509,8 @@ namespace pwgpu
         {
             constexpr uint32_t kWebGPUDescriptorSourceSpace = 0;
             if (groupIndex >= pe::DX12_DESCRIPTOR_SPACE_COUNT)
+                return false;
+            if (!group->descriptor)
                 return false;
             if (point == PipelineBindingPoint::Compute)
             {
@@ -335,12 +556,133 @@ namespace pwgpu
         }
     }
 
+    bool BindWebGPUVertexBuffer(pe::CommandBuffer *cmd,
+                                pe::Buffer *buffer,
+                                size_t offset,
+                                uint32_t firstBinding,
+                                uint32_t bindingCount,
+                                WebGPUBindingCache *cache)
+    {
+        if (!cmd || !buffer)
+            return false;
+
+        switch (pe::RHII.GetApi())
+        {
+        case PE_GRAPHICS_API_VULKAN:
+        {
+            if (IsCachedVertexBuffer(cache, firstBinding, buffer, offset, bindingCount))
+                return true;
+
+            vk::Buffer vkBuffer = pe::GetVulkanBuffer(buffer);
+            vk::DeviceSize vkOffset = static_cast<vk::DeviceSize>(offset);
+            pe::GetVulkanCommandBuffer(cmd).bindVertexBuffers(
+                firstBinding, bindingCount, &vkBuffer, &vkOffset);
+            CacheVertexBuffer(cache, firstBinding, buffer, offset, bindingCount);
+            return true;
+        }
+        case PE_GRAPHICS_API_DX12:
+#if defined(PE_WIN32)
+            cmd->BindVertexBuffer(buffer, offset, firstBinding, bindingCount);
+            return true;
+#else
+            return false;
+#endif
+        default:
+            return false;
+        }
+    }
+
+    bool BindWebGPUIndexBuffer(pe::CommandBuffer *cmd,
+                               pe::Buffer *buffer,
+                               size_t offset,
+                               PeIndexType indexType,
+                               WebGPUBindingCache *cache)
+    {
+        if (!cmd || !buffer)
+            return false;
+
+        switch (pe::RHII.GetApi())
+        {
+        case PE_GRAPHICS_API_VULKAN:
+        {
+            if (IsCachedIndexBuffer(cache, buffer, offset, indexType))
+                return true;
+
+            pe::GetVulkanCommandBuffer(cmd).bindIndexBuffer(
+                pe::GetVulkanBuffer(buffer), offset, pe::ToVkIndexType(indexType));
+            CacheIndexBuffer(cache, buffer, offset, indexType);
+            return true;
+        }
+        case PE_GRAPHICS_API_DX12:
+#if defined(PE_WIN32)
+            cmd->BindIndexBuffer(buffer, offset, indexType);
+            return true;
+#else
+            return false;
+#endif
+        default:
+            return false;
+        }
+    }
+
+    void DrawWebGPU(pe::CommandBuffer *cmd,
+                    uint32_t vertexCount,
+                    uint32_t instanceCount,
+                    uint32_t firstVertex,
+                    uint32_t firstInstance)
+    {
+        if (!cmd)
+            return;
+
+        switch (pe::RHII.GetApi())
+        {
+        case PE_GRAPHICS_API_VULKAN:
+            pe::GetVulkanCommandBuffer(cmd).draw(
+                vertexCount, instanceCount, firstVertex, firstInstance);
+            return;
+        case PE_GRAPHICS_API_DX12:
+#if defined(PE_WIN32)
+            cmd->Draw(vertexCount, instanceCount, firstVertex, firstInstance);
+#endif
+            return;
+        default:
+            return;
+        }
+    }
+
+    void DrawIndexedWebGPU(pe::CommandBuffer *cmd,
+                           uint32_t indexCount,
+                           uint32_t instanceCount,
+                           uint32_t firstIndex,
+                           int32_t vertexOffset,
+                           uint32_t firstInstance)
+    {
+        if (!cmd)
+            return;
+
+        switch (pe::RHII.GetApi())
+        {
+        case PE_GRAPHICS_API_VULKAN:
+            pe::GetVulkanCommandBuffer(cmd).drawIndexed(
+                indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+            return;
+        case PE_GRAPHICS_API_DX12:
+#if defined(PE_WIN32)
+            cmd->DrawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+#endif
+            return;
+        default:
+            return;
+        }
+    }
+
     void RebindWebGPUCompatibleBindGroups(
         pe::CommandBuffer *cmd,
         PipelineBindingPoint point,
         WGPUPipelineLayoutImpl *layout,
         const std::vector<WGPUBindGroupImpl *> &currentBindGroups,
-        const std::vector<std::vector<uint32_t>> *currentDynamicOffsets)
+        const std::vector<std::vector<uint32_t>> *currentDynamicOffsets,
+        WebGPUBindingCache *cache)
     {
         if (!cmd || !layout)
             return;
@@ -360,7 +702,8 @@ namespace pwgpu
                     : nullptr;
             BindWebGPUBindGroup(cmd, point, layout, static_cast<uint32_t>(i), bg,
                                 dynOffsets ? dynOffsets->size() : 0u,
-                                (dynOffsets && !dynOffsets->empty()) ? dynOffsets->data() : nullptr);
+                                (dynOffsets && !dynOffsets->empty()) ? dynOffsets->data() : nullptr,
+                                cache);
         }
     }
 } // namespace pwgpu

@@ -1,7 +1,34 @@
 #include "BindGroup.h"
+#include "DescriptorBuffer.h"
 #include "Device.h"
 #include "Utils.h"
 #include "API/Image.h"
+
+namespace
+{
+    void ReleaseDescriptorBufferSlice(WGPUBindGroupImpl *bg)
+    {
+        if (!bg || !bg->descriptorBufferValid)
+            return;
+
+        const uint64_t offset = bg->descriptorBufferOffset;
+        const uint64_t size = bg->descriptorBufferSize;
+        const uint64_t serial = bg->lastUsageSerial.load(std::memory_order_acquire);
+        if (pwgpu::IsQueueSerialPending(bg->device, serial))
+        {
+            std::lock_guard<std::mutex> lock(bg->device->pendingResourceDeletionsMutex);
+            bg->device->pendingDescriptorBufferSlices.push_back({offset, size, serial});
+        }
+        else
+        {
+            pwgpu::FreeDescriptorBufferSlice(bg->device, offset, size);
+        }
+
+        bg->descriptorBufferValid = false;
+        bg->descriptorBufferOffset = 0;
+        bg->descriptorBufferSize = 0;
+    }
+} // namespace
 
 bool BglGroupEquivalent(const WGPUBindGroupLayoutImpl *a, const WGPUBindGroupLayoutImpl *b)
 {
@@ -98,6 +125,7 @@ extern "C"
             return;
         if (bgl->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
+            pwgpu::DestroyDescriptorBufferLayout(bgl);
             if (bgl->layout)
                 pe::DescriptorLayout::Destroy(bgl->layout);
             WGPUDeviceImpl *dev = bgl->device;
@@ -125,6 +153,7 @@ extern "C"
             return;
         if (bg->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
+            ReleaseDescriptorBufferSlice(bg);
             if (bg->layout)
                 wgpuBindGroupLayoutRelease(bg->layout);
             for (pe::Sampler *sampler : bg->ownedSamplers)

@@ -54,6 +54,8 @@ void WGPUQueueImpl::RecyclePendingSubmits()
     }
     if (auto *sm = pe::RHII.GetStagingManager())
         sm->RemoveUnused();
+    if (device)
+        device->ReclaimCompletedDeferredResources();
 }
 
 extern "C"
@@ -94,7 +96,7 @@ extern "C"
 
         queue->RecyclePendingSubmits();
         if (queue->device)
-            queue->device->ReclaimCompletedTextureDeletions();
+            queue->device->ReclaimCompletedDeferredResources();
 
         std::vector<pe::CommandBuffer *> cmds;
         std::vector<WGPUCommandBuffer> validCBs;
@@ -424,6 +426,7 @@ extern "C"
             {
                 if (!bg)
                     return;
+                bg->lastUsageSerial.store(serial, std::memory_order_release);
                 for (auto &use : bg->bufferUses)
                 {
                     if (use.buffer)
@@ -442,6 +445,7 @@ extern "C"
             {
                 if (!rb)
                     continue;
+                rb->lastUsageSerial.store(serial, std::memory_order_release);
                 for (auto *buf : rb->retainedBuffers)
                 {
                     if (buf)
@@ -475,7 +479,7 @@ extern "C"
         {
             queue->RecyclePendingSubmits();
             if (queue->device)
-                queue->device->ReclaimCompletedTextureDeletions();
+                queue->device->ReclaimCompletedDeferredResources();
         }
 
         WGPUDeviceImpl *reportDevice =
@@ -641,7 +645,7 @@ extern "C"
             return;
         queue->RecyclePendingSubmits();
         if (queue->device)
-            queue->device->ReclaimCompletedTextureDeletions();
+            queue->device->ReclaimCompletedDeferredResources();
         auto fail = [&](const char *msg)
         {
             if (queue->device)

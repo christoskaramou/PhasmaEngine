@@ -2,14 +2,39 @@
 
 #include <D3D12MemAlloc.h>
 
+#include <cstdlib>
+
 namespace pe
 {
     using Microsoft::WRL::ComPtr;
 
+    static std::string EnvFlagValue(const char *name)
+    {
+#if defined(PE_WIN32)
+        char *value = nullptr;
+        size_t valueSize = 0;
+        if (_dupenv_s(&value, &valueSize, name) != 0 || !value)
+            return {};
+
+        std::string result(value);
+        std::free(value);
+        return result;
+#else
+        const char *v = std::getenv(name);
+        return v ? std::string(v) : std::string{};
+#endif
+    }
+
     static bool EnvFlagOn(const char *name)
     {
-        const char *v = std::getenv(name);
-        return v && v[0] == '1';
+        const std::string value = EnvFlagValue(name);
+        return !value.empty() && value[0] == '1';
+    }
+
+    static bool EnvFlagOff(const char *name)
+    {
+        const std::string value = EnvFlagValue(name);
+        return !value.empty() && value[0] == '0';
     }
 
     static std::string WideToUtf8(const wchar_t *w)
@@ -85,19 +110,26 @@ namespace pe
 
     bool Dx12RhiImpl::Init(SDL_Window * /*window*/)
     {
+        const bool dx12DebugLayerRequested = EnvFlagOn("PE_DX12_DEBUG");
+        const bool dx12DebugLayerSuppressed = EnvFlagOff("PE_DX12_DEBUG");
+
         // Debug interfaces must be acquired before D3D12CreateDevice.
+        const bool enableDx12DebugLayer =
 #if !defined(PE_RELEASE)
-        {
-            ComPtr<ID3D12Debug> debug;
-            if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
-                debug->EnableDebugLayer();
-        }
+            !dx12DebugLayerSuppressed || dx12DebugLayerRequested;
+#else
+            dx12DebugLayerRequested;
 #endif
-        if (EnvFlagOn("PE_DX12_DEBUG"))
+
+        bool dx12DebugLayerEnabled = false;
+        if (enableDx12DebugLayer)
         {
             ComPtr<ID3D12Debug> debug;
             if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
+            {
                 debug->EnableDebugLayer();
+                dx12DebugLayerEnabled = true;
+            }
         }
         if (EnvFlagOn("PE_DX12_GBV"))
         {
@@ -105,7 +137,16 @@ namespace pe
             if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug1))))
                 debug1->SetEnableGPUBasedValidation(TRUE);
         }
+
+        const bool dx12DredRequested = EnvFlagOn("PE_DX12_DRED");
+        const bool dx12DredSuppressed = EnvFlagOff("PE_DX12_DRED");
+        const bool enableDx12Dred =
 #if defined(PE_DEBUG) || defined(PE_RELWITHDEBINFO)
+            !dx12DredSuppressed || dx12DredRequested;
+#else
+            dx12DredRequested;
+#endif
+        if (enableDx12Dred)
         {
             ComPtr<ID3D12DeviceRemovedExtendedDataSettings> dred;
             if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dred))))
@@ -114,12 +155,10 @@ namespace pe
                 dred->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
             }
         }
-#endif
 
         UINT factoryFlags = 0;
-#if !defined(PE_RELEASE)
-        factoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
-#endif
+        if (dx12DebugLayerEnabled)
+            factoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
         if (FAILED(CreateDXGIFactory2(factoryFlags, IID_PPV_ARGS(&m_factory))))
         {
             PE_ERROR("Dx12RhiImpl::Init: CreateDXGIFactory2 failed");
@@ -162,14 +201,7 @@ namespace pe
         PE_INFO("DX12 device created on '%s'", m_adapterName.c_str());
 
         HRESULT hr = S_OK;
-#if !defined(PE_RELEASE)
-        const bool dx12DebugLayerActive = true;
-#else
-        const bool dx12DebugLayerActive =
-            EnvFlagOn("PE_DX12_DEBUG");
-#endif
-
-        if (dx12DebugLayerActive)
+        if (dx12DebugLayerEnabled)
         {
             ComPtr<ID3D12InfoQueue1> infoQueue;
             if (SUCCEEDED(m_device.As(&infoQueue)))

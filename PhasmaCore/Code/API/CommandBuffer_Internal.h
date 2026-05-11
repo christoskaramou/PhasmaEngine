@@ -19,7 +19,10 @@ namespace pe
         virtual void ClearDepthStencils(std::vector<Image *> images) = 0;
 
         // Render pass
-        virtual void BeginPass(uint32_t count, Attachment *attachments, const std::string &name, bool skipDynamicPass) = 0;
+        virtual void BeginPass(uint32_t count,
+                               Attachment *attachments,
+                               const std::string &name,
+                               bool skipDynamicPass) = 0;
         virtual void EndPass() = 0;
 
         // Pipeline + bindings

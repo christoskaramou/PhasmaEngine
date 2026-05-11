@@ -5,7 +5,15 @@
 #include "BindGroup.h"
 #include "Buffer.h"
 #include "Device.h"
+#include "FormatMap.h"
 #include "Utils.h"
+#include "API/Queue.h"
+#include "API/RHI.h"
+#include "API/Vulkan/VulkanBufferImpl.h"
+#include "API/Vulkan/VulkanDescriptorImpl.h"
+#include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/VulkanRHITypeUtils.h"
+#include "Base/Settings.h"
 
 extern "C" void wgpuDeviceRelease(WGPUDevice);
 extern "C" void wgpuRenderPipelineAddRef(WGPURenderPipeline);
@@ -73,7 +81,346 @@ namespace
             return false;
         return true;
     }
+
+    vk::Format ResolveBundleVkFormat(WGPUDeviceImpl *device, WGPUTextureFormat format)
+    {
+        if (format == WGPUTextureFormat_Undefined)
+            return vk::Format::eUndefined;
+        const VkFormat resolved = device
+                                      ? pwgpu::ResolveVkTextureFormat(format,
+                                                                      device->resolvedDepth24Plus,
+                                                                      device->resolvedDepth24PlusStencil8,
+                                                                      device->resolvedStencil8)
+                                      : pwgpu::ToVkFormat(format);
+        return static_cast<vk::Format>(resolved);
+    }
+
+    bool NativeBundleCacheKeyMatches(const WGPUVulkanNativeRenderBundle &cached,
+                                     uint32_t renderWidth,
+                                     uint32_t renderHeight,
+                                     const std::vector<WGPUTextureFormat> &colorFormats,
+                                     WGPUTextureFormat depthStencilFormat,
+                                     uint32_t sampleCount)
+    {
+        return cached.width == renderWidth &&
+               cached.height == renderHeight &&
+               cached.sampleCount == sampleCount &&
+               cached.depthStencilFormat == depthStencilFormat &&
+               cached.colorFormats == colorFormats;
+    }
+
+    bool ActiveNativeBundleCacheKeyMatches(const WGPURenderBundleImpl *rb,
+                                           uint32_t renderWidth,
+                                           uint32_t renderHeight,
+                                           const std::vector<WGPUTextureFormat> &colorFormats,
+                                           WGPUTextureFormat depthStencilFormat,
+                                           uint32_t sampleCount)
+    {
+        return rb && rb->vulkanSecondaryCommandBuffer != 0 &&
+               rb->vulkanSecondaryWidth == renderWidth &&
+               rb->vulkanSecondaryHeight == renderHeight &&
+               rb->vulkanSecondarySampleCount == sampleCount &&
+               rb->vulkanSecondaryDepthStencilFormat == depthStencilFormat &&
+               rb->vulkanSecondaryColorFormats == colorFormats;
+    }
+
+    void DestroyVulkanCommandPool(PeBackendHandle commandPool)
+    {
+        if (commandPool == 0 || pe::RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+            return;
+        pe::VulkanRhi::Device().destroyCommandPool(
+            vk::CommandPool{PeFromBackendHandle<VkCommandPool>(commandPool)});
+    }
+
+    void ClearActiveVulkanNativeBundle(WGPURenderBundleImpl *rb)
+    {
+        rb->vulkanSecondaryCommandBuffer = 0;
+        rb->vulkanSecondaryWidth = 0;
+        rb->vulkanSecondaryHeight = 0;
+        rb->vulkanSecondaryColorFormats.clear();
+        rb->vulkanSecondaryDepthStencilFormat = WGPUTextureFormat_Undefined;
+        rb->vulkanSecondarySampleCount = 1;
+    }
+
+    bool RecordVulkanNativeOp(vk::CommandBuffer cmd,
+                              WGPUDeviceImpl *device,
+                              const WGPURenderBundleOp &op,
+                              bool &descriptorBufferBound)
+    {
+        switch (op.kind)
+        {
+        case WGPURenderBundleOpKind::SetPipeline:
+            if (!op.pipeline || op.pipeline->backendPipeline == 0)
+                return false;
+            cmd.bindPipeline(
+                vk::PipelineBindPoint::eGraphics,
+                vk::Pipeline{PeFromBackendHandle<VkPipeline>(op.pipeline->backendPipeline)});
+            return true;
+
+        case WGPURenderBundleOpKind::SetBindGroup:
+        {
+            if (!op.layout || !op.bindGroup || op.layout->backendLayout == 0)
+                return false;
+
+            vk::PipelineLayout vkLayout{
+                PeFromBackendHandle<VkPipelineLayout>(op.layout->backendLayout)};
+            if (op.layout->bindingModel == WGPUBindingModel::DescriptorBuffer)
+            {
+                if (!op.bindGroup->descriptorBufferValid || !op.dynamicOffsets.empty() ||
+                    !device || !device->descriptorBuffer.enabled ||
+                    !device->descriptorBuffer.buffer)
+                    return false;
+
+                if (!descriptorBufferBound)
+                {
+                    vk::DescriptorBufferBindingInfoEXT bindingInfo{};
+                    bindingInfo.address =
+                        device->descriptorBuffer.buffer->GetDeviceAddress();
+                    bindingInfo.usage =
+                        vk::BufferUsageFlagBits::eResourceDescriptorBufferEXT |
+                        vk::BufferUsageFlagBits::eSamplerDescriptorBufferEXT;
+                    cmd.bindDescriptorBuffersEXT(1, &bindingInfo);
+                    descriptorBufferBound = true;
+                }
+
+                const uint32_t bufferIndex = 0;
+                const vk::DeviceSize offset =
+                    static_cast<vk::DeviceSize>(op.bindGroup->descriptorBufferOffset);
+                cmd.setDescriptorBufferOffsetsEXT(
+                    vk::PipelineBindPoint::eGraphics, vkLayout, op.slotOrGroup, 1,
+                    &bufferIndex, &offset);
+                return true;
+            }
+
+            if (!op.bindGroup->descriptor)
+                return false;
+            vk::DescriptorSet ds = pe::GetVulkanDescriptorSet(op.bindGroup->descriptor);
+            cmd.bindDescriptorSets(
+                vk::PipelineBindPoint::eGraphics, vkLayout, op.slotOrGroup, 1, &ds,
+                static_cast<uint32_t>(op.dynamicOffsets.size()),
+                op.dynamicOffsets.empty() ? nullptr : op.dynamicOffsets.data());
+            return true;
+        }
+
+        case WGPURenderBundleOpKind::SetVertexBuffer:
+        {
+            if (!op.buffer)
+                return false;
+            vk::Buffer vkBuffer = pe::GetVulkanBuffer(op.buffer);
+            vk::DeviceSize vkOffset = static_cast<vk::DeviceSize>(op.offset);
+            cmd.bindVertexBuffers(op.slotOrGroup, 1, &vkBuffer, &vkOffset);
+            return true;
+        }
+
+        case WGPURenderBundleOpKind::SetIndexBuffer:
+            if (!op.buffer)
+                return false;
+            cmd.bindIndexBuffer(
+                pe::GetVulkanBuffer(op.buffer), op.offset, pe::ToVkIndexType(op.indexType));
+            return true;
+
+        case WGPURenderBundleOpKind::Draw:
+            cmd.draw(op.first, op.second, op.third, op.fourth);
+            return true;
+
+        case WGPURenderBundleOpKind::DrawIndexed:
+            cmd.drawIndexed(op.first, op.second, op.third, op.signedValue, op.fourth);
+            return true;
+        }
+
+        return false;
+    }
+
+    void DestroyVulkanNativeRenderBundle(WGPURenderBundleImpl *rb)
+    {
+        if (!rb || pe::RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+            return;
+
+        const uint64_t serial = rb->lastUsageSerial.load(std::memory_order_acquire);
+        const bool defer = pwgpu::IsQueueSerialPending(rb->device, serial);
+        for (const WGPUVulkanNativeRenderBundle &cached : rb->vulkanNativeBundles)
+        {
+            if (cached.commandPool == 0)
+                continue;
+            if (defer)
+            {
+                std::lock_guard<std::mutex> lock(rb->device->pendingResourceDeletionsMutex);
+                rb->device->pendingVulkanCommandPoolDeletions.push_back(
+                    {cached.commandPool, serial});
+            }
+            else
+            {
+                DestroyVulkanCommandPool(cached.commandPool);
+            }
+        }
+        rb->vulkanNativeBundles.clear();
+        ClearActiveVulkanNativeBundle(rb);
+    }
+
+    bool CreateVulkanNativeRenderBundle(WGPURenderBundleImpl *rb,
+                                        uint32_t renderWidth,
+                                        uint32_t renderHeight,
+                                        const std::vector<WGPUTextureFormat> &passColorFormats,
+                                        WGPUTextureFormat passDepthStencilFormat,
+                                        uint32_t passSampleCount)
+    {
+        if (!rb || !rb->vulkanNativeEligible || rb->nativeOps.empty() ||
+            !rb->device || !rb->device->peQueue ||
+            pe::RHII.GetApi() != PE_GRAPHICS_API_VULKAN ||
+            !pe::Settings::Get<pe::GlobalSettings>().dynamic_rendering ||
+            renderWidth == 0 || renderHeight == 0)
+            return false;
+
+        if (ActiveNativeBundleCacheKeyMatches(rb, renderWidth, renderHeight,
+                                              passColorFormats,
+                                              passDepthStencilFormat,
+                                              passSampleCount))
+            return true;
+
+        for (const WGPUVulkanNativeRenderBundle &cached : rb->vulkanNativeBundles)
+        {
+            if (cached.commandBuffer != 0 &&
+                NativeBundleCacheKeyMatches(cached, renderWidth, renderHeight,
+                                            passColorFormats,
+                                            passDepthStencilFormat,
+                                            passSampleCount))
+            {
+                rb->vulkanSecondaryCommandBuffer = cached.commandBuffer;
+                rb->vulkanSecondaryWidth = renderWidth;
+                rb->vulkanSecondaryHeight = renderHeight;
+                rb->vulkanSecondaryColorFormats = cached.colorFormats;
+                rb->vulkanSecondaryDepthStencilFormat = cached.depthStencilFormat;
+                rb->vulkanSecondarySampleCount = cached.sampleCount;
+                return true;
+            }
+        }
+
+        std::vector<vk::Format> colorFormats;
+        colorFormats.reserve(passColorFormats.size());
+        for (WGPUTextureFormat format : passColorFormats)
+            colorFormats.push_back(ResolveBundleVkFormat(rb->device, format));
+
+        vk::Format depthFormat = vk::Format::eUndefined;
+        vk::Format stencilFormat = vk::Format::eUndefined;
+        if (passDepthStencilFormat != WGPUTextureFormat_Undefined)
+        {
+            const vk::Format dsFormat =
+                ResolveBundleVkFormat(rb->device, passDepthStencilFormat);
+            if (pwgpu::HasDepthAspect(passDepthStencilFormat))
+                depthFormat = dsFormat;
+            if (pwgpu::HasStencilAspect(passDepthStencilFormat))
+                stencilFormat = dsFormat;
+        }
+
+        vk::CommandPoolCreateInfo poolInfo{};
+        poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+        poolInfo.queueFamilyIndex = rb->device->peQueue->GetFamilyId();
+
+        vk::CommandPool pool{};
+        try
+        {
+            pool = pe::VulkanRhi::Device().createCommandPool(poolInfo);
+
+            vk::CommandBufferAllocateInfo allocInfo{};
+            allocInfo.commandPool = pool;
+            allocInfo.level = vk::CommandBufferLevel::eSecondary;
+            allocInfo.commandBufferCount = 1;
+            vk::CommandBuffer cmd =
+                pe::VulkanRhi::Device().allocateCommandBuffers(allocInfo)[0];
+
+            vk::CommandBufferInheritanceRenderingInfo renderingInfo{};
+            renderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorFormats.size());
+            renderingInfo.pColorAttachmentFormats =
+                colorFormats.empty() ? nullptr : colorFormats.data();
+            renderingInfo.depthAttachmentFormat = depthFormat;
+            renderingInfo.stencilAttachmentFormat = stencilFormat;
+            renderingInfo.rasterizationSamples = pwgpu::ToVkSampleCount(passSampleCount);
+
+            vk::CommandBufferInheritanceInfo inheritanceInfo{};
+            inheritanceInfo.pNext = &renderingInfo;
+
+            vk::CommandBufferBeginInfo beginInfo{};
+            beginInfo.flags = vk::CommandBufferUsageFlagBits::eRenderPassContinue |
+                              vk::CommandBufferUsageFlagBits::eSimultaneousUse;
+            beginInfo.pInheritanceInfo = &inheritanceInfo;
+
+            cmd.begin(beginInfo);
+
+            vk::Viewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = static_cast<float>(renderWidth);
+            viewport.height = static_cast<float>(renderHeight);
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            cmd.setViewport(0, 1, &viewport);
+
+            vk::Rect2D scissor{};
+            scissor.offset = vk::Offset2D{0, 0};
+            scissor.extent = vk::Extent2D{renderWidth, renderHeight};
+            cmd.setScissor(0, 1, &scissor);
+
+            // WebGPU resets render-pass encoder dynamic state after executeBundles.
+            // Vulkan does not promise primary state restoration after secondary
+            // execution, so these defaults are intentionally recorded in the
+            // secondary command buffer for later inline commands to observe.
+            float blendConstants[4] = {};
+            cmd.setBlendConstants(blendConstants);
+            cmd.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, 0);
+
+            bool descriptorBufferBound = false;
+            for (const WGPURenderBundleOp &op : rb->nativeOps)
+            {
+                if (!RecordVulkanNativeOp(cmd, rb->device, op, descriptorBufferBound))
+                {
+                    cmd.end();
+                    pe::VulkanRhi::Device().destroyCommandPool(pool);
+                    return false;
+                }
+            }
+            cmd.end();
+
+            WGPUVulkanNativeRenderBundle cached{};
+            cached.commandPool = PeToBackendHandle(static_cast<VkCommandPool>(pool));
+            cached.commandBuffer = PeToBackendHandle(static_cast<VkCommandBuffer>(cmd));
+            cached.width = renderWidth;
+            cached.height = renderHeight;
+            cached.colorFormats = passColorFormats;
+            cached.depthStencilFormat = passDepthStencilFormat;
+            cached.sampleCount = passSampleCount;
+            rb->vulkanNativeBundles.push_back(cached);
+            rb->vulkanSecondaryCommandBuffer = cached.commandBuffer;
+            rb->vulkanSecondaryWidth = renderWidth;
+            rb->vulkanSecondaryHeight = renderHeight;
+            rb->vulkanSecondaryColorFormats = cached.colorFormats;
+            rb->vulkanSecondaryDepthStencilFormat = cached.depthStencilFormat;
+            rb->vulkanSecondarySampleCount = cached.sampleCount;
+            return true;
+        }
+        catch (...)
+        {
+            if (pool)
+                DestroyVulkanCommandPool(PeToBackendHandle(static_cast<VkCommandPool>(pool)));
+            ClearActiveVulkanNativeBundle(rb);
+            return false;
+        }
+    }
 } // namespace
+
+namespace pwgpu
+{
+    bool EnsureVulkanNativeRenderBundle(WGPURenderBundleImpl *bundle,
+                                        uint32_t renderWidth,
+                                        uint32_t renderHeight,
+                                        const std::vector<WGPUTextureFormat> &colorFormats,
+                                        WGPUTextureFormat depthStencilFormat,
+                                        uint32_t sampleCount)
+    {
+        return CreateVulkanNativeRenderBundle(bundle, renderWidth, renderHeight,
+                                              colorFormats, depthStencilFormat,
+                                              sampleCount);
+    }
+} // namespace pwgpu
 
 extern "C"
 {
@@ -90,6 +437,7 @@ extern "C"
             return;
         if (rb->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
+            DestroyVulkanNativeRenderBundle(rb);
             for (auto *p : rb->retainedPipelines)
                 wgpuRenderPipelineRelease(p);
             for (auto *bg : rb->retainedBindGroups)
@@ -220,8 +568,12 @@ extern "C"
         wgpuRenderPipelineAddRef(pipeline);
         rbe->retainedPipelines.push_back(pipeline);
 
-        rbe->commands.push_back([pipeline](pe::CommandBuffer *cmd)
-                                { pwgpu::BindWebGPURenderPipeline(cmd, pipeline); });
+        rbe->commands.push_back([pipeline](pe::CommandBuffer *cmd, pwgpu::WebGPUBindingCache *cache)
+                                { pwgpu::BindWebGPURenderPipeline(cmd, pipeline, cache); });
+        WGPURenderBundleOp op{};
+        op.kind = WGPURenderBundleOpKind::SetPipeline;
+        op.pipeline = pipeline;
+        rbe->nativeOps.push_back(std::move(op));
 
         if (pipeline->layout)
         {
@@ -240,12 +592,21 @@ extern "C"
                         ? rbe->currentDynamicOffsets[i]
                         : std::vector<uint32_t>{};
                 auto *layout = pipeline->layout;
-                rbe->commands.push_back([layout, groupIndex, bg, dynOffsets](pe::CommandBuffer *cmd)
+                rbe->commands.push_back([layout, groupIndex, bg, dynOffsets](pe::CommandBuffer *cmd,
+                                                                             pwgpu::WebGPUBindingCache *cache)
                                         { pwgpu::BindWebGPUBindGroup(
                                               cmd, pwgpu::PipelineBindingPoint::Render,
                                               layout, groupIndex, bg,
                                               dynOffsets.size(),
-                                              dynOffsets.empty() ? nullptr : dynOffsets.data()); });
+                                              dynOffsets.empty() ? nullptr : dynOffsets.data(),
+                                              cache); });
+                WGPURenderBundleOp op{};
+                op.kind = WGPURenderBundleOpKind::SetBindGroup;
+                op.layout = layout;
+                op.bindGroup = bg;
+                op.slotOrGroup = groupIndex;
+                op.dynamicOffsets = dynOffsets;
+                rbe->nativeOps.push_back(std::move(op));
             }
         }
     }
@@ -423,12 +784,21 @@ extern "C"
             dynOffsets.assign(dynamicOffsets, dynamicOffsets + dynamicOffsetCount);
 
         auto *layout = rbe->pipeline->layout;
-        rbe->commands.push_back([layout, groupIndex, group, dynOffsets](pe::CommandBuffer *cmd)
+        rbe->commands.push_back([layout, groupIndex, group, dynOffsets](pe::CommandBuffer *cmd,
+                                                                        pwgpu::WebGPUBindingCache *cache)
                                 { pwgpu::BindWebGPUBindGroup(
                                       cmd, pwgpu::PipelineBindingPoint::Render,
                                       layout, groupIndex, group,
                                       dynOffsets.size(),
-                                      dynOffsets.empty() ? nullptr : dynOffsets.data()); });
+                                      dynOffsets.empty() ? nullptr : dynOffsets.data(),
+                                      cache); });
+        WGPURenderBundleOp op{};
+        op.kind = WGPURenderBundleOpKind::SetBindGroup;
+        op.layout = layout;
+        op.bindGroup = group;
+        op.slotOrGroup = groupIndex;
+        op.dynamicOffsets = std::move(dynOffsets);
+        rbe->nativeOps.push_back(std::move(op));
     }
 
     void wgpuRenderBundleEncoderSetVertexBuffer(WGPURenderBundleEncoder rbe, uint32_t slot,
@@ -511,8 +881,14 @@ extern "C"
         if (!buffer->peBuffer)
             return;
 
-        rbe->commands.push_back([buffer, slot, offset](pe::CommandBuffer *cmd)
-                                { cmd->BindVertexBuffer(buffer->peBuffer, static_cast<size_t>(offset), slot, 1); });
+        rbe->commands.push_back([buffer, slot, offset](pe::CommandBuffer *cmd, pwgpu::WebGPUBindingCache *cache)
+                                { pwgpu::BindWebGPUVertexBuffer(cmd, buffer->peBuffer, static_cast<size_t>(offset), slot, 1, cache); });
+        WGPURenderBundleOp op{};
+        op.kind = WGPURenderBundleOpKind::SetVertexBuffer;
+        op.buffer = buffer->peBuffer;
+        op.slotOrGroup = slot;
+        op.offset = static_cast<size_t>(offset);
+        rbe->nativeOps.push_back(std::move(op));
     }
 
     void wgpuRenderBundleEncoderSetIndexBuffer(WGPURenderBundleEncoder rbe, WGPUBuffer buffer,
@@ -591,8 +967,14 @@ extern "C"
 
         pe::Buffer *peBuffer = buffer->peBuffer;
         PeIndexType indexType = pwgpu::ToPeIndexType(format);
-        rbe->commands.push_back([peBuffer, offset, indexType](pe::CommandBuffer *cmd)
-                                { cmd->BindIndexBuffer(peBuffer, offset, indexType); });
+        rbe->commands.push_back([peBuffer, offset, indexType](pe::CommandBuffer *cmd, pwgpu::WebGPUBindingCache *cache)
+                                { pwgpu::BindWebGPUIndexBuffer(cmd, peBuffer, static_cast<size_t>(offset), indexType, cache); });
+        WGPURenderBundleOp op{};
+        op.kind = WGPURenderBundleOpKind::SetIndexBuffer;
+        op.buffer = peBuffer;
+        op.offset = static_cast<size_t>(offset);
+        op.indexType = indexType;
+        rbe->nativeOps.push_back(std::move(op));
     }
 
     void wgpuRenderBundleEncoderDraw(WGPURenderBundleEncoder rbe, uint32_t vertexCount,
@@ -612,8 +994,16 @@ extern "C"
         }
 
         rbe->drawCount++;
-        rbe->commands.push_back([vertexCount, instanceCount, firstVertex, firstInstance](pe::CommandBuffer *cmd)
-                                { cmd->Draw(vertexCount, instanceCount, firstVertex, firstInstance); });
+        rbe->commands.push_back([vertexCount, instanceCount, firstVertex, firstInstance](pe::CommandBuffer *cmd,
+                                                                                         pwgpu::WebGPUBindingCache *)
+                                { pwgpu::DrawWebGPU(cmd, vertexCount, instanceCount, firstVertex, firstInstance); });
+        WGPURenderBundleOp op{};
+        op.kind = WGPURenderBundleOpKind::Draw;
+        op.first = vertexCount;
+        op.second = instanceCount;
+        op.third = firstVertex;
+        op.fourth = firstInstance;
+        rbe->nativeOps.push_back(std::move(op));
     }
 
     void wgpuRenderBundleEncoderDrawIndexed(WGPURenderBundleEncoder rbe, uint32_t indexCount,
@@ -647,8 +1037,17 @@ extern "C"
         }
 
         rbe->drawCount++;
-        rbe->commands.push_back([indexCount, instanceCount, firstIndex, baseVertex, firstInstance](pe::CommandBuffer *cmd)
-                                { cmd->DrawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance); });
+        rbe->commands.push_back([indexCount, instanceCount, firstIndex, baseVertex, firstInstance](pe::CommandBuffer *cmd,
+                                                                                                   pwgpu::WebGPUBindingCache *)
+                                { pwgpu::DrawIndexedWebGPU(cmd, indexCount, instanceCount, firstIndex, baseVertex, firstInstance); });
+        WGPURenderBundleOp op{};
+        op.kind = WGPURenderBundleOpKind::DrawIndexed;
+        op.first = indexCount;
+        op.second = instanceCount;
+        op.third = firstIndex;
+        op.signedValue = baseVertex;
+        op.fourth = firstInstance;
+        rbe->nativeOps.push_back(std::move(op));
     }
 
     void wgpuRenderBundleEncoderDrawIndirect(WGPURenderBundleEncoder rbe, WGPUBuffer buffer, uint64_t offset)
@@ -722,7 +1121,8 @@ extern "C"
             return;
 
         rbe->drawCount++;
-        rbe->commands.push_back([buffer, offset](pe::CommandBuffer *cmd)
+        rbe->vulkanNativeEligible = false;
+        rbe->commands.push_back([buffer, offset](pe::CommandBuffer *cmd, pwgpu::WebGPUBindingCache *)
                                 { cmd->DrawIndirect(buffer->peBuffer, offset, 1, PE_DRAW_INDIRECT_COMMAND_SIZE); });
     }
 
@@ -798,7 +1198,8 @@ extern "C"
             return;
 
         rbe->drawCount++;
-        rbe->commands.push_back([buffer, offset](pe::CommandBuffer *cmd)
+        rbe->vulkanNativeEligible = false;
+        rbe->commands.push_back([buffer, offset](pe::CommandBuffer *cmd, pwgpu::WebGPUBindingCache *)
                                 { cmd->DrawIndexedIndirect(buffer->peBuffer, offset, 1, PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE); });
     }
 
@@ -867,6 +1268,8 @@ extern "C"
 
         rb->drawCount = rbe->drawCount;
         rb->commands = std::move(rbe->commands);
+        rb->nativeOps = std::move(rbe->nativeOps);
+        rb->vulkanNativeEligible = rbe->vulkanNativeEligible;
 
         rb->retainedPipelines = std::move(rbe->retainedPipelines);
         rb->retainedBindGroups = std::move(rbe->retainedBindGroups);
@@ -887,7 +1290,8 @@ extern "C"
             return;
 
         std::string str = pwgpu::ToString(label);
-        rbe->commands.push_back([str](pe::CommandBuffer *cmd)
+        rbe->vulkanNativeEligible = false;
+        rbe->commands.push_back([str](pe::CommandBuffer *cmd, pwgpu::WebGPUBindingCache *)
                                 { cmd->InsertDebugLabel(str); });
     }
 
@@ -898,7 +1302,8 @@ extern "C"
         rbe->debugGroupDepth++;
 
         std::string str = pwgpu::ToString(groupLabel);
-        rbe->commands.push_back([str](pe::CommandBuffer *cmd)
+        rbe->vulkanNativeEligible = false;
+        rbe->commands.push_back([str](pe::CommandBuffer *cmd, pwgpu::WebGPUBindingCache *)
                                 { cmd->BeginDebugRegion(str); });
     }
 
@@ -915,7 +1320,8 @@ extern "C"
         }
         rbe->debugGroupDepth--;
 
-        rbe->commands.push_back([](pe::CommandBuffer *cmd)
+        rbe->vulkanNativeEligible = false;
+        rbe->commands.push_back([](pe::CommandBuffer *cmd, pwgpu::WebGPUBindingCache *)
                                 { cmd->EndDebugRegion(); });
     }
 

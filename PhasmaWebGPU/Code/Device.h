@@ -3,12 +3,15 @@
 #include <webgpu/webgpu.h>
 #include "ErrorScope.h"
 #include "WGPULimits.h"
+#include "API/RHITypes.h"
+#include "API/Semaphore.h"
 #include "API/Vulkan/VulkanHeaders.h"
 
 namespace pe
 {
     class RHI;
     class Queue;
+    class Buffer;
 } // namespace pe
 
 struct WGPUDeviceImpl;
@@ -61,6 +64,34 @@ struct WGPUQueueImpl
 
 struct WGPUInstanceImpl;
 
+struct WGPUDescriptorBufferState
+{
+    struct FreeSlice
+    {
+        uint64_t offset = 0;
+        uint64_t size = 0;
+    };
+
+    bool supported = false;
+    bool enabled = false;
+    bool robustBufferAccess = false;
+    uint64_t descriptorBufferOffsetAlignment = 1;
+    size_t samplerDescriptorSize = 0;
+    size_t combinedImageSamplerDescriptorSize = 0;
+    size_t sampledImageDescriptorSize = 0;
+    size_t storageImageDescriptorSize = 0;
+    size_t uniformBufferDescriptorSize = 0;
+    size_t robustUniformBufferDescriptorSize = 0;
+    size_t storageBufferDescriptorSize = 0;
+    size_t robustStorageBufferDescriptorSize = 0;
+
+    pe::Buffer *buffer = nullptr;
+    uint64_t bufferSize = 0;
+    uint64_t cursor = 0;
+    std::vector<FreeSlice> freeSlices;
+    std::mutex mutex;
+};
+
 struct WGPUDeviceImpl
 {
     std::atomic<uint32_t> refCount{1};
@@ -79,6 +110,7 @@ struct WGPUDeviceImpl
     VkFormat resolvedStencil8 = VK_FORMAT_S8_UINT;
     bool supportsDepthClamp = false;
     bool supportsDepthClipEnable = false;
+    WGPUDescriptorBufferState descriptorBuffer;
 
     std::string adapterVendor;
     std::string adapterArchitecture;
@@ -110,13 +142,26 @@ struct WGPUDeviceImpl
         WGPUTextureImpl *tex;
         uint64_t serial;
     };
+    struct PendingDescriptorBufferSlice
+    {
+        uint64_t offset = 0;
+        uint64_t size = 0;
+        uint64_t serial = 0;
+    };
+    struct PendingVulkanCommandPoolDeletion
+    {
+        PeBackendHandle commandPool = 0;
+        uint64_t serial = 0;
+    };
     std::vector<PendingTextureDeletion> pendingTextureDeletions;
-    std::mutex pendingTextureDeletionsMutex;
+    std::vector<PendingDescriptorBufferSlice> pendingDescriptorBufferSlices;
+    std::vector<PendingVulkanCommandPoolDeletion> pendingVulkanCommandPoolDeletions;
+    std::mutex pendingResourceDeletionsMutex;
 
     WGPUDeviceImpl() : lostFuture(lostPromise.get_future().share()) {}
 
     void reportError(WGPUErrorType type, WGPUStringView message);
-    void ReclaimCompletedTextureDeletions();
+    void ReclaimCompletedDeferredResources();
 };
 
 namespace pwgpu
@@ -131,5 +176,13 @@ namespace pwgpu
         if (!device || !message)
             return;
         device->reportError(WGPUErrorType_Validation, WGPUStringView{message, WGPU_STRLEN});
+    }
+
+    inline bool IsQueueSerialPending(WGPUDeviceImpl *device, uint64_t serial)
+    {
+        if (serial == 0 || !device || !device->queue)
+            return false;
+        pe::Semaphore *sem = device->queue->GetSemaphore();
+        return sem && sem->GetValue() < serial;
     }
 } // namespace pwgpu

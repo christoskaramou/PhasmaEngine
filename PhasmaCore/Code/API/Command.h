@@ -100,7 +100,10 @@ namespace pe
         void BlitImage(Image *src, Image *dst, const ImageBlit &region, PeFilter filter);
         void ClearColors(std::vector<Image *> images);
         void ClearDepthStencils(std::vector<Image *> images);
-        void BeginPass(uint32_t count, Attachment *attachments, const std::string &name, bool skipDynamicPass = false);
+        void BeginPass(uint32_t count,
+                       Attachment *attachments,
+                       const std::string &name,
+                       bool skipDynamicPass = false);
         void EndPass();
         void BindPipeline(PassInfo &passInfo, bool bindDescriptors = true);
         void BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding = 0, uint32_t bindingCount = 1);
