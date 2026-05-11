@@ -215,7 +215,10 @@ namespace pe
         dslci.pBindings = bindings.data();
         dslci.pNext = &layoutBindingFlags;
         if (owner->m_pushDescriptor)
+        {
+            PE_ERROR_IF(!RHII.GetCaps().pushDescriptor, "DescriptorLayout: push descriptors are not supported on this device");
             dslci.flags |= vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptor;
+        }
         else if (owner->m_allowUpdateAfterBind)
             dslci.flags |= vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 

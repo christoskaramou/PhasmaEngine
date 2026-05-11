@@ -481,6 +481,7 @@ namespace pe
     void VulkanCommandBufferImpl::PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info)
     {
         PE_ERROR_IF(!m_owner->m_boundPipeline, "CommandBuffer::PushDescriptor: No bound pipeline found!");
+        PE_ERROR_IF(!RHII.GetCaps().pushDescriptor, "CommandBuffer::PushDescriptor: push descriptors are not supported on this device");
 
         std::vector<vk::WriteDescriptorSet> writes{};
         std::vector<std::vector<vk::DescriptorImageInfo>> imageInfo{};
@@ -543,16 +544,20 @@ namespace pe
             }
         }
 
-        // vkCmdPushDescriptorSetKHR is part of VK_KHR_push_descriptor extension, has to be loaded
-        static auto vkCmdPushDescriptorSetKHR = (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(VulkanRhi::Device(), "vkCmdPushDescriptorSetKHR");
-        PE_ERROR_IF(!vkCmdPushDescriptorSetKHR, "CommandBuffer::PushDescriptor: vkCmdPushDescriptorSetKHR not found!");
+        static auto vkCmdPushDescriptorSetFn = (PFN_vkCmdPushDescriptorSet)vkGetDeviceProcAddr(VulkanRhi::Device(), "vkCmdPushDescriptorSet");
+        if (!vkCmdPushDescriptorSetFn)
+        {
+            vkCmdPushDescriptorSetFn =
+                reinterpret_cast<PFN_vkCmdPushDescriptorSet>(vkGetDeviceProcAddr(VulkanRhi::Device(), "vkCmdPushDescriptorSetKHR"));
+        }
+        PE_ERROR_IF(!vkCmdPushDescriptorSetFn, "CommandBuffer::PushDescriptor: vkCmdPushDescriptorSet not found!");
 
-        vkCmdPushDescriptorSetKHR(m_apiHandle,
-                                  m_owner->m_boundPipeline->m_info.pCompShader ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                  GetVulkanPipelineLayout(m_owner->m_boundPipeline),
-                                  set,
-                                  static_cast<uint32_t>(writes.size()),
-                                  reinterpret_cast<const VkWriteDescriptorSet *>(writes.data()));
+        vkCmdPushDescriptorSetFn(m_apiHandle,
+                                 m_owner->m_boundPipeline->m_info.pCompShader ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 GetVulkanPipelineLayout(m_owner->m_boundPipeline),
+                                 set,
+                                 static_cast<uint32_t>(writes.size()),
+                                 reinterpret_cast<const VkWriteDescriptorSet *>(writes.data()));
     }
 
     void VulkanCommandBufferImpl::SetViewport(float x, float y, float width, float height, float minDepth, float maxDepth)

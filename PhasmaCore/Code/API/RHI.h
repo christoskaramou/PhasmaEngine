@@ -143,6 +143,7 @@ namespace pe
             bool dynamicRendering = false;
             bool indirectCount = false;
             bool meshShaders = false;
+            bool pushDescriptor = false;
             uint32_t maxPushConstantsBytes = 0;
             uint32_t maxBindlessTextures = 0;
             DescriptorBuffer descriptorBuffer{};

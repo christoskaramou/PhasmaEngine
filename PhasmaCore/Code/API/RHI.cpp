@@ -57,6 +57,16 @@ namespace pe
         return gpu.getProperties().vendorID; // 0x10DE NVIDIA, 0x1002 AMD, 0x8086 Intel
     }
 
+    static bool HasDeviceExtension(vk::PhysicalDevice gpu, const char *name)
+    {
+        auto extensions = gpu.enumerateDeviceExtensionProperties();
+        for (auto &extension : extensions)
+            if (std::string(extension.extensionName.data()) == name)
+                return true;
+
+        return false;
+    }
+
 #if defined(PE_WIN32)
     static bool Dx12FormatSupportsTextureSample(ID3D12Device *device, DXGI_FORMAT format)
     {
@@ -828,15 +838,12 @@ namespace pe
         const bool descriptorBufferExtensionAvailable =
             IsDeviceExtensionValid(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
 
-        ::vk::PhysicalDevicePushDescriptorPropertiesKHR pushDescriptorProperties{};
         VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptorBufferProperties{};
         descriptorBufferProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
 
         ::vk::PhysicalDeviceProperties2 gpuPropertiesVK{};
-        gpuPropertiesVK.pNext = &pushDescriptorProperties;
         if (descriptorBufferExtensionAvailable)
         {
-            descriptorBufferProperties.pNext = gpuPropertiesVK.pNext;
             gpuPropertiesVK.pNext = &descriptorBufferProperties;
         }
         vk->m_gpu.getProperties2(&gpuPropertiesVK);
@@ -975,25 +982,29 @@ namespace pe
         auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
         PE_ERROR_IF(!vk->m_gpu, "Must find gpu before checking device extensions!");
 
-        auto extensions = vk->m_gpu.enumerateDeviceExtensionProperties();
-        for (auto &extension : extensions)
-            if (std::string(extension.extensionName.data()) == name)
-                return true;
-
-        return false;
+        return HasDeviceExtension(vk->m_gpu, name);
     }
 
     void RHI::CreateDevice()
     {
         auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
+        const uint32_t gpuApiVersion = vk->m_gpu.getProperties().apiVersion;
+        const bool vulkan12Available = gpuApiVersion >= VK_API_VERSION_1_2;
+        const bool vulkan13Available = gpuApiVersion >= VK_API_VERSION_1_3;
+        const bool sync2ExtensionAvailable = IsDeviceExtensionValid(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+        const bool separateDepthStencilLayoutsExtensionAvailable =
+            IsDeviceExtensionValid(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
+
         PE_ERROR_IF(!IsDeviceExtensionValid(VK_KHR_SWAPCHAIN_EXTENSION_NAME), "Swapchain extension not supported!");
-        PE_ERROR_IF(!IsDeviceExtensionValid(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME), "Synchronization2 extension not supported!");
-        PE_ERROR_IF(!IsDeviceExtensionValid(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME), "Push descriptor extension not supported!");
-        PE_ERROR_IF(!IsDeviceExtensionValid(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME), "Separate depth stencil layouts extension not supported!");
+        PE_ERROR_IF(!vulkan13Available && !sync2ExtensionAvailable, "Synchronization2 extension not supported!");
+        PE_ERROR_IF(!vulkan12Available && !separateDepthStencilLayoutsExtensionAvailable, "Separate depth stencil layouts extension not supported!");
 
         std::vector<const char *> deviceExtensions{};
         deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-        deviceExtensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+        if (!vulkan13Available && sync2ExtensionAvailable)
+            deviceExtensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+        if (!vulkan12Available && separateDepthStencilLayoutsExtensionAvailable)
+            deviceExtensions.push_back(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
         if (IsDeviceExtensionValid(VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME) &&
             IsDeviceExtensionValid(VK_EXT_PAGEABLE_DEVICE_LOCAL_MEMORY_EXTENSION_NAME))
         {
@@ -1067,15 +1078,10 @@ namespace pe
         deviceFeatures13.dynamicRendering = true;
         deviceFeatures13.pNext = &deviceFeatures12;
 
-        // Vulkan 1.4 features
-        vk::PhysicalDeviceVulkan14Features deviceFeatures14{};
-        deviceFeatures14.pushDescriptor = true;
-        deviceFeatures14.pNext = &deviceFeatures13;
-
         // Ray Tracing Features
         vk::PhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{};
         accelerationStructureFeatures.accelerationStructure = true;
-        accelerationStructureFeatures.pNext = &deviceFeatures14;
+        accelerationStructureFeatures.pNext = &deviceFeatures13;
 
         vk::PhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures{};
         rayTracingPipelineFeatures.rayTracingPipeline = true;
@@ -1131,6 +1137,7 @@ namespace pe
         PE_ERROR_IF(!deviceFeatures12.descriptorBindingVariableDescriptorCount, "Variable descriptor count is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures12.separateDepthStencilLayouts, "Separate depth stencil layouts are not supported!");
         PE_ERROR_IF(!deviceFeatures12.bufferDeviceAddress, "Buffer Device Address not supported!");
+        PE_ERROR_IF(!deviceFeatures13.synchronization2, "Synchronization2 is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures12.shaderFloat16, "Float16 is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures2.features.shaderInt16, "Int16 is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures2.features.shaderInt64, "Int64 is not supported on this device!");
