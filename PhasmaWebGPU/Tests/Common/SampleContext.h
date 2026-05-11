@@ -23,6 +23,7 @@ namespace pwgpu::test
         WGPUTextureFormat surfaceFormat = WGPUTextureFormat_Undefined;
         WGPUPresentMode presentMode = WGPUPresentMode_Fifo;
         std::string presentModeName;
+        std::string apiName;
         std::string gpuName;
         std::string exeDir;
         std::string shaderDir;

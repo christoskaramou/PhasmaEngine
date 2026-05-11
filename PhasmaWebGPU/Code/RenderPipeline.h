@@ -6,6 +6,7 @@
 struct WGPUDeviceImpl;
 struct WGPUPipelineLayoutImpl;
 struct WGPUBindGroupLayoutImpl;
+struct WGPUBufferImpl;
 
 struct VertexBufferLayoutInfo
 {
@@ -18,6 +19,8 @@ struct VertexBufferLayoutInfo
 struct VertexBufferBinding
 {
     bool bound = false;
+    WGPUBufferImpl *buffer = nullptr;
+    uint64_t offset = 0;
     uint64_t size = 0;
 };
 

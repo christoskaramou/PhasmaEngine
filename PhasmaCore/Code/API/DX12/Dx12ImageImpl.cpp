@@ -120,6 +120,9 @@ namespace pe
 
         std::optional<D3D12_CLEAR_VALUE> OptimizedClearValue(const ImageDesc &desc, DXGI_FORMAT viewFormat)
         {
+            if (!desc.useOptimizedClearValue)
+                return std::nullopt;
+
             if (desc.usage & PE_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT)
             {
                 D3D12_CLEAR_VALUE clear{};

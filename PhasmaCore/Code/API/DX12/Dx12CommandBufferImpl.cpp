@@ -80,10 +80,15 @@ namespace pe
             return requiredBytes <= available;
         }
 
-        void ValidateIndirectDrawState(Pipeline *pipeline, const char *what)
+        void ValidateIndirectDrawState(Pipeline *pipeline, bool externalRenderPipelineBound, const char *what)
         {
-            PE_ERROR_IF(!pipeline, "Dx12CommandBufferImpl::%s: No bound pipeline found!", what);
-            PE_ERROR_IF(IsComputePipeline(pipeline), "Dx12CommandBufferImpl::%s: bound pipeline is compute", what);
+            if (pipeline)
+            {
+                PE_ERROR_IF(IsComputePipeline(pipeline), "Dx12CommandBufferImpl::%s: bound pipeline is compute", what);
+                return;
+            }
+
+            PE_ERROR_IF(!externalRenderPipelineBound, "Dx12CommandBufferImpl::%s: No bound pipeline found!", what);
         }
 
         bool IsReadOnlyBufferState(D3D12_RESOURCE_STATES state)
@@ -796,6 +801,12 @@ namespace pe
         BindDescriptorTables(count, descriptors, false);
     }
 
+    void Dx12CommandBufferImpl::BindExternalRenderDescriptorSpace(Descriptor *descriptor, uint32_t sourceDxSpace, uint32_t targetDxSpace)
+    {
+        PE_ERROR_IF(!m_externalRenderPipelineBound, "Dx12CommandBufferImpl::BindExternalRenderDescriptorSpace: no external render pipeline bound");
+        BindDescriptorTableSpace(descriptor, sourceDxSpace, targetDxSpace, false);
+    }
+
     void Dx12CommandBufferImpl::BindExternalComputePipeline(ID3D12PipelineState *pipeline)
     {
         PE_ERROR_IF(!pipeline, "Dx12CommandBufferImpl::BindExternalComputePipeline: null pipeline");
@@ -818,6 +829,49 @@ namespace pe
         PE_ERROR_IF(!m_externalComputePipelineBound, "Dx12CommandBufferImpl::BindExternalComputeDescriptors: no external compute pipeline bound");
         PE_ERROR_IF(count > 0 && !descriptors, "Dx12CommandBufferImpl::BindExternalComputeDescriptors: null descriptor array");
         BindDescriptorTables(count, descriptors, true);
+    }
+
+    void Dx12CommandBufferImpl::BindExternalComputeDescriptorSpace(Descriptor *descriptor, uint32_t sourceDxSpace, uint32_t targetDxSpace)
+    {
+        PE_ERROR_IF(!m_externalComputePipelineBound, "Dx12CommandBufferImpl::BindExternalComputeDescriptorSpace: no external compute pipeline bound");
+        BindDescriptorTableSpace(descriptor, sourceDxSpace, targetDxSpace, true);
+    }
+
+    void Dx12CommandBufferImpl::BindDescriptorTableSpace(Descriptor *descriptor, uint32_t sourceDxSpace, uint32_t targetDxSpace, bool compute)
+    {
+        PE_ERROR_IF(!descriptor, "Dx12CommandBufferImpl::BindDescriptorTableSpace: null descriptor");
+        PE_ERROR_IF(sourceDxSpace >= DX12_DESCRIPTOR_SPACE_COUNT,
+                    "Dx12CommandBufferImpl::BindDescriptorTableSpace: source space %u exceeds supported count %u",
+                    sourceDxSpace,
+                    DX12_DESCRIPTOR_SPACE_COUNT);
+        PE_ERROR_IF(targetDxSpace >= DX12_DESCRIPTOR_SPACE_COUNT,
+                    "Dx12CommandBufferImpl::BindDescriptorTableSpace: target space %u exceeds supported count %u",
+                    targetDxSpace,
+                    DX12_DESCRIPTOR_SPACE_COUNT);
+
+        BindShaderVisibleHeaps();
+
+        const Dx12DescriptorImpl *impl = Dx12DescriptorImpl::From(descriptor);
+
+        const D3D12_GPU_DESCRIPTOR_HANDLE cbvSrvUavTable = impl->GetCbvSrvUavTableGpuHandle(sourceDxSpace);
+        if (cbvSrvUavTable.ptr != 0)
+        {
+            const uint32_t rootIdx = Dx12CbvSrvUavRootIndex(targetDxSpace);
+            if (compute)
+                m_cmdList->SetComputeRootDescriptorTable(rootIdx, cbvSrvUavTable);
+            else
+                m_cmdList->SetGraphicsRootDescriptorTable(rootIdx, cbvSrvUavTable);
+        }
+
+        const D3D12_GPU_DESCRIPTOR_HANDLE samplerTable = impl->GetSamplerTableGpuHandle(sourceDxSpace);
+        if (samplerTable.ptr != 0)
+        {
+            const uint32_t rootIdx = Dx12SamplerRootIndex(targetDxSpace);
+            if (compute)
+                m_cmdList->SetComputeRootDescriptorTable(rootIdx, samplerTable);
+            else
+                m_cmdList->SetGraphicsRootDescriptorTable(rootIdx, samplerTable);
+        }
     }
 
     void Dx12CommandBufferImpl::BindDescriptorTables(uint32_t count, Descriptor *const *descriptors, bool compute)
@@ -970,7 +1024,7 @@ namespace pe
     void Dx12CommandBufferImpl::DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
         static_assert(PE_DRAW_INDIRECT_COMMAND_SIZE == sizeof(D3D12_DRAW_ARGUMENTS));
-        ValidateIndirectDrawState(m_owner->m_boundPipeline, "DrawIndirect");
+        ValidateIndirectDrawState(m_owner->m_boundPipeline, m_externalRenderPipelineBound, "DrawIndirect");
         PE_ERROR_IF(!indirectBuffer, "Dx12CommandBufferImpl::DrawIndirect: null indirect buffer");
         PE_ERROR_IF(stride < PE_DRAW_INDIRECT_COMMAND_SIZE,
                     "Dx12CommandBufferImpl::DrawIndirect: stride %u is smaller than D3D12_DRAW_ARGUMENTS (%u)",
@@ -992,7 +1046,7 @@ namespace pe
     void Dx12CommandBufferImpl::DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
         static_assert(PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE == sizeof(D3D12_DRAW_INDEXED_ARGUMENTS));
-        ValidateIndirectDrawState(m_owner->m_boundPipeline, "DrawIndexedIndirect");
+        ValidateIndirectDrawState(m_owner->m_boundPipeline, m_externalRenderPipelineBound, "DrawIndexedIndirect");
         PE_ERROR_IF(!indirectBuffer, "Dx12CommandBufferImpl::DrawIndexedIndirect: null indirect buffer");
         PE_ERROR_IF(stride < PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
                     "Dx12CommandBufferImpl::DrawIndexedIndirect: stride %u is smaller than D3D12_DRAW_INDEXED_ARGUMENTS (%u)",
@@ -1014,7 +1068,7 @@ namespace pe
     void Dx12CommandBufferImpl::DrawIndexedIndirectCount(Buffer *indirectBuffer, size_t offset, Buffer *countBuffer, size_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
     {
         static_assert(PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE == sizeof(D3D12_DRAW_INDEXED_ARGUMENTS));
-        ValidateIndirectDrawState(m_owner->m_boundPipeline, "DrawIndexedIndirectCount");
+        ValidateIndirectDrawState(m_owner->m_boundPipeline, m_externalRenderPipelineBound, "DrawIndexedIndirectCount");
         PE_ERROR_IF(!indirectBuffer, "Dx12CommandBufferImpl::DrawIndexedIndirectCount: null indirect buffer");
         PE_ERROR_IF(!countBuffer, "Dx12CommandBufferImpl::DrawIndexedIndirectCount: null count buffer");
         PE_ERROR_IF(stride < PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,

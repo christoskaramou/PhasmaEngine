@@ -63,9 +63,14 @@ namespace
 
         void Resize(pwgpu::test::SampleContext &ctx, uint32_t width, uint32_t height) override
         {
+            CreateMsaaTarget(ctx, width, height);
+        }
+
+        bool CreateMsaaTarget(pwgpu::test::SampleContext &ctx, uint32_t width, uint32_t height)
+        {
             ReleaseMsaaTarget();
             if (width == 0 || height == 0)
-                return;
+                return false;
 
             WGPUTextureDescriptor textureDesc{};
             textureDesc.label = {"msaa_color", WGPU_STRLEN};
@@ -78,9 +83,15 @@ namespace
             m_msaaTexture = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
 
             if (!m_msaaTexture)
-                return;
+                return false;
 
             m_msaaView = pwgpu::test::CreateTextureView(m_msaaTexture, ctx.surfaceFormat);
+            if (!m_msaaView)
+                return false;
+
+            m_msaaWidth = width;
+            m_msaaHeight = height;
+            return true;
         }
 
         void Update(pwgpu::test::SampleContext &ctx) override
@@ -106,8 +117,15 @@ namespace
             }
         }
 
-        bool Execute(pwgpu::test::SampleContext &, pwgpu::test::SampleFrame &frame) override
+        bool Execute(pwgpu::test::SampleContext &ctx, pwgpu::test::SampleFrame &frame) override
         {
+            const uint32_t surfaceWidth = wgpuTextureGetWidth(frame.surfaceTexture.texture);
+            const uint32_t surfaceHeight = wgpuTextureGetHeight(frame.surfaceTexture.texture);
+            if (!m_msaaView || m_msaaWidth != surfaceWidth || m_msaaHeight != surfaceHeight)
+            {
+                if (!CreateMsaaTarget(ctx, surfaceWidth, surfaceHeight))
+                    return true;
+            }
             if (!m_msaaView)
                 return true;
 
@@ -153,6 +171,8 @@ namespace
                 wgpuTextureRelease(m_msaaTexture);
                 m_msaaTexture = nullptr;
             }
+            m_msaaWidth = 0;
+            m_msaaHeight = 0;
         }
 
         void ReleasePipeline()
@@ -181,6 +201,8 @@ namespace
         WGPURenderPipeline m_pipeline = nullptr;
         WGPUTexture m_msaaTexture = nullptr;
         WGPUTextureView m_msaaView = nullptr;
+        uint32_t m_msaaWidth = 0;
+        uint32_t m_msaaHeight = 0;
     };
 
     pwgpu::test::SampleAppDesc MakeResizeCanvasDesc()

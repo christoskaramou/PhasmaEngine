@@ -2373,6 +2373,30 @@ extern "C"
                                               dstBaseLayer, dstLayerCount, dstAspects);
         }
 
+        const bool dx12Backend =
+            enc->device && enc->device->rhi
+                ? enc->device->rhi->GetApi() == PE_GRAPHICS_API_DX12
+                : pe::RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        if (dx12Backend)
+        {
+            const bool srcFullCoverage = IsFullMipRegion(src->texture, src->mipLevel, src->origin, *copySize);
+            if (!srcFullCoverage || !dstFullCoverage ||
+                src->mipLevel != 0 || dst->mipLevel != 0 ||
+                src->texture->mipLevelCount != dst->texture->mipLevelCount ||
+                src->texture->size.depthOrArrayLayers != dst->texture->size.depthOrArrayLayers)
+            {
+                fail("DX12 backend currently supports only whole-texture copyTextureToTexture regions");
+                return;
+            }
+
+            enc->cmd->CopyImage(src->texture->image, dst->texture->image);
+            pwgpu::MarkRangeInitialized(dst->texture, dst->mipLevel, 1,
+                                        dstBaseLayer, dstLayerCount, dstAspects);
+            enc->retained.usedTextures.push_back(src->texture);
+            enc->retained.usedTextures.push_back(dst->texture);
+            return;
+        }
+
         vk::ImageCopy2 region{};
         region.srcSubresource.aspectMask = srcAspect;
         region.srcSubresource.mipLevel = src->mipLevel;

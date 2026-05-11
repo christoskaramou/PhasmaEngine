@@ -51,8 +51,8 @@ namespace
     };
     static_assert(sizeof(SceneUniforms) == 80);
 
-    // sliceStartY is always 0 for our single-pass implementation, but the
-    // int3 padding is required so the cbuffer matches HLSL's 16-byte alignment.
+    // sliceStartY is always 0 for our single-pass implementation. Scalar
+    // padding keeps the cbuffer 16-byte sized without violating uniform layout.
     struct SliceInfo
     {
         int32_t sliceStartY;

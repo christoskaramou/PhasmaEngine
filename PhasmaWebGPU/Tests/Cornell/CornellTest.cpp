@@ -14,6 +14,8 @@
 //   - The radiosity lightmap write pass uses RWTexture2DArray (HLSL read-write
 //     storage) instead of the WGSL write-only storage texture, which matches
 //     the engine's RWTexture2D pattern.
+//   - The photon-tracing pass uses the fixed lightmap dimensions directly, so
+//     only the accumulation->lightmap pass binds the lightmap as a storage image.
 //
 // All other pipeline shapes, RNG constants, photon counts, camera animation,
 // and scene geometry are 1:1 with upstream main.ts defaults:
@@ -323,13 +325,13 @@ namespace
 
     // ---------- common.ts / GPU uniform layouts ----------
 
-    // Matches CommonUniforms in common.inc.hlsl: mat4 mvp, mat4 inv_mvp, uint3 seed, uint pad.
+    // Matches CommonUniforms in common.inc.hlsl: mat4 mvp, mat4 inv_mvp, uint3 seed, uint quadCount.
     struct CommonUniformsCpu
     {
         float mvp[16];
         float invMvp[16];
         uint32_t seed[3];
-        uint32_t pad;
+        uint32_t quadCount;
     };
     static_assert(sizeof(CommonUniformsCpu) == 64 + 64 + 16, "CommonUniforms size");
 
@@ -467,7 +469,7 @@ namespace
             u.seed[0] = m_rng();
             u.seed[1] = m_rng();
             u.seed[2] = m_rng();
-            u.pad = 0;
+            u.quadCount = static_cast<uint32_t>(m_scene.quads.size());
             wgpuQueueWriteBuffer(ctx.queue, m_commonUniformBuffer, 0, &u, sizeof(u));
 
             // Radiosity accumulation scale tracking (radiosity.ts.run).
@@ -503,27 +505,21 @@ namespace
 
         bool Execute(pwgpu::test::SampleContext &, pwgpu::test::SampleFrame &frame) override
         {
-            if (!m_framebufferView || !m_depthView || !m_raytracerBindGroup ||
-                !m_tonemapBindGroup)
+            if (!m_framebufferView || !m_depthView || !m_radiosityTraceBindGroup ||
+                !m_radiosityBindGroup || !m_raytracerBindGroup || !m_tonemapBindGroup)
             {
                 return true;
             }
 
-            // Pass 1a: radiosity photon tracing (writes accumulation SSBO,
-            // reads lightmap dimensions only). Upstream fuses this with the
-            // accumulation->lightmap copy in a single compute pass, but doing
-            // so trips the Vulkan SYNC validator with a WAW hazard on the
-            // lightmap storage image (the layout transition to GENERAL counts
-            // as a write, and the first shader dispatch in the pass is
-            // executing without an inserted barrier in the engine's current
-            // compute-pass emission path). Splitting into two passes forces
-            // the engine to emit a dependency/barrier at the pass boundary.
+            // Pass 1a: radiosity photon tracing writes the accumulation SSBO.
+            // It intentionally does not bind the lightmap storage image; the
+            // lightmap dimensions are fixed for this sample.
             {
                 WGPUComputePassDescriptor pd{};
                 pd.label = {"cornell_radiosity", WGPU_STRLEN};
                 WGPUComputePassEncoder cp = wgpuCommandEncoderBeginComputePass(frame.encoder, &pd);
                 wgpuComputePassEncoderSetBindGroup(cp, 0, m_commonBindGroup, 0, nullptr);
-                wgpuComputePassEncoderSetBindGroup(cp, 1, m_radiosityBindGroup, 0, nullptr);
+                wgpuComputePassEncoderSetBindGroup(cp, 1, m_radiosityTraceBindGroup, 0, nullptr);
                 wgpuComputePassEncoderSetPipeline(cp, m_radiosityPipeline);
                 wgpuComputePassEncoderDispatchWorkgroups(cp, kWorkgroupsPerFrame, 1, 1);
                 wgpuComputePassEncoderEnd(cp);
@@ -651,11 +647,15 @@ namespace
                 wgpuPipelineLayoutRelease(m_raytracerPipelineLayout);
             if (m_rasterizerPipelineLayout)
                 wgpuPipelineLayoutRelease(m_rasterizerPipelineLayout);
+            if (m_accumToLightmapPipelineLayout)
+                wgpuPipelineLayoutRelease(m_accumToLightmapPipelineLayout);
             if (m_radiosityPipelineLayout)
                 wgpuPipelineLayoutRelease(m_radiosityPipelineLayout);
 
             if (m_commonBindGroup)
                 wgpuBindGroupRelease(m_commonBindGroup);
+            if (m_radiosityTraceBindGroup)
+                wgpuBindGroupRelease(m_radiosityTraceBindGroup);
             if (m_radiosityBindGroup)
                 wgpuBindGroupRelease(m_radiosityBindGroup);
             if (m_rasterizerBindGroup)
@@ -663,6 +663,8 @@ namespace
 
             if (m_commonBgl)
                 wgpuBindGroupLayoutRelease(m_commonBgl);
+            if (m_radiosityTraceBgl)
+                wgpuBindGroupLayoutRelease(m_radiosityTraceBgl);
             if (m_radiosityBgl)
                 wgpuBindGroupLayoutRelease(m_radiosityBgl);
             if (m_rasterizerBgl)
@@ -930,7 +932,28 @@ namespace
                     return false;
             }
 
-            // group 1 (radiosity): accumulation SSBO + lightmap storage + radiosity UBO.
+            // group 1 (radiosity trace): accumulation SSBO + radiosity UBO.
+            {
+                WGPUBindGroupLayoutEntry e[2] = {};
+                e[0].binding = 0;
+                e[0].visibility = WGPUShaderStage_Compute;
+                e[0].buffer.type = WGPUBufferBindingType_Storage;
+                e[0].buffer.minBindingSize = 4;
+                e[1].binding = 2;
+                e[1].visibility = WGPUShaderStage_Compute;
+                e[1].buffer.type = WGPUBufferBindingType_Uniform;
+                e[1].buffer.minBindingSize = sizeof(RadiosityUniformsCpu);
+
+                WGPUBindGroupLayoutDescriptor d{};
+                d.label = {"cornell_radiosity_trace_bgl", WGPU_STRLEN};
+                d.entryCount = 2;
+                d.entries = e;
+                m_radiosityTraceBgl = wgpuDeviceCreateBindGroupLayout(ctx.device, &d);
+                if (!m_radiosityTraceBgl)
+                    return false;
+            }
+
+            // group 1 (accumulation->lightmap): accumulation SSBO + lightmap storage + radiosity UBO.
             {
                 WGPUBindGroupLayoutEntry e[3] = {};
                 e[0].binding = 0;
@@ -1031,8 +1054,12 @@ namespace
                 return wgpuDeviceCreatePipelineLayout(ctx.device, &d);
             };
             {
-                WGPUBindGroupLayout bgls[2] = {m_commonBgl, m_radiosityBgl};
+                WGPUBindGroupLayout bgls[2] = {m_commonBgl, m_radiosityTraceBgl};
                 m_radiosityPipelineLayout = makePl("cornell_rad_pl", bgls, 2);
+            }
+            {
+                WGPUBindGroupLayout bgls[2] = {m_commonBgl, m_radiosityBgl};
+                m_accumToLightmapPipelineLayout = makePl("cornell_accum2lm_pl", bgls, 2);
             }
             {
                 WGPUBindGroupLayout bgls[2] = {m_commonBgl, m_rasterizerBgl};
@@ -1046,8 +1073,9 @@ namespace
                 WGPUBindGroupLayout bgls[1] = {m_tonemapBgl};
                 m_tonemapPipelineLayout = makePl("cornell_tonemap_pl", bgls, 1);
             }
-            if (!m_radiosityPipelineLayout || !m_rasterizerPipelineLayout ||
-                !m_raytracerPipelineLayout || !m_tonemapPipelineLayout)
+            if (!m_radiosityPipelineLayout || !m_accumToLightmapPipelineLayout ||
+                !m_rasterizerPipelineLayout || !m_raytracerPipelineLayout ||
+                !m_tonemapPipelineLayout)
                 return false;
 
             // Radiosity compute pipelines.
@@ -1064,7 +1092,7 @@ namespace
             {
                 WGPUComputePipelineDescriptor d{};
                 d.label = {"cornell_accum2lm_cp", WGPU_STRLEN};
-                d.layout = m_radiosityPipelineLayout;
+                d.layout = m_accumToLightmapPipelineLayout;
                 d.compute.module = m_accumToLightmapCS;
                 d.compute.entryPoint = {"CSMain", WGPU_STRLEN};
                 m_accumToLightmapPipeline = wgpuDeviceCreateComputePipeline(ctx.device, &d);
@@ -1192,7 +1220,30 @@ namespace
                     return false;
             }
 
-            // Radiosity bind group.
+            // Radiosity trace bind group.
+            {
+                const uint64_t accumBytes = static_cast<uint64_t>(kLightmapWidth) *
+                                            kLightmapHeight *
+                                            static_cast<uint64_t>(m_scene.quads.size()) * 16ull;
+                WGPUBindGroupEntry e[2] = {};
+                e[0].binding = 0;
+                e[0].buffer = m_accumulationBuffer;
+                e[0].size = accumBytes;
+                e[1].binding = 2;
+                e[1].buffer = m_radiosityUniformBuffer;
+                e[1].size = sizeof(RadiosityUniformsCpu);
+
+                WGPUBindGroupDescriptor d{};
+                d.label = {"cornell_radiosity_trace_bg", WGPU_STRLEN};
+                d.layout = m_radiosityTraceBgl;
+                d.entryCount = 2;
+                d.entries = e;
+                m_radiosityTraceBindGroup = wgpuDeviceCreateBindGroup(ctx.device, &d);
+                if (!m_radiosityTraceBindGroup)
+                    return false;
+            }
+
+            // Accumulation->lightmap bind group.
             {
                 const uint64_t accumBytes = static_cast<uint64_t>(kLightmapWidth) *
                                             kLightmapHeight *
@@ -1373,18 +1424,21 @@ namespace
 
         // Bind group layouts + pipeline layouts.
         WGPUBindGroupLayout m_commonBgl = nullptr;
+        WGPUBindGroupLayout m_radiosityTraceBgl = nullptr;
         WGPUBindGroupLayout m_radiosityBgl = nullptr;
         WGPUBindGroupLayout m_rasterizerBgl = nullptr;
         WGPUBindGroupLayout m_raytracerBgl = nullptr;
         WGPUBindGroupLayout m_tonemapBgl = nullptr;
 
         WGPUPipelineLayout m_radiosityPipelineLayout = nullptr;
+        WGPUPipelineLayout m_accumToLightmapPipelineLayout = nullptr;
         WGPUPipelineLayout m_rasterizerPipelineLayout = nullptr;
         WGPUPipelineLayout m_raytracerPipelineLayout = nullptr;
         WGPUPipelineLayout m_tonemapPipelineLayout = nullptr;
 
         // Bind groups.
         WGPUBindGroup m_commonBindGroup = nullptr;
+        WGPUBindGroup m_radiosityTraceBindGroup = nullptr;
         WGPUBindGroup m_radiosityBindGroup = nullptr;
         WGPUBindGroup m_rasterizerBindGroup = nullptr;
         WGPUBindGroup m_raytracerBindGroup = nullptr;

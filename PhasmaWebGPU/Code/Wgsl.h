@@ -21,6 +21,7 @@ namespace pwgpu::Wgsl
     PWGPU_API std::string SpirvToHlsl(const std::vector<uint32_t> &spirv,
                                       const std::string &entryPoint,
                                       const char *stage);
+    PWGPU_API std::string LastSpirvToHlslError();
 
     PWGPU_API void PopulateReflectionMeta(WGPUShaderModuleImpl *module,
                                           const CompileResult &result);

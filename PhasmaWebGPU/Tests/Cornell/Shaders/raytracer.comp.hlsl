@@ -15,7 +15,7 @@ static const int NumReflectionRays = 5;
 
 float3 sample_hit(HitInfo hit)
 {
-    Quad q = quads[hit.quad];
+    Quad q = load_quad(hit.quad);
     float3 lm = lightmap.SampleLevel(smpl, float3(hit.uv, (float)hit.quad), 0).rgb;
     return lm + q.emissive * q.color;
 }
@@ -46,7 +46,7 @@ void CSMain(uint3 invocation_id : SV_DispatchThreadID)
         if (hit.quad != kNoHit)
         {
             float3 hit_color = sample_hit(hit);
-            float3 normal = quads[hit.quad].plane.xyz;
+            float3 normal = load_quad(hit.quad).plane.xyz;
             float3 bounce = reflect(ray.dir, normal);
 
             float3 reflection = float3(0, 0, 0);

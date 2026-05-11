@@ -495,6 +495,8 @@ extern "C"
         if (rbe->boundVertexBuffers.size() <= slot)
             rbe->boundVertexBuffers.resize(slot + 1);
         rbe->boundVertexBuffers[slot].bound = true;
+        rbe->boundVertexBuffers[slot].buffer = buffer;
+        rbe->boundVertexBuffers[slot].offset = offset;
         rbe->boundVertexBuffers[slot].size = size;
 
         {

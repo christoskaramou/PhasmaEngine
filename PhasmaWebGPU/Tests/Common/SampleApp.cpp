@@ -107,6 +107,19 @@ namespace
 
         return false;
     }
+
+    const char *ApiDisplayName(PeGraphicsApi api)
+    {
+        switch (api)
+        {
+        case PE_GRAPHICS_API_DX12:
+            return "DX12";
+        case PE_GRAPHICS_API_VULKAN:
+            return "Vulkan";
+        default:
+            return "Unknown";
+        }
+    }
 } // namespace
 
 namespace pwgpu::test
@@ -184,13 +197,14 @@ namespace pwgpu::test
             return false;
         }
 
-        const pe::GraphicsApiSelection apiSelection = pe::ResolveGraphicsApi(argc, argv);
+        const pe::GraphicsApiSelection apiSelection = pe::ResolveGraphicsApi(argc, argv, nullptr, false);
         if (!apiSelection.Succeeded())
         {
             fprintf(stderr, "%s\n", apiSelection.error.c_str());
             return false;
         }
         PeGraphicsApi api = apiSelection.api;
+        m_ctx.apiName = ApiDisplayName(api);
         m_exitAfterFrames = runOptions.exitAfterFrames;
         m_exitAfterSeconds = runOptions.exitAfterSeconds;
 
@@ -404,11 +418,12 @@ namespace pwgpu::test
             double frameTimeMs = m_ctx.timing.fps > 0.0 ? 1000.0 / m_ctx.timing.fps : 0.0;
             snprintf(title,
                      sizeof(title),
-                     "%s %ux%u - Device: %s - API: Vulkan - Present: %s - FPS: %.0f - %.2f ms",
+                     "%s %ux%u - Device: %s - API: %s - Present: %s - FPS: %.0f - %.2f ms",
                      m_desc.windowTitle,
                      m_ctx.width,
                      m_ctx.height,
                      m_ctx.gpuName.c_str(),
+                     m_ctx.apiName.c_str(),
                      m_ctx.presentModeName.c_str(),
                      m_ctx.timing.fps,
                      frameTimeMs);
@@ -417,11 +432,12 @@ namespace pwgpu::test
         {
             snprintf(title,
                      sizeof(title),
-                     "%s %ux%u - Device: %s - API: Vulkan - Present: %s",
+                     "%s %ux%u - Device: %s - API: %s - Present: %s",
                      m_desc.windowTitle,
                      m_ctx.width,
                      m_ctx.height,
                      m_ctx.gpuName.c_str(),
+                     m_ctx.apiName.c_str(),
                      m_ctx.presentModeName.c_str());
         }
 

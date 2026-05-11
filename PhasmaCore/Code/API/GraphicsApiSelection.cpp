@@ -259,7 +259,10 @@ namespace pe
         }
     }
 
-    GraphicsApiSelection ResolveGraphicsApi(int argc, char *const *argv, const char *runtimeConfigPath)
+    GraphicsApiSelection ResolveGraphicsApi(int argc,
+                                            char *const *argv,
+                                            const char *runtimeConfigPath,
+                                            bool readRuntimeConfig)
     {
         GraphicsApiSelection selection{};
 
@@ -288,34 +291,37 @@ namespace pe
             return selection;
         }
 
-        ApiCandidate config;
-        std::string warning;
-        const std::filesystem::path configPath =
-            runtimeConfigPath && *runtimeConfigPath ? std::filesystem::path(runtimeConfigPath) : DefaultRuntimeConfigPath();
-        if (TryReadRuntimeConfigApi(configPath, config, warning))
+        if (readRuntimeConfig)
         {
-            PeGraphicsApi configApi = PE_GRAPHICS_API_VULKAN;
-            if (!TryParseGraphicsApiName(config.value, configApi))
+            ApiCandidate config;
+            std::string warning;
+            const std::filesystem::path configPath =
+                runtimeConfigPath && *runtimeConfigPath ? std::filesystem::path(runtimeConfigPath) : DefaultRuntimeConfigPath();
+            if (TryReadRuntimeConfigApi(configPath, config, warning))
             {
-                StoreWarning(selection, InvalidApiMessage(config.label, config.value) + "; falling back to vulkan");
-            }
-            else if (!IsSupportedOnCurrentPlatform(configApi))
-            {
-                StoreWarning(selection,
-                             "Unsupported " + config.label + " value '" + config.value + "': " +
-                                 UnsupportedReason(configApi) + "; falling back to vulkan");
+                PeGraphicsApi configApi = PE_GRAPHICS_API_VULKAN;
+                if (!TryParseGraphicsApiName(config.value, configApi))
+                {
+                    StoreWarning(selection, InvalidApiMessage(config.label, config.value) + "; falling back to vulkan");
+                }
+                else if (!IsSupportedOnCurrentPlatform(configApi))
+                {
+                    StoreWarning(selection,
+                                 "Unsupported " + config.label + " value '" + config.value + "': " +
+                                     UnsupportedReason(configApi) + "; falling back to vulkan");
+                }
+                else
+                {
+                    selection.api = configApi;
+                    selection.source = GraphicsApiSelectionSource::RuntimeConfig;
+                    selection.value = config.value;
+                    return selection;
+                }
             }
             else
             {
-                selection.api = configApi;
-                selection.source = GraphicsApiSelectionSource::RuntimeConfig;
-                selection.value = config.value;
-                return selection;
+                StoreWarning(selection, std::move(warning));
             }
-        }
-        else
-        {
-            StoreWarning(selection, std::move(warning));
         }
 
         selection.api = PE_GRAPHICS_API_VULKAN;

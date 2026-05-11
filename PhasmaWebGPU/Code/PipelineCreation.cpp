@@ -274,7 +274,7 @@ namespace pwgpu
             static constexpr uint32_t kDx12WebGPUDxilCacheVersion = 1;
             static constexpr uint32_t kDx12WebGPUCbvRegisterShiftVersion = 2;
             static constexpr std::string_view kDx12WebGPUNagaBridgeVersion =
-                "naga-29.0.1-spv-to-hlsl-semantic-cbv-shift";
+                "naga-29.0.1-spv-to-hlsl-semantic-cbv-shift-sampler-cap64-vector-select2-demote-kill";
 
             DxilCacheSha256 hash;
             HashDxilCacheString(hash, "PhasmaWebGPU.DX12.DXIL");
@@ -391,6 +391,9 @@ namespace pwgpu
             if (hlsl.empty())
             {
                 error = "failed to translate SPIR-V to HLSL for DX12";
+                const std::string bridgeError = pwgpu::Wgsl::LastSpirvToHlslError();
+                if (!bridgeError.empty())
+                    error += ": " + bridgeError;
                 return false;
             }
 
@@ -1368,6 +1371,9 @@ namespace pwgpu
             D3D12_RASTERIZER_DESC rasterizer{};
             rasterizer.FillMode = D3D12_FILL_MODE_SOLID;
             rasterizer.CullMode = ToDx12CullMode(ResolveCullMode(descriptor.primitive.cullMode));
+            // WebGPU's frontFace is expressed in framebuffer coordinates. The
+            // negative-height viewport already maps DX12 into that coordinate
+            // space, so preserve the WebGPU winding in the PSO.
             rasterizer.FrontCounterClockwise =
                 (ResolveFrontFace(descriptor.primitive.frontFace) == WGPUFrontFace_CCW) ? TRUE : FALSE;
             rasterizer.DepthBias = desc.hasDepthStencil ? descriptor.depthStencil->depthBias : 0;

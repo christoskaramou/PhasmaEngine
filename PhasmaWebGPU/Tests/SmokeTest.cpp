@@ -110,7 +110,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    const pe::GraphicsApiSelection apiSelection = pe::ResolveGraphicsApi(argc, argv);
+    const pe::GraphicsApiSelection apiSelection = pe::ResolveGraphicsApi(argc, argv, nullptr, false);
     if (!apiSelection.Succeeded())
     {
         fprintf(stderr, "%s\n", apiSelection.error.c_str());

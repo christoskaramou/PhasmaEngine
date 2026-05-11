@@ -978,6 +978,7 @@ extern "C"
         // do its own pre-pass clear) and STORAGE_BINDING-only views (compute writes
         // overwrite contents anyway).
         if (texture->image &&
+            (viewUsage & WGPUTextureUsage_RenderAttachment) == 0 &&
             (viewUsage & (WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopySrc)) != 0)
         {
             auto aspects = pwgpu::AspectsForView(texture->format, resolved.aspect);

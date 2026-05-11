@@ -19,7 +19,7 @@ struct SurfaceVertex
 
 [[vk::binding(1, 0)]] RWStructuredBuffer<SurfaceVertex> outVertices : register(u0, space0);
 
-static const uint kGridDim = 48u;
+static const uint kGridDim = 32u;
 static const uint kCells = kGridDim * kGridDim * kGridDim;
 static const uint kVerticesPerTet = 6u;
 static const uint kVerticesPerCell = 36u;
@@ -158,132 +158,52 @@ void EmitTet(uint outBase, float3 p[4], float d[4])
         StoreEmpty(outBase + i);
     }
 
-    // Direct 16-case dispatch. Avoids variable-indexed local-array writes which
-    // DXC→SPIR-V under [unroll] was miscompiling into half-filled insideIds[]
-    // (symptom: triangles with one real vertex and two StoreEmpty vertices).
-    uint caseIdx = 0u;
-    if (d[0] < 0.0f) caseIdx |= 1u;
-    if (d[1] < 0.0f) caseIdx |= 2u;
-    if (d[2] < 0.0f) caseIdx |= 4u;
-    if (d[3] < 0.0f) caseIdx |= 8u;
+    uint inside[4];
+    uint outside[4];
+    uint insideCount = 0u;
+    uint outsideCount = 0u;
 
-    switch (caseIdx)
+    for (uint i = 0u; i < 4u; ++i)
     {
-    case 0u:
-    case 15u:
+        if (d[i] < 0.0f)
+            inside[insideCount++] = i;
+        else
+            outside[outsideCount++] = i;
+    }
+
+    if (insideCount == 0u || insideCount == 4u)
         return;
 
-    case 1u:
+    if (insideCount == 1u)
+    {
+        uint i0 = inside[0];
         EmitTriangle(outBase, 0u,
-                     IntersectEdge(p[0], d[0], p[1], d[1]),
-                     IntersectEdge(p[0], d[0], p[2], d[2]),
-                     IntersectEdge(p[0], d[0], p[3], d[3]));
-        break;
-    case 2u:
-        EmitTriangle(outBase, 0u,
-                     IntersectEdge(p[1], d[1], p[0], d[0]),
-                     IntersectEdge(p[1], d[1], p[2], d[2]),
-                     IntersectEdge(p[1], d[1], p[3], d[3]));
-        break;
-    case 4u:
-        EmitTriangle(outBase, 0u,
-                     IntersectEdge(p[2], d[2], p[0], d[0]),
-                     IntersectEdge(p[2], d[2], p[1], d[1]),
-                     IntersectEdge(p[2], d[2], p[3], d[3]));
-        break;
-    case 8u:
-        EmitTriangle(outBase, 0u,
-                     IntersectEdge(p[3], d[3], p[0], d[0]),
-                     IntersectEdge(p[3], d[3], p[1], d[1]),
-                     IntersectEdge(p[3], d[3], p[2], d[2]));
-        break;
+                     IntersectEdge(p[i0], d[i0], p[outside[0]], d[outside[0]]),
+                     IntersectEdge(p[i0], d[i0], p[outside[1]], d[outside[1]]),
+                     IntersectEdge(p[i0], d[i0], p[outside[2]], d[outside[2]]));
+        return;
+    }
 
-    case 14u:
+    if (insideCount == 3u)
+    {
+        uint o0 = outside[0];
         EmitTriangle(outBase, 0u,
-                     IntersectEdge(p[0], d[0], p[3], d[3]),
-                     IntersectEdge(p[0], d[0], p[2], d[2]),
-                     IntersectEdge(p[0], d[0], p[1], d[1]));
-        break;
-    case 13u:
-        EmitTriangle(outBase, 0u,
-                     IntersectEdge(p[1], d[1], p[3], d[3]),
-                     IntersectEdge(p[1], d[1], p[2], d[2]),
-                     IntersectEdge(p[1], d[1], p[0], d[0]));
-        break;
-    case 11u:
-        EmitTriangle(outBase, 0u,
-                     IntersectEdge(p[2], d[2], p[3], d[3]),
-                     IntersectEdge(p[2], d[2], p[1], d[1]),
-                     IntersectEdge(p[2], d[2], p[0], d[0]));
-        break;
-    case 7u:
-        EmitTriangle(outBase, 0u,
-                     IntersectEdge(p[3], d[3], p[2], d[2]),
-                     IntersectEdge(p[3], d[3], p[1], d[1]),
-                     IntersectEdge(p[3], d[3], p[0], d[0]));
-        break;
+                     IntersectEdge(p[o0], d[o0], p[inside[2]], d[inside[2]]),
+                     IntersectEdge(p[o0], d[o0], p[inside[1]], d[inside[1]]),
+                     IntersectEdge(p[o0], d[o0], p[inside[0]], d[inside[0]]));
+        return;
+    }
 
-    case 3u:
-    {
-        float3 a = IntersectEdge(p[0], d[0], p[2], d[2]);
-        float3 b = IntersectEdge(p[1], d[1], p[2], d[2]);
-        float3 c = IntersectEdge(p[1], d[1], p[3], d[3]);
-        float3 q = IntersectEdge(p[0], d[0], p[3], d[3]);
-        EmitTriangle(outBase, 0u, a, b, c);
-        EmitTriangle(outBase, 1u, a, c, q);
-        break;
-    }
-    case 5u:
-    {
-        float3 a = IntersectEdge(p[0], d[0], p[1], d[1]);
-        float3 b = IntersectEdge(p[2], d[2], p[1], d[1]);
-        float3 c = IntersectEdge(p[2], d[2], p[3], d[3]);
-        float3 q = IntersectEdge(p[0], d[0], p[3], d[3]);
-        EmitTriangle(outBase, 0u, a, b, c);
-        EmitTriangle(outBase, 1u, a, c, q);
-        break;
-    }
-    case 6u:
-    {
-        float3 a = IntersectEdge(p[1], d[1], p[0], d[0]);
-        float3 b = IntersectEdge(p[2], d[2], p[0], d[0]);
-        float3 c = IntersectEdge(p[2], d[2], p[3], d[3]);
-        float3 q = IntersectEdge(p[1], d[1], p[3], d[3]);
-        EmitTriangle(outBase, 0u, a, b, c);
-        EmitTriangle(outBase, 1u, a, c, q);
-        break;
-    }
-    case 9u:
-    {
-        float3 a = IntersectEdge(p[0], d[0], p[1], d[1]);
-        float3 b = IntersectEdge(p[3], d[3], p[1], d[1]);
-        float3 c = IntersectEdge(p[3], d[3], p[2], d[2]);
-        float3 q = IntersectEdge(p[0], d[0], p[2], d[2]);
-        EmitTriangle(outBase, 0u, a, b, c);
-        EmitTriangle(outBase, 1u, a, c, q);
-        break;
-    }
-    case 10u:
-    {
-        float3 a = IntersectEdge(p[1], d[1], p[0], d[0]);
-        float3 b = IntersectEdge(p[3], d[3], p[0], d[0]);
-        float3 c = IntersectEdge(p[3], d[3], p[2], d[2]);
-        float3 q = IntersectEdge(p[1], d[1], p[2], d[2]);
-        EmitTriangle(outBase, 0u, a, b, c);
-        EmitTriangle(outBase, 1u, a, c, q);
-        break;
-    }
-    case 12u:
-    {
-        float3 a = IntersectEdge(p[2], d[2], p[0], d[0]);
-        float3 b = IntersectEdge(p[3], d[3], p[0], d[0]);
-        float3 c = IntersectEdge(p[3], d[3], p[1], d[1]);
-        float3 q = IntersectEdge(p[2], d[2], p[1], d[1]);
-        EmitTriangle(outBase, 0u, a, b, c);
-        EmitTriangle(outBase, 1u, a, c, q);
-        break;
-    }
-    }
+    uint i0 = inside[0];
+    uint i1 = inside[1];
+    uint o0 = outside[0];
+    uint o1 = outside[1];
+    float3 a = IntersectEdge(p[i0], d[i0], p[o0], d[o0]);
+    float3 b = IntersectEdge(p[i1], d[i1], p[o0], d[o0]);
+    float3 c = IntersectEdge(p[i1], d[i1], p[o1], d[o1]);
+    float3 q = IntersectEdge(p[i0], d[i0], p[o1], d[o1]);
+    EmitTriangle(outBase, 0u, a, b, c);
+    EmitTriangle(outBase, 1u, a, c, q);
 }
 
 [numthreads(128, 1, 1)]

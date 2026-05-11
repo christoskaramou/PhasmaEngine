@@ -173,6 +173,16 @@ namespace pwgpu::Wgsl
 #endif
     }
 
+    std::string LastSpirvToHlslError()
+    {
+#if defined(PE_WEBGPU_WGSL) && PE_WEBGPU_WGSL
+        const char *error = naga_spirv_to_hlsl_error();
+        return error ? std::string(error) : std::string{};
+#else
+        return {};
+#endif
+    }
+
     void PopulateReflectionMeta(WGPUShaderModuleImpl *module, const CompileResult &result)
     {
 #if defined(PE_WEBGPU_WGSL) && PE_WEBGPU_WGSL

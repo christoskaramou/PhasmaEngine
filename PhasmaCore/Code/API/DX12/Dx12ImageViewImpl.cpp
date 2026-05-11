@@ -33,8 +33,22 @@ namespace pe
             return format;
         }
 
-        D3D12_SRV_DIMENSION SrvDimension(PeImageViewType type)
+        D3D12_SRV_DIMENSION SrvDimension(PeImageViewType type, bool multisampled)
         {
+            if (multisampled)
+            {
+                switch (type)
+                {
+                case PE_IMAGE_VIEW_TYPE_2D_ARRAY:
+                case PE_IMAGE_VIEW_TYPE_CUBE_ARRAY:
+                    return D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
+                case PE_IMAGE_VIEW_TYPE_2D:
+                case PE_IMAGE_VIEW_TYPE_CUBE:
+                default:
+                    return D3D12_SRV_DIMENSION_TEXTURE2DMS;
+                }
+            }
+
             switch (type)
             {
             case PE_IMAGE_VIEW_TYPE_1D:
@@ -75,8 +89,22 @@ namespace pe
             }
         }
 
-        D3D12_RTV_DIMENSION RtvDimension(PeImageViewType type)
+        D3D12_RTV_DIMENSION RtvDimension(PeImageViewType type, bool multisampled)
         {
+            if (multisampled)
+            {
+                switch (type)
+                {
+                case PE_IMAGE_VIEW_TYPE_2D_ARRAY:
+                case PE_IMAGE_VIEW_TYPE_CUBE_ARRAY:
+                    return D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
+                case PE_IMAGE_VIEW_TYPE_2D:
+                case PE_IMAGE_VIEW_TYPE_CUBE:
+                default:
+                    return D3D12_RTV_DIMENSION_TEXTURE2DMS;
+                }
+            }
+
             switch (type)
             {
             case PE_IMAGE_VIEW_TYPE_1D:
@@ -96,8 +124,22 @@ namespace pe
             }
         }
 
-        D3D12_DSV_DIMENSION DsvDimension(PeImageViewType type)
+        D3D12_DSV_DIMENSION DsvDimension(PeImageViewType type, bool multisampled)
         {
+            if (multisampled)
+            {
+                switch (type)
+                {
+                case PE_IMAGE_VIEW_TYPE_2D_ARRAY:
+                case PE_IMAGE_VIEW_TYPE_CUBE_ARRAY:
+                    return D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
+                case PE_IMAGE_VIEW_TYPE_2D:
+                case PE_IMAGE_VIEW_TYPE_CUBE:
+                default:
+                    return D3D12_DSV_DIMENSION_TEXTURE2DMS;
+                }
+            }
+
             switch (type)
             {
             case PE_IMAGE_VIEW_TYPE_1D:
@@ -115,11 +157,14 @@ namespace pe
             }
         }
 
-        void FillSrvDesc(D3D12_SHADER_RESOURCE_VIEW_DESC &srv, const ImageViewDesc &desc, DXGI_FORMAT format)
+        void FillSrvDesc(D3D12_SHADER_RESOURCE_VIEW_DESC &srv,
+                         const ImageViewDesc &desc,
+                         DXGI_FORMAT format,
+                         bool multisampled)
         {
             srv.Format = format;
             srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-            srv.ViewDimension = SrvDimension(desc.viewType);
+            srv.ViewDimension = SrvDimension(desc.viewType, multisampled);
             switch (srv.ViewDimension)
             {
             case D3D12_SRV_DIMENSION_TEXTURE1D:
@@ -141,6 +186,12 @@ namespace pe
                 srv.Texture2DArray.MipLevels = desc.levelCount;
                 srv.Texture2DArray.FirstArraySlice = desc.baseArrayLayer;
                 srv.Texture2DArray.ArraySize = desc.layerCount;
+                break;
+            case D3D12_SRV_DIMENSION_TEXTURE2DMS:
+                break;
+            case D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY:
+                srv.Texture2DMSArray.FirstArraySlice = desc.baseArrayLayer;
+                srv.Texture2DMSArray.ArraySize = desc.layerCount;
                 break;
             case D3D12_SRV_DIMENSION_TEXTURE3D:
                 srv.Texture3D.MostDetailedMip = desc.baseMipLevel;
@@ -193,10 +244,13 @@ namespace pe
             }
         }
 
-        void FillRtvDesc(D3D12_RENDER_TARGET_VIEW_DESC &rtv, const ImageViewDesc &desc, DXGI_FORMAT format)
+        void FillRtvDesc(D3D12_RENDER_TARGET_VIEW_DESC &rtv,
+                         const ImageViewDesc &desc,
+                         DXGI_FORMAT format,
+                         bool multisampled)
         {
             rtv.Format = format;
-            rtv.ViewDimension = RtvDimension(desc.viewType);
+            rtv.ViewDimension = RtvDimension(desc.viewType, multisampled);
             switch (rtv.ViewDimension)
             {
             case D3D12_RTV_DIMENSION_TEXTURE1D:
@@ -215,6 +269,12 @@ namespace pe
                 rtv.Texture2DArray.FirstArraySlice = desc.baseArrayLayer;
                 rtv.Texture2DArray.ArraySize = desc.layerCount;
                 break;
+            case D3D12_RTV_DIMENSION_TEXTURE2DMS:
+                break;
+            case D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY:
+                rtv.Texture2DMSArray.FirstArraySlice = desc.baseArrayLayer;
+                rtv.Texture2DMSArray.ArraySize = desc.layerCount;
+                break;
             case D3D12_RTV_DIMENSION_TEXTURE3D:
                 rtv.Texture3D.MipSlice = desc.baseMipLevel;
                 rtv.Texture3D.FirstWSlice = desc.baseArrayLayer;
@@ -225,10 +285,13 @@ namespace pe
             }
         }
 
-        void FillDsvDesc(D3D12_DEPTH_STENCIL_VIEW_DESC &dsv, const ImageViewDesc &desc, DXGI_FORMAT format)
+        void FillDsvDesc(D3D12_DEPTH_STENCIL_VIEW_DESC &dsv,
+                         const ImageViewDesc &desc,
+                         DXGI_FORMAT format,
+                         bool multisampled)
         {
             dsv.Format = format;
-            dsv.ViewDimension = DsvDimension(desc.viewType);
+            dsv.ViewDimension = DsvDimension(desc.viewType, multisampled);
             switch (dsv.ViewDimension)
             {
             case D3D12_DSV_DIMENSION_TEXTURE1D:
@@ -246,6 +309,12 @@ namespace pe
                 dsv.Texture2DArray.MipSlice = desc.baseMipLevel;
                 dsv.Texture2DArray.FirstArraySlice = desc.baseArrayLayer;
                 dsv.Texture2DArray.ArraySize = desc.layerCount;
+                break;
+            case D3D12_DSV_DIMENSION_TEXTURE2DMS:
+                break;
+            case D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY:
+                dsv.Texture2DMSArray.FirstArraySlice = desc.baseArrayLayer;
+                dsv.Texture2DMSArray.ArraySize = desc.layerCount;
                 break;
             default:
                 break;
@@ -269,12 +338,13 @@ namespace pe
         m_cpuHandle = m_heap->GetCpuHandle(m_slot);
 
         const DXGI_FORMAT format = ViewFormat(desc, image, kind);
+        const bool multisampled = owner->m_parent->GetSamples() != PE_SAMPLE_COUNT_1;
         switch (kind)
         {
         case Dx12ImageViewKind::Srv:
         {
             D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
-            FillSrvDesc(srv, desc, format);
+            FillSrvDesc(srv, desc, format, multisampled);
             device->CreateShaderResourceView(image->GetResource(), &srv, m_cpuHandle);
             break;
         }
@@ -288,14 +358,14 @@ namespace pe
         case Dx12ImageViewKind::Rtv:
         {
             D3D12_RENDER_TARGET_VIEW_DESC rtv{};
-            FillRtvDesc(rtv, desc, format);
+            FillRtvDesc(rtv, desc, format, multisampled);
             device->CreateRenderTargetView(image->GetResource(), &rtv, m_cpuHandle);
             break;
         }
         case Dx12ImageViewKind::Dsv:
         {
             D3D12_DEPTH_STENCIL_VIEW_DESC dsv{};
-            FillDsvDesc(dsv, desc, format);
+            FillDsvDesc(dsv, desc, format, multisampled);
             device->CreateDepthStencilView(image->GetResource(), &dsv, m_cpuHandle);
             break;
         }

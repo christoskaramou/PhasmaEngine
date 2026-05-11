@@ -33,9 +33,10 @@ struct WGPUTextureImpl
     bool invalid = false;
     bool isSwapchain = false;
 
-    // §23.x lazy initialization tracking. Subresources are eager zero-init at create
-    // (see Device.cpp wgpuDeviceCreateTexture), so the empty set means "all initialized".
-    // storeOp=Discard adds entries; reads/writes that fully cover a subresource clear them.
+    // Section 23.x lazy initialization tracking. Non-attachment textures are eager zero-init at
+    // create; render attachments can stay uninitialized until a pass/read handles them.
+    // The empty set means "all initialized". storeOp=Discard adds entries; reads/writes
+    // that fully cover a subresource clear them.
     // Aspect-bit packed into the high byte so depth/stencil aspects track independently.
     // Key layout: ((aspect & 0xFF) << 56) | ((mip & 0xFFFFFF) << 32) | (layer & 0xFFFFFFFF)
     std::unordered_set<uint64_t> uninitializedSubresources;

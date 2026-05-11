@@ -84,6 +84,7 @@ extern "C"
     const char *naga_spirv_to_hlsl(const uint32_t *words, size_t word_count,
                                    const char *entry_point, const char *stage,
                                    size_t *out_len);
+    const char *naga_spirv_to_hlsl_error(void);
     void naga_string_free(const char *text);
 
 #ifdef __cplusplus

@@ -37,7 +37,7 @@ struct CommonUniforms
     column_major float4x4 mvp;
     column_major float4x4 inv_mvp;
     uint3 seed;
-    uint _pad;
+    uint quad_count;
 };
 
 // group(0) binding(0): CommonUniforms
@@ -47,13 +47,27 @@ struct CommonUniforms
     CommonUniforms common_uniforms;
 };
 
-[[vk::binding(1, 0)]] StructuredBuffer<Quad> quads : register(t0, space0);
+[[vk::binding(1, 0)]] ByteAddressBuffer quads : register(t0, space0);
+
+Quad load_quad(uint quadIdx)
+{
+    uint base = quadIdx * 64u;
+    uint4 colorEmissive = quads.Load4(base + 48u);
+
+    Quad q;
+    q.plane = asfloat(quads.Load4(base + 0u));
+    q.right = asfloat(quads.Load4(base + 16u));
+    q.up = asfloat(quads.Load4(base + 32u));
+    q.color = asfloat(colorEmissive.xyz);
+    q.emissive = asfloat(colorEmissive.w);
+    return q;
+}
 
 // Intersect a ray with the quad at 'quadIdx'. Return the closer of 'closest'
 // and the new intersection. Matches WGSL intersect_ray_quad exactly.
 HitInfo intersect_ray_quad(Ray r, uint quadIdx, HitInfo closest)
 {
-    Quad q = quads[quadIdx];
+    Quad q = load_quad(quadIdx);
     float plane_dist = dot(q.plane, float4(r.start, 1.0));
     float ray_dist = plane_dist / -dot(q.plane.xyz, r.dir);
     float3 pos = r.start + r.dir * ray_dist;
@@ -80,9 +94,7 @@ HitInfo raytrace(Ray ray)
     hit.pos = float3(0, 0, 0);
     hit.uv = float2(0, 0);
 
-    uint count, stride;
-    quads.GetDimensions(count, stride);
-    for (uint q = 0u; q < count; q++)
+    for (uint q = 0u; q < common_uniforms.quad_count; q++)
     {
         hit = intersect_ray_quad(ray, q, hit);
     }

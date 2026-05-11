@@ -6,7 +6,7 @@
 namespace pe
 {
     constexpr uint32_t DX12_DESCRIPTOR_SPACE_COUNT = 4;
-    constexpr uint32_t DX12_DESCRIPTORS_PER_TYPE = 1024;
+    constexpr uint32_t DX12_DESCRIPTORS_PER_TYPE = 64;
     constexpr uint32_t DX12_CBV_TABLE_OFFSET = 0;
     constexpr uint32_t DX12_SRV_TABLE_OFFSET = DX12_DESCRIPTORS_PER_TYPE;
     constexpr uint32_t DX12_UAV_TABLE_OFFSET = DX12_DESCRIPTORS_PER_TYPE * 2;

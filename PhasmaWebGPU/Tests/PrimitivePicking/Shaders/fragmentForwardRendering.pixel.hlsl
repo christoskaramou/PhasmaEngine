@@ -14,7 +14,6 @@ ConstantBuffer<Frame> frame : register(b1);
 
 struct PSInput
 {
-    float4 position : SV_Position;
     float3 fragNormal : TEXCOORD0;
     uint primIndex : SV_PrimitiveID;
 };

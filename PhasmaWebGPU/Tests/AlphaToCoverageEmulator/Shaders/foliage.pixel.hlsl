@@ -8,11 +8,15 @@
 // Mali-G78, Imagination PowerVR Rogue GE8300, Qualcomm Adreno 630) see
 // emulators.inc.hlsl in this directory.
 
-cbuffer Uniforms : register(b0, space0)
+struct UniformsData
 {
     column_major float4x4 uViewProj;
-    float                 uFeatheringWidthPx;
-    float3                uPad0;
+    float4                uFeatheringWidthPxPad;
+};
+
+[[vk::binding(0, 0)]] cbuffer UniformsCB : register(b0, space0)
+{
+    UniformsData uniforms;
 };
 
 struct Varying
@@ -29,7 +33,7 @@ float UvToAlpha(float2 uv)
     const float kRadius = 1.0f;
     float t = kRadius - length(uv);
     float2 grad = float2(ddx(t), ddy(t));
-    float divisor = length(grad) * uFeatheringWidthPx;
+    float divisor = length(grad) * uniforms.uFeatheringWidthPxPad.x;
     return clamp(t / max(divisor, 0.0001f), 0.0f, 1.0f);
 }
 

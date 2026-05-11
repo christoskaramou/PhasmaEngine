@@ -347,6 +347,15 @@ void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
         ID3D12Device *device = dx12 ? dx12->GetDevice() : nullptr;
 
         a.depth32FloatStencil8 = Dx12FormatDepth(device, DXGI_FORMAT_D32_FLOAT_S8X24_UINT);
+        a.resolvedDepth24Plus = VK_FORMAT_D32_SFLOAT;
+        a.resolvedDepth24PlusStencil8 =
+            Dx12FormatDepth(device, DXGI_FORMAT_D24_UNORM_S8_UINT)
+                ? VK_FORMAT_D24_UNORM_S8_UINT
+                : VK_FORMAT_D32_SFLOAT_S8_UINT;
+        a.resolvedStencil8 =
+            Dx12FormatDepth(device, DXGI_FORMAT_D24_UNORM_S8_UINT)
+                ? VK_FORMAT_D24_UNORM_S8_UINT
+                : VK_FORMAT_D32_SFLOAT_S8_UINT;
         a.float32Blendable = Dx12FormatRenderBlend(device, DXGI_FORMAT_R32_FLOAT) &&
                              Dx12FormatRenderBlend(device, DXGI_FORMAT_R32G32_FLOAT) &&
                              Dx12FormatRenderBlend(device, DXGI_FORMAT_R32G32B32A32_FLOAT);
@@ -431,7 +440,9 @@ void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
             a.textureCompressionBcFullySupported &&
             Dx12FormatSupports(device, DXGI_FORMAT_BC1_UNORM, D3D12_FORMAT_SUPPORT1_TEXTURE3D);
         a.textureCompressionASTCSliced3D = false;
-        a.primitiveIndex = a.featureSupport.geometryShader;
+        // D3D12 pixel shaders can consume SV_PrimitiveID directly, which is
+        // enough for WebGPU's optional primitive-index feature.
+        a.primitiveIndex = true;
     }
 #endif
     else

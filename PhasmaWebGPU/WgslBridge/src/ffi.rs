@@ -1,12 +1,18 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::ptr;
 use std::slice;
 
 use crate::{
-    bake_wgsl_with_constants, compile_with_meta, install_panic_suppression, spirv_to_hlsl,
-    BindingRef, EntryPointMeta, OverrideInfo, WgslCompileResult, WgslMessage,
+    bake_wgsl_with_constants, compile_with_meta, install_panic_suppression,
+    spirv_to_hlsl_with_error, BindingRef, EntryPointMeta, OverrideInfo, WgslCompileResult,
+    WgslMessage,
 };
+
+thread_local! {
+    static LAST_SPIRV_TO_HLSL_ERROR: RefCell<CString> = RefCell::new(CString::new("").unwrap());
+}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -125,6 +131,12 @@ fn make_optional_cstring(value: Option<String>) -> Option<CString> {
             Some(make_cstring(s))
         }
     })
+}
+
+fn set_spirv_to_hlsl_error(message: impl Into<String>) {
+    LAST_SPIRV_TO_HLSL_ERROR.with(|last| {
+        *last.borrow_mut() = make_cstring(message.into());
+    });
 }
 
 fn opt_ptr(value: &Option<CString>) -> *const c_char {
@@ -581,8 +593,16 @@ pub extern "C" fn naga_spirv_to_hlsl(
     let words_slice = unsafe { slice::from_raw_parts(words, word_count) };
     let entry_point = unsafe { cstr_to_string(entry_point) };
     let stage = unsafe { cstr_to_string(stage) };
-    let Some(hlsl) = spirv_to_hlsl(words_slice, entry_point.as_deref(), stage.as_deref()) else {
-        return ptr::null();
+    let hlsl = match spirv_to_hlsl_with_error(words_slice, entry_point.as_deref(), stage.as_deref())
+    {
+        Ok(hlsl) => {
+            set_spirv_to_hlsl_error("");
+            hlsl
+        }
+        Err(err) => {
+            set_spirv_to_hlsl_error(err);
+            return ptr::null();
+        }
     };
 
     let bytes = hlsl.as_bytes();
@@ -598,6 +618,11 @@ pub extern "C" fn naga_spirv_to_hlsl(
         }
     }
     dst
+}
+
+#[no_mangle]
+pub extern "C" fn naga_spirv_to_hlsl_error() -> *const c_char {
+    LAST_SPIRV_TO_HLSL_ERROR.with(|last| last.borrow().as_ptr())
 }
 
 #[no_mangle]

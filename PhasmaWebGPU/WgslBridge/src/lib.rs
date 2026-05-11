@@ -1,4 +1,5 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::error::Error;
 use std::sync::Once;
 
 use naga::back::hlsl;
@@ -12880,6 +12881,15 @@ fn main() {
                 .map(|msgs| msgs.iter().map(|m| m.message.clone()).collect::<Vec<_>>())
         );
     }
+
+    #[test]
+    fn dx12_hlsl_vector_ternaries_are_lowered_to_select() {
+        let source =
+            "    local_12 = ((_e212).xxx ? _e188 : _e166);\n    scalar = (_flag ? a : b);\n";
+        let lowered = lower_dx12_vector_ternary_selects(source);
+        assert!(lowered.contains("local_12 = select((_e212).xxx, _e188, _e166);"));
+        assert!(lowered.contains("scalar = (_flag ? a : b);"));
+    }
 }
 
 pub fn wgsl_to_spirv(source: &str) -> Result<Vec<u32>, String> {
@@ -13128,6 +13138,27 @@ fn hlsl_stage_from_str(stage: &str) -> Option<naga::ShaderStage> {
     }
 }
 
+fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        (*message).to_string()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "unknown panic payload".to_string()
+    }
+}
+
+fn error_chain_message(err: &dyn Error) -> String {
+    let mut message = err.to_string();
+    let mut source = err.source();
+    while let Some(err) = source {
+        message.push_str(": ");
+        message.push_str(&err.to_string());
+        source = err.source();
+    }
+    message
+}
+
 fn apply_dx12_webgpu_binding_map(options: &mut hlsl::Options, module: &naga::Module) {
     for (_, global) in module.global_variables.iter() {
         let Some(binding) = global.binding else {
@@ -13152,13 +13183,321 @@ fn apply_dx12_webgpu_binding_map(options: &mut hlsl::Options, module: &naga::Mod
     }
 }
 
-pub fn spirv_to_hlsl(
+fn type_contains_sampler(module: &naga::Module, ty: naga::Handle<naga::Type>) -> bool {
+    match module.types[ty].inner {
+        naga::TypeInner::Sampler { .. } => true,
+        naga::TypeInner::BindingArray { base, .. } => type_contains_sampler(module, base),
+        _ => false,
+    }
+}
+
+fn apply_dx12_webgpu_sampler_buffer_map(options: &mut hlsl::Options, module: &naga::Module) {
+    let mut groups = BTreeSet::new();
+    for (_, global) in module.global_variables.iter() {
+        let Some(binding) = global.binding else {
+            continue;
+        };
+        if type_contains_sampler(module, global.ty) {
+            groups.insert(binding.group);
+        }
+    }
+
+    for group in groups {
+        options.sampler_buffer_binding_map.insert(
+            hlsl::SamplerIndexBufferKey { group },
+            hlsl::BindTarget {
+                space: 3,
+                register: 63u32.saturating_sub(group),
+                ..Default::default()
+            },
+        );
+    }
+}
+
+fn direct_sampler_binding_line(line: &str) -> Option<String> {
+    let trimmed = line.trim_start();
+    let indent = &line[..line.len() - trimmed.len()];
+    let rest = trimmed.strip_prefix("static const ")?;
+
+    let (kind, rest, heap) = if let Some(rest) = rest.strip_prefix("SamplerComparisonState ") {
+        ("SamplerComparisonState", rest, "nagaComparisonSamplerHeap[")
+    } else if let Some(rest) = rest.strip_prefix("SamplerState ") {
+        ("SamplerState", rest, "nagaSamplerHeap[")
+    } else {
+        return None;
+    };
+
+    let (name, rhs) = rest.split_once(" = ")?;
+    let rhs = rhs.trim();
+    let indexed = rhs.strip_prefix(heap)?.strip_suffix("];")?;
+    let indexed = indexed.strip_prefix("nagaGroup")?;
+    let (group, register) = indexed.split_once("SamplerIndexArray[")?;
+    let register = register.strip_suffix(']')?;
+    if group.parse::<u32>().is_err() || register.parse::<u32>().is_err() {
+        return None;
+    }
+
+    Some(format!(
+        "{indent}{kind} {name} : register(s{register}, space{group});"
+    ))
+}
+
+fn lower_dx12_webgpu_static_samplers(hlsl_source: &str) -> String {
+    if !hlsl_source.contains("nagaSamplerHeap")
+        && !hlsl_source.contains("nagaComparisonSamplerHeap")
+    {
+        return hlsl_source.to_string();
+    }
+
+    let mut out = String::with_capacity(hlsl_source.len());
+    for line in hlsl_source.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("SamplerState nagaSamplerHeap[")
+            || trimmed.starts_with("SamplerComparisonState nagaComparisonSamplerHeap[")
+            || (trimmed.starts_with("StructuredBuffer<uint> nagaGroup")
+                && trimmed.contains("SamplerIndexArray"))
+        {
+            continue;
+        }
+
+        if let Some(replacement) = direct_sampler_binding_line(line) {
+            out.push_str(&replacement);
+        } else {
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    out
+}
+
+fn collect_hlsl_vector_bool_symbols(source: &str) -> HashSet<String> {
+    let mut symbols = HashSet::new();
+    for line in source.lines() {
+        let trimmed = line.trim_start();
+        let Some(rest) = trimmed
+            .strip_prefix("bool2 ")
+            .or_else(|| trimmed.strip_prefix("bool3 "))
+            .or_else(|| trimmed.strip_prefix("bool4 "))
+        else {
+            continue;
+        };
+
+        let name = rest
+            .split(|c: char| c.is_whitespace() || c == '=' || c == ';')
+            .next()
+            .unwrap_or_default()
+            .trim();
+        if !name.is_empty() {
+            symbols.insert(name.to_string());
+        }
+    }
+    symbols
+}
+
+fn is_vector_hlsl_ternary_condition(
+    condition: &str,
+    vector_bool_symbols: &HashSet<String>,
+) -> bool {
+    let condition = condition.trim();
+    if condition.starts_with("bool2(")
+        || condition.starts_with("bool3(")
+        || condition.starts_with("bool4(")
+        || vector_bool_symbols.contains(condition)
+    {
+        return true;
+    }
+
+    let Some(dot) = condition.rfind('.') else {
+        return false;
+    };
+    let suffix = condition[dot + 1..].trim();
+    suffix.len() > 1
+        && suffix
+            .chars()
+            .all(|c| matches!(c, 'x' | 'y' | 'z' | 'w' | 'r' | 'g' | 'b' | 'a'))
+}
+
+fn find_top_level_ternary(expr: &str) -> Option<(usize, usize)> {
+    let mut paren_depth = 0i32;
+    let mut bracket_depth = 0i32;
+    let mut question = None;
+
+    for (i, b) in expr.bytes().enumerate() {
+        match b {
+            b'(' => paren_depth += 1,
+            b')' => paren_depth -= 1,
+            b'[' => bracket_depth += 1,
+            b']' => bracket_depth -= 1,
+            b'?' if paren_depth == 0 && bracket_depth == 0 => {
+                question.get_or_insert(i);
+            }
+            b':' if paren_depth == 0 && bracket_depth == 0 => {
+                if let Some(q) = question {
+                    return Some((q, i));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    None
+}
+
+fn find_matching_paren(source: &str, start: usize) -> Option<usize> {
+    let mut depth = 0i32;
+    for (offset, b) in source.as_bytes()[start..].iter().copied().enumerate() {
+        match b {
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(start + offset);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn find_dx12_vector_ternary(
+    source: &str,
+    vector_bool_symbols: &HashSet<String>,
+) -> Option<(usize, usize, String)> {
+    for (start, b) in source.bytes().enumerate() {
+        if b != b'(' {
+            continue;
+        }
+
+        let Some(end) = find_matching_paren(source, start) else {
+            continue;
+        };
+        let expr = &source[start + 1..end];
+        let Some((question, colon)) = find_top_level_ternary(expr) else {
+            continue;
+        };
+
+        let condition = expr[..question].trim();
+        if !is_vector_hlsl_ternary_condition(condition, vector_bool_symbols) {
+            continue;
+        }
+
+        let when_true = expr[question + 1..colon].trim();
+        let when_false = expr[colon + 1..].trim();
+        return Some((
+            start,
+            end + 1,
+            format!("select({condition}, {when_true}, {when_false})"),
+        ));
+    }
+
+    None
+}
+
+fn lower_dx12_vector_ternary_selects_line(
+    line: &str,
+    vector_bool_symbols: &HashSet<String>,
+) -> String {
+    let mut lowered = line.to_string();
+    while let Some((start, end, replacement)) =
+        find_dx12_vector_ternary(&lowered, vector_bool_symbols)
+    {
+        lowered.replace_range(start..end, &replacement);
+    }
+    lowered
+}
+
+fn lower_dx12_vector_ternary_selects(hlsl_source: &str) -> String {
+    if !hlsl_source.contains(" ? ") {
+        return hlsl_source.to_string();
+    }
+
+    let vector_bool_symbols = collect_hlsl_vector_bool_symbols(hlsl_source);
+    let mut out = String::with_capacity(hlsl_source.len());
+    for line in hlsl_source.lines() {
+        out.push_str(&lower_dx12_vector_ternary_selects_line(
+            line,
+            &vector_bool_symbols,
+        ));
+        out.push('\n');
+    }
+    out
+}
+
+fn normalize_spirv_for_naga_parse(words: &[u32]) -> Result<Vec<u32>, String> {
+    const OP_BRANCH: u32 = 249;
+    const OP_COPY_OBJECT: u32 = 83;
+    const OP_COPY_LOGICAL: u32 = 400;
+    const OP_KILL: u32 = 252;
+    const OP_TERMINATE_INVOCATION: u32 = 4416;
+    const OP_DEMOTE_TO_HELPER_INVOCATION: u32 = 5380;
+
+    if words.len() < 5 {
+        return Err("SPIR-V input is shorter than the module header".to_string());
+    }
+
+    let mut out = Vec::with_capacity(words.len());
+    out.extend_from_slice(&words[..5]);
+    let mut i = 5usize;
+    while i < words.len() {
+        let word = words[i];
+        let word_count = word >> 16;
+        let opcode = word & 0xFFFF;
+        if word_count == 0 {
+            return Err("SPIR-V contains an instruction with zero word count".to_string());
+        }
+        if i + word_count as usize > words.len() {
+            return Err("SPIR-V instruction exceeds module word count".to_string());
+        }
+
+        if opcode == OP_COPY_LOGICAL {
+            if word_count != 4 {
+                return Err(format!(
+                    "SPIR-V OpCopyLogical has unexpected word count {word_count}"
+                ));
+            }
+            out.push((word_count << 16) | OP_COPY_OBJECT);
+            out.extend_from_slice(&words[i + 1..i + word_count as usize]);
+        } else if opcode == OP_DEMOTE_TO_HELPER_INVOCATION || opcode == OP_TERMINATE_INVOCATION {
+            if word_count != 1 {
+                return Err(format!(
+                    "SPIR-V invocation-termination op has unexpected word count {word_count}"
+                ));
+            }
+            out.push((word_count << 16) | OP_KILL);
+
+            let next = i + word_count as usize;
+            if next < words.len() {
+                let next_word = words[next];
+                let next_word_count = next_word >> 16;
+                let next_opcode = next_word & 0xFFFF;
+                if next_word_count == 0 {
+                    return Err("SPIR-V contains an instruction with zero word count".to_string());
+                }
+                if next + next_word_count as usize > words.len() {
+                    return Err("SPIR-V instruction exceeds module word count".to_string());
+                }
+                if next_opcode == OP_BRANCH {
+                    i = next + next_word_count as usize;
+                    continue;
+                }
+            }
+        } else {
+            out.extend_from_slice(&words[i..i + word_count as usize]);
+        }
+        i += word_count as usize;
+    }
+
+    Ok(out)
+}
+
+pub fn spirv_to_hlsl_with_error(
     words: &[u32],
     entry_point: Option<&str>,
     stage: Option<&str>,
-) -> Option<String> {
+) -> Result<String, String> {
     if words.is_empty() {
-        return None;
+        return Err("SPIR-V input is empty".to_string());
     }
 
     let parse_options = spv_front::Options {
@@ -13167,20 +13506,36 @@ pub fn spirv_to_hlsl(
         block_ctx_dump_prefix: None,
     };
 
-    let module = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        spv_front::Frontend::new(words.iter().copied(), &parse_options).parse()
-    }))
-    .ok()
-    .and_then(Result::ok)?;
+    let normalized_words = normalize_spirv_for_naga_parse(words)?;
+
+    let module_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        spv_front::Frontend::new(normalized_words.iter().copied(), &parse_options).parse()
+    }));
+    let module = match module_result {
+        Ok(Ok(module)) => module,
+        Ok(Err(err)) => return Err(format!("naga SPIR-V parse failed: {err}")),
+        Err(payload) => {
+            return Err(format!(
+                "naga SPIR-V parser panicked: {}",
+                panic_message(payload)
+            ))
+        }
+    };
 
     let info = Validator::new(ValidationFlags::all(), hlsl::supported_capabilities())
         .validate(&module)
-        .ok()?;
+        .map_err(|err| {
+            format!(
+                "naga validation failed before HLSL output: {}",
+                error_chain_message(&err)
+            )
+        })?;
 
     let mut options = hlsl::Options::default();
     options.shader_model = hlsl::ShaderModel::V6_6;
     options.fake_missing_bindings = false;
     apply_dx12_webgpu_binding_map(&mut options, &module);
+    apply_dx12_webgpu_sampler_buffer_map(&mut options, &module);
 
     let pipeline_options = hlsl::PipelineOptions {
         entry_point: match (entry_point, stage.and_then(hlsl_stage_from_str)) {
@@ -13191,12 +13546,29 @@ pub fn spirv_to_hlsl(
         },
     };
 
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    let output_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let mut output = String::new();
         let mut writer = hlsl::Writer::new(&mut output, &options, &pipeline_options);
-        writer.write(&module, &info, None).ok()?;
-        Some(output)
-    }))
-    .ok()
-    .flatten()
+        writer.write(&module, &info, None).map(|_| output)
+    }));
+
+    match output_result {
+        Ok(Ok(output)) => {
+            let output = lower_dx12_webgpu_static_samplers(&output);
+            Ok(lower_dx12_vector_ternary_selects(&output))
+        }
+        Ok(Err(err)) => Err(format!("naga HLSL output failed: {err}")),
+        Err(payload) => Err(format!(
+            "naga HLSL writer panicked: {}",
+            panic_message(payload)
+        )),
+    }
+}
+
+pub fn spirv_to_hlsl(
+    words: &[u32],
+    entry_point: Option<&str>,
+    stage: Option<&str>,
+) -> Option<String> {
+    spirv_to_hlsl_with_error(words, entry_point, stage).ok()
 }

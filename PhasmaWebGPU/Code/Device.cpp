@@ -1353,6 +1353,11 @@ extern "C"
         imageDesc.mipLevels = mips;
         imageDesc.arrayLayers = (dim == WGPUTextureDimension_2D) ? d : 1u;
         imageDesc.samples = pe::FromVkSampleCount(static_cast<vk::SampleCountFlagBits>(samples));
+        if (usage & WGPUTextureUsage_RenderAttachment)
+        {
+            if (pwgpu::IsDepthStencilFormat(fmt))
+                imageDesc.clearColor = vec4(pwgpu::HasDepthAspect(fmt) ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
+        }
 
         switch (dim)
         {
@@ -1439,7 +1444,17 @@ extern "C"
         if (fmt == WGPUTextureFormat_Stencil8 && vkFmt != VK_FORMAT_S8_UINT)
             tex->image->SetAspectMaskOverride(PE_IMAGE_ASPECT_STENCIL);
 
-        if (zeroInitViaClearImage && device->queue && device->queue->peQueue)
+        const bool deferRenderAttachmentInit = (usage & WGPUTextureUsage_RenderAttachment) != 0;
+        if (deferRenderAttachmentInit)
+        {
+            pwgpu::MarkRangeUninitialized(tex,
+                                          0,
+                                          imageDesc.mipLevels,
+                                          0,
+                                          imageDesc.arrayLayers,
+                                          pwgpu::AspectsForView(fmt, WGPUTextureAspect_All));
+        }
+        else if (zeroInitViaClearImage && device->queue && device->queue->peQueue)
         {
             pe::CommandBuffer *cmd = device->queue->peQueue->AcquireCommandBuffer();
             cmd->Begin();
@@ -1635,8 +1650,9 @@ extern "C"
             }
         };
 
-        if (device->rhi && pe::VulkanRhi::Device())
+        if (device->rhi)
         {
+            const PeGraphicsApi api = device->rhi->GetApi();
             pe::SamplerDesc sci{};
             sci.magFilter = toPeFilter(magF);
             sci.minFilter = toPeFilter(minF);
@@ -1652,9 +1668,13 @@ extern "C"
             {
                 sci.anisotropyEnable = true;
                 float clampedAniso = static_cast<float>(maxAniso);
-                VkPhysicalDeviceProperties gpuProps{};
-                vkGetPhysicalDeviceProperties(pe::VulkanRhi::Gpu(), &gpuProps);
-                float hwMax = gpuProps.limits.maxSamplerAnisotropy;
+                float hwMax = 16.0f;
+                if (api == PE_GRAPHICS_API_VULKAN && pe::VulkanRhi::Gpu())
+                {
+                    VkPhysicalDeviceProperties gpuProps{};
+                    vkGetPhysicalDeviceProperties(pe::VulkanRhi::Gpu(), &gpuProps);
+                    hwMax = gpuProps.limits.maxSamplerAnisotropy;
+                }
                 if (clampedAniso > hwMax)
                     clampedAniso = hwMax;
                 sci.maxAnisotropy = clampedAniso;
@@ -2055,9 +2075,18 @@ extern "C"
                                     : PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
                     break;
                 case WGPUBufferBindingType_ReadOnlyStorage:
-                    info.type = entry.buffer.hasDynamicOffset
-                                    ? PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC
-                                    : PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER;
+                    if (pe::RHII.GetApi() == PE_GRAPHICS_API_DX12)
+                    {
+                        info.type = entry.buffer.hasDynamicOffset
+                                        ? PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC
+                                        : PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                    }
+                    else
+                    {
+                        info.type = entry.buffer.hasDynamicOffset
+                                        ? PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC
+                                        : PE_DESCRIPTOR_TYPE_STRUCTURED_BUFFER;
+                    }
                     break;
                 default:
                     break;

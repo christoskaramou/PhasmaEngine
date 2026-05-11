@@ -30,5 +30,8 @@ namespace pe
     PE_API bool TryParseGraphicsApiName(std::string_view value, PeGraphicsApi &api);
     PE_API const char *GraphicsApiConfigName(PeGraphicsApi api);
     PE_API const char *GraphicsApiSelectionSourceName(GraphicsApiSelectionSource source);
-    PE_API GraphicsApiSelection ResolveGraphicsApi(int argc, char *const *argv, const char *runtimeConfigPath = nullptr);
+    PE_API GraphicsApiSelection ResolveGraphicsApi(int argc,
+                                                   char *const *argv,
+                                                   const char *runtimeConfigPath = nullptr,
+                                                   bool readRuntimeConfig = true);
 } // namespace pe

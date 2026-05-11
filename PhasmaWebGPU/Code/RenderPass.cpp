@@ -38,6 +38,23 @@ namespace
             rpe->deferredErrorMessage = msg ? msg : "";
     }
 
+    void BindStoredVertexBuffers(WGPURenderPassEncoder rpe)
+    {
+        if (!rpe || !rpe->cmd || !rpe->pipeline)
+            return;
+        for (uint32_t slot = 0; slot < rpe->boundVertexBuffers.size(); ++slot)
+        {
+            if (slot >= rpe->pipeline->vertexBufferLayouts.size() ||
+                !rpe->pipeline->vertexBufferLayouts[slot].used)
+                continue;
+            const VertexBufferBinding &binding = rpe->boundVertexBuffers[slot];
+            if (!binding.bound || !binding.buffer || !binding.buffer->peBuffer)
+                continue;
+            rpe->cmd->BindVertexBuffer(
+                binding.buffer->peBuffer, static_cast<size_t>(binding.offset), slot, 1);
+        }
+    }
+
     bool ValidateBindGroupCompat(WGPURenderPassEncoder rpe)
     {
         if (!rpe || !rpe->pipeline || !rpe->pipeline->layout)
@@ -653,6 +670,8 @@ extern "C"
             pwgpu::RebindWebGPUCompatibleBindGroups(
                 rpe->cmd, pwgpu::PipelineBindingPoint::Render,
                 pipeline->layout, rpe->currentBindGroups, &rpe->currentDynamicOffsets);
+
+        BindStoredVertexBuffers(rpe);
     }
 
     void wgpuRenderPassEncoderSetBindGroup(WGPURenderPassEncoder rpe, uint32_t groupIndex,
@@ -893,6 +912,8 @@ extern "C"
         if (rpe->boundVertexBuffers.size() <= slot)
             rpe->boundVertexBuffers.resize(slot + 1);
         rpe->boundVertexBuffers[slot].bound = true;
+        rpe->boundVertexBuffers[slot].buffer = buffer;
+        rpe->boundVertexBuffers[slot].offset = offset;
         rpe->boundVertexBuffers[slot].size = size;
 
         {
@@ -908,7 +929,10 @@ extern "C"
             return;
         }
 
-        rpe->cmd->BindVertexBuffer(buffer->peBuffer, static_cast<size_t>(offset), slot, 1);
+        if (rpe->pipeline &&
+            slot < rpe->pipeline->vertexBufferLayouts.size() &&
+            rpe->pipeline->vertexBufferLayouts[slot].used)
+            rpe->cmd->BindVertexBuffer(buffer->peBuffer, static_cast<size_t>(offset), slot, 1);
         rpe->usedBuffers.push_back(buffer);
     }
 

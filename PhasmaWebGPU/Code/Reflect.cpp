@@ -37,6 +37,13 @@ namespace pwgpu
             WGPUStorageTextureBindingLayout storageTexture{};
         };
 
+        struct SampledImageUsage
+        {
+            std::set<uint32_t> samplerPairedImageVars;
+            std::set<uint32_t> depthComparisonImageVars;
+            std::set<uint32_t> comparisonSamplerVars;
+        };
+
         WGPUTextureViewDimension DimensionFromSpirv(const spirv_cross::SPIRType &t)
         {
             switch (t.image.dim)
@@ -63,9 +70,10 @@ namespace pwgpu
         // builtin call that also uses a sampler (paired via OpSampledImage).
         WGPUTextureSampleType SampleTypeFromSpirv(const spirv_cross::Compiler &c,
                                                   const spirv_cross::SPIRType &t,
-                                                  bool samplerPaired = true)
+                                                  bool samplerPaired = true,
+                                                  bool depthComparison = false)
         {
-            if (t.image.depth)
+            if (t.image.depth || depthComparison)
                 return WGPUTextureSampleType_Depth;
             const auto &sampled = c.get_type(t.image.type);
             switch (sampled.basetype)
@@ -94,11 +102,11 @@ namespace pwgpu
         // walk would leak sampler-pair facts from sibling entry points and
         // wrongly classify load-only bindings as "float" in a stage that
         // never samples them. Walk pattern mirrors ValidateTextureSamplerPairs.
-        std::set<uint32_t> CollectSampledImageVarIds(const std::vector<uint32_t> &spirv,
-                                                     const std::string &entryName,
-                                                     uint32_t executionModel)
+        SampledImageUsage CollectSampledImageUsage(const std::vector<uint32_t> &spirv,
+                                                   const std::string &entryName,
+                                                   uint32_t executionModel)
         {
-            std::set<uint32_t> result;
+            SampledImageUsage result;
             if (spirv.size() < 5)
                 return result;
 
@@ -197,6 +205,8 @@ namespace pwgpu
             // shaders without a matching name.
             std::map<uint32_t, uint32_t> chainBase;
             std::map<uint32_t, uint32_t> loadedVar;
+            std::map<uint32_t, uint32_t> sampledImageVar;
+            std::map<uint32_t, uint32_t> sampledImageSamplerVar;
             uint32_t currentFn = 0;
             for (size_t w = 5; w < numWords;)
             {
@@ -244,10 +254,39 @@ namespace pwgpu
                         case spv::OpSampledImage:
                             if (wc >= 5)
                             {
+                                uint32_t resultId = code[w + 2];
                                 uint32_t imgId = code[w + 3];
+                                uint32_t smpId = code[w + 4];
                                 auto ii = loadedVar.find(imgId);
+                                auto si = loadedVar.find(smpId);
                                 if (ii != loadedVar.end())
-                                    result.insert(ii->second);
+                                {
+                                    result.samplerPairedImageVars.insert(ii->second);
+                                    sampledImageVar[resultId] = ii->second;
+                                    if (si != loadedVar.end())
+                                        sampledImageSamplerVar[resultId] = si->second;
+                                }
+                            }
+                            break;
+                        case spv::OpImageSampleDrefImplicitLod:
+                        case spv::OpImageSampleDrefExplicitLod:
+                            if (wc >= 4)
+                            {
+                                uint32_t sampledId = code[w + 3];
+                                auto imageIt = sampledImageVar.find(sampledId);
+                                if (imageIt != sampledImageVar.end())
+                                {
+                                    result.depthComparisonImageVars.insert(imageIt->second);
+                                    auto samplerIt = sampledImageSamplerVar.find(sampledId);
+                                    if (samplerIt != sampledImageSamplerVar.end())
+                                        result.comparisonSamplerVars.insert(samplerIt->second);
+                                }
+                                else
+                                {
+                                    auto loadedIt = loadedVar.find(sampledId);
+                                    if (loadedIt != loadedVar.end())
+                                        result.depthComparisonImageVars.insert(loadedIt->second);
+                                }
                             }
                             break;
                         default:
@@ -418,8 +457,8 @@ namespace pwgpu
                         ? compiler.get_shader_resources()
                         : compiler.get_shader_resources(
                               compiler.get_active_interface_variables());
-                const std::set<uint32_t> sampledImageVarIds =
-                    CollectSampledImageVarIds(*stage.spirv, stage.entryPoint, stage.executionModel);
+                const SampledImageUsage sampledImageUsage =
+                    CollectSampledImageUsage(*stage.spirv, stage.entryPoint, stage.executionModel);
 
                 auto isStaticallyUsed = [&](uint32_t resourceId, const char *resourceKind) -> bool
                 {
@@ -606,8 +645,9 @@ namespace pwgpu
                     const auto &t = compiler.get_type(r.type_id);
                     ReflectedBinding rb = buildBase(set, bind);
                     rb.hasTexture = true;
-                    const bool paired = sampledImageVarIds.count(r.id) > 0;
-                    rb.texture.sampleType = SampleTypeFromSpirv(compiler, t, paired);
+                    const bool paired = sampledImageUsage.samplerPairedImageVars.count(r.id) > 0;
+                    const bool depthComparison = sampledImageUsage.depthComparisonImageVars.count(r.id) > 0;
+                    rb.texture.sampleType = SampleTypeFromSpirv(compiler, t, paired, depthComparison);
                     rb.texture.viewDimension = DimensionFromSpirv(t);
                     rb.texture.multisampled = t.image.ms ? 1u : 0u;
                     if (!mergeInto(set, bind, rb))
@@ -625,7 +665,8 @@ namespace pwgpu
                     const auto &t = compiler.get_type(r.type_id);
                     ReflectedBinding rb = buildBase(set, bind);
                     rb.hasTexture = true;
-                    rb.texture.sampleType = SampleTypeFromSpirv(compiler, t, true);
+                    const bool depthComparison = sampledImageUsage.depthComparisonImageVars.count(r.id) > 0;
+                    rb.texture.sampleType = SampleTypeFromSpirv(compiler, t, true, depthComparison);
                     rb.texture.viewDimension = DimensionFromSpirv(t);
                     rb.texture.multisampled = t.image.ms ? 1u : 0u;
                     if (!mergeInto(set, bind, rb))
@@ -641,7 +682,10 @@ namespace pwgpu
                     uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
                     ReflectedBinding rb = buildBase(set, bind);
                     rb.hasSampler = true;
-                    rb.sampler.type = WGPUSamplerBindingType_Filtering;
+                    rb.sampler.type =
+                        sampledImageUsage.comparisonSamplerVars.count(r.id) > 0
+                            ? WGPUSamplerBindingType_Comparison
+                            : WGPUSamplerBindingType_Filtering;
                     if (!mergeInto(set, bind, rb))
                         return false;
                 }
@@ -947,6 +991,8 @@ namespace pwgpu
                     compiler.set_entry_point(stageIn.entryPoint,
                                              static_cast<spv::ExecutionModel>(stageIn.executionModel));
                 spirv_cross::ShaderResources res = compiler.get_shader_resources();
+                const SampledImageUsage sampledImageUsage =
+                    CollectSampledImageUsage(*stageIn.spirv, stageIn.entryPoint, stageIn.executionModel);
 
                 // Look up the BGL entry for (set, binding), check visibility and type.
                 auto checkBinding = [&](uint32_t set, uint32_t binding,
@@ -1066,10 +1112,16 @@ namespace pwgpu
                     {
                         uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
                         uint32_t binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-                        bool shaderCmp = stageIn.comparisonSamplers->count(BindingKey{set, binding}) != 0;
+                        bool shaderCmp = stageIn.comparisonSamplers->count(BindingKey{set, binding}) != 0 ||
+                                         sampledImageUsage.comparisonSamplerVars.count(r.id) != 0;
                         bool layoutCmp = (e.sampler.type == WGPUSamplerBindingType_Comparison);
                         if (shaderCmp != layoutCmp)
                             return "binding type mismatch: sampler comparison-ness differs between shader and layout";
+                    }
+                    else if (sampledImageUsage.comparisonSamplerVars.count(r.id) != 0 &&
+                             e.sampler.type != WGPUSamplerBindingType_Comparison)
+                    {
+                        return "binding type mismatch: sampler comparison-ness differs between shader and layout";
                     }
                     return "";
                 };
@@ -1080,7 +1132,9 @@ namespace pwgpu
                         e.texture.sampleType == WGPUTextureSampleType_Undefined)
                         return "binding type mismatch: shader expects sampled texture, layout has non-texture";
                     const auto &t = compiler.get_type(r.type_id);
-                    WGPUTextureSampleType wgslSampleType = SampleTypeFromSpirv(compiler, t);
+                    const bool depthComparison =
+                        sampledImageUsage.depthComparisonImageVars.count(r.id) != 0;
+                    WGPUTextureSampleType wgslSampleType = SampleTypeFromSpirv(compiler, t, true, depthComparison);
                     WGPUTextureViewDimension wgslDim = DimensionFromSpirv(t);
                     uint32_t wgslMs = t.image.ms ? 1u : 0u;
                     if (!matchSampleType(e.texture.sampleType, wgslSampleType))
@@ -1481,8 +1535,14 @@ namespace pwgpu
         device->refCount.fetch_add(1, std::memory_order_relaxed);
         pl->bindGroupLayouts.resize(numSets, nullptr);
 
-        auto vkDev = pe::VulkanRhi::Device();
-        std::vector<vk::DescriptorSetLayout> vkSetLayouts(numSets, VK_NULL_HANDLE);
+        const bool useVulkanBackend = device->rhi && device->rhi->GetApi() == PE_GRAPHICS_API_VULKAN;
+        vk::Device vkDev{};
+        std::vector<vk::DescriptorSetLayout> vkSetLayouts;
+        if (useVulkanBackend)
+        {
+            vkDev = pe::VulkanRhi::Device();
+            vkSetLayouts.resize(numSets, VK_NULL_HANDLE);
+        }
 
         for (uint32_t s = 0; s < numSets; ++s)
         {
@@ -1495,11 +1555,14 @@ namespace pwgpu
             auto it = merged.find(s);
             if (it == merged.end() || it->second.empty())
             {
-                vk::DescriptorSetLayoutCreateInfo emptyCI{};
-                auto emptyLayout = vkDev.createDescriptorSetLayout(emptyCI);
-                pl->ownedEmptyBackendLayouts.push_back(
-                    PeToBackendHandle(static_cast<VkDescriptorSetLayout>(emptyLayout)));
-                vkSetLayouts[s] = emptyLayout;
+                if (useVulkanBackend)
+                {
+                    vk::DescriptorSetLayoutCreateInfo emptyCI{};
+                    auto emptyLayout = vkDev.createDescriptorSetLayout(emptyCI);
+                    pl->ownedEmptyBackendLayouts.push_back(
+                        PeToBackendHandle(static_cast<VkDescriptorSetLayout>(emptyLayout)));
+                    vkSetLayouts[s] = emptyLayout;
+                }
                 continue;
             }
 
@@ -1557,23 +1620,30 @@ namespace pwgpu
             if (!infos.empty())
             {
                 bgl->layout = pe::DescriptorLayout::Create(infos, stageMask, "auto_bgl");
-                vkSetLayouts[s] = pe::GetVulkanDescriptorLayout(bgl->layout);
+                if (useVulkanBackend)
+                    vkSetLayouts[s] = pe::GetVulkanDescriptorLayout(bgl->layout);
             }
             else
             {
-                vk::DescriptorSetLayoutCreateInfo emptyCI{};
-                auto emptyLayout = vkDev.createDescriptorSetLayout(emptyCI);
-                pl->ownedEmptyBackendLayouts.push_back(
-                    PeToBackendHandle(static_cast<VkDescriptorSetLayout>(emptyLayout)));
-                vkSetLayouts[s] = emptyLayout;
+                if (useVulkanBackend)
+                {
+                    vk::DescriptorSetLayoutCreateInfo emptyCI{};
+                    auto emptyLayout = vkDev.createDescriptorSetLayout(emptyCI);
+                    pl->ownedEmptyBackendLayouts.push_back(
+                        PeToBackendHandle(static_cast<VkDescriptorSetLayout>(emptyLayout)));
+                    vkSetLayouts[s] = emptyLayout;
+                }
             }
         }
 
-        vk::PipelineLayoutCreateInfo ci{};
-        ci.setLayoutCount = static_cast<uint32_t>(vkSetLayouts.size());
-        ci.pSetLayouts = vkSetLayouts.empty() ? nullptr : vkSetLayouts.data();
-        vk::PipelineLayout layout = vkDev.createPipelineLayout(ci);
-        pl->backendLayout = PeToBackendHandle(static_cast<VkPipelineLayout>(layout));
+        if (useVulkanBackend)
+        {
+            vk::PipelineLayoutCreateInfo ci{};
+            ci.setLayoutCount = static_cast<uint32_t>(vkSetLayouts.size());
+            ci.pSetLayouts = vkSetLayouts.empty() ? nullptr : vkSetLayouts.data();
+            vk::PipelineLayout layout = vkDev.createPipelineLayout(ci);
+            pl->backendLayout = PeToBackendHandle(static_cast<VkPipelineLayout>(layout));
+        }
         return pl;
     }
 

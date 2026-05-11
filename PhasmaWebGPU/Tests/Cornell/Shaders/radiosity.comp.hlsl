@@ -4,12 +4,8 @@
 #include "common.inc.hlsl"
 
 // group(1) binding(0): accumulation buffer (atomic u32 array, 3 per texel+quad)
-// group(1) binding(1): lightmap 2D array storage texture (rgba16f, write-only)
 // group(1) binding(2): Uniforms
 [[vk::binding(0, 1)]] RWStructuredBuffer<uint> accumulation : register(u0, space1);
-
-[[vk::binding(1, 1)]] [[vk::image_format("rgba16f")]]
-RWTexture2DArray<float4> lightmap : register(u1, space1);
 
 struct RadiosityUniforms
 {
@@ -32,23 +28,21 @@ struct RadiosityUniforms
 // Maximum value added to 'accumulation' buffer per photon; matches radiosity.ts
 // kPhotonEnergy = 100000.
 #define PhotonEnergy 100000.0
+#define LightmapWidth 256u
+#define LightmapHeight 256u
 
 static const int PhotonBounces = 4;
 static const float LightAbsorbtion = 0.5;
 
 uint accumulation_base_index(uint2 coord, uint quad)
 {
-    uint w, h, layers;
-    lightmap.GetDimensions(w, h, layers);
-    uint2 c = min(uint2(w - 1u, h - 1u), coord);
-    return 3u * (c.x + w * c.y + w * h * quad);
+    uint2 c = min(uint2(LightmapWidth - 1u, LightmapHeight - 1u), coord);
+    return 3u * (c.x + LightmapWidth * c.y + LightmapWidth * LightmapHeight * quad);
 }
 
 void accumulate(float2 uv, uint quad, float3 color)
 {
-    uint w, h, layers;
-    lightmap.GetDimensions(w, h, layers);
-    uint2 coord = uint2(uv * float2(w, h));
+    uint2 coord = uint2(uv * float2(LightmapWidth, LightmapHeight));
     uint base_idx = accumulation_base_index(coord, quad);
     uint dummy;
     InterlockedAdd(accumulation[base_idx + 0u], (uint)(color.r + 0.5), dummy);
@@ -82,7 +76,7 @@ void photon()
         HitInfo hit = raytrace(ray);
         if (hit.quad == kNoHit)
             break;
-        Quad q = quads[hit.quad];
+        Quad q = load_quad(hit.quad);
 
         ray.start = hit.pos + q.plane.xyz * 1e-5;
         ray.dir = normalize(reflect(ray.dir, q.plane.xyz) + rand_unit_sphere() * 0.75);

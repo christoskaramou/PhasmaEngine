@@ -12,7 +12,9 @@ struct Uniforms
 struct SliceInfo
 {
     int  sliceStartY;
-    int3 _pad;
+    int  _pad0;
+    int  _pad1;
+    int  _pad2;
 };
 
 // Packed 24-byte linked-list entry:

@@ -20,7 +20,7 @@ namespace
     constexpr uint32_t kHeight = 720;
     constexpr float kPi = 3.14159265358979323846f;
 
-    constexpr uint32_t kGridDim = 48;
+    constexpr uint32_t kGridDim = 32;
     constexpr uint32_t kCells = kGridDim * kGridDim * kGridDim;
     constexpr uint32_t kTetsPerCell = 6;
     constexpr uint32_t kVerticesPerTet = 6;

@@ -84,6 +84,8 @@ namespace pwgpu
 
         bool BindDx12DynamicTables(pe::CommandBuffer *cmd,
                                    PipelineBindingPoint point,
+                                   uint32_t sourceDxSpace,
+                                   uint32_t targetDxSpace,
                                    WGPUBindGroupImpl *group,
                                    size_t dynamicOffsetCount,
                                    const uint32_t *dynamicOffsets)
@@ -167,7 +169,8 @@ namespace pwgpu
 
             for (const Dx12DynamicTable &table : dynamicTables)
             {
-                const uint32_t rootIdx = pe::Dx12CbvSrvUavRootIndex(table.dxSpace);
+                const uint32_t rootIdx = pe::Dx12CbvSrvUavRootIndex(
+                    table.dxSpace == sourceDxSpace ? targetDxSpace : table.dxSpace);
                 if (point == PipelineBindingPoint::Compute)
                     list->SetComputeRootDescriptorTable(rootIdx, table.gpuHandle);
                 else
@@ -284,18 +287,24 @@ namespace pwgpu
         }
         case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
+        {
+            constexpr uint32_t kWebGPUDescriptorSourceSpace = 0;
+            if (groupIndex >= pe::DX12_DESCRIPTOR_SPACE_COUNT)
+                return false;
             if (point == PipelineBindingPoint::Compute)
             {
-                pe::Dx12CommandBufferImpl::From(cmd)->BindExternalComputeDescriptors(
-                    1, &group->descriptor);
+                pe::Dx12CommandBufferImpl::From(cmd)->BindExternalComputeDescriptorSpace(
+                    group->descriptor, kWebGPUDescriptorSourceSpace, groupIndex);
             }
             else
             {
-                pe::Dx12CommandBufferImpl::From(cmd)->BindExternalRenderDescriptors(
-                    1, &group->descriptor);
+                pe::Dx12CommandBufferImpl::From(cmd)->BindExternalRenderDescriptorSpace(
+                    group->descriptor, kWebGPUDescriptorSourceSpace, groupIndex);
             }
             return BindDx12DynamicTables(
-                cmd, point, group, dynamicOffsetCount, dynamicOffsets);
+                cmd, point, kWebGPUDescriptorSourceSpace, groupIndex, group,
+                dynamicOffsetCount, dynamicOffsets);
+        }
 #else
             return BackendUnsupported("bind group bind");
 #endif

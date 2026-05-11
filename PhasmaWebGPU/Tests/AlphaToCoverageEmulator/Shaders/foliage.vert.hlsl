@@ -5,11 +5,15 @@
 // mesh per instance so transparent quad corners cannot leak through on native
 // A2C paths that mishandle fragment alpha coverage.
 
-cbuffer Uniforms : register(b0, space0)
+struct UniformsData
 {
     column_major float4x4 uViewProj;
-    float                 uFeatheringWidthPx;
-    float3                uPad0;
+    float4                uFeatheringWidthPxPad;
+};
+
+[[vk::binding(0, 0)]] cbuffer UniformsCB : register(b0, space0)
+{
+    UniformsData uniforms;
 };
 
 struct Varying
@@ -103,7 +107,7 @@ Varying VSMain(uint vertex_index : SV_VertexID, uint instance_index : SV_Instanc
     uint idx = (uint)fmod(t * 41.0f, 8.0f);
 
     Varying o;
-    o.pos = mul(uViewProj, float4(worldSpacePos, 1.0f));
+    o.pos = mul(uniforms.uViewProj, float4(worldSpacePos, 1.0f));
     o.uv  = uv;
     o.gb  = gbTable[idx];
     return o;

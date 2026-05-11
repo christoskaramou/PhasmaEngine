@@ -40,8 +40,10 @@ namespace pe
                                         D3D12_PRIMITIVE_TOPOLOGY topology,
                                         const std::vector<uint32_t> &vertexBindingStrides);
         void BindExternalRenderDescriptors(uint32_t count, Descriptor *const *descriptors);
+        void BindExternalRenderDescriptorSpace(Descriptor *descriptor, uint32_t sourceDxSpace, uint32_t targetDxSpace);
         void BindExternalComputePipeline(ID3D12PipelineState *pipeline);
         void BindExternalComputeDescriptors(uint32_t count, Descriptor *const *descriptors);
+        void BindExternalComputeDescriptorSpace(Descriptor *descriptor, uint32_t sourceDxSpace, uint32_t targetDxSpace);
         void PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info) override;
 
         void SetViewport(float x, float y, float width, float height, float minDepth, float maxDepth) override;
@@ -102,6 +104,7 @@ namespace pe
     private:
         void BindShaderVisibleHeaps();
         void BindDescriptorTables(uint32_t count, Descriptor *const *descriptors, bool compute);
+        void BindDescriptorTableSpace(Descriptor *descriptor, uint32_t sourceDxSpace, uint32_t targetDxSpace, bool compute);
         ID3D12CommandSignature *GetDrawIndirectSignature(uint32_t stride);
         ID3D12CommandSignature *GetDrawIndexedIndirectSignature(uint32_t stride);
         void MarkPendingImageBarrierRegion(const char *name);

@@ -28,6 +28,7 @@ namespace pe
         bool mutableFormat = false;     // view created with format that differs from desc.format
         bool tilingLinear = false;
         vec4 clearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        bool useOptimizedClearValue = true;
         std::string name;
     };
 
