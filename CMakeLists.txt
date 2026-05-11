@@ -271,10 +271,17 @@ add_executable(PhasmaLauncher "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Launcher
 target_precompile_headers(PhasmaLauncher PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
 target_include_directories(PhasmaLauncher PRIVATE ${PHASMA_EDITOR_HOST_INCLUDES})
 target_link_libraries(PhasmaLauncher PRIVATE PhasmaCore)
+target_sources(PhasmaLauncher PRIVATE
+    "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/imgui.cpp"
+    "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/imgui_draw.cpp"
+    "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/imgui_tables.cpp"
+    "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/imgui_widgets.cpp"
+    "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/imgui_impl_sdl2.cpp"
+)
+target_include_directories(PhasmaLauncher PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}/imgui")
 if(WIN32)
-    target_link_libraries(PhasmaLauncher PRIVATE user32.lib comdlg32.lib)
-endif()
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_libraries(PhasmaLauncher PRIVATE comdlg32.lib)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set_target_properties(PhasmaLauncher PROPERTIES
         BUILD_RPATH "$ORIGIN"
         INSTALL_RPATH "$ORIGIN"

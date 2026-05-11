@@ -8,12 +8,28 @@
 #include "rapidjson/prettywriter.h"
 
 #include <cctype>
+#include <cstdlib>
+#include <cstdint>
+#include <cstring>
+#include <iostream>
+
+#include "SDL.h"
+#include "imgui.h"
+#include "imgui_impl_sdl2.h"
 
 #if defined(PE_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include <commdlg.h>
+#include "SDL_syswm.h"
 #else
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #endif
 
@@ -560,6 +576,9 @@ namespace
         if (pid == 0)
         {
             const std::string apiName = pe::GraphicsApiConfigName(api);
+            const std::filesystem::path workingDirectory = executablePath.parent_path();
+            if (!workingDirectory.empty() && chdir(workingDirectory.c_str()) != 0)
+                _exit(127);
             execl(executablePath.c_str(), executablePath.filename().c_str(), "--api", apiName.c_str(), nullptr);
             _exit(127);
         }
@@ -567,393 +586,537 @@ namespace
 #endif
     }
 
-#if defined(PE_WIN32)
     constexpr int kLauncherWidth = 1060;
     constexpr int kLauncherHeight = 300;
     constexpr int kLabelX = 18;
     constexpr int kFieldX = 136;
     constexpr int kFieldWidth = 876;
     constexpr int kSceneComboWidth = 760;
-    constexpr int kBrowseX = 912;
-    constexpr int kDropDownWidth = 960;
     constexpr int kLaunchButtonX = 820;
     constexpr int kCancelButtonX = 922;
-    constexpr int kIdTargetCombo = 1000;
-    constexpr int kIdSceneCombo = 1001;
-    constexpr int kIdSceneBrowse = 1002;
-    constexpr int kIdVulkan = 1003;
-    constexpr int kIdDx12 = 1004;
-    constexpr int kIdLaunch = 1005;
-    constexpr int kIdCancel = 1006;
 
-    struct WindowsLauncherDialog
+    void ApplyLauncherStyle()
     {
-        LauncherSelection *selection = nullptr;
-        std::vector<LaunchTarget> *targets = nullptr;
-        HWND targetCombo = nullptr;
-        HWND projectLabel = nullptr;
-        HWND sceneLabel = nullptr;
-        HWND sceneCombo = nullptr;
-        HWND sceneBrowse = nullptr;
-        HWND vulkanRadio = nullptr;
-        HWND dx12Radio = nullptr;
-    };
+        ImGuiStyle &style = ImGui::GetStyle();
+        style.WindowRounding = 0.0f;
+        style.ChildRounding = 4.0f;
+        style.FrameRounding = 4.0f;
+        style.PopupRounding = 4.0f;
+        style.ScrollbarRounding = 4.0f;
+        style.GrabRounding = 4.0f;
+        style.WindowPadding = ImVec2(18.0f, 18.0f);
+        style.FramePadding = ImVec2(8.0f, 5.0f);
+        style.ItemSpacing = ImVec2(10.0f, 10.0f);
 
-    void RefreshBackendRadioButtons(const WindowsLauncherDialog &dialog)
-    {
-        SendMessageA(dialog.vulkanRadio,
-                     BM_SETCHECK,
-                     dialog.selection->api == PE_GRAPHICS_API_VULKAN ? BST_CHECKED : BST_UNCHECKED,
-                     0);
-        SendMessageA(dialog.dx12Radio,
-                     BM_SETCHECK,
-                     dialog.selection->api == PE_GRAPHICS_API_DX12 ? BST_CHECKED : BST_UNCHECKED,
-                     0);
-
-        const BOOL backendEnabled = dialog.selection->apiLocked ? FALSE : TRUE;
-        EnableWindow(dialog.vulkanRadio, backendEnabled);
-        EnableWindow(dialog.dx12Radio, backendEnabled);
+        ImVec4 *colors = style.Colors;
+        colors[ImGuiCol_WindowBg] = ImVec4(0.13f, 0.14f, 0.15f, 1.0f);
+        colors[ImGuiCol_Text] = ImVec4(0.93f, 0.93f, 0.91f, 1.0f);
+        colors[ImGuiCol_TextDisabled] = ImVec4(0.58f, 0.60f, 0.62f, 1.0f);
+        colors[ImGuiCol_FrameBg] = ImVec4(0.20f, 0.22f, 0.24f, 1.0f);
+        colors[ImGuiCol_FrameBgHovered] = ImVec4(0.27f, 0.30f, 0.32f, 1.0f);
+        colors[ImGuiCol_FrameBgActive] = ImVec4(0.32f, 0.35f, 0.38f, 1.0f);
+        colors[ImGuiCol_Button] = ImVec4(0.24f, 0.27f, 0.30f, 1.0f);
+        colors[ImGuiCol_ButtonHovered] = ImVec4(0.31f, 0.35f, 0.39f, 1.0f);
+        colors[ImGuiCol_ButtonActive] = ImVec4(0.18f, 0.50f, 0.42f, 1.0f);
+        colors[ImGuiCol_CheckMark] = ImVec4(0.33f, 0.78f, 0.64f, 1.0f);
+        colors[ImGuiCol_Header] = ImVec4(0.24f, 0.29f, 0.31f, 1.0f);
+        colors[ImGuiCol_HeaderHovered] = ImVec4(0.28f, 0.41f, 0.39f, 1.0f);
+        colors[ImGuiCol_HeaderActive] = ImVec4(0.20f, 0.55f, 0.46f, 1.0f);
     }
 
-    void AddSceneToCombo(HWND combo, LauncherSelection &selection, const std::string &scene)
+    bool CreateFontTexture(SDL_Renderer *renderer, SDL_Texture *&fontTexture, std::string &error)
     {
-        AddUniqueScene(selection.startupScenes, scene);
-        SendMessageA(combo, CB_RESETCONTENT, 0, 0);
-        SendMessageA(combo, CB_SETDROPPEDWIDTH, kDropDownWidth, 0);
-        for (const std::string &item : selection.startupScenes)
+        ImGuiIO &io = ImGui::GetIO();
+        const std::filesystem::path fontPath = std::filesystem::path(pe::Path::Assets) / "Fonts/Inter-Regular.ttf";
+        if (std::filesystem::exists(fontPath))
+            io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(), 15.0f);
+
+        unsigned char *pixels = nullptr;
+        int width = 0;
+        int height = 0;
+        io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+
+        fontTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, width, height);
+        if (!fontTexture)
         {
-            const std::string label = SceneDisplayName(selection, item);
-            SendMessageA(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label.c_str()));
+            error = std::string("[SDL] could not create launcher font texture: ") + SDL_GetError();
+            return false;
         }
 
-        const auto it = std::find(selection.startupScenes.begin(), selection.startupScenes.end(), scene);
-        const int index = it == selection.startupScenes.end() ? 0 : static_cast<int>(it - selection.startupScenes.begin());
-        SendMessageA(combo, CB_SETCURSEL, index, 0);
-        selection.startupScene = scene;
+        SDL_UpdateTexture(fontTexture, nullptr, pixels, width * 4);
+        SDL_SetTextureBlendMode(fontTexture, SDL_BLENDMODE_BLEND);
+        io.Fonts->SetTexID(static_cast<ImTextureID>(reinterpret_cast<intptr_t>(fontTexture)));
+        return true;
     }
 
-    void BrowseStartupScene(HWND owner, WindowsLauncherDialog &dialog)
+    void RenderImGuiDrawData(SDL_Renderer *renderer, ImDrawData *drawData)
     {
+        const ImVec2 clipOffset = drawData->DisplayPos;
+        const ImVec2 clipScale = drawData->FramebufferScale;
+        SDL_RenderSetScale(renderer, clipScale.x, clipScale.y);
+
+        for (int listIndex = 0; listIndex < drawData->CmdListsCount; ++listIndex)
+        {
+            const ImDrawList *cmdList = drawData->CmdLists[listIndex];
+            std::vector<SDL_Vertex> vertices;
+            vertices.reserve(cmdList->VtxBuffer.Size);
+
+            for (const ImDrawVert &vertex : cmdList->VtxBuffer)
+            {
+                const ImU32 color = vertex.col;
+                SDL_Vertex out{};
+                out.position = {vertex.pos.x - clipOffset.x, vertex.pos.y - clipOffset.y};
+                out.tex_coord = {vertex.uv.x, vertex.uv.y};
+                out.color = {static_cast<Uint8>(color & 0xFF),
+                             static_cast<Uint8>((color >> 8) & 0xFF),
+                             static_cast<Uint8>((color >> 16) & 0xFF),
+                             static_cast<Uint8>((color >> 24) & 0xFF)};
+                vertices.push_back(out);
+            }
+
+            for (const ImDrawCmd &cmd : cmdList->CmdBuffer)
+            {
+                if (cmd.UserCallback)
+                {
+                    cmd.UserCallback(cmdList, &cmd);
+                    continue;
+                }
+
+                SDL_Rect clipRect{};
+                clipRect.x = static_cast<int>(cmd.ClipRect.x - clipOffset.x);
+                clipRect.y = static_cast<int>(cmd.ClipRect.y - clipOffset.y);
+                clipRect.w = static_cast<int>(cmd.ClipRect.z - cmd.ClipRect.x);
+                clipRect.h = static_cast<int>(cmd.ClipRect.w - cmd.ClipRect.y);
+                if (clipRect.w <= 0 || clipRect.h <= 0)
+                    continue;
+
+                std::vector<int> indices;
+                indices.reserve(cmd.ElemCount);
+                for (unsigned int i = 0; i < cmd.ElemCount; ++i)
+                {
+                    const ImDrawIdx index = cmdList->IdxBuffer[cmd.IdxOffset + i];
+                    indices.push_back(static_cast<int>(index + cmd.VtxOffset));
+                }
+
+                SDL_Texture *texture = reinterpret_cast<SDL_Texture *>(static_cast<intptr_t>(cmd.GetTexID()));
+                SDL_RenderSetClipRect(renderer, &clipRect);
+                SDL_RenderGeometry(renderer,
+                                   texture,
+                                   vertices.data(),
+                                   static_cast<int>(vertices.size()),
+                                   indices.data(),
+                                   static_cast<int>(indices.size()));
+            }
+        }
+
+        SDL_RenderSetClipRect(renderer, nullptr);
+        SDL_RenderSetScale(renderer, 1.0f, 1.0f);
+    }
+
+#if defined(PE_WIN32)
+    HWND GetNativeWindowHandle(SDL_Window *window)
+    {
+        SDL_SysWMinfo info{};
+        SDL_VERSION(&info.version);
+        if (SDL_GetWindowWMInfo(window, &info) == SDL_TRUE && info.subsystem == SDL_SYSWM_WINDOWS)
+            return info.info.win.window;
+        return nullptr;
+    }
+#endif
+
+    bool PickStartupScene(SDL_Window *owner, const std::string &projectPath, std::string &selectedPath, std::string &error)
+    {
+#if defined(PE_WIN32)
         char fileName[MAX_PATH] = {};
-        std::string initialDir = (std::filesystem::path(dialog.selection->projectPath) / "Scenes").string();
+        const std::string initialDir = (std::filesystem::path(projectPath) / "Scenes").string();
 
         OPENFILENAMEA openFileName{};
         openFileName.lStructSize = sizeof(openFileName);
-        openFileName.hwndOwner = owner;
+        openFileName.hwndOwner = GetNativeWindowHandle(owner);
         openFileName.lpstrFilter = "Phasma Scene (*.pescene)\0*.pescene\0All Files (*.*)\0*.*\0";
         openFileName.lpstrFile = fileName;
         openFileName.nMaxFile = static_cast<DWORD>(sizeof(fileName));
         openFileName.lpstrInitialDir = initialDir.c_str();
         openFileName.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
 
-        if (!GetOpenFileNameA(&openFileName))
-            return;
+        if (GetOpenFileNameA(&openFileName))
+        {
+            selectedPath = fileName;
+            return true;
+        }
 
-        dialog.selection->projectPath = InferProjectPathFromScene(fileName);
-        dialog.selection->startupScenes = DiscoverStartupScenes(dialog.selection->projectPath, "");
-        SetWindowTextA(dialog.projectLabel, dialog.selection->projectPath.c_str());
-        AddSceneToCombo(dialog.sceneCombo, *dialog.selection, MakeRuntimeRelativePath(fileName));
+        const DWORD dialogError = CommDlgExtendedError();
+        if (dialogError != 0)
+            error = "Browse failed: " + std::to_string(dialogError);
+        return false;
+#else
+        (void)owner;
+        int pipeFd[2] = {-1, -1};
+        if (pipe(pipeFd) != 0)
+        {
+            error = "Browse unavailable: could not create pipe";
+            return false;
+        }
+
+        const pid_t pid = fork();
+        if (pid < 0)
+        {
+            close(pipeFd[0]);
+            close(pipeFd[1]);
+            error = "Browse unavailable: could not fork zenity";
+            return false;
+        }
+
+        if (pid == 0)
+        {
+            close(pipeFd[0]);
+            dup2(pipeFd[1], STDOUT_FILENO);
+            close(pipeFd[1]);
+
+            const std::filesystem::path sceneDir = std::filesystem::path(projectPath) / "Scenes";
+            const std::string filenameArg = "--filename=" + EnsureTrailingSlash(sceneDir.generic_string());
+            execlp("zenity",
+                   "zenity",
+                   "--file-selection",
+                   "--title=Select startup scene",
+                   filenameArg.c_str(),
+                   "--file-filter=Phasma Scene (*.pescene) | *.pescene",
+                   "--file-filter=All Files | *",
+                   nullptr);
+            _exit(127);
+        }
+
+        close(pipeFd[1]);
+        std::string output;
+        char buffer[512] = {};
+        ssize_t count = 0;
+        while ((count = read(pipeFd[0], buffer, sizeof(buffer))) > 0)
+            output.append(buffer, static_cast<size_t>(count));
+        close(pipeFd[0]);
+
+        int status = 0;
+        waitpid(pid, &status, 0);
+        if (!WIFEXITED(status))
+        {
+            error = "Browse failed: zenity did not exit normally";
+            return false;
+        }
+        if (WEXITSTATUS(status) == 127)
+        {
+            error = "Browse requires zenity; choose a discovered scene or edit editor_config.json.";
+            return false;
+        }
+        if (WEXITSTATUS(status) != 0 || output.empty())
+            return false;
+
+        while (!output.empty() && (output.back() == '\n' || output.back() == '\r'))
+            output.pop_back();
+        selectedPath = output;
+        return !selectedPath.empty();
+#endif
     }
 
-    void RefreshEditorOnlyControls(const WindowsLauncherDialog &dialog)
+#if !defined(PE_WIN32)
+    bool HasConsolePrompt()
     {
-        const BOOL enabled = LaunchesEditor(*dialog.selection) ? TRUE : FALSE;
-        EnableWindow(dialog.projectLabel, enabled);
-        EnableWindow(dialog.sceneLabel, enabled);
-        EnableWindow(dialog.sceneCombo, enabled);
-        EnableWindow(dialog.sceneBrowse, enabled);
+        return isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
     }
 
-    LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+    int PromptIndex(const char *title, const std::vector<std::string> &labels, int currentIndex)
     {
-        auto *dialog = reinterpret_cast<WindowsLauncherDialog *>(GetWindowLongPtrA(hwnd, GWLP_USERDATA));
+        if (labels.empty())
+            return 0;
 
-        switch (msg)
+        std::cout << '\n' << title << '\n';
+        for (size_t i = 0; i < labels.size(); ++i)
         {
-        case WM_NCCREATE:
-        {
-            const auto *createStruct = reinterpret_cast<CREATESTRUCTA *>(lParam);
-            SetWindowLongPtrA(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(createStruct->lpCreateParams));
-            return TRUE;
+            std::cout << "  " << (i + 1) << ". " << labels[i];
+            if (static_cast<int>(i) == currentIndex)
+                std::cout << " [default]";
+            std::cout << '\n';
         }
-        case WM_CREATE:
+        std::cout << "Select [default " << (currentIndex + 1) << "]: " << std::flush;
+
+        std::string input;
+        if (!std::getline(std::cin, input) || input.empty())
+            return currentIndex;
+
+        char *end = nullptr;
+        const long value = std::strtol(input.c_str(), &end, 10);
+        if (end == input.c_str() || value < 1 || value > static_cast<long>(labels.size()))
         {
-            dialog = reinterpret_cast<WindowsLauncherDialog *>(GetWindowLongPtrA(hwnd, GWLP_USERDATA));
-            CreateWindowExA(0, "STATIC", "Target", WS_CHILD | WS_VISIBLE, kLabelX, 20, 100, 20, hwnd, nullptr, nullptr, nullptr);
-            dialog->targetCombo = CreateWindowExA(0,
-                                                  "COMBOBOX",
-                                                  "",
-                                                  WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,
-                                                  kFieldX,
-                                                  16,
-                                                  kFieldWidth,
-                                                  260,
-                                                  hwnd,
-                                                  reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdTargetCombo)),
-                                                  nullptr,
-                                                  nullptr);
-            SendMessageA(dialog->targetCombo, CB_SETDROPPEDWIDTH, kDropDownWidth, 0);
-            CreateWindowExA(0, "STATIC", "Project", WS_CHILD | WS_VISIBLE, kLabelX, 58, 100, 20, hwnd, nullptr, nullptr, nullptr);
-            dialog->projectLabel = CreateWindowExA(0,
-                                                   "STATIC",
-                                                   dialog->selection->projectPath.c_str(),
-                                                   WS_CHILD | WS_VISIBLE | SS_PATHELLIPSIS,
-                                                   kFieldX,
-                                                   58,
-                                                   kFieldWidth,
-                                                   20,
-                                                   hwnd,
-                                                   nullptr,
-                                                   nullptr,
-                                                   nullptr);
-            dialog->sceneLabel = CreateWindowExA(0,
-                                                 "STATIC",
-                                                 "Startup scene",
-                                                 WS_CHILD | WS_VISIBLE,
-                                                 kLabelX,
-                                                 96,
-                                                 100,
-                                                 20,
-                                                 hwnd,
-                                                 nullptr,
-                                                 nullptr,
-                                                 nullptr);
-            dialog->sceneCombo = CreateWindowExA(0,
-                                                 "COMBOBOX",
-                                                 "",
-                                                 WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,
-                                                 kFieldX,
-                                                 92,
-                                                 kSceneComboWidth,
-                                                 260,
-                                                 hwnd,
-                                                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdSceneCombo)),
-                                                 nullptr,
-                                                 nullptr);
-            SendMessageA(dialog->sceneCombo, CB_SETDROPPEDWIDTH, kDropDownWidth, 0);
-            dialog->sceneBrowse = CreateWindowExA(0,
-                                                  "BUTTON",
-                                                  "Browse...",
-                                                  WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-                                                  kBrowseX,
-                                                  91,
-                                                  100,
-                                                  24,
-                                                  hwnd,
-                                                  reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdSceneBrowse)),
-                                                  nullptr,
-                                                  nullptr);
-            CreateWindowExA(0, "STATIC", "Backend", WS_CHILD | WS_VISIBLE, kLabelX, 134, 100, 20, hwnd, nullptr, nullptr, nullptr);
-            dialog->vulkanRadio = CreateWindowExA(0,
-                                                  "BUTTON",
-                                                  "Vulkan",
-                                                  WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON,
-                                                  kFieldX,
-                                                  132,
-                                                  90,
-                                                  24,
-                                                  hwnd,
-                                                  reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdVulkan)),
-                                                  nullptr,
-                                                  nullptr);
-            dialog->dx12Radio = CreateWindowExA(0,
-                                                "BUTTON",
-                                                "DX12",
-                                                WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON,
-                                                234,
-                                                132,
-                                                90,
-                                                24,
-                                                hwnd,
-                                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdDx12)),
-                                                nullptr,
-                                                nullptr);
-            CreateWindowExA(0,
-                            "STATIC",
-                            "Settings",
-                            WS_CHILD | WS_VISIBLE,
-                            kLabelX,
-                            172,
-                            100,
-                            20,
-                            hwnd,
-                            nullptr,
-                            nullptr,
-                            nullptr);
-            CreateWindowExA(0,
-                            "STATIC",
-                            RuntimeSettingsPath().generic_string().c_str(),
-                            WS_CHILD | WS_VISIBLE | SS_PATHELLIPSIS,
-                            kFieldX,
-                            172,
-                            kFieldWidth,
-                            20,
-                            hwnd,
-                            nullptr,
-                            nullptr,
-                            nullptr);
-            CreateWindowExA(0,
-                            "BUTTON",
-                            "Launch",
-                            WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
-                            kLaunchButtonX,
-                            226,
-                            90,
-                            28,
-                            hwnd,
-                            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdLaunch)),
-                            nullptr,
-                            nullptr);
-            CreateWindowExA(0,
-                            "BUTTON",
-                            "Cancel",
-                            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-                            kCancelButtonX,
-                            226,
-                            90,
-                            28,
-                            hwnd,
-                            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdCancel)),
-                            nullptr,
-                            nullptr);
-
-            for (const LaunchTarget &target : *dialog->targets)
-                SendMessageA(dialog->targetCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(target.label.c_str()));
-            const int targetIndex = FindLaunchTargetIndex(*dialog->targets, dialog->selection->launchTarget);
-            SendMessageA(dialog->targetCombo, CB_SETCURSEL, static_cast<WPARAM>(targetIndex), 0);
-            dialog->selection->launchTarget = (*dialog->targets)[targetIndex].configValue;
-
-            for (const std::string &scene : dialog->selection->startupScenes)
-            {
-                const std::string label = SceneDisplayName(*dialog->selection, scene);
-                SendMessageA(dialog->sceneCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label.c_str()));
-            }
-
-            auto it = std::find(dialog->selection->startupScenes.begin(),
-                                dialog->selection->startupScenes.end(),
-                                dialog->selection->startupScene);
-            if (it == dialog->selection->startupScenes.end())
-                it = dialog->selection->startupScenes.begin();
-            SendMessageA(dialog->sceneCombo,
-                         CB_SETCURSEL,
-                         static_cast<WPARAM>(it - dialog->selection->startupScenes.begin()),
-                         0);
-
-            RefreshBackendRadioButtons(*dialog);
-            RefreshEditorOnlyControls(*dialog);
-            return 0;
-        }
-        case WM_COMMAND:
-        {
-            if (!dialog)
-                break;
-
-            const int id = LOWORD(wParam);
-            const int notification = HIWORD(wParam);
-            if (id == kIdTargetCombo && notification == CBN_SELCHANGE)
-            {
-                const int index = static_cast<int>(SendMessageA(dialog->targetCombo, CB_GETCURSEL, 0, 0));
-                if (index >= 0 && index < static_cast<int>(dialog->targets->size()))
-                {
-                    dialog->selection->launchTarget = (*dialog->targets)[index].configValue;
-                    RefreshEditorOnlyControls(*dialog);
-                }
-            }
-            else if (id == kIdSceneCombo && notification == CBN_SELCHANGE)
-            {
-                const int index = static_cast<int>(SendMessageA(dialog->sceneCombo, CB_GETCURSEL, 0, 0));
-                if (index >= 0 && index < static_cast<int>(dialog->selection->startupScenes.size()))
-                    dialog->selection->startupScene = dialog->selection->startupScenes[index];
-            }
-            else if (id == kIdSceneBrowse)
-            {
-                BrowseStartupScene(hwnd, *dialog);
-            }
-            else if (id == kIdVulkan && !dialog->selection->apiLocked)
-            {
-                dialog->selection->api = PE_GRAPHICS_API_VULKAN;
-                RefreshBackendRadioButtons(*dialog);
-            }
-            else if (id == kIdDx12 && !dialog->selection->apiLocked)
-            {
-                dialog->selection->api = PE_GRAPHICS_API_DX12;
-                RefreshBackendRadioButtons(*dialog);
-            }
-            else if (id == kIdLaunch)
-            {
-                dialog->selection->accepted = true;
-                DestroyWindow(hwnd);
-            }
-            else if (id == kIdCancel)
-            {
-                DestroyWindow(hwnd);
-            }
-            return 0;
-        }
-        case WM_CLOSE:
-            DestroyWindow(hwnd);
-            return 0;
-        case WM_DESTROY:
-            PostQuitMessage(0);
-            return 0;
-        default:
-            break;
+            std::cout << "Invalid selection, keeping default.\n";
+            return currentIndex;
         }
 
-        return DefWindowProcA(hwnd, msg, wParam, lParam);
+        return static_cast<int>(value - 1);
     }
 
-    LauncherDialogResult ShowLauncherWindow(LauncherSelection &selection)
+    bool PromptLaunch()
     {
-        const HINSTANCE instance = GetModuleHandleA(nullptr);
-        const char *className = "PhasmaLauncherWindow";
+        std::cout << "\nLaunch? [Y/n]: " << std::flush;
 
-        WNDCLASSA windowClass{};
-        windowClass.lpfnWndProc = LauncherWndProc;
-        windowClass.hInstance = instance;
-        windowClass.lpszClassName = className;
-        windowClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
-        windowClass.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
-        RegisterClassA(&windowClass);
+        std::string input;
+        if (!std::getline(std::cin, input) || input.empty())
+            return true;
 
-        const int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-        const int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-        const int x = std::max(0, (screenWidth - kLauncherWidth) / 2);
-        const int y = std::max(0, (screenHeight - kLauncherHeight) / 2);
+        const char answer = static_cast<char>(std::tolower(static_cast<unsigned char>(input.front())));
+        return answer == 'y';
+    }
 
-        std::vector<LaunchTarget> targets = DiscoverLaunchTargets(selection.launchTarget);
-        WindowsLauncherDialog dialog{};
-        dialog.selection = &selection;
-        dialog.targets = &targets;
+    LauncherDialogResult ShowConsoleLauncher(LauncherSelection &selection,
+                                             const std::vector<LaunchTarget> &targets,
+                                             int targetIndex)
+    {
+        std::vector<std::string> targetLabels;
+        targetLabels.reserve(targets.size());
+        for (const LaunchTarget &target : targets)
+            targetLabels.push_back(target.label);
 
-        HWND window = CreateWindowExA(WS_EX_DLGMODALFRAME,
-                                      className,
-                                      "Phasma Launcher",
-                                      WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-                                      x,
-                                      y,
-                                      kLauncherWidth,
-                                      kLauncherHeight,
-                                      nullptr,
-                                      nullptr,
-                                      instance,
-                                      &dialog);
-        if (!window)
+        std::cout << "Phasma Launcher\n";
+        targetIndex = PromptIndex("Target", targetLabels, targetIndex);
+        selection.launchTarget = targets[targetIndex].configValue;
+
+        if (LaunchesEditor(selection))
         {
-            pe::Log::Error("Could not create Phasma Launcher window: " + std::to_string(GetLastError()));
+            std::vector<std::string> sceneLabels;
+            sceneLabels.reserve(selection.startupScenes.size());
+            for (const std::string &scene : selection.startupScenes)
+                sceneLabels.push_back(SceneDisplayName(selection, scene));
+
+            int sceneIndex = 0;
+            const auto currentScene = std::find(selection.startupScenes.begin(),
+                                                selection.startupScenes.end(),
+                                                selection.startupScene);
+            if (currentScene != selection.startupScenes.end())
+                sceneIndex = static_cast<int>(currentScene - selection.startupScenes.begin());
+
+            sceneIndex = PromptIndex("Startup scene", sceneLabels, sceneIndex);
+            if (sceneIndex >= 0 && sceneIndex < static_cast<int>(selection.startupScenes.size()))
+                selection.startupScene = selection.startupScenes[sceneIndex];
+        }
+
+        if (!selection.apiLocked)
+            selection.api = PE_GRAPHICS_API_VULKAN;
+
+        std::cout << "\nProject: " << selection.projectPath << '\n'
+                  << "Backend: " << pe::GraphicsApiConfigName(selection.api) << '\n'
+                  << "Settings: " << RuntimeSettingsPath().generic_string() << '\n';
+
+        selection.accepted = PromptLaunch();
+        return selection.accepted ? LauncherDialogResult::Launch : LauncherDialogResult::Cancel;
+    }
+#endif
+
+    LauncherDialogResult ShowSdlLauncher(LauncherSelection &selection,
+                                         const std::vector<LaunchTarget> &targets,
+                                         int targetIndex,
+                                         std::string &error)
+    {
+        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
+        {
+            error = std::string("[SDL] launcher init failed: ") + SDL_GetError();
+            return LauncherDialogResult::Error;
+        }
+        const char *videoDriver = SDL_GetCurrentVideoDriver();
+        if (videoDriver && std::strcmp(videoDriver, "dummy") == 0)
+        {
+            error = "[SDL] dummy video driver cannot show the launcher window";
+            SDL_Quit();
             return LauncherDialogResult::Error;
         }
 
-        MSG message{};
-        while (GetMessageA(&message, nullptr, 0, 0) > 0)
+        SDL_Window *window = SDL_CreateWindow("Phasma Launcher",
+                                              SDL_WINDOWPOS_CENTERED,
+                                              SDL_WINDOWPOS_CENTERED,
+                                              kLauncherWidth,
+                                              kLauncherHeight,
+                                              SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
+        if (!window)
         {
-            TranslateMessage(&message);
-            DispatchMessageA(&message);
+            error = std::string("[SDL] could not create launcher window: ") + SDL_GetError();
+            SDL_Quit();
+            return LauncherDialogResult::Error;
         }
 
-        return selection.accepted ? LauncherDialogResult::Launch : LauncherDialogResult::Cancel;
-    }
+        SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+        if (!renderer)
+            renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+        if (!renderer)
+        {
+            error = std::string("[SDL] could not create launcher renderer: ") + SDL_GetError();
+            SDL_DestroyWindow(window);
+            SDL_Quit();
+            return LauncherDialogResult::Error;
+        }
+
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ApplyLauncherStyle();
+        ImGuiIO &io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
+
+        SDL_Texture *fontTexture = nullptr;
+        if (!CreateFontTexture(renderer, fontTexture, error))
+        {
+            ImGui_ImplSDL2_Shutdown();
+            ImGui::DestroyContext();
+            SDL_DestroyRenderer(renderer);
+            SDL_DestroyWindow(window);
+            SDL_Quit();
+            return LauncherDialogResult::Error;
+        }
+
+        LauncherDialogResult result = LauncherDialogResult::Cancel;
+        bool running = true;
+        std::string statusText;
+        while (running)
+        {
+            SDL_Event event{};
+            while (SDL_PollEvent(&event))
+            {
+                ImGui_ImplSDL2_ProcessEvent(&event);
+                if (event.type == SDL_QUIT)
+                    running = false;
+                if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)
+                    running = false;
+            }
+
+            ImGui_ImplSDL2_NewFrame();
+            ImGui::NewFrame();
+
+            ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize, ImGuiCond_Always);
+            ImGui::Begin("Phasma Launcher",
+                         nullptr,
+                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+
+            ImGui::TextUnformatted("Target");
+            ImGui::SameLine(kFieldX);
+            ImGui::SetNextItemWidth(kFieldWidth);
+            if (ImGui::BeginCombo("##target", targets[targetIndex].label.c_str()))
+            {
+                for (int i = 0; i < static_cast<int>(targets.size()); ++i)
+                {
+                    const bool selected = i == targetIndex;
+                    if (ImGui::Selectable(targets[i].label.c_str(), selected))
+                    {
+                        targetIndex = i;
+                        selection.launchTarget = targets[targetIndex].configValue;
+                    }
+                    if (selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
+            const bool editorSelected = LaunchesEditor(selection);
+            ImGui::TextUnformatted("Project");
+            ImGui::SameLine(kFieldX);
+            ImGui::BeginDisabled(!editorSelected);
+            ImGui::TextUnformatted(selection.projectPath.c_str());
+            ImGui::EndDisabled();
+
+            ImGui::TextUnformatted("Startup scene");
+            ImGui::SameLine(kFieldX);
+            ImGui::BeginDisabled(!editorSelected);
+            std::string sceneLabel = SceneDisplayName(selection, selection.startupScene);
+            ImGui::SetNextItemWidth(kSceneComboWidth);
+            if (ImGui::BeginCombo("##scene", sceneLabel.c_str()))
+            {
+                for (int i = 0; i < static_cast<int>(selection.startupScenes.size()); ++i)
+                {
+                    const bool selected = selection.startupScenes[i] == selection.startupScene;
+                    const std::string label = SceneDisplayName(selection, selection.startupScenes[i]);
+                    if (ImGui::Selectable(label.c_str(), selected))
+                        selection.startupScene = selection.startupScenes[i];
+                    if (selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Browse...", ImVec2(100.0f, 0.0f)))
+            {
+                std::string selectedPath;
+                std::string browseError;
+                if (PickStartupScene(window, selection.projectPath, selectedPath, browseError))
+                {
+                    selection.projectPath = InferProjectPathFromScene(selectedPath);
+                    selection.startupScenes = DiscoverStartupScenes(selection.projectPath, "");
+                    selection.startupScene = MakeRuntimeRelativePath(selectedPath);
+                    AddUniqueScene(selection.startupScenes, selection.startupScene);
+                    statusText.clear();
+                }
+                else
+                {
+                    statusText = browseError;
+                }
+            }
+            ImGui::EndDisabled();
+
+            ImGui::TextUnformatted("Backend");
+            ImGui::SameLine(kFieldX);
+            ImGui::BeginDisabled(selection.apiLocked);
+            bool vulkan = selection.api == PE_GRAPHICS_API_VULKAN;
+            if (ImGui::RadioButton("Vulkan", vulkan))
+                selection.api = PE_GRAPHICS_API_VULKAN;
+            ImGui::SameLine();
+            bool dx12 = selection.api == PE_GRAPHICS_API_DX12;
+#if defined(PE_WIN32)
+            if (ImGui::RadioButton("DX12", dx12))
+                selection.api = PE_GRAPHICS_API_DX12;
 #else
+            ImGui::BeginDisabled(true);
+            ImGui::RadioButton("DX12", dx12);
+            ImGui::EndDisabled();
+#endif
+            ImGui::EndDisabled();
+
+            ImGui::TextUnformatted("Settings");
+            ImGui::SameLine(kFieldX);
+            ImGui::TextUnformatted(RuntimeSettingsPath().generic_string().c_str());
+
+            if (!statusText.empty())
+            {
+                ImGui::SetCursorPosY(kLauncherHeight - 68.0f);
+                ImGui::TextDisabled("%s", statusText.c_str());
+            }
+
+            ImGui::SetCursorPos(ImVec2(kLaunchButtonX, kLauncherHeight - 54.0f));
+            if (ImGui::Button("Launch", ImVec2(90.0f, 28.0f)))
+            {
+                selection.accepted = true;
+                result = LauncherDialogResult::Launch;
+                running = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(90.0f, 28.0f)))
+            {
+                result = LauncherDialogResult::Cancel;
+                running = false;
+            }
+
+            ImGui::End();
+            ImGui::Render();
+
+            SDL_SetRenderDrawColor(renderer, 31, 34, 37, 255);
+            SDL_RenderClear(renderer);
+            RenderImGuiDrawData(renderer, ImGui::GetDrawData());
+            SDL_RenderPresent(renderer);
+        }
+
+        if (fontTexture)
+            SDL_DestroyTexture(fontTexture);
+        ImGui_ImplSDL2_Shutdown();
+        ImGui::DestroyContext();
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return result;
+    }
+
     LauncherDialogResult ShowLauncherWindow(LauncherSelection &selection)
     {
         const std::vector<LaunchTarget> targets = DiscoverLaunchTargets(selection.launchTarget);
@@ -961,39 +1124,22 @@ namespace
         if (targetIndex >= 0 && targetIndex < static_cast<int>(targets.size()))
             selection.launchTarget = targets[targetIndex].configValue;
 
-        const SDL_MessageBoxButtonData buttons[] = {
-            {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Launch"},
-            {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Cancel"},
-        };
-        const std::string message = "Target: " + targets[targetIndex].label +
-                                    "\nProject: " + selection.projectPath +
-                                    "\nStartup scene: " + SceneDisplayName(selection, selection.startupScene) +
-                                    "\nSettings: " + RuntimeSettingsPath().generic_string() +
-                                    "\nBackend: " + pe::GraphicsApiConfigName(selection.api);
-        const SDL_MessageBoxData box = {
-            SDL_MESSAGEBOX_INFORMATION,
-            nullptr,
-            "Phasma Launcher",
-            message.c_str(),
-            SDL_arraysize(buttons),
-            buttons,
-            nullptr,
-        };
+        std::string error;
+        const LauncherDialogResult result = ShowSdlLauncher(selection, targets, targetIndex, error);
+        if (result != LauncherDialogResult::Error)
+            return result;
 
-        int buttonId = 0;
-        if (SDL_ShowMessageBox(&box, &buttonId) < 0)
+#if !defined(PE_WIN32)
+        if (HasConsolePrompt())
         {
-            PE_WARN("[SDL] launcher prompt failed: %s", SDL_GetError());
-            selection.accepted = true;
-            return LauncherDialogResult::Launch;
+            pe::Log::Warn(error + "; falling back to terminal launcher");
+            return ShowConsoleLauncher(selection, targets, targetIndex);
         }
-
-        if (buttonId == 1)
-            selection.accepted = true;
-
-        return selection.accepted ? LauncherDialogResult::Launch : LauncherDialogResult::Cancel;
-    }
 #endif
+
+        pe::Log::Error(error);
+        return LauncherDialogResult::Error;
+    }
 
     bool IsHardApiOverride(pe::GraphicsApiSelectionSource source)
     {
@@ -1049,11 +1195,7 @@ namespace
                 selectedApi, selection.projectPath, selection.startupScene, selection.launchTarget, launchesEditor, error))
         {
             pe::Log::Error(error);
-#if defined(PE_WIN32)
-            MessageBoxA(nullptr, error.c_str(), "Phasma Launcher", MB_ICONERROR | MB_OK);
-#else
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Phasma Launcher", error.c_str(), nullptr);
-#endif
             return 1;
         }
 
@@ -1068,11 +1210,7 @@ namespace
         if (!LaunchExternalTarget(targets[targetIndex], selectedApi, error))
         {
             pe::Log::Error(error);
-#if defined(PE_WIN32)
-            MessageBoxA(nullptr, error.c_str(), "Phasma Launcher", MB_ICONERROR | MB_OK);
-#else
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Phasma Launcher", error.c_str(), nullptr);
-#endif
             return 1;
         }
 
