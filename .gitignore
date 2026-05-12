@@ -303,8 +303,16 @@ PhasmaEditor/Assets/Temp/
 PhasmaEditor/Assets/Agent/*
 !PhasmaEditor/Assets/Agent/START.md
 
-#Agents INSTRUCTIONS.md file
+# Agent instruction and wiki files
 !/INSTRUCTIONS.md
+!/AGENTS.md
+!/CLAUDE.md
+!/GEMINI.md
+!/.github/
+!/.github/copilot-instructions.md
+!/docs/
+!/docs/wiki/
+!/docs/wiki/**
 
 # User scenes (keep folder, ignore scene files)
 PhasmaEditor/Assets/Scenes/*.pescene

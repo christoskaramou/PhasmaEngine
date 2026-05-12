@@ -14,11 +14,19 @@ Subdirectory `INSTRUCTIONS.md` files cascade on top of this root.
   - Physics timestep / API → `PhasmaEditor/Code/Systems/PhysicsSystem.cpp`
   - PE_API export sites → `grep PE_API PhasmaCore/Code/`
 
-- **Non-obvious rules and gotchas live in MemPalace.** Search with `mempalace_search` for things like: PCH `<vector>` trap, GPU resource wrappers (`Buffer`/`Image`/`Sampler`), perf regression thresholds, hot-reload safe-window / ImGui forwarding, scripting MCP caveat (`ScriptSystem*` caching), `MaterialGpuData` 80-byte layout + IOR/transmission flush rule.
+- **Non-obvious rules and gotchas live in MemPalace.** Search with `mempalace_search` for things like: PCH `<vector>` trap, GPU resource wrappers (`Buffer`/`Image`/`Sampler`), perf regression thresholds, hot-reload safe-window / ImGui forwarding, scripting MCP caveat (`ScriptSystem*` caching), `MaterialGpuData` 80-byte layout + IOR/transmission flush rule. Use lowercase `phasmaengine` for new project memories.
 
 - **Recent state and session history** → `mempalace_kg_timeline`, `mempalace_diary_read`.
 
 - **Synthesis pages** (architecture overviews, testing playbooks, pitfalls) → `docs/wiki/index.md`. Find with `bash docs/wiki/tools/search.sh "query"`.
+
+## MemPalace workflow
+
+- Start architecture, handoff, or project-history work with `mempalace_status`; use CLI `mempalace wake-up --wing phasmaengine` when available, then targeted `mempalace_search` / `mempalace_kg_query`.
+- Use `mempalace_add_drawer` for durable verbatim handoffs, decisions, and discoveries; use `mempalace_diary_write` at session end.
+- Use `mempalace_kg_add` / `mempalace_kg_invalidate` for stable facts and superseded relationships instead of hiding them in prose-only drawers.
+- Use taxonomy and graph tools (`mempalace_get_taxonomy`, `mempalace_graph_stats`, `mempalace_traverse`) when a task spans subsystems or wings.
+- After large instruction, doc, or history imports, dry-run `mempalace mine`, avoid build/generated/vendor trees, then refresh compressed recall with `mempalace compress --wing phasmaengine`.
 
 ## Wiki maintenance
 
