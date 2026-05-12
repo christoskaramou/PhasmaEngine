@@ -1,6 +1,6 @@
 # PhasmaEngine
 
-PhasmaEngine is a Vulkan 3D engine for learning graphics techniques. Runs on Windows and Linux
+PhasmaEngine is a Vulkan and DirectX 12 3D engine for learning graphics techniques, with an experimental WebGPU C API layer. Vulkan runs on Windows and Linux; DX12 is Windows-only.
 
 ![Screenshot](PhasmaEditor/Images/ABeautifulGame.png)
 
@@ -8,8 +8,8 @@ PhasmaEngine is a Vulkan 3D engine for learning graphics techniques. Runs on Win
 
 ### Rendering
 * Deferred Rendering
-* Ray Tracing
-* Hybrid RT (Transparency/Transmission/Refraction)
+* Ray Tracing (Vulkan backend)
+* Hybrid RT (Transparency/Transmission/Refraction, Vulkan backend)
 * Physically Based Rendering (PBR)
 * Image Based Lighting (IBL)
 * Screen Space Ambient Occlusion (SSAO)
@@ -27,6 +27,7 @@ PhasmaEngine is a Vulkan 3D engine for learning graphics techniques. Runs on Win
 
 ### Shaders
 * HLSL shaders compiled via DXC/shaderc
+* Experimental WGSL support through PhasmaWebGPU
 * Shader hot-reload with file watching
 
 ### Scene
@@ -65,6 +66,17 @@ Toggle the server from **Connection → MCP Server** in the editor. The **Connec
 ## Building and Compiling
 
 PhasmaEngine uses CMake to configure and generate project files. The CMakeLists.txt is in the root folder.
+
+## Graphics API
+
+PhasmaEditor supports runtime graphics API selection:
+
+- Vulkan (default, Windows/Linux): `PhasmaEditor --api vulkan`
+- DirectX 12 (Windows-only): `PhasmaEditor.exe --api dx12`
+
+You can also set `PHASMA_API` to `vulkan` or `dx12`, or write `graphics_api` / `api` in `phasma_settings.json` next to the executable.
+
+WebGPU support is experimental and lives in `PhasmaWebGPU`, a WebGPU C API layer over PhasmaCore. It builds with the `PE_WEBGPU` CMake option and runs through dedicated WebGPU sample/test executables rather than PhasmaEditor `--api` selection.
 
 ## GitHub Release Builds
 
