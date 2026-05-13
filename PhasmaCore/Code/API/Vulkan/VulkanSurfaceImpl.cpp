@@ -1,4 +1,5 @@
 #include "API/Vulkan/VulkanSurfaceImpl.h"
+#include "API/RHI.h"
 #include "API/Surface.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
@@ -50,6 +51,9 @@ namespace pe
 
     std::vector<PePresentMode> VulkanSurfaceImpl::GetSupportedPresentModes() const
     {
+        if (RHII.UsesDozenVulkan())
+            return {PE_PRESENT_MODE_FIFO};
+
         const auto vkModes = VulkanRhi::Gpu().getSurfacePresentModesKHR(m_apiHandle);
         std::vector<PePresentMode> out;
         out.reserve(vkModes.size());

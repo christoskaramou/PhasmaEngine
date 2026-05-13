@@ -9,6 +9,7 @@
 #include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
+#include "Script/Bindings/Input/InputState.h"
 #include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_sdl2.h"
@@ -159,12 +160,16 @@ namespace pe
 
         SDL_Event sdlEvent;
         std::vector<std::string> dropAccum;
+        InputState::BeginFrame();
         while (SDL_PollEvent(&sdlEvent))
         {
             if (sdlEvent.type == SDL_QUIT)
                 EventSystem::PushEvent(EventType::RequestExit);
 
             ImGui_ImplSDL2_ProcessEvent(&sdlEvent);
+
+            if (sdlEvent.type == SDL_MOUSEMOTION)
+                InputState::AddMouseMotion(sdlEvent.motion.xrel, sdlEvent.motion.yrel);
 
             if (sdlEvent.type == SDL_WINDOWEVENT &&
                 ShouldResizeForWindowEvent(sdlEvent.window.event) &&

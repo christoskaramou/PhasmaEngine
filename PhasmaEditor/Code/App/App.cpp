@@ -1,9 +1,9 @@
 #include "Code/App/App.h"
 #include "API/Command.h"
-#include "API/Debug.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/Surface.h"
+#include "API/Swapchain.h"
 #include "Base/Log.h"
 #include "Base/Settings.h"
 #include "GUI/Backends/GUIBackend.h"
@@ -102,6 +102,64 @@ namespace pe
 
             return out;
         }
+
+        bool UsesWslDozenVulkan()
+        {
+            return RHII.UsesDozenVulkan();
+        }
+
+        bool NeedsWslDozenFifoPacing()
+        {
+            if (!UsesWslDozenVulkan() || !RHII.GetSwapchain())
+                return false;
+
+            const PePresentMode mode = RHII.GetSwapchain()->GetPresentMode();
+            return mode == PE_PRESENT_MODE_FIFO || mode == PE_PRESENT_MODE_FIFO_RELAXED;
+        }
+
+        double GetWindowRefreshHz(Window *window)
+        {
+            constexpr double fallbackHz = 60.0;
+            if (!window)
+                return fallbackHz;
+
+            const int display = SDL_GetWindowDisplayIndex(window->ApiHandle());
+            SDL_DisplayMode mode{};
+            if (display >= 0 && SDL_GetCurrentDisplayMode(display, &mode) == 0 && mode.refresh_rate > 0)
+                return static_cast<double>(mode.refresh_rate);
+
+            return fallbackHz;
+        }
+
+        void PaceWslDozenFifo(Window *window)
+        {
+            using Clock = std::chrono::steady_clock;
+            static bool active = false;
+            static Clock::time_point nextFrame{};
+
+            if (!NeedsWslDozenFifoPacing())
+            {
+                active = false;
+                return;
+            }
+
+            const auto frameDuration = std::chrono::duration<double>(1.0 / GetWindowRefreshHz(window));
+            const auto now = Clock::now();
+            if (!active)
+            {
+                active = true;
+                nextFrame = now + std::chrono::duration_cast<Clock::duration>(frameDuration);
+                return;
+            }
+
+            if (now < nextFrame)
+                std::this_thread::sleep_until(nextFrame);
+
+            const auto afterSleep = Clock::now();
+            nextFrame += std::chrono::duration_cast<Clock::duration>(frameDuration);
+            if (nextFrame < afterSleep)
+                nextFrame = afterSleep + std::chrono::duration_cast<Clock::duration>(frameDuration);
+        }
     } // namespace
 
     App::App() : m_frameTimer(FrameTimer::Instance())
@@ -151,16 +209,14 @@ namespace pe
         // On hot-reload reload_state.json already exists — skip splash screen.
         const bool isHotReload = std::filesystem::exists(Path::Executable + "reload_state.json");
         const bool usesDx12StartupOrchestration = UsesDx12StartupOrchestration();
+        const bool usesWslDozenVulkan = UsesWslDozenVulkan();
 #ifdef NDEBUG
-        if (!isHotReload && !usesDx12StartupOrchestration)
+        if (!isHotReload && !usesDx12StartupOrchestration && !usesWslDozenVulkan)
             m_splashScreen = SplashScreen::Create(SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS);
 #endif
 
         // Adopt the SDL window that was created by the launcher.
         m_window = Window::Adopt(RHII.GetWindow());
-        m_window->Show();
-        m_window->Maximize();
-        SDL_PumpEvents();
         GlobalSettings &settings = Settings::Get<GlobalSettings>();
         const StartupSceneSettings startupSceneSettings = TryReadStartupSceneSettings();
         if (startupSceneSettings.presentMode)
@@ -245,7 +301,9 @@ namespace pe
         }
 
         GetGlobalSystem<RendererSystem>()->GetGUI().ApplyStartupLayout(!shouldRestoreHotReloadSnapshot);
+
         if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN &&
+            !usesWslDozenVulkan &&
             RHII.GetSurface()->GetPresentMode() == PE_PRESENT_MODE_IMMEDIATE)
         {
             m_startupPresentRefreshFrames = 4;
@@ -430,6 +488,8 @@ namespace pe
         }
 
         m_frameTimer.CountCpuTotalStamp();
+
+        PaceWslDozenFifo(m_window);
 
         Profiler::EndFrame();
         PE_FRAME_MARK;

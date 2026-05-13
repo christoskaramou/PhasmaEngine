@@ -45,8 +45,10 @@ namespace pe
         vk::SwapchainCreateInfoKHR swapchainCreateInfo{};
         swapchainCreateInfo.surface = pe::GetVulkanSurface(surface);
         // bbCount=2 matches DX12 FLIP_DISCARD and avoids NVIDIA IMMEDIATE
-        // burst-throttle stalls in vkAcquireNextImageKHR.
-        uint32_t desiredImageCount = 2u;
+        // burst-throttle stalls in vkAcquireNextImageKHR. Mesa Dozen (Vulkan
+        // over D3D12 on WSLg) has been fragile with the two-image path, so keep
+        // one image of slack above the driver minimum there.
+        uint32_t desiredImageCount = RHII.UsesDozenVulkan() ? capabilities.minImageCount + 1u : 2u;
         if (desiredImageCount < capabilities.minImageCount)
             desiredImageCount = capabilities.minImageCount;
         if (capabilities.maxImageCount > 0 && desiredImageCount > capabilities.maxImageCount)

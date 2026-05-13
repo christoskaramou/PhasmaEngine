@@ -1,9 +1,142 @@
 #include "Script/ScriptSystem.h"
-#include "GUI/GUIState.h"
 #include "API/RHI.h"
+#include "GUI/GUIState.h"
+#include "Script/Bindings/Input/InputState.h"
 
 namespace pe
 {
+    namespace InputState
+    {
+        namespace
+        {
+            MouseDelta s_mouseDelta{};
+            bool s_relativeMouseRequested = false;
+            bool s_softwareMouseDelta = false;
+            bool s_mousePositionInitialized = false;
+            int s_lastMouseX = 0;
+            int s_lastMouseY = 0;
+
+            bool IsWslEnvironment()
+            {
+                static const bool isWsl = []()
+                {
+                    if (std::getenv("WSL_DISTRO_NAME") || std::getenv("WSL_INTEROP"))
+                        return true;
+
+                    std::ifstream osRelease("/proc/sys/kernel/osrelease");
+                    std::string text;
+                    std::getline(osRelease, text);
+                    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c)
+                                   { return static_cast<char>(std::tolower(c)); });
+                    return text.find("microsoft") != std::string::npos || text.find("wsl") != std::string::npos;
+                }();
+                return isWsl;
+            }
+
+            void ResetAbsoluteMouseDelta()
+            {
+                SDL_GetMouseState(&s_lastMouseX, &s_lastMouseY);
+                s_mousePositionInitialized = true;
+            }
+        } // namespace
+
+        void BeginFrame()
+        {
+            s_mouseDelta = {};
+        }
+
+        void AddMouseMotion(int xrel, int yrel)
+        {
+            s_mouseDelta.x += xrel;
+            s_mouseDelta.y += yrel;
+        }
+
+        MouseDelta ConsumeMouseDelta()
+        {
+            if (s_softwareMouseDelta)
+            {
+                int x = 0;
+                int y = 0;
+                SDL_GetMouseState(&x, &y);
+                if (!s_mousePositionInitialized)
+                {
+                    s_lastMouseX = x;
+                    s_lastMouseY = y;
+                    s_mousePositionInitialized = true;
+                    return {};
+                }
+
+                MouseDelta delta{};
+                delta.x = std::clamp(x - s_lastMouseX, -128, 128);
+                delta.y = std::clamp(y - s_lastMouseY, -128, 128);
+                s_lastMouseX = x;
+                s_lastMouseY = y;
+                return delta;
+            }
+
+            MouseDelta delta = s_mouseDelta;
+            s_mouseDelta = {};
+            return delta;
+        }
+
+        void ResetMouseDelta()
+        {
+            s_mouseDelta = {};
+            int discardX = 0;
+            int discardY = 0;
+            SDL_GetRelativeMouseState(&discardX, &discardY);
+            ResetAbsoluteMouseDelta();
+        }
+
+        void SetRelativeMouseRequested(bool enabled)
+        {
+            s_relativeMouseRequested = enabled;
+        }
+
+        bool IsRelativeMouseRequested()
+        {
+            return s_relativeMouseRequested;
+        }
+
+        bool SetRelativeMouse(bool enabled)
+        {
+            ResetMouseDelta();
+            SetRelativeMouseRequested(enabled);
+
+            if (!enabled)
+            {
+                s_softwareMouseDelta = false;
+                if (SDL_GetRelativeMouseMode() == SDL_TRUE)
+                    SDL_SetRelativeMouseMode(SDL_FALSE);
+                return true;
+            }
+
+            if (IsWslEnvironment())
+            {
+                static bool warned = false;
+                if (!warned)
+                {
+                    PE_WARN("[Input] WSL detected; using software mouse delta fallback instead of SDL relative mouse mode");
+                    warned = true;
+                }
+                s_softwareMouseDelta = true;
+                return true;
+            }
+
+            const int result = SDL_SetRelativeMouseMode(SDL_TRUE);
+            static bool warned = false;
+            if (result != 0 && !warned)
+            {
+                PE_WARN("[Input] SDL_SetRelativeMouseMode failed: %s", SDL_GetError());
+                warned = true;
+            }
+
+            if (result != 0)
+                s_softwareMouseDelta = true;
+            return result == 0 && SDL_GetRelativeMouseMode() == SDL_TRUE;
+        }
+    } // namespace InputState
+
     static struct InputBindings
     {
         InputBindings()
@@ -41,11 +174,11 @@ namespace pe
 
                 input.set_function("get_mouse_delta", [](sol::this_state ts) -> sol::table {
                     sol::state_view lua(ts);
-                    int dx, dy;
-                    SDL_GetRelativeMouseState(&dx, &dy);
+                    InputState::MouseDelta delta = InputState::ConsumeMouseDelta();
+
                     sol::table t = lua.create_table();
-                    t["x"] = dx;
-                    t["y"] = dy;
+                    t["x"] = delta.x;
+                    t["y"] = delta.y;
                     return t;
                 });
 
@@ -74,12 +207,16 @@ namespace pe
                 });
 
                 // Relative mouse mode (hides cursor, captures deltas - needed for FPS-style camera)
-                input.set_function("set_relative_mouse", [](bool enabled) {
-                    SDL_SetRelativeMouseMode(enabled ? SDL_TRUE : SDL_FALSE);
+                input.set_function("set_relative_mouse", [](bool enabled) -> bool {
+                    return InputState::SetRelativeMouse(enabled);
                 });
 
                 input.set_function("is_relative_mouse", []() -> bool {
-                    return SDL_GetRelativeMouseMode() == SDL_TRUE;
+                    return InputState::IsRelativeMouseRequested() || SDL_GetRelativeMouseMode() == SDL_TRUE;
+                });
+
+                input.set_function("reset_mouse_delta", []() {
+                    InputState::ResetMouseDelta();
                 });
 
                 // Warp mouse to center of window (useful when exiting relative mode)

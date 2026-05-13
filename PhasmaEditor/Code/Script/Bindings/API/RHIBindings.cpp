@@ -142,10 +142,19 @@ namespace pe
                 });
 
                 // ChangePresentMode
-                rhi.set_function("change_present_mode", [](const std::string &mode) {
+                rhi.set_function("change_present_mode", [](const std::string &mode) -> std::string {
                     auto it = s_presentModeMap.find(std::string_view(mode));
                     if (it != s_presentModeMap.end())
+                    {
                         RHII.ChangePresentMode(it->second);
+                        return RHII.GetSurface() ? PresentModeToString(RHII.GetSurface()->GetPresentMode()) : "unknown";
+                    }
+                    return "unknown";
+                });
+
+                // GetPresentMode
+                rhi.set_function("get_present_mode", []() -> std::string {
+                    return RHII.GetSurface() ? PresentModeToString(RHII.GetSurface()->GetPresentMode()) : "unknown";
                 });
 
                 // PresentModeToString

@@ -188,6 +188,11 @@ int main(int argc, char *argv[])
         int windowWidth = displayBounds.w > 100 ? displayBounds.w - 100 : displayBounds.w;
         int windowHeight = displayBounds.h > 100 ? displayBounds.h - 100 : displayBounds.h;
         uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+#if !defined(PE_WIN32)
+        // Sizes the surface/swapchain to the maximized extent at creation time so
+        // App.cpp's early Show()/Maximize() doesn't trigger a swapchain recreate.
+        windowFlags |= SDL_WINDOW_MAXIMIZED;
+#endif
         if (api == PE_GRAPHICS_API_VULKAN)
             windowFlags |= SDL_WINDOW_VULKAN;
         PE_INFO("Creating window on display %d/%d at (%d, %d) size %dx%d",
@@ -210,14 +215,23 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        // Vulkan WSI on Windows can cache a redirected presentation path if the
-        // surface is created while the HWND is hidden. Make the HWND visible and
-        // maximized before RHI initialization creates the surface/swapchain.
+        // Show/maximize before RHI init creates the Vulkan surface/swapchain.
+        // Windows WSI caches a redirected present path on a hidden HWND; Mesa
+        // Dozen on WSLg registers its WSLg-mirror handle on the wl_surface at
+        // swapchain create — both need a visible window first.
         SDL_ShowWindow(sdlWindow);
         SDL_MaximizeWindow(sdlWindow);
         SDL_PumpEvents();
 
         pe::RHII.Init(sdlWindow, api);
+#if !defined(PE_WIN32)
+        PE_INFO("[Startup] Dozen Vulkan after RHI init: %u", pe::RHII.UsesDozenVulkan() ? 1u : 0u);
+        if (pe::RHII.UsesDozenVulkan())
+        {
+            PE_INFO("[Startup] Initializing Dozen swapchain before editor module load");
+            pe::RHII.InitSwapchain();
+        }
+#endif
 
         ModuleHandle mod = LoadModule();
         if (!mod.lib)

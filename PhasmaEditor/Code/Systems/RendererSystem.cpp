@@ -997,8 +997,8 @@ namespace pe
         ImageBarrierInfo barrier{};
         barrier.image = swapchainImage;
         barrier.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
-        // Present is serialized via semaphore; no pipeline-stage wait needed.
-        barrier.stageFlags = PE_STAGE_NONE;
+        // Dozen uses the legacy barrier path; keep its present transition conservative.
+        barrier.stageFlags = RHII.UsesDozenVulkan() ? PE_STAGE_ALL_COMMANDS : PE_STAGE_NONE;
         barrier.accessMask = PE_ACCESS_NONE;
 
         // with 1:1 ratio we can use nearest filter
