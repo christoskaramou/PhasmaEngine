@@ -286,7 +286,9 @@ namespace pe
             cmd->ImageBarrier(toTransfer);
 
             std::vector<vk::BufferImageCopy2> regions;
+            std::vector<vk::BufferImageCopy> legacyRegions;
             regions.reserve(dds.mipLevels);
+            legacyRegions.reserve(dds.mipLevels);
 
             size_t offset = 0;
             for (uint32_t mip = 0; mip < dds.mipLevels; ++mip)
@@ -309,16 +311,39 @@ namespace pe
                 region.imageExtent = vk::Extent3D{mipWidth, mipHeight, 1};
                 regions.push_back(region);
 
+                vk::BufferImageCopy legacyRegion{};
+                legacyRegion.bufferOffset = static_cast<vk::DeviceSize>(offset);
+                legacyRegion.bufferRowLength = 0;
+                legacyRegion.bufferImageHeight = 0;
+                legacyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+                legacyRegion.imageSubresource.mipLevel = mip;
+                legacyRegion.imageSubresource.baseArrayLayer = 0;
+                legacyRegion.imageSubresource.layerCount = 1;
+                legacyRegion.imageOffset = vk::Offset3D{0, 0, 0};
+                legacyRegion.imageExtent = vk::Extent3D{mipWidth, mipHeight, 1};
+                legacyRegions.push_back(legacyRegion);
+
                 offset += mipSize;
             }
 
-            vk::CopyBufferToImageInfo2 copyInfo{};
-            copyInfo.srcBuffer = pe::GetVulkanBuffer(alloc.buffer);
-            copyInfo.dstImage = pe::GetVulkanImage(image);
-            copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
-            copyInfo.regionCount = static_cast<uint32_t>(regions.size());
-            copyInfo.pRegions = regions.data();
-            GetVulkanCommandBuffer(cmd).copyBufferToImage2(copyInfo);
+            if (RHII.GetCaps().copyCommands2)
+            {
+                vk::CopyBufferToImageInfo2 copyInfo{};
+                copyInfo.srcBuffer = pe::GetVulkanBuffer(alloc.buffer);
+                copyInfo.dstImage = pe::GetVulkanImage(image);
+                copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
+                copyInfo.regionCount = static_cast<uint32_t>(regions.size());
+                copyInfo.pRegions = regions.data();
+                GetVulkanCommandBuffer(cmd).copyBufferToImage2(copyInfo);
+            }
+            else
+            {
+                GetVulkanCommandBuffer(cmd).copyBufferToImage(pe::GetVulkanBuffer(alloc.buffer),
+                                                              pe::GetVulkanImage(image),
+                                                              vk::ImageLayout::eTransferDstOptimal,
+                                                              static_cast<uint32_t>(legacyRegions.size()),
+                                                              legacyRegions.data());
+            }
 
             cmd->AddAfterWaitCallback([alloc = std::move(alloc)]() mutable
                                       { RHII.GetStagingManager()->SetUnused(alloc); });

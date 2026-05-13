@@ -35,7 +35,7 @@ namespace pe
         BufferBarrierInfo counterBarrier{};
         counterBarrier.buffer = s_atomicCounter[s_currentIndex];
         counterBarrier.stageMask = PE_STAGE_COMPUTE_SHADER;
-        counterBarrier.accessMask = PE_ACCESS_SHADER_WRITE;
+        counterBarrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE;
         counterBarrier.size = PE_WHOLE_SIZE;
         cmd->BufferBarrier(counterBarrier);
 

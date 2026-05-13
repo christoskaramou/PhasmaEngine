@@ -90,6 +90,44 @@ namespace pe
         return flag == "1" || flag == "true" || flag == "TRUE" || flag == "on" || flag == "ON";
     }
 
+    static uint32_t QueryLoaderApiVersion(PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr)
+    {
+        uint32_t version = VK_API_VERSION_1_0;
+        if (!vkGetInstanceProcAddr)
+            return version;
+
+        auto enumerateInstanceVersion = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(
+            vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceVersion"));
+        if (enumerateInstanceVersion)
+        {
+            const VkResult result = enumerateInstanceVersion(&version);
+            if (result != VK_SUCCESS)
+                version = VK_API_VERSION_1_0;
+        }
+        return version;
+    }
+
+    static uint32_t ClampVulkanApiVersionToEngineMax(uint32_t version)
+    {
+        constexpr uint32_t engineMaxMajor = 1;
+        constexpr uint32_t engineMaxMinor = 4;
+        const uint32_t major = VK_API_VERSION_MAJOR(version);
+        const uint32_t minor = VK_API_VERSION_MINOR(version);
+        if (major > engineMaxMajor || (major == engineMaxMajor && minor > engineMaxMinor))
+            return VK_API_VERSION_1_4;
+        return version;
+    }
+
+    static void LogVulkanApiVersion(const char *label, uint32_t version)
+    {
+        PE_INFO("[Vulkan] %s: %u.%u.%u (%u)",
+                label,
+                VK_API_VERSION_MAJOR(version),
+                VK_API_VERSION_MINOR(version),
+                VK_API_VERSION_PATCH(version),
+                version);
+    }
+
 #if defined(PE_WIN32)
     static bool Dx12FormatSupportsTextureSample(ID3D12Device *device, DXGI_FORMAT format)
     {
@@ -761,16 +799,17 @@ namespace pe
         }
 #endif
 
-        // uint32_t apiVersion;
-        // vkEnumerateInstanceVersion(&apiVersion);
+        m_caps.loaderApiVersion = QueryLoaderApiVersion(vkGetInstanceProcAddr);
+        m_caps.instanceApiVersion = ClampVulkanApiVersionToEngineMax(m_caps.loaderApiVersion);
+        LogVulkanApiVersion("Loader max API version", m_caps.loaderApiVersion);
+        LogVulkanApiVersion("Requested instance API version", m_caps.instanceApiVersion);
 
         vk::ApplicationInfo appInfo{};
         appInfo.sType = vk::StructureType::eApplicationInfo;
         appInfo.pApplicationName = "PhasmaEngine";
         appInfo.pEngineName = "PhasmaEngine";
-        appInfo.apiVersion = VK_API_VERSION_1_4;
+        appInfo.apiVersion = m_caps.instanceApiVersion;
 
-        vk::InstanceCreateInfo instInfo{};
         // Create Instance
         {
             vk::InstanceCreateInfo instanceCI{};
@@ -794,6 +833,16 @@ namespace pe
     void RHI::CreateSurface()
     {
         m_surface = Surface::Create(m_window);
+    }
+
+    bool RHI::UsesDozenVulkan() const
+    {
+#if defined(PE_WIN32)
+        return false;
+#else
+        return m_api == PE_GRAPHICS_API_VULKAN &&
+               m_gpuName.find("Microsoft Direct3D12") != std::string::npos;
+#endif
     }
 
     struct GPUScore
@@ -864,6 +913,8 @@ namespace pe
             gpuPropertiesVK.pNext = &descriptorBufferProperties;
         }
         vk->m_gpu.getProperties2(&gpuPropertiesVK);
+        m_caps.deviceApiVersion = gpuPropertiesVK.properties.apiVersion;
+        m_caps.effectiveApiVersion = std::min(m_caps.instanceApiVersion, m_caps.deviceApiVersion);
 
         const vk::PhysicalDeviceFeatures gpuFeatures = vk->m_gpu.getFeatures();
         VkPhysicalDeviceVulkan11Features vk11Features{};
@@ -911,6 +962,10 @@ namespace pe
         m_gpuFeatureSupport.geometryShader = gpuFeatures.geometryShader != 0;
 
         m_gpuName = gpuPropertiesVK.properties.deviceName.data();
+        PE_INFO("[Vulkan] Selected GPU: %s", m_gpuName.c_str());
+        LogVulkanApiVersion("Selected GPU max API version", m_caps.deviceApiVersion);
+        LogVulkanApiVersion("Effective device API version", m_caps.effectiveApiVersion);
+
         m_maxUniformBufferSize = gpuPropertiesVK.properties.limits.maxUniformBufferRange;
         m_maxStorageBufferSize = gpuPropertiesVK.properties.limits.maxStorageBufferRange;
         m_minUniformBufferOffsetAlignment = gpuPropertiesVK.properties.limits.minUniformBufferOffsetAlignment;
@@ -1006,24 +1061,21 @@ namespace pe
     {
         auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
         const uint32_t gpuApiVersion = vk->m_gpu.getProperties().apiVersion;
-        const bool vulkan12Available = gpuApiVersion >= VK_API_VERSION_1_2;
-        const bool vulkan13Available = gpuApiVersion >= VK_API_VERSION_1_3;
-        const bool vulkan14Available = gpuApiVersion >= VK_API_VERSION_1_4;
-        const bool sync2ExtensionAvailable = IsDeviceExtensionValid(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-        const bool separateDepthStencilLayoutsExtensionAvailable =
-            IsDeviceExtensionValid(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
+        m_caps.deviceApiVersion = gpuApiVersion;
+        if (!m_caps.instanceApiVersion)
+            m_caps.instanceApiVersion = m_caps.loaderApiVersion ? m_caps.loaderApiVersion : VK_API_VERSION_1_0;
+        m_caps.effectiveApiVersion = std::min(m_caps.instanceApiVersion, m_caps.deviceApiVersion);
+
+        const bool vulkan12Available = m_caps.effectiveApiVersion >= VK_API_VERSION_1_2;
+        const bool vulkan13Available = m_caps.effectiveApiVersion >= VK_API_VERSION_1_3;
+        const bool vulkan14Available = m_caps.effectiveApiVersion >= VK_API_VERSION_1_4;
         const bool pushDescriptorExtensionAvailable = IsDeviceExtensionValid(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
 
         PE_ERROR_IF(!IsDeviceExtensionValid(VK_KHR_SWAPCHAIN_EXTENSION_NAME), "Swapchain extension not supported!");
-        PE_ERROR_IF(!vulkan13Available && !sync2ExtensionAvailable, "Synchronization2 extension not supported!");
-        PE_ERROR_IF(!vulkan12Available && !separateDepthStencilLayoutsExtensionAvailable, "Separate depth stencil layouts extension not supported!");
+        PE_ERROR_IF(!vulkan12Available, "PhasmaEngine requires Vulkan 1.2 or newer!");
 
         std::vector<const char *> deviceExtensions{};
         deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-        if (!vulkan13Available && sync2ExtensionAvailable)
-            deviceExtensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-        if (!vulkan12Available && separateDepthStencilLayoutsExtensionAvailable)
-            deviceExtensions.push_back(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
         if (pushDescriptorExtensionAvailable)
             deviceExtensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
         if (IsDeviceExtensionValid(VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME) &&
@@ -1033,31 +1085,31 @@ namespace pe
             deviceExtensions.push_back(VK_EXT_PAGEABLE_DEVICE_LOCAL_MEMORY_EXTENSION_NAME);
         }
 
-        if (IsDeviceExtensionValid(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) &&
+        const bool optionalExtensionsAllowed = vulkan13Available;
+        const bool rayTracingExtensionsAvailable =
+            IsDeviceExtensionValid(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) &&
             IsDeviceExtensionValid(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME) &&
             IsDeviceExtensionValid(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME) &&
             IsDeviceExtensionValid(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) &&
             IsDeviceExtensionValid(VK_KHR_SPIRV_1_4_EXTENSION_NAME) &&
             IsDeviceExtensionValid(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME) &&
-            IsDeviceExtensionValid(VK_KHR_RAY_QUERY_EXTENSION_NAME))
-        {
-            deviceExtensions.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
-            deviceExtensions.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
-            deviceExtensions.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
-            deviceExtensions.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
-            deviceExtensions.push_back(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
-            deviceExtensions.push_back(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
-            deviceExtensions.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
-            m_caps.rayTracing = true;
-        }
-        else
-        {
-            m_caps.rayTracing = false;
-        }
+            IsDeviceExtensionValid(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+        const bool depthClipExtAvailable =
+            optionalExtensionsAllowed && IsDeviceExtensionValid(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
+        const bool descriptorBufferExtAvailable =
+            optionalExtensionsAllowed && IsDeviceExtensionValid(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
 
-        m_caps.meshShaders = IsDeviceExtensionValid(VK_EXT_MESH_SHADER_EXTENSION_NAME);
-        // Indirect-count is core in Vulkan 1.2; the engine pins apiVersion to 1.4.
+        m_caps.rayTracing = false;
+        m_caps.sync2 = false;
+        m_caps.dynamicRendering = false;
+        m_caps.copyCommands2 = vulkan13Available;
+        m_caps.extendedDynamicState = false;
+        m_caps.descriptorUpdateAfterBind = false;
+        m_caps.maintenance5 = m_caps.effectiveApiVersion >= VK_API_VERSION_1_4;
+        m_caps.meshShaders = false;
+        m_caps.pushDescriptor = false;
         m_caps.indirectCount = true;
+        m_caps.spirvTargetVulkanVersion = vulkan13Available ? VK_API_VERSION_1_3 : VK_API_VERSION_1_2;
 
         auto queueFamilyProperties = vk->m_gpu.getQueueFamilyProperties();
         float priority = 1.f;
@@ -1081,50 +1133,44 @@ namespace pe
 
         // Vulkan 1.2 features
         vk::PhysicalDeviceVulkan12Features deviceFeatures12{};
-        deviceFeatures12.bufferDeviceAddress = true;
-        deviceFeatures12.timelineSemaphore = true;
-        deviceFeatures12.descriptorIndexing = true;
-        deviceFeatures12.runtimeDescriptorArray = true;
-        deviceFeatures12.descriptorBindingPartiallyBound = true;
-        deviceFeatures12.descriptorBindingVariableDescriptorCount = true;
-        deviceFeatures12.shaderSampledImageArrayNonUniformIndexing = true;
-        deviceFeatures12.shaderStorageImageArrayNonUniformIndexing = true;
-        deviceFeatures12.shaderFloat16 = true;
-        deviceFeatures12.hostQueryReset = true;
         deviceFeatures12.pNext = &deviceFeatures11;
+
+        void *featureQueryChain = &deviceFeatures12;
 
         // Vulkan 1.3 features
         vk::PhysicalDeviceVulkan13Features deviceFeatures13{};
-        deviceFeatures13.synchronization2 = true;
-        deviceFeatures13.dynamicRendering = true;
-        deviceFeatures13.pNext = &deviceFeatures12;
+        if (vulkan13Available)
+        {
+            deviceFeatures13.pNext = featureQueryChain;
+            featureQueryChain = &deviceFeatures13;
+        }
 
         vk::PhysicalDeviceVulkan14Features deviceFeatures14{};
-        deviceFeatures14.pushDescriptor = true;
         if (vulkan14Available)
-            deviceFeatures14.pNext = &deviceFeatures13;
+        {
+            deviceFeatures14.pNext = featureQueryChain;
+            featureQueryChain = &deviceFeatures14;
+        }
 
         // Ray Tracing Features
         vk::PhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{};
-        accelerationStructureFeatures.accelerationStructure = true;
-        accelerationStructureFeatures.pNext = vulkan14Available
-                                                  ? static_cast<void *>(&deviceFeatures14)
-                                                  : static_cast<void *>(&deviceFeatures13);
-
         vk::PhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures{};
-        rayTracingPipelineFeatures.rayTracingPipeline = true;
-        rayTracingPipelineFeatures.pNext = &accelerationStructureFeatures;
-
         vk::PhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures{};
-        rayQueryFeatures.rayQuery = true;
-        rayQueryFeatures.pNext = &rayTracingPipelineFeatures;
+        if (rayTracingExtensionsAvailable)
+        {
+            accelerationStructureFeatures.pNext = featureQueryChain;
+            rayTracingPipelineFeatures.pNext = &accelerationStructureFeatures;
+            rayQueryFeatures.pNext = &rayTracingPipelineFeatures;
+            featureQueryChain = &rayQueryFeatures;
+        }
 
-        const bool depthClipExtAvailable = IsDeviceExtensionValid(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
-        const bool descriptorBufferExtAvailable = IsDeviceExtensionValid(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
         const bool descriptorBufferRequested = IsEnvFlagEnabled("PE_VULKAN_DESCRIPTOR_BUFFER");
         vk::PhysicalDeviceDepthClipEnableFeaturesEXT depthClipFeatures{};
         if (depthClipExtAvailable)
-            depthClipFeatures.pNext = &rayQueryFeatures;
+        {
+            depthClipFeatures.pNext = featureQueryChain;
+            featureQueryChain = &depthClipFeatures;
+        }
 
         VkPhysicalDeviceDescriptorBufferFeaturesEXT supportedDescriptorBufferFeatures{};
         supportedDescriptorBufferFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
@@ -1132,16 +1178,29 @@ namespace pe
         requestedDescriptorBufferFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
 
         vk::PhysicalDeviceFeatures2 deviceFeatures2{};
-        deviceFeatures2.pNext = depthClipExtAvailable
-                                    ? static_cast<void *>(&depthClipFeatures)
-                                    : static_cast<void *>(&rayQueryFeatures);
         if (descriptorBufferExtAvailable)
         {
-            supportedDescriptorBufferFeatures.pNext = deviceFeatures2.pNext;
-            deviceFeatures2.pNext = &supportedDescriptorBufferFeatures;
+            supportedDescriptorBufferFeatures.pNext = featureQueryChain;
+            featureQueryChain = &supportedDescriptorBufferFeatures;
         }
+        deviceFeatures2.pNext = featureQueryChain;
 
         vk->m_gpu.getFeatures2(&deviceFeatures2);
+
+        if (rayTracingExtensionsAvailable &&
+            accelerationStructureFeatures.accelerationStructure &&
+            rayTracingPipelineFeatures.rayTracingPipeline &&
+            rayQueryFeatures.rayQuery)
+        {
+            deviceExtensions.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+            m_caps.rayTracing = true;
+        }
 
         if (depthClipExtAvailable && depthClipFeatures.depthClipEnable)
             deviceExtensions.push_back(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
@@ -1158,8 +1217,17 @@ namespace pe
             requestedDescriptorBufferFeatures.descriptorBuffer = VK_TRUE;
         }
 
-        Settings::Get<GlobalSettings>().dynamic_rendering &= static_cast<bool>(deviceFeatures13.dynamicRendering);
-        m_caps.dynamicRendering = static_cast<bool>(deviceFeatures13.dynamicRendering);
+        m_caps.sync2 = vulkan13Available && static_cast<bool>(deviceFeatures13.synchronization2);
+        m_caps.dynamicRendering = vulkan13Available && static_cast<bool>(deviceFeatures13.dynamicRendering);
+        m_caps.descriptorUpdateAfterBind =
+            vulkan13Available &&
+            static_cast<bool>(deviceFeatures12.descriptorBindingSampledImageUpdateAfterBind) &&
+            static_cast<bool>(deviceFeatures12.descriptorBindingStorageImageUpdateAfterBind) &&
+            static_cast<bool>(deviceFeatures12.descriptorBindingUniformBufferUpdateAfterBind) &&
+            static_cast<bool>(deviceFeatures12.descriptorBindingStorageBufferUpdateAfterBind) &&
+            static_cast<bool>(deviceFeatures12.descriptorBindingUniformTexelBufferUpdateAfterBind) &&
+            static_cast<bool>(deviceFeatures12.descriptorBindingStorageTexelBufferUpdateAfterBind);
+        Settings::Get<GlobalSettings>().dynamic_rendering &= m_caps.dynamicRendering;
 
         // Check needed features
         PE_ERROR_IF(!deviceFeatures12.descriptorBindingPartiallyBound, "Partially bound descriptors are not supported on this device!");
@@ -1169,21 +1237,63 @@ namespace pe
         PE_ERROR_IF(!deviceFeatures12.descriptorBindingVariableDescriptorCount, "Variable descriptor count is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures12.separateDepthStencilLayouts, "Separate depth stencil layouts are not supported!");
         PE_ERROR_IF(!deviceFeatures12.bufferDeviceAddress, "Buffer Device Address not supported!");
-        PE_ERROR_IF(!deviceFeatures13.synchronization2, "Synchronization2 is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures12.shaderFloat16, "Float16 is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures2.features.shaderInt16, "Int16 is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures2.features.shaderInt64, "Int64 is not supported on this device!");
         PE_ERROR_IF(!deviceFeatures2.features.multiDrawIndirect, "Multi draw indirect is not supported!");
         PE_ERROR_IF(!deviceFeatures2.features.drawIndirectFirstInstance, "Draw indirect first instance is not supported!");
 
-        deviceFeatures2.pNext = depthClipExtAvailable
-                                    ? static_cast<void *>(&depthClipFeatures)
-                                    : static_cast<void *>(&rayQueryFeatures);
+        if (!m_caps.descriptorUpdateAfterBind)
+        {
+            deviceFeatures12.descriptorBindingUniformBufferUpdateAfterBind = VK_FALSE;
+            deviceFeatures12.descriptorBindingSampledImageUpdateAfterBind = VK_FALSE;
+            deviceFeatures12.descriptorBindingStorageImageUpdateAfterBind = VK_FALSE;
+            deviceFeatures12.descriptorBindingStorageBufferUpdateAfterBind = VK_FALSE;
+            deviceFeatures12.descriptorBindingUniformTexelBufferUpdateAfterBind = VK_FALSE;
+            deviceFeatures12.descriptorBindingStorageTexelBufferUpdateAfterBind = VK_FALSE;
+        }
+        deviceFeatures13.synchronization2 = m_caps.sync2 ? VK_TRUE : VK_FALSE;
+        deviceFeatures13.dynamicRendering = m_caps.dynamicRendering ? VK_TRUE : VK_FALSE;
+        deviceFeatures14.pushDescriptor = vulkan14Available && m_caps.pushDescriptor ? VK_TRUE : VK_FALSE;
+
+        deviceFeatures12.pNext = &deviceFeatures11;
+        void *deviceFeatureChain = &deviceFeatures12;
+        if (vulkan13Available)
+        {
+            deviceFeatures13.pNext = deviceFeatureChain;
+            deviceFeatureChain = &deviceFeatures13;
+        }
+        if (vulkan14Available)
+        {
+            deviceFeatures14.pNext = deviceFeatureChain;
+            deviceFeatureChain = &deviceFeatures14;
+        }
+        if (m_caps.rayTracing)
+        {
+            accelerationStructureFeatures.pNext = deviceFeatureChain;
+            rayTracingPipelineFeatures.pNext = &accelerationStructureFeatures;
+            rayQueryFeatures.pNext = &rayTracingPipelineFeatures;
+            deviceFeatureChain = &rayQueryFeatures;
+        }
+        if (depthClipExtAvailable && depthClipFeatures.depthClipEnable)
+        {
+            depthClipFeatures.pNext = deviceFeatureChain;
+            deviceFeatureChain = &depthClipFeatures;
+        }
         if (m_caps.descriptorBuffer.supported)
         {
-            requestedDescriptorBufferFeatures.pNext = deviceFeatures2.pNext;
-            deviceFeatures2.pNext = &requestedDescriptorBufferFeatures;
+            requestedDescriptorBufferFeatures.pNext = deviceFeatureChain;
+            deviceFeatureChain = &requestedDescriptorBufferFeatures;
         }
+        deviceFeatures2.pNext = deviceFeatureChain;
+
+        PE_INFO("[Vulkan] Effective caps: sync2=%u, copyCommands2=%u, dynamicRendering=%u, extendedDynamicState=%u, descriptorUpdateAfterBind=%u, maintenance5=%u",
+                m_caps.sync2 ? 1u : 0u,
+                m_caps.copyCommands2 ? 1u : 0u,
+                m_caps.dynamicRendering ? 1u : 0u,
+                m_caps.extendedDynamicState ? 1u : 0u,
+                m_caps.descriptorUpdateAfterBind ? 1u : 0u,
+                m_caps.maintenance5 ? 1u : 0u);
 
         vk::DeviceCreateInfo deviceCreateInfo{};
         deviceCreateInfo.queueCreateInfoCount = 1;
@@ -1206,10 +1316,12 @@ namespace pe
     void RHI::CreateAllocator()
     {
         auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
-        uint32_t apiVersion = ::vk::enumerateInstanceVersion();
+        const uint32_t apiVersion = m_caps.effectiveApiVersion ? m_caps.effectiveApiVersion : VK_API_VERSION_1_0;
 
         VmaAllocatorCreateInfo allocator_info = {};
-        allocator_info.flags = VMA_ALLOCATOR_CREATE_KHR_MAINTENANCE5_BIT | VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+        allocator_info.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+        if (m_caps.maintenance5)
+            allocator_info.flags |= VMA_ALLOCATOR_CREATE_KHR_MAINTENANCE5_BIT;
         allocator_info.physicalDevice = vk->m_gpu;
         allocator_info.device = vk->m_device;
         allocator_info.instance = vk->m_instance;
@@ -1564,28 +1676,51 @@ namespace pe
 
     void RHI::ChangePresentMode(PePresentMode mode)
     {
-        WaitDeviceIdle();
+        if (!m_surface)
+            return;
 
+        const PePresentMode requestedMode = mode;
         m_surface->SetPresentMode(mode);
-        Swapchain::Destroy(m_swapchain);
-        CreateSwapchain(m_surface);
+        const PePresentMode effectiveMode = m_surface->GetPresentMode();
+        Settings::Get<GlobalSettings>().preferred_present_mode = effectiveMode;
+
+        if (effectiveMode != requestedMode)
+        {
+            PE_WARN("Requested present mode %s is not supported; using %s",
+                    PresentModeToString(requestedMode),
+                    PresentModeToString(effectiveMode));
+        }
 
         // Set Window Title
-        std::string title = "PhasmaEngine";
-        title += " - Device: " + GetGpuName();
-        title += " - API: " + std::string(PeGraphicsApiName(m_api));
-        title += " - Present Mode: " + std::string(PresentModeToString(m_surface->GetPresentMode()));
+        auto updateTitle = [&]()
+        {
+            std::string title = "PhasmaEngine";
+            title += " - Device: " + GetGpuName();
+            title += " - API: " + std::string(PeGraphicsApiName(m_api));
+            title += " - Present Mode: " + std::string(PresentModeToString(effectiveMode));
 #if PE_DEBUG
-        title += " - Debug";
+            title += " - Debug";
 #elif PE_RELEASE
-        title += " - Release";
+            title += " - Release";
 #elif PE_MINSIZEREL
-        title += " - MinSizeRel";
+            title += " - MinSizeRel";
 #elif PE_RELWITHDEBINFO
-        title += " - RelWithDebInfo";
+            title += " - RelWithDebInfo";
 #endif
 
-        EventSystem::DispatchEvent(EventType::SetWindowTitle, title);
+            EventSystem::DispatchEvent(EventType::SetWindowTitle, title);
+        };
+
+        if (m_swapchain && m_swapchain->GetPresentMode() == effectiveMode)
+        {
+            updateTitle();
+            return;
+        }
+
+        WaitDeviceIdle();
+        Swapchain::Destroy(m_swapchain);
+        CreateSwapchain(m_surface);
+        updateTitle();
     }
 
     const char *RHI::PresentModeToString(PePresentMode presentMode)

@@ -25,6 +25,13 @@ namespace pe
         CreateMaterialTable();
         CreateMeshConstants(cmd);
 
+        MemoryBarrierInfo geometryUploadBarrier{};
+        geometryUploadBarrier.srcStageMask = PE_STAGE_TRANSFER;
+        geometryUploadBarrier.srcAccessMask = PE_ACCESS_TRANSFER_WRITE;
+        geometryUploadBarrier.dstStageMask = PE_STAGE_VERTEX_INPUT;
+        geometryUploadBarrier.dstAccessMask = PE_ACCESS_INDEX_READ | PE_ACCESS_VERTEX_ATTRIBUTE_READ;
+        cmd->MemoryBarrier(geometryUploadBarrier);
+
         // Geometry buffer was recreated — existing BLAS handles are invalid.
         // Mark dirty so FlushPendingGpuWork rebuilds acceleration structures.
         if (RHII.GetCaps().rayTracing)

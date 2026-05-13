@@ -383,6 +383,15 @@ namespace pe
         }
     }
 
+    static vk::ImageLayout ToVkImageLayoutForFormat(PeImageLayout layout, vk::Format format)
+    {
+        if (layout == PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
+            return VulkanHelpers::HasDepthOrStencil(format)
+                       ? vk::ImageLayout::eDepthStencilAttachmentOptimal
+                       : vk::ImageLayout::eColorAttachmentOptimal;
+        return ToVkImageLayout(layout);
+    }
+
     PeImageLayout FromVkImageLayout(vk::ImageLayout layout)
     {
         switch (layout)
@@ -563,29 +572,51 @@ namespace pe
         barriers[1].layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         Image::Barriers(cmd, barriers);
 
-        vk::ImageCopy2 region{};
-        region.srcSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
-        region.srcSubresource.baseArrayLayer = 0;
-        region.srcSubresource.layerCount = 1;
-        region.srcSubresource.mipLevel = 0;
-        region.srcOffset = vk::Offset3D{0, 0, 0};
-        region.dstSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
-        region.dstSubresource.baseArrayLayer = 0;
-        region.dstSubresource.layerCount = 1;
-        region.dstSubresource.mipLevel = 0;
-        region.dstOffset = vk::Offset3D{0, 0, 0};
-        region.extent = vk::Extent3D{dst->GetWidth(), dst->GetHeight(), 1};
-
-        vk::CopyImageInfo2 copyInfo{};
-        copyInfo.srcImage = From(src)->m_image;
-        copyInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
-        copyInfo.dstImage = m_image;
-        copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
-        copyInfo.regionCount = 1;
-        copyInfo.pRegions = &region;
-
         cmd->BeginDebugRegion(src->GetName() + " -> " + dst->GetName());
-        GetVulkanCommandBuffer(cmd).copyImage2(copyInfo);
+        if (RHII.GetCaps().copyCommands2)
+        {
+            vk::ImageCopy2 region{};
+            region.srcSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
+            region.srcSubresource.baseArrayLayer = 0;
+            region.srcSubresource.layerCount = 1;
+            region.srcSubresource.mipLevel = 0;
+            region.srcOffset = vk::Offset3D{0, 0, 0};
+            region.dstSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
+            region.dstSubresource.baseArrayLayer = 0;
+            region.dstSubresource.layerCount = 1;
+            region.dstSubresource.mipLevel = 0;
+            region.dstOffset = vk::Offset3D{0, 0, 0};
+            region.extent = vk::Extent3D{dst->GetWidth(), dst->GetHeight(), 1};
+
+            vk::CopyImageInfo2 copyInfo{};
+            copyInfo.srcImage = From(src)->m_image;
+            copyInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
+            copyInfo.dstImage = m_image;
+            copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
+            copyInfo.regionCount = 1;
+            copyInfo.pRegions = &region;
+
+            GetVulkanCommandBuffer(cmd).copyImage2(copyInfo);
+        }
+        else
+        {
+            vk::ImageCopy region{};
+            region.srcSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
+            region.srcSubresource.baseArrayLayer = 0;
+            region.srcSubresource.layerCount = 1;
+            region.srcSubresource.mipLevel = 0;
+            region.srcOffset = vk::Offset3D{0, 0, 0};
+            region.dstSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
+            region.dstSubresource.baseArrayLayer = 0;
+            region.dstSubresource.layerCount = 1;
+            region.dstSubresource.mipLevel = 0;
+            region.dstOffset = vk::Offset3D{0, 0, 0};
+            region.extent = vk::Extent3D{dst->GetWidth(), dst->GetHeight(), 1};
+
+            GetVulkanCommandBuffer(cmd).copyImage(From(src)->m_image, vk::ImageLayout::eTransferSrcOptimal,
+                                                  m_image, vk::ImageLayout::eTransferDstOptimal,
+                                                  1, &region);
+        }
         cmd->EndDebugRegion();
 
         cmd->EndDebugRegion();
@@ -609,25 +640,45 @@ namespace pe
         bufBarrier.accessMask = PE_ACCESS_TRANSFER_WRITE;
         cmd->BufferBarrier(bufBarrier);
 
-        vk::BufferImageCopy2 region{};
-        region.bufferOffset = 0;
-        region.bufferRowLength = 0;
-        region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
-        region.imageSubresource.mipLevel = 0;
-        region.imageSubresource.baseArrayLayer = 0;
-        region.imageSubresource.layerCount = 1;
-        region.imageOffset = vk::Offset3D{0, 0, 0};
-        region.imageExtent = vk::Extent3D{src->GetWidth(), src->GetHeight(), 1};
+        if (RHII.GetCaps().copyCommands2)
+        {
+            vk::BufferImageCopy2 region{};
+            region.bufferOffset = 0;
+            region.bufferRowLength = 0;
+            region.bufferImageHeight = 0;
+            region.imageSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
+            region.imageSubresource.mipLevel = 0;
+            region.imageSubresource.baseArrayLayer = 0;
+            region.imageSubresource.layerCount = 1;
+            region.imageOffset = vk::Offset3D{0, 0, 0};
+            region.imageExtent = vk::Extent3D{src->GetWidth(), src->GetHeight(), 1};
 
-        vk::CopyImageToBufferInfo2 copyInfo{};
-        copyInfo.srcImage = m_image;
-        copyInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
-        copyInfo.dstBuffer = pe::GetVulkanBuffer(dst);
-        copyInfo.regionCount = 1;
-        copyInfo.pRegions = &region;
+            vk::CopyImageToBufferInfo2 copyInfo{};
+            copyInfo.srcImage = m_image;
+            copyInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
+            copyInfo.dstBuffer = pe::GetVulkanBuffer(dst);
+            copyInfo.regionCount = 1;
+            copyInfo.pRegions = &region;
 
-        GetVulkanCommandBuffer(cmd).copyImageToBuffer2(copyInfo);
+            GetVulkanCommandBuffer(cmd).copyImageToBuffer2(copyInfo);
+        }
+        else
+        {
+            vk::BufferImageCopy region{};
+            region.bufferOffset = 0;
+            region.bufferRowLength = 0;
+            region.bufferImageHeight = 0;
+            region.imageSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
+            region.imageSubresource.mipLevel = 0;
+            region.imageSubresource.baseArrayLayer = 0;
+            region.imageSubresource.layerCount = 1;
+            region.imageOffset = vk::Offset3D{0, 0, 0};
+            region.imageExtent = vk::Extent3D{src->GetWidth(), src->GetHeight(), 1};
+
+            GetVulkanCommandBuffer(cmd).copyImageToBuffer(m_image, vk::ImageLayout::eTransferSrcOptimal,
+                                                          pe::GetVulkanBuffer(dst),
+                                                          1, &region);
+        }
         cmd->EndDebugRegion();
     }
 
@@ -692,25 +743,47 @@ namespace pe
         barrier.mipLevels = image->GetMipLevels();
         Image::Barrier(cmd, barrier);
 
-        vk::BufferImageCopy2 region{};
-        region.bufferOffset = 0;
-        region.bufferRowLength = 0;
-        region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
-        region.imageSubresource.mipLevel = mipLevel;
-        region.imageSubresource.baseArrayLayer = baseArrayLayer;
-        region.imageSubresource.layerCount = layerCount ? layerCount : image->GetArrayLayers();
-        region.imageOffset = vk::Offset3D{0, 0, 0};
-        region.imageExtent = vk::Extent3D{image->GetWidth(), image->GetHeight(), image->m_depth};
+        if (RHII.GetCaps().copyCommands2)
+        {
+            vk::BufferImageCopy2 region{};
+            region.bufferOffset = 0;
+            region.bufferRowLength = 0;
+            region.bufferImageHeight = 0;
+            region.imageSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
+            region.imageSubresource.mipLevel = mipLevel;
+            region.imageSubresource.baseArrayLayer = baseArrayLayer;
+            region.imageSubresource.layerCount = layerCount ? layerCount : image->GetArrayLayers();
+            region.imageOffset = vk::Offset3D{0, 0, 0};
+            region.imageExtent = vk::Extent3D{image->GetWidth(), image->GetHeight(), image->m_depth};
 
-        vk::CopyBufferToImageInfo2 copyInfo{};
-        copyInfo.srcBuffer = pe::GetVulkanBuffer(alloc.buffer);
-        copyInfo.dstImage = m_image;
-        copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
-        copyInfo.regionCount = 1;
-        copyInfo.pRegions = &region;
+            vk::CopyBufferToImageInfo2 copyInfo{};
+            copyInfo.srcBuffer = pe::GetVulkanBuffer(alloc.buffer);
+            copyInfo.dstImage = m_image;
+            copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
+            copyInfo.regionCount = 1;
+            copyInfo.pRegions = &region;
 
-        GetVulkanCommandBuffer(cmd).copyBufferToImage2(copyInfo);
+            GetVulkanCommandBuffer(cmd).copyBufferToImage2(copyInfo);
+        }
+        else
+        {
+            vk::BufferImageCopy region{};
+            region.bufferOffset = 0;
+            region.bufferRowLength = 0;
+            region.bufferImageHeight = 0;
+            region.imageSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
+            region.imageSubresource.mipLevel = mipLevel;
+            region.imageSubresource.baseArrayLayer = baseArrayLayer;
+            region.imageSubresource.layerCount = layerCount ? layerCount : image->GetArrayLayers();
+            region.imageOffset = vk::Offset3D{0, 0, 0};
+            region.imageExtent = vk::Extent3D{image->GetWidth(), image->GetHeight(), image->m_depth};
+
+            GetVulkanCommandBuffer(cmd).copyBufferToImage(pe::GetVulkanBuffer(alloc.buffer),
+                                                          m_image,
+                                                          vk::ImageLayout::eTransferDstOptimal,
+                                                          1,
+                                                          &region);
+        }
 
         cmd->AddAfterWaitCallback([alloc = std::move(alloc)]()
                                   { RHII.GetStagingManager()->SetUnused(alloc); });
@@ -838,14 +911,15 @@ namespace pe
         if (requestRead && previousRead && sameState)
             return;
 
-        vk::ImageMemoryBarrier2 barrier{};
+        if (RHII.GetCaps().sync2)
         {
+            vk::ImageMemoryBarrier2 barrier{};
             barrier.srcStageMask = ToVkPipelineStageFlags(oldInfo.stageFlags);
             barrier.dstStageMask = ToVkPipelineStageFlags(info.stageFlags);
             barrier.srcAccessMask = ToVkAccessFlags(oldInfo.accessMask);
             barrier.dstAccessMask = ToVkAccessFlags(info.accessMask);
-            barrier.oldLayout = ToVkImageLayout(oldInfo.layout);
-            barrier.newLayout = ToVkImageLayout(info.layout);
+            barrier.oldLayout = ToVkImageLayoutForFormat(oldInfo.layout, impl->m_vkFormat);
+            barrier.newLayout = ToVkImageLayoutForFormat(info.layout, impl->m_vkFormat);
             // Sync2: eNone+eNone is "no prior dependency"; only promote stage
             // when there is a real prior access to wait on.
             if (barrier.srcStageMask == vk::PipelineStageFlagBits2::eNone &&
@@ -862,17 +936,40 @@ namespace pe
             barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
             barrier.subresourceRange.layerCount =
                 impl->m_imageType == PE_IMAGE_TYPE_3D ? VK_REMAINING_ARRAY_LAYERS : arrayLayers;
-        }
-
-        {
-            auto *vkCmd = VulkanCommandBufferImpl::From(cmd);
 
             vk::DependencyInfo depInfo{};
             depInfo.imageMemoryBarrierCount = 1;
             depInfo.pImageMemoryBarriers = &barrier;
 
             PE_PROFILE_COUNTER("Vk PipelineBarrier2 Image Items", 1);
-            vkCmd->m_apiHandle.pipelineBarrier2(depInfo);
+            GetVulkanCommandBuffer(cmd).pipelineBarrier2(depInfo);
+        }
+        else
+        {
+            vk::ImageMemoryBarrier barrier{};
+            barrier.srcAccessMask = ToVkAccessFlagsLegacy(oldInfo.accessMask);
+            barrier.dstAccessMask = ToVkAccessFlagsLegacy(info.accessMask);
+            barrier.oldLayout = ToVkImageLayoutForFormat(oldInfo.layout, impl->m_vkFormat);
+            barrier.newLayout = ToVkImageLayoutForFormat(info.layout, impl->m_vkFormat);
+            barrier.srcQueueFamilyIndex = oldInfo.queueFamilyId;
+            barrier.dstQueueFamilyIndex = info.queueFamilyId;
+            barrier.image = impl->m_image;
+            barrier.subresourceRange.aspectMask = image.GetAspectMaskOverride()
+                                                      ? ToVkImageAspect(image.GetAspectMaskOverride())
+                                                      : VulkanHelpers::GetAspectMask(impl->m_vkFormat);
+            barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
+            barrier.subresourceRange.levelCount = mipLevels;
+            barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
+            barrier.subresourceRange.layerCount =
+                impl->m_imageType == PE_IMAGE_TYPE_3D ? VK_REMAINING_ARRAY_LAYERS : arrayLayers;
+
+            vk::PipelineStageFlags srcStageMask = ToVkPipelineStageFlagsLegacy(oldInfo.stageFlags);
+            vk::PipelineStageFlags dstStageMask = ToVkPipelineStageFlagsLegacy(info.stageFlags);
+            if (!srcStageMask)
+                srcStageMask = vk::PipelineStageFlagBits::eTopOfPipe;
+            if (!dstStageMask)
+                dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+            GetVulkanCommandBuffer(cmd).pipelineBarrier(srcStageMask, dstStageMask, {}, 0, nullptr, 0, nullptr, 1, &barrier);
         }
 
         for (uint32_t i = 0; i < arrayLayers; i++)
@@ -897,7 +994,12 @@ namespace pe
         // Thread-local scratch avoids a heap allocation per barrier batch.
         thread_local std::vector<vk::ImageMemoryBarrier2> barriers;
         barriers.clear();
+        thread_local std::vector<vk::ImageMemoryBarrier> legacyBarriers;
+        legacyBarriers.clear();
         barriers.reserve(infos.size());
+        legacyBarriers.reserve(infos.size());
+        vk::PipelineStageFlags legacySrcStageMask{};
+        vk::PipelineStageFlags legacyDstStageMask{};
 
         {
             for (auto &info : infos)
@@ -921,30 +1023,55 @@ namespace pe
                 if (requestRead && previousRead && sameState)
                     continue;
 
-                vk::ImageMemoryBarrier2 barrier{};
-                barrier.srcStageMask = ToVkPipelineStageFlags(oldInfo.stageFlags);
-                barrier.dstStageMask = ToVkPipelineStageFlags(info.stageFlags);
-                barrier.srcAccessMask = ToVkAccessFlags(oldInfo.accessMask);
-                barrier.dstAccessMask = ToVkAccessFlags(info.accessMask);
-                barrier.oldLayout = ToVkImageLayout(oldInfo.layout);
-                barrier.newLayout = ToVkImageLayout(info.layout);
-                // Sync2: eNone+eNone is "no prior dependency"; only promote
-                // stage when there is a real prior access to wait on.
-                if (barrier.srcStageMask == vk::PipelineStageFlagBits2::eNone &&
-                    barrier.srcAccessMask != vk::AccessFlagBits2::eNone)
-                    barrier.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
-                barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                barrier.image = impl->m_image;
-                barrier.subresourceRange.aspectMask = image->GetAspectMaskOverride()
-                                                          ? ToVkImageAspect(image->GetAspectMaskOverride())
-                                                          : VulkanHelpers::GetAspectMask(impl->m_vkFormat);
-                barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
-                barrier.subresourceRange.levelCount = mipLevels;
-                barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
-                barrier.subresourceRange.layerCount =
-                    impl->m_imageType == PE_IMAGE_TYPE_3D ? VK_REMAINING_ARRAY_LAYERS : arrayLayers;
-                barriers.push_back(barrier);
+                if (RHII.GetCaps().sync2)
+                {
+                    vk::ImageMemoryBarrier2 barrier{};
+                    barrier.srcStageMask = ToVkPipelineStageFlags(oldInfo.stageFlags);
+                    barrier.dstStageMask = ToVkPipelineStageFlags(info.stageFlags);
+                    barrier.srcAccessMask = ToVkAccessFlags(oldInfo.accessMask);
+                    barrier.dstAccessMask = ToVkAccessFlags(info.accessMask);
+                    barrier.oldLayout = ToVkImageLayoutForFormat(oldInfo.layout, impl->m_vkFormat);
+                    barrier.newLayout = ToVkImageLayoutForFormat(info.layout, impl->m_vkFormat);
+                    // Sync2: eNone+eNone is "no prior dependency"; only promote
+                    // stage when there is a real prior access to wait on.
+                    if (barrier.srcStageMask == vk::PipelineStageFlagBits2::eNone &&
+                        barrier.srcAccessMask != vk::AccessFlagBits2::eNone)
+                        barrier.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
+                    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    barrier.image = impl->m_image;
+                    barrier.subresourceRange.aspectMask = image->GetAspectMaskOverride()
+                                                              ? ToVkImageAspect(image->GetAspectMaskOverride())
+                                                              : VulkanHelpers::GetAspectMask(impl->m_vkFormat);
+                    barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
+                    barrier.subresourceRange.levelCount = mipLevels;
+                    barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
+                    barrier.subresourceRange.layerCount =
+                        impl->m_imageType == PE_IMAGE_TYPE_3D ? VK_REMAINING_ARRAY_LAYERS : arrayLayers;
+                    barriers.push_back(barrier);
+                }
+                else
+                {
+                    vk::ImageMemoryBarrier barrier{};
+                    barrier.srcAccessMask = ToVkAccessFlagsLegacy(oldInfo.accessMask);
+                    barrier.dstAccessMask = ToVkAccessFlagsLegacy(info.accessMask);
+                    barrier.oldLayout = ToVkImageLayoutForFormat(oldInfo.layout, impl->m_vkFormat);
+                    barrier.newLayout = ToVkImageLayoutForFormat(info.layout, impl->m_vkFormat);
+                    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    barrier.image = impl->m_image;
+                    barrier.subresourceRange.aspectMask = image->GetAspectMaskOverride()
+                                                              ? ToVkImageAspect(image->GetAspectMaskOverride())
+                                                              : VulkanHelpers::GetAspectMask(impl->m_vkFormat);
+                    barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
+                    barrier.subresourceRange.levelCount = mipLevels;
+                    barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
+                    barrier.subresourceRange.layerCount =
+                        impl->m_imageType == PE_IMAGE_TYPE_3D ? VK_REMAINING_ARRAY_LAYERS : arrayLayers;
+                    legacySrcStageMask |= ToVkPipelineStageFlagsLegacy(oldInfo.stageFlags);
+                    legacyDstStageMask |= ToVkPipelineStageFlagsLegacy(info.stageFlags);
+                    legacyBarriers.push_back(barrier);
+                }
 
                 for (uint32_t i = 0; i < arrayLayers; i++)
                     for (uint32_t j = 0; j < mipLevels; j++)
@@ -952,18 +1079,27 @@ namespace pe
             }
         }
 
-        if (barriers.empty())
+        if (RHII.GetCaps().sync2 && barriers.empty())
+            return;
+        if (!RHII.GetCaps().sync2 && legacyBarriers.empty())
             return;
 
+        if (RHII.GetCaps().sync2)
         {
-            auto *vkCmd = VulkanCommandBufferImpl::From(cmd);
-
             vk::DependencyInfo depInfo{};
             depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
             depInfo.pImageMemoryBarriers = barriers.data();
 
             PE_PROFILE_COUNTER("Vk PipelineBarrier2 Image Items", barriers.size());
-            vkCmd->m_apiHandle.pipelineBarrier2(depInfo);
+            GetVulkanCommandBuffer(cmd).pipelineBarrier2(depInfo);
+        }
+        else
+        {
+            if (!legacySrcStageMask)
+                legacySrcStageMask = vk::PipelineStageFlagBits::eTopOfPipe;
+            if (!legacyDstStageMask)
+                legacyDstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+            GetVulkanCommandBuffer(cmd).pipelineBarrier(legacySrcStageMask, legacyDstStageMask, {}, 0, nullptr, 0, nullptr, static_cast<uint32_t>(legacyBarriers.size()), legacyBarriers.data());
         }
     }
 } // namespace pe

@@ -201,7 +201,9 @@ namespace pe
         {
             std::vector<LPCWSTR> args{};
             args.push_back(L"-spirv");
-            args.push_back(L"-fspv-target-env=vulkan1.3");
+            args.push_back(RHII.GetCaps().spirvTargetVulkanVersion >= VK_API_VERSION_1_3
+                               ? L"-fspv-target-env=vulkan1.3"
+                               : L"-fspv-target-env=vulkan1.2");
 
             const bool isLibraryTarget =
                 (stage & (PE_SHADER_STAGE_RAYGEN_KHR | PE_SHADER_STAGE_ANY_HIT_KHR | PE_SHADER_STAGE_CLOSEST_HIT_KHR |

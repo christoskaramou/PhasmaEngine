@@ -191,7 +191,9 @@ namespace pe
                                             bool skipDynamicPass)
     {
         BeginDebugRegion(name + "_pass");
-        m_owner->m_dynamicPass = Settings::Get<GlobalSettings>().dynamic_rendering && !skipDynamicPass;
+        m_owner->m_dynamicPass = RHII.GetCaps().dynamicRendering &&
+                                 Settings::Get<GlobalSettings>().dynamic_rendering &&
+                                 !skipDynamicPass;
         m_owner->m_attachmentCount = count;
         m_owner->m_attachments = attachments;
 
@@ -209,58 +211,57 @@ namespace pe
             bool hasDepth = false;
             bool hasStencil = false;
 
+            for (uint32_t i = 0; i < count; i++)
             {
-                for (uint32_t i = 0; i < count; i++)
+                const Attachment &attachment = attachments[i];
+
+                ImageBarrierInfo barrier{};
+                barrier.image = attachment.image;
+
+                const vk::Format attVkFormat = pe::ToVkFormat(attachment.image->GetFormat());
+                if (VulkanHelpers::HasDepthOrStencil(attVkFormat))
                 {
-                    const Attachment &attachment = attachments[i];
+                    barrier.layout = PE_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                    hasDepth |= VulkanHelpers::HasDepth(attVkFormat);
+                    hasStencil |= VulkanHelpers::HasStencil(attVkFormat);
 
-                    ImageBarrierInfo barrier{};
-                    barrier.image = attachment.image;
-                    barrier.layout = PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+                    const vec4 &clearColor = attachment.image->m_clearColor;
+                    const float clearDepth = clearColor[0];
+                    uint32_t clearStencil = static_cast<uint32_t>(clearColor[1]);
 
-                    const vk::Format attVkFormat = pe::ToVkFormat(attachment.image->GetFormat());
-                    if (VulkanHelpers::HasDepthOrStencil(attVkFormat))
-                    {
-                        hasDepth |= VulkanHelpers::HasDepth(attVkFormat);
-                        hasStencil |= VulkanHelpers::HasStencil(attVkFormat);
+                    depthInfo.imageView = pe::GetVulkanImageView(attachment.view ? attachment.view : attachment.image->GetRTV());
+                    depthInfo.imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                    depthInfo.loadOp = ToVkLoadOp(attachment.loadOp);
+                    depthInfo.storeOp = ToVkStoreOp(attachment.storeOp);
+                    depthInfo.clearValue.depthStencil = vk::ClearDepthStencilValue{clearDepth, clearStencil};
 
-                        const vec4 &clearColor = attachment.image->m_clearColor;
-                        const float clearDepth = clearColor[0];
-                        uint32_t clearStencil = static_cast<uint32_t>(clearColor[1]);
-
-                        depthInfo.imageView = pe::GetVulkanImageView(attachment.view ? attachment.view : attachment.image->GetRTV());
-                        depthInfo.imageLayout = vk::ImageLayout::eAttachmentOptimal;
-                        depthInfo.loadOp = ToVkLoadOp(attachment.loadOp);
-                        depthInfo.storeOp = ToVkStoreOp(attachment.storeOp);
-                        depthInfo.clearValue.depthStencil = vk::ClearDepthStencilValue{clearDepth, clearStencil};
-
-                        barrier.stageFlags = PE_STAGE_EARLY_FRAGMENT_TESTS | PE_STAGE_LATE_FRAGMENT_TESTS;
-                        if (attachment.loadOp == PE_LOAD_OP_LOAD)
-                            barrier.accessMask = PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ;
-                        else
-                            barrier.accessMask = PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE;
-                    }
+                    barrier.stageFlags = PE_STAGE_EARLY_FRAGMENT_TESTS | PE_STAGE_LATE_FRAGMENT_TESTS;
+                    if (attachment.loadOp == PE_LOAD_OP_LOAD)
+                        barrier.accessMask = PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ;
                     else
-                    {
-                        const vec4 &clearColor = attachment.image->m_clearColor;
-
-                        vk::RenderingAttachmentInfo colorInfo{};
-                        colorInfo.imageView = pe::GetVulkanImageView(attachment.view ? attachment.view : attachment.image->GetRTV());
-                        colorInfo.imageLayout = vk::ImageLayout::eAttachmentOptimal;
-                        colorInfo.loadOp = ToVkLoadOp(attachment.loadOp);
-                        colorInfo.storeOp = ToVkStoreOp(attachment.storeOp);
-                        colorInfo.clearValue.color = {clearColor[0], clearColor[1], clearColor[2], clearColor[3]};
-                        colorInfos.push_back(colorInfo);
-
-                        barrier.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
-                        if (attachment.loadOp == PE_LOAD_OP_LOAD)
-                            barrier.accessMask = PE_ACCESS_COLOR_ATTACHMENT_READ;
-                        else
-                            barrier.accessMask = PE_ACCESS_COLOR_ATTACHMENT_WRITE;
-                    }
-
-                    attachmentBarriers.push_back(barrier);
+                        barrier.accessMask = PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE;
                 }
+                else
+                {
+                    barrier.layout = PE_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                    const vec4 &clearColor = attachment.image->m_clearColor;
+
+                    vk::RenderingAttachmentInfo colorInfo{};
+                    colorInfo.imageView = pe::GetVulkanImageView(attachment.view ? attachment.view : attachment.image->GetRTV());
+                    colorInfo.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+                    colorInfo.loadOp = ToVkLoadOp(attachment.loadOp);
+                    colorInfo.storeOp = ToVkStoreOp(attachment.storeOp);
+                    colorInfo.clearValue.color = {clearColor[0], clearColor[1], clearColor[2], clearColor[3]};
+                    colorInfos.push_back(colorInfo);
+
+                    barrier.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
+                    if (attachment.loadOp == PE_LOAD_OP_LOAD)
+                        barrier.accessMask = PE_ACCESS_COLOR_ATTACHMENT_READ;
+                    else
+                        barrier.accessMask = PE_ACCESS_COLOR_ATTACHMENT_WRITE;
+                }
+
+                attachmentBarriers.push_back(barrier);
             }
 
             Image::Barriers(m_owner, attachmentBarriers);
@@ -301,14 +302,15 @@ namespace pe
 
                 ImageBarrierInfo barrier{};
                 barrier.image = attachment.image;
-                barrier.layout = PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
                 if (VulkanHelpers::HasDepthOrStencil(pe::ToVkFormat(renderTarget->GetFormat())))
                 {
+                    barrier.layout = PE_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
                     barrier.stageFlags = PE_STAGE_EARLY_FRAGMENT_TESTS | PE_STAGE_LATE_FRAGMENT_TESTS;
                     barrier.accessMask = PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE;
                 }
                 else
                 {
+                    barrier.layout = PE_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
                     barrier.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
                     barrier.accessMask = PE_ACCESS_COLOR_ATTACHMENT_WRITE;
                 }
@@ -605,11 +607,15 @@ namespace pe
 
     void VulkanCommandBufferImpl::SetDepthTestEnable(uint32_t enable)
     {
+        if (!RHII.GetCaps().extendedDynamicState)
+            return;
         m_apiHandle.setDepthTestEnable(enable);
     }
 
     void VulkanCommandBufferImpl::SetDepthWriteEnable(uint32_t enable)
     {
+        if (!RHII.GetCaps().extendedDynamicState)
+            return;
         m_apiHandle.setDepthWriteEnable(enable);
     }
 
@@ -663,6 +669,14 @@ namespace pe
 
     void VulkanCommandBufferImpl::FillBuffer(Buffer *buffer, size_t offset, size_t size, uint32_t data)
     {
+        BufferBarrierInfo fillBarrier{};
+        fillBarrier.buffer = buffer;
+        fillBarrier.stageMask = PE_STAGE_CLEAR;
+        fillBarrier.accessMask = PE_ACCESS_TRANSFER_WRITE;
+        fillBarrier.offset = offset;
+        fillBarrier.size = size;
+        Buffer::Barrier(m_owner, fillBarrier);
+
         m_apiHandle.fillBuffer(pe::GetVulkanBuffer(buffer), offset, size, data);
 
         // Record the transfer write so the next Buffer::Barrier emits srcStage=Clear,
@@ -676,6 +690,7 @@ namespace pe
     void VulkanCommandBufferImpl::TraceRays(uint32_t width, uint32_t height, uint32_t depth)
     {
         PE_ERROR_IF(!m_owner->m_boundPipeline, "CommandBuffer::TraceRays: No bound pipeline found!");
+        PE_ERROR_IF(!RHII.GetCaps().rayTracing, "CommandBuffer::TraceRays: ray tracing is not supported on this device");
         m_apiHandle.traceRaysKHR(GetVulkanRgenRegion(m_owner->m_boundPipeline),
                                  GetVulkanMissRegion(m_owner->m_boundPipeline),
                                  GetVulkanHitRegion(m_owner->m_boundPipeline),
@@ -705,18 +720,35 @@ namespace pe
 
     void VulkanCommandBufferImpl::MemoryBarrier(const MemoryBarrierInfo &info)
     {
-        vk::MemoryBarrier2 barrier{};
-        barrier.srcStageMask = ToVkPipelineStageFlags(info.srcStageMask);
-        barrier.srcAccessMask = ToVkAccessFlags(info.srcAccessMask);
-        barrier.dstStageMask = ToVkPipelineStageFlags(info.dstStageMask);
-        barrier.dstAccessMask = ToVkAccessFlags(info.dstAccessMask);
+        if (RHII.GetCaps().sync2)
+        {
+            vk::MemoryBarrier2 barrier{};
+            barrier.srcStageMask = ToVkPipelineStageFlags(info.srcStageMask);
+            barrier.srcAccessMask = ToVkAccessFlags(info.srcAccessMask);
+            barrier.dstStageMask = ToVkPipelineStageFlags(info.dstStageMask);
+            barrier.dstAccessMask = ToVkAccessFlags(info.dstAccessMask);
 
-        vk::DependencyInfo dependencyInfo{};
-        dependencyInfo.memoryBarrierCount = 1;
-        dependencyInfo.pMemoryBarriers = &barrier;
+            vk::DependencyInfo dependencyInfo{};
+            dependencyInfo.memoryBarrierCount = 1;
+            dependencyInfo.pMemoryBarriers = &barrier;
 
-        PE_PROFILE_COUNTER("Vk PipelineBarrier2 Memory Items", 1);
-        m_apiHandle.pipelineBarrier2(dependencyInfo);
+            PE_PROFILE_COUNTER("Vk PipelineBarrier2 Memory Items", 1);
+            m_apiHandle.pipelineBarrier2(dependencyInfo);
+        }
+        else
+        {
+            vk::MemoryBarrier barrier{};
+            barrier.srcAccessMask = ToVkAccessFlagsLegacy(info.srcAccessMask);
+            barrier.dstAccessMask = ToVkAccessFlagsLegacy(info.dstAccessMask);
+
+            vk::PipelineStageFlags srcStageMask = ToVkPipelineStageFlagsLegacy(info.srcStageMask);
+            vk::PipelineStageFlags dstStageMask = ToVkPipelineStageFlagsLegacy(info.dstStageMask);
+            if (!srcStageMask)
+                srcStageMask = vk::PipelineStageFlagBits::eTopOfPipe;
+            if (!dstStageMask)
+                dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+            m_apiHandle.pipelineBarrier(srcStageMask, dstStageMask, {}, 1, &barrier, 0, nullptr, 0, nullptr);
+        }
     }
 
     void VulkanCommandBufferImpl::MemoryBarriers(const std::vector<MemoryBarrierInfo> &infos)
@@ -724,25 +756,47 @@ namespace pe
         if (infos.empty())
             return;
 
-        // Thread-local scratch avoids a heap allocation per barrier batch.
-        thread_local std::vector<vk::MemoryBarrier2> barriers;
-        barriers.clear();
-        barriers.reserve(infos.size());
-        for (const auto &info : infos)
+        if (RHII.GetCaps().sync2)
         {
-            vk::MemoryBarrier2 &barrier = barriers.emplace_back();
-            barrier.srcStageMask = ToVkPipelineStageFlags(info.srcStageMask);
-            barrier.srcAccessMask = ToVkAccessFlags(info.srcAccessMask);
-            barrier.dstStageMask = ToVkPipelineStageFlags(info.dstStageMask);
-            barrier.dstAccessMask = ToVkAccessFlags(info.dstAccessMask);
+            // Thread-local scratch avoids a heap allocation per barrier batch.
+            thread_local std::vector<vk::MemoryBarrier2> barriers;
+            barriers.clear();
+            barriers.reserve(infos.size());
+            for (const auto &info : infos)
+            {
+                vk::MemoryBarrier2 &barrier = barriers.emplace_back();
+                barrier.srcStageMask = ToVkPipelineStageFlags(info.srcStageMask);
+                barrier.srcAccessMask = ToVkAccessFlags(info.srcAccessMask);
+                barrier.dstStageMask = ToVkPipelineStageFlags(info.dstStageMask);
+                barrier.dstAccessMask = ToVkAccessFlags(info.dstAccessMask);
+            }
+
+            vk::DependencyInfo dependencyInfo{};
+            dependencyInfo.memoryBarrierCount = static_cast<uint32_t>(barriers.size());
+            dependencyInfo.pMemoryBarriers = barriers.data();
+
+            PE_PROFILE_COUNTER("Vk PipelineBarrier2 Memory Items", barriers.size());
+            m_apiHandle.pipelineBarrier2(dependencyInfo);
         }
-
-        vk::DependencyInfo dependencyInfo{};
-        dependencyInfo.memoryBarrierCount = static_cast<uint32_t>(barriers.size());
-        dependencyInfo.pMemoryBarriers = barriers.data();
-
-        PE_PROFILE_COUNTER("Vk PipelineBarrier2 Memory Items", barriers.size());
-        m_apiHandle.pipelineBarrier2(dependencyInfo);
+        else
+        {
+            thread_local std::vector<vk::MemoryBarrier> barriers;
+            barriers.assign(infos.size(), vk::MemoryBarrier{});
+            vk::PipelineStageFlags srcStageMask{};
+            vk::PipelineStageFlags dstStageMask{};
+            for (size_t i = 0; i < infos.size(); ++i)
+            {
+                barriers[i].srcAccessMask = ToVkAccessFlagsLegacy(infos[i].srcAccessMask);
+                barriers[i].dstAccessMask = ToVkAccessFlagsLegacy(infos[i].dstAccessMask);
+                srcStageMask |= ToVkPipelineStageFlagsLegacy(infos[i].srcStageMask);
+                dstStageMask |= ToVkPipelineStageFlagsLegacy(infos[i].dstStageMask);
+            }
+            if (!srcStageMask)
+                srcStageMask = vk::PipelineStageFlagBits::eTopOfPipe;
+            if (!dstStageMask)
+                dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+            m_apiHandle.pipelineBarrier(srcStageMask, dstStageMask, {}, static_cast<uint32_t>(barriers.size()), barriers.data(), 0, nullptr, 0, nullptr);
+        }
     }
 
     void VulkanCommandBufferImpl::CopyBuffer(Buffer *src, Buffer *dst, size_t size, size_t srcOffset, size_t dstOffset)

@@ -14,9 +14,11 @@ namespace pe
 
     vk::PipelineStageFlags2 ToVkPipelineStageFlags(PeBarrierSync stages);
     PeBarrierSync FromVkPipelineStageFlags(vk::PipelineStageFlags2 stages);
+    vk::PipelineStageFlags ToVkPipelineStageFlagsLegacy(PeBarrierSync stages);
 
     vk::AccessFlags2 ToVkAccessFlags(PeBarrierAccess access);
     PeBarrierAccess FromVkAccessFlags(vk::AccessFlags2 access);
+    vk::AccessFlags ToVkAccessFlagsLegacy(PeBarrierAccess access);
 
     vk::PrimitiveTopology ToVkTopology(PeTopology topology);
     PeTopology FromVkTopology(vk::PrimitiveTopology topology);

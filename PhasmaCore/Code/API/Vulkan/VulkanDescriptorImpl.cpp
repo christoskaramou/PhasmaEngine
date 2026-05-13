@@ -163,7 +163,7 @@ namespace pe
 
         vk::DescriptorPoolCreateInfo createInfo{};
         createInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
-        if (desc.updateAfterBind)
+        if (desc.updateAfterBind && RHII.GetCaps().descriptorUpdateAfterBind)
             createInfo.flags |= vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
         createInfo.poolSizeCount = static_cast<uint32_t>(sizes.size());
         createInfo.pPoolSizes = sizes.data();
@@ -199,8 +199,15 @@ namespace pe
         std::vector<vk::DescriptorBindingFlags> bindingFlags(bindings.size());
         for (int i = 0; i < bindings.size(); i++)
         {
-            if (owner->m_allowUpdateAfterBind && !owner->m_pushDescriptor)
-                bindingFlags[i] |= vk::DescriptorBindingFlagBits::eUpdateAfterBind | vk::DescriptorBindingFlagBits::ePartiallyBound;
+            const bool allowUpdateAfterBind =
+                owner->m_allowUpdateAfterBind &&
+                RHII.GetCaps().descriptorUpdateAfterBind &&
+                !owner->m_pushDescriptor;
+            if (allowUpdateAfterBind)
+                bindingFlags[i] |= vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+
+            if (owner->m_allowUpdateAfterBind || owner->m_bindingInfos[i].bindless)
+                bindingFlags[i] |= vk::DescriptorBindingFlagBits::ePartiallyBound;
 
             if (owner->m_bindingInfos[i].bindless)
                 bindingFlags[i] |= vk::DescriptorBindingFlagBits::eVariableDescriptorCount;
@@ -219,7 +226,7 @@ namespace pe
             PE_ERROR_IF(!RHII.GetCaps().pushDescriptor, "DescriptorLayout: push descriptors are not supported on this device");
             dslci.flags |= vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptor;
         }
-        else if (owner->m_allowUpdateAfterBind)
+        else if (owner->m_allowUpdateAfterBind && RHII.GetCaps().descriptorUpdateAfterBind)
             dslci.flags |= vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
         m_layout = VulkanRhi::Device().createDescriptorSetLayout(dslci);
@@ -247,7 +254,7 @@ namespace pe
         allocateInfo.descriptorPool = GetVulkanDescriptorPool(owner->m_pool);
         allocateInfo.descriptorSetCount = 1;
         allocateInfo.pSetLayouts = &dsetLayout;
-        allocateInfo.pNext = &variableDescriptorCountAllocInfo; // If the flag was not set in the layout, this will be ignored
+        allocateInfo.pNext = owner->m_layout->GetVariableCount() > 1 ? &variableDescriptorCountAllocInfo : nullptr;
 
         m_set = VulkanRhi::Device().allocateDescriptorSets(allocateInfo)[0];
 

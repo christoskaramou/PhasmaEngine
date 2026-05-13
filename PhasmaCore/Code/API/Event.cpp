@@ -11,6 +11,21 @@
 
 namespace pe
 {
+    namespace
+    {
+        vk::ImageLayout ToVkImageLayoutForEvent(PeImageLayout layout, Image *image)
+        {
+            if (layout == PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL && image)
+            {
+                const vk::Format format = pe::ToVkFormat(image->GetFormat());
+                return VulkanHelpers::HasDepthOrStencil(format)
+                           ? vk::ImageLayout::eDepthStencilAttachmentOptimal
+                           : vk::ImageLayout::eColorAttachmentOptimal;
+            }
+            return ToVkImageLayout(layout);
+        }
+    } // namespace
+
     VulkanEventImpl::VulkanEventImpl(const std::string &name)
     {
         vk::EventCreateInfo ci{};
@@ -50,53 +65,43 @@ namespace pe
         m_infoImage.dstStage = dstStage;
         m_infoImage.dstAccess = dstAccess;
 
-        vk::ImageMemoryBarrier2 barrier{};
-        barrier.srcStageMask = ToVkPipelineStageFlags(srcStage);
-        barrier.srcAccessMask = ToVkAccessFlags(srcAccess);
-        barrier.dstStageMask = ToVkPipelineStageFlags(dstStage);
-        barrier.dstAccessMask = ToVkAccessFlags(dstAccess);
-        barrier.oldLayout = ToVkImageLayout(srcLayout);
-        barrier.newLayout = ToVkImageLayout(dstLayout);
-        barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
-        barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
-        barrier.image = pe::GetVulkanImage(image);
-        barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(image->GetFormat()));
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = image->GetMipLevels();
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = image->GetArrayLayers();
+        if (RHII.GetCaps().sync2)
+        {
+            vk::ImageMemoryBarrier2 barrier{};
+            barrier.srcStageMask = ToVkPipelineStageFlags(srcStage);
+            barrier.srcAccessMask = ToVkAccessFlags(srcAccess);
+            barrier.dstStageMask = ToVkPipelineStageFlags(dstStage);
+            barrier.dstAccessMask = ToVkAccessFlags(dstAccess);
+            barrier.oldLayout = ToVkImageLayoutForEvent(srcLayout, image);
+            barrier.newLayout = ToVkImageLayoutForEvent(dstLayout, image);
+            barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
+            barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
+            barrier.image = pe::GetVulkanImage(image);
+            barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(image->GetFormat()));
+            barrier.subresourceRange.baseMipLevel = 0;
+            barrier.subresourceRange.levelCount = image->GetMipLevels();
+            barrier.subresourceRange.baseArrayLayer = 0;
+            barrier.subresourceRange.layerCount = image->GetArrayLayers();
 
-        vk::DependencyInfo depInfo{};
-        depInfo.imageMemoryBarrierCount = 1;
-        depInfo.pImageMemoryBarriers = &barrier;
+            vk::DependencyInfo depInfo{};
+            depInfo.imageMemoryBarrierCount = 1;
+            depInfo.pImageMemoryBarriers = &barrier;
 
-        GetVulkanCommandBuffer(cmd).setEvent2(GetVulkanEvent(this), &depInfo);
+            GetVulkanCommandBuffer(cmd).setEvent2(GetVulkanEvent(this), &depInfo);
+        }
+        else
+        {
+            vk::PipelineStageFlags legacyStage = ToVkPipelineStageFlagsLegacy(srcStage);
+            if (!legacyStage)
+                legacyStage = vk::PipelineStageFlagBits::eTopOfPipe;
+            GetVulkanCommandBuffer(cmd).setEvent(GetVulkanEvent(this), legacyStage);
+        }
 
         m_set = true;
     }
 
     void Event::Wait()
     {
-        vk::ImageMemoryBarrier2 barrier{};
-        barrier.srcStageMask = ToVkPipelineStageFlags(m_infoImage.srcStage);
-        barrier.srcAccessMask = ToVkAccessFlags(m_infoImage.srcAccess);
-        barrier.dstStageMask = ToVkPipelineStageFlags(m_infoImage.dstStage);
-        barrier.dstAccessMask = ToVkAccessFlags(m_infoImage.dstAccess);
-        barrier.oldLayout = ToVkImageLayout(m_infoImage.oldLayout);
-        barrier.newLayout = ToVkImageLayout(m_infoImage.newLayout);
-        barrier.srcQueueFamilyIndex = m_cmd->GetFamilyId();
-        barrier.dstQueueFamilyIndex = m_cmd->GetFamilyId();
-        barrier.image = pe::GetVulkanImage(m_infoImage.image);
-        barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(m_infoImage.image->GetFormat()));
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = m_infoImage.image->GetMipLevels();
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = m_infoImage.image->GetArrayLayers();
-
-        vk::DependencyInfo depInfo{};
-        depInfo.imageMemoryBarrierCount = 1;
-        depInfo.pImageMemoryBarriers = &barrier;
-
         ImageBarrierInfo info{};
         info.image = m_infoImage.image;
         info.layout = m_infoImage.newLayout;
@@ -105,12 +110,69 @@ namespace pe
         m_infoImage.image->SetCurrentInfoAll(info);
 
         const vk::Event event = GetVulkanEvent(this);
-        GetVulkanCommandBuffer(m_cmd).waitEvents2(1, &event, &depInfo);
+        if (RHII.GetCaps().sync2)
+        {
+            vk::ImageMemoryBarrier2 barrier{};
+            barrier.srcStageMask = ToVkPipelineStageFlags(m_infoImage.srcStage);
+            barrier.srcAccessMask = ToVkAccessFlags(m_infoImage.srcAccess);
+            barrier.dstStageMask = ToVkPipelineStageFlags(m_infoImage.dstStage);
+            barrier.dstAccessMask = ToVkAccessFlags(m_infoImage.dstAccess);
+            barrier.oldLayout = ToVkImageLayoutForEvent(m_infoImage.oldLayout, m_infoImage.image);
+            barrier.newLayout = ToVkImageLayoutForEvent(m_infoImage.newLayout, m_infoImage.image);
+            barrier.srcQueueFamilyIndex = m_cmd->GetFamilyId();
+            barrier.dstQueueFamilyIndex = m_cmd->GetFamilyId();
+            barrier.image = pe::GetVulkanImage(m_infoImage.image);
+            barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(m_infoImage.image->GetFormat()));
+            barrier.subresourceRange.baseMipLevel = 0;
+            barrier.subresourceRange.levelCount = m_infoImage.image->GetMipLevels();
+            barrier.subresourceRange.baseArrayLayer = 0;
+            barrier.subresourceRange.layerCount = m_infoImage.image->GetArrayLayers();
+
+            vk::DependencyInfo depInfo{};
+            depInfo.imageMemoryBarrierCount = 1;
+            depInfo.pImageMemoryBarriers = &barrier;
+
+            GetVulkanCommandBuffer(m_cmd).waitEvents2(1, &event, &depInfo);
+        }
+        else
+        {
+            vk::ImageMemoryBarrier barrier{};
+            barrier.srcAccessMask = ToVkAccessFlagsLegacy(m_infoImage.srcAccess);
+            barrier.dstAccessMask = ToVkAccessFlagsLegacy(m_infoImage.dstAccess);
+            barrier.oldLayout = ToVkImageLayoutForEvent(m_infoImage.oldLayout, m_infoImage.image);
+            barrier.newLayout = ToVkImageLayoutForEvent(m_infoImage.newLayout, m_infoImage.image);
+            barrier.srcQueueFamilyIndex = m_cmd->GetFamilyId();
+            barrier.dstQueueFamilyIndex = m_cmd->GetFamilyId();
+            barrier.image = pe::GetVulkanImage(m_infoImage.image);
+            barrier.subresourceRange.aspectMask = VulkanHelpers::GetAspectMask(pe::ToVkFormat(m_infoImage.image->GetFormat()));
+            barrier.subresourceRange.baseMipLevel = 0;
+            barrier.subresourceRange.levelCount = m_infoImage.image->GetMipLevels();
+            barrier.subresourceRange.baseArrayLayer = 0;
+            barrier.subresourceRange.layerCount = m_infoImage.image->GetArrayLayers();
+
+            vk::PipelineStageFlags srcStageMask = ToVkPipelineStageFlagsLegacy(m_infoImage.srcStage);
+            vk::PipelineStageFlags dstStageMask = ToVkPipelineStageFlagsLegacy(m_infoImage.dstStage);
+            if (!srcStageMask)
+                srcStageMask = vk::PipelineStageFlagBits::eTopOfPipe;
+            if (!dstStageMask)
+                dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+            GetVulkanCommandBuffer(m_cmd).waitEvents(1, &event, srcStageMask, dstStageMask, 0, nullptr, 0, nullptr, 1, &barrier);
+        }
     }
 
     void Event::Reset(PeBarrierSync resetStage)
     {
-        GetVulkanCommandBuffer(m_cmd).resetEvent2(GetVulkanEvent(this), ToVkPipelineStageFlags(resetStage));
+        if (RHII.GetCaps().sync2)
+        {
+            GetVulkanCommandBuffer(m_cmd).resetEvent2(GetVulkanEvent(this), ToVkPipelineStageFlags(resetStage));
+        }
+        else
+        {
+            vk::PipelineStageFlags stageMask = ToVkPipelineStageFlagsLegacy(resetStage);
+            if (!stageMask)
+                stageMask = vk::PipelineStageFlagBits::eTopOfPipe;
+            GetVulkanCommandBuffer(m_cmd).resetEvent(GetVulkanEvent(this), stageMask);
+        }
         m_cmd = nullptr;
         m_infoImage = {};
         m_set = false;

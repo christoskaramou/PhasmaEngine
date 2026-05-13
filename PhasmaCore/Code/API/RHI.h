@@ -141,9 +141,19 @@ namespace pe
 
             bool rayTracing = false;
             bool dynamicRendering = false;
+            bool sync2 = false;
+            bool copyCommands2 = false;
+            bool extendedDynamicState = false;
+            bool descriptorUpdateAfterBind = false;
             bool indirectCount = false;
             bool meshShaders = false;
             bool pushDescriptor = false;
+            bool maintenance5 = false;
+            uint32_t loaderApiVersion = 0;
+            uint32_t instanceApiVersion = 0;
+            uint32_t deviceApiVersion = 0;
+            uint32_t effectiveApiVersion = 0;
+            uint32_t spirvTargetVulkanVersion = 0;
             uint32_t maxPushConstantsBytes = 0;
             uint32_t maxBindlessTextures = 0;
             DescriptorBuffer descriptorBuffer{};
@@ -163,6 +173,7 @@ namespace pe
 
         void Init(SDL_Window *window, PeGraphicsApi api = PE_GRAPHICS_API_VULKAN);
         PeGraphicsApi GetApi() const { return m_api; }
+        bool UsesDozenVulkan() const;
         Impl *GetImpl() const { return m_impl; }
         void Destroy();
         void CreateInstance(SDL_Window *window);

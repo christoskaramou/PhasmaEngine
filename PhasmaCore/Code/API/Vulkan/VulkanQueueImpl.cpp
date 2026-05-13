@@ -1,5 +1,6 @@
 #include "API/Vulkan/VulkanQueueImpl.h"
 #include "API/Command.h"
+#include "API/RHI.h"
 #include "API/Semaphore.h"
 #include "API/Swapchain.h"
 #include "API/Vulkan/RHI_Vulkan.h"
@@ -35,34 +36,106 @@ namespace pe
     {
         std::lock_guard<std::mutex> lock(s_submitMutex);
 
-        vk::SemaphoreSubmitInfo waitSemaphoreSubmitInfo{};
-        std::vector<vk::SemaphoreSubmitInfo> signalSemaphoreSubmitInfos{};
-        std::vector<vk::CommandBufferSubmitInfo> commandBufferSubmitInfos{};
+        if (RHII.GetCaps().sync2)
+        {
+            vk::SemaphoreSubmitInfo waitSemaphoreSubmitInfo{};
+            std::vector<vk::SemaphoreSubmitInfo> signalSemaphoreSubmitInfos{};
+            std::vector<vk::CommandBufferSubmitInfo> commandBufferSubmitInfos{};
 
-        signalSemaphoreSubmitInfos.reserve(2);
-        commandBufferSubmitInfos.reserve(commandBuffersCount);
+            signalSemaphoreSubmitInfos.reserve(2);
+            commandBufferSubmitInfos.reserve(commandBuffersCount);
+
+            if (wait)
+            {
+                waitSemaphoreSubmitInfo.semaphore = GetVulkanSemaphore(wait);
+                waitSemaphoreSubmitInfo.stageMask = ToVkPipelineStageFlags(wait->GetStageFlags());
+            }
+
+            if (signal)
+            {
+                vk::SemaphoreSubmitInfo info{};
+                info.semaphore = GetVulkanSemaphore(signal);
+                info.stageMask = ToVkPipelineStageFlags(signal->GetStageFlags());
+                signalSemaphoreSubmitInfos.push_back(info);
+            }
+
+            if (submissionsSemaphore)
+            {
+                vk::SemaphoreSubmitInfo info{};
+                info.semaphore = GetVulkanSemaphore(submissionsSemaphore);
+                info.stageMask = vk::PipelineStageFlagBits2::eBottomOfPipe;
+                info.value = submissionValue;
+                signalSemaphoreSubmitInfos.push_back(info);
+            }
+
+            for (uint32_t i = 0; i < commandBuffersCount; i++)
+            {
+                CommandBuffer *cmd = commandBuffers[i];
+                if (cmd)
+                {
+                    vk::CommandBufferSubmitInfo cbInfo{};
+                    cbInfo.commandBuffer = GetVulkanCommandBuffer(cmd);
+                    commandBufferSubmitInfos.push_back(cbInfo);
+                    cmd->SetSubmission(submissionValue);
+                }
+            }
+
+            vk::SubmitInfo2 si{};
+            si.waitSemaphoreInfoCount = wait ? 1 : 0;
+            si.pWaitSemaphoreInfos = &waitSemaphoreSubmitInfo;
+            si.commandBufferInfoCount = static_cast<uint32_t>(commandBufferSubmitInfos.size());
+            si.pCommandBufferInfos = commandBufferSubmitInfos.data();
+            si.signalSemaphoreInfoCount = static_cast<uint32_t>(signalSemaphoreSubmitInfos.size());
+            si.pSignalSemaphoreInfos = signalSemaphoreSubmitInfos.data();
+
+            auto result = m_apiHandle.submit2(1, &si, nullptr);
+            switch (result)
+            {
+            case vk::Result::eSuccess:
+                break;
+            case vk::Result::eErrorDeviceLost:
+                PE_WARN("[Queue] submit: device lost");
+                break;
+            case vk::Result::eErrorOutOfDeviceMemory:
+            case vk::Result::eErrorOutOfHostMemory:
+                PE_WARN("[Queue] submit: out of memory (%d)", static_cast<int>(result));
+                break;
+            default:
+                PE_WARN("[Queue] submit failed with VkResult=%d", static_cast<int>(result));
+                break;
+            }
+            return;
+        }
+
+        std::vector<vk::Semaphore> waitSemaphores{};
+        std::vector<vk::PipelineStageFlags> waitStages{};
+        std::vector<uint64_t> waitValues{};
+        std::vector<vk::Semaphore> signalSemaphores{};
+        std::vector<uint64_t> signalValues{};
+        std::vector<vk::CommandBuffer> commandBufferInfos{};
+
+        commandBufferInfos.reserve(commandBuffersCount);
 
         if (wait)
         {
-            waitSemaphoreSubmitInfo.semaphore = GetVulkanSemaphore(wait);
-            waitSemaphoreSubmitInfo.stageMask = ToVkPipelineStageFlags(wait->GetStageFlags());
+            vk::PipelineStageFlags stageMask = ToVkPipelineStageFlagsLegacy(wait->GetStageFlags());
+            if (!stageMask)
+                stageMask = vk::PipelineStageFlagBits::eAllCommands;
+            waitSemaphores.push_back(GetVulkanSemaphore(wait));
+            waitStages.push_back(stageMask);
+            waitValues.push_back(0);
         }
 
         if (signal)
         {
-            vk::SemaphoreSubmitInfo info{};
-            info.semaphore = GetVulkanSemaphore(signal);
-            info.stageMask = ToVkPipelineStageFlags(signal->GetStageFlags());
-            signalSemaphoreSubmitInfos.push_back(info);
+            signalSemaphores.push_back(GetVulkanSemaphore(signal));
+            signalValues.push_back(0);
         }
 
         if (submissionsSemaphore)
         {
-            vk::SemaphoreSubmitInfo info{};
-            info.semaphore = GetVulkanSemaphore(submissionsSemaphore);
-            info.stageMask = vk::PipelineStageFlagBits2::eBottomOfPipe;
-            info.value = submissionValue;
-            signalSemaphoreSubmitInfos.push_back(info);
+            signalSemaphores.push_back(GetVulkanSemaphore(submissionsSemaphore));
+            signalValues.push_back(submissionValue);
         }
 
         for (uint32_t i = 0; i < commandBuffersCount; i++)
@@ -70,22 +143,28 @@ namespace pe
             CommandBuffer *cmd = commandBuffers[i];
             if (cmd)
             {
-                vk::CommandBufferSubmitInfo cbInfo{};
-                cbInfo.commandBuffer = GetVulkanCommandBuffer(cmd);
-                commandBufferSubmitInfos.push_back(cbInfo);
+                commandBufferInfos.push_back(GetVulkanCommandBuffer(cmd));
                 cmd->SetSubmission(submissionValue);
             }
         }
 
-        vk::SubmitInfo2 si{};
-        si.waitSemaphoreInfoCount = wait ? 1 : 0;
-        si.pWaitSemaphoreInfos = &waitSemaphoreSubmitInfo;
-        si.commandBufferInfoCount = static_cast<uint32_t>(commandBufferSubmitInfos.size());
-        si.pCommandBufferInfos = commandBufferSubmitInfos.data();
-        si.signalSemaphoreInfoCount = static_cast<uint32_t>(signalSemaphoreSubmitInfos.size());
-        si.pSignalSemaphoreInfos = signalSemaphoreSubmitInfos.data();
+        vk::TimelineSemaphoreSubmitInfo timelineInfo{};
+        timelineInfo.waitSemaphoreValueCount = static_cast<uint32_t>(waitValues.size());
+        timelineInfo.pWaitSemaphoreValues = waitValues.data();
+        timelineInfo.signalSemaphoreValueCount = static_cast<uint32_t>(signalValues.size());
+        timelineInfo.pSignalSemaphoreValues = signalValues.data();
 
-        auto result = m_apiHandle.submit2(1, &si, nullptr);
+        vk::SubmitInfo si{};
+        si.pNext = (!waitValues.empty() || !signalValues.empty()) ? &timelineInfo : nullptr;
+        si.waitSemaphoreCount = static_cast<uint32_t>(waitSemaphores.size());
+        si.pWaitSemaphores = waitSemaphores.data();
+        si.pWaitDstStageMask = waitStages.data();
+        si.commandBufferCount = static_cast<uint32_t>(commandBufferInfos.size());
+        si.pCommandBuffers = commandBufferInfos.data();
+        si.signalSemaphoreCount = static_cast<uint32_t>(signalSemaphores.size());
+        si.pSignalSemaphores = signalSemaphores.data();
+
+        auto result = m_apiHandle.submit(1, &si, nullptr);
         switch (result)
         {
         case vk::Result::eSuccess:

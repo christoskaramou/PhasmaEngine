@@ -109,6 +109,46 @@ namespace pe
         return flags;
     }
 
+    vk::PipelineStageFlags ToVkPipelineStageFlagsLegacy(PeBarrierSync stages)
+    {
+        vk::PipelineStageFlags flags{};
+        if (stages & PE_STAGE_TOP_OF_PIPE)
+            flags |= vk::PipelineStageFlagBits::eTopOfPipe;
+        if (stages & PE_STAGE_VERTEX_SHADER)
+            flags |= vk::PipelineStageFlagBits::eVertexShader;
+        if (stages & PE_STAGE_FRAGMENT_SHADER)
+            flags |= vk::PipelineStageFlagBits::eFragmentShader;
+        if (stages & PE_STAGE_COMPUTE_SHADER)
+            flags |= vk::PipelineStageFlagBits::eComputeShader;
+        if (stages & PE_STAGE_TRANSFER)
+            flags |= vk::PipelineStageFlagBits::eTransfer;
+        if (stages & PE_STAGE_COLOR_ATTACHMENT_OUTPUT)
+            flags |= vk::PipelineStageFlagBits::eColorAttachmentOutput;
+        if (stages & PE_STAGE_EARLY_FRAGMENT_TESTS)
+            flags |= vk::PipelineStageFlagBits::eEarlyFragmentTests;
+        if (stages & PE_STAGE_LATE_FRAGMENT_TESTS)
+            flags |= vk::PipelineStageFlagBits::eLateFragmentTests;
+        if (stages & PE_STAGE_VERTEX_INPUT)
+            flags |= vk::PipelineStageFlagBits::eVertexInput;
+        if (stages & PE_STAGE_DRAW_INDIRECT)
+            flags |= vk::PipelineStageFlagBits::eDrawIndirect;
+        if (stages & PE_STAGE_ALL_GRAPHICS)
+            flags |= vk::PipelineStageFlagBits::eAllGraphics;
+        if (stages & PE_STAGE_ALL_COMMANDS)
+            flags |= vk::PipelineStageFlagBits::eAllCommands;
+        if (stages & PE_STAGE_BOTTOM_OF_PIPE)
+            flags |= vk::PipelineStageFlagBits::eBottomOfPipe;
+        if (stages & (PE_STAGE_RAY_TRACING_SHADER_KHR | PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR))
+            flags |= vk::PipelineStageFlagBits::eAllCommands;
+        if (stages & (PE_STAGE_CLEAR | PE_STAGE_COPY))
+            flags |= vk::PipelineStageFlagBits::eTransfer;
+        if (stages & PE_STAGE_HOST)
+            flags |= vk::PipelineStageFlagBits::eHost;
+        if (stages & (PE_STAGE_INDEX_INPUT | PE_STAGE_VERTEX_ATTRIBUTE_INPUT))
+            flags |= vk::PipelineStageFlagBits::eVertexInput;
+        return flags;
+    }
+
     PeBarrierSync FromVkPipelineStageFlags(vk::PipelineStageFlags2 stages)
     {
         PeBarrierSync flags = PE_STAGE_NONE;
@@ -198,6 +238,52 @@ namespace pe
             flags |= vk::AccessFlagBits2::eShaderStorageRead;
         if (access & PE_ACCESS_SHADER_STORAGE_WRITE)
             flags |= vk::AccessFlagBits2::eShaderStorageWrite;
+        return flags;
+    }
+
+    vk::AccessFlags ToVkAccessFlagsLegacy(PeBarrierAccess access)
+    {
+        vk::AccessFlags flags{};
+        if (access & PE_ACCESS_SHADER_READ)
+            flags |= vk::AccessFlagBits::eShaderRead;
+        if (access & PE_ACCESS_SHADER_WRITE)
+            flags |= vk::AccessFlagBits::eShaderWrite;
+        if (access & PE_ACCESS_SHADER_SAMPLED_READ)
+            flags |= vk::AccessFlagBits::eShaderRead;
+        if (access & PE_ACCESS_COLOR_ATTACHMENT_READ)
+            flags |= vk::AccessFlagBits::eColorAttachmentRead;
+        if (access & PE_ACCESS_COLOR_ATTACHMENT_WRITE)
+            flags |= vk::AccessFlagBits::eColorAttachmentWrite;
+        if (access & PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ)
+            flags |= vk::AccessFlagBits::eDepthStencilAttachmentRead;
+        if (access & PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE)
+            flags |= vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+        if (access & PE_ACCESS_TRANSFER_READ)
+            flags |= vk::AccessFlagBits::eTransferRead;
+        if (access & PE_ACCESS_TRANSFER_WRITE)
+            flags |= vk::AccessFlagBits::eTransferWrite;
+        if (access & PE_ACCESS_INDEX_READ)
+            flags |= vk::AccessFlagBits::eIndexRead;
+        if (access & PE_ACCESS_VERTEX_ATTRIBUTE_READ)
+            flags |= vk::AccessFlagBits::eVertexAttributeRead;
+        if (access & PE_ACCESS_INDIRECT_COMMAND_READ)
+            flags |= vk::AccessFlagBits::eIndirectCommandRead;
+        if (access & PE_ACCESS_MEMORY_READ)
+            flags |= vk::AccessFlagBits::eMemoryRead;
+        if (access & PE_ACCESS_MEMORY_WRITE)
+            flags |= vk::AccessFlagBits::eMemoryWrite;
+        if (access & PE_ACCESS_HOST_WRITE)
+            flags |= vk::AccessFlagBits::eHostWrite;
+        if (access & PE_ACCESS_ACCELERATION_STRUCTURE_READ_KHR)
+            flags |= vk::AccessFlagBits::eMemoryRead;
+        if (access & PE_ACCESS_ACCELERATION_STRUCTURE_WRITE_KHR)
+            flags |= vk::AccessFlagBits::eMemoryWrite;
+        if (access & PE_ACCESS_UNIFORM_READ)
+            flags |= vk::AccessFlagBits::eUniformRead;
+        if (access & PE_ACCESS_SHADER_STORAGE_READ)
+            flags |= vk::AccessFlagBits::eShaderRead;
+        if (access & PE_ACCESS_SHADER_STORAGE_WRITE)
+            flags |= vk::AccessFlagBits::eShaderWrite;
         return flags;
     }
 

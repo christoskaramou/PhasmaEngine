@@ -15,35 +15,35 @@ namespace pe
 {
     namespace
     {
-        vk::BufferUsageFlags2 ToVkBufferUsage(PeBufferUsageFlags usage)
+        vk::BufferUsageFlags ToVkBufferUsage(PeBufferUsageFlags usage)
         {
-            vk::BufferUsageFlags2 vkUsage{};
+            vk::BufferUsageFlags vkUsage{};
             if (usage & PE_BUFFER_USAGE_TRANSFER_SRC)
-                vkUsage |= vk::BufferUsageFlagBits2::eTransferSrc;
+                vkUsage |= vk::BufferUsageFlagBits::eTransferSrc;
             if (usage & PE_BUFFER_USAGE_TRANSFER_DST)
-                vkUsage |= vk::BufferUsageFlagBits2::eTransferDst;
+                vkUsage |= vk::BufferUsageFlagBits::eTransferDst;
             if (usage & PE_BUFFER_USAGE_UNIFORM_BUFFER)
-                vkUsage |= vk::BufferUsageFlagBits2::eUniformBuffer;
+                vkUsage |= vk::BufferUsageFlagBits::eUniformBuffer;
             if (usage & PE_BUFFER_USAGE_STORAGE_BUFFER)
-                vkUsage |= vk::BufferUsageFlagBits2::eStorageBuffer;
+                vkUsage |= vk::BufferUsageFlagBits::eStorageBuffer;
             if (usage & PE_BUFFER_USAGE_INDEX_BUFFER)
-                vkUsage |= vk::BufferUsageFlagBits2::eIndexBuffer;
+                vkUsage |= vk::BufferUsageFlagBits::eIndexBuffer;
             if (usage & PE_BUFFER_USAGE_VERTEX_BUFFER)
-                vkUsage |= vk::BufferUsageFlagBits2::eVertexBuffer;
+                vkUsage |= vk::BufferUsageFlagBits::eVertexBuffer;
             if (usage & PE_BUFFER_USAGE_INDIRECT_BUFFER)
-                vkUsage |= vk::BufferUsageFlagBits2::eIndirectBuffer;
+                vkUsage |= vk::BufferUsageFlagBits::eIndirectBuffer;
             if (usage & PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS)
-                vkUsage |= vk::BufferUsageFlagBits2::eShaderDeviceAddress;
+                vkUsage |= vk::BufferUsageFlagBits::eShaderDeviceAddress;
             if (usage & PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_KHR)
-                vkUsage |= vk::BufferUsageFlagBits2::eAccelerationStructureStorageKHR;
+                vkUsage |= vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR;
             if (usage & PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR)
-                vkUsage |= vk::BufferUsageFlagBits2::eAccelerationStructureBuildInputReadOnlyKHR;
+                vkUsage |= vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR;
             if (usage & PE_BUFFER_USAGE_SHADER_BINDING_TABLE_KHR)
-                vkUsage |= vk::BufferUsageFlagBits2::eShaderBindingTableKHR;
+                vkUsage |= vk::BufferUsageFlagBits::eShaderBindingTableKHR;
             if (usage & PE_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER)
-                vkUsage |= vk::BufferUsageFlagBits2::eResourceDescriptorBufferEXT;
+                vkUsage |= vk::BufferUsageFlagBits::eResourceDescriptorBufferEXT;
             if (usage & PE_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER)
-                vkUsage |= vk::BufferUsageFlagBits2::eSamplerDescriptorBufferEXT;
+                vkUsage |= vk::BufferUsageFlagBits::eSamplerDescriptorBufferEXT;
             return vkUsage;
         }
 
@@ -72,15 +72,12 @@ namespace pe
     VulkanBufferImpl::VulkanBufferImpl(Buffer *owner, const BufferDesc &desc)
         : m_owner{owner}
     {
-        const vk::BufferUsageFlags2 vkUsage = ToVkBufferUsage(desc.usage);
+        const vk::BufferUsageFlags vkUsage = ToVkBufferUsage(desc.usage);
         const VmaAllocationCreateFlags vmaFlags = ToVmaCreateFlags(desc.memoryUsage);
         size_t size = owner->m_size;
 
-        vk::BufferUsageFlags2CreateInfo flags2{};
-        flags2.usage = vkUsage;
-
         vk::BufferCreateInfo bufferInfo{};
-        bufferInfo.pNext = &flags2;
+        bufferInfo.usage = vkUsage;
         bufferInfo.size = size;
         bufferInfo.sharingMode = vk::SharingMode::eExclusive;
 
@@ -137,18 +134,37 @@ namespace pe
         PE_ERROR_IF(size + srcOffset > src->Size(), "Buffer::CopyBuffer: Source size is too big");
         PE_ERROR_IF(size + dstOffset > m_owner->Size(), "Buffer::CopyBuffer: Destination size is too small");
 
-        vk::BufferCopy2 region{};
-        region.srcOffset = srcOffset;
-        region.dstOffset = dstOffset;
-        region.size = size;
+        if (RHII.GetCaps().copyCommands2)
+        {
+            vk::BufferCopy2 region{};
+            region.srcOffset = srcOffset;
+            region.dstOffset = dstOffset;
+            region.size = size;
 
-        vk::CopyBufferInfo2 copyInfo{};
-        copyInfo.srcBuffer = From(src)->m_buffer;
-        copyInfo.dstBuffer = m_buffer;
-        copyInfo.regionCount = 1;
-        copyInfo.pRegions = &region;
+            vk::CopyBufferInfo2 copyInfo{};
+            copyInfo.srcBuffer = From(src)->m_buffer;
+            copyInfo.dstBuffer = m_buffer;
+            copyInfo.regionCount = 1;
+            copyInfo.pRegions = &region;
 
-        GetVulkanCommandBuffer(cmd).copyBuffer2(copyInfo);
+            GetVulkanCommandBuffer(cmd).copyBuffer2(copyInfo);
+        }
+        else
+        {
+            vk::BufferCopy region{};
+            region.srcOffset = srcOffset;
+            region.dstOffset = dstOffset;
+            region.size = size;
+            GetVulkanCommandBuffer(cmd).copyBuffer(From(src)->m_buffer, m_buffer, 1, &region);
+        }
+
+        BufferTrackInfo &trackInfo = m_owner->GetTrackInfo();
+        trackInfo.buffer = m_owner;
+        trackInfo.stageMask = PE_STAGE_TRANSFER;
+        trackInfo.accessMask = PE_ACCESS_TRANSFER_WRITE;
+        trackInfo.queueFamilyIndex = cmd->GetFamilyId();
+        trackInfo.offset = dstOffset;
+        trackInfo.size = size;
     }
 
     Buffer::Impl *CreateBufferImpl(Buffer *owner, const BufferDesc &desc)
@@ -194,8 +210,9 @@ namespace pe
         if (requestRead && previousRead && sameState)
             return;
 
-        vk::BufferMemoryBarrier2 barrier{};
+        if (RHII.GetCaps().sync2)
         {
+            vk::BufferMemoryBarrier2 barrier{};
             barrier.buffer = VulkanBufferImpl::From(info.buffer)->m_buffer;
             barrier.srcStageMask = ToVkPipelineStageFlags(trackInfo.stageMask);
             barrier.srcAccessMask = ToVkAccessFlags(trackInfo.accessMask);
@@ -205,17 +222,33 @@ namespace pe
             barrier.dstQueueFamilyIndex = info.queueFamilyIndex;
             barrier.offset = info.offset;
             barrier.size = info.size;
-        }
-
-        {
-            auto *vkCmd = VulkanCommandBufferImpl::From(cmd);
 
             vk::DependencyInfo dependencyInfo{};
             dependencyInfo.bufferMemoryBarrierCount = 1;
             dependencyInfo.pBufferMemoryBarriers = &barrier;
 
             PE_PROFILE_COUNTER("Vk PipelineBarrier2 Buffer Items", 1);
-            vkCmd->m_apiHandle.pipelineBarrier2(dependencyInfo);
+            GetVulkanCommandBuffer(cmd).pipelineBarrier2(dependencyInfo);
+        }
+        else
+        {
+            vk::BufferMemoryBarrier barrier{};
+            barrier.buffer = VulkanBufferImpl::From(info.buffer)->m_buffer;
+            barrier.srcAccessMask = ToVkAccessFlagsLegacy(trackInfo.accessMask);
+            barrier.srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
+            barrier.dstAccessMask = ToVkAccessFlagsLegacy(info.accessMask);
+            barrier.dstQueueFamilyIndex = info.queueFamilyIndex;
+            barrier.offset = info.offset;
+            barrier.size = info.size;
+
+            vk::PipelineStageFlags srcStageMask = ToVkPipelineStageFlagsLegacy(trackInfo.stageMask);
+            vk::PipelineStageFlags dstStageMask = ToVkPipelineStageFlagsLegacy(info.stageMask);
+            if (!srcStageMask)
+                srcStageMask = vk::PipelineStageFlagBits::eTopOfPipe;
+            if (!dstStageMask)
+                dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+
+            GetVulkanCommandBuffer(cmd).pipelineBarrier(srcStageMask, dstStageMask, {}, 0, nullptr, 1, &barrier, 0, nullptr);
         }
 
         trackInfo.stageMask = info.stageMask;
@@ -241,9 +274,16 @@ namespace pe
         if (infos.empty())
             return;
 
+        const bool sync2 = RHII.GetCaps().sync2;
         // Thread-local scratch avoids a heap allocation per barrier batch.
         thread_local std::vector<vk::BufferMemoryBarrier2> barriers;
-        barriers.assign(infos.size(), vk::BufferMemoryBarrier2{});
+        thread_local std::vector<vk::BufferMemoryBarrier> legacyBarriers;
+        if (sync2)
+            barriers.assign(infos.size(), vk::BufferMemoryBarrier2{});
+        else
+            legacyBarriers.assign(infos.size(), vk::BufferMemoryBarrier{});
+        vk::PipelineStageFlags legacySrcStageMask{};
+        vk::PipelineStageFlags legacyDstStageMask{};
         uint32_t barrierIndex = 0;
         {
             for (uint32_t i = 0; i < infos.size(); i++)
@@ -261,15 +301,30 @@ namespace pe
                 if (requestRead && previousRead && sameState)
                     continue;
 
-                barriers[barrierIndex].buffer = VulkanBufferImpl::From(info.buffer)->m_buffer;
-                barriers[barrierIndex].srcStageMask = ToVkPipelineStageFlags(trackInfo.stageMask);
-                barriers[barrierIndex].srcAccessMask = ToVkAccessFlags(trackInfo.accessMask);
-                barriers[barrierIndex].srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
-                barriers[barrierIndex].dstStageMask = ToVkPipelineStageFlags(info.stageMask);
-                barriers[barrierIndex].dstAccessMask = ToVkAccessFlags(info.accessMask);
-                barriers[barrierIndex].dstQueueFamilyIndex = info.queueFamilyIndex;
-                barriers[barrierIndex].offset = info.offset;
-                barriers[barrierIndex].size = info.size;
+                if (sync2)
+                {
+                    barriers[barrierIndex].buffer = VulkanBufferImpl::From(info.buffer)->m_buffer;
+                    barriers[barrierIndex].srcStageMask = ToVkPipelineStageFlags(trackInfo.stageMask);
+                    barriers[barrierIndex].srcAccessMask = ToVkAccessFlags(trackInfo.accessMask);
+                    barriers[barrierIndex].srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
+                    barriers[barrierIndex].dstStageMask = ToVkPipelineStageFlags(info.stageMask);
+                    barriers[barrierIndex].dstAccessMask = ToVkAccessFlags(info.accessMask);
+                    barriers[barrierIndex].dstQueueFamilyIndex = info.queueFamilyIndex;
+                    barriers[barrierIndex].offset = info.offset;
+                    barriers[barrierIndex].size = info.size;
+                }
+                else
+                {
+                    legacyBarriers[barrierIndex].buffer = VulkanBufferImpl::From(info.buffer)->m_buffer;
+                    legacyBarriers[barrierIndex].srcAccessMask = ToVkAccessFlagsLegacy(trackInfo.accessMask);
+                    legacyBarriers[barrierIndex].srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
+                    legacyBarriers[barrierIndex].dstAccessMask = ToVkAccessFlagsLegacy(info.accessMask);
+                    legacyBarriers[barrierIndex].dstQueueFamilyIndex = info.queueFamilyIndex;
+                    legacyBarriers[barrierIndex].offset = info.offset;
+                    legacyBarriers[barrierIndex].size = info.size;
+                    legacySrcStageMask |= ToVkPipelineStageFlagsLegacy(trackInfo.stageMask);
+                    legacyDstStageMask |= ToVkPipelineStageFlagsLegacy(info.stageMask);
+                }
                 barrierIndex++;
 
                 trackInfo.stageMask = info.stageMask;
@@ -281,15 +336,22 @@ namespace pe
         if (!barrierIndex)
             return;
 
+        if (sync2)
         {
-            auto *vkCmd = VulkanCommandBufferImpl::From(cmd);
-
             vk::DependencyInfo dependencyInfo{};
             dependencyInfo.bufferMemoryBarrierCount = barrierIndex;
             dependencyInfo.pBufferMemoryBarriers = barriers.data();
 
             PE_PROFILE_COUNTER("Vk PipelineBarrier2 Buffer Items", barrierIndex);
-            vkCmd->m_apiHandle.pipelineBarrier2(dependencyInfo);
+            GetVulkanCommandBuffer(cmd).pipelineBarrier2(dependencyInfo);
+        }
+        else
+        {
+            if (!legacySrcStageMask)
+                legacySrcStageMask = vk::PipelineStageFlagBits::eTopOfPipe;
+            if (!legacyDstStageMask)
+                legacyDstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+            GetVulkanCommandBuffer(cmd).pipelineBarrier(legacySrcStageMask, legacyDstStageMask, {}, 0, nullptr, barrierIndex, legacyBarriers.data(), 0, nullptr);
         }
     }
 } // namespace pe

@@ -58,6 +58,8 @@ namespace pe
         m_hash.Combine(entryPoint);
         m_hash.Combine(definesHash);
         m_hash.Combine(static_cast<uint32_t>(RHII.GetApi()));
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+            m_hash.Combine(RHII.GetCaps().spirvTargetVulkanVersion);
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
             m_hash.Combine(4u); // DX12 source-register rewrite/reflection contract version.
 

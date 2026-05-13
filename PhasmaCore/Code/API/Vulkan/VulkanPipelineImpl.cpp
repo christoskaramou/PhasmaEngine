@@ -264,7 +264,12 @@ namespace pe
         std::vector<vk::DynamicState> vkDynamicStates;
         vkDynamicStates.reserve(m_info.dynamicStates.size());
         for (PeDynamicState ds : m_info.dynamicStates)
+        {
+            if (!RHII.GetCaps().extendedDynamicState &&
+                (ds == PE_DYNAMIC_STATE_DEPTH_TEST_ENABLE || ds == PE_DYNAMIC_STATE_DEPTH_WRITE_ENABLE))
+                continue;
             vkDynamicStates.push_back(ToVkDynamicState(ds));
+        }
         vk::PipelineDynamicStateCreateInfo dsi{};
         dsi.dynamicStateCount = static_cast<uint32_t>(vkDynamicStates.size());
         dsi.pDynamicStates = vkDynamicStates.data();
@@ -406,7 +411,7 @@ namespace pe
         // Render Pass
         vk::PipelineRenderingCreateInfo prci{};
         std::vector<vk::Format> vkColorFormats;
-        if (Settings::Get<GlobalSettings>().dynamic_rendering)
+        if (RHII.GetCaps().dynamicRendering && Settings::Get<GlobalSettings>().dynamic_rendering)
         {
             vkColorFormats.reserve(m_info.colorFormats.size());
             for (::PeFormat f : m_info.colorFormats)
@@ -458,6 +463,8 @@ namespace pe
 
     void VulkanPipelineImpl::CreateRayTracingPipeline()
     {
+        PE_ERROR_IF(!RHII.GetCaps().rayTracing, "VulkanPipelineImpl: ray tracing is not supported on this device");
+
         m_info.m_pushConstantStages.clear();
         m_info.m_pushConstantOffsets.clear();
         m_info.m_pushConstantSizes.clear();
