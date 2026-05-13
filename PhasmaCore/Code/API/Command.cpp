@@ -1,4 +1,5 @@
 #include "API/Command.h"
+#include "API/Buffer.h"
 #include "API/CommandBuffer_Internal.h"
 #include "API/Event.h"
 #include "API/Framebuffer.h"
@@ -9,6 +10,7 @@
 #include "API/RenderPass.h"
 #include "API/Semaphore.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
+#include "Base/Profiler.h"
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12CommandBufferImpl.h"
 #endif
@@ -54,17 +56,33 @@ namespace pe
 
     void CommandBuffer::Begin()
     {
-        m_impl->Begin();
-        // Neutral outer debug-region wrap: drives the per-frame GpuTimer that
-        // ProfilerWidget reads, and gives every per-pass timer a depth >= 1
-        // (the GPU/Table widget hides depth==0 entries).
-        BeginDebugRegion(m_name);
+        PE_PROFILE_COUNTER("Cmd Begin Calls", 1);
+        PE_PROFILE_SCOPE("Cmd Begin");
+        {
+            PE_PROFILE_SCOPE("Cmd Backend Begin");
+            m_impl->Begin();
+        }
+        {
+            PE_PROFILE_SCOPE("Cmd Begin Debug Region");
+            // Neutral outer debug-region wrap: drives the per-frame GpuTimer that
+            // ProfilerWidget reads, and gives every per-pass timer a depth >= 1
+            // (the GPU/Table widget hides depth==0 entries).
+            BeginDebugRegion(m_name);
+        }
     }
 
     void CommandBuffer::End()
     {
-        EndDebugRegion();
-        m_impl->End();
+        PE_PROFILE_COUNTER("Cmd End Calls", 1);
+        PE_PROFILE_SCOPE("Cmd End");
+        {
+            PE_PROFILE_SCOPE("Cmd End Debug Region");
+            EndDebugRegion();
+        }
+        {
+            PE_PROFILE_SCOPE("Cmd Backend End");
+            m_impl->End();
+        }
     }
 
     void CommandBuffer::Reset()
@@ -95,6 +113,7 @@ namespace pe
     // Note: We don't care about the actual images, having the Attachment struct for convenience
     RenderPass *CommandBuffer::GetRenderPass(uint32_t count, Attachment *attachments)
     {
+        PE_PROFILE_SCOPE("Cmd GetRenderPass");
         Hash hash;
         hash.Combine(count);
         for (uint32_t i = 0; i < count; i++)
@@ -115,6 +134,7 @@ namespace pe
         }
         else
         {
+            PE_PROFILE_SCOPE("Cmd CreateRenderPass");
             std::string name = "Auto_Gen_RenderPass_" + std::to_string(s_renderPasses.size());
             RenderPass *newRenderPass = RenderPass::Create(count, attachments, name);
             s_renderPasses[hash] = newRenderPass;
@@ -126,6 +146,7 @@ namespace pe
     // Note: Cares only about the actual images, just having the Attachment struct for convenience
     Framebuffer *CommandBuffer::GetFramebuffer(RenderPass *renderPass, uint32_t count, Attachment *attachments)
     {
+        PE_PROFILE_SCOPE("Cmd GetFramebuffer");
         Hash hash;
         hash.Combine(reinterpret_cast<std::intptr_t>(renderPass));
         for (uint32_t i = 0; i < count; i++)
@@ -143,6 +164,7 @@ namespace pe
         }
         else
         {
+            PE_PROFILE_SCOPE("Cmd CreateFramebuffer");
             std::vector<ImageView *> views{};
             views.reserve(count);
 
@@ -171,16 +193,22 @@ namespace pe
                                   const std::string &name,
                                   bool skipDynamicPass)
     {
+        PE_PROFILE_COUNTER("Cmd BeginPass Calls", 1);
+        PE_PROFILE_COUNTER("Cmd BeginPass Attachments", count);
+        PE_PROFILE_SCOPE("Cmd BeginPass");
         m_impl->BeginPass(count, attachments, name, skipDynamicPass);
     }
 
     void CommandBuffer::EndPass()
     {
+        PE_PROFILE_COUNTER("Cmd EndPass Calls", 1);
+        PE_PROFILE_SCOPE("Cmd EndPass");
         m_impl->EndPass();
     }
 
     Pipeline *CommandBuffer::GetPipeline(RenderPass *renderPass, PassInfo &passInfo)
     {
+        PE_PROFILE_SCOPE("Cmd GetPipeline");
         Hash hash;
 
         if (renderPass)
@@ -195,6 +223,7 @@ namespace pe
         }
         else
         {
+            PE_PROFILE_SCOPE("Cmd CreatePipeline");
             Pipeline *newPipeline = Pipeline::Create(renderPass, passInfo);
             s_pipelines[hash] = newPipeline;
 
@@ -230,26 +259,34 @@ namespace pe
 
     void CommandBuffer::BindPipeline(PassInfo &passInfo, bool bindDescriptors)
     {
+        PE_PROFILE_COUNTER("Cmd BindPipeline Calls", 1);
+        PE_PROFILE_SCOPE("Cmd BindPipeline");
         m_impl->BindPipeline(passInfo, bindDescriptors);
     }
 
     void CommandBuffer::BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding, uint32_t bindingCount)
     {
+        PE_PROFILE_SCOPE("Cmd BindVertexBuffer");
         m_impl->BindVertexBuffer(buffer, offset, firstBinding, bindingCount);
     }
 
     void CommandBuffer::BindIndexBuffer(Buffer *buffer, size_t offset, PeIndexType indexType)
     {
+        PE_PROFILE_SCOPE("Cmd BindIndexBuffer");
         m_impl->BindIndexBuffer(buffer, offset, indexType);
     }
 
     void CommandBuffer::BindDescriptors(uint32_t count, Descriptor *const *descriptors)
     {
+        PE_PROFILE_COUNTER("Cmd BindDescriptors Calls", 1);
+        PE_PROFILE_COUNTER("Cmd BindDescriptors Sets", count);
+        PE_PROFILE_SCOPE("Cmd BindDescriptors");
         m_impl->BindDescriptors(count, descriptors);
     }
 
     void CommandBuffer::PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info)
     {
+        PE_PROFILE_SCOPE("Cmd PushDescriptor");
         m_impl->PushDescriptor(set, info);
     }
 
@@ -290,76 +327,115 @@ namespace pe
 
     void CommandBuffer::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
     {
+        PE_PROFILE_COUNTER("Cmd Dispatch Calls", 1);
+        PE_PROFILE_SCOPE("Cmd Dispatch");
         m_impl->Dispatch(groupCountX, groupCountY, groupCountZ);
     }
 
     void CommandBuffer::PushConstants()
     {
+        PE_PROFILE_COUNTER("Cmd PushConstants Calls", 1);
+        PE_PROFILE_SCOPE("Cmd PushConstants");
         m_impl->PushConstants(m_pushConstants);
     }
 
     void CommandBuffer::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {
+        PE_PROFILE_COUNTER("Cmd Draw Calls", 1);
+        PE_PROFILE_SCOPE("Cmd Draw");
         m_impl->Draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     void CommandBuffer::DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
     {
+        PE_PROFILE_COUNTER("Cmd DrawIndexed Calls", 1);
+        PE_PROFILE_SCOPE("Cmd DrawIndexed");
         m_impl->DrawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
     void CommandBuffer::DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
+        PE_PROFILE_COUNTER("Cmd DrawIndirect Calls", 1);
+        PE_PROFILE_COUNTER("Cmd DrawIndirect DrawCount", drawCount);
+        PE_PROFILE_SCOPE("Cmd DrawIndirect");
         m_impl->DrawIndirect(indirectBuffer, offset, drawCount, stride);
     }
 
     void CommandBuffer::DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
+        PE_PROFILE_COUNTER("Cmd DrawIndexedIndirect Calls", 1);
+        PE_PROFILE_COUNTER("Cmd DrawIndexedIndirect DrawCount", drawCount);
+        PE_PROFILE_SCOPE("Cmd DrawIndexedIndirect");
         m_impl->DrawIndexedIndirect(indirectBuffer, offset, drawCount, stride);
     }
 
     void CommandBuffer::DrawIndexedIndirectCount(Buffer *indirectBuffer, size_t offset, Buffer *countBuffer, size_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
     {
+        PE_PROFILE_COUNTER("Cmd DrawIndexedIndirectCount Calls", 1);
+        PE_PROFILE_COUNTER("Cmd DrawIndexedIndirectCount MaxDrawCount", maxDrawCount);
+        PE_PROFILE_SCOPE("Cmd DrawIndexedIndirectCount");
         m_impl->DrawIndexedIndirectCount(indirectBuffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
     }
 
     void CommandBuffer::FillBuffer(Buffer *buffer, size_t offset, size_t size, uint32_t data)
     {
+        PE_PROFILE_COUNTER("Cmd FillBuffer Calls", 1);
+        PE_PROFILE_COUNTER("Cmd FillBuffer Bytes", size);
+        PE_PROFILE_SCOPE("Cmd FillBuffer");
         m_impl->FillBuffer(buffer, offset, size, data);
     }
 
     void CommandBuffer::TraceRays(uint32_t width, uint32_t height, uint32_t depth)
     {
+        PE_PROFILE_SCOPE("Cmd TraceRays");
         m_impl->TraceRays(width, height, depth);
     }
 
     void CommandBuffer::BufferBarrier(const BufferBarrierInfo &info)
     {
+        PE_PROFILE_COUNTER("Cmd BufferBarrier Calls", 1);
+        PE_PROFILE_COUNTER("Cmd BufferBarrier Items", 1);
+        PE_PROFILE_SCOPE("Cmd BufferBarrier");
         m_impl->BufferBarrier(info);
     }
 
     void CommandBuffer::BufferBarriers(const std::vector<BufferBarrierInfo> &infos)
     {
+        PE_PROFILE_COUNTER("Cmd BufferBarriers Calls", 1);
+        PE_PROFILE_COUNTER("Cmd BufferBarrier Items", infos.size());
+        PE_PROFILE_SCOPE("Cmd BufferBarriers");
         m_impl->BufferBarriers(infos);
     }
 
     void CommandBuffer::ImageBarrier(const ImageBarrierInfo &info)
     {
+        PE_PROFILE_COUNTER("Cmd ImageBarrier Calls", 1);
+        PE_PROFILE_COUNTER("Cmd ImageBarrier Items", 1);
+        PE_PROFILE_SCOPE("Cmd ImageBarrier");
         m_impl->ImageBarrier(info);
     }
 
     void CommandBuffer::ImageBarriers(const std::vector<ImageBarrierInfo> &infos)
     {
+        PE_PROFILE_COUNTER("Cmd ImageBarriers Calls", 1);
+        PE_PROFILE_COUNTER("Cmd ImageBarrier Items", infos.size());
+        PE_PROFILE_SCOPE("Cmd ImageBarriers");
         m_impl->ImageBarriers(infos);
     }
 
     void CommandBuffer::MemoryBarrier(const MemoryBarrierInfo &info)
     {
+        PE_PROFILE_COUNTER("Cmd MemoryBarrier Calls", 1);
+        PE_PROFILE_COUNTER("Cmd MemoryBarrier Items", 1);
+        PE_PROFILE_SCOPE("Cmd MemoryBarrier");
         m_impl->MemoryBarrier(info);
     }
 
     void CommandBuffer::MemoryBarriers(const std::vector<MemoryBarrierInfo> &infos)
     {
+        PE_PROFILE_COUNTER("Cmd MemoryBarriers Calls", 1);
+        PE_PROFILE_COUNTER("Cmd MemoryBarrier Items", infos.size());
+        PE_PROFILE_SCOPE("Cmd MemoryBarriers");
         m_impl->MemoryBarriers(infos);
     }
 
@@ -421,6 +497,7 @@ namespace pe
 
     void CommandBuffer::BeginDebugRegion(const std::string &name)
     {
+        PE_PROFILE_COUNTER("Cmd DebugRegion Begin Calls", 1);
         m_impl->BeginDebugRegion(name);
     }
 
@@ -431,6 +508,7 @@ namespace pe
 
     void CommandBuffer::EndDebugRegion()
     {
+        PE_PROFILE_COUNTER("Cmd DebugRegion End Calls", 1);
         m_impl->EndDebugRegion();
     }
 

@@ -492,23 +492,29 @@ namespace pe
         Image *dx12SwapchainImage = isDx12 ? RHII.GetSwapchain()->GetImage(imageIndex) : nullptr;
 
         // Set scene on all scene-dependent passes before execution.
-        auto setScene = [this](auto *pass)
         {
-            if (pass)
-                pass->SetScene(&m_scene);
-        };
-        setScene(m_cullingPass);
-        setScene(m_shadowPass);
-        setScene(m_depthPass);
-        setScene(m_gbufferOpaquePass);
-        setScene(m_gbufferTransparentPass);
-        setScene(m_rayTracingPass);
-        setScene(m_particleComputePass);
-        setScene(m_particlePass);
-        setScene(m_gridPass);
-        setScene(m_aabbsPass);
+            PE_PROFILE_SCOPE("Record Set Pass Scenes");
+            auto setScene = [this](auto *pass)
+            {
+                if (pass)
+                    pass->SetScene(&m_scene);
+            };
+            setScene(m_cullingPass);
+            setScene(m_shadowPass);
+            setScene(m_depthPass);
+            setScene(m_gbufferOpaquePass);
+            setScene(m_gbufferTransparentPass);
+            setScene(m_rayTracingPass);
+            setScene(m_particleComputePass);
+            setScene(m_particlePass);
+            setScene(m_gridPass);
+            setScene(m_aabbsPass);
+        }
 
-        cmd->Begin();
+        {
+            PE_PROFILE_SCOPE("Record Cmd Begin");
+            cmd->Begin();
+        }
         {
             PE_PROFILE_SCOPE("Render Graph Execute");
             m_renderGraph.Execute(cmd);
@@ -520,8 +526,14 @@ namespace pe
 
             if (frameOutputImage)
             {
-                BlitToSwapchain(cmd, frameOutputImage, imageIndex);
-                QueueScreenshotReadback(cmd, frameOutputImage);
+                {
+                    PE_PROFILE_SCOPE("DX12 FrameOutput Blit");
+                    BlitToSwapchain(cmd, frameOutputImage, imageIndex);
+                }
+                {
+                    PE_PROFILE_SCOPE("DX12 Screenshot Readback");
+                    QueueScreenshotReadback(cmd, frameOutputImage);
+                }
             }
             else
             {
@@ -532,14 +544,20 @@ namespace pe
                 cmd->BeginPass(1, &attachment, "DX12FinalClear");
                 cmd->EndPass();
 
-                QueueScreenshotReadback(cmd, dx12SwapchainImage);
+                {
+                    PE_PROFILE_SCOPE("DX12 Screenshot Readback");
+                    QueueScreenshotReadback(cmd, dx12SwapchainImage);
+                }
 
                 ImageBarrierInfo presentBarrier{};
                 presentBarrier.image = dx12SwapchainImage;
                 presentBarrier.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
                 presentBarrier.stageFlags = PE_STAGE_ALL_COMMANDS;
                 presentBarrier.accessMask = PE_ACCESS_NONE;
-                cmd->ImageBarrier(presentBarrier);
+                {
+                    PE_PROFILE_SCOPE("DX12 Present Barrier");
+                    cmd->ImageBarrier(presentBarrier);
+                }
             }
         }
         else
@@ -549,12 +567,21 @@ namespace pe
                 BlitToSwapchain(cmd, m_displayRT, imageIndex);
             }
 
-            QueueScreenshotReadback(cmd, m_displayRT);
+            {
+                PE_PROFILE_SCOPE("Vulkan Screenshot Readback");
+                QueueScreenshotReadback(cmd, m_displayRT);
+            }
         }
 
-        Debug::CollectGpuTrace(cmd);
+        {
+            PE_PROFILE_SCOPE("Collect GPU Trace");
+            Debug::CollectGpuTrace(cmd);
+        }
 
-        cmd->End();
+        {
+            PE_PROFILE_SCOPE("Record Cmd End");
+            cmd->End();
+        }
 
         return cmd;
     }

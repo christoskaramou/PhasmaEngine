@@ -275,6 +275,8 @@ namespace pe
         Buffer *GetIndirectTransmission(uint32_t frame) const { return m_indirectTransmission[frame]; }
         Buffer *GetIndirectSelected(uint32_t frame) const { return m_indirectSelected[frame]; }
         bool HasTransparentMeshes() const { return m_hasTransparentMeshes; }
+        bool HasAlphaBlendMeshes() const { return m_hasAlphaBlendMeshes; }
+        bool HasTransmissionMeshes() const { return m_hasTransmissionMeshes; }
 
         const std::vector<ImageView *> &GetImageViews() const { return m_imageViews; }
         uint32_t GetMeshCount() const { return m_meshCount; }
@@ -469,6 +471,10 @@ namespace pe
         uint32_t m_meshCount = 0;
         uint32_t m_indirectCapacity = 1;
         bool m_hasTransparentMeshes = false;
+        bool m_hasAlphaBlendMeshes = false;
+        bool m_hasTransmissionMeshes = false;
+        uint32_t m_alphaBlendMeshCount = 0;
+        uint32_t m_transmissionMeshCount = 0;
         uint32_t m_indicesCount = 0;
         uint32_t m_verticesCount = 0;
         uint32_t m_positionsCount = 0;

@@ -9,6 +9,7 @@
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
+#include "Base/Profiler.h"
 
 namespace pe
 {
@@ -179,6 +180,7 @@ namespace pe
         PE_ERROR_IF(RHII.GetApi() != PE_GRAPHICS_API_VULKAN,
                     "Buffer_Barrier_Backend: unsupported graphics api %u",
                     static_cast<uint32_t>(RHII.GetApi()));
+        PE_PROFILE_SCOPE("Vk BufferBarrier");
 
         PE_ERROR_IF(!info.buffer, "Buffer::Barrier: no buffer specified");
 
@@ -193,21 +195,28 @@ namespace pe
             return;
 
         vk::BufferMemoryBarrier2 barrier{};
-        barrier.buffer = VulkanBufferImpl::From(info.buffer)->m_buffer;
-        barrier.srcStageMask = ToVkPipelineStageFlags(trackInfo.stageMask);
-        barrier.srcAccessMask = ToVkAccessFlags(trackInfo.accessMask);
-        barrier.srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
-        barrier.dstStageMask = ToVkPipelineStageFlags(info.stageMask);
-        barrier.dstAccessMask = ToVkAccessFlags(info.accessMask);
-        barrier.dstQueueFamilyIndex = info.queueFamilyIndex;
-        barrier.offset = info.offset;
-        barrier.size = info.size;
+        {
+            barrier.buffer = VulkanBufferImpl::From(info.buffer)->m_buffer;
+            barrier.srcStageMask = ToVkPipelineStageFlags(trackInfo.stageMask);
+            barrier.srcAccessMask = ToVkAccessFlags(trackInfo.accessMask);
+            barrier.srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
+            barrier.dstStageMask = ToVkPipelineStageFlags(info.stageMask);
+            barrier.dstAccessMask = ToVkAccessFlags(info.accessMask);
+            barrier.dstQueueFamilyIndex = info.queueFamilyIndex;
+            barrier.offset = info.offset;
+            barrier.size = info.size;
+        }
 
-        vk::DependencyInfo dependencyInfo{};
-        dependencyInfo.bufferMemoryBarrierCount = 1;
-        dependencyInfo.pBufferMemoryBarriers = &barrier;
+        {
+            auto *vkCmd = VulkanCommandBufferImpl::From(cmd);
 
-        GetVulkanCommandBuffer(cmd).pipelineBarrier2(dependencyInfo);
+            vk::DependencyInfo dependencyInfo{};
+            dependencyInfo.bufferMemoryBarrierCount = 1;
+            dependencyInfo.pBufferMemoryBarriers = &barrier;
+
+            PE_PROFILE_COUNTER("Vk PipelineBarrier2 Buffer Items", 1);
+            vkCmd->m_apiHandle.pipelineBarrier2(dependencyInfo);
+        }
 
         trackInfo.stageMask = info.stageMask;
         trackInfo.accessMask = info.accessMask;
@@ -227,50 +236,58 @@ namespace pe
         PE_ERROR_IF(RHII.GetApi() != PE_GRAPHICS_API_VULKAN,
                     "Buffer_Barriers_Backend: unsupported graphics api %u",
                     static_cast<uint32_t>(RHII.GetApi()));
+        PE_PROFILE_SCOPE("Vk BufferBarriers");
 
         if (infos.empty())
             return;
 
         std::vector<vk::BufferMemoryBarrier2> barriers(infos.size());
         uint32_t barrierIndex = 0;
-        for (uint32_t i = 0; i < infos.size(); i++)
         {
-            const auto &info = infos[i];
-            PE_ERROR_IF(!info.buffer, "Buffer::Barriers: no buffer specified");
+            for (uint32_t i = 0; i < infos.size(); i++)
+            {
+                const auto &info = infos[i];
+                PE_ERROR_IF(!info.buffer, "Buffer::Barriers: no buffer specified");
 
-            BufferTrackInfo &trackInfo = info.buffer->GetTrackInfo();
+                BufferTrackInfo &trackInfo = info.buffer->GetTrackInfo();
 
-            bool requestRead = IsReadOnlyAccess(info.accessMask);
-            bool previousRead = IsReadOnlyAccess(trackInfo.accessMask);
-            bool sameState = trackInfo.stageMask == info.stageMask &&
-                             trackInfo.accessMask == info.accessMask &&
-                             trackInfo.queueFamilyIndex == info.queueFamilyIndex;
-            if (requestRead && previousRead && sameState)
-                continue;
+                bool requestRead = IsReadOnlyAccess(info.accessMask);
+                bool previousRead = IsReadOnlyAccess(trackInfo.accessMask);
+                bool sameState = trackInfo.stageMask == info.stageMask &&
+                                 trackInfo.accessMask == info.accessMask &&
+                                 trackInfo.queueFamilyIndex == info.queueFamilyIndex;
+                if (requestRead && previousRead && sameState)
+                    continue;
 
-            barriers[barrierIndex].buffer = VulkanBufferImpl::From(info.buffer)->m_buffer;
-            barriers[barrierIndex].srcStageMask = ToVkPipelineStageFlags(trackInfo.stageMask);
-            barriers[barrierIndex].srcAccessMask = ToVkAccessFlags(trackInfo.accessMask);
-            barriers[barrierIndex].srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
-            barriers[barrierIndex].dstStageMask = ToVkPipelineStageFlags(info.stageMask);
-            barriers[barrierIndex].dstAccessMask = ToVkAccessFlags(info.accessMask);
-            barriers[barrierIndex].dstQueueFamilyIndex = info.queueFamilyIndex;
-            barriers[barrierIndex].offset = info.offset;
-            barriers[barrierIndex].size = info.size;
-            barrierIndex++;
+                barriers[barrierIndex].buffer = VulkanBufferImpl::From(info.buffer)->m_buffer;
+                barriers[barrierIndex].srcStageMask = ToVkPipelineStageFlags(trackInfo.stageMask);
+                barriers[barrierIndex].srcAccessMask = ToVkAccessFlags(trackInfo.accessMask);
+                barriers[barrierIndex].srcQueueFamilyIndex = trackInfo.queueFamilyIndex;
+                barriers[barrierIndex].dstStageMask = ToVkPipelineStageFlags(info.stageMask);
+                barriers[barrierIndex].dstAccessMask = ToVkAccessFlags(info.accessMask);
+                barriers[barrierIndex].dstQueueFamilyIndex = info.queueFamilyIndex;
+                barriers[barrierIndex].offset = info.offset;
+                barriers[barrierIndex].size = info.size;
+                barrierIndex++;
 
-            trackInfo.stageMask = info.stageMask;
-            trackInfo.accessMask = info.accessMask;
-            trackInfo.queueFamilyIndex = info.queueFamilyIndex;
+                trackInfo.stageMask = info.stageMask;
+                trackInfo.accessMask = info.accessMask;
+                trackInfo.queueFamilyIndex = info.queueFamilyIndex;
+            }
         }
 
         if (!barrierIndex)
             return;
 
-        vk::DependencyInfo dependencyInfo{};
-        dependencyInfo.bufferMemoryBarrierCount = barrierIndex;
-        dependencyInfo.pBufferMemoryBarriers = barriers.data();
+        {
+            auto *vkCmd = VulkanCommandBufferImpl::From(cmd);
 
-        GetVulkanCommandBuffer(cmd).pipelineBarrier2(dependencyInfo);
+            vk::DependencyInfo dependencyInfo{};
+            dependencyInfo.bufferMemoryBarrierCount = barrierIndex;
+            dependencyInfo.pBufferMemoryBarriers = barriers.data();
+
+            PE_PROFILE_COUNTER("Vk PipelineBarrier2 Buffer Items", barrierIndex);
+            vkCmd->m_apiHandle.pipelineBarrier2(dependencyInfo);
+        }
     }
 } // namespace pe

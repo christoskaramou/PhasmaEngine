@@ -16,6 +16,7 @@
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
+#include "Base/Profiler.h"
 
 namespace pe
 {
@@ -398,8 +399,11 @@ namespace pe
 
     void Dx12CommandBufferImpl::FlushBarriers()
     {
+        PE_PROFILE_COUNTER("DX12 FlushBarriers Calls", 1);
+        PE_PROFILE_SCOPE("DX12 FlushBarriers");
         if (m_barrierBatch.empty())
         {
+            PE_PROFILE_COUNTER("DX12 FlushBarriers Empty", 1);
             m_pendingImageBarrierRegion.clear();
             return;
         }
@@ -408,7 +412,12 @@ namespace pe
         if (markImageBarrier)
             BeginDebugRegion(m_pendingImageBarrierRegion);
 
-        m_cmdList->ResourceBarrier(static_cast<UINT>(m_barrierBatch.size()), m_barrierBatch.data());
+        {
+            PE_PROFILE_COUNTER("DX12 ResourceBarrier Calls", 1);
+            PE_PROFILE_COUNTER("DX12 ResourceBarrier Items", m_barrierBatch.size());
+            PE_PROFILE_SCOPE("DX12 ResourceBarrier");
+            m_cmdList->ResourceBarrier(static_cast<UINT>(m_barrierBatch.size()), m_barrierBatch.data());
+        }
 
         if (markImageBarrier)
             EndDebugRegion();
@@ -512,7 +521,10 @@ namespace pe
         // over beginRendering) and has no analog here, so it is intentionally
         // ignored. The engine still consults m_dynamicPass elsewhere; set it to
         // true so DX12 follows the dynamic-rendering control flow.
-        BeginDebugRegion(name + "_pass");
+        {
+            PE_PROFILE_SCOPE("DX12 BeginPass DebugRegion");
+            BeginDebugRegion(name + "_pass");
+        }
 
         m_owner->m_dynamicPass = true;
         m_owner->m_attachmentCount = count;
@@ -526,78 +538,93 @@ namespace pe
         D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle{};
         bool hasDsv = false;
 
-        for (uint32_t i = 0; i < count; ++i)
         {
-            const Attachment &att = attachments[i];
-            PE_ERROR_IF(!att.image, "Dx12CommandBufferImpl::BeginPass: attachment %u has null image", i);
-
-            const ::PeFormat fmt = att.image->GetFormat();
-            const bool isDepthStencil = IsDepthStencilFormat(fmt);
-
-            ImageBarrierInfo barrier{};
-            barrier.image = att.image;
-
-            if (isDepthStencil)
+            PE_PROFILE_SCOPE("DX12 BeginPass Build Attachments");
+            for (uint32_t i = 0; i < count; ++i)
             {
-                PE_ERROR_IF(hasDsv, "Dx12CommandBufferImpl::BeginPass: more than one depth/stencil attachment");
-                barrier.layout = PE_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-                barrier.stageFlags = PE_STAGE_EARLY_FRAGMENT_TESTS | PE_STAGE_LATE_FRAGMENT_TESTS;
-                barrier.accessMask = (att.loadOp == PE_LOAD_OP_LOAD)
-                                         ? PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ
-                                         : PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE;
-                dsvHandle = GetAttachmentCpuHandle(att.image, att.view, true, "BeginPass");
-                hasDsv = true;
-            }
-            else
-            {
-                PE_ERROR_IF(rtvCount >= D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT,
-                            "Dx12CommandBufferImpl::BeginPass: more than %u color attachments",
-                            D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT);
-                barrier.layout = PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-                barrier.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
-                barrier.accessMask = (att.loadOp == PE_LOAD_OP_LOAD)
-                                         ? PE_ACCESS_COLOR_ATTACHMENT_READ
-                                         : PE_ACCESS_COLOR_ATTACHMENT_WRITE;
-                rtvHandles[rtvCount++] = GetAttachmentCpuHandle(att.image, att.view, false, "BeginPass");
-            }
+                const Attachment &att = attachments[i];
+                PE_ERROR_IF(!att.image, "Dx12CommandBufferImpl::BeginPass: attachment %u has null image", i);
 
-            attachmentBarriers.push_back(barrier);
+                const ::PeFormat fmt = att.image->GetFormat();
+                const bool isDepthStencil = IsDepthStencilFormat(fmt);
+
+                ImageBarrierInfo barrier{};
+                barrier.image = att.image;
+
+                if (isDepthStencil)
+                {
+                    PE_ERROR_IF(hasDsv, "Dx12CommandBufferImpl::BeginPass: more than one depth/stencil attachment");
+                    barrier.layout = PE_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                    barrier.stageFlags = PE_STAGE_EARLY_FRAGMENT_TESTS | PE_STAGE_LATE_FRAGMENT_TESTS;
+                    barrier.accessMask = (att.loadOp == PE_LOAD_OP_LOAD)
+                                             ? PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ
+                                             : PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE;
+                    dsvHandle = GetAttachmentCpuHandle(att.image, att.view, true, "BeginPass");
+                    hasDsv = true;
+                }
+                else
+                {
+                    PE_ERROR_IF(rtvCount >= D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT,
+                                "Dx12CommandBufferImpl::BeginPass: more than %u color attachments",
+                                D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT);
+                    barrier.layout = PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+                    barrier.stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
+                    barrier.accessMask = (att.loadOp == PE_LOAD_OP_LOAD)
+                                             ? PE_ACCESS_COLOR_ATTACHMENT_READ
+                                             : PE_ACCESS_COLOR_ATTACHMENT_WRITE;
+                    rtvHandles[rtvCount++] = GetAttachmentCpuHandle(att.image, att.view, false, "BeginPass");
+                }
+
+                attachmentBarriers.push_back(barrier);
+            }
         }
 
-        Image::Barriers(m_owner, attachmentBarriers);
-        FlushBarriers();
-
-        m_cmdList->OMSetRenderTargets(rtvCount,
-                                      rtvCount > 0 ? rtvHandles : nullptr,
-                                      FALSE,
-                                      hasDsv ? &dsvHandle : nullptr);
-
-        for (uint32_t i = 0; i < count; ++i)
         {
-            const Attachment &att = attachments[i];
-            const ::PeFormat fmt = att.image->GetFormat();
+            PE_PROFILE_SCOPE("DX12 BeginPass ImageBarriers");
+            Image::Barriers(m_owner, attachmentBarriers);
+        }
+        {
+            PE_PROFILE_SCOPE("DX12 BeginPass FlushBarriers");
+            FlushBarriers();
+        }
 
-            if (IsDepthStencilFormat(fmt))
-            {
-                D3D12_CLEAR_FLAGS flags = static_cast<D3D12_CLEAR_FLAGS>(0);
-                if (att.loadOp == PE_LOAD_OP_CLEAR)
-                    flags |= D3D12_CLEAR_FLAG_DEPTH;
-                if (HasStencilComponent(fmt) && att.stencilLoadOp == PE_LOAD_OP_CLEAR)
-                    flags |= D3D12_CLEAR_FLAG_STENCIL;
-                if (flags == 0)
-                    continue;
+        {
+            PE_PROFILE_SCOPE("DX12 OMSetRenderTargets");
+            m_cmdList->OMSetRenderTargets(rtvCount,
+                                          rtvCount > 0 ? rtvHandles : nullptr,
+                                          FALSE,
+                                          hasDsv ? &dsvHandle : nullptr);
+        }
 
-                const float depth = att.image->m_clearColor[0];
-                const uint8_t stencil = static_cast<uint8_t>(att.image->m_clearColor[1]);
-                m_cmdList->ClearDepthStencilView(GetAttachmentCpuHandle(att.image, att.view, true, "BeginPass"),
-                                                 flags, depth, stencil, 0, nullptr);
-            }
-            else if (att.loadOp == PE_LOAD_OP_CLEAR)
+        {
+            PE_PROFILE_SCOPE("DX12 BeginPass Clears");
+            for (uint32_t i = 0; i < count; ++i)
             {
-                const vec4 &c = att.image->m_clearColor;
-                const float color[4] = {c[0], c[1], c[2], c[3]};
-                m_cmdList->ClearRenderTargetView(GetAttachmentCpuHandle(att.image, att.view, false, "BeginPass"),
-                                                 color, 0, nullptr);
+                const Attachment &att = attachments[i];
+                const ::PeFormat fmt = att.image->GetFormat();
+
+                if (IsDepthStencilFormat(fmt))
+                {
+                    D3D12_CLEAR_FLAGS flags = static_cast<D3D12_CLEAR_FLAGS>(0);
+                    if (att.loadOp == PE_LOAD_OP_CLEAR)
+                        flags |= D3D12_CLEAR_FLAG_DEPTH;
+                    if (HasStencilComponent(fmt) && att.stencilLoadOp == PE_LOAD_OP_CLEAR)
+                        flags |= D3D12_CLEAR_FLAG_STENCIL;
+                    if (flags == 0)
+                        continue;
+
+                    const float depth = att.image->m_clearColor[0];
+                    const uint8_t stencil = static_cast<uint8_t>(att.image->m_clearColor[1]);
+                    m_cmdList->ClearDepthStencilView(GetAttachmentCpuHandle(att.image, att.view, true, "BeginPass"),
+                                                     flags, depth, stencil, 0, nullptr);
+                }
+                else if (att.loadOp == PE_LOAD_OP_CLEAR)
+                {
+                    const vec4 &c = att.image->m_clearColor;
+                    const float color[4] = {c[0], c[1], c[2], c[3]};
+                    m_cmdList->ClearRenderTargetView(GetAttachmentCpuHandle(att.image, att.view, false, "BeginPass"),
+                                                     color, 0, nullptr);
+                }
             }
         }
     }
@@ -1236,16 +1263,22 @@ namespace pe
 
     void Dx12CommandBufferImpl::BufferBarrier(const BufferBarrierInfo &info)
     {
+        PE_PROFILE_COUNTER("DX12 Queue BufferBarrier Calls", 1);
+        PE_PROFILE_COUNTER("DX12 Queue BufferBarrier Items", 1);
         PushBufferBarrier(m_barrierBatch, info);
     }
     void Dx12CommandBufferImpl::BufferBarriers(const std::vector<BufferBarrierInfo> &infos)
     {
+        PE_PROFILE_COUNTER("DX12 Queue BufferBarriers Calls", 1);
+        PE_PROFILE_COUNTER("DX12 Queue BufferBarrier Items", infos.size());
         m_barrierBatch.reserve(m_barrierBatch.size() + infos.size());
         for (const auto &info : infos)
             PushBufferBarrier(m_barrierBatch, info);
     }
     void Dx12CommandBufferImpl::ImageBarrier(const ImageBarrierInfo &info)
     {
+        PE_PROFILE_COUNTER("DX12 Queue ImageBarrier Calls", 1);
+        PE_PROFILE_COUNTER("DX12 Queue ImageBarrier Items", 1);
         if (!info.image)
             return;
         Dx12ImageImpl *img = Dx12ImageImpl::From(info.image);
@@ -1256,6 +1289,8 @@ namespace pe
     }
     void Dx12CommandBufferImpl::ImageBarriers(const std::vector<ImageBarrierInfo> &infos)
     {
+        PE_PROFILE_COUNTER("DX12 Queue ImageBarriers Calls", 1);
+        PE_PROFILE_COUNTER("DX12 Queue ImageBarrier Items", infos.size());
         m_barrierBatch.reserve(m_barrierBatch.size() + infos.size());
         for (const auto &info : infos)
         {

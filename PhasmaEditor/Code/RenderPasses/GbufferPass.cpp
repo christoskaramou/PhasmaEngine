@@ -303,7 +303,9 @@ namespace pe
     {
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
 
-        if (m_scene->GetMeshCount() == 0 || !m_scene->HasTransparentMeshes())
+        const bool hasAlphaBlendMeshes = m_scene->HasAlphaBlendMeshes();
+        const bool hasTransmissionMeshes = m_scene->HasTransmissionMeshes();
+        if (m_scene->GetMeshCount() == 0 || (!hasAlphaBlendMeshes && !hasTransmissionMeshes))
         {
             m_scene = nullptr;
             return;
@@ -318,28 +320,34 @@ namespace pe
         pushConstants.passType = 1u;
         uint32_t frame = RHII.GetFrameIndex();
 
-        cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass_AlphaBlend");
-        cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
-        cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
-        cmd->BindPipeline(*m_passInfo);
-        cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
-        cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
-        cmd->SetConstants(pushConstants);
-        cmd->PushConstants();
-        cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaBlend(frame), 0, m_scene->GetCullingCountersBuffer(frame), 2 * sizeof(uint32_t), m_scene->GetMeshCount());
-        cmd->EndPass();
+        if (hasAlphaBlendMeshes)
+        {
+            cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass_AlphaBlend");
+            cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
+            cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
+            cmd->BindPipeline(*m_passInfo);
+            cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+            cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
+            cmd->SetConstants(pushConstants);
+            cmd->PushConstants();
+            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaBlend(frame), 0, m_scene->GetCullingCountersBuffer(frame), 2 * sizeof(uint32_t), m_scene->GetMeshCount());
+            cmd->EndPass();
+        }
 
-        pushConstants.passType = 2u;
-        cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass_Transmission");
-        cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
-        cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
-        cmd->BindPipeline(*m_passInfo);
-        cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
-        cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
-        cmd->SetConstants(pushConstants);
-        cmd->PushConstants();
-        cmd->DrawIndexedIndirectCount(m_scene->GetIndirectTransmission(frame), 0, m_scene->GetCullingCountersBuffer(frame), 3 * sizeof(uint32_t), m_scene->GetMeshCount());
-        cmd->EndPass();
+        if (hasTransmissionMeshes)
+        {
+            pushConstants.passType = 2u;
+            cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass_Transmission");
+            cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
+            cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
+            cmd->BindPipeline(*m_passInfo);
+            cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+            cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
+            cmd->SetConstants(pushConstants);
+            cmd->PushConstants();
+            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectTransmission(frame), 0, m_scene->GetCullingCountersBuffer(frame), 3 * sizeof(uint32_t), m_scene->GetMeshCount());
+            cmd->EndPass();
+        }
 
         m_scene = nullptr;
     }

@@ -67,6 +67,29 @@ namespace pe
         return false;
     }
 
+    static std::string ReadEnv(const char *name)
+    {
+#if defined(PE_WIN32)
+        char *value = nullptr;
+        size_t size = 0;
+        if (_dupenv_s(&value, &size, name) != 0 || !value)
+            return {};
+
+        std::string result{value};
+        std::free(value);
+        return result;
+#else
+        const char *value = std::getenv(name);
+        return value ? std::string{value} : std::string{};
+#endif
+    }
+
+    static bool IsEnvFlagEnabled(const char *name)
+    {
+        const std::string flag = ReadEnv(name);
+        return flag == "1" || flag == "true" || flag == "TRUE" || flag == "on" || flag == "ON";
+    }
+
 #if defined(PE_WIN32)
     static bool Dx12FormatSupportsTextureSample(ID3D12Device *device, DXGI_FORMAT format)
     {
@@ -542,14 +565,8 @@ namespace pe
         CreateDevice();
         SyncRayTracingSettingsToCaps(m_caps);
         CreateAllocator();
-        CreateSwapchain(m_surface);
         CreateDescriptorPool(150); // General purpose descriptor pool
 
-        Downsampler::Init();
-
-        m_deletionQueues.resize(GetSwapchainImageCount());
-        for (auto &queue : m_deletionQueues)
-            queue = new DeletionQueue();
         m_stagingManager = new StagingManager();
 
 #ifdef PE_TRACY
@@ -991,9 +1008,11 @@ namespace pe
         const uint32_t gpuApiVersion = vk->m_gpu.getProperties().apiVersion;
         const bool vulkan12Available = gpuApiVersion >= VK_API_VERSION_1_2;
         const bool vulkan13Available = gpuApiVersion >= VK_API_VERSION_1_3;
+        const bool vulkan14Available = gpuApiVersion >= VK_API_VERSION_1_4;
         const bool sync2ExtensionAvailable = IsDeviceExtensionValid(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
         const bool separateDepthStencilLayoutsExtensionAvailable =
             IsDeviceExtensionValid(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
+        const bool pushDescriptorExtensionAvailable = IsDeviceExtensionValid(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
 
         PE_ERROR_IF(!IsDeviceExtensionValid(VK_KHR_SWAPCHAIN_EXTENSION_NAME), "Swapchain extension not supported!");
         PE_ERROR_IF(!vulkan13Available && !sync2ExtensionAvailable, "Synchronization2 extension not supported!");
@@ -1005,6 +1024,8 @@ namespace pe
             deviceExtensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
         if (!vulkan12Available && separateDepthStencilLayoutsExtensionAvailable)
             deviceExtensions.push_back(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
+        if (pushDescriptorExtensionAvailable)
+            deviceExtensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
         if (IsDeviceExtensionValid(VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME) &&
             IsDeviceExtensionValid(VK_EXT_PAGEABLE_DEVICE_LOCAL_MEMORY_EXTENSION_NAME))
         {
@@ -1078,10 +1099,17 @@ namespace pe
         deviceFeatures13.dynamicRendering = true;
         deviceFeatures13.pNext = &deviceFeatures12;
 
+        vk::PhysicalDeviceVulkan14Features deviceFeatures14{};
+        deviceFeatures14.pushDescriptor = true;
+        if (vulkan14Available)
+            deviceFeatures14.pNext = &deviceFeatures13;
+
         // Ray Tracing Features
         vk::PhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{};
         accelerationStructureFeatures.accelerationStructure = true;
-        accelerationStructureFeatures.pNext = &deviceFeatures13;
+        accelerationStructureFeatures.pNext = vulkan14Available
+                                                  ? static_cast<void *>(&deviceFeatures14)
+                                                  : static_cast<void *>(&deviceFeatures13);
 
         vk::PhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures{};
         rayTracingPipelineFeatures.rayTracingPipeline = true;
@@ -1093,6 +1121,7 @@ namespace pe
 
         const bool depthClipExtAvailable = IsDeviceExtensionValid(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
         const bool descriptorBufferExtAvailable = IsDeviceExtensionValid(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
+        const bool descriptorBufferRequested = IsEnvFlagEnabled("PE_VULKAN_DESCRIPTOR_BUFFER");
         vk::PhysicalDeviceDepthClipEnableFeaturesEXT depthClipFeatures{};
         if (depthClipExtAvailable)
             depthClipFeatures.pNext = &rayQueryFeatures;
@@ -1116,9 +1145,12 @@ namespace pe
 
         if (depthClipExtAvailable && depthClipFeatures.depthClipEnable)
             deviceExtensions.push_back(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
+        m_caps.pushDescriptor = pushDescriptorExtensionAvailable ||
+                                (vulkan14Available && static_cast<bool>(deviceFeatures14.pushDescriptor));
         m_caps.descriptorBuffer.supported = false;
         m_caps.descriptorBuffer.robustBufferAccess = deviceFeatures2.features.robustBufferAccess != 0;
-        if (descriptorBufferExtAvailable &&
+        if (descriptorBufferRequested &&
+            descriptorBufferExtAvailable &&
             supportedDescriptorBufferFeatures.descriptorBuffer)
         {
             deviceExtensions.push_back(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
@@ -1204,6 +1236,30 @@ namespace pe
         desc.backbufferCount = 2;
         desc.name = "RHI_swapchain";
         m_swapchain = Swapchain::Create(desc);
+    }
+
+    void RHI::InitSwapchain()
+    {
+        if (m_swapchain)
+            return;
+
+        PE_ERROR_IF(!m_surface, "RHI::InitSwapchain requires a surface");
+
+        if (m_api == PE_GRAPHICS_API_DX12)
+        {
+            int sdlW = 0;
+            int sdlH = 0;
+            SDL_GetWindowSize(m_window, &sdlW, &sdlH);
+            m_surface->SetActualExtent({0, 0, static_cast<uint32_t>(sdlW), static_cast<uint32_t>(sdlH)});
+        }
+
+        CreateSwapchain(m_surface);
+        Downsampler::Init();
+
+        m_deletionQueues.resize(GetSwapchainImageCount());
+        for (auto &queue : m_deletionQueues)
+            if (!queue)
+                queue = new DeletionQueue();
     }
 
     void RHI::CreateDescriptorPool(uint32_t maxDescriptorSets)

@@ -410,6 +410,55 @@ namespace pe
     //  ProfilerWidget::Update
     // ────────────────────────────────────────────────────────────────────────────
 
+    void ProfilerWidget::RefreshData(std::vector<GpuTimerSample> latestGpuData)
+    {
+        if (m_paused)
+            return;
+
+        ProfilerData d;
+
+        d.fps = ImGui::GetIO().Framerate;
+        d.frameMs = Profiler::GetFrameTimeMs();
+
+        static std::deque<float> hist(200, 0.f);
+        hist.pop_front();
+        hist.push_back(d.frameMs);
+        d.frameTimeVec.assign(hist.begin(), hist.end());
+        float histMax = *std::max_element(hist.begin(), hist.end());
+        d.frameTimeMax = std::max(2.f, histMax * 1.3f);
+
+        FrameTimer &ft = FrameTimer::Instance();
+        d.cpuTotalMs = static_cast<float>(MILLI(ft.GetCpuTotal()));
+        d.cpuUpdateMs = static_cast<float>(MILLI(ft.GetUpdatesStamp()));
+        d.cpuDrawMs = static_cast<float>(MILLI(ft.GetCpuTotal() - ft.GetUpdatesStamp()));
+
+        d.ram = RHII.GetSystemAndProcessMemory();
+        d.gpu = RHII.GetGpuMemorySnapshot();
+
+        d.cpuEntries = Profiler::GetEntries();
+        for (const auto &e : d.cpuEntries)
+        {
+            if (e.depth == 0)
+                d.cpuScopeTotal += e.timeMs;
+            m_cpuStats[e.name].Push(e.timeMs);
+        }
+
+        d.counters = Profiler::GetCounters();
+
+        if (!latestGpuData.empty())
+        {
+            d.gpuSamples = std::move(latestGpuData);
+            for (const auto &s : d.gpuSamples)
+            {
+                if (s.depth == 0)
+                    d.gpuTotal += s.timeMs;
+                m_gpuStats[s.name].Push(s.timeMs);
+            }
+        }
+
+        m_data = std::move(d);
+    }
+
     void ProfilerWidget::Update()
     {
         // Reopen after a RenderDoc capture completes (or immediately if API unavailable)
@@ -422,9 +471,6 @@ namespace pe
             }
         }
 
-        if (!m_open)
-            return;
-
         // Always drain the GPU timer queue every frame to prevent buffer accumulation
         // and ensure the latest single-frame data is available for display.
         auto latestGpuData = m_gui->PopGpuTimerInfos();
@@ -435,51 +481,11 @@ namespace pe
         {
             m_delay.Start();
             m_firstFrame = false;
-
-            if (!m_paused)
-            {
-                ProfilerData d;
-
-                d.fps = ImGui::GetIO().Framerate;
-                d.frameMs = Profiler::GetFrameTimeMs();
-
-                static std::deque<float> hist(200, 0.f);
-                hist.pop_front();
-                hist.push_back(d.frameMs);
-                d.frameTimeVec.assign(hist.begin(), hist.end());
-                float histMax = *std::max_element(hist.begin(), hist.end());
-                d.frameTimeMax = std::max(2.f, histMax * 1.3f);
-
-                FrameTimer &ft = FrameTimer::Instance();
-                d.cpuTotalMs = static_cast<float>(MILLI(ft.GetCpuTotal()));
-                d.cpuUpdateMs = static_cast<float>(MILLI(ft.GetUpdatesStamp()));
-                d.cpuDrawMs = static_cast<float>(MILLI(ft.GetCpuTotal() - ft.GetUpdatesStamp()));
-
-                d.ram = RHII.GetSystemAndProcessMemory();
-                d.gpu = RHII.GetGpuMemorySnapshot();
-
-                d.cpuEntries = Profiler::GetEntries();
-                for (const auto &e : d.cpuEntries)
-                {
-                    if (e.depth == 0)
-                        d.cpuScopeTotal += e.timeMs;
-                    m_cpuStats[e.name].Push(e.timeMs);
-                }
-
-                if (!latestGpuData.empty())
-                {
-                    d.gpuSamples = std::move(latestGpuData);
-                    for (const auto &s : d.gpuSamples)
-                    {
-                        if (s.depth == 0)
-                            d.gpuTotal += s.timeMs;
-                        m_gpuStats[s.name].Push(s.timeMs);
-                    }
-                }
-
-                m_data = std::move(d);
-            }
+            RefreshData(std::move(latestGpuData));
         }
+
+        if (!m_open)
+            return;
 
         ui::SetInitialWindowSizeFraction(1.f / 4.f, 2.f / 3.f);
         if (!ImGui::Begin("Profiler", &m_open))
@@ -541,6 +547,11 @@ namespace pe
                 DrawGpuTab();
                 ImGui::EndTabItem();
             }
+            if (ImGui::BeginTabItem("Counters"))
+            {
+                DrawCountersTab();
+                ImGui::EndTabItem();
+            }
             if (ImGui::BeginTabItem("Capture"))
             {
                 DrawCaptureTab();
@@ -556,6 +567,8 @@ namespace pe
 
     std::string ProfilerWidget::TakeSnapshot()
     {
+        RefreshData(m_gui ? m_gui->PopGpuTimerInfos() : std::vector<GpuTimerSample>{});
+
         auto now = std::chrono::system_clock::now();
         std::time_t t = std::chrono::system_clock::to_time_t(now);
         std::tm tm{};
@@ -656,7 +669,18 @@ namespace pe
             }
         }
         fprintf(f, "    ]\n");
-        fprintf(f, "  }\n");
+        fprintf(f, "  },\n");
+
+        fprintf(f, "  \"counters\": [\n");
+        for (size_t i = 0; i < m_data.counters.size(); ++i)
+        {
+            const auto &c = m_data.counters[i];
+            fprintf(f, "    {\"name\": \"%s\", \"value\": %llu}%s\n",
+                    c.name,
+                    (unsigned long long)c.value,
+                    (i + 1 < m_data.counters.size()) ? "," : "");
+        }
+        fprintf(f, "  ]\n");
 
         fprintf(f, "}\n");
         fclose(f);
@@ -694,6 +718,38 @@ namespace pe
             ui::DrawGpuBar("GPU (Host Visible)", m_data.gpu.host.app, m_data.gpu.host.other,
                            std::max<uint64_t>(m_data.gpu.host.budget, 1));
             ImGui::PopStyleVar();
+        }
+    }
+
+    void ProfilerWidget::DrawCountersTab()
+    {
+        if (m_data.counters.empty())
+        {
+            ImGui::TextDisabled("No counters recorded for the previous frame.");
+            return;
+        }
+
+        if (ImGui::BeginTable("ProfilerCounters",
+                              2,
+                              ImGuiTableFlags_RowBg |
+                                  ImGuiTableFlags_BordersInnerH |
+                                  ImGuiTableFlags_Resizable |
+                                  ImGuiTableFlags_SizingStretchProp))
+        {
+            ImGui::TableSetupColumn("Counter");
+            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 120.f);
+            ImGui::TableHeadersRow();
+
+            for (const auto &counter : m_data.counters)
+            {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(counter.name);
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text("%llu", (unsigned long long)counter.value);
+            }
+
+            ImGui::EndTable();
         }
     }
 

@@ -3,6 +3,7 @@
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "API/Surface.h"
 #include "Camera/Camera.h"
 #include "GUI/GUIState.h"
 #include "Scene/ModelAsset.h"
@@ -30,6 +31,33 @@ namespace pe
 
             // SDL2 lacks SDL_GetWindowSizeInPixels (SDL3 only), so DX12 uses window size while Vulkan keeps high-DPI drawable size.
             SDL_GetWindowSize(window, &width, &height);
+        }
+
+        bool ShouldResizeForWindowEvent(uint8_t event)
+        {
+            switch (event)
+            {
+            case SDL_WINDOWEVENT_SIZE_CHANGED:
+            case SDL_WINDOWEVENT_RESIZED:
+            case SDL_WINDOWEVENT_MAXIMIZED:
+            case SDL_WINDOWEVENT_RESTORED:
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        bool WindowEventChangesDrawableExtent(SDL_Window *window, PeGraphicsApi api)
+        {
+            int width = 0;
+            int height = 0;
+            GetBackendDrawableSize(window, api, width, height);
+            if (width <= 0 || height <= 0)
+                return false;
+
+            return RHII.GetSwapchain() == nullptr ||
+                   RHII.GetWidth() != static_cast<uint32_t>(width) ||
+                   RHII.GetHeight() != static_cast<uint32_t>(height);
         }
     } // namespace
 
@@ -138,8 +166,12 @@ namespace pe
 
             ImGui_ImplSDL2_ProcessEvent(&sdlEvent);
 
-            if (sdlEvent.type == SDL_WINDOWEVENT && sdlEvent.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
+            if (sdlEvent.type == SDL_WINDOWEVENT &&
+                ShouldResizeForWindowEvent(sdlEvent.window.event) &&
+                WindowEventChangesDrawableExtent(m_apiHandle, RHII.GetApi()))
+            {
                 EventSystem::PushEvent(EventType::Resize);
+            }
 
             if (sdlEvent.type == SDL_DROPBEGIN)
                 dropAccum.clear();
@@ -221,7 +253,10 @@ namespace pe
                 case EventType::PresentMode:
                 {
                     GlobalSettings &gSettings = Settings::Get<GlobalSettings>();
-                    RHII.ChangePresentMode(gSettings.preferred_present_mode);
+                    const PePresentMode previousMode = RHII.GetSurface()->GetPresentMode();
+                    RHII.GetSurface()->SetPresentMode(gSettings.preferred_present_mode);
+                    if (RHII.GetSurface()->GetPresentMode() != previousMode)
+                        EventSystem::PushEvent(EventType::Resize);
                     break;
                 }
                 case EventType::Resize:

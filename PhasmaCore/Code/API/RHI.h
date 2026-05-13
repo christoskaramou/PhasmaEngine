@@ -176,6 +176,7 @@ namespace pe
         bool IsDeviceExtensionValid(const char *name);
         void CreateDevice();
         void CreateAllocator();
+        void InitSwapchain();
         void CreateSwapchain(Surface *surface);
         void CreateDescriptorPool(uint32_t maxDescriptorSets);
         void CreateGlobalDescriptors();

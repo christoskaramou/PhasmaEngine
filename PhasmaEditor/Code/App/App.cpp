@@ -3,7 +3,9 @@
 #include "API/Debug.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "API/Surface.h"
 #include "Base/Log.h"
+#include "Base/Settings.h"
 #include "GUI/Backends/GUIBackend.h"
 #include "GUI/UndoRedo.h"
 #include "Scene/ModelAsset.h"
@@ -32,6 +34,73 @@ namespace pe
         bool UsesDx12StartupOrchestration()
         {
             return RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        }
+
+        struct StartupSceneSettings
+        {
+            std::optional<PePresentMode> presentMode;
+            std::optional<float> renderScale;
+        };
+
+        std::filesystem::path ResolveStartupPath(const std::string &path)
+        {
+            std::filesystem::path p(path);
+            if (p.is_absolute() || std::filesystem::exists(p))
+                return p;
+
+            std::filesystem::path fromExecutable = std::filesystem::path(Path::Executable) / p;
+            if (std::filesystem::exists(fromExecutable))
+                return fromExecutable;
+
+            std::filesystem::path fromAssets;
+            auto it = p.begin();
+            if (it != p.end() && *it == "Assets")
+                ++it;
+            for (; it != p.end(); ++it)
+                fromAssets /= *it;
+
+            return std::filesystem::path(Path::Assets) / fromAssets;
+        }
+
+        StartupSceneSettings TryReadStartupSceneSettings()
+        {
+            StartupSceneSettings out;
+            std::filesystem::path configPath = std::filesystem::path(Path::Executable) / "Assets/editor_config.json";
+            if (!std::filesystem::exists(configPath))
+                configPath = "Assets/editor_config.json";
+
+            std::ifstream configFile(configPath);
+            if (!configFile)
+                return out;
+
+            nlohmann::json config = nlohmann::json::parse(configFile, nullptr, false);
+            if (config.is_discarded() || !config.contains("last_scene") || !config["last_scene"].is_string())
+                return out;
+
+            const std::string lastScene = config["last_scene"].get<std::string>();
+            if (lastScene.empty())
+                return out;
+
+            std::ifstream sceneFile(ResolveStartupPath(lastScene));
+            if (!sceneFile)
+                return out;
+
+            nlohmann::json scene = nlohmann::json::parse(sceneFile, nullptr, false);
+            if (scene.is_discarded() || !scene.contains("settings") || !scene["settings"].is_object())
+                return out;
+
+            const nlohmann::json &settings = scene["settings"];
+            if (settings.contains("present_mode") && settings["present_mode"].is_number_integer())
+            {
+                const int mode = settings["present_mode"].get<int>();
+                if (mode >= 0 && mode < PE_PRESENT_MODE_COUNT)
+                    out.presentMode = static_cast<PePresentMode>(mode);
+            }
+
+            if (settings.contains("render_scale") && settings["render_scale"].is_number())
+                out.renderScale = std::clamp(settings["render_scale"].get<float>(), 0.1f, 4.0f);
+
+            return out;
         }
     } // namespace
 
@@ -89,6 +158,17 @@ namespace pe
 
         // Adopt the SDL window that was created by the launcher.
         m_window = Window::Adopt(RHII.GetWindow());
+        m_window->Show();
+        m_window->Maximize();
+        SDL_PumpEvents();
+        GlobalSettings &settings = Settings::Get<GlobalSettings>();
+        const StartupSceneSettings startupSceneSettings = TryReadStartupSceneSettings();
+        if (startupSceneSettings.presentMode)
+            settings.preferred_present_mode = *startupSceneSettings.presentMode;
+        if (startupSceneSettings.renderScale)
+            settings.render_scale = *startupSceneSettings.renderScale;
+        RHII.GetSurface()->SetPresentMode(settings.preferred_present_mode);
+        RHII.InitSwapchain();
 
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
@@ -139,9 +219,7 @@ namespace pe
             if (auto *ss = GetGlobalSystem<ScriptSystem>())
                 ss->CallInit();
 
-        // Restore scene before showing the window so the user never sees the
-        // default/auto-loaded scene. One extra frame is rendered with the restored
-        // state so the swapchain image is correct when Show() makes it visible.
+        // Restore hot-reload state after the warm-up frames but before normal Run().
         if (shouldRestoreHotReloadSnapshot)
         {
             if (auto *rs = GetGlobalSystem<RendererSystem>())
@@ -166,9 +244,12 @@ namespace pe
             }
         }
 
-        m_window->Show();
-        m_window->Maximize();
         GetGlobalSystem<RendererSystem>()->GetGUI().ApplyStartupLayout(!shouldRestoreHotReloadSnapshot);
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN &&
+            RHII.GetSurface()->GetPresentMode() == PE_PRESENT_MODE_IMMEDIATE)
+        {
+            m_startupPresentRefreshFrames = 4;
+        }
 
         if (hasHotReloadSnapshot)
         {
@@ -304,6 +385,20 @@ namespace pe
             PE_PROFILE_SCOPE("Process Events");
             if (!m_window->ProcessEvents())
                 return false;
+        }
+
+        if (m_startupPresentRefreshFrames > 0 && --m_startupPresentRefreshFrames == 0)
+        {
+            GlobalSettings &settings = Settings::Get<GlobalSettings>();
+            const PePresentMode preferredMode = settings.preferred_present_mode;
+            if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN &&
+                preferredMode == PE_PRESENT_MODE_IMMEDIATE &&
+                RHII.GetSurface()->GetPresentMode() == preferredMode)
+            {
+                PE_INFO("[Vulkan] Refreshing immediate present mode after startup");
+                RHII.ChangePresentMode(PE_PRESENT_MODE_FIFO);
+                RHII.ChangePresentMode(preferredMode);
+            }
         }
 
         if (!m_window->isMinimized())

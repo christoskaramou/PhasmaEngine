@@ -1,5 +1,6 @@
 #include "RenderGraph.h"
 #include "API/Command.h"
+#include "Base/Profiler.h"
 
 namespace pe
 {
@@ -196,6 +197,8 @@ namespace pe
 
         if (pass.callback)
         {
+            PE_PROFILE_COUNTER("RG Callback Passes", 1);
+            PE_PROFILE_SCOPE("RG Callback");
             pass.callback(cmd);
             return;
         }
@@ -203,28 +206,49 @@ namespace pe
         if (!pass.component)
             return;
 
-        builder.Reset();
-        pass.component->DeclareInputs(builder);
-        pass.component->DeclareOutputs(builder);
+        {
+            PE_PROFILE_SCOPE("RG Builder Reset");
+            builder.Reset();
+        }
+        {
+            PE_PROFILE_SCOPE("RG DeclareInputs");
+            pass.component->DeclareInputs(builder);
+        }
+        {
+            PE_PROFILE_SCOPE("RG DeclareOutputs");
+            pass.component->DeclareOutputs(builder);
+        }
+        PE_PROFILE_COUNTER("RG Component Passes", 1);
+        PE_PROFILE_COUNTER("RG Input Image Count", builder.m_inputs.size());
+        PE_PROFILE_COUNTER("RG Output Image Count", builder.m_outputs.size());
 
         if (!builder.m_inputs.empty())
+        {
+            PE_PROFILE_SCOPE("RG Input ImageBarriers");
             cmd->ImageBarriers(builder.m_inputs);
+        }
 
-        pass.component->ExecutePass(cmd);
+        {
+            PE_PROFILE_SCOPE("RG ExecutePass");
+            pass.component->ExecutePass(cmd);
+        }
 
         // Apply tracked-state fixup for custom outputs (non-attachment).
         // Attachment barriers and tracking are handled by BeginPass/EndPass.
-        for (auto &output : builder.m_outputs)
         {
-            if (!output.image || output.finalLayout == PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
-                continue;
+            PE_PROFILE_SCOPE("RG Output Fixup");
+            for (auto &output : builder.m_outputs)
+            {
+                if (!output.image || output.finalLayout == PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
+                    continue;
 
-            ImageTrackInfo fixup{};
-            fixup.image = output.image;
-            fixup.layout = output.finalLayout;
-            fixup.stageFlags = output.stageFlags;
-            fixup.accessMask = output.accessMask;
-            output.image->SetCurrentInfoAll(fixup);
+                ImageTrackInfo fixup{};
+                fixup.image = output.image;
+                fixup.layout = output.finalLayout;
+                fixup.stageFlags = output.stageFlags;
+                fixup.accessMask = output.accessMask;
+                output.image->SetCurrentInfoAll(fixup);
+            }
         }
     }
 

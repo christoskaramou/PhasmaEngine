@@ -736,6 +736,10 @@ namespace pe
 
         size_t offset = 0;
         m_hasTransparentMeshes = false;
+        m_hasAlphaBlendMeshes = false;
+        m_hasTransmissionMeshes = false;
+        m_alphaBlendMeshCount = 0;
+        m_transmissionMeshCount = 0;
         m_meshConstants->Map();
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
@@ -751,8 +755,17 @@ namespace pe
                 if (mesh.indexCount == 0)
                     continue;
 
-                if (mesh.renderType == RenderType::AlphaBlend || mesh.renderType == RenderType::Transmission)
-                    m_hasTransparentMeshes = true;
+                if (mesh.renderType == RenderType::AlphaBlend)
+                {
+                    m_hasAlphaBlendMeshes = true;
+                    m_alphaBlendMeshCount++;
+                }
+                else if (mesh.renderType == RenderType::Transmission)
+                {
+                    m_hasTransmissionMeshes = true;
+                    m_transmissionMeshCount++;
+                }
+                m_hasTransparentMeshes = m_hasAlphaBlendMeshes || m_hasTransmissionMeshes;
 
                 const MeshRuntime &meshRt = m_meshRuntimes[meshIdx];
 

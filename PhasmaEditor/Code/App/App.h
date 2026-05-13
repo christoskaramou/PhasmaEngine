@@ -21,5 +21,6 @@ namespace pe
         Window *m_window = nullptr;
         FrameTimer &m_frameTimer;
         SplashScreen *m_splashScreen = nullptr;
+        uint32_t m_startupPresentRefreshFrames = 0;
     };
 } // namespace pe

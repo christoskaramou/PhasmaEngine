@@ -44,7 +44,14 @@ namespace pe
 
         vk::SwapchainCreateInfoKHR swapchainCreateInfo{};
         swapchainCreateInfo.surface = pe::GetVulkanSurface(surface);
-        swapchainCreateInfo.minImageCount = capabilities.minImageCount + 1;
+        // bbCount=2 matches DX12 FLIP_DISCARD and avoids NVIDIA IMMEDIATE
+        // burst-throttle stalls in vkAcquireNextImageKHR.
+        uint32_t desiredImageCount = 2u;
+        if (desiredImageCount < capabilities.minImageCount)
+            desiredImageCount = capabilities.minImageCount;
+        if (capabilities.maxImageCount > 0 && desiredImageCount > capabilities.maxImageCount)
+            desiredImageCount = capabilities.maxImageCount;
+        swapchainCreateInfo.minImageCount = desiredImageCount;
         const vk::Format surfaceFormat = ToVkFormat(surface->GetFormat());
         const vk::ColorSpaceKHR surfaceColorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
         swapchainCreateInfo.imageFormat = surfaceFormat;

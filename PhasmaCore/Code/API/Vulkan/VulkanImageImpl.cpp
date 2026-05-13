@@ -10,6 +10,7 @@
 #include "API/Vulkan/VulkanImageViewImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 #include "API/Vulkan/VulkanSamplerImpl.h"
+#include "Base/Profiler.h"
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12CommandBufferImpl.h"
 #include "API/DX12/Dx12ImageImpl.h"
@@ -820,6 +821,7 @@ namespace pe
         }
 #endif
         PE_ERROR_IF(!info.image, "Image::Barrier: no image specified.");
+        PE_PROFILE_SCOPE("Vk ImageBarrier");
         Image &image = *info.image;
         VulkanImageImpl *impl = VulkanImageImpl::From(&image);
 
@@ -837,33 +839,41 @@ namespace pe
             return;
 
         vk::ImageMemoryBarrier2 barrier{};
-        barrier.srcStageMask = ToVkPipelineStageFlags(oldInfo.stageFlags);
-        barrier.dstStageMask = ToVkPipelineStageFlags(info.stageFlags);
-        barrier.srcAccessMask = ToVkAccessFlags(oldInfo.accessMask);
-        barrier.dstAccessMask = ToVkAccessFlags(info.accessMask);
-        barrier.oldLayout = ToVkImageLayout(oldInfo.layout);
-        barrier.newLayout = ToVkImageLayout(info.layout);
-        if (barrier.srcStageMask == vk::PipelineStageFlagBits2::eNone)
-            barrier.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe;
-        barrier.srcQueueFamilyIndex = oldInfo.queueFamilyId;
-        barrier.dstQueueFamilyIndex = info.queueFamilyId;
-        barrier.image = impl->m_image;
-        barrier.subresourceRange.aspectMask = image.GetAspectMaskOverride()
-                                                  ? ToVkImageAspect(image.GetAspectMaskOverride())
-                                                  : VulkanHelpers::GetAspectMask(impl->m_vkFormat);
-        barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
-        barrier.subresourceRange.levelCount = mipLevels;
-        barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
-        barrier.subresourceRange.layerCount =
-            impl->m_imageType == PE_IMAGE_TYPE_3D ? VK_REMAINING_ARRAY_LAYERS : arrayLayers;
+        {
+            barrier.srcStageMask = ToVkPipelineStageFlags(oldInfo.stageFlags);
+            barrier.dstStageMask = ToVkPipelineStageFlags(info.stageFlags);
+            barrier.srcAccessMask = ToVkAccessFlags(oldInfo.accessMask);
+            barrier.dstAccessMask = ToVkAccessFlags(info.accessMask);
+            barrier.oldLayout = ToVkImageLayout(oldInfo.layout);
+            barrier.newLayout = ToVkImageLayout(info.layout);
+            // Sync2: eNone+eNone is "no prior dependency"; only promote stage
+            // when there is a real prior access to wait on.
+            if (barrier.srcStageMask == vk::PipelineStageFlagBits2::eNone &&
+                barrier.srcAccessMask != vk::AccessFlagBits2::eNone)
+                barrier.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
+            barrier.srcQueueFamilyIndex = oldInfo.queueFamilyId;
+            barrier.dstQueueFamilyIndex = info.queueFamilyId;
+            barrier.image = impl->m_image;
+            barrier.subresourceRange.aspectMask = image.GetAspectMaskOverride()
+                                                      ? ToVkImageAspect(image.GetAspectMaskOverride())
+                                                      : VulkanHelpers::GetAspectMask(impl->m_vkFormat);
+            barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
+            barrier.subresourceRange.levelCount = mipLevels;
+            barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
+            barrier.subresourceRange.layerCount =
+                impl->m_imageType == PE_IMAGE_TYPE_3D ? VK_REMAINING_ARRAY_LAYERS : arrayLayers;
+        }
 
-        vk::DependencyInfo depInfo{};
-        depInfo.imageMemoryBarrierCount = 1;
-        depInfo.pImageMemoryBarriers = &barrier;
+        {
+            auto *vkCmd = VulkanCommandBufferImpl::From(cmd);
 
-        cmd->BeginDebugRegion("ImageBarrier");
-        GetVulkanCommandBuffer(cmd).pipelineBarrier2(depInfo);
-        cmd->EndDebugRegion();
+            vk::DependencyInfo depInfo{};
+            depInfo.imageMemoryBarrierCount = 1;
+            depInfo.pImageMemoryBarriers = &barrier;
+
+            PE_PROFILE_COUNTER("Vk PipelineBarrier2 Image Items", 1);
+            vkCmd->m_apiHandle.pipelineBarrier2(depInfo);
+        }
 
         for (uint32_t i = 0; i < arrayLayers; i++)
             for (uint32_t j = 0; j < mipLevels; j++)
@@ -882,67 +892,76 @@ namespace pe
 #endif
         if (infos.empty())
             return;
+        PE_PROFILE_SCOPE("Vk ImageBarriers");
 
         std::vector<vk::ImageMemoryBarrier2> barriers;
         barriers.reserve(infos.size());
 
-        for (auto &info : infos)
         {
-            PE_ERROR_IF(!info.image, "Image::Barriers: no image specified.");
+            for (auto &info : infos)
+            {
+                PE_ERROR_IF(!info.image, "Image::Barriers: no image specified.");
 
-            Image *image = info.image;
-            VulkanImageImpl *impl = VulkanImageImpl::From(image);
+                Image *image = info.image;
+                VulkanImageImpl *impl = VulkanImageImpl::From(image);
 
-            uint32_t mipLevels = info.mipLevels ? info.mipLevels : image->GetMipLevels();
-            uint32_t arrayLayers = info.arrayLayers ? info.arrayLayers : image->GetArrayLayers();
+                uint32_t mipLevels = info.mipLevels ? info.mipLevels : image->GetMipLevels();
+                uint32_t arrayLayers = info.arrayLayers ? info.arrayLayers : image->GetArrayLayers();
 
-            const ImageTrackInfo &oldInfo = image->GetCurrentInfo(info.baseArrayLayer, info.baseMipLevel);
+                const ImageTrackInfo &oldInfo = image->GetCurrentInfo(info.baseArrayLayer, info.baseMipLevel);
 
-            bool requestRead = IsReadOnlyAccess(info.accessMask);
-            bool previousRead = IsReadOnlyAccess(oldInfo.accessMask);
-            bool sameState = oldInfo.layout == info.layout &&
-                             oldInfo.stageFlags == info.stageFlags &&
-                             oldInfo.accessMask == info.accessMask &&
-                             oldInfo.queueFamilyId == info.queueFamilyId;
-            if (requestRead && previousRead && sameState)
-                continue;
+                bool requestRead = IsReadOnlyAccess(info.accessMask);
+                bool previousRead = IsReadOnlyAccess(oldInfo.accessMask);
+                bool sameState = oldInfo.layout == info.layout &&
+                                 oldInfo.stageFlags == info.stageFlags &&
+                                 oldInfo.accessMask == info.accessMask &&
+                                 oldInfo.queueFamilyId == info.queueFamilyId;
+                if (requestRead && previousRead && sameState)
+                    continue;
 
-            vk::ImageMemoryBarrier2 barrier{};
-            barrier.srcStageMask = ToVkPipelineStageFlags(oldInfo.stageFlags);
-            barrier.dstStageMask = ToVkPipelineStageFlags(info.stageFlags);
-            barrier.srcAccessMask = ToVkAccessFlags(oldInfo.accessMask);
-            barrier.dstAccessMask = ToVkAccessFlags(info.accessMask);
-            barrier.oldLayout = ToVkImageLayout(oldInfo.layout);
-            barrier.newLayout = ToVkImageLayout(info.layout);
-            if (barrier.srcStageMask == vk::PipelineStageFlagBits2::eNone)
-                barrier.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe;
-            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = impl->m_image;
-            barrier.subresourceRange.aspectMask = image->GetAspectMaskOverride()
-                                                      ? ToVkImageAspect(image->GetAspectMaskOverride())
-                                                      : VulkanHelpers::GetAspectMask(impl->m_vkFormat);
-            barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
-            barrier.subresourceRange.levelCount = mipLevels;
-            barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
-            barrier.subresourceRange.layerCount =
-                impl->m_imageType == PE_IMAGE_TYPE_3D ? VK_REMAINING_ARRAY_LAYERS : arrayLayers;
-            barriers.push_back(barrier);
+                vk::ImageMemoryBarrier2 barrier{};
+                barrier.srcStageMask = ToVkPipelineStageFlags(oldInfo.stageFlags);
+                barrier.dstStageMask = ToVkPipelineStageFlags(info.stageFlags);
+                barrier.srcAccessMask = ToVkAccessFlags(oldInfo.accessMask);
+                barrier.dstAccessMask = ToVkAccessFlags(info.accessMask);
+                barrier.oldLayout = ToVkImageLayout(oldInfo.layout);
+                barrier.newLayout = ToVkImageLayout(info.layout);
+                // Sync2: eNone+eNone is "no prior dependency"; only promote
+                // stage when there is a real prior access to wait on.
+                if (barrier.srcStageMask == vk::PipelineStageFlagBits2::eNone &&
+                    barrier.srcAccessMask != vk::AccessFlagBits2::eNone)
+                    barrier.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
+                barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.image = impl->m_image;
+                barrier.subresourceRange.aspectMask = image->GetAspectMaskOverride()
+                                                          ? ToVkImageAspect(image->GetAspectMaskOverride())
+                                                          : VulkanHelpers::GetAspectMask(impl->m_vkFormat);
+                barrier.subresourceRange.baseMipLevel = info.baseMipLevel;
+                barrier.subresourceRange.levelCount = mipLevels;
+                barrier.subresourceRange.baseArrayLayer = info.baseArrayLayer;
+                barrier.subresourceRange.layerCount =
+                    impl->m_imageType == PE_IMAGE_TYPE_3D ? VK_REMAINING_ARRAY_LAYERS : arrayLayers;
+                barriers.push_back(barrier);
 
-            for (uint32_t i = 0; i < arrayLayers; i++)
-                for (uint32_t j = 0; j < mipLevels; j++)
-                    image->SetCurrentInfo(info, info.baseArrayLayer + i, info.baseMipLevel + j);
+                for (uint32_t i = 0; i < arrayLayers; i++)
+                    for (uint32_t j = 0; j < mipLevels; j++)
+                        image->SetCurrentInfo(info, info.baseArrayLayer + i, info.baseMipLevel + j);
+            }
         }
 
         if (barriers.empty())
             return;
 
-        vk::DependencyInfo depInfo{};
-        depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
-        depInfo.pImageMemoryBarriers = barriers.data();
+        {
+            auto *vkCmd = VulkanCommandBufferImpl::From(cmd);
 
-        cmd->BeginDebugRegion("ImageGroupBarrier");
-        GetVulkanCommandBuffer(cmd).pipelineBarrier2(depInfo);
-        cmd->EndDebugRegion();
+            vk::DependencyInfo depInfo{};
+            depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
+            depInfo.pImageMemoryBarriers = barriers.data();
+
+            PE_PROFILE_COUNTER("Vk PipelineBarrier2 Image Items", barriers.size());
+            vkCmd->m_apiHandle.pipelineBarrier2(depInfo);
+        }
     }
 } // namespace pe

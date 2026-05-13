@@ -1,4 +1,5 @@
 #include "API/Descriptor_Internal.h"
+#include "Base/Profiler.h"
 
 namespace pe
 {
@@ -437,12 +438,21 @@ namespace pe
 
     void Descriptor::Update()
     {
-        m_impl->Update(m_bindingInfos, m_updateInfos);
-
-        for (uint32_t i = 0; i < m_updateInfos.size(); i++)
+        PE_PROFILE_COUNTER("Descriptor Update Calls", 1);
+        PE_PROFILE_COUNTER("Descriptor Update Bindings", m_updateInfos.size());
+        PE_PROFILE_SCOPE("Descriptor Update");
         {
-            if (HasDescriptorUpdate(m_updateInfos[i]))
-                m_boundResources[i] = m_updateInfos[i];
+            PE_PROFILE_SCOPE("Descriptor Backend Update");
+            m_impl->Update(m_bindingInfos, m_updateInfos);
+        }
+
+        {
+            PE_PROFILE_SCOPE("Descriptor Store Bound Resources");
+            for (uint32_t i = 0; i < m_updateInfos.size(); i++)
+            {
+                if (HasDescriptorUpdate(m_updateInfos[i]))
+                    m_boundResources[i] = m_updateInfos[i];
+            }
         }
 
         m_updateInfos.clear();

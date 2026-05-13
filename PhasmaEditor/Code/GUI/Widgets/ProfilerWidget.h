@@ -26,7 +26,9 @@ namespace pe
         void DrawCpuTimelineView();
         void DrawCpuTimingTableWithStats(const std::vector<Profiler::Entry> &entries,
                                          float scopeTotal, const char *filter);
+        void DrawCountersTab();
         void DrawCaptureTab();
+        void RefreshData(std::vector<GpuTimerSample> latestGpuData);
 
         // Render target preview helpers
         void DrawPassImageTooltip(const std::string &passName);
@@ -93,6 +95,7 @@ namespace pe
             std::vector<GpuTimerSample> gpuSamples;
             float gpuTotal = 0.0f;
             std::vector<Profiler::Entry> cpuEntries;
+            std::vector<Profiler::Counter> counters;
             float cpuScopeTotal = 0.0f;
             SystemProcMem ram;
             GpuMemorySnapshot gpu;

@@ -38,7 +38,10 @@ namespace pe
         PE_ERROR_IF(m_inUse, "GpuTimer::Start() called before End()");
 
         m_cmd = cmd;
-        vkCmdResetQueryPool(GetVulkanCommandBuffer(m_cmd), m_pool, 0, 2);
+        // Host reset (hostQueryReset feature). Avoids vkCmdResetQueryPool
+        // mid-command-buffer which serializes the graphics pipeline on NVIDIA.
+        // Safe because the timer is reused only after CommandBuffer::Wait.
+        VulkanRhi::Device().resetQueryPool(m_pool, 0, 2);
         vkCmdWriteTimestamp(GetVulkanCommandBuffer(m_cmd), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, m_pool, 0);
         m_resultsReady = false;
         m_inUse = true;
