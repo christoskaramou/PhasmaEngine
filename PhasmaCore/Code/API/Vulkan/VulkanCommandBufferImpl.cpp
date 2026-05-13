@@ -195,12 +195,15 @@ namespace pe
         m_owner->m_attachmentCount = count;
         m_owner->m_attachments = attachments;
 
-        std::vector<ImageBarrierInfo> attachmentBarriers;
+        // Thread-local scratch avoids per-pass heap allocations.
+        thread_local std::vector<ImageBarrierInfo> attachmentBarriers;
+        attachmentBarriers.clear();
         attachmentBarriers.reserve(count);
 
         if (m_owner->m_dynamicPass)
         {
-            std::vector<vk::RenderingAttachmentInfo> colorInfos;
+            thread_local std::vector<vk::RenderingAttachmentInfo> colorInfos;
+            colorInfos.clear();
             colorInfos.reserve(count);
             vk::RenderingAttachmentInfo depthInfo{};
             bool hasDepth = false;
@@ -274,7 +277,8 @@ namespace pe
         }
         else
         {
-            std::vector<vk::ClearValue> clearValues(count);
+            thread_local std::vector<vk::ClearValue> clearValues;
+            clearValues.assign(count, vk::ClearValue{});
             uint32_t clearOps = 0;
 
             for (uint32_t i = 0; i < count; i++)

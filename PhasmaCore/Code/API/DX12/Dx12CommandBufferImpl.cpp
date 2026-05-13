@@ -399,11 +399,9 @@ namespace pe
 
     void Dx12CommandBufferImpl::FlushBarriers()
     {
-        PE_PROFILE_COUNTER("DX12 FlushBarriers Calls", 1);
         PE_PROFILE_SCOPE("DX12 FlushBarriers");
         if (m_barrierBatch.empty())
         {
-            PE_PROFILE_COUNTER("DX12 FlushBarriers Empty", 1);
             m_pendingImageBarrierRegion.clear();
             return;
         }
@@ -412,12 +410,8 @@ namespace pe
         if (markImageBarrier)
             BeginDebugRegion(m_pendingImageBarrierRegion);
 
-        {
-            PE_PROFILE_COUNTER("DX12 ResourceBarrier Calls", 1);
-            PE_PROFILE_COUNTER("DX12 ResourceBarrier Items", m_barrierBatch.size());
-            PE_PROFILE_SCOPE("DX12 ResourceBarrier");
-            m_cmdList->ResourceBarrier(static_cast<UINT>(m_barrierBatch.size()), m_barrierBatch.data());
-        }
+        PE_PROFILE_COUNTER("DX12 ResourceBarrier Items", m_barrierBatch.size());
+        m_cmdList->ResourceBarrier(static_cast<UINT>(m_barrierBatch.size()), m_barrierBatch.data());
 
         if (markImageBarrier)
             EndDebugRegion();
@@ -521,16 +515,14 @@ namespace pe
         // over beginRendering) and has no analog here, so it is intentionally
         // ignored. The engine still consults m_dynamicPass elsewhere; set it to
         // true so DX12 follows the dynamic-rendering control flow.
-        {
-            PE_PROFILE_SCOPE("DX12 BeginPass DebugRegion");
-            BeginDebugRegion(name + "_pass");
-        }
+        BeginDebugRegion(name + "_pass");
 
         m_owner->m_dynamicPass = true;
         m_owner->m_attachmentCount = count;
         m_owner->m_attachments = attachments;
 
-        std::vector<ImageBarrierInfo> attachmentBarriers;
+        thread_local std::vector<ImageBarrierInfo> attachmentBarriers;
+        attachmentBarriers.clear();
         attachmentBarriers.reserve(count);
 
         D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
@@ -539,7 +531,6 @@ namespace pe
         bool hasDsv = false;
 
         {
-            PE_PROFILE_SCOPE("DX12 BeginPass Build Attachments");
             for (uint32_t i = 0; i < count; ++i)
             {
                 const Attachment &att = attachments[i];
@@ -579,25 +570,15 @@ namespace pe
             }
         }
 
-        {
-            PE_PROFILE_SCOPE("DX12 BeginPass ImageBarriers");
-            Image::Barriers(m_owner, attachmentBarriers);
-        }
-        {
-            PE_PROFILE_SCOPE("DX12 BeginPass FlushBarriers");
-            FlushBarriers();
-        }
+        Image::Barriers(m_owner, attachmentBarriers);
+        FlushBarriers();
+
+        m_cmdList->OMSetRenderTargets(rtvCount,
+                                      rtvCount > 0 ? rtvHandles : nullptr,
+                                      FALSE,
+                                      hasDsv ? &dsvHandle : nullptr);
 
         {
-            PE_PROFILE_SCOPE("DX12 OMSetRenderTargets");
-            m_cmdList->OMSetRenderTargets(rtvCount,
-                                          rtvCount > 0 ? rtvHandles : nullptr,
-                                          FALSE,
-                                          hasDsv ? &dsvHandle : nullptr);
-        }
-
-        {
-            PE_PROFILE_SCOPE("DX12 BeginPass Clears");
             for (uint32_t i = 0; i < count; ++i)
             {
                 const Attachment &att = attachments[i];
@@ -736,7 +717,8 @@ namespace pe
 
         const Dx12BufferImpl *bufImpl = Dx12BufferImpl::From(buffer);
 
-        std::vector<D3D12_VERTEX_BUFFER_VIEW> views(bindingCount);
+        thread_local std::vector<D3D12_VERTEX_BUFFER_VIEW> views;
+        views.assign(bindingCount, D3D12_VERTEX_BUFFER_VIEW{});
         for (uint32_t i = 0; i < bindingCount; ++i)
         {
             const uint32_t binding = firstBinding + i;
@@ -1263,13 +1245,11 @@ namespace pe
 
     void Dx12CommandBufferImpl::BufferBarrier(const BufferBarrierInfo &info)
     {
-        PE_PROFILE_COUNTER("DX12 Queue BufferBarrier Calls", 1);
         PE_PROFILE_COUNTER("DX12 Queue BufferBarrier Items", 1);
         PushBufferBarrier(m_barrierBatch, info);
     }
     void Dx12CommandBufferImpl::BufferBarriers(const std::vector<BufferBarrierInfo> &infos)
     {
-        PE_PROFILE_COUNTER("DX12 Queue BufferBarriers Calls", 1);
         PE_PROFILE_COUNTER("DX12 Queue BufferBarrier Items", infos.size());
         m_barrierBatch.reserve(m_barrierBatch.size() + infos.size());
         for (const auto &info : infos)
@@ -1277,7 +1257,6 @@ namespace pe
     }
     void Dx12CommandBufferImpl::ImageBarrier(const ImageBarrierInfo &info)
     {
-        PE_PROFILE_COUNTER("DX12 Queue ImageBarrier Calls", 1);
         PE_PROFILE_COUNTER("DX12 Queue ImageBarrier Items", 1);
         if (!info.image)
             return;
@@ -1289,7 +1268,6 @@ namespace pe
     }
     void Dx12CommandBufferImpl::ImageBarriers(const std::vector<ImageBarrierInfo> &infos)
     {
-        PE_PROFILE_COUNTER("DX12 Queue ImageBarriers Calls", 1);
         PE_PROFILE_COUNTER("DX12 Queue ImageBarrier Items", infos.size());
         m_barrierBatch.reserve(m_barrierBatch.size() + infos.size());
         for (const auto &info : infos)
