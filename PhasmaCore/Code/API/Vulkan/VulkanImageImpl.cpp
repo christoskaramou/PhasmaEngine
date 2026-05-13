@@ -894,7 +894,9 @@ namespace pe
             return;
         PE_PROFILE_SCOPE("Vk ImageBarriers");
 
-        std::vector<vk::ImageMemoryBarrier2> barriers;
+        // Thread-local scratch avoids a heap allocation per barrier batch.
+        thread_local std::vector<vk::ImageMemoryBarrier2> barriers;
+        barriers.clear();
         barriers.reserve(infos.size());
 
         {

@@ -720,7 +720,9 @@ namespace pe
         if (infos.empty())
             return;
 
-        std::vector<vk::MemoryBarrier2> barriers;
+        // Thread-local scratch avoids a heap allocation per barrier batch.
+        thread_local std::vector<vk::MemoryBarrier2> barriers;
+        barriers.clear();
         barriers.reserve(infos.size());
         for (const auto &info : infos)
         {

@@ -997,7 +997,8 @@ namespace pe
         ImageBarrierInfo barrier{};
         barrier.image = swapchainImage;
         barrier.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
-        barrier.stageFlags = PE_STAGE_ALL_COMMANDS;
+        // Present is serialized via semaphore; no pipeline-stage wait needed.
+        barrier.stageFlags = PE_STAGE_NONE;
         barrier.accessMask = PE_ACCESS_NONE;
 
         // with 1:1 ratio we can use nearest filter

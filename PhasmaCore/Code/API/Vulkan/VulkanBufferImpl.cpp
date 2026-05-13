@@ -241,7 +241,9 @@ namespace pe
         if (infos.empty())
             return;
 
-        std::vector<vk::BufferMemoryBarrier2> barriers(infos.size());
+        // Thread-local scratch avoids a heap allocation per barrier batch.
+        thread_local std::vector<vk::BufferMemoryBarrier2> barriers;
+        barriers.assign(infos.size(), vk::BufferMemoryBarrier2{});
         uint32_t barrierIndex = 0;
         {
             for (uint32_t i = 0; i < infos.size(); i++)

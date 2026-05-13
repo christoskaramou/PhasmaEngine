@@ -1625,7 +1625,7 @@ namespace pe
     void DeletionQueue::Push(std::function<void()> &&deletor)
     {
         std::lock_guard<std::mutex> lock(mutex);
-        deletors.push_back(deletor);
+        deletors.push_back(std::move(deletor));
     }
 
     void DeletionQueue::Flush()
