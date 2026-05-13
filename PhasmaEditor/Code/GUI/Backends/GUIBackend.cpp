@@ -46,7 +46,11 @@ namespace pe::GUIBackend
 
     bool SupportsPlatformWindows()
     {
+#if defined(PE_WIN32)
+        return RHII.GetApi() == PE_GRAPHICS_API_VULKAN || RHII.GetApi() == PE_GRAPHICS_API_DX12;
+#else
         return RHII.GetApi() == PE_GRAPHICS_API_VULKAN;
+#endif
     }
 
     void ConfigureIO()
