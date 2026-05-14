@@ -34,11 +34,7 @@ namespace pe
 
                                std::replace(Executable.begin(), Executable.end(), '\\', '/');
 
-                               if (std::filesystem::exists(Executable + "../PhasmaEditor/Assets"))
-                                   Assets = Executable + "../PhasmaEditor/Assets/";
-                               else if (std::filesystem::exists(Executable + "../../PhasmaEditor/Assets"))
-                                   Assets = Executable + "../../PhasmaEditor/Assets/";
-                               else if (std::filesystem::exists(Executable + "Assets"))
+                               if (std::filesystem::exists(Executable + "Assets"))
                                    Assets = Executable + "Assets/";
                            });
         }

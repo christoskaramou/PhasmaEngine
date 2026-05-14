@@ -29,8 +29,8 @@ namespace pe
         VmaAllocationInfo m_allocationInfo{};
     };
 
-    // Engine-private Vulkan seam accessor for PhasmaWebGPU. Will move to
-    // API/Vulkan/RHI_Vulkan.h when Phase 0 step 13 lands. Returns null vk::Buffer
+    // Engine-private Vulkan seam accessor for backend integration. Will move to
+    // API/Vulkan/RHI_Vulkan.h when the public Vulkan seam lands. Returns null vk::Buffer
     // for null input so callers can pass through unchecked pointers.
     inline vk::Buffer GetVulkanBuffer(Buffer *buffer)
     {

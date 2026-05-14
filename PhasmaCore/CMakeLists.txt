@@ -41,7 +41,7 @@ file(GLOB_RECURSE API_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Cod
 list(FILTER API_SOURCES EXCLUDE REGEX "/Code/API/DX12/") # Windows-only — added below under if(WIN32)
 file(GLOB_RECURSE VMA_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/vma/*.cpp")
 
-# Build PhasmaCore as a shared library for runtime loading from PhasmaEditor.
+# Build PhasmaCore as a shared library for runtime host loading.
 add_library(PhasmaCore SHARED
         ${BASE_SOURCES}
         ${ECS_SOURCES}

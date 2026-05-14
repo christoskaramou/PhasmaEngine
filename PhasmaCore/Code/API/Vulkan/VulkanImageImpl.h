@@ -42,8 +42,8 @@ namespace pe
         bool m_externallyOwned{false};
     };
 
-    // Engine-private Vulkan seam accessors for PhasmaWebGPU + RT pass.
-    // Will move to API/Vulkan/RHI_Vulkan.h when Phase 0 step 13 lands.
+    // Engine-private Vulkan seam accessors for backend integration.
+    // Will move to API/Vulkan/RHI_Vulkan.h when the public Vulkan seam lands.
     inline vk::Image GetVulkanImage(Image *image)
     {
         VulkanImageImpl *impl = VulkanImageImpl::TryFrom(image);
