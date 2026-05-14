@@ -8,7 +8,7 @@
 #include "API/RHI.h"
 #include "API/Surface.h"
 
-#include "SDL2/SDL_syswm.h"
+#include "SDL_syswm.h"
 
 namespace pe
 {

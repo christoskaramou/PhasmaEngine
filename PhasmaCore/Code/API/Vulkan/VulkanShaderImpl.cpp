@@ -7,7 +7,7 @@
 #include <unknwn.h>
 #include <objidl.h>
 #endif
-#include "dxc/dxcapi.h"
+#include "dxcapi.h"
 
 namespace pe
 {

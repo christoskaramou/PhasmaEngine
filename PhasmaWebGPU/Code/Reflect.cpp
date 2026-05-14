@@ -8,7 +8,7 @@
 #include "API/RHI.h"
 #include "API/Descriptor.h"
 
-#include "spirv_cross/spirv_cross.hpp"
+#include "spirv_cross.hpp"
 
 namespace pwgpu
 {

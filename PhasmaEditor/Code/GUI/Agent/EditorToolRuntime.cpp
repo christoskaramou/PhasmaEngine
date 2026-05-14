@@ -8,7 +8,7 @@
 #include "PhasmaMCP/Utils.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
-#include "stb/stb_image.h"
+#include "stb_image.h"
 
 using namespace pmcp;
 

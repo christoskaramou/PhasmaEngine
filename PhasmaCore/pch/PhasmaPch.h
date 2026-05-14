@@ -49,7 +49,7 @@
 #include <variant>
 #include <vector>
 
-#include "SDL2/SDL.h"
+#include "SDL.h"
 #if defined(PE_WIN32)
 #include <share.h>
 #elif defined(PE_LINUX)

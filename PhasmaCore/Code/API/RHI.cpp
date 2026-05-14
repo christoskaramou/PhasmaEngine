@@ -28,7 +28,7 @@
 #include "API/Swapchain.h"
 #include "Base/Settings.h"
 
-#include "SDL2/SDL_vulkan.h"
+#include "SDL_vulkan.h"
 
 // System + Process RAM (Windows)
 #if defined(PE_WIN32)

@@ -35,7 +35,7 @@
 #ifdef PE_TRACY
 #include <tracy/TracyVulkan.hpp>
 #endif
-#include "RenderDoc/renderdoc_app.h"
+#include "renderdoc_app.h"
 
 #define PE_RENDER_DOC 0
 

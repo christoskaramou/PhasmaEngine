@@ -14,24 +14,15 @@
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_sdl2.h"
 
-#include "SDL2/SDL_vulkan.h"
-
 #include "Script/ScriptSystem.h"
 
 namespace pe
 {
     namespace
     {
-        void GetBackendDrawableSize(SDL_Window *window, PeGraphicsApi api, int &width, int &height)
+        void GetDrawableSizeInPixels(SDL_Window *window, int &width, int &height)
         {
-            if (api == PE_GRAPHICS_API_VULKAN)
-            {
-                SDL_Vulkan_GetDrawableSize(window, &width, &height);
-                return;
-            }
-
-            // SDL2 lacks SDL_GetWindowSizeInPixels (SDL3 only), so DX12 uses window size while Vulkan keeps high-DPI drawable size.
-            SDL_GetWindowSize(window, &width, &height);
+            SDL_GetWindowSizeInPixels(window, &width, &height);
         }
 
         bool ShouldResizeForWindowEvent(uint8_t event)
@@ -48,11 +39,11 @@ namespace pe
             }
         }
 
-        bool WindowEventChangesDrawableExtent(SDL_Window *window, PeGraphicsApi api)
+        bool WindowEventChangesDrawableExtent(SDL_Window *window)
         {
             int width = 0;
             int height = 0;
-            GetBackendDrawableSize(window, api, width, height);
+            GetDrawableSizeInPixels(window, width, height);
             if (width <= 0 || height <= 0)
                 return false;
 
@@ -173,7 +164,7 @@ namespace pe
 
             if (sdlEvent.type == SDL_WINDOWEVENT &&
                 ShouldResizeForWindowEvent(sdlEvent.window.event) &&
-                WindowEventChangesDrawableExtent(m_apiHandle, RHII.GetApi()))
+                WindowEventChangesDrawableExtent(m_apiHandle))
             {
                 EventSystem::PushEvent(EventType::Resize);
             }
@@ -269,7 +260,7 @@ namespace pe
                     if (!isMinimized())
                     {
                         int w, h;
-                        GetBackendDrawableSize(m_apiHandle, RHII.GetApi(), w, h);
+                        GetDrawableSizeInPixels(m_apiHandle, w, h);
                         rendererSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
                         if (postProcessSystem)
                             postProcessSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
@@ -416,7 +407,7 @@ namespace pe
 
     void Window::GetDrawableSize(int &width, int &height)
     {
-        GetBackendDrawableSize(m_apiHandle, RHII.GetApi(), width, height);
+        GetDrawableSizeInPixels(m_apiHandle, width, height);
     }
 
     void Window::Show()

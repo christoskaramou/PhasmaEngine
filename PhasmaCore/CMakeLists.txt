@@ -67,31 +67,32 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(PhasmaCore PRIVATE $<$<CONFIG:Debug>:-O1>)
 endif()
 
-# Precompiled headers
-target_precompile_headers(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/pch/PhasmaPch.h")
+# Precompiled headers stay private; host targets opt in explicitly when they want to reuse this PCH.
+target_precompile_headers(PhasmaCore PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/pch/PhasmaPch.h")
 
 # Set the include directories
 target_include_directories(PhasmaCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/Code
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/glm
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL2
+)
+
+target_include_directories(PhasmaCore PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/dxc
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/RenderDoc
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/shaderc
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/spirv_cross
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vk_video
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vma
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vulkan
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vk_video
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL2
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/rapidjson/include
 )
 
-# Third-party prebuilt includes (assimp, rapidjson, meshoptimizer, zlib)
-target_include_directories(PhasmaCore PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/assimp/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/rapidjson/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/meshoptimizer
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib
-)
+if(TARGET TracyClient)
+    target_include_directories(PhasmaCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tracy/public)
+endif()
 
 # DX12 backend (Windows-only). PRIVATE include scope on D3D12MA — DX12 SDK headers must not leak to consumers.
 if(WIN32)
@@ -107,15 +108,15 @@ if(WIN32)
         ${PHASMACORE_DX12_SOURCES}
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/D3D12MA/D3D12MemAlloc.cpp
     )
-    target_link_libraries(PhasmaCore PUBLIC d3d12.lib dxgi.lib dxguid.lib)
+    target_link_libraries(PhasmaCore PRIVATE d3d12.lib dxgi.lib dxguid.lib)
 endif()
 
-# Link directories
-# cannot find this when running from main CMakeLists.txt
-target_link_directories(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Libs/dx")
-target_link_directories(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Libs/SDL2")
-target_link_directories(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Libs/spirv")
-target_link_directories(PhasmaCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Libs/vulkan")
+target_link_directories(PhasmaCore PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/Libs/dx"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Libs/SDL2"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Libs/spirv"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Libs/vulkan"
+)
 
 # Compile Definitions
 set(COMPILE_DEFS
@@ -133,7 +134,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set(LIB_FILES
         $<$<CONFIG:Debug>:spirv-cross-cored>
         $<$<CONFIG:Release>:spirv-cross-core>
-        $<$<CONFIG:MinsizeRel>:spirv-cross-core>
+        $<$<CONFIG:MinSizeRel>:spirv-cross-core>
         $<$<CONFIG:RelWithDebInfo>:spirv-cross-core>
     )
 else()
@@ -148,7 +149,7 @@ list(APPEND LIB_FILES
     SDL2main
     vulkan
 )
-target_link_libraries(PhasmaCore PUBLIC ${LIB_FILES})
+target_link_libraries(PhasmaCore PRIVATE ${LIB_FILES})
 
 # Tracy profiler (linked when PE_TRACY is set in the root CMakeLists.txt)
 if(TARGET TracyClient)

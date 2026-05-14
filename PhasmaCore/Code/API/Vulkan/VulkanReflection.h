@@ -1,7 +1,7 @@
 #pragma once
 
 #include "API/Reflection.h"
-#include "spirv_cross/spirv_cross.hpp"
+#include "spirv_cross.hpp"
 
 namespace pe
 {

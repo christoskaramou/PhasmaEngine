@@ -9,7 +9,7 @@
 #include <Windows.h>
 #include <Objidl.h>
 #include <Unknwn.h>
-#include "dxc/dxcapi.h"
+#include "dxcapi.h"
 #include <wrl/client.h>
 #endif
 

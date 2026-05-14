@@ -2,7 +2,7 @@
 
 #if defined(PE_WIN32)
 
-#include "dxc/dxcapi.h"
+#include "dxcapi.h"
 
 namespace pe
 {

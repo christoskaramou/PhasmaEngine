@@ -6,7 +6,7 @@
 #include "API/Shader.h"
 
 #include "API/RHI.h"
-#include "stb/stb_image.h"
+#include "stb_image.h"
 
 namespace pe
 {

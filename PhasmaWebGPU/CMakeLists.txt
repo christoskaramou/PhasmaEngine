@@ -32,6 +32,29 @@ file(GLOB_RECURSE PWGPU_SOURCES CONFIGURE_DEPENDS
 option(PE_WEBGPU_SHARED "Build PhasmaWebGPU as a shared library" OFF)
 option(PE_WEBGPU_WGSL "Build in-engine WGSL to SPIR-V via naga (Rust)" ON)
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set(PWGPU_SPIRV_CROSS_CORE_LIB
+        "$<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/spirv/spirv-cross-cored.lib>"
+        "$<$<CONFIG:Release>:${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/spirv/spirv-cross-core.lib>"
+        "$<$<CONFIG:MinSizeRel>:${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/spirv/spirv-cross-core.lib>"
+        "$<$<CONFIG:RelWithDebInfo>:${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/spirv/spirv-cross-core.lib>"
+    )
+    set(PWGPU_DXCOMPILER_LIB "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/dx/dxcompiler.lib")
+    set(PWGPU_SDL_LIBS
+        "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/SDL2/SDL2.lib"
+        "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/SDL2/SDL2main.lib"
+    )
+    set(PWGPU_VULKAN_LIB "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/vulkan/vulkan.lib")
+else()
+    set(PWGPU_SPIRV_CROSS_CORE_LIB "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/spirv/libspirv-cross-core.a")
+    set(PWGPU_DXCOMPILER_LIB "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/dx/libdxcompiler.so")
+    set(PWGPU_SDL_LIBS
+        "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/SDL2/libSDL2.a"
+        "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/SDL2/libSDL2main.a"
+    )
+    set(PWGPU_VULKAN_LIB "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/vulkan/libvulkan.so")
+endif()
+
 if (PE_WEBGPU_SHARED)
     add_library(PhasmaWebGPU SHARED ${PWGPU_SOURCES})
     target_compile_definitions(
@@ -48,9 +71,21 @@ target_precompile_headers(PhasmaWebGPU PRIVATE "${CMAKE_SOURCE_DIR}/PhasmaCore/p
 target_include_directories(
     PhasmaWebGPU
     PUBLIC "${WEBGPU_INCLUDE_WRAP}"
-    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Code"
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/Code"
+        "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party"
+        "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/dxc"
+        "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/spirv_cross"
+        "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/vma"
+        "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/vulkan"
 )
 target_link_libraries(PhasmaWebGPU PUBLIC PhasmaCore)
+target_link_libraries(PhasmaWebGPU PRIVATE
+    ${PWGPU_SPIRV_CROSS_CORE_LIB}
+    ${PWGPU_DXCOMPILER_LIB}
+    ${PWGPU_SDL_LIBS}
+    ${PWGPU_VULKAN_LIB}
+)
 
 if (PE_WEBGPU_WGSL)
     FetchContent_Declare(
@@ -157,6 +192,12 @@ if (PE_WEBGPU_TESTS)
             PRIVATE
                 "${CMAKE_CURRENT_SOURCE_DIR}/Code"
                 "${CMAKE_SOURCE_DIR}/PhasmaCore"
+                "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party"
+                "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/dxc"
+                "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/glm"
+                "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/rapidjson/include"
+                "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/vma"
+                "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/vulkan"
                 "${CMAKE_CURRENT_SOURCE_DIR}/Tests"
         )
         set_target_properties(${S_TARGET} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -211,6 +252,9 @@ if (PE_WEBGPU_TESTS)
             "${CMAKE_CURRENT_SOURCE_DIR}/Code"
             "${CMAKE_CURRENT_SOURCE_DIR}/Tests"
             "${CMAKE_SOURCE_DIR}/PhasmaCore"
+            "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/dxc"
+            "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/glm"
+            "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/rapidjson/include"
     )
 
     set(WEBGPU_SAMPLES_ASSETS "${CMAKE_SOURCE_DIR}/../webgpu-samples/public/assets/img")

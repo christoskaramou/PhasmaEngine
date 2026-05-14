@@ -4,7 +4,7 @@
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 
-#include "SDL2/SDL_vulkan.h"
+#include "SDL_vulkan.h"
 
 namespace pe
 {

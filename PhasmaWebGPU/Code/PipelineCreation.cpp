@@ -12,7 +12,7 @@
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12RhiImpl.h"
 #include "Base/Path.h"
-#include "dxc/dxcapi.h"
+#include "dxcapi.h"
 #endif
 
 #include <exception>

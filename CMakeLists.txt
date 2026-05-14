@@ -43,6 +43,20 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/RelWithDe
 set(PE_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/Libs")
 set(PE_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/third_party")
 
+set(PE_CORE_LINK_DIRS
+    "${PE_LIBS_DIR}/dx"
+    "${PE_LIBS_DIR}/SDL2"
+    "${PE_LIBS_DIR}/spirv"
+    "${PE_LIBS_DIR}/vulkan"
+)
+
+set(PE_SPIRV_CROSS_CORE_LIB
+    $<$<CONFIG:Debug>:spirv-cross-cored>
+    $<$<CONFIG:Release>:spirv-cross-core>
+    $<$<CONFIG:MinSizeRel>:spirv-cross-core>
+    $<$<CONFIG:RelWithDebInfo>:spirv-cross-core>
+)
+
 # --- Tracy Profiler ---
 option(PE_TRACY "Enable Tracy profiler integration" OFF)
 if(PE_TRACY)
@@ -211,10 +225,19 @@ target_include_directories(PhasmaEditorModule PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor"
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code"
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaMCP/third_party"
+    "${PE_THIRD_PARTY_DIR}/assimp/include"
+    "${PE_THIRD_PARTY_DIR}/meshoptimizer"
+    "${PE_THIRD_PARTY_DIR}/rapidjson/include"
+    "${PE_THIRD_PARTY_DIR}/spirv_cross"
+    "${PE_THIRD_PARTY_DIR}/stb"
+    "${PE_THIRD_PARTY_DIR}"
+    "${PE_THIRD_PARTY_DIR}/vma"
+    "${PE_THIRD_PARTY_DIR}/vulkan"
     "${PE_EDITOR_THIRD_PARTY_DIR}"
     "${PE_EDITOR_THIRD_PARTY_DIR}/imgui"
     "${PE_EDITOR_THIRD_PARTY_DIR}/sol2"
 )
+target_link_directories(PhasmaEditorModule PRIVATE ${PE_CORE_LINK_DIRS})
 
 target_link_libraries(PhasmaEditorModule PRIVATE
     PhasmaCore
@@ -222,12 +245,16 @@ target_link_libraries(PhasmaEditorModule PRIVATE
     assimp
     meshoptimizer
     Lua
+    ${PE_SPIRV_CROSS_CORE_LIB}
+    SDL2
+    SDL2main
+    vulkan
 )
 if(PE_PHYSICS AND TARGET Jolt)
     target_link_libraries(PhasmaEditorModule PRIVATE Jolt)
 endif()
 if(WIN32)
-    target_link_libraries(PhasmaEditorModule PRIVATE d3dcompiler.lib)
+    target_link_libraries(PhasmaEditorModule PRIVATE d3d12.lib dxgi.lib dxguid.lib d3dcompiler.lib)
 endif()
 
 option(PE_AUDIO "Enable miniaudio integration" ON)
@@ -254,7 +281,8 @@ set(PHASMA_EDITOR_HOST_INCLUDES
 )
 
 target_include_directories(PhasmaEditor PRIVATE ${PHASMA_EDITOR_HOST_INCLUDES})
-target_link_libraries(PhasmaEditor PRIVATE PhasmaCore)
+target_link_directories(PhasmaEditor PRIVATE ${PE_CORE_LINK_DIRS})
+target_link_libraries(PhasmaEditor PRIVATE PhasmaCore SDL2 SDL2main)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(PhasmaEditor PRIVATE dl)
     set_target_properties(PhasmaEditor PROPERTIES
@@ -269,8 +297,12 @@ add_dependencies(PhasmaEditor PhasmaEditorModule)
 add_executable(PhasmaLauncher "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Launcher.cpp")
 
 target_precompile_headers(PhasmaLauncher PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
-target_include_directories(PhasmaLauncher PRIVATE ${PHASMA_EDITOR_HOST_INCLUDES})
-target_link_libraries(PhasmaLauncher PRIVATE PhasmaCore)
+target_include_directories(PhasmaLauncher PRIVATE
+    ${PHASMA_EDITOR_HOST_INCLUDES}
+    "${PE_THIRD_PARTY_DIR}/rapidjson/include"
+)
+target_link_directories(PhasmaLauncher PRIVATE ${PE_CORE_LINK_DIRS})
+target_link_libraries(PhasmaLauncher PRIVATE PhasmaCore SDL2 SDL2main)
 target_sources(PhasmaLauncher PRIVATE
     "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/imgui.cpp"
     "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/imgui_draw.cpp"
