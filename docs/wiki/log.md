@@ -13,7 +13,7 @@
 - Tightened PhasmaCore's exported build surface by making its precompiled header private and keeping DX12 system libraries as PhasmaCore-private link dependencies; the editor module now links its DX12 GUI/CACAO dependencies explicitly.
 - Removed the editor window resize path's direct `SDL_vulkan.h` dependency by using SDL's backend-neutral pixel-size query for drawable extents.
 - Narrowed PhasmaCore's public third-party build surface: core now publishes only the neutral public include roots its public headers need, keeps its third-party library search paths/link libraries private, and makes consumers explicitly include/link shader compilers, SPIRV-Cross, RenderDoc, stb, VMA, Vulkan, RapidJSON, or SDL when they use them directly.
-- Classified the LightPass `tonemapping/fsr2` UBO path as legacy flag plumbing. `fsr2` is fed from `taa`, no `GlobalSettings::fsr2` exists, and `Lighting.hlsl` declares but does not consume `cb_tonemapping` or `cb_fsr2`; real postprocess behavior is driven by explicit render-graph passes (`TAA`, `Sharpen`, `Upsample`, `Tonemap`, etc.).
+- Removed the stale LightPass `tonemapping/fsr2` UBO plumbing and DX12 gate helper. `fsr2` had been fed from `taa`, no `GlobalSettings::fsr2` exists, and `LightingPS.hlsl` did not consume either flag; real postprocess behavior remains driven by explicit render-graph passes (`TAA`, `Sharpen`, `Upsample`, `Tonemap`, etc.).
 
 ## 2026-05-12
 

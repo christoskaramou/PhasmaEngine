@@ -34,8 +34,6 @@ TexSamplerDecl(6, 0, Emission)
     float4      cb_camPos;
     uint        cb_ssao;
     uint        cb_ssr;
-    uint        cb_tonemapping;
-    uint        cb_fsr2;
     uint        cb_IBL;
     float       cb_IBL_intensity;
     float       cb_lightsIntensity;

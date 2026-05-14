@@ -8,8 +8,6 @@ namespace pe
         vec4 camPos = vec4(0.0f);
         uint32_t ssao = 1;
         uint32_t ssr = 0;
-        uint32_t tonemapping = 0;
-        uint32_t fsr2 = 0;
         uint32_t IBL = 1;
         float IBL_intensity = 0.75f;
         float lights_intensity = 7.0f;
