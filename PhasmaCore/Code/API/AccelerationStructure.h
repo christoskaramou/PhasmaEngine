@@ -28,6 +28,7 @@ namespace pe
 
     private:
         friend struct AccelerationStructureAccess;
+        friend struct Dx12AccelerationStructureAccess;
 
         void CreateBuffer(size_t size);
         void CreateScratchBuffer(size_t size);

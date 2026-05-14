@@ -26,8 +26,16 @@ namespace pe
             }
         }
 
-        D3D12_RESOURCE_STATES InitialStateForHeap(D3D12_HEAP_TYPE heapType)
+        bool IsAccelerationStructureStorage(PeBufferUsageFlags usage)
         {
+            return (usage & PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_KHR) != 0;
+        }
+
+        D3D12_RESOURCE_STATES InitialStateForHeap(D3D12_HEAP_TYPE heapType, PeBufferUsageFlags usage)
+        {
+            if (IsAccelerationStructureStorage(usage))
+                return D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+
             switch (heapType)
             {
             case D3D12_HEAP_TYPE_UPLOAD:
@@ -87,8 +95,10 @@ namespace pe
             allocationDesc.Flags = D3D12MA::ALLOCATION_FLAG_COMMITTED;
 
         D3D12_RESOURCE_DESC resourceDesc = BufferResourceDesc(owner->m_size, desc.usage, m_heapType);
+        PE_ERROR_IF(IsAccelerationStructureStorage(desc.usage) && m_heapType != D3D12_HEAP_TYPE_DEFAULT,
+                    "Dx12BufferImpl: acceleration-structure storage buffers must use a default heap");
         m_allowsUnorderedAccess = (resourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) != 0;
-        m_state = InitialStateForHeap(m_heapType);
+        m_state = InitialStateForHeap(m_heapType, desc.usage);
         HRESULT hr = rhi->GetAllocator()->CreateResource(&allocationDesc,
                                                          &resourceDesc,
                                                          m_state,

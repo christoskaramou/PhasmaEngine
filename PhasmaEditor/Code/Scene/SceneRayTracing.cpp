@@ -7,19 +7,89 @@
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vertex.h"
 
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12AccelerationStructure.h"
+#undef MemoryBarrier
+#endif
+
 namespace pe
 {
     namespace
     {
-        bool SupportsVulkanSceneRayTracing()
+        bool SupportsSceneRayTracing()
         {
-            return RHII.GetApi() == PE_GRAPHICS_API_VULKAN && RHII.GetCaps().rayTracing;
+            const PeGraphicsApi api = RHII.GetApi();
+            return RHII.GetCaps().rayTracing &&
+                   (api == PE_GRAPHICS_API_VULKAN || api == PE_GRAPHICS_API_DX12);
         }
+
+        bool IsVulkanSceneRayTracing()
+        {
+            return RHII.GetApi() == PE_GRAPHICS_API_VULKAN;
+        }
+
+        bool IsDx12SceneRayTracing()
+        {
+            return RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        }
+
+        uint64_t GetSceneRtScratchAlignment()
+        {
+            if (IsVulkanSceneRayTracing())
+            {
+                vk::PhysicalDeviceAccelerationStructurePropertiesKHR asProps{};
+                vk::PhysicalDeviceProperties2 props{};
+                props.pNext = &asProps;
+                VulkanRhi::Gpu().getProperties2(&props);
+                return asProps.minAccelerationStructureScratchOffsetAlignment;
+            }
+
+#if defined(PE_WIN32)
+            if (IsDx12SceneRayTracing())
+                return D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT;
+#endif
+
+            return 256;
+        }
+
+        void FillVulkanTransform(vk::TransformMatrixKHR &transformMatrix, const mat4 &t)
+        {
+            transformMatrix.matrix[0][0] = t[0][0];
+            transformMatrix.matrix[0][1] = t[1][0];
+            transformMatrix.matrix[0][2] = t[2][0];
+            transformMatrix.matrix[0][3] = t[3][0];
+            transformMatrix.matrix[1][0] = t[0][1];
+            transformMatrix.matrix[1][1] = t[1][1];
+            transformMatrix.matrix[1][2] = t[2][1];
+            transformMatrix.matrix[1][3] = t[3][1];
+            transformMatrix.matrix[2][0] = t[0][2];
+            transformMatrix.matrix[2][1] = t[1][2];
+            transformMatrix.matrix[2][2] = t[2][2];
+            transformMatrix.matrix[2][3] = t[3][2];
+        }
+
+#if defined(PE_WIN32)
+        void FillDx12Transform(float (&transform)[3][4], const mat4 &t)
+        {
+            transform[0][0] = t[0][0];
+            transform[0][1] = t[1][0];
+            transform[0][2] = t[2][0];
+            transform[0][3] = t[3][0];
+            transform[1][0] = t[0][1];
+            transform[1][1] = t[1][1];
+            transform[1][2] = t[2][1];
+            transform[1][3] = t[3][1];
+            transform[2][0] = t[0][2];
+            transform[2][1] = t[1][2];
+            transform[2][2] = t[2][2];
+            transform[2][3] = t[3][2];
+        }
+#endif
     } // namespace
 
     void Scene::BuildAllBLASes(CommandBuffer *cmd)
     {
-        if (!SupportsVulkanSceneRayTracing())
+        if (!SupportsSceneRayTracing())
             return;
 
         // Cleanup old BLAS resources
@@ -42,17 +112,21 @@ namespace pe
         if (m_meshCount == 0)
             return;
 
-        vk::DeviceAddress bufferAddress = GetBuffer()->GetDeviceAddress();
+        uint64_t bufferAddress = GetBuffer()->GetDeviceAddress();
 
         // --- Pass 1: Calculate BLAS sizes ---
-        vk::DeviceSize totalBlasSize = 0;
-        vk::DeviceSize maxScratchSize = 0;
+        uint64_t totalBlasSize = 0;
+        uint64_t maxScratchSize = 0;
 
         struct BlasBuildReq
         {
             vk::AccelerationStructureGeometryKHR geometry;
             vk::AccelerationStructureBuildRangeInfoKHR range;
             vk::AccelerationStructureBuildSizesInfoKHR sizeInfo;
+#if defined(PE_WIN32)
+            Dx12RtTriangleGeometry dxGeometry;
+#endif
+            uint64_t resultSize = 0;
             int meshIndex;
             AccelerationStructure *createdBlas = nullptr;
         };
@@ -72,53 +146,70 @@ namespace pe
             if (hasSkeleton && mesh.skinned)
                 continue;
 
-            vk::AccelerationStructureGeometryKHR geometry{};
-            geometry.geometryType = vk::GeometryTypeKHR::eTriangles;
-            geometry.geometry.triangles.vertexFormat = vk::Format::eR32G32B32Sfloat;
-            geometry.geometry.triangles.vertexData.deviceAddress =
-                bufferAddress + m_verticesOffset + mesh.vertexOffset * sizeof(Vertex);
-            geometry.geometry.triangles.vertexStride = sizeof(Vertex);
-            geometry.geometry.triangles.maxVertex = mesh.vertexCount ? mesh.vertexCount - 1 : 0;
-            geometry.geometry.triangles.indexType = vk::IndexType::eUint32;
-            geometry.geometry.triangles.indexData.deviceAddress =
-                bufferAddress + mesh.indexOffset * sizeof(uint32_t);
-            if (mesh.renderType == RenderType::AlphaCut || mesh.renderType == RenderType::AlphaBlend ||
-                mesh.renderType == RenderType::Transmission)
+            BlasBuildReq req{};
+            req.meshIndex = meshIndex;
+            const bool isTransparent = mesh.renderType == RenderType::AlphaCut ||
+                                       mesh.renderType == RenderType::AlphaBlend ||
+                                       mesh.renderType == RenderType::Transmission;
+
+            if (IsVulkanSceneRayTracing())
             {
-                geometry.flags = vk::GeometryFlagBitsKHR::eNoDuplicateAnyHitInvocation;
+                req.geometry.geometryType = vk::GeometryTypeKHR::eTriangles;
+                req.geometry.geometry.triangles.vertexFormat = vk::Format::eR32G32B32Sfloat;
+                req.geometry.geometry.triangles.vertexData.deviceAddress =
+                    bufferAddress + m_verticesOffset + mesh.vertexOffset * sizeof(Vertex);
+                req.geometry.geometry.triangles.vertexStride = sizeof(Vertex);
+                req.geometry.geometry.triangles.maxVertex = mesh.vertexCount ? mesh.vertexCount - 1 : 0;
+                req.geometry.geometry.triangles.indexType = vk::IndexType::eUint32;
+                req.geometry.geometry.triangles.indexData.deviceAddress =
+                    bufferAddress + mesh.indexOffset * sizeof(uint32_t);
+                req.geometry.flags = isTransparent
+                                         ? vk::GeometryFlagBitsKHR::eNoDuplicateAnyHitInvocation
+                                         : vk::GeometryFlagBitsKHR::eOpaque;
+
+                req.range.primitiveCount = mesh.indexCount / 3;
+                req.range.primitiveOffset = 0;
+                req.range.firstVertex = 0;
+                req.range.transformOffset = 0;
+
+                req.sizeInfo = GetVulkanAccelerationStructureBuildSizes(
+                    {req.geometry},
+                    {req.range.primitiveCount},
+                    vk::AccelerationStructureTypeKHR::eBottomLevel,
+                    kBlasFlags,
+                    vk::AccelerationStructureBuildTypeKHR::eDevice);
+
+                req.resultSize = req.sizeInfo.accelerationStructureSize;
+                maxScratchSize = std::max<uint64_t>(maxScratchSize, req.sizeInfo.buildScratchSize);
             }
-            else
+
+#if defined(PE_WIN32)
+            if (IsDx12SceneRayTracing())
             {
-                geometry.flags = vk::GeometryFlagBitsKHR::eOpaque;
+                req.dxGeometry.vertexAddress = bufferAddress + m_verticesOffset + mesh.vertexOffset * sizeof(Vertex);
+                req.dxGeometry.vertexCount = mesh.vertexCount;
+                req.dxGeometry.vertexStride = sizeof(Vertex);
+                req.dxGeometry.vertexFormat = PE_FORMAT_R32G32B32_SFLOAT;
+                req.dxGeometry.indexAddress = bufferAddress + mesh.indexOffset * sizeof(uint32_t);
+                req.dxGeometry.indexCount = mesh.indexCount;
+                req.dxGeometry.indexType = PE_INDEX_TYPE_UINT32;
+                req.dxGeometry.opaque = !isTransparent;
+
+                Dx12RtPrebuildInfo sizeInfo = GetDx12BlasPrebuildInfo({req.dxGeometry}, kBlasFlags);
+                req.resultSize = sizeInfo.resultDataMaxSize;
+                maxScratchSize = std::max<uint64_t>(maxScratchSize, sizeInfo.buildScratchSize);
             }
+#endif
 
-            vk::AccelerationStructureBuildRangeInfoKHR rangeInfo{};
-            rangeInfo.primitiveCount = mesh.indexCount / 3;
-            rangeInfo.primitiveOffset = 0;
-            rangeInfo.firstVertex = 0;
-            rangeInfo.transformOffset = 0;
-
-            auto sizeInfo = GetVulkanAccelerationStructureBuildSizes(
-                {geometry},
-                {rangeInfo.primitiveCount},
-                vk::AccelerationStructureTypeKHR::eBottomLevel,
-                kBlasFlags,
-                vk::AccelerationStructureBuildTypeKHR::eDevice);
-
-            totalBlasSize = RHII.Align(totalBlasSize + sizeInfo.accelerationStructureSize, 256);
-            maxScratchSize = std::max(maxScratchSize, sizeInfo.buildScratchSize);
-
-            buildReqs.push_back({geometry, rangeInfo, sizeInfo, meshIndex});
+            PE_ERROR_IF(req.resultSize == 0, "Scene::BuildAllBLASes: mesh %d produced zero BLAS size", meshIndex);
+            totalBlasSize = RHII.Align(totalBlasSize + req.resultSize, 256);
+            buildReqs.push_back(req);
         }
 
         if (buildReqs.empty())
             return;
 
-        vk::PhysicalDeviceAccelerationStructurePropertiesKHR asProps{};
-        vk::PhysicalDeviceProperties2 props{};
-        props.pNext = &asProps;
-        VulkanRhi::Gpu().getProperties2(&props);
-        auto scratchAlign = asProps.minAccelerationStructureScratchOffsetAlignment;
+        const uint64_t scratchAlign = GetSceneRtScratchAlignment();
 
         m_blasMergedBuffer = Buffer::Create({
             .size = totalBlasSize,
@@ -144,25 +235,45 @@ namespace pe
                                 PE_ACCESS_SHADER_READ | PE_ACCESS_TRANSFER_READ;
         cmd->MemoryBarrier(barrier);
 
-        vk::DeviceSize currentOffset = 0;
+#if defined(PE_WIN32)
+        if (IsDx12SceneRayTracing())
+        {
+            BufferBarrierInfo geometryBarrier{};
+            geometryBarrier.buffer = GetBuffer();
+            geometryBarrier.stageMask = PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR;
+            geometryBarrier.accessMask = PE_ACCESS_ACCELERATION_STRUCTURE_READ_KHR;
+            cmd->BufferBarrier(geometryBarrier);
+        }
+#endif
+
+        uint64_t currentOffset = 0;
         for (auto &req : buildReqs)
         {
             currentOffset = RHII.Align(currentOffset, 256);
 
             std::string name = "BLAS_mesh" + std::to_string(req.meshIndex);
             req.createdBlas = new AccelerationStructure(name, m_blasMergedBuffer, currentOffset);
-            BuildVulkanBLAS(req.createdBlas, cmd, {req.geometry}, {req.range}, {req.range.primitiveCount},
-                            kBlasFlags, m_scratchBuffer->GetDeviceAddress());
+            if (IsVulkanSceneRayTracing())
+            {
+                BuildVulkanBLAS(req.createdBlas, cmd, {req.geometry}, {req.range}, {req.range.primitiveCount},
+                                kBlasFlags, m_scratchBuffer->GetDeviceAddress());
+            }
+#if defined(PE_WIN32)
+            else if (IsDx12SceneRayTracing())
+            {
+                BuildDx12BLAS(req.createdBlas, cmd, {req.dxGeometry}, kBlasFlags, m_scratchBuffer->GetDeviceAddress());
+            }
+#endif
             m_blases.push_back(req.createdBlas);
             m_blasByMesh[req.meshIndex] = req.createdBlas;
 
-            currentOffset += req.sizeInfo.accelerationStructureSize;
+            currentOffset += req.resultSize;
         }
     }
 
     void Scene::BuildTLASFromInstances(CommandBuffer *cmd)
     {
-        if (!SupportsVulkanSceneRayTracing())
+        if (!SupportsSceneRayTracing())
             return;
 
         // Cleanup old TLAS resources (keep BLAS — caller manages those)
@@ -181,6 +292,7 @@ namespace pe
         {
             AccelerationStructure *blas;
             int meshIndex;
+            uint32_t constantsIndex;
             uint32_t nodeIndex;
             uint32_t meshSlot;
             mat4 transform;
@@ -189,6 +301,7 @@ namespace pe
         instanceReqs.reserve(m_meshCount);
 
         bool hasSkeleton = GetSkeleton().GetBoneCount() > 0;
+        uint32_t constantsIndex = 0;
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
@@ -203,6 +316,8 @@ namespace pe
                     continue;
                 if (m_meshes[meshIdx].indexCount == 0)
                     continue;
+
+                const uint32_t currentConstantsIndex = constantsIndex++;
                 if (hasSkeleton && m_meshes[meshIdx].skinned)
                     continue;
 
@@ -210,7 +325,7 @@ namespace pe
                 if (it == m_blasByMesh.end())
                     continue; // mesh has no BLAS (e.g., removed mesh, dead entry)
 
-                instanceReqs.push_back({it->second, meshIdx, i, slot, m_nodeRuntime[i].gpuData.worldMatrix});
+                instanceReqs.push_back({it->second, meshIdx, currentConstantsIndex, i, slot, m_nodeRuntime[i].gpuData.worldMatrix});
             }
         }
 
@@ -231,29 +346,36 @@ namespace pe
         static constexpr PeAccelerationStructureBuildFlags kTlasFlags =
             PE_ACCELERATION_STRUCTURE_BUILD_PREFER_FAST_TRACE;
 
-        vk::AccelerationStructureGeometryKHR tlasGeom{};
-        tlasGeom.geometryType = vk::GeometryTypeKHR::eInstances;
-        vk::AccelerationStructureGeometryInstancesDataKHR instData{};
-        instData.arrayOfPointers = VK_FALSE;
-        instData.data.deviceAddress = 0;
-        tlasGeom.geometry.instances = instData;
+        uint64_t tlasScratch = 0;
+        if (IsVulkanSceneRayTracing())
+        {
+            vk::AccelerationStructureGeometryKHR tlasGeom{};
+            tlasGeom.geometryType = vk::GeometryTypeKHR::eInstances;
+            vk::AccelerationStructureGeometryInstancesDataKHR instData{};
+            instData.arrayOfPointers = VK_FALSE;
+            instData.data.deviceAddress = 0;
+            tlasGeom.geometry.instances = instData;
 
-        // Must include eAllowUpdate here — UpdateTLASTransformations needs updateScratchSize bytes,
-        // which can exceed buildScratchSize on some hardware at high instance counts.
-        auto tlasSizes = GetVulkanAccelerationStructureBuildSizes(
-            {tlasGeom},
-            {m_rtInstanceCount},
-            vk::AccelerationStructureTypeKHR::eTopLevel,
-            kTlasFlags | PE_ACCELERATION_STRUCTURE_BUILD_ALLOW_UPDATE,
-            vk::AccelerationStructureBuildTypeKHR::eDevice);
-
-        vk::PhysicalDeviceAccelerationStructurePropertiesKHR asProps{};
-        vk::PhysicalDeviceProperties2 props{};
-        props.pNext = &asProps;
-        VulkanRhi::Gpu().getProperties2(&props);
-        auto scratchAlign = asProps.minAccelerationStructureScratchOffsetAlignment;
-        vk::DeviceSize tlasScratch =
-            std::max(tlasSizes.buildScratchSize, tlasSizes.updateScratchSize);
+            // Must include ALLOW_UPDATE here: UpdateTLASTransformations needs update scratch,
+            // which can exceed build scratch on some hardware at high instance counts.
+            auto tlasSizes = GetVulkanAccelerationStructureBuildSizes(
+                {tlasGeom},
+                {m_rtInstanceCount},
+                vk::AccelerationStructureTypeKHR::eTopLevel,
+                kTlasFlags | PE_ACCELERATION_STRUCTURE_BUILD_ALLOW_UPDATE,
+                vk::AccelerationStructureBuildTypeKHR::eDevice);
+            tlasScratch = std::max<uint64_t>(tlasSizes.buildScratchSize, tlasSizes.updateScratchSize);
+        }
+#if defined(PE_WIN32)
+        else if (IsDx12SceneRayTracing())
+        {
+            Dx12RtPrebuildInfo tlasSizes = GetDx12TlasPrebuildInfo(
+                m_rtInstanceCount,
+                kTlasFlags | PE_ACCELERATION_STRUCTURE_BUILD_ALLOW_UPDATE);
+            tlasScratch = std::max<uint64_t>(tlasSizes.buildScratchSize, tlasSizes.updateScratchSize);
+        }
+#endif
+        const uint64_t scratchAlign = GetSceneRtScratchAlignment();
 
         // Reallocate scratch buffer sized for TLAS (BLAS scratch was separate in BuildAllBLASes)
         RHII.AddToDeletionQueue([b = m_scratchBuffer]()
@@ -267,8 +389,14 @@ namespace pe
 
         // --- Build instance buffer ---
         m_instanceBuffer = Buffer::Create({
-            .size = std::max((size_t)1, (size_t)m_rtInstanceCount) *
-                    sizeof(vk::AccelerationStructureInstanceKHR),
+            .size = std::max<size_t>(1, m_rtInstanceCount) *
+                    (IsVulkanSceneRayTracing() ? sizeof(vk::AccelerationStructureInstanceKHR)
+#if defined(PE_WIN32)
+                                               : sizeof(D3D12_RAYTRACING_INSTANCE_DESC)
+#else
+                                               : sizeof(vk::AccelerationStructureInstanceKHR)
+#endif
+                         ),
             .usage = PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR |
                      PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS |
                      PE_BUFFER_USAGE_TRANSFER_DST,
@@ -277,39 +405,49 @@ namespace pe
         });
 
         m_instanceBuffer->Map();
-        auto *gpuInstances = (vk::AccelerationStructureInstanceKHR *)m_instanceBuffer->Data();
+        auto *vkInstances = IsVulkanSceneRayTracing()
+                                ? static_cast<vk::AccelerationStructureInstanceKHR *>(m_instanceBuffer->Data())
+                                : nullptr;
+#if defined(PE_WIN32)
+        auto *dxInstances = IsDx12SceneRayTracing()
+                                ? static_cast<D3D12_RAYTRACING_INSTANCE_DESC *>(m_instanceBuffer->Data())
+                                : nullptr;
+#endif
 
         for (size_t i = 0; i < instanceReqs.size(); i++)
         {
             auto &req = instanceReqs[i];
 
-            vk::TransformMatrixKHR transformMatrix;
             mat4 &t = req.transform;
-            transformMatrix.matrix[0][0] = t[0][0];
-            transformMatrix.matrix[0][1] = t[1][0];
-            transformMatrix.matrix[0][2] = t[2][0];
-            transformMatrix.matrix[0][3] = t[3][0];
-            transformMatrix.matrix[1][0] = t[0][1];
-            transformMatrix.matrix[1][1] = t[1][1];
-            transformMatrix.matrix[1][2] = t[2][1];
-            transformMatrix.matrix[1][3] = t[3][1];
-            transformMatrix.matrix[2][0] = t[0][2];
-            transformMatrix.matrix[2][1] = t[1][2];
-            transformMatrix.matrix[2][2] = t[2][2];
-            transformMatrix.matrix[2][3] = t[3][2];
 
             const Mesh &mesh = m_meshes[req.meshIndex];
             bool isTransparent = (mesh.renderType == RenderType::AlphaBlend ||
                                   mesh.renderType == RenderType::Transmission ||
                                   mesh.renderType == RenderType::AlphaCut);
 
-            gpuInstances[i].transform = transformMatrix;
-            gpuInstances[i].instanceCustomIndex = static_cast<uint32_t>(i);
-            gpuInstances[i].mask = isTransparent ? 0x80 : 0x01;
-            gpuInstances[i].instanceShaderBindingTableRecordOffset = 0;
-            gpuInstances[i].flags = static_cast<VkGeometryInstanceFlagBitsKHR>(
-                vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
-            gpuInstances[i].accelerationStructureReference = req.blas->GetDeviceAddress();
+            if (vkInstances)
+            {
+                vk::TransformMatrixKHR transformMatrix{};
+                FillVulkanTransform(transformMatrix, t);
+                vkInstances[i].transform = transformMatrix;
+                vkInstances[i].instanceCustomIndex = static_cast<uint32_t>(i);
+                vkInstances[i].mask = isTransparent ? 0x80 : 0x01;
+                vkInstances[i].instanceShaderBindingTableRecordOffset = 0;
+                vkInstances[i].flags = static_cast<VkGeometryInstanceFlagBitsKHR>(
+                    vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
+                vkInstances[i].accelerationStructureReference = req.blas->GetDeviceAddress();
+            }
+#if defined(PE_WIN32)
+            if (dxInstances)
+            {
+                FillDx12Transform(dxInstances[i].Transform, t);
+                dxInstances[i].InstanceID = static_cast<UINT>(i);
+                dxInstances[i].InstanceMask = isTransparent ? 0x80 : 0x01;
+                dxInstances[i].InstanceContributionToHitGroupIndex = 0;
+                dxInstances[i].Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE;
+                dxInstances[i].AccelerationStructure = req.blas->GetDeviceAddress();
+            }
+#endif
 
             m_nodeRuntime[req.nodeIndex].rtInstanceIndices[req.meshSlot] = static_cast<int>(i);
         }
@@ -328,6 +466,7 @@ namespace pe
             uint32_t vertexOffset;
             uint32_t positionsOffset;
             uint32_t renderType;
+            uint32_t constantsIndex;
             int32_t textures[5];
         };
 
@@ -354,7 +493,10 @@ namespace pe
             meshInfoGPU.indexOffset = mesh.indexOffset * 4;
             meshInfoGPU.vertexOffset =
                 static_cast<uint32_t>(m_verticesOffset) + mesh.vertexOffset * sizeof(Vertex);
+            meshInfoGPU.positionsOffset =
+                static_cast<uint32_t>(m_positionsOffset) + mesh.positionsOffset * sizeof(PositionUvVertex);
             meshInfoGPU.renderType = static_cast<uint32_t>(mesh.renderType);
+            meshInfoGPU.constantsIndex = req.constantsIndex;
 
             for (int k = 0; k < 5; k++)
                 meshInfoGPU.textures[k] = static_cast<int32_t>(meshRt.imageViewIndices[k]);
@@ -365,7 +507,7 @@ namespace pe
 
     void Scene::BuildAccelerationStructures(CommandBuffer *cmd)
     {
-        if (!SupportsVulkanSceneRayTracing())
+        if (!SupportsSceneRayTracing())
             return;
 
         BuildAllBLASes(cmd);
@@ -374,7 +516,7 @@ namespace pe
 
     void Scene::RebuildTLASOnly()
     {
-        if (!SupportsVulkanSceneRayTracing())
+        if (!SupportsSceneRayTracing())
             return;
 
         if (m_blasByMesh.empty())
@@ -400,7 +542,7 @@ namespace pe
 
     void Scene::UpdateTLASTransformations(CommandBuffer *cmd)
     {
-        if (!SupportsVulkanSceneRayTracing())
+        if (!SupportsSceneRayTracing())
             return;
 
         if (!m_tlas || !m_instanceBuffer || !m_scratchBuffer)
@@ -410,31 +552,35 @@ namespace pe
             return;
 
         m_instanceBuffer->Map();
-        auto *gpuInstances = (vk::AccelerationStructureInstanceKHR *)m_instanceBuffer->Data();
+        auto *vkInstances = IsVulkanSceneRayTracing()
+                                ? static_cast<vk::AccelerationStructureInstanceKHR *>(m_instanceBuffer->Data())
+                                : nullptr;
+#if defined(PE_WIN32)
+        auto *dxInstances = IsDx12SceneRayTracing()
+                                ? static_cast<D3D12_RAYTRACING_INSTANCE_DESC *>(m_instanceBuffer->Data())
+                                : nullptr;
+#endif
 
         for (NodeId *node : m_nodesMoved)
         {
             const NodeRuntime &rt = m_nodeRuntime[node->index];
             const mat4 &t = rt.gpuData.worldMatrix;
 
-            vk::TransformMatrixKHR transformMatrix;
-            transformMatrix.matrix[0][0] = t[0][0];
-            transformMatrix.matrix[0][1] = t[1][0];
-            transformMatrix.matrix[0][2] = t[2][0];
-            transformMatrix.matrix[0][3] = t[3][0];
-            transformMatrix.matrix[1][0] = t[0][1];
-            transformMatrix.matrix[1][1] = t[1][1];
-            transformMatrix.matrix[1][2] = t[2][1];
-            transformMatrix.matrix[1][3] = t[3][1];
-            transformMatrix.matrix[2][0] = t[0][2];
-            transformMatrix.matrix[2][1] = t[1][2];
-            transformMatrix.matrix[2][2] = t[2][2];
-            transformMatrix.matrix[2][3] = t[3][2];
-
             for (int instanceIndex : rt.rtInstanceIndices)
             {
                 if (instanceIndex >= 0 && instanceIndex < static_cast<int>(m_rtInstanceCount))
-                    gpuInstances[instanceIndex].transform = transformMatrix;
+                {
+                    if (vkInstances)
+                    {
+                        vk::TransformMatrixKHR transformMatrix{};
+                        FillVulkanTransform(transformMatrix, t);
+                        vkInstances[instanceIndex].transform = transformMatrix;
+                    }
+#if defined(PE_WIN32)
+                    if (dxInstances)
+                        FillDx12Transform(dxInstances[instanceIndex].Transform, t);
+#endif
+                }
             }
         }
 

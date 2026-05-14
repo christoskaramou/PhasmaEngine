@@ -7,6 +7,8 @@
 #include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 
+#include <algorithm>
+
 namespace pe
 {
     namespace
@@ -76,43 +78,12 @@ namespace pe
         return sizeInfo;
     }
 
-    AccelerationStructure::AccelerationStructure(const std::string &name, Buffer *buffer, uint64_t offset)
-        : m_buffer(buffer), m_offset(offset), m_name(name)
+    void DestroyVulkanAccelerationStructure(AccelerationStructure *as)
     {
-        if (m_buffer)
-            m_externalBuffer = true;
-    }
-
-    AccelerationStructure::~AccelerationStructure()
-    {
-        if (m_apiHandle)
-        {
-            VulkanRhi::Device().destroyAccelerationStructureKHR(GetVulkanAccelerationStructure(this));
-        }
-
-        if (!m_externalBuffer)
-            Buffer::Destroy(m_buffer);
-        Buffer::Destroy(m_scratchBuffer);
-    }
-
-    void AccelerationStructure::CreateBuffer(size_t size)
-    {
-        m_buffer = Buffer::Create({
-            .size = size,
-            .usage = PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_KHR | PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS,
-            .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
-            .name = m_name + "_buffer",
-        });
-    }
-
-    void AccelerationStructure::CreateScratchBuffer(size_t size)
-    {
-        m_scratchBuffer = Buffer::Create({
-            .size = size,
-            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS,
-            .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
-            .name = m_name + "_scratch_buffer",
-        });
+        if (!as || !as->ApiHandle())
+            return;
+        VulkanRhi::Device().destroyAccelerationStructureKHR(GetVulkanAccelerationStructure(as));
+        as->ApiHandle() = {};
     }
 
     void BuildVulkanBLAS(AccelerationStructure *as,
@@ -148,7 +119,8 @@ namespace pe
 
         if (!scratchAddress)
         {
-            AccelerationStructureAccess::CreateScratchBuffer(as, sizeInfo.buildScratchSize);
+            AccelerationStructureAccess::CreateScratchBuffer(
+                as, std::max(sizeInfo.buildScratchSize, sizeInfo.updateScratchSize));
             buildInfo.scratchData.deviceAddress = AccelerationStructureAccess::GetScratchBuffer(as)->GetDeviceAddress();
         }
         else
@@ -183,15 +155,16 @@ namespace pe
         cmd->MemoryBarrier(barrier);
     }
 
-    void AccelerationStructure::BuildTLAS(CommandBuffer *cmd,
-                                          uint32_t instanceCount,
-                                          Buffer *instanceBuffer,
-                                          PeAccelerationStructureBuildFlags flags,
-                                          uint64_t scratchAddress)
+    void BuildVulkanTLAS(AccelerationStructure *as,
+                         CommandBuffer *cmd,
+                         uint32_t instanceCount,
+                         Buffer *instanceBuffer,
+                         PeAccelerationStructureBuildFlags flags,
+                         vk::DeviceAddress scratchAddress)
     {
         if (!SupportsVulkanAccelerationStructures())
         {
-            PE_ERROR("AccelerationStructure::BuildTLAS requested without Vulkan ray-tracing support");
+            PE_ERROR("Vulkan TLAS build requested without Vulkan ray-tracing support");
             return;
         }
 
@@ -220,13 +193,14 @@ namespace pe
             &count,
             &sizeInfo);
 
-        if (!m_externalBuffer)
-            CreateBuffer(sizeInfo.accelerationStructureSize);
+        if (!AccelerationStructureAccess::IsExternalBuffer(as))
+            AccelerationStructureAccess::CreateBuffer(as, sizeInfo.accelerationStructureSize);
 
         if (!scratchAddress)
         {
-            CreateScratchBuffer(sizeInfo.buildScratchSize);
-            buildInfo.scratchData.deviceAddress = m_scratchBuffer->GetDeviceAddress();
+            AccelerationStructureAccess::CreateScratchBuffer(
+                as, std::max(sizeInfo.buildScratchSize, sizeInfo.updateScratchSize));
+            buildInfo.scratchData.deviceAddress = AccelerationStructureAccess::GetScratchBuffer(as)->GetDeviceAddress();
         }
         else
         {
@@ -234,16 +208,17 @@ namespace pe
         }
 
         vk::AccelerationStructureCreateInfoKHR createInfo{};
-        createInfo.buffer = GetVulkanBuffer(m_buffer);
-        createInfo.offset = m_offset;
+        createInfo.buffer = GetVulkanBuffer(AccelerationStructureAccess::GetBuffer(as));
+        createInfo.offset = AccelerationStructureAccess::GetOffset(as);
         createInfo.size = sizeInfo.accelerationStructureSize;
         createInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
         vk::AccelerationStructureKHR apiHandle = VulkanRhi::Device().createAccelerationStructureKHR(createInfo);
-        m_apiHandle = detail::ToUintPtr(apiHandle);
+        as->ApiHandle() = detail::ToUintPtr(apiHandle);
 
         vk::AccelerationStructureDeviceAddressInfoKHR addressInfo{};
         addressInfo.accelerationStructure = apiHandle;
-        m_deviceAddress = VulkanRhi::Device().getAccelerationStructureAddressKHR(&addressInfo);
+        AccelerationStructureAccess::SetDeviceAddress(
+            as, VulkanRhi::Device().getAccelerationStructureAddressKHR(&addressInfo));
 
         buildInfo.dstAccelerationStructure = apiHandle;
 
@@ -265,18 +240,19 @@ namespace pe
         cmd->MemoryBarrier(barrier);
     }
 
-    void AccelerationStructure::UpdateTLAS(CommandBuffer *cmd,
-                                           uint32_t instanceCount,
-                                           Buffer *instanceBuffer,
-                                           uint64_t scratchAddress)
+    void UpdateVulkanTLAS(AccelerationStructure *as,
+                          CommandBuffer *cmd,
+                          uint32_t instanceCount,
+                          Buffer *instanceBuffer,
+                          vk::DeviceAddress scratchAddress)
     {
         if (!SupportsVulkanAccelerationStructures())
         {
-            PE_ERROR("AccelerationStructure::UpdateTLAS requested without Vulkan ray-tracing support");
+            PE_ERROR("Vulkan TLAS update requested without Vulkan ray-tracing support");
             return;
         }
 
-        if (!m_apiHandle)
+        if (!as->ApiHandle())
             return; // Must have been built first
 
         vk::AccelerationStructureGeometryInstancesDataKHR instancesVk{};
@@ -290,7 +266,7 @@ namespace pe
         buildInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
         buildInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate | vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
         buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eUpdate; // In-place update
-        vk::AccelerationStructureKHR apiHandle = GetVulkanAccelerationStructure(this);
+        vk::AccelerationStructureKHR apiHandle = GetVulkanAccelerationStructure(as);
         buildInfo.srcAccelerationStructure = apiHandle;
         buildInfo.dstAccelerationStructure = apiHandle;
         buildInfo.geometryCount = 1;
@@ -298,8 +274,8 @@ namespace pe
 
         if (scratchAddress)
             buildInfo.scratchData.deviceAddress = scratchAddress;
-        else if (m_scratchBuffer)
-            buildInfo.scratchData.deviceAddress = m_scratchBuffer->GetDeviceAddress();
+        else if (AccelerationStructureAccess::GetScratchBuffer(as))
+            buildInfo.scratchData.deviceAddress = AccelerationStructureAccess::GetScratchBuffer(as)->GetDeviceAddress();
 
         vk::AccelerationStructureBuildRangeInfoKHR buildRange{};
         buildRange.primitiveCount = instanceCount;
@@ -317,10 +293,5 @@ namespace pe
         barrier.dstStageMask = PE_STAGE_RAY_TRACING_SHADER_KHR | PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR;
         barrier.dstAccessMask = PE_ACCESS_ACCELERATION_STRUCTURE_READ_KHR | PE_ACCESS_ACCELERATION_STRUCTURE_WRITE_KHR;
         cmd->MemoryBarrier(barrier);
-    }
-
-    uint64_t AccelerationStructure::GetDeviceAddress() const
-    {
-        return m_deviceAddress;
     }
 } // namespace pe

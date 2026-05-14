@@ -14,6 +14,9 @@
 - Removed the editor window resize path's direct `SDL_vulkan.h` dependency by using SDL's backend-neutral pixel-size query for drawable extents.
 - Narrowed PhasmaCore's public third-party build surface: core now publishes only the neutral public include roots its public headers need, keeps its third-party library search paths/link libraries private, and makes consumers explicitly include/link shader compilers, SPIRV-Cross, RenderDoc, stb, VMA, Vulkan, RapidJSON, or SDL when they use them directly.
 - Removed the stale LightPass `tonemapping/fsr2` UBO plumbing and DX12 gate helper. `fsr2` had been fed from `taa`, no `GlobalSettings::fsr2` exists, and `LightingPS.hlsl` did not consume either flag; real postprocess behavior remains driven by explicit render-graph passes (`TAA`, `Sharpen`, `Upsample`, `Tonemap`, etc.).
+- Enabled the first DX12 ray-tracing path behind the normal `rayTracing` cap: DX12 now creates BLAS/TLAS resources, writes AS descriptors, compiles DXR libraries, creates state objects/SBTs, and dispatches rays. Sponza full RT on DX12 was smoke-tested with the debug layer after fixing AS resource states, DXR push-constant/register rewriting, SBT raygen record sizing, recursion depth, and the RT instance-to-mesh-constants index.
+- Fixed the first DX12 RT visual routing issues: RT-only mode now makes the RT `viewport` image become a fresh `display` image before Grid/GUI/final blit, avoiding recursive viewport capture; DX12 Hybrid now matches Vulkan by disabling `GBufferTransparent` outside Raster mode so transparent geometry is handled by the RT pass instead of being pre-rastered.
+- Matched DX12 RT-only TAA routing to the Vulkan shape: when TAA is enabled, DX12 keeps the depth/GBuffer velocity path alive and runs TAA/Sharpen over the RT `viewport` instead of applying camera jitter and then doing only a plain upsample. Render-mode changes now reset TAA history.
 
 ## 2026-05-12
 

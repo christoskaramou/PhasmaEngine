@@ -10,6 +10,7 @@ struct MeshInfoGPU
     uint vertexOffset;
     uint positionsOffset;
     uint renderType;   // 1: Opaque, 2: AlphaCut, 3: AlphaBlend, 4: Transmission
+    uint constantsIndex;
     int textures[5];
 };
 
@@ -51,13 +52,13 @@ struct Vertex
 [[vk::binding(2, 0)]] ByteAddressBuffer data;
 [[vk::binding(3, 0)]] StructuredBuffer<Mesh_Constants> constants;
 [[vk::binding(4, 0)]] SamplerState material_sampler;
-[[vk::binding(5, 0)]] Texture2D textures[];
 [[vk::binding(6, 0)]] ByteAddressBuffer geometry;
 [[vk::binding(7, 0)]] StructuredBuffer<MeshInfoGPU> meshInfos;
 [[vk::binding(8, 0)]] TextureCube skybox;
 [[vk::binding(9, 0)]] Texture2D LutIBL;
 [[vk::binding(10, 0)]] Texture2D<float> depthBuffer;
 [[vk::binding(11, 0)]] StructuredBuffer<MaterialGpuData> materialTable;
+[[vk::binding(12, 0)]] Texture2D textures[];
 
 // Set 1
 [[vk::binding(0, 1)]] cbuffer LightSystemUBO
@@ -658,24 +659,25 @@ void raygeneration()
 [shader("anyhit")]
 void anyhit(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    uint id = InstanceID();
+    uint instanceId = InstanceID();
+    uint constantsId = meshInfos[instanceId].constantsIndex;
     uint primitiveId = PrimitiveIndex();
 
-    uint textureMask = constants[id].textureMask;
+    uint textureMask = constants[constantsId].textureMask;
 
     if (!HasTexture(textureMask, TEX_BASE_COLOR_BIT))
         return;
 
-    uint3 indices = GetIndices(id, primitiveId);
-    Vertex v0 = SkinVertex(GetVertex(id, indices.x), id);
-    Vertex v1 = SkinVertex(GetVertex(id, indices.y), id);
-    Vertex v2 = SkinVertex(GetVertex(id, indices.z), id);
+    uint3 indices = GetIndices(instanceId, primitiveId);
+    Vertex v0 = SkinVertex(GetVertex(instanceId, indices.x), constantsId);
+    Vertex v1 = SkinVertex(GetVertex(instanceId, indices.y), constantsId);
+    Vertex v2 = SkinVertex(GetVertex(instanceId, indices.z), constantsId);
 
     float3 barycentricCoords = float3(1.0f - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
     float2 uv = v0.uv * barycentricCoords.x + v1.uv * barycentricCoords.y + v2.uv * barycentricCoords.z;
 
-    float4 baseColor = GetBaseColor(id, uv);
-    if (baseColor.a < constants[id].alphaCut)
+    float4 baseColor = GetBaseColor(constantsId, uv);
+    if (baseColor.a < constants[constantsId].alphaCut)
     {
         IgnoreHit();
     }
@@ -689,14 +691,15 @@ void anyhit(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes a
 [shader("closesthit")]
 void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    uint id = InstanceID(); // Linear ID matching Constants/MeshInfos
+    uint instanceId = InstanceID();
+    uint constantsId = meshInfos[instanceId].constantsIndex;
     uint primitiveId = PrimitiveIndex();
-    uint3 indices = GetIndices(id, primitiveId);
+    uint3 indices = GetIndices(instanceId, primitiveId);
 
     // Interpolate vertex attributes (apply skinning if weighted)
-    Vertex v0 = SkinVertex(GetVertex(id, indices.x), id);
-    Vertex v1 = SkinVertex(GetVertex(id, indices.y), id);
-    Vertex v2 = SkinVertex(GetVertex(id, indices.z), id);
+    Vertex v0 = SkinVertex(GetVertex(instanceId, indices.x), constantsId);
+    Vertex v1 = SkinVertex(GetVertex(instanceId, indices.y), constantsId);
+    Vertex v2 = SkinVertex(GetVertex(instanceId, indices.z), constantsId);
 
     float3 barycentricCoords = float3(1.0f - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
 
@@ -715,23 +718,23 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 tangentWorld = normalize(mul(worldRotation3x3, tangentObj.xyz));
 
     // GBuffer Logic Adaptation
-    uint textureMask = constants[id].textureMask;
+    uint textureMask = constants[constantsId].textureMask;
 
     // 1. Base Color
-    float4 baseColorFactor = GetBaseColorFactor(id);
+    float4 baseColorFactor = GetBaseColorFactor(constantsId);
     float4 combinedColor = color * baseColorFactor;
     if (HasTexture(textureMask, TEX_BASE_COLOR_BIT))
     {
-        combinedColor *= GetBaseColor(id, uv);
+        combinedColor *= GetBaseColor(constantsId, uv);
     }
 
     // 2. Material Properties
-    float4 metRoughAlphacutOcl = GetMetRoughAlphacutOcl(id);
+    float4 metRoughAlphacutOcl = GetMetRoughAlphacutOcl(constantsId);
     float metallic = metRoughAlphacutOcl.x;
     float roughness = metRoughAlphacutOcl.y;
     if (HasTexture(textureMask, TEX_METAL_ROUGH_BIT))
     {
-        float3 mrSample = GetMetallicRoughness(id, uv).xyz;
+        float3 mrSample = GetMetallicRoughness(constantsId, uv).xyz;
         metallic *= mrSample.z;
         roughness *= mrSample.y;
     }
@@ -741,21 +744,21 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float occlusion = 1.0f;
     if (HasTexture(textureMask, TEX_OCCLUSION_BIT))
     {
-        float occlusionSample = GetOcclusion(id, uv).r;
+        float occlusionSample = GetOcclusion(constantsId, uv).r;
         occlusion = lerp(1.0f, occlusionSample, metRoughAlphacutOcl.w);
     }
 
-    float3 emissive = GetEmissiveFactor(id);
+    float3 emissive = GetEmissiveFactor(constantsId);
     if (HasTexture(textureMask, TEX_EMISSIVE_BIT))
     {
-        emissive *= GetEmissive(id, uv).xyz;
+        emissive *= GetEmissive(constantsId, uv).xyz;
     }
 
     // 3. Normal Mapping
     float3 N = normalWorld;
     if (HasTexture(textureMask, TEX_NORMAL_BIT))
     {
-        float3 tangentNormalSample = GetNormal(id, uv).xyz;
+        float3 tangentNormalSample = GetNormal(constantsId, uv).xyz;
         tangentWorld = normalize(tangentWorld - dot(tangentWorld, normalWorld) * normalWorld);
         float3 bitangentWorld = cross(normalWorld, tangentWorld) * tangentObj.w;
         float3x3 TBN = float3x3(tangentWorld, bitangentWorld, normalWorld);
@@ -820,14 +823,14 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     lighting += emissive;
 
     // Transmission & Volume
-    float transmissionFactor = materialTable[constants[id].materialId].emissiveTransmission.w;
-    float thicknessFactor = materialTable[constants[id].materialId].transmissionVolume.x;
-    float attenuationDistance = materialTable[constants[id].materialId].transmissionVolume.y;
-    float ior = materialTable[constants[id].materialId].transmissionVolume.z;
-    float3 attenuationColor = materialTable[constants[id].materialId].attenuationColor.xyz;
+    float transmissionFactor = materialTable[constants[constantsId].materialId].emissiveTransmission.w;
+    float thicknessFactor = materialTable[constants[constantsId].materialId].transmissionVolume.x;
+    float attenuationDistance = materialTable[constants[constantsId].materialId].transmissionVolume.y;
+    float ior = materialTable[constants[constantsId].materialId].transmissionVolume.z;
+    float3 attenuationColor = materialTable[constants[constantsId].materialId].attenuationColor.xyz;
 
     // Check material type from RenderType enum (1: Opaque, 2: AlphaCut, 3: AlphaBlend, 4: Transmission)
-    uint renderType = meshInfos[id].renderType;
+    uint renderType = meshInfos[instanceId].renderType;
     bool isAlphaCutMaterial = renderType == 2;
     bool isAlphaBlendMaterial = renderType == 3;
     bool isTransmissive = renderType == 4;

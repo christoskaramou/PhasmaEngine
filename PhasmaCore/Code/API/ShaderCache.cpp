@@ -61,7 +61,7 @@ namespace pe
         if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
             m_hash.Combine(RHII.GetCaps().spirvTargetVulkanVersion);
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-            m_hash.Combine(4u); // DX12 source-register rewrite/reflection contract version.
+            m_hash.Combine(8u); // DX12 source-register rewrite/reflection contract version.
 
         m_tempFilePath = Path::Executable;
         m_tempFilePath += "ShaderCache/";

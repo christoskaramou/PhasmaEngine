@@ -34,7 +34,7 @@ namespace pe
         m_passInfo->acceleration.rayGen = rayGen;
         m_passInfo->acceleration.miss = {miss};
         m_passInfo->acceleration.hitGroups = {{.closestHit = closestHit, .anyHit = anyHit}};
-        m_passInfo->acceleration.maxRecursionDepth = 3;
+        m_passInfo->acceleration.maxRecursionDepth = 4;
         m_passInfo->Update();
     }
 
@@ -79,7 +79,6 @@ namespace pe
                 desc->SetBuffer(2, scene.GetUniforms(i));
                 desc->SetBuffer(3, scene.GetMeshConstants());
                 desc->SetSampler(4, m_display->GetSampler());
-                desc->SetImageViews(5, scene.GetImageViews());
                 desc->SetBuffer(6, scene.GetBuffer());
                 desc->SetBuffer(7, scene.GetMeshInfoBuffer());
                 desc->SetImageView(8, skybox->GetSRV());
@@ -87,6 +86,7 @@ namespace pe
                 desc->SetImageView(9, ibl_brdf_lut->GetSRV());
                 desc->SetImageView(10, rs->GetDepthStencilRT()->GetSRV());
                 desc->SetBuffer(11, scene.GetMaterialTable());
+                desc->SetImageViews(12, scene.GetImageViews());
                 desc->Update();
             }
 
@@ -154,8 +154,8 @@ namespace pe
                         rtSet0->SetBuffer(2, scene.GetUniforms(i));
                         rtSet0->SetBuffer(3, scene.GetMeshConstants());
                         rtSet0->SetSampler(4, m_display->GetSampler());
-                        rtSet0->SetImageViews(5, scene.GetImageViews());
                         rtSet0->SetBuffer(11, scene.GetMaterialTable());
+                        rtSet0->SetImageViews(12, scene.GetImageViews());
                         rtSet0->Update();
                     }
                 }
@@ -198,6 +198,33 @@ namespace pe
         cmd->BeginDebugRegion("RayTracingPass");
         cmd->BindPipeline(*m_passInfo);
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        const uint32_t frame = RHII.GetFrameIndex();
+
+        std::vector<BufferBarrierInfo> readBarriers;
+        readBarriers.reserve(8);
+        auto addReadBarrier = [&](Buffer *buffer, PeAccessFlags accessMask)
+        {
+            if (!buffer)
+                return;
+
+            BufferBarrierInfo barrier{};
+            barrier.buffer = buffer;
+            barrier.stageMask = PE_STAGE_RAY_TRACING_SHADER_KHR;
+            barrier.accessMask = accessMask;
+            readBarriers.push_back(barrier);
+        };
+
+        addReadBarrier(scene.GetUniforms(frame), PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ);
+        addReadBarrier(scene.GetMeshConstants(), PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ);
+        addReadBarrier(scene.GetBuffer(), PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ);
+        addReadBarrier(scene.GetMeshInfoBuffer(), PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ);
+        addReadBarrier(scene.GetMaterialTable(), PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ);
+        addReadBarrier(scene.GetLightUniform(frame), PE_ACCESS_UNIFORM_READ);
+        addReadBarrier(m_uniforms[frame], PE_ACCESS_UNIFORM_READ);
+        addReadBarrier(scene.GetLightStorage(frame), PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ);
+        if (!readBarriers.empty())
+            cmd->BufferBarriers(readBarriers);
+
         cmd->SetConstantAt(0, (uint32_t)scene.GetPointLights().size());
         cmd->SetConstantAt(1, (uint32_t)scene.GetSpotLights().size());
         cmd->SetConstantAt(2, (uint32_t)scene.GetAreaLights().size());

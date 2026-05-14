@@ -329,12 +329,13 @@ namespace pe
 
         if (UsesDx12RenderOrchestration())
         {
-            // DX12 Phase 1 enables the carved raster/post/GUI slice, but falls
-            // back to raster when a user setting requests RT-only rendering.
             const bool dx12RayTracing = renderRayTracing;
             const bool dx12RenderRaster = renderRaster || !dx12RayTracing;
-            const bool dx12NeedDepth = dx12RenderRaster || gs.draw_aabbs || gs.draw_grid;
-            const bool dx12NeedGBuffer = dx12RenderRaster;
+            const bool dx12RtOnly = dx12RayTracing && !dx12RenderRaster;
+            const bool dx12RenderTAA = gs.taa && (dx12RenderRaster || dx12RtOnly);
+            const bool dx12NeedVelocity = dx12RenderTAA || (gs.motion_blur && dx12RenderRaster);
+            const bool dx12NeedDepth = dx12RenderRaster || dx12NeedVelocity || gs.draw_aabbs || gs.draw_grid;
+            const bool dx12NeedGBuffer = dx12RenderRaster || dx12NeedVelocity;
 
             m_renderGraphPassEnabled.fill(false);
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Culling)] = true;
@@ -343,16 +344,16 @@ namespace pe
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GBufferOpaque)] = dx12NeedGBuffer;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::SSAO)] = gs.ssao && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightOpaque)] = dx12RenderRaster;
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GBufferTransparent)] = dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GBufferTransparent)] = gs.render_mode == RenderMode::Raster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightTransparent)] = dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::RayTracing)] = dx12RayTracing;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::ParticleCompute)] = dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Particle)] = dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::SSR)] = gs.ssr && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::FXAA)] = gs.fxaa && dx12RenderRaster;
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::TAA)] = gs.taa && dx12RenderRaster;
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Sharpen)] = gs.taa && gs.cas_sharpening && dx12RenderRaster;
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] = !gs.taa && dx12RenderRaster;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::TAA)] = dx12RenderTAA;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Sharpen)] = dx12RenderTAA && gs.cas_sharpening;
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] = (!gs.taa && dx12RenderRaster) || (dx12RtOnly && !dx12RenderTAA);
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Tonemap)] = gs.tonemapping && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomBF)] = gs.bloom && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomH)] = gs.bloom && dx12RenderRaster;
@@ -603,7 +604,8 @@ namespace pe
 
         const bool viewportProduced =
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightOpaque)] ||
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightTransparent)];
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightTransparent)] ||
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::RayTracing)];
         if (viewportProduced)
             return m_viewportRT;
 

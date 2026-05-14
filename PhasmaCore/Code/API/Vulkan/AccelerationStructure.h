@@ -49,6 +49,18 @@ namespace pe
                          const std::vector<uint32_t> &maxPrimitiveCounts,
                          PeAccelerationStructureBuildFlags flags,
                          vk::DeviceAddress scratchAddress = 0);
+    void BuildVulkanTLAS(AccelerationStructure *as,
+                         CommandBuffer *cmd,
+                         uint32_t instanceCount,
+                         Buffer *instanceBuffer,
+                         PeAccelerationStructureBuildFlags flags,
+                         vk::DeviceAddress scratchAddress = 0);
+    void UpdateVulkanTLAS(AccelerationStructure *as,
+                          CommandBuffer *cmd,
+                          uint32_t instanceCount,
+                          Buffer *instanceBuffer,
+                          vk::DeviceAddress scratchAddress = 0);
+    void DestroyVulkanAccelerationStructure(AccelerationStructure *as);
 
     // Vulkan-private RT-build entry. Called by AccelerationStructure::Build*; not part
     // of the neutral CommandBuffer surface (DXR, when added, will get its own entry).

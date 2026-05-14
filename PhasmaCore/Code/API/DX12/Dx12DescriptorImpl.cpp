@@ -1,5 +1,6 @@
 #include "API/DX12/Dx12DescriptorImpl.h"
 
+#include "API/AccelerationStructure.h"
 #include "API/Buffer.h"
 #include "API/DX12/Dx12BufferImpl.h"
 #include "API/DX12/Dx12DescriptorHeap.h"
@@ -560,6 +561,23 @@ namespace pe
                     WriteBufferDescriptor(rhi->GetDevice(), dst, bindingInfo, buffer, offset, rangeBytes);
                 }
             }
+            else if (!updateInfo.accelerationStructures.empty())
+            {
+                for (uint32_t j = 0; j < updateInfo.accelerationStructures.size(); ++j)
+                {
+                    const uint32_t sourceSlot = GetCbvSrvUavSlot(updateInfo.binding, j);
+                    if (sourceSlot == InvalidSlot || sourceSlot < sourceBase || sourceSlot >= sourceBase + tableCount)
+                    {
+                        freeOnFailure();
+                        return false;
+                    }
+                    rhi->GetDevice()->CopyDescriptorsSimple(
+                        1,
+                        heap->GetCpuHandle(dynamicBase + (sourceSlot - sourceBase)),
+                        heap->GetCpuHandle(sourceSlot),
+                        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                }
+            }
         }
 
         firstSlot = dynamicBase;
@@ -722,7 +740,22 @@ namespace pe
             }
             else if (!updateInfo.accelerationStructures.empty())
             {
-                PE_ERROR("Dx12DescriptorImpl: acceleration-structure descriptors wait for the DXR slice");
+                for (uint32_t j = 0; j < updateInfo.accelerationStructures.size(); j++)
+                {
+                    PE_ERROR_IF(j >= slots->cbvSrvUavSlots.size(),
+                                "Dx12DescriptorImpl: acceleration-structure descriptor array exceeds reflected count");
+                    AccelerationStructure *as = updateInfo.accelerationStructures[j];
+                    PE_ERROR_IF(!as, "Dx12DescriptorImpl: null acceleration structure for binding %u", updateInfo.binding);
+                    PE_ERROR_IF(as->GetDeviceAddress() == 0,
+                                "Dx12DescriptorImpl: acceleration structure for binding %u has no GPU address",
+                                updateInfo.binding);
+
+                    D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
+                    srv.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+                    srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                    srv.RaytracingAccelerationStructure.Location = as->GetDeviceAddress();
+                    device->CreateShaderResourceView(nullptr, &srv, cbvSrvUavHeap->GetCpuHandle(slots->cbvSrvUavSlots[j]));
+                }
             }
         }
     }

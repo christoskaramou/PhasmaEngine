@@ -29,6 +29,21 @@ namespace pe
             return pipeline && pipeline->GetInfo().pCompShader != nullptr;
         }
 
+        bool IsRayTracingPipeline(const Pipeline *pipeline)
+        {
+            return pipeline && Dx12PipelineImpl::From(pipeline)->IsRayTracing();
+        }
+
+        bool UsesComputeRootSignature(const Pipeline *pipeline)
+        {
+            return IsComputePipeline(pipeline) || IsRayTracingPipeline(pipeline);
+        }
+
+        bool IsGraphicsPipeline(const Pipeline *pipeline)
+        {
+            return pipeline && !IsComputePipeline(pipeline) && !IsRayTracingPipeline(pipeline);
+        }
+
         bool IsDepthStencilFormat(::PeFormat fmt)
         {
             return fmt == PE_FORMAT_D32_SFLOAT ||
@@ -85,7 +100,7 @@ namespace pe
         {
             if (pipeline)
             {
-                PE_ERROR_IF(IsComputePipeline(pipeline), "Dx12CommandBufferImpl::%s: bound pipeline is compute", what);
+                PE_ERROR_IF(!IsGraphicsPipeline(pipeline), "Dx12CommandBufferImpl::%s: bound pipeline is not graphics", what);
                 return;
             }
 
@@ -124,6 +139,25 @@ namespace pe
             if (state == D3D12_RESOURCE_STATE_COMMON && (accessMask & PE_ACCESS_MEMORY_READ))
                 state = D3D12_RESOURCE_STATE_GENERIC_READ;
             return state;
+        }
+
+        D3D12_RESOURCE_STATES ToD3D12BufferState(const BufferBarrierInfo &info)
+        {
+            const PeAccessFlags accessMask = info.accessMask;
+            const bool asAccess = (accessMask & (PE_ACCESS_ACCELERATION_STRUCTURE_READ_KHR |
+                                                 PE_ACCESS_ACCELERATION_STRUCTURE_WRITE_KHR)) != 0;
+            if (asAccess && info.buffer)
+            {
+                const PeBufferUsageFlags usage = info.buffer->Usage();
+                if (usage & PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_KHR)
+                    return D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+                if (usage & PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR)
+                    return D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
+            }
+            if (accessMask & PE_ACCESS_ACCELERATION_STRUCTURE_READ_KHR)
+                return D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
+
+            return ToD3D12BufferState(accessMask);
         }
 
         bool CoalescePendingTransition(std::vector<D3D12_RESOURCE_BARRIER> &batch,
@@ -226,7 +260,7 @@ namespace pe
             if (previousUavWrite && (buf->m_state & D3D12_RESOURCE_STATE_UNORDERED_ACCESS))
                 PushBufferUAV(batch, buf);
 
-            PushBufferTransition(batch, buf, ToD3D12BufferState(info.accessMask));
+            PushBufferTransition(batch, buf, ToD3D12BufferState(info));
 
             BufferTrackInfo &trackInfo = info.buffer->GetTrackInfo();
             trackInfo.stageMask = info.stageMask;
@@ -428,11 +462,10 @@ namespace pe
 
     // ----------------------------------------------------------------------
     // Surfaces still gated by DX12_CMD_CARVE_OUT are audited-unreachable on
-    // DX12 today: TraceRays (RT explicitly out of Phase 1 — caps.rayTracing
-    // == false), PushDescriptor (zero callers tree-wide), SetEvent (only
-    // reachable via the Lua CommandBindings::SetEvent shim, no script in
-    // the repo invokes it). Macro fires PE_ERROR if a future caller hits
-    // them so we notice instead of silently no-oping.
+    // DX12 today: PushDescriptor (zero callers tree-wide), SetEvent (only
+    // reachable via the Lua CommandBindings::SetEvent shim, no script in the
+    // repo invokes it). Macro fires PE_ERROR if a future caller hits them so we
+    // notice instead of silently no-oping.
     // ----------------------------------------------------------------------
 
 #define DX12_CMD_CARVE_OUT(name) PE_ERROR("Dx12CommandBufferImpl::" name " is a DX12 carve-out (unreachable today; audited 2026-05-06)")
@@ -665,24 +698,37 @@ namespace pe
             PE_ERROR_IF(!rhi || !rhi->GetSharedRootSig(), "Dx12CommandBufferImpl::BindPipeline: shared root signature unavailable");
 
             ID3D12RootSignature *rootSig = rhi->GetSharedRootSig()->Get();
-            ID3D12PipelineState *pso = GetDx12Pipeline(pipeline);
-            PE_ERROR_IF(!pso, "Dx12CommandBufferImpl::BindPipeline: pipeline has no PSO");
 
             BindShaderVisibleHeaps();
-            m_cmdList->SetPipelineState(pso);
 
-            if (IsComputePipeline(pipeline))
+            if (IsRayTracingPipeline(pipeline))
             {
+                ID3D12StateObject *stateObject = GetDx12RayTracingStateObject(pipeline);
+                PE_ERROR_IF(!stateObject, "Dx12CommandBufferImpl::BindPipeline: ray tracing pipeline has no state object");
+                Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> cmdList4;
+                PE_CHECK(m_cmdList.As(&cmdList4));
+                cmdList4->SetPipelineState1(stateObject);
                 m_cmdList->SetComputeRootSignature(rootSig);
             }
             else
             {
-                m_cmdList->SetGraphicsRootSignature(rootSig);
-                const D3D12_PRIMITIVE_TOPOLOGY topology = Topology(passInfo.topology);
-                if (topology != m_lastTopology)
+                ID3D12PipelineState *pso = GetDx12Pipeline(pipeline);
+                PE_ERROR_IF(!pso, "Dx12CommandBufferImpl::BindPipeline: pipeline has no PSO");
+                m_cmdList->SetPipelineState(pso);
+
+                if (IsComputePipeline(pipeline))
                 {
-                    m_cmdList->IASetPrimitiveTopology(topology);
-                    m_lastTopology = topology;
+                    m_cmdList->SetComputeRootSignature(rootSig);
+                }
+                else
+                {
+                    m_cmdList->SetGraphicsRootSignature(rootSig);
+                    const D3D12_PRIMITIVE_TOPOLOGY topology = Topology(passInfo.topology);
+                    if (topology != m_lastTopology)
+                    {
+                        m_cmdList->IASetPrimitiveTopology(topology);
+                        m_lastTopology = topology;
+                    }
                 }
             }
         }
@@ -774,7 +820,7 @@ namespace pe
         PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::BindDescriptors: No bound pipeline found!");
         PE_ERROR_IF(count > 0 && !descriptors, "Dx12CommandBufferImpl::BindDescriptors: null descriptor array");
 
-        const bool compute = IsComputePipeline(m_owner->m_boundPipeline);
+        const bool compute = UsesComputeRootSignature(m_owner->m_boundPipeline);
         BindDescriptorTables(count, descriptors, compute);
     }
 
@@ -1007,7 +1053,7 @@ namespace pe
         // (DX12_ROOT_CONSTANTS_INDEX) per the shared root signature layout.
         const uint32_t numDwords = (sizes[0] + 3u) / 4u;
         PE_ERROR_IF(numDwords > 32, "Dx12CommandBufferImpl::PushConstants: push constants exceed shared root constant budget");
-        const bool compute = IsComputePipeline(m_owner->m_boundPipeline);
+        const bool compute = UsesComputeRootSignature(m_owner->m_boundPipeline);
 
         if (compute)
             m_cmdList->SetComputeRoot32BitConstants(DX12_ROOT_CONSTANTS_INDEX, numDwords, constants.Data(), 0);
@@ -1018,7 +1064,7 @@ namespace pe
     void Dx12CommandBufferImpl::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {
         if (m_owner->m_boundPipeline)
-            PE_ERROR_IF(IsComputePipeline(m_owner->m_boundPipeline), "Dx12CommandBufferImpl::Draw: bound pipeline is compute");
+            PE_ERROR_IF(!IsGraphicsPipeline(m_owner->m_boundPipeline), "Dx12CommandBufferImpl::Draw: bound pipeline is not graphics");
         else
             PE_ERROR_IF(!m_externalRenderPipelineBound, "Dx12CommandBufferImpl::Draw: no external render pipeline bound");
         FlushBarriers();
@@ -1027,7 +1073,7 @@ namespace pe
     void Dx12CommandBufferImpl::DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
     {
         if (m_owner->m_boundPipeline)
-            PE_ERROR_IF(IsComputePipeline(m_owner->m_boundPipeline), "Dx12CommandBufferImpl::DrawIndexed: bound pipeline is compute");
+            PE_ERROR_IF(!IsGraphicsPipeline(m_owner->m_boundPipeline), "Dx12CommandBufferImpl::DrawIndexed: bound pipeline is not graphics");
         else
             PE_ERROR_IF(!m_externalRenderPipelineBound, "Dx12CommandBufferImpl::DrawIndexed: no external render pipeline bound");
         FlushBarriers();
@@ -1170,9 +1216,29 @@ namespace pe
         image->GenerateMipMaps(m_owner);
     }
 
-    void Dx12CommandBufferImpl::TraceRays(uint32_t, uint32_t, uint32_t)
+    void Dx12CommandBufferImpl::TraceRays(uint32_t width, uint32_t height, uint32_t depth)
     {
-        DX12_CMD_CARVE_OUT("TraceRays");
+        PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::TraceRays: No bound pipeline found!");
+        PE_ERROR_IF(!IsRayTracingPipeline(m_owner->m_boundPipeline), "Dx12CommandBufferImpl::TraceRays: bound pipeline is not ray tracing");
+
+        Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+        PE_ERROR_IF(!rhi || !rhi->SupportsDxr(), "Dx12CommandBufferImpl::TraceRays: DXR is not supported on this device");
+
+        const Dx12PipelineImpl *pipeline = Dx12PipelineImpl::From(m_owner->m_boundPipeline);
+        ID3D12StateObject *stateObject = pipeline->GetRtStateObject();
+        PE_ERROR_IF(!stateObject, "Dx12CommandBufferImpl::TraceRays: pipeline has no DXR state object");
+
+        D3D12_DISPATCH_RAYS_DESC desc = pipeline->GetDispatchRaysDesc(width, height, depth);
+        PE_ERROR_IF(desc.RayGenerationShaderRecord.StartAddress == 0 || desc.RayGenerationShaderRecord.SizeInBytes == 0,
+                    "Dx12CommandBufferImpl::TraceRays: ray generation shader table is empty");
+
+        Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> cmdList4;
+        PE_CHECK(m_cmdList.As(&cmdList4));
+
+        BindShaderVisibleHeaps();
+        FlushBarriers();
+        cmdList4->SetPipelineState1(stateObject);
+        cmdList4->DispatchRays(&desc);
     }
 
     namespace

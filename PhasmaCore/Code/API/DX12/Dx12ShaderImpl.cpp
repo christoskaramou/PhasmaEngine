@@ -330,6 +330,12 @@ namespace pe
             return L"";
         }
 
+        bool IsRayTracingStage(PeShaderStageFlags stage)
+        {
+            return (stage & (PE_SHADER_STAGE_RAYGEN_KHR | PE_SHADER_STAGE_ANY_HIT_KHR | PE_SHADER_STAGE_CLOSEST_HIT_KHR |
+                             PE_SHADER_STAGE_MISS_KHR | PE_SHADER_STAGE_INTERSECTION_KHR | PE_SHADER_STAGE_CALLABLE_KHR)) != 0;
+        }
+
         bool CompileHlslToDxil(Shader *owner,
                                PeShaderStageFlags stage,
                                const std::vector<Define> &globalDefines,
@@ -387,11 +393,18 @@ namespace pe
                 std::string out;
                 std::string line;
                 const std::regex bindingRegex(R"(\[\[vk::binding\(\s*(\d+)\s*(?:,\s*(\d+))?\s*\)\]\])");
+                const std::regex pushConstantRegex(
+                    R"(^(\s*)\[\[vk::push_constant\]\]\s*(?:(?:ConstantBuffer\s*<\s*([A-Za-z_][A-Za-z0-9_]*)\s*>)|([A-Za-z_][A-Za-z0-9_]*))\s+([A-Za-z_][A-Za-z0-9_]*)\s*;)");
 
                 while (std::getline(in, line))
                 {
                     std::smatch match;
-                    if (std::regex_search(line, match, bindingRegex) && line.find(": register(") == std::string::npos)
+                    if (std::regex_search(line, match, pushConstantRegex))
+                    {
+                        const std::string typeName = match[2].matched ? match[2].str() : match[3].str();
+                        line = match[1].str() + "ConstantBuffer<" + typeName + "> " + match[4].str() + " : register(b0, space0);";
+                    }
+                    else if (std::regex_search(line, match, bindingRegex) && line.find(": register(") == std::string::npos)
                     {
                         const std::string binding = match[1].str();
                         const std::string set = match[2].matched ? match[2].str() : "0";
@@ -416,7 +429,13 @@ namespace pe
                             if (insertPos == std::string::npos)
                                 insertPos = line.find(';', match.position() + match.length());
                             if (insertPos != std::string::npos)
+                            {
                                 line.insert(insertPos, annotation);
+                            }
+                            else if (regType == "b")
+                            {
+                                line += annotation;
+                            }
                         }
                     }
 
@@ -447,9 +466,18 @@ namespace pe
             std::vector<LPCWSTR> args{};
             args.push_back(L"-T");
             args.push_back(GetStageProfile(stage));
-            args.push_back(L"-E");
-            ownedStrings.push_back(ConvertUtf8ToWide(owner->GetEntryName()));
-            args.push_back(ownedStrings.back().c_str());
+            if (!IsRayTracingStage(stage))
+            {
+                args.push_back(L"-E");
+                ownedStrings.push_back(ConvertUtf8ToWide(owner->GetEntryName()));
+                args.push_back(ownedStrings.back().c_str());
+            }
+            else
+            {
+                args.push_back(L"-exports");
+                ownedStrings.push_back(ConvertUtf8ToWide(owner->GetEntryName()));
+                args.push_back(ownedStrings.back().c_str());
+            }
 
             const std::filesystem::path includePath = std::filesystem::path(owner->GetCache().GetSourcePath()).parent_path();
             ownedStrings.push_back(ConvertUtf8ToWide(includePath.string()));
@@ -523,7 +551,11 @@ namespace pe
         bool IsPushConstantBinding(const D3D12_SHADER_INPUT_BIND_DESC &binding, const SourceBindings &sourceBindings)
         {
             const std::string name = binding.Name ? binding.Name : "";
-            if (binding.Type != D3D_SIT_CBUFFER || binding.BindPoint != 0 || binding.Space != 0)
+            if (binding.Type != D3D_SIT_CBUFFER)
+                return false;
+            if (name == "$Globals" && !sourceBindings.pushConstants.empty())
+                return true;
+            if (binding.BindPoint != 0 || binding.Space != 0)
                 return false;
             if (sourceBindings.pushConstants.find(name) != sourceBindings.pushConstants.end())
                 return true;
@@ -627,7 +659,8 @@ namespace pe
             return desc;
         }
 
-        void FillConstantBufferSize(ID3D12ShaderReflection *reflection,
+        template <typename ReflectionT>
+        void FillConstantBufferSize(ReflectionT *reflection,
                                     const D3D12_SHADER_INPUT_BIND_DESC &binding,
                                     BufferReflection &desc)
         {
@@ -757,6 +790,154 @@ namespace pe
             desc.dxRegister = static_cast<int>(dxBinding.BindPoint);
             desc.dxSpace = static_cast<int>(dxBinding.Space);
         }
+
+        template <typename ReflectionT>
+        void PopulateBoundResourceReflection(ReflectionT *reflection,
+                                             uint32_t boundResources,
+                                             const SourceBindings &sourceBindings,
+                                             std::vector<SamplerReflection> &samplers,
+                                             std::vector<ImageReflection> &images,
+                                             std::vector<ImageReflection> &storageImages,
+                                             std::vector<BufferReflection> &uniformBuffers,
+                                             std::vector<BufferReflection> &storageBuffers,
+                                             std::vector<AccelerationStructureReflection> &accelerationStructures,
+                                             PushConstantDesc &pushConstants)
+        {
+            for (uint32_t i = 0; i < boundResources; ++i)
+            {
+                D3D12_SHADER_INPUT_BIND_DESC binding{};
+                if (FAILED(reflection->GetResourceBindingDesc(i, &binding)))
+                    continue;
+
+                const std::string name = binding.Name ? binding.Name : "";
+                const uint32_t count = GetBindingCount(binding.BindCount);
+
+                if (IsPushConstantBinding(binding, sourceBindings))
+                {
+                    BufferReflection buffer{};
+                    FillConstantBufferSize(reflection, binding, buffer);
+                    pushConstants.name = name;
+                    pushConstants.structName = name;
+                    pushConstants.size = buffer.bufferSize;
+                    continue;
+                }
+
+                switch (binding.Type)
+                {
+                case D3D_SIT_CBUFFER:
+                {
+                    SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
+                    PE_ERROR_IF(binding.Space == 0 && binding.BindPoint == 0,
+                                "DX12 reflection: ordinary cbuffer '%s' compiled to b0/space0 reserved for push constants",
+                                name.c_str());
+                    BufferReflection desc{};
+                    desc.name = name;
+                    desc.count = count;
+                    FillBindingMetadata(desc, sourceBinding, binding);
+                    FillConstantBufferSize(reflection, binding, desc);
+                    uniformBuffers.push_back(desc);
+                    break;
+                }
+                case D3D_SIT_TBUFFER:
+                {
+                    SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
+                    BufferReflection desc{};
+                    desc.name = name;
+                    desc.count = count;
+                    FillBindingMetadata(desc, sourceBinding, binding);
+                    desc.kind = PeBufferKind::Structured;
+                    FillConstantBufferSize(reflection, binding, desc);
+                    storageBuffers.push_back(desc);
+                    break;
+                }
+                case D3D_SIT_TEXTURE:
+                {
+                    SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
+                    ImageReflection desc{};
+                    desc.name = name;
+                    desc.count = count;
+                    FillBindingMetadata(desc, sourceBinding, binding);
+                    images.push_back(desc);
+                    break;
+                }
+                case D3D_SIT_SAMPLER:
+                {
+                    SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
+                    SamplerReflection desc{};
+                    desc.name = name;
+                    desc.count = count;
+                    FillBindingMetadata(desc, sourceBinding, binding);
+                    samplers.push_back(desc);
+                    break;
+                }
+                case D3D_SIT_STRUCTURED:
+                case D3D_SIT_BYTEADDRESS:
+                {
+                    SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
+                    BufferReflection desc{};
+                    desc.name = name;
+                    desc.count = count;
+                    FillBindingMetadata(desc, sourceBinding, binding);
+                    desc.kind = (binding.Type == D3D_SIT_BYTEADDRESS)
+                                    ? PeBufferKind::ByteAddress
+                                    : PeBufferKind::Structured;
+                    if (desc.kind == PeBufferKind::Structured)
+                    {
+                        desc.structuredStride = sourceBinding.structuredStride;
+                        PE_ERROR_IF(desc.structuredStride == 0,
+                                    "DX12 reflection: StructuredBuffer '%s' has no element stride",
+                                    name.c_str());
+                    }
+                    storageBuffers.push_back(desc);
+                    break;
+                }
+                case D3D_SIT_UAV_RWTYPED:
+                {
+                    SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
+                    ImageReflection desc{};
+                    desc.name = name;
+                    desc.count = count;
+                    FillBindingMetadata(desc, sourceBinding, binding);
+                    storageImages.push_back(desc);
+                    break;
+                }
+                case D3D_SIT_UAV_RWSTRUCTURED:
+                case D3D_SIT_UAV_RWBYTEADDRESS:
+                case D3D_SIT_UAV_APPEND_STRUCTURED:
+                case D3D_SIT_UAV_CONSUME_STRUCTURED:
+                case D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER:
+                {
+                    SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
+                    BufferReflection desc{};
+                    desc.name = name;
+                    desc.count = count;
+                    FillBindingMetadata(desc, sourceBinding, binding);
+                    desc.kind = PeBufferKind::StorageRW;
+                    if (binding.Type != D3D_SIT_UAV_RWBYTEADDRESS)
+                    {
+                        desc.structuredStride = sourceBinding.structuredStride;
+                        PE_ERROR_IF(desc.structuredStride == 0,
+                                    "DX12 reflection: RWStructuredBuffer '%s' has no element stride",
+                                    name.c_str());
+                    }
+                    storageBuffers.push_back(desc);
+                    break;
+                }
+                case D3D_SIT_RTACCELERATIONSTRUCTURE:
+                {
+                    SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
+                    AccelerationStructureReflection desc{};
+                    desc.name = name;
+                    desc.count = count;
+                    FillBindingMetadata(desc, sourceBinding, binding);
+                    accelerationStructures.push_back(desc);
+                    break;
+                }
+                default:
+                    break;
+                }
+            }
+        }
     } // namespace
 
     Dx12ShaderImpl::Dx12ShaderImpl(Shader *owner, const ShaderDesc &desc)
@@ -804,187 +985,132 @@ namespace pe
         reflectBuffer.Size = dxilSize;
         reflectBuffer.Encoding = 0;
 
-        Microsoft::WRL::ComPtr<ID3D12ShaderReflection> reflection;
-        hr = utils->CreateReflection(&reflectBuffer, IID_PPV_ARGS(&reflection));
-        if (FAILED(hr) || !reflection)
-        {
-            PE_ERROR("[Shader] Failed to create DXIL reflection");
-            return;
-        }
-
-        D3D12_SHADER_DESC shaderDesc{};
-        if (FAILED(reflection->GetDesc(&shaderDesc)))
-            return;
-
         const std::string &reflectionSource = shader->GetReflectionSource().empty()
                                                   ? shader->GetCache().GetShaderCode()
                                                   : shader->GetReflectionSource();
         const SourceBindings sourceBindings = ExtractSourceBindings(reflectionSource);
 
-        for (uint32_t i = 0; i < shaderDesc.InputParameters; ++i)
+        Microsoft::WRL::ComPtr<ID3D12ShaderReflection> reflection;
+        hr = utils->CreateReflection(&reflectBuffer, IID_PPV_ARGS(&reflection));
+        if (SUCCEEDED(hr) && reflection)
         {
-            D3D12_SIGNATURE_PARAMETER_DESC param{};
-            if (FAILED(reflection->GetInputParameterDesc(i, &param)))
-                continue;
-            if (param.SystemValueType != D3D_NAME_UNDEFINED)
-                continue;
+            D3D12_SHADER_DESC shaderDesc{};
+            if (FAILED(reflection->GetDesc(&shaderDesc)))
+                return;
 
-            refl.m_inputs.push_back(FillSignatureParameter(param));
+            for (uint32_t i = 0; i < shaderDesc.InputParameters; ++i)
+            {
+                D3D12_SIGNATURE_PARAMETER_DESC param{};
+                if (FAILED(reflection->GetInputParameterDesc(i, &param)))
+                    continue;
+                if (param.SystemValueType != D3D_NAME_UNDEFINED)
+                    continue;
+
+                refl.m_inputs.push_back(FillSignatureParameter(param));
+            }
+            std::sort(refl.m_inputs.begin(), refl.m_inputs.end(),
+                      [](auto &a, auto &b)
+                      { return a.location < b.location; });
+
+            for (uint32_t i = 0; i < shaderDesc.OutputParameters; ++i)
+            {
+                D3D12_SIGNATURE_PARAMETER_DESC param{};
+                if (FAILED(reflection->GetOutputParameterDesc(i, &param)))
+                    continue;
+                if (param.SystemValueType != D3D_NAME_UNDEFINED)
+                    continue;
+
+                ShaderInOutDesc desc = FillSignatureParameter(param);
+                desc.binding = INT32_MIN;
+                refl.m_outputs.push_back(desc);
+            }
+            std::sort(refl.m_outputs.begin(), refl.m_outputs.end(),
+                      [](auto &a, auto &b)
+                      { return a.location < b.location; });
+
+            PopulateBoundResourceReflection(reflection.Get(),
+                                            shaderDesc.BoundResources,
+                                            sourceBindings,
+                                            refl.m_samplers,
+                                            refl.m_images,
+                                            refl.m_storageImages,
+                                            refl.m_uniformBuffers,
+                                            refl.m_storageBuffers,
+                                            refl.m_accelerationStructures,
+                                            refl.m_pushConstants);
+            return;
         }
-        std::sort(refl.m_inputs.begin(), refl.m_inputs.end(),
-                  [](auto &a, auto &b)
-                  { return a.location < b.location; });
 
-        for (uint32_t i = 0; i < shaderDesc.OutputParameters; ++i)
+        if (!IsRayTracingStage(shader->GetShaderStage()))
         {
-            D3D12_SIGNATURE_PARAMETER_DESC param{};
-            if (FAILED(reflection->GetOutputParameterDesc(i, &param)))
-                continue;
-            if (param.SystemValueType != D3D_NAME_UNDEFINED)
-                continue;
-
-            ShaderInOutDesc desc = FillSignatureParameter(param);
-            desc.binding = INT32_MIN;
-            refl.m_outputs.push_back(desc);
+            PE_ERROR("[Shader] Failed to create DXIL reflection");
+            return;
         }
-        std::sort(refl.m_outputs.begin(), refl.m_outputs.end(),
-                  [](auto &a, auto &b)
-                  { return a.location < b.location; });
 
-        for (uint32_t i = 0; i < shaderDesc.BoundResources; ++i)
+        Microsoft::WRL::ComPtr<ID3D12LibraryReflection> libraryReflection;
+        hr = utils->CreateReflection(&reflectBuffer, IID_PPV_ARGS(&libraryReflection));
+        if (FAILED(hr) || !libraryReflection)
         {
-            D3D12_SHADER_INPUT_BIND_DESC binding{};
-            if (FAILED(reflection->GetResourceBindingDesc(i, &binding)))
+            PE_ERROR("[Shader] Failed to create DXIL library reflection");
+            return;
+        }
+
+        D3D12_LIBRARY_DESC libraryDesc{};
+        if (FAILED(libraryReflection->GetDesc(&libraryDesc)))
+            return;
+
+        const std::string &entryName = shader->GetEntryName();
+        ID3D12FunctionReflection *fallbackFunction = nullptr;
+        D3D12_FUNCTION_DESC fallbackDesc{};
+        for (UINT i = 0; i < libraryDesc.FunctionCount; ++i)
+        {
+            ID3D12FunctionReflection *function = libraryReflection->GetFunctionByIndex(static_cast<INT>(i));
+            if (!function)
                 continue;
 
-            const std::string name = binding.Name ? binding.Name : "";
-            const uint32_t count = GetBindingCount(binding.BindCount);
-
-            if (IsPushConstantBinding(binding, sourceBindings))
-            {
-                BufferReflection buffer{};
-                FillConstantBufferSize(reflection.Get(), binding, buffer);
-                refl.m_pushConstants.name = name;
-                refl.m_pushConstants.structName = name;
-                refl.m_pushConstants.size = buffer.bufferSize;
+            D3D12_FUNCTION_DESC functionDesc{};
+            if (FAILED(function->GetDesc(&functionDesc)))
                 continue;
+
+            const std::string functionName = functionDesc.Name ? functionDesc.Name : "";
+            if (!fallbackFunction)
+            {
+                fallbackFunction = function;
+                fallbackDesc = functionDesc;
             }
 
-            switch (binding.Type)
+            if (functionName == entryName || functionName.find(entryName) != std::string::npos)
             {
-            case D3D_SIT_CBUFFER:
-            {
-                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
-                PE_ERROR_IF(binding.Space == 0 && binding.BindPoint == 0,
-                            "DX12 reflection: ordinary cbuffer '%s' compiled to b0/space0 reserved for push constants",
-                            name.c_str());
-                BufferReflection desc{};
-                desc.name = name;
-                desc.count = count;
-                FillBindingMetadata(desc, sourceBinding, binding);
-                FillConstantBufferSize(reflection.Get(), binding, desc);
-                refl.m_uniformBuffers.push_back(desc);
-                break;
-            }
-            case D3D_SIT_TBUFFER:
-            {
-                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
-                BufferReflection desc{};
-                desc.name = name;
-                desc.count = count;
-                FillBindingMetadata(desc, sourceBinding, binding);
-                desc.kind = PeBufferKind::Structured;
-                FillConstantBufferSize(reflection.Get(), binding, desc);
-                refl.m_storageBuffers.push_back(desc);
-                break;
-            }
-            case D3D_SIT_TEXTURE:
-            {
-                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
-                ImageReflection desc{};
-                desc.name = name;
-                desc.count = count;
-                FillBindingMetadata(desc, sourceBinding, binding);
-                refl.m_images.push_back(desc);
-                break;
-            }
-            case D3D_SIT_SAMPLER:
-            {
-                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
-                SamplerReflection desc{};
-                desc.name = name;
-                desc.count = count;
-                FillBindingMetadata(desc, sourceBinding, binding);
-                refl.m_samplers.push_back(desc);
-                break;
-            }
-            case D3D_SIT_STRUCTURED:
-            case D3D_SIT_BYTEADDRESS:
-            {
-                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
-                BufferReflection desc{};
-                desc.name = name;
-                desc.count = count;
-                FillBindingMetadata(desc, sourceBinding, binding);
-                desc.kind = (binding.Type == D3D_SIT_BYTEADDRESS)
-                                ? PeBufferKind::ByteAddress
-                                : PeBufferKind::Structured;
-                if (desc.kind == PeBufferKind::Structured)
-                {
-                    desc.structuredStride = sourceBinding.structuredStride;
-                    PE_ERROR_IF(desc.structuredStride == 0,
-                                "DX12 reflection: StructuredBuffer '%s' has no element stride",
-                                name.c_str());
-                }
-                refl.m_storageBuffers.push_back(desc);
-                break;
-            }
-            case D3D_SIT_UAV_RWTYPED:
-            {
-                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
-                ImageReflection desc{};
-                desc.name = name;
-                desc.count = count;
-                FillBindingMetadata(desc, sourceBinding, binding);
-                refl.m_storageImages.push_back(desc);
-                break;
-            }
-            case D3D_SIT_UAV_RWSTRUCTURED:
-            case D3D_SIT_UAV_RWBYTEADDRESS:
-            case D3D_SIT_UAV_APPEND_STRUCTURED:
-            case D3D_SIT_UAV_CONSUME_STRUCTURED:
-            case D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER:
-            {
-                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
-                BufferReflection desc{};
-                desc.name = name;
-                desc.count = count;
-                FillBindingMetadata(desc, sourceBinding, binding);
-                desc.kind = PeBufferKind::StorageRW;
-                if (binding.Type != D3D_SIT_UAV_RWBYTEADDRESS)
-                {
-                    desc.structuredStride = sourceBinding.structuredStride;
-                    PE_ERROR_IF(desc.structuredStride == 0,
-                                "DX12 reflection: RWStructuredBuffer '%s' has no element stride",
-                                name.c_str());
-                }
-                refl.m_storageBuffers.push_back(desc);
-                break;
-            }
-            case D3D_SIT_RTACCELERATIONSTRUCTURE:
-            {
-                SourceBinding sourceBinding = RequireSourceBinding(sourceBindings, binding);
-                AccelerationStructureReflection desc{};
-                desc.name = name;
-                desc.count = count;
-                FillBindingMetadata(desc, sourceBinding, binding);
-                refl.m_accelerationStructures.push_back(desc);
-                break;
-            }
-            default:
-                break;
+                PopulateBoundResourceReflection(function,
+                                                functionDesc.BoundResources,
+                                                sourceBindings,
+                                                refl.m_samplers,
+                                                refl.m_images,
+                                                refl.m_storageImages,
+                                                refl.m_uniformBuffers,
+                                                refl.m_storageBuffers,
+                                                refl.m_accelerationStructures,
+                                                refl.m_pushConstants);
+                return;
             }
         }
+
+        if (libraryDesc.FunctionCount == 1 && fallbackFunction)
+        {
+            PopulateBoundResourceReflection(fallbackFunction,
+                                            fallbackDesc.BoundResources,
+                                            sourceBindings,
+                                            refl.m_samplers,
+                                            refl.m_images,
+                                            refl.m_storageImages,
+                                            refl.m_uniformBuffers,
+                                            refl.m_storageBuffers,
+                                            refl.m_accelerationStructures,
+                                            refl.m_pushConstants);
+            return;
+        }
+
+        PE_ERROR("[Shader] DXIL library reflection could not find entry '%s'", entryName.c_str());
     }
 } // namespace pe
 

@@ -347,6 +347,7 @@ namespace pe
                     auto mode = std::any_cast<RenderMode>(event.payload);
                     Settings::Get<GlobalSettings>().render_mode =
                         ClampRenderModeToRayTracingSupport(mode, RHII.GetCaps().rayTracing);
+                    rendererSystem->ResetTAAHistory();
                     break;
                 }
                 default:

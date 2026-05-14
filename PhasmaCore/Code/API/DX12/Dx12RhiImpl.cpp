@@ -270,7 +270,13 @@ namespace pe
 
         D3D12_FEATURE_DATA_D3D12_OPTIONS5 opts5{};
         m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &opts5, sizeof(opts5));
-        m_caps.rayTracing = false; // forced off in Phase 1 regardless of device support
+        m_rayTracingTier = opts5.RaytracingTier;
+        m_caps.rayTracing = SupportsDxr();
+        if (SupportsDxr())
+        {
+            PE_INFO("[DX12] DXR tier %u available; ray-tracing cap enabled",
+                    static_cast<uint32_t>(m_rayTracingTier));
+        }
 
         D3D12_FEATURE_DATA_D3D12_OPTIONS7 opts7{};
         m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &opts7, sizeof(opts7));

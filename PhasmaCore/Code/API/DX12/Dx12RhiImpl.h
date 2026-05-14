@@ -41,6 +41,8 @@ namespace pe
         Dx12DescriptorHeap *GetRtvStagingHeap() const { return m_rtvStagingHeap.get(); }
         Dx12DescriptorHeap *GetDsvStagingHeap() const { return m_dsvStagingHeap.get(); }
         Dx12RootSignature *GetSharedRootSig() const { return m_sharedRootSignature.get(); }
+        D3D12_RAYTRACING_TIER GetRayTracingTier() const { return m_rayTracingTier; }
+        bool SupportsDxr() const { return m_rayTracingTier >= D3D12_RAYTRACING_TIER_1_0; }
         const RHI::Caps &GetCaps() const { return m_caps; }
         const std::string &GetAdapterName() const { return m_adapterName; }
 
@@ -64,6 +66,7 @@ namespace pe
         DWORD m_infoQueueCallbackCookie = 0;
         HANDLE m_fenceEvent = nullptr;
         uint64_t m_fenceValue = 0;
+        D3D12_RAYTRACING_TIER m_rayTracingTier = D3D12_RAYTRACING_TIER_NOT_SUPPORTED;
         std::string m_adapterName;
         RHI::Caps m_caps{};
     };
