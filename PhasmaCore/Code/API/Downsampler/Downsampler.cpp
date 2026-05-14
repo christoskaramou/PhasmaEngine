@@ -8,6 +8,14 @@
 
 namespace pe
 {
+    namespace
+    {
+#include "API/Downsampler/DownsamplerShaders.inl"
+
+        static_assert(kDownsamplerSpirv_len == sizeof(kDownsamplerSpirv));
+        static_assert(kDownsamplerDxil_len == sizeof(kDownsamplerDxil));
+    } // namespace
+
     void Downsampler::Init()
     {
         UpdatePassInfo();
@@ -64,18 +72,16 @@ namespace pe
 
     void Downsampler::UpdatePassInfo()
     {
-        // Downsampler::Init runs from RHII::Init, before the editor module's FileWatcher::Add loop
-        // registers shader files. Self-register the SPD integration shader so Shader::Create's
-        // FileWatcher presence check passes; vendored FFX headers don't need hot-reload.
-        const std::string spdShaderPath = Path::Assets + "Shaders/Downsampler/SPDIntegration.hlsl";
-        if (!FileWatcher::Get(spdShaderPath))
-            FileWatcher::Add(spdShaderPath, [](size_t) {});
-
         s_passInfo = std::make_shared<PassInfo>();
-        s_passInfo->pCompShader = Shader::Create({
-            .sourcePath = spdShaderPath,
-            .entryPoint = "main",
+        s_passInfo->pCompShader = Shader::CreateFromBytecode({
+            .spirv = kDownsamplerSpirv,
+            .spirvSizeBytes = sizeof(kDownsamplerSpirv),
+            .dxil = kDownsamplerDxil,
+            .dxilSizeBytes = sizeof(kDownsamplerDxil),
             .stage = PE_SHADER_STAGE_COMPUTE,
+            .entryPoint = "main",
+            .debugName = "Downsample_compute",
+            .reflectionSource = kDownsamplerReflectionSource,
         });
         s_passInfo->name = "Downsample_pipeline";
         s_passInfo->Update();

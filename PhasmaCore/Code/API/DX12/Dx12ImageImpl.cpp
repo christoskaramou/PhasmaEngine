@@ -3,6 +3,7 @@
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/DX12/Dx12BufferImpl.h"
+#include "API/DX12/Dx12Blit.h"
 #include "API/DX12/Dx12CommandBufferImpl.h"
 #include "API/DX12/Dx12ImageViewImpl.h"
 #include "API/DX12/Dx12RhiImpl.h"
@@ -348,7 +349,7 @@ namespace pe
         trackInfo.accessMask = PE_ACCESS_TRANSFER_WRITE;
     }
 
-    void Dx12ImageImpl::Blit(CommandBuffer *cmd, Image *src, const ImageBlit &region, PeFilter /*filter*/)
+    void Dx12ImageImpl::Blit(CommandBuffer *cmd, Image *src, const ImageBlit &region, PeFilter filter)
     {
         Image *dst = m_owner;
         PE_ERROR_IF(!cmd, "Dx12ImageImpl::Blit: no command buffer specified");
@@ -382,10 +383,8 @@ namespace pe
         const int32_t srcH = srcMax.y - srcMin.y;
         const int32_t srcBack = std::max(srcMax.z, srcMin.z + 1);
         const int32_t dstBack = std::max(dstMax.z, dstMin.z + 1);
-        const int32_t srcD = srcBack - srcMin.z;
         const int32_t dstW = dstMax.x - dstMin.x;
         const int32_t dstH = dstMax.y - dstMin.y;
-        const int32_t dstD = dstBack - dstMin.z;
 
         PE_ERROR_IF(srcMin.x < 0 || srcMin.y < 0 || srcMin.z < 0 ||
                         dstMin.x < 0 || dstMin.y < 0 || dstMin.z < 0,
@@ -395,10 +394,6 @@ namespace pe
                     srcW, srcH, dstW, dstH);
         PE_ERROR_IF(srcMax.z < srcMin.z || dstMax.z < dstMin.z,
                     "Dx12ImageImpl::Blit: invalid depth range");
-        PE_ERROR_IF(srcW != dstW || srcH != dstH || srcD != dstD,
-                    "Dx12ImageImpl::Blit: scaling blits are not supported on DX12 yet "
-                    "(src %dx%dx%d, dst %dx%dx%d) - needs the shader-blit slice",
-                    srcW, srcH, srcD, dstW, dstH, dstD);
 
         const Dx12ImageImpl *srcImpl = Dx12ImageImpl::From(src);
         PE_ERROR_IF(IsDepthStencilFormat(srcImpl->m_viewFormat) || IsDepthStencilFormat(m_viewFormat),
@@ -412,7 +407,7 @@ namespace pe
                     "Dx12ImageImpl::Blit: region exceeds source or destination mip extent");
         PE_ERROR_IF(srcImpl->m_resourceFormat != m_resourceFormat,
                     "Dx12ImageImpl::Blit: format-converting blit not supported on DX12 yet "
-                    "(src '%s' fmt=%u, dst '%s' fmt=%u) - needs the shader-blit slice",
+                    "(src '%s' fmt=%u, dst '%s' fmt=%u) - needs a format-conversion shader slice",
                     src->GetName().c_str(), static_cast<uint32_t>(srcImpl->m_resourceFormat),
                     dst->GetName().c_str(), static_cast<uint32_t>(m_resourceFormat));
 
@@ -440,39 +435,7 @@ namespace pe
         Image::Barriers(cmd, barriers);
         Dx12CommandBufferImpl::From(cmd)->FlushBarriers();
 
-        ID3D12GraphicsCommandList *list = GetDx12CommandList(cmd);
-
-        D3D12_BOX srcBox{};
-        srcBox.left = static_cast<UINT>(srcMin.x);
-        srcBox.top = static_cast<UINT>(srcMin.y);
-        srcBox.front = static_cast<UINT>(srcMin.z);
-        srcBox.right = static_cast<UINT>(srcMax.x);
-        srcBox.bottom = static_cast<UINT>(srcMax.y);
-        srcBox.back = static_cast<UINT>(srcBack);
-
-        for (uint32_t i = 0; i < srcLayerCount; ++i)
-        {
-            D3D12_TEXTURE_COPY_LOCATION source{};
-            source.pResource = srcImpl->GetResource();
-            source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-            source.SubresourceIndex = SubresourceIndex(src,
-                                                       region.srcSubresource.baseArrayLayer + i,
-                                                       srcMip);
-
-            D3D12_TEXTURE_COPY_LOCATION dest{};
-            dest.pResource = m_resource.Get();
-            dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-            dest.SubresourceIndex = SubresourceIndex(dst,
-                                                     region.dstSubresource.baseArrayLayer + i,
-                                                     dstMip);
-
-            list->CopyTextureRegion(&dest,
-                                    static_cast<UINT>(dstMin.x),
-                                    static_cast<UINT>(dstMin.y),
-                                    static_cast<UINT>(dstMin.z),
-                                    &source,
-                                    &srcBox);
-        }
+        Dx12BlitImage(cmd, src, dst, region, filter);
 
         cmd->EndDebugRegion();
     }

@@ -173,8 +173,8 @@ struct VS_OUTPUT_Gbuffer
 
 struct VS_OUTPUT_AABB
 {
+    float4 color : TEXCOORD0;
     float4 position : SV_POSITION;
-    float4 color : COLOR;
 };
 // -----------------------------------------
 
@@ -212,7 +212,7 @@ struct PS_INPUT_UV
 
 struct PS_INPUT_Color
 {
-    float4 color : COLOR;
+    float4 color : TEXCOORD0;
 };
 
 struct PS_OUTPUT_Gbuffer

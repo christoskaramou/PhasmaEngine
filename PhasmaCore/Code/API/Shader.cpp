@@ -154,6 +154,47 @@ namespace pe
         return shader;
     }
 
+    Shader *Shader::CreateFromBytecode(const ShaderBytecodeDesc &desc)
+    {
+        Shader *shader = new Shader();
+        shader->m_entryName = desc.entryPoint;
+        shader->m_stage = desc.stage;
+        shader->m_type = ShaderCodeType::HLSL;
+        shader->m_reflectionSource = desc.reflectionSource;
+
+        const std::string debugName = desc.debugName.empty() ? "direct_bytecode_shader" : desc.debugName;
+        shader->m_pathID = StringHash(debugName);
+        PE_INFO("[Shader] Init(bytecode) -> name='%s' | hash=%llu",
+                debugName.c_str(), static_cast<unsigned long long>(shader->m_pathID));
+
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+#if defined(PE_WIN32)
+            PE_ERROR_IF(!desc.dxil || desc.dxilSizeBytes == 0,
+                        "[Shader] Direct DX12 shader '%s' has no DXIL bytecode",
+                        debugName.c_str());
+            std::vector<uint8_t> dxil(desc.dxil, desc.dxil + desc.dxilSizeBytes);
+            shader->m_impl = new Dx12ShaderImpl(shader, std::move(dxil));
+#else
+            PE_ERROR("[Shader] DX12 bytecode shader creation is Windows-only");
+#endif
+        }
+        else
+        {
+            PE_ERROR_IF(!desc.spirv || desc.spirvSizeBytes == 0 || (desc.spirvSizeBytes % sizeof(uint32_t)) != 0,
+                        "[Shader] Direct Vulkan shader '%s' has invalid SPIR-V bytecode",
+                        debugName.c_str());
+            const size_t wordCount = desc.spirvSizeBytes / sizeof(uint32_t);
+            std::vector<uint32_t> spirv(wordCount);
+            memcpy(spirv.data(), desc.spirv, desc.spirvSizeBytes);
+            shader->m_impl = new VulkanShaderImpl(shader, spirv.data(), spirv.size());
+        }
+
+        shader->m_reflection.Init(shader);
+        TrackedShaders().push_back(shader);
+        return shader;
+    }
+
     void Shader::Destroy(Shader *&shader)
     {
         if (!shader)

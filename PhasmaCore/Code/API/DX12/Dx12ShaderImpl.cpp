@@ -816,7 +816,10 @@ namespace pe
         if (FAILED(reflection->GetDesc(&shaderDesc)))
             return;
 
-        const SourceBindings sourceBindings = ExtractSourceBindings(shader->GetCache().GetShaderCode());
+        const std::string &reflectionSource = shader->GetReflectionSource().empty()
+                                                  ? shader->GetCache().GetShaderCode()
+                                                  : shader->GetReflectionSource();
+        const SourceBindings sourceBindings = ExtractSourceBindings(reflectionSource);
 
         for (uint32_t i = 0; i < shaderDesc.InputParameters; ++i)
         {
