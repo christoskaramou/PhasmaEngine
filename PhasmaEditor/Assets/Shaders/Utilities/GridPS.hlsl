@@ -6,6 +6,7 @@ static const uint MATRIX_SIZE = 64u;
 
 [[vk::binding(0)]] ByteAddressBuffer data;
 TexSamplerDecl(1, 0, Depth)
+[[vk::push_constant]] PushConstants_Grid pc;
 
 float4x4 LoadMatrix(uint matrixIndex)
 {
@@ -22,16 +23,26 @@ float4x4 GetViewProjection() { return LoadMatrix(0); }
 float4x4 GetInvView()        { return LoadMatrix(2); }
 float4x4 GetInvProjection()  { return LoadMatrix(3); }
 
+float2 GetStableUnprojectUV(float2 uv)
+{
+    float2 ndc = UvToNdc(uv) + pc.projJitter;
+    return NdcToUv(ndc);
+}
+
 PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
 {
+    float2 stableUV = GetStableUnprojectUV(input.uv);
+    if (any(stableUV < 0.0) || any(stableUV > 1.0))
+        discard;
+
     float4x4 invView = GetInvView();
     float3 cameraPos = float3(invView[3][0], invView[3][1], invView[3][2]);
 
     float4x4 invViewProj = mul(GetInvProjection(), invView);
 
     // Build view ray
-    float3 pNear = GetPosFromUV(input.uv, 1.0, invViewProj);
-    float3 pFar  = GetPosFromUV(input.uv, 0.0, invViewProj);
+    float3 pNear = GetPosFromUV(stableUV, 1.0, invViewProj);
+    float3 pFar  = GetPosFromUV(stableUV, 0.0, invViewProj);
     float3 dir   = normalize(pFar - pNear);
 
     // Ray-plane intersection (y = 0)
@@ -45,8 +56,8 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     float3 worldPos = cameraPos + dir * t;
 
     // Manual depth test against scene depth
-    float sceneDepth = Depth.Sample(sampler_Depth, input.uv).x;
-    float3 scenePos = GetPosFromUV(input.uv, sceneDepth, invViewProj);
+    float sceneDepth = Depth.Sample(sampler_Depth, stableUV).x;
+    float3 scenePos = GetPosFromUV(stableUV, sceneDepth, invViewProj);
     float tScene = dot(scenePos - cameraPos, dir);
     if (t > tScene + 0.01)
         discard;

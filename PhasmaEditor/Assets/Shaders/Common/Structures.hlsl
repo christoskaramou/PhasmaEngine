@@ -33,6 +33,12 @@ struct PushConstants_AABB
     uint color;
 };
 
+struct PushConstants_Grid
+{
+    float2 projJitter;
+    float2 padding;
+};
+
 struct PushConstants_Bloom
 {
     float range;

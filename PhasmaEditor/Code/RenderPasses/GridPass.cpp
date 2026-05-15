@@ -5,6 +5,7 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "Camera/Camera.h"
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 
@@ -87,8 +88,16 @@ namespace pe
 
     void GridPass::ExecutePass(CommandBuffer *cmd)
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
-        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
+
+        struct PushConstants_Grid
+        {
+            vec2 projJitter;
+            vec2 padding;
+        } constants{};
+
+        if (!m_scene->GetCameras().empty())
+            constants.projJitter = m_scene->GetActiveCamera()->GetProjJitter();
 
         cmd->BeginDebugRegion("GridPass");
 
@@ -100,6 +109,8 @@ namespace pe
         cmd->SetDepthWriteEnable(false);
 
         cmd->BindPipeline(*m_passInfo);
+        cmd->SetConstants(constants);
+        cmd->PushConstants();
 
         // Fullscreen triangle
         cmd->Draw(3, 1, 0, 0);
@@ -107,6 +118,8 @@ namespace pe
         cmd->EndPass();
 
         cmd->EndDebugRegion();
+
+        m_scene = nullptr;
     }
 
     void GridPass::Resize(uint32_t width, uint32_t height)
