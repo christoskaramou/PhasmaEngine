@@ -2,6 +2,9 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12ShaderImpl.h"
+#endif
 #include "API/Vulkan/VulkanReflection.h"
 #include "API/Vulkan/VulkanShaderImpl.h"
 #include "Base/Path.h"
@@ -87,6 +90,22 @@ namespace pe
             return false;
         }
 
+#if defined(PE_WIN32)
+        bool ReflectMaterialBufferStructFromDx12(Shader *shader,
+                                                 const std::string &bufferName,
+                                                 ReflectedMaterialResources &out)
+        {
+            std::vector<StructMemberInfo> members;
+            uint32_t totalByteSize = 0;
+            if (!ReflectStructuredBufferMembersFromDx12(shader, bufferName, members, totalByteSize))
+                return false;
+
+            out.rawMembers = std::move(members);
+            out.totalByteSize = Align4(totalByteSize);
+            return true;
+        }
+#endif
+
         void ReflectBindlessTextureSlotsFromSpirv(Shader *shader, std::vector<MaterialTextureSlot> &outSlots)
         {
             const uint32_t *spirvData = GetVulkanShaderSpirv(shader);
@@ -136,13 +155,47 @@ namespace pe
 
             return resources;
         }
+
+#if defined(PE_WIN32)
+        ReflectedMaterialResources ReflectMaterialResourcesFromDx12(const PassVariant &variant)
+        {
+            ReflectedMaterialResources resources;
+
+            ScopedShaderStages stages;
+            stages.Add(variant.vertexShader, "mainVS", PE_SHADER_STAGE_VERTEX);
+            stages.Add(variant.fragmentShader, "mainPS", PE_SHADER_STAGE_FRAGMENT);
+
+            if (variant.materialBufferName.empty())
+                return resources;
+
+            for (Shader *shader : stages.Get())
+            {
+                if (ReflectMaterialBufferStructFromDx12(shader, variant.materialBufferName, resources))
+                    break;
+            }
+
+            return resources;
+        }
+#endif
     } // namespace
 
     ReflectedMaterialResources ReflectMaterialResourcesForBackend(const PassVariant &variant)
     {
-        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN || !variant.HasShaders())
+        if (!variant.HasShaders())
             return {};
 
-        return ReflectMaterialResourcesFromVulkan(variant);
+        switch (RHII.GetApi())
+        {
+        case PE_GRAPHICS_API_VULKAN:
+            return ReflectMaterialResourcesFromVulkan(variant);
+        case PE_GRAPHICS_API_DX12:
+#if defined(PE_WIN32)
+            return ReflectMaterialResourcesFromDx12(variant);
+#else
+            return {};
+#endif
+        default:
+            return {};
+        }
     }
 } // namespace pe

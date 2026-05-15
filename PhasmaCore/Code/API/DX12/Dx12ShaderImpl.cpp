@@ -13,6 +13,7 @@ namespace pe
             int set = INT32_MIN;
             int binding = INT32_MIN;
             uint32_t structuredStride = 0;
+            std::vector<StructMemberInfo> structuredMembers;
         };
 
         struct SourceBindings
@@ -24,9 +25,18 @@ namespace pe
         struct HlslStructDefinition
         {
             std::string body;
+            std::vector<StructMemberInfo> members;
             uint32_t size = 0;
             bool resolving = false;
             bool resolved = false;
+        };
+
+        struct HlslTypeInfo
+        {
+            uint32_t size = 0;
+            StructMemberBaseType baseType = StructMemberBaseType::Unknown;
+            uint32_t vecSize = 1;
+            uint32_t columns = 1;
         };
 
         std::string Trim(const std::string &text)
@@ -162,15 +172,32 @@ namespace pe
             return result;
         }
 
-        uint32_t ResolveHlslTypeSize(const std::string &typeName,
-                                     std::unordered_map<std::string, HlslStructDefinition> &structs);
+        HlslTypeInfo ResolveHlslTypeInfo(const std::string &typeName,
+                                         std::unordered_map<std::string, HlslStructDefinition> &structs);
 
-        uint32_t ResolveBuiltinHlslTypeSize(const std::string &typeName)
+        StructMemberBaseType GetStructMemberBaseType(const std::string &scalar)
+        {
+            if (scalar == "bool")
+                return StructMemberBaseType::Boolean;
+            if (scalar == "int")
+                return StructMemberBaseType::Int;
+            if (scalar == "uint")
+                return StructMemberBaseType::UInt;
+            if (scalar == "float")
+                return StructMemberBaseType::Float;
+            if (scalar == "half")
+                return StructMemberBaseType::Half;
+            if (scalar == "double")
+                return StructMemberBaseType::Double;
+            return StructMemberBaseType::Unknown;
+        }
+
+        HlslTypeInfo ResolveBuiltinHlslTypeInfo(const std::string &typeName)
         {
             static const std::regex typeRegex(R"(^(bool|int|uint|float|half|double)([1-4])?(?:x([1-4]))?$)");
             std::smatch match;
             if (!std::regex_match(typeName, match, typeRegex))
-                return 0;
+                return {};
 
             const std::string scalar = match[1].str();
             uint32_t componentSize = sizeof(uint32_t);
@@ -179,12 +206,20 @@ namespace pe
             else if (scalar == "double")
                 componentSize = sizeof(double);
 
-            uint32_t components = 1;
+            HlslTypeInfo info{};
+            info.baseType = GetStructMemberBaseType(scalar);
             if (match[2].matched)
-                components *= static_cast<uint32_t>(std::stoul(match[2].str()));
+                info.vecSize = static_cast<uint32_t>(std::stoul(match[2].str()));
             if (match[3].matched)
-                components *= static_cast<uint32_t>(std::stoul(match[3].str()));
-            return componentSize * components;
+                info.columns = static_cast<uint32_t>(std::stoul(match[3].str()));
+            info.size = componentSize * info.vecSize * info.columns;
+            return info;
+        }
+
+        uint32_t ResolveHlslTypeSize(const std::string &typeName,
+                                     std::unordered_map<std::string, HlslStructDefinition> &structs)
+        {
+            return ResolveHlslTypeInfo(typeName, structs).size;
         }
 
         uint32_t ArrayMultiplier(const std::string &declarator)
@@ -228,10 +263,27 @@ namespace pe
             return declaration;
         }
 
-        uint32_t ResolveHlslStructSize(const std::string &body,
-                                       std::unordered_map<std::string, HlslStructDefinition> &structs)
+        std::string ExtractDeclaratorName(std::string declarator)
         {
-            uint32_t size = 0;
+            const size_t semanticPos = declarator.find(':');
+            if (semanticPos != std::string::npos)
+                declarator = declarator.substr(0, semanticPos);
+
+            const size_t initializerPos = declarator.find('=');
+            if (initializerPos != std::string::npos)
+                declarator = declarator.substr(0, initializerPos);
+
+            declarator = Trim(declarator);
+            static const std::regex nameRegex(R"(^([A-Za-z_][A-Za-z0-9_]*))");
+            std::smatch match;
+            return std::regex_search(declarator, match, nameRegex) ? match[1].str() : std::string{};
+        }
+
+        std::vector<StructMemberInfo> ReflectHlslStructMembers(const std::string &body,
+                                                               std::unordered_map<std::string, HlslStructDefinition> &structs,
+                                                               uint32_t &outSize)
+        {
+            std::vector<StructMemberInfo> members;
             std::stringstream stream(body);
             std::string statement;
             static const std::regex declarationRegex(R"(^([A-Za-z_][A-Za-z0-9_]*)(?:\s+(.+))$)");
@@ -247,48 +299,63 @@ namespace pe
                     continue;
 
                 const std::string memberType = match[1].str();
-                const uint32_t memberSize = ResolveHlslTypeSize(memberType, structs);
-                PE_ERROR_IF(memberSize == 0,
+                const HlslTypeInfo memberTypeInfo = ResolveHlslTypeInfo(memberType, structs);
+                PE_ERROR_IF(memberTypeInfo.size == 0,
                             "DX12 reflection: unsupported StructuredBuffer member type '%s'",
                             memberType.c_str());
 
                 for (std::string declarator : SplitDeclarators(match[2].str()))
                 {
-                    const size_t semanticPos = declarator.find(':');
-                    if (semanticPos != std::string::npos)
-                        declarator = declarator.substr(0, semanticPos);
                     declarator = Trim(declarator);
-                    if (!declarator.empty())
-                        size += memberSize * ArrayMultiplier(declarator);
+                    const std::string memberName = ExtractDeclaratorName(declarator);
+                    if (memberName.empty())
+                        continue;
+
+                    const uint32_t multiplier = ArrayMultiplier(declarator);
+                    StructMemberInfo info{};
+                    info.name = memberName;
+                    info.offset = outSize;
+                    info.size = memberTypeInfo.size * multiplier;
+                    info.baseType = memberTypeInfo.baseType;
+                    info.vecSize = memberTypeInfo.vecSize;
+                    info.columns = memberTypeInfo.columns;
+                    members.push_back(info);
+
+                    outSize += info.size;
                 }
             }
 
-            return size;
+            return members;
         }
 
-        uint32_t ResolveHlslTypeSize(const std::string &typeName,
-                                     std::unordered_map<std::string, HlslStructDefinition> &structs)
+        HlslTypeInfo ResolveHlslTypeInfo(const std::string &typeName,
+                                         std::unordered_map<std::string, HlslStructDefinition> &structs)
         {
-            if (const uint32_t builtinSize = ResolveBuiltinHlslTypeSize(typeName))
-                return builtinSize;
+            if (const HlslTypeInfo builtin = ResolveBuiltinHlslTypeInfo(typeName); builtin.size != 0)
+                return builtin;
 
             auto it = structs.find(typeName);
             if (it == structs.end())
-                return 0;
+                return {};
 
             HlslStructDefinition &definition = it->second;
-            if (definition.resolved)
-                return definition.size;
+            if (!definition.resolved)
+            {
+                PE_ERROR_IF(definition.resolving,
+                            "DX12 reflection: recursive StructuredBuffer element type '%s' is unsupported",
+                            typeName.c_str());
 
-            PE_ERROR_IF(definition.resolving,
-                        "DX12 reflection: recursive StructuredBuffer element type '%s' is unsupported",
-                        typeName.c_str());
+                definition.resolving = true;
+                definition.size = 0;
+                definition.members = ReflectHlslStructMembers(definition.body, structs, definition.size);
+                definition.resolving = false;
+                definition.resolved = true;
+            }
 
-            definition.resolving = true;
-            definition.size = ResolveHlslStructSize(definition.body, structs);
-            definition.resolving = false;
-            definition.resolved = true;
-            return definition.size;
+            HlslTypeInfo info{};
+            info.size = definition.size;
+            info.baseType = StructMemberBaseType::Struct;
+            return info;
         }
 
         std::wstring ConvertUtf8ToWide(const std::string &str)
@@ -745,6 +812,8 @@ namespace pe
                                 "DX12 reflection: could not resolve StructuredBuffer '%s' element type '%s'",
                                 resourceName.c_str(),
                                 elementType.c_str());
+                    if (auto it = structDefinitions.find(elementType); it != structDefinitions.end() && it->second.resolved)
+                        binding.structuredMembers = it->second.members;
                     bindings.resources[resourceName] = binding;
                     continue;
                 }
@@ -939,6 +1008,30 @@ namespace pe
             }
         }
     } // namespace
+
+    bool ReflectStructuredBufferMembersFromDx12(Shader *shader,
+                                                const std::string &bufferName,
+                                                std::vector<StructMemberInfo> &outMembers,
+                                                uint32_t &outTotalByteSize)
+    {
+        outMembers.clear();
+        outTotalByteSize = 0;
+
+        if (!shader || bufferName.empty())
+            return false;
+
+        const std::string &reflectionSource = shader->GetReflectionSource().empty()
+                                                  ? shader->GetCache().GetShaderCode()
+                                                  : shader->GetReflectionSource();
+        SourceBindings sourceBindings = ExtractSourceBindings(reflectionSource);
+        auto it = sourceBindings.resources.find(bufferName);
+        if (it == sourceBindings.resources.end() || it->second.structuredMembers.empty())
+            return false;
+
+        outMembers = it->second.structuredMembers;
+        outTotalByteSize = it->second.structuredStride;
+        return outTotalByteSize != 0;
+    }
 
     Dx12ShaderImpl::Dx12ShaderImpl(Shader *owner, const ShaderDesc &desc)
         : m_owner{owner}

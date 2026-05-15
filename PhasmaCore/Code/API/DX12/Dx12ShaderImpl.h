@@ -45,6 +45,11 @@ namespace pe
         return impl ? impl->GetBytecode() : D3D12_SHADER_BYTECODE{};
     }
 
+    bool ReflectStructuredBufferMembersFromDx12(Shader *shader,
+                                                const std::string &bufferName,
+                                                std::vector<StructMemberInfo> &outMembers,
+                                                uint32_t &outTotalByteSize);
+
     void PopulateReflectionFromDxil(Reflection &refl, Shader *shader);
 } // namespace pe
 

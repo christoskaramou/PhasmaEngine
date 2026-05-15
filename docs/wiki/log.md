@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-05-15
+
+- Added DX12 material struct reflection for editor material layouts: the DX12 HLSL source-binding parser now records flat builtin struct-member offsets/sizes for `StructuredBuffer<T>` element structs, and `MaterialReflectionBackend` uses that path so `standard_pbr` can expose `MaterialGpuData` scalar/color fields on DX12. Texture-slot reflection remains Vulkan/SPIR-V-only for this slice.
+
 ## 2026-05-14
 
 - Enabled DX12/Windows ImGui platform-window capability in `GUIBackend::SupportsPlatformWindows`; SDL2 and ImGui's DX12 renderer now handle secondary viewport creation and rendering for DX12.
