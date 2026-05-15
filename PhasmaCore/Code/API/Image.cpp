@@ -2,12 +2,6 @@
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Downsampler/Downsampler.h"
-#include "API/Vulkan/Helpers_Vulkan.h"
-#include "API/RHI.h"
-#include "API/StagingManager.h"
-#include "API/Vulkan/VulkanBufferImpl.h"
-#include "API/Vulkan/VulkanCommandBufferImpl.h"
-#include "API/Vulkan/VulkanImageImpl.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -272,24 +266,6 @@ namespace pe
             samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
             image->SetSampler(Sampler::Create(samplerInfo));
 
-            StagingAllocation alloc = RHII.GetStagingManager()->Allocate(dds.dataSize);
-            std::memcpy(alloc.data, fileData.data() + dds.dataOffset, dds.dataSize);
-            alloc.buffer->Flush(dds.dataSize, 0);
-
-            ImageBarrierInfo toTransfer{};
-            toTransfer.image = image;
-            toTransfer.layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            toTransfer.stageFlags = PE_STAGE_TRANSFER;
-            toTransfer.accessMask = PE_ACCESS_TRANSFER_WRITE;
-            toTransfer.baseMipLevel = 0;
-            toTransfer.mipLevels = dds.mipLevels;
-            cmd->ImageBarrier(toTransfer);
-
-            std::vector<vk::BufferImageCopy2> regions;
-            std::vector<vk::BufferImageCopy> legacyRegions;
-            regions.reserve(dds.mipLevels);
-            legacyRegions.reserve(dds.mipLevels);
-
             size_t offset = 0;
             for (uint32_t mip = 0; mip < dds.mipLevels; ++mip)
             {
@@ -299,54 +275,15 @@ namespace pe
                 const size_t blockHeight = (mipHeight + 3u) / 4u;
                 const size_t mipSize = blockWidth * blockHeight * dds.blockBytes;
 
-                vk::BufferImageCopy2 region{};
-                region.bufferOffset = static_cast<vk::DeviceSize>(offset);
-                region.bufferRowLength = 0;
-                region.bufferImageHeight = 0;
-                region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-                region.imageSubresource.mipLevel = mip;
-                region.imageSubresource.baseArrayLayer = 0;
-                region.imageSubresource.layerCount = 1;
-                region.imageOffset = vk::Offset3D{0, 0, 0};
-                region.imageExtent = vk::Extent3D{mipWidth, mipHeight, 1};
-                regions.push_back(region);
-
-                vk::BufferImageCopy legacyRegion{};
-                legacyRegion.bufferOffset = static_cast<vk::DeviceSize>(offset);
-                legacyRegion.bufferRowLength = 0;
-                legacyRegion.bufferImageHeight = 0;
-                legacyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-                legacyRegion.imageSubresource.mipLevel = mip;
-                legacyRegion.imageSubresource.baseArrayLayer = 0;
-                legacyRegion.imageSubresource.layerCount = 1;
-                legacyRegion.imageOffset = vk::Offset3D{0, 0, 0};
-                legacyRegion.imageExtent = vk::Extent3D{mipWidth, mipHeight, 1};
-                legacyRegions.push_back(legacyRegion);
-
+                cmd->CopyDataToImageStaged(image,
+                                           const_cast<uint8_t *>(fileData.data() + dds.dataOffset + offset),
+                                           mipSize,
+                                           0,
+                                           1,
+                                           mip);
                 offset += mipSize;
             }
-
-            if (RHII.GetCaps().copyCommands2)
-            {
-                vk::CopyBufferToImageInfo2 copyInfo{};
-                copyInfo.srcBuffer = pe::GetVulkanBuffer(alloc.buffer);
-                copyInfo.dstImage = pe::GetVulkanImage(image);
-                copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
-                copyInfo.regionCount = static_cast<uint32_t>(regions.size());
-                copyInfo.pRegions = regions.data();
-                GetVulkanCommandBuffer(cmd).copyBufferToImage2(copyInfo);
-            }
-            else
-            {
-                GetVulkanCommandBuffer(cmd).copyBufferToImage(pe::GetVulkanBuffer(alloc.buffer),
-                                                              pe::GetVulkanImage(image),
-                                                              vk::ImageLayout::eTransferDstOptimal,
-                                                              static_cast<uint32_t>(legacyRegions.size()),
-                                                              legacyRegions.data());
-            }
-
-            cmd->AddAfterWaitCallback([alloc = std::move(alloc)]() mutable
-                                      { RHII.GetStagingManager()->SetUnused(alloc); });
+            PE_ERROR_IF(offset != dds.dataSize, "DDS upload byte count mismatch for '%s'", path.c_str());
 
             ImageBarrierInfo toRead{};
             toRead.image = image;

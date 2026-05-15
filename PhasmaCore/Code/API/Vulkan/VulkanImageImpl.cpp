@@ -740,8 +740,12 @@ namespace pe
         barrier.baseArrayLayer = baseArrayLayer;
         barrier.arrayLayers = layerCount ? layerCount : image->GetArrayLayers();
         barrier.baseMipLevel = mipLevel;
-        barrier.mipLevels = image->GetMipLevels();
+        barrier.mipLevels = mipLevel == 0 ? image->GetMipLevels() : 1;
         Image::Barrier(cmd, barrier);
+
+        const uint32_t mipWidth = std::max(image->GetWidth() >> mipLevel, 1u);
+        const uint32_t mipHeight = std::max(image->GetHeight() >> mipLevel, 1u);
+        const uint32_t mipDepth = std::max(image->m_depth >> mipLevel, 1u);
 
         if (RHII.GetCaps().copyCommands2)
         {
@@ -754,7 +758,7 @@ namespace pe
             region.imageSubresource.baseArrayLayer = baseArrayLayer;
             region.imageSubresource.layerCount = layerCount ? layerCount : image->GetArrayLayers();
             region.imageOffset = vk::Offset3D{0, 0, 0};
-            region.imageExtent = vk::Extent3D{image->GetWidth(), image->GetHeight(), image->m_depth};
+            region.imageExtent = vk::Extent3D{mipWidth, mipHeight, mipDepth};
 
             vk::CopyBufferToImageInfo2 copyInfo{};
             copyInfo.srcBuffer = pe::GetVulkanBuffer(alloc.buffer);
@@ -776,7 +780,7 @@ namespace pe
             region.imageSubresource.baseArrayLayer = baseArrayLayer;
             region.imageSubresource.layerCount = layerCount ? layerCount : image->GetArrayLayers();
             region.imageOffset = vk::Offset3D{0, 0, 0};
-            region.imageExtent = vk::Extent3D{image->GetWidth(), image->GetHeight(), image->m_depth};
+            region.imageExtent = vk::Extent3D{mipWidth, mipHeight, mipDepth};
 
             GetVulkanCommandBuffer(cmd).copyBufferToImage(pe::GetVulkanBuffer(alloc.buffer),
                                                           m_image,
