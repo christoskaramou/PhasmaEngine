@@ -61,9 +61,9 @@ namespace pe
             desc.FillMode = pe_dx12::FillMode(info.polygonMode);
             desc.CullMode = pe_dx12::CullMode(info.cullMode);
             desc.FrontCounterClockwise = FALSE;
-            desc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
-            desc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-            desc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+            desc.DepthBias = info.depthBiasEnable ? static_cast<INT>(info.depthBiasConstantFactor) : D3D12_DEFAULT_DEPTH_BIAS;
+            desc.DepthBiasClamp = info.depthBiasEnable ? info.depthBiasClamp : D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
+            desc.SlopeScaledDepthBias = info.depthBiasEnable ? info.depthBiasSlopeFactor : D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
             desc.DepthClipEnable = TRUE;
             desc.MultisampleEnable = FALSE;
             desc.AntialiasedLineEnable = FALSE;

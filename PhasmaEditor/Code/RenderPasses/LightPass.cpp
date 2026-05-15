@@ -127,6 +127,7 @@ namespace pe
 
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.camPos = vec4(camera->GetPosition(), 1.0f);
+        m_ubo.camForward = vec4(camera->GetFront(), 0.0f);
         m_ubo.ssao = gSettings.ssao;
         m_ubo.ssr = gSettings.ssr;
         m_ubo.IBL = gSettings.IBL;
@@ -166,6 +167,7 @@ namespace pe
     void LightOpaquePass::ExecutePass(CommandBuffer *cmd)
     {
         uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().num_cascades;
+        const auto &gSettings = Settings::Get<GlobalSettings>();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
@@ -178,6 +180,13 @@ namespace pe
         cmd->SetConstantAt(6, 0u);                                      // is transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
             cmd->SetConstantAt(i + 8, shadows.m_viewZ[i]); // shadowmap cascade distances
+        for (uint32_t i = 0; i < shadowmapCascades; i++)
+            cmd->SetConstantAt(i + 12, shadows.m_texelSizeWorld[i]); // cascade world-space texel sizes
+        cmd->SetConstantAt(16, gSettings.shadow_distance);
+        cmd->SetConstantAt(17, gSettings.shadow_distance * std::clamp(gSettings.shadow_fade_fraction, 0.0f, 1.0f));
+        cmd->SetConstantAt(18, gSettings.shadow_normal_bias);
+        cmd->SetConstantAt(19, gSettings.shadow_filter_radius);
+        cmd->SetConstantAt(20, static_cast<uint32_t>(std::clamp(gSettings.shadow_debug_mode, 0, 2)));
 
         cmd->BeginPass(1, m_attachments.data(), "LightOpaquePass");
         cmd->BindPipeline(*m_passInfo);
@@ -312,6 +321,7 @@ namespace pe
 
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.camPos = vec4(camera->GetPosition(), 1.0f);
+        m_ubo.camForward = vec4(camera->GetFront(), 0.0f);
         m_ubo.ssao = gSettings.ssao;
         m_ubo.ssr = gSettings.ssr;
         m_ubo.IBL = gSettings.IBL;
@@ -351,6 +361,7 @@ namespace pe
     void LightTransparentPass::ExecutePass(CommandBuffer *cmd)
     {
         uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().num_cascades;
+        const auto &gSettings = Settings::Get<GlobalSettings>();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
         Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
@@ -363,6 +374,13 @@ namespace pe
         cmd->SetConstantAt(6, 1u);                                      // transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
             cmd->SetConstantAt(i + 8, shadows.m_viewZ[i]); // shadowmap cascade distances
+        for (uint32_t i = 0; i < shadowmapCascades; i++)
+            cmd->SetConstantAt(i + 12, shadows.m_texelSizeWorld[i]); // cascade world-space texel sizes
+        cmd->SetConstantAt(16, gSettings.shadow_distance);
+        cmd->SetConstantAt(17, gSettings.shadow_distance * std::clamp(gSettings.shadow_fade_fraction, 0.0f, 1.0f));
+        cmd->SetConstantAt(18, gSettings.shadow_normal_bias);
+        cmd->SetConstantAt(19, gSettings.shadow_filter_radius);
+        cmd->SetConstantAt(20, static_cast<uint32_t>(std::clamp(gSettings.shadow_debug_mode, 0, 2)));
 
         cmd->BeginPass(1, m_attachments.data(), "LightTransparentPass");
         cmd->BindPipeline(*m_passInfo);

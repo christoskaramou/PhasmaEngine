@@ -2,6 +2,7 @@
 
 ## 2026-05-15
 
+- Upgraded raster shadow quality controls: cascades now use camera-forward view depth, configurable shadow distance/split lambda, texel-snapped light projections, per-cascade world texel sizes, angle-aware receiver normal bias, filter radius, and last-cascade fade; shadow depth bias is enabled for Vulkan and baked into DX12 PSOs, with editor debug modes for cascade bands and raw shadow factor.
 - Added DX12 material struct reflection for editor material layouts: the DX12 HLSL source-binding parser now records flat builtin struct-member offsets/sizes for `StructuredBuffer<T>` element structs, and `MaterialReflectionBackend` uses that path so `standard_pbr` can expose `MaterialGpuData` scalar/color fields on DX12. Texture-slot reflection remains Vulkan/SPIR-V-only for this slice.
 
 ## 2026-05-14

@@ -65,6 +65,10 @@ namespace pe
           dynamicStates{},
           colorFormats{},
           depthFormat{PE_FORMAT_UNDEFINED},
+          depthBiasEnable{false},
+          depthBiasConstantFactor{0.0f},
+          depthBiasClamp{0.0f},
+          depthBiasSlopeFactor{0.0f},
           depthWriteEnable{true},
           depthTestEnable{true},
           depthCompareOp{Settings::Get<GlobalSettings>().reverse_depth ? PE_COMPARE_OP_GREATER_OR_EQUAL : PE_COMPARE_OP_LESS_OR_EQUAL},
@@ -422,6 +426,10 @@ namespace pe
             }
 
             m_hash.Combine(static_cast<uint64_t>(depthFormat));
+            m_hash.Combine(depthBiasEnable);
+            m_hash.Combine(depthBiasConstantFactor);
+            m_hash.Combine(depthBiasClamp);
+            m_hash.Combine(depthBiasSlopeFactor);
             m_hash.Combine(depthWriteEnable);
             m_hash.Combine(depthTestEnable);
             m_hash.Combine(static_cast<uint64_t>(depthCompareOp));

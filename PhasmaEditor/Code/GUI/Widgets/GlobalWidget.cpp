@@ -170,7 +170,14 @@ namespace pe
         if (gSettings.day)
         {
             ImGui::Indent(16.0f);
+            ImGui::DragFloat("Distance##Shadow", &gSettings.shadow_distance, 5.0f, 10.0f, 1000.0f);
+            ImGui::SliderFloat("Cascade Split##Shadow", &gSettings.shadow_cascade_lambda, 0.0f, 1.0f);
             ImGui::DragFloat("Slope", &gSettings.depth_bias[2], 0.15f, 0.5f);
+            ImGui::DragFloat("Normal Bias##Shadow", &gSettings.shadow_normal_bias, 0.05f, 0.0f, 10.0f);
+            ImGui::SliderFloat("Fade##Shadow", &gSettings.shadow_fade_fraction, 0.0f, 0.5f);
+            ImGui::SliderFloat("Filter##Shadow", &gSettings.shadow_filter_radius, 0.0f, 3.0f);
+            const char *shadowDebugModes[] = {"Off", "Cascades", "Shadow Factor"};
+            ImGui::Combo("Debug##Shadow", &gSettings.shadow_debug_mode, shadowDebugModes, IM_ARRAYSIZE(shadowDebugModes));
             ImGui::Separator();
             ImGui::Unindent(16.0f);
         }

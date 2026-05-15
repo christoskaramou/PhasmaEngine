@@ -58,6 +58,10 @@ namespace pe
         m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR, PE_DYNAMIC_STATE_DEPTH_BIAS};
         m_passInfo->cullMode = PE_CULL_MODE_NONE;
         m_passInfo->depthFormat = RHII.GetDepthFormat();
+        m_passInfo->depthBiasEnable = true;
+        m_passInfo->depthBiasConstantFactor = Settings::Get<GlobalSettings>().depth_bias[0];
+        m_passInfo->depthBiasClamp = Settings::Get<GlobalSettings>().depth_bias[1];
+        m_passInfo->depthBiasSlopeFactor = Settings::Get<GlobalSettings>().depth_bias[2];
         m_passInfo->Update();
     }
 
@@ -119,17 +123,17 @@ namespace pe
         }
     }
 
-    constexpr float cascadeSplitLambda = 0.95f;
     void ShadowPass::CalculateCascades(Camera *camera)
     {
-        uint32_t cascades = Settings::Get<GlobalSettings>().num_cascades;
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        uint32_t cascades = gSettings.num_cascades;
         m_cascades.resize(cascades);
         m_cascadePlanes.resize(cascades);
 
         float cascadeSplits[8];
 
         float nearClip = camera->GetNearPlane();
-        float farClip = 100.0f;
+        float farClip = std::max(gSettings.shadow_distance, nearClip + 1.0f);
         float clipRange = farClip - nearClip;
 
         float minZ = nearClip;
@@ -145,7 +149,8 @@ namespace pe
             float p = (i + 1) / static_cast<float>(cascades);
             float log = minZ * std::pow(ratio, p);
             float uniform = minZ + range * p;
-            float d = cascadeSplitLambda * (log - uniform) + uniform;
+            float lambda = std::clamp(gSettings.shadow_cascade_lambda, 0.0f, 1.0f);
+            float d = lambda * (log - uniform) + uniform;
             cascadeSplits[i] = (d - nearClip) / clipRange;
         }
 
@@ -212,13 +217,28 @@ namespace pe
                 glm::quat rot = glm::quat(dirLights[0].rotation.w, dirLights[0].rotation.x, dirLights[0].rotation.y, dirLights[0].rotation.z);
                 lightDir = rot * glm::vec3(0, 0, -1);
             }
-            mat4 lightViewMatrix = lookAt(frustumCenter - (lightDir * radius), frustumCenter, camera->WorldUp());
+            lightDir = glm::normalize(lightDir);
+            vec3 lightUp = camera->WorldUp();
+            if (std::abs(glm::dot(lightDir, glm::normalize(lightUp))) > 0.95f)
+                lightUp = camera->WorldFront();
+
+            const float texelSizeWorld = (radius * 2.0f) / static_cast<float>(gSettings.shadow_map_size);
+            mat4 lightViewMatrix = lookAt(frustumCenter - (lightDir * radius), frustumCenter, lightUp);
+            vec4 centerLightSpace = lightViewMatrix * vec4(frustumCenter, 1.0f);
+            centerLightSpace.x = std::floor(centerLightSpace.x / texelSizeWorld) * texelSizeWorld;
+            centerLightSpace.y = std::floor(centerLightSpace.y / texelSizeWorld) * texelSizeWorld;
+
+            mat4 invLightViewMatrix = inverse(lightViewMatrix);
+            vec4 snappedCenter = invLightViewMatrix * centerLightSpace;
+            frustumCenter = vec3(snappedCenter) / snappedCenter.w;
+            lightViewMatrix = lookAt(frustumCenter - (lightDir * radius), frustumCenter, lightUp);
             mat4 lightOrthoMatrix = ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, maxExtents.z - minExtents.z, -clipRange);
 
             // Store split distance and matrix in cascade
             m_cascades[i] = lightOrthoMatrix * lightViewMatrix;
             m_cascadePlanes[i] = ExtractFrustumPlanes(m_cascades[i]);
-            m_viewZ[i] = (camera->GetNearPlane() + splitDist * clipRange) * 1.5f;
+            m_viewZ[i] = camera->GetNearPlane() + splitDist * clipRange;
+            m_texelSizeWorld[i] = texelSizeWorld;
 
             lastSplitDist = cascadeSplits[i];
         }
@@ -257,6 +277,8 @@ namespace pe
                 cmd->SetViewport(0.f, 0.f, attachment.image->GetWidth_f(), attachment.image->GetHeight_f());
                 cmd->SetScissor(0, 0, attachment.image->GetWidth(), attachment.image->GetHeight());
                 cmd->BindPipeline(passInfo);
+                const auto &gSettings = Settings::Get<GlobalSettings>();
+                cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
                 cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
                 cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
                 cmd->SetConstants(pushConstants);

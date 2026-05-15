@@ -1014,9 +1014,8 @@ namespace pe
     }
     void Dx12CommandBufferImpl::SetDepthBias(float, float, float)
     {
-        // DX12 bakes depth bias into the PSO rasterizer state. Until the
-        // pipeline-binding slice rebuilds PSO variants on demand, we accept the
-        // call but rely on the bound PSO to provide the configured values.
+        // DX12 bakes depth bias into the PSO rasterizer state. Runtime tuning
+        // requires a new PSO; current callers rely on PassInfo's baked values.
     }
     void Dx12CommandBufferImpl::SetDepthTestEnable(uint32_t)
     {

@@ -39,10 +39,16 @@ namespace pe
         {"IBL_intensity", &GlobalSettings::IBL_intensity},
         {"lights_intensity", &GlobalSettings::lights_intensity},
         {"time_scale", &GlobalSettings::time_scale},
+        {"shadow_distance", &GlobalSettings::shadow_distance},
+        {"shadow_cascade_lambda", &GlobalSettings::shadow_cascade_lambda},
+        {"shadow_normal_bias", &GlobalSettings::shadow_normal_bias},
+        {"shadow_fade_fraction", &GlobalSettings::shadow_fade_fraction},
+        {"shadow_filter_radius", &GlobalSettings::shadow_filter_radius},
     };
 
     static const std::unordered_map<std::string_view, int GlobalSettings::*> s_intSettings = {
         {"motion_blur_samples", &GlobalSettings::motion_blur_samples},
+        {"shadow_debug_mode", &GlobalSettings::shadow_debug_mode},
     };
 
     static const std::unordered_map<std::string_view, uint32_t GlobalSettings::*> s_uint32Settings = {

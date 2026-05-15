@@ -288,10 +288,13 @@ namespace pe
         prsci.polygonMode = ToVkPolygonMode(m_info.polygonMode);
         prsci.cullMode = ToVkCullMode(m_info.cullMode);
         prsci.frontFace = vk::FrontFace::eClockwise;
-        prsci.depthBiasEnable = VK_FALSE;
-        prsci.depthBiasConstantFactor = 0.0f;
-        prsci.depthBiasClamp = 0.0f;
-        prsci.depthBiasSlopeFactor = 0.0f;
+        bool depthBiasDynamic = false;
+        for (PeDynamicState ds : m_info.dynamicStates)
+            depthBiasDynamic |= ds == PE_DYNAMIC_STATE_DEPTH_BIAS;
+        prsci.depthBiasEnable = m_info.depthBiasEnable || depthBiasDynamic;
+        prsci.depthBiasConstantFactor = m_info.depthBiasConstantFactor;
+        prsci.depthBiasClamp = m_info.depthBiasClamp;
+        prsci.depthBiasSlopeFactor = m_info.depthBiasSlopeFactor;
         prsci.lineWidth = max(m_info.lineWidth, 1.0f);
         pipeinfo.pRasterizationState = &prsci;
 

@@ -6,6 +6,7 @@ namespace pe
     {
         mat4 invViewProj = mat4(1.0f);
         vec4 camPos = vec4(0.0f);
+        vec4 camForward = vec4(0.0f);
         uint32_t ssao = 1;
         uint32_t ssr = 0;
         uint32_t IBL = 1;

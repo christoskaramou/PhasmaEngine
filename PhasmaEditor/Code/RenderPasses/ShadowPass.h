@@ -43,6 +43,7 @@ namespace pe
         std::vector<Buffer *> m_uniforms;
         std::vector<mat4> m_cascades;
         vec4 m_viewZ;
+        vec4 m_texelSizeWorld;
         std::vector<Image *> m_textures{};
         Sampler *m_sampler;
         Scene *m_scene = nullptr;

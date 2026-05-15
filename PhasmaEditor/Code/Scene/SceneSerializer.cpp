@@ -255,6 +255,12 @@ namespace pe
             settings.AddMember("shadows", gSettings.shadows, allocator);
             settings.AddMember("shadow_map_size", gSettings.shadow_map_size, allocator);
             settings.AddMember("num_cascades", gSettings.num_cascades, allocator);
+            settings.AddMember("shadow_distance", gSettings.shadow_distance, allocator);
+            settings.AddMember("shadow_cascade_lambda", gSettings.shadow_cascade_lambda, allocator);
+            settings.AddMember("shadow_normal_bias", gSettings.shadow_normal_bias, allocator);
+            settings.AddMember("shadow_fade_fraction", gSettings.shadow_fade_fraction, allocator);
+            settings.AddMember("shadow_filter_radius", gSettings.shadow_filter_radius, allocator);
+            settings.AddMember("shadow_debug_mode", gSettings.shadow_debug_mode, allocator);
             settings.AddMember("render_scale", gSettings.render_scale, allocator);
             settings.AddMember("ssao", gSettings.ssao, allocator);
             settings.AddMember("fxaa", gSettings.fxaa, allocator);
@@ -1099,6 +1105,18 @@ namespace pe
                 gSettings.shadow_map_size = settings["shadow_map_size"].GetUint();
             if (settings.HasMember("num_cascades"))
                 gSettings.num_cascades = settings["num_cascades"].GetUint();
+            if (settings.HasMember("shadow_distance"))
+                gSettings.shadow_distance = settings["shadow_distance"].GetFloat();
+            if (settings.HasMember("shadow_cascade_lambda"))
+                gSettings.shadow_cascade_lambda = settings["shadow_cascade_lambda"].GetFloat();
+            if (settings.HasMember("shadow_normal_bias"))
+                gSettings.shadow_normal_bias = settings["shadow_normal_bias"].GetFloat();
+            if (settings.HasMember("shadow_fade_fraction"))
+                gSettings.shadow_fade_fraction = settings["shadow_fade_fraction"].GetFloat();
+            if (settings.HasMember("shadow_filter_radius"))
+                gSettings.shadow_filter_radius = settings["shadow_filter_radius"].GetFloat();
+            if (settings.HasMember("shadow_debug_mode"))
+                gSettings.shadow_debug_mode = settings["shadow_debug_mode"].GetInt();
             if (settings.HasMember("render_scale"))
             {
                 gSettings.render_scale = settings["render_scale"].GetFloat();
@@ -2734,6 +2752,18 @@ namespace pe
                 gSettings.shadow_map_size = settings["shadow_map_size"].GetUint();
             if (settings.HasMember("num_cascades"))
                 gSettings.num_cascades = settings["num_cascades"].GetUint();
+            if (settings.HasMember("shadow_distance"))
+                gSettings.shadow_distance = settings["shadow_distance"].GetFloat();
+            if (settings.HasMember("shadow_cascade_lambda"))
+                gSettings.shadow_cascade_lambda = settings["shadow_cascade_lambda"].GetFloat();
+            if (settings.HasMember("shadow_normal_bias"))
+                gSettings.shadow_normal_bias = settings["shadow_normal_bias"].GetFloat();
+            if (settings.HasMember("shadow_fade_fraction"))
+                gSettings.shadow_fade_fraction = settings["shadow_fade_fraction"].GetFloat();
+            if (settings.HasMember("shadow_filter_radius"))
+                gSettings.shadow_filter_radius = settings["shadow_filter_radius"].GetFloat();
+            if (settings.HasMember("shadow_debug_mode"))
+                gSettings.shadow_debug_mode = settings["shadow_debug_mode"].GetInt();
             if (settings.HasMember("render_scale"))
             {
                 gSettings.render_scale = settings["render_scale"].GetFloat();

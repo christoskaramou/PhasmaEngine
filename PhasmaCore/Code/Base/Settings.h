@@ -72,6 +72,12 @@ namespace pe
         bool shadows = true;
         uint32_t shadow_map_size = 2048;
         uint32_t num_cascades = 4;
+        float shadow_distance = 250.0f;
+        float shadow_cascade_lambda = 0.85f;
+        float shadow_normal_bias = 1.5f;
+        float shadow_fade_fraction = 0.15f;
+        float shadow_filter_radius = 0.75f;
+        int shadow_debug_mode = 0;
         float render_scale = 0.75f;
         bool ssao = true;
         bool fxaa = false;

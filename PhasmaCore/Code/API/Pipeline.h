@@ -111,6 +111,10 @@ namespace pe
         std::vector<PeDynamicState> dynamicStates;
         std::vector<::PeFormat> colorFormats;
         ::PeFormat depthFormat;
+        bool depthBiasEnable;
+        float depthBiasConstantFactor;
+        float depthBiasClamp;
+        float depthBiasSlopeFactor;
         bool depthWriteEnable;
         bool depthTestEnable;
         PeCompareOp depthCompareOp;

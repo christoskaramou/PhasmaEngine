@@ -59,6 +59,12 @@ struct PushConstants_Lighting
     float2 framebufferSize;
     uint passType;
     float4 max_cascade_dist;
+    float4 cascade_texel_size_world;
+    float shadow_distance;
+    float shadow_fade_distance;
+    float shadow_normal_bias;
+    float shadow_filter_radius;
+    uint shadow_debug_mode;
 };
 #endif
 

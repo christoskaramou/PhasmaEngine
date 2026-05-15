@@ -54,13 +54,26 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
         // Shadow only for the first directional light for now, or need to handle cascades for multiple
         DirectionalLight sun = LoadDirectionalLight(0);
         float3 sunDir = RotateVectorByQuat(float3(0, 0, -1), sun.rotation);
-        float shadow = CalculateShadows(wolrdPos, length(wolrdPos - cb_camPos.xyz), dot(normal, -sunDir));
-        
+        float viewDepth = max(0.0f, dot(wolrdPos - cb_camPos.xyz, cb_camForward.xyz));
+        float shadow = CalculateShadows(wolrdPos, viewDepth, dot(normal, -sunDir), normal);
+
+        if (pc.shadow_debug_mode == 1)
+        {
+            int cascade = SelectShadowCascade(viewDepth);
+            output.color = float4(cascade < 0 ? float3(0.08f, 0.08f, 0.08f) : ShadowCascadeDebugColor(cascade), 1.0f);
+            return output;
+        }
+        if (pc.shadow_debug_mode == 2)
+        {
+            output.color = float4(shadow.xxx, 1.0f);
+            return output;
+        }
+
         for (uint i = 0; i < cb_numDirectionalLights; ++i)
         {
             DirectionalLight light = LoadDirectionalLight(i);
             // Use shadow only for the first one for now or all if they share shadow map (unlikely)
-            float s = (i == 0) ? shadow : 1.0; 
+            float s = (i == 0) ? shadow : 1.0;
             fragColor += DirectLight(light, material, wolrdPos, cb_camPos.xyz, normal, occlusion, s, energyCompensation);
         }
     }

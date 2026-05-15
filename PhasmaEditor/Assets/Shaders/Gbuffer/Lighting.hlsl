@@ -32,6 +32,7 @@ TexSamplerDecl(6, 0, Emission)
 {
     float4x4    cb_invViewProj;
     float4      cb_camPos;
+    float4      cb_camForward;
     uint        cb_ssao;
     uint        cb_ssr;
     uint        cb_IBL;
@@ -128,7 +129,7 @@ float ShadowProjLinear(Texture2D shadowTex, SamplerComparisonState sampler_shado
 
 float FilterPoisson(float4 sc, Texture2D shadowTex, SamplerComparisonState sampler_shadow)
 {
-    float offsetScaled = 0.75 * SHADOWMAP_TEXEL_SIZE;
+    float offsetScaled = max(pc.shadow_filter_radius, 0.0f) * SHADOWMAP_TEXEL_SIZE;
     float shadowFactor = 0.0;
 
     for (int i = 0; i < POISSON_SAMPLES; i++)
@@ -139,7 +140,7 @@ float FilterPoisson(float4 sc, Texture2D shadowTex, SamplerComparisonState sampl
 
 float FilterPCF(float4 sc, Texture2D shadowTex, SamplerComparisonState sampler_shadow)
 {
-    float offsetScaled  = 0.75 * SHADOWMAP_TEXEL_SIZE;
+    float offsetScaled  = max(pc.shadow_filter_radius, 0.0f) * SHADOWMAP_TEXEL_SIZE;
     float dx            = offsetScaled;
     float dy            = offsetScaled;
 
@@ -164,10 +165,37 @@ static const float4x4 biasMat = float4x4(
     0.5, 0.5, 0.0, 1.0
 );
 
-float SampleShadowMap(int i, float zBias, float3 worldPos)
+int SelectShadowCascade(float depth)
 {
+    for (int i = 0; i < SHADOWMAP_CASCADES; i++)
+    {
+        if (depth < pc.max_cascade_dist[i])
+            return i;
+    }
+
+    return -1;
+}
+
+float3 ShadowCascadeDebugColor(int cascade)
+{
+    if (cascade == 0)
+        return float3(0.95f, 0.15f, 0.12f);
+    if (cascade == 1)
+        return float3(0.15f, 0.85f, 0.20f);
+    if (cascade == 2)
+        return float3(0.12f, 0.35f, 1.00f);
+    return float3(1.00f, 0.85f, 0.15f);
+}
+
+float SampleShadowMap(int i, float zBias, float3 worldPos, float3 normal, float normalBiasScale)
+{
+    worldPos += normal * pc.shadow_normal_bias * normalBiasScale * pc.cascade_texel_size_world[i];
     float4 coords   = mul(float4(worldPos, 1.0), mul(cb_cascades[i], biasMat));
     coords.z        += zBias;
+    float3 projCoords = coords.xyz / coords.w;
+
+    if (any(projCoords.xy < 0.0f) || any(projCoords.xy > 1.0f) || projCoords.z < 0.0f || projCoords.z > 1.0f)
+        return 1.0f;
 
     // TOTO: fix this annoying looking code snippet
     // Randomly figured how to fix a bug, possibly in the Vulkan or AMD driver (or there is something in my code that other GPU drivers are forgiving)
@@ -182,13 +210,15 @@ float SampleShadowMap(int i, float zBias, float3 worldPos)
         return FilterPCF(coords, Shadow[i], sampler_Shadow);
 }
 
-float CalculateShadows(float3 worldPos, float depth, float NdL)
+float CalculateShadows(float3 worldPos, float depth, float NdL, float3 normal)
 {
     float shadow = 1.0;
 
     if (cb_shadows)
     {
-        float zBias = clamp(SHADOWMAP_TEXEL_SIZE * tan(acos(NdL)), 0, SHADOWMAP_TEXEL_SIZE * 2.0f); 
+        float safeNdL = saturate(NdL);
+        float zBias = clamp(SHADOWMAP_TEXEL_SIZE * tan(acos(safeNdL)), 0, SHADOWMAP_TEXEL_SIZE * 2.0f);
+        float normalBiasScale = lerp(0.35f, 2.5f, 1.0f - safeNdL);
 
         for (int i = 0; i < SHADOWMAP_CASCADES; i++)
         {
@@ -197,13 +227,20 @@ float CalculateShadows(float3 worldPos, float depth, float NdL)
                 // Blend between cascades
                 float dist      = pc.max_cascade_dist[i] - depth;
 				float blendDist = 1.0;
-                shadow          = SampleShadowMap(i, zBias, worldPos);
+                shadow          = SampleShadowMap(i, zBias, worldPos, normal, normalBiasScale);
 
                 if (i < SHADOWMAP_CASCADES - 1 && dist < blendDist)
-                    shadow = lerp(shadow, SampleShadowMap(i + 1, zBias, worldPos), 1.0 - dist / blendDist);
+                    shadow = lerp(shadow, SampleShadowMap(i + 1, zBias, worldPos, normal, normalBiasScale), 1.0 - dist / blendDist);
 
                 break;
             }
+        }
+
+        if (pc.shadow_fade_distance > 0.0f)
+        {
+            float fadeStart = max(pc.shadow_distance - pc.shadow_fade_distance, 0.0f);
+            float fade = saturate((depth - fadeStart) / pc.shadow_fade_distance);
+            shadow = lerp(shadow, 1.0f, fade);
         }
     }
 
