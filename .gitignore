@@ -7,6 +7,8 @@
 !/PhasmaCore/
 !/PhasmaEditor/
 !/PhasmaMCP/
+!/PhasmaPlayer/
+!/PhasmaRuntime/
 !/PhasmaWebGPU/
 !/CMakeLists.txt
 !/CMakePresets.json
@@ -20,6 +22,12 @@
 !/PhasmaCore/pch/
 !/PhasmaCore/third_party/
 !/PhasmaCore/CMakeLists.txt
+
+!/PhasmaRuntime/Code/
+!/PhasmaRuntime/CMakeLists.txt
+
+!/PhasmaPlayer/CMakeLists.txt
+!/PhasmaPlayer/main.cpp
 
 # User-specific files
 *.suo

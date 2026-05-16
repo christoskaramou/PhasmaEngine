@@ -1,6 +1,7 @@
 #include "Base/Log.h"
 #include "Base/Path.h"
 #include "API/GraphicsApiSelection.h"
+#include "Project/ProjectSelection.h"
 
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
@@ -35,11 +36,8 @@
 
 namespace
 {
-    constexpr const char *k_runtimeSettingsFileName = "phasma_settings.json";
     constexpr const char *k_editorConfigPath = "Assets/editor_config.json";
     constexpr const char *k_graphicsApiKey = "graphics_api";
-    constexpr const char *k_projectPathKey = "project_path";
-    constexpr const char *k_startupSceneKey = "startup_scene";
     constexpr const char *k_launchTargetKey = "launch_target";
     constexpr const char *k_editorLaunchTarget = "PhasmaEditor";
 
@@ -78,7 +76,7 @@ namespace
 
     std::filesystem::path RuntimeSettingsPath()
     {
-        return std::filesystem::path(pe::Path::Executable) / k_runtimeSettingsFileName;
+        return std::filesystem::path(pe::Path::Executable) / pe::kRuntimeSettingsFileName;
     }
 
     std::filesystem::path EditorConfigPath()
@@ -237,6 +235,12 @@ namespace
             document.AddMember(jsonKey.Move(), jsonValue.Move(), allocator);
     }
 
+    void RemoveJsonMember(rapidjson::Document &document, const char *key)
+    {
+        if (document.HasMember(key))
+            document.RemoveMember(key);
+    }
+
     bool WriteJsonObject(const std::filesystem::path &path, const rapidjson::Document &document, std::string &error)
     {
         std::error_code ec;
@@ -329,9 +333,16 @@ namespace
             PE_WARN("%s; rewriting launcher settings", warning.c_str());
 
         SetJsonStringMember(document, k_graphicsApiKey, pe::GraphicsApiConfigName(api));
-        SetJsonStringMember(document, k_projectPathKey, projectPath);
-        SetJsonStringMember(document, k_startupSceneKey, startupScene);
+        SetJsonStringMember(document, pe::kProjectPathSettingsKey, projectPath);
+        SetJsonStringMember(document, pe::kStartupSceneSettingsKey, startupScene);
         SetJsonStringMember(document, k_launchTargetKey, launchTarget.empty() ? k_editorLaunchTarget : launchTarget);
+
+        const std::filesystem::path projectManifest = pe::ProjectConfig::DefaultManifestPath(projectPath);
+        std::error_code ec;
+        if (std::filesystem::exists(projectManifest, ec))
+            SetJsonStringMember(document, pe::kProjectManifestSettingsKey, projectManifest.generic_string());
+        else
+            RemoveJsonMember(document, pe::kProjectManifestSettingsKey);
 
         if (!WriteJsonObject(RuntimeSettingsPath(), document, error))
             return false;
@@ -827,7 +838,8 @@ namespace
         if (labels.empty())
             return 0;
 
-        std::cout << '\n' << title << '\n';
+        std::cout << '\n'
+                  << title << '\n';
         for (size_t i = 0; i < labels.size(); ++i)
         {
             std::cout << "  " << (i + 1) << ". " << labels[i];
@@ -1158,11 +1170,22 @@ namespace
         if (!apiSelection.warning.empty())
             PE_WARN("%s", apiSelection.warning.c_str());
 
-        std::string currentScene = ReadEditorConfigStartupScene();
-        if (currentScene.empty())
-            currentScene = ReadJsonStringField(RuntimeSettingsPath(), k_startupSceneKey);
+        std::string currentScene;
+        rapidjson::Document runtimeSettings;
+        std::string runtimeSettingsWarning;
+        const bool loadedRuntimeSettings = TryLoadJsonObject(RuntimeSettingsPath(), runtimeSettings, runtimeSettingsWarning);
+        if (loadedRuntimeSettings &&
+            runtimeSettings.HasMember(pe::kStartupSceneSettingsKey) &&
+            runtimeSettings[pe::kStartupSceneSettingsKey].IsString())
+        {
+            currentScene = runtimeSettings[pe::kStartupSceneSettingsKey].GetString();
+        }
+        else
+        {
+            currentScene = ReadEditorConfigStartupScene();
+        }
 
-        std::string currentProjectPath = ReadJsonStringField(RuntimeSettingsPath(), k_projectPathKey);
+        std::string currentProjectPath = ReadJsonStringField(RuntimeSettingsPath(), pe::kProjectPathSettingsKey);
         if (currentProjectPath.empty() || !std::filesystem::exists(currentProjectPath))
             currentProjectPath = NormalizeProjectPath(std::filesystem::path(pe::Path::Assets));
         else

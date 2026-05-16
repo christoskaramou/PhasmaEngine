@@ -1,5 +1,15 @@
 # PhasmaEngine Wiki Log
 
+## 2026-05-16
+
+- Added the first PhasmaRuntime/MyProject architecture page: PhasmaRuntime sits above PhasmaCore and below hosts, MyProject starts as a project/root/assets/startup-scene contract, and standalone player work waits until the shared runtime boundary exists.
+- Added `phasma_project.json` as the first MyProject manifest contract: version/name/assets/startup_scene, with runtime load/write helpers in `ProjectConfig`.
+- Added active project selection helpers around executable-local `phasma_settings.json`; the launcher now persists `project_manifest` when the selected project root has a manifest and otherwise falls back to the legacy project path.
+- Wired editor startup to resolve the active project and use manifest `startup_scene` only after explicit runtime settings and editor restore have both declined to select a scene; hot-reload snapshot restore still keeps precedence.
+- Added the first `PhasmaPlayer` executable over PhasmaRuntime: the exe is now a thin runtime entrypoint, while PhasmaRuntime owns SDL/window/RHI lifetime, active-project logging, manifest startup-scene validation, and a continuous clear/present frame pump without editor GUI, launcher, MCP, or hot-reload module loading.
+- Fixed startup-scene precedence after the runtime settings split: explicit `phasma_settings.json:startup_scene` now wins over stale editor `last_scene`, and successful editor scene loads immediately sync both files.
+- Fixed the new-scene restore regression: an existing empty runtime `startup_scene` now means "no startup scene" rather than "fall through to manifest", and editor new-scene actions clear both startup-scene stores.
+
 ## 2026-05-15
 
 - Upgraded raster shadow quality controls: cascades now use camera-forward view depth, configurable shadow distance/split lambda, texel-snapped light projections, per-cascade world texel sizes, angle-aware receiver normal bias, filter radius, and last-cascade fade; shadow depth bias is enabled for Vulkan and baked into DX12 PSOs, with editor debug modes for cascade bands and raw shadow factor.

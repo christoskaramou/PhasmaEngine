@@ -144,6 +144,12 @@ endif()
 # Add PhasmaCore subdirectory
 add_subdirectory(PhasmaCore)
 
+# Shared project/runtime contract used by editor today and future player hosts.
+add_subdirectory(PhasmaRuntime)
+
+# Standalone player host over PhasmaRuntime.
+add_subdirectory(PhasmaPlayer)
+
 # Engine-agnostic MCP server library (protocol + transport + optional codebase indexer).
 # The codebase indexer (BM25 / CodebaseIndexer / CodebaseContext) is included by default
 # inside the same target; pass -DPE_PMCP_CODEBASE=OFF to strip it for minimal builds.
@@ -241,6 +247,7 @@ target_link_directories(PhasmaEditorModule PRIVATE ${PE_CORE_LINK_DIRS})
 
 target_link_libraries(PhasmaEditorModule PRIVATE
     PhasmaCore
+    PhasmaRuntime
     PhasmaMCP
     assimp
     meshoptimizer
@@ -302,7 +309,7 @@ target_include_directories(PhasmaLauncher PRIVATE
     "${PE_THIRD_PARTY_DIR}/rapidjson/include"
 )
 target_link_directories(PhasmaLauncher PRIVATE ${PE_CORE_LINK_DIRS})
-target_link_libraries(PhasmaLauncher PRIVATE PhasmaCore SDL2 SDL2main)
+target_link_libraries(PhasmaLauncher PRIVATE PhasmaCore PhasmaRuntime SDL2 SDL2main)
 target_sources(PhasmaLauncher PRIVATE
     "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/imgui.cpp"
     "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/imgui_draw.cpp"
@@ -336,6 +343,7 @@ add_custom_command(
 add_custom_target(PhasmaEditorAssets ALL DEPENDS "${ASSETS_COPY_STAMP}")
 add_dependencies(PhasmaEditor PhasmaEditorAssets)
 add_dependencies(PhasmaLauncher PhasmaEditorAssets)
+add_dependencies(PhasmaPlayer PhasmaEditorAssets)
 
 # Copy DLLs for Windows
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")

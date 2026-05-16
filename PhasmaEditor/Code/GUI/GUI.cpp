@@ -10,6 +10,7 @@
 #include "GUIState.h"
 #include "Helpers.h"
 #include "Particles/ParticleManager.h"
+#include "Project/ProjectSelection.h"
 #include "Script/ScriptSystem.h"
 #include "Scene/SelectionManager.h"
 #include "IconsFontAwesome.h"
@@ -767,6 +768,7 @@ namespace pe
             if (renderer && args.value("discard_unsaved", false))
             {
                 renderer->GetScene().NewScene();
+                SaveEditorConfig();
                 UndoRedo::Instance().Clear();
                 return ok();
             }
@@ -803,6 +805,7 @@ namespace pe
 
             renderer->WaitAllFramesCommands();
             renderer->GetScene().LoadScene(scenePath.string());
+            SaveEditorConfig();
             UndoRedo::Instance().Clear();
             return ok({{"path", scenePath.string()}});
         }
@@ -1102,27 +1105,29 @@ namespace pe
     void GUI::OpenLoadSceneDialog()
     {
         auto *fs = GetWidget<FileSelector>();
-        if (fs)
+        if (!fs)
+            return;
+
+        auto onSceneSelected = [this](const std::string &path)
         {
-            std::vector<std::string> exts = {};
-            fs->OpenSelection([this](const std::string &path)
-                              {
-                UndoRedo::Instance().Clear();
-                ThreadPool::GUI.Enqueue([this, path]()
-                {
+            UndoRedo::Instance().Clear();
+            ThreadPool::GUI.Enqueue([this, path]()
+                                    {
                     auto preload = std::make_shared<Scene::ScenePreload>(Scene::PreloadScene(path));
-                    QueueMainThreadAction([preload]()
-                    {
+                    QueueMainThreadAction([this, preload]()
+                                          {
                         auto *rs = GetGlobalSystem<RendererSystem>();
                         if (rs && preload->valid)
                         {
                             rs->WaitAllFramesCommands();
                             rs->GetScene().LoadSceneApply(std::move(*preload));
-                        }
-                    });
-                });
-                return true; }, exts);
-        }
+                            SaveEditorConfig();
+                        } }); });
+            return true;
+        };
+
+        std::vector<std::string> exts = {};
+        fs->OpenSelection(onSceneSelected, exts);
     }
 
     void GUI::DrawSaveBeforeLoadPopup()
@@ -1178,6 +1183,7 @@ namespace pe
         else
         {
             rs->GetScene().NewScene();
+            SaveEditorConfig();
             UndoRedo::Instance().Clear();
         }
     }
@@ -1206,6 +1212,7 @@ namespace pe
                     else
                         ShowSaveSceneMenuItem_Action();
                     scene.NewScene();
+                    SaveEditorConfig();
                     UndoRedo::Instance().Clear();
                 }
                 ImGui::CloseCurrentPopup();
@@ -1215,7 +1222,10 @@ namespace pe
             {
                 RendererSystem *rs = GetGlobalSystem<RendererSystem>();
                 if (rs)
+                {
                     rs->GetScene().NewScene();
+                    SaveEditorConfig();
+                }
                 UndoRedo::Instance().Clear();
                 ImGui::CloseCurrentPopup();
             }
@@ -1420,6 +1430,35 @@ namespace pe
 
     static constexpr const char *kEditorConfigPath = "Assets/editor_config.json";
 
+    static std::filesystem::path ResolveStartupPath(const std::string &path)
+    {
+        std::filesystem::path p(path);
+        if (p.is_absolute() || std::filesystem::exists(p))
+            return p;
+
+        std::filesystem::path fromExecutable = std::filesystem::path(Path::Executable) / p;
+        if (std::filesystem::exists(fromExecutable))
+            return fromExecutable;
+
+        std::filesystem::path fromAssets;
+        auto it = p.begin();
+        if (it != p.end() && *it == "Assets")
+            ++it;
+        for (; it != p.end(); ++it)
+            fromAssets /= *it;
+
+        return std::filesystem::path(Path::Assets) / fromAssets;
+    }
+
+    static std::filesystem::path ResolveProjectStartupScene()
+    {
+        const ProjectSelection selection = ResolveProjectSelection();
+        if (!selection.loadedManifest || selection.project.startupScene.empty())
+            return {};
+
+        return selection.project.ResolveStartupScene();
+    }
+
     void GUI::SaveEditorConfig()
     {
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
@@ -1433,6 +1472,10 @@ namespace pe
         std::ofstream f(kEditorConfigPath);
         if (f)
             f << j.dump(2) << "\n";
+
+        std::string error;
+        if (!WriteRuntimeStartupScene({}, j["last_scene"].get<std::string>(), &error) && !error.empty())
+            PE_WARN("[Runtime] Could not write startup scene setting: %s", error.c_str());
     }
 
     void GUI::LoadAgentConfig()
@@ -1518,37 +1561,52 @@ namespace pe
     void GUI::LoadEditorConfig()
     {
         std::ifstream f(kEditorConfigPath);
-        if (!f)
-            return;
-
         nlohmann::json j;
-        try
+        bool loadedEditorConfig = false;
+        if (f)
         {
-            j = nlohmann::json::parse(f);
-        }
-        catch (...)
-        {
-            return;
+            try
+            {
+                j = nlohmann::json::parse(f);
+                loadedEditorConfig = j.is_object();
+            }
+            catch (...)
+            {
+                loadedEditorConfig = false;
+            }
         }
 
-        std::string lastScene = j.value("last_scene", "");
-        if (lastScene.empty())
+        std::string lastScene = loadedEditorConfig ? j.value("last_scene", "") : "";
+        std::string explicitStartupScene;
+        const bool fromRuntimeSettings = TryReadRuntimeStartupScene({}, explicitStartupScene);
+        if (fromRuntimeSettings && explicitStartupScene.empty())
             return;
 
-        if (!std::filesystem::exists(lastScene))
+        const bool fromEditorConfig = !fromRuntimeSettings && !lastScene.empty();
+        std::filesystem::path scenePath = fromRuntimeSettings ? ResolveStartupPath(explicitStartupScene)
+                                          : fromEditorConfig  ? ResolveStartupPath(lastScene)
+                                                              : ResolveProjectStartupScene();
+        if (scenePath.empty())
+            return;
+
+        if (!std::filesystem::exists(scenePath))
         {
-            Log::Warn("Last scene not found, clearing: " + lastScene);
-            j["last_scene"] = "";
-            std::ofstream fw(kEditorConfigPath);
-            if (fw)
-                fw << j.dump(2) << "\n";
+            Log::Warn("Startup scene not found: " + scenePath.generic_string());
+            if (fromEditorConfig)
+            {
+                j["last_scene"] = "";
+                std::ofstream fw(kEditorConfigPath);
+                if (fw)
+                    fw << j.dump(2) << "\n";
+            }
             return;
         }
 
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         if (rs)
         {
-            rs->GetScene().LoadScene(lastScene);
+            rs->GetScene().LoadScene(scenePath);
+            SaveEditorConfig();
             UndoRedo::Instance().Clear();
         }
     }

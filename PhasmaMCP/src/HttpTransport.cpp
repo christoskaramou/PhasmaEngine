@@ -310,5 +310,6 @@ namespace pmcp
             m_http->stop();
         if (m_thread.joinable())
             m_thread.join();
+        Log(LogLevel::Info, "[MCP] HttpTransport stopped");
     }
 } // namespace pmcp
