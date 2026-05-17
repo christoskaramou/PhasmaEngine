@@ -27,7 +27,7 @@ jobs:
       working-directory: ${{github.workspace}}/build
       run: ctest -C ${{env.BUILD_TYPE}}
 
-    - name: Prepare release packages
+    - name: Prepare release package
       run: |
         $ErrorActionPreference = "Stop"
 
@@ -35,61 +35,61 @@ jobs:
         $outDir = Join-Path "${{ github.workspace }}" "release-packages"
         New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
-        $packages = @(
-          @{
-            Name = "PhasmaEngine-Windows-Vulkan"
-            Api = "vulkan"
-            Label = "Vulkan"
-            Note = "This is the default PhasmaEditor backend and works on Windows and Linux-capable Vulkan GPUs."
-          },
-          @{
-            Name = "PhasmaEngine-Windows-DX12"
-            Api = "dx12"
-            Label = "DX12"
-            Note = "This package launches PhasmaEditor with the DirectX 12 backend. DX12 is Windows-only."
-          }
-        )
+        $stage = Join-Path $outDir "PhasmaEngine-Full-Windows"
+        if (Test-Path $stage) {
+          Remove-Item -Recurse -Force $stage
+        }
+        New-Item -ItemType Directory -Force -Path $stage | Out-Null
 
-        foreach ($package in $packages) {
-          $stage = Join-Path $outDir $package.Name
-          if (Test-Path $stage) {
-            Remove-Item -Recurse -Force $stage
-          }
-          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+        Copy-Item -Path (Join-Path $runtime "*") -Destination $stage -Recurse -Force
+        Remove-Item -Force -ErrorAction SilentlyContinue `
+          (Join-Path $stage "PhasmaEngine.log"), `
+          (Join-Path $stage "PhasmaEditorModule_*.dll"), `
+          (Join-Path $stage "*.pid"), `
+          (Join-Path $stage "*.tmp")
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue `
+          (Join-Path $stage "cargo\build"), `
+          (Join-Path $stage "_codex_visual")
 
-          Copy-Item -Path (Join-Path $runtime "*") -Destination $stage -Recurse -Force
-          Remove-Item -Force -ErrorAction SilentlyContinue `
-            (Join-Path $stage "PhasmaEngine.log"), `
-            (Join-Path $stage "PhasmaEditorModule_*.dll")
-
-          $launcherName = "Launch-PhasmaEditor-$($package.Label).cmd"
-          $launcher = @"
+        Set-Content -Path (Join-Path $stage "Launch-PhasmaLauncher.cmd") -Encoding ascii -Value @"
         @echo off
         cd /d "%~dp0"
-        PhasmaEditor.exe --api $($package.Api) %*
+        PhasmaLauncher.exe %*
         "@
-          Set-Content -Path (Join-Path $stage $launcherName) -Value $launcher -Encoding ascii
 
-          $readme = @"
-        PhasmaEngine Windows $($package.Label) prebuild
+        Set-Content -Path (Join-Path $stage "Launch-PhasmaEditor.cmd") -Encoding ascii -Value @"
+        @echo off
+        cd /d "%~dp0"
+        PhasmaEditor.exe %*
+        "@
+
+        Set-Content -Path (Join-Path $stage "Launch-PhasmaPlayer.cmd") -Encoding ascii -Value @"
+        @echo off
+        cd /d "%~dp0"
+        PhasmaPlayer.exe %*
+        "@
+
+        $readme = @"
+        PhasmaEngine Full Windows prebuild
 
         Run:
-          $launcherName
+          Launch-PhasmaLauncher.cmd
 
-        Backend:
-          PhasmaEditor.exe --api $($package.Api)
+        Included:
+          PhasmaLauncher, PhasmaEditor, PhasmaPlayer, PhasmaCore, PhasmaRuntime,
+          PhasmaWebGPU, physics/audio support, shaders, sample scenes, and assets.
 
-        $($package.Note)
+        Backends:
+          Vulkan and DX12 are both included. Pick the backend in PhasmaLauncher,
+          or run PhasmaEditor.exe / PhasmaPlayer.exe with --api vulkan or --api dx12.
 
-        The Vulkan and DX12 release zips are built from the same commit and binary set.
-        The launch script selects the backend at process startup.
+        DX12 is Windows-only.
         "@
-          Set-Content -Path (Join-Path $stage "README_RELEASE.txt") -Value $readme -Encoding ascii
+        Set-Content -Path (Join-Path $stage "README_RELEASE.txt") -Value $readme -Encoding ascii
 
-          $zip = Join-Path $outDir "$($package.Name).zip"
-          Remove-Item -Force -ErrorAction SilentlyContinue $zip
-          Compress-Archive -Path $stage -DestinationPath $zip -Force
-        }
+        $zip = Join-Path $outDir "PhasmaEngine-Full-Windows.zip"
+        Remove-Item -Force -ErrorAction SilentlyContinue $zip
+        Compress-Archive -Path $stage -DestinationPath $zip -Force
 
     - name: Upload artifact
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -145,17 +145,26 @@ jobs:
 
         runtime="${{ github.workspace }}/build/${{ env.BUILD_TYPE }}"
         out_dir="${{ github.workspace }}/release-packages"
-        stage="${out_dir}/PhasmaEngine-Linux-Vulkan"
+        stage="${out_dir}/PhasmaEngine-Full-Linux"
 
         rm -rf "$stage"
         mkdir -p "$stage"
         cp -a "$runtime"/. "$stage"/
         rm -f "$stage"/PhasmaEngine.log "$stage"/libPhasmaEditorModule_*.so
+        rm -rf "$stage"/cargo/build "$stage"/_codex_visual
 
         cp -a "${{ github.workspace }}"/PhasmaCore/Libs/assimp/libassimp.so* "$stage"/
         cp -a "${{ github.workspace }}"/PhasmaCore/Libs/dx/libdxcompiler.so "$stage"/
         cp -a "${{ github.workspace }}"/PhasmaCore/Libs/spirv/libshaderc_shared.so* "$stage"/
         cp -a "${{ github.workspace }}"/PhasmaCore/Libs/vulkan/libvulkan.so* "$stage"/
+
+        cat > "$stage/Launch-PhasmaLauncher.sh" <<'SH'
+        #!/usr/bin/env bash
+        set -e
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        export LD_LIBRARY_PATH="$SCRIPT_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        exec "$SCRIPT_DIR/PhasmaLauncher" "$@"
+        SH
 
         cat > "$stage/Launch-PhasmaEditor-Vulkan.sh" <<'SH'
         #!/usr/bin/env bash
@@ -164,21 +173,42 @@ jobs:
         export LD_LIBRARY_PATH="$SCRIPT_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
         exec "$SCRIPT_DIR/PhasmaEditor" --api vulkan "$@"
         SH
-        chmod +x "$stage/Launch-PhasmaEditor-Vulkan.sh" "$stage/PhasmaEditor"
+
+        cat > "$stage/Launch-PhasmaPlayer-Vulkan.sh" <<'SH'
+        #!/usr/bin/env bash
+        set -e
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        export LD_LIBRARY_PATH="$SCRIPT_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        exec "$SCRIPT_DIR/PhasmaPlayer" --api vulkan "$@"
+        SH
+        chmod +x "$stage/Launch-PhasmaLauncher.sh" \
+          "$stage/Launch-PhasmaEditor-Vulkan.sh" \
+          "$stage/Launch-PhasmaPlayer-Vulkan.sh" \
+          "$stage/PhasmaLauncher" \
+          "$stage/PhasmaEditor" \
+          "$stage/PhasmaPlayer"
 
         cat > "$stage/README_RELEASE.txt" <<'TXT'
-        PhasmaEngine Linux Vulkan prebuild
+        PhasmaEngine Full Linux prebuild
 
         Run:
+          ./Launch-PhasmaLauncher.sh
+
+        Direct launch:
           ./Launch-PhasmaEditor-Vulkan.sh
+          ./Launch-PhasmaPlayer-Vulkan.sh
 
         Backend:
-          ./PhasmaEditor --api vulkan
+          Vulkan
 
-        DX12 is Windows-only. This Linux package ships the Vulkan backend.
+        Included:
+          PhasmaLauncher, PhasmaEditor, PhasmaPlayer, PhasmaCore, PhasmaRuntime,
+          PhasmaWebGPU, physics/audio support, shaders, sample scenes, and assets.
+
+        DX12 is Windows-only, so this Linux package ships Vulkan only.
         TXT
 
-        tar -C "$out_dir" -czf "$out_dir/PhasmaEngine-Linux-Vulkan.tar.gz" "PhasmaEngine-Linux-Vulkan"
+        tar -C "$out_dir" -czf "$out_dir/PhasmaEngine-Full-Linux.tar.gz" "PhasmaEngine-Full-Linux"
 
     - name: Upload artifact
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -223,7 +253,6 @@ jobs:
           prerelease: true
           title: "Development Build"
           files: |
-            release-packages/PhasmaEngine-Windows-Vulkan.zip
-            release-packages/PhasmaEngine-Windows-DX12.zip
-            release-packages/PhasmaEngine-Linux-Vulkan.tar.gz
+            release-packages/PhasmaEngine-Full-Windows.zip
+            release-packages/PhasmaEngine-Full-Linux.tar.gz
             LICENSE

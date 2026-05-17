@@ -20,6 +20,7 @@
 - Fixed old Vulkan validation warnings from CACAO without editing `third_party`: PhasmaRuntime now redirects CACAO shader-module creation through an engine wrapper that patches only float storage-image SPIR-V declarations to formatless images, leaving typed atomic images intact. Vulkan and DX12 PhasmaPlayer validation smokes stayed alive after the change.
 - Broadened player readiness smokes across the local scene set. Runtime project/settings JSON parsing now accepts UTF-8 BOM files, and `broken.lua` is inert by default so manual Lua error-path snippets do not pollute editor/player smoke logs.
 - Hardened player startup failure cleanup after review: runtime systems, file watchers, model defaults, and ECS context now unwind before RHI teardown if scene or renderer initialization throws.
+- Collapsed CI release packaging to full-platform artifacts: `PhasmaEngine-Full-Windows.zip` now contains both Vulkan and DX12 with PhasmaLauncher as the primary entry point, and `PhasmaEngine-Full-Linux.tar.gz` contains the Vulkan-only Linux full build.
 
 ## 2026-05-16
 
