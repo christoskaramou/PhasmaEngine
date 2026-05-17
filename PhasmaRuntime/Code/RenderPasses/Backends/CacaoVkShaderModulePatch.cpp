@@ -1,5 +1,8 @@
 #include "vulkan/vulkan.h"
 
+#include <cstddef>
+#include <vector>
+
 namespace
 {
     constexpr uint32_t kSpirvMagic = 0x07230203;

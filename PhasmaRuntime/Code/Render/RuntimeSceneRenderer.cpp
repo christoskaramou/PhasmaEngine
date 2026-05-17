@@ -91,64 +91,76 @@ namespace pe
         m_initialized = true;
         SetActiveSceneRendererHost(this);
 
-        Queue *queue = RHII.GetMainQueue();
-        CommandBuffer *initCmd = cmd;
-        const bool ownsInitCmd = initCmd == nullptr;
-        if (ownsInitCmd)
+        try
         {
-            initCmd = queue->AcquireCommandBuffer();
-            initCmd->Begin();
+            Queue *queue = RHII.GetMainQueue();
+            CommandBuffer *initCmd = cmd;
+            const bool ownsInitCmd = initCmd == nullptr;
+            if (ownsInitCmd)
+            {
+                initCmd = queue->AcquireCommandBuffer();
+                initCmd->Begin();
+            }
+
+            CreateRenderTargets();
+            LoadResources(initCmd);
+
+            m_renderPassComponents[ID::GetTypeID<CullingPass>()] = CreateGlobalComponent<CullingPass>();
+            m_renderPassComponents[ID::GetTypeID<ShadowPass>()] = CreateGlobalComponent<ShadowPass>();
+            m_renderPassComponents[ID::GetTypeID<DepthPass>()] = CreateGlobalComponent<DepthPass>();
+            m_renderPassComponents[ID::GetTypeID<GbufferOpaquePass>()] = CreateGlobalComponent<GbufferOpaquePass>();
+            m_renderPassComponents[ID::GetTypeID<GbufferTransparentPass>()] =
+                CreateGlobalComponent<GbufferTransparentPass>();
+            m_renderPassComponents[ID::GetTypeID<SSAOPass>()] = CreateGlobalComponent<SSAOPass>();
+            m_renderPassComponents[ID::GetTypeID<LightOpaquePass>()] = CreateGlobalComponent<LightOpaquePass>();
+            m_renderPassComponents[ID::GetTypeID<LightTransparentPass>()] =
+                CreateGlobalComponent<LightTransparentPass>();
+            m_renderPassComponents[ID::GetTypeID<ParticleComputePass>()] = CreateGlobalComponent<ParticleComputePass>();
+            m_renderPassComponents[ID::GetTypeID<ParticlePass>()] = CreateGlobalComponent<ParticlePass>();
+            m_renderPassComponents[ID::GetTypeID<SSRPass>()] = CreateGlobalComponent<SSRPass>();
+            m_renderPassComponents[ID::GetTypeID<FXAAPass>()] = CreateGlobalComponent<FXAAPass>();
+            m_renderPassComponents[ID::GetTypeID<AabbsPass>()] = CreateGlobalComponent<AabbsPass>();
+            m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
+            m_renderPassComponents[ID::GetTypeID<SharpenPass>()] = CreateGlobalComponent<SharpenPass>();
+            m_renderPassComponents[ID::GetTypeID<UpsamplePass>()] = CreateGlobalComponent<UpsamplePass>();
+            m_renderPassComponents[ID::GetTypeID<TonemapPass>()] = CreateGlobalComponent<TonemapPass>();
+            m_renderPassComponents[ID::GetTypeID<BloomBrightFilterPass>()] = CreateGlobalComponent<BloomBrightFilterPass>();
+            m_renderPassComponents[ID::GetTypeID<BloomGaussianBlurHorizontalPass>()] =
+                CreateGlobalComponent<BloomGaussianBlurHorizontalPass>();
+            m_renderPassComponents[ID::GetTypeID<BloomGaussianBlurVerticalPass>()] =
+                CreateGlobalComponent<BloomGaussianBlurVerticalPass>();
+            m_renderPassComponents[ID::GetTypeID<DOFPass>()] = CreateGlobalComponent<DOFPass>();
+            m_renderPassComponents[ID::GetTypeID<MotionBlurPass>()] = CreateGlobalComponent<MotionBlurPass>();
+            m_renderPassComponents[ID::GetTypeID<GridPass>()] = CreateGlobalComponent<GridPass>();
+            if (SupportsRayTracingPass())
+                m_renderPassComponents[ID::GetTypeID<RayTracingPass>()] = CreateGlobalComponent<RayTracingPass>();
+
+            for (auto &renderPassComponent : m_renderPassComponents)
+            {
+                renderPassComponent->Init();
+                renderPassComponent->UpdatePassInfo();
+                renderPassComponent->CreateUniforms(initCmd);
+            }
+
+            const uint32_t imageCount = RHII.GetSwapchainImageCount();
+            CreateFrameResources(imageCount);
+            TransitionSwapchainImagesToPresent(initCmd);
+
+            m_scene.UploadBuffers(initCmd);
+            CacheGlobalComponents();
+            BuildRenderGraph();
+            if (ownsInitCmd)
+            {
+                initCmd->End();
+                queue->Submit(1, &initCmd, nullptr, nullptr);
+                initCmd->Wait();
+                initCmd->Return();
+            }
         }
-
-        CreateRenderTargets();
-        LoadResources(initCmd);
-
-        m_renderPassComponents[ID::GetTypeID<CullingPass>()] = CreateGlobalComponent<CullingPass>();
-        m_renderPassComponents[ID::GetTypeID<ShadowPass>()] = CreateGlobalComponent<ShadowPass>();
-        m_renderPassComponents[ID::GetTypeID<DepthPass>()] = CreateGlobalComponent<DepthPass>();
-        m_renderPassComponents[ID::GetTypeID<GbufferOpaquePass>()] = CreateGlobalComponent<GbufferOpaquePass>();
-        m_renderPassComponents[ID::GetTypeID<GbufferTransparentPass>()] = CreateGlobalComponent<GbufferTransparentPass>();
-        m_renderPassComponents[ID::GetTypeID<SSAOPass>()] = CreateGlobalComponent<SSAOPass>();
-        m_renderPassComponents[ID::GetTypeID<LightOpaquePass>()] = CreateGlobalComponent<LightOpaquePass>();
-        m_renderPassComponents[ID::GetTypeID<LightTransparentPass>()] = CreateGlobalComponent<LightTransparentPass>();
-        m_renderPassComponents[ID::GetTypeID<ParticleComputePass>()] = CreateGlobalComponent<ParticleComputePass>();
-        m_renderPassComponents[ID::GetTypeID<ParticlePass>()] = CreateGlobalComponent<ParticlePass>();
-        m_renderPassComponents[ID::GetTypeID<SSRPass>()] = CreateGlobalComponent<SSRPass>();
-        m_renderPassComponents[ID::GetTypeID<FXAAPass>()] = CreateGlobalComponent<FXAAPass>();
-        m_renderPassComponents[ID::GetTypeID<AabbsPass>()] = CreateGlobalComponent<AabbsPass>();
-        m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
-        m_renderPassComponents[ID::GetTypeID<SharpenPass>()] = CreateGlobalComponent<SharpenPass>();
-        m_renderPassComponents[ID::GetTypeID<UpsamplePass>()] = CreateGlobalComponent<UpsamplePass>();
-        m_renderPassComponents[ID::GetTypeID<TonemapPass>()] = CreateGlobalComponent<TonemapPass>();
-        m_renderPassComponents[ID::GetTypeID<BloomBrightFilterPass>()] = CreateGlobalComponent<BloomBrightFilterPass>();
-        m_renderPassComponents[ID::GetTypeID<BloomGaussianBlurHorizontalPass>()] = CreateGlobalComponent<BloomGaussianBlurHorizontalPass>();
-        m_renderPassComponents[ID::GetTypeID<BloomGaussianBlurVerticalPass>()] = CreateGlobalComponent<BloomGaussianBlurVerticalPass>();
-        m_renderPassComponents[ID::GetTypeID<DOFPass>()] = CreateGlobalComponent<DOFPass>();
-        m_renderPassComponents[ID::GetTypeID<MotionBlurPass>()] = CreateGlobalComponent<MotionBlurPass>();
-        m_renderPassComponents[ID::GetTypeID<GridPass>()] = CreateGlobalComponent<GridPass>();
-        if (SupportsRayTracingPass())
-            m_renderPassComponents[ID::GetTypeID<RayTracingPass>()] = CreateGlobalComponent<RayTracingPass>();
-
-        for (auto &renderPassComponent : m_renderPassComponents)
+        catch (...)
         {
-            renderPassComponent->Init();
-            renderPassComponent->UpdatePassInfo();
-            renderPassComponent->CreateUniforms(initCmd);
-        }
-
-        const uint32_t imageCount = RHII.GetSwapchainImageCount();
-        CreateFrameResources(imageCount);
-        TransitionSwapchainImagesToPresent(initCmd);
-
-        m_scene.UploadBuffers(initCmd);
-        CacheGlobalComponents();
-        BuildRenderGraph();
-        if (ownsInitCmd)
-        {
-            initCmd->End();
-            queue->Submit(1, &initCmd, nullptr, nullptr);
-            initCmd->Wait();
-            initCmd->Return();
+            Destroy();
+            throw;
         }
     }
 

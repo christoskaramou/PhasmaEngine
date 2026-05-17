@@ -19,6 +19,7 @@
 - Added launcher validation controls. The UI shows a single Validation checkbox for the selected backend, which sets child-process validation env vars; Vulkan now honors `PE_VULKAN_VALIDATION` in Release and creates the debug messenger so layer output reaches the engine log.
 - Fixed old Vulkan validation warnings from CACAO without editing `third_party`: PhasmaRuntime now redirects CACAO shader-module creation through an engine wrapper that patches only float storage-image SPIR-V declarations to formatless images, leaving typed atomic images intact. Vulkan and DX12 PhasmaPlayer validation smokes stayed alive after the change.
 - Broadened player readiness smokes across the local scene set. Runtime project/settings JSON parsing now accepts UTF-8 BOM files, and `broken.lua` is inert by default so manual Lua error-path snippets do not pollute editor/player smoke logs.
+- Hardened player startup failure cleanup after review: runtime systems, file watchers, model defaults, and ECS context now unwind before RHI teardown if scene or renderer initialization throws.
 
 ## 2026-05-16
 

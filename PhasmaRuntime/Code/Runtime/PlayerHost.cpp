@@ -188,6 +188,43 @@ namespace pe
             bool m_initialized = false;
         };
 
+        class PlayerRuntimeCleanup : public NoCopy, public NoMove
+        {
+        public:
+            ~PlayerRuntimeCleanup()
+            {
+                Cleanup();
+            }
+
+            void MarkGlobalSystemsCreated()
+            {
+                m_globalSystemsCreated = true;
+            }
+
+            void Cleanup()
+            {
+                if (m_cleaned)
+                    return;
+
+                StopRuntimePlaySession();
+                FileWatcher::StopAndJoin();
+                ThreadPool::GUI.WaitIdle();
+                ThreadPool::General.WaitIdle();
+                FileWatcher::Clear();
+
+                if (m_globalSystemsCreated)
+                    DestroyGlobalSystems();
+
+                ModelAsset::DestroyDefaults();
+                Context::Remove();
+                m_cleaned = true;
+            }
+
+        private:
+            bool m_globalSystemsCreated = false;
+            bool m_cleaned = false;
+        };
+
         class PlayerFramePump : public NoCopy, public NoMove
         {
         public:
@@ -365,16 +402,19 @@ namespace pe
 
             RuntimeWindow window(windowDesc);
             RuntimeRhiSession rhi(window.Get(), api, true);
-            CreateGlobalSystem<AnimationSystem>()->Init(nullptr);
-#ifdef PE_PHYSICS
-            CreateGlobalSystem<PhysicsSystem>()->Init(nullptr);
-#endif
-#ifdef PE_AUDIO
-            CreateGlobalSystem<AudioSystem>()->Init(nullptr);
-#endif
             {
                 Scene scene;
                 PlayerSceneRegistration sceneRegistration(scene);
+                PlayerRuntimeCleanup runtimeCleanup;
+
+                runtimeCleanup.MarkGlobalSystemsCreated();
+                CreateGlobalSystem<AnimationSystem>()->Init(nullptr);
+#ifdef PE_PHYSICS
+                CreateGlobalSystem<PhysicsSystem>()->Init(nullptr);
+#endif
+#ifdef PE_AUDIO
+                CreateGlobalSystem<AudioSystem>()->Init(nullptr);
+#endif
 
                 if (!startupScene.IsExplicitEmpty() && !startupScene.scenePath.empty())
                 {
@@ -413,10 +453,8 @@ namespace pe
                 ThreadPool::General.WaitIdle();
                 FileWatcher::Clear();
                 renderer.Destroy();
-                DestroyGlobalSystems();
+                runtimeCleanup.Cleanup();
             }
-            ModelAsset::DestroyDefaults();
-            Context::Remove();
             return 0;
         }
         catch (const std::exception &e)
