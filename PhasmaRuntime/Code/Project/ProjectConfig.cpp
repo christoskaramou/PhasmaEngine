@@ -107,13 +107,14 @@ namespace pe
     std::optional<ProjectConfig> ProjectConfig::TryLoadManifest(const std::filesystem::path &path, std::string *error)
     {
         const std::filesystem::path manifestPath = project_detail::NormalizeAbsolute(path);
-        std::ifstream file(manifestPath);
+        std::ifstream file(manifestPath, std::ios::binary);
         if (!file)
         {
             project_detail::SetError(error, "Unable to open project manifest: " + manifestPath.generic_string());
             return std::nullopt;
         }
 
+        project_detail::SkipUtf8Bom(file);
         rapidjson::IStreamWrapper stream(file);
         rapidjson::Document document;
         document.ParseStream(stream);

@@ -44,6 +44,20 @@ namespace pe::project_detail
         return Normalize(root / path);
     }
 
+    inline void SkipUtf8Bom(std::istream &stream)
+    {
+        char bom[3]{};
+        stream.read(bom, sizeof(bom));
+        if (stream.gcount() != sizeof(bom) ||
+            static_cast<unsigned char>(bom[0]) != 0xef ||
+            static_cast<unsigned char>(bom[1]) != 0xbb ||
+            static_cast<unsigned char>(bom[2]) != 0xbf)
+        {
+            stream.clear();
+            stream.seekg(0, std::ios::beg);
+        }
+    }
+
     inline bool TryLoadJsonObject(const std::filesystem::path &path,
                                   rapidjson::Document &document,
                                   std::string &warning)
@@ -61,6 +75,7 @@ namespace pe::project_detail
             return false;
         }
 
+        SkipUtf8Bom(file);
         rapidjson::IStreamWrapper stream(file);
         document.ParseStream(stream);
         if (document.HasParseError())

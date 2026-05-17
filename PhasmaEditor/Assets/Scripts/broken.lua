@@ -1,8 +1,11 @@
-hooks {
-    update = function()
-        this_does_not_exist()
-    end
-}
+-- Deliberately broken snippets live here for manual Lua error-path testing.
+-- Keep them commented so regular editor/player scene smokes stay quiet.
+
+-- hooks {
+--     update = function()
+--         this_does_not_exist()
+--     end
+-- }
 
 -- comment all lines bellow
 -- local speed = 1 -- radians per second
@@ -21,4 +24,3 @@ hooks {
 --         transform:set_position(vec3(x, start_pos.y, z))
 --     end
 -- }	
-
