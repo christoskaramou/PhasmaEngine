@@ -89,15 +89,13 @@ namespace pe
     }
 
     RuntimeStartupSceneSelection ResolveRuntimeStartupScene(const ProjectSelection &projectSelection,
-                                                            bool allowProjectFallback,
-                                                            const std::filesystem::path &settingsPath,
-                                                            const std::filesystem::path &editorConfigPath)
+                                                            const RuntimeStartupSceneResolveOptions &options)
     {
         RuntimeStartupSceneSelection selection;
 
         std::string explicitStartupScene;
         std::string warning;
-        if (TryReadRuntimeStartupScene(settingsPath, explicitStartupScene, &warning))
+        if (TryReadRuntimeStartupScene(options.settingsPath, explicitStartupScene, &warning))
         {
             selection.source = RuntimeStartupSceneSource::RuntimeSettings;
             selection.configuredValue = explicitStartupScene;
@@ -108,23 +106,26 @@ namespace pe
         }
         selection.warning = PrefixStartupWarning("settings", warning);
 
-        std::string editorWarning;
-        const std::string lastScene = ReadEditorStartupScene(editorConfigPath, &editorWarning);
-        if (!editorWarning.empty())
+        if (options.allowEditorRestore)
         {
-            const std::string prefixedWarning = PrefixStartupWarning("editor_config", editorWarning);
-            selection.warning =
-                selection.warning.empty() ? prefixedWarning : selection.warning + "; " + prefixedWarning;
-        }
-        if (!lastScene.empty())
-        {
-            selection.source = RuntimeStartupSceneSource::EditorConfig;
-            selection.configuredValue = lastScene;
-            selection.scenePath = ResolveRuntimeStartupPath(lastScene);
-            return selection;
+            std::string editorWarning;
+            const std::string lastScene = ReadEditorStartupScene(options.editorConfigPath, &editorWarning);
+            if (!editorWarning.empty())
+            {
+                const std::string prefixedWarning = PrefixStartupWarning("editor_config", editorWarning);
+                selection.warning =
+                    selection.warning.empty() ? prefixedWarning : selection.warning + "; " + prefixedWarning;
+            }
+            if (!lastScene.empty())
+            {
+                selection.source = RuntimeStartupSceneSource::EditorConfig;
+                selection.configuredValue = lastScene;
+                selection.scenePath = ResolveRuntimeStartupPath(lastScene);
+                return selection;
+            }
         }
 
-        if (allowProjectFallback && projectSelection.loadedManifest && !projectSelection.project.startupScene.empty())
+        if (options.allowProjectFallback && projectSelection.loadedManifest && !projectSelection.project.startupScene.empty())
         {
             selection.source = RuntimeStartupSceneSource::ProjectManifest;
             selection.configuredValue = projectSelection.project.startupScene.generic_string();

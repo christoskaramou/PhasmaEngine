@@ -335,7 +335,10 @@ namespace pe
 
             const ProjectSelection projectSelection = ResolveProjectSelection();
             ApplyProjectSelectionAssetsRoot(projectSelection);
-            const RuntimeStartupSceneSelection startupScene = ResolveRuntimeStartupScene(projectSelection, true);
+            RuntimeStartupSceneResolveOptions startupSceneOptions{};
+            startupSceneOptions.allowEditorRestore = true;
+            const RuntimeStartupSceneSelection startupScene =
+                ResolveRuntimeStartupScene(projectSelection, startupSceneOptions);
             LogProjectSelection(projectSelection, startupScene);
             PE_INFO("[Runtime] Active assets root: %s", Path::Assets.c_str());
 

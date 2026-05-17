@@ -622,7 +622,6 @@ namespace pe
         samplerInfo.addressModeW = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         samplerInfo.anisotropyEnable = false;
         samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-        samplerInfo.compareEnable = true;
         Sampler *sampler = Sampler::Create(samplerInfo, name + "_sampler");
         depth->SetSampler(sampler);
 

@@ -160,6 +160,28 @@ namespace pe
             return ToD3D12BufferState(accessMask);
         }
 
+        D3D12_RESOURCE_STATES ToD3D12ImageState(const ImageBarrierInfo &info)
+        {
+            if (info.layout == PE_IMAGE_LAYOUT_GENERAL)
+            {
+                const bool storageAccess =
+                    (info.accessMask &
+                     (PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE | PE_ACCESS_SHADER_WRITE | PE_ACCESS_MEMORY_WRITE)) != 0;
+                if (storageAccess)
+                    return D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+                const bool shaderRead =
+                    (info.accessMask & (PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_SAMPLED_READ)) != 0;
+                if (shaderRead)
+                    return D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
+
+                if (info.image && (info.image->GetUsage() & PE_IMAGE_USAGE_STORAGE))
+                    return D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            }
+
+            return pe_dx12::ToD3D12ResourceState(info.layout);
+        }
+
         bool CoalescePendingTransition(std::vector<D3D12_RESOURCE_BARRIER> &batch,
                                        ID3D12Resource *resource,
                                        UINT subresource,
@@ -1326,7 +1348,7 @@ namespace pe
         if (!info.image)
             return;
         Dx12ImageImpl *img = Dx12ImageImpl::From(info.image);
-        const D3D12_RESOURCE_STATES after = pe_dx12::ToD3D12ResourceState(info.layout);
+        const D3D12_RESOURCE_STATES after = ToD3D12ImageState(info);
         PrepareImageForFirstWrite(img, after, info.accessMask);
         if (PushImageStateTransition(m_barrierBatch, img, after))
             MarkPendingImageBarrierRegion("ImageBarrier");
@@ -1340,7 +1362,7 @@ namespace pe
             if (!info.image)
                 continue;
             Dx12ImageImpl *img = Dx12ImageImpl::From(info.image);
-            const D3D12_RESOURCE_STATES after = pe_dx12::ToD3D12ResourceState(info.layout);
+            const D3D12_RESOURCE_STATES after = ToD3D12ImageState(info);
             PrepareImageForFirstWrite(img, after, info.accessMask);
             if (PushImageStateTransition(m_barrierBatch, img, after))
                 MarkPendingImageBarrierRegion("ImageGroupBarrier");

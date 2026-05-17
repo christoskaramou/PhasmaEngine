@@ -45,6 +45,48 @@
 
 namespace pe
 {
+    static std::string DebugEnvFlagValue(const char *name)
+    {
+#if defined(PE_WIN32)
+        char *value = nullptr;
+        size_t valueSize = 0;
+        if (_dupenv_s(&value, &valueSize, name) != 0 || !value)
+            return {};
+
+        std::string result(value);
+        std::free(value);
+        return result;
+#else
+        const char *value = std::getenv(name);
+        return value ? std::string(value) : std::string{};
+#endif
+    }
+
+    static bool DebugEnvFlagOn(const char *name)
+    {
+        const std::string flag = DebugEnvFlagValue(name);
+        return flag == "1" || flag == "true" || flag == "TRUE" || flag == "on" || flag == "ON";
+    }
+
+    static bool DebugEnvFlagOff(const char *name)
+    {
+        const std::string flag = DebugEnvFlagValue(name);
+        return flag == "0" || flag == "false" || flag == "FALSE" || flag == "off" || flag == "OFF";
+    }
+
+    static bool ShouldCreateVulkanDebugMessenger()
+    {
+#if PE_DEBUG_MESSENGER == 1
+#if defined(_DEBUG)
+        return !DebugEnvFlagOff("PE_VULKAN_VALIDATION") || DebugEnvFlagOn("PE_VULKAN_VALIDATION");
+#else
+        return DebugEnvFlagOn("PE_VULKAN_VALIDATION");
+#endif
+#else
+        return false;
+#endif
+    }
+
 #if PE_DEBUG_MODE
     // Frame Capture
     void *capture_module = nullptr;
@@ -351,7 +393,10 @@ namespace pe
 
     void Debug::CreateDebugMessenger()
     {
-#if defined(_DEBUG) && PE_DEBUG_MESSENGER == 1
+        if (!ShouldCreateVulkanDebugMessenger())
+            return;
+
+#if PE_DEBUG_MESSENGER == 1
         PE_ERROR_IF(!s_instance, "A valid instance handle is required to initialize debug messenger!");
 
         if (!vkCreateDebugUtilsMessengerEXT)
@@ -378,7 +423,7 @@ namespace pe
 
     void Debug::DestroyDebugMessenger()
     {
-#if defined(_DEBUG) && PE_DEBUG_MESSENGER == 1
+#if PE_DEBUG_MESSENGER == 1
         if (s_debugMessenger)
         {
             vkDestroyDebugUtilsMessengerEXT(reinterpret_cast<VkInstance>(s_instance),

@@ -9,12 +9,15 @@
 #include "rapidjson/ostreamwrapper.h"
 #include "rapidjson/prettywriter.h"
 
-#include <cctype>
-#include <cstdlib>
 #include <cstdint>
+#include <cstdlib>
+#include <cctype>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <optional>
+#include <sstream>
+#include <vector>
 
 #include "SDL.h"
 #include "imgui.h"
@@ -29,6 +32,7 @@
 #endif
 #include <windows.h>
 #include <commdlg.h>
+#include <shlobj.h>
 #include "SDL_syswm.h"
 #else
 #include <sys/types.h>
@@ -40,7 +44,13 @@ namespace
 {
     constexpr const char *k_graphicsApiKey = "graphics_api";
     constexpr const char *k_launchTargetKey = "launch_target";
+    constexpr const char *kVulkanValidationModeKey = "vulkan_validation_mode";
+    constexpr const char *kDx12ValidationModeKey = "dx12_validation_mode";
+    constexpr const char *kVulkanCoreValidationKey = "vulkan_core_validation";
+    constexpr const char *kDx12CoreValidationKey = "dx12_core_validation";
     constexpr const char *k_editorLaunchTarget = "PhasmaEditor";
+    constexpr const char *k_playerLaunchTarget = "PhasmaPlayer";
+    constexpr size_t kSettingsTextBufferSize = 64 * 1024;
 
     bool PathElementEquals(const std::filesystem::path &a, const std::filesystem::path &b)
     {
@@ -86,6 +96,15 @@ namespace
         return std::filesystem::path(pe::Path::Executable) / "PhasmaEditor.exe";
 #else
         return std::filesystem::path(pe::Path::Executable) / "PhasmaEditor";
+#endif
+    }
+
+    std::filesystem::path PlayerExecutablePath()
+    {
+#if defined(PE_WIN32)
+        return std::filesystem::path(pe::Path::Executable) / "PhasmaPlayer.exe";
+#else
+        return std::filesystem::path(pe::Path::Executable) / "PhasmaPlayer";
 #endif
     }
 
@@ -316,6 +335,18 @@ namespace
             document.AddMember(jsonKey.Move(), jsonValue.Move(), allocator);
     }
 
+    void SetJsonBoolMember(rapidjson::Document &document, const char *key, bool value)
+    {
+        rapidjson::Document::AllocatorType &allocator = document.GetAllocator();
+        rapidjson::Value jsonKey(key, allocator);
+        rapidjson::Value jsonValue(value);
+
+        if (document.HasMember(key))
+            document[key] = jsonValue;
+        else
+            document.AddMember(jsonKey.Move(), jsonValue.Move(), allocator);
+    }
+
     void RemoveJsonMember(rapidjson::Document &document, const char *key)
     {
         if (document.HasMember(key))
@@ -350,6 +381,113 @@ namespace
 
         file << '\n';
         return true;
+    }
+
+    bool ReadTextFile(const std::filesystem::path &path, std::string &text, std::string &error)
+    {
+        text.clear();
+
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec))
+        {
+            text = "{\n}\n";
+            return true;
+        }
+
+        std::ifstream file(path, std::ios::binary);
+        if (!file.is_open())
+        {
+            error = "Could not open " + path.string();
+            return false;
+        }
+
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        text = buffer.str();
+        if (text.empty())
+            text = "{\n}\n";
+        return true;
+    }
+
+    bool ValidateSettingsText(const std::string &text, std::string &error)
+    {
+        const auto firstContent = std::find_if(text.begin(), text.end(), [](unsigned char ch)
+                                               { return !std::isspace(ch); });
+        if (firstContent == text.end())
+            return true;
+
+        rapidjson::Document document;
+        document.Parse(text.c_str(), text.size());
+        if (document.HasParseError())
+        {
+            error = "Settings JSON parse error: " + std::string(rapidjson::GetParseError_En(document.GetParseError()));
+            return false;
+        }
+        if (!document.IsObject())
+        {
+            error = "Settings JSON must be an object";
+            return false;
+        }
+        return true;
+    }
+
+    bool WriteTextFile(const std::filesystem::path &path, const std::string &text, std::string &error)
+    {
+        if (!ValidateSettingsText(text, error))
+            return false;
+
+        std::error_code ec;
+        std::filesystem::create_directories(path.parent_path(), ec);
+        if (ec)
+        {
+            error = "Could not create " + path.parent_path().string() + ": " + ec.message();
+            return false;
+        }
+
+        std::ofstream file(path, std::ios::binary | std::ios::trunc);
+        if (!file.is_open())
+        {
+            error = "Could not open " + path.string() + " for writing";
+            return false;
+        }
+
+        const std::string output = text.empty() ? "{\n}\n" : text;
+        file.write(output.data(), static_cast<std::streamsize>(output.size()));
+        if (!output.empty() && output.back() != '\n')
+            file << '\n';
+        return true;
+    }
+
+    bool CopyTextToBuffer(std::vector<char> &buffer, const std::string &text)
+    {
+        if (buffer.empty())
+            return false;
+
+        std::fill(buffer.begin(), buffer.end(), '\0');
+        const size_t copied = std::min(text.size(), buffer.size() - 1);
+        std::memcpy(buffer.data(), text.data(), copied);
+        return copied == text.size();
+    }
+
+    template <size_t Size>
+    void CopyStringToArray(char (&buffer)[Size], const std::string &text)
+    {
+        static_assert(Size > 0);
+        const size_t copied = std::min(text.size(), Size - 1);
+        std::memcpy(buffer, text.data(), copied);
+        buffer[copied] = '\0';
+    }
+
+    std::string BufferText(const std::vector<char> &buffer)
+    {
+        if (buffer.empty())
+            return {};
+        return std::string(buffer.data());
+    }
+
+    bool SaveSettingsBuffer(const std::vector<char> &buffer, std::string &error)
+    {
+        return WriteTextFile(RuntimeSettingsPath(), BufferText(buffer), error);
     }
 
     std::string ReadEditorConfigStartupScene()
@@ -397,10 +535,17 @@ namespace
         return pe::WriteEditorStartupScene({}, scene, &error);
     }
 
+    struct ValidationOptions
+    {
+        bool vulkanCoreValidation = false;
+        bool dx12CoreValidation = false;
+    };
+
     bool PersistLauncherSettings(PeGraphicsApi api,
                                  const std::string &projectPath,
                                  const std::string &startupScene,
                                  const std::string &launchTarget,
+                                 const ValidationOptions &validation,
                                  bool launchesEditor,
                                  std::string &error)
     {
@@ -413,6 +558,12 @@ namespace
         SetJsonStringMember(document, pe::kProjectPathSettingsKey, projectPath);
         SetJsonStringMember(document, pe::kStartupSceneSettingsKey, startupScene);
         SetJsonStringMember(document, k_launchTargetKey, launchTarget.empty() ? k_editorLaunchTarget : launchTarget);
+        SetJsonBoolMember(document, kVulkanCoreValidationKey, validation.vulkanCoreValidation);
+        SetJsonBoolMember(document, kDx12CoreValidationKey, validation.dx12CoreValidation);
+        RemoveJsonMember(document, kVulkanValidationModeKey);
+        RemoveJsonMember(document, kDx12ValidationModeKey);
+        RemoveJsonMember(document, "vulkan_configurator_path");
+        RemoveJsonMember(document, "dx12_configurator_path");
 
         const std::filesystem::path projectManifest = pe::ProjectConfig::DefaultManifestPath(projectPath);
         std::error_code ec;
@@ -430,12 +581,33 @@ namespace
         return true;
     }
 
-    struct LauncherSelection
+    enum class LauncherTab
     {
-        PeGraphicsApi api = PE_GRAPHICS_API_VULKAN;
+        Editor,
+        Player
+    };
+
+    enum class LaunchTargetKind
+    {
+        Editor,
+        Player,
+        Sample
+    };
+
+    struct LaunchProfile
+    {
         std::string projectPath;
         std::string startupScene;
         std::vector<std::string> startupScenes;
+    };
+
+    struct LauncherSelection
+    {
+        PeGraphicsApi api = PE_GRAPHICS_API_VULKAN;
+        LauncherTab activeTab = LauncherTab::Editor;
+        LaunchProfile editor;
+        LaunchProfile player;
+        ValidationOptions validation;
         std::string launchTarget;
         bool apiLocked = false;
         bool accepted = false;
@@ -446,7 +618,7 @@ namespace
         std::string configValue;
         std::string label;
         std::filesystem::path executablePath;
-        bool editor = false;
+        LaunchTargetKind kind = LaunchTargetKind::Sample;
     };
 
     enum class LauncherDialogResult
@@ -456,17 +628,20 @@ namespace
         Error
     };
 
-    std::string SceneDisplayName(const LauncherSelection &selection, const std::string &scene)
+    std::string SceneDisplayName(const LaunchProfile &profile, const std::string &scene)
     {
         if (scene.empty())
-            return "Empty editor";
-        return MakeRootRelativeDisplayPath(scene, selection.projectPath);
+            return "Empty scene";
+        return MakeRootRelativeDisplayPath(scene, profile.projectPath);
     }
 
     bool IsExecutableFile(const std::filesystem::path &path)
     {
 #if defined(PE_WIN32)
-        return path.extension() == ".exe";
+        std::string extension = path.extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char ch)
+                       { return static_cast<char>(std::tolower(ch)); });
+        return extension == ".exe";
 #else
         std::error_code ec;
         const auto status = std::filesystem::status(path, ec);
@@ -522,14 +697,15 @@ namespace
                 continue;
 
             seenNames.push_back(fileName);
-            targets.push_back({fileName, entry.path().stem().string(), entry.path().lexically_normal(), false});
+            targets.push_back({fileName, entry.path().stem().string(), entry.path().lexically_normal(), LaunchTargetKind::Sample});
         }
     }
 
     std::vector<LaunchTarget> DiscoverLaunchTargets(const std::string &preferredTarget)
     {
         std::vector<LaunchTarget> targets;
-        targets.push_back({k_editorLaunchTarget, "Phasma Editor", EditorExecutablePath(), true});
+        targets.push_back({k_editorLaunchTarget, "Phasma Editor", EditorExecutablePath(), LaunchTargetKind::Editor});
+        targets.push_back({k_playerLaunchTarget, "Phasma Player", PlayerExecutablePath(), LaunchTargetKind::Player});
 
         std::vector<LaunchTarget> sampleTargets;
         std::vector<std::string> seenNames;
@@ -562,7 +738,7 @@ namespace
                 if (std::filesystem::exists(preferredPath, ec) && IsExecutableFile(preferredPath))
                 {
                     targets.push_back(
-                        {preferredTarget, preferredPath.stem().string(), preferredPath.lexically_normal(), false});
+                        {preferredTarget, preferredPath.stem().string(), preferredPath.lexically_normal(), LaunchTargetKind::Sample});
                 }
             }
         }
@@ -582,7 +758,37 @@ namespace
 
     bool LaunchesEditor(const LauncherSelection &selection)
     {
-        return selection.launchTarget.empty() || selection.launchTarget == k_editorLaunchTarget;
+        return selection.activeTab == LauncherTab::Editor;
+    }
+
+    bool LaunchesProjectScene(const LaunchTarget &target)
+    {
+        return target.kind == LaunchTargetKind::Editor || target.kind == LaunchTargetKind::Player;
+    }
+
+    LaunchProfile &ActiveProfile(LauncherSelection &selection)
+    {
+        return LaunchesEditor(selection) ? selection.editor : selection.player;
+    }
+
+    const LaunchProfile &ActiveProfile(const LauncherSelection &selection)
+    {
+        return LaunchesEditor(selection) ? selection.editor : selection.player;
+    }
+
+    int FindPlayerLaunchTargetIndex(const std::vector<LaunchTarget> &targets, const std::string &value)
+    {
+        int playerIndex = -1;
+        for (size_t i = 0; i < targets.size(); ++i)
+        {
+            if (targets[i].kind == LaunchTargetKind::Editor)
+                continue;
+            if (targets[i].kind == LaunchTargetKind::Player && playerIndex < 0)
+                playerIndex = static_cast<int>(i);
+            if (targets[i].configValue == value)
+                return static_cast<int>(i);
+        }
+        return playerIndex;
     }
 
 #if defined(PE_WIN32)
@@ -617,6 +823,38 @@ namespace
         return quoted;
     }
 #endif
+
+    bool SetLaunchEnvironmentFlag(const char *name, bool enabled, std::string &error)
+    {
+        const char *value = enabled ? "1" : "0";
+#if defined(PE_WIN32)
+        if (!SetEnvironmentVariableA(name, value))
+        {
+            error = std::string("Could not set ") + name + ": " + std::to_string(GetLastError());
+            return false;
+        }
+#else
+        if (setenv(name, value, 1) != 0)
+        {
+            error = std::string("Could not set ") + name;
+            return false;
+        }
+#endif
+        return true;
+    }
+
+    bool ApplyValidationEnvironment(const ValidationOptions &validation, std::string &error)
+    {
+        if (!SetLaunchEnvironmentFlag("PE_VULKAN_VALIDATION", validation.vulkanCoreValidation, error))
+            return false;
+        if (!SetLaunchEnvironmentFlag("PE_DX12_DEBUG", validation.dx12CoreValidation, error))
+            return false;
+        if (!SetLaunchEnvironmentFlag("PE_DX12_GBV", validation.dx12CoreValidation, error))
+            return false;
+        if (!SetLaunchEnvironmentFlag("PE_DX12_DRED", validation.dx12CoreValidation, error))
+            return false;
+        return true;
+    }
 
     bool LaunchExternalTarget(const LaunchTarget &target, PeGraphicsApi api, std::string &error)
     {
@@ -674,14 +912,13 @@ namespace
 #endif
     }
 
-    constexpr int kLauncherWidth = 1060;
-    constexpr int kLauncherHeight = 300;
-    constexpr int kLabelX = 18;
-    constexpr int kFieldX = 136;
-    constexpr int kFieldWidth = 876;
-    constexpr int kSceneComboWidth = 760;
-    constexpr int kLaunchButtonX = 820;
-    constexpr int kCancelButtonX = 922;
+    constexpr int kLauncherWidth = 1120;
+    constexpr int kLauncherHeight = 700;
+    constexpr int kFieldX = 140;
+    constexpr int kFieldWidth = 930;
+    constexpr int kSceneComboWidth = 810;
+    constexpr int kSettingsPathWidth = 660;
+    constexpr int kLaunchButtonX = 878;
 
     void ApplyLauncherStyle()
     {
@@ -812,19 +1049,25 @@ namespace
     }
 #endif
 
-    bool PickStartupScene(SDL_Window *owner, const std::string &projectPath, std::string &selectedPath, std::string &error)
+    bool PickFile(SDL_Window *owner,
+                  const char *title,
+                  const char *filter,
+                  const std::filesystem::path &initialDir,
+                  std::string &selectedPath,
+                  std::string &error)
     {
 #if defined(PE_WIN32)
         char fileName[MAX_PATH] = {};
-        const std::string initialDir = (ProjectAssetsRoot(projectPath) / "Scenes").string();
+        const std::string initialDirString = initialDir.string();
 
         OPENFILENAMEA openFileName{};
         openFileName.lStructSize = sizeof(openFileName);
         openFileName.hwndOwner = GetNativeWindowHandle(owner);
-        openFileName.lpstrFilter = "Phasma Scene (*.pescene)\0*.pescene\0All Files (*.*)\0*.*\0";
+        openFileName.lpstrTitle = title;
+        openFileName.lpstrFilter = filter;
         openFileName.lpstrFile = fileName;
         openFileName.nMaxFile = static_cast<DWORD>(sizeof(fileName));
-        openFileName.lpstrInitialDir = initialDir.c_str();
+        openFileName.lpstrInitialDir = initialDirString.c_str();
         openFileName.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
 
         if (GetOpenFileNameA(&openFileName))
@@ -837,6 +1080,107 @@ namespace
         if (dialogError != 0)
             error = "Browse failed: " + std::to_string(dialogError);
         return false;
+#else
+        (void)owner;
+        std::vector<std::string> filters;
+        if (std::strstr(filter, "*.pescene"))
+            filters.push_back("--file-filter=Phasma Scene (*.pescene) | *.pescene");
+        else if (std::strstr(filter, "*.json"))
+            filters.push_back("--file-filter=JSON Settings (*.json) | *.json");
+        filters.push_back("--file-filter=All Files | *");
+
+        int pipeFd[2] = {-1, -1};
+        if (pipe(pipeFd) != 0)
+        {
+            error = "Browse unavailable: could not create pipe";
+            return false;
+        }
+
+        const pid_t pid = fork();
+        if (pid < 0)
+        {
+            close(pipeFd[0]);
+            close(pipeFd[1]);
+            error = "Browse unavailable: could not fork zenity";
+            return false;
+        }
+
+        if (pid == 0)
+        {
+            close(pipeFd[0]);
+            dup2(pipeFd[1], STDOUT_FILENO);
+            close(pipeFd[1]);
+
+            const std::string titleArg = std::string("--title=") + title;
+            const std::string filenameArg = "--filename=" + EnsureTrailingSlash(initialDir.generic_string());
+            std::vector<char *> args;
+            args.push_back(const_cast<char *>("zenity"));
+            args.push_back(const_cast<char *>("--file-selection"));
+            args.push_back(const_cast<char *>(titleArg.c_str()));
+            args.push_back(const_cast<char *>(filenameArg.c_str()));
+            for (std::string &zenityFilter : filters)
+                args.push_back(const_cast<char *>(zenityFilter.c_str()));
+            args.push_back(nullptr);
+            execvp("zenity", args.data());
+            _exit(127);
+        }
+
+        close(pipeFd[1]);
+        std::string output;
+        char buffer[512] = {};
+        ssize_t count = 0;
+        while ((count = read(pipeFd[0], buffer, sizeof(buffer))) > 0)
+            output.append(buffer, static_cast<size_t>(count));
+        close(pipeFd[0]);
+
+        int status = 0;
+        waitpid(pid, &status, 0);
+        if (!WIFEXITED(status))
+        {
+            error = "Browse failed: zenity did not exit normally";
+            return false;
+        }
+        if (WEXITSTATUS(status) == 127)
+        {
+            error = "Browse requires zenity.";
+            return false;
+        }
+        if (WEXITSTATUS(status) != 0 || output.empty())
+            return false;
+
+        while (!output.empty() && (output.back() == '\n' || output.back() == '\r'))
+            output.pop_back();
+        selectedPath = output;
+        return !selectedPath.empty();
+#endif
+    }
+
+    bool PickProjectPath(SDL_Window *owner,
+                         const std::string &currentProjectPath,
+                         std::string &selectedPath,
+                         std::string &error)
+    {
+#if defined(PE_WIN32)
+        BROWSEINFOA browseInfo{};
+        browseInfo.hwndOwner = GetNativeWindowHandle(owner);
+        browseInfo.lpszTitle = "Select project root or assets folder";
+        browseInfo.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+
+        LPITEMIDLIST itemId = SHBrowseForFolderA(&browseInfo);
+        if (!itemId)
+            return false;
+
+        char path[MAX_PATH] = {};
+        const BOOL ok = SHGetPathFromIDListA(itemId, path);
+        CoTaskMemFree(itemId);
+        if (!ok)
+        {
+            error = "Project browse failed";
+            return false;
+        }
+
+        selectedPath = path;
+        return true;
 #else
         (void)owner;
         int pipeFd[2] = {-1, -1};
@@ -861,15 +1205,13 @@ namespace
             dup2(pipeFd[1], STDOUT_FILENO);
             close(pipeFd[1]);
 
-            const std::filesystem::path sceneDir = ProjectAssetsRoot(projectPath) / "Scenes";
-            const std::string filenameArg = "--filename=" + EnsureTrailingSlash(sceneDir.generic_string());
+            const std::string filenameArg = "--filename=" + EnsureTrailingSlash(currentProjectPath);
             execlp("zenity",
                    "zenity",
                    "--file-selection",
-                   "--title=Select startup scene",
+                   "--directory",
+                   "--title=Select project root or assets folder",
                    filenameArg.c_str(),
-                   "--file-filter=Phasma Scene (*.pescene) | *.pescene",
-                   "--file-filter=All Files | *",
                    nullptr);
             _exit(127);
         }
@@ -891,7 +1233,7 @@ namespace
         }
         if (WEXITSTATUS(status) == 127)
         {
-            error = "Browse requires zenity; choose a discovered scene or edit editor_config.json.";
+            error = "Browse requires zenity.";
             return false;
         }
         if (WEXITSTATUS(status) != 0 || output.empty())
@@ -902,6 +1244,26 @@ namespace
         selectedPath = output;
         return !selectedPath.empty();
 #endif
+    }
+
+    bool PickStartupScene(SDL_Window *owner, const std::string &projectPath, std::string &selectedPath, std::string &error)
+    {
+        return PickFile(owner,
+                        "Select startup scene",
+                        "Phasma Scene (*.pescene)\0*.pescene\0All Files (*.*)\0*.*\0",
+                        ProjectAssetsRoot(projectPath) / "Scenes",
+                        selectedPath,
+                        error);
+    }
+
+    bool PickSettingsFile(SDL_Window *owner, std::string &selectedPath, std::string &error)
+    {
+        return PickFile(owner,
+                        "Select settings file",
+                        "JSON Settings (*.json)\0*.json\0All Files (*.*)\0*.*\0",
+                        RuntimeSettingsPath().parent_path(),
+                        selectedPath,
+                        error);
     }
 
 #if !defined(PE_WIN32)
@@ -965,30 +1327,30 @@ namespace
         std::cout << "Phasma Launcher\n";
         targetIndex = PromptIndex("Target", targetLabels, targetIndex);
         selection.launchTarget = targets[targetIndex].configValue;
+        selection.activeTab = targets[targetIndex].kind == LaunchTargetKind::Editor ? LauncherTab::Editor : LauncherTab::Player;
 
-        if (LaunchesEditor(selection))
+        if (LaunchesProjectScene(targets[targetIndex]))
         {
+            LaunchProfile &profile = ActiveProfile(selection);
             std::vector<std::string> sceneLabels;
-            sceneLabels.reserve(selection.startupScenes.size());
-            for (const std::string &scene : selection.startupScenes)
-                sceneLabels.push_back(SceneDisplayName(selection, scene));
+            sceneLabels.reserve(profile.startupScenes.size());
+            for (const std::string &scene : profile.startupScenes)
+                sceneLabels.push_back(SceneDisplayName(profile, scene));
 
             int sceneIndex = 0;
-            const auto currentScene = std::find(selection.startupScenes.begin(),
-                                                selection.startupScenes.end(),
-                                                selection.startupScene);
-            if (currentScene != selection.startupScenes.end())
-                sceneIndex = static_cast<int>(currentScene - selection.startupScenes.begin());
+            const auto currentScene = std::find(profile.startupScenes.begin(), profile.startupScenes.end(), profile.startupScene);
+            if (currentScene != profile.startupScenes.end())
+                sceneIndex = static_cast<int>(currentScene - profile.startupScenes.begin());
 
             sceneIndex = PromptIndex("Startup scene", sceneLabels, sceneIndex);
-            if (sceneIndex >= 0 && sceneIndex < static_cast<int>(selection.startupScenes.size()))
-                selection.startupScene = selection.startupScenes[sceneIndex];
+            if (sceneIndex >= 0 && sceneIndex < static_cast<int>(profile.startupScenes.size()))
+                profile.startupScene = profile.startupScenes[sceneIndex];
         }
 
         if (!selection.apiLocked)
             selection.api = PE_GRAPHICS_API_VULKAN;
 
-        std::cout << "\nProject: " << selection.projectPath << '\n'
+        std::cout << "\nProject: " << ActiveProfile(selection).projectPath << '\n'
                   << "Backend: " << pe::GraphicsApiConfigName(selection.api) << '\n'
                   << "Settings: " << RuntimeSettingsPath().generic_string() << '\n';
 
@@ -997,11 +1359,140 @@ namespace
     }
 #endif
 
+    void RefreshStartupScenes(LaunchProfile &profile)
+    {
+        profile.startupScenes = DiscoverStartupScenes(profile.projectPath, profile.startupScene);
+        AddUniqueScene(profile.startupScenes, profile.startupScene);
+    }
+
+    void ApplyPickedProject(LaunchProfile &profile, const std::string &selectedPath)
+    {
+        profile.projectPath = NormalizeConfiguredProjectPath(selectedPath);
+        RefreshStartupScenes(profile);
+    }
+
+    void ApplyPickedScene(LaunchProfile &profile, const std::string &selectedPath)
+    {
+        profile.projectPath = InferProjectPathFromScene(selectedPath);
+        profile.startupScene = MakeRuntimeRelativePath(selectedPath);
+        RefreshStartupScenes(profile);
+    }
+
+    void RenderProjectSceneControls(const char *id,
+                                    SDL_Window *window,
+                                    LaunchProfile &profile,
+                                    std::string &statusText)
+    {
+        ImGui::PushID(id);
+
+        ImGui::TextUnformatted("Project");
+        ImGui::SameLine(kFieldX);
+        char projectBuffer[2048] = {};
+        CopyStringToArray(projectBuffer, profile.projectPath);
+        ImGui::SetNextItemWidth(kSceneComboWidth);
+        ImGui::InputText("##project_path", projectBuffer, sizeof(projectBuffer), ImGuiInputTextFlags_ReadOnly);
+        ImGui::SameLine();
+        if (ImGui::Button("Open", ImVec2(110.0f, 0.0f)))
+        {
+            std::string selectedPath;
+            std::string browseError;
+            if (PickProjectPath(window, profile.projectPath, selectedPath, browseError))
+            {
+                ApplyPickedProject(profile, selectedPath);
+                statusText.clear();
+            }
+            else
+            {
+                statusText = browseError;
+            }
+        }
+
+        ImGui::TextUnformatted("Startup scene");
+        ImGui::SameLine(kFieldX);
+        const std::string sceneLabel = SceneDisplayName(profile, profile.startupScene);
+        ImGui::SetNextItemWidth(kSceneComboWidth);
+        if (ImGui::BeginCombo("##scene", sceneLabel.c_str()))
+        {
+            for (int i = 0; i < static_cast<int>(profile.startupScenes.size()); ++i)
+            {
+                const bool selected = profile.startupScenes[i] == profile.startupScene;
+                const std::string label = SceneDisplayName(profile, profile.startupScenes[i]);
+                ImGui::PushID(i);
+                if (ImGui::Selectable(label.c_str(), selected))
+                    profile.startupScene = profile.startupScenes[i];
+                ImGui::PopID();
+                if (selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Open", ImVec2(110.0f, 0.0f)))
+        {
+            std::string selectedPath;
+            std::string browseError;
+            if (PickStartupScene(window, profile.projectPath, selectedPath, browseError))
+            {
+                ApplyPickedScene(profile, selectedPath);
+                statusText.clear();
+            }
+            else
+            {
+                statusText = browseError;
+            }
+        }
+
+        ImGui::PopID();
+    }
+
+    void RenderPlayerTargetControls(const std::vector<LaunchTarget> &targets, LauncherSelection &selection)
+    {
+        int playerTargetIndex = FindPlayerLaunchTargetIndex(targets, selection.launchTarget);
+        if (playerTargetIndex < 0)
+            return;
+
+        selection.launchTarget = targets[playerTargetIndex].configValue;
+
+        ImGui::TextUnformatted("Run");
+        ImGui::SameLine(kFieldX);
+        ImGui::SetNextItemWidth(kFieldWidth);
+        if (ImGui::BeginCombo("##player_target", targets[playerTargetIndex].label.c_str()))
+        {
+            for (int i = 0; i < static_cast<int>(targets.size()); ++i)
+            {
+                if (targets[i].kind == LaunchTargetKind::Editor)
+                    continue;
+
+                const bool selected = i == playerTargetIndex;
+                if (ImGui::Selectable(targets[i].label.c_str(), selected))
+                {
+                    playerTargetIndex = i;
+                    selection.launchTarget = targets[playerTargetIndex].configValue;
+                }
+                if (selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+    }
+
+    void RenderValidationControls(const char *id, bool &coreValidation)
+    {
+        ImGui::PushID(id);
+
+        ImGui::TextUnformatted("Validation");
+        ImGui::SameLine(kFieldX);
+        ImGui::Checkbox("##validation", &coreValidation);
+
+        ImGui::PopID();
+    }
+
     LauncherDialogResult ShowSdlLauncher(LauncherSelection &selection,
                                          const std::vector<LaunchTarget> &targets,
                                          int targetIndex,
                                          std::string &error)
     {
+        (void)targetIndex;
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
         {
             error = std::string("[SDL] launcher init failed: ") + SDL_GetError();
@@ -1060,6 +1551,22 @@ namespace
         LauncherDialogResult result = LauncherDialogResult::Cancel;
         bool running = true;
         std::string statusText;
+        std::vector<char> settingsBuffer(kSettingsTextBufferSize, '\0');
+        std::string settingsText;
+        std::string settingsError;
+        if (ReadTextFile(RuntimeSettingsPath(), settingsText, settingsError))
+        {
+            if (!CopyTextToBuffer(settingsBuffer, settingsText))
+                statusText = "Settings file is too large for the inline editor; showing a truncated copy.";
+        }
+        else
+        {
+            statusText = settingsError;
+            CopyTextToBuffer(settingsBuffer, "{\n}\n");
+        }
+        bool settingsEditorOpen = false;
+        bool settingsDirty = false;
+        bool applyInitialTabSelection = true;
         while (running)
         {
             SDL_Event event{};
@@ -1081,70 +1588,6 @@ namespace
                          nullptr,
                          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
 
-            ImGui::TextUnformatted("Target");
-            ImGui::SameLine(kFieldX);
-            ImGui::SetNextItemWidth(kFieldWidth);
-            if (ImGui::BeginCombo("##target", targets[targetIndex].label.c_str()))
-            {
-                for (int i = 0; i < static_cast<int>(targets.size()); ++i)
-                {
-                    const bool selected = i == targetIndex;
-                    if (ImGui::Selectable(targets[i].label.c_str(), selected))
-                    {
-                        targetIndex = i;
-                        selection.launchTarget = targets[targetIndex].configValue;
-                    }
-                    if (selected)
-                        ImGui::SetItemDefaultFocus();
-                }
-                ImGui::EndCombo();
-            }
-
-            const bool editorSelected = LaunchesEditor(selection);
-            ImGui::TextUnformatted("Project");
-            ImGui::SameLine(kFieldX);
-            ImGui::BeginDisabled(!editorSelected);
-            ImGui::TextUnformatted(selection.projectPath.c_str());
-            ImGui::EndDisabled();
-
-            ImGui::TextUnformatted("Startup scene");
-            ImGui::SameLine(kFieldX);
-            ImGui::BeginDisabled(!editorSelected);
-            std::string sceneLabel = SceneDisplayName(selection, selection.startupScene);
-            ImGui::SetNextItemWidth(kSceneComboWidth);
-            if (ImGui::BeginCombo("##scene", sceneLabel.c_str()))
-            {
-                for (int i = 0; i < static_cast<int>(selection.startupScenes.size()); ++i)
-                {
-                    const bool selected = selection.startupScenes[i] == selection.startupScene;
-                    const std::string label = SceneDisplayName(selection, selection.startupScenes[i]);
-                    if (ImGui::Selectable(label.c_str(), selected))
-                        selection.startupScene = selection.startupScenes[i];
-                    if (selected)
-                        ImGui::SetItemDefaultFocus();
-                }
-                ImGui::EndCombo();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Browse...", ImVec2(100.0f, 0.0f)))
-            {
-                std::string selectedPath;
-                std::string browseError;
-                if (PickStartupScene(window, selection.projectPath, selectedPath, browseError))
-                {
-                    selection.projectPath = InferProjectPathFromScene(selectedPath);
-                    selection.startupScenes = DiscoverStartupScenes(selection.projectPath, "");
-                    selection.startupScene = MakeRuntimeRelativePath(selectedPath);
-                    AddUniqueScene(selection.startupScenes, selection.startupScene);
-                    statusText.clear();
-                }
-                else
-                {
-                    statusText = browseError;
-                }
-            }
-            ImGui::EndDisabled();
-
             ImGui::TextUnformatted("Backend");
             ImGui::SameLine(kFieldX);
             ImGui::BeginDisabled(selection.apiLocked);
@@ -1163,9 +1606,131 @@ namespace
 #endif
             ImGui::EndDisabled();
 
+            if (selection.api == PE_GRAPHICS_API_VULKAN)
+                RenderValidationControls("vulkan_validation", selection.validation.vulkanCoreValidation);
+#if defined(PE_WIN32)
+            if (selection.api == PE_GRAPHICS_API_DX12)
+                RenderValidationControls("dx12_validation", selection.validation.dx12CoreValidation);
+#endif
+
             ImGui::TextUnformatted("Settings");
             ImGui::SameLine(kFieldX);
-            ImGui::TextUnformatted(RuntimeSettingsPath().generic_string().c_str());
+            char settingsPathBuffer[2048] = {};
+            const std::string settingsPath = RuntimeSettingsPath().generic_string();
+            CopyStringToArray(settingsPathBuffer, settingsPath);
+            ImGui::SetNextItemWidth(kSettingsPathWidth);
+            ImGui::InputText("##settings_path", settingsPathBuffer, sizeof(settingsPathBuffer), ImGuiInputTextFlags_ReadOnly);
+            ImGui::SameLine();
+            if (ImGui::Button(settingsEditorOpen ? "Hide" : "Edit", ImVec2(110.0f, 0.0f)))
+                settingsEditorOpen = !settingsEditorOpen;
+            ImGui::SameLine();
+            if (ImGui::Button("Open", ImVec2(100.0f, 0.0f)))
+            {
+                std::string selectedPath;
+                std::string browseError;
+                if (PickSettingsFile(window, selectedPath, browseError))
+                {
+                    std::string pickedText;
+                    std::string readError;
+                    if (ReadTextFile(selectedPath, pickedText, readError))
+                    {
+                        if (!CopyTextToBuffer(settingsBuffer, pickedText))
+                            statusText = "Picked settings file is too large; showing a truncated copy.";
+                        else
+                            statusText = "Picked settings loaded into the editor.";
+                        settingsEditorOpen = true;
+                        settingsDirty = true;
+                    }
+                    else
+                    {
+                        statusText = readError;
+                    }
+                }
+                else
+                {
+                    statusText = browseError;
+                }
+            }
+
+            if (settingsEditorOpen)
+            {
+                ImGui::SetNextItemWidth(kFieldWidth);
+                if (ImGui::InputTextMultiline("##settings_json",
+                                              settingsBuffer.data(),
+                                              settingsBuffer.size(),
+                                              ImVec2(kFieldWidth, 170.0f),
+                                              ImGuiInputTextFlags_AllowTabInput))
+                {
+                    settingsDirty = true;
+                }
+
+                ImGui::SameLine();
+                ImGui::BeginGroup();
+                if (ImGui::Button("Save", ImVec2(96.0f, 0.0f)))
+                {
+                    std::string saveError;
+                    if (SaveSettingsBuffer(settingsBuffer, saveError))
+                    {
+                        settingsDirty = false;
+                        statusText = "Settings saved.";
+                    }
+                    else
+                    {
+                        statusText = saveError;
+                    }
+                }
+                if (ImGui::Button("Reload", ImVec2(96.0f, 0.0f)))
+                {
+                    std::string reloadText;
+                    std::string reloadError;
+                    if (ReadTextFile(RuntimeSettingsPath(), reloadText, reloadError))
+                    {
+                        CopyTextToBuffer(settingsBuffer, reloadText);
+                        settingsDirty = false;
+                        statusText = "Settings reloaded.";
+                    }
+                    else
+                    {
+                        statusText = reloadError;
+                    }
+                }
+                ImGui::EndGroup();
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::BeginTabBar("##launcher_tabs"))
+            {
+                const ImGuiTabItemFlags editorTabFlags =
+                    applyInitialTabSelection && selection.activeTab == LauncherTab::Editor ? ImGuiTabItemFlags_SetSelected : 0;
+                if (ImGui::BeginTabItem("Editor", nullptr, editorTabFlags))
+                {
+                    selection.activeTab = LauncherTab::Editor;
+                    selection.launchTarget = k_editorLaunchTarget;
+                    RenderProjectSceneControls("editor", window, selection.editor, statusText);
+                    ImGui::EndTabItem();
+                }
+
+                const ImGuiTabItemFlags playerTabFlags =
+                    applyInitialTabSelection && selection.activeTab == LauncherTab::Player ? ImGuiTabItemFlags_SetSelected : 0;
+                if (ImGui::BeginTabItem("Player", nullptr, playerTabFlags))
+                {
+                    selection.activeTab = LauncherTab::Player;
+                    if (selection.launchTarget.empty() || selection.launchTarget == k_editorLaunchTarget)
+                        selection.launchTarget = k_playerLaunchTarget;
+                    RenderPlayerTargetControls(targets, selection);
+
+                    const int playerTargetIndex = FindLaunchTargetIndex(targets, selection.launchTarget);
+                    const bool projectSceneTarget =
+                        playerTargetIndex >= 0 && LaunchesProjectScene(targets[playerTargetIndex]);
+                    ImGui::BeginDisabled(!projectSceneTarget);
+                    RenderProjectSceneControls("player", window, selection.player, statusText);
+                    ImGui::EndDisabled();
+                    ImGui::EndTabItem();
+                }
+                ImGui::EndTabBar();
+                applyInitialTabSelection = false;
+            }
 
             if (!statusText.empty())
             {
@@ -1176,9 +1741,25 @@ namespace
             ImGui::SetCursorPos(ImVec2(kLaunchButtonX, kLauncherHeight - 54.0f));
             if (ImGui::Button("Launch", ImVec2(90.0f, 28.0f)))
             {
-                selection.accepted = true;
-                result = LauncherDialogResult::Launch;
-                running = false;
+                if (settingsDirty)
+                {
+                    std::string saveError;
+                    if (!SaveSettingsBuffer(settingsBuffer, saveError))
+                    {
+                        statusText = saveError;
+                    }
+                    else
+                    {
+                        settingsDirty = false;
+                    }
+                }
+
+                if (!settingsDirty)
+                {
+                    selection.accepted = true;
+                    result = LauncherDialogResult::Launch;
+                    running = false;
+                }
             }
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2(90.0f, 28.0f)))
@@ -1272,13 +1853,34 @@ namespace
         if (currentLaunchTarget.empty())
             currentLaunchTarget = k_editorLaunchTarget;
 
+        auto readRuntimeBool = [&](const char *key)
+        {
+            return loadedRuntimeSettings &&
+                   runtimeSettings.HasMember(key) &&
+                   runtimeSettings[key].IsBool() &&
+                   runtimeSettings[key].GetBool();
+        };
+        auto readCoreValidation = [&](const char *modeKey, const char *coreKey)
+        {
+            if (loadedRuntimeSettings && runtimeSettings.HasMember(modeKey) && runtimeSettings[modeKey].IsString())
+            {
+                const std::string mode = runtimeSettings[modeKey].GetString();
+                return mode == "core" || mode == "phasma" || mode == "phasmacore";
+            }
+            return readRuntimeBool(coreKey);
+        };
+
         LauncherSelection selection{};
         selection.api = apiSelection.api;
         selection.apiLocked = IsHardApiOverride(apiSelection.source);
-        selection.projectPath = currentProjectPath;
-        selection.startupScene = currentScene;
-        selection.startupScenes = DiscoverStartupScenes(currentProjectPath, currentScene);
+        selection.editor.projectPath = currentProjectPath;
+        selection.editor.startupScene = currentScene;
+        selection.editor.startupScenes = DiscoverStartupScenes(currentProjectPath, currentScene);
+        selection.player = selection.editor;
+        selection.validation.vulkanCoreValidation = readCoreValidation(kVulkanValidationModeKey, kVulkanCoreValidationKey);
+        selection.validation.dx12CoreValidation = readCoreValidation(kDx12ValidationModeKey, kDx12CoreValidationKey);
         selection.launchTarget = currentLaunchTarget;
+        selection.activeTab = currentLaunchTarget == k_editorLaunchTarget ? LauncherTab::Editor : LauncherTab::Player;
 
         const LauncherDialogResult dialogResult = ShowLauncherWindow(selection);
         if (dialogResult == LauncherDialogResult::Cancel)
@@ -1286,13 +1888,31 @@ namespace
         if (dialogResult == LauncherDialogResult::Error)
             return 1;
 
-        pe::Path::Assets = EnsureTrailingSlash(ProjectAssetsRoot(selection.projectPath).generic_string());
+        const LaunchProfile &profile = ActiveProfile(selection);
+        pe::Path::Assets = EnsureTrailingSlash(ProjectAssetsRoot(profile.projectPath).generic_string());
         const bool launchesEditor = LaunchesEditor(selection);
+        if (launchesEditor)
+            selection.launchTarget = k_editorLaunchTarget;
+        else if (selection.launchTarget.empty() || selection.launchTarget == k_editorLaunchTarget)
+            selection.launchTarget = k_playerLaunchTarget;
         const PeGraphicsApi selectedApi = selection.apiLocked ? apiSelection.api : selection.api;
 
         std::string error;
         if (!PersistLauncherSettings(
-                selectedApi, selection.projectPath, selection.startupScene, selection.launchTarget, launchesEditor, error))
+                selectedApi,
+                profile.projectPath,
+                profile.startupScene,
+                selection.launchTarget,
+                selection.validation,
+                launchesEditor,
+                error))
+        {
+            pe::Log::Error(error);
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Phasma Launcher", error.c_str(), nullptr);
+            return 1;
+        }
+
+        if (!ApplyValidationEnvironment(selection.validation, error))
         {
             pe::Log::Error(error);
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Phasma Launcher", error.c_str(), nullptr);

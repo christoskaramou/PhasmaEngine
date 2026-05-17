@@ -303,7 +303,7 @@ target_sources(PhasmaLauncher PRIVATE
 )
 target_include_directories(PhasmaLauncher PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}/imgui")
 if(WIN32)
-    target_link_libraries(PhasmaLauncher PRIVATE comdlg32.lib)
+    target_link_libraries(PhasmaLauncher PRIVATE comdlg32.lib shell32.lib ole32.lib)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set_target_properties(PhasmaLauncher PROPERTIES
         BUILD_RPATH "$ORIGIN"
@@ -311,7 +311,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     )
 endif()
 
-add_dependencies(PhasmaLauncher PhasmaEditor)
+add_dependencies(PhasmaLauncher PhasmaEditor PhasmaPlayer)
 
 # Copy runtime assets to build directory (re-runs when assets change)
 set(ASSETS_COPY_STAMP "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/AssetsCopy.stamp")

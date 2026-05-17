@@ -226,8 +226,11 @@ namespace pe
         // Adopt the SDL window that was created by the launcher.
         m_window = Window::Adopt(RHII.GetWindow());
         GlobalSettings &settings = Settings::Get<GlobalSettings>();
+        RuntimeStartupSceneResolveOptions startupSceneOptions{};
+        startupSceneOptions.allowEditorRestore = !isHotReload;
+        startupSceneOptions.allowProjectFallback = !isHotReload;
         const RuntimeStartupSceneSelection startupScene =
-            ResolveRuntimeStartupScene(projectSelection, !isHotReload);
+            ResolveRuntimeStartupScene(projectSelection, startupSceneOptions);
         if (!startupScene.warning.empty())
             PE_WARN("[Runtime] %s", startupScene.warning.c_str());
         const RuntimeStartupSceneSettings startupSceneSettings = ReadRuntimeStartupSceneSettings(startupScene);

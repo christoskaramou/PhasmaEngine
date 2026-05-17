@@ -3,6 +3,8 @@
 ## 2026-05-17
 
 - Renamed the top-level CMake project to `PhasmaEngine` and cleaned up runtime/player build naming. Shared Lua/CACAO/sol2/miniaudio paths now go through `PE_SHARED_THIRD_PARTY_DIR`, and editor/player/launcher asset preparation depends on the neutral `PhasmaRuntimeAssets` target while keeping `PhasmaEditorAssets` as a compatibility target.
+- Aligned `RuntimeStartupSceneResolveOptions` usage across editor, player, and runtime implementation after the startup resolver API split. Editor hot reload now disables both editor restore and manifest fallback so snapshot restore keeps precedence, while PhasmaPlayer keeps normal startup scene fallback enabled.
+- Reworked PhasmaLauncher into global backend/settings controls plus Editor and Player tabs. Both tabs can pick project/scene, Player can launch PhasmaPlayer or discovered WebGPU sample targets, and the launcher can load/edit/save executable-local `phasma_settings.json` before launch.
 - Fixed runtime/player review findings: editor and player now apply the resolved project assets root to `Path::Assets`, PhasmaPlayer copies the Assimp runtime DLL on Windows, starts/stops the file watcher around script reload support, and destroys the scene before removing the ECS context.
 - Hardened `RuntimeSceneRenderer` lifecycle and resize handling. Partial init now leaves `Destroy()` able to clear registered renderer-host state/resources, and player resize recreates command/semaphore frame resources to match the new swapchain image count.
 - Routed Lua `engine.set_play_mode` and `engine.set_paused` through `ScriptRuntimeHooks`. The editor hooks keep GUI play/pause state in sync with runtime services, and PhasmaPlayer registers its own play/pause state plus shutdown on `set_play_mode(false)`.
@@ -13,6 +15,8 @@
 - Added runtime screenshot support for PhasmaPlayer. `RuntimeSceneRenderer` now handles screenshot requests from runtime Lua, and screenshot PNG writing lives in PhasmaRuntime instead of using `PhasmaMCP` utilities from renderer code.
 - Added `RuntimePlaySession` in PhasmaRuntime so the editor play button and PhasmaPlayer share physics/audio play-service start/stop, pause propagation, optional player script init, and animation-state cleanup while editor-only snapshot/UI behavior stays in `GUI`.
 - Moved the shared SDL window-event helpers into PhasmaRuntime. Editor `Window` and `PhasmaPlayer` now use the same drawable-size, resize-event, and minimized-window checks, leaving editor-specific ImGui/drop/model/render event dispatch in the editor layer.
+- Fixed DX12 validation breaks in the runtime/player path: `PE_IMAGE_LAYOUT_GENERAL` barriers now map shader-write/storage images to UAV resource state, and editor/player scene depth render targets use a normal sampler while shadow maps keep their comparison sampler. PhasmaPlayer and PhasmaEditor both survived Sponza DX12 smokes with GPU validation enabled.
+- Added launcher validation controls. The UI shows a single Validation checkbox for the selected backend, which sets child-process validation env vars; Vulkan now honors `PE_VULKAN_VALIDATION` in Release and creates the debug messenger so layer output reaches the engine log.
 
 ## 2026-05-16
 

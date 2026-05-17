@@ -55,6 +55,8 @@ Successful editor scene loads update both `editor_config.json:last_scene` and `p
 
 The launcher stores `project_path` as the project root when a manifest project is detected. It uses the project's configured assets root for startup-scene discovery and browsing. Legacy projects without a manifest may still use the assets directory itself as `project_path`.
 
+The launcher UI has global backend/settings/validation controls plus Editor and Player tabs. Both tabs can pick a project and startup scene; the Player tab can launch `PhasmaPlayer` or discovered `WebGPU*` sample executables. The inline settings editor loads JSON into the executable-local `phasma_settings.json` contract before launch. The validation row follows the selected backend and is a single PhasmaCore checkbox. It sets child-process validation env vars for the selected backend (`PE_VULKAN_VALIDATION` for Vulkan, `PE_DX12_DEBUG`/`PE_DX12_GBV`/`PE_DX12_DRED` for DX12).
+
 Path resolution rules:
 
 - absolute paths are preserved and normalized;

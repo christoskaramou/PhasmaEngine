@@ -90,6 +90,12 @@ namespace pe
         return flag == "1" || flag == "true" || flag == "TRUE" || flag == "on" || flag == "ON";
     }
 
+    static bool IsEnvFlagDisabled(const char *name)
+    {
+        const std::string flag = ReadEnv(name);
+        return flag == "0" || flag == "false" || flag == "FALSE" || flag == "off" || flag == "OFF";
+    }
+
     static uint32_t QueryLoaderApiVersion(PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr)
     {
         uint32_t version = VK_API_VERSION_1_0;
@@ -780,24 +786,42 @@ namespace pe
             instanceExtensions.push_back("VK_EXT_debug_utils");
         // =============================================
 
+        const bool vulkanValidationRequested = IsEnvFlagEnabled("PE_VULKAN_VALIDATION");
+        const bool vulkanValidationSuppressed = IsEnvFlagDisabled("PE_VULKAN_VALIDATION");
+        const bool enableVulkanValidation =
 #if !defined(PE_RELEASE) && !defined(PE_MINSIZEREL)
-        // === Layers ==================================
-        if (RHII.IsInstanceLayerValid("VK_LAYER_KHRONOS_validation"))
-            instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
-        // =============================================
-
+            !vulkanValidationSuppressed || vulkanValidationRequested;
+#else
+            vulkanValidationRequested;
+#endif
+        bool useValidationLayerSettings = false;
         const VkBool32 setting_true = true;
         const VkLayerSettingEXT layer_settings[] = {
             {"VK_LAYER_KHRONOS_validation", "printf_verbose", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &setting_true},
             {"VK_LAYER_KHRONOS_validation", "validate_sync", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &setting_true}};
+        VkLayerSettingsCreateInfoEXT layer_settings_create_info = {
+            VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT,
+            nullptr,
+            static_cast<uint32_t>(sizeof(layer_settings) / sizeof(layer_settings[0])),
+            layer_settings};
 
-        VkLayerSettingsCreateInfoEXT layer_settings_create_info = {VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT, nullptr, 2, layer_settings};
+        // === Layers ==================================
+        if (enableVulkanValidation && RHII.IsInstanceLayerValid("VK_LAYER_KHRONOS_validation"))
+        {
+            instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
+            PE_INFO("Vulkan validation layer enabled");
+        }
+        else if (vulkanValidationRequested)
+        {
+            PE_WARN("PE_VULKAN_VALIDATION requested, but VK_LAYER_KHRONOS_validation is unavailable");
+        }
+        // =============================================
 
-        if (RHII.IsInstanceExtensionValid("VK_EXT_layer_settings"))
+        if (enableVulkanValidation && RHII.IsInstanceExtensionValid("VK_EXT_layer_settings"))
         {
             instanceExtensions.push_back("VK_EXT_layer_settings");
+            useValidationLayerSettings = true;
         }
-#endif
 
         m_caps.loaderApiVersion = QueryLoaderApiVersion(vkGetInstanceProcAddr);
         m_caps.instanceApiVersion = ClampVulkanApiVersionToEngineMax(m_caps.loaderApiVersion);
@@ -813,9 +837,8 @@ namespace pe
         // Create Instance
         {
             vk::InstanceCreateInfo instanceCI{};
-#if !defined(PE_RELEASE) && !defined(PE_MINSIZEREL)
-            instanceCI.pNext = &layer_settings_create_info;
-#endif
+            if (useValidationLayerSettings)
+                instanceCI.pNext = &layer_settings_create_info;
             instanceCI.pApplicationInfo = &appInfo;
             instanceCI.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
             instanceCI.ppEnabledExtensionNames = instanceExtensions.data();
