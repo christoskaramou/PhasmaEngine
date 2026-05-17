@@ -41,6 +41,14 @@ namespace pe
         std::optional<float> renderScale;
     };
 
+    struct RuntimeStartupSceneResolveOptions
+    {
+        bool allowEditorRestore = true;
+        bool allowProjectFallback = true;
+        std::filesystem::path settingsPath;
+        std::filesystem::path editorConfigPath;
+    };
+
     [[nodiscard]] const char *RuntimeStartupSceneSourceName(RuntimeStartupSceneSource source);
     [[nodiscard]] std::filesystem::path RuntimeEditorConfigPath(const std::filesystem::path &editorConfigPath = {});
     [[nodiscard]] std::filesystem::path RuntimeEditorConfigWritePath(const std::filesystem::path &editorConfigPath = {});
@@ -51,9 +59,7 @@ namespace pe
                                                std::string *error = nullptr);
     [[nodiscard]] RuntimeStartupSceneSelection ResolveRuntimeStartupScene(
         const ProjectSelection &projectSelection,
-        bool allowProjectFallback,
-        const std::filesystem::path &settingsPath = {},
-        const std::filesystem::path &editorConfigPath = {});
+        const RuntimeStartupSceneResolveOptions &options = {});
     [[nodiscard]] RuntimeStartupSceneSettings ReadRuntimeStartupSceneSettings(
         const RuntimeStartupSceneSelection &selection);
 } // namespace pe

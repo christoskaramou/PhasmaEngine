@@ -1,13 +1,13 @@
 # Runtime And Project Boundary
 
-PhasmaRuntime is the future shared runtime layer between PhasmaCore and PhasmaEditor. It owns project/runtime contracts that should be identical for the editor and a standalone player. It should not own editor UI, hot-reload UI, launcher UI, ImGui panels, or module-reload mechanics.
+PhasmaRuntime is the shared runtime layer between PhasmaCore and the host products. It owns project/runtime contracts that should be identical for the editor and a standalone player. It should not own editor UI, hot-reload UI, launcher UI, ImGui panels, or module-reload mechanics.
 
 ## Layer Shape
 
 - `PhasmaCore` remains the low-level engine foundation: RHI, ECS, platform-adjacent services, paths, settings, and shared primitives.
 - `PhasmaRuntime` sits above PhasmaCore and below hosts. It defines how a project is described, how a runtime session resolves project-relative paths, and the shared SDL/window/RHI boot primitives that editor and player hosts use before handing off to their own loops.
 - `PhasmaEditor` remains the desktop editor concept. `PhasmaEditorModule` is the current hot-reload DLL implementation detail, not the product/layer name.
-- Future player executables should depend on PhasmaRuntime instead of copying editor startup logic.
+- `PhasmaPlayer` is the first standalone host over PhasmaRuntime instead of a copy of editor startup logic.
 
 ## MyProject Contract
 
@@ -103,5 +103,6 @@ The first code slice is intentionally boring:
 - add `RuntimePlaySession` as the shared play-service lifecycle surface. The editor play button still owns snapshots, toolbar state, and undo reset, while runtime owns starting/stopping physics/audio play services, optional script init for player startup, pause propagation, and animation-state cleanup;
 - wire `PhasmaPlayer` to load the selected startup scene, initialize `RuntimeSceneRenderer`, initialize Lua scripts and per-node script instances, start runtime physics/audio play mode, pump SDL input into runtime input state, tick `FrameTimer`, process runtime quit/compile/resize events, and render the scene frame loop.
 - keep PhasmaPlayer shutdown ordered so runtime play services, file watchers, renderer resources, and global systems stop while the scene/context are still valid; the scene is then destroyed before `Context::Remove()`.
+- rename the top-level CMake project to `PhasmaEngine`, route shared Lua/CACAO/sol2/miniaudio include paths through `PE_SHARED_THIRD_PARTY_DIR`, and make the executable-local asset copy target `PhasmaRuntimeAssets`. The shared vendors and built-in assets still physically live in their historical editor tree until a larger repository-layout move is worth the churn.
 
 The remaining editor-owned surfaces are host/product concerns rather than player runtime behavior: editor GUI, launcher UI, MCP/editor-agent tooling, hot-reload/module mechanics, `Window`, `SelectionManager`, and editor-only Lua GUI/profiler/selection bindings.

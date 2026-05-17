@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.24)
 
 if(POLICY CMP0091)
     cmake_policy(SET CMP0091 NEW)
@@ -13,10 +13,10 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
 # Static libs linked into PhasmaEditorModule need PIC on ELF targets.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-project(PhasmaEditor C CXX)
+project(PhasmaEngine C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-message(STATUS "PhasmaEditor = ${CMAKE_CURRENT_SOURCE_DIR}")
+message(STATUS "PhasmaEngine = ${CMAKE_CURRENT_SOURCE_DIR}")
 
 if(MSVC)
     # /MP enables multi-threaded compilation *within* each cl.exe invocation.
@@ -42,7 +42,9 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/RelWithDe
 
 set(PE_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/Libs")
 set(PE_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/third_party")
-set(PE_EDITOR_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/third_party")
+set(PE_SHARED_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/third_party")
+set(PE_EDITOR_THIRD_PARTY_DIR "${PE_SHARED_THIRD_PARTY_DIR}")
+set(PE_RUNTIME_ASSETS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Assets")
 
 set(PE_CORE_LINK_DIRS
     "${PE_LIBS_DIR}/dx"
@@ -115,7 +117,7 @@ if(NOT meshoptimizer_POPULATED)
     FetchContent_Populate(meshoptimizer)
     # Create a simple CMakeLists.txt for meshoptimizer since it doesn't have one
     file(WRITE "${meshoptimizer_SOURCE_DIR}/CMakeLists.txt" "
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.24)
 project(meshoptimizer CXX)
 file(GLOB SOURCES \"src/*.cpp\")
 add_library(meshoptimizer STATIC \${SOURCES})
@@ -148,9 +150,9 @@ endif()
 add_subdirectory(PhasmaCore)
 
 # --- Lua 5.4 (vendored, compiled from source) ---
-file(GLOB LUA_SOURCES "${PE_EDITOR_THIRD_PARTY_DIR}/lua/*.c")
+file(GLOB LUA_SOURCES "${PE_SHARED_THIRD_PARTY_DIR}/lua/*.c")
 add_library(Lua STATIC ${LUA_SOURCES})
-target_include_directories(Lua PUBLIC "${PE_EDITOR_THIRD_PARTY_DIR}/lua")
+target_include_directories(Lua PUBLIC "${PE_SHARED_THIRD_PARTY_DIR}/lua")
 set_target_properties(Lua PROPERTIES LINKER_LANGUAGE C)
 if(NOT MSVC)
     target_compile_options(Lua PRIVATE -w)
@@ -176,7 +178,7 @@ endif()
 # === PhasmaEditorModule + thin launcher ===
 file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/*.cpp")
 file(GLOB_RECURSE IMGUI_SRC_FILES CONFIGURE_DEPENDS "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/*.cpp")
-file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Assets/*")
+file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${PE_RUNTIME_ASSETS_SOURCE_DIR}/*")
 list(FILTER ASSET_FILES EXCLUDE REGEX "\\.obj$")
 set_source_files_properties(${ASSET_FILES} PROPERTIES VS_TOOL_OVERRIDE "None")
 
@@ -222,9 +224,9 @@ target_include_directories(PhasmaEditorModule PRIVATE
     "${PE_THIRD_PARTY_DIR}"
     "${PE_THIRD_PARTY_DIR}/vma"
     "${PE_THIRD_PARTY_DIR}/vulkan"
-    "${PE_EDITOR_THIRD_PARTY_DIR}"
+    "${PE_SHARED_THIRD_PARTY_DIR}"
     "${PE_EDITOR_THIRD_PARTY_DIR}/imgui"
-    "${PE_EDITOR_THIRD_PARTY_DIR}/sol2"
+    "${PE_SHARED_THIRD_PARTY_DIR}/sol2"
 )
 target_link_directories(PhasmaEditorModule PRIVATE ${PE_CORE_LINK_DIRS})
 
@@ -248,7 +250,7 @@ if(WIN32)
 endif()
 
 if(PE_AUDIO)
-    target_include_directories(PhasmaEditorModule PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}/miniaudio")
+    target_include_directories(PhasmaEditorModule PRIVATE "${PE_SHARED_THIRD_PARTY_DIR}/miniaudio")
     target_compile_definitions(PhasmaEditorModule PRIVATE PE_AUDIO)
 endif()
 
@@ -311,21 +313,22 @@ endif()
 
 add_dependencies(PhasmaLauncher PhasmaEditor)
 
-# Copy assets to build directory (re-runs when assets change)
+# Copy runtime assets to build directory (re-runs when assets change)
 set(ASSETS_COPY_STAMP "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/AssetsCopy.stamp")
-set(PHASMAEDITOR_RUNTIME_DIR "$<IF:$<CONFIG:Debug>,${CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG},$<IF:$<CONFIG:Release>,${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE},$<IF:$<CONFIG:RelWithDebInfo>,${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO},${CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL}>>>")
+set(PHASMA_RUNTIME_OUTPUT_DIR "$<IF:$<CONFIG:Debug>,${CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG},$<IF:$<CONFIG:Release>,${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE},$<IF:$<CONFIG:RelWithDebInfo>,${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO},${CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL}>>>")
 add_custom_command(
     OUTPUT "${ASSETS_COPY_STAMP}"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Assets" "${PHASMAEDITOR_RUNTIME_DIR}/Assets"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PE_RUNTIME_ASSETS_SOURCE_DIR}" "${PHASMA_RUNTIME_OUTPUT_DIR}/Assets"
     COMMAND ${CMAKE_COMMAND} -E touch "${ASSETS_COPY_STAMP}"
     DEPENDS ${ASSET_FILES}
     COMMENT "[Phasma] Copying assets to build directory"
 )
-add_custom_target(PhasmaEditorAssets ALL DEPENDS "${ASSETS_COPY_STAMP}")
-add_dependencies(PhasmaEditor PhasmaEditorAssets)
-add_dependencies(PhasmaLauncher PhasmaEditorAssets)
-add_dependencies(PhasmaPlayer PhasmaEditorAssets)
+add_custom_target(PhasmaRuntimeAssets ALL DEPENDS "${ASSETS_COPY_STAMP}")
+add_custom_target(PhasmaEditorAssets DEPENDS "${ASSETS_COPY_STAMP}")
+add_dependencies(PhasmaEditor PhasmaRuntimeAssets)
+add_dependencies(PhasmaLauncher PhasmaRuntimeAssets)
+add_dependencies(PhasmaPlayer PhasmaRuntimeAssets)
 
 # Copy DLLs for Windows
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")

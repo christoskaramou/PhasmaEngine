@@ -2,6 +2,7 @@
 
 ## 2026-05-17
 
+- Renamed the top-level CMake project to `PhasmaEngine` and cleaned up runtime/player build naming. Shared Lua/CACAO/sol2/miniaudio paths now go through `PE_SHARED_THIRD_PARTY_DIR`, and editor/player/launcher asset preparation depends on the neutral `PhasmaRuntimeAssets` target while keeping `PhasmaEditorAssets` as a compatibility target.
 - Fixed runtime/player review findings: editor and player now apply the resolved project assets root to `Path::Assets`, PhasmaPlayer copies the Assimp runtime DLL on Windows, starts/stops the file watcher around script reload support, and destroys the scene before removing the ECS context.
 - Hardened `RuntimeSceneRenderer` lifecycle and resize handling. Partial init now leaves `Destroy()` able to clear registered renderer-host state/resources, and player resize recreates command/semaphore frame resources to match the new swapchain image count.
 - Routed Lua `engine.set_play_mode` and `engine.set_paused` through `ScriptRuntimeHooks`. The editor hooks keep GUI play/pause state in sync with runtime services, and PhasmaPlayer registers its own play/pause state plus shutdown on `set_play_mode(false)`.

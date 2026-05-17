@@ -1,15 +1,19 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.24)
 project(PhasmaRuntime CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message(STATUS "PhasmaRuntime = ${CMAKE_CURRENT_SOURCE_DIR}")
+
+if(NOT DEFINED PE_SHARED_THIRD_PARTY_DIR)
+    set(PE_SHARED_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaEditor/third_party")
+endif()
 
 file(GLOB_RECURSE PHASMARUNTIME_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/Code/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Code/*.h"
 )
 file(GLOB_RECURSE PHASMARUNTIME_CACAO_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaEditor/third_party/CACAO/*.cpp"
+    "${PE_SHARED_THIRD_PARTY_DIR}/CACAO/*.cpp"
 )
 
 add_library(PhasmaRuntime STATIC ${PHASMARUNTIME_SOURCES} ${PHASMARUNTIME_CACAO_SOURCES})
@@ -20,11 +24,11 @@ target_precompile_headers(PhasmaRuntime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../
 target_include_directories(PhasmaRuntime PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/Code"
     "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaCore/third_party/assimp/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaEditor/third_party/lua"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaEditor/third_party/sol2"
+    "${PE_SHARED_THIRD_PARTY_DIR}/lua"
+    "${PE_SHARED_THIRD_PARTY_DIR}/sol2"
 )
 target_include_directories(PhasmaRuntime PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaEditor/third_party"
+    "${PE_SHARED_THIRD_PARTY_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaCore/third_party"
     "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaCore/third_party/meshoptimizer"
     "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaCore/third_party/rapidjson/include"
@@ -37,9 +41,9 @@ target_include_directories(PhasmaRuntime PRIVATE
 if(WIN32)
     target_compile_definitions(PhasmaRuntime PRIVATE FFX_CACAO_ENABLE_D3D12)
     target_include_directories(PhasmaRuntime PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaEditor/third_party/CacaoCompat"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaEditor/third_party/CacaoCompat/DirectXHeaders/include"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaEditor/third_party/CacaoCompat/DirectXHeaders/include/directx"
+        "${PE_SHARED_THIRD_PARTY_DIR}/CacaoCompat"
+        "${PE_SHARED_THIRD_PARTY_DIR}/CacaoCompat/DirectXHeaders/include"
+        "${PE_SHARED_THIRD_PARTY_DIR}/CacaoCompat/DirectXHeaders/include/directx"
     )
     if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
         set_source_files_properties(${PHASMARUNTIME_CACAO_SOURCES} PROPERTIES
@@ -66,7 +70,7 @@ if(PE_PHYSICS AND TARGET Jolt)
     target_link_libraries(PhasmaRuntime PUBLIC Jolt)
 endif()
 if(PE_AUDIO)
-    target_include_directories(PhasmaRuntime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaEditor/third_party/miniaudio")
+    target_include_directories(PhasmaRuntime PRIVATE "${PE_SHARED_THIRD_PARTY_DIR}/miniaudio")
     target_compile_definitions(PhasmaRuntime PRIVATE PE_AUDIO)
 endif()
 if(TARGET assimp)
