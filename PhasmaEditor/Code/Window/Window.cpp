@@ -10,49 +10,14 @@
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
 #include "Script/Bindings/Input/InputState.h"
-#include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
+#include "Window/WindowEvents.h"
 #include "imgui/imgui_impl_sdl2.h"
 
 #include "Script/ScriptSystem.h"
 
 namespace pe
 {
-    namespace
-    {
-        void GetDrawableSizeInPixels(SDL_Window *window, int &width, int &height)
-        {
-            SDL_GetWindowSizeInPixels(window, &width, &height);
-        }
-
-        bool ShouldResizeForWindowEvent(uint8_t event)
-        {
-            switch (event)
-            {
-            case SDL_WINDOWEVENT_SIZE_CHANGED:
-            case SDL_WINDOWEVENT_RESIZED:
-            case SDL_WINDOWEVENT_MAXIMIZED:
-            case SDL_WINDOWEVENT_RESTORED:
-                return true;
-            default:
-                return false;
-            }
-        }
-
-        bool WindowEventChangesDrawableExtent(SDL_Window *window)
-        {
-            int width = 0;
-            int height = 0;
-            GetDrawableSizeInPixels(window, width, height);
-            if (width <= 0 || height <= 0)
-                return false;
-
-            return RHII.GetSwapchain() == nullptr ||
-                   RHII.GetWidth() != static_cast<uint32_t>(width) ||
-                   RHII.GetHeight() != static_cast<uint32_t>(height);
-        }
-    } // namespace
-
     Window::Window(int x, int y, int w, int h, uint32_t flags) : m_owned(true)
     {
         m_apiHandle = SDL_CreateWindow("", x, y, w, h, flags);
@@ -146,8 +111,6 @@ namespace pe
     bool Window::ProcessEvents()
     {
         RendererSystem *rendererSystem = GetGlobalSystem<RendererSystem>();
-        PostProcessSystem *postProcessSystem =
-            HasGlobalSystem<PostProcessSystem>() ? GetGlobalSystem<PostProcessSystem>() : nullptr;
 
         SDL_Event sdlEvent;
         std::vector<std::string> dropAccum;
@@ -162,11 +125,16 @@ namespace pe
             if (sdlEvent.type == SDL_MOUSEMOTION)
                 InputState::AddMouseMotion(sdlEvent.motion.xrel, sdlEvent.motion.yrel);
 
-            if (sdlEvent.type == SDL_WINDOWEVENT &&
-                ShouldResizeForWindowEvent(sdlEvent.window.event) &&
-                WindowEventChangesDrawableExtent(m_apiHandle))
+            if (IsRuntimeWindowResizeEvent(sdlEvent))
             {
-                EventSystem::PushEvent(EventType::Resize);
+                const WindowDrawableExtent extent = GetWindowDrawableExtent(m_apiHandle);
+                if (extent.IsValid() &&
+                    (RHII.GetSwapchain() == nullptr ||
+                     RHII.GetWidth() != static_cast<uint32_t>(extent.width) ||
+                     RHII.GetHeight() != static_cast<uint32_t>(extent.height)))
+                {
+                    EventSystem::PushEvent(EventType::Resize);
+                }
             }
 
             if (sdlEvent.type == SDL_DROPBEGIN)
@@ -213,8 +181,6 @@ namespace pe
                         hash = std::any_cast<size_t>(event.payload);
 
                     rendererSystem->PollShaders(hash);
-                    if (postProcessSystem)
-                        postProcessSystem->PollShaders(hash);
                     CommandBuffer::ClearCache(); // force fresh pipeline rebuild with new shaders
                     break;
                 }
@@ -259,11 +225,12 @@ namespace pe
                 {
                     if (!isMinimized())
                     {
-                        int w, h;
-                        GetDrawableSizeInPixels(m_apiHandle, w, h);
-                        rendererSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
-                        if (postProcessSystem)
-                            postProcessSystem->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+                        const WindowDrawableExtent extent = GetWindowDrawableExtent(m_apiHandle);
+                        if (extent.IsValid())
+                        {
+                            rendererSystem->Resize(static_cast<uint32_t>(extent.width),
+                                                   static_cast<uint32_t>(extent.height));
+                        }
                     }
                     break;
                 }
@@ -403,12 +370,14 @@ namespace pe
 
     bool Window::isMinimized()
     {
-        return (SDL_GetWindowFlags(m_apiHandle) & SDL_WINDOW_MINIMIZED) != 0;
+        return IsWindowMinimized(m_apiHandle);
     }
 
     void Window::GetDrawableSize(int &width, int &height)
     {
-        GetDrawableSizeInPixels(m_apiHandle, width, height);
+        const WindowDrawableExtent extent = GetWindowDrawableExtent(m_apiHandle);
+        width = extent.width;
+        height = extent.height;
     }
 
     void Window::Show()

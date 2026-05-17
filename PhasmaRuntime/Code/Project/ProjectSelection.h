@@ -31,6 +31,8 @@ namespace pe
     [[nodiscard]] std::filesystem::path DefaultProjectSettingsPath();
     [[nodiscard]] const char *ProjectSelectionSourceName(ProjectSelectionSource source);
     [[nodiscard]] ProjectSelection ResolveProjectSelection(const std::filesystem::path &settingsPath = {});
+    [[nodiscard]] std::filesystem::path ProjectSelectionAssetsRoot(const ProjectSelection &selection);
+    void ApplyProjectSelectionAssetsRoot(const ProjectSelection &selection);
     [[nodiscard]] std::string ReadRuntimeStartupScene(const std::filesystem::path &settingsPath = {},
                                                       std::string *warning = nullptr);
     [[nodiscard]] bool TryReadRuntimeStartupScene(const std::filesystem::path &settingsPath,

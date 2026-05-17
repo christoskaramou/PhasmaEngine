@@ -1,0 +1,206 @@
+#include "Script/ScriptSystem.h"
+#include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
+#include "Scene/SceneHost.h"
+#include "Scene/SceneNode.h"
+#include "Scene/SceneNodeHandle.h"
+#include "Scene/Primitives.h"
+#include "Camera/Camera.h"
+#include "Script/ScriptRuntimeHooks.h"
+#include "Base/ThreadPool.h"
+
+namespace pe
+{
+    static struct SceneBindings
+    {
+        SceneBindings()
+        {
+            ScriptSystem::AddBindings([](sol::state &lua)
+                                      {
+                sol::table scene = lua.create_named_table("scene");
+
+                scene.set_function("save", [](const std::string &name) {
+                    SaveScene(Path::Assets + "Scenes/" + name);
+                });
+
+                scene.set_function("load", [](const std::string &name) {
+                    LoadScene(Path::Assets + "Scenes/" + name);
+                });
+
+                scene.set_function("load_async", [](const std::string &name, sol::function callback) {
+                    Scene *activeScene = GetActiveScene();
+                    if (!activeScene) return;
+
+                    // Clear scene immediately on main thread
+                    NewScene();
+
+                    SetScriptModelLoading(true);
+
+                    std::string fullPath = Path::Assets + "Scenes/" + name;
+                    uint32_t gen = activeScene->GetGeneration();
+
+                    auto future = ThreadPool::General.Enqueue([fullPath]() -> ScenePreloadHandle * {
+                        return new ScenePreloadHandle(PreloadScene(fullPath));
+                    });
+
+                    auto *ss = GetGlobalSystem<ScriptSystem>();
+                    if (ss)
+                    {
+                        PendingSceneLoad load;
+                        load.future = std::move(future);
+                        load.callback = std::move(callback);
+                        load.sceneGeneration = gen;
+                        ss->AddPendingSceneLoad(std::move(load));
+                    }
+                });
+
+                scene.set_function("clear", []() {
+                    // Use NewScene for a complete, ordered cleanup — it nulls
+                    // camera/light nodeIds before freeing nodes, clears all
+                    // geometry stores, and rebuilds GPU buffers synchronously.
+                    NewScene();
+                });
+
+                scene.set_function("get_entities", [](sol::this_state ts) -> sol::as_table_t<std::vector<sol::table>> {
+                    sol::state_view lua(ts);
+                    std::vector<sol::table> result;
+                    Scene *sc = GetActiveScene();
+                    if (!sc) return sol::as_table(std::move(result));
+
+                    for (uint32_t i = 0; i < sc->GetNodeCount(); i++)
+                    {
+                        NodeId *node = sc->GetNodeId(i);
+                        if (sc->GetParent(node)) continue;
+                        uint32_t flags = sc->GetComponentFlags(node);
+                        if ((flags & Component_Camera) && !(flags & Component_Mesh)) continue;
+                        if ((flags & Component_Light) && !(flags & Component_Mesh)) continue;
+
+                        sol::table t = lua.create_table();
+                        t["node"] = sc->MakeHandle(node);
+                        t["label"] = sc->GetNodeName(node);
+                        t["type"] = "node";
+                        result.push_back(t);
+                    }
+                    return sol::as_table(std::move(result));
+                });
+
+                scene.set_function("get_model_count", []() -> int {
+                    Scene *sc = GetActiveScene();
+                    return sc ? static_cast<int>(sc->GetModels().size()) : 0;
+                });
+
+                scene.set_function("find_model", [](const std::string &label, sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
+                    Scene *sc = GetActiveScene();
+                    if (!sc) return sol::make_object(lua, sol::nil);
+                    for (uint32_t i = 0; i < sc->GetNodeCount(); i++)
+                    {
+                        NodeId *node = sc->GetNodeId(i);
+                        if (sc->GetNodeName(node) == label)
+                            return sol::make_object(lua, sc->MakeHandle(node));
+                    }
+                    return sol::make_object(lua, sol::nil);
+                });
+
+                scene.set_function("get_cameras", []() -> sol::as_table_t<std::vector<Camera *>> {
+                    std::vector<Camera *> result;
+                    Scene *sc = GetActiveScene();
+                    if (sc)
+                    {
+                        for (auto *c : sc->GetCameras())
+                            result.push_back(c);
+                    }
+                    return sol::as_table(std::move(result));
+                });
+
+                scene.set_function("get_active_camera", []() -> Camera * {
+                    Scene *sc = GetActiveScene();
+                    return sc ? sc->GetActiveCamera() : nullptr;
+                });
+
+                scene.set_function("add_camera", []() -> Camera * {
+                    Scene *sc = GetActiveScene();
+                    return sc ? sc->AddCamera() : nullptr;
+                });
+
+                scene.set_function("remove_camera", [](Camera *camera) {
+                    if (!camera) return;
+                    if (Scene *sc = GetActiveScene())
+                        sc->RemoveCamera(camera);
+                });
+
+                scene.set_function("set_active_camera", [](Camera *camera) {
+                    if (!camera) return;
+                    if (Scene *sc = GetActiveScene())
+                        sc->SetActiveCamera(camera);
+                });
+
+                scene.set_function("add_empty_node", [](sol::optional<std::string> name, sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
+                    Scene *sc = GetActiveScene();
+                    if (!sc) return sol::make_object(lua, sol::nil);
+                    std::string nodeName = name.value_or("Node_" + std::to_string(ID::NextID()));
+                    NodeId *node = sc->CreateNode(nodeName);
+                    return sol::make_object(lua, sc->MakeHandle(node));
+                });
+
+                scene.set_function("delete_node", [](SceneNodeHandle h) {
+                    Scene *sc = GetActiveScene();
+                    if (!sc) return;
+                    if (h.IsValid(*sc))
+                        sc->DeleteNode(h.nodeId);
+                });
+
+                scene.set_function("attach_primitive", [](SceneNodeHandle h, const std::string &type) {
+                    Scene *sc = GetActiveScene();
+                    if (!sc) return;
+                    if (!h.IsValid(*sc)) return;
+                    ModelAsset *model = nullptr;
+                    if (type == "plane") model = Primitives::CreatePlane();
+                    else if (type == "cube") model = Primitives::CreateCube();
+                    else if (type == "sphere") model = Primitives::CreateSphere();
+                    else if (type == "cylinder") model = Primitives::CreateCylinder();
+                    else if (type == "cone") model = Primitives::CreateCone();
+                    else if (type == "quad") model = Primitives::CreateQuad();
+                    if (model)
+                    {
+                        sc->AttachPrimitiveToNode(h.nodeId, model);
+                        sc->SetGeometryDirty();
+                    }
+                });
+
+                scene.set_function("add_directional_light", []() {
+                    if (Scene *sc = GetActiveScene()) sc->CreateDirectionalLight();
+                });
+
+                scene.set_function("add_point_light", []() {
+                    if (Scene *sc = GetActiveScene()) sc->CreatePointLight();
+                });
+
+                scene.set_function("add_spot_light", []() {
+                    if (Scene *sc = GetActiveScene()) sc->CreateSpotLight();
+                });
+
+                scene.set_function("add_area_light", []() {
+                    if (Scene *sc = GetActiveScene()) sc->CreateAreaLight();
+                });
+
+                scene.set_function("remove_light", [](const std::string &type, int index) {
+                    Scene *sc = GetActiveScene();
+                    if (!sc) return;
+                    LightType lt;
+                    if (type == "directional") lt = LightType::Directional;
+                    else if (type == "point") lt = LightType::Point;
+                    else if (type == "spot") lt = LightType::Spot;
+                    else if (type == "area") lt = LightType::Area;
+                    else { PE_WARN("remove_light: unknown type '%s'", type.c_str()); return; }
+                    sc->RemoveLight(lt, index);
+                });
+
+                // Keep legacy global functions for backwards compatibility
+                lua.set_function("save_scene", [](const std::string &name) {
+                    SaveScene(Path::Assets + "Scenes/" + name);
+                }); });
+        }
+    } s_sceneBindings;
+} // namespace pe

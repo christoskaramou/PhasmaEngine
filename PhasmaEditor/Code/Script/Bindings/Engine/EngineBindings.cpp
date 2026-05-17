@@ -1,4 +1,5 @@
 #include "Script/ScriptSystem.h"
+#include "Script/ScriptRuntimeHooks.h"
 #include "GUI/GUIState.h"
 #include "GUI/GUI.h"
 #include "GUI/Widgets/Console.h"
@@ -23,7 +24,7 @@ namespace pe
         {
             ScriptSystem::AddBindings([](sol::state &lua)
                                       {
-                sol::table engine = lua.create_named_table("engine");
+                sol::table engine = lua["engine"].get_or_create<sol::table>();
 
                 engine.set_function("get_metrics", [](sol::this_state ts) -> sol::table {
                     sol::state_view lua(ts);
@@ -40,22 +41,20 @@ namespace pe
 
                 // Play mode
                 engine.set_function("is_play_mode", []() -> bool {
-                    return GUIState::s_playMode;
+                    return IsScriptPlayMode();
                 });
 
                 engine.set_function("set_play_mode", [](bool enabled) {
-                    GUIState::s_playMode = enabled;
-                    if (!enabled)
-                        GUIState::s_isPaused = false;
+                    SetScriptPlayMode(enabled);
                 });
 
                 // Pause
                 engine.set_function("is_paused", []() -> bool {
-                    return GUIState::s_isPaused;
+                    return IsScriptPaused();
                 });
 
                 engine.set_function("set_paused", [](bool paused) {
-                    GUIState::s_isPaused = paused;
+                    SetScriptPaused(paused);
                 });
 
                 // GUI

@@ -42,6 +42,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/RelWithDe
 
 set(PE_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/Libs")
 set(PE_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/third_party")
+set(PE_EDITOR_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/third_party")
 
 set(PE_CORE_LINK_DIRS
     "${PE_LIBS_DIR}/dx"
@@ -100,6 +101,8 @@ if(PE_PHYSICS)
     endif()
 endif()
 
+option(PE_AUDIO "Enable miniaudio integration" ON)
+
 # --- MeshOptimizer (built from source with -fPIC) ---
 include(FetchContent)
 FetchContent_Declare(meshoptimizer
@@ -144,6 +147,15 @@ endif()
 # Add PhasmaCore subdirectory
 add_subdirectory(PhasmaCore)
 
+# --- Lua 5.4 (vendored, compiled from source) ---
+file(GLOB LUA_SOURCES "${PE_EDITOR_THIRD_PARTY_DIR}/lua/*.c")
+add_library(Lua STATIC ${LUA_SOURCES})
+target_include_directories(Lua PUBLIC "${PE_EDITOR_THIRD_PARTY_DIR}/lua")
+set_target_properties(Lua PROPERTIES LINKER_LANGUAGE C)
+if(NOT MSVC)
+    target_compile_options(Lua PRIVATE -w)
+endif()
+
 # Shared project/runtime contract used by editor today and future player hosts.
 add_subdirectory(PhasmaRuntime)
 
@@ -163,18 +175,7 @@ endif()
 
 # === PhasmaEditorModule + thin launcher ===
 file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/*.cpp")
-set(PE_EDITOR_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/third_party")
-
-# --- Lua 5.4 (vendored, compiled from source) ---
-file(GLOB LUA_SOURCES "${PE_EDITOR_THIRD_PARTY_DIR}/lua/*.c")
-add_library(Lua STATIC ${LUA_SOURCES})
-target_include_directories(Lua PUBLIC "${PE_EDITOR_THIRD_PARTY_DIR}/lua")
-set_target_properties(Lua PROPERTIES LINKER_LANGUAGE C)
-if(NOT MSVC)
-    target_compile_options(Lua PRIVATE -w)
-endif()
 file(GLOB_RECURSE IMGUI_SRC_FILES CONFIGURE_DEPENDS "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/*.cpp")
-file(GLOB_RECURSE CACAO_SRC_FILES CONFIGURE_DEPENDS "${PE_EDITOR_THIRD_PARTY_DIR}/CACAO/*.cpp")
 file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Assets/*")
 list(FILTER ASSET_FILES EXCLUDE REGEX "\\.obj$")
 set_source_files_properties(${ASSET_FILES} PROPERTIES VS_TOOL_OVERRIDE "None")
@@ -183,7 +184,6 @@ set_source_files_properties(${ASSET_FILES} PROPERTIES VS_TOOL_OVERRIDE "None")
 add_library(PhasmaEditorModule SHARED
     ${CODE_SRC_FILES}
     ${IMGUI_SRC_FILES}
-    ${CACAO_SRC_FILES}
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/App/EditorModule.cpp"
 )
 set_target_properties(PhasmaEditorModule PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -208,23 +208,6 @@ if(PE_PHYSICS AND TARGET Jolt)
     target_compile_definitions(PhasmaEditorModule PRIVATE PE_PHYSICS)
 endif()
 
-if(WIN32)
-    target_compile_definitions(PhasmaEditorModule PRIVATE FFX_CACAO_ENABLE_D3D12)
-    target_include_directories(PhasmaEditorModule PRIVATE
-        "${PE_EDITOR_THIRD_PARTY_DIR}/CacaoCompat"
-        "${PE_EDITOR_THIRD_PARTY_DIR}/CacaoCompat/DirectXHeaders/include"
-        "${PE_EDITOR_THIRD_PARTY_DIR}/CacaoCompat/DirectXHeaders/include/directx"
-    )
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-        set_source_files_properties(${CACAO_SRC_FILES} PROPERTIES
-            COMPILE_FLAGS "/permissive /Zc:gotoScope-"
-            SKIP_PRECOMPILE_HEADERS ON)
-    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        set_source_files_properties(${CACAO_SRC_FILES} PROPERTIES
-            COMPILE_FLAGS "-Wno-address-of-temporary")
-    endif()
-endif()
-
 target_precompile_headers(PhasmaEditorModule PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
 
 target_include_directories(PhasmaEditorModule PRIVATE
@@ -247,7 +230,7 @@ target_link_directories(PhasmaEditorModule PRIVATE ${PE_CORE_LINK_DIRS})
 
 target_link_libraries(PhasmaEditorModule PRIVATE
     PhasmaCore
-    PhasmaRuntime
+    "$<LINK_LIBRARY:WHOLE_ARCHIVE,PhasmaRuntime>"
     PhasmaMCP
     assimp
     meshoptimizer
@@ -264,7 +247,6 @@ if(WIN32)
     target_link_libraries(PhasmaEditorModule PRIVATE d3d12.lib dxgi.lib dxguid.lib d3dcompiler.lib)
 endif()
 
-option(PE_AUDIO "Enable miniaudio integration" ON)
 if(PE_AUDIO)
     target_include_directories(PhasmaEditorModule PRIVATE "${PE_EDITOR_THIRD_PARTY_DIR}/miniaudio")
     target_compile_definitions(PhasmaEditorModule PRIVATE PE_AUDIO)
@@ -289,7 +271,7 @@ set(PHASMA_EDITOR_HOST_INCLUDES
 
 target_include_directories(PhasmaEditor PRIVATE ${PHASMA_EDITOR_HOST_INCLUDES})
 target_link_directories(PhasmaEditor PRIVATE ${PE_CORE_LINK_DIRS})
-target_link_libraries(PhasmaEditor PRIVATE PhasmaCore SDL2 SDL2main)
+target_link_libraries(PhasmaEditor PRIVATE PhasmaCore PhasmaRuntime SDL2 SDL2main)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(PhasmaEditor PRIVATE dl)
     set_target_properties(PhasmaEditor PROPERTIES

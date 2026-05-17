@@ -8,7 +8,7 @@ add_executable(PhasmaPlayer "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
 
 target_precompile_headers(PhasmaPlayer PRIVATE "${CMAKE_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
 target_link_directories(PhasmaPlayer PRIVATE ${PE_CORE_LINK_DIRS})
-target_link_libraries(PhasmaPlayer PRIVATE PhasmaCore PhasmaRuntime SDL2 SDL2main)
+target_link_libraries(PhasmaPlayer PRIVATE PhasmaCore "$<LINK_LIBRARY:WHOLE_ARCHIVE,PhasmaRuntime>" SDL2 SDL2main)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set_target_properties(PhasmaPlayer PROPERTIES
@@ -23,6 +23,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/dxcompiler.dll" "$<TARGET_FILE_DIR:PhasmaPlayer>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/shaderc_shared.dll" "$<TARGET_FILE_DIR:PhasmaPlayer>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/SDL2.dll" "$<TARGET_FILE_DIR:PhasmaPlayer>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/assimp-vc143-mt.dll" "$<TARGET_FILE_DIR:PhasmaPlayer>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/libssl-3-x64.dll" "$<TARGET_FILE_DIR:PhasmaPlayer>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/libcrypto-3-x64.dll" "$<TARGET_FILE_DIR:PhasmaPlayer>"
     )

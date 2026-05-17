@@ -49,6 +49,7 @@ namespace pe
 
         [[nodiscard]] std::vector<Attachment> &GetAttachments() noexcept { return m_attachments; }
         [[nodiscard]] std::shared_ptr<PassInfo> GetPassInfo() const noexcept { return m_passInfo; }
+        [[nodiscard]] virtual std::vector<PassInfo *> GetPassInfos() noexcept { return {m_passInfo.get()}; }
 
     protected:
         std::vector<Attachment> m_attachments;

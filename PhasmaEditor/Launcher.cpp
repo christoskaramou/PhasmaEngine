@@ -2,6 +2,7 @@
 #include "Base/Path.h"
 #include "API/GraphicsApiSelection.h"
 #include "Project/ProjectSelection.h"
+#include "Runtime/RuntimeStartup.h"
 
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
@@ -13,6 +14,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <optional>
 
 #include "SDL.h"
 #include "imgui.h"
@@ -36,7 +38,6 @@
 
 namespace
 {
-    constexpr const char *k_editorConfigPath = "Assets/editor_config.json";
     constexpr const char *k_graphicsApiKey = "graphics_api";
     constexpr const char *k_launchTargetKey = "launch_target";
     constexpr const char *k_editorLaunchTarget = "PhasmaEditor";
@@ -79,11 +80,6 @@ namespace
         return std::filesystem::path(pe::Path::Executable) / pe::kRuntimeSettingsFileName;
     }
 
-    std::filesystem::path EditorConfigPath()
-    {
-        return std::filesystem::path(pe::Path::Executable) / k_editorConfigPath;
-    }
-
     std::filesystem::path EditorExecutablePath()
     {
 #if defined(PE_WIN32)
@@ -110,8 +106,93 @@ namespace
         return EnsureTrailingSlash(absolutePath.generic_string());
     }
 
+    std::optional<pe::ProjectConfig> TryLoadProjectAtRoot(const std::filesystem::path &projectRoot)
+    {
+        std::error_code ec;
+        const std::filesystem::path manifestPath = pe::ProjectConfig::DefaultManifestPath(projectRoot);
+        if (!std::filesystem::exists(manifestPath, ec))
+            return std::nullopt;
+
+        std::string error;
+        std::optional<pe::ProjectConfig> project = pe::ProjectConfig::TryLoadManifest(manifestPath, &error);
+        if (!project && !error.empty())
+            PE_WARN("[Runtime] %s", error.c_str());
+        return project;
+    }
+
+    bool PathEquivalent(const std::filesystem::path &a, const std::filesystem::path &b)
+    {
+        std::error_code ec;
+        const std::filesystem::path absoluteA = std::filesystem::absolute(a, ec).lexically_normal();
+        if (ec)
+            return false;
+
+        const std::filesystem::path absoluteB = std::filesystem::absolute(b, ec).lexically_normal();
+        if (ec)
+            return false;
+
+        return IsPathInside(absoluteA, absoluteB) && IsPathInside(absoluteB, absoluteA);
+    }
+
+    std::optional<pe::ProjectConfig> FindContainingProject(const std::filesystem::path &path)
+    {
+        std::error_code ec;
+        std::filesystem::path absolutePath = std::filesystem::absolute(path, ec).lexically_normal();
+        if (ec)
+            absolutePath = path.lexically_normal();
+
+        std::filesystem::path cursor = std::filesystem::is_regular_file(absolutePath, ec)
+                                           ? absolutePath.parent_path()
+                                           : absolutePath;
+        while (!cursor.empty())
+        {
+            if (std::optional<pe::ProjectConfig> project = TryLoadProjectAtRoot(cursor))
+            {
+                if (IsPathInside(absolutePath, project->AssetsRoot()))
+                    return project;
+            }
+
+            const std::filesystem::path parent = cursor.parent_path();
+            if (parent == cursor)
+                break;
+            cursor = parent;
+        }
+
+        return std::nullopt;
+    }
+
+    std::filesystem::path ProjectAssetsRoot(const std::string &projectPath)
+    {
+        if (std::optional<pe::ProjectConfig> project = TryLoadProjectAtRoot(projectPath))
+            return project->AssetsRoot();
+
+        return std::filesystem::path(projectPath);
+    }
+
+    std::string NormalizeConfiguredProjectPath(const std::filesystem::path &path)
+    {
+        std::error_code ec;
+        const std::filesystem::path absolutePath = std::filesystem::absolute(path, ec).lexically_normal();
+        if (ec)
+            return NormalizeProjectPath(path);
+
+        if (std::optional<pe::ProjectConfig> project = TryLoadProjectAtRoot(absolutePath))
+            return NormalizeProjectPath(project->root);
+
+        if (std::optional<pe::ProjectConfig> project = FindContainingProject(absolutePath))
+        {
+            if (PathEquivalent(absolutePath, project->AssetsRoot()))
+                return NormalizeProjectPath(project->root);
+        }
+
+        return NormalizeProjectPath(absolutePath);
+    }
+
     std::string InferProjectPathFromScene(const std::filesystem::path &scenePath)
     {
+        if (std::optional<pe::ProjectConfig> project = FindContainingProject(scenePath))
+            return NormalizeProjectPath(project->root);
+
         const std::filesystem::path parent = scenePath.parent_path();
         if (parent.filename() == "Scenes" && !parent.parent_path().empty())
             return NormalizeProjectPath(parent.parent_path());
@@ -273,7 +354,7 @@ namespace
 
     std::string ReadEditorConfigStartupScene()
     {
-        return ReadJsonStringField(EditorConfigPath(), "last_scene");
+        return pe::ReadEditorStartupScene();
     }
 
     void AddUniqueScene(std::vector<std::string> &scenes, const std::string &scene)
@@ -289,7 +370,7 @@ namespace
         if (!currentScene.empty())
             AddUniqueScene(scenes, currentScene);
 
-        std::filesystem::path scenesPath = std::filesystem::path(projectPath) / "Scenes";
+        std::filesystem::path scenesPath = ProjectAssetsRoot(projectPath) / "Scenes";
         std::error_code ec;
         if (!std::filesystem::exists(scenesPath, ec))
             return scenes;
@@ -313,11 +394,7 @@ namespace
 
     bool WriteEditorConfigStartupScene(const std::string &scene, std::string &error)
     {
-        rapidjson::Document document;
-        std::string warning;
-        TryLoadJsonObject(EditorConfigPath(), document, warning);
-        SetJsonStringMember(document, "last_scene", scene);
-        return WriteJsonObject(EditorConfigPath(), document, error);
+        return pe::WriteEditorStartupScene({}, scene, &error);
     }
 
     bool PersistLauncherSettings(PeGraphicsApi api,
@@ -739,7 +816,7 @@ namespace
     {
 #if defined(PE_WIN32)
         char fileName[MAX_PATH] = {};
-        const std::string initialDir = (std::filesystem::path(projectPath) / "Scenes").string();
+        const std::string initialDir = (ProjectAssetsRoot(projectPath) / "Scenes").string();
 
         OPENFILENAMEA openFileName{};
         openFileName.lStructSize = sizeof(openFileName);
@@ -784,7 +861,7 @@ namespace
             dup2(pipeFd[1], STDOUT_FILENO);
             close(pipeFd[1]);
 
-            const std::filesystem::path sceneDir = std::filesystem::path(projectPath) / "Scenes";
+            const std::filesystem::path sceneDir = ProjectAssetsRoot(projectPath) / "Scenes";
             const std::string filenameArg = "--filename=" + EnsureTrailingSlash(sceneDir.generic_string());
             execlp("zenity",
                    "zenity",
@@ -1189,7 +1266,7 @@ namespace
         if (currentProjectPath.empty() || !std::filesystem::exists(currentProjectPath))
             currentProjectPath = NormalizeProjectPath(std::filesystem::path(pe::Path::Assets));
         else
-            currentProjectPath = NormalizeProjectPath(currentProjectPath);
+            currentProjectPath = NormalizeConfiguredProjectPath(currentProjectPath);
 
         std::string currentLaunchTarget = ReadJsonStringField(RuntimeSettingsPath(), k_launchTargetKey);
         if (currentLaunchTarget.empty())
@@ -1209,7 +1286,7 @@ namespace
         if (dialogResult == LauncherDialogResult::Error)
             return 1;
 
-        pe::Path::Assets = EnsureTrailingSlash(selection.projectPath);
+        pe::Path::Assets = EnsureTrailingSlash(ProjectAssetsRoot(selection.projectPath).generic_string());
         const bool launchesEditor = LaunchesEditor(selection);
         const PeGraphicsApi selectedApi = selection.apiLocked ? apiSelection.api : selection.api;
 

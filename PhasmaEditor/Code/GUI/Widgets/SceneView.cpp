@@ -8,6 +8,7 @@
 #include "Particles/ParticleManager.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/RendererSystem.h"
@@ -181,7 +182,7 @@ namespace pe
                 ctx.node = selection.GetSelectedNode();
                 if (ctx.node)
                 {
-                    Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+                    Scene &scene = *GetActiveScene();
                     if (!scene.IsNodeAlive(ctx.node))
                     {
                         selection.ClearSelection();
@@ -198,7 +199,7 @@ namespace pe
                 ctx.lightIndex = selection.GetSelectedLightIndex();
                 ctx.useLight = true;
 
-                Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+                Scene &scene = *GetActiveScene();
                 if (ctx.lightType == LightType::Point && ctx.lightIndex >= 0 && ctx.lightIndex < (int)scene.GetPointLights().size())
                 {
                     ctx.matrix = glm::translate(glm::mat4(1.0f), glm::vec3(scene.GetPointLights()[ctx.lightIndex].position));
@@ -232,7 +233,7 @@ namespace pe
             else if (selection.GetSelectionType() == SelectionType::Camera)
             {
                 ctx.cameraIndex = selection.GetSelectedCameraIndex();
-                auto cameras = GetGlobalSystem<RendererSystem>()->GetScene().GetCameras();
+                auto cameras = GetActiveScene()->GetCameras();
                 if (ctx.cameraIndex >= 0 && ctx.cameraIndex < (int)cameras.size())
                 {
                     Camera *c = cameras[ctx.cameraIndex];
@@ -245,7 +246,7 @@ namespace pe
             else if (selection.GetSelectionType() == SelectionType::Emitter)
             {
                 ctx.emitterIndex = selection.GetSelectedEmitterIndex();
-                ParticleManager *pm = GetGlobalSystem<RendererSystem>()->GetScene().GetParticleManager();
+                ParticleManager *pm = GetActiveScene()->GetParticleManager();
                 if (pm)
                 {
                     auto &emitters = pm->GetEmitters();
@@ -344,7 +345,7 @@ namespace pe
 
             if (ctx.useLight)
             {
-                Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+                Scene &scene = *GetActiveScene();
 
                 if (ctx.lightType == LightType::Point)
                 {
@@ -371,7 +372,7 @@ namespace pe
             }
             else if (ctx.cameraIndex != -1)
             {
-                auto cameras = GetGlobalSystem<RendererSystem>()->GetScene().GetCameras();
+                auto cameras = GetActiveScene()->GetCameras();
                 if (ctx.cameraIndex >= 0 && ctx.cameraIndex < (int)cameras.size())
                 {
                     auto &selection = SelectionManager::Instance();
@@ -387,7 +388,7 @@ namespace pe
             }
             else if (ctx.emitterIndex != -1)
             {
-                ParticleManager *pm = GetGlobalSystem<RendererSystem>()->GetScene().GetParticleManager();
+                ParticleManager *pm = GetActiveScene()->GetParticleManager();
                 if (pm)
                 {
                     auto &emitters = pm->GetEmitters();
@@ -416,7 +417,7 @@ namespace pe
                         if (std::isnan(newMatrix[i][j]) || std::isinf(newMatrix[i][j]))
                             return;
 
-                Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+                Scene &scene = *GetActiveScene();
                 NodeId *parent = scene.GetParent(ctx.node);
                 glm::mat4 parentWorldMatrix = parent ? scene.GetWorldMatrix(parent) : glm::mat4(1.0f);
 

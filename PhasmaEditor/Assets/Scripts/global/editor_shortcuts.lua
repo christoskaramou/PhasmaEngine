@@ -1,4 +1,5 @@
 -- editor_shortcuts.lua
+-- phasma: editor-only
 -- Keyboard shortcuts (moved from C++ Window::ProcessEvents)
 -- Escape: context-sensitive (close file selector / deselect / close popup)
 -- F: focus camera on selected object

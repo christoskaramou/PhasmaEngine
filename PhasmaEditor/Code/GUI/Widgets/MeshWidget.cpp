@@ -8,6 +8,7 @@
 #include "Scene/Material.h"
 #include "Scene/MaterialAsset.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/RendererSystem.h"
@@ -121,10 +122,10 @@ namespace pe
             // If material has a PassInfoAsset, use the reflection-driven editor
             if (mesh->material && mesh->material->passInfoAsset)
             {
-                if (m_materialEditor.Draw(mesh, node, GetGlobalSystem<RendererSystem>()->GetScene()))
+                if (m_materialEditor.Draw(mesh, node, *GetActiveScene()))
                 {
                     PropagateMeshChange(node);
-                    GetGlobalSystem<RendererSystem>()->GetScene().UpdateDirtyMaterials();
+                    GetActiveScene()->UpdateDirtyMaterials();
                     m_gui->NotifyChange();
                 }
                 DrawTextureInfo(mesh, node);
@@ -607,7 +608,7 @@ namespace pe
 
     void MeshWidget::PropagateMeshChange(NodeId *node)
     {
-        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        Scene &scene = *GetActiveScene();
         scene.MarkNodeDirty(node);
     }
 } // namespace pe

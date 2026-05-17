@@ -1,5 +1,4 @@
 #include "RendererSystem.h"
-#include "PhasmaMCP/Utils.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Debug.h"
@@ -12,6 +11,8 @@
 #include "API/StagingManager.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
+#include "Render/RenderPassShaderReload.h"
+#include "Render/ScreenshotWriter.h"
 #include "RenderPasses/AabbsPass.h"
 #include "RenderPasses/CullingPass.h"
 #include "RenderPasses/BloomPass.h"
@@ -43,11 +44,6 @@ namespace pe
             return RHII.AlignTextureRowPitch(rowBytes);
         }
 
-        bool IsBgra8Format(::PeFormat format)
-        {
-            return format == PE_FORMAT_B8G8R8A8_UNORM || format == PE_FORMAT_B8G8R8A8_SRGB;
-        }
-
         bool UsesDx12RenderOrchestration()
         {
             return RHII.GetApi() == PE_GRAPHICS_API_DX12;
@@ -70,6 +66,8 @@ namespace pe
 
     void RendererSystem::Init(CommandBuffer *cmd)
     {
+        SetActiveSceneRendererHost(this);
+
         const bool isDx12 = UsesDx12RenderOrchestration();
 
         // Set Window Title
@@ -103,38 +101,29 @@ namespace pe
         // Skybox / IBL are consumed by the Light pass. DX12 reaches that slice in 14c.
         LoadResources(initCmd);
 
-        // DX12 Phase 1 wires bounded raster/post/editor slices here; RT follows RHI caps.
         m_renderPassComponents[ID::GetTypeID<CullingPass>()] = CreateGlobalComponent<CullingPass>();
         m_renderPassComponents[ID::GetTypeID<ShadowPass>()] = CreateGlobalComponent<ShadowPass>();
         m_renderPassComponents[ID::GetTypeID<DepthPass>()] = CreateGlobalComponent<DepthPass>();
         m_renderPassComponents[ID::GetTypeID<GbufferOpaquePass>()] = CreateGlobalComponent<GbufferOpaquePass>();
         m_renderPassComponents[ID::GetTypeID<GbufferTransparentPass>()] = CreateGlobalComponent<GbufferTransparentPass>();
-        m_renderPassComponents[ID::GetTypeID<AabbsPass>()] = CreateGlobalComponent<AabbsPass>();
-        m_renderPassComponents[ID::GetTypeID<GridPass>()] = CreateGlobalComponent<GridPass>();
+        m_renderPassComponents[ID::GetTypeID<SSAOPass>()] = CreateGlobalComponent<SSAOPass>();
         m_renderPassComponents[ID::GetTypeID<LightOpaquePass>()] = CreateGlobalComponent<LightOpaquePass>();
         m_renderPassComponents[ID::GetTypeID<LightTransparentPass>()] = CreateGlobalComponent<LightTransparentPass>();
         m_renderPassComponents[ID::GetTypeID<ParticleComputePass>()] = CreateGlobalComponent<ParticleComputePass>();
         m_renderPassComponents[ID::GetTypeID<ParticlePass>()] = CreateGlobalComponent<ParticlePass>();
+        m_renderPassComponents[ID::GetTypeID<SSRPass>()] = CreateGlobalComponent<SSRPass>();
+        m_renderPassComponents[ID::GetTypeID<FXAAPass>()] = CreateGlobalComponent<FXAAPass>();
+        m_renderPassComponents[ID::GetTypeID<AabbsPass>()] = CreateGlobalComponent<AabbsPass>();
+        m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
+        m_renderPassComponents[ID::GetTypeID<SharpenPass>()] = CreateGlobalComponent<SharpenPass>();
         m_renderPassComponents[ID::GetTypeID<UpsamplePass>()] = CreateGlobalComponent<UpsamplePass>();
-        if (isDx12)
-        {
-            m_renderPassComponents[ID::GetTypeID<SSAOPass>()] = CreateGlobalComponent<SSAOPass>();
-            m_renderPassComponents[ID::GetTypeID<SSRPass>()] = CreateGlobalComponent<SSRPass>();
-            m_renderPassComponents[ID::GetTypeID<FXAAPass>()] = CreateGlobalComponent<FXAAPass>();
-            m_renderPassComponents[ID::GetTypeID<TonemapPass>()] = CreateGlobalComponent<TonemapPass>();
-            m_renderPassComponents[ID::GetTypeID<BloomBrightFilterPass>()] = CreateGlobalComponent<BloomBrightFilterPass>();
-            m_renderPassComponents[ID::GetTypeID<BloomGaussianBlurHorizontalPass>()] = CreateGlobalComponent<BloomGaussianBlurHorizontalPass>();
-            m_renderPassComponents[ID::GetTypeID<BloomGaussianBlurVerticalPass>()] = CreateGlobalComponent<BloomGaussianBlurVerticalPass>();
-            m_renderPassComponents[ID::GetTypeID<DOFPass>()] = CreateGlobalComponent<DOFPass>();
-            m_renderPassComponents[ID::GetTypeID<MotionBlurPass>()] = CreateGlobalComponent<MotionBlurPass>();
-            m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
-            m_renderPassComponents[ID::GetTypeID<SharpenPass>()] = CreateGlobalComponent<SharpenPass>();
-        }
-        if (!isDx12)
-        {
-            m_renderPassComponents[ID::GetTypeID<TAAPass>()] = CreateGlobalComponent<TAAPass>();
-            m_renderPassComponents[ID::GetTypeID<SharpenPass>()] = CreateGlobalComponent<SharpenPass>();
-        }
+        m_renderPassComponents[ID::GetTypeID<TonemapPass>()] = CreateGlobalComponent<TonemapPass>();
+        m_renderPassComponents[ID::GetTypeID<BloomBrightFilterPass>()] = CreateGlobalComponent<BloomBrightFilterPass>();
+        m_renderPassComponents[ID::GetTypeID<BloomGaussianBlurHorizontalPass>()] = CreateGlobalComponent<BloomGaussianBlurHorizontalPass>();
+        m_renderPassComponents[ID::GetTypeID<BloomGaussianBlurVerticalPass>()] = CreateGlobalComponent<BloomGaussianBlurVerticalPass>();
+        m_renderPassComponents[ID::GetTypeID<DOFPass>()] = CreateGlobalComponent<DOFPass>();
+        m_renderPassComponents[ID::GetTypeID<MotionBlurPass>()] = CreateGlobalComponent<MotionBlurPass>();
+        m_renderPassComponents[ID::GetTypeID<GridPass>()] = CreateGlobalComponent<GridPass>();
         if (SupportsRayTracingPass())
             m_renderPassComponents[ID::GetTypeID<RayTracingPass>()] = CreateGlobalComponent<RayTracingPass>();
 
@@ -164,14 +153,8 @@ namespace pe
         }
 
         m_scene.UploadBuffers(initCmd);
-
-        // On DX12 PostProcessSystem isn't initialized yet, so cache pointers and build
-        // the render graph here. On Vulkan PostProcessSystem::Init does this.
-        if (isDx12)
-        {
-            CacheGlobalComponents();
-            BuildRenderGraph();
-        }
+        CacheGlobalComponents();
+        BuildRenderGraph();
 
         m_acquireSemaphores.reserve(imageCount);
         m_submitSemaphores.reserve(imageCount);
@@ -270,24 +253,38 @@ namespace pe
                 return isPassEnabled(RenderGraphPassId::GBufferOpaque);
             if (rc == m_gbufferTransparentPass)
                 return isPassEnabled(RenderGraphPassId::GBufferTransparent);
+            if (rc == m_ssaoPass)
+                return isPassEnabled(RenderGraphPassId::SSAO);
             if (rc == m_lightOpaquePass)
                 return isPassEnabled(RenderGraphPassId::LightOpaque);
             if (rc == m_lightTransparentPass)
                 return isPassEnabled(RenderGraphPassId::LightTransparent);
-            if (rc == m_aabbsPass)
-                return isPassEnabled(RenderGraphPassId::Aabbs);
+            if (rc == m_rayTracingPass)
+                return isPassEnabled(RenderGraphPassId::RayTracing);
             if (rc == m_particleComputePass || rc == m_particlePass)
-                return true;
+                return isPassEnabled(RenderGraphPassId::ParticleCompute) || isPassEnabled(RenderGraphPassId::Particle);
             if (rc == m_ssrPass)
                 return isPassEnabled(RenderGraphPassId::SSR);
+            if (rc == m_fxaaPass)
+                return isPassEnabled(RenderGraphPassId::FXAA);
+            if (rc == m_aabbsPass)
+                return isPassEnabled(RenderGraphPassId::Aabbs);
             if (rc == m_taaPass)
                 return isPassEnabled(RenderGraphPassId::TAA);
             if (rc == m_sharpenPass)
                 return isPassEnabled(RenderGraphPassId::Sharpen);
             if (rc == m_upsamplePass)
                 return isPassEnabled(RenderGraphPassId::Upsample);
-            if (rc == m_rayTracingPass)
-                return isPassEnabled(RenderGraphPassId::RayTracing);
+            if (rc == m_tonemapPass)
+                return isPassEnabled(RenderGraphPassId::Tonemap);
+            if (rc == m_bloomBrightFilterPass || rc == m_bloomGaussianBlurHorizontalPass || rc == m_bloomGaussianBlurVerticalPass)
+                return isPassEnabled(RenderGraphPassId::BloomBF) ||
+                       isPassEnabled(RenderGraphPassId::BloomH) ||
+                       isPassEnabled(RenderGraphPassId::BloomV);
+            if (rc == m_dofPass)
+                return isPassEnabled(RenderGraphPassId::DOF);
+            if (rc == m_motionBlurPass)
+                return isPassEnabled(RenderGraphPassId::MotionBlur);
             if (rc == m_gridPass)
                 return isPassEnabled(RenderGraphPassId::Grid);
 
@@ -327,6 +324,8 @@ namespace pe
         const bool needDepth = renderRaster || needVelocity || gs.dof || gs.motion_blur || gs.draw_aabbs || gs.draw_grid;
         const bool needGBuffer = renderRaster || needVelocity || renderSSR || renderSSAO;
 
+        m_renderGraphPassEnabled.fill(false);
+
         if (UsesDx12RenderOrchestration())
         {
             const bool dx12RayTracing = renderRayTracing;
@@ -337,7 +336,6 @@ namespace pe
             const bool dx12NeedDepth = dx12RenderRaster || dx12NeedVelocity || gs.draw_aabbs || gs.draw_grid;
             const bool dx12NeedGBuffer = dx12RenderRaster || dx12NeedVelocity;
 
-            m_renderGraphPassEnabled.fill(false);
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Culling)] = true;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Shadow)] = gs.shadows && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Depth)] = dx12NeedDepth;
@@ -717,35 +715,19 @@ namespace pe
             path = dir + "screenshot_" + buf + ".png";
         }
 
-        size_t pixelCount = static_cast<size_t>(w) * h;
-        std::vector<uint8_t> rgba(pixelCount * 4);
-        const size_t rowPitch = m_screenshotRowPitch ? m_screenshotRowPitch : static_cast<size_t>(w) * 4;
-        const bool isBgra = IsBgra8Format(m_screenshotRT->GetFormat());
-        for (uint32_t y = 0; y < h; ++y)
+        ScreenshotWriteDesc screenshot{};
+        screenshot.path = path;
+        screenshot.pixels = pixels;
+        screenshot.width = w;
+        screenshot.height = h;
+        screenshot.rowPitch = m_screenshotRowPitch;
+        screenshot.format = m_screenshotRT->GetFormat();
+
+        std::string savedPath;
+        if (WriteScreenshotPng(screenshot, &savedPath))
         {
-            const uint8_t *srcRow = pixels + static_cast<size_t>(y) * rowPitch;
-            uint8_t *dstRow = rgba.data() + static_cast<size_t>(y) * w * 4;
-            for (uint32_t x = 0; x < w; ++x)
-            {
-                const uint8_t *src = srcRow + static_cast<size_t>(x) * 4;
-                uint8_t *dst = dstRow + static_cast<size_t>(x) * 4;
-                dst[0] = isBgra ? src[2] : src[0];
-                dst[1] = src[1];
-                dst[2] = isBgra ? src[0] : src[2];
-                dst[3] = src[3];
-            }
-        }
-
-        auto pngData = pmcp::EncodeRGBA_PNG(rgba.data(), static_cast<int>(w), static_cast<int>(h));
-
-        std::ofstream file(path, std::ios::binary);
-        if (file.is_open())
-        {
-            file.write(reinterpret_cast<const char *>(pngData.data()), pngData.size());
-            file.close();
-
-            PE_INFO("Screenshot saved: %s", path.c_str());
-            m_screenshotSavedPath = path;
+            PE_INFO("Screenshot saved: %s", savedPath.c_str());
+            m_screenshotSavedPath = savedPath;
         }
         else
         {
@@ -797,6 +779,9 @@ namespace pe
             Semaphore::Destroy(semaphore);
 
         Buffer::Destroy(m_screenshotBuffer);
+
+        if (GetActiveSceneRendererHost() == this)
+            SetActiveSceneRendererHost(nullptr);
     }
 
     Image *RendererSystem::CreateRenderTarget(const std::string &name,
@@ -999,8 +984,7 @@ namespace pe
         ImageBarrierInfo barrier{};
         barrier.image = swapchainImage;
         barrier.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
-        // Dozen uses the legacy barrier path; keep its present transition conservative.
-        barrier.stageFlags = RHII.UsesDozenVulkan() ? PE_STAGE_ALL_COMMANDS : PE_STAGE_NONE;
+        barrier.stageFlags = PE_STAGE_NONE;
         barrier.accessMask = PE_ACCESS_NONE;
 
         // with 1:1 ratio we can use nearest filter
@@ -1014,53 +998,6 @@ namespace pe
         RHII.WaitDeviceIdle();
 
         for (auto &rc : m_renderPassComponents)
-        {
-            std::shared_ptr<PassInfo> info = rc->GetPassInfo();
-
-            bool match = false;
-            if (!hash.has_value())
-            {
-                match = true;
-            }
-            else
-            {
-                if (info->pCompShader && info->pCompShader->GetPathID() == hash.value())
-                    match = true;
-                if (info->pVertShader && info->pVertShader->GetPathID() == hash.value())
-                    match = true;
-                if (info->pFragShader && info->pFragShader->GetPathID() == hash.value())
-                    match = true;
-            }
-
-            if (match)
-            {
-                auto oldComp = info->pCompShader;
-                auto oldVert = info->pVertShader;
-                auto oldFrag = info->pFragShader;
-
-                try
-                {
-                    rc->UpdatePassInfo();
-                    rc->UpdateDescriptorSets();
-
-                    Shader::Destroy(oldComp);
-                    Shader::Destroy(oldVert);
-                    Shader::Destroy(oldFrag);
-                }
-                catch (const std::exception &e)
-                {
-                    if (info->pCompShader != oldComp)
-                        Shader::Destroy(info->pCompShader);
-                    if (info->pVertShader != oldVert)
-                        Shader::Destroy(info->pVertShader);
-                    if (info->pFragShader != oldFrag)
-                        Shader::Destroy(info->pFragShader);
-
-                    info->pCompShader = oldComp;
-                    info->pVertShader = oldVert;
-                    info->pFragShader = oldFrag;
-                }
-            }
-        }
+            ReloadRenderPassShaders(*rc, hash);
     }
 } // namespace pe

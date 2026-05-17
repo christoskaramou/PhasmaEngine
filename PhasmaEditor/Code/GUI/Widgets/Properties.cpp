@@ -10,6 +10,7 @@
 #include "Particles/ParticleManager.h"
 #include "Scene/Primitives.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
 #include "Script/ScriptSystem.h"
@@ -53,7 +54,7 @@ namespace pe
             return;
         }
 
-        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        Scene &scene = *GetActiveScene();
         if ((sel.GetSelectionType() == SelectionType::Node || sel.GetSelectionType() == SelectionType::Mesh) &&
             !scene.IsNodeAlive(sel.GetSelectedNode()))
         {

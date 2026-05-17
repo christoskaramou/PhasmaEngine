@@ -1,7 +1,47 @@
 # PhasmaEngine Wiki Log
 
+## 2026-05-17
+
+- Fixed runtime/player review findings: editor and player now apply the resolved project assets root to `Path::Assets`, PhasmaPlayer copies the Assimp runtime DLL on Windows, starts/stops the file watcher around script reload support, and destroys the scene before removing the ECS context.
+- Hardened `RuntimeSceneRenderer` lifecycle and resize handling. Partial init now leaves `Destroy()` able to clear registered renderer-host state/resources, and player resize recreates command/semaphore frame resources to match the new swapchain image count.
+- Routed Lua `engine.set_play_mode` and `engine.set_paused` through `ScriptRuntimeHooks`. The editor hooks keep GUI play/pause state in sync with runtime services, and PhasmaPlayer registers its own play/pause state plus shutdown on `set_play_mode(false)`.
+- Added an editor-only global Lua script filter. `editor_shortcuts.lua` is marked `phasma: editor-only`; the editor opts in through `ScriptRuntimeHooks`, while PhasmaPlayer skips marked scripts before executing them.
+- Renamed `ScriptSystem`'s internal `update_editor` hook storage to edit-mode wording while preserving the Lua hook name for compatibility.
+- Renamed runtime `Scene` light metadata records from `*LightEditor` to `Scene*Light` types. The data still carries scene metadata plus GPU light data, but no longer advertises itself as editor-owned inside PhasmaRuntime.
+- Added shared runtime render-pass shader reload handling. `RendererSystem` and `RuntimeSceneRenderer` now use the same helper for primary/secondary pass infos and ray-tracing shader groups, and PhasmaPlayer responds to runtime Lua `CompileShaders` events by refreshing matching pass shaders before clearing command caches.
+- Added runtime screenshot support for PhasmaPlayer. `RuntimeSceneRenderer` now handles screenshot requests from runtime Lua, and screenshot PNG writing lives in PhasmaRuntime instead of using `PhasmaMCP` utilities from renderer code.
+- Added `RuntimePlaySession` in PhasmaRuntime so the editor play button and PhasmaPlayer share physics/audio play-service start/stop, pause propagation, optional player script init, and animation-state cleanup while editor-only snapshot/UI behavior stays in `GUI`.
+- Moved the shared SDL window-event helpers into PhasmaRuntime. Editor `Window` and `PhasmaPlayer` now use the same drawable-size, resize-event, and minimized-window checks, leaving editor-specific ImGui/drop/model/render event dispatch in the editor layer.
+
 ## 2026-05-16
 
+- Moved the default camera runtime callback table into PhasmaRuntime. Editor and player now share active-renderer-host aspect lookup and `TAAPass` projection jitter, and the player relies on default script runtime hook behavior instead of registering no-op hooks.
+- Folded the common `SceneHost` new/save/load/preload/apply behavior into PhasmaRuntime. Editor and player now register the active scene through `SceneAccess` plus their mutation-sync policy instead of duplicating scene host callbacks.
+- Consolidated the default scene service hook table into PhasmaRuntime. `SceneRuntimeHooks` now builds the animation/physics/audio/render-descriptor callbacks shared by editor and player, while the editor only adds selection hooks.
+- Removed the editor `PostProcessSystem` adapter. Editor `RendererSystem` now creates the full runtime pass set for every backend and owns postprocess shader polling, resize handling, pass-state updates, and render-graph compilation directly.
+- Finished the player-facing runtime carve for this slice: PhasmaPlayer now initializes runtime scripts, pumps input/frame timing/runtime events, starts physics/audio play mode after script init, and uses player scene-host callbacks for Lua scene load/new/save/apply.
+- Moved `ScriptSystem` plus runtime-safe Lua bindings into PhasmaRuntime. Editor-only Lua GUI/profiler/selection bindings remain in PhasmaEditor, with `ScriptRuntimeHooks` bridging play/pause/model-loading/viewport-focus state.
+- Moved `AnimationSystem`, `PhysicsSystem`, and `AudioSystem` into PhasmaRuntime and wired both editor and player scene runtime hooks to the moved systems.
+- Moved the remaining built-in render passes into PhasmaRuntime, including postprocess, particles, ray tracing, grid/AABB overlays, and the CACAO backend. RuntimeSceneRenderer now builds the full pass graph while keeping editor overlays disabled for player.
+- Moved the startup raster render slice into PhasmaRuntime: `CullingPass`, `ShadowPass`, `DepthPass`, `GbufferPass`, `LightPass`, and `UpsamplePass` now use a `SceneRendererHost` seam instead of direct editor `RendererSystem` access.
+- Added `RuntimeSceneRenderer` for PhasmaPlayer. The player now loads the selected startup scene, initializes runtime render targets/skybox/IBL/pass graph, and renders the scene frame loop without editor GUI, launcher, MCP, or hot-reload module loading.
+- Moved `Scene` implementation into PhasmaRuntime behind `SceneRuntimeHooks`; editor selection/animation/physics/audio/render-descriptor behavior is registered from `App`, while the player uses null/default hooks.
+- Added the scene mutation funnel in PhasmaRuntime: `SceneHost` routes load/new/save/preload/apply calls through registered callbacks, and GUI/Lua scene mutation paths now use the shared surface.
+- Resolved runtime-refactor review findings: `NewScene` now drains in-flight frame commands through the shared mutation funnel, scene host/getter callbacks are cleared before global-system teardown, and the static-library per-image callback registration constraint is documented.
+- Fixed launcher project-root handling for manifest projects: startup-scene browse/discovery now uses the manifest assets root, while persisted `project_path` remains the project root; legacy no-manifest assets folders still work.
+- Moved `Camera` into PhasmaRuntime behind host-registered callbacks for display aspect and projection jitter, removing its direct `RendererSystem` and `TAAPass` dependencies.
+- Moved `SkyBox` into PhasmaRuntime as a leaf rendering asset helper over PhasmaCore RHI/resource APIs.
+- Moved `MaterialAsset` into PhasmaRuntime so `.mat` material save/load IO sits beside runtime material/model data instead of the editor scene layer.
+- Moved material runtime data/reflection into PhasmaRuntime, including `Material`, `MaterialInstance`, `PassInfoAsset`, material annotation parsing, and backend material reflection; `PassInfoAsset` now uses RapidJSON instead of the MCP-bundled `nlohmann` header.
+- Moved runtime-owned data/model helpers into PhasmaRuntime: audio/physics descriptor types, animation clip/import/evaluation code, model asset loading/primitive generation, and particle manager/buffer helpers now live outside the editor tree.
+- Moved scene vocabulary headers and the standalone splash-screen helper into PhasmaRuntime while leaving `Scene`, selection, window event processing, and renderer startup in the editor layer.
+- Added the first scene-access seam in PhasmaRuntime: `SceneAccess` owns the active-scene getter, the editor registers its current `RendererSystem` scene, and direct render-pass/widget/script `RendererSystem()->GetScene()` chains now use `GetActiveScene()`.
+- Moved shared host boot into PhasmaRuntime: editor/player display parsing, SDL video lifetime, display-sized window creation, and RHI session lifetime now live in `RuntimeHost`; the editor executable links PhasmaRuntime while keeping module reload ownership local.
+- Moved startup-scene orchestration into PhasmaRuntime: editor config `last_scene` read/write, runtime settings/editor restore/manifest precedence, startup-scene source naming, and pre-swapchain scene settings parsing now live in `RuntimeStartup`; App, GUI, Launcher, and PlayerHost consume the shared helper.
+- Threaded the editor's resolved startup-scene selection from `App` into `GUI::ApplyStartupLayout`, avoiding a second parse of `phasma_settings.json`/project manifest during normal startup.
+- Polished `RuntimeStartup` diagnostics by prefixing settings/editor-config parse warnings and naming the render-scale clamp bounds.
+- Tightened the first runtime/player slice after review: manifest `startup_scene` is optional, startup-scene path fallback lives in PhasmaRuntime instead of duplicated editor helpers, the unused `RuntimeContext` scaffold was removed, and PhasmaPlayer's gitignore allowlist now covers future host source files.
+- Moved player present-barrier backend/Dozen policy out of `PhasmaRuntime`: host code now records neutral present transitions and core command barrier normalization applies conservative stages where the active backend needs them.
 - Added the first PhasmaRuntime/MyProject architecture page: PhasmaRuntime sits above PhasmaCore and below hosts, MyProject starts as a project/root/assets/startup-scene contract, and standalone player work waits until the shared runtime boundary exists.
 - Added `phasma_project.json` as the first MyProject manifest contract: version/name/assets/startup_scene, with runtime load/write helpers in `ProjectConfig`.
 - Added active project selection helpers around executable-local `phasma_settings.json`; the launcher now persists `project_manifest` when the selected project root has a manifest and otherwise falls back to the legacy project path.

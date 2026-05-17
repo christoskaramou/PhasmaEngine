@@ -4,6 +4,7 @@
 #include "Base/ThreadPool.h"
 #include "API/GraphicsApiSelection.h"
 #include "API/RHI.h"
+#include "Runtime/RuntimeHost.h"
 
 #if defined(PE_LINUX)
 #include <dlfcn.h>
@@ -21,20 +22,6 @@ using InitWithCtxFunc = void (*)(void *);
 
 namespace
 {
-    bool ParseDisplayIndex(const char *value, int &displayIndex)
-    {
-        if (!value || *value == '\0')
-            return false;
-
-        char *end = nullptr;
-        long parsed = std::strtol(value, &end, 10);
-        if (*end != '\0' || parsed < 0 || parsed > std::numeric_limits<int>::max())
-            return false;
-
-        displayIndex = static_cast<int>(parsed);
-        return true;
-    }
-
     struct ModuleHandle
     {
         void *lib = nullptr;
@@ -140,16 +127,11 @@ int main(int argc, char *argv[])
 
         PeGraphicsApi api = apiSelection.api;
         int displayIndex = 0;
-        for (int i = 1; i < argc; ++i)
+        std::string displayError;
+        if (!pe::TryParseRuntimeDisplayIndexArg(argc, argv, displayIndex, &displayError))
         {
-            if ((std::strcmp(argv[i], "--display") == 0 || std::strcmp(argv[i], "--screen") == 0) && i + 1 < argc)
-            {
-                if (!ParseDisplayIndex(argv[++i], displayIndex))
-                {
-                    PE_ERROR("Invalid display index: %s", argv[i]);
-                    return 1;
-                }
-            }
+            PE_ERROR("%s", displayError.c_str());
+            return 1;
         }
 
         PE_INFO("Selected graphics API: %s (%s)",
@@ -157,73 +139,29 @@ int main(int argc, char *argv[])
                 pe::GraphicsApiSelectionSourceName(apiSelection.source));
 
         // SDL and graphics device live here; they survive module reloads.
-        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
-        {
-            PE_ERROR("[SDL] %s", SDL_GetError());
-            return 1;
-        }
+        pe::RuntimeSdlSession sdl;
 
-        const int displayCount = SDL_GetNumVideoDisplays();
-        if (displayCount <= 0)
-        {
-            PE_ERROR("[SDL] no video displays found: %s", SDL_GetError());
-            SDL_Quit();
-            return 1;
-        }
-        if (displayIndex >= displayCount)
-        {
-            PE_ERROR("Invalid --display %d; SDL reports %d display(s)", displayIndex, displayCount);
-            SDL_Quit();
-            return 1;
-        }
-
-        SDL_Rect displayBounds{};
-        if (SDL_GetDisplayBounds(displayIndex, &displayBounds) != 0)
-        {
-            PE_ERROR("[SDL] SDL_GetDisplayBounds(%d) failed: %s", displayIndex, SDL_GetError());
-            SDL_Quit();
-            return 1;
-        }
-
-        int windowWidth = displayBounds.w > 100 ? displayBounds.w - 100 : displayBounds.w;
-        int windowHeight = displayBounds.h > 100 ? displayBounds.h - 100 : displayBounds.h;
-        uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+        pe::RuntimeWindowDesc windowDesc;
+        windowDesc.title = "PhasmaEditor";
+        windowDesc.api = api;
+        windowDesc.displayIndex = displayIndex;
+        windowDesc.flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
 #if !defined(PE_WIN32)
         // Sizes the surface/swapchain to the maximized extent at creation time so
         // App.cpp's early Show()/Maximize() doesn't trigger a swapchain recreate.
-        windowFlags |= SDL_WINDOW_MAXIMIZED;
+        windowDesc.flags |= SDL_WINDOW_MAXIMIZED;
 #endif
-        if (api == PE_GRAPHICS_API_VULKAN)
-            windowFlags |= SDL_WINDOW_VULKAN;
-        PE_INFO("Creating window on display %d/%d at (%d, %d) size %dx%d",
-                displayIndex,
-                displayCount,
-                displayBounds.x,
-                displayBounds.y,
-                displayBounds.w,
-                displayBounds.h);
-        SDL_Window *sdlWindow = SDL_CreateWindow("PhasmaEditor",
-                                                 SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex),
-                                                 SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex),
-                                                 windowWidth,
-                                                 windowHeight,
-                                                 windowFlags);
-        if (!sdlWindow)
-        {
-            PE_ERROR("[SDL] %s", SDL_GetError());
-            SDL_Quit();
-            return 1;
-        }
-
         // Show/maximize before RHI init creates the Vulkan surface/swapchain.
         // Windows WSI caches a redirected present path on a hidden HWND; Mesa
         // Dozen on WSLg registers its WSLg-mirror handle on the wl_surface at
         // swapchain create — both need a visible window first.
-        SDL_ShowWindow(sdlWindow);
-        SDL_MaximizeWindow(sdlWindow);
-        SDL_PumpEvents();
+        windowDesc.showAfterCreate = true;
+        windowDesc.maximizeAfterCreate = true;
+        windowDesc.pumpEventsAfterCreate = true;
+        windowDesc.logDisplaySelection = true;
+        pe::RuntimeWindow window(windowDesc);
 
-        pe::RHII.Init(sdlWindow, api);
+        pe::RuntimeRhiSession rhi(window.Get(), api, false);
 #if !defined(PE_WIN32)
         PE_INFO("[Startup] Dozen Vulkan after RHI init: %u", pe::RHII.UsesDozenVulkan() ? 1u : 0u);
         if (pe::RHII.UsesDozenVulkan())
@@ -235,12 +173,7 @@ int main(int argc, char *argv[])
 
         ModuleHandle mod = LoadModule();
         if (!mod.lib)
-        {
-            pe::RHII.Destroy();
-            SDL_DestroyWindow(sdlWindow);
-            SDL_Quit();
             return 1;
-        }
 
         while (true)
         {
@@ -271,10 +204,6 @@ int main(int argc, char *argv[])
         }
 
         UnloadModule(mod);
-
-        pe::RHII.Destroy();
-        SDL_DestroyWindow(sdlWindow);
-        SDL_Quit();
         return 0;
     }
     catch (const std::exception &e)

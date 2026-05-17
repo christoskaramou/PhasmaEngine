@@ -17,6 +17,22 @@
 
 namespace pe
 {
+    namespace
+    {
+        ImageBarrierInfo NormalizeImageBarrierForBackend(const ImageBarrierInfo &info)
+        {
+            ImageBarrierInfo normalized = info;
+            if (normalized.layout == PE_IMAGE_LAYOUT_PRESENT_SRC &&
+                normalized.stageFlags == PE_STAGE_NONE &&
+                (RHII.GetApi() == PE_GRAPHICS_API_DX12 || RHII.UsesDozenVulkan()))
+            {
+                // DX12 and Dozen reject PE_STAGE_NONE on present transitions.
+                normalized.stageFlags = PE_STAGE_ALL_COMMANDS;
+            }
+            return normalized;
+        }
+    } // namespace
+
     CommandBuffer::CommandBuffer(CommandPool *commandPool, const std::string &name)
         : m_id{ID::NextID()},
           m_submission{0},
@@ -412,7 +428,7 @@ namespace pe
         PE_PROFILE_COUNTER("Cmd ImageBarrier Calls", 1);
         PE_PROFILE_COUNTER("Cmd ImageBarrier Items", 1);
         PE_PROFILE_SCOPE("Cmd ImageBarrier");
-        m_impl->ImageBarrier(info);
+        m_impl->ImageBarrier(NormalizeImageBarrierForBackend(info));
     }
 
     void CommandBuffer::ImageBarriers(const std::vector<ImageBarrierInfo> &infos)
@@ -420,7 +436,17 @@ namespace pe
         PE_PROFILE_COUNTER("Cmd ImageBarriers Calls", 1);
         PE_PROFILE_COUNTER("Cmd ImageBarrier Items", infos.size());
         PE_PROFILE_SCOPE("Cmd ImageBarriers");
-        m_impl->ImageBarriers(infos);
+        if (RHII.GetApi() != PE_GRAPHICS_API_DX12 && !RHII.UsesDozenVulkan())
+        {
+            m_impl->ImageBarriers(infos);
+            return;
+        }
+
+        std::vector<ImageBarrierInfo> normalizedInfos;
+        normalizedInfos.reserve(infos.size());
+        for (const ImageBarrierInfo &info : infos)
+            normalizedInfos.push_back(NormalizeImageBarrierForBackend(info));
+        m_impl->ImageBarriers(normalizedInfos);
     }
 
     void CommandBuffer::MemoryBarrier(const MemoryBarrierInfo &info)

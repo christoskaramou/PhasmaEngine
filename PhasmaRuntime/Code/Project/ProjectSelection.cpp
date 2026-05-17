@@ -1,13 +1,9 @@
 #include "Project/ProjectSelection.h"
 
 #include "Base/Path.h"
+#include "Project/Detail/ProjectHelpers.h"
 #include "rapidjson/document.h"
-#include "rapidjson/error/en.h"
-#include "rapidjson/istreamwrapper.h"
-#include "rapidjson/ostreamwrapper.h"
-#include "rapidjson/prettywriter.h"
 
-#include <fstream>
 #include <system_error>
 #include <utility>
 
@@ -15,134 +11,22 @@ namespace pe
 {
     namespace
     {
-        void SetError(std::string *error, std::string message)
-        {
-            if (error)
-                *error = std::move(message);
-        }
-
-        std::filesystem::path Normalize(const std::filesystem::path &path)
-        {
-            return path.lexically_normal();
-        }
-
-        std::filesystem::path NormalizeAbsolute(const std::filesystem::path &path)
-        {
-            if (path.empty())
-                return {};
-
-            std::error_code ec;
-            const std::filesystem::path absolutePath = path.is_absolute() ? path : std::filesystem::absolute(path, ec);
-            return Normalize(ec ? path : absolutePath);
-        }
-
         std::filesystem::path ResolveSettingsPathValue(const std::filesystem::path &settingsPath,
                                                        const std::string &value)
         {
             std::filesystem::path path(value);
             if (path.is_absolute())
-                return Normalize(path);
+                return project_detail::Normalize(path);
 
-            return Normalize(settingsPath.parent_path() / path);
+            return project_detail::Normalize(settingsPath.parent_path() / path);
         }
 
         std::filesystem::path DefaultProjectRoot()
         {
             Path::Init();
             if (!Path::Assets.empty())
-                return NormalizeAbsolute(Path::Assets);
-            return NormalizeAbsolute(Path::Executable);
-        }
-
-        bool TryLoadJsonObject(const std::filesystem::path &path, rapidjson::Document &document, std::string &warning)
-        {
-            document.SetObject();
-
-            std::error_code ec;
-            if (!std::filesystem::exists(path, ec))
-                return true;
-
-            std::ifstream file(path, std::ios::binary);
-            if (!file)
-            {
-                warning = "Could not open " + path.generic_string();
-                return false;
-            }
-
-            rapidjson::IStreamWrapper stream(file);
-            document.ParseStream(stream);
-            if (document.HasParseError())
-            {
-                warning = "Could not parse " + path.generic_string() + " at offset " +
-                          std::to_string(document.GetErrorOffset()) + ": " +
-                          rapidjson::GetParseError_En(document.GetParseError());
-                document.SetObject();
-                return false;
-            }
-
-            if (!document.IsObject())
-            {
-                warning = path.generic_string() + " must contain a JSON object";
-                document.SetObject();
-                return false;
-            }
-
-            return true;
-        }
-
-        std::string ReadJsonStringField(const rapidjson::Document &document, const char *key)
-        {
-            if (!document.HasMember(key) || !document[key].IsString())
-                return {};
-
-            return document[key].GetString();
-        }
-
-        void SetJsonStringMember(rapidjson::Document &document, const char *key, const std::string &value)
-        {
-            rapidjson::Document::AllocatorType &allocator = document.GetAllocator();
-            rapidjson::Value jsonKey(key, allocator);
-            rapidjson::Value jsonValue;
-            jsonValue.SetString(value.c_str(), static_cast<rapidjson::SizeType>(value.size()), allocator);
-
-            if (document.HasMember(key))
-                document[key] = jsonValue;
-            else
-                document.AddMember(jsonKey.Move(), jsonValue.Move(), allocator);
-        }
-
-        bool WriteJsonObject(const std::filesystem::path &path, const rapidjson::Document &document, std::string *error)
-        {
-            const std::filesystem::path parent = path.parent_path();
-            if (!parent.empty())
-            {
-                std::error_code ec;
-                std::filesystem::create_directories(parent, ec);
-                if (ec)
-                {
-                    SetError(error, "Could not create " + parent.generic_string() + ": " + ec.message());
-                    return false;
-                }
-            }
-
-            std::ofstream file(path, std::ios::binary | std::ios::trunc);
-            if (!file)
-            {
-                SetError(error, "Could not open " + path.generic_string() + " for writing");
-                return false;
-            }
-
-            rapidjson::OStreamWrapper stream(file);
-            rapidjson::PrettyWriter<rapidjson::OStreamWrapper> writer(stream);
-            writer.SetIndent(' ', 2);
-            if (!document.Accept(writer))
-            {
-                SetError(error, "Could not serialize " + path.generic_string());
-                return false;
-            }
-
-            file << '\n';
-            return true;
+                return project_detail::NormalizeAbsolute(Path::Assets);
+            return project_detail::NormalizeAbsolute(Path::Executable);
         }
 
         bool TryUseManifest(ProjectSelection &selection,
@@ -163,12 +47,20 @@ namespace pe
             selection.loadedManifest = true;
             return true;
         }
+
+        std::string EnsureTrailingSlash(std::filesystem::path path)
+        {
+            std::string out = project_detail::NormalizeAbsolute(path).generic_string();
+            if (!out.empty() && out.back() != '/')
+                out += '/';
+            return out;
+        }
     } // namespace
 
     std::filesystem::path DefaultProjectSettingsPath()
     {
         Path::Init();
-        return NormalizeAbsolute(std::filesystem::path(Path::Executable) / kRuntimeSettingsFileName);
+        return project_detail::NormalizeAbsolute(std::filesystem::path(Path::Executable) / kRuntimeSettingsFileName);
     }
 
     const char *ProjectSelectionSourceName(ProjectSelectionSource source)
@@ -191,14 +83,14 @@ namespace pe
     ProjectSelection ResolveProjectSelection(const std::filesystem::path &settingsPath)
     {
         ProjectSelection selection;
-        selection.settingsPath = settingsPath.empty() ? DefaultProjectSettingsPath() : NormalizeAbsolute(settingsPath);
+        selection.settingsPath = settingsPath.empty() ? DefaultProjectSettingsPath() : project_detail::NormalizeAbsolute(settingsPath);
 
         rapidjson::Document document;
         std::string warning;
-        TryLoadJsonObject(selection.settingsPath, document, warning);
+        project_detail::TryLoadJsonObject(selection.settingsPath, document, warning);
         selection.warning = warning;
 
-        const std::string manifest = ReadJsonStringField(document, kProjectManifestSettingsKey);
+        const std::string manifest = project_detail::ReadJsonStringField(document, kProjectManifestSettingsKey);
         if (!manifest.empty() &&
             TryUseManifest(selection,
                            ResolveSettingsPathValue(selection.settingsPath, manifest),
@@ -207,7 +99,7 @@ namespace pe
             return selection;
         }
 
-        const std::string projectPath = ReadJsonStringField(document, kProjectPathSettingsKey);
+        const std::string projectPath = project_detail::ReadJsonStringField(document, kProjectPathSettingsKey);
         if (!projectPath.empty())
         {
             const std::filesystem::path projectRoot = ResolveSettingsPathValue(selection.settingsPath, projectPath);
@@ -231,6 +123,22 @@ namespace pe
         return selection;
     }
 
+    std::filesystem::path ProjectSelectionAssetsRoot(const ProjectSelection &selection)
+    {
+        if (selection.loadedManifest)
+            return selection.project.AssetsRoot();
+
+        return selection.project.root;
+    }
+
+    void ApplyProjectSelectionAssetsRoot(const ProjectSelection &selection)
+    {
+        Path::Init();
+        const std::filesystem::path assetsRoot = ProjectSelectionAssetsRoot(selection);
+        if (!assetsRoot.empty())
+            Path::Assets = EnsureTrailingSlash(assetsRoot);
+    }
+
     std::string ReadRuntimeStartupScene(const std::filesystem::path &settingsPath, std::string *warningOut)
     {
         std::string startupScene;
@@ -244,12 +152,12 @@ namespace pe
                                     std::string *warningOut)
     {
         const std::filesystem::path normalizedSettingsPath =
-            settingsPath.empty() ? DefaultProjectSettingsPath() : NormalizeAbsolute(settingsPath);
+            settingsPath.empty() ? DefaultProjectSettingsPath() : project_detail::NormalizeAbsolute(settingsPath);
 
         startupScene.clear();
         rapidjson::Document document;
         std::string warning;
-        TryLoadJsonObject(normalizedSettingsPath, document, warning);
+        project_detail::TryLoadJsonObject(normalizedSettingsPath, document, warning);
         if (warningOut)
             *warningOut = warning;
 
@@ -263,19 +171,19 @@ namespace pe
     bool WriteProjectSelection(const std::filesystem::path &settingsPath, const ProjectConfig &project, std::string *error)
     {
         const std::filesystem::path normalizedSettingsPath =
-            settingsPath.empty() ? DefaultProjectSettingsPath() : NormalizeAbsolute(settingsPath);
+            settingsPath.empty() ? DefaultProjectSettingsPath() : project_detail::NormalizeAbsolute(settingsPath);
 
         rapidjson::Document document;
         std::string warning;
-        TryLoadJsonObject(normalizedSettingsPath, document, warning);
+        project_detail::TryLoadJsonObject(normalizedSettingsPath, document, warning);
 
-        SetJsonStringMember(document, kProjectPathSettingsKey, project.root.generic_string());
+        project_detail::SetJsonStringMember(document, kProjectPathSettingsKey, project.root.generic_string());
         if (!project.manifestPath.empty())
-            SetJsonStringMember(document, kProjectManifestSettingsKey, project.manifestPath.generic_string());
+            project_detail::SetJsonStringMember(document, kProjectManifestSettingsKey, project.manifestPath.generic_string());
         else if (document.HasMember(kProjectManifestSettingsKey))
             document.RemoveMember(kProjectManifestSettingsKey);
 
-        return WriteJsonObject(normalizedSettingsPath, document, error);
+        return project_detail::WriteJsonObject(normalizedSettingsPath, document, error);
     }
 
     bool WriteRuntimeStartupScene(const std::filesystem::path &settingsPath,
@@ -283,13 +191,13 @@ namespace pe
                                   std::string *error)
     {
         const std::filesystem::path normalizedSettingsPath =
-            settingsPath.empty() ? DefaultProjectSettingsPath() : NormalizeAbsolute(settingsPath);
+            settingsPath.empty() ? DefaultProjectSettingsPath() : project_detail::NormalizeAbsolute(settingsPath);
 
         rapidjson::Document document;
         std::string warning;
-        TryLoadJsonObject(normalizedSettingsPath, document, warning);
+        project_detail::TryLoadJsonObject(normalizedSettingsPath, document, warning);
 
-        SetJsonStringMember(document, kStartupSceneSettingsKey, startupScene);
-        return WriteJsonObject(normalizedSettingsPath, document, error);
+        project_detail::SetJsonStringMember(document, kStartupSceneSettingsKey, startupScene);
+        return project_detail::WriteJsonObject(normalizedSettingsPath, document, error);
     }
 } // namespace pe

@@ -2,6 +2,7 @@
 #include "Camera/Camera.h"
 #include "GUI/IconsFontAwesome.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/ImGuizmo.h"
@@ -54,7 +55,7 @@ namespace pe
         if (!node)
             return;
 
-        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        Scene &scene = *GetActiveScene();
 
         char buffer[256];
         memset(buffer, 0, 256);
@@ -134,7 +135,7 @@ namespace pe
 
     void TransformWidget::DrawPositionEditor(NodeId *node)
     {
-        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        Scene &scene = *GetActiveScene();
 
         // For camera nodes, read/write directly from the camera's internal state
         // to avoid the node-matrix round-trip (Scene::Update overwrites the node
@@ -168,7 +169,7 @@ namespace pe
 
     void TransformWidget::DrawRotationEditor(NodeId *node)
     {
-        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        Scene &scene = *GetActiveScene();
 
         // For camera nodes, read/write directly from camera's euler.
         // Camera::Rotate() negates xoffset for yaw (y = -xoffset * speed),
@@ -203,7 +204,7 @@ namespace pe
 
     void TransformWidget::DrawScaleEditor(NodeId *node)
     {
-        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        Scene &scene = *GetActiveScene();
 
         // Cameras and lights don't support scaling
         if (scene.GetComponentFlags(node) & (Component_Camera | Component_Light))
@@ -293,7 +294,7 @@ namespace pe
         float matrix[16];
         ImGuizmo::RecomposeMatrixFromComponents(t, r, s, matrix);
 
-        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        Scene &scene = *GetActiveScene();
         scene.SetLocalMatrix(node, make_mat4(matrix));
     }
 } // namespace pe

@@ -2,6 +2,7 @@
 
 #include "API/RenderGraph.h"
 #include "GUI/GUI.h"
+#include "Render/SceneRendererHost.h"
 #include "Scene/Scene.h"
 #include "Skybox/Skybox.h"
 
@@ -48,7 +49,7 @@ namespace pe
     class MotionBlurPass;
     class GridPass;
 
-    class RendererSystem : public ISystem
+    class RendererSystem : public ISystem, public SceneRendererHost
     {
     public:
         enum class RenderGraphPassId : uint32_t
@@ -87,11 +88,11 @@ namespace pe
         void Draw();
         void DrawPlatformWindows();
 
-        Scene &GetScene() { return m_scene; }
-        const SkyBox &GetSkyBoxDay() const { return m_skyBoxDay; }
-        const SkyBox &GetSkyBoxNight() const { return m_skyBoxNight; }
+        Scene &GetScene() override { return m_scene; }
+        const SkyBox &GetSkyBoxDay() const override { return m_skyBoxDay; }
+        const SkyBox &GetSkyBoxNight() const override { return m_skyBoxNight; }
         const SkyBox &GetSkyBoxWhite() const { return m_skyBoxWhite; }
-        Image *GetIBL_LUT() const { return m_ibl_brdf_lut; }
+        Image *GetIBL_LUT() const override { return m_ibl_brdf_lut; }
         const GUI &GetGUI() const { return m_gui; }
         GUI &GetGUI() { return m_gui; }
         void ToggleGUI() { m_gui.ToggleRender(); }
@@ -102,20 +103,20 @@ namespace pe
                                   bool useRenderTergetScale = true,
                                   bool useMips = false,
                                   vec4 clearColor = Color::Transparent);
-        Image *GetRenderTarget(const std::string &name);
-        Image *GetRenderTarget(size_t hash);
+        Image *GetRenderTarget(const std::string &name) override;
+        Image *GetRenderTarget(size_t hash) override;
         Image *CreateDepthStencilTarget(const std::string &name,
                                         ::PeFormat format,
                                         PeImageUsageFlags usage = PE_IMAGE_USAGE_NONE,
                                         bool useRenderTergetScale = true,
                                         float clearDepth = Color::Depth,
                                         uint32_t clearStencil = Color::Stencil);
-        Image *GetDepthStencilTarget(const std::string &name);
-        Image *GetDepthStencilTarget(size_t hash);
-        Image *GetDisplayRT() { return m_displayRT; }
-        Image *GetViewportRT() { return m_viewportRT; }
-        Image *GetDepthStencilRT() { return m_depthStencil; }
-        Image *CreateFSSampledImage(bool useRenderTergetScale = true);
+        Image *GetDepthStencilTarget(const std::string &name) override;
+        Image *GetDepthStencilTarget(size_t hash) override;
+        Image *GetDisplayRT() override { return m_displayRT; }
+        Image *GetViewportRT() override { return m_viewportRT; }
+        Image *GetDepthStencilRT() override { return m_depthStencil; }
+        Image *CreateFSSampledImage(bool useRenderTergetScale = true) override;
         void Resize(uint32_t width, uint32_t height);
         void BlitToSwapchain(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex);
         void PollShaders(std::optional<size_t> hash = std::nullopt);

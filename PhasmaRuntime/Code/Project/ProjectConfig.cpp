@@ -1,5 +1,7 @@
 #include "Project/ProjectConfig.h"
 
+#include "Project/Detail/ProjectHelpers.h"
+
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
 #include "rapidjson/istreamwrapper.h"
@@ -7,42 +9,11 @@
 #include "rapidjson/prettywriter.h"
 
 #include <fstream>
-#include <system_error>
-#include <utility>
 
 namespace pe
 {
     namespace
     {
-        void SetError(std::string *error, std::string message)
-        {
-            if (error)
-                *error = std::move(message);
-        }
-
-        std::filesystem::path Normalize(const std::filesystem::path &path)
-        {
-            return path.lexically_normal();
-        }
-
-        std::filesystem::path NormalizeAbsolute(const std::filesystem::path &path)
-        {
-            if (path.empty())
-                return {};
-
-            std::error_code ec;
-            const std::filesystem::path absolutePath = path.is_absolute() ? path : std::filesystem::absolute(path, ec);
-            return Normalize(ec ? path : absolutePath);
-        }
-
-        std::filesystem::path NormalizeAgainst(const std::filesystem::path &root, const std::filesystem::path &path)
-        {
-            if (path.empty() || path.is_absolute())
-                return Normalize(path);
-
-            return Normalize(root / path);
-        }
-
         bool TryReadString(const rapidjson::Value &object,
                            const char *key,
                            std::string &out,
@@ -54,7 +25,7 @@ namespace pe
             {
                 if (required)
                 {
-                    SetError(error, std::string("Project manifest field '") + key + "' is required");
+                    project_detail::SetError(error, std::string("Project manifest field '") + key + "' is required");
                     return false;
                 }
                 return true;
@@ -62,7 +33,7 @@ namespace pe
 
             if (!it->value.IsString())
             {
-                SetError(error, std::string("Project manifest field '") + key + "' must be a string");
+                project_detail::SetError(error, std::string("Project manifest field '") + key + "' must be a string");
                 return false;
             }
 
@@ -91,19 +62,19 @@ namespace pe
             auto it = object.FindMember("version");
             if (it == object.MemberEnd())
             {
-                SetError(error, "Project manifest field 'version' is required");
+                project_detail::SetError(error, "Project manifest field 'version' is required");
                 return false;
             }
 
             if (!it->value.IsUint())
             {
-                SetError(error, "Project manifest field 'version' must be an unsigned integer");
+                project_detail::SetError(error, "Project manifest field 'version' must be an unsigned integer");
                 return false;
             }
 
             if (it->value.GetUint() != 1)
             {
-                SetError(error, "Unsupported project manifest version " + std::to_string(it->value.GetUint()));
+                project_detail::SetError(error, "Unsupported project manifest version " + std::to_string(it->value.GetUint()));
                 return false;
             }
 
@@ -123,23 +94,23 @@ namespace pe
     ProjectConfig ProjectConfig::ForRoot(const std::filesystem::path &projectRoot)
     {
         ProjectConfig config;
-        config.root = Normalize(projectRoot);
+        config.root = project_detail::Normalize(projectRoot);
         config.manifestPath = DefaultManifestPath(config.root);
         return config;
     }
 
     std::filesystem::path ProjectConfig::DefaultManifestPath(const std::filesystem::path &projectRoot)
     {
-        return NormalizeAgainst(projectRoot, kProjectManifestFileName);
+        return project_detail::NormalizeAgainst(projectRoot, kProjectManifestFileName);
     }
 
     std::optional<ProjectConfig> ProjectConfig::TryLoadManifest(const std::filesystem::path &path, std::string *error)
     {
-        const std::filesystem::path manifestPath = NormalizeAbsolute(path);
+        const std::filesystem::path manifestPath = project_detail::NormalizeAbsolute(path);
         std::ifstream file(manifestPath);
         if (!file)
         {
-            SetError(error, "Unable to open project manifest: " + manifestPath.generic_string());
+            project_detail::SetError(error, "Unable to open project manifest: " + manifestPath.generic_string());
             return std::nullopt;
         }
 
@@ -148,15 +119,15 @@ namespace pe
         document.ParseStream(stream);
         if (document.HasParseError())
         {
-            SetError(error,
-                     "Invalid project manifest JSON at offset " + std::to_string(document.GetErrorOffset()) + ": " +
-                         rapidjson::GetParseError_En(document.GetParseError()));
+            project_detail::SetError(error,
+                                     "Invalid project manifest JSON at offset " + std::to_string(document.GetErrorOffset()) + ": " +
+                                         rapidjson::GetParseError_En(document.GetParseError()));
             return std::nullopt;
         }
 
         if (!document.IsObject())
         {
-            SetError(error, "Project manifest root must be a JSON object");
+            project_detail::SetError(error, "Project manifest root must be a JSON object");
             return std::nullopt;
         }
 
@@ -170,17 +141,17 @@ namespace pe
             return std::nullopt;
         if (!TryReadPath(document, "assets", config.assetsDirectory, error, true))
             return std::nullopt;
-        if (!TryReadPath(document, "startup_scene", config.startupScene, error, true))
+        if (!TryReadPath(document, "startup_scene", config.startupScene, error, false))
             return std::nullopt;
 
         if (config.name.empty())
         {
-            SetError(error, "Project manifest field 'name' must not be empty");
+            project_detail::SetError(error, "Project manifest field 'name' must not be empty");
             return std::nullopt;
         }
         if (config.assetsDirectory.empty())
         {
-            SetError(error, "Project manifest field 'assets' must not be empty");
+            project_detail::SetError(error, "Project manifest field 'assets' must not be empty");
             return std::nullopt;
         }
 
@@ -189,17 +160,17 @@ namespace pe
 
     std::filesystem::path ProjectConfig::AssetsRoot() const
     {
-        return NormalizeAgainst(root, assetsDirectory);
+        return project_detail::NormalizeAgainst(root, assetsDirectory);
     }
 
     std::filesystem::path ProjectConfig::ResolveProjectPath(const std::filesystem::path &path) const
     {
-        return NormalizeAgainst(root, path);
+        return project_detail::NormalizeAgainst(root, path);
     }
 
     std::filesystem::path ProjectConfig::ResolveAssetPath(const std::filesystem::path &path) const
     {
-        return NormalizeAgainst(AssetsRoot(), path);
+        return project_detail::NormalizeAgainst(AssetsRoot(), path);
     }
 
     std::filesystem::path ProjectConfig::ResolveStartupScene() const
@@ -209,7 +180,7 @@ namespace pe
 
     bool ProjectConfig::WriteManifest(const std::filesystem::path &path, std::string *error) const
     {
-        const std::filesystem::path manifestPath = NormalizeAbsolute(path);
+        const std::filesystem::path manifestPath = project_detail::NormalizeAbsolute(path);
         const std::filesystem::path parent = manifestPath.parent_path();
         if (!parent.empty())
         {
@@ -217,7 +188,7 @@ namespace pe
             std::filesystem::create_directories(parent, ec);
             if (ec)
             {
-                SetError(error, "Unable to create project manifest directory: " + parent.generic_string());
+                project_detail::SetError(error, "Unable to create project manifest directory: " + parent.generic_string());
                 return false;
             }
         }
@@ -225,7 +196,7 @@ namespace pe
         std::ofstream file(manifestPath);
         if (!file)
         {
-            SetError(error, "Unable to write project manifest: " + manifestPath.generic_string());
+            project_detail::SetError(error, "Unable to write project manifest: " + manifestPath.generic_string());
             return false;
         }
 
@@ -241,7 +212,7 @@ namespace pe
         writer.SetIndent(' ', 4);
         if (!document.Accept(writer))
         {
-            SetError(error, "Unable to serialize project manifest");
+            project_detail::SetError(error, "Unable to serialize project manifest");
             return false;
         }
 

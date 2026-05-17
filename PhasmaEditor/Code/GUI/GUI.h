@@ -14,6 +14,7 @@ namespace pe
     class EditorToolRuntime;
     class Queue;
     class Image;
+    struct RuntimeStartupSceneSelection;
 
     class GUI
     {
@@ -50,8 +51,8 @@ namespace pe
         std::string InvokeEditorAction(const std::string &actionId, const std::string &argsJson);
 
         // Called after the window is shown to apply the correct layout
-        void ApplyStartupLayout(bool restoreLastScene = true);
-        void LoadEditorConfig();
+        void ApplyStartupLayout(bool restoreLastScene, const RuntimeStartupSceneSelection &startupScene);
+        void LoadEditorConfig(const RuntimeStartupSceneSelection &startupScene);
 
         // Hot-reload UI state persistence
         std::string TakeUISnapshot() const;

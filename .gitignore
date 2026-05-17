@@ -27,7 +27,10 @@
 !/PhasmaRuntime/CMakeLists.txt
 
 !/PhasmaPlayer/CMakeLists.txt
-!/PhasmaPlayer/main.cpp
+!/PhasmaPlayer/*.cpp
+!/PhasmaPlayer/*.h
+!/PhasmaPlayer/Code/
+!/PhasmaPlayer/Code/**
 
 # User-specific files
 *.suo

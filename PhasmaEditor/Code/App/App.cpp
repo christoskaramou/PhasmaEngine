@@ -5,13 +5,21 @@
 #include "API/Surface.h"
 #include "API/Swapchain.h"
 #include "Base/Log.h"
+#include "Camera/Camera.h"
 #include "Base/Settings.h"
 #include "GUI/Backends/GUIBackend.h"
+#include "GUI/GUIState.h"
 #include "GUI/UndoRedo.h"
 #include "Project/ProjectSelection.h"
+#include "Runtime/RuntimeStartup.h"
+#include "Runtime/RuntimePlaySession.h"
+#include "Scene/SelectionManager.h"
+#include "Scene/SceneAccess.h"
+#include "Scene/SceneHost.h"
+#include "Scene/SceneRuntimeHooks.h"
 #include "Scene/ModelAsset.h"
+#include "Script/ScriptRuntimeHooks.h"
 #include "Script/ScriptSystem.h"
-#include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
 #ifdef PE_PHYSICS
 #include "Systems/PhysicsSystem.h"
@@ -35,110 +43,6 @@ namespace pe
         bool UsesDx12StartupOrchestration()
         {
             return RHII.GetApi() == PE_GRAPHICS_API_DX12;
-        }
-
-        struct StartupSceneSettings
-        {
-            std::optional<PePresentMode> presentMode;
-            std::optional<float> renderScale;
-        };
-
-        std::filesystem::path EditorConfigPath()
-        {
-            std::filesystem::path configPath = std::filesystem::path(Path::Executable) / "Assets/editor_config.json";
-            if (!std::filesystem::exists(configPath))
-                configPath = "Assets/editor_config.json";
-            return configPath;
-        }
-
-        std::filesystem::path ResolveStartupPath(const std::string &path)
-        {
-            std::filesystem::path p(path);
-            if (p.is_absolute() || std::filesystem::exists(p))
-                return p;
-
-            std::filesystem::path fromExecutable = std::filesystem::path(Path::Executable) / p;
-            if (std::filesystem::exists(fromExecutable))
-                return fromExecutable;
-
-            std::filesystem::path fromAssets;
-            auto it = p.begin();
-            if (it != p.end() && *it == "Assets")
-                ++it;
-            for (; it != p.end(); ++it)
-                fromAssets /= *it;
-
-            return std::filesystem::path(Path::Assets) / fromAssets;
-        }
-
-        std::string ReadEditorConfigLastScene()
-        {
-            std::ifstream configFile(EditorConfigPath());
-            if (!configFile)
-                return {};
-
-            nlohmann::json config = nlohmann::json::parse(configFile, nullptr, false);
-            if (config.is_discarded() || !config.contains("last_scene") || !config["last_scene"].is_string())
-                return {};
-
-            return config["last_scene"].get<std::string>();
-        }
-
-        bool TryReadExplicitStartupScene(std::string &startupScene)
-        {
-            std::string warning;
-            const bool found = TryReadRuntimeStartupScene({}, startupScene, &warning);
-            if (!warning.empty())
-                PE_WARN("[Runtime] %s", warning.c_str());
-            return found;
-        }
-
-        std::filesystem::path ResolveConfiguredStartupScene(const ProjectSelection &projectSelection,
-                                                            bool allowProjectFallback)
-        {
-            std::string explicitStartupScene;
-            if (TryReadExplicitStartupScene(explicitStartupScene))
-                return explicitStartupScene.empty() ? std::filesystem::path{} : ResolveStartupPath(explicitStartupScene);
-
-            const std::string lastScene = ReadEditorConfigLastScene();
-            if (!lastScene.empty())
-                return ResolveStartupPath(lastScene);
-
-            if (allowProjectFallback && projectSelection.loadedManifest && !projectSelection.project.startupScene.empty())
-                return projectSelection.project.ResolveStartupScene();
-
-            return {};
-        }
-
-        StartupSceneSettings TryReadStartupSceneSettings(const ProjectSelection &projectSelection,
-                                                         bool allowProjectFallback)
-        {
-            StartupSceneSettings out;
-            const std::filesystem::path startupScene =
-                ResolveConfiguredStartupScene(projectSelection, allowProjectFallback);
-            if (startupScene.empty())
-                return out;
-
-            std::ifstream sceneFile(startupScene);
-            if (!sceneFile)
-                return out;
-
-            nlohmann::json scene = nlohmann::json::parse(sceneFile, nullptr, false);
-            if (scene.is_discarded() || !scene.contains("settings") || !scene["settings"].is_object())
-                return out;
-
-            const nlohmann::json &settings = scene["settings"];
-            if (settings.contains("present_mode") && settings["present_mode"].is_number_integer())
-            {
-                const int mode = settings["present_mode"].get<int>();
-                if (mode >= 0 && mode < PE_PRESENT_MODE_COUNT)
-                    out.presentMode = static_cast<PePresentMode>(mode);
-            }
-
-            if (settings.contains("render_scale") && settings["render_scale"].is_number())
-                out.renderScale = std::clamp(settings["render_scale"].get<float>(), 0.1f, 4.0f);
-
-            return out;
         }
 
         bool UsesWslDozenVulkan()
@@ -198,17 +102,77 @@ namespace pe
             if (nextFrame < afterSleep)
                 nextFrame = afterSleep + std::chrono::duration_cast<Clock::duration>(frameDuration);
         }
+
+        Scene *GetEditorActiveScene()
+        {
+            RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+            return renderer ? &renderer->GetScene() : nullptr;
+        }
+
+        void WaitForSceneMutation()
+        {
+            if (RendererSystem *renderer = GetGlobalSystem<RendererSystem>())
+                renderer->WaitAllFramesCommands();
+        }
+
+        void EditorClearSceneSelection()
+        {
+            SelectionManager::Instance().ClearSelection();
+        }
+
+        bool EditorIsSceneNodeSelected(const NodeId *node)
+        {
+            return SelectionManager::Instance().GetSelectedNode() == node;
+        }
+
+        bool EditorScriptPlayMode()
+        {
+            return GUIState::s_playMode;
+        }
+
+        void EditorSetScriptPlayMode(bool enabled)
+        {
+            GUIState::s_playMode = enabled;
+            if (!enabled)
+            {
+                GUIState::s_isPaused = false;
+                SetRuntimePlaySessionPaused(false);
+            }
+        }
+
+        bool EditorScriptPaused()
+        {
+            return GUIState::s_isPaused;
+        }
+
+        void EditorSetScriptPaused(bool paused)
+        {
+            GUIState::s_isPaused = paused;
+            SetRuntimePlaySessionPaused(paused);
+        }
+
+        bool EditorScriptViewportFocused()
+        {
+            return GUIState::s_sceneViewFocused;
+        }
+
+        void EditorSetScriptModelLoading(bool loading)
+        {
+            GUIState::s_modelLoading = loading;
+        }
     } // namespace
 
     App::App() : m_frameTimer(FrameTimer::Instance())
     {
         Path::Init();
         const ProjectSelection projectSelection = ResolveProjectSelection();
+        ApplyProjectSelectionAssetsRoot(projectSelection);
         if (!projectSelection.warning.empty())
             PE_WARN("[Runtime] %s", projectSelection.warning.c_str());
         PE_INFO("[Runtime] Active project root: %s (%s)",
                 projectSelection.project.root.generic_string().c_str(),
                 ProjectSelectionSourceName(projectSelection.source));
+        PE_INFO("[Runtime] Active assets root: %s", Path::Assets.c_str());
 
         auto shaderCallback = [](size_t fileEvent)
         {
@@ -262,7 +226,11 @@ namespace pe
         // Adopt the SDL window that was created by the launcher.
         m_window = Window::Adopt(RHII.GetWindow());
         GlobalSettings &settings = Settings::Get<GlobalSettings>();
-        const StartupSceneSettings startupSceneSettings = TryReadStartupSceneSettings(projectSelection, !isHotReload);
+        const RuntimeStartupSceneSelection startupScene =
+            ResolveRuntimeStartupScene(projectSelection, !isHotReload);
+        if (!startupScene.warning.empty())
+            PE_WARN("[Runtime] %s", startupScene.warning.c_str());
+        const RuntimeStartupSceneSettings startupSceneSettings = ReadRuntimeStartupSceneSettings(startupScene);
         if (startupSceneSettings.presentMode)
             settings.preferred_present_mode = *startupSceneSettings.presentMode;
         if (startupSceneSettings.renderScale)
@@ -274,9 +242,30 @@ namespace pe
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
 
         cmd->Begin();
-        CreateGlobalSystem<RendererSystem>()->Init(cmd);
-        if (!usesDx12StartupOrchestration)
-            CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
+        CreateGlobalSystem<RendererSystem>();
+        SetActiveSceneGetter(
+            []() -> Scene *
+            {
+                return GetEditorActiveScene();
+            });
+        SceneHostCallbacks sceneHost{};
+        sceneHost.beforeMutation = WaitForSceneMutation;
+        SetSceneHostCallbacks(sceneHost);
+        SceneRuntimeHooks sceneHooks = CreateDefaultSceneRuntimeHooks();
+        sceneHooks.clearSelection = EditorClearSceneSelection;
+        sceneHooks.isNodeSelected = EditorIsSceneNodeSelected;
+        SetSceneRuntimeHooks(sceneHooks);
+        SetCameraRuntimeCallbacks(CreateDefaultCameraRuntimeCallbacks());
+        ScriptRuntimeHooks scriptHooks{};
+        scriptHooks.isPlayMode = EditorScriptPlayMode;
+        scriptHooks.setPlayMode = EditorSetScriptPlayMode;
+        scriptHooks.isPaused = EditorScriptPaused;
+        scriptHooks.setPaused = EditorSetScriptPaused;
+        scriptHooks.isViewportFocused = EditorScriptViewportFocused;
+        scriptHooks.setModelLoading = EditorSetScriptModelLoading;
+        scriptHooks.loadEditorOnlyGlobalScripts = true;
+        SetScriptRuntimeHooks(scriptHooks);
+        GetGlobalSystem<RendererSystem>()->Init(cmd);
 #ifdef PE_PHYSICS
         CreateGlobalSystem<PhysicsSystem>()->Init(nullptr);
 #endif
@@ -344,7 +333,7 @@ namespace pe
             }
         }
 
-        GetGlobalSystem<RendererSystem>()->GetGUI().ApplyStartupLayout(!shouldRestoreHotReloadSnapshot);
+        GetGlobalSystem<RendererSystem>()->GetGUI().ApplyStartupLayout(!shouldRestoreHotReloadSnapshot, startupScene);
 
         if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN &&
             !usesWslDozenVulkan &&
@@ -399,6 +388,11 @@ namespace pe
         ThreadPool::GUI.WaitIdle();
         ThreadPool::General.WaitIdle();
         FileWatcher::Clear();
+        SetCameraRuntimeCallbacks({});
+        SetScriptRuntimeHooks({});
+        SetActiveSceneGetter(nullptr);
+        SetSceneHostCallbacks({});
+        SetSceneRuntimeHooks({});
         DestroyGlobalSystems();
         ModelAsset::DestroyDefaults();
         Context::Remove();

@@ -10,9 +10,11 @@
 #include "GUIState.h"
 #include "Helpers.h"
 #include "Particles/ParticleManager.h"
-#include "Project/ProjectSelection.h"
+#include "Runtime/RuntimePlaySession.h"
+#include "Runtime/RuntimeStartup.h"
 #include "Script/ScriptSystem.h"
 #include "Scene/SelectionManager.h"
+#include "Scene/SceneHost.h"
 #include "IconsFontAwesome.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
@@ -39,13 +41,10 @@
 #include "Widgets/TransformWidget.h"
 #ifdef PE_PHYSICS
 #include "Widgets/PhysicsWidget.h"
-#include "Systems/PhysicsSystem.h"
 #endif
 #ifdef PE_AUDIO
 #include "Widgets/AudioWidget.h"
-#include "Systems/AudioSystem.h"
 #endif
-#include "Systems/AnimationSystem.h"
 #include "UndoRedo.h"
 #include <nlohmann/json.hpp>
 #include "imgui/imgui_internal.h"
@@ -767,7 +766,7 @@ namespace pe
         {
             if (renderer && args.value("discard_unsaved", false))
             {
-                renderer->GetScene().NewScene();
+                pe::NewScene();
                 SaveEditorConfig();
                 UndoRedo::Instance().Clear();
                 return ok();
@@ -803,8 +802,7 @@ namespace pe
             if (!std::filesystem::exists(scenePath))
                 return nlohmann::json{{"error", "scene file not found: " + scenePath.string()}}.dump();
 
-            renderer->WaitAllFramesCommands();
-            renderer->GetScene().LoadScene(scenePath.string());
+            pe::LoadScene(scenePath);
             SaveEditorConfig();
             UndoRedo::Instance().Clear();
             return ok({{"path", scenePath.string()}});
@@ -826,16 +824,14 @@ namespace pe
                 if (std::filesystem::exists(savePath) && !args.value("overwrite", false))
                     return nlohmann::json{{"error", "file exists; pass overwrite=true to replace: " + savePath.string()}}.dump();
 
-                renderer->GetScene().SaveScene(savePath);
-                renderer->GetScene().ClearDirty();
+                pe::SaveScene(savePath);
                 return ok({{"path", savePath.string()}});
             }
 
             Scene &scene = renderer->GetScene();
             if (!scene.GetScenePath().empty())
             {
-                scene.SaveScene(scene.GetScenePath());
-                scene.ClearDirty();
+                pe::SaveScene(scene.GetScenePath());
                 return ok({{"path", scene.GetScenePath().string()}});
             }
 
@@ -1003,6 +999,7 @@ namespace pe
             if (!ResolveRequestedBool(GUIState::s_isPaused, args, value, error))
                 return nlohmann::json{{"error", error}}.dump();
             GUIState::s_isPaused = value;
+            SetRuntimePlaySessionPaused(GUIState::s_isPaused);
             return ok({{"paused", GUIState::s_isPaused}});
         }
 
@@ -1113,14 +1110,12 @@ namespace pe
             UndoRedo::Instance().Clear();
             ThreadPool::GUI.Enqueue([this, path]()
                                     {
-                    auto preload = std::make_shared<Scene::ScenePreload>(Scene::PreloadScene(path));
+                    auto preload = std::make_shared<ScenePreloadHandle>(pe::PreloadScene(path));
                     QueueMainThreadAction([this, preload]()
                                           {
-                        auto *rs = GetGlobalSystem<RendererSystem>();
-                        if (rs && preload->valid)
+                        if (preload->IsValid())
                         {
-                            rs->WaitAllFramesCommands();
-                            rs->GetScene().LoadSceneApply(std::move(*preload));
+                            pe::LoadSceneApply(std::move(*preload));
                             SaveEditorConfig();
                         } }); });
             return true;
@@ -1150,7 +1145,7 @@ namespace pe
                 {
                     Scene &scene = rs->GetScene();
                     if (!scene.GetScenePath().empty())
-                        scene.SaveScene(scene.GetScenePath());
+                        pe::SaveScene(scene.GetScenePath());
                     else
                         ShowSaveSceneMenuItem_Action();
                 }
@@ -1182,7 +1177,7 @@ namespace pe
             m_showSaveBeforeNew = true;
         else
         {
-            rs->GetScene().NewScene();
+            pe::NewScene();
             SaveEditorConfig();
             UndoRedo::Instance().Clear();
         }
@@ -1208,10 +1203,10 @@ namespace pe
                 {
                     Scene &scene = rs->GetScene();
                     if (!scene.GetScenePath().empty())
-                        scene.SaveScene(scene.GetScenePath());
+                        pe::SaveScene(scene.GetScenePath());
                     else
                         ShowSaveSceneMenuItem_Action();
-                    scene.NewScene();
+                    pe::NewScene();
                     SaveEditorConfig();
                     UndoRedo::Instance().Clear();
                 }
@@ -1223,7 +1218,7 @@ namespace pe
                 RendererSystem *rs = GetGlobalSystem<RendererSystem>();
                 if (rs)
                 {
-                    rs->GetScene().NewScene();
+                    pe::NewScene();
                     SaveEditorConfig();
                 }
                 UndoRedo::Instance().Clear();
@@ -1243,7 +1238,7 @@ namespace pe
         {
             RendererSystem *rs = GetGlobalSystem<RendererSystem>();
             if (rs && !rs->GetScene().GetScenePath().empty())
-                rs->GetScene().SaveScene(rs->GetScene().GetScenePath());
+                pe::SaveScene(rs->GetScene().GetScenePath());
             else
                 ShowSaveSceneMenuItem_Action();
         }
@@ -1280,12 +1275,7 @@ namespace pe
 
                 auto saveAsync = [savePath, exitAfter = m_exitAfterSave]()
                 {
-                    auto* rs = GetGlobalSystem<RendererSystem>();
-                    if (rs)
-                    {
-                        rs->GetScene().SaveScene(savePath);
-                        rs->GetScene().ClearDirty();
-                    }
+                    pe::SaveScene(savePath);
                     if (exitAfter)
                     {
                         EventSystem::PushEvent(EventType::Quit);
@@ -1320,9 +1310,7 @@ namespace pe
                 auto savePath = m_pendingSavePath;
                 auto saveAsync = [savePath]()
                 {
-                    auto *rs = GetGlobalSystem<RendererSystem>();
-                    if (rs)
-                        rs->GetScene().SaveScene(savePath);
+                    pe::SaveScene(savePath);
                 };
                 ThreadPool::GUI.Enqueue(saveAsync);
                 m_pendingSavePath.clear();
@@ -1428,53 +1416,22 @@ namespace pe
         ImGui::EndMenu();
     }
 
-    static constexpr const char *kEditorConfigPath = "Assets/editor_config.json";
-
-    static std::filesystem::path ResolveStartupPath(const std::string &path)
-    {
-        std::filesystem::path p(path);
-        if (p.is_absolute() || std::filesystem::exists(p))
-            return p;
-
-        std::filesystem::path fromExecutable = std::filesystem::path(Path::Executable) / p;
-        if (std::filesystem::exists(fromExecutable))
-            return fromExecutable;
-
-        std::filesystem::path fromAssets;
-        auto it = p.begin();
-        if (it != p.end() && *it == "Assets")
-            ++it;
-        for (; it != p.end(); ++it)
-            fromAssets /= *it;
-
-        return std::filesystem::path(Path::Assets) / fromAssets;
-    }
-
-    static std::filesystem::path ResolveProjectStartupScene()
-    {
-        const ProjectSelection selection = ResolveProjectSelection();
-        if (!selection.loadedManifest || selection.project.startupScene.empty())
-            return {};
-
-        return selection.project.ResolveStartupScene();
-    }
-
     void GUI::SaveEditorConfig()
     {
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         if (!rs)
             return;
 
-        nlohmann::json j;
         const auto &scenePath = rs->GetScene().GetScenePath();
-        j["last_scene"] = scenePath.empty() ? "" : scenePath.generic_string();
+        const std::string startupScene = scenePath.empty() ? "" : scenePath.generic_string();
 
-        std::ofstream f(kEditorConfigPath);
-        if (f)
-            f << j.dump(2) << "\n";
-
+        // Keep editor restore and runtime/launcher startup selection in sync.
         std::string error;
-        if (!WriteRuntimeStartupScene({}, j["last_scene"].get<std::string>(), &error) && !error.empty())
+        if (!WriteEditorStartupScene({}, startupScene, &error) && !error.empty())
+            PE_WARN("[Runtime] Could not write editor startup scene: %s", error.c_str());
+
+        error.clear();
+        if (!WriteRuntimeStartupScene({}, startupScene, &error) && !error.empty())
             PE_WARN("[Runtime] Could not write startup scene setting: %s", error.c_str());
     }
 
@@ -1558,46 +1515,24 @@ namespace pe
         PE_INFO("[MCP] Startup: %s", m_mcpStartEnabled ? "enabled" : "disabled");
     }
 
-    void GUI::LoadEditorConfig()
+    void GUI::LoadEditorConfig(const RuntimeStartupSceneSelection &startupScene)
     {
-        std::ifstream f(kEditorConfigPath);
-        nlohmann::json j;
-        bool loadedEditorConfig = false;
-        if (f)
-        {
-            try
-            {
-                j = nlohmann::json::parse(f);
-                loadedEditorConfig = j.is_object();
-            }
-            catch (...)
-            {
-                loadedEditorConfig = false;
-            }
-        }
-
-        std::string lastScene = loadedEditorConfig ? j.value("last_scene", "") : "";
-        std::string explicitStartupScene;
-        const bool fromRuntimeSettings = TryReadRuntimeStartupScene({}, explicitStartupScene);
-        if (fromRuntimeSettings && explicitStartupScene.empty())
+        if (!startupScene.warning.empty())
+            PE_WARN("[Runtime] %s", startupScene.warning.c_str());
+        if (startupScene.IsExplicitEmpty())
             return;
 
-        const bool fromEditorConfig = !fromRuntimeSettings && !lastScene.empty();
-        std::filesystem::path scenePath = fromRuntimeSettings ? ResolveStartupPath(explicitStartupScene)
-                                          : fromEditorConfig  ? ResolveStartupPath(lastScene)
-                                                              : ResolveProjectStartupScene();
-        if (scenePath.empty())
+        if (startupScene.scenePath.empty())
             return;
 
-        if (!std::filesystem::exists(scenePath))
+        if (!std::filesystem::exists(startupScene.scenePath))
         {
-            Log::Warn("Startup scene not found: " + scenePath.generic_string());
-            if (fromEditorConfig)
+            Log::Warn("Startup scene not found: " + startupScene.scenePath.generic_string());
+            if (startupScene.source == RuntimeStartupSceneSource::EditorConfig)
             {
-                j["last_scene"] = "";
-                std::ofstream fw(kEditorConfigPath);
-                if (fw)
-                    fw << j.dump(2) << "\n";
+                std::string error;
+                if (!WriteEditorStartupScene({}, "", &error) && !error.empty())
+                    PE_WARN("[Runtime] Could not clear editor startup scene: %s", error.c_str());
             }
             return;
         }
@@ -1605,7 +1540,7 @@ namespace pe
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         if (rs)
         {
-            rs->GetScene().LoadScene(scenePath);
+            pe::LoadScene(startupScene.scenePath);
             SaveEditorConfig();
             UndoRedo::Instance().Clear();
         }
@@ -1649,8 +1584,7 @@ namespace pe
                     Scene &scene = rs->GetScene();
                     if (!scene.GetScenePath().empty())
                     {
-                        scene.SaveScene(scene.GetScenePath());
-                        scene.ClearDirty();
+                        pe::SaveScene(scene.GetScenePath());
                         SaveEditorConfig();
                         EventSystem::PushEvent(EventType::Quit);
                     }
@@ -2414,7 +2348,7 @@ namespace pe
             m_editorMcp->Start();
     }
 
-    void GUI::ApplyStartupLayout(bool restoreLastScene)
+    void GUI::ApplyStartupLayout(bool restoreLastScene, const RuntimeStartupSceneSelection &startupScene)
     {
         SDL_PumpEvents();
 
@@ -2427,7 +2361,7 @@ namespace pe
         {
             // Normal startup restores the last open scene. Hot-reload startup already
             // restored a live snapshot and must not overwrite it from editor_config.json.
-            LoadEditorConfig();
+            LoadEditorConfig(startupScene);
         }
     }
 
@@ -2557,7 +2491,7 @@ namespace pe
                         Scene &scene = undoRedoRS->GetScene();
                         if (!scene.GetScenePath().empty())
                         {
-                            scene.SaveScene(scene.GetScenePath());
+                            pe::SaveScene(scene.GetScenePath());
                         }
                         else
                         {
@@ -2842,7 +2776,10 @@ namespace pe
             const char *pauseIcon = GUIState::s_isPaused ? ICON_FA_PLAY : ICON_FA_PAUSE;
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
             if (ImGui::Button(pauseIcon, ImVec2(buttonSize, buttonSize)))
+            {
                 GUIState::s_isPaused = !GUIState::s_isPaused;
+                SetRuntimePlaySessionPaused(GUIState::s_isPaused);
+            }
             ImGui::PopStyleColor();
         }
         else
@@ -2871,14 +2808,7 @@ namespace pe
             m_playModeSnapshot = rs->GetScene().TakeSnapshot();
             GUIState::s_playMode = true;
             GUIState::s_isPaused = false;
-#ifdef PE_PHYSICS
-            if (auto *ps = GetGlobalSystem<PhysicsSystem>())
-                ps->StartSimulation(rs->GetScene());
-#endif
-#ifdef PE_AUDIO
-            if (auto *as = GetGlobalSystem<AudioSystem>())
-                as->StartPlayMode(rs->GetScene());
-#endif
+            StartRuntimePlaySession(rs->GetScene());
         }
     }
 
@@ -2887,14 +2817,7 @@ namespace pe
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         if (rs)
         {
-#ifdef PE_AUDIO
-            if (auto *as = GetGlobalSystem<AudioSystem>())
-                as->StopPlayMode();
-#endif
-#ifdef PE_PHYSICS
-            if (auto *ps = GetGlobalSystem<PhysicsSystem>())
-                ps->StopSimulation();
-#endif
+            StopRuntimePlaySession();
             GUIState::s_playMode = false;
             GUIState::s_isPaused = false;
             if (!m_playModeSnapshot.empty())
@@ -2903,9 +2826,7 @@ namespace pe
                 rs->GetScene().RestoreSnapshot(m_playModeSnapshot);
                 m_playModeSnapshot.clear();
             }
-            // Clear animation state AFTER restore so we don't dereference stale nodes
-            if (auto *animSys = GetGlobalSystem<AnimationSystem>())
-                animSys->ClearAllAnimations();
+            ClearRuntimeAnimationState();
             UndoRedo::Instance().Clear();
         }
     }

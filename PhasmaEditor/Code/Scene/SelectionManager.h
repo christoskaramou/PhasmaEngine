@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Scene/LightTypes.h"
+
 namespace pe
 {
     struct NodeId;
@@ -18,14 +20,6 @@ namespace pe
         Camera,
         Light,
         Emitter
-    };
-
-    enum class LightType
-    {
-        Directional,
-        Point,
-        Spot,
-        Area
     };
 
     class SelectionManager

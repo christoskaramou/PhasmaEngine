@@ -9,6 +9,7 @@
 #include "Scene/ModelAsset.h"
 #include "Scene/Primitives.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
 #include "Script/ScriptSystem.h"
@@ -70,7 +71,7 @@ namespace pe
         ImGui::Begin("Hierarchy", &m_open);
         GUIState::s_hierarchyFocused = ImGui::IsWindowFocused();
 
-        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        Scene &scene = *GetActiveScene();
         auto &selection = SelectionManager::Instance();
 
         // Helper: save undo snapshot before any destructive action
