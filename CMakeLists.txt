@@ -177,7 +177,7 @@ if(PE_WEBGPU)
     add_subdirectory(PhasmaWebGPU)
 endif()
 
-# === PhasmaEditorModule + thin launcher ===
+# === PhasmaEditorModule + host executables ===
 file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/*.cpp")
 file(GLOB_RECURSE IMGUI_SRC_FILES CONFIGURE_DEPENDS "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/*.cpp")
 file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${PE_RUNTIME_ASSETS_SOURCE_DIR}/*")
@@ -301,11 +301,10 @@ add_dependencies(PhasmaEditor PhasmaEditorModule)
 pe_depend_on_root_runtime_dependencies(PhasmaEditor)
 
 # PhasmaLauncher (pre-launch target/sample/backend selector)
-add_executable(PhasmaLauncher "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Launcher.cpp")
+add_executable(PhasmaLauncher "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaLauncher/main.cpp")
 
 target_precompile_headers(PhasmaLauncher PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
 target_include_directories(PhasmaLauncher PRIVATE
-    ${PHASMA_EDITOR_HOST_INCLUDES}
     "${PE_THIRD_PARTY_DIR}/rapidjson/include"
 )
 target_link_directories(PhasmaLauncher PRIVATE ${PE_CORE_LINK_DIRS})

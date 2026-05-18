@@ -8,6 +8,7 @@
 !/PhasmaEditor/
 !/PhasmaMCP/
 !/PhasmaPlayer/
+!/PhasmaLauncher/
 !/PhasmaRuntime/
 !/PhasmaWebGPU/
 !/cmake/
@@ -33,6 +34,9 @@
 !/PhasmaPlayer/*.h
 !/PhasmaPlayer/Code/
 !/PhasmaPlayer/Code/**
+
+!/PhasmaLauncher/*.cpp
+!/PhasmaLauncher/*.h
 
 # User-specific files
 *.suo
