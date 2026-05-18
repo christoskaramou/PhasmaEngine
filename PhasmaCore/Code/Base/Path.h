@@ -5,6 +5,7 @@ namespace pe
     class Path
     {
     public:
+        inline static std::string Root;
         inline static std::string Executable;
         inline static std::string Assets;
 
@@ -32,11 +33,50 @@ namespace pe
                                if (!std::filesystem::exists(Executable))
                                    Executable = std::filesystem::current_path().string();
 
-                               std::replace(Executable.begin(), Executable.end(), '\\', '/');
+                               std::filesystem::path executableDir = std::filesystem::path(Executable).lexically_normal();
+                               if (executableDir.filename().empty())
+                                   executableDir = executableDir.parent_path();
 
-                               if (std::filesystem::exists(Executable + "Assets"))
-                                   Assets = Executable + "Assets/";
+                               std::filesystem::path rootDir = executableDir;
+                               const std::string executableLeaf = executableDir.filename().string();
+                               if (executableLeaf == "Editor" || executableLeaf == "Player")
+                               {
+                                   rootDir = executableDir.parent_path();
+                               }
+                               else if (executableLeaf == "WebGPU" &&
+                                        executableDir.parent_path().filename().string() == "Samples")
+                               {
+                                   rootDir = executableDir.parent_path().parent_path();
+                               }
+
+                               auto normalizeDirectory = [](std::filesystem::path path)
+                               {
+                                   std::string value = path.lexically_normal().string();
+                                   std::replace(value.begin(), value.end(), '\\', '/');
+                                   if (!value.empty() && value.back() != '/')
+                                       value.push_back('/');
+                                   return value;
+                               };
+
+                               Executable = normalizeDirectory(executableDir);
+                               Root = normalizeDirectory(rootDir);
+
+                               const std::filesystem::path rootAssets = rootDir / "Assets";
+                               const std::filesystem::path executableAssets = executableDir / "Assets";
+                               const std::filesystem::path editorAssets = rootDir / "Editor" / "Assets";
+                               if (std::filesystem::exists(rootAssets))
+                                   Assets = normalizeDirectory(rootAssets);
+                               else if (std::filesystem::exists(executableAssets))
+                                   Assets = normalizeDirectory(executableAssets);
+                               else if (std::filesystem::exists(editorAssets))
+                                   Assets = normalizeDirectory(editorAssets);
                            });
+        }
+
+        static const std::string &RootPath()
+        {
+            Init();
+            return Root;
         }
 
         static const std::string &ExecutablePath()

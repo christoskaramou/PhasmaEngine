@@ -322,12 +322,14 @@ namespace pe
             addIfExists(config.directories, makePath("PhasmaMCP"));
             addIfExists(config.directories, makePath("PhasmaCore"));
             addIfExists(config.directories, makePath("PhasmaEditor"));
+            addIfExists(config.directories, makePath("PhasmaWebGPU"));
 
             addIfExists(config.include_files, makePath("PhasmaEditor/Assets/Agent/START.md"));
 
             addIfExists(config.skip_directories, makePath("PhasmaMCP/third_party"));
             addIfExists(config.skip_directories, makePath("PhasmaCore/third_party"));
             addIfExists(config.skip_directories, makePath("PhasmaEditor/third_party"));
+            addIfExists(config.skip_directories, makePath("PhasmaWebGPU/WgslBridge/target"));
             addIfExists(config.skip_directories, makePath("PhasmaEditor/Assets/Agent"));
             config.skip_files.clear();
             config.skip_regex.clear();
@@ -427,6 +429,38 @@ namespace pe
                 }
             }
 
+            return changed;
+        }
+
+        bool AddJsonStringArrayItem(nlohmann::json &object, const char *key, const std::string &value)
+        {
+            if (value.empty())
+                return false;
+
+            if (!object.is_object())
+                object = nlohmann::json::object();
+
+            auto &array = object[key];
+            if (!array.is_array())
+                array = nlohmann::json::array();
+
+            for (const auto &item : array)
+                if (item.is_string() && item.get<std::string>() == value)
+                    return false;
+
+            array.push_back(value);
+            return true;
+        }
+
+        bool AddDefaultJsonStringArrayItems(nlohmann::json &object, const nlohmann::json &defaults, const char *key)
+        {
+            if (!defaults.is_object() || !defaults.contains(key) || !defaults[key].is_array())
+                return false;
+
+            bool changed = false;
+            for (const auto &item : defaults[key])
+                if (item.is_string())
+                    changed |= AddJsonStringArrayItem(object, key, item.get<std::string>());
             return changed;
         }
     } // namespace
@@ -1465,6 +1499,13 @@ namespace pe
         }
 
         bool changed = MergeJsonDefaults(j, defaultConfig);
+        if (j.contains("indexing") && j["indexing"].is_object() &&
+            defaultConfig.contains("indexing") && defaultConfig["indexing"].is_object())
+        {
+            changed |= AddDefaultJsonStringArrayItems(j["indexing"], defaultConfig["indexing"], "directories");
+            changed |= AddDefaultJsonStringArrayItems(j["indexing"], defaultConfig["indexing"], "include_files");
+            changed |= AddDefaultJsonStringArrayItems(j["indexing"], defaultConfig["indexing"], "skip_directories");
+        }
 
         // Migration: scrub the obsolete `completion` block written by builds prior to the
         // PhasmaAgent → PhasmaMCP refactor. The in-engine AICompletionService was retired

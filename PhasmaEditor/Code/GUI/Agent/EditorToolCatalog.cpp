@@ -92,6 +92,19 @@ namespace pe
         if (ec || assetsPath.empty())
             assetsPath = fs::path(Path::Assets).lexically_normal();
 
+        for (fs::path candidate = assetsPath; !candidate.empty(); candidate = candidate.parent_path())
+        {
+            if (fs::exists(candidate / "PhasmaEditor/Code/GUI/GUI.cpp") &&
+                fs::exists(candidate / "PhasmaCore") &&
+                fs::exists(candidate / "PhasmaMCP"))
+            {
+                return candidate;
+            }
+
+            if (candidate == candidate.parent_path())
+                break;
+        }
+
         return assetsPath.parent_path().parent_path();
     }
 

@@ -116,19 +116,52 @@ else()
     target_compile_options(PhasmaWebGPU PRIVATE -Wall -Wextra -Wno-unused-parameter)
 endif()
 
+if(NOT DEFINED PHASMA_WEBGPU_SAMPLE_OUTPUT_DIR)
+    set(PHASMA_WEBGPU_SAMPLE_OUTPUT_DIR "${CMAKE_BINARY_DIR}/$<CONFIG>/Samples/WebGPU")
+endif()
+if(NOT DEFINED PHASMA_WEBGPU_SAMPLE_INSTALL_DIR)
+    set(PHASMA_WEBGPU_SAMPLE_INSTALL_DIR "Samples/WebGPU")
+endif()
+
+function(pe_configure_webgpu_executable TARGET_NAME)
+    if(COMMAND pe_set_target_output_subdir)
+        pe_set_target_output_subdir(${TARGET_NAME} "Samples/WebGPU")
+    else()
+        set_target_properties(${TARGET_NAME} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${PHASMA_WEBGPU_SAMPLE_OUTPUT_DIR}"
+        )
+    endif()
+
+    if(COMMAND pe_depend_on_root_runtime_dependencies)
+        pe_depend_on_root_runtime_dependencies(${TARGET_NAME})
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set_target_properties(${TARGET_NAME} PROPERTIES
+            BUILD_RPATH "$ORIGIN;$ORIGIN/../.."
+            INSTALL_RPATH "$ORIGIN;$ORIGIN/../.."
+        )
+    endif()
+
+    install(TARGETS ${TARGET_NAME}
+        RUNTIME DESTINATION "${PHASMA_WEBGPU_SAMPLE_INSTALL_DIR}"
+        COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
+    )
+endfunction()
+
 option(PE_WEBGPU_TESTS "Build PhasmaWebGPU smoke tests" ON)
 if (PE_WEBGPU_TESTS)
     add_executable(WebGPUSmokeTest "${CMAKE_CURRENT_SOURCE_DIR}/Tests/SmokeTest.cpp")
     target_link_libraries(WebGPUSmokeTest PRIVATE PhasmaWebGPU)
     target_precompile_headers(WebGPUSmokeTest REUSE_FROM PhasmaWebGPU)
     target_include_directories(WebGPUSmokeTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Code")
-    set_target_properties(WebGPUSmokeTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+    pe_configure_webgpu_executable(WebGPUSmokeTest)
 
     add_executable(WebGPURenderTest "${CMAKE_CURRENT_SOURCE_DIR}/Tests/RenderTest.cpp")
     target_link_libraries(WebGPURenderTest PRIVATE PhasmaWebGPU)
     target_precompile_headers(WebGPURenderTest REUSE_FROM PhasmaWebGPU)
     target_include_directories(WebGPURenderTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Code")
-    set_target_properties(WebGPURenderTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+    pe_configure_webgpu_executable(WebGPURenderTest)
 
     add_executable(WebGPUWgslSmokeTest "${CMAKE_CURRENT_SOURCE_DIR}/Tests/WgslSmokeTest.cpp")
     target_link_libraries(WebGPUWgslSmokeTest PRIVATE PhasmaWebGPU)
@@ -137,14 +170,14 @@ if (PE_WEBGPU_TESTS)
     if (PE_WEBGPU_WGSL)
         target_compile_definitions(WebGPUWgslSmokeTest PRIVATE PE_WEBGPU_WGSL=1)
     endif()
-    set_target_properties(WebGPUWgslSmokeTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+    pe_configure_webgpu_executable(WebGPUWgslSmokeTest)
 
     if (WIN32)
         add_executable(WebGPUDxilCacheHashTest "${CMAKE_CURRENT_SOURCE_DIR}/Tests/DxilCacheHashTest.cpp")
         target_link_libraries(WebGPUDxilCacheHashTest PRIVATE PhasmaWebGPU)
         target_precompile_headers(WebGPUDxilCacheHashTest REUSE_FROM PhasmaWebGPU)
         target_include_directories(WebGPUDxilCacheHashTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Code")
-        set_target_properties(WebGPUDxilCacheHashTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+        pe_configure_webgpu_executable(WebGPUDxilCacheHashTest)
     endif()
 
     # pe_add_webgpu_sample(
@@ -200,7 +233,7 @@ if (PE_WEBGPU_TESTS)
                 "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/vulkan"
                 "${CMAKE_CURRENT_SOURCE_DIR}/Tests"
         )
-        set_target_properties(${S_TARGET} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+        pe_configure_webgpu_executable(${S_TARGET})
 
         file(GLOB_RECURSE SHADER_SOURCE_FILES CONFIGURE_DEPENDS "${SHADER_SRC}/*")
         add_custom_command(
@@ -211,6 +244,10 @@ if (PE_WEBGPU_TESTS)
                 "${SHADER_SRC}"
                 "$<TARGET_FILE_DIR:${S_TARGET}>/Shaders/${SHADER_FOLDER}"
             COMMENT "Copying ${SHADER_FOLDER} shader sources next to ${S_TARGET}"
+        )
+        install(DIRECTORY "${SHADER_SRC}/"
+            DESTINATION "${PHASMA_WEBGPU_SAMPLE_INSTALL_DIR}/Shaders/${SHADER_FOLDER}"
+            COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
         )
 
         foreach (A IN LISTS S_ASSETS)
@@ -233,6 +270,21 @@ if (PE_WEBGPU_TESTS)
                     "$<TARGET_FILE_DIR:${S_TARGET}>/${ADST}"
                 COMMENT "Copying asset ${ADST} for ${S_TARGET}"
             )
+
+            get_filename_component(ADST_NAME "${ADST}" NAME)
+            if (ADST_DIR)
+                install(FILES "${ASRC}"
+                    DESTINATION "${PHASMA_WEBGPU_SAMPLE_INSTALL_DIR}/${ADST_DIR}"
+                    RENAME "${ADST_NAME}"
+                    COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
+                )
+            else()
+                install(FILES "${ASRC}"
+                    DESTINATION "${PHASMA_WEBGPU_SAMPLE_INSTALL_DIR}"
+                    RENAME "${ADST_NAME}"
+                    COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
+                )
+            endif()
         endforeach()
     endfunction()
 

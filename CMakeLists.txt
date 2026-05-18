@@ -45,6 +45,8 @@ set(PE_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/third_party")
 set(PE_SHARED_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/third_party")
 set(PE_EDITOR_THIRD_PARTY_DIR "${PE_SHARED_THIRD_PARTY_DIR}")
 set(PE_RUNTIME_ASSETS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Assets")
+include(cmake/PhasmaRuntimeLayout.cmake)
+pe_add_root_runtime_dependencies_target()
 
 set(PE_CORE_LINK_DIRS
     "${PE_LIBS_DIR}/dx"
@@ -188,7 +190,9 @@ add_library(PhasmaEditorModule SHARED
     ${IMGUI_SRC_FILES}
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/App/EditorModule.cpp"
 )
-set_target_properties(PhasmaEditorModule PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(PhasmaEditorModule PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+)
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(PhasmaEditorModule PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS OFF)
 endif()
@@ -260,6 +264,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         INSTALL_RPATH "$ORIGIN"
     )
 endif()
+pe_depend_on_root_runtime_dependencies(PhasmaEditorModule)
 
 # PhasmaEditor (editor host EXE)
 add_executable(PhasmaEditor "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/main.cpp")
@@ -283,6 +288,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 add_dependencies(PhasmaEditor PhasmaEditorModule)
+pe_depend_on_root_runtime_dependencies(PhasmaEditor)
 
 # PhasmaLauncher (pre-launch target/sample/backend selector)
 add_executable(PhasmaLauncher "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Launcher.cpp")
@@ -312,14 +318,14 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 add_dependencies(PhasmaLauncher PhasmaEditor PhasmaPlayer)
+pe_depend_on_root_runtime_dependencies(PhasmaLauncher)
 
 # Copy runtime assets to build directory (re-runs when assets change)
-set(ASSETS_COPY_STAMP "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/AssetsCopy.stamp")
-set(PHASMA_RUNTIME_OUTPUT_DIR "$<IF:$<CONFIG:Debug>,${CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG},$<IF:$<CONFIG:Release>,${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE},$<IF:$<CONFIG:RelWithDebInfo>,${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO},${CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL}>>>")
+set(ASSETS_COPY_STAMP "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/PhasmaRuntimeAssets-$<CONFIG>.stamp")
 add_custom_command(
     OUTPUT "${ASSETS_COPY_STAMP}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PE_RUNTIME_ASSETS_SOURCE_DIR}" "${PHASMA_RUNTIME_OUTPUT_DIR}/Assets"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles" "${PHASMA_CONFIG_OUTPUT_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PE_RUNTIME_ASSETS_SOURCE_DIR}" "${PHASMA_CONFIG_OUTPUT_DIR}/Assets"
     COMMAND ${CMAKE_COMMAND} -E touch "${ASSETS_COPY_STAMP}"
     DEPENDS ${ASSET_FILES}
     COMMENT "[Phasma] Copying assets to build directory"
@@ -330,20 +336,4 @@ add_dependencies(PhasmaEditor PhasmaRuntimeAssets)
 add_dependencies(PhasmaLauncher PhasmaRuntimeAssets)
 add_dependencies(PhasmaPlayer PhasmaRuntimeAssets)
 
-# Copy DLLs for Windows
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    add_custom_command(TARGET PhasmaEditor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:PhasmaCore>" "$<TARGET_FILE_DIR:PhasmaEditor>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:PhasmaEditorModule>" "$<TARGET_FILE_DIR:PhasmaEditor>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/dxcompiler.dll" "$<TARGET_FILE_DIR:PhasmaEditor>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/shaderc_shared.dll" "$<TARGET_FILE_DIR:PhasmaEditor>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/SDL2.dll" "$<TARGET_FILE_DIR:PhasmaEditor>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/assimp-vc143-mt.dll" "$<TARGET_FILE_DIR:PhasmaEditor>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/libssl-3-x64.dll" "$<TARGET_FILE_DIR:PhasmaEditor>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/libcrypto-3-x64.dll" "$<TARGET_FILE_DIR:PhasmaEditor>")
-else()
-    add_custom_command(TARGET PhasmaEditor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:PhasmaCore>" "$<TARGET_FILE_DIR:PhasmaEditor>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:PhasmaEditorModule>" "$<TARGET_FILE_DIR:PhasmaEditor>"
-    )
-endif()
+pe_install_runtime_layout()

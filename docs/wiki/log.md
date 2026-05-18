@@ -1,5 +1,11 @@
 # PhasmaEngine Wiki Log
 
+## 2026-05-18
+
+- Reworked build and release layout ownership into CMake install rules. Packages and local build outputs now keep launcher/editor/player executables, launcher/settings/log state, shared runtime dependencies, one shared `Assets/` tree, and the generated `ShaderCache/` at the root without launch scripts or `README_RELEASE.txt`, while WebGPU samples plus their sample assets live under `Samples/WebGPU/`. Runtime DLLs/shared libraries are centralized at the package root; unused OpenSSL DLLs are no longer copied.
+- Changed DX12 shader-cache output to embed the transformed `PE_DX12` source in a DXIL private-data container part, keeping each cache entry as one valid DXIL file while Release bytecode remains stripped and optimized. The DX12 shader-cache version was bumped so older cache entries regenerate with embedded source.
+- Added `PhasmaWebGPU` to the editor agent codebase-indexing defaults and config migration, while skipping the generated `PhasmaWebGPU/WgslBridge/target` tree. Agent repo-root detection now walks up from `Assets/` to the real source root so generated build-tree configs include source `PhasmaEditor` instead of resolving against `build-ninja-full`.
+
 ## 2026-05-17
 
 - Renamed the top-level CMake project to `PhasmaEngine` and cleaned up runtime/player build naming. Shared Lua/CACAO/sol2/miniaudio paths now go through `PE_SHARED_THIRD_PARTY_DIR`, and editor/player/launcher asset preparation depends on the neutral `PhasmaRuntimeAssets` target while keeping `PhasmaEditorAssets` as a compatibility target.

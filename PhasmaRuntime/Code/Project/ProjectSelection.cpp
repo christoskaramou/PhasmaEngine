@@ -60,7 +60,7 @@ namespace pe
     std::filesystem::path DefaultProjectSettingsPath()
     {
         Path::Init();
-        return project_detail::NormalizeAbsolute(std::filesystem::path(Path::Executable) / kRuntimeSettingsFileName);
+        return project_detail::NormalizeAbsolute(std::filesystem::path(Path::Root) / kRuntimeSettingsFileName);
     }
 
     const char *ProjectSelectionSourceName(ProjectSelectionSource source)

@@ -10,6 +10,8 @@
 !/PhasmaPlayer/
 !/PhasmaRuntime/
 !/PhasmaWebGPU/
+!/cmake/
+!/cmake/**
 !/CMakeLists.txt
 !/CMakePresets.json
 !/LICENCE

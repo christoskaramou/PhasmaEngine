@@ -19,7 +19,7 @@ namespace pe
         std::lock_guard<std::mutex> lock(GetLogMutex());
         if (!s_file)
         {
-            std::string logPath = Path::Executable + "PhasmaEngine.log";
+            std::string logPath = Path::Root + "PhasmaEngine.log";
 #if defined(PE_WIN32)
             s_file = _fsopen(logPath.c_str(), "w", _SH_DENYNO);
 #else
@@ -80,7 +80,7 @@ namespace pe
         }
         else
         {
-            std::string logPath = Path::Executable + "PhasmaEngine.log";
+            std::string logPath = Path::Root + "PhasmaEngine.log";
 #if defined(PE_WIN32)
             s_file = _fsopen(logPath.c_str(), "a", _SH_DENYNO);
 #else

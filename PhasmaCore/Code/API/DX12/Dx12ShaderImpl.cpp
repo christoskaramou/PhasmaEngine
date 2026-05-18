@@ -381,6 +381,79 @@ namespace pe
                 PE_INFO(errors->GetStringPointer());
         }
 
+        void PrintDxcOperationError(IDxcOperationResult *result)
+        {
+            Microsoft::WRL::ComPtr<IDxcBlobEncoding> errors;
+            result->GetErrorBuffer(&errors);
+            if (errors && errors->GetBufferSize() > 0)
+                PE_INFO(static_cast<const char *>(errors->GetBufferPointer()));
+        }
+
+        bool AddSourcePrivateDataToDxil(IDxcUtils *utils,
+                                        IDxcBlob *dxilObject,
+                                        const std::string &source,
+                                        std::vector<uint8_t> &outDxil)
+        {
+            Microsoft::WRL::ComPtr<IDxcContainerBuilder> builder;
+            HRESULT hr = DxcCreateInstance(CLSID_DxcContainerBuilder, IID_PPV_ARGS(&builder));
+            if (FAILED(hr))
+            {
+                PE_INFO("Failed to create IDxcContainerBuilder");
+                return false;
+            }
+
+            hr = builder->Load(dxilObject);
+            if (FAILED(hr))
+            {
+                PE_INFO("Failed to load DXIL container for private source data");
+                return false;
+            }
+
+            Microsoft::WRL::ComPtr<IDxcBlobEncoding> sourceBlob;
+            hr = utils->CreateBlob(source.data(), static_cast<uint32_t>(source.size()), CP_UTF8, &sourceBlob);
+            if (FAILED(hr))
+            {
+                PE_INFO("Failed to create DXIL private source blob");
+                return false;
+            }
+
+            builder->RemovePart(DXC_PART_PRIVATE_DATA);
+            hr = builder->AddPart(DXC_PART_PRIVATE_DATA, sourceBlob.Get());
+            if (FAILED(hr))
+            {
+                PE_INFO("Failed to add DXIL private source data");
+                return false;
+            }
+
+            Microsoft::WRL::ComPtr<IDxcOperationResult> serializeResult;
+            hr = builder->SerializeContainer(&serializeResult);
+            if (FAILED(hr) || !serializeResult)
+            {
+                PE_INFO("Failed to serialize DXIL container with private source data");
+                return false;
+            }
+
+            HRESULT status = S_OK;
+            serializeResult->GetStatus(&status);
+            if (FAILED(status))
+            {
+                PrintDxcOperationError(serializeResult.Get());
+                return false;
+            }
+
+            Microsoft::WRL::ComPtr<IDxcBlob> container;
+            hr = serializeResult->GetResult(&container);
+            if (FAILED(hr) || !container)
+            {
+                PrintDxcOperationError(serializeResult.Get());
+                return false;
+            }
+
+            const auto *bytes = static_cast<const uint8_t *>(container->GetBufferPointer());
+            outDxil.assign(bytes, bytes + container->GetBufferSize());
+            return true;
+        }
+
         LPCWSTR GetStageProfile(PeShaderStageFlags stage)
         {
             if (stage == PE_SHADER_STAGE_VERTEX)
@@ -605,9 +678,7 @@ namespace pe
                 return false;
             }
 
-            const auto *bytes = static_cast<const uint8_t *>(object->GetBufferPointer());
-            outDxil.assign(bytes, bytes + object->GetBufferSize());
-            return true;
+            return AddSourcePrivateDataToDxil(utils.Get(), object.Get(), shaderCode, outDxil);
         }
 
         uint32_t GetBindingCount(UINT bindCount)

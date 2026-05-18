@@ -124,7 +124,7 @@ namespace pe
         std::filesystem::path DefaultRuntimeConfigPath()
         {
             Path::Init();
-            return std::filesystem::path(Path::Executable) / kRuntimeConfigFileName;
+            return std::filesystem::path(Path::Root) / kRuntimeConfigFileName;
         }
 
         bool TryReadRuntimeConfigApi(const std::filesystem::path &path, ApiCandidate &candidate, std::string &warning)

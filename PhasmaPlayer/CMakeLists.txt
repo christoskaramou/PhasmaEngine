@@ -17,18 +17,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     )
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    add_custom_command(TARGET PhasmaPlayer POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:PhasmaCore>" "$<TARGET_FILE_DIR:PhasmaPlayer>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/dxcompiler.dll" "$<TARGET_FILE_DIR:PhasmaPlayer>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/shaderc_shared.dll" "$<TARGET_FILE_DIR:PhasmaPlayer>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/SDL2.dll" "$<TARGET_FILE_DIR:PhasmaPlayer>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/assimp-vc143-mt.dll" "$<TARGET_FILE_DIR:PhasmaPlayer>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/libssl-3-x64.dll" "$<TARGET_FILE_DIR:PhasmaPlayer>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/libcrypto-3-x64.dll" "$<TARGET_FILE_DIR:PhasmaPlayer>"
-    )
-else()
-    add_custom_command(TARGET PhasmaPlayer POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:PhasmaCore>" "$<TARGET_FILE_DIR:PhasmaPlayer>"
-    )
+if(COMMAND pe_depend_on_root_runtime_dependencies)
+    pe_depend_on_root_runtime_dependencies(PhasmaPlayer)
 endif()

@@ -57,7 +57,7 @@ namespace pe
         ImGui::SameLine();
         if (ImGui::Button("Open Log"))
         {
-            std::string logPath = Path::Executable + "PhasmaEngine.log";
+            std::string logPath = Path::Root + "PhasmaEngine.log";
             GUIState::OpenExternalPath(logPath);
         }
         ImGui::SameLine();

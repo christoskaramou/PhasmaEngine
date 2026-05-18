@@ -36,18 +36,20 @@ namespace
     ModuleHandle LoadModule()
     {
         ModuleHandle m;
+        const std::filesystem::path modulePath = std::filesystem::path(pe::Path::Executable) / k_moduleName;
 #if defined(PE_LINUX)
         static int s_gen = 0;
         char versioned[256];
         std::snprintf(versioned, sizeof(versioned), "libPhasmaEditorModule_%04d.so", s_gen++);
+        const std::filesystem::path versionedPath = std::filesystem::path(pe::Path::Executable) / versioned;
         std::error_code ec;
-        std::filesystem::copy_file(k_moduleName, versioned, std::filesystem::copy_options::overwrite_existing, ec);
+        std::filesystem::copy_file(modulePath, versionedPath, std::filesystem::copy_options::overwrite_existing, ec);
         if (ec)
         {
             PE_ERROR("copy_file failed: %s", ec.message().c_str());
             return m;
         }
-        m.loadedPath = versioned;
+        m.loadedPath = versionedPath.string();
         m.lib = dlopen(m.loadedPath.c_str(), RTLD_NOW | RTLD_LOCAL);
         if (!m.lib)
         {
@@ -63,9 +65,14 @@ namespace
         static int s_gen = 0;
         char versioned[256];
         std::snprintf(versioned, sizeof(versioned), "PhasmaEditorModule_%04d.dll", s_gen++);
-        CopyFileA(k_moduleName, versioned, FALSE);
-        m.loadedPath = versioned;
-        m.lib = static_cast<void *>(::LoadLibraryA(versioned));
+        const std::filesystem::path versionedPath = std::filesystem::path(pe::Path::Executable) / versioned;
+        if (!CopyFileA(modulePath.string().c_str(), versionedPath.string().c_str(), FALSE))
+        {
+            PE_ERROR("CopyFileA failed: %lu", ::GetLastError());
+            return m;
+        }
+        m.loadedPath = versionedPath.string();
+        m.lib = static_cast<void *>(::LoadLibraryA(m.loadedPath.c_str()));
         if (!m.lib)
         {
             PE_ERROR("LoadLibraryA failed: %lu", ::GetLastError());

@@ -87,24 +87,24 @@ namespace
 
     std::filesystem::path RuntimeSettingsPath()
     {
-        return std::filesystem::path(pe::Path::Executable) / pe::kRuntimeSettingsFileName;
+        return std::filesystem::path(pe::Path::Root) / pe::kRuntimeSettingsFileName;
     }
 
     std::filesystem::path EditorExecutablePath()
     {
 #if defined(PE_WIN32)
-        return std::filesystem::path(pe::Path::Executable) / "PhasmaEditor.exe";
+        return std::filesystem::path(pe::Path::Root) / "PhasmaEditor.exe";
 #else
-        return std::filesystem::path(pe::Path::Executable) / "PhasmaEditor";
+        return std::filesystem::path(pe::Path::Root) / "PhasmaEditor";
 #endif
     }
 
     std::filesystem::path PlayerExecutablePath()
     {
 #if defined(PE_WIN32)
-        return std::filesystem::path(pe::Path::Executable) / "PhasmaPlayer.exe";
+        return std::filesystem::path(pe::Path::Root) / "PhasmaPlayer.exe";
 #else
-        return std::filesystem::path(pe::Path::Executable) / "PhasmaPlayer";
+        return std::filesystem::path(pe::Path::Root) / "PhasmaPlayer";
 #endif
     }
 
@@ -664,15 +664,12 @@ namespace
     std::vector<std::filesystem::path> DiscoverTargetDirectories()
     {
         std::vector<std::filesystem::path> directories;
-        std::filesystem::path runtimePath = std::filesystem::path(pe::Path::Executable);
+        std::filesystem::path runtimePath = std::filesystem::path(pe::Path::Root);
         if (runtimePath.filename().empty())
             runtimePath = runtimePath.parent_path();
         runtimePath = runtimePath.lexically_normal();
+        directories.push_back((runtimePath / "Samples" / "WebGPU").lexically_normal());
         directories.push_back(runtimePath);
-
-        const std::filesystem::path buildRoot = runtimePath.parent_path();
-        if (!buildRoot.empty())
-            directories.push_back((buildRoot / "bin").lexically_normal());
 
         return directories;
     }
@@ -732,7 +729,7 @@ namespace
             {
                 std::filesystem::path preferredPath(preferredTarget);
                 if (preferredPath.is_relative())
-                    preferredPath = std::filesystem::path(pe::Path::Executable) / preferredPath;
+                    preferredPath = std::filesystem::path(pe::Path::Root) / preferredPath;
 
                 std::error_code ec;
                 if (std::filesystem::exists(preferredPath, ec) && IsExecutableFile(preferredPath))
@@ -873,7 +870,7 @@ namespace
         startupInfo.cb = sizeof(startupInfo);
         PROCESS_INFORMATION processInfo{};
         std::string mutableCommandLine = commandLine;
-        const std::string workingDirectory = executablePath.parent_path().string();
+        const std::string workingDirectory = std::filesystem::path(pe::Path::Root).string();
         if (!CreateProcessA(nullptr,
                             mutableCommandLine.data(),
                             nullptr,
@@ -902,7 +899,7 @@ namespace
         if (pid == 0)
         {
             const std::string apiName = pe::GraphicsApiConfigName(api);
-            const std::filesystem::path workingDirectory = executablePath.parent_path();
+            const std::filesystem::path workingDirectory = pe::Path::Root;
             if (!workingDirectory.empty() && chdir(workingDirectory.c_str()) != 0)
                 _exit(127);
             execl(executablePath.c_str(), executablePath.filename().c_str(), "--api", apiName.c_str(), nullptr);
