@@ -1,10 +1,13 @@
 #pragma once
 
+#include <memory>
+
 namespace pe
 {
     class Window;
     class FrameTimer;
     class SplashScreen;
+    class RuntimeUiSystem;
 
     class App
     {
@@ -21,6 +24,7 @@ namespace pe
         Window *m_window = nullptr;
         FrameTimer &m_frameTimer;
         SplashScreen *m_splashScreen = nullptr;
+        std::unique_ptr<RuntimeUiSystem> m_runtimeUi;
         uint32_t m_startupPresentRefreshFrames = 0;
     };
 } // namespace pe

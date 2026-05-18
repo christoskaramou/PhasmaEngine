@@ -56,6 +56,8 @@ namespace pe
         virtual void EndScreen() = 0;
         virtual void EndFrame() = 0;
         virtual bool HasDrawData() const = 0;
+        virtual bool WantsMouseCapture() const { return false; }
+        virtual bool WantsKeyboardCapture() const { return false; }
         virtual void Render(const RuntimeUiRenderContext &context) = 0;
     };
 
@@ -74,6 +76,9 @@ namespace pe
         void BeginFrame();
         void EndFrame();
         void Render(CommandBuffer *cmd, Image *renderTarget);
+        void SetFrameSurfaceSize(uint32_t width, uint32_t height);
+        bool WantsMouseCapture() const;
+        bool WantsKeyboardCapture() const;
 
         void SetScreenVisible(const std::string &screenId, bool visible);
         bool IsScreenVisible(const std::string &screenId) const;
@@ -143,6 +148,8 @@ namespace pe
         bool m_initialized = false;
         bool m_frameOpen = false;
         bool m_sampleOverlayEnabled = false;
+        uint32_t m_frameSurfaceWidth = 0;
+        uint32_t m_frameSurfaceHeight = 0;
     };
 
     void SetActiveRuntimeUi(RuntimeUiSystem *runtimeUi);

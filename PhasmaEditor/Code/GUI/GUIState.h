@@ -42,6 +42,11 @@ namespace pe
         static bool s_sceneViewFocused;
         static bool s_hierarchyFocused;
         static Image *s_sceneViewImage;
+        static bool s_sceneViewImageRectValid;
+        static float s_sceneViewImageMinX;
+        static float s_sceneViewImageMinY;
+        static float s_sceneViewImageWidth;
+        static float s_sceneViewImageHeight;
         static bool s_useTransformGizmo;
         static bool s_useLightGizmos;
         static bool s_useCameraGizmos;

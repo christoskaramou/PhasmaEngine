@@ -323,7 +323,6 @@ namespace pe
             addIfExists(config.directories, makePath("PhasmaCore"));
             addIfExists(config.directories, makePath("PhasmaEditor"));
             addIfExists(config.directories, makePath("PhasmaRuntime"));
-            addIfExists(config.directories, makePath("PhasmaRuntimeUI"));
             addIfExists(config.directories, makePath("PhasmaWebGPU"));
 
             addIfExists(config.skip_directories, makePath("PhasmaMCP/third_party"));
@@ -2472,6 +2471,8 @@ namespace pe
 
         if (!m_initialized)
             return;
+
+        GUIState::s_sceneViewImageRectValid = false;
 
         if (!m_render)
             return;

@@ -1,6 +1,7 @@
 #include "Runtime/PlayerHost.h"
 #include "API/GraphicsApiSelection.h"
 #include "API/Command.h"
+#include "API/Image.h"
 #include "API/RHI.h"
 #include "Base/EventSystem.h"
 #include "Base/FileWatcher.h"
@@ -262,7 +263,11 @@ namespace pe
                 m_renderer.WaitPreviousFrameCommands();
 
                 if (m_runtimeUi)
+                {
+                    if (Image *displayRT = m_renderer.GetDisplayRT())
+                        m_runtimeUi->SetFrameSurfaceSize(displayRT->GetWidth(), displayRT->GetHeight());
                     m_runtimeUi->BeginFrame();
+                }
 
                 if (!ProcessEvents())
                 {
@@ -329,6 +334,12 @@ namespace pe
 
                     if (IsRuntimeWindowResizeEvent(event))
                         m_resizePending = true;
+                }
+
+                if (m_runtimeUi)
+                {
+                    InputState::SetMouseCapturedByUi(m_runtimeUi->WantsMouseCapture());
+                    InputState::SetKeyboardCapturedByUi(m_runtimeUi->WantsKeyboardCapture());
                 }
 
                 return true;

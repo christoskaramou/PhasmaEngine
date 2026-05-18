@@ -9,7 +9,6 @@
 !/PhasmaMCP/
 !/PhasmaPlayer/
 !/PhasmaRuntime/
-!/PhasmaRuntimeUI/
 !/PhasmaWebGPU/
 !/cmake/
 !/cmake/**
@@ -28,9 +27,6 @@
 
 !/PhasmaRuntime/Code/
 !/PhasmaRuntime/CMakeLists.txt
-
-!/PhasmaRuntimeUI/Code/
-!/PhasmaRuntimeUI/CMakeLists.txt
 
 !/PhasmaPlayer/CMakeLists.txt
 !/PhasmaPlayer/*.cpp

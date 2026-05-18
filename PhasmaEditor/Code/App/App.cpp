@@ -1,5 +1,6 @@
 #include "Code/App/App.h"
 #include "API/Command.h"
+#include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/Surface.h"
@@ -7,6 +8,7 @@
 #include "Base/Log.h"
 #include "Camera/Camera.h"
 #include "Base/Settings.h"
+#include "GUI/Backends/EditorRuntimeUiBackend.h"
 #include "GUI/Backends/GUIBackend.h"
 #include "GUI/GUIState.h"
 #include "GUI/UndoRedo.h"
@@ -21,6 +23,7 @@
 #include "Script/ScriptRuntimeHooks.h"
 #include "Script/ScriptSystem.h"
 #include "Systems/RendererSystem.h"
+#include "UI/RuntimeUi.h"
 #ifdef PE_PHYSICS
 #include "Systems/PhysicsSystem.h"
 #endif
@@ -101,6 +104,19 @@ namespace pe
             nextFrame += std::chrono::duration_cast<Clock::duration>(frameDuration);
             if (nextFrame < afterSleep)
                 nextFrame = afterSleep + std::chrono::duration_cast<Clock::duration>(frameDuration);
+        }
+
+        void UseFullWindowRuntimeUiSurface()
+        {
+            const ImGuiIO &io = ImGui::GetIO();
+            if (io.DisplaySize.x <= 0.0f || io.DisplaySize.y <= 0.0f)
+                return;
+
+            GUIState::s_sceneViewImageRectValid = true;
+            GUIState::s_sceneViewImageMinX = 0.0f;
+            GUIState::s_sceneViewImageMinY = 0.0f;
+            GUIState::s_sceneViewImageWidth = io.DisplaySize.x;
+            GUIState::s_sceneViewImageHeight = io.DisplaySize.y;
         }
 
         Scene *GetEditorActiveScene()
@@ -269,6 +285,17 @@ namespace pe
         scriptHooks.loadEditorOnlyGlobalScripts = true;
         SetScriptRuntimeHooks(scriptHooks);
         GetGlobalSystem<RendererSystem>()->Init(cmd);
+        m_runtimeUi = std::make_unique<RuntimeUiSystem>();
+        if (m_runtimeUi->Init(CreateEditorRuntimeUiBackend(), GetGlobalSystem<RendererSystem>()->GetDisplayRT()))
+        {
+            m_runtimeUi->EnableSampleOverlay(true);
+            SetActiveRuntimeUi(m_runtimeUi.get());
+            PE_INFO("[RuntimeUI] Running with backend: %s", m_runtimeUi->GetBackendName().c_str());
+        }
+        else
+        {
+            m_runtimeUi.reset();
+        }
 #ifdef PE_PHYSICS
         CreateGlobalSystem<PhysicsSystem>()->Init(nullptr);
 #endif
@@ -396,6 +423,12 @@ namespace pe
         SetActiveSceneGetter(nullptr);
         SetSceneHostCallbacks({});
         SetSceneRuntimeHooks({});
+        SetActiveRuntimeUi(nullptr);
+        if (m_runtimeUi)
+        {
+            m_runtimeUi->Shutdown();
+            m_runtimeUi.reset();
+        }
         DestroyGlobalSystems();
         ModelAsset::DestroyDefaults();
         Context::Remove();
@@ -479,11 +512,23 @@ namespace pe
             ImGui::NewFrame();
             ImGuizmo::BeginFrame();
         }
+        RuntimeUiSystem *runtimeUi =
+            (hasImGuiRenderer && m_runtimeUi && m_runtimeUi->IsInitialized()) ? m_runtimeUi.get() : nullptr;
+        if (runtimeUi)
+        {
+            if (Image *displayRT = GetGlobalSystem<RendererSystem>()->GetDisplayRT())
+                runtimeUi->SetFrameSurfaceSize(displayRT->GetWidth(), displayRT->GetHeight());
+            runtimeUi->BeginFrame();
+        }
 
         {
             PE_PROFILE_SCOPE("Process Events");
             if (!m_window->ProcessEvents())
+            {
+                if (runtimeUi)
+                    runtimeUi->EndFrame();
                 return false;
+            }
         }
 
         if (m_startupPresentRefreshFrames > 0 && --m_startupPresentRefreshFrames == 0)
@@ -509,6 +554,15 @@ namespace pe
                 if (auto *ss = GetGlobalSystem<ScriptSystem>())
                     ss->Update();
         }
+
+        if (runtimeUi && !rendererSystem->GetGUI().Render())
+            UseFullWindowRuntimeUiSurface();
+
+        if (runtimeUi)
+            runtimeUi->UpdateSampleOverlay();
+
+        if (runtimeUi)
+            runtimeUi->EndFrame();
 
         // Get ImGui render data ready
         if (hasImGuiRenderer)

@@ -84,6 +84,194 @@ namespace pe
             dstObj.AddMember("primitive_params", arr.Move(), allocator);
         }
 
+        void AddStringVectorMember(rapidjson::Value &settings,
+                                   const char *name,
+                                   const std::vector<std::string> &values,
+                                   rapidjson::Document::AllocatorType &allocator)
+        {
+            rapidjson::Value array(rapidjson::kArrayType);
+            for (const std::string &value : values)
+                array.PushBack(rapidjson::Value(value.c_str(), allocator), allocator);
+            settings.AddMember(rapidjson::Value(name, allocator), array.Move(), allocator);
+        }
+
+        void ReadStringVectorMember(const rapidjson::Value &settings, const char *name, std::vector<std::string> &out)
+        {
+            if (!settings.HasMember(name) || !settings[name].IsArray())
+                return;
+
+            out.clear();
+            const auto &array = settings[name];
+            out.reserve(array.Size());
+            for (const auto &value : array.GetArray())
+                if (value.IsString())
+                    out.emplace_back(value.GetString());
+        }
+
+        void AddGlobalSettingsMembers(rapidjson::Value &settings, rapidjson::Document::AllocatorType &allocator)
+        {
+            auto &gSettings = Settings::Get<GlobalSettings>();
+            settings.AddMember("right_handed", gSettings.right_handed, allocator);
+            settings.AddMember("reverse_depth", gSettings.reverse_depth, allocator);
+            settings.AddMember("frustum_culling", gSettings.frustum_culling, allocator);
+            settings.AddMember("shadows", gSettings.shadows, allocator);
+            settings.AddMember("shadow_map_size", gSettings.shadow_map_size, allocator);
+            settings.AddMember("num_cascades", gSettings.num_cascades, allocator);
+            settings.AddMember("shadow_distance", gSettings.shadow_distance, allocator);
+            settings.AddMember("shadow_cascade_lambda", gSettings.shadow_cascade_lambda, allocator);
+            settings.AddMember("shadow_normal_bias", gSettings.shadow_normal_bias, allocator);
+            settings.AddMember("shadow_fade_fraction", gSettings.shadow_fade_fraction, allocator);
+            settings.AddMember("shadow_filter_radius", gSettings.shadow_filter_radius, allocator);
+            settings.AddMember("shadow_debug_mode", gSettings.shadow_debug_mode, allocator);
+            settings.AddMember("render_scale", gSettings.render_scale, allocator);
+            settings.AddMember("ssao", gSettings.ssao, allocator);
+            settings.AddMember("fxaa", gSettings.fxaa, allocator);
+            settings.AddMember("taa", gSettings.taa, allocator);
+            settings.AddMember("cas_sharpening", gSettings.cas_sharpening, allocator);
+            settings.AddMember("cas_sharpness", gSettings.cas_sharpness, allocator);
+            settings.AddMember("ssr", gSettings.ssr, allocator);
+            settings.AddMember("tonemapping", gSettings.tonemapping, allocator);
+            settings.AddMember("dof", gSettings.dof, allocator);
+            settings.AddMember("dof_focus_scale", gSettings.dof_focus_scale, allocator);
+            settings.AddMember("dof_blur_range", gSettings.dof_blur_range, allocator);
+            settings.AddMember("bloom", gSettings.bloom, allocator);
+            settings.AddMember("bloom_strength", gSettings.bloom_strength, allocator);
+            settings.AddMember("bloom_range", gSettings.bloom_range, allocator);
+            settings.AddMember("motion_blur", gSettings.motion_blur, allocator);
+            settings.AddMember("motion_blur_strength", gSettings.motion_blur_strength, allocator);
+            settings.AddMember("motion_blur_samples", gSettings.motion_blur_samples, allocator);
+            settings.AddMember("IBL", gSettings.IBL, allocator);
+            settings.AddMember("IBL_intensity", gSettings.IBL_intensity, allocator);
+            settings.AddMember("lights_intensity", gSettings.lights_intensity, allocator);
+            settings.AddMember("randomize_lights", gSettings.randomize_lights, allocator);
+            settings.AddMember("day", gSettings.day, allocator);
+
+            rapidjson::Value depthBias(rapidjson::kArrayType);
+            depthBias.PushBack(gSettings.depth_bias[0], allocator);
+            depthBias.PushBack(gSettings.depth_bias[1], allocator);
+            depthBias.PushBack(gSettings.depth_bias[2], allocator);
+            settings.AddMember("depth_bias", depthBias.Move(), allocator);
+
+            settings.AddMember("time_scale", gSettings.time_scale, allocator);
+            AddStringVectorMember(settings, "model_list", gSettings.model_list, allocator);
+            settings.AddMember("freeze_frustum_culling", gSettings.freeze_frustum_culling, allocator);
+            settings.AddMember("draw_aabbs", gSettings.draw_aabbs, allocator);
+            settings.AddMember("draw_grid", gSettings.draw_grid, allocator);
+            settings.AddMember("aabbs_depth_aware", gSettings.aabbs_depth_aware, allocator);
+            settings.AddMember("dynamic_rendering", gSettings.dynamic_rendering, allocator);
+            settings.AddMember("ray_tracing_support", gSettings.ray_tracing_support, allocator);
+            settings.AddMember("render_mode", static_cast<int>(gSettings.render_mode), allocator);
+            settings.AddMember("use_Disney_PBR", gSettings.use_Disney_PBR, allocator);
+            settings.AddMember("present_mode", static_cast<int>(gSettings.preferred_present_mode), allocator);
+        }
+
+        void ApplyGlobalSettingsMembers(const rapidjson::Value &settings)
+        {
+            auto &gSettings = Settings::Get<GlobalSettings>();
+            if (settings.HasMember("right_handed"))
+                gSettings.right_handed = settings["right_handed"].GetBool();
+            if (settings.HasMember("reverse_depth"))
+                gSettings.reverse_depth = settings["reverse_depth"].GetBool();
+            if (settings.HasMember("frustum_culling"))
+                gSettings.frustum_culling = settings["frustum_culling"].GetBool();
+            if (settings.HasMember("shadows"))
+                gSettings.shadows = settings["shadows"].GetBool();
+            if (settings.HasMember("shadow_map_size"))
+                gSettings.shadow_map_size = settings["shadow_map_size"].GetUint();
+            if (settings.HasMember("num_cascades"))
+                gSettings.num_cascades = settings["num_cascades"].GetUint();
+            if (settings.HasMember("shadow_distance"))
+                gSettings.shadow_distance = settings["shadow_distance"].GetFloat();
+            if (settings.HasMember("shadow_cascade_lambda"))
+                gSettings.shadow_cascade_lambda = settings["shadow_cascade_lambda"].GetFloat();
+            if (settings.HasMember("shadow_normal_bias"))
+                gSettings.shadow_normal_bias = settings["shadow_normal_bias"].GetFloat();
+            if (settings.HasMember("shadow_fade_fraction"))
+                gSettings.shadow_fade_fraction = settings["shadow_fade_fraction"].GetFloat();
+            if (settings.HasMember("shadow_filter_radius"))
+                gSettings.shadow_filter_radius = settings["shadow_filter_radius"].GetFloat();
+            if (settings.HasMember("shadow_debug_mode"))
+                gSettings.shadow_debug_mode = settings["shadow_debug_mode"].GetInt();
+            if (settings.HasMember("render_scale"))
+            {
+                gSettings.render_scale = settings["render_scale"].GetFloat();
+                EventSystem::PushEvent(EventType::Resize);
+            }
+            if (settings.HasMember("ssao"))
+                gSettings.ssao = settings["ssao"].GetBool();
+            if (settings.HasMember("fxaa"))
+                gSettings.fxaa = settings["fxaa"].GetBool();
+            if (settings.HasMember("taa"))
+                gSettings.taa = settings["taa"].GetBool();
+            if (settings.HasMember("cas_sharpening"))
+                gSettings.cas_sharpening = settings["cas_sharpening"].GetBool();
+            if (settings.HasMember("cas_sharpness"))
+                gSettings.cas_sharpness = settings["cas_sharpness"].GetFloat();
+            if (settings.HasMember("ssr"))
+                gSettings.ssr = settings["ssr"].GetBool();
+            if (settings.HasMember("tonemapping"))
+                gSettings.tonemapping = settings["tonemapping"].GetBool();
+            if (settings.HasMember("dof"))
+                gSettings.dof = settings["dof"].GetBool();
+            if (settings.HasMember("dof_focus_scale"))
+                gSettings.dof_focus_scale = settings["dof_focus_scale"].GetFloat();
+            if (settings.HasMember("dof_blur_range"))
+                gSettings.dof_blur_range = settings["dof_blur_range"].GetFloat();
+            if (settings.HasMember("bloom"))
+                gSettings.bloom = settings["bloom"].GetBool();
+            if (settings.HasMember("bloom_strength"))
+                gSettings.bloom_strength = settings["bloom_strength"].GetFloat();
+            if (settings.HasMember("bloom_range"))
+                gSettings.bloom_range = settings["bloom_range"].GetFloat();
+            if (settings.HasMember("motion_blur"))
+                gSettings.motion_blur = settings["motion_blur"].GetBool();
+            if (settings.HasMember("motion_blur_strength"))
+                gSettings.motion_blur_strength = settings["motion_blur_strength"].GetFloat();
+            if (settings.HasMember("motion_blur_samples"))
+                gSettings.motion_blur_samples = settings["motion_blur_samples"].GetInt();
+            if (settings.HasMember("IBL"))
+                gSettings.IBL = settings["IBL"].GetBool();
+            if (settings.HasMember("IBL_intensity"))
+                gSettings.IBL_intensity = settings["IBL_intensity"].GetFloat();
+            if (settings.HasMember("lights_intensity"))
+                gSettings.lights_intensity = settings["lights_intensity"].GetFloat();
+            if (settings.HasMember("randomize_lights"))
+                gSettings.randomize_lights = settings["randomize_lights"].GetBool();
+            if (settings.HasMember("day"))
+                gSettings.day = settings["day"].GetBool();
+            if (settings.HasMember("depth_bias") && settings["depth_bias"].IsArray() && settings["depth_bias"].Size() == 3)
+            {
+                gSettings.depth_bias[0] = settings["depth_bias"][0].GetFloat();
+                gSettings.depth_bias[1] = settings["depth_bias"][1].GetFloat();
+                gSettings.depth_bias[2] = settings["depth_bias"][2].GetFloat();
+            }
+            if (settings.HasMember("time_scale"))
+                gSettings.time_scale = settings["time_scale"].GetFloat();
+            ReadStringVectorMember(settings, "model_list", gSettings.model_list);
+            if (settings.HasMember("freeze_frustum_culling"))
+                gSettings.freeze_frustum_culling = settings["freeze_frustum_culling"].GetBool();
+            if (settings.HasMember("draw_grid"))
+                gSettings.draw_grid = settings["draw_grid"].GetBool();
+            if (settings.HasMember("draw_aabbs"))
+                gSettings.draw_aabbs = settings["draw_aabbs"].GetBool();
+            if (settings.HasMember("aabbs_depth_aware"))
+                gSettings.aabbs_depth_aware = settings["aabbs_depth_aware"].GetBool();
+            if (settings.HasMember("dynamic_rendering"))
+                gSettings.dynamic_rendering = settings["dynamic_rendering"].GetBool() && RHII.GetCaps().dynamicRendering;
+            if (settings.HasMember("ray_tracing_support"))
+                gSettings.ray_tracing_support = RHII.GetCaps().rayTracing;
+            if (settings.HasMember("render_mode"))
+                gSettings.render_mode = ClampRenderModeToRayTracingSupport(
+                    static_cast<RenderMode>(settings["render_mode"].GetInt()), RHII.GetCaps().rayTracing);
+            if (settings.HasMember("use_Disney_PBR"))
+                gSettings.use_Disney_PBR = settings["use_Disney_PBR"].GetBool();
+            if (settings.HasMember("present_mode"))
+            {
+                gSettings.preferred_present_mode = static_cast<PePresentMode>(settings["present_mode"].GetInt());
+                EventSystem::PushEvent(EventType::PresentMode);
+            }
+        }
+
         std::string MakePrimitiveSourceId(const std::string &ptype, const vec4 &params, uint32_t count)
         {
             std::string id = "prim:" + ptype;
@@ -239,48 +427,7 @@ namespace pe
         void AddSettings()
         {
             rapidjson::Value settings(rapidjson::kObjectType);
-            auto &gSettings = Settings::Get<GlobalSettings>();
-            settings.AddMember("shadows", gSettings.shadows, allocator);
-            settings.AddMember("shadow_map_size", gSettings.shadow_map_size, allocator);
-            settings.AddMember("num_cascades", gSettings.num_cascades, allocator);
-            settings.AddMember("shadow_distance", gSettings.shadow_distance, allocator);
-            settings.AddMember("shadow_cascade_lambda", gSettings.shadow_cascade_lambda, allocator);
-            settings.AddMember("shadow_normal_bias", gSettings.shadow_normal_bias, allocator);
-            settings.AddMember("shadow_fade_fraction", gSettings.shadow_fade_fraction, allocator);
-            settings.AddMember("shadow_filter_radius", gSettings.shadow_filter_radius, allocator);
-            settings.AddMember("shadow_debug_mode", gSettings.shadow_debug_mode, allocator);
-            settings.AddMember("render_scale", gSettings.render_scale, allocator);
-            settings.AddMember("ssao", gSettings.ssao, allocator);
-            settings.AddMember("fxaa", gSettings.fxaa, allocator);
-            settings.AddMember("taa", gSettings.taa, allocator);
-            settings.AddMember("cas_sharpening", gSettings.cas_sharpening, allocator);
-            settings.AddMember("cas_sharpness", gSettings.cas_sharpness, allocator);
-            settings.AddMember("ssr", gSettings.ssr, allocator);
-            settings.AddMember("tonemapping", gSettings.tonemapping, allocator);
-            settings.AddMember("dof", gSettings.dof, allocator);
-            settings.AddMember("dof_focus_scale", gSettings.dof_focus_scale, allocator);
-            settings.AddMember("dof_blur_range", gSettings.dof_blur_range, allocator);
-            settings.AddMember("bloom", gSettings.bloom, allocator);
-            settings.AddMember("bloom_strength", gSettings.bloom_strength, allocator);
-            settings.AddMember("bloom_range", gSettings.bloom_range, allocator);
-            settings.AddMember("motion_blur", gSettings.motion_blur, allocator);
-            settings.AddMember("motion_blur_strength", gSettings.motion_blur_strength, allocator);
-            settings.AddMember("motion_blur_samples", gSettings.motion_blur_samples, allocator);
-            settings.AddMember("IBL", gSettings.IBL, allocator);
-            settings.AddMember("IBL_intensity", gSettings.IBL_intensity, allocator);
-            settings.AddMember("lights_intensity", gSettings.lights_intensity, allocator);
-            settings.AddMember("day", gSettings.day, allocator);
-
-            rapidjson::Value depthBias(rapidjson::kArrayType);
-            depthBias.PushBack(gSettings.depth_bias[0], allocator);
-            depthBias.PushBack(gSettings.depth_bias[1], allocator);
-            depthBias.PushBack(gSettings.depth_bias[2], allocator);
-            settings.AddMember("depth_bias", depthBias.Move(), allocator);
-
-            settings.AddMember("draw_grid", gSettings.draw_grid, allocator);
-            settings.AddMember("draw_aabbs", gSettings.draw_aabbs, allocator);
-            settings.AddMember("render_mode", static_cast<int>(gSettings.render_mode), allocator);
-            settings.AddMember("present_mode", static_cast<int>(gSettings.preferred_present_mode), allocator);
+            AddGlobalSettingsMembers(settings, allocator);
 
             document.AddMember("settings", settings.Move(), allocator);
         }
@@ -1060,89 +1207,7 @@ namespace pe
         if (d.HasMember("settings"))
         {
             const auto &settings = d["settings"];
-            auto &gSettings = Settings::Get<GlobalSettings>();
-            if (settings.HasMember("shadows"))
-                gSettings.shadows = settings["shadows"].GetBool();
-            if (settings.HasMember("shadow_map_size"))
-                gSettings.shadow_map_size = settings["shadow_map_size"].GetUint();
-            if (settings.HasMember("num_cascades"))
-                gSettings.num_cascades = settings["num_cascades"].GetUint();
-            if (settings.HasMember("shadow_distance"))
-                gSettings.shadow_distance = settings["shadow_distance"].GetFloat();
-            if (settings.HasMember("shadow_cascade_lambda"))
-                gSettings.shadow_cascade_lambda = settings["shadow_cascade_lambda"].GetFloat();
-            if (settings.HasMember("shadow_normal_bias"))
-                gSettings.shadow_normal_bias = settings["shadow_normal_bias"].GetFloat();
-            if (settings.HasMember("shadow_fade_fraction"))
-                gSettings.shadow_fade_fraction = settings["shadow_fade_fraction"].GetFloat();
-            if (settings.HasMember("shadow_filter_radius"))
-                gSettings.shadow_filter_radius = settings["shadow_filter_radius"].GetFloat();
-            if (settings.HasMember("shadow_debug_mode"))
-                gSettings.shadow_debug_mode = settings["shadow_debug_mode"].GetInt();
-            if (settings.HasMember("render_scale"))
-            {
-                gSettings.render_scale = settings["render_scale"].GetFloat();
-                EventSystem::PushEvent(EventType::Resize);
-            }
-            if (settings.HasMember("ssao"))
-                gSettings.ssao = settings["ssao"].GetBool();
-            if (settings.HasMember("fxaa"))
-                gSettings.fxaa = settings["fxaa"].GetBool();
-            if (settings.HasMember("taa"))
-                gSettings.taa = settings["taa"].GetBool();
-            if (settings.HasMember("cas_sharpening"))
-                gSettings.cas_sharpening = settings["cas_sharpening"].GetBool();
-            if (settings.HasMember("cas_sharpness"))
-                gSettings.cas_sharpness = settings["cas_sharpness"].GetFloat();
-            if (settings.HasMember("ssr"))
-                gSettings.ssr = settings["ssr"].GetBool();
-            if (settings.HasMember("tonemapping"))
-                gSettings.tonemapping = settings["tonemapping"].GetBool();
-            if (settings.HasMember("dof"))
-                gSettings.dof = settings["dof"].GetBool();
-            if (settings.HasMember("dof_focus_scale"))
-                gSettings.dof_focus_scale = settings["dof_focus_scale"].GetFloat();
-            if (settings.HasMember("dof_blur_range"))
-                gSettings.dof_blur_range = settings["dof_blur_range"].GetFloat();
-            if (settings.HasMember("bloom"))
-                gSettings.bloom = settings["bloom"].GetBool();
-            if (settings.HasMember("bloom_strength"))
-                gSettings.bloom_strength = settings["bloom_strength"].GetFloat();
-            if (settings.HasMember("bloom_range"))
-                gSettings.bloom_range = settings["bloom_range"].GetFloat();
-            if (settings.HasMember("motion_blur"))
-                gSettings.motion_blur = settings["motion_blur"].GetBool();
-            if (settings.HasMember("motion_blur_strength"))
-                gSettings.motion_blur_strength = settings["motion_blur_strength"].GetFloat();
-            if (settings.HasMember("motion_blur_samples"))
-                gSettings.motion_blur_samples = settings["motion_blur_samples"].GetInt();
-            if (settings.HasMember("IBL"))
-                gSettings.IBL = settings["IBL"].GetBool();
-            if (settings.HasMember("IBL_intensity"))
-                gSettings.IBL_intensity = settings["IBL_intensity"].GetFloat();
-            if (settings.HasMember("lights_intensity"))
-                gSettings.lights_intensity = settings["lights_intensity"].GetFloat();
-            if (settings.HasMember("day"))
-                gSettings.day = settings["day"].GetBool();
-            if (settings.HasMember("depth_bias"))
-            {
-                gSettings.depth_bias[0] = settings["depth_bias"][0].GetFloat();
-                gSettings.depth_bias[1] = settings["depth_bias"][1].GetFloat();
-                gSettings.depth_bias[2] = settings["depth_bias"][2].GetFloat();
-            }
-            if (settings.HasMember("draw_grid"))
-                gSettings.draw_grid = settings["draw_grid"].GetBool();
-            if (settings.HasMember("draw_aabbs"))
-                gSettings.draw_aabbs = settings["draw_aabbs"].GetBool();
-            if (settings.HasMember("render_mode"))
-                gSettings.render_mode = ClampRenderModeToRayTracingSupport(
-                    static_cast<RenderMode>(settings["render_mode"].GetInt()), RHII.GetCaps().rayTracing);
-            if (settings.HasMember("present_mode"))
-            {
-                gSettings.preferred_present_mode = static_cast<PePresentMode>(settings["present_mode"].GetInt());
-                EventSystem::PushEvent(EventType::PresentMode);
-            }
-
+            ApplyGlobalSettingsMembers(settings);
             MarkUniformsDirty();
         }
 
@@ -2670,88 +2735,7 @@ namespace pe
         if (d.HasMember("settings"))
         {
             const auto &settings = d["settings"];
-            auto &gSettings = Settings::Get<GlobalSettings>();
-            if (settings.HasMember("shadows"))
-                gSettings.shadows = settings["shadows"].GetBool();
-            if (settings.HasMember("shadow_map_size"))
-                gSettings.shadow_map_size = settings["shadow_map_size"].GetUint();
-            if (settings.HasMember("num_cascades"))
-                gSettings.num_cascades = settings["num_cascades"].GetUint();
-            if (settings.HasMember("shadow_distance"))
-                gSettings.shadow_distance = settings["shadow_distance"].GetFloat();
-            if (settings.HasMember("shadow_cascade_lambda"))
-                gSettings.shadow_cascade_lambda = settings["shadow_cascade_lambda"].GetFloat();
-            if (settings.HasMember("shadow_normal_bias"))
-                gSettings.shadow_normal_bias = settings["shadow_normal_bias"].GetFloat();
-            if (settings.HasMember("shadow_fade_fraction"))
-                gSettings.shadow_fade_fraction = settings["shadow_fade_fraction"].GetFloat();
-            if (settings.HasMember("shadow_filter_radius"))
-                gSettings.shadow_filter_radius = settings["shadow_filter_radius"].GetFloat();
-            if (settings.HasMember("shadow_debug_mode"))
-                gSettings.shadow_debug_mode = settings["shadow_debug_mode"].GetInt();
-            if (settings.HasMember("render_scale"))
-            {
-                gSettings.render_scale = settings["render_scale"].GetFloat();
-                EventSystem::PushEvent(EventType::Resize);
-            }
-            if (settings.HasMember("ssao"))
-                gSettings.ssao = settings["ssao"].GetBool();
-            if (settings.HasMember("fxaa"))
-                gSettings.fxaa = settings["fxaa"].GetBool();
-            if (settings.HasMember("taa"))
-                gSettings.taa = settings["taa"].GetBool();
-            if (settings.HasMember("cas_sharpening"))
-                gSettings.cas_sharpening = settings["cas_sharpening"].GetBool();
-            if (settings.HasMember("cas_sharpness"))
-                gSettings.cas_sharpness = settings["cas_sharpness"].GetFloat();
-            if (settings.HasMember("ssr"))
-                gSettings.ssr = settings["ssr"].GetBool();
-            if (settings.HasMember("tonemapping"))
-                gSettings.tonemapping = settings["tonemapping"].GetBool();
-            if (settings.HasMember("dof"))
-                gSettings.dof = settings["dof"].GetBool();
-            if (settings.HasMember("dof_focus_scale"))
-                gSettings.dof_focus_scale = settings["dof_focus_scale"].GetFloat();
-            if (settings.HasMember("dof_blur_range"))
-                gSettings.dof_blur_range = settings["dof_blur_range"].GetFloat();
-            if (settings.HasMember("bloom"))
-                gSettings.bloom = settings["bloom"].GetBool();
-            if (settings.HasMember("bloom_strength"))
-                gSettings.bloom_strength = settings["bloom_strength"].GetFloat();
-            if (settings.HasMember("bloom_range"))
-                gSettings.bloom_range = settings["bloom_range"].GetFloat();
-            if (settings.HasMember("motion_blur"))
-                gSettings.motion_blur = settings["motion_blur"].GetBool();
-            if (settings.HasMember("motion_blur_strength"))
-                gSettings.motion_blur_strength = settings["motion_blur_strength"].GetFloat();
-            if (settings.HasMember("motion_blur_samples"))
-                gSettings.motion_blur_samples = settings["motion_blur_samples"].GetInt();
-            if (settings.HasMember("IBL"))
-                gSettings.IBL = settings["IBL"].GetBool();
-            if (settings.HasMember("IBL_intensity"))
-                gSettings.IBL_intensity = settings["IBL_intensity"].GetFloat();
-            if (settings.HasMember("lights_intensity"))
-                gSettings.lights_intensity = settings["lights_intensity"].GetFloat();
-            if (settings.HasMember("day"))
-                gSettings.day = settings["day"].GetBool();
-            if (settings.HasMember("depth_bias") && settings["depth_bias"].Size() == 3)
-            {
-                gSettings.depth_bias[0] = settings["depth_bias"][0].GetFloat();
-                gSettings.depth_bias[1] = settings["depth_bias"][1].GetFloat();
-                gSettings.depth_bias[2] = settings["depth_bias"][2].GetFloat();
-            }
-            if (settings.HasMember("draw_grid"))
-                gSettings.draw_grid = settings["draw_grid"].GetBool();
-            if (settings.HasMember("draw_aabbs"))
-                gSettings.draw_aabbs = settings["draw_aabbs"].GetBool();
-            if (settings.HasMember("render_mode"))
-                gSettings.render_mode = ClampRenderModeToRayTracingSupport(
-                    static_cast<RenderMode>(settings["render_mode"].GetInt()), RHII.GetCaps().rayTracing);
-            if (settings.HasMember("present_mode"))
-            {
-                gSettings.preferred_present_mode = static_cast<PePresentMode>(settings["present_mode"].GetInt());
-                EventSystem::PushEvent(EventType::PresentMode);
-            }
+            ApplyGlobalSettingsMembers(settings);
             MarkUniformsDirty();
         }
 

@@ -11,6 +11,7 @@
 #include "Scene/SceneAccess.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
+#include "Script/Bindings/Input/InputState.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui_internal.h"
@@ -505,15 +506,21 @@ namespace pe
         const ImVec2 imageMin = ImGui::GetItemRectMin();
         const ImVec2 imageMax = ImGui::GetItemRectMax();
         const bool imageHovered = ImGui::IsItemHovered();
+        GUIState::s_sceneViewImageRectValid = true;
+        GUIState::s_sceneViewImageMinX = imageMin.x;
+        GUIState::s_sceneViewImageMinY = imageMin.y;
+        GUIState::s_sceneViewImageWidth = imageMax.x - imageMin.x;
+        GUIState::s_sceneViewImageHeight = imageMax.y - imageMin.y;
 
         // Gizmos (hit tests are in ImGuizmo)
         DrawGizmos(imageMin, imageSize);
 
         const bool overGizmo = ImGuizmo::IsOver();
         const bool usingGizmo = ImGuizmo::IsUsing();
+        const bool runtimeUiMouseCaptured = InputState::IsMouseCapturedByUi();
 
         // Input (picking / focus) only when not interacting with gizmos
-        if (!overGizmo && !usingGizmo)
+        if (!runtimeUiMouseCaptured && !overGizmo && !usingGizmo)
         {
             if (imageHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {

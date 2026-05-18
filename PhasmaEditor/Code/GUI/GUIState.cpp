@@ -64,6 +64,11 @@ namespace pe
     bool GUIState::s_sceneViewFocused = false;
     bool GUIState::s_hierarchyFocused = false;
     Image *GUIState::s_sceneViewImage = nullptr;
+    bool GUIState::s_sceneViewImageRectValid = false;
+    float GUIState::s_sceneViewImageMinX = 0.0f;
+    float GUIState::s_sceneViewImageMinY = 0.0f;
+    float GUIState::s_sceneViewImageWidth = 0.0f;
+    float GUIState::s_sceneViewImageHeight = 0.0f;
     bool GUIState::s_useTransformGizmo = true;
     bool GUIState::s_useLightGizmos = true;
     bool GUIState::s_useCameraGizmos = true;

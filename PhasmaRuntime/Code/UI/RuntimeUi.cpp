@@ -62,6 +62,8 @@ namespace pe
         m_backendName = "none";
         m_initialized = false;
         m_frameOpen = false;
+        m_frameSurfaceWidth = 0;
+        m_frameSurfaceHeight = 0;
     }
 
     bool RuntimeUiSystem::ProcessEvent(const SDL_Event &event)
@@ -77,8 +79,8 @@ namespace pe
         const double delta = FrameTimer::Instance().GetDelta();
         RuntimeUiFrameInfo frameInfo{};
         frameInfo.deltaSeconds = static_cast<float>(delta);
-        frameInfo.width = RHII.GetWidth();
-        frameInfo.height = RHII.GetHeight();
+        frameInfo.width = m_frameSurfaceWidth > 0 ? m_frameSurfaceWidth : RHII.GetWidth();
+        frameInfo.height = m_frameSurfaceHeight > 0 ? m_frameSurfaceHeight : RHII.GetHeight();
         m_backend->BeginFrame(frameInfo);
         m_frameOpen = true;
     }
@@ -102,6 +104,22 @@ namespace pe
         context.cmd = cmd;
         context.renderTarget = renderTarget;
         m_backend->Render(context);
+    }
+
+    void RuntimeUiSystem::SetFrameSurfaceSize(uint32_t width, uint32_t height)
+    {
+        m_frameSurfaceWidth = width;
+        m_frameSurfaceHeight = height;
+    }
+
+    bool RuntimeUiSystem::WantsMouseCapture() const
+    {
+        return m_initialized && m_backend && m_backend->WantsMouseCapture();
+    }
+
+    bool RuntimeUiSystem::WantsKeyboardCapture() const
+    {
+        return m_initialized && m_backend && m_backend->WantsKeyboardCapture();
     }
 
     RuntimeUiSystem::Screen &RuntimeUiSystem::GetOrCreateScreen(const std::string &screenId)

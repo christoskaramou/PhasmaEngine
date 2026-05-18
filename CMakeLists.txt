@@ -163,10 +163,6 @@ endif()
 # Shared project/runtime contract used by editor today and future player hosts.
 add_subdirectory(PhasmaRuntime)
 
-# Runtime UI backends. Public runtime-facing UI APIs stay in PhasmaRuntime;
-# concrete backends live here so hosts can opt in.
-add_subdirectory(PhasmaRuntimeUI)
-
 # Standalone player host over PhasmaRuntime.
 add_subdirectory(PhasmaPlayer)
 

@@ -33,6 +33,7 @@
 #include "RenderPasses/TAAPass.h"
 #include "RenderPasses/TonemapPass.h"
 #include "RenderPasses/UpsamplePass.h"
+#include "UI/RuntimeUi.h"
 
 namespace pe
 {
@@ -52,6 +53,12 @@ namespace pe
         bool SupportsRayTracingPass()
         {
             return RHII.GetCaps().rayTracing;
+        }
+
+        bool HasRuntimeUiPass()
+        {
+            RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi();
+            return runtimeUi && runtimeUi->IsInitialized();
         }
     } // namespace
 
@@ -360,7 +367,7 @@ namespace pe
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::MotionBlur)] = gs.motion_blur && dx12RenderRaster;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Aabbs)] = gs.draw_aabbs;
             m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)] = gs.draw_grid;
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GUI)] = m_gui.Render();
+            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GUI)] = m_gui.Render() || HasRuntimeUiPass();
             return;
         }
 
@@ -388,7 +395,7 @@ namespace pe
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::DOF)] = gs.dof;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::MotionBlur)] = gs.motion_blur;
         m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)] = gs.draw_grid;
-        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GUI)] = m_gui.Render();
+        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GUI)] = m_gui.Render() || HasRuntimeUiPass();
     }
 
     void RendererSystem::WaitPreviousFrameCommands()

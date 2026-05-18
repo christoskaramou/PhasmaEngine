@@ -1,4 +1,5 @@
-#include "Backends/ImGuiRuntimeUiBackend.h"
+#include "UI/Backends/ImGuiRuntimeUiBackend.h"
+#include "UI/Backends/ImGuiRuntimeUiStyle.h"
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/Queue.h"
@@ -58,10 +59,8 @@ namespace pe
                 ImGui::SetCurrentContext(m_context);
 
                 ImGuiIO &io = ImGui::GetIO();
-                io.ConfigFlags |= ImGuiConfigFlags_IsSRGB;
-                io.IniFilename = nullptr;
-                io.LogFilename = nullptr;
-                ImGui::StyleColorsDark();
+                runtime_ui_imgui::ApplyContextSettings(io);
+                runtime_ui_imgui::ApplyStyle();
 
                 if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
                 {
@@ -160,6 +159,8 @@ namespace pe
                     return;
 
                 ImGui::SetCurrentContext(m_context);
+                runtime_ui_imgui::ApplyContextSettings(ImGui::GetIO());
+                runtime_ui_imgui::ApplyStyle();
                 ImGui_ImplSDL2_NewFrame();
                 if (m_api == PE_GRAPHICS_API_VULKAN)
                 {
@@ -181,9 +182,9 @@ namespace pe
                 if (!m_frameOpen)
                     return false;
 
-                ImGui::SetNextWindowSize(ImVec2(300.0f, 0.0f), ImGuiCond_FirstUseEver);
+                ImGui::SetNextWindowSize(ImVec2(runtime_ui_imgui::kWindowWidth, 0.0f), ImGuiCond_FirstUseEver);
                 const std::string windowId = screen.title + "##" + screen.id;
-                return ImGui::Begin(windowId.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+                return ImGui::Begin(windowId.c_str(), nullptr, runtime_ui_imgui::kPlayerWindowFlags);
             }
 
             void Text(const char *label, const char *value) override
@@ -238,6 +239,25 @@ namespace pe
                 ImGui::SetCurrentContext(m_context);
                 ImDrawData *drawData = ImGui::GetDrawData();
                 return drawData && drawData->TotalVtxCount > 0;
+            }
+
+            bool WantsMouseCapture() const override
+            {
+                if (!m_initialized || !m_context)
+                    return false;
+
+                ImGui::SetCurrentContext(m_context);
+                return ImGui::GetIO().WantCaptureMouse;
+            }
+
+            bool WantsKeyboardCapture() const override
+            {
+                if (!m_initialized || !m_context)
+                    return false;
+
+                ImGui::SetCurrentContext(m_context);
+                const ImGuiIO &io = ImGui::GetIO();
+                return io.WantCaptureKeyboard || io.WantTextInput;
             }
 
             void Render(const RuntimeUiRenderContext &context) override

@@ -11,6 +11,7 @@
 #include "Scene/SelectionManager.h"
 #include "Script/Bindings/Input/InputState.h"
 #include "Systems/RendererSystem.h"
+#include "UI/RuntimeUi.h"
 #include "Window/WindowEvents.h"
 #include "imgui/imgui_impl_sdl2.h"
 
@@ -72,6 +73,22 @@ namespace pe
         return SDL_GetRelativeMouseMode() == SDL_TRUE;
     }
 
+    bool IsMouseInputEvent(const SDL_Event &event)
+    {
+        return event.type == SDL_MOUSEMOTION ||
+               event.type == SDL_MOUSEBUTTONDOWN ||
+               event.type == SDL_MOUSEBUTTONUP ||
+               event.type == SDL_MOUSEWHEEL;
+    }
+
+    bool IsKeyboardInputEvent(const SDL_Event &event)
+    {
+        return event.type == SDL_KEYDOWN ||
+               event.type == SDL_KEYUP ||
+               event.type == SDL_TEXTINPUT ||
+               event.type == SDL_TEXTEDITING;
+    }
+
     void Window::SmoothMouseRotation(Camera *camera, uint32_t triggerButton)
     {
         PE_ERROR_IF(!camera, "Camera is nullptr");
@@ -115,14 +132,21 @@ namespace pe
         SDL_Event sdlEvent;
         std::vector<std::string> dropAccum;
         InputState::BeginFrame();
+        RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi();
         while (SDL_PollEvent(&sdlEvent))
         {
             if (sdlEvent.type == SDL_QUIT)
                 EventSystem::PushEvent(EventType::RequestExit);
 
             ImGui_ImplSDL2_ProcessEvent(&sdlEvent);
+            const bool runtimeUiCaptured = runtimeUi && runtimeUi->ProcessEvent(sdlEvent);
+            if (runtimeUiCaptured)
+            {
+                InputState::SetMouseCapturedByUi(IsMouseInputEvent(sdlEvent));
+                InputState::SetKeyboardCapturedByUi(IsKeyboardInputEvent(sdlEvent));
+            }
 
-            if (sdlEvent.type == SDL_MOUSEMOTION)
+            if (!runtimeUiCaptured && sdlEvent.type == SDL_MOUSEMOTION)
                 InputState::AddMouseMotion(sdlEvent.motion.xrel, sdlEvent.motion.yrel);
 
             if (IsRuntimeWindowResizeEvent(sdlEvent))
@@ -153,6 +177,12 @@ namespace pe
                     EventSystem::DispatchEvent(EventType::FileDrop, dropAccum);
                 dropAccum.clear();
             }
+        }
+
+        if (runtimeUi)
+        {
+            InputState::SetMouseCapturedByUi(runtimeUi->WantsMouseCapture());
+            InputState::SetKeyboardCapturedByUi(runtimeUi->WantsKeyboardCapture());
         }
 
         EventSystem::QueuedEvent event;
