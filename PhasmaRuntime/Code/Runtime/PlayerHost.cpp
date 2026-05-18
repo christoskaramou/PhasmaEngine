@@ -26,6 +26,7 @@
 #include "Systems/AnimationSystem.h"
 #include "Systems/AudioSystem.h"
 #include "Systems/PhysicsSystem.h"
+#include "UI/RuntimeUi.h"
 #include "Window/WindowEvents.h"
 
 #include <filesystem>
@@ -64,10 +65,26 @@ namespace pe
                 PE_INFO("[Runtime] Startup scene: none");
         }
 
-        bool ShouldQuitFromEvent(const SDL_Event &event)
+        bool ShouldQuitFromEvent(const SDL_Event &event, bool uiCaptured)
         {
             return event.type == SDL_QUIT ||
-                   (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE);
+                   (!uiCaptured && event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE);
+        }
+
+        bool IsMouseInputEvent(const SDL_Event &event)
+        {
+            return event.type == SDL_MOUSEMOTION ||
+                   event.type == SDL_MOUSEBUTTONDOWN ||
+                   event.type == SDL_MOUSEBUTTONUP ||
+                   event.type == SDL_MOUSEWHEEL;
+        }
+
+        bool IsKeyboardInputEvent(const SDL_Event &event)
+        {
+            return event.type == SDL_KEYDOWN ||
+                   event.type == SDL_KEYUP ||
+                   event.type == SDL_TEXTINPUT ||
+                   event.type == SDL_TEXTEDITING;
         }
 
         Scene *s_playerScene = nullptr;
@@ -228,8 +245,8 @@ namespace pe
         class PlayerFramePump : public NoCopy, public NoMove
         {
         public:
-            PlayerFramePump(SDL_Window *window, RuntimeSceneRenderer &renderer)
-                : m_window(window), m_renderer(renderer)
+            PlayerFramePump(SDL_Window *window, RuntimeSceneRenderer &renderer, RuntimeUiSystem *runtimeUi)
+                : m_window(window), m_renderer(renderer), m_runtimeUi(runtimeUi)
             {
             }
 
@@ -244,21 +261,38 @@ namespace pe
                 FrameTimer::Instance().Tick();
                 m_renderer.WaitPreviousFrameCommands();
 
+                if (m_runtimeUi)
+                    m_runtimeUi->BeginFrame();
+
                 if (!ProcessEvents())
+                {
+                    if (m_runtimeUi)
+                        m_runtimeUi->EndFrame();
                     return false;
+                }
 
                 if (m_resizePending)
                     ResizeSwapchain();
 
                 if (IsWindowMinimized(m_window))
                 {
+                    if (m_runtimeUi)
+                        m_runtimeUi->EndFrame();
                     SDL_Delay(16);
                     return true;
                 }
 
                 UpdateGlobalSystems();
-                if (!ProcessRuntimeEvents())
+                if (m_runtimeUi)
+                    m_runtimeUi->UpdateSampleOverlay();
+
+                const bool keepRunning = ProcessRuntimeEvents();
+                if (m_runtimeUi)
+                    m_runtimeUi->EndFrame();
+
+                if (!keepRunning)
                     return false;
+
                 m_renderer.Update();
                 m_renderer.Draw();
                 FrameTimer::Instance().CountUpdatesStamp();
@@ -280,10 +314,17 @@ namespace pe
                 InputState::BeginFrame();
                 while (SDL_PollEvent(&event))
                 {
-                    if (ShouldQuitFromEvent(event))
+                    const bool uiCaptured = m_runtimeUi && m_runtimeUi->ProcessEvent(event);
+                    if (uiCaptured)
+                    {
+                        InputState::SetMouseCapturedByUi(IsMouseInputEvent(event));
+                        InputState::SetKeyboardCapturedByUi(IsKeyboardInputEvent(event));
+                    }
+
+                    if (ShouldQuitFromEvent(event, uiCaptured))
                         return false;
 
-                    if (event.type == SDL_MOUSEMOTION)
+                    if (!uiCaptured && event.type == SDL_MOUSEMOTION)
                         InputState::AddMouseMotion(event.motion.xrel, event.motion.yrel);
 
                     if (IsRuntimeWindowResizeEvent(event))
@@ -352,11 +393,17 @@ namespace pe
 
             SDL_Window *m_window = nullptr;
             RuntimeSceneRenderer &m_renderer;
+            RuntimeUiSystem *m_runtimeUi = nullptr;
             bool m_resizePending = false;
         };
     } // namespace
 
     int RunPlayerHost(int argc, char *argv[])
+    {
+        return RunPlayerHost(argc, argv, {});
+    }
+
+    int RunPlayerHost(int argc, char *argv[], PlayerHostDesc desc)
     {
         Path::Init();
         Log::Init();
@@ -434,6 +481,20 @@ namespace pe
                 RuntimeSceneRenderer renderer(scene);
                 renderer.Init(nullptr);
 
+                RuntimeUiSystem runtimeUi;
+                RuntimeUiSystem *runtimeUiPtr = nullptr;
+                if (desc.runtimeUiBackendFactory)
+                {
+                    if (runtimeUi.Init(desc.runtimeUiBackendFactory(), renderer.GetDisplayRT()))
+                    {
+                        runtimeUi.EnableSampleOverlay(desc.showSampleRuntimeUi);
+                        SetActiveRuntimeUi(&runtimeUi);
+                        renderer.SetRuntimeUi(&runtimeUi);
+                        runtimeUiPtr = &runtimeUi;
+                        PE_INFO("[RuntimeUI] Running with backend: %s", runtimeUi.GetBackendName().c_str());
+                    }
+                }
+
                 CreateGlobalSystem<ScriptSystem>()->Init(nullptr);
                 RegisterPlayerFileWatchers();
                 FileWatcher::Start();
@@ -442,7 +503,7 @@ namespace pe
                 StartRuntimePlaySession(scene, playStart);
 
                 {
-                    PlayerFramePump framePump(window.Get(), renderer);
+                    PlayerFramePump framePump(window.Get(), renderer, runtimeUiPtr);
                     PE_INFO("[Runtime] Player frame pump running (startup scene render)");
                     framePump.Run();
                 }
@@ -452,6 +513,9 @@ namespace pe
                 ThreadPool::GUI.WaitIdle();
                 ThreadPool::General.WaitIdle();
                 FileWatcher::Clear();
+                renderer.SetRuntimeUi(nullptr);
+                SetActiveRuntimeUi(nullptr);
+                runtimeUi.Shutdown();
                 renderer.Destroy();
                 runtimeCleanup.Cleanup();
             }

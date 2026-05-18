@@ -1,6 +1,9 @@
+#include "Backends/ImGuiRuntimeUiBackend.h"
 #include "Runtime/PlayerHost.h"
 
 int main(int argc, char *argv[])
 {
-    return pe::RunPlayerHost(argc, argv);
+    pe::PlayerHostDesc desc{};
+    desc.runtimeUiBackendFactory = pe::CreateImGuiRuntimeUiBackend;
+    return pe::RunPlayerHost(argc, argv, std::move(desc));
 }

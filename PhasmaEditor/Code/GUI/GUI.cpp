@@ -322,13 +322,14 @@ namespace pe
             addIfExists(config.directories, makePath("PhasmaMCP"));
             addIfExists(config.directories, makePath("PhasmaCore"));
             addIfExists(config.directories, makePath("PhasmaEditor"));
+            addIfExists(config.directories, makePath("PhasmaRuntime"));
+            addIfExists(config.directories, makePath("PhasmaRuntimeUI"));
             addIfExists(config.directories, makePath("PhasmaWebGPU"));
-
-            addIfExists(config.include_files, makePath("PhasmaEditor/Assets/Agent/START.md"));
 
             addIfExists(config.skip_directories, makePath("PhasmaMCP/third_party"));
             addIfExists(config.skip_directories, makePath("PhasmaCore/third_party"));
             addIfExists(config.skip_directories, makePath("PhasmaEditor/third_party"));
+            addIfExists(config.skip_directories, makePath("PhasmaRuntime/third_party"));
             addIfExists(config.skip_directories, makePath("PhasmaWebGPU/WgslBridge/target"));
             addIfExists(config.skip_directories, makePath("PhasmaEditor/Assets/Agent"));
             config.skip_files.clear();

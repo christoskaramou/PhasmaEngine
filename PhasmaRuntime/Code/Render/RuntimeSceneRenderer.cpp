@@ -33,6 +33,7 @@
 #include "RenderPasses/TonemapPass.h"
 #include "RenderPasses/UpsamplePass.h"
 #include "Render/ScreenshotWriter.h"
+#include "UI/RuntimeUi.h"
 
 namespace pe
 {
@@ -480,6 +481,8 @@ namespace pe
 
         cmd->Begin();
         m_renderGraph.Execute(cmd);
+        if (m_runtimeUi)
+            m_runtimeUi->Render(cmd, m_displayRT);
         BlitToSwapchain(cmd, m_displayRT, imageIndex);
         QueueScreenshotReadback(cmd, m_displayRT);
         Debug::CollectGpuTrace(cmd);

@@ -12,4 +12,8 @@ namespace pe::InputState
     void AddMouseMotion(int xrel, int yrel);
     MouseDelta ConsumeMouseDelta();
     void ResetMouseDelta();
+    void SetMouseCapturedByUi(bool captured);
+    void SetKeyboardCapturedByUi(bool captured);
+    bool IsMouseCapturedByUi();
+    bool IsKeyboardCapturedByUi();
 } // namespace pe::InputState

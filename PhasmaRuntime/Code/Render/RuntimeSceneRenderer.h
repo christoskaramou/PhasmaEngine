@@ -12,6 +12,7 @@ namespace pe
     class CommandBuffer;
     class Buffer;
     class Image;
+    class RuntimeUiSystem;
     class Semaphore;
     class CullingPass;
     class ShadowPass;
@@ -53,6 +54,7 @@ namespace pe
         void PollShaders(std::optional<size_t> hash = std::nullopt);
         void WaitPreviousFrameCommands();
         void WaitAllFramesCommands();
+        void SetRuntimeUi(RuntimeUiSystem *runtimeUi) { m_runtimeUi = runtimeUi; }
 
         Scene &GetScene() override { return m_scene; }
         const SkyBox &GetSkyBoxDay() const override { return m_skyBoxDay; }
@@ -130,6 +132,7 @@ namespace pe
         Image *m_viewportRT = nullptr;
         Image *m_depthStencil = nullptr;
         Image *m_screenshotRT = nullptr;
+        RuntimeUiSystem *m_runtimeUi = nullptr;
         bool m_screenshotRequested = false;
         bool m_screenshotPending = false;
         size_t m_screenshotRowPitch = 0;

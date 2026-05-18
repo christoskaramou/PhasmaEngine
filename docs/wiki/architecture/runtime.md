@@ -9,6 +9,12 @@ PhasmaRuntime is the shared runtime layer between PhasmaCore and the host produc
 - `PhasmaEditor` remains the desktop editor concept. `PhasmaEditorModule` is the current hot-reload DLL implementation detail, not the product/layer name.
 - `PhasmaPlayer` is the first standalone host over PhasmaRuntime instead of a copy of editor startup logic.
 
+## Runtime UI
+
+Runtime/game UI is a backend-neutral service in `PhasmaRuntime` with concrete renderer implementations outside PhasmaCore. The runtime-facing API is intentionally small: screens can be shown/hidden and populated with prototype text, number, bool, and button widgets. Public runtime and Lua call sites do not include ImGui types.
+
+`PhasmaRuntimeUI` provides the first concrete backend, Dear ImGui. The player creates that backend at the host boundary, sends SDL events to runtime UI before gameplay input, exposes UI capture state to runtime input bindings, and renders the UI after the render graph has produced the display target but before `BlitToSwapchain`. RmlUi is reserved as a future backend that can plug into the same lifecycle/event/render surface without rewriting runtime/game call sites.
+
 ## MyProject Contract
 
 The project contract starts as a small descriptor:
@@ -103,6 +109,7 @@ The first code slice is intentionally boring:
 - move `ScriptSystem` and runtime-safe Lua bindings into PhasmaRuntime. `ScriptRuntimeHooks` provides host state and mutation callbacks for play/pause, viewport focus, and model-loading indicators; the player registers runtime play/pause state, while the editor registers GUI-backed overrides. The editor keeps GUI/profiler/selection Lua extensions in `PhasmaEditor`, while player scripts get scene/node/model/material/camera/light/animation/physics/audio/input/settings/filesystem/shader/RHI helper bindings from runtime;
 - filter editor-only global Lua scripts in PhasmaRuntime before executing them. Global scripts marked `phasma: editor-only` load only when the editor host opts in through `ScriptRuntimeHooks`, so PhasmaPlayer does not execute editor shortcut scripts that depend on GUI/selection bindings;
 - keep the legacy Lua `update_editor` hook name for script compatibility, but treat it internally as an edit-mode hook rather than an editor-owned runtime path;
+- add runtime/game UI behind a backend-neutral `RuntimeUiSystem` in PhasmaRuntime and a separate `PhasmaRuntimeUI` Dear ImGui backend. PhasmaPlayer now routes SDL events through runtime UI before gameplay input, masks Lua input polling when UI captures mouse/keyboard, renders the UI after the runtime render graph and before swapchain blit, and exposes a small `runtime_ui` Lua surface for screen visibility plus simple prototype widgets;
 - add `RuntimePlaySession` as the shared play-service lifecycle surface. The editor play button still owns snapshots, toolbar state, and undo reset, while runtime owns starting/stopping physics/audio play services, optional script init for player startup, pause propagation, and animation-state cleanup;
 - wire `PhasmaPlayer` to load the selected startup scene, initialize `RuntimeSceneRenderer`, initialize Lua scripts and per-node script instances, start runtime physics/audio play mode, pump SDL input into runtime input state, tick `FrameTimer`, process runtime quit/compile/resize events, and render the scene frame loop.
 - keep PhasmaPlayer shutdown ordered so runtime play services, file watchers, renderer resources, and global systems stop while the scene/context are still valid; the scene is then destroyed before `Context::Remove()`.

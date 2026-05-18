@@ -13,6 +13,8 @@ namespace pe
             bool s_relativeMouseRequested = false;
             bool s_softwareMouseDelta = false;
             bool s_mousePositionInitialized = false;
+            bool s_mouseCapturedByUi = false;
+            bool s_keyboardCapturedByUi = false;
             int s_lastMouseX = 0;
             int s_lastMouseY = 0;
 
@@ -43,6 +45,8 @@ namespace pe
         void BeginFrame()
         {
             s_mouseDelta = {};
+            s_mouseCapturedByUi = false;
+            s_keyboardCapturedByUi = false;
         }
 
         void AddMouseMotion(int xrel, int yrel)
@@ -53,6 +57,9 @@ namespace pe
 
         MouseDelta ConsumeMouseDelta()
         {
+            if (s_mouseCapturedByUi)
+                return {};
+
             if (s_softwareMouseDelta)
             {
                 int x = 0;
@@ -135,6 +142,26 @@ namespace pe
                 s_softwareMouseDelta = true;
             return result == 0 && SDL_GetRelativeMouseMode() == SDL_TRUE;
         }
+
+        void SetMouseCapturedByUi(bool captured)
+        {
+            s_mouseCapturedByUi = s_mouseCapturedByUi || captured;
+        }
+
+        void SetKeyboardCapturedByUi(bool captured)
+        {
+            s_keyboardCapturedByUi = s_keyboardCapturedByUi || captured;
+        }
+
+        bool IsMouseCapturedByUi()
+        {
+            return s_mouseCapturedByUi;
+        }
+
+        bool IsKeyboardCapturedByUi()
+        {
+            return s_keyboardCapturedByUi;
+        }
     } // namespace InputState
 
     static struct InputBindings
@@ -147,6 +174,7 @@ namespace pe
 
                 // Keyboard state
                 input.set_function("is_key_down", [](const std::string &keyName) -> bool {
+                    if (InputState::IsKeyboardCapturedByUi()) return false;
                     SDL_Scancode sc = SDL_GetScancodeFromName(keyName.c_str());
                     if (sc == SDL_SCANCODE_UNKNOWN) return false;
                     const Uint8 *state = SDL_GetKeyboardState(nullptr);
@@ -154,6 +182,7 @@ namespace pe
                 });
 
                 input.set_function("is_key_pressed", [](const std::string &keyName) -> bool {
+                    if (InputState::IsKeyboardCapturedByUi()) return false;
                     SDL_Keycode kc = SDL_GetKeyFromName(keyName.c_str());
                     if (kc == SDLK_UNKNOWN) return false;
                     SDL_Scancode sc = SDL_GetScancodeFromKey(kc);
@@ -165,7 +194,15 @@ namespace pe
                 input.set_function("get_mouse_position", [](sol::this_state ts) -> sol::table {
                     sol::state_view lua(ts);
                     int x, y;
-                    SDL_GetMouseState(&x, &y);
+                    if (InputState::IsMouseCapturedByUi())
+                    {
+                        x = 0;
+                        y = 0;
+                    }
+                    else
+                    {
+                        SDL_GetMouseState(&x, &y);
+                    }
                     sol::table t = lua.create_table();
                     t["x"] = x;
                     t["y"] = y;
@@ -183,16 +220,19 @@ namespace pe
                 });
 
                 input.set_function("is_mouse_down", [](int button) -> bool {
+                    if (InputState::IsMouseCapturedByUi()) return false;
                     Uint32 state = SDL_GetMouseState(nullptr, nullptr);
                     return (state & SDL_BUTTON(button)) != 0;
                 });
 
                 input.set_function("is_left_mouse_down", []() -> bool {
+                    if (InputState::IsMouseCapturedByUi()) return false;
                     Uint32 state = SDL_GetMouseState(nullptr, nullptr);
                     return (state & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
                 });
 
                 input.set_function("is_right_mouse_down", []() -> bool {
+                    if (InputState::IsMouseCapturedByUi()) return false;
                     Uint32 state = SDL_GetMouseState(nullptr, nullptr);
                     return (state & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
                 });
@@ -202,6 +242,7 @@ namespace pe
                 });
 
                 input.set_function("is_middle_mouse_down", []() -> bool {
+                    if (InputState::IsMouseCapturedByUi()) return false;
                     Uint32 state = SDL_GetMouseState(nullptr, nullptr);
                     return (state & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
                 });

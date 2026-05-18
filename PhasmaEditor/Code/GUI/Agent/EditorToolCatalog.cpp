@@ -105,7 +105,10 @@ namespace pe
                 break;
         }
 
-        return assetsPath.parent_path().parent_path();
+        // No source tree (e.g. release zip): use the runtime root. addIfExists checks in
+        // ApplyDefaultCodebaseIndexingConfig will skip missing source dirs, leaving the
+        // indexing arrays empty rather than pointing at bogus paths.
+        return fs::path(Path::Root).lexically_normal();
     }
 
     std::vector<ToolDefinition> BuildEditorToolDefinitions(const EditorToolCatalogContext &context)
@@ -848,7 +851,7 @@ namespace pe
                 ToolDefinition tool;
                 tool.name = "read_agent_file";
                 tool.description = "Reads a text file from the agent workspace (Assets/Agent/). "
-                                   "Use this to read START.md, MEMORY.md, TASKS.md, PROGRESSION.md, or any workspace file.";
+                                   "Use this to read MEMORY.md, TASKS.md, PROGRESSION.md, or any workspace file.";
                 tool.inputSchema = schema::Object({
                     {"path", "File path relative to workspace (e.g. 'MEMORY.md') or absolute", schema::String(), true},
                 });

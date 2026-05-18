@@ -8,7 +8,7 @@ add_executable(PhasmaPlayer "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
 
 target_precompile_headers(PhasmaPlayer PRIVATE "${CMAKE_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
 target_link_directories(PhasmaPlayer PRIVATE ${PE_CORE_LINK_DIRS})
-target_link_libraries(PhasmaPlayer PRIVATE PhasmaCore "$<LINK_LIBRARY:WHOLE_ARCHIVE,PhasmaRuntime>" SDL2 SDL2main)
+target_link_libraries(PhasmaPlayer PRIVATE PhasmaCore "$<LINK_LIBRARY:WHOLE_ARCHIVE,PhasmaRuntime>" PhasmaRuntimeUI SDL2 SDL2main)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set_target_properties(PhasmaPlayer PROPERTIES

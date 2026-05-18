@@ -9,6 +9,7 @@
 !/PhasmaMCP/
 !/PhasmaPlayer/
 !/PhasmaRuntime/
+!/PhasmaRuntimeUI/
 !/PhasmaWebGPU/
 !/cmake/
 !/cmake/**
@@ -27,6 +28,9 @@
 
 !/PhasmaRuntime/Code/
 !/PhasmaRuntime/CMakeLists.txt
+
+!/PhasmaRuntimeUI/Code/
+!/PhasmaRuntimeUI/CMakeLists.txt
 
 !/PhasmaPlayer/CMakeLists.txt
 !/PhasmaPlayer/*.cpp
@@ -311,10 +315,9 @@ Phasma/Assets/ShaderCache/
 imgui.ini
 .cache/
 
-# Agent runtime files (keep START.md only)
+# Agent runtime files
 PhasmaEditor/Assets/Temp/
-PhasmaEditor/Assets/Agent/*
-!PhasmaEditor/Assets/Agent/START.md
+PhasmaEditor/Assets/Agent/
 
 # Agent instruction and wiki files
 !/INSTRUCTIONS.md
