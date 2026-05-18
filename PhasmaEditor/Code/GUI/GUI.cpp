@@ -15,6 +15,7 @@
 #include "Script/ScriptSystem.h"
 #include "Scene/SelectionManager.h"
 #include "Scene/SceneHost.h"
+#include "UI/RuntimeUi.h"
 #include "IconsFontAwesome.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
@@ -327,7 +328,6 @@ namespace pe
 
             addIfExists(config.skip_directories, makePath("PhasmaMCP/third_party"));
             addIfExists(config.skip_directories, makePath("PhasmaCore/third_party"));
-            addIfExists(config.skip_directories, makePath("PhasmaEditor/third_party"));
             addIfExists(config.skip_directories, makePath("PhasmaRuntime/third_party"));
             addIfExists(config.skip_directories, makePath("PhasmaWebGPU/WgslBridge/target"));
             addIfExists(config.skip_directories, makePath("PhasmaEditor/Assets/Agent"));
@@ -2411,12 +2411,15 @@ namespace pe
         if (!m_initialized)
             return;
 
-        if (!m_render || ImGui::GetDrawData()->TotalVtxCount <= 0)
-            return;
-
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
         Image *displayRT = renderer->GetDisplayRT();
         m_attachment->image = displayRT;
+
+        if (RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi())
+            runtimeUi->Render(cmd, displayRT);
+
+        if (!m_render || ImGui::GetDrawData()->TotalVtxCount <= 0)
+            return;
 
         const bool canCopySceneView =
             GUIState::s_sceneViewImage && displayRT &&
@@ -2472,6 +2475,7 @@ namespace pe
         if (!m_initialized)
             return;
 
+        // Runtime UI input must not use stale Viewport coordinates when the editor GUI is hidden.
         GUIState::s_sceneViewImageRectValid = false;
 
         if (!m_render)

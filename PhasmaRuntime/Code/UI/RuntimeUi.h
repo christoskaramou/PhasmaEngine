@@ -18,6 +18,12 @@ namespace pe
         float deltaSeconds = 0.0f;
         uint32_t width = 0;
         uint32_t height = 0;
+        bool inputEnabled = true;
+        bool inputRectValid = false;
+        float inputRectMinX = 0.0f;
+        float inputRectMinY = 0.0f;
+        float inputRectWidth = 0.0f;
+        float inputRectHeight = 0.0f;
     };
 
     struct RuntimeUiBackendInitInfo
@@ -77,6 +83,8 @@ namespace pe
         void EndFrame();
         void Render(CommandBuffer *cmd, Image *renderTarget);
         void SetFrameSurfaceSize(uint32_t width, uint32_t height);
+        void SetFrameInputRect(float minX, float minY, float width, float height);
+        void DisableFrameInput();
         bool WantsMouseCapture() const;
         bool WantsKeyboardCapture() const;
 
@@ -150,6 +158,12 @@ namespace pe
         bool m_sampleOverlayEnabled = false;
         uint32_t m_frameSurfaceWidth = 0;
         uint32_t m_frameSurfaceHeight = 0;
+        bool m_frameInputEnabled = true;
+        bool m_frameInputRectValid = false;
+        float m_frameInputRectMinX = 0.0f;
+        float m_frameInputRectMinY = 0.0f;
+        float m_frameInputRectWidth = 0.0f;
+        float m_frameInputRectHeight = 0.0f;
     };
 
     void SetActiveRuntimeUi(RuntimeUiSystem *runtimeUi);

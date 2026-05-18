@@ -64,6 +64,12 @@ namespace pe
         m_frameOpen = false;
         m_frameSurfaceWidth = 0;
         m_frameSurfaceHeight = 0;
+        m_frameInputEnabled = true;
+        m_frameInputRectValid = false;
+        m_frameInputRectMinX = 0.0f;
+        m_frameInputRectMinY = 0.0f;
+        m_frameInputRectWidth = 0.0f;
+        m_frameInputRectHeight = 0.0f;
     }
 
     bool RuntimeUiSystem::ProcessEvent(const SDL_Event &event)
@@ -81,6 +87,12 @@ namespace pe
         frameInfo.deltaSeconds = static_cast<float>(delta);
         frameInfo.width = m_frameSurfaceWidth > 0 ? m_frameSurfaceWidth : RHII.GetWidth();
         frameInfo.height = m_frameSurfaceHeight > 0 ? m_frameSurfaceHeight : RHII.GetHeight();
+        frameInfo.inputEnabled = m_frameInputEnabled;
+        frameInfo.inputRectValid = m_frameInputRectValid;
+        frameInfo.inputRectMinX = m_frameInputRectMinX;
+        frameInfo.inputRectMinY = m_frameInputRectMinY;
+        frameInfo.inputRectWidth = m_frameInputRectWidth;
+        frameInfo.inputRectHeight = m_frameInputRectHeight;
         m_backend->BeginFrame(frameInfo);
         m_frameOpen = true;
     }
@@ -110,6 +122,23 @@ namespace pe
     {
         m_frameSurfaceWidth = width;
         m_frameSurfaceHeight = height;
+        m_frameInputEnabled = true;
+        m_frameInputRectValid = false;
+    }
+
+    void RuntimeUiSystem::SetFrameInputRect(float minX, float minY, float width, float height)
+    {
+        m_frameInputRectValid = width > 0.0f && height > 0.0f;
+        m_frameInputRectMinX = minX;
+        m_frameInputRectMinY = minY;
+        m_frameInputRectWidth = width;
+        m_frameInputRectHeight = height;
+    }
+
+    void RuntimeUiSystem::DisableFrameInput()
+    {
+        m_frameInputEnabled = false;
+        m_frameInputRectValid = false;
     }
 
     bool RuntimeUiSystem::WantsMouseCapture() const

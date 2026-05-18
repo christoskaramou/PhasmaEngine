@@ -8,7 +8,6 @@
 #include "Base/Log.h"
 #include "Camera/Camera.h"
 #include "Base/Settings.h"
-#include "GUI/Backends/EditorRuntimeUiBackend.h"
 #include "GUI/Backends/GUIBackend.h"
 #include "GUI/GUIState.h"
 #include "GUI/UndoRedo.h"
@@ -23,6 +22,7 @@
 #include "Script/ScriptRuntimeHooks.h"
 #include "Script/ScriptSystem.h"
 #include "Systems/RendererSystem.h"
+#include "UI/Backends/ImGuiRuntimeUiBackend.h"
 #include "UI/RuntimeUi.h"
 #ifdef PE_PHYSICS
 #include "Systems/PhysicsSystem.h"
@@ -106,17 +106,37 @@ namespace pe
                 nextFrame = afterSleep + std::chrono::duration_cast<Clock::duration>(frameDuration);
         }
 
-        void UseFullWindowRuntimeUiSurface()
+        bool ConfigureRuntimeUiFrame(RuntimeUiSystem &runtimeUi, RendererSystem &rendererSystem)
         {
-            const ImGuiIO &io = ImGui::GetIO();
-            if (io.DisplaySize.x <= 0.0f || io.DisplaySize.y <= 0.0f)
-                return;
+            Image *displayRT = rendererSystem.GetDisplayRT();
+            if (!displayRT)
+                return false;
 
-            GUIState::s_sceneViewImageRectValid = true;
-            GUIState::s_sceneViewImageMinX = 0.0f;
-            GUIState::s_sceneViewImageMinY = 0.0f;
-            GUIState::s_sceneViewImageWidth = io.DisplaySize.x;
-            GUIState::s_sceneViewImageHeight = io.DisplaySize.y;
+            runtimeUi.SetFrameSurfaceSize(displayRT->GetWidth(), displayRT->GetHeight());
+
+            const ImGuiIO &io = ImGui::GetIO();
+            if (!rendererSystem.GetGUI().Render())
+            {
+                if (io.DisplaySize.x <= 0.0f || io.DisplaySize.y <= 0.0f)
+                    return false;
+
+                runtimeUi.SetFrameInputRect(0.0f, 0.0f, io.DisplaySize.x, io.DisplaySize.y);
+                return true;
+            }
+
+            if (!GUIState::s_sceneViewImageRectValid ||
+                GUIState::s_sceneViewImageWidth <= 0.0f ||
+                GUIState::s_sceneViewImageHeight <= 0.0f)
+            {
+                runtimeUi.DisableFrameInput();
+                return true;
+            }
+
+            runtimeUi.SetFrameInputRect(GUIState::s_sceneViewImageMinX,
+                                        GUIState::s_sceneViewImageMinY,
+                                        GUIState::s_sceneViewImageWidth,
+                                        GUIState::s_sceneViewImageHeight);
+            return true;
         }
 
         Scene *GetEditorActiveScene()
@@ -286,7 +306,7 @@ namespace pe
         SetScriptRuntimeHooks(scriptHooks);
         GetGlobalSystem<RendererSystem>()->Init(cmd);
         m_runtimeUi = std::make_unique<RuntimeUiSystem>();
-        if (m_runtimeUi->Init(CreateEditorRuntimeUiBackend(), GetGlobalSystem<RendererSystem>()->GetDisplayRT()))
+        if (m_runtimeUi->Init(CreateImGuiRuntimeUiBackend(), GetGlobalSystem<RendererSystem>()->GetDisplayRT()))
         {
             m_runtimeUi->EnableSampleOverlay(true);
             SetActiveRuntimeUi(m_runtimeUi.get());
@@ -514,18 +534,15 @@ namespace pe
         }
         RuntimeUiSystem *runtimeUi =
             (hasImGuiRenderer && m_runtimeUi && m_runtimeUi->IsInitialized()) ? m_runtimeUi.get() : nullptr;
-        if (runtimeUi)
-        {
-            if (Image *displayRT = GetGlobalSystem<RendererSystem>()->GetDisplayRT())
-                runtimeUi->SetFrameSurfaceSize(displayRT->GetWidth(), displayRT->GetHeight());
+        const bool runtimeUiFrameOpen = runtimeUi && ConfigureRuntimeUiFrame(*runtimeUi, *rendererSystem);
+        if (runtimeUiFrameOpen)
             runtimeUi->BeginFrame();
-        }
 
         {
             PE_PROFILE_SCOPE("Process Events");
             if (!m_window->ProcessEvents())
             {
-                if (runtimeUi)
+                if (runtimeUiFrameOpen)
                     runtimeUi->EndFrame();
                 return false;
             }
@@ -555,14 +572,11 @@ namespace pe
                     ss->Update();
         }
 
-        if (runtimeUi && !rendererSystem->GetGUI().Render())
-            UseFullWindowRuntimeUiSurface();
-
-        if (runtimeUi)
+        if (runtimeUiFrameOpen)
+        {
             runtimeUi->UpdateSampleOverlay();
-
-        if (runtimeUi)
             runtimeUi->EndFrame();
+        }
 
         // Get ImGui render data ready
         if (hasImGuiRenderer)

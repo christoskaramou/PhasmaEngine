@@ -168,10 +168,16 @@ namespace pe
         void ApplyGlobalSettingsMembers(const rapidjson::Value &settings)
         {
             auto &gSettings = Settings::Get<GlobalSettings>();
-            if (settings.HasMember("right_handed"))
-                gSettings.right_handed = settings["right_handed"].GetBool();
-            if (settings.HasMember("reverse_depth"))
-                gSettings.reverse_depth = settings["reverse_depth"].GetBool();
+            if (settings.HasMember("right_handed") && settings["right_handed"].GetBool() != gSettings.right_handed)
+            {
+                PE_WARN("[Scene] Ignoring saved right_handed=%s; this is fixed by the active runtime/backend setup",
+                        settings["right_handed"].GetBool() ? "true" : "false");
+            }
+            if (settings.HasMember("reverse_depth") && settings["reverse_depth"].GetBool() != gSettings.reverse_depth)
+            {
+                PE_WARN("[Scene] Ignoring saved reverse_depth=%s; this is fixed by the active runtime/backend setup",
+                        settings["reverse_depth"].GetBool() ? "true" : "false");
+            }
             if (settings.HasMember("frustum_culling"))
                 gSettings.frustum_culling = settings["frustum_culling"].GetBool();
             if (settings.HasMember("shadows"))

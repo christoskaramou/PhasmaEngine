@@ -10,6 +10,7 @@
 #include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/VulkanQueueImpl.h"
 #include "API/Vulkan/VulkanRenderPassImpl.h"
+#include "UI/RuntimeUiInputEvents.h"
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12CommandBufferImpl.h"
 #include "API/DX12/Dx12DescriptorHeap.h"
@@ -28,6 +29,23 @@ namespace pe
 {
     namespace
     {
+        class ScopedImGuiContext
+        {
+        public:
+            explicit ScopedImGuiContext(ImGuiContext *context) : m_previous(ImGui::GetCurrentContext())
+            {
+                ImGui::SetCurrentContext(context);
+            }
+
+            ~ScopedImGuiContext()
+            {
+                ImGui::SetCurrentContext(m_previous);
+            }
+
+        private:
+            ImGuiContext *m_previous = nullptr;
+        };
+
         class ImGuiRuntimeUiBackend final : public IRuntimeUiBackend
         {
         public:
@@ -55,38 +73,41 @@ namespace pe
                 if (!IsSupported())
                     return false;
 
-                m_context = ImGui::CreateContext();
-                ImGui::SetCurrentContext(m_context);
-
-                ImGuiIO &io = ImGui::GetIO();
-                runtime_ui_imgui::ApplyContextSettings(io);
-                runtime_ui_imgui::ApplyStyle();
-
-                if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
                 {
-                    if (!InitVulkan(initInfo.renderTarget))
+                    m_context = ImGui::CreateContext();
+                    ScopedImGuiContext contextScope(m_context);
+
+                    ImGuiIO &io = ImGui::GetIO();
+                    runtime_ui_imgui::ApplyContextSettings(io);
+                    runtime_ui_imgui::ApplyStyle();
+
+                    if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
                     {
-                        Shutdown();
-                        return false;
+                        if (!InitVulkan(initInfo.renderTarget))
+                        {
+                            Shutdown();
+                            return false;
+                        }
                     }
-                }
 #if defined(PE_WIN32)
-                else if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-                {
-                    if (!InitDx12(initInfo.renderTarget))
+                    else if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+                    {
+                        if (!InitDx12(initInfo.renderTarget))
+                        {
+                            Shutdown();
+                            return false;
+                        }
+                    }
+#endif
+                    else
                     {
                         Shutdown();
                         return false;
                     }
-                }
-#endif
-                else
-                {
-                    Shutdown();
-                    return false;
+
+                    CreateFontsTexture();
                 }
 
-                CreateFontsTexture();
                 RHII.GetMainQueue()->WaitIdle();
                 m_initialized = true;
                 return true;
@@ -97,6 +118,7 @@ namespace pe
                 if (!m_context)
                     return;
 
+                ImGuiContext *previousContext = ImGui::GetCurrentContext();
                 ImGui::SetCurrentContext(m_context);
                 if (m_rendererInitialized)
                 {
@@ -115,8 +137,10 @@ namespace pe
                     ImGui_ImplSDL2_Shutdown();
                     m_platformInitialized = false;
                 }
-                ImGui::DestroyContext(m_context);
+                ImGuiContext *destroyedContext = m_context;
+                ImGui::DestroyContext(destroyedContext);
                 m_context = nullptr;
+                ImGui::SetCurrentContext(previousContext == destroyedContext ? nullptr : previousContext);
                 m_initialized = false;
                 m_frameOpen = false;
                 m_rendered = false;
@@ -130,35 +154,34 @@ namespace pe
                 if (!m_initialized || !m_context)
                     return false;
 
-                ImGui::SetCurrentContext(m_context);
-                SDL_Event &mutableEvent = const_cast<SDL_Event &>(event);
+                if (!m_frameInfo.inputEnabled)
+                    return false;
+
+                ScopedImGuiContext contextScope(m_context);
+                SDL_Event mappedEvent = MapEventToSurface(event);
+                SDL_Event &mutableEvent = mappedEvent;
                 ImGui_ImplSDL2_ProcessEvent(&mutableEvent);
 
                 ImGuiIO &io = ImGui::GetIO();
-                switch (event.type)
-                {
-                case SDL_MOUSEMOTION:
-                case SDL_MOUSEBUTTONDOWN:
-                case SDL_MOUSEBUTTONUP:
-                case SDL_MOUSEWHEEL:
+                if (IsRuntimeUiMouseInputEvent(mappedEvent))
                     return io.WantCaptureMouse;
-                case SDL_KEYDOWN:
-                case SDL_KEYUP:
-                    return io.WantCaptureKeyboard;
-                case SDL_TEXTINPUT:
-                case SDL_TEXTEDITING:
+
+                if (IsRuntimeUiTextInputEvent(mappedEvent))
                     return io.WantTextInput || io.WantCaptureKeyboard;
-                default:
-                    return false;
-                }
+
+                if (IsRuntimeUiKeyboardInputEvent(mappedEvent))
+                    return io.WantCaptureKeyboard;
+
+                return false;
             }
 
-            void BeginFrame(const RuntimeUiFrameInfo &) override
+            void BeginFrame(const RuntimeUiFrameInfo &frameInfo) override
             {
                 if (!m_initialized || m_frameOpen)
                     return;
 
-                ImGui::SetCurrentContext(m_context);
+                ScopedImGuiContext contextScope(m_context);
+                m_frameInfo = frameInfo;
                 runtime_ui_imgui::ApplyContextSettings(ImGui::GetIO());
                 runtime_ui_imgui::ApplyStyle();
                 ImGui_ImplSDL2_NewFrame();
@@ -172,6 +195,9 @@ namespace pe
                     ImGui_ImplDX12_NewFrame();
                 }
 #endif
+                if (frameInfo.width > 0 && frameInfo.height > 0)
+                    ImGui::GetIO().DisplaySize =
+                        ImVec2(static_cast<float>(frameInfo.width), static_cast<float>(frameInfo.height));
                 ImGui::NewFrame();
                 m_frameOpen = true;
                 m_rendered = false;
@@ -182,6 +208,7 @@ namespace pe
                 if (!m_frameOpen)
                     return false;
 
+                ScopedImGuiContext contextScope(m_context);
                 ImGui::SetNextWindowSize(ImVec2(runtime_ui_imgui::kWindowWidth, 0.0f), ImGuiCond_FirstUseEver);
                 const std::string windowId = screen.title + "##" + screen.id;
                 return ImGui::Begin(windowId.c_str(), nullptr, runtime_ui_imgui::kPlayerWindowFlags);
@@ -191,6 +218,7 @@ namespace pe
             {
                 if (!m_frameOpen)
                     return;
+                ScopedImGuiContext contextScope(m_context);
                 ImGui::Text("%s: %s", label ? label : "", value ? value : "");
             }
 
@@ -198,6 +226,7 @@ namespace pe
             {
                 if (!m_frameOpen)
                     return;
+                ScopedImGuiContext contextScope(m_context);
                 ImGui::Text("%s: %.3f", label ? label : "", value);
             }
 
@@ -205,6 +234,7 @@ namespace pe
             {
                 if (!m_frameOpen)
                     return false;
+                ScopedImGuiContext contextScope(m_context);
                 return ImGui::Checkbox(label ? label : "", &value);
             }
 
@@ -212,13 +242,17 @@ namespace pe
             {
                 if (!m_frameOpen)
                     return false;
+                ScopedImGuiContext contextScope(m_context);
                 return ImGui::Button(label ? label : "");
             }
 
             void EndScreen() override
             {
                 if (m_frameOpen)
+                {
+                    ScopedImGuiContext contextScope(m_context);
                     ImGui::End();
+                }
             }
 
             void EndFrame() override
@@ -226,6 +260,7 @@ namespace pe
                 if (!m_frameOpen)
                     return;
 
+                ScopedImGuiContext contextScope(m_context);
                 ImGui::Render();
                 m_frameOpen = false;
                 m_rendered = true;
@@ -236,7 +271,7 @@ namespace pe
                 if (!m_rendered || !m_context)
                     return false;
 
-                ImGui::SetCurrentContext(m_context);
+                ScopedImGuiContext contextScope(m_context);
                 ImDrawData *drawData = ImGui::GetDrawData();
                 return drawData && drawData->TotalVtxCount > 0;
             }
@@ -246,7 +281,10 @@ namespace pe
                 if (!m_initialized || !m_context)
                     return false;
 
-                ImGui::SetCurrentContext(m_context);
+                if (!m_frameInfo.inputEnabled)
+                    return false;
+
+                ScopedImGuiContext contextScope(m_context);
                 return ImGui::GetIO().WantCaptureMouse;
             }
 
@@ -255,7 +293,10 @@ namespace pe
                 if (!m_initialized || !m_context)
                     return false;
 
-                ImGui::SetCurrentContext(m_context);
+                if (!m_frameInfo.inputEnabled)
+                    return false;
+
+                ScopedImGuiContext contextScope(m_context);
                 const ImGuiIO &io = ImGui::GetIO();
                 return io.WantCaptureKeyboard || io.WantTextInput;
             }
@@ -265,7 +306,7 @@ namespace pe
                 if (!m_initialized || !context.cmd || !context.renderTarget || !HasDrawData())
                     return;
 
-                ImGui::SetCurrentContext(m_context);
+                ScopedImGuiContext contextScope(m_context);
 
                 Attachment attachment{};
                 attachment.image = context.renderTarget;
@@ -295,6 +336,49 @@ namespace pe
             }
 
         private:
+            bool HasInputRect() const
+            {
+                return m_frameInfo.inputRectValid &&
+                       m_frameInfo.inputRectWidth > 0.0f &&
+                       m_frameInfo.inputRectHeight > 0.0f &&
+                       m_frameInfo.width > 0 &&
+                       m_frameInfo.height > 0;
+            }
+
+            SDL_Event MapEventToSurface(const SDL_Event &event) const
+            {
+                if (!HasInputRect())
+                    return event;
+
+                SDL_Event mapped = event;
+                const auto mapX = [this](float x)
+                {
+                    return (x - m_frameInfo.inputRectMinX) *
+                           static_cast<float>(m_frameInfo.width) /
+                           m_frameInfo.inputRectWidth;
+                };
+                const auto mapY = [this](float y)
+                {
+                    return (y - m_frameInfo.inputRectMinY) *
+                           static_cast<float>(m_frameInfo.height) /
+                           m_frameInfo.inputRectHeight;
+                };
+
+                if (mapped.type == SDL_MOUSEMOTION)
+                {
+                    mapped.motion.x = static_cast<int>(mapX(static_cast<float>(event.motion.x)));
+                    mapped.motion.y = static_cast<int>(mapY(static_cast<float>(event.motion.y)));
+                }
+                else if (mapped.type == SDL_MOUSEBUTTONDOWN || mapped.type == SDL_MOUSEBUTTONUP)
+                {
+                    mapped.button.x = static_cast<int>(mapX(static_cast<float>(event.button.x)));
+                    mapped.button.y = static_cast<int>(mapY(static_cast<float>(event.button.y)));
+                }
+                // SDL mouse-wheel events have no cursor coordinates; ImGui applies them at its cached mouse position.
+
+                return mapped;
+            }
+
             bool InitVulkan(Image *renderTarget)
             {
                 if (!renderTarget)
@@ -396,6 +480,7 @@ namespace pe
             }
 
             ImGuiContext *m_context = nullptr;
+            RuntimeUiFrameInfo m_frameInfo{};
             PeGraphicsApi m_api = PE_GRAPHICS_API_VULKAN;
             bool m_initialized = false;
             bool m_platformInitialized = false;

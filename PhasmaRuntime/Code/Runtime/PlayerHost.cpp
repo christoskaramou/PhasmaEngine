@@ -72,22 +72,6 @@ namespace pe
                    (!uiCaptured && event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE);
         }
 
-        bool IsMouseInputEvent(const SDL_Event &event)
-        {
-            return event.type == SDL_MOUSEMOTION ||
-                   event.type == SDL_MOUSEBUTTONDOWN ||
-                   event.type == SDL_MOUSEBUTTONUP ||
-                   event.type == SDL_MOUSEWHEEL;
-        }
-
-        bool IsKeyboardInputEvent(const SDL_Event &event)
-        {
-            return event.type == SDL_KEYDOWN ||
-                   event.type == SDL_KEYUP ||
-                   event.type == SDL_TEXTINPUT ||
-                   event.type == SDL_TEXTEDITING;
-        }
-
         Scene *s_playerScene = nullptr;
         bool s_playerPlayMode = true;
         bool s_playerPaused = false;
@@ -320,11 +304,6 @@ namespace pe
                 while (SDL_PollEvent(&event))
                 {
                     const bool uiCaptured = m_runtimeUi && m_runtimeUi->ProcessEvent(event);
-                    if (uiCaptured)
-                    {
-                        InputState::SetMouseCapturedByUi(IsMouseInputEvent(event));
-                        InputState::SetKeyboardCapturedByUi(IsKeyboardInputEvent(event));
-                    }
 
                     if (ShouldQuitFromEvent(event, uiCaptured))
                         return false;

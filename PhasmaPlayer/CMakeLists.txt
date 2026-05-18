@@ -18,7 +18,7 @@ set(PHASMAPLAYER_RUNTIME_UI_SOURCES
 
 if(WIN32)
     list(APPEND PHASMAPLAYER_RUNTIME_UI_SOURCES
-        "${CMAKE_SOURCE_DIR}/PhasmaEditor/Code/GUI/Backends/imgui_impl_dx12.cpp"
+        "${CMAKE_SOURCE_DIR}/PhasmaRuntime/Code/UI/Backends/imgui_impl_dx12.cpp"
     )
 endif()
 
@@ -29,8 +29,8 @@ add_executable(PhasmaPlayer
 
 target_precompile_headers(PhasmaPlayer PRIVATE "${CMAKE_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
 target_include_directories(PhasmaPlayer PRIVATE
+    "${CMAKE_SOURCE_DIR}/PhasmaRuntime/Code/UI/Backends"
     "${PE_SHARED_THIRD_PARTY_DIR}/imgui"
-    "${CMAKE_SOURCE_DIR}/PhasmaEditor/Code/GUI/Backends"
     "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party"
     "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/vma"
     "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/vulkan"

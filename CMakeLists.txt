@@ -42,7 +42,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/RelWithDe
 
 set(PE_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/Libs")
 set(PE_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/third_party")
-set(PE_SHARED_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/third_party")
+set(PE_SHARED_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaRuntime/third_party")
 set(PE_EDITOR_THIRD_PARTY_DIR "${PE_SHARED_THIRD_PARTY_DIR}")
 set(PE_RUNTIME_ASSETS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Assets")
 include(cmake/PhasmaRuntimeLayout.cmake)
@@ -182,12 +182,21 @@ file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/
 file(GLOB_RECURSE IMGUI_SRC_FILES CONFIGURE_DEPENDS "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/*.cpp")
 file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${PE_RUNTIME_ASSETS_SOURCE_DIR}/*")
 list(FILTER ASSET_FILES EXCLUDE REGEX "\\.obj$")
+set(PE_SHARED_IMGUI_BACKEND_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaRuntime/Code/UI/Backends/ImGuiRuntimeUiBackend.cpp"
+)
+if(WIN32)
+    list(APPEND PE_SHARED_IMGUI_BACKEND_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaRuntime/Code/UI/Backends/imgui_impl_dx12.cpp"
+    )
+endif()
 set_source_files_properties(${ASSET_FILES} PROPERTIES VS_TOOL_OVERRIDE "None")
 
 # PhasmaEditorModule (SHARED) — all editor code lives in DLL
 add_library(PhasmaEditorModule SHARED
     ${CODE_SRC_FILES}
     ${IMGUI_SRC_FILES}
+    ${PE_SHARED_IMGUI_BACKEND_SOURCES}
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/App/EditorModule.cpp"
 )
 set_target_properties(PhasmaEditorModule PROPERTIES
@@ -219,6 +228,7 @@ target_precompile_headers(PhasmaEditorModule PRIVATE "${CMAKE_CURRENT_SOURCE_DIR
 target_include_directories(PhasmaEditorModule PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor"
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code"
+    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaRuntime/Code/UI/Backends"
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaMCP/third_party"
     "${PE_THIRD_PARTY_DIR}/assimp/include"
     "${PE_THIRD_PARTY_DIR}/meshoptimizer"

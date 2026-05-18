@@ -73,22 +73,6 @@ namespace pe
         return SDL_GetRelativeMouseMode() == SDL_TRUE;
     }
 
-    bool IsMouseInputEvent(const SDL_Event &event)
-    {
-        return event.type == SDL_MOUSEMOTION ||
-               event.type == SDL_MOUSEBUTTONDOWN ||
-               event.type == SDL_MOUSEBUTTONUP ||
-               event.type == SDL_MOUSEWHEEL;
-    }
-
-    bool IsKeyboardInputEvent(const SDL_Event &event)
-    {
-        return event.type == SDL_KEYDOWN ||
-               event.type == SDL_KEYUP ||
-               event.type == SDL_TEXTINPUT ||
-               event.type == SDL_TEXTEDITING;
-    }
-
     void Window::SmoothMouseRotation(Camera *camera, uint32_t triggerButton)
     {
         PE_ERROR_IF(!camera, "Camera is nullptr");
@@ -140,11 +124,6 @@ namespace pe
 
             ImGui_ImplSDL2_ProcessEvent(&sdlEvent);
             const bool runtimeUiCaptured = runtimeUi && runtimeUi->ProcessEvent(sdlEvent);
-            if (runtimeUiCaptured)
-            {
-                InputState::SetMouseCapturedByUi(IsMouseInputEvent(sdlEvent));
-                InputState::SetKeyboardCapturedByUi(IsKeyboardInputEvent(sdlEvent));
-            }
 
             if (!runtimeUiCaptured && sdlEvent.type == SDL_MOUSEMOTION)
                 InputState::AddMouseMotion(sdlEvent.motion.xrel, sdlEvent.motion.yrel);
