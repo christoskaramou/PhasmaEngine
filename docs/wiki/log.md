@@ -2,6 +2,10 @@
 
 ## 2026-05-19
 
+- Added `tools/editor_stress.py` and `PhasmaEditor/Assets/Scripts/stress/editor_stress.lua` plus the per-node `editor_stress_node.lua` asset as an opt-in PhasmaEditor stress harness. It launches or reuses MCP, starts from generated content by default with optional `--scene` loading, batches generated geometry/lights/particles/scripted nodes, captures profiler snapshots plus screenshots/logs, and leaves artifacts under `reports/editor_stress/`.
+- Added configurable settle delays to the editor stress harness around editor startup, scene setup, mutation batches, cleanup, and shutdown so stress reports are less dominated by rapid load/unload churn.
+- Optimized per-node Lua script steady-state update cost by avoiding filesystem path canonicalization during instance reconciliation, using a node-instance lookup set while scanning scripted nodes, and refreshing `self`/`transform`/`mesh`/`camera` Lua bindings only when the node binding state changes.
+- Tightened validation tooling follow-ups by ignoring ADK `.env` files, making the ADK tool-filter guard use the canonical `READ_ONLY_MCP_TOOLS` name, narrowing raw engine-log error scans, and keeping paired asset/Lua scene path constants in `tools/precommit_validate.py`.
 - Added `architecture/agent-tooling.md` to describe the current MCP/editor/ADK sidecar boundary, the absence of a tracked `PhasmaAgent/` lane on current `master`, the Phase 1 read-only MCP tool filter, and the future A2A goal-level constraint.
 - Added `tools/phasma_adk_agent/` as a read-only ADK sidecar scaffold with a stdlib MCP probe and ADK `root_agent` that uses Streamable HTTP without the stdio bridge.
 - Added `tools/precommit_validate.py`, a pre-commit validation orchestrator that runs hygiene checks, instruction/ADK guardrails, Release builds, auto-launches PhasmaEditor with MCP enabled on display 1, runs launcher/editor/player smokes across Vulkan/DX12, MCP/ADK smoke checks, console error scans, screenshot capture plus sanity checks, and optional visual/performance/broader editor-behavior probes. The tracked tools whitelist now includes the perf comparison helper it calls.

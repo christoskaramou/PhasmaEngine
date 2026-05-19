@@ -11,6 +11,7 @@
 #include "Base/Timer.h"
 
 #include <fstream>
+#include <unordered_set>
 
 namespace pe
 {
@@ -19,21 +20,38 @@ namespace pe
         constexpr const char *kEditorOnlyScriptMarker = "phasma: editor-only";
     }
 
+    static std::string NormalizeSlashes(std::string path)
+    {
+        std::replace(path.begin(), path.end(), '\\', '/');
+        return path;
+    }
+
     static std::string NormalizePath(const std::string &path)
     {
         try
         {
             auto canonical = std::filesystem::weakly_canonical(path);
-            std::string s = canonical.string();
-            std::replace(s.begin(), s.end(), '\\', '/');
-            return s;
+            return NormalizeSlashes(canonical.string());
         }
         catch (...)
         {
-            std::string s = path;
-            std::replace(s.begin(), s.end(), '\\', '/');
-            return s;
+            return NormalizeSlashes(path);
         }
+    }
+
+    static bool MatchesNodeScriptPath(const std::string &currentPath, const NodeScriptInstance &inst)
+    {
+        if (currentPath.empty())
+            return false;
+
+        if (currentPath == inst.sourcePath || currentPath == inst.path)
+            return true;
+
+        const std::string normalized = NormalizeSlashes(currentPath);
+        if (normalized == inst.sourcePath || normalized == inst.path)
+            return true;
+
+        return NormalizePath(currentPath) == inst.path;
     }
 
     static bool HasNodeInstanceForPath(const std::vector<NodeScriptInstance> &instances, const std::string &path)
@@ -44,6 +62,36 @@ namespace pe
                 return true;
         }
         return false;
+    }
+
+    static bool MeshBindingPayloadChanged(const Scene &scene, const NodeScriptInstance &inst, int meshRef)
+    {
+        if (meshRef != inst.bindingMeshRef)
+            return true;
+        if (meshRef < 0 || meshRef >= static_cast<int>(scene.GetMeshes().size()))
+            return false;
+
+        const Mesh &mesh = scene.GetMesh(meshRef);
+        return mesh.vertexCount != inst.bindingMeshVertexCount ||
+               mesh.indexCount != inst.bindingMeshIndexCount ||
+               mesh.boundingBox.min != inst.bindingMeshBounds.min ||
+               mesh.boundingBox.max != inst.bindingMeshBounds.max;
+    }
+
+    static void StoreMeshBindingPayload(const Scene &scene, NodeScriptInstance &inst, int meshRef)
+    {
+        inst.bindingMeshRef = meshRef;
+        inst.bindingMeshVertexCount = 0;
+        inst.bindingMeshIndexCount = 0;
+        inst.bindingMeshBounds = {};
+
+        if (meshRef < 0 || meshRef >= static_cast<int>(scene.GetMeshes().size()))
+            return;
+
+        const Mesh &mesh = scene.GetMesh(meshRef);
+        inst.bindingMeshVertexCount = mesh.vertexCount;
+        inst.bindingMeshIndexCount = mesh.indexCount;
+        inst.bindingMeshBounds = mesh.boundingBox;
     }
 
     static bool IsSupportTestScriptPath(const std::string &path)
@@ -343,6 +391,7 @@ namespace pe
 
         NodeScriptInstance inst;
         inst.handle = scene->MakeHandle(node);
+        inst.sourcePath = NormalizeSlashes(path);
         inst.path = NormalizePath(path);
 
         // Fresh environment inheriting globals (bindings, pe_log, etc.)
@@ -379,22 +428,48 @@ namespace pe
 
         if (!inst.handle.IsValid(*scene))
         {
-            inst.env["self"] = sol::lua_nil;
-            inst.env["transform"] = sol::lua_nil;
-            inst.env["mesh"] = sol::lua_nil;
-            inst.env["camera"] = sol::lua_nil;
+            if (inst.bindingsValid)
+            {
+                inst.env["self"] = sol::lua_nil;
+                inst.env["transform"] = sol::lua_nil;
+                inst.env["mesh"] = sol::lua_nil;
+                inst.env["camera"] = sol::lua_nil;
+                inst.bindingsValid = false;
+                inst.bindingComponentFlags = 0;
+                StoreMeshBindingPayload(*scene, inst, -1);
+                inst.bindingCamera = nullptr;
+            }
             return;
         }
 
         NodeId *node = inst.handle.nodeId;
-        inst.env["self"] = inst.handle;
-        inst.env["transform"] = inst.handle;
-        inst.env["mesh"] = MakeMeshBindingObject(m_lua, *scene, node);
+        const uint32_t flags = scene->GetComponentFlags(node);
+        const int meshRef = scene->GetMeshRef(node);
 
         Camera *camera = nullptr;
-        if (scene->GetComponentFlags(node) & Component_Camera)
+        if (flags & Component_Camera)
             camera = scene->GetCameraForNode(node);
-        inst.env["camera"] = camera;
+
+        if (!inst.bindingsValid)
+        {
+            inst.env["self"] = inst.handle;
+            inst.env["transform"] = inst.handle;
+        }
+
+        const uint32_t bindingRelevantFlags = flags & (Component_Mesh | Component_Camera);
+        const uint32_t previousRelevantFlags = inst.bindingComponentFlags & (Component_Mesh | Component_Camera);
+        const bool meshChanged =
+            bindingRelevantFlags != previousRelevantFlags || MeshBindingPayloadChanged(*scene, inst, meshRef);
+        if (!inst.bindingsValid || meshChanged)
+            inst.env["mesh"] = MakeMeshBindingObject(m_lua, *scene, node);
+
+        if (!inst.bindingsValid || bindingRelevantFlags != previousRelevantFlags || camera != inst.bindingCamera)
+            inst.env["camera"] = camera;
+
+        inst.bindingComponentFlags = flags;
+        StoreMeshBindingPayload(*scene, inst, meshRef);
+        inst.bindingCamera = camera;
+        inst.bindingsValid = true;
     }
 
     void ScriptSystem::InitializeNodeInstance(NodeScriptInstance &inst)
@@ -433,7 +508,7 @@ namespace pe
                 if (flags & Component_Script)
                 {
                     const std::string &currentPath = scene->GetNodeScriptPath(it->handle.nodeId);
-                    if (NormalizePath(currentPath) == it->path)
+                    if (MatchesNodeScriptPath(currentPath, *it))
                         valid = true;
                 }
             }
@@ -461,6 +536,11 @@ namespace pe
             }
         }
 
+        std::unordered_set<const NodeId *> existingNodeInstances;
+        existingNodeInstances.reserve(m_nodeInstances.size());
+        for (const auto &inst : m_nodeInstances)
+            existingNodeInstances.insert(inst.handle.nodeId);
+
         // Create instances for nodes that have a script but no instance yet
         for (uint32_t i = 0; i < nodeCount; i++)
         {
@@ -473,11 +553,11 @@ namespace pe
             if (scriptPath.empty())
                 continue;
 
-            // Check if already instantiated
-            if (FindNodeInstance(node))
+            if (existingNodeInstances.find(node) != existingNodeInstances.end())
                 continue;
 
             m_nodeInstances.push_back(CreateNodeInstance(node, scriptPath));
+            existingNodeInstances.insert(node);
         }
     }
 

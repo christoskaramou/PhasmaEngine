@@ -25,7 +25,8 @@ try:
 except ModuleNotFoundError as exc:
     raise RuntimeError(
         "tools/phasma_adk_agent requires google-adk (with litellm). "
-        "Install it in a virtual environment with `pip install google-adk litellm`."
+        "Install the pinned sidecar dependencies with "
+        "`pip install -r tools/phasma_adk_agent/requirements.txt`."
     ) from exc
 
 

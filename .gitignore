@@ -334,6 +334,7 @@ PhasmaEditor/Assets/Agent/
 !/tools/
 /tools/*
 !/tools/precommit_validate.py
+!/tools/editor_stress.py
 !/tools/compare_snapshots.py
 !/tools/perf_cycle.sh
 !/tools/phasma_adk_agent/
@@ -342,6 +343,9 @@ PhasmaEditor/Assets/Agent/
 /tools/phasma_adk_agent/__pycache__/
 /tools/phasma_adk_agent/**/*.pyc
 /tools/phasma_adk_agent/.adk/
+/tools/phasma_adk_agent/.env
+/tools/phasma_adk_agent/.env.*
+!/tools/phasma_adk_agent/.env.example
 
 # User scenes (keep folder, ignore scene files)
 PhasmaEditor/Assets/Scenes/*.pescene

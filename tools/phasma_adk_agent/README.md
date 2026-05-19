@@ -2,7 +2,7 @@
 
 Read-only Phase 1 ADK sidecar for a running PhasmaEditor instance. It connects
 to the editor's existing MCP endpoint at `http://127.0.0.1:8765/mcp` and exposes
-only the inspection tools needed for the first wedge:
+only the ADK-visible inspection tools needed for the first wedge:
 
 - `tools/list` through the MCP protocol probe
 - `query_scene`
@@ -124,7 +124,8 @@ py -3 tools\precommit_validate.py --profile commit
 guard, instruction-file sync, ADK read-only tool-filter guard, `clang-format`
 dry-run for changed C/C++ files, Python syntax, wiki lint, auto-launch or reuse
 an editor MCP session, probe MCP, and run an ADK smoke prompt when `adk` plus an
-API key are available. The validator writes the build output
+API key are available. The validator finds `adk` on PATH or in `tools/.venv`,
+and reads ignored local `.env` files for model keys. It writes the build output
 `Assets/Agent/agent_config.json` with `"mcp": true` before launching the editor
 and passes `--display 1` by default. Use `--display 0` only when you want the
 primary monitor.
@@ -139,9 +140,10 @@ against a fixed baseline. Performance comparison loads `Scenes/sponza.pescene`,
 reapplies immediate present mode, then captures 10 snapshots 1 second apart
 before calling `tools/compare_snapshots.py`.
 
-Path convention note: editor startup config stores scenes with the asset-prefix
-form, for example `Assets/Scenes/sponza.pescene`. Lua runs from the asset root,
-so validation Lua uses `Scenes/sponza.pescene` for the same scene.
+Path convention note: `tools/precommit_validate.py` keeps paired constants for
+the default scene path. Editor startup config stores the asset-prefixed form,
+`Assets/Scenes/sponza.pescene`, while Lua runs from the asset root and loads the
+same scene as `Scenes/sponza.pescene`.
 
 The heavier editor-behavior checks are opt-in until they are boring on every
 machine:

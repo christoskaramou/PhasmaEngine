@@ -12,8 +12,8 @@ remains the source of truth.
   `http://127.0.0.1:8765/mcp`, toggled from `Connection -> MCP Server`.
   Editor tools live in `PhasmaEditor/Code/GUI/Agent/EditorToolCatalog.cpp`.
 - `tools/phasma_adk_agent/` is the external ADK sidecar scaffold. Phase 1 uses
-  ADK's MCP toolset over Streamable HTTP and filters the editor MCP surface down
-  to `query_scene`, `take_screenshot`, and `get_console_log`.
+  ADK's MCP toolset over Streamable HTTP and filters its ADK-visible MCP toolset
+  down to `query_scene`, `take_screenshot`, and `get_console_log`.
 
 As of 2026-05-19 on `master`, the repository does not contain a tracked
 `PhasmaAgent/` directory or CMake target. If an embedded PhasmaAgent lane is
@@ -63,7 +63,9 @@ The quick profile is the daily routine: git hygiene, `third_party/` guard,
 instruction-file sync, ADK read-only tool-filter guard, `clang-format` dry-run
 for changed C/C++ files, Python syntax checks, wiki lint, editor MCP
 launch/probe, and ADK smoke when `adk` plus an API key are present. The
-validator writes the build output `Assets/Agent/agent_config.json` with
+validator finds `adk` either on PATH or in the repo-local `tools/.venv`, reads
+ignored local `.env` files for model keys, writes the build output
+`Assets/Agent/agent_config.json` with
 `"mcp": true` before launching PhasmaEditor and passes `--display 1` by default;
 use `--display 0` only for the primary monitor. If MCP is already reachable, the
 script reuses the running editor.
@@ -78,11 +80,43 @@ parity comparisons. The performance path loads `Scenes/sponza.pescene`,
 reapplies immediate present mode, captures 10 snapshots 1 second apart, then
 calls `tools/compare_snapshots.py`.
 
-Scene paths have two conventions in this flow: editor startup config stores the
-asset-prefixed path, such as `Assets/Scenes/sponza.pescene`, while Lua executes
-from the asset root and therefore loads the same scene as `Scenes/sponza.pescene`.
+Scene paths have two conventions in this flow, captured by paired constants in
+`tools/precommit_validate.py`: editor startup config stores the asset-prefixed
+path, such as `Assets/Scenes/sponza.pescene`, while Lua executes from the asset
+root and therefore loads the same scene as `Scenes/sponza.pescene`.
 
 The deeper behavior probes are opt-in rather than part of the default commit
 gate: `--play-lifecycle` drives editor start/pause/resume/stop over MCP,
 `--script-tests` runs the editor script test action and scans the log, and
 `--hot-reload-smoke` reloads the editor module then waits for MCP to return.
+
+## Editor Stress Harness
+
+`tools/editor_stress.py` is the deliberately heavy PhasmaEditor pressure test.
+It follows the validator's launch pattern, writes MCP/startup config in the build
+output, drives the editor through MCP `execute_lua`, then collects profiler
+snapshots, a screenshot, returned Lua samples, console logs, and a scene query under
+`reports/editor_stress/`. It launches a fresh editor by default; pass
+`--reuse-running` only when mutating the current MCP editor is intentional.
+The default run starts from an empty generated scene so the harness works in
+external clones without project-specific assets. Pass `--scene <path>` to opt
+into loading a local `.pescene` before adding generated stress content.
+For scripted-node pressure it preinstalls `editor_stress_node.lua` into the
+build output before launch so the editor script file watcher does not reload Lua
+mid-run.
+
+```powershell
+py -3 tools\editor_stress.py --profile heavy --build-dir build-ninja-full --config Release --api vulkan --display 1
+```
+
+The default `heavy` profile requests immediate present mode,
+spawns batched generated geometry, per-node `update_editor` scripts, hundreds of
+lights, particle emitters, extra cameras, and aggressive render settings before
+capturing 10 profiler snapshots 1 second apart. Use `--profile quick` for a
+short sanity run. `--profile absurd` requires `--allow-extreme` and is intended
+for manual limit finding, not routine validation. The harness batches scene
+mutation because editor MCP `execute_lua` has a short main-thread wait, and it
+adds settle delays around startup, scene setup, mutation batches, cleanup, and
+shutdown so reports are not dominated by rapid load/unload churn. Override those
+with `--startup-settle`, `--scene-settle`, `--batch-settle`,
+`--cleanup-settle`, and `--shutdown-settle` when needed.

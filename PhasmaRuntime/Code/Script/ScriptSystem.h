@@ -11,6 +11,7 @@ namespace pe
     using LuaBindingFunc = std::function<void(sol::state &)>;
 
     class CommandBuffer;
+    class Camera;
     class Image;
     class ModelAsset;
 
@@ -77,6 +78,7 @@ namespace pe
     {
         SceneNodeHandle handle;
         std::string path;
+        std::string sourcePath;
         sol::environment env;
         sol::function initFn;
         sol::function updateFn;
@@ -85,6 +87,13 @@ namespace pe
         std::vector<ExposedVar> exposedVars;
         int exposedRef = LUA_NOREF; // Lua registry ref to __exposed table
         bool initCalled = false;
+        bool bindingsValid = false;
+        uint32_t bindingComponentFlags = 0;
+        int bindingMeshRef = -1;
+        uint32_t bindingMeshVertexCount = 0;
+        uint32_t bindingMeshIndexCount = 0;
+        AABB bindingMeshBounds{};
+        Camera *bindingCamera = nullptr;
         std::string lastError; // non-empty when the script has an active error
     };
 

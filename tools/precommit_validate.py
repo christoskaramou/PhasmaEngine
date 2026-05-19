@@ -18,6 +18,7 @@ import struct
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 import zlib
 from dataclasses import dataclass
 from datetime import datetime
@@ -28,7 +29,9 @@ TOOLS = ROOT / "tools"
 SIDECAR_DIR = TOOLS / "phasma_adk_agent"
 DEFAULT_BUILD_DIRS = (ROOT / "build-ninja-full", ROOT / "build")
 DEFAULT_CONFIG = "Release"
-DEFAULT_SCENE = "Assets/Scenes/sponza.pescene"
+DEFAULT_SCENE_ASSET_PATH = "Assets/Scenes/sponza.pescene"
+DEFAULT_SCENE_LUA_PATH = "Scenes/sponza.pescene"
+DEFAULT_SCENE = DEFAULT_SCENE_ASSET_PATH
 REPORT_ROOT = ROOT / "reports" / "precommit_validation"
 INSTRUCTION_SYNC_FILES = (
     ROOT / "AGENTS.md",
@@ -38,14 +41,15 @@ INSTRUCTION_SYNC_FILES = (
 )
 ADK_READ_ONLY_TOOLS = {"query_scene", "take_screenshot", "get_console_log"}
 MUTATING_TOOLS = {"write_project_file", "patch_project_file", "execute_lua", "inject_mouse_input"}
+MODEL_API_KEY_ENV_VARS = ("OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY")
 
 FAIL_PATTERNS = [
     re.compile(pattern, re.IGNORECASE)
     for pattern in [
         r"\bPE_ERROR\b",
-        r"^\s*(?:\[[^\]]+\]\s*)?(?:ERROR|FATAL)\b",
+        r"^\s*(?:\[[^\]]+\]\s*)?(?:ERROR|FATAL)(?:\s*[:\]]|\s+-|\s+\[|$)",
         r"\[(?:ERROR|FATAL)\]",
-        r"\bERROR\s*:",
+        r"\b(?:ERROR|FATAL)(?:\s*[:\]])",
         r"Validation Error",
         r"\bVUID-",
         r"\bVK_ERROR",
@@ -62,6 +66,8 @@ LOG_ALLOW_PATTERNS = [
     re.compile(pattern, re.IGNORECASE)
     for pattern in [
         r"0 errors",
+        r"\berror_count\s*[:=]\s*0\b",
+        r"\bERROR_NONE\b",
         r"No recent error",
         r"Vulkan validation layer enabled",
         r"PE_VULKAN_VALIDATION",
@@ -202,6 +208,16 @@ def rel(path: Path) -> str:
         return str(path)
 
 
+def scene_lua_path(scene: str) -> str:
+    normalized = scene.replace("\\", "/")
+    if normalized == DEFAULT_SCENE_ASSET_PATH:
+        return DEFAULT_SCENE_LUA_PATH
+    asset_prefix = "Assets/"
+    if normalized.startswith(asset_prefix):
+        return normalized[len(asset_prefix):]
+    return normalized
+
+
 def choose_build_dir(explicit: Path | None) -> Path:
     if explicit:
         return explicit if explicit.is_absolute() else ROOT / explicit
@@ -236,6 +252,7 @@ def hygiene_steps(v: Validator) -> None:
     clang_format_dry_run_step(v)
 
     files = [
+        TOOLS / "editor_stress.py",
         TOOLS / "precommit_validate.py",
         SIDECAR_DIR / "agent.py",
         SIDECAR_DIR / "mcp_probe.py",
@@ -297,7 +314,7 @@ def adk_read_only_guard_step(v: Validator) -> None:
         if not isinstance(node, ast.Assign):
             continue
         if not any(
-            isinstance(target, ast.Name) and target.id in {"READ_ONLY_TOOL_NAMES", "READ_ONLY_MCP_TOOLS"}
+            isinstance(target, ast.Name) and target.id == "READ_ONLY_MCP_TOOLS"
             for target in node.targets
         ):
             continue
@@ -306,7 +323,7 @@ def adk_read_only_guard_step(v: Validator) -> None:
         break
 
     if tool_names is None:
-        v.add("adk read-only guard", "FAIL", "READ_ONLY_TOOL_NAMES not found", time.monotonic() - start)
+        v.add("adk read-only guard", "FAIL", "READ_ONLY_MCP_TOOLS not found", time.monotonic() - start)
         raise RuntimeError("adk read-only guard")
 
     extra = sorted(tool_names - ADK_READ_ONLY_TOOLS)
@@ -349,22 +366,121 @@ def changed_cpp_headers() -> list[Path]:
     return sorted(set(paths))
 
 
+def find_clang_format_binary() -> str | None:
+    for name in ("clang-format", "clang-format.exe"):
+        found = shutil.which(name)
+        if found:
+            return found
+
+    for candidate in (
+        Path("/mnt/c/Program Files/LLVM/bin/clang-format.exe"),
+        Path("/mnt/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/Llvm/x64/bin/clang-format.exe"),
+        Path("/mnt/c/Program Files/Microsoft Visual Studio/2022/Professional/VC/Tools/Llvm/x64/bin/clang-format.exe"),
+        Path("/mnt/c/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/Llvm/x64/bin/clang-format.exe"),
+    ):
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
+def find_adk_binary() -> str | None:
+    for name in ("adk", "adk.exe"):
+        found = shutil.which(name)
+        if found:
+            return found
+
+    for candidate in (
+        TOOLS / ".venv" / "Scripts" / "adk.exe",
+        TOOLS / ".venv" / "bin" / "adk",
+        SIDECAR_DIR / ".venv" / "Scripts" / "adk.exe",
+        SIDECAR_DIR / ".venv" / "bin" / "adk",
+    ):
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
+def read_dotenv_file(path: Path, env: dict[str, str]) -> None:
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key or key in env:
+            continue
+        value = value.strip().strip("'\"")
+        env[key] = value
+
+
+def adk_subprocess_env() -> dict[str, str]:
+    env = os.environ.copy()
+    for path in (ROOT / ".env", TOOLS / ".env", SIDECAR_DIR / ".env"):
+        read_dotenv_file(path, env)
+    return env
+
+
+def has_model_api_key(env: dict[str, str]) -> bool:
+    return any(env.get(name) for name in MODEL_API_KEY_ENV_VARS)
+
+
 def clang_format_dry_run_step(v: Validator) -> None:
     start = time.monotonic()
     paths = changed_cpp_headers()
     if not paths:
         v.add("clang-format", "PASS", "No modified C/C++ files", time.monotonic() - start)
         return
-    clang_format = shutil.which("clang-format")
+    clang_format = find_clang_format_binary()
     if not clang_format:
-        v.add("clang-format", "FAIL", "clang-format not found on PATH", time.monotonic() - start)
+        v.add("clang-format", "FAIL", "clang-format not found", time.monotonic() - start)
         raise RuntimeError("clang-format")
 
-    cmd = [clang_format, "--dry-run", "--Werror", *[str(path) for path in paths]]
-    completed = v.run_cmd("clang-format", cmd, timeout=120, log_name="clang_format")
-    detail = f"checked {len(paths)} file(s)" if completed.returncode == 0 else tail(completed.stdout, 40)
-    if completed.returncode == 0:
-        v.steps[-1].detail = detail
+    outputs: list[str] = []
+    unformatted: list[Path] = []
+    for path in paths:
+        display_path = rel(path)
+        cmd = [clang_format, "--output-replacements-xml", display_path]
+        try:
+            completed = subprocess.run(
+                cmd,
+                cwd=str(ROOT),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=120,
+            )
+        except subprocess.TimeoutExpired as exc:
+            output = exc.stdout or ""
+            if isinstance(output, bytes):
+                output = output.decode("utf-8", errors="replace")
+            v._write_log("clang_format", output)
+            v.add("clang-format", "FAIL", f"Timed out after 120s while checking {display_path}", time.monotonic() - start)
+            raise RuntimeError("clang-format") from exc
+
+        outputs.append(f"$ {' '.join(cmd)}\n{completed.stdout}")
+        if completed.returncode != 0:
+            v._write_log("clang_format", "\n\n".join(outputs))
+            v.add("clang-format", "FAIL", tail(completed.stdout, 40), time.monotonic() - start)
+            raise RuntimeError("clang-format")
+
+        try:
+            root = ET.fromstring(completed.stdout)
+        except ET.ParseError as exc:
+            v._write_log("clang_format", "\n\n".join(outputs))
+            v.add("clang-format", "FAIL", f"Invalid clang-format XML for {display_path}", time.monotonic() - start)
+            raise RuntimeError("clang-format") from exc
+        if root.findall("replacement"):
+            unformatted.append(path)
+
+    v._write_log("clang_format", "\n\n".join(outputs))
+    if unformatted:
+        detail = "Run clang-format -i on:\n" + "\n".join(rel(path) for path in unformatted)
+        v.add("clang-format", "FAIL", detail, time.monotonic() - start)
+        raise RuntimeError("clang-format")
+
+    v.add("clang-format", "PASS", f"checked {len(paths)} file(s)", time.monotonic() - start)
 
 
 def python_wiki_lint(v: Validator) -> None:
@@ -826,16 +942,17 @@ def script_tests_step(v: Validator) -> None:
 
 
 def adk_smoke_step(v: Validator) -> None:
-    adk = shutil.which("adk")
+    adk = find_adk_binary()
     if not adk:
         status = "FAIL" if v.args.require_adk else "SKIP"
-        v.add("adk smoke", status, "adk not found on PATH")
+        v.add("adk smoke", status, "adk not found on PATH or in tools/.venv")
         if v.args.require_adk:
             raise RuntimeError("adk smoke")
         return
-    if not (os.environ.get("OPENAI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")):
+    env = adk_subprocess_env()
+    if not has_model_api_key(env):
         status = "FAIL" if v.args.require_adk else "SKIP"
-        v.add("adk smoke", status, "No model API key env var found")
+        v.add("adk smoke", status, "No model API key env var found in process env or local .env files")
         if v.args.require_adk:
             raise RuntimeError("adk smoke")
         return
@@ -851,9 +968,11 @@ def adk_smoke_step(v: Validator) -> None:
         completed = subprocess.run(
             [adk, "run", "phasma_adk_agent"],
             cwd=str(TOOLS),
-            env=os.environ.copy(),
+            env=env,
             input=prompt,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             timeout=v.args.adk_timeout,
@@ -879,7 +998,7 @@ def adk_smoke_step(v: Validator) -> None:
         raise RuntimeError("adk smoke")
 
 
-def ensure_sponza_config(bin_dir: Path, scene: str) -> None:
+def ensure_scene_config(bin_dir: Path, scene: str) -> None:
     ensure_startup_files(bin_dir, scene)
     ensure_agent_config_mcp(bin_dir)
 
@@ -899,7 +1018,7 @@ def smoke_backend(v: Validator, build_dir: Path, api: str) -> None:
         v.add(f"{api} smoke", "FAIL", f"Missing executable: {exe}")
         raise RuntimeError(f"{api} smoke")
 
-    ensure_sponza_config(bin_dir, v.args.scene)
+    ensure_scene_config(bin_dir, v.args.scene)
     remove_hot_reload_modules(bin_dir)
     clear_engine_log(bin_dir)
 
@@ -944,7 +1063,7 @@ def smoke_backend(v: Validator, build_dir: Path, api: str) -> None:
         raise RuntimeError(f"{api} smoke")
 
     if not scene_load_marker_present(log_text, v.args.scene):
-        v.add(f"{api} smoke", "FAIL", "Sponza scene load marker missing\n" + log_detail, time.monotonic() - start)
+        v.add(f"{api} smoke", "FAIL", f"Scene load marker missing for {v.args.scene}\n" + log_detail, time.monotonic() - start)
         raise RuntimeError(f"{api} smoke")
 
     bad_lines = find_bad_log_lines(log_text)
@@ -1046,7 +1165,12 @@ def smoke_player(v: Validator, build_dir: Path, api: str) -> None:
     log_text = read_engine_log(bin_dir)
     log_detail = scan_engine_log(v, bin_dir, f"player_{api}")
     if not scene_load_marker_present(log_text, v.args.scene):
-        v.add(f"player {api} smoke", "FAIL", "Sponza scene load marker missing\n" + log_detail, time.monotonic() - start)
+        v.add(
+            f"player {api} smoke",
+            "FAIL",
+            f"Scene load marker missing for {v.args.scene}\n" + log_detail,
+            time.monotonic() - start,
+        )
         raise RuntimeError(f"player {api} smoke")
 
     bad_lines = find_bad_log_lines(log_text)
@@ -1333,12 +1457,14 @@ def collect_perf_snapshots(v: Validator) -> Path | None:
 
 def prepare_perf_scene(v: Validator) -> None:
     assert v.mcp_client is not None
-    code = r"""
-scene.load("Scenes/sponza.pescene")
+    lua_scene = scene_lua_path(v.args.scene)
+    code = f"""
+local requested_scene = {json.dumps(lua_scene)}
+scene.load(requested_scene)
 rhi.change_present_mode("immediate")
 local m = engine.get_metrics()
 local present = rhi.get_present_mode()
-pe_log(string.format("[precommit:perf] requested scene=sponza present=%s fps=%.2f", present, m.fps))
+pe_log(string.format("[precommit:perf] requested scene=%s present=%s fps=%.2f", requested_scene, present, m.fps))
 """
     result = v.mcp_client.call_tool("execute_lua", {"code": code})
     if result.get("isError"):
@@ -1359,7 +1485,7 @@ pe_log(string.format("[precommit:perf] verify present=%s fps=%.2f", present, m.f
     )
     text = json.dumps(verify)
     fps_match = re.search(r"fps=([0-9.]+)", text)
-    detail = "Sponza requested; immediate present mode re-applied"
+    detail = f"{lua_scene} requested; immediate present mode re-applied"
     if fps_match:
         fps = float(fps_match.group(1))
         detail += f"; fps={fps:.2f}"
