@@ -1,5 +1,11 @@
 # PhasmaEngine Wiki Log
 
+## 2026-05-19
+
+- Added `architecture/agent-tooling.md` to describe the current MCP/editor/ADK sidecar boundary, the absence of a tracked `PhasmaAgent/` lane on current `master`, the Phase 1 read-only MCP tool filter, and the future A2A goal-level constraint.
+- Added `tools/phasma_adk_agent/` as a read-only ADK sidecar scaffold with a stdlib MCP probe and ADK `root_agent` that uses Streamable HTTP without the stdio bridge.
+- Added `tools/precommit_validate.py`, a pre-commit validation orchestrator that runs hygiene checks, instruction/ADK guardrails, Release builds, auto-launches PhasmaEditor with MCP enabled on display 1, runs launcher/editor/player smokes across Vulkan/DX12, MCP/ADK smoke checks, console error scans, screenshot capture plus sanity checks, and optional visual/performance/broader editor-behavior probes. The tracked tools whitelist now includes the perf comparison helper it calls.
+
 ## 2026-05-18
 
 - Started runtime/game UI with a backend-neutral `RuntimeUiSystem` in PhasmaRuntime and a Dear ImGui player backend under `PhasmaRuntime/Code/UI/Backends`, compiled into PhasmaPlayer at the host boundary. PhasmaPlayer now feeds SDL events to runtime UI before gameplay input, renders UI after the render graph before swapchain blit, exposes conservative `runtime_ui` Lua helpers, and keeps ImGui types out of runtime/game-facing APIs so RmlUi can be added behind the same surface later.

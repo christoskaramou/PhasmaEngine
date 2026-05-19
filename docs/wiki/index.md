@@ -10,6 +10,7 @@
 
 - `README.md` — purpose and maintenance rules
 - `log.md` — wiki maintenance log
+- `architecture/agent-tooling.md` — MCP, editor agent tools, and ADK sidecar boundary
 - `architecture/runtime.md` — PhasmaRuntime and MyProject boundary
 
 Add subsystem pages here as they are created. Prefer short synthesis over copying source-code detail.

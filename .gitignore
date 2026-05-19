@@ -330,6 +330,19 @@ PhasmaEditor/Assets/Agent/
 !/docs/wiki/
 !/docs/wiki/**
 
+# Tracked validation and ADK tools
+!/tools/
+/tools/*
+!/tools/precommit_validate.py
+!/tools/compare_snapshots.py
+!/tools/perf_cycle.sh
+!/tools/phasma_adk_agent/
+!/tools/phasma_adk_agent/**
+/tools/phasma_adk_agent/.venv/
+/tools/phasma_adk_agent/__pycache__/
+/tools/phasma_adk_agent/**/*.pyc
+/tools/phasma_adk_agent/.adk/
+
 # User scenes (keep folder, ignore scene files)
 PhasmaEditor/Assets/Scenes/*.pescene
 
