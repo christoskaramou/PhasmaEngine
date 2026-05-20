@@ -43,6 +43,7 @@ namespace pe
     };
 
     void SetSceneHostCallbacks(SceneHostCallbacks callbacks);
+    void SyncSceneBeforeMutation();
     void NewScene();
     void SaveScene(const std::filesystem::path &path);
     void LoadScene(const std::filesystem::path &path);

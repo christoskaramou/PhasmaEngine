@@ -114,7 +114,13 @@ namespace pe
         if (m_targetNode)
         {
             if (auto *r = GetGlobalSystem<RendererSystem>())
-                r->GetScene().SetNodeScript(m_targetNode, outPath.string());
+            {
+                Scene &scene = r->GetScene();
+                if (scene.IsNodeAlive(m_targetNode))
+                    scene.SetNodeScript(m_targetNode, outPath.string());
+                else
+                    m_targetNode = nullptr;
+            }
         }
 
         m_loadedPath = outPath.string();

@@ -2,6 +2,7 @@
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/Primitives.h"
+#include "Scene/SceneHost.h"
 #include "Scene/SceneRuntimeHooks.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
@@ -1167,13 +1168,7 @@ namespace pe
 
         DestroyAllNodeEntities();
 
-        // Free all NodeId allocations and clear SoA stores
-        for (NodeId *id : m_nodeIds)
-            delete id;
-        for (NodeId *id : m_freeNodeIds)
-            delete id;
-        m_nodeIds.clear();
-        m_freeNodeIds.clear();
+        RetireAllNodeIds();
 
         m_nodeRuntime.clear();
         m_nodesMoved.clear();
@@ -1369,12 +1364,7 @@ namespace pe
 
         DestroyAllNodeEntities();
 
-        for (NodeId *id : m_nodeIds)
-            delete id;
-        for (NodeId *id : m_freeNodeIds)
-            delete id;
-        m_nodeIds.clear();
-        m_freeNodeIds.clear();
+        RetireAllNodeIds();
 
         m_nodeRuntime.clear();
         m_nodesMoved.clear();
@@ -2064,12 +2054,28 @@ namespace pe
         return std::string(sb.GetString(), sb.GetSize());
     }
 
-    void Scene::RestoreSnapshot(const std::string &json)
+    bool Scene::RestoreSnapshot(const std::string &json)
     {
         rapidjson::Document d;
         d.Parse(json.c_str(), json.size());
-        if (d.HasParseError())
-            return;
+        if (d.HasParseError() || !d.IsObject())
+        {
+            PE_WARN("[Scene] RestoreSnapshot skipped invalid JSON snapshot");
+            return false;
+        }
+        if (!d.HasMember("sources") || !d["sources"].IsArray() ||
+            !d.HasMember("nodes") || !d["nodes"].IsArray() ||
+            (d.HasMember("meshes") && !d["meshes"].IsArray()) ||
+            (d.HasMember("lights") && !d["lights"].IsArray()) ||
+            (d.HasMember("cameras") && !d["cameras"].IsArray()) ||
+            (d.HasMember("emitters") && !d["emitters"].IsArray()))
+        {
+            PE_WARN("[Scene] RestoreSnapshot skipped malformed scene snapshot");
+            return false;
+        }
+
+        SyncSceneBeforeMutation();
+        ClearSceneSelection();
 
         PE_INFO("[Scene] RestoreSnapshot begin: bytes=%zu currentNodes=%u currentMeshes=%zu currentSources=%zu",
                 json.size(), GetNodeCount(), m_meshes.size(), m_sources.size());
@@ -2474,6 +2480,7 @@ namespace pe
             else
             {
                 replayDefaultAnimations = true;
+                m_generation++;
 
                 // Slow path: geometry changed — clear everything and reload via LoadScene-style path
                 ClearSceneSelection();
@@ -2497,12 +2504,7 @@ namespace pe
 
                 // Clear old scene data synchronously (mirrors LoadSceneApply)
                 DestroyAllNodeEntities();
-                for (NodeId *id : m_nodeIds)
-                    delete id;
-                for (NodeId *id : m_freeNodeIds)
-                    delete id;
-                m_nodeIds.clear();
-                m_freeNodeIds.clear();
+                RetireAllNodeIds();
 
                 m_nodeRuntime.clear();
                 m_nodesMoved.clear();
@@ -3050,5 +3052,6 @@ namespace pe
                 restoredSkeleton.bones.size(),
                 restoredClips.size(),
                 replayedAnimationNodes);
+        return true;
     }
 } // namespace pe

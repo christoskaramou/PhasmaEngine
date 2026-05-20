@@ -221,17 +221,17 @@ namespace pe
 
     void UndoRedo::CaptureIdleState(Scene &scene)
     {
+        if (m_restoring)
+            return;
+
         std::string current = scene.TakeSnapshot();
 
         if (m_hasIdleSnapshot && m_settleFrames == 0 && current != m_idleSnapshot)
         {
             std::string label = DiffSnapshots(m_idleSnapshot, current);
-            m_undoStack.push_back({std::move(m_idleSnapshot), std::move(label)});
+            PushUndo({std::move(m_idleSnapshot), std::move(label)});
             m_redoStack.clear();
             scene.MarkDirty();
-
-            if (m_undoStack.size() > MAX_HISTORY)
-                m_undoStack.pop_front();
         }
 
         if (m_settleFrames > 0)
@@ -243,14 +243,13 @@ namespace pe
 
     void UndoRedo::RecordSnapshot(Scene &scene, std::string label)
     {
-        std::string current = scene.TakeSnapshot();
+        if (m_restoring)
+            return;
 
-        m_undoStack.push_back({std::move(current), std::move(label)});
+        std::string current = scene.TakeSnapshot();
+        PushUndo({std::move(current), std::move(label)});
         m_redoStack.clear();
         scene.MarkDirty();
-
-        if (m_undoStack.size() > MAX_HISTORY)
-            m_undoStack.pop_front();
 
         m_hasIdleSnapshot = false;
     }
@@ -263,13 +262,12 @@ namespace pe
         HistoryEntry entry = std::move(m_undoStack.back());
         m_undoStack.pop_back();
 
-        m_redoStack.push_back({scene.TakeSnapshot(), entry.label});
+        HistoryEntry current{scene.TakeSnapshot(), entry.label};
 
-        scene.RestoreSnapshot(entry.snapshot);
-        scene.MarkDirty();
-
-        m_hasIdleSnapshot = false;
-        m_settleFrames = SETTLE_FRAMES;
+        if (RestoreEntry(scene, entry))
+            PushRedo(std::move(current));
+        else
+            PushUndo(std::move(entry));
     }
 
     void UndoRedo::Redo(Scene &scene)
@@ -280,13 +278,12 @@ namespace pe
         HistoryEntry entry = std::move(m_redoStack.back());
         m_redoStack.pop_back();
 
-        m_undoStack.push_back({scene.TakeSnapshot(), entry.label});
+        HistoryEntry current{scene.TakeSnapshot(), entry.label};
 
-        scene.RestoreSnapshot(entry.snapshot);
-        scene.MarkDirty();
-
-        m_hasIdleSnapshot = false;
-        m_settleFrames = SETTLE_FRAMES;
+        if (RestoreEntry(scene, entry))
+            PushUndo(std::move(current));
+        else
+            PushRedo(std::move(entry));
     }
 
     void UndoRedo::UndoTo(Scene &scene, size_t stepsBack)
@@ -296,24 +293,30 @@ namespace pe
 
         stepsBack = std::min(stepsBack, m_undoStack.size());
 
-        // Push current state onto redo stack once
-        m_redoStack.push_back({scene.TakeSnapshot(), "Scene Change"});
-
-        // Move intermediate entries directly to redo (no scene restore needed)
-        for (size_t i = 0; i < stepsBack - 1; i++)
+        std::vector<HistoryEntry> popped;
+        popped.reserve(stepsBack);
+        for (size_t i = 0; i < stepsBack; i++)
         {
-            m_redoStack.push_back(std::move(m_undoStack.back()));
+            popped.push_back(std::move(m_undoStack.back()));
             m_undoStack.pop_back();
         }
 
-        // Final entry: restore the target scene state
-        HistoryEntry target = std::move(m_undoStack.back());
-        m_undoStack.pop_back();
-        scene.RestoreSnapshot(target.snapshot);
-        scene.MarkDirty();
+        HistoryEntry current{scene.TakeSnapshot(), "Scene Change"};
+        HistoryEntry target = std::move(popped.back());
+        popped.pop_back();
 
-        m_hasIdleSnapshot = false;
-        m_settleFrames = SETTLE_FRAMES;
+        if (RestoreEntry(scene, target))
+        {
+            PushRedo(std::move(current));
+            for (auto &entry : popped)
+                PushRedo(std::move(entry));
+        }
+        else
+        {
+            m_undoStack.push_back(std::move(target));
+            for (auto it = popped.rbegin(); it != popped.rend(); ++it)
+                m_undoStack.push_back(std::move(*it));
+        }
     }
 
     void UndoRedo::RedoTo(Scene &scene, size_t stepsForward)
@@ -323,24 +326,30 @@ namespace pe
 
         stepsForward = std::min(stepsForward, m_redoStack.size());
 
-        // Push current state onto undo stack once
-        m_undoStack.push_back({scene.TakeSnapshot(), "Scene Change"});
-
-        // Move intermediate entries directly to undo (no scene restore needed)
-        for (size_t i = 0; i < stepsForward - 1; i++)
+        std::vector<HistoryEntry> popped;
+        popped.reserve(stepsForward);
+        for (size_t i = 0; i < stepsForward; i++)
         {
-            m_undoStack.push_back(std::move(m_redoStack.back()));
+            popped.push_back(std::move(m_redoStack.back()));
             m_redoStack.pop_back();
         }
 
-        // Final entry: restore the target scene state
-        HistoryEntry target = std::move(m_redoStack.back());
-        m_redoStack.pop_back();
-        scene.RestoreSnapshot(target.snapshot);
-        scene.MarkDirty();
+        HistoryEntry current{scene.TakeSnapshot(), "Scene Change"};
+        HistoryEntry target = std::move(popped.back());
+        popped.pop_back();
 
-        m_hasIdleSnapshot = false;
-        m_settleFrames = SETTLE_FRAMES;
+        if (RestoreEntry(scene, target))
+        {
+            PushUndo(std::move(current));
+            for (auto &entry : popped)
+                PushUndo(std::move(entry));
+        }
+        else
+        {
+            m_redoStack.push_back(std::move(target));
+            for (auto it = popped.rbegin(); it != popped.rend(); ++it)
+                m_redoStack.push_back(std::move(*it));
+        }
     }
 
     void UndoRedo::Clear()
@@ -349,6 +358,50 @@ namespace pe
         m_redoStack.clear();
         m_idleSnapshot.clear();
         m_hasIdleSnapshot = false;
+        m_restoring = false;
+        m_settleFrames = 0;
+    }
+
+    void UndoRedo::PushUndo(HistoryEntry entry)
+    {
+        if (entry.snapshot.empty())
+            return;
+        if (!m_undoStack.empty() && m_undoStack.back().snapshot == entry.snapshot)
+            return;
+
+        m_undoStack.push_back(std::move(entry));
+        if (m_undoStack.size() > MAX_HISTORY)
+            m_undoStack.pop_front();
+    }
+
+    void UndoRedo::PushRedo(HistoryEntry entry)
+    {
+        if (entry.snapshot.empty())
+            return;
+        if (!m_redoStack.empty() && m_redoStack.back().snapshot == entry.snapshot)
+            return;
+
+        m_redoStack.push_back(std::move(entry));
+        if (m_redoStack.size() > MAX_HISTORY)
+            m_redoStack.pop_front();
+    }
+
+    bool UndoRedo::RestoreEntry(Scene &scene, const HistoryEntry &entry)
+    {
+        if (entry.snapshot.empty())
+            return false;
+
+        m_restoring = true;
+        const bool restored = scene.RestoreSnapshot(entry.snapshot);
+        m_restoring = false;
+
+        if (!restored)
+            return false;
+
+        scene.MarkDirty();
+        m_idleSnapshot.clear();
+        m_hasIdleSnapshot = false;
         m_settleFrames = SETTLE_FRAMES;
+        return true;
     }
 } // namespace pe

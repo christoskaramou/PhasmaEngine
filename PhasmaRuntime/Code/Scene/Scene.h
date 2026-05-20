@@ -168,7 +168,7 @@ namespace pe
         static ScenePreload PreloadScene(const std::filesystem::path &file);
         void LoadSceneApply(ScenePreload preload);
         std::string TakeSnapshot() const;
-        void RestoreSnapshot(const std::string &json);
+        bool RestoreSnapshot(const std::string &json);
 
         // --- Node Graph ---
         NodeId *CreateNode(const std::string &name, NodeId *parent = nullptr);
@@ -470,6 +470,7 @@ namespace pe
         void SwapAndPopNode(uint32_t index);
         void UpdateNodeMatrix(NodeId *node);
         void DestroyAllNodeEntities();
+        void RetireAllNodeIds();
 
         // Model geometry
         std::vector<int> AddModelGeometry(ModelAsset *model, int sourceIndex);
@@ -548,6 +549,7 @@ namespace pe
         std::vector<NodeId *> m_nodeIds;
         std::vector<NodeRuntime> m_nodeRuntime;
         std::vector<NodeId *> m_freeNodeIds;
+        std::vector<NodeId *> m_retiredNodeIds;
 
         // Indexed access helpers
         int MeshRefAt(uint32_t index) const
@@ -579,7 +581,7 @@ namespace pe
         bool m_nodesDirty = false;
         std::vector<NodeId *> m_nodesMoved;
 
-        uint32_t m_generation = 0;     // Incremented on NewScene/LoadSceneApply
+        uint32_t m_generation = 0;     // Incremented on full scene identity changes
         bool m_geometryDirty = false;  // Pending full geometry GPU upload (new mesh data)
         bool m_instancesDirty = false; // Pending raster instance data rebuild (mesh refs changed, no new geometry)
         bool m_materialDirty = false;  // Pending material table update

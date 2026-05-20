@@ -74,12 +74,14 @@ namespace pe
         Scene &scene = *GetActiveScene();
         auto &selection = SelectionManager::Instance();
 
-        // Helper: save undo snapshot before any destructive action
-        auto recordUndo = [&scene]()
-        { UndoRedo::Instance().RecordSnapshot(scene, "Deleted Node"); };
+        auto recordSnapshot = [&scene](const char *label)
+        { UndoRedo::Instance().RecordSnapshot(scene, label); };
+        auto recordUndo = [&recordSnapshot]()
+        { recordSnapshot("Deleted Node"); };
 
-        auto createSprite = [&scene, &selection](NodeId *parent = nullptr)
+        auto createSprite = [&scene, &selection, &recordSnapshot](NodeId *parent = nullptr)
         {
+            recordSnapshot(parent ? "Added Sprite Child" : "Added Sprite");
             SceneNodeHandle handle = scene.CreateSpriteNode("Sprite", vec2(1.0f), vec3(0.0f), RenderType::AlphaCut, vec4(1.0f), parent);
             if (handle.IsValid(scene))
                 selection.Select(handle.nodeId, SelectionType::Node);
@@ -123,24 +125,38 @@ namespace pe
         {
             if (ImGui::MenuItem("Camera"))
             {
+                recordSnapshot("Added Camera");
                 scene.AddCamera();
             }
 
             if (ImGui::BeginMenu("Light"))
             {
                 if (ImGui::MenuItem("Directional Light"))
+                {
+                    recordSnapshot("Added Directional Light");
                     scene.CreateDirectionalLight();
+                }
                 if (ImGui::MenuItem("Point Light"))
+                {
+                    recordSnapshot("Added Point Light");
                     scene.CreatePointLight();
+                }
                 if (ImGui::MenuItem("Spot Light"))
+                {
+                    recordSnapshot("Added Spot Light");
                     scene.CreateSpotLight();
+                }
                 if (ImGui::MenuItem("Area Light"))
+                {
+                    recordSnapshot("Added Area Light");
                     scene.CreateAreaLight();
+                }
                 ImGui::EndMenu();
             }
 
             if (ImGui::MenuItem("Empty Node"))
             {
+                recordSnapshot("Added Node");
                 NodeId *node = scene.CreateNode("Empty Node");
                 selection.Select(node, SelectionType::Node);
             }
@@ -152,6 +168,7 @@ namespace pe
             {
                 auto AddPrimitive = [&](ModelAsset *m)
                 {
+                    recordSnapshot("Added Mesh");
                     EventSystem::PushEvent(EventType::ModelLoaded, m);
                     // After model is added to scene, select its first root node
                     // The event handler will call AddModel which creates NodeIds
@@ -213,6 +230,14 @@ namespace pe
 
         // Check for selection change (auto-expand)
         NodeId *currentSelectedNode = selection.GetSelectedNode();
+        if (m_lastSelectedNode && !scene.IsNodeAlive(m_lastSelectedNode))
+            m_lastSelectedNode = nullptr;
+        if (m_nodeToExpand && !scene.IsNodeAlive(m_nodeToExpand))
+        {
+            m_nodeToExpand = nullptr;
+            m_nodesToExpand.clear();
+            m_scrollToSelection = false;
+        }
         if (currentSelectedNode != m_lastSelectedNode)
         {
             m_lastSelectedNode = currentSelectedNode;
@@ -243,28 +268,47 @@ namespace pe
         if (ImGui::BeginPopupContextItem("RootNodeContext"))
         {
             if (ImGui::MenuItem("Camera"))
+            {
+                recordSnapshot("Added Camera");
                 scene.AddCamera();
+            }
             if (ImGui::BeginMenu("Light"))
             {
                 if (ImGui::MenuItem("Directional Light"))
+                {
+                    recordSnapshot("Added Directional Light");
                     scene.CreateDirectionalLight();
+                }
                 if (ImGui::MenuItem("Point Light"))
+                {
+                    recordSnapshot("Added Point Light");
                     scene.CreatePointLight();
+                }
                 if (ImGui::MenuItem("Spot Light"))
+                {
+                    recordSnapshot("Added Spot Light");
                     scene.CreateSpotLight();
+                }
                 if (ImGui::MenuItem("Area Light"))
+                {
+                    recordSnapshot("Added Area Light");
                     scene.CreateAreaLight();
+                }
                 ImGui::EndMenu();
             }
             if (ImGui::MenuItem("Empty Node"))
             {
+                recordSnapshot("Added Node");
                 NodeId *node = scene.CreateNode("Empty Node");
                 selection.Select(node, SelectionType::Node);
             }
             if (ImGui::BeginMenu("Mesh"))
             {
                 auto AddPrim = [&](ModelAsset *m)
-                { EventSystem::PushEvent(EventType::ModelLoaded, m); };
+                {
+                    recordSnapshot("Added Mesh");
+                    EventSystem::PushEvent(EventType::ModelLoaded, m);
+                };
                 if (ImGui::MenuItem("Plane"))
                     AddPrim(Primitives::CreatePlane());
                 if (ImGui::MenuItem("Cube"))
@@ -494,7 +538,11 @@ namespace pe
                     if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("HIERARCHY_NODE"))
                     {
                         HierarchyDragDropPayload data = *(const HierarchyDragDropPayload *)payload->Data;
-                        scene.ReparentNode(data.node, node);
+                        if (scene.IsNodeAlive(data.node) && data.node != node && scene.GetParent(data.node) != node)
+                        {
+                            recordSnapshot("Reparented Node");
+                            scene.ReparentNode(data.node, node);
+                        }
                     }
 
                     if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
@@ -571,23 +619,39 @@ namespace pe
                     if (ImGui::BeginMenu("Add"))
                     {
                         if (ImGui::MenuItem("Camera"))
+                        {
+                            recordSnapshot("Added Camera");
                             scene.AddCamera(node);
+                        }
 
                         if (ImGui::BeginMenu("Light"))
                         {
                             if (ImGui::MenuItem("Directional Light"))
+                            {
+                                recordSnapshot("Added Directional Light");
                                 scene.CreateDirectionalLight(node);
+                            }
                             if (ImGui::MenuItem("Point Light"))
+                            {
+                                recordSnapshot("Added Point Light");
                                 scene.CreatePointLight(node);
+                            }
                             if (ImGui::MenuItem("Spot Light"))
+                            {
+                                recordSnapshot("Added Spot Light");
                                 scene.CreateSpotLight(node);
+                            }
                             if (ImGui::MenuItem("Area Light"))
+                            {
+                                recordSnapshot("Added Area Light");
                                 scene.CreateAreaLight(node);
+                            }
                             ImGui::EndMenu();
                         }
 
                         if (ImGui::MenuItem("Empty Node"))
                         {
+                            recordSnapshot("Added Node");
                             NodeId *newNode = scene.CreateNode("Empty Node", node);
                             scene.MarkNodeDirty(newNode);
                             selection.Select(newNode, SelectionType::Node);
@@ -602,11 +666,15 @@ namespace pe
                         {
                             auto AttachPrimitive = [&](ModelAsset *m)
                             {
+                                recordSnapshot("Added Mesh Component");
                                 EventSystem::PushEvent(EventType::PrimitiveAttachedToNode,
                                                        Scene::PrimitiveAttachRequest{node, m});
                             };
                             if (ImGui::MenuItem("2D Sprite"))
+                            {
+                                recordSnapshot("Added Sprite Component");
                                 scene.AttachSpriteToNode(node);
+                            }
                             if (ImGui::MenuItem("Plane"))
                                 AttachPrimitive(Primitives::CreatePlane());
                             if (ImGui::MenuItem("Cube"))
@@ -649,6 +717,7 @@ namespace pe
                             ParticleManager *pm = scene.GetParticleManager();
                             if (pm)
                             {
+                                recordSnapshot("Added Particle Emitter");
                                 auto &emitters = pm->GetEmitters();
                                 auto &names = pm->GetEmitterNames();
                                 Camera *activeCamera = scene.GetActiveCamera();
@@ -677,15 +746,15 @@ namespace pe
 
                     if (ImGui::MenuItem("Delete"))
                     {
-                        recordUndo();
+                        bool canDelete = true;
                         if (nodeCompFlags & Component_Camera)
                         {
                             Camera *cam = scene.GetCameraForNode(node);
-                            if (cam && scene.GetCameras().size() > 1)
-                                nodesToDelete.push_back(node);
+                            canDelete = cam && scene.GetCameras().size() > 1;
                         }
-                        else
+                        if (canDelete)
                         {
+                            recordUndo();
                             nodesToDelete.push_back(node);
                         }
                     }
@@ -761,7 +830,11 @@ namespace pe
                 if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("HIERARCHY_NODE"))
                 {
                     HierarchyDragDropPayload data = *(const HierarchyDragDropPayload *)payload->Data;
-                    scene.ReparentNode(data.node, nullptr);
+                    if (scene.IsNodeAlive(data.node) && scene.GetParent(data.node))
+                    {
+                        recordSnapshot("Reparented Node");
+                        scene.ReparentNode(data.node, nullptr);
+                    }
                 }
                 ImGui::EndDragDropTarget();
             }
@@ -792,33 +865,39 @@ namespace pe
                 }
                 else if (s_renameNode)
                 {
-                    scene.SetNodeName(s_renameNode, s_renameBuf);
-                    // Sync camera/light names stored in their respective systems
-                    Camera *cam = scene.GetCameraForNode(s_renameNode);
-                    if (cam)
-                        cam->SetName(s_renameBuf);
-                    else
+                    if (scene.IsNodeAlive(s_renameNode))
                     {
-                        auto [lt, idx] = scene.GetLightForNode(s_renameNode);
-                        if (idx >= 0)
+                        scene.SetNodeName(s_renameNode, s_renameBuf);
+                        // Sync camera/light names stored in their respective systems
+                        Camera *cam = scene.GetCameraForNode(s_renameNode);
+                        if (cam)
+                            cam->SetName(s_renameBuf);
+                        else
                         {
-                            if (lt == LightType::Directional)
-                                scene.GetDirectionalLights()[idx].name = s_renameBuf;
-                            else if (lt == LightType::Point)
-                                scene.GetPointLights()[idx].name = s_renameBuf;
-                            else if (lt == LightType::Spot)
-                                scene.GetSpotLights()[idx].name = s_renameBuf;
-                            else if (lt == LightType::Area)
-                                scene.GetAreaLights()[idx].name = s_renameBuf;
+                            auto [lt, idx] = scene.GetLightForNode(s_renameNode);
+                            if (idx >= 0)
+                            {
+                                if (lt == LightType::Directional)
+                                    scene.GetDirectionalLights()[idx].name = s_renameBuf;
+                                else if (lt == LightType::Point)
+                                    scene.GetPointLights()[idx].name = s_renameBuf;
+                                else if (lt == LightType::Spot)
+                                    scene.GetSpotLights()[idx].name = s_renameBuf;
+                                else if (lt == LightType::Area)
+                                    scene.GetAreaLights()[idx].name = s_renameBuf;
+                            }
                         }
                     }
                 }
+                s_renameNode = nullptr;
                 s_renameEmitterIndex = -1;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2(120, 0)))
             {
+                s_renameNode = nullptr;
+                s_renameEmitterIndex = -1;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
@@ -839,23 +918,39 @@ namespace pe
             if (ImGui::BeginMenu("Add"))
             {
                 if (ImGui::MenuItem("Camera"))
+                {
+                    recordSnapshot("Added Camera");
                     scene.AddCamera();
+                }
 
                 if (ImGui::BeginMenu("Light"))
                 {
                     if (ImGui::MenuItem("Directional Light"))
+                    {
+                        recordSnapshot("Added Directional Light");
                         scene.CreateDirectionalLight();
+                    }
                     if (ImGui::MenuItem("Point Light"))
+                    {
+                        recordSnapshot("Added Point Light");
                         scene.CreatePointLight();
+                    }
                     if (ImGui::MenuItem("Spot Light"))
+                    {
+                        recordSnapshot("Added Spot Light");
                         scene.CreateSpotLight();
+                    }
                     if (ImGui::MenuItem("Area Light"))
+                    {
+                        recordSnapshot("Added Area Light");
                         scene.CreateAreaLight();
+                    }
                     ImGui::EndMenu();
                 }
 
                 if (ImGui::MenuItem("Empty Node"))
                 {
+                    recordSnapshot("Added Node");
                     NodeId *node = scene.CreateNode("Empty Node");
                     selection.Select(node, SelectionType::Node);
                 }
@@ -866,7 +961,10 @@ namespace pe
                 if (ImGui::BeginMenu("Mesh"))
                 {
                     auto AddPrim = [&](ModelAsset *m)
-                    { EventSystem::PushEvent(EventType::ModelLoaded, m); };
+                    {
+                        recordSnapshot("Added Mesh");
+                        EventSystem::PushEvent(EventType::ModelLoaded, m);
+                    };
                     if (ImGui::MenuItem("Plane"))
                         AddPrim(Primitives::CreatePlane());
                     if (ImGui::MenuItem("Cube"))

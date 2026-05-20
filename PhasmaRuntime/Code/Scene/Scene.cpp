@@ -132,6 +132,9 @@ namespace pe
         for (NodeId *id : m_freeNodeIds)
             delete id;
         m_freeNodeIds.clear();
+        for (NodeId *id : m_retiredNodeIds)
+            delete id;
+        m_retiredNodeIds.clear();
 
         for (auto *model : m_models)
             delete model;

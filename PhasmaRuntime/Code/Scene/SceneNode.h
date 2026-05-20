@@ -8,8 +8,9 @@ namespace pe
     class MaterialInstance;
     class Sampler;
 
-    // Stable node identity — heap allocated, never moves.
-    // All references (parent, children, selection, undo) hold NodeId*.
+    // Stable node identity — heap allocated, never moves while alive.
+    // Scene-wide rebuilds retire old ids so stale editor pointers can fail
+    // liveness checks without dereferencing freed memory.
     // On swap-and-pop deletion, only NodeId::index is updated.
     struct NodeId
     {

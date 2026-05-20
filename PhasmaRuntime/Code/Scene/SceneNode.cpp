@@ -1002,4 +1002,25 @@ namespace pe
         }
         m_nodeComponentCache.clear();
     }
+
+    void Scene::RetireAllNodeIds()
+    {
+        auto retire = [this](NodeId *id)
+        {
+            if (!id)
+                return;
+            id->entity = nullptr;
+            id->index = UINT32_MAX;
+            id->revision++;
+            m_retiredNodeIds.push_back(id);
+        };
+
+        for (NodeId *id : m_nodeIds)
+            retire(id);
+        for (NodeId *id : m_freeNodeIds)
+            retire(id);
+
+        m_nodeIds.clear();
+        m_freeNodeIds.clear();
+    }
 } // namespace pe

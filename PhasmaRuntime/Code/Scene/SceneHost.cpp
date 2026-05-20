@@ -30,12 +30,6 @@ namespace pe
             return scene;
         }
 
-        void SyncBeforeMutation()
-        {
-            if (s_sceneHostCallbacks.beforeMutation)
-                s_sceneHostCallbacks.beforeMutation();
-        }
-
         void DestroyDefaultScenePreload(void *payload)
         {
             delete static_cast<Scene::ScenePreload *>(payload);
@@ -99,6 +93,12 @@ namespace pe
         s_sceneHostCallbacks = callbacks;
     }
 
+    void SyncSceneBeforeMutation()
+    {
+        if (s_sceneHostCallbacks.beforeMutation)
+            s_sceneHostCallbacks.beforeMutation();
+    }
+
     void NewScene()
     {
         if (s_sceneHostCallbacks.newScene)
@@ -107,7 +107,7 @@ namespace pe
             return;
         }
 
-        SyncBeforeMutation();
+        SyncSceneBeforeMutation();
         if (Scene *scene = GetHostScene("NewScene"))
             scene->NewScene();
     }
@@ -132,7 +132,7 @@ namespace pe
             return;
         }
 
-        SyncBeforeMutation();
+        SyncSceneBeforeMutation();
         if (Scene *scene = GetHostScene("LoadScene"))
             scene->LoadScene(path);
     }
@@ -161,7 +161,7 @@ namespace pe
         if (!scenePreload || !scenePreload->valid)
             return;
 
-        SyncBeforeMutation();
+        SyncSceneBeforeMutation();
         if (Scene *scene = GetHostScene("LoadSceneApply"))
             scene->LoadSceneApply(std::move(*scenePreload));
     }

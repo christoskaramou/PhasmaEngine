@@ -2555,10 +2555,6 @@ namespace pe
                 auto &selection = SelectionManager::Instance();
                 if (selection.HasSelection())
                 {
-                    // Record undo snapshot before any destructive action
-                    if (undoRedoRS)
-                        undoRedo.RecordSnapshot(undoRedoRS->GetScene(), "Deleted Node");
-
                     SelectionType selType = selection.GetSelectionType();
                     if (selType == SelectionType::Node || selType == SelectionType::Mesh)
                     {
@@ -2578,6 +2574,8 @@ namespace pe
                                 }
                                 if (canDelete)
                                 {
+                                    if (undoRedoRS)
+                                        undoRedo.RecordSnapshot(undoRedoRS->GetScene(), "Deleted Node");
                                     selection.ClearSelection();
                                     scene.DeleteNode(node);
                                     EventSystem::PushEvent(EventType::NodeRemoved);
@@ -2598,6 +2596,8 @@ namespace pe
                                 auto &names = pm->GetEmitterNames();
                                 if (idx >= 0 && idx < static_cast<int>(emitters.size()))
                                 {
+                                    if (undoRedoRS)
+                                        undoRedo.RecordSnapshot(undoRedoRS->GetScene(), "Deleted Emitter");
                                     emitters.erase(emitters.begin() + idx);
                                     if (idx < static_cast<int>(names.size()))
                                         names.erase(names.begin() + idx);

@@ -37,10 +37,15 @@ namespace pe
     private:
         UndoRedo() = default;
 
+        void PushUndo(HistoryEntry entry);
+        void PushRedo(HistoryEntry entry);
+        bool RestoreEntry(Scene &scene, const HistoryEntry &entry);
+
         std::deque<HistoryEntry> m_undoStack;
         std::deque<HistoryEntry> m_redoStack;
         std::string m_idleSnapshot;
         bool m_hasIdleSnapshot = false;
+        bool m_restoring = false;
         int m_settleFrames = 0;
 
         static constexpr size_t MAX_HISTORY = 100;
