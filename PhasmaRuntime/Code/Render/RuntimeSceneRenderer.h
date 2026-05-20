@@ -66,7 +66,6 @@ namespace pe
         void CreateRenderTargets();
         void CreateFrameResources(uint32_t imageCount);
         void DestroyFrameResources();
-        void TransitionSwapchainImagesToPresent(CommandBuffer *cmd);
         void CacheGlobalComponents();
         SceneRenderGraphPassComponents GetSceneRenderGraphPassComponents() const;
         void UpdateRenderGraphPassStates();

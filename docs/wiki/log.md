@@ -2,6 +2,8 @@
 
 ## 2026-05-20
 
+- Folded swapchain present initialization into `SceneFrameResources.*`. Editor init and runtime init/resize now share the Vulkan-only swapchain-image present transition helper, while DX12 still skips that setup transition.
+- Added `SceneScreenshot.*` as a shared PhasmaRuntime screenshot readback/save helper. Editor and player still own their screenshot request sources, but both now share the copy-to-screenshot-target, staging-buffer, row-pitch, PNG-write, and cleanup body.
 - Moved the shared threaded scene render-pass update loop into `SceneRenderGraph.*`. `RuntimeSceneRenderer` and editor `RendererSystem` still own their local scene/GUI/runtime setup, but both now delegate enabled-pass filtering and `ThreadPool::Update` dispatch to the runtime helper.
 - Added shared frame command/semaphore primitives in `SceneFrameResources.*`. Editor and player now share command wait/return plus acquire/submit semaphore create/destroy helpers, while runtime resize still owns frame-resource recreation and editor resize keeps its existing behavior.
 - Centralized the scene render-pass cache fill in `SceneRenderGraph.*`. `RuntimeSceneRenderer` and editor `RendererSystem` now keep a single `SceneRenderGraphPassComponents` bundle instead of maintaining parallel typed pass pointer lists, while editor `ResetTAAHistory` remains editor-owned.

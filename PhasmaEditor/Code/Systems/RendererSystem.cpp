@@ -9,10 +9,10 @@
 #include "API/Surface.h"
 #include "API/Swapchain.h"
 #include "Render/RenderPassShaderReload.h"
-#include "Render/ScreenshotWriter.h"
 #include "Render/SceneFrameResources.h"
 #include "Render/SceneRenderGraph.h"
 #include "Render/SceneRenderTargets.h"
+#include "Render/SceneScreenshot.h"
 #include "RenderPasses/TAAPass.h"
 #include "UI/RuntimeUi.h"
 
@@ -20,12 +20,6 @@ namespace pe
 {
     namespace
     {
-        size_t GetScreenshotRowPitch(uint32_t width)
-        {
-            const size_t rowBytes = static_cast<size_t>(width) * 4;
-            return RHII.AlignTextureRowPitch(rowBytes);
-        }
-
         bool UsesDx12RenderOrchestration()
         {
             return RHII.GetApi() == PE_GRAPHICS_API_DX12;
@@ -103,18 +97,7 @@ namespace pe
 
         uint32_t imageCount = RHII.GetSwapchainImageCount();
         m_cmds.resize(imageCount, nullptr);
-        if (!isDx12)
-        {
-            for (uint32_t i = 0; i < imageCount; i++)
-            {
-                ImageBarrierInfo barrierInfo{};
-                barrierInfo.image = RHII.GetSwapchain()->GetImage(i);
-                barrierInfo.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
-                barrierInfo.stageFlags = PE_STAGE_ALL_COMMANDS;
-                barrierInfo.accessMask = PE_ACCESS_NONE;
-                initCmd->ImageBarrier(barrierInfo); // transition from undefined to present
-            }
-        }
+        TransitionSceneSwapchainImagesToPresent(initCmd);
 
         m_scene.UploadBuffers(initCmd);
         CacheGlobalComponents();
@@ -376,23 +359,8 @@ namespace pe
                                ? std::any_cast<std::string>(screenshotEvt.payload)
                                : std::string();
 
-        cmd->CopyImage(sourceImage, m_screenshotRT);
-
-        uint32_t w = m_screenshotRT->GetWidth();
-        uint32_t h = m_screenshotRT->GetHeight();
-        m_screenshotRowPitch = GetScreenshotRowPitch(w);
-        size_t bufferSize = m_screenshotRowPitch * h;
-
-        Buffer::Destroy(m_screenshotBuffer);
-        m_screenshotBuffer = Buffer::Create({
-            .size = bufferSize,
-            .usage = PE_BUFFER_USAGE_TRANSFER_DST,
-            .memoryUsage = PE_MEMORY_USAGE_GPU_TO_CPU,
-            .name = "ScreenshotStaging",
-        });
-
-        cmd->CopyImageToBuffer(m_screenshotRT, m_screenshotBuffer);
-        m_screenshotPending = true;
+        m_screenshotPending =
+            QueueSceneScreenshotReadback(cmd, sourceImage, m_screenshotRT, m_screenshotBuffer, m_screenshotRowPitch, "ScreenshotStaging");
     }
 
     void RendererSystem::Draw()
@@ -442,57 +410,9 @@ namespace pe
 
     void RendererSystem::SaveScreenshot()
     {
-        if (!m_screenshotBuffer)
-            return;
-
-        uint32_t w = m_screenshotRT->GetWidth();
-        uint32_t h = m_screenshotRT->GetHeight();
-
-        m_screenshotBuffer->Map();
-        const uint8_t *pixels = static_cast<const uint8_t *>(m_screenshotBuffer->Data());
-
-        // Generate path
-        std::string path = m_screenshotPath;
-        if (path.empty())
-        {
-            std::string dir = Path::Executable + "Screenshots/";
-            std::filesystem::create_directories(dir);
-
-            auto now = std::chrono::system_clock::now();
-            auto time = std::chrono::system_clock::to_time_t(now);
-            std::tm tm{};
-#if defined(PE_WIN32)
-            localtime_s(&tm, &time);
-#else
-            localtime_r(&time, &tm);
-#endif
-            char buf[64];
-            std::strftime(buf, sizeof(buf), "%Y%m%d_%H%M%S", &tm);
-            path = dir + "screenshot_" + buf + ".png";
-        }
-
-        ScreenshotWriteDesc screenshot{};
-        screenshot.path = path;
-        screenshot.pixels = pixels;
-        screenshot.width = w;
-        screenshot.height = h;
-        screenshot.rowPitch = m_screenshotRowPitch;
-        screenshot.format = m_screenshotRT->GetFormat();
-
         std::string savedPath;
-        if (WriteScreenshotPng(screenshot, &savedPath))
-        {
-            PE_INFO("Screenshot saved: %s", savedPath.c_str());
+        if (SaveSceneScreenshot(m_screenshotBuffer, m_screenshotRT, m_screenshotPath, m_screenshotRowPitch, &savedPath))
             m_screenshotSavedPath = savedPath;
-        }
-        else
-        {
-            PE_ERROR("[Renderer] Failed to save screenshot: %s", path.c_str());
-        }
-
-        m_screenshotBuffer->Unmap();
-        Buffer::Destroy(m_screenshotBuffer);
-        m_screenshotRowPitch = 0;
     }
 
     void RendererSystem::DrawPlatformWindows()

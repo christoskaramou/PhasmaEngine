@@ -12,6 +12,7 @@ namespace pe
 
     void WaitSceneFrameCommand(CommandBuffer *&cmd);
     void WaitSceneFrameCommands(std::vector<CommandBuffer *> &cmds);
+    void TransitionSceneSwapchainImagesToPresent(CommandBuffer *cmd);
 
     void CreateSceneFrameSemaphores(std::vector<Semaphore *> &acquireSemaphores,
                                     std::vector<Semaphore *> &submitSemaphores,

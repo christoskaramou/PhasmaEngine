@@ -1,6 +1,9 @@
 #include "Render/SceneFrameResources.h"
 #include "API/Command.h"
+#include "API/Image.h"
+#include "API/RHI.h"
 #include "API/Semaphore.h"
+#include "API/Swapchain.h"
 
 namespace pe
 {
@@ -18,6 +21,23 @@ namespace pe
     {
         for (auto &cmd : cmds)
             WaitSceneFrameCommand(cmd);
+    }
+
+    void TransitionSceneSwapchainImagesToPresent(CommandBuffer *cmd)
+    {
+        if (!cmd || RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            return;
+
+        const uint32_t imageCount = RHII.GetSwapchainImageCount();
+        for (uint32_t i = 0; i < imageCount; i++)
+        {
+            ImageBarrierInfo barrierInfo{};
+            barrierInfo.image = RHII.GetSwapchain()->GetImage(i);
+            barrierInfo.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
+            barrierInfo.stageFlags = PE_STAGE_ALL_COMMANDS;
+            barrierInfo.accessMask = PE_ACCESS_NONE;
+            cmd->ImageBarrier(barrierInfo);
+        }
     }
 
     void CreateSceneFrameSemaphores(std::vector<Semaphore *> &acquireSemaphores,
