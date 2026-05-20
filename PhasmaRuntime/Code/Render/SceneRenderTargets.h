@@ -47,5 +47,7 @@ namespace pe
     SceneRenderTargets CreateDefaultSceneRenderTargets(SceneRenderTargetMap &renderTargets,
                                                        SceneRenderTargetMap &depthStencilTargets);
 
+    void DestroySceneRenderTargets(SceneRenderTargetMap &renderTargets, SceneRenderTargetMap &depthStencilTargets);
+
     void BlitSceneImageToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex);
 } // namespace pe

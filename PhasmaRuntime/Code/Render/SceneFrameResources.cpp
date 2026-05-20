@@ -3,6 +3,7 @@
 #include "API/Image.h"
 #include "API/RHI.h"
 #include "API/Semaphore.h"
+#include "API/StagingManager.h"
 #include "API/Swapchain.h"
 
 namespace pe
@@ -17,10 +18,27 @@ namespace pe
         cmd = nullptr;
     }
 
+    void WaitPreviousSceneFrameCommand(std::vector<CommandBuffer *> &cmds)
+    {
+        if (cmds.empty())
+            return;
+
+        const uint32_t frame = RHII.GetFrameIndex();
+        WaitSceneFrameCommand(cmds[frame]);
+        RHII.FlushDeletionQueue(frame);
+        RHII.GetStagingManager()->RemoveUnused();
+    }
+
     void WaitSceneFrameCommands(std::vector<CommandBuffer *> &cmds)
     {
         for (auto &cmd : cmds)
             WaitSceneFrameCommand(cmd);
+    }
+
+    void WaitSceneFrameCommandsAndCleanup(std::vector<CommandBuffer *> &cmds)
+    {
+        WaitSceneFrameCommands(cmds);
+        RHII.GetStagingManager()->RemoveUnused();
     }
 
     void TransitionSceneSwapchainImagesToPresent(CommandBuffer *cmd)

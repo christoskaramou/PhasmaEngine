@@ -204,6 +204,31 @@ namespace pe
             CreateSceneRenderGraphPassComponent<RayTracingPass>(renderPassComponents);
     }
 
+    void InitSceneRenderGraphPassComponents(OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,
+                                            CommandBuffer *cmd)
+    {
+        for (auto &renderPassComponent : renderPassComponents)
+        {
+            renderPassComponent->Init();
+            renderPassComponent->UpdatePassInfo();
+            renderPassComponent->CreateUniforms(cmd);
+        }
+    }
+
+    void ResizeSceneRenderGraphPassComponents(OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,
+                                              uint32_t width,
+                                              uint32_t height)
+    {
+        for (auto &renderPassComponent : renderPassComponents)
+            renderPassComponent->Resize(width, height);
+    }
+
+    void DestroySceneRenderGraphPassComponents(OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents)
+    {
+        for (auto &renderPassComponent : renderPassComponents)
+            renderPassComponent->Destroy();
+    }
+
     SceneRenderGraphPassComponents GetGlobalSceneRenderGraphPassComponents()
     {
         SceneRenderGraphPassComponents scenePasses{};

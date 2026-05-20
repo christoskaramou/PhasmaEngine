@@ -2,6 +2,9 @@
 
 ## 2026-05-20
 
+- Folded the remaining safe render-pass lifecycle and shader-polling loops into runtime helpers. `SceneRenderGraph.*` now owns shared pass init/destroy/resize loops, `RenderPassShaderReload.*` owns bulk render-pass shader polling, and `SceneFrameResources.*` owns previous/all frame command cleanup with staging cleanup.
+- Exposed shared scene render-target destruction in `SceneRenderTargets.*` and removed the now-trivial `LoadResources` wrappers from both renderer hosts.
+- Added `SceneSky.*` as a shared PhasmaRuntime helper for default scene sky resources. `RuntimeSceneRenderer` and editor `RendererSystem` now share day/night skybox and IBL BRDF LUT load/destroy code, while editor-only `m_skyBoxWhite` remains local to the editor renderer.
 - Folded swapchain present initialization into `SceneFrameResources.*`. Editor init and runtime init/resize now share the Vulkan-only swapchain-image present transition helper, while DX12 still skips that setup transition.
 - Added `SceneScreenshot.*` as a shared PhasmaRuntime screenshot readback/save helper. Editor and player still own their screenshot request sources, but both now share the copy-to-screenshot-target, staging-buffer, row-pitch, PNG-write, and cleanup body.
 - Moved the shared threaded scene render-pass update loop into `SceneRenderGraph.*`. `RuntimeSceneRenderer` and editor `RendererSystem` still own their local scene/GUI/runtime setup, but both now delegate enabled-pass filtering and `ThreadPool::Update` dispatch to the runtime helper.

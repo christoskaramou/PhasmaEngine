@@ -30,18 +30,18 @@ namespace pe
             return static_cast<uint32_t>(RHII.GetHeightf() * GetRenderTargetScale(useRenderTargetScale));
         }
 
-        void DestroySceneRenderTargetMaps(SceneRenderTargetMap &renderTargets,
-                                          SceneRenderTargetMap &depthStencilTargets)
-        {
-            for (auto &rt : renderTargets)
-                Image::Destroy(rt.second);
-            renderTargets.clear();
-
-            for (auto &rt : depthStencilTargets)
-                Image::Destroy(rt.second);
-            depthStencilTargets.clear();
-        }
     } // namespace
+
+    void DestroySceneRenderTargets(SceneRenderTargetMap &renderTargets, SceneRenderTargetMap &depthStencilTargets)
+    {
+        for (auto &rt : renderTargets)
+            Image::Destroy(rt.second);
+        renderTargets.clear();
+
+        for (auto &rt : depthStencilTargets)
+            Image::Destroy(rt.second);
+        depthStencilTargets.clear();
+    }
 
     Image *CreateSceneRenderTarget(SceneRenderTargetMap &renderTargets,
                                    const std::string &name,
@@ -160,7 +160,7 @@ namespace pe
             Framebuffer::Destroy(framebuffer.second);
         CommandBuffer::GetFramebuffers().clear();
 
-        DestroySceneRenderTargetMaps(renderTargets, depthStencilTargets);
+        DestroySceneRenderTargets(renderTargets, depthStencilTargets);
         Settings::Get<GlobalSettings>().rendering_images.clear();
 
         const ::PeFormat surfaceFormat = RHII.GetSwapchainFormat();

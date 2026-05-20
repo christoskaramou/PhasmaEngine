@@ -62,7 +62,6 @@ namespace pe
                                         bool useRenderTergetScale = true,
                                         float clearDepth = Color::Depth,
                                         uint32_t clearStencil = Color::Stencil);
-        void LoadResources(CommandBuffer *cmd);
         void CreateRenderTargets();
         void CreateFrameResources(uint32_t imageCount);
         void DestroyFrameResources();

@@ -5,7 +5,6 @@
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
-#include "API/StagingManager.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
 #include "Render/RenderPassShaderReload.h"
@@ -13,6 +12,7 @@
 #include "Render/SceneRenderGraph.h"
 #include "Render/SceneRenderTargets.h"
 #include "Render/SceneScreenshot.h"
+#include "Render/SceneSky.h"
 #include "UI/RuntimeUi.h"
 
 namespace pe
@@ -49,15 +49,6 @@ namespace pe
         settings.draw_aabbs = false;
     }
 
-    void RuntimeSceneRenderer::LoadResources(CommandBuffer *cmd)
-    {
-        m_skyBoxDay.LoadSkyBox(cmd, Path::Assets + "Skyboxes/golden_gate_hills/golden_gate_hills_4k.hdr");
-        m_skyBoxNight.LoadSkyBox(cmd, Path::Assets + "Skyboxes/rogland_clear_night/rogland_clear_night_4k.hdr");
-
-        Image::LoadRawParams loadImageParams = {256, 256, PE_FORMAT_R16G16_SFLOAT, false, true, 0.0f};
-        m_ibl_brdf_lut = Image::LoadRaw(cmd, Path::Assets + "Objects/ibl_brdf_lut_rg16f_256.bin", loadImageParams);
-    }
-
     void RuntimeSceneRenderer::Init(CommandBuffer *cmd)
     {
         if (m_initialized)
@@ -79,16 +70,10 @@ namespace pe
             }
 
             CreateRenderTargets();
-            LoadResources(initCmd);
+            LoadDefaultSceneSky(initCmd, m_skyBoxDay, m_skyBoxNight, m_ibl_brdf_lut);
 
             CreateSceneRenderGraphPassComponents(m_renderPassComponents, SupportsRayTracingPass());
-
-            for (auto &renderPassComponent : m_renderPassComponents)
-            {
-                renderPassComponent->Init();
-                renderPassComponent->UpdatePassInfo();
-                renderPassComponent->CreateUniforms(initCmd);
-            }
+            InitSceneRenderGraphPassComponents(m_renderPassComponents, initCmd);
 
             const uint32_t imageCount = RHII.GetSwapchainImageCount();
             CreateFrameResources(imageCount);
@@ -160,22 +145,12 @@ namespace pe
         if (!m_initialized)
             return;
 
-        const uint32_t frame = RHII.GetFrameIndex();
-        auto &frameCmd = m_cmds[frame];
-        if (frameCmd)
-        {
-            PE_PROFILE_SCOPE("Runtime Cmd Wait");
-            WaitSceneFrameCommand(frameCmd);
-        }
-
-        RHII.FlushDeletionQueue(frame);
-        RHII.GetStagingManager()->RemoveUnused();
+        WaitPreviousSceneFrameCommand(m_cmds);
     }
 
     void RuntimeSceneRenderer::WaitAllFramesCommands()
     {
-        WaitSceneFrameCommands(m_cmds);
-        RHII.GetStagingManager()->RemoveUnused();
+        WaitSceneFrameCommandsAndCleanup(m_cmds);
     }
 
     void RuntimeSceneRenderer::RequestScreenshot(std::string path)
@@ -186,10 +161,7 @@ namespace pe
 
     void RuntimeSceneRenderer::PollShaders(std::optional<size_t> hash)
     {
-        RHII.WaitDeviceIdle();
-
-        for (auto &rc : m_renderPassComponents)
-            ReloadRenderPassShaders(*rc, hash);
+        ReloadRenderPassShaders(m_renderPassComponents, hash);
     }
 
     void RuntimeSceneRenderer::BuildRenderGraph()
@@ -283,21 +255,12 @@ namespace pe
         RHII.WaitDeviceIdle();
         DestroyFrameResources();
 
-        for (auto &rc : m_renderPassComponents)
-            rc->Destroy();
+        DestroySceneRenderGraphPassComponents(m_renderPassComponents);
 
-        m_skyBoxDay.Destroy();
-        m_skyBoxNight.Destroy();
-        Image::Destroy(m_ibl_brdf_lut);
+        DestroyDefaultSceneSky(m_skyBoxDay, m_skyBoxNight, m_ibl_brdf_lut);
         Buffer::Destroy(m_screenshotBuffer);
 
-        for (auto &rt : m_renderTargets)
-            Image::Destroy(rt.second);
-        m_renderTargets.clear();
-
-        for (auto &dt : m_depthStencilTargets)
-            Image::Destroy(dt.second);
-        m_depthStencilTargets.clear();
+        DestroySceneRenderTargets(m_renderTargets, m_depthStencilTargets);
 
         if (GetActiveSceneRendererHost() == this)
             SetActiveSceneRendererHost(nullptr);
@@ -410,8 +373,7 @@ namespace pe
         resizeCmd->Wait();
         resizeCmd->Return();
 
-        for (auto &rc : m_renderPassComponents)
-            rc->Resize(width, height);
+        ResizeSceneRenderGraphPassComponents(m_renderPassComponents, width, height);
 
         BuildRenderGraph();
     }

@@ -10,6 +10,7 @@
 
 namespace pe
 {
+    class CommandBuffer;
     class IRenderPassComponent;
     class Scene;
 
@@ -80,6 +81,15 @@ namespace pe
 
     void CreateSceneRenderGraphPassComponents(OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,
                                               bool includeRayTracingPass);
+
+    void InitSceneRenderGraphPassComponents(OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,
+                                            CommandBuffer *cmd);
+
+    void ResizeSceneRenderGraphPassComponents(OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,
+                                              uint32_t width,
+                                              uint32_t height);
+
+    void DestroySceneRenderGraphPassComponents(OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents);
 
     [[nodiscard]] SceneRenderGraphPassComponents GetGlobalSceneRenderGraphPassComponents();
 

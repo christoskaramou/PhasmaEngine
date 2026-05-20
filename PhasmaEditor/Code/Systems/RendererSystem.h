@@ -114,7 +114,6 @@ namespace pe
 
     protected:
         SceneRenderGraphPassComponents GetSceneRenderGraphPassComponents() const;
-        void LoadResources(CommandBuffer *cmd);
         CommandBuffer *RecordPasses(uint32_t imageIndex);
         void CreateRenderTargets();
         Image *GetFrameOutputImage() const;

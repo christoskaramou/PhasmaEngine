@@ -11,7 +11,9 @@ namespace pe
     class Semaphore;
 
     void WaitSceneFrameCommand(CommandBuffer *&cmd);
+    void WaitPreviousSceneFrameCommand(std::vector<CommandBuffer *> &cmds);
     void WaitSceneFrameCommands(std::vector<CommandBuffer *> &cmds);
+    void WaitSceneFrameCommandsAndCleanup(std::vector<CommandBuffer *> &cmds);
     void TransitionSceneSwapchainImagesToPresent(CommandBuffer *cmd);
 
     void CreateSceneFrameSemaphores(std::vector<Semaphore *> &acquireSemaphores,

@@ -5,7 +5,6 @@
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
-#include "API/StagingManager.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
 #include "Render/RenderPassShaderReload.h"
@@ -13,6 +12,7 @@
 #include "Render/SceneRenderGraph.h"
 #include "Render/SceneRenderTargets.h"
 #include "Render/SceneScreenshot.h"
+#include "Render/SceneSky.h"
 #include "RenderPasses/TAAPass.h"
 #include "UI/RuntimeUi.h"
 
@@ -36,15 +36,6 @@ namespace pe
             return runtimeUi && runtimeUi->IsInitialized();
         }
     } // namespace
-
-    void RendererSystem::LoadResources(CommandBuffer *cmd)
-    {
-        m_skyBoxDay.LoadSkyBox(cmd, Path::Assets + "Skyboxes/golden_gate_hills/golden_gate_hills_4k.hdr");
-        m_skyBoxNight.LoadSkyBox(cmd, Path::Assets + "Skyboxes/rogland_clear_night/rogland_clear_night_4k.hdr");
-
-        Image::LoadRawParams loadImageParams = {256, 256, PE_FORMAT_R16G16_SFLOAT, false, true, 0.0f};
-        m_ibl_brdf_lut = Image::LoadRaw(cmd, Path::Assets + "Objects/ibl_brdf_lut_rg16f_256.bin", loadImageParams);
-    }
 
     void RendererSystem::Init(CommandBuffer *cmd)
     {
@@ -81,16 +72,10 @@ namespace pe
         CreateRenderTargets();
 
         // Skybox / IBL are consumed by the Light pass. DX12 reaches that slice in 14c.
-        LoadResources(initCmd);
+        LoadDefaultSceneSky(initCmd, m_skyBoxDay, m_skyBoxNight, m_ibl_brdf_lut);
 
         CreateSceneRenderGraphPassComponents(m_renderPassComponents, SupportsRayTracingPass());
-
-        for (auto &renderPassComponent : m_renderPassComponents)
-        {
-            renderPassComponent->Init();
-            renderPassComponent->UpdatePassInfo();
-            renderPassComponent->CreateUniforms(initCmd);
-        }
+        InitSceneRenderGraphPassComponents(m_renderPassComponents, initCmd);
 
         // Init GUI
         m_gui.Init();
@@ -181,23 +166,7 @@ namespace pe
 
     void RendererSystem::WaitPreviousFrameCommands()
     {
-        uint32_t frame = RHII.GetFrameIndex();
-
-        auto &frameCmd = m_cmds[frame];
-        if (frameCmd)
-        {
-            PE_PROFILE_SCOPE("Cmd Wait");
-            WaitSceneFrameCommand(frameCmd);
-        }
-
-        {
-            PE_PROFILE_SCOPE("Flush Deletion Queue");
-            RHII.FlushDeletionQueue(frame);
-        }
-        {
-            PE_PROFILE_SCOPE("Staging Cleanup");
-            RHII.GetStagingManager()->RemoveUnused();
-        }
+        WaitPreviousSceneFrameCommand(m_cmds);
     }
 
     void RendererSystem::ResetTAAHistory()
@@ -208,8 +177,7 @@ namespace pe
 
     void RendererSystem::WaitAllFramesCommands()
     {
-        WaitSceneFrameCommands(m_cmds);
-        RHII.GetStagingManager()->RemoveUnused();
+        WaitSceneFrameCommandsAndCleanup(m_cmds);
     }
 
     void RendererSystem::BuildRenderGraph()
@@ -426,19 +394,12 @@ namespace pe
 
         WaitSceneFrameCommands(m_cmds);
 
-        for (auto &rc : m_renderPassComponents)
-            rc->Destroy();
+        DestroySceneRenderGraphPassComponents(m_renderPassComponents);
 
-        m_skyBoxDay.Destroy();
-        m_skyBoxNight.Destroy();
+        DestroyDefaultSceneSky(m_skyBoxDay, m_skyBoxNight, m_ibl_brdf_lut);
         m_skyBoxWhite.Destroy();
-        Image::Destroy(m_ibl_brdf_lut);
 
-        for (auto &rt : m_renderTargets)
-            Image::Destroy(rt.second);
-
-        for (auto &dt : m_depthStencilTargets)
-            Image::Destroy(dt.second);
+        DestroySceneRenderTargets(m_renderTargets, m_depthStencilTargets);
 
         DestroySceneFrameSemaphores(m_acquireSemaphores);
         DestroySceneFrameSemaphores(m_submitSemaphores);
@@ -517,8 +478,7 @@ namespace pe
 
         CreateRenderTargets();
 
-        for (auto &rc : m_renderPassComponents)
-            rc->Resize(width, height);
+        ResizeSceneRenderGraphPassComponents(m_renderPassComponents, width, height);
     }
 
     void RendererSystem::BlitToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex)
@@ -528,9 +488,6 @@ namespace pe
 
     void RendererSystem::PollShaders(std::optional<size_t> hash)
     {
-        RHII.WaitDeviceIdle();
-
-        for (auto &rc : m_renderPassComponents)
-            ReloadRenderPassShaders(*rc, hash);
+        ReloadRenderPassShaders(m_renderPassComponents, hash);
     }
 } // namespace pe

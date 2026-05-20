@@ -1,5 +1,6 @@
 #include "Render/RenderPassShaderReload.h"
 #include "API/Pipeline.h"
+#include "API/RHI.h"
 #include "API/Shader.h"
 #include "ECS/Component.h"
 
@@ -166,5 +167,17 @@ namespace pe
         }
 
         return false;
+    }
+
+    void ReloadRenderPassShaders(const OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,
+                                 std::optional<size_t> changedShaderHash)
+    {
+        RHII.WaitDeviceIdle();
+
+        for (auto &renderPassComponent : renderPassComponents)
+        {
+            if (renderPassComponent)
+                ReloadRenderPassShaders(*renderPassComponent, changedShaderHash);
+        }
     }
 } // namespace pe
