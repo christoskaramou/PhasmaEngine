@@ -1,6 +1,7 @@
 #pragma once
 
 #include "API/RenderGraph.h"
+#include "Render/SceneRenderGraph.h"
 #include "Render/SceneRendererHost.h"
 #include "Scene/Scene.h"
 #include "Skybox/Skybox.h"
@@ -14,30 +15,6 @@ namespace pe
     class Image;
     class RuntimeUiSystem;
     class Semaphore;
-    class CullingPass;
-    class ShadowPass;
-    class DepthPass;
-    class GbufferOpaquePass;
-    class GbufferTransparentPass;
-    class SSAOPass;
-    class LightOpaquePass;
-    class LightTransparentPass;
-    class RayTracingPass;
-    class ParticleComputePass;
-    class ParticlePass;
-    class SSRPass;
-    class FXAAPass;
-    class AabbsPass;
-    class TAAPass;
-    class SharpenPass;
-    class UpsamplePass;
-    class TonemapPass;
-    class BloomBrightFilterPass;
-    class BloomGaussianBlurHorizontalPass;
-    class BloomGaussianBlurVerticalPass;
-    class DOFPass;
-    class MotionBlurPass;
-    class GridPass;
 
     class RuntimeSceneRenderer : public SceneRendererHost, public NoCopy, public NoMove
     {
@@ -71,34 +48,7 @@ namespace pe
         Image *CreateFSSampledImage(bool useRenderTergetScale = true) override;
 
     private:
-        enum class RenderGraphPassId : uint32_t
-        {
-            Culling = 0,
-            Shadow,
-            Depth,
-            GBufferOpaque,
-            SSAO,
-            LightOpaque,
-            GBufferTransparent,
-            LightTransparent,
-            RayTracing,
-            ParticleCompute,
-            Particle,
-            SSR,
-            FXAA,
-            Aabbs,
-            TAA,
-            Sharpen,
-            Upsample,
-            Tonemap,
-            BloomBF,
-            BloomH,
-            BloomV,
-            DOF,
-            MotionBlur,
-            Grid,
-            Count
-        };
+        using RenderGraphPassId = SceneRenderGraphPassId;
 
         Image *CreateRenderTarget(const std::string &name,
                                   ::PeFormat format,
@@ -118,6 +68,7 @@ namespace pe
         void DestroyFrameResources();
         void TransitionSwapchainImagesToPresent(CommandBuffer *cmd);
         void CacheGlobalComponents();
+        SceneRenderGraphPassComponents GetSceneRenderGraphPassComponents() const;
         void UpdateRenderGraphPassStates();
         void BuildRenderGraph();
         CommandBuffer *RecordPasses(uint32_t imageIndex);
@@ -146,31 +97,7 @@ namespace pe
         std::vector<Semaphore *> m_acquireSemaphores;
         std::vector<Semaphore *> m_submitSemaphores;
         std::array<bool, static_cast<size_t>(RenderGraphPassId::Count)> m_renderGraphPassEnabled{};
-
-        CullingPass *m_cullingPass = nullptr;
-        ShadowPass *m_shadowPass = nullptr;
-        DepthPass *m_depthPass = nullptr;
-        GbufferOpaquePass *m_gbufferOpaquePass = nullptr;
-        GbufferTransparentPass *m_gbufferTransparentPass = nullptr;
-        SSAOPass *m_ssaoPass = nullptr;
-        LightOpaquePass *m_lightOpaquePass = nullptr;
-        LightTransparentPass *m_lightTransparentPass = nullptr;
-        RayTracingPass *m_rayTracingPass = nullptr;
-        ParticleComputePass *m_particleComputePass = nullptr;
-        ParticlePass *m_particlePass = nullptr;
-        SSRPass *m_ssrPass = nullptr;
-        FXAAPass *m_fxaaPass = nullptr;
-        AabbsPass *m_aabbsPass = nullptr;
-        TAAPass *m_taaPass = nullptr;
-        SharpenPass *m_sharpenPass = nullptr;
-        UpsamplePass *m_upsamplePass = nullptr;
-        TonemapPass *m_tonemapPass = nullptr;
-        BloomBrightFilterPass *m_bloomBrightFilterPass = nullptr;
-        BloomGaussianBlurHorizontalPass *m_bloomGaussianBlurHorizontalPass = nullptr;
-        BloomGaussianBlurVerticalPass *m_bloomGaussianBlurVerticalPass = nullptr;
-        DOFPass *m_dofPass = nullptr;
-        MotionBlurPass *m_motionBlurPass = nullptr;
-        GridPass *m_gridPass = nullptr;
+        SceneRenderGraphPassComponents m_scenePasses{};
 
         SkyBox m_skyBoxDay;
         SkyBox m_skyBoxNight;

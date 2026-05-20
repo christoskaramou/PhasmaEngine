@@ -1,5 +1,13 @@
 # PhasmaEngine Wiki Log
 
+## 2026-05-20
+
+- Moved the shared threaded scene render-pass update loop into `SceneRenderGraph.*`. `RuntimeSceneRenderer` and editor `RendererSystem` still own their local scene/GUI/runtime setup, but both now delegate enabled-pass filtering and `ThreadPool::Update` dispatch to the runtime helper.
+- Added shared frame command/semaphore primitives in `SceneFrameResources.*`. Editor and player now share command wait/return plus acquire/submit semaphore create/destroy helpers, while runtime resize still owns frame-resource recreation and editor resize keeps its existing behavior.
+- Centralized the scene render-pass cache fill in `SceneRenderGraph.*`. `RuntimeSceneRenderer` and editor `RendererSystem` now keep a single `SceneRenderGraphPassComponents` bundle instead of maintaining parallel typed pass pointer lists, while editor `ResetTAAHistory` remains editor-owned.
+- Continued renderer reuse by adding shared scene render target helpers under PhasmaRuntime. `SceneRenderTargets.*` now owns common render/depth target creation, the default scene target layout, target lookup, FSSampled image construction, and the shared swapchain blit body used by both `RuntimeSceneRenderer` and editor `RendererSystem`.
+- Started renderer reuse between `RuntimeSceneRenderer` and editor `RendererSystem` by adding shared scene render-graph pass creation, registration, scene-pass enablement, render-pass update gating, and scene-dependent pass binding under PhasmaRuntime. The common Culling through Particle pass inventory, order, state calculation, update gating, and per-frame scene binding now live in `SceneRenderGraph.*`, with the editor GUI pass still appended and enabled separately at order 10000.
+
 ## 2026-05-19
 
 - Added `tools/editor_stress.py` and `PhasmaEditor/Assets/Scripts/stress/editor_stress.lua` plus the per-node `editor_stress_node.lua` asset as an opt-in PhasmaEditor stress harness. It launches or reuses MCP, starts from generated content by default with optional `--scene` loading, batches generated geometry/lights/particles/scripted nodes, captures profiler snapshots plus screenshots/logs, and leaves artifacts under `reports/editor_stress/`.

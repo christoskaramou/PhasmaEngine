@@ -2,6 +2,7 @@
 
 #include "API/RenderGraph.h"
 #include "GUI/GUI.h"
+#include "Render/SceneRenderGraph.h"
 #include "Render/SceneRendererHost.h"
 #include "Scene/Scene.h"
 #include "Skybox/Skybox.h"
@@ -24,61 +25,37 @@ namespace pe
 
     class GpuTimer;
     class Semaphore;
-    class CullingPass;
-    class ShadowPass;
-    class DepthPass;
-    class GbufferOpaquePass;
-    class GbufferTransparentPass;
-    class SSAOPass;
-    class LightOpaquePass;
-    class LightTransparentPass;
-    class RayTracingPass;
-    class ParticleComputePass;
-    class ParticlePass;
-    class SSRPass;
-    class FXAAPass;
-    class AabbsPass;
-    class TAAPass;
-    class SharpenPass;
-    class UpsamplePass;
-    class TonemapPass;
-    class BloomBrightFilterPass;
-    class BloomGaussianBlurHorizontalPass;
-    class BloomGaussianBlurVerticalPass;
-    class DOFPass;
-    class MotionBlurPass;
-    class GridPass;
 
     class RendererSystem : public ISystem, public SceneRendererHost
     {
     public:
         enum class RenderGraphPassId : uint32_t
         {
-            Culling = 0,
-            Shadow,
-            Depth,
-            GBufferOpaque,
-            SSAO,
-            LightOpaque,
-            GBufferTransparent,
-            LightTransparent,
-            RayTracing,
-            ParticleCompute,
-            Particle,
-            SSR,
-            FXAA,
-            Aabbs,
-            TAA,
-            Sharpen,
-            Upsample,
-            Tonemap,
-            BloomBF,
-            BloomH,
-            BloomV,
-            DOF,
-            MotionBlur,
-            Grid,
-            GUI,
+            Culling = static_cast<uint32_t>(SceneRenderGraphPassId::Culling),
+            Shadow = static_cast<uint32_t>(SceneRenderGraphPassId::Shadow),
+            Depth = static_cast<uint32_t>(SceneRenderGraphPassId::Depth),
+            GBufferOpaque = static_cast<uint32_t>(SceneRenderGraphPassId::GBufferOpaque),
+            SSAO = static_cast<uint32_t>(SceneRenderGraphPassId::SSAO),
+            LightOpaque = static_cast<uint32_t>(SceneRenderGraphPassId::LightOpaque),
+            GBufferTransparent = static_cast<uint32_t>(SceneRenderGraphPassId::GBufferTransparent),
+            LightTransparent = static_cast<uint32_t>(SceneRenderGraphPassId::LightTransparent),
+            RayTracing = static_cast<uint32_t>(SceneRenderGraphPassId::RayTracing),
+            ParticleCompute = static_cast<uint32_t>(SceneRenderGraphPassId::ParticleCompute),
+            Particle = static_cast<uint32_t>(SceneRenderGraphPassId::Particle),
+            SSR = static_cast<uint32_t>(SceneRenderGraphPassId::SSR),
+            FXAA = static_cast<uint32_t>(SceneRenderGraphPassId::FXAA),
+            Aabbs = static_cast<uint32_t>(SceneRenderGraphPassId::Aabbs),
+            TAA = static_cast<uint32_t>(SceneRenderGraphPassId::TAA),
+            Sharpen = static_cast<uint32_t>(SceneRenderGraphPassId::Sharpen),
+            Upsample = static_cast<uint32_t>(SceneRenderGraphPassId::Upsample),
+            Tonemap = static_cast<uint32_t>(SceneRenderGraphPassId::Tonemap),
+            BloomBF = static_cast<uint32_t>(SceneRenderGraphPassId::BloomBF),
+            BloomH = static_cast<uint32_t>(SceneRenderGraphPassId::BloomH),
+            BloomV = static_cast<uint32_t>(SceneRenderGraphPassId::BloomV),
+            DOF = static_cast<uint32_t>(SceneRenderGraphPassId::DOF),
+            MotionBlur = static_cast<uint32_t>(SceneRenderGraphPassId::MotionBlur),
+            Grid = static_cast<uint32_t>(SceneRenderGraphPassId::Grid),
+            GUI = static_cast<uint32_t>(SceneRenderGraphPassId::Count),
             Count
         };
 
@@ -136,6 +113,7 @@ namespace pe
         }
 
     protected:
+        SceneRenderGraphPassComponents GetSceneRenderGraphPassComponents() const;
         void LoadResources(CommandBuffer *cmd);
         CommandBuffer *RecordPasses(uint32_t imageIndex);
         void CreateRenderTargets();
@@ -161,32 +139,7 @@ namespace pe
         std::vector<Semaphore *> m_submitSemaphores;
         Scene m_scene;
         std::array<bool, static_cast<size_t>(RenderGraphPassId::Count)> m_renderGraphPassEnabled{};
-
-        // Cached global component pointers (set by CacheGlobalComponents)
-        CullingPass *m_cullingPass = nullptr;
-        ShadowPass *m_shadowPass = nullptr;
-        DepthPass *m_depthPass = nullptr;
-        GbufferOpaquePass *m_gbufferOpaquePass = nullptr;
-        GbufferTransparentPass *m_gbufferTransparentPass = nullptr;
-        SSAOPass *m_ssaoPass = nullptr;
-        LightOpaquePass *m_lightOpaquePass = nullptr;
-        LightTransparentPass *m_lightTransparentPass = nullptr;
-        RayTracingPass *m_rayTracingPass = nullptr;
-        ParticleComputePass *m_particleComputePass = nullptr;
-        ParticlePass *m_particlePass = nullptr;
-        SSRPass *m_ssrPass = nullptr;
-        FXAAPass *m_fxaaPass = nullptr;
-        AabbsPass *m_aabbsPass = nullptr;
-        TAAPass *m_taaPass = nullptr;
-        SharpenPass *m_sharpenPass = nullptr;
-        UpsamplePass *m_upsamplePass = nullptr;
-        TonemapPass *m_tonemapPass = nullptr;
-        BloomBrightFilterPass *m_bloomBrightFilterPass = nullptr;
-        BloomGaussianBlurHorizontalPass *m_bloomGaussianBlurHorizontalPass = nullptr;
-        BloomGaussianBlurVerticalPass *m_bloomGaussianBlurVerticalPass = nullptr;
-        DOFPass *m_dofPass = nullptr;
-        MotionBlurPass *m_motionBlurPass = nullptr;
-        GridPass *m_gridPass = nullptr;
+        SceneRenderGraphPassComponents m_scenePasses{};
 
         SkyBox m_skyBoxDay;
         SkyBox m_skyBoxNight;
