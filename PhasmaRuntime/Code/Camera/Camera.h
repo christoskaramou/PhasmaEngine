@@ -13,6 +13,12 @@ namespace pe
     [[nodiscard]] CameraRuntimeCallbacks CreateDefaultCameraRuntimeCallbacks();
     void SetCameraRuntimeCallbacks(CameraRuntimeCallbacks callbacks);
 
+    enum class CameraProjectionMode
+    {
+        Perspective,
+        Orthographic
+    };
+
     class Camera : public IComponent
     {
     public:
@@ -25,7 +31,7 @@ namespace pe
         Camera();
 
         void Update();
-        void UpdatePerspective();
+        void UpdateProjection();
         inline float FovyToFovx(float fovy) { return 2.0f * atan(tan(fovy * 0.5f) * GetAspect()); } // In radians
         inline float FovxToFovy(float fovx) { return 2.0f * atan(tan(fovx * 0.5f) / GetAspect()); } // In radians
         inline float Fovy() { return 2.0f * atan(tan(m_fovx * 0.5f) / GetAspect()); }
@@ -55,10 +61,14 @@ namespace pe
         inline vec3 GetRight() const { return m_right; }
         inline vec3 GetUp() const { return m_up; }
         inline float GetNearPlane() const { return m_nearPlane; }
-        inline float GetFarPlane() const { return m_farPlane; } // Note: Not used for projection (Infinite Reverse-Z)
+        // Perspective is infinite reverse-Z; far plane is used by orthographic projection.
+        inline float GetFarPlane() const { return m_farPlane; }
         inline float GetRotationSpeed() const { return m_rotationSpeed; }
         inline float GetSpeed() const { return m_speed; }
         inline vec3 GetEuler() const { return m_euler; }
+        inline CameraProjectionMode GetProjectionMode() const { return m_projectionMode; }
+        inline bool IsOrthographic() const { return m_projectionMode == CameraProjectionMode::Orthographic; }
+        inline float GetOrthographicSize() const { return m_orthographicSize; }
         inline void SetPosition(const vec3 &position) { m_position = position; }
         inline void SetEuler(const vec3 &euler)
         {
@@ -70,6 +80,9 @@ namespace pe
         inline void SetNearPlane(float nearPlane) { m_nearPlane = nearPlane; }
         inline void SetFarPlane(float farPlane) { m_farPlane = farPlane; }
         inline void SetFovx(float fovx) { m_fovx = fovx; }
+        inline void SetProjectionMode(CameraProjectionMode mode) { m_projectionMode = mode; }
+        inline void SetOrthographic(bool enabled) { m_projectionMode = enabled ? CameraProjectionMode::Orthographic : CameraProjectionMode::Perspective; }
+        inline void SetOrthographicSize(float size) { m_orthographicSize = std::max(0.001f, size); }
         inline void SetProjJitter(const vec2 &jitter) { m_projJitter = jitter; }
         inline void SetPrevProjJitter(const vec2 &prevJitter) { m_prevProjJitter = prevJitter; }
 
@@ -93,6 +106,8 @@ namespace pe
         vec3 m_position, m_euler, m_worldOrientation;
         vec3 m_front, m_right, m_up;
         float m_nearPlane, m_farPlane, m_fovx, m_rotationSpeed, m_speed;
+        CameraProjectionMode m_projectionMode = CameraProjectionMode::Perspective;
+        float m_orthographicSize = 10.0f;
         std::array<Plane, 6> m_frustum{};
         vec2 m_projJitter;
         vec2 m_prevProjJitter;

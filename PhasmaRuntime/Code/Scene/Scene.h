@@ -125,7 +125,7 @@ namespace pe
         void UpdateGeometryBuffers();
         void UpdateRasterInstances(); // creates cmd, calls RebuildRasterInstances, submits
         void UpdateTextures();
-        void UpdateDirtyMaterials();                          // incremental GPU update for scalar/texture property changes
+        bool UpdateDirtyMaterials();                          // returns true when a material update must retry next frame
         MaterialInstance *CreateMaterialInstance(Mesh &mesh); // creates instance from mesh's shared material
         void DestroyMaterialInstance(Mesh &mesh);             // removes instance, reverts to shared material
         void UploadBuffers(CommandBuffer *cmd);
@@ -181,6 +181,36 @@ namespace pe
         void RemoveMeshRef(NodeId *node, int meshIndex); // remove specific mesh ref
         void SetNodeScript(NodeId *node, const std::string &path);
         void AttachPrimitiveToNode(NodeId *node, ModelAsset *primitiveModel);
+        SceneNodeHandle CreateSpriteNode(const std::string &name = "Sprite",
+                                         const vec2 &size = vec2(1.0f),
+                                         const vec3 &position = vec3(0.0f),
+                                         RenderType renderType = RenderType::AlphaCut,
+                                         const vec4 &tint = vec4(1.0f),
+                                         NodeId *parent = nullptr);
+        void AttachSpriteToNode(NodeId *node,
+                                const vec2 &size = vec2(1.0f),
+                                RenderType renderType = RenderType::AlphaCut,
+                                const vec4 &tint = vec4(1.0f));
+        void ConfigureSpriteNode(NodeId *node,
+                                 const vec2 &size = vec2(1.0f),
+                                 RenderType renderType = RenderType::AlphaCut,
+                                 const vec4 &tint = vec4(1.0f));
+        void SetSpriteSize(NodeId *node, const vec2 &size);
+        void SetSpriteCoordinateSpace(NodeId *node, SpriteCoordinateSpace space);
+        void SetSpriteNdcTransform(NodeId *node, const vec2 &position, const vec2 &size, float depth = 1.0f, float rotation = 0.0f);
+        bool SetMeshUvRect(int meshIndex, const vec4 &uvRect);
+        bool SetSpriteUvRect(NodeId *node, const vec4 &uvRect, int meshSlot = 0);
+        bool SetSpriteFrame(NodeId *node, int frame, int columns, int rows, int meshSlot = 0);
+        void SetSpriteAnimation(NodeId *node,
+                                int columns,
+                                int rows,
+                                float fps,
+                                const std::vector<int> &frames,
+                                bool loop = true);
+        void StopSpriteAnimation(NodeId *node);
+        bool UpdateSpriteAnimation(NodeId *node, float dt);
+        void UpdateSpriteAnimations(float dt);
+        void UpdateSpriteNdcTransforms();
         void SetNodeName(NodeId *node, const std::string &name)
         {
             ValidateNodeId(node);
@@ -333,6 +363,8 @@ namespace pe
                 flags |= Component_Script;
             if (c.audio)
                 flags |= Component_Audio;
+            if (c.sprite)
+                flags |= Component_Sprite;
             if (m_nodeRuntime[idx].gpuPending)
                 flags |= Component_GpuPending;
             return flags;

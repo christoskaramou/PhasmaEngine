@@ -29,6 +29,7 @@ namespace pe
         Component_Script = 1 << 4,
         Component_Audio = 1 << 5,
         Component_GpuPending = 1 << 6, // Node geometry not yet uploaded to GPU
+        Component_Sprite = 1 << 7,
     };
 
     // Lightweight mesh descriptor — references into Scene's data stores
@@ -87,7 +88,7 @@ namespace pe
     struct MeshRuntime
     {
         uint32_t imageViewIndices[5] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
-        uint32_t materialGpuIndex = 0;
+        uint32_t materialGpuIndex = 0xFFFFFFFF;
     };
     // Transform an AABB by a matrix (8-corner method)
     inline AABB TransformAabb(const AABB &local, const mat4 &m)

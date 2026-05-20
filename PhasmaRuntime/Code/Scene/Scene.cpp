@@ -11,6 +11,7 @@
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "Base/Timer.h"
 #include "Camera/Camera.h"
 #include "Particles/ParticleManager.h"
 
@@ -203,6 +204,8 @@ namespace pe
             }
         }
 
+        UpdateSpriteAnimations(static_cast<float>(FrameTimer::Instance().GetDelta()));
+        UpdateSpriteNdcTransforms();
         UpdateGeometry();
         UpdateLights();
     }
@@ -256,6 +259,8 @@ namespace pe
         MaterialInstance *ptr = inst.get();
         mesh.materialInstance = ptr;
         m_ownedMaterialInstances.push_back(std::move(inst));
+        m_texturesDirty = true;
+        m_materialDirty = true;
         return ptr;
     }
 
@@ -1103,8 +1108,7 @@ namespace pe
             }
             if (m_materialDirty)
             {
-                UpdateDirtyMaterials();
-                m_materialDirty = false;
+                m_materialDirty = UpdateDirtyMaterials();
             }
         }
         else
@@ -1116,8 +1120,7 @@ namespace pe
             }
             if (m_materialDirty)
             {
-                UpdateDirtyMaterials();
-                m_materialDirty = false;
+                m_materialDirty = UpdateDirtyMaterials();
             }
         }
 

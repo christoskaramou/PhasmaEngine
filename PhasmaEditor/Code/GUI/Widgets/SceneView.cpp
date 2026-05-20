@@ -701,7 +701,7 @@ namespace pe
         if (!cam)
             return;
 
-        ImGuizmo::SetOrthographic(false);
+        ImGuizmo::SetOrthographic(cam->IsOrthographic());
         ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
         ImGuizmo::SetRect(imageMin.x, imageMin.y, imageSize.x, imageSize.y);
 
@@ -714,11 +714,20 @@ namespace pe
         glm::mat4 viewLH = cam->GetView();
         glm::mat4 viewRH = GizmoUtils::FlipHandedness(viewLH);
 
-        float fovY = cam->Fovy();
         float aspect = cam->GetAspect();
         float nearPlane = glm::max(0.001f, cam->GetNearPlane());
         float farPlane = 1000.0f;
-        glm::mat4 projRH = glm::perspectiveRH_NO(fovY, aspect, nearPlane, farPlane);
+        glm::mat4 projRH;
+        if (cam->IsOrthographic())
+        {
+            float halfHeight = glm::max(0.001f, cam->GetOrthographicSize()) * 0.5f;
+            float halfWidth = halfHeight * aspect;
+            projRH = glm::orthoRH_NO(-halfWidth, halfWidth, -halfHeight, halfHeight, nearPlane, farPlane);
+        }
+        else
+        {
+            projRH = glm::perspectiveRH_NO(cam->Fovy(), aspect, nearPlane, farPlane);
+        }
 
         // Match Vulkan viewport Y direction so camera pitch maps correctly
         projRH[1][1] *= -1.0f;
@@ -1120,7 +1129,7 @@ namespace pe
 
                 bool isInfinite = camera->GetFarPlane() >= 3.402823466e+38F; // FLT_MAX
                 float nearPlane = camera->GetNearPlane();
-                float farZ = isInfinite ? 0.00001f : (nearPlane / camera->GetFarPlane());
+                float farZ = camera->IsOrthographic() ? 0.0f : (isInfinite ? 0.00001f : (nearPlane / camera->GetFarPlane()));
 
                 vec4 frustumCornersNDC[8] = {
                     vec4(-1, -1, 1, 1), vec4(1, -1, 1, 1), vec4(1, 1, 1, 1), vec4(-1, 1, 1, 1),            // Near (z=1 in reverse-z)

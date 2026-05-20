@@ -87,7 +87,7 @@ namespace pe
         m_right = m_orientation * WorldRight();
         m_up = m_orientation * WorldUp();
 
-        UpdatePerspective();
+        UpdateProjection();
         UpdateView();
 
         m_invViewProjection = m_invView * m_invProjection;
@@ -113,35 +113,51 @@ namespace pe
         return 16.0f / 9.0f;
     }
 
-    void Camera::UpdatePerspective()
+    void Camera::UpdateProjection()
     {
         m_prevProjJitter = m_projJitter;
         m_previousProjection = m_projection;
 
-        // Infinite Reverse-Z Projection
-        // Maps:
-        // z_view = -near    => z_ndc = 1
-        // z_view = -infinity => z_ndc = 0
-        //
-        // Matrix (Column-Major):
-        // [ 1/(a*tan)   0       0    0 ]
-        // [    0      1/tan     0    0 ]
-        // [    0        0       0    n ]
-        // [    0        0      -1    0 ]
-
-        float const tanHalfFovy = tan(Fovy() / 2.0f);
         float const aspect = GetAspect();
 
-        m_projection = mat4(0.0f);
-        m_projection[0][0] = 1.0f / (aspect * tanHalfFovy);
-        m_projection[1][1] = 1.0f / tanHalfFovy;
-        m_projection[2][2] = 0.0f;
-        m_projection[2][3] = 1.0f;
-        m_projection[3][2] = m_nearPlane;
+        if (m_projectionMode == CameraProjectionMode::Orthographic)
+        {
+            const float halfHeight = std::max(0.001f, m_orthographicSize) * 0.5f;
+            const float halfWidth = halfHeight * aspect;
+            const bool hasFiniteFarPlane = std::isfinite(m_farPlane) && m_farPlane > m_nearPlane &&
+                                           m_farPlane < std::numeric_limits<float>::max() * 0.5f;
+            const float farPlane = hasFiniteFarPlane ? m_farPlane : 1000.0f;
+            m_projection = ortho(-halfWidth, halfWidth, -halfHeight, halfHeight, m_nearPlane, farPlane);
+        }
+        else
+        {
+            // Infinite Reverse-Z Projection
+            // Maps:
+            // z_view = -near     => z_ndc = 1
+            // z_view = -infinity => z_ndc = 0
+            //
+            // Matrix (Column-Major):
+            // [ 1/(a*tan)   0       0    0 ]
+            // [    0      1/tan     0    0 ]
+            // [    0        0       0    n ]
+            // [    0        0      -1    0 ]
+            float const tanHalfFovy = tan(Fovy() / 2.0f);
+
+            m_projection = mat4(0.0f);
+            m_projection[0][0] = 1.0f / (aspect * tanHalfFovy);
+            m_projection[1][1] = 1.0f / tanHalfFovy;
+            m_projection[2][2] = 0.0f;
+            m_projection[2][3] = 1.0f;
+            m_projection[3][2] = m_nearPlane;
+        }
 
         m_projectionNoJitter = m_projection; // Save the clean projection matrix
 
-        if (Settings::Get<GlobalSettings>().taa && s_cameraRuntimeCallbacks.updateProjectionJitter)
+        if (m_projectionMode == CameraProjectionMode::Orthographic)
+        {
+            m_projJitter = vec2(0.0f);
+        }
+        else if (Settings::Get<GlobalSettings>().taa && s_cameraRuntimeCallbacks.updateProjectionJitter)
         {
             vec2 jitter;
             if (s_cameraRuntimeCallbacks.updateProjectionJitter(jitter))

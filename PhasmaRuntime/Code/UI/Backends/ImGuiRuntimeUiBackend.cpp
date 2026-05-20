@@ -198,6 +198,7 @@ namespace pe
                 if (frameInfo.width > 0 && frameInfo.height > 0)
                     ImGui::GetIO().DisplaySize =
                         ImVec2(static_cast<float>(frameInfo.width), static_cast<float>(frameInfo.height));
+                m_nextScreenPos = ImVec2(runtime_ui_imgui::kViewportPadding, runtime_ui_imgui::kViewportPadding);
                 ImGui::NewFrame();
                 m_frameOpen = true;
                 m_rendered = false;
@@ -209,6 +210,7 @@ namespace pe
                     return false;
 
                 ScopedImGuiContext contextScope(m_context);
+                ImGui::SetNextWindowPos(m_nextScreenPos, ImGuiCond_Always);
                 ImGui::SetNextWindowSize(ImVec2(runtime_ui_imgui::kWindowWidth, 0.0f), ImGuiCond_FirstUseEver);
                 const std::string windowId = screen.title + "##" + screen.id;
                 return ImGui::Begin(windowId.c_str(), nullptr, runtime_ui_imgui::kPlayerWindowFlags);
@@ -251,7 +253,9 @@ namespace pe
                 if (m_frameOpen)
                 {
                     ScopedImGuiContext contextScope(m_context);
+                    const ImVec2 windowSize = ImGui::GetWindowSize();
                     ImGui::End();
+                    m_nextScreenPos.y += windowSize.y + runtime_ui_imgui::kScreenGap;
                 }
             }
 
@@ -481,6 +485,7 @@ namespace pe
 
             ImGuiContext *m_context = nullptr;
             RuntimeUiFrameInfo m_frameInfo{};
+            ImVec2 m_nextScreenPos = ImVec2(runtime_ui_imgui::kViewportPadding, runtime_ui_imgui::kViewportPadding);
             PeGraphicsApi m_api = PE_GRAPHICS_API_VULKAN;
             bool m_initialized = false;
             bool m_platformInitialized = false;

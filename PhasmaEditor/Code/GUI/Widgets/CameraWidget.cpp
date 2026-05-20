@@ -37,11 +37,26 @@ namespace pe
 
         if (ImGui::CollapsingHeader("Projection", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            float fov = degrees(camera->Fovy());
-            float oldFov = fov;
-            DrawFloatControl(ICON_FA_EYE "  FOV", fov, 0.1f, 1.0f, 179.0f, "%.1f");
-            if (fov != oldFov)
-                camera->SetFovx(camera->FovyToFovx(radians(fov)));
+            int mode = camera->IsOrthographic() ? 1 : 0;
+            if (ImGui::Combo("Mode", &mode, "Perspective\0Orthographic\0"))
+                camera->SetProjectionMode(mode == 1 ? CameraProjectionMode::Orthographic : CameraProjectionMode::Perspective);
+
+            if (camera->IsOrthographic())
+            {
+                float orthoSize = camera->GetOrthographicSize();
+                float oldOrthoSize = orthoSize;
+                DrawFloatControl(ICON_FA_EXPAND "  Size", orthoSize, 0.05f, 0.001f, 10000.0f, "%.3f");
+                if (orthoSize != oldOrthoSize)
+                    camera->SetOrthographicSize(orthoSize);
+            }
+            else
+            {
+                float fov = degrees(camera->Fovy());
+                float oldFov = fov;
+                DrawFloatControl(ICON_FA_EYE "  FOV", fov, 0.1f, 1.0f, 179.0f, "%.1f");
+                if (fov != oldFov)
+                    camera->SetFovx(camera->FovyToFovx(radians(fov)));
+            }
 
             float nearPlane = camera->GetNearPlane();
             float oldNear = nearPlane;

@@ -177,7 +177,17 @@ namespace pe
             Image *displayRT = RequireActiveSceneRendererHost().GetDisplayRT();
             const float aspect = displayRT->GetWidth_f() / displayRT->GetHeight_f();
             const vec3 position = camera->GetPosition();
-            mat4 projection = perspective(camera->Fovy(), aspect, farClip, nearClip);
+            mat4 projection;
+            if (camera->IsOrthographic())
+            {
+                const float halfHeight = std::max(0.001f, camera->GetOrthographicSize()) * 0.5f;
+                const float halfWidth = halfHeight * aspect;
+                projection = ortho(-halfWidth, halfWidth, -halfHeight, halfHeight, nearClip, farClip);
+            }
+            else
+            {
+                projection = perspective(camera->Fovy(), aspect, farClip, nearClip);
+            }
             mat4 view = lookAt(position, position + camera->GetFront(), camera->WorldUp());
             mat4 invVP = inverse(projection * view);
             for (uint32_t i = 0; i < 8; i++)

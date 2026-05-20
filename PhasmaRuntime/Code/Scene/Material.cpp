@@ -4,6 +4,27 @@
 
 namespace pe
 {
+    namespace
+    {
+        void WriteEffectiveAlphaCutoff(std::vector<uint8_t> &buffer,
+                                       const std::vector<StructMemberInfo> &layout,
+                                       RenderType renderType,
+                                       float alphaCutoff)
+        {
+            for (const auto &member : layout)
+            {
+                if (member.name != "alphaCutoff")
+                    continue;
+                if (member.offset + sizeof(float) > buffer.size())
+                    return;
+
+                float effectiveAlphaCutoff = (renderType == RenderType::AlphaCut) ? alphaCutoff : 0.0f;
+                WriteParamValue(buffer, member.offset, effectiveAlphaCutoff);
+                return;
+            }
+        }
+    } // namespace
+
     Material::Material() = default;
 
     void Material::PackLegacyFactors(mat4 factors[2]) const
@@ -366,6 +387,7 @@ namespace pe
     void MaterialInstance::SetRenderType(RenderType type)
     {
         m_renderTypeOverride = type;
+        m_paramOverrides["alphaCutoff"] = (type == RenderType::AlphaCut) ? GetAlphaCutoff() : 0.0f;
         dirty = true;
     }
     void MaterialInstance::SetTextureMask(uint32_t mask)
@@ -597,6 +619,7 @@ namespace pe
             if (it != m_paramOverrides.end())
                 WriteParamValue(buffer, member.offset, it->second);
         }
+        WriteEffectiveAlphaCutoff(buffer, layout, GetRenderType(), GetAlphaCutoff());
 
         // Override named texture bindless indices from instance's namedTextureIndices
         for (const auto &slot : textureSlots)
@@ -637,6 +660,7 @@ namespace pe
                 WriteParamValue(buffer, member.offset, it->second);
             }
         }
+        WriteEffectiveAlphaCutoff(buffer, layout, renderType, alphaCutoff);
 
         // Write named texture bindless indices
         for (const auto &slot : textureSlots)

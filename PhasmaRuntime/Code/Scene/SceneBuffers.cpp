@@ -614,31 +614,46 @@ namespace pe
         m_materialByteBufferUsed = totalBytes;
     }
 
-    void Scene::UpdateDirtyMaterials()
+    bool Scene::UpdateDirtyMaterials()
     {
         if (!m_materialTable)
-            return;
+        {
+            m_materialDirty = false;
+            return false;
+        }
+
+        if (m_texturesDirty)
+        {
+            m_materialDirty = true;
+            return true;
+        }
 
         bool anyDirty = false;
+        bool pendingDirty = false;
+
+        auto uploadMaterialGpuData = [&](uint32_t gpuIndex, MaterialGpuData data)
+        {
+            if (gpuIndex == 0xFFFFFFFF)
+                return;
+
+            m_materialTable->Map();
+            BufferRange range{};
+            range.data = &data;
+            range.offset = gpuIndex * sizeof(MaterialGpuData);
+            range.size = sizeof(MaterialGpuData);
+            m_materialTable->Copy(1, &range, true);
+            m_materialTable->Flush(range.size, range.offset);
+            m_materialTable->Unmap();
+            anyDirty = true;
+        };
 
         auto updateIfDirty = [&](Material *mat)
         {
             if (!mat->dirty || mat->gpuIndex == 0xFFFFFFFF)
                 return;
 
-            MaterialGpuData data = mat->BuildGpuData();
-
-            m_materialTable->Map();
-            BufferRange range{};
-            range.data = &data;
-            range.offset = mat->gpuIndex * sizeof(MaterialGpuData);
-            range.size = sizeof(MaterialGpuData);
-            m_materialTable->Copy(1, &range, true);
-            m_materialTable->Flush(range.size, range.offset);
-            m_materialTable->Unmap();
-
+            uploadMaterialGpuData(mat->gpuIndex, mat->BuildGpuData());
             // Don't clear dirty here — collectByteIfDirty still needs it
-            anyDirty = true;
         };
 
         for (auto &mat : m_ownedMaterials)
@@ -646,6 +661,35 @@ namespace pe
         for (auto *model : m_models)
             for (auto &mat : model->GetOwnedMaterials())
                 updateIfDirty(mat.get());
+
+        for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
+        {
+            if (m_nodeRuntime[ni].gpuPending)
+            {
+                pendingDirty = true;
+                continue;
+            }
+
+            for (int meshIdx : m_nodeComponentCache[ni].meshRefs->meshRefs)
+            {
+                if (meshIdx < 0)
+                    continue;
+
+                Mesh &mesh = m_meshes[meshIdx];
+                MaterialInstance *inst = mesh.materialInstance;
+                if (!inst || !inst->dirty)
+                    continue;
+
+                const uint32_t materialGpuIndex = m_meshRuntimes[meshIdx].materialGpuIndex;
+                if (materialGpuIndex == 0xFFFFFFFF)
+                {
+                    pendingDirty = true;
+                    continue;
+                }
+
+                uploadMaterialGpuData(materialGpuIndex, inst->BuildGpuData());
+            }
+        }
 
         struct ByteDirtyEntry
         {
@@ -660,10 +704,18 @@ namespace pe
             if (!mat->dirty)
                 return;
 
-            // Materials without ByteAddressBuffer path: just clear the dirty flag
-            // (materialTable was already updated above)
-            if (!mat->passInfoAsset || mat->gpuByteOffset == 0xFFFFFFFF ||
-                !mat->cachedLayout.valid || mat->cachedLayout.structMembers.empty())
+            // Standard PBR materials only need the structured material table upload above.
+            if (!mat->passInfoAsset)
+            {
+                mat->dirty = false;
+                return;
+            }
+            if (mat->gpuByteOffset == 0xFFFFFFFF || !mat->cachedLayout.valid)
+            {
+                pendingDirty = true;
+                return;
+            }
+            if (mat->cachedLayout.structMembers.empty())
             {
                 mat->dirty = false;
                 return;
@@ -688,23 +740,51 @@ namespace pe
 
         for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
         {
+            if (m_nodeRuntime[ni].gpuPending)
+            {
+                pendingDirty = true;
+                continue;
+            }
+
             for (int meshIdx : m_nodeComponentCache[ni].meshRefs->meshRefs)
             {
                 if (meshIdx < 0)
                     continue;
                 Mesh &mesh = m_meshes[meshIdx];
                 MaterialInstance *inst = mesh.materialInstance;
-                if (!inst || !inst->dirty || inst->gpuByteOffset == 0xFFFFFFFF)
+                if (!inst || !inst->dirty)
                     continue;
 
                 Material *parent = inst->GetParent();
-                if (!parent || !parent->cachedLayout.valid || parent->cachedLayout.structMembers.empty())
+                if (!parent)
+                {
+                    inst->dirty = false;
                     continue;
+                }
+                // Standard PBR instances only need the structured material table upload above.
+                if (!parent->passInfoAsset)
+                {
+                    inst->dirty = false;
+                    continue;
+                }
+                if (inst->gpuByteOffset == 0xFFFFFFFF || !parent->cachedLayout.valid)
+                {
+                    pendingDirty = true;
+                    continue;
+                }
+                if (parent->cachedLayout.structMembers.empty())
+                {
+                    inst->dirty = false;
+                    continue;
+                }
 
                 std::vector<uint8_t> byteData = inst->BuildByteAddressData(
                     parent->cachedLayout.structMembers, parent->cachedLayout.textureSlots, parent->cachedLayout.totalByteSize);
                 if (byteData.empty())
+                {
+                    inst->dirty = false;
                     continue;
+                }
 
                 byteDirtyEntries.push_back({inst->gpuByteOffset, &inst->dirty, std::move(byteData)});
             }
@@ -726,9 +806,16 @@ namespace pe
             m_materialByteBuffer->Unmap();
             anyDirty = true;
         }
+        else if (!byteDirtyEntries.empty())
+        {
+            pendingDirty = true;
+        }
 
         if (anyDirty)
             m_geometryVersion++;
+
+        m_materialDirty = pendingDirty;
+        return pendingDirty;
     }
 
     void Scene::CreateMeshConstants(CommandBuffer *cmd)

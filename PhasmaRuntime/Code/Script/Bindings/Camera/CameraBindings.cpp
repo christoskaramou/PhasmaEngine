@@ -28,6 +28,18 @@ namespace pe
                     "get_up", &Camera::GetUp,
                     "get_fov", [](Camera &c) { return glm::degrees(c.Fovx()); },
                     "set_fov", [](Camera &c, float deg) { c.SetFovx(glm::radians(deg)); },
+                    "get_projection_mode", [](Camera &c) -> std::string {
+                        return c.IsOrthographic() ? "orthographic" : "perspective";
+                    },
+                    "set_projection_mode", [](Camera &c, const std::string &mode) {
+                        c.SetProjectionMode(mode == "orthographic" || mode == "ortho"
+                                                ? CameraProjectionMode::Orthographic
+                                                : CameraProjectionMode::Perspective);
+                    },
+                    "is_orthographic", &Camera::IsOrthographic,
+                    "set_orthographic", &Camera::SetOrthographic,
+                    "get_orthographic_size", &Camera::GetOrthographicSize,
+                    "set_orthographic_size", &Camera::SetOrthographicSize,
                     "get_near", &Camera::GetNearPlane,
                     "set_near", &Camera::SetNearPlane,
                     "get_far", &Camera::GetFarPlane,

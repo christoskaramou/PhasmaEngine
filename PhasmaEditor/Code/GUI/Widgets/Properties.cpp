@@ -75,6 +75,11 @@ namespace pe
             EventSystem::PushEvent(EventType::PrimitiveAttachedToNode, Scene::PrimitiveAttachRequest{node, model});
         };
 
+        auto attachSprite = [&](NodeId *node)
+        {
+            scene.AttachSpriteToNode(node);
+        };
+
         auto drawMeshComponent = [&](NodeId *node)
         {
             auto *w = m_gui->GetWidget<MeshWidget>();
@@ -141,6 +146,51 @@ namespace pe
 
             if (removeIdx >= 0)
                 scene.RemoveMeshRef(node, removeIdx);
+        };
+
+        auto drawSpriteComponent = [&](NodeId *node)
+        {
+            NodeSpriteTag *sprite = scene.GetNodeComponent<NodeSpriteTag>(node);
+            if (!sprite)
+                return;
+
+            const char *spaces[] = {"World", "NDC"};
+            int currentSpace = sprite->coordinateSpace == SpriteCoordinateSpace::NDC ? 1 : 0;
+            if (ImGui::Combo("Space", &currentSpace, spaces, IM_ARRAYSIZE(spaces)))
+            {
+                scene.SetSpriteCoordinateSpace(node,
+                                               currentSpace == 1 ? SpriteCoordinateSpace::NDC : SpriteCoordinateSpace::World);
+            }
+
+            int atlas[2] = {sprite->atlasColumns, sprite->atlasRows};
+            bool atlasChanged = ImGui::DragInt2("Atlas", atlas, 1, 1, 512);
+            int frame = sprite->frame;
+            bool frameChanged = ImGui::DragInt("Frame", &frame, 1, 0, std::max(atlas[0] * atlas[1] - 1, 0));
+            if (atlasChanged || frameChanged)
+                scene.SetSpriteFrame(node, frame, std::max(atlas[0], 1), std::max(atlas[1], 1));
+
+            float uv[4] = {sprite->uvRect.x, sprite->uvRect.y, sprite->uvRect.z, sprite->uvRect.w};
+            if (ImGui::DragFloat4("UV Rect", uv, 0.001f, 0.0f, 1.0f, "%.3f"))
+                scene.SetSpriteUvRect(node, vec4(uv[0], uv[1], uv[2], uv[3]));
+
+            float fps = sprite->animationFps > 0.0f ? sprite->animationFps : 12.0f;
+            if (ImGui::DragFloat("FPS", &fps, 0.1f, 0.0f, 240.0f, "%.1f"))
+                sprite->animationFps = fps;
+            ImGui::Checkbox("Loop", &sprite->animationLoop);
+
+            if (sprite->animationPlaying)
+            {
+                if (ImGui::Button("Stop"))
+                    scene.StopSpriteAnimation(node);
+            }
+            else
+            {
+                if (ImGui::Button("Play"))
+                {
+                    std::vector<int> frames;
+                    scene.SetSpriteAnimation(node, std::max(sprite->atlasColumns, 1), std::max(sprite->atlasRows, 1), fps, frames, sprite->animationLoop);
+                }
+            }
         };
 
         auto drawScriptComponent = [&](NodeId *node)
@@ -288,8 +338,17 @@ namespace pe
 
             if (ImGui::BeginPopup("AddComponentPopup"))
             {
+                if (!(flags & Component_Sprite) && (flags & Component_Mesh))
+                {
+                    if (ImGui::MenuItem("Sprite Tag"))
+                        scene.ConfigureSpriteNode(node);
+                }
+
                 if (!(flags & Component_Mesh))
                 {
+                    if (ImGui::MenuItem("2D Sprite"))
+                        attachSprite(node);
+
                     if (ImGui::BeginMenu("Mesh"))
                     {
                         if (ImGui::MenuItem("Plane"))
@@ -389,6 +448,17 @@ namespace pe
 
             // Transform is always shown
             drawTransform();
+
+            if (flags & Component_Sprite)
+            {
+                ImGui::Separator();
+                if (ImGui::CollapsingHeader("Sprite Component", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    ImGui::Indent(8.f);
+                    drawSpriteComponent(node);
+                    ImGui::Unindent(8.f);
+                }
+            }
 
             // Mesh component
             if (flags & Component_Mesh)

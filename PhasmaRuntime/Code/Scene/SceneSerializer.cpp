@@ -303,6 +303,153 @@ namespace pe
 
             return count;
         }
+
+        const char *SpriteCoordinateSpaceName(SpriteCoordinateSpace space)
+        {
+            return space == SpriteCoordinateSpace::NDC ? "ndc" : "world";
+        }
+
+        SpriteCoordinateSpace ReadSpriteCoordinateSpace(const rapidjson::Value &value)
+        {
+            if (!value.IsString())
+                return SpriteCoordinateSpace::World;
+
+            const std::string mode = value.GetString();
+            return (mode == "ndc" || mode == "screen" || mode == "normalized") ? SpriteCoordinateSpace::NDC : SpriteCoordinateSpace::World;
+        }
+
+        vec2 ReadVec2Value(const rapidjson::Value &arr, const vec2 &fallback = vec2(0.0f))
+        {
+            if (!arr.IsArray() || arr.Size() < 2)
+                return fallback;
+            return vec2(arr[0].GetFloat(), arr[1].GetFloat());
+        }
+
+        vec4 ReadVec4Value(const rapidjson::Value &arr, const vec4 &fallback = vec4(0.0f))
+        {
+            if (!arr.IsArray() || arr.Size() < 4)
+                return fallback;
+            return vec4(arr[0].GetFloat(), arr[1].GetFloat(), arr[2].GetFloat(), arr[3].GetFloat());
+        }
+
+        void RestoreSpriteNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
+        {
+            if (!node || !nodeValue.HasMember("sprite") || !nodeValue["sprite"].IsObject())
+                return;
+
+            const auto &sv = nodeValue["sprite"];
+            scene.AddComponentFlag(node, Component_Sprite);
+            NodeSpriteTag *sprite = scene.GetNodeComponent<NodeSpriteTag>(node);
+            if (!sprite)
+                return;
+
+            if (sv.HasMember("size"))
+                sprite->size = ReadVec2Value(sv["size"], sprite->size);
+            if (sv.HasMember("atlas_columns"))
+                sprite->atlasColumns = std::max(sv["atlas_columns"].GetInt(), 1);
+            if (sv.HasMember("atlas_rows"))
+                sprite->atlasRows = std::max(sv["atlas_rows"].GetInt(), 1);
+            if (sv.HasMember("frame"))
+                sprite->frame = std::max(sv["frame"].GetInt(), 0);
+
+            if (sv.HasMember("uv_rect"))
+            {
+                sprite->uvRect = ReadVec4Value(sv["uv_rect"], sprite->uvRect);
+                scene.SetSpriteUvRect(node, sprite->uvRect);
+            }
+            else
+                scene.SetSpriteFrame(node, sprite->frame, sprite->atlasColumns, sprite->atlasRows);
+
+            if (sv.HasMember("animation_fps"))
+                sprite->animationFps = std::max(sv["animation_fps"].GetFloat(), 0.0f);
+            if (sv.HasMember("animation_loop"))
+                sprite->animationLoop = sv["animation_loop"].GetBool();
+            if (sv.HasMember("animation_playing"))
+                sprite->animationPlaying = sv["animation_playing"].GetBool();
+            if (sv.HasMember("animation_time"))
+                sprite->animationTime = std::max(sv["animation_time"].GetFloat(), 0.0f);
+            if (sv.HasMember("animation_frames") && sv["animation_frames"].IsArray())
+            {
+                sprite->animationFrames.clear();
+                for (const auto &frame : sv["animation_frames"].GetArray())
+                    if (frame.IsInt())
+                        sprite->animationFrames.push_back(frame.GetInt());
+            }
+
+            SpriteCoordinateSpace space = SpriteCoordinateSpace::World;
+            if (sv.HasMember("coordinate_space"))
+                space = ReadSpriteCoordinateSpace(sv["coordinate_space"]);
+
+            if (space == SpriteCoordinateSpace::NDC)
+            {
+                const vec2 ndcPosition = sv.HasMember("ndc_position") ? ReadVec2Value(sv["ndc_position"], sprite->ndcPosition) : sprite->ndcPosition;
+                const vec2 ndcSize = sv.HasMember("ndc_size") ? ReadVec2Value(sv["ndc_size"], sprite->ndcSize) : sprite->ndcSize;
+                const float ndcDepth = sv.HasMember("ndc_depth") ? sv["ndc_depth"].GetFloat() : sprite->ndcDepth;
+                const float ndcRotation = sv.HasMember("ndc_rotation") ? sv["ndc_rotation"].GetFloat() : sprite->ndcRotation;
+                scene.SetSpriteNdcTransform(node, ndcPosition, ndcSize, ndcDepth, ndcRotation);
+            }
+            else
+            {
+                scene.SetSpriteCoordinateSpace(node, SpriteCoordinateSpace::World);
+            }
+        }
+
+        std::filesystem::path ResolveSerializedTexturePath(const rapidjson::Value &textureValue,
+                                                           const std::filesystem::path *relativeToDir)
+        {
+            if (!textureValue.IsString() || textureValue.GetStringLength() == 0)
+                return {};
+
+            std::filesystem::path texturePath = textureValue.GetString();
+            if (!texturePath.is_relative())
+                return texturePath;
+
+            if (relativeToDir)
+                return (*relativeToDir / texturePath).lexically_normal();
+
+            const std::filesystem::path assetsPath = std::filesystem::path(Path::Assets) / texturePath;
+            if (std::filesystem::exists(assetsPath))
+                return assetsPath.lexically_normal();
+
+            return texturePath.lexically_normal();
+        }
+
+        void ResetMaterialTexturesToDefaults(Material &material)
+        {
+            const auto &defaults = ModelAsset::GetDefaultResources();
+            material.textures[static_cast<int>(TextureType::BaseColor)] = ResourceHandle<Image>::FromRaw(defaults.white);
+            material.textures[static_cast<int>(TextureType::MetallicRoughness)] = ResourceHandle<Image>::FromRaw(defaults.white);
+            material.textures[static_cast<int>(TextureType::Normal)] = ResourceHandle<Image>::FromRaw(defaults.normal);
+            material.textures[static_cast<int>(TextureType::Occlusion)] = ResourceHandle<Image>::FromRaw(defaults.white);
+            material.textures[static_cast<int>(TextureType::Emissive)] = ResourceHandle<Image>::FromRaw(defaults.black);
+        }
+
+        void RestoreMaterialTexturesFromJson(CommandBuffer *cmd,
+                                             Material &material,
+                                             const rapidjson::Value &meshValue,
+                                             const std::filesystem::path *relativeToDir)
+        {
+            ResetMaterialTexturesToDefaults(material);
+            if (!cmd || !meshValue.HasMember("textures") || !meshValue["textures"].IsObject())
+                return;
+
+            const auto &texVal = meshValue["textures"];
+            const char *texSlotNames[] = {"base_color", "metallic_roughness", "normal", "occlusion", "emissive"};
+            ModelAsset textureLoader;
+            for (int k = 0; k < 5; k++)
+            {
+                if (!texVal.HasMember(texSlotNames[k]))
+                    continue;
+
+                const std::filesystem::path texPath = ResolveSerializedTexturePath(texVal[texSlotNames[k]], relativeToDir);
+                if (texPath.empty() || !std::filesystem::exists(texPath))
+                    continue;
+
+                ResourceHandle<Image> img = textureLoader.LoadTexture(cmd, texPath);
+                if (img)
+                    material.textures[k] = img;
+            }
+        }
     } // namespace
 
     struct SceneSerializationHelper
@@ -334,6 +481,12 @@ namespace pe
         {
             arr.SetArray();
             arr.PushBack(SafeFloat(v.x), allocator).PushBack(SafeFloat(v.y), allocator).PushBack(SafeFloat(v.z), allocator);
+        }
+
+        void SetVec2(rapidjson::Value &arr, const vec2 &v) const
+        {
+            arr.SetArray();
+            arr.PushBack(SafeFloat(v.x), allocator).PushBack(SafeFloat(v.y), allocator);
         }
 
         void SetVec4(rapidjson::Value &arr, const vec4 &v) const
@@ -593,7 +746,9 @@ namespace pe
                     if (cam)
                     {
                         rapidjson::Value camObj(rapidjson::kObjectType);
+                        camObj.AddMember("projection", MakeStringValue(cam->IsOrthographic() ? "orthographic" : "perspective"), allocator);
                         camObj.AddMember("fovx", cam->Fovx(), allocator);
+                        camObj.AddMember("orthographic_size", cam->GetOrthographicSize(), allocator);
                         camObj.AddMember("near_plane", cam->GetNearPlane(), allocator);
                         camObj.AddMember("far_plane", cam->GetFarPlane(), allocator);
                         camObj.AddMember("speed", cam->GetSpeed(), allocator);
@@ -693,6 +848,47 @@ namespace pe
                         audio.AddMember("autoplay", desc->autoplay, allocator);
                         nodeObj.AddMember("audio", audio.Move(), allocator);
                     }
+                }
+
+                if ((flags & Component_Sprite) && cache.sprite)
+                {
+                    const NodeSpriteTag &sprite = *cache.sprite;
+                    rapidjson::Value spriteObj(rapidjson::kObjectType);
+                    spriteObj.AddMember("coordinate_space", MakeStringValue(SpriteCoordinateSpaceName(sprite.coordinateSpace)), allocator);
+
+                    rapidjson::Value size;
+                    SetVec2(size, sprite.size);
+                    spriteObj.AddMember("size", size.Move(), allocator);
+
+                    rapidjson::Value ndcPosition;
+                    SetVec2(ndcPosition, sprite.ndcPosition);
+                    spriteObj.AddMember("ndc_position", ndcPosition.Move(), allocator);
+
+                    rapidjson::Value ndcSize;
+                    SetVec2(ndcSize, sprite.ndcSize);
+                    spriteObj.AddMember("ndc_size", ndcSize.Move(), allocator);
+                    spriteObj.AddMember("ndc_depth", SafeFloat(sprite.ndcDepth), allocator);
+                    spriteObj.AddMember("ndc_rotation", SafeFloat(sprite.ndcRotation), allocator);
+
+                    rapidjson::Value uvRect;
+                    SetVec4(uvRect, sprite.uvRect);
+                    spriteObj.AddMember("uv_rect", uvRect.Move(), allocator);
+                    spriteObj.AddMember("atlas_columns", sprite.atlasColumns, allocator);
+                    spriteObj.AddMember("atlas_rows", sprite.atlasRows, allocator);
+                    spriteObj.AddMember("frame", sprite.frame, allocator);
+                    spriteObj.AddMember("animation_fps", SafeFloat(sprite.animationFps), allocator);
+                    spriteObj.AddMember("animation_loop", sprite.animationLoop, allocator);
+                    spriteObj.AddMember("animation_playing", sprite.animationPlaying, allocator);
+                    spriteObj.AddMember("animation_time", SafeFloat(sprite.animationTime), allocator);
+                    if (!sprite.animationFrames.empty())
+                    {
+                        rapidjson::Value frames(rapidjson::kArrayType);
+                        for (int frame : sprite.animationFrames)
+                            frames.PushBack(frame, allocator);
+                        spriteObj.AddMember("animation_frames", frames.Move(), allocator);
+                    }
+
+                    nodeObj.AddMember("sprite", spriteObj.Move(), allocator);
                 }
 
                 nodesArr.PushBack(nodeObj.Move(), allocator);
@@ -803,6 +999,8 @@ namespace pe
                 }
 
                 camObj.AddMember("fovx", camera->Fovx(), allocator);
+                camObj.AddMember("projection", MakeStringValue(camera->IsOrthographic() ? "orthographic" : "perspective"), allocator);
+                camObj.AddMember("orthographic_size", camera->GetOrthographicSize(), allocator);
                 camObj.AddMember("near_plane", camera->GetNearPlane(), allocator);
                 camObj.AddMember("far_plane", camera->GetFarPlane(), allocator);
                 camObj.AddMember("speed", camera->GetSpeed(), allocator);
@@ -1461,8 +1659,19 @@ namespace pe
                             cam->SetName(nv.HasMember("name") ? nv["name"].GetString() : ("Camera_" + std::to_string(ID::NextID())));
                             m_cameras.push_back(cam);
                         }
+                        if (cv.HasMember("projection") && cv["projection"].IsString())
+                        {
+                            std::string mode = cv["projection"].GetString();
+                            cam->SetProjectionMode(mode == "orthographic" ? CameraProjectionMode::Orthographic : CameraProjectionMode::Perspective);
+                        }
+                        else if (cv.HasMember("orthographic") && cv["orthographic"].IsBool())
+                        {
+                            cam->SetOrthographic(cv["orthographic"].GetBool());
+                        }
                         if (cv.HasMember("fovx"))
                             cam->SetFovx(cv["fovx"].GetFloat());
+                        if (cv.HasMember("orthographic_size"))
+                            cam->SetOrthographicSize(cv["orthographic_size"].GetFloat());
                         if (cv.HasMember("near_plane"))
                             cam->SetNearPlane(cv["near_plane"].GetFloat());
                         if (cv.HasMember("far_plane"))
@@ -1526,6 +1735,9 @@ namespace pe
                         hadEmbeddedLights = true;
                     }
                 }
+
+                for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+                    RestoreSpriteNode(*this, nodeMap[ni], nodesVal[ni]);
 
                 // Restore physics bodies from embedded node data
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
@@ -1780,8 +1992,19 @@ namespace pe
                     cam->SetPosition(ReadVec3(cVal["position"]));
                 if (cVal.HasMember("euler"))
                     cam->SetEuler(ReadVec3(cVal["euler"]));
+                if (cVal.HasMember("projection") && cVal["projection"].IsString())
+                {
+                    std::string mode = cVal["projection"].GetString();
+                    cam->SetProjectionMode(mode == "orthographic" ? CameraProjectionMode::Orthographic : CameraProjectionMode::Perspective);
+                }
+                else if (cVal.HasMember("orthographic") && cVal["orthographic"].IsBool())
+                {
+                    cam->SetOrthographic(cVal["orthographic"].GetBool());
+                }
                 if (cVal.HasMember("fovx"))
                     cam->SetFovx(cVal["fovx"].GetFloat());
+                if (cVal.HasMember("orthographic_size"))
+                    cam->SetOrthographicSize(cVal["orthographic_size"].GetFloat());
                 if (cVal.HasMember("near_plane"))
                     cam->SetNearPlane(cVal["near_plane"].GetFloat());
                 if (cVal.HasMember("far_plane"))
@@ -1987,7 +2210,7 @@ namespace pe
 
                     uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
                     // Clear subsystem tags before restoring — Mesh/Script are already set by SetMeshRef/SetNodeScript above
-                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Audio);
+                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Audio | Component_Sprite);
                     uint32_t restoreFlags = flags & ~(Component_Mesh | Component_Script | Component_GpuPending);
                     if (restoreFlags)
                         AddComponentFlag(node, restoreFlags);
@@ -2003,6 +2226,10 @@ namespace pe
 
                     const auto &meshesVal = d["meshes"];
                     std::unordered_set<Material *> loadedSharedMaterials;
+                    Queue *queue = RHII.GetMainQueue();
+                    CommandBuffer *cmd = queue ? queue->AcquireCommandBuffer() : nullptr;
+                    if (cmd)
+                        cmd->Begin();
 
                     for (rapidjson::SizeType mi = 0; mi < meshesVal.Size() && mi < static_cast<rapidjson::SizeType>(m_meshes.size()); mi++)
                     {
@@ -2036,6 +2263,7 @@ namespace pe
                                 DecodeMaterialFactorsFromPersistence(mesh.renderType, factors[0], factors[1]);
                                 loadTarget->UnpackLegacyFactors(factors, loadTarget->textureMask);
                             }
+                            RestoreMaterialTexturesFromJson(cmd, *loadTarget, mVal, nullptr);
 
                             if (!isInstanced && target)
                                 loadedSharedMaterials.insert(target);
@@ -2047,6 +2275,14 @@ namespace pe
                             if (inst)
                                 inst->ApplyDiffFromResolved(tempMat);
                         }
+                    }
+
+                    if (cmd)
+                    {
+                        cmd->End();
+                        queue->Submit(1, &cmd, nullptr, nullptr);
+                        cmd->Wait();
+                        queue->ReturnCommandBuffer(cmd);
                     }
                 }
 
@@ -2078,8 +2314,19 @@ namespace pe
                                 AddComponentFlag(node, Component_Camera);
                             m_nodeComponentCache[node->index].camera->camera = cam;
                             const auto &cv = nv["camera"];
+                            if (cv.HasMember("projection") && cv["projection"].IsString())
+                            {
+                                std::string mode = cv["projection"].GetString();
+                                cam->SetProjectionMode(mode == "orthographic" ? CameraProjectionMode::Orthographic : CameraProjectionMode::Perspective);
+                            }
+                            else if (cv.HasMember("orthographic") && cv["orthographic"].IsBool())
+                            {
+                                cam->SetOrthographic(cv["orthographic"].GetBool());
+                            }
                             if (cv.HasMember("fovx"))
                                 cam->SetFovx(cv["fovx"].GetFloat());
+                            if (cv.HasMember("orthographic_size"))
+                                cam->SetOrthographicSize(cv["orthographic_size"].GetFloat());
                             if (cv.HasMember("near_plane"))
                                 cam->SetNearPlane(cv["near_plane"].GetFloat());
                             if (cv.HasMember("far_plane"))
@@ -2141,6 +2388,9 @@ namespace pe
                         hadEmbeddedLightsSnap = true;
                     }
                 }
+
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestoreSpriteNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
 
                 // Restore physics bodies from embedded node data
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
@@ -2370,6 +2620,7 @@ namespace pe
                                 DecodeMaterialFactorsFromPersistence(mesh.renderType, factors[0], factors[1]);
                                 loadTarget->UnpackLegacyFactors(factors, loadTarget->textureMask);
                             }
+                            RestoreMaterialTexturesFromJson(cmd, *loadTarget, mVal, nullptr);
 
                             if (!isInstanced && target)
                                 loadedSharedMaterials.insert(target);
@@ -2467,8 +2718,19 @@ namespace pe
                             m_cameras.push_back(cam);
                         }
                         const auto &cv = nv["camera"];
+                        if (cv.HasMember("projection") && cv["projection"].IsString())
+                        {
+                            std::string mode = cv["projection"].GetString();
+                            cam->SetProjectionMode(mode == "orthographic" ? CameraProjectionMode::Orthographic : CameraProjectionMode::Perspective);
+                        }
+                        else if (cv.HasMember("orthographic") && cv["orthographic"].IsBool())
+                        {
+                            cam->SetOrthographic(cv["orthographic"].GetBool());
+                        }
                         if (cv.HasMember("fovx"))
                             cam->SetFovx(cv["fovx"].GetFloat());
+                        if (cv.HasMember("orthographic_size"))
+                            cam->SetOrthographicSize(cv["orthographic_size"].GetFloat());
                         if (cv.HasMember("near_plane"))
                             cam->SetNearPlane(cv["near_plane"].GetFloat());
                         if (cv.HasMember("far_plane"))
@@ -2531,6 +2793,9 @@ namespace pe
                         hadEmbeddedLightsSnap = true;
                     }
                 }
+
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestoreSpriteNode(*this, nodeMap[ni], snapshotNodes[ni]);
 
                 // Restore physics bodies from embedded node data (slow path)
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
@@ -2679,8 +2944,19 @@ namespace pe
                     cam->SetPosition(ReadVec3(cv["position"]));
                 if (cv.HasMember("euler"))
                     cam->SetEuler(ReadVec3(cv["euler"]));
+                if (cv.HasMember("projection") && cv["projection"].IsString())
+                {
+                    std::string mode = cv["projection"].GetString();
+                    cam->SetProjectionMode(mode == "orthographic" ? CameraProjectionMode::Orthographic : CameraProjectionMode::Perspective);
+                }
+                else if (cv.HasMember("orthographic") && cv["orthographic"].IsBool())
+                {
+                    cam->SetOrthographic(cv["orthographic"].GetBool());
+                }
                 if (cv.HasMember("fovx"))
                     cam->SetFovx(cv["fovx"].GetFloat());
+                if (cv.HasMember("orthographic_size"))
+                    cam->SetOrthographicSize(cv["orthographic_size"].GetFloat());
                 if (cv.HasMember("near_plane"))
                     cam->SetNearPlane(cv["near_plane"].GetFloat());
                 if (cv.HasMember("far_plane"))

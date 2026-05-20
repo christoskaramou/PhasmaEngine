@@ -44,4 +44,5 @@
 #define ICON_FA_ARROW_RIGHT "\xef\x81\xa1"          // f061 - arrow-right (navigate forward)
 #define ICON_FA_ARROW_UP "\xef\x81\xa2"             // f062 - arrow-up (navigate to parent)
 #define ICON_FA_PLUS "\xef\x81\xa7"                 // f067 - plus (new scene)
+#define ICON_FA_IMAGE "\xef\x80\xbe"                // f03e - image (for sprites)
 #define ICON_FA_TRIANGLE_EXCLAMATION "\xef\x81\xb1" // f071 - triangle-exclamation (warning)
