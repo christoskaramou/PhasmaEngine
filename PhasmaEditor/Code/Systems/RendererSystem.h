@@ -104,7 +104,6 @@ namespace pe
         void CacheGlobalComponents();
 
         void ResetTAAHistory();
-        void SaveScreenshot();
         std::string GetScreenshotSavedPath()
         {
             std::string path = std::move(m_screenshotSavedPath);

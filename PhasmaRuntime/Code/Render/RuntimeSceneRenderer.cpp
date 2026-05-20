@@ -205,46 +205,12 @@ namespace pe
         if (!m_initialized)
             return;
 
-        try
-        {
-            const uint32_t frame = RHII.GetFrameIndex();
-
-            Semaphore *acquireSemaphore = m_acquireSemaphores[frame];
-            Swapchain *swapchain = RHII.GetSwapchain();
-            uint32_t imageIndex = 0;
-            {
-                PE_PROFILE_SCOPE("Runtime Acquire Image");
-                imageIndex = swapchain->AquireNextImage(acquireSemaphore);
-            }
-
-            auto &frameCmd = m_cmds[frame];
-            {
-                PE_PROFILE_SCOPE("Runtime Record Passes");
-                frameCmd = RecordPasses(imageIndex);
-            }
-
-            Semaphore *submitSemaphore = m_submitSemaphores[imageIndex];
-            Queue *queue = RHII.GetMainQueue();
-            {
-                PE_PROFILE_SCOPE("Runtime Queue Submit");
-                queue->Submit(1, &frameCmd, acquireSemaphore, submitSemaphore);
-            }
-
-            {
-                PE_PROFILE_SCOPE("Runtime Present");
-                queue->Present(swapchain, imageIndex, submitSemaphore);
-            }
-
-            if (m_screenshotPending)
-            {
-                frameCmd->Wait();
-                SaveScreenshot();
-                m_screenshotPending = false;
-            }
-        }
-        catch (const SwapchainOutOfDateError &)
-        {
-        }
+        SubmitAndPresentSceneFrame(m_cmds, m_acquireSemaphores, m_submitSemaphores, [this](uint32_t imageIndex)
+                                   { return RecordPasses(imageIndex); }, m_screenshotPending, [this]()
+                                   { (void)SaveSceneScreenshot(m_screenshotBuffer,
+                                                               m_screenshotRT,
+                                                               m_screenshotPath,
+                                                               m_screenshotRowPitch); }, {"Runtime Acquire Image", "Runtime Record Passes", "Runtime Queue Submit", "Runtime Present"});
     }
 
     void RuntimeSceneRenderer::Destroy()
@@ -397,8 +363,4 @@ namespace pe
                                                            "RuntimeScreenshotStaging");
     }
 
-    void RuntimeSceneRenderer::SaveScreenshot()
-    {
-        (void)SaveSceneScreenshot(m_screenshotBuffer, m_screenshotRT, m_screenshotPath, m_screenshotRowPitch);
-    }
 } // namespace pe

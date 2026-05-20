@@ -2,6 +2,7 @@
 
 ## 2026-05-20
 
+- Centralized the shared frame submit/present skeleton in `SceneFrameResources.*`. Editor and player now share acquire/record/submit/present/screenshot-drain mechanics while keeping host-local pass recording and screenshot save policy.
 - Folded the remaining safe render-pass lifecycle and shader-polling loops into runtime helpers. `SceneRenderGraph.*` now owns shared pass init/destroy/resize loops, `RenderPassShaderReload.*` owns bulk render-pass shader polling, and `SceneFrameResources.*` owns previous/all frame command cleanup with staging cleanup.
 - Exposed shared scene render-target destruction in `SceneRenderTargets.*` and removed the now-trivial `LoadResources` wrappers from both renderer hosts.
 - Added `SceneSky.*` as a shared PhasmaRuntime helper for default scene sky resources. `RuntimeSceneRenderer` and editor `RendererSystem` now share day/night skybox and IBL BRDF LUT load/destroy code, while editor-only `m_skyBoxWhite` remains local to the editor renderer.

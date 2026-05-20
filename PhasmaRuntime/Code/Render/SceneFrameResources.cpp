@@ -1,6 +1,7 @@
 #include "Render/SceneFrameResources.h"
 #include "API/Command.h"
 #include "API/Image.h"
+#include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/Semaphore.h"
 #include "API/StagingManager.h"
@@ -55,6 +56,56 @@ namespace pe
             barrierInfo.stageFlags = PE_STAGE_ALL_COMMANDS;
             barrierInfo.accessMask = PE_ACCESS_NONE;
             cmd->ImageBarrier(barrierInfo);
+        }
+    }
+
+    void SubmitAndPresentSceneFrame(std::vector<CommandBuffer *> &cmds,
+                                    const std::vector<Semaphore *> &acquireSemaphores,
+                                    const std::vector<Semaphore *> &submitSemaphores,
+                                    const SceneFrameRecordCallback &recordFrame,
+                                    bool &screenshotPending,
+                                    const SceneFrameScreenshotCallback &saveScreenshot,
+                                    const SceneFrameSubmitLabels &labels)
+    {
+        try
+        {
+            const uint32_t frame = RHII.GetFrameIndex();
+
+            Semaphore *acquireSemaphore = acquireSemaphores[frame];
+            Swapchain *swapchain = RHII.GetSwapchain();
+            uint32_t imageIndex = 0;
+            {
+                PE_PROFILE_SCOPE(labels.acquire);
+                imageIndex = swapchain->AquireNextImage(acquireSemaphore);
+            }
+
+            auto &frameCmd = cmds[frame];
+            {
+                PE_PROFILE_SCOPE(labels.record);
+                frameCmd = recordFrame(imageIndex);
+            }
+
+            Semaphore *submitSemaphore = submitSemaphores[imageIndex];
+            Queue *queue = RHII.GetMainQueue();
+            {
+                PE_PROFILE_SCOPE(labels.submit);
+                queue->Submit(1, &frameCmd, acquireSemaphore, submitSemaphore);
+            }
+
+            {
+                PE_PROFILE_SCOPE(labels.present);
+                queue->Present(swapchain, imageIndex, submitSemaphore);
+            }
+
+            if (screenshotPending)
+            {
+                frameCmd->Wait();
+                saveScreenshot();
+                screenshotPending = false;
+            }
+        }
+        catch (const SwapchainOutOfDateError &)
+        {
         }
     }
 

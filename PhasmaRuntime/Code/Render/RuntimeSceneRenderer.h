@@ -72,7 +72,6 @@ namespace pe
         CommandBuffer *RecordPasses(uint32_t imageIndex);
         void BlitToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex);
         void QueueScreenshotReadback(CommandBuffer *cmd, Image *sourceImage);
-        void SaveScreenshot();
         void ApplyRuntimeRenderSettings();
 
         Scene &m_scene;

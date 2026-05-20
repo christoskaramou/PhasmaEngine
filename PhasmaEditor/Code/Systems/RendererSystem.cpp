@@ -333,54 +333,16 @@ namespace pe
 
     void RendererSystem::Draw()
     {
-        try
-        {
-            uint32_t frame = RHII.GetFrameIndex();
-
-            Semaphore *acquireSemaphore = m_acquireSemaphores[frame];
-            Swapchain *swapchain = RHII.GetSwapchain();
-            uint32_t imageIndex;
-            {
-                PE_PROFILE_SCOPE("Acquire Image");
-                imageIndex = swapchain->AquireNextImage(acquireSemaphore);
-            }
-
-            auto &frameCmd = m_cmds[frame];
-            {
-                PE_PROFILE_SCOPE("Record Passes");
-                frameCmd = RecordPasses(imageIndex);
-            }
-
-            Semaphore *submitSemaphore = m_submitSemaphores[imageIndex];
-            Queue *queue = RHII.GetMainQueue();
-            {
-                PE_PROFILE_SCOPE("Queue Submit");
-                queue->Submit(1, &frameCmd, acquireSemaphore, submitSemaphore);
-            }
-
-            {
-                PE_PROFILE_SCOPE("Present");
-                queue->Present(swapchain, imageIndex, submitSemaphore);
-            }
-
-            if (m_screenshotPending)
-            {
-                frameCmd->Wait();
-                SaveScreenshot();
-                m_screenshotPending = false;
-            }
-        }
-        catch (const SwapchainOutOfDateError &)
-        {
-            // Just ignore and try again
-        }
-    }
-
-    void RendererSystem::SaveScreenshot()
-    {
-        std::string savedPath;
-        if (SaveSceneScreenshot(m_screenshotBuffer, m_screenshotRT, m_screenshotPath, m_screenshotRowPitch, &savedPath))
-            m_screenshotSavedPath = savedPath;
+        SubmitAndPresentSceneFrame(m_cmds, m_acquireSemaphores, m_submitSemaphores, [this](uint32_t imageIndex)
+                                   { return RecordPasses(imageIndex); }, m_screenshotPending, [this]()
+                                   {
+                                       std::string savedPath;
+                                       if (SaveSceneScreenshot(m_screenshotBuffer,
+                                                               m_screenshotRT,
+                                                               m_screenshotPath,
+                                                               m_screenshotRowPitch,
+                                                               &savedPath))
+                                           m_screenshotSavedPath = savedPath; });
     }
 
     void RendererSystem::DrawPlatformWindows()
