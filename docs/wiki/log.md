@@ -2,6 +2,7 @@
 
 ## 2026-05-20
 
+- Added `SceneRendererCore` as the composed shared renderer object under PhasmaRuntime. Editor `RendererSystem` and player `RuntimeSceneRenderer` now delegate neutral render graph, target, sky/IBL, pass-component, frame-resource, and screenshot-staging state to the core while keeping host-specific scene, GUI/runtime UI, DX12 fallback, hot-reload, and screenshot policy outside it.
 - Centralized the shared frame submit/present skeleton in `SceneFrameResources.*`. Editor and player now share acquire/record/submit/present/screenshot-drain mechanics while keeping host-local pass recording and screenshot save policy.
 - Folded the remaining safe render-pass lifecycle and shader-polling loops into runtime helpers. `SceneRenderGraph.*` now owns shared pass init/destroy/resize loops, `RenderPassShaderReload.*` owns bulk render-pass shader polling, and `SceneFrameResources.*` owns previous/all frame command cleanup with staging cleanup.
 - Exposed shared scene render-target destruction in `SceneRenderTargets.*` and removed the now-trivial `LoadResources` wrappers from both renderer hosts.

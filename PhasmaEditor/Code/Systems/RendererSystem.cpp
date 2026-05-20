@@ -1,5 +1,4 @@
 #include "RendererSystem.h"
-#include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Debug.h"
 #include "API/Image.h"
@@ -7,12 +6,6 @@
 #include "API/RHI.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
-#include "Render/RenderPassShaderReload.h"
-#include "Render/SceneFrameResources.h"
-#include "Render/SceneRenderGraph.h"
-#include "Render/SceneRenderTargets.h"
-#include "Render/SceneScreenshot.h"
-#include "Render/SceneSky.h"
 #include "RenderPasses/TAAPass.h"
 #include "UI/RuntimeUi.h"
 
@@ -69,36 +62,31 @@ namespace pe
             initCmd->Begin();
         }
 
-        CreateRenderTargets();
+        m_sceneRenderer.CreateRenderTargets();
 
         // Skybox / IBL are consumed by the Light pass. DX12 reaches that slice in 14c.
-        LoadDefaultSceneSky(initCmd, m_skyBoxDay, m_skyBoxNight, m_ibl_brdf_lut);
+        m_sceneRenderer.LoadSky(initCmd);
 
-        CreateSceneRenderGraphPassComponents(m_renderPassComponents, SupportsRayTracingPass());
-        InitSceneRenderGraphPassComponents(m_renderPassComponents, initCmd);
+        m_sceneRenderer.CreateRenderPassComponents(SupportsRayTracingPass(), initCmd);
 
         // Init GUI
         m_gui.Init();
 
         uint32_t imageCount = RHII.GetSwapchainImageCount();
-        m_cmds.resize(imageCount, nullptr);
-        TransitionSceneSwapchainImagesToPresent(initCmd);
-
-        m_scene.UploadBuffers(initCmd);
-        CacheGlobalComponents();
-        BuildRenderGraph();
-
         const PeBarrierSync acquireStageFlags = isDx12 ? PE_STAGE_NONE
                                                        : PE_STAGE_COLOR_ATTACHMENT_OUTPUT | PE_STAGE_COMPUTE_SHADER |
                                                              PE_STAGE_RAY_TRACING_SHADER_KHR | PE_STAGE_TRANSFER;
         const PeBarrierSync submitStageFlags = isDx12 ? PE_STAGE_NONE : PE_STAGE_ALL_COMMANDS;
-        CreateSceneFrameSemaphores(m_acquireSemaphores,
-                                   m_submitSemaphores,
-                                   imageCount,
-                                   "AcquireSemaphore_",
-                                   "SubmitSemaphore_",
-                                   acquireStageFlags,
-                                   submitStageFlags);
+        m_sceneRenderer.CreateFrameResources(imageCount,
+                                             "AcquireSemaphore_",
+                                             "SubmitSemaphore_",
+                                             acquireStageFlags,
+                                             submitStageFlags);
+        m_sceneRenderer.TransitionSwapchainImagesToPresent(initCmd);
+
+        m_scene.UploadBuffers(initCmd);
+        m_sceneRenderer.CacheGlobalComponents();
+        BuildRenderGraph();
 
         if (ownsInitCmd)
         {
@@ -107,11 +95,6 @@ namespace pe
             initCmd->Wait();
             initCmd->Return();
         }
-    }
-
-    void RendererSystem::CacheGlobalComponents()
-    {
-        m_scenePasses = GetGlobalSceneRenderGraphPassComponents();
     }
 
     void RendererSystem::Update()
@@ -139,70 +122,55 @@ namespace pe
             UpdateRenderGraphPassStates();
         }
 
-        const SceneRenderGraphPassComponents scenePasses = GetSceneRenderGraphPassComponents();
-        const auto isPassEnabled = [this](SceneRenderGraphPassId passId) -> bool
-        {
-            return m_renderGraphPassEnabled[static_cast<size_t>(passId)];
-        };
-
         // Render Components
         {
             PE_PROFILE_SCOPE("Render Pass Updates");
-            UpdateSceneRenderGraphPassComponents(m_renderPassComponents, scenePasses, isPassEnabled);
+            m_sceneRenderer.UpdateRenderPassComponents();
         }
-    }
-
-    SceneRenderGraphPassComponents RendererSystem::GetSceneRenderGraphPassComponents() const
-    {
-        return m_scenePasses;
     }
 
     void RendererSystem::UpdateRenderGraphPassStates()
     {
         const bool hasRTGeom = SupportsRayTracingPass() && m_scene.GetTLAS() != nullptr;
-        UpdateSceneRenderGraphPassStates(m_renderGraphPassEnabled, hasRTGeom);
-        m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GUI)] = m_gui.Render() || HasRuntimeUiPass();
+        m_sceneRenderer.UpdateRenderGraphPassStates(hasRTGeom);
+        m_guiPassEnabled = m_gui.Render() || HasRuntimeUiPass();
     }
 
     void RendererSystem::WaitPreviousFrameCommands()
     {
-        WaitPreviousSceneFrameCommand(m_cmds);
+        m_sceneRenderer.WaitPreviousFrameCommands();
     }
 
     void RendererSystem::ResetTAAHistory()
     {
-        if (auto *taaPass = static_cast<TAAPass *>(m_scenePasses.taa))
+        if (auto *taaPass = static_cast<TAAPass *>(m_sceneRenderer.GetSceneRenderGraphPassComponents().taa))
             taaPass->RequestHistoryReset();
     }
 
     void RendererSystem::WaitAllFramesCommands()
     {
-        WaitSceneFrameCommandsAndCleanup(m_cmds);
+        m_sceneRenderer.WaitAllFrameCommands();
     }
 
     void RendererSystem::BuildRenderGraph()
     {
-        m_renderGraph.Clear();
+        RenderGraph &renderGraph = m_sceneRenderer.GetRenderGraph();
+        renderGraph.Clear();
 
         UpdateRenderGraphPassStates();
 
-        const SceneRenderGraphPassComponents scenePasses = GetSceneRenderGraphPassComponents();
-
-        AddSceneRenderGraphPasses(m_renderGraph,
-                                  scenePasses,
-                                  [this](SceneRenderGraphPassId passId)
-                                  { return m_renderGraphPassEnabled[static_cast<size_t>(passId)]; });
         auto isGuiPassEnabled = [this]()
         {
-            return m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GUI)];
+            return m_guiPassEnabled;
         };
-        m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::GUI),
-                              10000,
-                              "GUI",
-                              isGuiPassEnabled,
-                              [this](CommandBuffer *cmd)
-                              { m_gui.ExecutePass(cmd); });
-        m_renderGraph.Compile();
+        m_sceneRenderer.AddScenePassesToRenderGraph();
+        renderGraph.AddPass(static_cast<RenderGraph::PassID>(RenderGraphPassId::GUI),
+                            10000,
+                            "GUI",
+                            isGuiPassEnabled,
+                            [this](CommandBuffer *cmd)
+                            { m_gui.ExecutePass(cmd); });
+        renderGraph.Compile();
     }
 
     CommandBuffer *RendererSystem::RecordPasses(uint32_t imageIndex)
@@ -214,7 +182,7 @@ namespace pe
         // Set scene on all scene-dependent passes before execution.
         {
             PE_PROFILE_SCOPE("Record Set Pass Scenes");
-            SetSceneRenderGraphPassScene(GetSceneRenderGraphPassComponents(), m_scene);
+            m_sceneRenderer.SetRenderPassScene(m_scene);
         }
 
         {
@@ -223,7 +191,7 @@ namespace pe
         }
         {
             PE_PROFILE_SCOPE("Render Graph Execute");
-            m_renderGraph.Execute(cmd);
+            m_sceneRenderer.ExecuteRenderGraph(cmd);
         }
 
         if (isDx12)
@@ -234,7 +202,7 @@ namespace pe
             {
                 {
                     PE_PROFILE_SCOPE("DX12 FrameOutput Blit");
-                    BlitToSwapchain(cmd, frameOutputImage, imageIndex);
+                    m_sceneRenderer.BlitToSwapchain(cmd, frameOutputImage, imageIndex);
                 }
                 {
                     PE_PROFILE_SCOPE("DX12 Screenshot Readback");
@@ -270,12 +238,12 @@ namespace pe
         {
             {
                 PE_PROFILE_SCOPE("Blit To Swapchain");
-                BlitToSwapchain(cmd, m_displayRT, imageIndex);
+                m_sceneRenderer.BlitToSwapchain(cmd, m_sceneRenderer.GetDisplayRT(), imageIndex);
             }
 
             {
                 PE_PROFILE_SCOPE("Vulkan Screenshot Readback");
-                QueueScreenshotReadback(cmd, m_displayRT);
+                QueueScreenshotReadback(cmd, m_sceneRenderer.GetDisplayRT());
             }
         }
 
@@ -295,24 +263,23 @@ namespace pe
     Image *RendererSystem::GetFrameOutputImage() const
     {
         const bool displayProduced =
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Upsample)] ||
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::TAA)] ||
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Sharpen)] ||
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Tonemap)] ||
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::BloomV)] ||
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::DOF)] ||
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::MotionBlur)] ||
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::Grid)] ||
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::GUI)];
+            m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::Upsample) ||
+            m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::TAA) ||
+            m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::Sharpen) ||
+            m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::Tonemap) ||
+            m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::BloomV) ||
+            m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::DOF) ||
+            m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::MotionBlur) ||
+            m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::Grid) || m_guiPassEnabled;
         if (displayProduced)
-            return m_displayRT;
+            return m_sceneRenderer.GetDisplayRT();
 
         const bool viewportProduced =
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightOpaque)] ||
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::LightTransparent)] ||
-            m_renderGraphPassEnabled[static_cast<size_t>(RenderGraphPassId::RayTracing)];
+            m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::LightOpaque) ||
+            m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::LightTransparent) ||
+            m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::RayTracing);
         if (viewportProduced)
-            return m_viewportRT;
+            return m_sceneRenderer.GetViewportRT();
 
         return nullptr;
     }
@@ -323,26 +290,22 @@ namespace pe
         if (!sourceImage || !EventSystem::PeekAndPop(EventType::Screenshot, screenshotEvt))
             return;
 
-        m_screenshotPath = screenshotEvt.payload.has_value()
-                               ? std::any_cast<std::string>(screenshotEvt.payload)
-                               : std::string();
-
-        m_screenshotPending =
-            QueueSceneScreenshotReadback(cmd, sourceImage, m_screenshotRT, m_screenshotBuffer, m_screenshotRowPitch, "ScreenshotStaging");
+        m_sceneRenderer.SetScreenshotPath(screenshotEvt.payload.has_value()
+                                              ? std::any_cast<std::string>(screenshotEvt.payload)
+                                              : std::string());
+        m_sceneRenderer.QueueScreenshotReadback(cmd, sourceImage, "ScreenshotStaging");
     }
 
     void RendererSystem::Draw()
     {
-        SubmitAndPresentSceneFrame(m_cmds, m_acquireSemaphores, m_submitSemaphores, [this](uint32_t imageIndex)
-                                   { return RecordPasses(imageIndex); }, m_screenshotPending, [this]()
-                                   {
-                                       std::string savedPath;
-                                       if (SaveSceneScreenshot(m_screenshotBuffer,
-                                                               m_screenshotRT,
-                                                               m_screenshotPath,
-                                                               m_screenshotRowPitch,
-                                                               &savedPath))
-                                           m_screenshotSavedPath = savedPath; });
+        m_sceneRenderer.SubmitAndPresent([this](uint32_t imageIndex)
+                                         { return RecordPasses(imageIndex); },
+                                         [this]()
+                                         {
+                                             std::string savedPath;
+                                             if (m_sceneRenderer.SaveScreenshot(&savedPath))
+                                                 m_screenshotSavedPath = savedPath;
+                                         });
     }
 
     void RendererSystem::DrawPlatformWindows()
@@ -354,19 +317,16 @@ namespace pe
     {
         RHII.WaitDeviceIdle();
 
-        WaitSceneFrameCommands(m_cmds);
+        m_sceneRenderer.DestroyFrameResources();
 
-        DestroySceneRenderGraphPassComponents(m_renderPassComponents);
+        m_sceneRenderer.DestroyRenderPassComponents();
 
-        DestroyDefaultSceneSky(m_skyBoxDay, m_skyBoxNight, m_ibl_brdf_lut);
+        m_sceneRenderer.DestroySky();
         m_skyBoxWhite.Destroy();
 
-        DestroySceneRenderTargets(m_renderTargets, m_depthStencilTargets);
+        m_sceneRenderer.DestroyRenderTargets();
 
-        DestroySceneFrameSemaphores(m_acquireSemaphores);
-        DestroySceneFrameSemaphores(m_submitSemaphores);
-
-        Buffer::Destroy(m_screenshotBuffer);
+        m_sceneRenderer.DestroyScreenshotBuffer();
 
         if (GetActiveSceneRendererHost() == this)
             SetActiveSceneRendererHost(nullptr);
@@ -379,7 +339,7 @@ namespace pe
                                               bool useMips,
                                               vec4 clearColor)
     {
-        return CreateSceneRenderTarget(m_renderTargets, name, format, usage, useRenderTergetScale, useMips, clearColor);
+        return m_sceneRenderer.CreateRenderTarget(name, format, usage, useRenderTergetScale, useMips, clearColor);
     }
 
     Image *RendererSystem::CreateDepthStencilTarget(const std::string &name,
@@ -389,41 +349,32 @@ namespace pe
                                                     float clearDepth,
                                                     uint32_t clearStencil)
     {
-        return CreateSceneDepthStencilTarget(m_depthStencilTargets, name, format, usage, useRenderTergetScale, clearDepth, clearStencil);
+        return m_sceneRenderer.CreateDepthStencilTarget(name, format, usage, useRenderTergetScale, clearDepth, clearStencil);
     }
 
     Image *RendererSystem::GetRenderTarget(const std::string &name)
     {
-        return GetSceneRenderTarget(m_renderTargets, name);
+        return m_sceneRenderer.GetRenderTarget(name);
     }
 
     Image *RendererSystem::GetRenderTarget(size_t hash)
     {
-        return GetSceneRenderTarget(m_renderTargets, hash);
+        return m_sceneRenderer.GetRenderTarget(hash);
     }
 
     Image *RendererSystem::GetDepthStencilTarget(const std::string &name)
     {
-        return GetSceneRenderTarget(m_depthStencilTargets, name);
+        return m_sceneRenderer.GetDepthStencilTarget(name);
     }
 
     Image *RendererSystem::GetDepthStencilTarget(size_t hash)
     {
-        return GetSceneRenderTarget(m_depthStencilTargets, hash);
+        return m_sceneRenderer.GetDepthStencilTarget(hash);
     }
 
     Image *RendererSystem::CreateFSSampledImage(bool useRenderTergetScale)
     {
-        return CreateSceneFSSampledImage("FSSampledImage", useRenderTergetScale);
-    }
-
-    void RendererSystem::CreateRenderTargets()
-    {
-        const SceneRenderTargets targets = CreateDefaultSceneRenderTargets(m_renderTargets, m_depthStencilTargets);
-        m_depthStencil = targets.depthStencil;
-        m_viewportRT = targets.viewport;
-        m_displayRT = targets.display;
-        m_screenshotRT = targets.screenshot;
+        return m_sceneRenderer.CreateFSSampledImage("FSSampledImage", useRenderTergetScale);
     }
 
     void RendererSystem::Resize(uint32_t width, uint32_t height)
@@ -438,18 +389,13 @@ namespace pe
         Surface *surface = RHII.GetSurface();
         RHII.CreateSwapchain(surface);
 
-        CreateRenderTargets();
+        m_sceneRenderer.CreateRenderTargets();
 
-        ResizeSceneRenderGraphPassComponents(m_renderPassComponents, width, height);
-    }
-
-    void RendererSystem::BlitToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex)
-    {
-        BlitSceneImageToSwapchain(cmd, src, imageIndex);
+        m_sceneRenderer.ResizeRenderPassComponents(width, height);
     }
 
     void RendererSystem::PollShaders(std::optional<size_t> hash)
     {
-        ReloadRenderPassShaders(m_renderPassComponents, hash);
+        m_sceneRenderer.PollShaders(hash);
     }
 } // namespace pe
