@@ -1389,7 +1389,7 @@ namespace
         ImGui::SetNextItemWidth(kSceneComboWidth);
         ImGui::InputText("##project_path", projectBuffer, sizeof(projectBuffer), ImGuiInputTextFlags_ReadOnly);
         ImGui::SameLine();
-        if (ImGui::Button("Open", ImVec2(110.0f, 0.0f)))
+        if (ImGui::Button("Open##project", ImVec2(110.0f, 0.0f)))
         {
             std::string selectedPath;
             std::string browseError;
@@ -1424,7 +1424,7 @@ namespace
             ImGui::EndCombo();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Open", ImVec2(110.0f, 0.0f)))
+        if (ImGui::Button("Open##startup_scene", ImVec2(110.0f, 0.0f)))
         {
             std::string selectedPath;
             std::string browseError;
