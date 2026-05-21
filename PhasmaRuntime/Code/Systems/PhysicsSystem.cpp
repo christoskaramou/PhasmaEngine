@@ -31,10 +31,12 @@
 #include <Jolt/Core/Factory.h>
 #include <Jolt/Core/JobSystemThreadPool.h>
 #include <Jolt/Core/TempAllocator.h>
+#include <Jolt/Physics/Body/Body.h>
 #include <Jolt/Physics/Body/BodyActivationListener.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Collision/ContactListener.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
@@ -75,6 +77,14 @@ namespace pe
                     return false;
             }
             return true;
+        }
+
+        bool IsLivePhysicsState(const PhysicsNodeState &state, const Scene &scene)
+        {
+            return state.nodeId &&
+                   scene.IsNodeAlive(state.nodeId) &&
+                   state.nodeId->revision == state.nodeRevision &&
+                   (scene.GetComponentFlags(state.nodeId) & Component_Physics) != 0;
         }
     } // namespace
 
@@ -156,6 +166,31 @@ namespace pe
     static ObjectVsBroadPhaseFilter s_objVsBpFilter;
     static ObjectLayerPairFilter s_objLayerPairFilter;
 
+    class TriggerContactListener final : public JPH::ContactListener
+    {
+    public:
+        explicit TriggerContactListener(PhysicsSystem &owner) : m_owner(owner) {}
+
+        void OnContactAdded(const JPH::Body &body1, const JPH::Body &body2,
+                            const JPH::ContactManifold &, JPH::ContactSettings &) override
+        {
+            if (!body1.IsSensor() && !body2.IsSensor())
+                return;
+
+            m_owner.QueueTriggerContact(body1.GetID().GetIndexAndSequenceNumber(),
+                                        body2.GetID().GetIndexAndSequenceNumber(), true);
+        }
+
+        void OnContactRemoved(const JPH::SubShapeIDPair &subShapePair) override
+        {
+            m_owner.QueueTriggerContact(subShapePair.GetBody1ID().GetIndexAndSequenceNumber(),
+                                        subShapePair.GetBody2ID().GetIndexAndSequenceNumber(), false);
+        }
+
+    private:
+        PhysicsSystem &m_owner;
+    };
+
     // --- PhysicsSystem implementation ---
 
     PhysicsSystem::~PhysicsSystem()
@@ -184,6 +219,8 @@ namespace pe
         m_joltSystem = new JPH::PhysicsSystem();
         m_joltSystem->Init(kMaxBodies, numBodyMutexes, kMaxBodyPairs, kMaxContactConstraints,
                            s_bpLayerInterface, s_objVsBpFilter, s_objLayerPairFilter);
+        m_contactListener = new TriggerContactListener(*this);
+        m_joltSystem->SetContactListener(m_contactListener);
 
         m_joltSystem->SetGravity(JPH::Vec3(0.0f, -9.81f, 0.0f));
 
@@ -232,6 +269,7 @@ namespace pe
         {
             PE_PROFILE_SCOPE("Physics Sync Transforms");
             SyncTransformsFromJolt(*scene);
+            DrainTriggerContacts(*scene);
         }
     }
 
@@ -244,6 +282,9 @@ namespace pe
 
         StopSimulation();
         ClearAllBodies();
+        m_joltSystem->SetContactListener(nullptr);
+        delete m_contactListener;
+        m_contactListener = nullptr;
         delete m_joltSystem;
         m_joltSystem = nullptr;
         delete m_jobSystem;
@@ -369,6 +410,8 @@ namespace pe
         {
             m_bodies[idx] = std::move(m_bodies.back());
             m_nodeToIndex[m_bodies[idx].nodeId] = idx;
+            if (m_bodies[idx].inWorld)
+                m_bodyIdToIndex[m_bodies[idx].joltBodyIdRaw] = idx;
         }
         m_bodies.pop_back();
         m_nodeToIndex.erase(it);
@@ -414,6 +457,8 @@ namespace pe
         }
         m_bodies.clear();
         m_nodeToIndex.clear();
+        m_bodyIdToIndex.clear();
+        ClearTriggerContactState();
     }
 
     void PhysicsSystem::InvalidateShapeCache(NodeId *node)
@@ -550,6 +595,40 @@ namespace pe
         return true;
     }
 
+    void PhysicsSystem::SetTriggerEnterCallback(NodeId *node, PhysicsTriggerCallback callback)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
+            return;
+        m_bodies[it->second].triggerEnterCallback = std::move(callback);
+    }
+
+    void PhysicsSystem::SetTriggerExitCallback(NodeId *node, PhysicsTriggerCallback callback)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
+            return;
+        m_bodies[it->second].triggerExitCallback = std::move(callback);
+    }
+
+    void PhysicsSystem::ClearTriggerCallbacks(NodeId *node)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
+            return;
+        m_bodies[it->second].triggerEnterCallback = nullptr;
+        m_bodies[it->second].triggerExitCallback = nullptr;
+    }
+
+    void PhysicsSystem::ClearAllTriggerCallbacks()
+    {
+        for (auto &state : m_bodies)
+        {
+            state.triggerEnterCallback = nullptr;
+            state.triggerExitCallback = nullptr;
+        }
+    }
+
     // --- Simulation control ---
 
     void PhysicsSystem::StartSimulation(Scene &scene)
@@ -588,7 +667,11 @@ namespace pe
         PE_PROFILE_SCOPE("Physics Stop Simulation");
 
         if (!m_simulating)
+        {
+            ClearAllTriggerCallbacks();
+            ClearTriggerContactState();
             return;
+        }
 
         PE_INFO("[Physics] StopSimulation: registeredBodies=%zu", m_bodies.size());
 
@@ -606,6 +689,8 @@ namespace pe
         m_simulating = false;
         m_paused = false;
         m_accumulator = 0.0f;
+        ClearAllTriggerCallbacks();
+        ClearTriggerContactState();
     }
 
     // --- Internal helpers ---
@@ -617,6 +702,8 @@ namespace pe
         if (m_bodies.empty())
         {
             m_nodeToIndex.clear();
+            m_bodyIdToIndex.clear();
+            ClearTriggerContactState();
             return;
         }
 
@@ -658,8 +745,13 @@ namespace pe
 
         m_bodies = std::move(kept);
         m_nodeToIndex.clear();
+        m_bodyIdToIndex.clear();
         for (size_t i = 0; i < m_bodies.size(); ++i)
+        {
             m_nodeToIndex[m_bodies[i].nodeId] = i;
+            if (m_bodies[i].inWorld)
+                m_bodyIdToIndex[m_bodies[i].joltBodyIdRaw] = i;
+        }
     }
 
     void PhysicsSystem::CreateJoltBody(PhysicsNodeState &state, Scene &scene)
@@ -831,6 +923,7 @@ namespace pe
 
         bodySettings.mFriction = desc.friction;
         bodySettings.mRestitution = desc.restitution;
+        bodySettings.mIsSensor = desc.isTrigger;
 
         // Store the node pointer as user data for reverse lookups
         bodySettings.mUserData = reinterpret_cast<uint64_t>(state.nodeId);
@@ -849,6 +942,7 @@ namespace pe
 
         state.joltBodyIdRaw = bodyId.GetIndexAndSequenceNumber();
         state.inWorld = true;
+        m_bodyIdToIndex[state.joltBodyIdRaw] = bodyIndex;
     }
 
     void PhysicsSystem::DestroyJoltBody(PhysicsNodeState &state, bool releaseShape)
@@ -857,9 +951,13 @@ namespace pe
             return;
 
         JPH::BodyID bodyId(state.joltBodyIdRaw);
+        const uint32_t bodyRaw = state.joltBodyIdRaw;
         JPH::BodyInterface &bi = m_joltSystem->GetBodyInterface();
         bi.RemoveBody(bodyId);
         bi.DestroyBody(bodyId);
+
+        m_bodyIdToIndex.erase(bodyRaw);
+        ClearTriggerContactStateForBody(bodyRaw);
 
         state.inWorld = false;
         state.joltBodyIdRaw = 0xFFFFFFFF;
@@ -868,6 +966,151 @@ namespace pe
         {
             state.cachedShape->Release();
             state.cachedShape = nullptr;
+        }
+    }
+
+    void PhysicsSystem::QueueTriggerContact(uint32_t body1Raw, uint32_t body2Raw, bool added)
+    {
+        if (body1Raw == 0xFFFFFFFF || body2Raw == 0xFFFFFFFF || body1Raw == body2Raw)
+            return;
+
+        std::lock_guard<std::mutex> lock(m_triggerContactMutex);
+        m_queuedTriggerContacts.push_back({body1Raw, body2Raw, added});
+    }
+
+    void PhysicsSystem::DrainTriggerContacts(Scene &scene)
+    {
+        struct ReadyTriggerCallback
+        {
+            PhysicsTriggerCallback callback;
+            NodeId *trigger = nullptr;
+            uint32_t triggerRevision = 0;
+            NodeId *other = nullptr;
+            uint32_t otherRevision = 0;
+        };
+
+        std::vector<QueuedTriggerContact> contacts;
+        {
+            std::lock_guard<std::mutex> lock(m_triggerContactMutex);
+            contacts.swap(m_queuedTriggerContacts);
+        }
+
+        if (contacts.empty())
+            return;
+
+        std::vector<ReadyTriggerCallback> readyCallbacks;
+
+        auto resolveBody = [this](uint32_t bodyRaw) -> PhysicsNodeState *
+        {
+            auto it = m_bodyIdToIndex.find(bodyRaw);
+            if (it == m_bodyIdToIndex.end() || it->second >= m_bodies.size())
+                return nullptr;
+            PhysicsNodeState &state = m_bodies[it->second];
+            if (!state.inWorld || state.joltBodyIdRaw != bodyRaw)
+                return nullptr;
+            return &state;
+        };
+
+        auto erasePairBothWays = [this](uint32_t body1Raw, uint32_t body2Raw)
+        {
+            m_activeTriggerPairs.erase({body1Raw, body2Raw});
+            m_activeTriggerPairs.erase({body2Raw, body1Raw});
+        };
+
+        auto handleAdded = [&](PhysicsNodeState &triggerState, PhysicsNodeState &otherState)
+        {
+            if (!triggerState.desc.isTrigger ||
+                !IsLivePhysicsState(triggerState, scene) ||
+                !IsLivePhysicsState(otherState, scene))
+                return;
+
+            TriggerPairKey key{triggerState.joltBodyIdRaw, otherState.joltBodyIdRaw};
+            if (!m_activeTriggerPairs.insert(key).second || !triggerState.triggerEnterCallback)
+                return;
+
+            readyCallbacks.push_back({triggerState.triggerEnterCallback, triggerState.nodeId,
+                                      triggerState.nodeRevision, otherState.nodeId, otherState.nodeRevision});
+        };
+
+        auto handleRemoved = [&](PhysicsNodeState &triggerState, PhysicsNodeState &otherState)
+        {
+            TriggerPairKey key{triggerState.joltBodyIdRaw, otherState.joltBodyIdRaw};
+            if (m_activeTriggerPairs.erase(key) == 0 ||
+                !IsLivePhysicsState(triggerState, scene) ||
+                !IsLivePhysicsState(otherState, scene) ||
+                !triggerState.triggerExitCallback)
+                return;
+
+            readyCallbacks.push_back({triggerState.triggerExitCallback, triggerState.nodeId,
+                                      triggerState.nodeRevision, otherState.nodeId, otherState.nodeRevision});
+        };
+
+        for (const QueuedTriggerContact &contact : contacts)
+        {
+            PhysicsNodeState *body1 = resolveBody(contact.body1Raw);
+            PhysicsNodeState *body2 = resolveBody(contact.body2Raw);
+            if (!body1 || !body2)
+            {
+                if (!contact.added)
+                    erasePairBothWays(contact.body1Raw, contact.body2Raw);
+                continue;
+            }
+
+            if (contact.added)
+            {
+                handleAdded(*body1, *body2);
+                handleAdded(*body2, *body1);
+            }
+            else
+            {
+                handleRemoved(*body1, *body2);
+                handleRemoved(*body2, *body1);
+            }
+        }
+
+        for (const ReadyTriggerCallback &ready : readyCallbacks)
+        {
+            if (!ready.callback ||
+                !ready.trigger ||
+                !ready.other ||
+                !scene.IsNodeAlive(ready.trigger) ||
+                !scene.IsNodeAlive(ready.other) ||
+                ready.trigger->revision != ready.triggerRevision ||
+                ready.other->revision != ready.otherRevision)
+                continue;
+
+            ready.callback(ready.trigger, ready.other);
+        }
+    }
+
+    void PhysicsSystem::ClearTriggerContactState()
+    {
+        {
+            std::lock_guard<std::mutex> lock(m_triggerContactMutex);
+            m_queuedTriggerContacts.clear();
+        }
+        m_activeTriggerPairs.clear();
+    }
+
+    void PhysicsSystem::ClearTriggerContactStateForBody(uint32_t bodyRaw)
+    {
+        {
+            std::lock_guard<std::mutex> lock(m_triggerContactMutex);
+            m_queuedTriggerContacts.erase(
+                std::remove_if(m_queuedTriggerContacts.begin(), m_queuedTriggerContacts.end(),
+                               [bodyRaw](const QueuedTriggerContact &contact)
+                               {
+                                   return contact.body1Raw == bodyRaw || contact.body2Raw == bodyRaw;
+                               }),
+                m_queuedTriggerContacts.end());
+        }
+
+        for (auto it = m_activeTriggerPairs.begin(); it != m_activeTriggerPairs.end();)
+        {
+            if (it->triggerBodyRaw == bodyRaw || it->otherBodyRaw == bodyRaw)
+                it = m_activeTriggerPairs.erase(it);
+            else
+                ++it;
         }
     }
 

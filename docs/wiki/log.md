@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-05-21
+
+- Added runtime Jolt trigger callbacks for small-game scripting. Physics bodies now support serialized `is_trigger` sensor state, the editor physics inspector exposes an Is Trigger checkbox, and runtime Lua can register `physics.on_trigger_enter` / `physics.on_trigger_exit` callbacks plus clear them. Jolt worker-thread contact callbacks only queue raw body ids; `PhysicsSystem` resolves live nodes, dedupes trigger enter/exit pairs, and clears callback/overlap state on play stop or body removal.
+
 ## 2026-05-20
 
 - Hardened editor undo/redo around whole-scene snapshot restore. `Scene::RestoreSnapshot` now validates snapshot shape, synchronizes with the host before mutation, clears editor selection for both fast and slow restore paths, returns success/failure to callers, bumps scene generation when geometry is rebuilt, and retires old `NodeId` allocations so stale editor pointers fail liveness checks instead of dangling. Undo/redo restores are now transactional, keep failed snapshots on the original stack, de-duplicate identical history states, and no longer suppress post-clear captures. Hierarchy menu creates, reparenting, sprite/mesh attachments, particle creation, and delete paths now record concrete undo snapshots only when a mutation will actually happen, with stale rename/script targets guarded against restore-time node invalidation.

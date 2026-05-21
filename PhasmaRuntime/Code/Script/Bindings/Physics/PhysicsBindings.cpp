@@ -2,12 +2,28 @@
 
 #include "Physics/PhysicsTypes.h"
 #include "Scene/SceneAccess.h"
+#include "Scene/Scene.h"
 #include "Scene/SceneNodeHandle.h"
 #include "Script/ScriptSystem.h"
 #include "Systems/PhysicsSystem.h"
 
 namespace pe
 {
+    static void CallLuaTriggerCallback(const sol::function &callback, NodeId *trigger, NodeId *other, const char *eventName)
+    {
+        Scene *scene = GetActiveScene();
+        if (!scene || !callback.valid() || !scene->IsNodeAlive(trigger) || !scene->IsNodeAlive(other))
+            return;
+
+        sol::protected_function protectedCallback(callback);
+        sol::protected_function_result result = protectedCallback(scene->MakeHandle(other), scene->MakeHandle(trigger));
+        if (!result.valid())
+        {
+            sol::error err = result;
+            Log::Error(PeFormat("[Lua] physics.%s callback error: %s", eventName, err.what()));
+        }
+    }
+
     static struct PhysicsBindings
     {
         PhysicsBindings()
@@ -49,6 +65,8 @@ namespace pe
                             desc.friction = p["friction"];
                         if (p["restitution"].valid())
                             desc.restitution = p["restitution"];
+                        if (p["is_trigger"].valid())
+                            desc.isTrigger = p["is_trigger"];
                     }
 
                     ps->AddBody(*scene, h.nodeId, desc);
@@ -58,6 +76,35 @@ namespace pe
                     auto *ps = GetGlobalSystem<PhysicsSystem>();
                     if (ps && h.nodeId)
                         ps->RemoveBody(h.nodeId);
+                });
+
+                physics.set_function("on_trigger_enter", [](SceneNodeHandle &h, sol::function callback) {
+                    auto *ps = GetGlobalSystem<PhysicsSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (!ps || !scene || !h.IsValid(*scene) || !callback.valid())
+                        return;
+
+                    ps->SetTriggerEnterCallback(h.nodeId, [callback = std::move(callback)](NodeId *trigger, NodeId *other) {
+                        CallLuaTriggerCallback(callback, trigger, other, "on_trigger_enter");
+                    });
+                });
+
+                physics.set_function("on_trigger_exit", [](SceneNodeHandle &h, sol::function callback) {
+                    auto *ps = GetGlobalSystem<PhysicsSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (!ps || !scene || !h.IsValid(*scene) || !callback.valid())
+                        return;
+
+                    ps->SetTriggerExitCallback(h.nodeId, [callback = std::move(callback)](NodeId *trigger, NodeId *other) {
+                        CallLuaTriggerCallback(callback, trigger, other, "on_trigger_exit");
+                    });
+                });
+
+                physics.set_function("clear_trigger_callbacks", [](SceneNodeHandle &h) {
+                    auto *ps = GetGlobalSystem<PhysicsSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (ps && scene && h.IsValid(*scene))
+                        ps->ClearTriggerCallbacks(h.nodeId);
                 });
 
                 physics.set_function("has_body", [](SceneNodeHandle &h) -> bool {

@@ -27,6 +27,8 @@ namespace pe
         if (ImGui::Combo("Body Type", &bodyType, bodyTypeNames, IM_ARRAYSIZE(bodyTypeNames)))
             desc->bodyType = static_cast<PhysicsBodyType>(bodyType);
 
+        ImGui::Checkbox("Is Trigger", &desc->isTrigger);
+
         bool shapeChanged = false;
         int shapeType = static_cast<int>(desc->shapeType);
         if (ImGui::Combo("Shape Type", &shapeType, shapeTypeNames, IM_ARRAYSIZE(shapeTypeNames)))

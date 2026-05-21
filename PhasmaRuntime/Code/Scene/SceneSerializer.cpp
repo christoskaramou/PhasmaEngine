@@ -823,6 +823,7 @@ namespace pe
                         phys.AddMember("friction", desc->friction, allocator);
                         phys.AddMember("restitution", desc->restitution, allocator);
                         phys.AddMember("auto_fit", desc->autoFitShape, allocator);
+                        phys.AddMember("is_trigger", desc->isTrigger, allocator);
                         rapidjson::Value halfExtents;
                         SetVec3(halfExtents, desc->boxHalfExtents);
                         phys.AddMember("box_half_extents", halfExtents.Move(), allocator);
@@ -1750,6 +1751,8 @@ namespace pe
                         desc.restitution = pv["restitution"].GetFloat();
                     if (pv.HasMember("auto_fit"))
                         desc.autoFitShape = pv["auto_fit"].GetBool();
+                    if (pv.HasMember("is_trigger"))
+                        desc.isTrigger = pv["is_trigger"].GetBool();
                     if (pv.HasMember("box_half_extents"))
                         desc.boxHalfExtents = ReadVec3(pv["box_half_extents"]);
                     if (pv.HasMember("sphere_radius"))
@@ -2419,6 +2422,8 @@ namespace pe
                             desc.restitution = pv["restitution"].GetFloat();
                         if (pv.HasMember("auto_fit"))
                             desc.autoFitShape = pv["auto_fit"].GetBool();
+                        if (pv.HasMember("is_trigger"))
+                            desc.isTrigger = pv["is_trigger"].GetBool();
                         if (pv.HasMember("box_half_extents"))
                             desc.boxHalfExtents = ReadVec3(pv["box_half_extents"]);
                         if (pv.HasMember("sphere_radius"))
@@ -2822,6 +2827,8 @@ namespace pe
                             desc.restitution = pv["restitution"].GetFloat();
                         if (pv.HasMember("auto_fit"))
                             desc.autoFitShape = pv["auto_fit"].GetBool();
+                        if (pv.HasMember("is_trigger"))
+                            desc.isTrigger = pv["is_trigger"].GetBool();
                         if (pv.HasMember("box_half_extents"))
                             desc.boxHalfExtents = ReadVec3(pv["box_half_extents"]);
                         if (pv.HasMember("sphere_radius"))

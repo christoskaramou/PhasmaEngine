@@ -29,5 +29,6 @@ namespace pe
         float capsuleHalfHeight = 0.5f;
         float capsuleRadius = 0.25f;
         bool autoFitShape = true;
+        bool isTrigger = false;
     };
 } // namespace pe
