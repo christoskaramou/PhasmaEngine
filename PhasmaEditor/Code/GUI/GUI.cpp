@@ -78,6 +78,38 @@ namespace pe
             return line;
         }
 
+        bool IsPortableRelativePath(const std::filesystem::path &path)
+        {
+            if (path.empty() || path.is_absolute())
+                return false;
+
+            auto it = path.begin();
+            return it == path.end() || *it != "..";
+        }
+
+        std::string MakePortableStartupScenePath(const std::filesystem::path &scenePath)
+        {
+            if (scenePath.empty())
+                return {};
+
+            std::error_code ec;
+            std::filesystem::path normalizedScene = std::filesystem::weakly_canonical(scenePath, ec);
+            if (ec)
+                normalizedScene = scenePath.lexically_normal();
+
+            ec.clear();
+            std::filesystem::path assetsRoot = std::filesystem::weakly_canonical(Path::Assets, ec);
+            if (ec)
+                assetsRoot = std::filesystem::path(Path::Assets).lexically_normal();
+
+            ec.clear();
+            const std::filesystem::path fromAssets = std::filesystem::relative(normalizedScene, assetsRoot, ec);
+            if (!ec && IsPortableRelativePath(fromAssets))
+                return (std::filesystem::path("Assets") / fromAssets).generic_string();
+
+            return scenePath.generic_string();
+        }
+
         std::string SlugifyEditorToken(const std::string &value)
         {
             std::string out;
@@ -1457,7 +1489,7 @@ namespace pe
             return;
 
         const auto &scenePath = rs->GetScene().GetScenePath();
-        const std::string startupScene = scenePath.empty() ? "" : scenePath.generic_string();
+        const std::string startupScene = MakePortableStartupScenePath(scenePath);
 
         // Keep editor restore and runtime/launcher startup selection in sync.
         std::string error;

@@ -37,6 +37,8 @@
 #endif
 #include "renderdoc_app.h"
 
+#include <atomic>
+
 #define PE_RENDER_DOC 0
 
 #if defined(WIN32) && PE_RENDER_DOC == 1
@@ -45,6 +47,11 @@
 
 namespace pe
 {
+    namespace
+    {
+        std::atomic_bool g_gpuTimingEnabled{false};
+    }
+
     static std::string DebugEnvFlagValue(const char *name)
     {
 #if defined(PE_WIN32)
@@ -672,8 +679,8 @@ namespace pe
         const bool isVulkan = RHII.GetApi() == PE_GRAPHICS_API_VULKAN;
 
         // The Vulkan debug-utils label is opt-in (extension may be absent and the
-        // pointer null on DX12). The timer machinery below must run regardless so
-        // GpuTimer samples populate on every backend.
+        // pointer null on DX12). GPU timestamp queries are separately gated by
+        // the profiler so a closed panel does not tax every command recording.
         if (isVulkan && vkCmdBeginDebugUtilsLabelEXT)
         {
             VkDebugUtilsLabelEXT label{};
@@ -686,6 +693,9 @@ namespace pe
             label.color[3] = color.w;
             vkCmdBeginDebugUtilsLabelEXT(GetVulkanCommandBuffer(cmd), &label);
         }
+
+        if (!IsGpuTimingEnabled())
+            return;
 
         if (cmd->m_gpuTimerInfos.size() < cmd->m_gpuTimerInfosCount + 1)
         {
@@ -740,6 +750,9 @@ namespace pe
         if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN && vkCmdEndDebugUtilsLabelEXT)
             vkCmdEndDebugUtilsLabelEXT(GetVulkanCommandBuffer(cmd));
 
+        if (cmd->m_gpuTimerIdsStack.empty())
+            return;
+
         cmd->m_gpuTimerInfos[cmd->m_gpuTimerIdsStack.top()].timer->End();
         cmd->m_gpuTimerIdsStack.pop();
 
@@ -762,5 +775,15 @@ namespace pe
 #else
         (void)cmd;
 #endif
+    }
+
+    void Debug::SetGpuTimingEnabled(bool enabled)
+    {
+        g_gpuTimingEnabled.store(enabled, std::memory_order_relaxed);
+    }
+
+    bool Debug::IsGpuTimingEnabled()
+    {
+        return g_gpuTimingEnabled.load(std::memory_order_relaxed);
     }
 } // namespace pe

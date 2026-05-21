@@ -2,6 +2,8 @@
 
 #include <sol/sol.hpp>
 #include <future>
+#include <string>
+#include <vector>
 #include "Scene/SceneNodeHandle.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneHost.h"
@@ -70,6 +72,21 @@ namespace pe
         sol::function updateEditModeFn;
         sol::function destroyFn;
         std::vector<ExposedVar> exposedVars;
+    };
+
+    enum class ScriptUpdateMode
+    {
+        Play,
+        Editor,
+        Always
+    };
+
+    struct RegisteredScriptUpdate
+    {
+        std::string id;
+        sol::function fn;
+        ScriptUpdateMode mode = ScriptUpdateMode::Play;
+        bool disabled = false;
     };
 
     // Per-node script instance — each node with Component_Script gets its own
@@ -143,6 +160,9 @@ namespace pe
         static std::vector<LuaBindingFunc> &GetBindings();
 
         void ProcessSceneLoads();
+        void RegisterUpdateCallback(const std::string &id, sol::function fn, const std::string &mode);
+        void UnregisterUpdateCallback(const std::string &id);
+        void RunRegisteredUpdateCallbacks();
 
         // Per-node script instance management
         void ReconcileNodeInstances();
@@ -153,6 +173,7 @@ namespace pe
         sol::state m_lua{};
         std::vector<ScriptEntry> m_scripts{};
         std::vector<NodeScriptInstance> m_nodeInstances{};
+        std::vector<RegisteredScriptUpdate> m_registeredUpdates{};
         std::vector<PendingAsyncLoad> m_pendingAsyncLoads;
         std::vector<PendingSceneLoad> m_pendingSceneLoads;
         bool m_initialized = false;

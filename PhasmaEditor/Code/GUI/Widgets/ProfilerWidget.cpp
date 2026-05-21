@@ -473,6 +473,7 @@ namespace pe
 
         // Always drain the GPU timer queue every frame to prevent buffer accumulation
         // and ensure the latest single-frame data is available for display.
+        Debug::SetGpuTimingEnabled(m_open && m_gpuTimingEnabled);
         auto latestGpuData = m_gui->PopGpuTimerInfos();
 
         // Refresh displayed data on a 250 ms interval.
@@ -930,6 +931,9 @@ namespace pe
     {
         // View selector + stats + filter (table mode only)
         static const char *viewNames[] = {"Table", "Timeline"};
+        if (ImGui::Checkbox("GPU timers", &m_gpuTimingEnabled))
+            Debug::SetGpuTimingEnabled(m_open && m_gpuTimingEnabled);
+        ImGui::SameLine();
         ImGui::SetNextItemWidth(110.f);
         ImGui::Combo("##gpuview", &m_gpuViewMode, viewNames, 2);
         ImGui::SameLine();

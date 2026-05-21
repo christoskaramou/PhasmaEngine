@@ -52,6 +52,8 @@ namespace pe
         static uint32_t GetNumCaptures(); // returns the total number of RenderDoc captures saved to disk since the app started
         static bool IsCaptureApiAvailable();
         static void CollectGpuTrace(CommandBuffer *cmd);
+        static void SetGpuTimingEnabled(bool enabled);
+        static bool IsGpuTimingEnabled();
 
     private:
         friend class CommandBuffer;
@@ -99,6 +101,8 @@ namespace pe
         static uint32_t GetNumCaptures() { return 0; }
         static bool IsCaptureApiAvailable() { return false; }
         static void CollectGpuTrace(CommandBuffer *cmd);
+        static void SetGpuTimingEnabled(bool) {}
+        static bool IsGpuTimingEnabled() { return false; }
 
     private:
         friend class CommandBuffer;

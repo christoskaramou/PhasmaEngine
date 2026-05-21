@@ -118,6 +118,7 @@ namespace pe
         float m_timelineZoom = 1.0f;
         float m_timelineZoomV = 1.0f;
         bool m_paused = false;
+        bool m_gpuTimingEnabled = false;
 
         // Capture flow
         bool m_waitingForCapture = false;

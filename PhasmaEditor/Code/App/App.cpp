@@ -352,12 +352,6 @@ namespace pe
         }
         const bool shouldRestoreHotReloadSnapshot = hasHotReloadSnapshot && !hotReloadSnapshot.empty();
 
-        // Call Lua init() after initial frames. For hot-reload we defer this until after
-        // startup scene loading and snapshot restore so init runs against the current scene.
-        if (!shouldRestoreHotReloadSnapshot)
-            if (auto *ss = GetGlobalSystem<ScriptSystem>())
-                ss->CallInit();
-
         // Restore hot-reload state after the warm-up frames but before normal Run().
         if (shouldRestoreHotReloadSnapshot)
         {
@@ -384,6 +378,12 @@ namespace pe
         }
 
         GetGlobalSystem<RendererSystem>()->GetGUI().ApplyStartupLayout(!shouldRestoreHotReloadSnapshot, startupScene);
+
+        // Call Lua init() after startup scene loading so script-built editor
+        // scenes are not cleared by the saved startup scene.
+        if (!shouldRestoreHotReloadSnapshot)
+            if (auto *ss = GetGlobalSystem<ScriptSystem>())
+                ss->CallInit();
 
         if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN &&
             !usesWslDozenVulkan &&
@@ -566,10 +566,6 @@ namespace pe
         {
             PE_PROFILE_SCOPE("Update Systems");
             UpdateGlobalSystems();
-
-            if (HasGlobalSystem<ScriptSystem>())
-                if (auto *ss = GetGlobalSystem<ScriptSystem>())
-                    ss->Update();
         }
 
         if (runtimeUiFrameOpen)

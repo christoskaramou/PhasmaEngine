@@ -10,6 +10,8 @@
 #include "Base/FileWatcher.h"
 #include "Base/Timer.h"
 
+#include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <unordered_set>
 
@@ -133,6 +135,36 @@ namespace pe
         return false;
     }
 
+    static ScriptUpdateMode ParseScriptUpdateMode(std::string mode)
+    {
+        std::transform(mode.begin(), mode.end(), mode.begin(),
+                       [](unsigned char c)
+                       { return static_cast<char>(std::tolower(c)); });
+
+        if (mode == "editor" || mode == "edit")
+            return ScriptUpdateMode::Editor;
+        if (mode == "always" || mode == "all")
+            return ScriptUpdateMode::Always;
+        if (!mode.empty() && mode != "play")
+            PE_WARN("[Lua] script.on_update: unknown mode '%s', defaulting to play", mode.c_str());
+        return ScriptUpdateMode::Play;
+    }
+
+    static const char *ScriptUpdateModeName(ScriptUpdateMode mode)
+    {
+        switch (mode)
+        {
+        case ScriptUpdateMode::Play:
+            return "play";
+        case ScriptUpdateMode::Editor:
+            return "editor";
+        case ScriptUpdateMode::Always:
+            return "always";
+        default:
+            return "play";
+        }
+    }
+
     static sol::object MakeMeshBindingObject(sol::state_view lua, Scene &scene, NodeId *node)
     {
         int meshRef = scene.GetMeshRef(node);
@@ -216,6 +248,15 @@ namespace pe
             lua_rawset(L, -3);
             lua_pop(L, 1);
             return t; });
+
+        sol::table script = m_lua.create_named_table("script");
+        script.set_function("on_update",
+                            [this](const std::string &id, sol::function fn, sol::optional<std::string> mode)
+                            { RegisterUpdateCallback(id, std::move(fn), mode.value_or("play")); });
+        script.set_function("remove_update", [this](const std::string &id)
+                            { UnregisterUpdateCallback(id); });
+        script.set_function("clear_updates", [this]()
+                            { m_registeredUpdates.clear(); });
 
         // Execute all registered binding functions
         for (auto &fn : GetBindings())
@@ -605,6 +646,104 @@ namespace pe
         m_pendingSceneLoads.push_back(std::move(load));
     }
 
+    void ScriptSystem::RegisterUpdateCallback(const std::string &id, sol::function fn, const std::string &mode)
+    {
+        if (id.empty())
+        {
+            PE_WARN("[Lua] script.on_update requires a non-empty id");
+            return;
+        }
+        if (!fn.valid())
+        {
+            PE_WARN("[Lua] script.on_update('%s') requires a valid function", id.c_str());
+            return;
+        }
+
+        const ScriptUpdateMode parsedMode = ParseScriptUpdateMode(mode);
+        for (RegisteredScriptUpdate &registered : m_registeredUpdates)
+        {
+            if (registered.id == id)
+            {
+                registered.fn = std::move(fn);
+                registered.mode = parsedMode;
+                registered.disabled = false;
+                return;
+            }
+        }
+
+        RegisteredScriptUpdate registered{};
+        registered.id = id;
+        registered.fn = std::move(fn);
+        registered.mode = parsedMode;
+        m_registeredUpdates.push_back(std::move(registered));
+    }
+
+    void ScriptSystem::UnregisterUpdateCallback(const std::string &id)
+    {
+        m_registeredUpdates.erase(
+            std::remove_if(m_registeredUpdates.begin(), m_registeredUpdates.end(),
+                           [&id](const RegisteredScriptUpdate &registered)
+                           { return registered.id == id; }),
+            m_registeredUpdates.end());
+    }
+
+    void ScriptSystem::RunRegisteredUpdateCallbacks()
+    {
+        const bool playMode = IsScriptPlayMode();
+        const bool paused = IsScriptPaused();
+
+        std::vector<std::string> callbackIds;
+        callbackIds.reserve(m_registeredUpdates.size());
+        for (const RegisteredScriptUpdate &registered : m_registeredUpdates)
+        {
+            if (registered.disabled || !registered.fn.valid())
+                continue;
+
+            callbackIds.push_back(registered.id);
+        }
+
+        for (const std::string &id : callbackIds)
+        {
+            auto it = std::find_if(m_registeredUpdates.begin(), m_registeredUpdates.end(),
+                                   [&id](const RegisteredScriptUpdate &registered)
+                                   { return registered.id == id; });
+            if (it == m_registeredUpdates.end() || it->disabled || !it->fn.valid())
+                continue;
+
+            const ScriptUpdateMode mode = it->mode;
+            sol::function fn = it->fn;
+
+            bool shouldRun = false;
+            switch (mode)
+            {
+            case ScriptUpdateMode::Always:
+                shouldRun = !playMode || !paused;
+                break;
+            case ScriptUpdateMode::Editor:
+                shouldRun = !playMode;
+                break;
+            case ScriptUpdateMode::Play:
+                shouldRun = playMode && !paused;
+                break;
+            }
+            if (!shouldRun)
+                continue;
+
+            auto result = CallProtected(fn);
+            if (!result.valid())
+            {
+                sol::error err = result;
+                Log::Error(PeFormat("[Lua] script.on_update('%s', mode='%s') error: %s",
+                                    id.c_str(), ScriptUpdateModeName(mode), err.what()));
+                auto disableIt = std::find_if(m_registeredUpdates.begin(), m_registeredUpdates.end(),
+                                              [&id](const RegisteredScriptUpdate &registered)
+                                              { return registered.id == id; });
+                if (disableIt != m_registeredUpdates.end())
+                    disableIt->disabled = true;
+            }
+        }
+    }
+
     void ScriptSystem::ProcessAsyncLoads()
     {
         struct CompletedLoad
@@ -785,6 +924,8 @@ namespace pe
             return HasNodeInstanceForPath(m_nodeInstances, s.path);
         };
 
+        RunRegisteredUpdateCallbacks();
+
         // update_editor() runs every frame when not in play mode,
         // so scripts can provide edit-mode behavior without entering play mode.
         if (!IsScriptPlayMode())
@@ -905,6 +1046,7 @@ namespace pe
         }
         m_pendingSceneLoads.clear();
 
+        m_registeredUpdates.clear();
         m_scripts.clear();
         m_lua = sol::state();
         m_initialized = false;
