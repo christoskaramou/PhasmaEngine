@@ -1,4 +1,5 @@
 -- camera_fly.lua
+-- phasma: editor-only
 -- Replaces C++ camera movement (Window::SmoothMouseRotation + WASD handling)
 -- Uses update_editor() so it runs every frame, not just in play mode
 

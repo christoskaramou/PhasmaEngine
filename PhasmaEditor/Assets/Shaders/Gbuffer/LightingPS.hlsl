@@ -17,8 +17,26 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
             discard;
 
         // Skybox
-        float3 wolrdPos  = GetPosFromUV(input.uv, depth, cb_invViewProj);
-        float3 samplePos = normalize(wolrdPos - cb_camPos.xyz);
+        float3 samplePos;
+        if (cb_orthographicCamera != 0)
+        {
+            float2 ndc = UvToNdc(input.uv);
+
+            float3 orthoCenter = GetPosFromUV(float2(0.5, 0.5), depth, cb_invViewProj);
+            float3 orthoRight  = GetPosFromUV(float2(1.0, 0.5), depth, cb_invViewProj) - orthoCenter;
+            float3 orthoUp     = GetPosFromUV(float2(0.5, 1.0), depth, cb_invViewProj) - orthoCenter;
+            float aspect       = length(orthoRight) / max(length(orthoUp), FLT_EPSILON);
+            float tanHalfFovY  = max(cb_skyboxTanHalfFovY, FLT_EPSILON);
+
+            samplePos = normalize(cb_camForward.xyz +
+                                  normalize(orthoRight) * ndc.x * aspect * tanHalfFovY +
+                                  normalize(orthoUp) * ndc.y * tanHalfFovY);
+        }
+        else
+        {
+            float3 wolrdPos = GetPosFromUV(input.uv, depth, cb_invViewProj);
+            samplePos       = normalize(wolrdPos - cb_camPos.xyz);
+        }
         output.color     = float4(Cube.Sample(sampler_Cube, samplePos).xyz, 1.0);
 
         return output;

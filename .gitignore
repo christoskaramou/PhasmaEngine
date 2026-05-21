@@ -11,6 +11,8 @@
 !/PhasmaLauncher/
 !/PhasmaRuntime/
 !/PhasmaWebGPU/
+!/Projects/
+!/Projects/**
 !/cmake/
 !/cmake/**
 !/CMakeLists.txt
@@ -318,6 +320,7 @@ imgui.ini
 # Agent runtime files
 PhasmaEditor/Assets/Temp/
 PhasmaEditor/Assets/Agent/
+Projects/*/Assets/Agent/
 
 # Agent instruction and wiki files
 !/INSTRUCTIONS.md

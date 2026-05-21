@@ -112,8 +112,8 @@ The ADK sidecar can be included in a broader validation routine through the
 repo-level script:
 
 ```powershell
-cd C:\Users\Christos\repos\PhasmaEngine
-C:\venvs\phasma-adk\Scripts\Activate.ps1
+cd <repo-root>
+.\tools\.venv\Scripts\Activate.ps1
 $env:OPENAI_API_KEY="..."
 $env:PHASMA_ADK_MODEL="openai/gpt-4o-mini"
 py -3 tools\precommit_validate.py --profile quick

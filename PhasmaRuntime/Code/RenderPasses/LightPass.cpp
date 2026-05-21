@@ -140,6 +140,8 @@ namespace pe
         m_ubo.lights_intensity = gSettings.lights_intensity;
         m_ubo.shadows = gSettings.shadows;
         m_ubo.use_Disney_PBR = gSettings.use_Disney_PBR;
+        m_ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;
+        m_ubo.skyboxTanHalfFovY = tan(camera->Fovy() * 0.5f);
 
         BufferRange range{};
         range.data = &m_ubo;
@@ -336,6 +338,8 @@ namespace pe
         m_ubo.lights_intensity = gSettings.lights_intensity;
         m_ubo.shadows = gSettings.shadows;
         m_ubo.use_Disney_PBR = gSettings.use_Disney_PBR;
+        m_ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;
+        m_ubo.skyboxTanHalfFovY = tan(camera->Fovy() * 0.5f);
 
         BufferRange range{};
         range.data = &m_ubo;

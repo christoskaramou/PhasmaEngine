@@ -361,7 +361,6 @@ namespace pe
                     MaterialInstance *inst = ensureInstance(s, mesh);
                     if (!inst) return;
                     if (prop == "base_color") inst->SetBaseColorFactor(value);
-                    s->SetTexturesDirty();
                     s->SetMaterialDirty();
                     s->MarkNodeDirty(nodeId);
                 };
@@ -373,7 +372,6 @@ namespace pe
                     if (!inst) return;
                     if (prop == "base_color") inst->SetBaseColorFactor(vec4(value, 1.f));
                     else if (prop == "emissive") inst->SetEmissiveFactor(value);
-                    s->SetTexturesDirty();
                     s->SetMaterialDirty();
                     s->MarkNodeDirty(nodeId);
                 };
@@ -393,7 +391,6 @@ namespace pe
                     else if (prop == "thickness_factor") inst->SetThicknessFactor(value);
                     else if (prop == "attenuation_distance") inst->SetAttenuationDistance(value);
                     else return;
-                    s->SetTexturesDirty();
                     s->SetMaterialDirty();
                     s->MarkNodeDirty(nodeId);
                 };

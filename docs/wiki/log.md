@@ -2,6 +2,9 @@
 
 ## 2026-05-21
 
+- Restored editor camera flight for the AgainstTheHero project by exposing the editor `fly_camera.lua` global script through the project assets. The fly-camera utility is now marked `phasma: editor-only`, so PhasmaPlayer skips it, and ATH edit-mode gameplay input ignores right-mouse viewport navigation so WASD camera movement does not place cards.
+- Fixed runtime Lua material dirtying so scalar/color `material.set` calls no longer mark texture descriptors dirty. AgainstTheHero's per-frame tint updates now use the material-dirty update path instead of forcing material-table reflection and temporary Gbuffer shader creation every frame. Added project `Fonts` and `Icons` symlinks so editor glyph/icon assets resolve under the AgainstTheHero asset root.
+- Fixed raster skybox sampling for orthographic cameras. `LightPass` now passes an orthographic-camera flag plus FOV scale to the Gbuffer lighting shader, which keeps the perspective inverse-view-projection path for perspective cameras and uses a virtual FOV-scaled sky ray for orthographic views. AgainstTheHero player smokes load the project, compile the updated shader, and capture the corrected ortho sky background.
 - Added runtime Jolt trigger callbacks for small-game scripting. Physics bodies now support serialized `is_trigger` sensor state, the editor physics inspector exposes an Is Trigger checkbox, and runtime Lua can register `physics.on_trigger_enter` / `physics.on_trigger_exit` callbacks plus clear them. Jolt worker-thread contact callbacks only queue raw body ids; `PhysicsSystem` resolves live nodes, dedupes trigger enter/exit pairs, and clears callback/overlap state on play stop or body removal.
 
 ## 2026-05-20

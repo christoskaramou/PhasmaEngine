@@ -12,11 +12,14 @@ The result is loaded by ShadowMappingTest.cpp at runtime.
 
 import json
 import math
+import os
 import struct
 import sys
 from pathlib import Path
 
-SRC = Path(r"C:/Users/Christos/repos/webgpu-samples/meshes/stanfordDragonData.ts")
+REPO_ROOT = Path(__file__).resolve().parents[4]
+WEBGPU_SAMPLES_DIR = Path(os.environ.get("WEBGPU_SAMPLES_DIR", REPO_ROOT.parent / "webgpu-samples"))
+SRC = Path(os.environ.get("STANFORD_DRAGON_TS", WEBGPU_SAMPLES_DIR / "meshes" / "stanfordDragonData.ts"))
 OUT = Path(__file__).resolve().parents[1] / "Assets" / "stanfordDragon.bin"
 
 

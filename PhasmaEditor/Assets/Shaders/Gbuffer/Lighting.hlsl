@@ -40,6 +40,11 @@ TexSamplerDecl(6, 0, Emission)
     float       cb_lightsIntensity;
     uint        cb_shadows;
     uint        cb_use_Disney_PBR;
+    uint        cb_orthographicCamera;
+    float       cb_skyboxTanHalfFovY;
+    float       cb_lightPassPad0;
+    float       cb_lightPassPad1;
+    float       cb_lightPassPad2;
 };
 TexSamplerDecl(8, 0, Transparency)
 TexSamplerDecl(9, 0, LutIBL)
