@@ -127,7 +127,7 @@ namespace pe
         for (size_t i = 0; i < m_passes.size(); i++)
         {
             auto &pass = m_passes[i];
-            if (!pass.component)
+            if (!pass.component || !pass.condition())
                 continue;
 
             m_builderScratch.Reset();

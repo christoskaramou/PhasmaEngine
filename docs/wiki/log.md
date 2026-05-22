@@ -5,6 +5,7 @@
 - Fixed editor startup ordering so saved startup scenes load before Lua `init()` runs. This keeps script-built project scenes such as AgainstTheHero visible in the editor instead of creating runtime nodes and then clearing them by loading the empty saved scene.
 - Matched orthographic camera projection depth to the engine's reverse-Z depth state by swapping the near/far inputs to the GLM ortho matrix. Perspective was already infinite reverse-Z, so orthographic cameras now share the same near-to-1, far-to-0 convention.
 - Reduced shader/file-watcher startup log noise: source shader creation now logs only actual shader-cache misses as `Compile(hlsl)`, and `FileWatcher::Add` no longer emits Info-level registration spam for every watched asset.
+- Made RenderGraph compile-time dependency diagnostics skip passes that are disabled by the current pass-state condition, avoiding false warnings such as ATH's disabled `Sharpen` pass reading `TAA_Resolved` when TAA/CAS are off.
 
 ## 2026-05-21
 
