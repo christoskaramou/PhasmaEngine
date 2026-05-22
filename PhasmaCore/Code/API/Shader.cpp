@@ -86,12 +86,12 @@ namespace pe
         }
     } // namespace
 
-    Shader::Impl *CreateShaderImpl(Shader *owner, const ShaderDesc &desc)
+    Shader::Impl *CreateShaderImpl(Shader *owner, const ShaderDesc &desc, bool needsCompile)
     {
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
         {
 #if defined(PE_WIN32)
-            if (owner->GetCache().ShaderNeedsCompile())
+            if (needsCompile)
                 return new Dx12ShaderImpl(owner, desc);
 
             std::vector<uint8_t> cached = owner->GetCache().ReadBytecodeFile();
@@ -102,7 +102,7 @@ namespace pe
 #endif
         }
 
-        if (owner->GetCache().ShaderNeedsCompile())
+        if (needsCompile)
             return new VulkanShaderImpl(owner, desc);
 
         std::vector<uint32_t> cached = owner->GetCache().ReadSpvFile();
@@ -134,8 +134,6 @@ namespace pe
                              { EventSystem::PushEvent(EventType::CompileShaders, fileEvent); });
         }
         shader->m_pathID = StringHash(path);
-        PE_INFO("[Shader] Init(hlsl) -> source='%s' | path='%s' | hash=%llu",
-                desc.sourcePath.c_str(), path.c_str(), static_cast<unsigned long long>(shader->m_pathID));
 
         Hash definesHash;
         for (const Define &def : m_globalDefines)
@@ -151,8 +149,14 @@ namespace pe
         definesHash.Combine(static_cast<uint32_t>(desc.stage));
 
         shader->m_cache.Init(path, shader->m_entryName, definesHash);
+        const bool needsCompile = shader->m_cache.ShaderNeedsCompile();
+        if (needsCompile)
+        {
+            PE_INFO("[Shader] Compile(hlsl) -> source='%s' | path='%s' | hash=%llu",
+                    desc.sourcePath.c_str(), path.c_str(), static_cast<unsigned long long>(shader->m_pathID));
+        }
 
-        shader->m_impl = CreateShaderImpl(shader, desc);
+        shader->m_impl = CreateShaderImpl(shader, desc, needsCompile);
         shader->m_reflection.Init(shader);
 
         TrackedShaders().push_back(shader);

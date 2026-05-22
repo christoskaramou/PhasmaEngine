@@ -11,11 +11,13 @@ namespace pe
         std::string filePath = std::filesystem::weakly_canonical(file, ec).generic_string();
 
         StringHash hash(filePath);
-        PE_INFO("[FW] Add -> file='%s' | filePath='%s' | hash=%llu", file.c_str(), filePath.c_str(), static_cast<unsigned long long>(hash));
         if (FileWatcher::Get(hash))
             return;
 
         std::lock_guard<std::mutex> guard(s_mutex);
+        if (s_watchers.find(hash) != s_watchers.end())
+            return;
+
         EventSystem::RegisterEvent(static_cast<size_t>(hash));
         s_watchers[hash] = new FileWatcher(filePath, std::forward<Func>(callback));
     }
