@@ -1158,26 +1158,84 @@ namespace
                          std::string &error)
     {
 #if defined(PE_WIN32)
-        BROWSEINFOA browseInfo{};
-        browseInfo.hwndOwner = GetNativeWindowHandle(owner);
-        browseInfo.lpszTitle = "Select project root or assets folder";
-        browseInfo.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+        // Use the modern Vista+ IFileDialog picker (Explorer-style with sidebar,
+        // path bar, type-to-search) instead of the legacy SHBrowseForFolder tree.
+        const HRESULT comInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        const bool comOwned = SUCCEEDED(comInit) && comInit != S_FALSE;
 
-        LPITEMIDLIST itemId = SHBrowseForFolderA(&browseInfo);
-        if (!itemId)
-            return false;
-
-        char path[MAX_PATH] = {};
-        const BOOL ok = SHGetPathFromIDListA(itemId, path);
-        CoTaskMemFree(itemId);
-        if (!ok)
+        IFileDialog *dialog = nullptr;
+        HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog,
+                                      nullptr,
+                                      CLSCTX_INPROC_SERVER,
+                                      IID_PPV_ARGS(&dialog));
+        if (FAILED(hr) || !dialog)
         {
-            error = "Project browse failed";
+            if (comOwned)
+                CoUninitialize();
+            error = "Project browse failed: could not create file dialog";
             return false;
         }
 
-        selectedPath = path;
-        return true;
+        DWORD options = 0;
+        dialog->GetOptions(&options);
+        dialog->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST | FOS_NOCHANGEDIR);
+        dialog->SetTitle(L"Select project root or assets folder");
+
+        // Seed the dialog at the current project path so the user lands where they expect.
+        if (!currentProjectPath.empty())
+        {
+            std::filesystem::path initial = std::filesystem::absolute(currentProjectPath);
+            std::error_code ec;
+            if (!std::filesystem::is_directory(initial, ec))
+                initial = initial.parent_path();
+            const std::wstring initialW = initial.wstring();
+            if (!initialW.empty())
+            {
+                IShellItem *folder = nullptr;
+                if (SUCCEEDED(SHCreateItemFromParsingName(initialW.c_str(), nullptr, IID_PPV_ARGS(&folder))) && folder)
+                {
+                    dialog->SetFolder(folder);
+                    folder->Release();
+                }
+            }
+        }
+
+        hr = dialog->Show(GetNativeWindowHandle(owner));
+        if (FAILED(hr))
+        {
+            // HRESULT_FROM_WIN32(ERROR_CANCELLED) is the normal "user closed it" path.
+            dialog->Release();
+            if (comOwned)
+                CoUninitialize();
+            return false;
+        }
+
+        IShellItem *result = nullptr;
+        bool ok = false;
+        if (SUCCEEDED(dialog->GetResult(&result)) && result)
+        {
+            PWSTR pathW = nullptr;
+            if (SUCCEEDED(result->GetDisplayName(SIGDN_FILESYSPATH, &pathW)) && pathW)
+            {
+                const int needed = WideCharToMultiByte(CP_UTF8, 0, pathW, -1, nullptr, 0, nullptr, nullptr);
+                if (needed > 1)
+                {
+                    selectedPath.assign(static_cast<size_t>(needed - 1), '\0');
+                    WideCharToMultiByte(CP_UTF8, 0, pathW, -1, selectedPath.data(), needed, nullptr, nullptr);
+                    ok = !selectedPath.empty();
+                }
+                CoTaskMemFree(pathW);
+            }
+            result->Release();
+        }
+
+        dialog->Release();
+        if (comOwned)
+            CoUninitialize();
+
+        if (!ok)
+            error = "Project browse failed";
+        return ok;
 #else
         (void)owner;
         int pipeFd[2] = {-1, -1};
