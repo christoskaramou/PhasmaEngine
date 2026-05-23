@@ -2,6 +2,7 @@
 #include "Script/ScriptRuntimeHooks.h"
 #include "Base/EventSystem.h"
 #include "Base/Timer.h"
+#include "API/RHI.h"
 
 namespace pe
 {
@@ -48,6 +49,19 @@ namespace pe
 
                 engine.set_function("take_screenshot", [](sol::optional<std::string> filename) {
                     EventSystem::PushEvent(EventType::Screenshot, filename.value_or(""));
+                });
+
+                engine.set_function("get_window_size", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
+                    sol::table t = lua.create_table();
+                    int w = 0;
+                    int h = 0;
+                    SDL_Window *window = RHII.GetWindow();
+                    if (window)
+                        SDL_GetWindowSize(window, &w, &h);
+                    t["w"] = w;
+                    t["h"] = h;
+                    return t;
                 }); });
         }
     } s_runtimeEngineBindings;
