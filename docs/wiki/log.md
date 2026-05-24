@@ -1,5 +1,10 @@
 # PhasmaEngine Wiki Log
 
+## 2026-05-24
+
+- Made scene skybox assets optional for the shared renderer path. `SkyBox` loaders now report failure instead of hard-failing on missing or invalid images, and `SceneSky` falls back to a tiny solid-color cubemap for day/night sky so raster lighting, IBL, transmission fallback sampling, and ray tracing descriptors still have a valid environment resource.
+- Moved editor skybox selection out of Global settings and into a `Skybox` hierarchy node with day/night path controls in Properties. The node serializes its skybox paths into `.pescene`, while global settings remain a compatibility mirror for the shared renderer path; clearing either path intentionally uses the solid-color fallback.
+
 ## 2026-05-22
 
 - Fixed editor startup ordering so saved startup scenes load before Lua `init()` runs. This keeps script-built project scenes such as AgainstTheHero visible in the editor instead of creating runtime nodes and then clearing them by loading the empty saved scene.

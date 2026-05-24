@@ -100,6 +100,10 @@ namespace pe
         float lights_intensity = 1.0f;
         bool randomize_lights = false;
         bool day = true;
+        static constexpr const char *DefaultSkyboxDayPath = "Skyboxes/golden_gate_hills/golden_gate_hills_4k.hdr";
+        static constexpr const char *DefaultSkyboxNightPath = "Skyboxes/rogland_clear_night/rogland_clear_night_4k.hdr";
+        std::string skybox_day_path = DefaultSkyboxDayPath;
+        std::string skybox_night_path = DefaultSkyboxNightPath;
         std::array<float, 3> depth_bias{0.0f, 0.0f, -6.2f};
         float time_scale = 1.f;
         std::vector<std::string> model_list{};

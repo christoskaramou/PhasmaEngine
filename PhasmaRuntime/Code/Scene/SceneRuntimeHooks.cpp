@@ -1,5 +1,6 @@
 #include "Scene/SceneRuntimeHooks.h"
 #include "ECS/Context.h"
+#include "Render/SceneRendererHost.h"
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/RayTracingPass.h"
 #include "Systems/AnimationSystem.h"
@@ -46,6 +47,15 @@ namespace pe
                 lightTransparent->UpdateDescriptorSets();
             if (auto *rayTracing = GetGlobalComponent<RayTracingPass>())
                 rayTracing->UpdateDescriptorSets();
+        }
+
+        void DefaultRefreshSceneSky()
+        {
+            if (auto *renderer = GetActiveSceneRendererHost())
+            {
+                renderer->ReloadSkyFromSettings();
+                DefaultRefreshSceneRenderDescriptors();
+            }
         }
 
 #ifdef PE_PHYSICS
@@ -151,6 +161,7 @@ namespace pe
         hooks.removeAnimation = DefaultRemoveSceneAnimation;
         hooks.playAnimation = DefaultPlaySceneAnimation;
         hooks.refreshRenderDescriptors = DefaultRefreshSceneRenderDescriptors;
+        hooks.refreshSceneSky = DefaultRefreshSceneSky;
 #ifdef PE_PHYSICS
         hooks.isPhysicsSimulating = DefaultIsScenePhysicsSimulating;
         hooks.stopPhysicsSimulation = DefaultStopScenePhysicsSimulation;
@@ -210,6 +221,12 @@ namespace pe
     {
         if (s_sceneRuntimeHooks.refreshRenderDescriptors)
             s_sceneRuntimeHooks.refreshRenderDescriptors();
+    }
+
+    void RefreshSceneSky()
+    {
+        if (s_sceneRuntimeHooks.refreshSceneSky)
+            s_sceneRuntimeHooks.refreshSceneSky();
     }
 
     bool IsScenePhysicsSimulating()

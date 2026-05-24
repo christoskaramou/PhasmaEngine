@@ -86,6 +86,18 @@ namespace pe
             if (handle.IsValid(scene))
                 selection.Select(handle.nodeId, SelectionType::Node);
         };
+        auto createSkybox = [&scene, &selection, &recordSnapshot]()
+        {
+            if (NodeId *existing = scene.GetSkyboxNode())
+            {
+                selection.Select(existing, SelectionType::Node);
+                return;
+            }
+
+            recordSnapshot("Added Skybox");
+            NodeId *node = scene.CreateSkyboxNode();
+            selection.Select(node, SelectionType::Node);
+        };
 
         // Add Button
         float buttonWidth = ImGui::GetContentRegionAvail().x * 0.8f;
@@ -160,6 +172,9 @@ namespace pe
                 NodeId *node = scene.CreateNode("Empty Node");
                 selection.Select(node, SelectionType::Node);
             }
+
+            if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
+                createSkybox();
 
             if (ImGui::MenuItem("2D Sprite"))
                 createSprite();
@@ -302,6 +317,8 @@ namespace pe
                 NodeId *node = scene.CreateNode("Empty Node");
                 selection.Select(node, SelectionType::Node);
             }
+            if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
+                createSkybox();
             if (ImGui::BeginMenu("Mesh"))
             {
                 auto AddPrim = [&](ModelAsset *m)
@@ -461,6 +478,8 @@ namespace pe
                     icon = ICON_FA_VIDEO;
                 else if (nodeCompFlags & Component_Light)
                     icon = ICON_FA_LIGHTBULB;
+                else if (nodeCompFlags & Component_Skybox)
+                    icon = ICON_FA_SUN;
                 else if (nodeCompFlags & Component_Sprite)
                     icon = ICON_FA_IMAGE;
                 else
@@ -598,7 +617,7 @@ namespace pe
                     ImGui::EndDragDropTarget();
                 }
 
-                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+                if (!(nodeCompFlags & Component_Skybox) && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
                 {
                     Camera *camera = scene.GetActiveCamera();
                     const AABB &bounds = scene.GetWorldAABB(node);
@@ -610,7 +629,7 @@ namespace pe
 
                 if (ImGui::BeginPopupContextItem())
                 {
-                    if (ImGui::MenuItem("Focus"))
+                    if (!(nodeCompFlags & Component_Skybox) && ImGui::MenuItem("Focus"))
                     {
                         selection.Select(node, SelectionType::Node);
                         Camera *camera = scene.GetActiveCamera();
@@ -972,6 +991,9 @@ namespace pe
                     NodeId *node = scene.CreateNode("Empty Node");
                     selection.Select(node, SelectionType::Node);
                 }
+
+                if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
+                    createSkybox();
 
                 if (ImGui::MenuItem("2D Sprite"))
                     createSprite();

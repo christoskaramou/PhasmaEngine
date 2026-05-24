@@ -198,6 +198,12 @@ namespace pe
                                  const vec2 &size = vec2(1.0f),
                                  RenderType renderType = RenderType::AlphaCut,
                                  const vec4 &tint = vec4(1.0f));
+        NodeId *CreateSkyboxNode(NodeId *parent = nullptr, bool markDirty = true);
+        NodeId *GetSkyboxNode() const;
+        NodeSkyboxTag *GetSkyboxForNode(const NodeId *node) const;
+        void SetSkyboxPaths(NodeId *node, std::string dayPath, std::string nightPath, bool markDirty = true);
+        void ApplySkyboxSettingsFromNode(NodeId *node = nullptr);
+        void EnsureSkyboxNodeFromSettings(bool markDirty = false);
         void SetSpriteSize(NodeId *node, const vec2 &size);
         void SetSpriteCoordinateSpace(NodeId *node, SpriteCoordinateSpace space);
         void SetSpriteNdcTransform(NodeId *node, const vec2 &position, const vec2 &size, float depth = 1.0f, float rotation = 0.0f);
@@ -368,6 +374,8 @@ namespace pe
                 flags |= Component_Audio;
             if (c.sprite)
                 flags |= Component_Sprite;
+            if (c.skybox)
+                flags |= Component_Skybox;
             if (m_nodeRuntime[idx].gpuPending)
                 flags |= Component_GpuPending;
             return flags;

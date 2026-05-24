@@ -10,13 +10,64 @@
 
 namespace pe
 {
-    void SkyBox::LoadSkyBox(CommandBuffer *cmd, const std::array<std::string, 6> &textureNames)
+    namespace
     {
-        int texWidth, texHeight, texChannels;
-        // Load the first image to get dimensions
-        stbi_uc *pixels = stbi_load(textureNames[0].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-        PE_ERROR_IF(!pixels, "No pixel data loaded");
-        stbi_image_free(pixels);
+        Sampler *CreateSkyboxSampler(const std::string &name)
+        {
+            SamplerDesc samplerInfo = Sampler::CreateInfoInit();
+            samplerInfo.addressModeU = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            samplerInfo.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            samplerInfo.addressModeW = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            return Sampler::Create(samplerInfo, name);
+        }
+
+        void TransitionSkyboxToShaderRead(CommandBuffer *cmd, Image *image)
+        {
+            ImageBarrierInfo barrier{};
+            barrier.image = image;
+            barrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier.stageFlags = PE_STAGE_FRAGMENT_SHADER | PE_STAGE_RAY_TRACING_SHADER_KHR;
+            barrier.accessMask = PE_ACCESS_SHADER_READ;
+            barrier.mipLevels = image->GetMipLevels();
+            cmd->ImageBarrier(barrier);
+        }
+    } // namespace
+
+    bool SkyBox::LoadSkyBox(CommandBuffer *cmd, const std::array<std::string, 6> &textureNames)
+    {
+        int texWidth = 0;
+        int texHeight = 0;
+        std::array<stbi_uc *, 6> pixels{};
+
+        for (uint32_t i = 0; i < static_cast<uint32_t>(pixels.size()); ++i)
+        {
+            int faceWidth = 0;
+            int faceHeight = 0;
+            int faceChannels = 0;
+            pixels[i] = stbi_load(textureNames[i].c_str(), &faceWidth, &faceHeight, &faceChannels, STBI_rgb_alpha);
+            if (!pixels[i])
+            {
+                PE_WARN("[SkyBox] Failed to load cubemap face: %s", textureNames[i].c_str());
+                for (auto *loadedPixels : pixels)
+                    stbi_image_free(loadedPixels);
+                return false;
+            }
+
+            if (i == 0)
+            {
+                texWidth = faceWidth;
+                texHeight = faceHeight;
+            }
+            else if (faceWidth != texWidth || faceHeight != texHeight)
+            {
+                PE_WARN("[SkyBox] Cubemap face dimensions do not match: %s", textureNames[i].c_str());
+                for (auto *loadedPixels : pixels)
+                    stbi_image_free(loadedPixels);
+                return false;
+            }
+        }
+
+        Destroy();
 
         ImageDesc desc{};
         desc.cubeCompatible = true;
@@ -29,38 +80,39 @@ namespace pe
         m_cubeMap = Image::Create(desc);
 
         m_cubeMap->CreateSRV(PE_IMAGE_VIEW_TYPE_CUBE);
-
-        SamplerDesc samplerInfo = Sampler::CreateInfoInit();
-        samplerInfo.addressModeU = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        m_cubeMap->SetSampler(Sampler::Create(samplerInfo));
+        m_cubeMap->SetSampler(CreateSkyboxSampler("Skybox_Legacy_Sampler"));
 
         for (uint32_t i = 0; i < m_cubeMap->GetArrayLayers(); ++i)
         {
-            pixels = stbi_load(textureNames[i].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-            PE_ERROR_IF(!pixels, "No pixel data loaded");
-
             size_t size = static_cast<size_t>(texWidth) * static_cast<size_t>(texHeight) * STBI_rgb_alpha;
-            cmd->CopyDataToImageStaged(m_cubeMap, pixels, size, i, 1);
-            cmd->AddAfterWaitCallback([pixels]()
-                                      { stbi_image_free(pixels); });
+            cmd->CopyDataToImageStaged(m_cubeMap, pixels[i], size, i, 1);
+            cmd->AddAfterWaitCallback([facePixels = pixels[i]]()
+                                      { stbi_image_free(facePixels); });
         }
 
-        ImageBarrierInfo barrier{};
-        barrier.image = m_cubeMap;
-        barrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
-        barrier.accessMask = PE_ACCESS_SHADER_READ;
-        cmd->ImageBarrier(barrier);
+        TransitionSkyboxToShaderRead(cmd, m_cubeMap);
+        return true;
     }
 
-    void SkyBox::LoadSkyBox(CommandBuffer *cmd, const std::string &path)
+    bool SkyBox::LoadSkyBox(CommandBuffer *cmd, const std::string &path)
     {
         // 1. Load Equirectangular Image
         Image *equiImage = Image::LoadRGBA32F(cmd, path);
+        if (!equiImage)
+        {
+            PE_WARN("[SkyBox] Failed to load skybox: %s", path.c_str());
+            return false;
+        }
 
         uint32_t cubemapSize = equiImage->GetWidth() / 4;
+        if (cubemapSize == 0)
+        {
+            PE_WARN("[SkyBox] Invalid skybox dimensions: %s", path.c_str());
+            Image::Destroy(equiImage);
+            return false;
+        }
+
+        Destroy();
 
         // 2. Create Cubemap
         ImageDesc desc{};
@@ -77,11 +129,7 @@ namespace pe
         m_cubeMap->CreateSRV(PE_IMAGE_VIEW_TYPE_CUBE);
         m_cubeMap->CreateUAV(PE_IMAGE_VIEW_TYPE_2D_ARRAY, 0);
 
-        SamplerDesc samplerInfo = Sampler::CreateInfoInit();
-        samplerInfo.addressModeU = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        m_cubeMap->SetSampler(Sampler::Create(samplerInfo));
+        m_cubeMap->SetSampler(CreateSkyboxSampler("Skybox_Converted_Sampler"));
 
         // 3. Setup Compute Pass
         PassInfo *passInfo = new PassInfo();
@@ -119,11 +167,7 @@ namespace pe
         cmd->GenerateMipMaps(m_cubeMap);
 
         // 8. Final Barrier
-        barrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
-        barrier.accessMask = PE_ACCESS_SHADER_READ;
-        barrier.mipLevels = m_cubeMap->GetMipLevels();
-        cmd->ImageBarrier(barrier);
+        TransitionSkyboxToShaderRead(cmd, m_cubeMap);
 
         // 9. Cleanup
         cmd->AddAfterWaitCallback([equiImage, passInfo]()
@@ -131,6 +175,31 @@ namespace pe
                                     Image *im = equiImage;
                                     Image::Destroy(im);
                                     delete passInfo; });
+        return true;
+    }
+
+    void SkyBox::LoadSolidColor(CommandBuffer *cmd, const vec4 &color, const std::string &name)
+    {
+        Destroy();
+
+        ImageDesc desc{};
+        desc.cubeCompatible = true;
+        desc.format = PE_FORMAT_R32G32B32A32_SFLOAT;
+        desc.width = 1;
+        desc.height = 1;
+        desc.arrayLayers = 6;
+        desc.usage = PE_IMAGE_USAGE_TRANSFER_DST | PE_IMAGE_USAGE_SAMPLED;
+        desc.name = name;
+        m_cubeMap = Image::Create(desc);
+
+        m_cubeMap->CreateSRV(PE_IMAGE_VIEW_TYPE_CUBE);
+        m_cubeMap->SetSampler(CreateSkyboxSampler(name + "_Sampler"));
+
+        std::array<float, 4> pixel = {color.x, color.y, color.z, color.w};
+        for (uint32_t i = 0; i < m_cubeMap->GetArrayLayers(); ++i)
+            cmd->CopyDataToImageStaged(m_cubeMap, pixel.data(), sizeof(float) * pixel.size(), i, 1);
+
+        TransitionSkyboxToShaderRead(cmd, m_cubeMap);
     }
 
     void SkyBox::Destroy()

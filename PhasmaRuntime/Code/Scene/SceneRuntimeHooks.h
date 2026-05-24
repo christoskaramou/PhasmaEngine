@@ -16,6 +16,7 @@ namespace pe
         void (*removeAnimation)(NodeId *node) = nullptr;
         void (*playAnimation)(Scene &scene, NodeId *node, int clipIndex, bool loop) = nullptr;
         void (*refreshRenderDescriptors)() = nullptr;
+        void (*refreshSceneSky)() = nullptr;
         bool (*isPhysicsSimulating)() = nullptr;
         void (*stopPhysicsSimulation)() = nullptr;
         void (*clearPhysicsBodies)() = nullptr;
@@ -40,6 +41,7 @@ namespace pe
     void RemoveSceneAnimation(NodeId *node);
     void PlaySceneAnimation(Scene &scene, NodeId *node, int clipIndex, bool loop);
     void RefreshSceneRenderDescriptors();
+    void RefreshSceneSky();
     [[nodiscard]] bool IsScenePhysicsSimulating();
     void StopScenePhysicsSimulation();
     void ClearScenePhysicsBodies();

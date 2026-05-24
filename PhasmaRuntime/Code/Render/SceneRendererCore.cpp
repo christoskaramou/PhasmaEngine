@@ -2,6 +2,8 @@
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Image.h"
+#include "API/Queue.h"
+#include "API/RHI.h"
 #include "Render/RenderPassShaderReload.h"
 #include "Render/SceneScreenshot.h"
 #include "Render/SceneSky.h"
@@ -87,6 +89,20 @@ namespace pe
     void SceneRendererCore::LoadSky(CommandBuffer *cmd)
     {
         LoadDefaultSceneSky(cmd, m_skyBoxDay, m_skyBoxNight, m_ibl_brdf_lut);
+    }
+
+    void SceneRendererCore::ReloadSkyFromSettings()
+    {
+        RHII.WaitDeviceIdle();
+
+        Queue *queue = RHII.GetMainQueue();
+        CommandBuffer *cmd = queue->AcquireCommandBuffer();
+        cmd->Begin();
+        LoadConfiguredSceneSkyboxes(cmd, m_skyBoxDay, m_skyBoxNight);
+        cmd->End();
+        queue->Submit(1, &cmd, nullptr, nullptr);
+        cmd->Wait();
+        cmd->Return();
     }
 
     void SceneRendererCore::DestroySky()

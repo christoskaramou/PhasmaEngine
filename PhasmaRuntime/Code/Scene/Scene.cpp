@@ -106,6 +106,7 @@ namespace pe
         m_nodeComponentCache[camNode->index].camera->camera = camera;
         camera->SetNodeId(camNode);
         m_cameras.push_back(camera);
+        EnsureSkyboxNodeFromSettings(false);
 
         uint32_t swapchainImageCount = RHII.GetSwapchainImageCount();
         m_storages.resize(swapchainImageCount, nullptr);

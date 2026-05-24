@@ -175,6 +175,13 @@ namespace pe
             c.audio = entity->CreateComponent<NodeAudioTag>();
         if ((flag & Component_Sprite) && !c.sprite)
             c.sprite = entity->CreateComponent<NodeSpriteTag>();
+        if ((flag & Component_Skybox) && !c.skybox)
+        {
+            c.skybox = entity->CreateComponent<NodeSkyboxTag>();
+            const auto &settings = Settings::Get<GlobalSettings>();
+            c.skybox->dayPath = settings.skybox_day_path;
+            c.skybox->nightPath = settings.skybox_night_path;
+        }
     }
 
     void Scene::RemoveComponentFlag(NodeId *node, uint32_t flag)
@@ -209,6 +216,12 @@ namespace pe
         {
             entity->RemoveComponent<NodeSpriteTag>();
             c.sprite = nullptr;
+        }
+        if ((flag & Component_Skybox) && c.skybox)
+        {
+            entity->RemoveComponent<NodeSkyboxTag>();
+            c.skybox = nullptr;
+            ApplySkyboxSettingsFromNode();
         }
     }
 
@@ -254,7 +267,7 @@ namespace pe
         auto *scriptComp = entity->CreateComponent<NodeScriptComponent>();
 
         m_nodeComponentCache.push_back({nameComp, hierarchyComp, transformComp, meshRefsComp, scriptComp,
-                                        nullptr, nullptr, nullptr, nullptr, nullptr});
+                                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr});
 
         m_nodesDirty = true;
 
@@ -348,6 +361,13 @@ namespace pe
             RemoveScenePhysicsBody(node);
         if (cache.audio)
             RemoveSceneAudioSource(node);
+        if (cache.skybox)
+        {
+            auto &settings = Settings::Get<GlobalSettings>();
+            settings.skybox_day_path.clear();
+            settings.skybox_night_path.clear();
+            RefreshSceneSky();
+        }
         RemoveSceneAnimation(node);
 
         NodeId *parent = cache.hierarchy->parent;
@@ -453,6 +473,8 @@ namespace pe
         m_instancesDirty = true;
         m_tlasDirty = true;
         m_dirty = true;
+        if (GetSkyboxNode())
+            ApplySkyboxSettingsFromNode();
     }
 
     bool Scene::IsNodeEnabled(const NodeId *node) const
@@ -482,6 +504,91 @@ namespace pe
     bool Scene::IsValidMeshIndex(int meshIndex) const
     {
         return meshIndex >= 0 && meshIndex < static_cast<int>(m_meshes.size()) && m_meshes[meshIndex].live;
+    }
+
+    NodeId *Scene::CreateSkyboxNode(NodeId *parent, bool markDirty)
+    {
+        if (NodeId *existing = GetSkyboxNode())
+            return existing;
+
+        NodeId *node = CreateNode("Skybox", parent);
+        AddComponentFlag(node, Component_Skybox);
+
+        const auto &settings = Settings::Get<GlobalSettings>();
+        SetSkyboxPaths(node, settings.skybox_day_path, settings.skybox_night_path, markDirty);
+        return node;
+    }
+
+    NodeId *Scene::GetSkyboxNode() const
+    {
+        for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
+            if (m_nodeComponentCache[i].skybox)
+                return m_nodeIds[i];
+        return nullptr;
+    }
+
+    NodeSkyboxTag *Scene::GetSkyboxForNode(const NodeId *node) const
+    {
+        if (!IsNodeAlive(node))
+            return nullptr;
+        return m_nodeComponentCache[node->index].skybox;
+    }
+
+    void Scene::SetSkyboxPaths(NodeId *node, std::string dayPath, std::string nightPath, bool markDirty)
+    {
+        if (!IsNodeAlive(node))
+            return;
+
+        if (!m_nodeComponentCache[node->index].skybox)
+            AddComponentFlag(node, Component_Skybox);
+
+        NodeSkyboxTag *skybox = m_nodeComponentCache[node->index].skybox;
+        if (!skybox)
+            return;
+
+        const bool changed = skybox->dayPath != dayPath || skybox->nightPath != nightPath;
+        skybox->dayPath = std::move(dayPath);
+        skybox->nightPath = std::move(nightPath);
+        ApplySkyboxSettingsFromNode(node);
+
+        if (changed && markDirty)
+            MarkDirty();
+    }
+
+    void Scene::ApplySkyboxSettingsFromNode(NodeId *node)
+    {
+        NodeId *skyboxNode = node ? node : GetSkyboxNode();
+        std::string dayPath;
+        std::string nightPath;
+
+        if (skyboxNode && IsNodeAlive(skyboxNode) && IsNodeHierarchyEnabled(skyboxNode))
+        {
+            if (NodeSkyboxTag *skybox = m_nodeComponentCache[skyboxNode->index].skybox)
+            {
+                dayPath = skybox->dayPath;
+                nightPath = skybox->nightPath;
+            }
+        }
+
+        auto &settings = Settings::Get<GlobalSettings>();
+        if (settings.skybox_day_path == dayPath && settings.skybox_night_path == nightPath)
+            return;
+
+        settings.skybox_day_path = std::move(dayPath);
+        settings.skybox_night_path = std::move(nightPath);
+        RefreshSceneSky();
+    }
+
+    void Scene::EnsureSkyboxNodeFromSettings(bool markDirty)
+    {
+        if (GetSkyboxNode())
+            return;
+
+        const auto &settings = Settings::Get<GlobalSettings>();
+        if (settings.skybox_day_path.empty() && settings.skybox_night_path.empty())
+            return;
+
+        CreateSkyboxNode(nullptr, markDirty);
     }
 
     void Scene::SetMeshRef(NodeId *node, int meshIndex)

@@ -57,6 +57,7 @@ namespace pe
         void BlitToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex);
 
         void LoadSky(CommandBuffer *cmd);
+        void ReloadSkyFromSettings();
         void DestroySky();
 
         void CreateRenderPassComponents(bool includeRayTracingPass, CommandBuffer *cmd);

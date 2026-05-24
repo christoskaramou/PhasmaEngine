@@ -1,10 +1,8 @@
 #include "Script/ScriptSystem.h"
-#include "Skybox/Skybox.h"
-#include "Render/SceneRendererHost.h"
+#include "Render/SceneSky.h"
+#include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
 #include "Scene/SceneRuntimeHooks.h"
-#include "API/RHI.h"
-#include "API/Queue.h"
-#include "API/Command.h"
 
 namespace pe
 {
@@ -17,9 +15,6 @@ namespace pe
                 sol::table skybox = lua.create_named_table("skybox");
 
                 skybox.set_function("load", [](const std::string &path, sol::optional<std::string> time) {
-                    SceneRendererHost *renderer = GetActiveSceneRendererHost();
-                    if (!renderer) return;
-
                     std::string fullPath = path;
                     if (path.find('/') == std::string::npos && path.find('\\') == std::string::npos)
                         fullPath = Path::Assets + "Skybox/" + path;
@@ -31,19 +26,38 @@ namespace pe
                     }
 
                     std::string t = time.value_or("day");
-                    Queue *queue = RHII.GetMainQueue();
-                    CommandBuffer *cmd = queue->AcquireCommandBuffer();
-                    cmd->Begin();
-                    SkyBox &sb = const_cast<SkyBox &>(t == "night" ? renderer->GetSkyBoxNight() : renderer->GetSkyBoxDay());
-                    sb.Destroy();
-                    sb.LoadSkyBox(cmd, fullPath);
-                    cmd->End();
-                    queue->Submit(1, &cmd, nullptr, nullptr);
-                    cmd->Wait();
-                    cmd->Return();
+                    const bool useDaySky = t != "night";
+                    const std::string normalizedPath = MakeSceneSkyPathSetting(fullPath);
+                    auto &settings = Settings::Get<GlobalSettings>();
+                    settings.day = useDaySky;
 
-                    Settings::Get<GlobalSettings>().day = (t == "day");
-                    RefreshSceneRenderDescriptors();
+                    if (Scene *scene = GetActiveScene())
+                    {
+                        NodeId *skyboxNode = scene->GetSkyboxNode();
+                        if (!skyboxNode)
+                            skyboxNode = scene->CreateSkyboxNode();
+
+                        if (skyboxNode)
+                        {
+                            std::string dayPath = settings.skybox_day_path;
+                            std::string nightPath = settings.skybox_night_path;
+                            if (auto *skybox = scene->GetSkyboxForNode(skyboxNode))
+                            {
+                                dayPath = skybox->dayPath;
+                                nightPath = skybox->nightPath;
+                            }
+                            if (useDaySky)
+                                dayPath = normalizedPath;
+                            else
+                                nightPath = normalizedPath;
+                            scene->SetSkyboxPaths(skyboxNode, std::move(dayPath), std::move(nightPath));
+                            return;
+                        }
+                    }
+
+                    std::string &skyboxPath = useDaySky ? settings.skybox_day_path : settings.skybox_night_path;
+                    skyboxPath = normalizedPath;
+                    RefreshSceneSky();
                 });
 
                 skybox.set_function("set_time", [](const std::string &time) {

@@ -81,6 +81,13 @@ namespace pe
         std::vector<int> animationFrames;
     };
 
+    class NodeSkyboxTag : public IComponent
+    {
+    public:
+        std::string dayPath;
+        std::string nightPath;
+    };
+
     struct NodeComponentCache
     {
         NodeNameComponent *name = nullptr;
@@ -93,5 +100,6 @@ namespace pe
         NodePhysicsTag *physics = nullptr;
         NodeAudioTag *audio = nullptr;
         NodeSpriteTag *sprite = nullptr;
+        NodeSkyboxTag *skybox = nullptr;
     };
 } // namespace pe

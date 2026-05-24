@@ -146,6 +146,8 @@ namespace pe
             settings.AddMember("lights_intensity", gSettings.lights_intensity, allocator);
             settings.AddMember("randomize_lights", gSettings.randomize_lights, allocator);
             settings.AddMember("day", gSettings.day, allocator);
+            settings.AddMember("skybox_day_path", rapidjson::Value(gSettings.skybox_day_path.c_str(), allocator), allocator);
+            settings.AddMember("skybox_night_path", rapidjson::Value(gSettings.skybox_night_path.c_str(), allocator), allocator);
 
             rapidjson::Value depthBias(rapidjson::kArrayType);
             depthBias.PushBack(gSettings.depth_bias[0], allocator);
@@ -169,6 +171,8 @@ namespace pe
         void ApplyGlobalSettingsMembers(const rapidjson::Value &settings)
         {
             auto &gSettings = Settings::Get<GlobalSettings>();
+            const std::string previousDaySkyboxPath = gSettings.skybox_day_path;
+            const std::string previousNightSkyboxPath = gSettings.skybox_night_path;
             if (settings.HasMember("right_handed") && settings["right_handed"].GetBool() != gSettings.right_handed)
             {
                 PE_WARN("[Scene] Ignoring saved right_handed=%s; this is fixed by the active runtime/backend setup",
@@ -246,6 +250,15 @@ namespace pe
                 gSettings.randomize_lights = settings["randomize_lights"].GetBool();
             if (settings.HasMember("day"))
                 gSettings.day = settings["day"].GetBool();
+            gSettings.skybox_day_path = settings.HasMember("skybox_day_path") && settings["skybox_day_path"].IsString()
+                                            ? settings["skybox_day_path"].GetString()
+                                            : GlobalSettings::DefaultSkyboxDayPath;
+            gSettings.skybox_night_path = settings.HasMember("skybox_night_path") && settings["skybox_night_path"].IsString()
+                                              ? settings["skybox_night_path"].GetString()
+                                              : GlobalSettings::DefaultSkyboxNightPath;
+            if (gSettings.skybox_day_path != previousDaySkyboxPath ||
+                gSettings.skybox_night_path != previousNightSkyboxPath)
+                RefreshSceneSky();
             if (settings.HasMember("depth_bias") && settings["depth_bias"].IsArray() && settings["depth_bias"].Size() == 3)
             {
                 gSettings.depth_bias[0] = settings["depth_bias"][0].GetFloat();
@@ -393,6 +406,24 @@ namespace pe
             {
                 scene.SetSpriteCoordinateSpace(node, SpriteCoordinateSpace::World);
             }
+        }
+
+        void RestoreSkyboxNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
+        {
+            if (!node || !nodeValue.HasMember("skybox") || !nodeValue["skybox"].IsObject())
+                return;
+
+            const auto &sv = nodeValue["skybox"];
+            auto &settings = Settings::Get<GlobalSettings>();
+            const std::string dayPath = sv.HasMember("day_path") && sv["day_path"].IsString()
+                                            ? sv["day_path"].GetString()
+                                            : settings.skybox_day_path;
+            const std::string nightPath = sv.HasMember("night_path") && sv["night_path"].IsString()
+                                              ? sv["night_path"].GetString()
+                                              : settings.skybox_night_path;
+
+            scene.AddComponentFlag(node, Component_Skybox);
+            scene.SetSkyboxPaths(node, dayPath, nightPath, false);
         }
 
         std::filesystem::path ResolveSerializedTexturePath(const rapidjson::Value &textureValue,
@@ -895,6 +926,15 @@ namespace pe
                     nodeObj.AddMember("sprite", spriteObj.Move(), allocator);
                 }
 
+                if ((flags & Component_Skybox) && cache.skybox)
+                {
+                    const NodeSkyboxTag &skybox = *cache.skybox;
+                    rapidjson::Value skyboxObj(rapidjson::kObjectType);
+                    skyboxObj.AddMember("day_path", MakeStringValue(skybox.dayPath), allocator);
+                    skyboxObj.AddMember("night_path", MakeStringValue(skybox.nightPath), allocator);
+                    nodeObj.AddMember("skybox", skyboxObj.Move(), allocator);
+                }
+
                 nodesArr.PushBack(nodeObj.Move(), allocator);
             }
 
@@ -1212,6 +1252,7 @@ namespace pe
             m_nodeComponentCache[camNode->index].camera->camera = m_cameras[0];
             m_cameras[0]->SetNodeId(camNode);
         }
+        EnsureSkyboxNodeFromSettings(false);
 
         UpdateGeometryBuffers();
 
@@ -1733,6 +1774,9 @@ namespace pe
 
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreSpriteNode(*this, nodeMap[ni], nodesVal[ni]);
+                for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+                    RestoreSkyboxNode(*this, nodeMap[ni], nodesVal[ni]);
+                EnsureSkyboxNodeFromSettings(false);
 
                 // Restore physics bodies from embedded node data
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
@@ -2011,6 +2055,8 @@ namespace pe
             }
         }
 
+        EnsureSkyboxNodeFromSettings(false);
+
         if (d.HasMember("active_camera"))
         {
             uint32_t activeIndex = d["active_camera"].GetUint();
@@ -2224,7 +2270,7 @@ namespace pe
 
                     uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
                     // Clear subsystem tags before restoring — Mesh/Script are already set by SetMeshRef/SetNodeScript above
-                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Audio | Component_Sprite);
+                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Audio | Component_Sprite | Component_Skybox);
                     uint32_t restoreFlags = flags & ~(Component_Mesh | Component_Script | Component_GpuPending);
                     if (restoreFlags)
                         AddComponentFlag(node, restoreFlags);
@@ -2405,6 +2451,8 @@ namespace pe
 
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSpriteNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestoreSkyboxNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
 
                 // Restore physics bodies from embedded node data
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
@@ -2810,6 +2858,8 @@ namespace pe
 
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSpriteNode(*this, nodeMap[ni], snapshotNodes[ni]);
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestoreSkyboxNode(*this, nodeMap[ni], snapshotNodes[ni]);
 
                 // Restore physics bodies from embedded node data (slow path)
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)

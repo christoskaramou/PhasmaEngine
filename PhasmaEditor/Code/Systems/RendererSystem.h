@@ -66,6 +66,7 @@ namespace pe
         const SkyBox &GetSkyBoxNight() const override { return m_sceneRenderer.GetSkyBoxNight(); }
         const SkyBox &GetSkyBoxWhite() const { return m_skyBoxWhite; }
         Image *GetIBL_LUT() const override { return m_sceneRenderer.GetIBL_LUT(); }
+        void ReloadSkyFromSettings() override { m_sceneRenderer.ReloadSkyFromSettings(); }
         const GUI &GetGUI() const { return m_gui; }
         GUI &GetGUI() { return m_gui; }
         void ToggleGUI() { m_gui.ToggleRender(); }

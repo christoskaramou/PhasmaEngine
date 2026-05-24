@@ -33,6 +33,7 @@ namespace pe
         const SkyBox &GetSkyBoxDay() const override { return m_sceneRenderer.GetSkyBoxDay(); }
         const SkyBox &GetSkyBoxNight() const override { return m_sceneRenderer.GetSkyBoxNight(); }
         Image *GetIBL_LUT() const override { return m_sceneRenderer.GetIBL_LUT(); }
+        void ReloadSkyFromSettings() override { m_sceneRenderer.ReloadSkyFromSettings(); }
 
         Image *GetRenderTarget(const std::string &name) override;
         Image *GetRenderTarget(size_t hash) override;

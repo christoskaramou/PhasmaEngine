@@ -8,6 +8,8 @@
 #include "MeshWidget.h"
 #include "Particles.h"
 #include "Particles/ParticleManager.h"
+#include "Render/SceneSky.h"
+#include "Scene/NodeComponents.h"
 #include "Scene/Primitives.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
@@ -30,6 +32,60 @@
 
 namespace pe
 {
+    namespace
+    {
+        std::vector<std::string> SkyboxExtensions()
+        {
+            return {".hdr", ".png", ".jpg", ".jpeg", ".tga", ".bmp"};
+        }
+
+        const char *SkyboxDisplayPath(const std::string &path)
+        {
+            return path.empty() ? "<solid color>" : path.c_str();
+        }
+
+        void DrawSkyboxPathPreview(const std::string &path, float width = 0.0f)
+        {
+            const char *displayPath = SkyboxDisplayPath(path);
+            width = width > 0.0f ? width : ImGui::GetContentRegionAvail().x;
+            if (width <= 0.0f)
+                return;
+
+            char buffer[512];
+            std::snprintf(buffer, sizeof(buffer), "%s", displayPath);
+            ImGui::SetNextItemWidth(width);
+            if (path.empty())
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            ImGui::InputText("##skybox_path", buffer, sizeof(buffer), ImGuiInputTextFlags_ReadOnly);
+            if (path.empty())
+                ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", displayPath);
+        }
+
+        bool DrawCenteredIconButton(const char *id, const char *icon, const ImVec2 &size)
+        {
+            const bool clicked = ImGui::InvisibleButton(id, size);
+            const bool hovered = ImGui::IsItemHovered();
+            const bool active = ImGui::IsItemActive();
+            const ImVec2 min = ImGui::GetItemRectMin();
+            const ImVec2 max = ImGui::GetItemRectMax();
+            const ImGuiStyle &style = ImGui::GetStyle();
+
+            ImDrawList *drawList = ImGui::GetWindowDrawList();
+            const ImU32 buttonColor = ImGui::GetColorU32(active    ? ImGuiCol_ButtonActive
+                                                         : hovered ? ImGuiCol_ButtonHovered
+                                                                   : ImGuiCol_Button);
+            drawList->AddRectFilled(min, max, buttonColor, style.FrameRounding);
+
+            const ImVec2 iconSize = ImGui::CalcTextSize(icon);
+            const ImVec2 iconPos(min.x + (size.x - iconSize.x) * 0.5f,
+                                 min.y + (size.y - iconSize.y) * 0.5f - 1.0f);
+            drawList->AddText(iconPos, ImGui::GetColorU32(ImGuiCol_Text), icon);
+            return clicked;
+        }
+    } // namespace
+
     void Properties::Update()
     {
         if (!m_open)
@@ -424,6 +480,110 @@ namespace pe
             }
         };
 
+        auto drawSkyboxComponent = [&](NodeId *node)
+        {
+            NodeSkyboxTag *skybox = scene.GetSkyboxForNode(node);
+            if (!skybox)
+                return;
+
+            auto applyPath = [&](bool daySky, std::string path)
+            {
+                std::string dayPath = skybox->dayPath;
+                std::string nightPath = skybox->nightPath;
+                if (daySky)
+                    dayPath = std::move(path);
+                else
+                    nightPath = std::move(path);
+
+                scene.SetSkyboxPaths(node, std::move(dayPath), std::move(nightPath));
+                if (m_gui)
+                    m_gui->NotifyChange();
+            };
+
+            auto drawRow = [&](const char *label, bool daySky)
+            {
+                const std::string &path = daySky ? skybox->dayPath : skybox->nightPath;
+                ImGui::PushID(label);
+
+                const ImGuiStyle &style = ImGui::GetStyle();
+                const float buttonSize = ImGui::GetFrameHeight();
+                const float clearWidth = ImGui::CalcTextSize("Clear").x + style.FramePadding.x * 2.0f;
+                const float labelWidth = ImGui::CalcTextSize("Night").x;
+                const float actionWidth = buttonSize * 2.0f + clearWidth + style.ItemInnerSpacing.x * 2.0f;
+                const float pathWidth =
+                    std::max(48.0f,
+                             ImGui::GetContentRegionAvail().x -
+                                 labelWidth -
+                                 actionWidth -
+                                 style.ItemInnerSpacing.x * 4.0f);
+
+                const float rowStartX = ImGui::GetCursorPosX();
+                const float rowStartY = ImGui::GetCursorPosY();
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(label);
+                ImGui::SetCursorPos(ImVec2(rowStartX + labelWidth + style.ItemInnerSpacing.x, rowStartY));
+                DrawSkyboxPathPreview(path, pathWidth);
+
+                ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.5f, 0.5f));
+                ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
+                if (DrawCenteredIconButton("##Browse", ICON_FA_FOLDER, ImVec2(buttonSize, buttonSize)))
+                {
+                    if (auto *fs = m_gui ? m_gui->GetWidget<FileSelector>() : nullptr)
+                    {
+                        fs->OpenSelection([node, daySky, this](const std::string &selectedPath) -> bool
+                                          {
+                            Scene *activeScene = GetActiveScene();
+                            if (!activeScene || !activeScene->IsNodeAlive(node))
+                                return true;
+
+                            NodeSkyboxTag *activeSkybox = activeScene->GetSkyboxForNode(node);
+                            if (!activeSkybox)
+                                return true;
+
+                            std::string dayPath = activeSkybox->dayPath;
+                            std::string nightPath = activeSkybox->nightPath;
+                            if (daySky)
+                                dayPath = MakeSceneSkyPathSetting(selectedPath);
+                            else
+                                nightPath = MakeSceneSkyPathSetting(selectedPath);
+
+                            activeScene->SetSkyboxPaths(node, std::move(dayPath), std::move(nightPath));
+                            if (m_gui)
+                                m_gui->NotifyChange();
+                            return true; },
+                                          SkyboxExtensions(),
+                                          Path::Assets + "Skyboxes");
+                    }
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Browse");
+
+                ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
+                if (path.empty())
+                    ImGui::BeginDisabled();
+                if (ImGui::Button("Clear", ImVec2(clearWidth, buttonSize)))
+                    applyPath(daySky, {});
+                if (path.empty())
+                    ImGui::EndDisabled();
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Clear");
+
+                ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
+                if (DrawCenteredIconButton("##Default", ICON_FA_ROTATE_LEFT, ImVec2(buttonSize, buttonSize)))
+                    applyPath(daySky,
+                              daySky ? GlobalSettings::DefaultSkyboxDayPath
+                                     : GlobalSettings::DefaultSkyboxNightPath);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Default");
+                ImGui::PopStyleVar();
+                ImGui::PopID();
+            };
+
+            drawRow("Day", true);
+            ImGui::Spacing();
+            drawRow("Night", false);
+        };
+
         // Set when the selected node can receive a .lua script drop;
         // consumed after the switch to place the whole-window drop target.
         NodeId *scriptDropNode = nullptr;
@@ -440,13 +600,25 @@ namespace pe
                 break;
 
             uint32_t flags = scene.GetComponentFlags(node);
-            if (!(flags & (Component_Camera | Component_Light)))
+            if (!(flags & (Component_Camera | Component_Light | Component_Skybox)))
                 scriptDropNode = node;
 #ifdef PE_AUDIO
-            audioDropNode = node;
+            if (!(flags & Component_Skybox))
+                audioDropNode = node;
 #endif
 
-            // Transform is always shown
+            if (flags & Component_Skybox)
+            {
+                if (ImGui::CollapsingHeader("Skybox Component", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    ImGui::Indent(8.f);
+                    drawSkyboxComponent(node);
+                    ImGui::Unindent(8.f);
+                }
+                break;
+            }
+
+            // Transform is always shown for scene objects with spatial meaning
             drawTransform();
 
             if (flags & Component_Sprite)
@@ -550,7 +722,7 @@ namespace pe
             }
 #endif
 
-            if (!(flags & (Component_Camera | Component_Light)))
+            if (!(flags & (Component_Camera | Component_Light | Component_Skybox)))
                 drawAddComponentButton(node);
             break;
         }

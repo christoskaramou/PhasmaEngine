@@ -22,6 +22,7 @@ namespace pe
         virtual const SkyBox &GetSkyBoxDay() const = 0;
         virtual const SkyBox &GetSkyBoxNight() const = 0;
         virtual Image *GetIBL_LUT() const = 0;
+        virtual void ReloadSkyFromSettings() = 0;
 
         virtual Image *GetRenderTarget(const std::string &name) = 0;
         virtual Image *GetRenderTarget(size_t hash) = 0;
