@@ -708,6 +708,8 @@ namespace pe
                 NodeId *parentNode = cache.hierarchy->parent;
                 int parentIdx = parentNode ? static_cast<int>(parentNode->index) : -1;
                 nodeObj.AddMember("parent", parentIdx, allocator);
+                if (!cache.hierarchy->enabled)
+                    nodeObj.AddMember("enabled", false, allocator);
 
                 rapidjson::Value localMat;
                 SetMat4(localMat, cache.transform->localMatrix);
@@ -1580,6 +1582,8 @@ namespace pe
                     const auto &nv = nodesVal[ni];
                     std::string name = nv.HasMember("name") ? nv["name"].GetString() : "";
                     NodeId *node = CreateNode(name);
+                    if (nv.HasMember("enabled") && nv["enabled"].IsBool())
+                        SetNodeEnabled(node, nv["enabled"].GetBool());
 
                     if (nv.HasMember("local_matrix"))
                         SetLocalMatrix(node, ReadMat4(nv["local_matrix"]), false);
@@ -2195,6 +2199,7 @@ namespace pe
                     }
                     if (nv.HasMember("local_matrix"))
                         SetLocalMatrix(node, ReadMat4(nv["local_matrix"]));
+                    SetNodeEnabled(node, !nv.HasMember("enabled") || !nv["enabled"].IsBool() || nv["enabled"].GetBool());
                     SetMeshRef(node, -1);
                     if (nv.HasMember("mesh_refs"))
                     {
@@ -2649,6 +2654,8 @@ namespace pe
                     const auto &nv = snapshotNodes[ni];
                     std::string name = nv.HasMember("name") ? nv["name"].GetString() : "";
                     NodeId *node = CreateNode(name);
+                    if (nv.HasMember("enabled") && nv["enabled"].IsBool())
+                        SetNodeEnabled(node, nv["enabled"].GetBool());
                     if (nv.HasMember("local_matrix"))
                         SetLocalMatrix(node, ReadMat4(nv["local_matrix"]), false);
                     if (nv.HasMember("mesh_refs"))

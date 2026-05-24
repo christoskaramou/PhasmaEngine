@@ -440,6 +440,45 @@ namespace pe
         }
     }
 
+    void Scene::SetNodeEnabled(NodeId *node, bool enabled)
+    {
+        if (!IsNodeAlive(node))
+            return;
+
+        NodeHierarchyComponent *hierarchy = m_nodeComponentCache[node->index].hierarchy;
+        if (!hierarchy || hierarchy->enabled == enabled)
+            return;
+
+        hierarchy->enabled = enabled;
+        m_instancesDirty = true;
+        m_tlasDirty = true;
+        m_dirty = true;
+    }
+
+    bool Scene::IsNodeEnabled(const NodeId *node) const
+    {
+        if (!IsNodeAlive(node))
+            return false;
+
+        const NodeHierarchyComponent *hierarchy = m_nodeComponentCache[node->index].hierarchy;
+        return !hierarchy || hierarchy->enabled;
+    }
+
+    bool Scene::IsNodeHierarchyEnabled(const NodeId *node) const
+    {
+        for (const NodeId *current = node; current;)
+        {
+            if (!IsNodeAlive(current))
+                return false;
+
+            const NodeHierarchyComponent *hierarchy = m_nodeComponentCache[current->index].hierarchy;
+            if (hierarchy && !hierarchy->enabled)
+                return false;
+            current = hierarchy ? hierarchy->parent : nullptr;
+        }
+        return true;
+    }
+
     bool Scene::IsValidMeshIndex(int meshIndex) const
     {
         return meshIndex >= 0 && meshIndex < static_cast<int>(m_meshes.size()) && m_meshes[meshIndex].live;

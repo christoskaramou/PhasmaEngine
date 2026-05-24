@@ -305,7 +305,7 @@ namespace pe
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            if (m_nodeRuntime[i].gpuPending)
+            if (m_nodeRuntime[i].gpuPending || !IsNodeHierarchyEnabled(m_nodeIds[i]))
                 continue;
 
             const auto &refs = m_nodeComponentCache[i].meshRefs->meshRefs;

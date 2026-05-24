@@ -10,7 +10,9 @@ namespace pe::InputState
 
     void BeginFrame();
     void AddMouseMotion(int xrel, int yrel);
+    void AddMouseWheel(int x, int y);
     MouseDelta ConsumeMouseDelta();
+    MouseDelta GetMouseWheel();
     void ResetMouseDelta();
     void SetMouseCapturedByUi(bool captured);
     void SetKeyboardCapturedByUi(bool captured);

@@ -67,6 +67,8 @@ namespace pe
     bool GUIState::s_sceneViewImageRectValid = false;
     float GUIState::s_sceneViewImageMinX = 0.0f;
     float GUIState::s_sceneViewImageMinY = 0.0f;
+    float GUIState::s_sceneViewImageAbsMinX = 0.0f;
+    float GUIState::s_sceneViewImageAbsMinY = 0.0f;
     float GUIState::s_sceneViewImageWidth = 0.0f;
     float GUIState::s_sceneViewImageHeight = 0.0f;
     bool GUIState::s_useTransformGizmo = true;

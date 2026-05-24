@@ -190,6 +190,8 @@ namespace pe
                         ctx.node = nullptr;
                         return ctx;
                     }
+                    if (!scene.IsNodeHierarchyEnabled(ctx.node))
+                        return ctx;
                     ctx.matrix = scene.GetWorldMatrix(ctx.node);
                     ctx.valid = true;
                 }
@@ -203,12 +205,17 @@ namespace pe
                 Scene &scene = *GetActiveScene();
                 if (ctx.lightType == LightType::Point && ctx.lightIndex >= 0 && ctx.lightIndex < (int)scene.GetPointLights().size())
                 {
-                    ctx.matrix = glm::translate(glm::mat4(1.0f), glm::vec3(scene.GetPointLights()[ctx.lightIndex].position));
+                    const auto &pointLight = scene.GetPointLights()[ctx.lightIndex];
+                    if (!scene.IsNodeHierarchyEnabled(pointLight.nodeId))
+                        return ctx;
+                    ctx.matrix = glm::translate(glm::mat4(1.0f), glm::vec3(pointLight.position));
                     ctx.valid = true;
                 }
                 else if (ctx.lightType == LightType::Spot && ctx.lightIndex >= 0 && ctx.lightIndex < (int)scene.GetSpotLights().size())
                 {
                     const auto &spot = scene.GetSpotLights()[ctx.lightIndex];
+                    if (!scene.IsNodeHierarchyEnabled(spot.nodeId))
+                        return ctx;
                     glm::vec3 start = glm::vec3(spot.position);
                     glm::quat rot = glm::quat(spot.rotation.w, spot.rotation.x, spot.rotation.y, spot.rotation.z);
                     ctx.matrix = glm::translate(glm::mat4(1.0f), start) * glm::mat4_cast(rot);
@@ -217,6 +224,8 @@ namespace pe
                 else if (ctx.lightType == LightType::Directional && ctx.lightIndex >= 0 && ctx.lightIndex < (int)scene.GetDirectionalLights().size())
                 {
                     const auto &dirLight = scene.GetDirectionalLights()[ctx.lightIndex];
+                    if (!scene.IsNodeHierarchyEnabled(dirLight.nodeId))
+                        return ctx;
                     glm::vec3 pos = glm::vec3(dirLight.position);
                     glm::quat rot = glm::quat(dirLight.rotation.w, dirLight.rotation.x, dirLight.rotation.y, dirLight.rotation.z);
                     ctx.matrix = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot);
@@ -225,6 +234,8 @@ namespace pe
                 else if (ctx.lightType == LightType::Area && ctx.lightIndex >= 0 && ctx.lightIndex < (int)scene.GetAreaLights().size())
                 {
                     const auto &area = scene.GetAreaLights()[ctx.lightIndex];
+                    if (!scene.IsNodeHierarchyEnabled(area.nodeId))
+                        return ctx;
                     glm::vec3 start = glm::vec3(area.position);
                     glm::quat rot = glm::quat(area.rotation.w, area.rotation.x, area.rotation.y, area.rotation.z);
                     ctx.matrix = glm::translate(glm::mat4(1.0f), start) * glm::mat4_cast(rot);
@@ -238,6 +249,10 @@ namespace pe
                 if (ctx.cameraIndex >= 0 && ctx.cameraIndex < (int)cameras.size())
                 {
                     Camera *c = cameras[ctx.cameraIndex];
+                    Scene &scene = *GetActiveScene();
+                    NodeId *camNode = c->GetNodeId();
+                    if (camNode && !scene.IsNodeHierarchyEnabled(camNode))
+                        return ctx;
                     glm::vec3 pos = c->GetPosition();
                     glm::quat rot = glm::quat(c->GetEuler());
                     ctx.matrix = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot);
@@ -506,9 +521,13 @@ namespace pe
         const ImVec2 imageMin = ImGui::GetItemRectMin();
         const ImVec2 imageMax = ImGui::GetItemRectMax();
         const bool imageHovered = ImGui::IsItemHovered();
+        const ImGuiViewport *imageViewport = ImGui::GetWindowViewport();
+        const ImVec2 viewportOrigin = imageViewport ? imageViewport->Pos : ImVec2(0.0f, 0.0f);
         GUIState::s_sceneViewImageRectValid = true;
-        GUIState::s_sceneViewImageMinX = imageMin.x;
-        GUIState::s_sceneViewImageMinY = imageMin.y;
+        GUIState::s_sceneViewImageMinX = imageMin.x - viewportOrigin.x;
+        GUIState::s_sceneViewImageMinY = imageMin.y - viewportOrigin.y;
+        GUIState::s_sceneViewImageAbsMinX = imageMin.x;
+        GUIState::s_sceneViewImageAbsMinY = imageMin.y;
         GUIState::s_sceneViewImageWidth = imageMax.x - imageMin.x;
         GUIState::s_sceneViewImageHeight = imageMax.y - imageMin.y;
 
@@ -620,6 +639,8 @@ namespace pe
         for (uint32_t i = 0; i < nodeCount; i++)
         {
             NodeId *node = scene.GetNodeId(i);
+            if (!scene.IsNodeHierarchyEnabled(node))
+                continue;
             if (scene.GetMeshRef(node) < 0)
                 continue;
 
@@ -1054,6 +1075,8 @@ namespace pe
         // Point Lights
         for (int i = 0; i < (int)scene.GetPointLights().size(); i++)
         {
+            if (!scene.IsNodeHierarchyEnabled(scene.GetPointLights()[i].nodeId))
+                continue;
             if (checkGizmoIcon(vec3(scene.GetPointLights()[i].position), ICON_FA_LIGHTBULB, LightType::Point, i))
                 drawLightVisuals(vec3(scene.GetPointLights()[i].position), LightType::Point, i);
         }
@@ -1061,6 +1084,8 @@ namespace pe
         // Spot Lights
         for (int i = 0; i < (int)scene.GetSpotLights().size(); i++)
         {
+            if (!scene.IsNodeHierarchyEnabled(scene.GetSpotLights()[i].nodeId))
+                continue;
             if (checkGizmoIcon(vec3(scene.GetSpotLights()[i].position), ICON_FA_LIGHTBULB, LightType::Spot, i))
                 drawLightVisuals(vec3(scene.GetSpotLights()[i].position), LightType::Spot, i);
         }
@@ -1068,6 +1093,8 @@ namespace pe
         // Directional Lights
         for (int i = 0; i < (int)scene.GetDirectionalLights().size(); i++)
         {
+            if (!scene.IsNodeHierarchyEnabled(scene.GetDirectionalLights()[i].nodeId))
+                continue;
             if (checkGizmoIcon(vec3(scene.GetDirectionalLights()[i].position), ICON_FA_SUN, LightType::Directional, i))
                 drawLightVisuals(vec3(scene.GetDirectionalLights()[i].position), LightType::Directional, i);
         }
@@ -1075,6 +1102,8 @@ namespace pe
         // Area Lights
         for (int i = 0; i < (int)scene.GetAreaLights().size(); i++)
         {
+            if (!scene.IsNodeHierarchyEnabled(scene.GetAreaLights()[i].nodeId))
+                continue;
             if (checkGizmoIcon(vec3(scene.GetAreaLights()[i].position), ICON_FA_LIGHTBULB, LightType::Area, i))
                 drawLightVisuals(vec3(scene.GetAreaLights()[i].position), LightType::Area, i);
         }
@@ -1105,6 +1134,8 @@ namespace pe
 
             Camera *camera = cameras[i];
             NodeId *camNode = camera->GetNodeId();
+            if (camNode && !scene.IsNodeHierarchyEnabled(camNode))
+                continue;
 
             vec3 pos = camera->GetPosition();
             bool isSelected = camNode && selection.GetSelectionType() == SelectionType::Node &&

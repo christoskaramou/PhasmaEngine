@@ -175,6 +175,9 @@ namespace pe
         void DeleteNode(NodeId *node);
         void ReparentNode(NodeId *node, NodeId *newParent);
         void SetLocalMatrix(NodeId *node, const mat4 &m, bool markDirty = true);
+        void SetNodeEnabled(NodeId *node, bool enabled);
+        bool IsNodeEnabled(const NodeId *node) const;
+        bool IsNodeHierarchyEnabled(const NodeId *node) const;
         bool IsValidMeshIndex(int meshIndex) const;
         void SetMeshRef(NodeId *node, int meshIndex);    // single mesh (clears others)
         void AddMeshRef(NodeId *node, int meshIndex);    // append mesh ref

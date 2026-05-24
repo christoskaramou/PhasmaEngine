@@ -128,6 +128,9 @@ namespace pe
             if (!runtimeUiCaptured && sdlEvent.type == SDL_MOUSEMOTION)
                 InputState::AddMouseMotion(sdlEvent.motion.xrel, sdlEvent.motion.yrel);
 
+            if (!runtimeUiCaptured && sdlEvent.type == SDL_MOUSEWHEEL)
+                InputState::AddMouseWheel(sdlEvent.wheel.x, sdlEvent.wheel.y);
+
             if (IsRuntimeWindowResizeEvent(sdlEvent))
             {
                 const WindowDrawableExtent extent = GetWindowDrawableExtent(m_apiHandle);

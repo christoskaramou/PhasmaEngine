@@ -311,6 +311,9 @@ namespace pe
                     if (!uiCaptured && event.type == SDL_MOUSEMOTION)
                         InputState::AddMouseMotion(event.motion.xrel, event.motion.yrel);
 
+                    if (!uiCaptured && event.type == SDL_MOUSEWHEEL)
+                        InputState::AddMouseWheel(event.wheel.x, event.wheel.y);
+
                     if (IsRuntimeWindowResizeEvent(event))
                         m_resizePending = true;
                 }

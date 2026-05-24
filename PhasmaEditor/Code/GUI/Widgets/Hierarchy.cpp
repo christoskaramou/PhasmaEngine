@@ -486,6 +486,8 @@ namespace pe
                 std::string displayNodeName = std::string(icon) + "  " + displayName;
                 if (!scriptError.empty())
                     displayNodeName += "  " ICON_FA_TRIANGLE_EXCLAMATION;
+                const bool nodeEnabled = scene.IsNodeEnabled(node);
+                const bool hierarchyEnabled = scene.IsNodeHierarchyEnabled(node);
 
                 ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
                                                ImGuiTreeNodeFlags_OpenOnArrow |
@@ -505,7 +507,23 @@ namespace pe
                     }
                 }
 
+                ImGui::PushID(node);
+                bool enabledEdit = nodeEnabled;
+                if (ImGui::Checkbox("##Enabled", &enabledEdit))
+                {
+                    recordSnapshot(enabledEdit ? "Enabled Node" : "Disabled Node");
+                    scene.SetNodeEnabled(node, enabledEdit);
+                }
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                    ImGui::SetTooltip("%s", enabledEdit ? "Disable node and subtree rendering" : "Enable node rendering");
+                ImGui::SameLine(0.0f, 4.0f);
+
+                if (!hierarchyEnabled)
+                    ImGui::PushStyleColor(ImGuiCol_Text, HierarchyStyle::TextDisabled);
                 bool nodeOpen = ImGui::TreeNodeEx((void *)uniqueId, nodeFlags, "%s", displayNodeName.c_str());
+                if (!hierarchyEnabled)
+                    ImGui::PopStyleColor();
+                ImGui::PopID();
 
                 if (!scriptError.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
                     ImGui::SetTooltip("Script error:\n%s", scriptError.c_str());

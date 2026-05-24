@@ -117,6 +117,71 @@ namespace pe
                     EventSystem::PushEvent(EventType::Screenshot, path);
                 });
 
+                engine.set_function("get_viewport_rect", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
+                    sol::table t = lua.create_table();
+                    float x = 0.0f;
+                    float y = 0.0f;
+                    float w = 0.0f;
+                    float h = 0.0f;
+                    bool valid = GUIState::s_sceneViewImageRectValid &&
+                                 GUIState::s_sceneViewImageWidth > 0.0f &&
+                                 GUIState::s_sceneViewImageHeight > 0.0f;
+
+                    if (valid)
+                    {
+                        x = GUIState::s_sceneViewImageMinX;
+                        y = GUIState::s_sceneViewImageMinY;
+                        w = GUIState::s_sceneViewImageWidth;
+                        h = GUIState::s_sceneViewImageHeight;
+                    }
+                    else if (HasImGuiContext())
+                    {
+                        const ImGuiIO &io = ImGui::GetIO();
+                        w = io.DisplaySize.x;
+                        h = io.DisplaySize.y;
+                        valid = w > 0.0f && h > 0.0f;
+                    }
+
+                    t["x"] = x;
+                    t["y"] = y;
+                    t["abs_x"] = GUIState::s_sceneViewImageAbsMinX;
+                    t["abs_y"] = GUIState::s_sceneViewImageAbsMinY;
+                    t["w"] = w;
+                    t["h"] = h;
+                    t["valid"] = valid;
+                    return t;
+                });
+
+                engine.set_function("get_viewport_mouse_position", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
+                    sol::table t = lua.create_table();
+                    const bool valid = HasImGuiContext() &&
+                                       GUIState::s_sceneViewImageWidth > 0.0f &&
+                                       GUIState::s_sceneViewImageHeight > 0.0f;
+                    float x = 0.0f;
+                    float y = 0.0f;
+                    bool inside = false;
+
+                    if (valid)
+                    {
+                        const ImVec2 mouse = ImGui::GetMousePos();
+                        x = mouse.x - GUIState::s_sceneViewImageAbsMinX;
+                        y = mouse.y - GUIState::s_sceneViewImageAbsMinY;
+                        inside = x >= 0.0f && y >= 0.0f &&
+                                 x <= GUIState::s_sceneViewImageWidth &&
+                                 y <= GUIState::s_sceneViewImageHeight;
+                    }
+
+                    t["x"] = x;
+                    t["y"] = y;
+                    t["w"] = GUIState::s_sceneViewImageWidth;
+                    t["h"] = GUIState::s_sceneViewImageHeight;
+                    t["inside"] = inside;
+                    t["valid"] = valid;
+                    return t;
+                });
+
                 // Returns recent console log entries as a Lua array of {level, text} tables.
                 // Optional count (default 100) limits how many recent entries to return.
                 // Optional level filters by "info", "warn", or "error".

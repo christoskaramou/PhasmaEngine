@@ -10,6 +10,7 @@ namespace pe
         namespace
         {
             MouseDelta s_mouseDelta{};
+            MouseDelta s_mouseWheel{};
             bool s_relativeMouseRequested = false;
             bool s_softwareMouseDelta = false;
             bool s_mousePositionInitialized = false;
@@ -45,6 +46,7 @@ namespace pe
         void BeginFrame()
         {
             s_mouseDelta = {};
+            s_mouseWheel = {};
             s_mouseCapturedByUi = false;
             s_keyboardCapturedByUi = false;
         }
@@ -53,6 +55,12 @@ namespace pe
         {
             s_mouseDelta.x += xrel;
             s_mouseDelta.y += yrel;
+        }
+
+        void AddMouseWheel(int x, int y)
+        {
+            s_mouseWheel.x += x;
+            s_mouseWheel.y += y;
         }
 
         MouseDelta ConsumeMouseDelta()
@@ -84,6 +92,11 @@ namespace pe
             MouseDelta delta = s_mouseDelta;
             s_mouseDelta = {};
             return delta;
+        }
+
+        MouseDelta GetMouseWheel()
+        {
+            return s_mouseCapturedByUi ? MouseDelta{} : s_mouseWheel;
         }
 
         void ResetMouseDelta()
@@ -216,6 +229,16 @@ namespace pe
                     sol::table t = lua.create_table();
                     t["x"] = delta.x;
                     t["y"] = delta.y;
+                    return t;
+                });
+
+                input.set_function("get_mouse_wheel", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
+                    InputState::MouseDelta wheel = InputState::GetMouseWheel();
+
+                    sol::table t = lua.create_table();
+                    t["x"] = wheel.x;
+                    t["y"] = wheel.y;
                     return t;
                 });
 

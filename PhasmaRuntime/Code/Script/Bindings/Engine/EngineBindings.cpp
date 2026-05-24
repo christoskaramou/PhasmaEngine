@@ -62,6 +62,22 @@ namespace pe
                     t["w"] = w;
                     t["h"] = h;
                     return t;
+                });
+
+                engine.set_function("get_viewport_rect", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
+                    sol::table t = lua.create_table();
+                    int w = 0;
+                    int h = 0;
+                    SDL_Window *window = RHII.GetWindow();
+                    if (window)
+                        SDL_GetWindowSize(window, &w, &h);
+                    t["x"] = 0.0f;
+                    t["y"] = 0.0f;
+                    t["w"] = w;
+                    t["h"] = h;
+                    t["valid"] = w > 0 && h > 0;
+                    return t;
                 }); });
         }
     } s_runtimeEngineBindings;

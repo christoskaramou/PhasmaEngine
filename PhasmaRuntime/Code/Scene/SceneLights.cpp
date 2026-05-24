@@ -142,22 +142,29 @@ namespace pe
             }
         }
 
-        // Pack into POD vectors for GPU upload
-        m_directionalLightsPOD.resize(m_directionalLights.size());
-        for (size_t i = 0; i < m_directionalLights.size(); i++)
-            m_directionalLightsPOD[i] = m_directionalLights[i];
+        auto nodeEnabled = [this](const NodeId *node)
+        { return !node || IsNodeHierarchyEnabled(node); };
 
-        m_pointLightsPOD.resize(m_pointLights.size());
-        for (size_t i = 0; i < m_pointLights.size(); i++)
-            m_pointLightsPOD[i] = m_pointLights[i];
+        // Pack only enabled lights into the GPU-visible POD vectors.
+        m_directionalLightsPOD.clear();
+        for (const auto &l : m_directionalLights)
+            if (nodeEnabled(l.nodeId))
+                m_directionalLightsPOD.push_back(l);
 
-        m_spotLightsPOD.resize(m_spotLights.size());
-        for (size_t i = 0; i < m_spotLights.size(); i++)
-            m_spotLightsPOD[i] = m_spotLights[i];
+        m_pointLightsPOD.clear();
+        for (const auto &l : m_pointLights)
+            if (nodeEnabled(l.nodeId))
+                m_pointLightsPOD.push_back(l);
 
-        m_areaLightsPOD.resize(m_areaLights.size());
-        for (size_t i = 0; i < m_areaLights.size(); i++)
-            m_areaLightsPOD[i] = m_areaLights[i];
+        m_spotLightsPOD.clear();
+        for (const auto &l : m_spotLights)
+            if (nodeEnabled(l.nodeId))
+                m_spotLightsPOD.push_back(l);
+
+        m_areaLightsPOD.clear();
+        for (const auto &l : m_areaLights)
+            if (nodeEnabled(l.nodeId))
+                m_areaLightsPOD.push_back(l);
 
         // Calculate aligned offsets and total storage size
         const size_t sizeDirectional = m_directionalLightsPOD.size() * sizeof(DirectionalLight);
@@ -205,10 +212,10 @@ namespace pe
             sb->Copy(static_cast<uint32_t>(uploadRanges.size()), uploadRanges.data(), true);
 
         // Upload UBO (counts + offsets)
-        m_lightsUBO.numDirectionalLights = static_cast<uint32_t>(m_directionalLights.size());
-        m_lightsUBO.numPointLights = static_cast<uint32_t>(m_pointLights.size());
-        m_lightsUBO.numSpotLights = static_cast<uint32_t>(m_spotLights.size());
-        m_lightsUBO.numAreaLights = static_cast<uint32_t>(m_areaLights.size());
+        m_lightsUBO.numDirectionalLights = static_cast<uint32_t>(m_directionalLightsPOD.size());
+        m_lightsUBO.numPointLights = static_cast<uint32_t>(m_pointLightsPOD.size());
+        m_lightsUBO.numSpotLights = static_cast<uint32_t>(m_spotLightsPOD.size());
+        m_lightsUBO.numAreaLights = static_cast<uint32_t>(m_areaLightsPOD.size());
         m_lightsUBO.offsetDirectionalLights = offsetDirectional;
         m_lightsUBO.offsetPointLights = offsetPoint;
         m_lightsUBO.offsetSpotLights = offsetSpot;

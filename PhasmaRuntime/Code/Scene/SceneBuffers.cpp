@@ -44,7 +44,7 @@ namespace pe
         m_meshCount = 0;
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            if (m_nodeRuntime[i].gpuPending)
+            if (m_nodeRuntime[i].gpuPending || !IsNodeHierarchyEnabled(m_nodeIds[i]))
                 continue;
             for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
             {
@@ -166,8 +166,9 @@ namespace pe
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
             m_nodeRuntime[i].hasUniformData = false;
+            m_nodeRuntime[i].dataOffset = static_cast<size_t>(-1);
 
-            if (m_nodeRuntime[i].gpuPending)
+            if (m_nodeRuntime[i].gpuPending || !IsNodeHierarchyEnabled(m_nodeIds[i]))
                 continue;
 
             bool hasDrawable = false;
@@ -215,11 +216,11 @@ namespace pe
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            if (m_nodeRuntime[i].gpuPending)
-                continue;
-
             const auto &refs = m_nodeComponentCache[i].meshRefs->meshRefs;
             m_nodeRuntime[i].meshRefIndirect.assign(refs.size(), UINT32_MAX);
+
+            if (m_nodeRuntime[i].gpuPending || !IsNodeHierarchyEnabled(m_nodeIds[i]))
+                continue;
 
             for (uint32_t slot = 0; slot < static_cast<uint32_t>(refs.size()); slot++)
             {
@@ -345,6 +346,9 @@ namespace pe
 
         for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
         {
+            if (!IsNodeHierarchyEnabled(m_nodeIds[ni]))
+                continue;
+
             for (int meshIndex : m_nodeComponentCache[ni].meshRefs->meshRefs)
             {
                 if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshes.size()))
@@ -454,6 +458,9 @@ namespace pe
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
+            if (!IsNodeHierarchyEnabled(m_nodeIds[i]))
+                continue;
+
             for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
             {
                 if (meshIdx < 0)
@@ -532,6 +539,9 @@ namespace pe
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
+            if (!IsNodeHierarchyEnabled(m_nodeIds[i]))
+                continue;
+
             for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
             {
                 if (meshIdx < 0)
@@ -664,6 +674,9 @@ namespace pe
 
         for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
         {
+            if (!IsNodeHierarchyEnabled(m_nodeIds[ni]))
+                continue;
+
             if (m_nodeRuntime[ni].gpuPending)
             {
                 pendingDirty = true;
@@ -740,6 +753,9 @@ namespace pe
 
         for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
         {
+            if (!IsNodeHierarchyEnabled(m_nodeIds[ni]))
+                continue;
+
             if (m_nodeRuntime[ni].gpuPending)
             {
                 pendingDirty = true;
@@ -838,7 +854,7 @@ namespace pe
         m_meshConstants->Map();
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            if (m_nodeRuntime[i].gpuPending)
+            if (m_nodeRuntime[i].gpuPending || !IsNodeHierarchyEnabled(m_nodeIds[i]))
                 continue;
 
             for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
@@ -1036,7 +1052,7 @@ namespace pe
         m_meshCount = 0;
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            if (m_nodeRuntime[i].gpuPending)
+            if (m_nodeRuntime[i].gpuPending || !IsNodeHierarchyEnabled(m_nodeIds[i]))
                 continue;
             for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
             {

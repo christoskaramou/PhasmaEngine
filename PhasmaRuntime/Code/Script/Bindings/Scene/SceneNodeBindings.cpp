@@ -40,6 +40,22 @@ namespace pe
                     return s && h.IsReady(*s);
                 });
 
+                ut.set_function("is_enabled", [](SceneNodeHandle &h) -> bool {
+                    Scene *s = GetScene();
+                    return s && h.IsValid(*s) && s->IsNodeEnabled(h.nodeId);
+                });
+
+                ut.set_function("is_hierarchy_enabled", [](SceneNodeHandle &h) -> bool {
+                    Scene *s = GetScene();
+                    return s && h.IsValid(*s) && s->IsNodeHierarchyEnabled(h.nodeId);
+                });
+
+                ut.set_function("set_enabled", [](SceneNodeHandle &h, bool enabled) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    s->SetNodeEnabled(h.nodeId, enabled);
+                });
+
                 ut.set_function("get_name", [](SceneNodeHandle &h) -> std::string {
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return "";

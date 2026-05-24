@@ -16,6 +16,7 @@ namespace pe
     public:
         NodeId *parent = nullptr;
         std::vector<NodeId *> children;
+        bool enabled = true;
     };
 
     class NodeTransformComponent : public IComponent
