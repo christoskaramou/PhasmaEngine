@@ -272,9 +272,6 @@ namespace pe
                 }
 
                 UpdateGlobalSystems();
-                if (m_runtimeUi)
-                    m_runtimeUi->UpdateSampleOverlay();
-
                 const bool keepRunning = ProcessRuntimeEvents();
                 if (m_runtimeUi)
                     m_runtimeUi->EndFrame();
@@ -480,7 +477,6 @@ namespace pe
                 {
                     if (runtimeUi.Init(desc.runtimeUiBackendFactory(), renderer.GetDisplayRT()))
                     {
-                        runtimeUi.EnableSampleOverlay(desc.showSampleRuntimeUi);
                         SetActiveRuntimeUi(&runtimeUi);
                         renderer.SetRuntimeUi(&runtimeUi);
                         runtimeUiPtr = &runtimeUi;

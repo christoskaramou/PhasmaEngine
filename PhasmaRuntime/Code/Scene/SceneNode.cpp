@@ -1,162 +1,12 @@
 #include "Scene/Scene.h"
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
-#include "Scene/Primitives.h"
 #include "Scene/SceneRuntimeHooks.h"
 #include "Camera/Camera.h"
 #include "API/RHI.h"
 
 namespace pe
 {
-    namespace
-    {
-        constexpr float kSpriteEmissiveBoost = 4.0f;
-
-        mat4 SetSpriteScaleOnMatrix(const mat4 &m, const vec2 &size)
-        {
-            vec3 pos(m[3]);
-            vec3 oldScale(glm::length(vec3(m[0])), glm::length(vec3(m[1])), glm::length(vec3(m[2])));
-            oldScale.x = oldScale.x == 0.0f ? 1.0f : oldScale.x;
-            oldScale.y = oldScale.y == 0.0f ? 1.0f : oldScale.y;
-            oldScale.z = oldScale.z == 0.0f ? 1.0f : oldScale.z;
-            mat3 rotMat(vec3(m[0]) / oldScale.x, vec3(m[1]) / oldScale.y, vec3(m[2]) / oldScale.z);
-            return glm::translate(mat4(1.0f), pos) * glm::mat4_cast(glm::quat_cast(rotMat)) *
-                   glm::scale(mat4(1.0f), vec3(size, oldScale.z));
-        }
-
-        vec4 FrameToUvRect(int frame, int columns, int rows)
-        {
-            columns = std::max(columns, 1);
-            rows = std::max(rows, 1);
-            const int frameCount = columns * rows;
-            frame = frameCount > 0 ? std::clamp(frame, 0, frameCount - 1) : 0;
-            const int column = frame % columns;
-            const int row = frame / columns;
-            const float invColumns = 1.0f / static_cast<float>(columns);
-            const float invRows = 1.0f / static_cast<float>(rows);
-            return vec4(column * invColumns,
-                        row * invRows,
-                        (column + 1) * invColumns,
-                        (row + 1) * invRows);
-        }
-
-        struct SpriteNdcFrame
-        {
-            vec3 right = vec3(1.0f, 0.0f, 0.0f);
-            vec3 up = vec3(0.0f, 1.0f, 0.0f);
-            vec3 front = vec3(0.0f, 0.0f, -1.0f);
-            float halfWidth = 1.0f;
-            float halfHeight = 1.0f;
-            float depth = 1.0f;
-        };
-
-        bool BuildSpriteNdcFrame(Camera *camera, float depth, SpriteNdcFrame &frame)
-        {
-            if (!camera)
-                return false;
-
-            if (glm::dot(camera->GetRight(), camera->GetRight()) < 1e-8f ||
-                glm::dot(camera->GetUp(), camera->GetUp()) < 1e-8f ||
-                glm::dot(camera->GetFront(), camera->GetFront()) < 1e-8f)
-            {
-                camera->Update();
-            }
-
-            frame.right = -glm::normalize(camera->GetRight());
-            frame.up = -glm::normalize(camera->GetUp());
-            frame.front = glm::normalize(camera->GetFront());
-            frame.depth = std::max(depth, camera->GetNearPlane() + 0.001f);
-
-            const float aspect = std::max(camera->GetAspect(), 0.001f);
-            if (camera->IsOrthographic())
-            {
-                frame.halfHeight = std::max(camera->GetOrthographicSize() * 0.5f, 0.001f);
-            }
-            else
-            {
-                frame.halfHeight = std::max(std::tan(camera->Fovy() * 0.5f) * frame.depth, 0.001f);
-            }
-            frame.halfWidth = std::max(frame.halfHeight * aspect, 0.001f);
-            return true;
-        }
-
-        bool BuildSpriteNdcWorldMatrix(Camera *camera, const NodeSpriteTag &sprite, mat4 &worldMatrix)
-        {
-            SpriteNdcFrame frame;
-            if (!BuildSpriteNdcFrame(camera, sprite.ndcDepth, frame))
-                return false;
-
-            const vec2 size(std::max(sprite.ndcSize.x, 0.001f),
-                            std::max(sprite.ndcSize.y, 0.001f));
-            const float c = std::cos(sprite.ndcRotation);
-            const float s = std::sin(sprite.ndcRotation);
-            const vec3 xAxis = frame.right * c + frame.up * s;
-            const vec3 yAxis = frame.up * c - frame.right * s;
-            const vec3 center = camera->GetPosition() +
-                                frame.front * frame.depth +
-                                frame.right * (sprite.ndcPosition.x * frame.halfWidth) +
-                                frame.up * (sprite.ndcPosition.y * frame.halfHeight);
-
-            worldMatrix = mat4(1.0f);
-            worldMatrix[0] = vec4(xAxis * (size.x * frame.halfWidth), 0.0f);
-            worldMatrix[1] = vec4(yAxis * (size.y * frame.halfHeight), 0.0f);
-            worldMatrix[2] = vec4(-frame.front, 0.0f);
-            worldMatrix[3] = vec4(center, 1.0f);
-            return true;
-        }
-
-        bool CaptureSpriteNdcFromWorld(Camera *camera, const mat4 &worldMatrix, NodeSpriteTag &sprite)
-        {
-            if (!camera)
-                return false;
-
-            const vec3 worldPosition(worldMatrix[3]);
-            const vec4 clip = camera->GetProjectionNoJitter() * camera->GetView() * vec4(worldPosition, 1.0f);
-            if (std::abs(clip.w) > 1e-6f)
-                sprite.ndcPosition = vec2(clip.x, clip.y) / clip.w;
-
-            float depth = glm::dot(worldPosition - camera->GetPosition(), camera->GetFront());
-            if (depth <= camera->GetNearPlane())
-                depth = sprite.ndcDepth > camera->GetNearPlane() ? sprite.ndcDepth : 1.0f;
-
-            SpriteNdcFrame frame;
-            if (!BuildSpriteNdcFrame(camera, depth, frame))
-                return false;
-
-            sprite.ndcDepth = frame.depth;
-            sprite.ndcSize = vec2(std::max(glm::length(vec3(worldMatrix[0])) / frame.halfWidth, 0.001f),
-                                  std::max(glm::length(vec3(worldMatrix[1])) / frame.halfHeight, 0.001f));
-            const vec3 xColumn(worldMatrix[0]);
-            if (glm::dot(xColumn, xColumn) > 1e-8f)
-            {
-                const vec3 xAxis = glm::normalize(xColumn);
-                sprite.ndcRotation = std::atan2(glm::dot(xAxis, frame.up), glm::dot(xAxis, frame.right));
-            }
-            return true;
-        }
-
-        void ApplySpriteNdcMatrix(Scene &scene, NodeId *node, Camera *camera, const NodeSpriteTag &sprite)
-        {
-            if (!scene.IsNodeAlive(node))
-                return;
-
-            mat4 worldMatrix;
-            if (!BuildSpriteNdcWorldMatrix(camera, sprite, worldMatrix))
-                return;
-
-            mat4 localMatrix = worldMatrix;
-            if (NodeId *parent = scene.GetParent(node))
-            {
-                const mat4 &parentWorld = scene.GetWorldMatrix(parent);
-                if (std::abs(glm::determinant(parentWorld)) > 1e-6f)
-                    localMatrix = glm::inverse(parentWorld) * worldMatrix;
-            }
-
-            scene.SetLocalMatrix(node, localMatrix, false);
-            scene.MarkNodeDirty(node);
-        }
-    } // namespace
-
     void Scene::AddComponentFlag(NodeId *node, uint32_t flag)
     {
         ValidateNodeId(node);
@@ -173,8 +23,6 @@ namespace pe
             c.physics = entity->CreateComponent<NodePhysicsTag>();
         if ((flag & Component_Audio) && !c.audio)
             c.audio = entity->CreateComponent<NodeAudioTag>();
-        if ((flag & Component_Sprite) && !c.sprite)
-            c.sprite = entity->CreateComponent<NodeSpriteTag>();
         if ((flag & Component_Skybox) && !c.skybox)
         {
             c.skybox = entity->CreateComponent<NodeSkyboxTag>();
@@ -211,11 +59,6 @@ namespace pe
         {
             entity->RemoveComponent<NodeAudioTag>();
             c.audio = nullptr;
-        }
-        if ((flag & Component_Sprite) && c.sprite)
-        {
-            entity->RemoveComponent<NodeSpriteTag>();
-            c.sprite = nullptr;
         }
         if ((flag & Component_Skybox) && c.skybox)
         {
@@ -267,7 +110,7 @@ namespace pe
         auto *scriptComp = entity->CreateComponent<NodeScriptComponent>();
 
         m_nodeComponentCache.push_back({nameComp, hierarchyComp, transformComp, meshRefsComp, scriptComp,
-                                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr});
+                                        nullptr, nullptr, nullptr, nullptr, nullptr});
 
         m_nodesDirty = true;
 
@@ -447,17 +290,7 @@ namespace pe
     {
         m_nodeComponentCache[node->index].transform->localMatrix = m;
         if (markDirty)
-        {
-            NodeSpriteTag *sprite = m_nodeComponentCache[node->index].sprite;
-            if (sprite && sprite->coordinateSpace == SpriteCoordinateSpace::NDC && !m_cameras.empty())
-            {
-                mat4 worldMatrix = m;
-                if (NodeId *parent = GetParent(node))
-                    worldMatrix = GetWorldMatrix(parent) * m;
-                CaptureSpriteNdcFromWorld(m_cameras[0], worldMatrix, *sprite);
-            }
             MarkNodeDirty(node);
-        }
     }
 
     void Scene::SetNodeEnabled(NodeId *node, bool enabled)
@@ -681,175 +514,6 @@ namespace pe
         delete primitiveModel;
     }
 
-    SceneNodeHandle Scene::CreateSpriteNode(const std::string &name,
-                                            const vec2 &size,
-                                            const vec3 &position,
-                                            RenderType renderType,
-                                            const vec4 &tint,
-                                            NodeId *parent)
-    {
-        ModelAsset *model = Primitives::CreateQuad(1.0f, 1.0f);
-        model->SetLabel(name.empty() ? "Sprite" : name);
-        model->SetNodeName(model->GetRootNodeIndex(), name.empty() ? "Sprite" : name);
-
-        SceneNodeHandle handle = AddModelDeferred(model);
-        if (!handle.IsValid(*this))
-            return handle;
-
-        if (parent)
-            ReparentNode(handle.nodeId, parent);
-
-        SetLocalMatrix(handle.nodeId,
-                       glm::translate(mat4(1.0f), position) *
-                           glm::scale(mat4(1.0f), vec3(size, 1.0f)));
-        ConfigureSpriteNode(handle.nodeId, size, renderType, tint);
-        return handle;
-    }
-
-    void Scene::AttachSpriteToNode(NodeId *node, const vec2 &size, RenderType renderType, const vec4 &tint)
-    {
-        if (!IsNodeAlive(node))
-            return;
-
-        ModelAsset *model = Primitives::CreateQuad(1.0f, 1.0f);
-        model->SetLabel("Sprite");
-        model->SetNodeName(model->GetRootNodeIndex(), "Sprite");
-        AttachPrimitiveToNode(node, model);
-        AddComponentFlag(node, Component_Sprite);
-        SetSpriteSize(node, size);
-
-        const auto &refs = m_nodeComponentCache[node->index].meshRefs->meshRefs;
-        if (!refs.empty())
-        {
-            const int meshIdx = refs.back();
-            if (IsValidMeshIndex(meshIdx))
-            {
-                Mesh &mesh = GetMesh(meshIdx);
-                mesh.renderType = renderType;
-                if (mesh.material)
-                {
-                    MaterialInstance *inst = CreateMaterialInstance(mesh);
-                    if (inst)
-                    {
-                        inst->SetRenderType(renderType);
-                        inst->SetBaseColorFactor(tint);
-                        inst->SetEmissiveFactor(vec3(tint) * kSpriteEmissiveBoost);
-                    }
-                }
-            }
-        }
-
-        m_geometryDirty = true;
-        m_materialDirty = true;
-        MarkNodeDirty(node);
-    }
-
-    void Scene::ConfigureSpriteNode(NodeId *node, const vec2 &size, RenderType renderType, const vec4 &tint)
-    {
-        if (!IsNodeAlive(node))
-            return;
-
-        AddComponentFlag(node, Component_Sprite);
-        SetSpriteSize(node, size);
-        NodeSpriteTag *sprite = m_nodeComponentCache[node->index].sprite;
-        if (sprite)
-        {
-            sprite->size = size;
-            sprite->uvRect = vec4(0.0f, 0.0f, 1.0f, 1.0f);
-            sprite->atlasColumns = 1;
-            sprite->atlasRows = 1;
-            sprite->frame = 0;
-        }
-
-        const auto &refs = m_nodeComponentCache[node->index].meshRefs->meshRefs;
-        for (int meshIdx : refs)
-        {
-            if (!IsValidMeshIndex(meshIdx))
-                continue;
-
-            Mesh &mesh = GetMesh(meshIdx);
-            mesh.renderType = renderType;
-            if (!mesh.material)
-                continue;
-
-            MaterialInstance *inst = CreateMaterialInstance(mesh);
-            if (!inst)
-                continue;
-
-            inst->SetRenderType(renderType);
-            inst->SetBaseColorFactor(tint);
-            inst->SetEmissiveFactor(vec3(tint) * kSpriteEmissiveBoost);
-        }
-
-        m_geometryDirty = true;
-        m_materialDirty = true;
-        MarkNodeDirty(node);
-    }
-
-    void Scene::SetSpriteSize(NodeId *node, const vec2 &size)
-    {
-        if (!IsNodeAlive(node))
-            return;
-
-        NodeSpriteTag *sprite = m_nodeComponentCache[node->index].sprite;
-        if (sprite && sprite->coordinateSpace == SpriteCoordinateSpace::NDC)
-        {
-            SetSpriteNdcTransform(node, sprite->ndcPosition, size, sprite->ndcDepth, sprite->ndcRotation);
-            return;
-        }
-
-        SetLocalMatrix(node, SetSpriteScaleOnMatrix(GetLocalMatrix(node), size));
-        if (sprite)
-            sprite->size = size;
-    }
-
-    void Scene::SetSpriteCoordinateSpace(NodeId *node, SpriteCoordinateSpace space)
-    {
-        if (!IsNodeAlive(node))
-            return;
-
-        AddComponentFlag(node, Component_Sprite);
-        NodeSpriteTag *sprite = m_nodeComponentCache[node->index].sprite;
-        if (!sprite)
-            return;
-
-        if (space == SpriteCoordinateSpace::NDC && sprite->coordinateSpace != SpriteCoordinateSpace::NDC && !m_cameras.empty())
-        {
-            mat4 worldMatrix = GetLocalMatrix(node);
-            if (NodeId *parent = GetParent(node))
-                worldMatrix = GetWorldMatrix(parent) * worldMatrix;
-            CaptureSpriteNdcFromWorld(m_cameras[0], worldMatrix, *sprite);
-        }
-
-        sprite->coordinateSpace = space;
-        if (space == SpriteCoordinateSpace::NDC && !m_cameras.empty())
-            ApplySpriteNdcMatrix(*this, node, m_cameras[0], *sprite);
-        else
-            MarkNodeDirty(node);
-    }
-
-    void Scene::SetSpriteNdcTransform(NodeId *node, const vec2 &position, const vec2 &size, float depth, float rotation)
-    {
-        if (!IsNodeAlive(node))
-            return;
-
-        AddComponentFlag(node, Component_Sprite);
-        NodeSpriteTag *sprite = m_nodeComponentCache[node->index].sprite;
-        if (!sprite)
-            return;
-
-        sprite->coordinateSpace = SpriteCoordinateSpace::NDC;
-        sprite->ndcPosition = position;
-        sprite->ndcSize = vec2(std::max(size.x, 0.001f), std::max(size.y, 0.001f));
-        sprite->ndcDepth = std::max(depth, 0.001f);
-        sprite->ndcRotation = rotation;
-
-        if (!m_cameras.empty())
-            ApplySpriteNdcMatrix(*this, node, m_cameras[0], *sprite);
-        else
-            MarkNodeDirty(node);
-    }
-
     bool Scene::SetMeshUvRect(int meshIndex, const vec4 &uvRect)
     {
         if (!IsValidMeshIndex(meshIndex))
@@ -883,147 +547,6 @@ namespace pe
 
         m_geometryDirty = true;
         return true;
-    }
-
-    bool Scene::SetSpriteUvRect(NodeId *node, const vec4 &uvRect, int meshSlot)
-    {
-        if (!IsNodeAlive(node))
-            return false;
-
-        const auto &refs = m_nodeComponentCache[node->index].meshRefs->meshRefs;
-        if (meshSlot < 0 || meshSlot >= static_cast<int>(refs.size()))
-            return false;
-
-        if (!SetMeshUvRect(refs[meshSlot], uvRect))
-            return false;
-
-        AddComponentFlag(node, Component_Sprite);
-        NodeSpriteTag *sprite = m_nodeComponentCache[node->index].sprite;
-        if (sprite)
-            sprite->uvRect = uvRect;
-        MarkNodeDirty(node);
-        return true;
-    }
-
-    bool Scene::SetSpriteFrame(NodeId *node, int frame, int columns, int rows, int meshSlot)
-    {
-        if (!IsNodeAlive(node))
-            return false;
-
-        columns = std::max(columns, 1);
-        rows = std::max(rows, 1);
-        const int frameCount = columns * rows;
-        frame = frameCount > 0 ? std::clamp(frame, 0, frameCount - 1) : 0;
-        const vec4 uvRect = FrameToUvRect(frame, columns, rows);
-        if (!SetSpriteUvRect(node, uvRect, meshSlot))
-            return false;
-
-        NodeSpriteTag *sprite = m_nodeComponentCache[node->index].sprite;
-        if (sprite)
-        {
-            sprite->atlasColumns = columns;
-            sprite->atlasRows = rows;
-            sprite->frame = frame;
-        }
-        return true;
-    }
-
-    void Scene::SetSpriteAnimation(NodeId *node,
-                                   int columns,
-                                   int rows,
-                                   float fps,
-                                   const std::vector<int> &frames,
-                                   bool loop)
-    {
-        if (!IsNodeAlive(node))
-            return;
-
-        AddComponentFlag(node, Component_Sprite);
-        NodeSpriteTag *sprite = m_nodeComponentCache[node->index].sprite;
-        if (!sprite)
-            return;
-
-        sprite->atlasColumns = std::max(columns, 1);
-        sprite->atlasRows = std::max(rows, 1);
-        sprite->animationFps = std::max(fps, 0.0f);
-        sprite->animationFrames = frames;
-        sprite->animationLoop = loop;
-        sprite->animationPlaying = sprite->animationFps > 0.0f;
-        sprite->animationTime = 0.0f;
-
-        const int firstFrame = !sprite->animationFrames.empty() ? sprite->animationFrames.front() : 0;
-        SetSpriteFrame(node, firstFrame, sprite->atlasColumns, sprite->atlasRows);
-    }
-
-    void Scene::StopSpriteAnimation(NodeId *node)
-    {
-        if (!IsNodeAlive(node))
-            return;
-
-        NodeSpriteTag *sprite = m_nodeComponentCache[node->index].sprite;
-        if (sprite)
-            sprite->animationPlaying = false;
-    }
-
-    bool Scene::UpdateSpriteAnimation(NodeId *node, float dt)
-    {
-        if (!IsNodeAlive(node))
-            return false;
-
-        NodeSpriteTag *sprite = m_nodeComponentCache[node->index].sprite;
-        if (!sprite || !sprite->animationPlaying || sprite->animationFps <= 0.0f)
-            return false;
-
-        const int frameCount = !sprite->animationFrames.empty()
-                                   ? static_cast<int>(sprite->animationFrames.size())
-                                   : std::max(sprite->atlasColumns * sprite->atlasRows, 1);
-        if (frameCount <= 0)
-            return false;
-
-        sprite->animationTime += std::max(dt, 0.0f);
-        int animationIndex = static_cast<int>(sprite->animationTime * sprite->animationFps);
-        if (sprite->animationLoop)
-            animationIndex %= frameCount;
-        else if (animationIndex >= frameCount)
-        {
-            animationIndex = frameCount - 1;
-            sprite->animationPlaying = false;
-        }
-
-        const int frame = !sprite->animationFrames.empty() ? sprite->animationFrames[animationIndex] : animationIndex;
-        if (frame == sprite->frame)
-            return false;
-
-        return SetSpriteFrame(node, frame, sprite->atlasColumns, sprite->atlasRows);
-    }
-
-    void Scene::UpdateSpriteAnimations(float dt)
-    {
-        for (NodeId *node : m_nodeIds)
-        {
-            if (!IsNodeAlive(node))
-                continue;
-            UpdateSpriteAnimation(node, dt);
-        }
-    }
-
-    void Scene::UpdateSpriteNdcTransforms()
-    {
-        if (m_cameras.empty())
-            return;
-
-        Camera *camera = m_cameras[0];
-        for (NodeId *node : m_nodeIds)
-        {
-            if (!IsNodeAlive(node))
-                continue;
-
-            NodeSpriteTag *sprite = m_nodeComponentCache[node->index].sprite;
-            if (!sprite || sprite->coordinateSpace != SpriteCoordinateSpace::NDC)
-                continue;
-
-            ApplySpriteNdcMatrix(*this, node, camera, *sprite);
-        }
     }
 
     int Scene::AddMesh(Mesh &&mesh)

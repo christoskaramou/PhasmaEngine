@@ -112,9 +112,6 @@ namespace pe
 
         bool GetBool(const std::string &screenId, const std::string &widgetId, bool fallback = false) const;
         bool ConsumeButtonClick(const std::string &screenId, const std::string &widgetId);
-        void EnableSampleOverlay(bool enabled);
-        bool IsSampleOverlayEnabled() const { return m_sampleOverlayEnabled; }
-        void UpdateSampleOverlay();
 
     private:
         enum class WidgetType
@@ -155,7 +152,6 @@ namespace pe
         std::string m_backendName = "none";
         bool m_initialized = false;
         bool m_frameOpen = false;
-        bool m_sampleOverlayEnabled = false;
         uint32_t m_frameSurfaceWidth = 0;
         uint32_t m_frameSurfaceHeight = 0;
         bool m_frameInputEnabled = true;

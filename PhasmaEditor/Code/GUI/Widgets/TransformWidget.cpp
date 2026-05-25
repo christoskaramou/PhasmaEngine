@@ -153,17 +153,6 @@ namespace pe
             return;
         }
 
-        if (NodeSpriteTag *sprite = scene.GetNodeComponent<NodeSpriteTag>(node);
-            sprite && sprite->coordinateSpace == SpriteCoordinateSpace::NDC)
-        {
-            vec3 pos(sprite->ndcPosition.x, sprite->ndcPosition.y, sprite->ndcDepth);
-            vec3 oldPos = pos;
-            DrawVec3Control(TransformType::Position, pos);
-            if (pos != oldPos)
-                scene.SetSpriteNdcTransform(node, vec2(pos.x, pos.y), sprite->ndcSize, pos.z, sprite->ndcRotation);
-            return;
-        }
-
         const mat4 &localMatrix = scene.GetLocalMatrix(node);
         float t[3], r[3], s[3];
         ImGuizmo::DecomposeMatrixToComponents(value_ptr(localMatrix), t, r, s);
@@ -199,17 +188,6 @@ namespace pe
             return;
         }
 
-        if (NodeSpriteTag *sprite = scene.GetNodeComponent<NodeSpriteTag>(node);
-            sprite && sprite->coordinateSpace == SpriteCoordinateSpace::NDC)
-        {
-            vec3 eulerDeg(0.0f, 0.0f, degrees(sprite->ndcRotation));
-            vec3 oldRot = eulerDeg;
-            DrawVec3Control(TransformType::Rotation, eulerDeg);
-            if (glm::any(glm::notEqual(eulerDeg, oldRot, 0.001f)))
-                scene.SetSpriteNdcTransform(node, sprite->ndcPosition, sprite->ndcSize, sprite->ndcDepth, radians(eulerDeg.z));
-            return;
-        }
-
         const mat4 &localMatrix = scene.GetLocalMatrix(node);
         float t[3], r[3], s[3];
         ImGuizmo::DecomposeMatrixToComponents(value_ptr(localMatrix), t, r, s);
@@ -231,23 +209,6 @@ namespace pe
         // Cameras and lights don't support scaling
         if (scene.GetComponentFlags(node) & (Component_Camera | Component_Light))
             return;
-
-        if (NodeSpriteTag *sprite = scene.GetNodeComponent<NodeSpriteTag>(node);
-            sprite && sprite->coordinateSpace == SpriteCoordinateSpace::NDC)
-        {
-            vec3 scl(sprite->ndcSize.x, sprite->ndcSize.y, 1.0f);
-            vec3 oldScale = scl;
-            DrawVec3Control(TransformType::Scale, scl, 1.0f);
-            if (scl != oldScale)
-            {
-                scene.SetSpriteNdcTransform(node,
-                                            sprite->ndcPosition,
-                                            vec2(std::max(scl.x, 0.001f), std::max(scl.y, 0.001f)),
-                                            sprite->ndcDepth,
-                                            sprite->ndcRotation);
-            }
-            return;
-        }
 
         const mat4 &localMatrix = scene.GetLocalMatrix(node);
         float t[3], r[3], s[3];

@@ -318,96 +318,6 @@ namespace pe
             return count;
         }
 
-        const char *SpriteCoordinateSpaceName(SpriteCoordinateSpace space)
-        {
-            return space == SpriteCoordinateSpace::NDC ? "ndc" : "world";
-        }
-
-        SpriteCoordinateSpace ReadSpriteCoordinateSpace(const rapidjson::Value &value)
-        {
-            if (!value.IsString())
-                return SpriteCoordinateSpace::World;
-
-            const std::string mode = value.GetString();
-            return (mode == "ndc" || mode == "screen" || mode == "normalized") ? SpriteCoordinateSpace::NDC : SpriteCoordinateSpace::World;
-        }
-
-        vec2 ReadVec2Value(const rapidjson::Value &arr, const vec2 &fallback = vec2(0.0f))
-        {
-            if (!arr.IsArray() || arr.Size() < 2)
-                return fallback;
-            return vec2(arr[0].GetFloat(), arr[1].GetFloat());
-        }
-
-        vec4 ReadVec4Value(const rapidjson::Value &arr, const vec4 &fallback = vec4(0.0f))
-        {
-            if (!arr.IsArray() || arr.Size() < 4)
-                return fallback;
-            return vec4(arr[0].GetFloat(), arr[1].GetFloat(), arr[2].GetFloat(), arr[3].GetFloat());
-        }
-
-        void RestoreSpriteNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
-        {
-            if (!node || !nodeValue.HasMember("sprite") || !nodeValue["sprite"].IsObject())
-                return;
-
-            const auto &sv = nodeValue["sprite"];
-            scene.AddComponentFlag(node, Component_Sprite);
-            NodeSpriteTag *sprite = scene.GetNodeComponent<NodeSpriteTag>(node);
-            if (!sprite)
-                return;
-
-            if (sv.HasMember("size"))
-                sprite->size = ReadVec2Value(sv["size"], sprite->size);
-            if (sv.HasMember("atlas_columns"))
-                sprite->atlasColumns = std::max(sv["atlas_columns"].GetInt(), 1);
-            if (sv.HasMember("atlas_rows"))
-                sprite->atlasRows = std::max(sv["atlas_rows"].GetInt(), 1);
-            if (sv.HasMember("frame"))
-                sprite->frame = std::max(sv["frame"].GetInt(), 0);
-
-            if (sv.HasMember("uv_rect"))
-            {
-                sprite->uvRect = ReadVec4Value(sv["uv_rect"], sprite->uvRect);
-                scene.SetSpriteUvRect(node, sprite->uvRect);
-            }
-            else
-                scene.SetSpriteFrame(node, sprite->frame, sprite->atlasColumns, sprite->atlasRows);
-
-            if (sv.HasMember("animation_fps"))
-                sprite->animationFps = std::max(sv["animation_fps"].GetFloat(), 0.0f);
-            if (sv.HasMember("animation_loop"))
-                sprite->animationLoop = sv["animation_loop"].GetBool();
-            if (sv.HasMember("animation_playing"))
-                sprite->animationPlaying = sv["animation_playing"].GetBool();
-            if (sv.HasMember("animation_time"))
-                sprite->animationTime = std::max(sv["animation_time"].GetFloat(), 0.0f);
-            if (sv.HasMember("animation_frames") && sv["animation_frames"].IsArray())
-            {
-                sprite->animationFrames.clear();
-                for (const auto &frame : sv["animation_frames"].GetArray())
-                    if (frame.IsInt())
-                        sprite->animationFrames.push_back(frame.GetInt());
-            }
-
-            SpriteCoordinateSpace space = SpriteCoordinateSpace::World;
-            if (sv.HasMember("coordinate_space"))
-                space = ReadSpriteCoordinateSpace(sv["coordinate_space"]);
-
-            if (space == SpriteCoordinateSpace::NDC)
-            {
-                const vec2 ndcPosition = sv.HasMember("ndc_position") ? ReadVec2Value(sv["ndc_position"], sprite->ndcPosition) : sprite->ndcPosition;
-                const vec2 ndcSize = sv.HasMember("ndc_size") ? ReadVec2Value(sv["ndc_size"], sprite->ndcSize) : sprite->ndcSize;
-                const float ndcDepth = sv.HasMember("ndc_depth") ? sv["ndc_depth"].GetFloat() : sprite->ndcDepth;
-                const float ndcRotation = sv.HasMember("ndc_rotation") ? sv["ndc_rotation"].GetFloat() : sprite->ndcRotation;
-                scene.SetSpriteNdcTransform(node, ndcPosition, ndcSize, ndcDepth, ndcRotation);
-            }
-            else
-            {
-                scene.SetSpriteCoordinateSpace(node, SpriteCoordinateSpace::World);
-            }
-        }
-
         void RestoreSkyboxNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
         {
             if (!node || !nodeValue.HasMember("skybox") || !nodeValue["skybox"].IsObject())
@@ -883,47 +793,6 @@ namespace pe
                         audio.AddMember("autoplay", desc->autoplay, allocator);
                         nodeObj.AddMember("audio", audio.Move(), allocator);
                     }
-                }
-
-                if ((flags & Component_Sprite) && cache.sprite)
-                {
-                    const NodeSpriteTag &sprite = *cache.sprite;
-                    rapidjson::Value spriteObj(rapidjson::kObjectType);
-                    spriteObj.AddMember("coordinate_space", MakeStringValue(SpriteCoordinateSpaceName(sprite.coordinateSpace)), allocator);
-
-                    rapidjson::Value size;
-                    SetVec2(size, sprite.size);
-                    spriteObj.AddMember("size", size.Move(), allocator);
-
-                    rapidjson::Value ndcPosition;
-                    SetVec2(ndcPosition, sprite.ndcPosition);
-                    spriteObj.AddMember("ndc_position", ndcPosition.Move(), allocator);
-
-                    rapidjson::Value ndcSize;
-                    SetVec2(ndcSize, sprite.ndcSize);
-                    spriteObj.AddMember("ndc_size", ndcSize.Move(), allocator);
-                    spriteObj.AddMember("ndc_depth", SafeFloat(sprite.ndcDepth), allocator);
-                    spriteObj.AddMember("ndc_rotation", SafeFloat(sprite.ndcRotation), allocator);
-
-                    rapidjson::Value uvRect;
-                    SetVec4(uvRect, sprite.uvRect);
-                    spriteObj.AddMember("uv_rect", uvRect.Move(), allocator);
-                    spriteObj.AddMember("atlas_columns", sprite.atlasColumns, allocator);
-                    spriteObj.AddMember("atlas_rows", sprite.atlasRows, allocator);
-                    spriteObj.AddMember("frame", sprite.frame, allocator);
-                    spriteObj.AddMember("animation_fps", SafeFloat(sprite.animationFps), allocator);
-                    spriteObj.AddMember("animation_loop", sprite.animationLoop, allocator);
-                    spriteObj.AddMember("animation_playing", sprite.animationPlaying, allocator);
-                    spriteObj.AddMember("animation_time", SafeFloat(sprite.animationTime), allocator);
-                    if (!sprite.animationFrames.empty())
-                    {
-                        rapidjson::Value frames(rapidjson::kArrayType);
-                        for (int frame : sprite.animationFrames)
-                            frames.PushBack(frame, allocator);
-                        spriteObj.AddMember("animation_frames", frames.Move(), allocator);
-                    }
-
-                    nodeObj.AddMember("sprite", spriteObj.Move(), allocator);
                 }
 
                 if ((flags & Component_Skybox) && cache.skybox)
@@ -1773,8 +1642,6 @@ namespace pe
                 }
 
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
-                    RestoreSpriteNode(*this, nodeMap[ni], nodesVal[ni]);
-                for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreSkyboxNode(*this, nodeMap[ni], nodesVal[ni]);
                 EnsureSkyboxNodeFromSettings(false);
 
@@ -2270,7 +2137,7 @@ namespace pe
 
                     uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
                     // Clear subsystem tags before restoring — Mesh/Script are already set by SetMeshRef/SetNodeScript above
-                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Audio | Component_Sprite | Component_Skybox);
+                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Audio | Component_Skybox);
                     uint32_t restoreFlags = flags & ~(Component_Mesh | Component_Script | Component_GpuPending);
                     if (restoreFlags)
                         AddComponentFlag(node, restoreFlags);
@@ -2449,8 +2316,6 @@ namespace pe
                     }
                 }
 
-                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
-                    RestoreSpriteNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkyboxNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
 
@@ -2856,8 +2721,6 @@ namespace pe
                     }
                 }
 
-                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
-                    RestoreSpriteNode(*this, nodeMap[ni], snapshotNodes[ni]);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkyboxNode(*this, nodeMap[ni], snapshotNodes[ni]);
 

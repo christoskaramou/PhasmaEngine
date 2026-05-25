@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-05-25
+
+- Removed the engine sprite feature in favor of runtime UI for the current 2D-facing path. The `Component_Sprite` scene tag, sprite Lua table, editor sprite menus/inspector, sprite serialization, NDC sprite render pass/shaders, and sprite-specific render/culling/shadow plumbing are gone. Runtime UI now stays generic: it exposes screen/widget helpers and no longer auto-creates sample/debug overlay content in editor or player.
+
 ## 2026-05-24
 
 - Made scene skybox assets optional for the shared renderer path. `SkyBox` loaders now report failure instead of hard-failing on missing or invalid images, and `SceneSky` falls back to a tiny solid-color cubemap for day/night sky so raster lighting, IBL, transmission fallback sampling, and ray tracing descriptors still have a valid environment resource.

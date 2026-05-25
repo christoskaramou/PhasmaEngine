@@ -30,7 +30,6 @@ namespace pe
         Component_Script = 1 << 4,
         Component_Audio = 1 << 5,
         Component_GpuPending = 1 << 6, // Node geometry not yet uploaded to GPU
-        Component_Sprite = 1 << 7,
         Component_Skybox = 1 << 8,
     };
 

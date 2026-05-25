@@ -308,7 +308,6 @@ namespace pe
         m_runtimeUi = std::make_unique<RuntimeUiSystem>();
         if (m_runtimeUi->Init(CreateImGuiRuntimeUiBackend(), GetGlobalSystem<RendererSystem>()->GetDisplayRT()))
         {
-            m_runtimeUi->EnableSampleOverlay(true);
             SetActiveRuntimeUi(m_runtimeUi.get());
             PE_INFO("[RuntimeUI] Running with backend: %s", m_runtimeUi->GetBackendName().c_str());
         }
@@ -569,10 +568,7 @@ namespace pe
         }
 
         if (runtimeUiFrameOpen)
-        {
-            runtimeUi->UpdateSampleOverlay();
             runtimeUi->EndFrame();
-        }
 
         // Get ImGui render data ready
         if (hasImGuiRenderer)

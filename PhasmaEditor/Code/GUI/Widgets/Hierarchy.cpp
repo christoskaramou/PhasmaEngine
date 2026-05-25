@@ -79,13 +79,6 @@ namespace pe
         auto recordUndo = [&recordSnapshot]()
         { recordSnapshot("Deleted Node"); };
 
-        auto createSprite = [&scene, &selection, &recordSnapshot](NodeId *parent = nullptr)
-        {
-            recordSnapshot(parent ? "Added Sprite Child" : "Added Sprite");
-            SceneNodeHandle handle = scene.CreateSpriteNode("Sprite", vec2(1.0f), vec3(0.0f), RenderType::AlphaCut, vec4(1.0f), parent);
-            if (handle.IsValid(scene))
-                selection.Select(handle.nodeId, SelectionType::Node);
-        };
         auto createSkybox = [&scene, &selection, &recordSnapshot]()
         {
             if (NodeId *existing = scene.GetSkyboxNode())
@@ -175,9 +168,6 @@ namespace pe
 
             if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
                 createSkybox();
-
-            if (ImGui::MenuItem("2D Sprite"))
-                createSprite();
 
             if (ImGui::BeginMenu("Mesh"))
             {
@@ -480,8 +470,6 @@ namespace pe
                     icon = ICON_FA_LIGHTBULB;
                 else if (nodeCompFlags & Component_Skybox)
                     icon = ICON_FA_SUN;
-                else if (nodeCompFlags & Component_Sprite)
-                    icon = ICON_FA_IMAGE;
                 else
                     icon = ICON_FA_VECTOR_SQUARE;
 
@@ -696,9 +684,6 @@ namespace pe
 
                         uint32_t componentFlags = scene.GetComponentFlags(node);
 
-                        if (ImGui::MenuItem("2D Sprite Child"))
-                            createSprite(node);
-
                         if (!(componentFlags & Component_Mesh) && ImGui::BeginMenu("Mesh"))
                         {
                             auto AttachPrimitive = [&](ModelAsset *m)
@@ -707,11 +692,6 @@ namespace pe
                                 EventSystem::PushEvent(EventType::PrimitiveAttachedToNode,
                                                        Scene::PrimitiveAttachRequest{node, m});
                             };
-                            if (ImGui::MenuItem("2D Sprite"))
-                            {
-                                recordSnapshot("Added Sprite Component");
-                                scene.AttachSpriteToNode(node);
-                            }
                             if (ImGui::MenuItem("Plane"))
                                 AttachPrimitive(Primitives::CreatePlane());
                             if (ImGui::MenuItem("Cube"))
@@ -994,9 +974,6 @@ namespace pe
 
                 if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
                     createSkybox();
-
-                if (ImGui::MenuItem("2D Sprite"))
-                    createSprite();
 
                 if (ImGui::BeginMenu("Mesh"))
                 {

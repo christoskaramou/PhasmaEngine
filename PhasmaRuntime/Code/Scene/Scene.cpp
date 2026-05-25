@@ -11,7 +11,6 @@
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
-#include "Base/Timer.h"
 #include "Camera/Camera.h"
 #include "Particles/ParticleManager.h"
 
@@ -208,8 +207,6 @@ namespace pe
             }
         }
 
-        UpdateSpriteAnimations(static_cast<float>(FrameTimer::Instance().GetDelta()));
-        UpdateSpriteNdcTransforms();
         UpdateGeometry();
         UpdateLights();
     }

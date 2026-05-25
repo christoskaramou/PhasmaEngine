@@ -8,7 +8,6 @@ namespace pe
     namespace
     {
         RuntimeUiSystem *s_activeRuntimeUi = nullptr;
-        constexpr const char *kSampleScreenId = "runtime.debug";
 
         std::string MakeDefaultTitle(const std::string &screenId)
         {
@@ -309,25 +308,6 @@ namespace pe
         }
 
         return false;
-    }
-
-    void RuntimeUiSystem::EnableSampleOverlay(bool enabled)
-    {
-        m_sampleOverlayEnabled = enabled;
-        SetScreenTitle(kSampleScreenId, "Runtime Debug");
-        SetScreenVisible(kSampleScreenId, enabled);
-    }
-
-    void RuntimeUiSystem::UpdateSampleOverlay()
-    {
-        if (!m_sampleOverlayEnabled)
-            return;
-
-        const double delta = FrameTimer::Instance().GetDelta();
-        SetText(kSampleScreenId, "backend", "Backend", m_backendName);
-        SetNumber(kSampleScreenId, "fps", "FPS", delta > 0.0 ? 1.0 / delta : 0.0);
-        SetNumber(kSampleScreenId, "frame_ms", "Frame ms", delta * 1000.0);
-        SetNumber(kSampleScreenId, "frame", "Frame", static_cast<double>(RHII.GetFrameCounter()));
     }
 
     void RuntimeUiSystem::BuildFrame()

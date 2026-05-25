@@ -10,7 +10,6 @@ namespace pe
     struct PlayerHostDesc
     {
         std::function<std::unique_ptr<IRuntimeUiBackend>()> runtimeUiBackendFactory;
-        bool showSampleRuntimeUi = true;
     };
 
     int RunPlayerHost(int argc, char *argv[]);
