@@ -3,7 +3,6 @@
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/RHI.h"
-#include "Base/Log.h"
 #include "Render/ScreenshotWriter.h"
 
 namespace pe

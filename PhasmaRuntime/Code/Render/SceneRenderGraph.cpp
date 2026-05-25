@@ -1,10 +1,5 @@
 #include "Render/SceneRenderGraph.h"
 #include "API/RHI.h"
-#include "Base/Defines.h"
-#include "Base/Settings.h"
-#include "Base/ThreadPool.h"
-#include "ECS/Component.h"
-#include "ECS/Context.h"
 #include "RenderPasses/AabbsPass.h"
 #include "RenderPasses/BloomPass.h"
 #include "RenderPasses/CullingPass.h"
@@ -26,8 +21,6 @@
 #include "RenderPasses/TonemapPass.h"
 #include "RenderPasses/UpsamplePass.h"
 
-#include <algorithm>
-#include <future>
 
 namespace pe
 {

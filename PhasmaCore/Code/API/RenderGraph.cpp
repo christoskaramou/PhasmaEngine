@@ -1,6 +1,5 @@
 #include "RenderGraph.h"
 #include "API/Command.h"
-#include "Base/Profiler.h"
 
 namespace pe
 {

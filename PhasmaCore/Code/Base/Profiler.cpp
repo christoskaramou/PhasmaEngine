@@ -1,9 +1,5 @@
-#include "Base/Profiler.h"
 
-#include <atomic>
 #include <cstring>
-#include <mutex>
-#include <unordered_map>
 
 namespace pe
 {

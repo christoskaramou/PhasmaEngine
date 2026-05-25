@@ -1,5 +1,3 @@
-#include "Base/Log.h"
-#include "Base/Path.h"
 #include "API/GraphicsApiSelection.h"
 #include "Project/ProjectSelection.h"
 #include "Runtime/RuntimeStartup.h"
@@ -9,17 +7,8 @@
 #include "rapidjson/ostreamwrapper.h"
 #include "rapidjson/prettywriter.h"
 
-#include <cstdint>
-#include <cstdlib>
-#include <cctype>
 #include <cstring>
-#include <fstream>
-#include <iostream>
-#include <optional>
-#include <sstream>
-#include <vector>
 
-#include "SDL.h"
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
 

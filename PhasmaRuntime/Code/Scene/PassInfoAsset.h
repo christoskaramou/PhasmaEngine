@@ -1,6 +1,5 @@
 #pragma once
 #include "API/Pipeline.h"
-#include "Base/ResourceManager.h"
 
 namespace pe
 {

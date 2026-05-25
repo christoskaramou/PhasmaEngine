@@ -3,13 +3,6 @@
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/RHI.h"
-#include "Base/EventSystem.h"
-#include "Base/FileWatcher.h"
-#include "Base/Log.h"
-#include "Base/Path.h"
-#include "Base/ThreadPool.h"
-#include "Base/Timer.h"
-#include "ECS/Context.h"
 #include "Project/ProjectSelection.h"
 #include "Camera/Camera.h"
 #include "Render/RuntimeSceneRenderer.h"
@@ -30,10 +23,6 @@
 #include "UI/RuntimeUi.h"
 #include "Window/WindowEvents.h"
 
-#include <filesystem>
-#include <optional>
-#include <string>
-#include <vector>
 
 namespace pe
 {

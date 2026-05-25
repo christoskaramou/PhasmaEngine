@@ -2,10 +2,7 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
-#include "ECS/Component.h"
 
-#include <algorithm>
-#include <vector>
 
 namespace pe
 {

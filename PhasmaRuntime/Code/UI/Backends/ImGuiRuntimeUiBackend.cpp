@@ -8,12 +8,15 @@
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
 #include "API/Vulkan/VulkanQueueImpl.h"
 #include "API/Vulkan/VulkanRenderPassImpl.h"
+#include "API/Vulkan/VulkanSamplerImpl.h"
 #include "UI/RuntimeUiInputEvents.h"
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12CommandBufferImpl.h"
 #include "API/DX12/Dx12DescriptorHeap.h"
+#include "API/DX12/Dx12ImageViewImpl.h"
 #include "API/DX12/Dx12RhiImpl.h"
 #include "API/DX12/Dx12Translate.h"
 #include "imgui_impl_dx12.h"
@@ -21,9 +24,6 @@
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_vulkan.h"
-
-#include <cstdint>
-#include <unordered_map>
 
 namespace pe
 {
@@ -120,6 +120,7 @@ namespace pe
 
                 ImGuiContext *previousContext = ImGui::GetCurrentContext();
                 ImGui::SetCurrentContext(m_context);
+                ReleaseImageTextures();
                 if (m_rendererInitialized)
                 {
 #if defined(PE_WIN32)
@@ -248,6 +249,26 @@ namespace pe
                 return ImGui::Button(label ? label : "");
             }
 
+            void DrawImage(const RuntimeUiImageDesc &image) override
+            {
+                if (!m_frameOpen || !image.image)
+                    return;
+
+                ScopedImGuiContext contextScope(m_context);
+                void *textureID = GetImageTexture(image.image);
+                if (!textureID)
+                    return;
+
+                const float width = image.width > 0.0f ? image.width : image.image->GetWidth_f();
+                const float height = image.height > 0.0f ? image.height : image.image->GetHeight_f();
+                if (width <= 0.0f || height <= 0.0f)
+                    return;
+
+                if (image.label && image.label[0] != '\0')
+                    ImGui::TextUnformatted(image.label);
+                ImGui::Image((ImTextureID)textureID, ImVec2(width, height));
+            }
+
             void EndScreen() override
             {
                 if (m_frameOpen)
@@ -340,6 +361,93 @@ namespace pe
             }
 
         private:
+            void *GetImageTexture(Image *image)
+            {
+                auto it = m_imageTextureIds.find(image);
+                if (it != m_imageTextureIds.end())
+                    return it->second;
+
+                void *textureID = RegisterImageTexture(image);
+                if (textureID)
+                    m_imageTextureIds.emplace(image, textureID);
+                return textureID;
+            }
+
+            void *RegisterImageTexture(Image *image)
+            {
+                if (!image || !image->GetSampler() || !image->GetSRV())
+                    return nullptr;
+
+                if (m_api == PE_GRAPHICS_API_VULKAN)
+                {
+                    VkSampler sampler = pe::GetVulkanSampler(image->GetSampler());
+                    VkImageView view = pe::GetVulkanImageView(image->GetSRV());
+                    if (!sampler || !view)
+                        return nullptr;
+
+                    return (void *)ImGui_ImplVulkan_AddTexture(sampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                }
+
+#if defined(PE_WIN32)
+                if (m_api == PE_GRAPHICS_API_DX12)
+                {
+                    Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+                    if (!rhi || !rhi->GetDevice() || !rhi->GetCbvSrvUavHeap())
+                        return nullptr;
+
+                    const Dx12ImageViewImpl *srv = Dx12ImageViewImpl::From(image->GetSRV());
+                    if (!srv)
+                        return nullptr;
+
+                    const uint32_t slot = rhi->GetCbvSrvUavHeap()->Allocate();
+                    rhi->GetDevice()->CopyDescriptorsSimple(1,
+                                                            rhi->GetCbvSrvUavHeap()->GetCpuHandle(slot),
+                                                            srv->GetCpuHandle(),
+                                                            D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+                    const D3D12_GPU_DESCRIPTOR_HANDLE gpu = rhi->GetCbvSrvUavHeap()->GetGpuHandle(slot);
+                    m_dx12ImGuiSlots[static_cast<uint64_t>(gpu.ptr)] = slot;
+                    return reinterpret_cast<void *>(gpu.ptr);
+                }
+#endif
+
+                return nullptr;
+            }
+
+            void ReleaseImageTexture(void *&textureID)
+            {
+                if (!textureID)
+                    return;
+
+                if (m_api == PE_GRAPHICS_API_VULKAN)
+                {
+                    ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)textureID);
+                }
+#if defined(PE_WIN32)
+                else if (m_api == PE_GRAPHICS_API_DX12)
+                {
+                    const uint64_t key = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(textureID));
+                    auto it = m_dx12ImGuiSlots.find(key);
+                    if (it != m_dx12ImGuiSlots.end())
+                    {
+                        Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+                        if (rhi && rhi->GetCbvSrvUavHeap())
+                            rhi->GetCbvSrvUavHeap()->Free(it->second);
+                        m_dx12ImGuiSlots.erase(it);
+                    }
+                }
+#endif
+
+                textureID = nullptr;
+            }
+
+            void ReleaseImageTextures()
+            {
+                for (auto &entry : m_imageTextureIds)
+                    ReleaseImageTexture(entry.second);
+                m_imageTextureIds.clear();
+            }
+
             bool HasInputRect() const
             {
                 return m_frameInfo.inputRectValid &&
@@ -492,6 +600,7 @@ namespace pe
             bool m_rendererInitialized = false;
             bool m_frameOpen = false;
             bool m_rendered = false;
+            std::unordered_map<Image *, void *> m_imageTextureIds;
 #if defined(PE_WIN32)
             std::unordered_map<uint64_t, uint32_t> m_dx12ImGuiSlots;
 #endif

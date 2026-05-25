@@ -1,4 +1,3 @@
-#include "Base/Timer.h"
 #include "Base/Timer_Internal.h"
 
 #include "API/RHI.h"

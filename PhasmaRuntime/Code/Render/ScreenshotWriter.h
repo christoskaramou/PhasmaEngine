@@ -2,8 +2,6 @@
 
 #include "API/RHITypes.h"
 
-#include <cstdint>
-#include <string>
 
 namespace pe
 {

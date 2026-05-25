@@ -7,13 +7,7 @@
 #include "Scene/SceneNodeHandle.h"
 #include "Scene/SceneHost.h"
 #include "Script/ScriptRuntimeHooks.h"
-#include "Base/FileWatcher.h"
-#include "Base/Timer.h"
 
-#include <algorithm>
-#include <cctype>
-#include <fstream>
-#include <unordered_set>
 
 namespace pe
 {

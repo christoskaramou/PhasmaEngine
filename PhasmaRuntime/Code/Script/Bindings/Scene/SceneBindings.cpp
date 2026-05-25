@@ -7,7 +7,6 @@
 #include "Scene/Primitives.h"
 #include "Camera/Camera.h"
 #include "Script/ScriptRuntimeHooks.h"
-#include "Base/ThreadPool.h"
 
 namespace pe
 {

@@ -2,8 +2,6 @@
 #pragma once
 #include "GUI/Widget.h"
 #include "TextEditor.h"
-#include <vector>
-#include <string>
 
 namespace pe
 {

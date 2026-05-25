@@ -1,14 +1,11 @@
 #include "Runtime/RuntimeStartup.h"
 
-#include "Base/Path.h"
 #include "Project/Detail/ProjectHelpers.h"
 #include "Project/ProjectPaths.h"
 
 #include "rapidjson/document.h"
 #include "rapidjson/istreamwrapper.h"
 
-#include <algorithm>
-#include <fstream>
 
 namespace pe
 {

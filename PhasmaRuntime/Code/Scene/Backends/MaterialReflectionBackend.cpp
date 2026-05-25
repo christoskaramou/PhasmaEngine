@@ -7,7 +7,6 @@
 #endif
 #include "API/Vulkan/VulkanReflection.h"
 #include "API/Vulkan/VulkanShaderImpl.h"
-#include "Base/Path.h"
 #include "spirv_cross.hpp"
 
 namespace pe

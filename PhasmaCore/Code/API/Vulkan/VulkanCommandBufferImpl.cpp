@@ -21,7 +21,6 @@
 #include "API/Vulkan/VulkanRenderPassImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 #include "API/Vulkan/VulkanSamplerImpl.h"
-#include "Base/Profiler.h"
 
 namespace pe
 {

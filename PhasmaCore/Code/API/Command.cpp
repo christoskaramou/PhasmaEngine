@@ -10,7 +10,6 @@
 #include "API/RenderPass.h"
 #include "API/Semaphore.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
-#include "Base/Profiler.h"
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12CommandBufferImpl.h"
 #endif

@@ -1,4 +1,3 @@
-#include "ECS/Component.h"
 #include "API/Command.h"
 #include "API/Pipeline.h"
 #include "API/RenderGraph.h"

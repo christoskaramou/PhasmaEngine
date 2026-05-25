@@ -14,7 +14,6 @@
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 
-#include <algorithm>
 
 #if defined(PE_WIN32)
 #include "API/Buffer.h"

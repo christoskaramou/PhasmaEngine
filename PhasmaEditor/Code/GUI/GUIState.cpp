@@ -1,6 +1,5 @@
 #include "GUIState.h"
 
-#include <filesystem>
 
 #if defined(_WIN32)
 #include <windows.h>

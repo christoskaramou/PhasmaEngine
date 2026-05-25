@@ -1,17 +1,11 @@
 #pragma once
 
 #include "API/RenderGraph.h"
-#include "Base/Base.h"
 #include "Render/SceneFrameResources.h"
 #include "Render/SceneRenderGraph.h"
 #include "Render/SceneRenderTargets.h"
 #include "Skybox/Skybox.h"
 
-#include <array>
-#include <optional>
-#include <string>
-#include <string_view>
-#include <vector>
 
 namespace pe
 {

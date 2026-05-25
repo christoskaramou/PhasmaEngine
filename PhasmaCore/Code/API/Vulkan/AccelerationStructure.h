@@ -3,7 +3,6 @@
 #include "API/AccelerationStructure.h"
 #include "API/Vulkan/VulkanHeaders.h"
 
-#include <type_traits>
 
 namespace pe
 {

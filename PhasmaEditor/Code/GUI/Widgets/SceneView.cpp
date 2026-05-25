@@ -1,6 +1,5 @@
 #include "SceneView.h"
 #include "API/Image.h"
-#include "Base/ThreadPool.h"
 #include "Camera/Camera.h"
 #include "GUI/GUI.h"
 #include "GUI/GUIState.h"

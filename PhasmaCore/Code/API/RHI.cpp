@@ -26,7 +26,6 @@
 #include "API/StagingManager.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
-#include "Base/Settings.h"
 
 #include "SDL_vulkan.h"
 

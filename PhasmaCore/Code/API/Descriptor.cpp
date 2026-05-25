@@ -1,5 +1,4 @@
 #include "API/Descriptor_Internal.h"
-#include "Base/Profiler.h"
 
 namespace pe
 {

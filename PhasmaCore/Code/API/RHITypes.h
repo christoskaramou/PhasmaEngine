@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstdint>
-#include <type_traits>
 
 enum PeGraphicsApi : uint32_t
 {

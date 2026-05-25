@@ -11,7 +11,7 @@ PhasmaRuntime is the shared runtime layer between PhasmaCore and the host produc
 
 ## Runtime UI
 
-Runtime/game UI is a backend-neutral service in `PhasmaRuntime` with concrete renderer implementations outside PhasmaCore. The runtime-facing API is intentionally small: screens can be shown/hidden and populated with prototype text, number, bool, and button widgets. Public runtime and Lua call sites do not include ImGui types.
+Runtime/game UI is a backend-neutral service in `PhasmaRuntime` with concrete renderer implementations outside PhasmaCore. The runtime-facing API is intentionally small: screens can be shown/hidden and populated with prototype text, number, bool, button, and image widgets. Public runtime and Lua call sites do not include ImGui types.
 
 The first concrete player backend is Dear ImGui. Its implementation lives under `PhasmaRuntime/Code/UI/Backends`, but it is compiled into `PhasmaPlayer` at the host boundary so PhasmaRuntime still exposes only backend-neutral UI APIs and the editor does not link a second ImGui renderer. The player creates that backend, sends SDL events to runtime UI before gameplay input, exposes UI capture state to runtime input bindings, and renders the UI after the render graph has produced the display target but before `BlitToSwapchain`.
 
@@ -21,7 +21,7 @@ The editor also hosts the same `RuntimeUiSystem` and Lua `runtime_ui.*` surface 
 
 Runtime UI is the current 2D-facing helper path. It stays backend-neutral in `PhasmaRuntime`: callers create or update named screens and generic widgets, then the active host backend draws them. The runtime UI layer does not create game-specific overlays, debug panels, or sample content by itself.
 
-The Lua `runtime_ui` table exposes helper operations for visibility, titles, clearing/removing widgets, text, numbers, booleans, buttons, bool reads, and button click consumption. This is intentionally functional UI plumbing, not project/game logic. Dear ImGui is the active backend for now, and future UI renderers can attach behind the same lifecycle, input, and render hooks.
+The Lua `runtime_ui` table exposes helper operations for visibility, titles, clearing/removing widgets, text, numbers, booleans, buttons, images, bool reads, and button click consumption. Image widgets are generic path-backed runtime UI resources: `runtime_ui.set_image(...)` resolves asset-relative path/resource strings, caches loaded `Image` resources in the runtime UI system, and asks the active backend to draw an engine `Image*` through its own descriptor/texture mapping. This is intentionally functional UI plumbing, not project/game logic. Dear ImGui is the active backend for now, and future UI renderers can attach behind the same lifecycle, input, and render hooks.
 
 The engine no longer has a native sprite feature: no sprite scene component, Lua table, editor component panel, dedicated render pass, or sprite shader path is part of the runtime contract. Regular material helpers such as `material.set_texture(node, path)` remain for normal scene meshes.
 

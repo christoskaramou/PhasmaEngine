@@ -2,7 +2,6 @@
 #include "GUI/Agent/EditorToolRuntime.h"
 #include "GUI/GUI.h"
 #include "GUI/Widgets/Console.h"
-#include "Base/Path.h"
 #include "PhasmaMCP/Utils.h"
 #include "PhasmaMCP/Codebase/BM25Index.h"
 

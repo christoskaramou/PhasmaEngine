@@ -1,8 +1,6 @@
 #pragma once
 
-#include "SDL.h"
 
-#include <cstdint>
 
 namespace pe
 {

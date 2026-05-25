@@ -1,7 +1,5 @@
 #include "Script/ScriptSystem.h"
 #include "Script/ScriptRuntimeHooks.h"
-#include "Base/EventSystem.h"
-#include "Base/Timer.h"
 #include "API/RHI.h"
 
 namespace pe

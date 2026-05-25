@@ -7,7 +7,6 @@
 #include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 
-#include <algorithm>
 
 namespace pe
 {

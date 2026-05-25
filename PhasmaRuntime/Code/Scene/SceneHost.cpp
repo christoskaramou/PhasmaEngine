@@ -1,11 +1,8 @@
 #include "Scene/SceneHost.h"
 
-#include "Base/Log.h"
 #include "Scene/SceneAccess.h"
 #include "Scene/Scene.h"
 
-#include <memory>
-#include <utility>
 
 namespace pe
 {

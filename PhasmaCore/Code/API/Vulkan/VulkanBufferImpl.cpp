@@ -9,7 +9,6 @@
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
-#include "Base/Profiler.h"
 
 namespace pe
 {

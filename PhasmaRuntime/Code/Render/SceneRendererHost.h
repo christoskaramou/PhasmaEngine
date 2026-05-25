@@ -2,9 +2,6 @@
 
 #include "API/RHITypes.h"
 
-#include <filesystem>
-#include <optional>
-#include <string>
 
 namespace pe
 {

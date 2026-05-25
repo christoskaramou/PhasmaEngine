@@ -2,7 +2,6 @@
 
 #include <D3D12MemAlloc.h>
 
-#include <cstdlib>
 
 namespace pe
 {

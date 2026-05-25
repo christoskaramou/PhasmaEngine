@@ -3,6 +3,7 @@
 ## 2026-05-25
 
 - Removed the engine sprite feature in favor of runtime UI for the current 2D-facing path. The `Component_Sprite` scene tag, sprite Lua table, editor sprite menus/inspector, sprite serialization, NDC sprite render pass/shaders, and sprite-specific render/culling/shadow plumbing are gone. Runtime UI now stays generic: it exposes screen/widget helpers and no longer auto-creates sample/debug overlay content in editor or player.
+- Added generic runtime UI image widgets over the existing backend-neutral UI path. `RuntimeUiSystem` now has a path-backed `Image` widget, caches loaded engine `Image` resources by resolved asset path, and exposes `runtime_ui.set_image(...)` overloads with optional label/size/path/resource tables. The Dear ImGui runtime backend registers those engine images as backend descriptors/textures internally for Vulkan/DX12 without exposing ImGui types or reviving scene sprites/game overlay logic.
 
 ## 2026-05-24
 

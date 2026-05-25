@@ -1,7 +1,8 @@
 #include "UI/RuntimeUi.h"
+#include "API/Command.h"
 #include "API/Image.h"
+#include "API/Queue.h"
 #include "API/RHI.h"
-#include "Base/Timer.h"
 
 namespace pe
 {
@@ -12,6 +13,54 @@ namespace pe
         std::string MakeDefaultTitle(const std::string &screenId)
         {
             return screenId.empty() ? "Runtime UI" : screenId;
+        }
+
+        std::filesystem::path U8Path(const std::string &utf8)
+        {
+            return std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));
+        }
+
+        std::string PathToUtf8(const std::filesystem::path &path)
+        {
+            const auto utf8 = path.u8string();
+            return std::string(reinterpret_cast<const char *>(utf8.c_str()));
+        }
+
+        std::filesystem::path ResolveImagePath(const std::string &path)
+        {
+            std::filesystem::path imagePath = U8Path(path);
+            if (imagePath.is_absolute())
+                return imagePath;
+
+            std::string relative = path;
+            if (relative.rfind("Assets/", 0) == 0 || relative.rfind("Assets\\", 0) == 0)
+                relative = relative.substr(7);
+
+            imagePath = U8Path(relative);
+            const std::filesystem::path assets = U8Path(Path::Assets);
+            std::array<std::filesystem::path, 5> candidates = {
+                assets / imagePath,
+                assets / "Textures" / imagePath,
+                assets / "Images" / imagePath,
+                assets / "Objects" / imagePath,
+                imagePath};
+
+            for (const std::filesystem::path &candidate : candidates)
+            {
+                if (std::filesystem::exists(candidate))
+                    return candidate;
+            }
+
+            return candidates[0];
+        }
+
+        std::string NormalizeImagePathKey(const std::filesystem::path &path)
+        {
+            std::error_code ec;
+            std::filesystem::path normalized = std::filesystem::weakly_canonical(path, ec);
+            if (ec)
+                normalized = path.lexically_normal();
+            return PathToUtf8(normalized);
         }
     } // namespace
 
@@ -54,10 +103,17 @@ namespace pe
         if (s_activeRuntimeUi == this)
             s_activeRuntimeUi = nullptr;
 
+        if (!m_imageCache.empty())
+        {
+            if (Queue *queue = RHII.GetMainQueue())
+                queue->WaitIdle();
+        }
+
         if (m_backend)
             m_backend->Shutdown();
 
         m_backend.reset();
+        m_imageCache.clear();
         m_backendName = "none";
         m_initialized = false;
         m_frameOpen = false;
@@ -276,6 +332,22 @@ namespace pe
         widget.label = label.empty() ? widgetId : label;
     }
 
+    void RuntimeUiSystem::SetImage(const std::string &screenId,
+                                   const std::string &widgetId,
+                                   const std::string &label,
+                                   const std::string &path,
+                                   float width,
+                                   float height)
+    {
+        Screen &screen = GetOrCreateScreen(screenId);
+        Widget &widget = GetOrCreateWidget(screen, widgetId, WidgetType::Image);
+        widget.label = label;
+        widget.imagePath = path;
+        widget.imageWidth = width;
+        widget.imageHeight = height;
+        widget.image = path.empty() ? nullptr : LoadImageResource(path);
+    }
+
     bool RuntimeUiSystem::GetBool(const std::string &screenId,
                                   const std::string &widgetId,
                                   bool fallback) const
@@ -310,6 +382,59 @@ namespace pe
         return false;
     }
 
+    Image *RuntimeUiSystem::LoadImageResource(const std::string &path)
+    {
+        const std::filesystem::path resolvedPath = ResolveImagePath(path);
+        const std::string cacheKey = NormalizeImagePathKey(resolvedPath);
+
+        auto cacheIt = m_imageCache.find(cacheKey);
+        if (cacheIt != m_imageCache.end())
+            return cacheIt->second.get();
+
+        if (!std::filesystem::exists(resolvedPath))
+        {
+            PE_WARN("[RuntimeUI] image file not found: %s", path.c_str());
+            m_imageCache.emplace(cacheKey, nullptr);
+            return nullptr;
+        }
+
+        if (ResourceHandle<Image> cached = ResourceManager::Get().Find<Image>(cacheKey))
+        {
+            m_imageCache.emplace(cacheKey, cached.GetShared());
+            return cached.get();
+        }
+
+        Queue *queue = RHII.GetMainQueue();
+        if (!queue)
+        {
+            PE_WARN("[RuntimeUI] cannot load image without a main queue: %s", path.c_str());
+            m_imageCache.emplace(cacheKey, nullptr);
+            return nullptr;
+        }
+
+        CommandBuffer *cmd = queue->AcquireCommandBuffer();
+        cmd->Begin();
+        Image *rawImage = Image::LoadRGBA8(cmd, cacheKey);
+        cmd->End();
+
+        if (!rawImage)
+        {
+            cmd->Return();
+            m_imageCache.emplace(cacheKey, nullptr);
+            return nullptr;
+        }
+
+        queue->Submit(1, &cmd, nullptr, nullptr);
+        cmd->Wait();
+        cmd->Return();
+
+        std::shared_ptr<Image> image(rawImage, [](Image *p)
+                                     { Image::Destroy(p); });
+        ResourceManager::Get().Register<Image>(cacheKey, image);
+        m_imageCache.emplace(cacheKey, image);
+        return image.get();
+    }
+
     void RuntimeUiSystem::BuildFrame()
     {
         for (Screen &screen : m_screens)
@@ -340,6 +465,34 @@ namespace pe
                     case WidgetType::Button:
                         if (m_backend->Button(widget.label.c_str()))
                             widget.clicked = true;
+                        break;
+                    case WidgetType::Image:
+                        if (widget.image)
+                        {
+                            RuntimeUiImageDesc imageDesc{};
+                            imageDesc.image = widget.image;
+                            imageDesc.label = widget.label.c_str();
+                            imageDesc.width = widget.imageWidth;
+                            imageDesc.height = widget.imageHeight;
+
+                            const float nativeWidth = widget.image->GetWidth_f();
+                            const float nativeHeight = widget.image->GetHeight_f();
+                            if (imageDesc.width <= 0.0f && imageDesc.height <= 0.0f)
+                            {
+                                imageDesc.width = nativeWidth;
+                                imageDesc.height = nativeHeight;
+                            }
+                            else if (imageDesc.width <= 0.0f && imageDesc.height > 0.0f && nativeHeight > 0.0f)
+                            {
+                                imageDesc.width = imageDesc.height * nativeWidth / nativeHeight;
+                            }
+                            else if (imageDesc.height <= 0.0f && imageDesc.width > 0.0f && nativeWidth > 0.0f)
+                            {
+                                imageDesc.height = imageDesc.width * nativeHeight / nativeWidth;
+                            }
+
+                            m_backend->DrawImage(imageDesc);
+                        }
                         break;
                     }
                 }

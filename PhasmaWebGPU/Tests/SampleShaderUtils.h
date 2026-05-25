@@ -3,7 +3,6 @@
 #include "API/Shader.h"
 #include "API/RHI.h"
 #include "API/Vulkan/VulkanShaderImpl.h"
-#include "Base/FileWatcher.h"
 
 #if defined(PE_WIN32)
 #include <Windows.h>

@@ -6,7 +6,6 @@
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
 #include "Scene/SceneNodeHandle.h"
-#include "Base/ThreadPool.h"
 
 namespace pe
 {

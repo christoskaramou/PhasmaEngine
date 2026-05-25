@@ -1,12 +1,8 @@
 #pragma once
 
 #include "API/RHITypes.h"
-#include "Base/Settings.h"
-#include "Base/Math.h"
 
 #include <cstddef>
-#include <string>
-#include <unordered_map>
 
 namespace pe
 {

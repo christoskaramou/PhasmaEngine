@@ -6,8 +6,6 @@
 #include "WGPULimits.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
-#include "Base/Log.h"
-#include "Base/EventSystem.h"
 #include <SDL.h>
 
 namespace

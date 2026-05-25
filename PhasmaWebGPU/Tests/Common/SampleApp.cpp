@@ -5,8 +5,6 @@
 
 #include "API/GraphicsApiSelection.h"
 #include "API/RHI.h"
-#include "Base/EventSystem.h"
-#include "Base/Log.h"
 
 #include <cstring>
 

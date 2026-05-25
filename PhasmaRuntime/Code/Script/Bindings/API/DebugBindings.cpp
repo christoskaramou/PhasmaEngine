@@ -1,5 +1,4 @@
 #include "Script/ScriptSystem.h"
-#include "API/Debug.h"
 #include "API/Buffer.h"
 #include "API/Image.h"
 #include "API/Command.h"

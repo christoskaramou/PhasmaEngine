@@ -1,4 +1,3 @@
-#include "Base/Settings.h"
 
 namespace pe
 {

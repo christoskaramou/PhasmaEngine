@@ -5,8 +5,6 @@
 #include "API/RHI.h"
 #include "API/Sampler.h"
 #include "API/Swapchain.h"
-#include "Base/Hash.h"
-#include "Base/Settings.h"
 
 #include <cmath>
 

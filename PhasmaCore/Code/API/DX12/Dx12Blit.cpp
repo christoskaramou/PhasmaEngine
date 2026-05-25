@@ -13,13 +13,6 @@
 #include "API/RHI.h"
 #include "API/Sampler.h"
 
-#include <algorithm>
-#include <cstdint>
-#include <mutex>
-#include <sstream>
-#include <string>
-#include <unordered_map>
-#include <vector>
 
 namespace pe
 {

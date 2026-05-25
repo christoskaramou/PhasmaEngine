@@ -1,14 +1,7 @@
 #include "Render/ScreenshotWriter.h"
-#include "Base/Log.h"
-#include "Base/Path.h"
 
-#include <algorithm>
-#include <chrono>
 #include <ctime>
 #include <cstring>
-#include <filesystem>
-#include <fstream>
-#include <vector>
 
 namespace pe
 {

@@ -1,6 +1,4 @@
 #include "ScriptEditor.h"
-#include "Base/EventSystem.h"
-#include "Base/Path.h"
 #include "GUI/GUI.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"

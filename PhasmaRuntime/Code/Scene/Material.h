@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Base/ResourceManager.h"
 #include "Scene/MaterialReflection.h"
 
 namespace pe

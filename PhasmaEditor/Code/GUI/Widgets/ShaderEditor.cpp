@@ -1,12 +1,6 @@
 // PhasmaEditor/Code/GUI/Widgets/ShaderEditor.cpp
 #include "ShaderEditor.h"
-#include "Base/EventSystem.h"
-#include "Base/Path.h"
-#include "Base/Log.h"
 #include "imgui/imgui.h"
-#include <fstream>
-#include <filesystem>
-#include <algorithm>
 
 namespace pe
 {

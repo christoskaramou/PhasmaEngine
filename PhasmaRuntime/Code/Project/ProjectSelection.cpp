@@ -1,11 +1,9 @@
 #include "Project/ProjectSelection.h"
 
-#include "Base/Path.h"
 #include "Project/Detail/ProjectHelpers.h"
 #include "rapidjson/document.h"
 
 #include <system_error>
-#include <utility>
 
 namespace pe
 {

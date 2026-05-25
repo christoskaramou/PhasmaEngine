@@ -2,7 +2,6 @@
 
 #include "Project/ProjectConfig.h"
 
-#include <cstdint>
 
 namespace pe
 {

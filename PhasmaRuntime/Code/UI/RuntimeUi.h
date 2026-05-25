@@ -1,13 +1,5 @@
 #pragma once
 
-#include "Base/Base.h"
-#include "SDL.h"
-
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <vector>
-
 namespace pe
 {
     class CommandBuffer;
@@ -43,6 +35,14 @@ namespace pe
         std::string title;
     };
 
+    struct RuntimeUiImageDesc
+    {
+        Image *image = nullptr;
+        const char *label = nullptr;
+        float width = 0.0f;
+        float height = 0.0f;
+    };
+
     class IRuntimeUiBackend
     {
     public:
@@ -59,6 +59,7 @@ namespace pe
         virtual void Number(const char *label, double value) = 0;
         virtual bool Checkbox(const char *label, bool &value) = 0;
         virtual bool Button(const char *label) = 0;
+        virtual void DrawImage(const RuntimeUiImageDesc &image) = 0;
         virtual void EndScreen() = 0;
         virtual void EndFrame() = 0;
         virtual bool HasDrawData() const = 0;
@@ -109,6 +110,12 @@ namespace pe
         void SetButton(const std::string &screenId,
                        const std::string &widgetId,
                        const std::string &label);
+        void SetImage(const std::string &screenId,
+                      const std::string &widgetId,
+                      const std::string &label,
+                      const std::string &path,
+                      float width = 0.0f,
+                      float height = 0.0f);
 
         bool GetBool(const std::string &screenId, const std::string &widgetId, bool fallback = false) const;
         bool ConsumeButtonClick(const std::string &screenId, const std::string &widgetId);
@@ -119,7 +126,8 @@ namespace pe
             Text,
             Number,
             Bool,
-            Button
+            Button,
+            Image
         };
 
         struct Widget
@@ -131,6 +139,10 @@ namespace pe
             double numberValue = 0.0;
             bool boolValue = false;
             bool clicked = false;
+            std::string imagePath;
+            Image *image = nullptr;
+            float imageWidth = 0.0f;
+            float imageHeight = 0.0f;
         };
 
         struct Screen
@@ -145,10 +157,12 @@ namespace pe
         const Screen *FindScreen(const std::string &screenId) const;
         Screen *FindScreen(const std::string &screenId);
         Widget &GetOrCreateWidget(Screen &screen, const std::string &widgetId, WidgetType type);
+        Image *LoadImageResource(const std::string &path);
         void BuildFrame();
 
         std::unique_ptr<IRuntimeUiBackend> m_backend;
         std::vector<Screen> m_screens;
+        std::unordered_map<std::string, std::shared_ptr<Image>> m_imageCache;
         std::string m_backendName = "none";
         bool m_initialized = false;
         bool m_frameOpen = false;

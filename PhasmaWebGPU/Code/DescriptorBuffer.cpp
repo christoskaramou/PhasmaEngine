@@ -7,7 +7,6 @@
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 
-#include <algorithm>
 
 namespace pwgpu
 {

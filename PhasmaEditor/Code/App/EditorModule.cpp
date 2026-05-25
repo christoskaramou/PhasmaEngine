@@ -1,6 +1,5 @@
 #include "App/EditorModule.h"
 #include "App/App.h"
-#include "Base/Path.h"
 #include "GUI/GUI.h"
 #include "imgui/imgui.h"
 

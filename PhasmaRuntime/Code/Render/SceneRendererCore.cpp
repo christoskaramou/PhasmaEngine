@@ -8,7 +8,6 @@
 #include "Render/SceneScreenshot.h"
 #include "Render/SceneSky.h"
 
-#include <utility>
 
 namespace pe
 {

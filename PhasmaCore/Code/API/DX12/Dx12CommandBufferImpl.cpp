@@ -16,7 +16,6 @@
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
-#include "Base/Profiler.h"
 
 namespace pe
 {

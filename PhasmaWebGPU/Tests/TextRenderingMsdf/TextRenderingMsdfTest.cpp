@@ -6,7 +6,6 @@
 #include "../Common/SampleUtils.h"
 #include "../SampleShaderUtils.h"
 
-#include "Base/Log.h"
 
 #define _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING
 #include "rapidjson/document.h"

@@ -1,4 +1,3 @@
-#include "API/Debug.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
@@ -37,7 +36,6 @@
 #endif
 #include "renderdoc_app.h"
 
-#include <atomic>
 
 #define PE_RENDER_DOC 0
 

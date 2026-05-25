@@ -13,7 +13,6 @@
 #include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
-#include "Base/Settings.h"
 
 extern "C" void wgpuDeviceRelease(WGPUDevice);
 extern "C" void wgpuRenderPipelineAddRef(WGPURenderPipeline);

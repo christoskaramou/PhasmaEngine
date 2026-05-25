@@ -1,9 +1,6 @@
 #pragma once
 
 #include <sol/sol.hpp>
-#include <future>
-#include <string>
-#include <vector>
 #include "Scene/SceneNodeHandle.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneHost.h"

@@ -1,7 +1,6 @@
 #pragma once
 #include "GUI/Widget.h"
 #include "imgui/imgui.h"
-#include "Base/Log.h"
 
 namespace pe
 {

@@ -1,4 +1,3 @@
-#include "Base/Math.h"
 
 #if PE_USE_GLM == 0
 

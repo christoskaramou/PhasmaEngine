@@ -4,7 +4,6 @@
 #include "../Common/SampleUtils.h"
 #include "../SampleShaderUtils.h"
 
-#include "Base/Log.h"
 
 #include <cmath>
 #include <cstring>

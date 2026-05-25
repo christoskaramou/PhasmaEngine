@@ -1,5 +1,4 @@
 #include "Render/SceneRendererHost.h"
-#include "Base/Log.h"
 
 namespace pe
 {

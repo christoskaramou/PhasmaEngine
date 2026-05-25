@@ -2,11 +2,6 @@
 
 #include "PhasmaMCP/Tool.h"
 #include "PhasmaMCP/Codebase/BM25Index.h"
-#include <filesystem>
-#include <functional>
-#include <memory>
-#include <string>
-#include <vector>
 
 namespace pe
 {

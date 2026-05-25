@@ -1,5 +1,4 @@
 #include "Scene/SceneRuntimeHooks.h"
-#include "ECS/Context.h"
 #include "Render/SceneRendererHost.h"
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/RayTracingPass.h"

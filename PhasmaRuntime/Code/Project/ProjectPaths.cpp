@@ -1,6 +1,5 @@
 #include "Project/ProjectPaths.h"
 
-#include "Base/Path.h"
 #include "Project/Detail/ProjectHelpers.h"
 
 namespace pe

@@ -8,7 +8,6 @@
 #include "rapidjson/ostreamwrapper.h"
 #include "rapidjson/prettywriter.h"
 
-#include <fstream>
 
 namespace pe
 {

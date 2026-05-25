@@ -1,6 +1,5 @@
 #include "Render/SceneSky.h"
 #include "API/Image.h"
-#include "Base/Path.h"
 #include "Skybox/Skybox.h"
 
 namespace pe

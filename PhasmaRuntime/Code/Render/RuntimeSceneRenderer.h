@@ -4,7 +4,6 @@
 #include "Render/SceneRendererHost.h"
 #include "Scene/Scene.h"
 
-#include <optional>
 
 namespace pe
 {

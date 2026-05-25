@@ -4,8 +4,6 @@
 #include <tracy/Tracy.hpp>
 #endif
 
-#include <cstdint>
-#include <vector>
 
 namespace pe
 {

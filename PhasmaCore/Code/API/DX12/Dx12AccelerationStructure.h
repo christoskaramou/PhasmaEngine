@@ -6,7 +6,6 @@
 
 #include <d3d12.h>
 
-#include <vector>
 
 namespace pe
 {
