@@ -14,6 +14,7 @@ namespace pe
     private:
         void PerformObjectPicking(float normalizedX, float normalizedY);
         void DrawGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize);
+        bool DrawRuntimeUiTransformGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize);
         void DrawTransformGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize);
         void DrawLightGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize);
         void DrawCameraGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize);

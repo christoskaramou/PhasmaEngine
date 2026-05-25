@@ -62,6 +62,10 @@ namespace pe
         std::string nightPath;
     };
 
+    class NodeRuntimeUiTag : public IComponent
+    {
+    };
+
     struct NodeComponentCache
     {
         NodeNameComponent *name = nullptr;
@@ -74,5 +78,6 @@ namespace pe
         NodePhysicsTag *physics = nullptr;
         NodeAudioTag *audio = nullptr;
         NodeSkyboxTag *skybox = nullptr;
+        NodeRuntimeUiTag *runtimeUi = nullptr;
     };
 } // namespace pe

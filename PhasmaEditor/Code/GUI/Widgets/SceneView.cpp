@@ -12,6 +12,7 @@
 #include "Scene/SelectionManager.h"
 #include "Script/Bindings/Input/InputState.h"
 #include "Systems/RendererSystem.h"
+#include "UI/RuntimeUi.h"
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui_internal.h"
 
@@ -133,6 +134,212 @@ namespace pe
         cursor.x += (panel.x - imageSize.x) * 0.5f;
         cursor.y += (panel.y - imageSize.y) * 0.5f;
         ImGui::SetCursorPos(cursor);
+    }
+
+    static bool IsRuntimeUiNode(Scene &scene, NodeId *node)
+    {
+        return node &&
+               scene.IsNodeAlive(node) &&
+               scene.IsNodeHierarchyEnabled(node) &&
+               (scene.GetComponentFlags(node) & Component_RuntimeUi) != 0;
+    }
+
+    static bool GetRuntimeUiSurfaceSize(float &surfaceWidth, float &surfaceHeight)
+    {
+        RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi();
+        if (!runtimeUi)
+            return false;
+
+        uint32_t width = 0;
+        uint32_t height = 0;
+        runtimeUi->GetFrameSurfaceSize(width, height);
+        if (width == 0 || height == 0)
+            return false;
+
+        surfaceWidth = static_cast<float>(width);
+        surfaceHeight = static_cast<float>(height);
+        return true;
+    }
+
+    static mat4 ComputeNodeWorldMatrix(Scene &scene, NodeId *node)
+    {
+        if (!node || !scene.IsNodeAlive(node))
+            return mat4(1.0f);
+
+        NodeId *parent = scene.GetParent(node);
+        if (!parent)
+            return scene.GetLocalMatrix(node);
+
+        return ComputeNodeWorldMatrix(scene, parent) * scene.GetLocalMatrix(node);
+    }
+
+    static bool DecomposeRuntimeUiRect(const mat4 &matrix, float &x, float &y, float &w, float &h)
+    {
+        float t[3] = {};
+        float r[3] = {};
+        float s[3] = {};
+        ImGuizmo::DecomposeMatrixToComponents(value_ptr(matrix), t, r, s);
+        x = t[0];
+        y = t[1];
+        w = s[0];
+        h = s[1];
+        return std::isfinite(x) && std::isfinite(y) && std::isfinite(w) && std::isfinite(h) &&
+               w > 0.0f && h > 0.0f;
+    }
+
+    static bool MergeRuntimeUiRect(float srcX, float srcY, float srcW, float srcH,
+                                   bool &found, float &x, float &y, float &w, float &h)
+    {
+        if (srcW <= 0.0f || srcH <= 0.0f)
+            return false;
+
+        if (!found)
+        {
+            x = srcX;
+            y = srcY;
+            w = srcW;
+            h = srcH;
+            found = true;
+            return true;
+        }
+
+        const float minX = std::min(x, srcX);
+        const float minY = std::min(y, srcY);
+        const float maxX = std::max(x + w, srcX + srcW);
+        const float maxY = std::max(y + h, srcY + srcH);
+        x = minX;
+        y = minY;
+        w = maxX - minX;
+        h = maxY - minY;
+        return true;
+    }
+
+    static bool GetRuntimeUiDescendantRect(Scene &scene, NodeId *node, float &x, float &y, float &w, float &h)
+    {
+        bool found = false;
+        RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi();
+        if (runtimeUi)
+        {
+            float directX = 0.0f;
+            float directY = 0.0f;
+            float directW = 0.0f;
+            float directH = 0.0f;
+            if (runtimeUi->GetNodeRect(node, directX, directY, directW, directH))
+                MergeRuntimeUiRect(directX, directY, directW, directH, found, x, y, w, h);
+        }
+
+        for (NodeId *child : scene.GetChildren(node))
+        {
+            if (!IsRuntimeUiNode(scene, child))
+                continue;
+
+            float childX = 0.0f;
+            float childY = 0.0f;
+            float childW = 0.0f;
+            float childH = 0.0f;
+            if (GetRuntimeUiDescendantRect(scene, child, childX, childY, childW, childH))
+                MergeRuntimeUiRect(childX, childY, childW, childH, found, x, y, w, h);
+        }
+
+        return found;
+    }
+
+    static bool GetRuntimeUiNodeRect(Scene &scene, NodeId *node, float &x, float &y, float &w, float &h)
+    {
+        if (!IsRuntimeUiNode(scene, node))
+            return false;
+
+        if (GetRuntimeUiDescendantRect(scene, node, x, y, w, h))
+            return true;
+
+        return DecomposeRuntimeUiRect(ComputeNodeWorldMatrix(scene, node), x, y, w, h);
+    }
+
+    static bool HasDirectRuntimeUiNodeRect(NodeId *node)
+    {
+        RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi();
+        if (!runtimeUi)
+            return false;
+
+        float x = 0.0f;
+        float y = 0.0f;
+        float w = 0.0f;
+        float h = 0.0f;
+        return runtimeUi->GetNodeRect(node, x, y, w, h);
+    }
+
+    static void SetRuntimeUiNodeWorldMatrix(Scene &scene, NodeId *node, const mat4 &world)
+    {
+        NodeId *parent = scene.GetParent(node);
+        const mat4 parentWorld = parent ? ComputeNodeWorldMatrix(scene, parent) : mat4(1.0f);
+        const float det = glm::determinant(parentWorld);
+        if (std::abs(det) < 1e-6f)
+            return;
+
+        scene.SetLocalMatrix(node, glm::inverse(parentWorld) * world);
+    }
+
+    static void SetRuntimeUiNodeRect(Scene &scene, NodeId *node,
+                                     float previousX, float previousY, float previousW, float previousH,
+                                     float x, float y, float w, float h)
+    {
+        if (!IsRuntimeUiNode(scene, node))
+            return;
+
+        w = std::max(w, 1.0f);
+        h = std::max(h, 1.0f);
+
+        if (HasDirectRuntimeUiNodeRect(node))
+        {
+            const mat4 world = glm::translate(mat4(1.0f), vec3(x, y, 0.0f)) *
+                               glm::scale(mat4(1.0f), vec3(w, h, 1.0f));
+            SetRuntimeUiNodeWorldMatrix(scene, node, world);
+            return;
+        }
+
+        mat4 world = ComputeNodeWorldMatrix(scene, node);
+        float t[3] = {};
+        float r[3] = {};
+        float s[3] = {};
+        ImGuizmo::DecomposeMatrixToComponents(value_ptr(world), t, r, s);
+        if (!std::isfinite(t[0]) || !std::isfinite(t[1]))
+            return;
+
+        const float dx = x - previousX;
+        const float dy = y - previousY;
+        float sx = s[0];
+        float sy = s[1];
+        if (previousW > 0.0f && previousH > 0.0f)
+        {
+            sx *= w / previousW;
+            sy *= h / previousH;
+        }
+
+        world = glm::translate(mat4(1.0f), vec3(t[0] + dx, t[1] + dy, t[2])) *
+                glm::rotate(mat4(1.0f), glm::radians(r[2]), vec3(0.0f, 0.0f, 1.0f)) *
+                glm::scale(mat4(1.0f), vec3(sx, sy, s[2]));
+        SetRuntimeUiNodeWorldMatrix(scene, node, world);
+    }
+
+    static NodeId *PickRuntimeUiNodeAt(const ImVec2 &mouse, const ImVec2 &imageMin, const ImVec2 &imageSize)
+    {
+        RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi();
+        if (!runtimeUi || imageSize.x <= 0.0f || imageSize.y <= 0.0f)
+            return nullptr;
+
+        float surfaceWidth = 0.0f;
+        float surfaceHeight = 0.0f;
+        if (!GetRuntimeUiSurfaceSize(surfaceWidth, surfaceHeight))
+            return nullptr;
+
+        const float surfaceX = (mouse.x - imageMin.x) * surfaceWidth / imageSize.x;
+        const float surfaceY = (mouse.y - imageMin.y) * surfaceHeight / imageSize.y;
+        NodeId *node = runtimeUi->PickNode(surfaceX, surfaceY);
+        if (!node)
+            return nullptr;
+
+        Scene *scene = GetActiveScene();
+        return scene && IsRuntimeUiNode(*scene, node) ? node : nullptr;
     }
 
     // -----------------------------
@@ -538,14 +745,21 @@ namespace pe
         const bool runtimeUiMouseCaptured = InputState::IsMouseCapturedByUi();
 
         // Input (picking / focus) only when not interacting with gizmos
-        if (!runtimeUiMouseCaptured && !overGizmo && !usingGizmo)
+        if (!overGizmo && !usingGizmo)
         {
             if (imageHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
                 const ImVec2 mouse = ImGui::GetMousePos();
-                const float nx = (mouse.x - imageMin.x) / (imageMax.x - imageMin.x);
-                const float ny = (mouse.y - imageMin.y) / (imageMax.y - imageMin.y);
-                PerformObjectPicking(nx, ny);
+                if (NodeId *uiNode = PickRuntimeUiNodeAt(mouse, imageMin, imageSize))
+                {
+                    SelectionManager::Instance().Select(uiNode, SelectionType::Node);
+                }
+                else if (!runtimeUiMouseCaptured)
+                {
+                    const float nx = (mouse.x - imageMin.x) / (imageMax.x - imageMin.x);
+                    const float ny = (mouse.y - imageMin.y) / (imageMax.y - imageMin.y);
+                    PerformObjectPicking(nx, ny);
+                }
             }
 
             if (imageHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
@@ -710,6 +924,81 @@ namespace pe
         return glm::normalize(dir);
     }
 
+    bool SceneView::DrawRuntimeUiTransformGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    {
+        auto &selection = SelectionManager::Instance();
+        if (!selection.HasSelection() || selection.GetSelectionType() != SelectionType::Node)
+            return false;
+
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
+        NodeId *node = selection.GetSelectedNode();
+        float x = 0.0f;
+        float y = 0.0f;
+        float w = 0.0f;
+        float h = 0.0f;
+        if (!GetRuntimeUiNodeRect(scene, node, x, y, w, h))
+            return false;
+
+        float surfaceWidth = 0.0f;
+        float surfaceHeight = 0.0f;
+        if (!GetRuntimeUiSurfaceSize(surfaceWidth, surfaceHeight))
+            return false;
+
+        const float sx = imageSize.x / surfaceWidth;
+        const float sy = imageSize.y / surfaceHeight;
+        ImRect rect(ImVec2(imageMin.x + x * sx, imageMin.y + y * sy),
+                    ImVec2(imageMin.x + (x + w) * sx, imageMin.y + (y + h) * sy));
+
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        const ImU32 border = IM_COL32(255, 214, 74, 255);
+        const ImU32 fill = IM_COL32(255, 214, 74, 28);
+        drawList->AddRectFilled(rect.Min, rect.Max, fill, 4.0f);
+        drawList->AddRect(rect.Min, rect.Max, border, 4.0f, 0, 2.0f);
+
+        ImGuizmo::SetOrthographic(true);
+        ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
+        ImGuizmo::SetRect(imageMin.x, imageMin.y, imageSize.x, imageSize.y);
+
+        const bool isRightClick = ImGui::IsMouseDown(ImGuiMouseButton_Right) && ImGui::IsWindowFocused();
+        ImGuizmo::Enable(!isRightClick);
+
+        ImGuizmo::OPERATION op = ImGuizmo::TRANSLATE;
+        if (selection.GetGizmoOperation() == GizmoOperation::Scale)
+            op = ImGuizmo::SCALE;
+
+        mat4 view(1.0f);
+        mat4 projection = glm::orthoRH_NO(0.0f, surfaceWidth, surfaceHeight, 0.0f, -1.0f, 1.0f);
+        mat4 matrix = glm::translate(mat4(1.0f), vec3(x + w * 0.5f, y + h * 0.5f, 0.0f)) *
+                      glm::scale(mat4(1.0f), vec3(w, h, 1.0f));
+
+        if (ImGuizmo::Manipulate(value_ptr(view), value_ptr(projection), op, ImGuizmo::LOCAL, value_ptr(matrix)))
+        {
+            float t[3] = {};
+            float r[3] = {};
+            float s[3] = {};
+            ImGuizmo::DecomposeMatrixToComponents(value_ptr(matrix), t, r, s);
+
+            const float newW = std::max(std::fabs(s[0]), 1.0f);
+            const float newH = std::max(std::fabs(s[1]), 1.0f);
+            if (std::isfinite(t[0]) && std::isfinite(t[1]) &&
+                std::isfinite(newW) && std::isfinite(newH))
+            {
+                SetRuntimeUiNodeRect(scene,
+                                     node,
+                                     x,
+                                     y,
+                                     w,
+                                     h,
+                                     t[0] - newW * 0.5f,
+                                     t[1] - newH * 0.5f,
+                                     newW,
+                                     newH);
+            }
+        }
+
+        return true;
+    }
+
     void SceneView::DrawTransformGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize)
     {
         auto &selection = SelectionManager::Instance();
@@ -807,7 +1096,7 @@ namespace pe
 
         ImGuizmo::BeginFrame();
 
-        if (GUIState::s_useTransformGizmo)
+        if (GUIState::s_useTransformGizmo && !DrawRuntimeUiTransformGizmo(imageMin, imageSize))
             DrawTransformGizmo(imageMin, imageSize);
 
         if (GUIState::s_useLightGizmos)

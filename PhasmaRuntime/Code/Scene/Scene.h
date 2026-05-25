@@ -345,6 +345,8 @@ namespace pe
                 flags |= Component_Audio;
             if (c.skybox)
                 flags |= Component_Skybox;
+            if (c.runtimeUi)
+                flags |= Component_RuntimeUi;
             if (m_nodeRuntime[idx].gpuPending)
                 flags |= Component_GpuPending;
             return flags;

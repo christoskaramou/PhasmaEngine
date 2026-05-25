@@ -211,6 +211,11 @@ namespace pe
                     return false;
 
                 ScopedImGuiContext contextScope(m_context);
+                m_currentScreenId = screen.id;
+                m_currentScreenOverlay = screen.overlay;
+                if (screen.overlay)
+                    return true;
+
                 ImGui::SetNextWindowPos(m_nextScreenPos, ImGuiCond_Always);
                 ImGui::SetNextWindowSize(ImVec2(runtime_ui_imgui::kWindowWidth, 0.0f), ImGuiCond_FirstUseEver);
                 const std::string windowId = screen.title + "##" + screen.id;
@@ -269,15 +274,41 @@ namespace pe
                 ImGui::Image((ImTextureID)textureID, ImVec2(width, height));
             }
 
+            RuntimeUiWidgetState Quad(const RuntimeUiQuadDesc &quad) override
+            {
+                RuntimeUiWidgetState state{};
+                if (!m_frameOpen || !quad.visible)
+                    return state;
+
+                ScopedImGuiContext contextScope(m_context);
+                const float width = quad.width > 0.0f ? quad.width : 180.0f;
+                const float height = quad.height > 0.0f ? quad.height : 240.0f;
+                if (width <= 0.0f || height <= 0.0f)
+                    return state;
+
+                const std::string id = m_currentScreenId + "." + (quad.id ? quad.id : "quad");
+                const ImVec2 size(width, height);
+                if (m_currentScreenOverlay)
+                    return QuadOverlay(id, quad, size);
+
+                ImGui::PushID(id.c_str());
+                state = QuadInCurrentWindow(id, quad, size);
+                ImGui::PopID();
+                return state;
+            }
+
             void EndScreen() override
             {
-                if (m_frameOpen)
+                if (m_frameOpen && !m_currentScreenOverlay)
                 {
                     ScopedImGuiContext contextScope(m_context);
                     const ImVec2 windowSize = ImGui::GetWindowSize();
                     ImGui::End();
                     m_nextScreenPos.y += windowSize.y + runtime_ui_imgui::kScreenGap;
                 }
+
+                m_currentScreenOverlay = false;
+                m_currentScreenId.clear();
             }
 
             void EndFrame() override
@@ -371,6 +402,216 @@ namespace pe
                 if (textureID)
                     m_imageTextureIds.emplace(image, textureID);
                 return textureID;
+            }
+
+            static ImU32 ToColor(const RuntimeUiColor &color)
+            {
+                return ImGui::ColorConvertFloat4ToU32(ImVec4(color.r, color.g, color.b, color.a));
+            }
+
+            static bool HasText(const char *text)
+            {
+                return text && text[0] != '\0';
+            }
+
+            static float DrawWrappedText(ImDrawList *drawList,
+                                         ImFont *font,
+                                         float fontSize,
+                                         const char *text,
+                                         ImVec2 pos,
+                                         float maxWidth,
+                                         ImU32 color,
+                                         int maxLines)
+            {
+                if (!drawList || !HasText(text) || maxWidth <= 0.0f || maxLines <= 0)
+                    return 0.0f;
+
+                std::string line;
+                std::string word;
+                int lines = 0;
+                float y = pos.y;
+                const float lineHeight = fontSize + 3.0f;
+                const char *cursor = text;
+
+                auto flushLine = [&]()
+                {
+                    if (line.empty() || lines >= maxLines)
+                        return;
+                    drawList->AddText(font, fontSize, ImVec2(pos.x, y), color, line.c_str());
+                    line.clear();
+                    ++lines;
+                    y += lineHeight;
+                };
+
+                auto pushWord = [&](const std::string &next)
+                {
+                    if (next.empty() || lines >= maxLines)
+                        return;
+
+                    const std::string candidate = line.empty() ? next : line + " " + next;
+                    if (ImGui::CalcTextSize(candidate.c_str()).x <= maxWidth)
+                    {
+                        line = candidate;
+                        return;
+                    }
+
+                    flushLine();
+                    if (lines < maxLines)
+                        line = next;
+                };
+
+                while (*cursor && lines < maxLines)
+                {
+                    const char c = *cursor++;
+                    if (c == '\n')
+                    {
+                        pushWord(word);
+                        word.clear();
+                        flushLine();
+                    }
+                    else if (std::isspace(static_cast<unsigned char>(c)))
+                    {
+                        pushWord(word);
+                        word.clear();
+                    }
+                    else
+                    {
+                        word.push_back(c);
+                    }
+                }
+
+                pushWord(word);
+                flushLine();
+                return static_cast<float>(lines) * lineHeight;
+            }
+
+            RuntimeUiWidgetState QuadOverlay(const std::string &id, const RuntimeUiQuadDesc &quad, ImVec2 size)
+            {
+                const ImGuiWindowFlags flags =
+                    ImGuiWindowFlags_NoDecoration |
+                    ImGuiWindowFlags_NoMove |
+                    ImGuiWindowFlags_NoResize |
+                    ImGuiWindowFlags_NoSavedSettings |
+                    ImGuiWindowFlags_NoFocusOnAppearing |
+                    ImGuiWindowFlags_NoScrollbar |
+                    ImGuiWindowFlags_NoScrollWithMouse |
+                    ImGuiWindowFlags_NoBackground;
+
+                ImGui::SetNextWindowPos(ImVec2(quad.x, quad.y), ImGuiCond_Always);
+                ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+                RuntimeUiWidgetState state{};
+                if (ImGui::Begin(("##runtime-ui-quad-" + id).c_str(), nullptr, flags))
+                {
+                    ImGui::PushID(id.c_str());
+                    state = QuadInCurrentWindow(id, quad, size);
+                    ImGui::PopID();
+                }
+                ImGui::End();
+                ImGui::PopStyleVar(3);
+                return state;
+            }
+
+            RuntimeUiWidgetState QuadInCurrentWindow(const std::string &id, const RuntimeUiQuadDesc &quad, ImVec2 size)
+            {
+                RuntimeUiWidgetState state{};
+                const ImVec2 pos = ImGui::GetCursorScreenPos();
+                const ImVec2 max(pos.x + size.x, pos.y + size.y);
+                ImGui::InvisibleButton("hit", size);
+
+                ImGuiIO &io = ImGui::GetIO();
+                const bool itemActive = ImGui::IsItemActive();
+                const bool itemClicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+                const bool mouseReleased = ImGui::IsMouseReleased(ImGuiMouseButton_Left);
+                const bool mouseDragging = ImGui::IsMouseDragging(ImGuiMouseButton_Left, 1.0f);
+                if (quad.draggable && itemClicked)
+                    m_activeDragWidget = id;
+
+                state.hovered = ImGui::IsItemHovered();
+                state.active = itemActive;
+                state.clicked = itemClicked;
+                state.down = itemActive && ImGui::IsMouseDown(ImGuiMouseButton_Left);
+                state.dragStarted = quad.draggable && itemClicked;
+                state.dragging = quad.draggable && m_activeDragWidget == id && !mouseReleased &&
+                                 (mouseDragging || state.down);
+                state.dragReleased = quad.draggable && m_activeDragWidget == id && mouseReleased;
+                state.mouseX = io.MousePos.x;
+                state.mouseY = io.MousePos.y;
+                const ImVec2 dragDelta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0.0f);
+                state.dragDeltaX = dragDelta.x;
+                state.dragDeltaY = dragDelta.y;
+                if (state.dragReleased)
+                    m_activeDragWidget.clear();
+
+                DrawQuadVisual(quad, pos, max, size, state);
+                return state;
+            }
+
+            void DrawQuadVisual(const RuntimeUiQuadDesc &quad,
+                                ImVec2 pos,
+                                ImVec2 max,
+                                ImVec2 size,
+                                const RuntimeUiWidgetState &state)
+            {
+                ImDrawList *drawList = ImGui::GetWindowDrawList();
+                const float rounding = 7.0f;
+                ImU32 fill = ToColor(quad.fillColor);
+                ImU32 border = ToColor(quad.borderColor);
+                ImU32 accent = ToColor(quad.accentColor);
+                ImU32 text = ToColor(quad.textColor);
+                if (quad.selected || state.dragging)
+                    border = accent;
+
+                drawList->AddRectFilled(pos, max, fill, rounding);
+                drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
+
+                const float pad = 10.0f;
+                const float artHeight = std::clamp(size.y * 0.34f, 42.0f, 82.0f);
+                const ImVec2 artMin(pos.x + pad, pos.y + pad);
+                const ImVec2 artMax(max.x - pad, pos.y + pad + artHeight);
+                drawList->AddRectFilled(artMin, artMax, accent, 5.0f);
+
+                if (quad.image)
+                {
+                    if (void *textureID = GetImageTexture(quad.image))
+                    {
+                        drawList->AddImage((ImTextureID)textureID,
+                                           artMin,
+                                           artMax,
+                                           ImVec2(0.0f, 0.0f),
+                                           ImVec2(1.0f, 1.0f),
+                                           ToColor(quad.imageTint));
+                    }
+                }
+
+                ImFont *font = ImGui::GetFont();
+                const float fontSize = ImGui::GetFontSize();
+                float y = artMax.y + 9.0f;
+                const float textWidth = std::max(1.0f, size.x - pad * 2.0f);
+
+                if (HasText(quad.label))
+                {
+                    drawList->AddText(font, fontSize * 0.83f, ImVec2(pos.x + pad, pos.y + pad + 5.0f), text, quad.label);
+                }
+                if (HasText(quad.title))
+                {
+                    drawList->AddText(font, fontSize * 1.08f, ImVec2(pos.x + pad, y), text, quad.title);
+                    y += fontSize + 6.0f;
+                }
+                if (HasText(quad.subtitle))
+                {
+                    drawList->AddText(font, fontSize * 0.86f, ImVec2(pos.x + pad, y), accent, quad.subtitle);
+                    y += fontSize + 5.0f;
+                }
+                if (HasText(quad.body))
+                    y += DrawWrappedText(drawList, font, fontSize * 0.88f, quad.body, ImVec2(pos.x + pad, y), textWidth, text, 3);
+                if (HasText(quad.footer))
+                {
+                    drawList->AddLine(ImVec2(pos.x + pad, max.y - 30.0f), ImVec2(max.x - pad, max.y - 30.0f), border, 1.0f);
+                    drawList->AddText(font, fontSize * 0.82f, ImVec2(pos.x + pad, max.y - 23.0f), text, quad.footer);
+                }
             }
 
             void *RegisterImageTexture(Image *image)
@@ -594,12 +835,15 @@ namespace pe
             ImGuiContext *m_context = nullptr;
             RuntimeUiFrameInfo m_frameInfo{};
             ImVec2 m_nextScreenPos = ImVec2(runtime_ui_imgui::kViewportPadding, runtime_ui_imgui::kViewportPadding);
+            std::string m_currentScreenId;
+            std::string m_activeDragWidget;
             PeGraphicsApi m_api = PE_GRAPHICS_API_VULKAN;
             bool m_initialized = false;
             bool m_platformInitialized = false;
             bool m_rendererInitialized = false;
             bool m_frameOpen = false;
             bool m_rendered = false;
+            bool m_currentScreenOverlay = false;
             std::unordered_map<Image *, void *> m_imageTextureIds;
 #if defined(PE_WIN32)
             std::unordered_map<uint64_t, uint32_t> m_dx12ImGuiSlots;

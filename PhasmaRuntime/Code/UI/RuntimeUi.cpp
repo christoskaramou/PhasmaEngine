@@ -196,6 +196,12 @@ namespace pe
         m_frameInputRectValid = false;
     }
 
+    void RuntimeUiSystem::GetFrameSurfaceSize(uint32_t &width, uint32_t &height) const
+    {
+        width = m_frameSurfaceWidth > 0 ? m_frameSurfaceWidth : RHII.GetWidth();
+        height = m_frameSurfaceHeight > 0 ? m_frameSurfaceHeight : RHII.GetHeight();
+    }
+
     bool RuntimeUiSystem::WantsMouseCapture() const
     {
         return m_initialized && m_backend && m_backend->WantsMouseCapture();
@@ -270,6 +276,11 @@ namespace pe
     {
         Screen &screen = GetOrCreateScreen(screenId);
         screen.title = title.empty() ? MakeDefaultTitle(screenId) : title;
+    }
+
+    void RuntimeUiSystem::SetScreenOverlay(const std::string &screenId, bool overlay)
+    {
+        GetOrCreateScreen(screenId).overlay = overlay;
     }
 
     void RuntimeUiSystem::ClearScreen(const std::string &screenId)
@@ -348,6 +359,35 @@ namespace pe
         widget.image = path.empty() ? nullptr : LoadImageResource(path);
     }
 
+    void RuntimeUiSystem::SetQuad(const std::string &screenId,
+                                  const std::string &widgetId,
+                                  const RuntimeUiQuadDesc &desc,
+                                  const std::string &path)
+    {
+        Screen &screen = GetOrCreateScreen(screenId);
+        Widget &widget = GetOrCreateWidget(screen, widgetId, WidgetType::Quad);
+        widget.label = desc.label ? desc.label : "";
+        widget.title = desc.title ? desc.title : "";
+        widget.subtitle = desc.subtitle ? desc.subtitle : "";
+        widget.textValue = desc.body ? desc.body : "";
+        widget.footer = desc.footer ? desc.footer : "";
+        widget.x = desc.x;
+        widget.y = desc.y;
+        widget.width = desc.width;
+        widget.height = desc.height;
+        widget.fillColor = desc.fillColor;
+        widget.borderColor = desc.borderColor;
+        widget.accentColor = desc.accentColor;
+        widget.textColor = desc.textColor;
+        widget.imageTint = desc.imageTint;
+        widget.node = desc.node;
+        widget.draggable = desc.draggable;
+        widget.selected = desc.selected;
+        widget.visible = desc.visible;
+        widget.imagePath = path;
+        widget.image = path.empty() ? desc.image : LoadImageResource(path);
+    }
+
     bool RuntimeUiSystem::GetBool(const std::string &screenId,
                                   const std::string &widgetId,
                                   bool fallback) const
@@ -380,6 +420,103 @@ namespace pe
         }
 
         return false;
+    }
+
+    bool RuntimeUiSystem::GetWidgetState(const std::string &screenId,
+                                         const std::string &widgetId,
+                                         RuntimeUiWidgetState &state) const
+    {
+        const Screen *screen = FindScreen(screenId);
+        if (!screen)
+            return false;
+
+        for (const Widget &widget : screen->widgets)
+        {
+            if (widget.id == widgetId)
+            {
+                state = widget.state;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool RuntimeUiSystem::GetNodeRect(NodeId *node, float &x, float &y, float &w, float &h) const
+    {
+        if (!node)
+            return false;
+
+        bool found = false;
+        float minX = 0.0f;
+        float minY = 0.0f;
+        float maxX = 0.0f;
+        float maxY = 0.0f;
+
+        for (const Screen &screen : m_screens)
+        {
+            if (!screen.visible || !screen.overlay)
+                continue;
+
+            for (const Widget &widget : screen.widgets)
+            {
+                if (widget.type != WidgetType::Quad || !widget.visible || widget.node != node)
+                    continue;
+                if (widget.width <= 0.0f || widget.height <= 0.0f)
+                    continue;
+
+                const float widgetMinX = widget.x;
+                const float widgetMinY = widget.y;
+                const float widgetMaxX = widget.x + widget.width;
+                const float widgetMaxY = widget.y + widget.height;
+                if (!found)
+                {
+                    minX = widgetMinX;
+                    minY = widgetMinY;
+                    maxX = widgetMaxX;
+                    maxY = widgetMaxY;
+                    found = true;
+                }
+                else
+                {
+                    minX = std::min(minX, widgetMinX);
+                    minY = std::min(minY, widgetMinY);
+                    maxX = std::max(maxX, widgetMaxX);
+                    maxY = std::max(maxY, widgetMaxY);
+                }
+            }
+        }
+
+        if (!found)
+            return false;
+
+        x = minX;
+        y = minY;
+        w = maxX - minX;
+        h = maxY - minY;
+        return true;
+    }
+
+    NodeId *RuntimeUiSystem::PickNode(float x, float y) const
+    {
+        for (auto screenIt = m_screens.rbegin(); screenIt != m_screens.rend(); ++screenIt)
+        {
+            const Screen &screen = *screenIt;
+            if (!screen.visible || !screen.overlay)
+                continue;
+
+            for (auto widgetIt = screen.widgets.rbegin(); widgetIt != screen.widgets.rend(); ++widgetIt)
+            {
+                const Widget &widget = *widgetIt;
+                if (widget.type != WidgetType::Quad || !widget.visible || !widget.node)
+                    continue;
+                if (widget.width <= 0.0f || widget.height <= 0.0f)
+                    continue;
+                if (x >= widget.x && y >= widget.y && x <= widget.x + widget.width && y <= widget.y + widget.height)
+                    return widget.node;
+            }
+        }
+        return nullptr;
     }
 
     Image *RuntimeUiSystem::LoadImageResource(const std::string &path)
@@ -445,12 +582,19 @@ namespace pe
             RuntimeUiScreenDesc desc{};
             desc.id = screen.id;
             desc.title = screen.title.empty() ? MakeDefaultTitle(screen.id) : screen.title;
+            desc.overlay = screen.overlay;
 
             const bool open = m_backend->BeginScreen(desc);
             if (open)
             {
                 for (Widget &widget : screen.widgets)
                 {
+                    if (!widget.visible)
+                    {
+                        widget.state = {};
+                        continue;
+                    }
+
                     switch (widget.type)
                     {
                     case WidgetType::Text:
@@ -494,6 +638,32 @@ namespace pe
                             m_backend->DrawImage(imageDesc);
                         }
                         break;
+                    case WidgetType::Quad:
+                    {
+                        RuntimeUiQuadDesc quadDesc{};
+                        quadDesc.id = widget.id.c_str();
+                        quadDesc.label = widget.label.c_str();
+                        quadDesc.title = widget.title.c_str();
+                        quadDesc.subtitle = widget.subtitle.c_str();
+                        quadDesc.body = widget.textValue.c_str();
+                        quadDesc.footer = widget.footer.c_str();
+                        quadDesc.image = widget.image;
+                        quadDesc.x = widget.x;
+                        quadDesc.y = widget.y;
+                        quadDesc.width = widget.width;
+                        quadDesc.height = widget.height;
+                        quadDesc.fillColor = widget.fillColor;
+                        quadDesc.borderColor = widget.borderColor;
+                        quadDesc.accentColor = widget.accentColor;
+                        quadDesc.textColor = widget.textColor;
+                        quadDesc.imageTint = widget.imageTint;
+                        quadDesc.node = widget.node;
+                        quadDesc.draggable = widget.draggable;
+                        quadDesc.selected = widget.selected;
+                        quadDesc.visible = widget.visible;
+                        widget.state = m_backend->Quad(quadDesc);
+                        break;
+                    }
                     }
                 }
             }

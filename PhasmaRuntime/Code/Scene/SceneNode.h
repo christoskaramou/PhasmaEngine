@@ -31,6 +31,7 @@ namespace pe
         Component_Audio = 1 << 5,
         Component_GpuPending = 1 << 6, // Node geometry not yet uploaded to GPU
         Component_Skybox = 1 << 8,
+        Component_RuntimeUi = 1 << 9,
     };
 
     // Lightweight mesh descriptor — references into Scene's data stores

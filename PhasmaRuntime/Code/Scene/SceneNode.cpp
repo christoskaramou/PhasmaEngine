@@ -30,6 +30,8 @@ namespace pe
             c.skybox->dayPath = settings.skybox_day_path;
             c.skybox->nightPath = settings.skybox_night_path;
         }
+        if ((flag & Component_RuntimeUi) && !c.runtimeUi)
+            c.runtimeUi = entity->CreateComponent<NodeRuntimeUiTag>();
     }
 
     void Scene::RemoveComponentFlag(NodeId *node, uint32_t flag)
@@ -65,6 +67,11 @@ namespace pe
             entity->RemoveComponent<NodeSkyboxTag>();
             c.skybox = nullptr;
             ApplySkyboxSettingsFromNode();
+        }
+        if ((flag & Component_RuntimeUi) && c.runtimeUi)
+        {
+            entity->RemoveComponent<NodeRuntimeUiTag>();
+            c.runtimeUi = nullptr;
         }
     }
 
@@ -110,7 +117,7 @@ namespace pe
         auto *scriptComp = entity->CreateComponent<NodeScriptComponent>();
 
         m_nodeComponentCache.push_back({nameComp, hierarchyComp, transformComp, meshRefsComp, scriptComp,
-                                        nullptr, nullptr, nullptr, nullptr, nullptr});
+                                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr});
 
         m_nodesDirty = true;
 

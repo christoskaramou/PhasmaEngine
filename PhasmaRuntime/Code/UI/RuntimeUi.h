@@ -4,6 +4,7 @@ namespace pe
 {
     class CommandBuffer;
     class Image;
+    struct NodeId;
 
     struct RuntimeUiFrameInfo
     {
@@ -33,6 +34,7 @@ namespace pe
     {
         std::string id;
         std::string title;
+        bool overlay = false;
     };
 
     struct RuntimeUiImageDesc
@@ -41,6 +43,53 @@ namespace pe
         const char *label = nullptr;
         float width = 0.0f;
         float height = 0.0f;
+    };
+
+    struct RuntimeUiColor
+    {
+        float r = 1.0f;
+        float g = 1.0f;
+        float b = 1.0f;
+        float a = 1.0f;
+    };
+
+    struct RuntimeUiQuadDesc
+    {
+        const char *id = nullptr;
+        const char *label = nullptr;
+        const char *title = nullptr;
+        const char *subtitle = nullptr;
+        const char *body = nullptr;
+        const char *footer = nullptr;
+        Image *image = nullptr;
+        float x = 0.0f;
+        float y = 0.0f;
+        float width = 0.0f;
+        float height = 0.0f;
+        RuntimeUiColor fillColor{0.07f, 0.08f, 0.10f, 0.94f};
+        RuntimeUiColor borderColor{0.45f, 0.48f, 0.54f, 0.95f};
+        RuntimeUiColor accentColor{0.96f, 0.74f, 0.22f, 1.0f};
+        RuntimeUiColor textColor{0.92f, 0.93f, 0.94f, 1.0f};
+        RuntimeUiColor imageTint{1.0f, 1.0f, 1.0f, 1.0f};
+        NodeId *node = nullptr;
+        bool draggable = false;
+        bool selected = false;
+        bool visible = true;
+    };
+
+    struct RuntimeUiWidgetState
+    {
+        bool hovered = false;
+        bool active = false;
+        bool clicked = false;
+        bool down = false;
+        bool dragging = false;
+        bool dragStarted = false;
+        bool dragReleased = false;
+        float mouseX = 0.0f;
+        float mouseY = 0.0f;
+        float dragDeltaX = 0.0f;
+        float dragDeltaY = 0.0f;
     };
 
     class IRuntimeUiBackend
@@ -60,6 +109,7 @@ namespace pe
         virtual bool Checkbox(const char *label, bool &value) = 0;
         virtual bool Button(const char *label) = 0;
         virtual void DrawImage(const RuntimeUiImageDesc &image) = 0;
+        virtual RuntimeUiWidgetState Quad(const RuntimeUiQuadDesc &quad) = 0;
         virtual void EndScreen() = 0;
         virtual void EndFrame() = 0;
         virtual bool HasDrawData() const = 0;
@@ -86,12 +136,14 @@ namespace pe
         void SetFrameSurfaceSize(uint32_t width, uint32_t height);
         void SetFrameInputRect(float minX, float minY, float width, float height);
         void DisableFrameInput();
+        void GetFrameSurfaceSize(uint32_t &width, uint32_t &height) const;
         bool WantsMouseCapture() const;
         bool WantsKeyboardCapture() const;
 
         void SetScreenVisible(const std::string &screenId, bool visible);
         bool IsScreenVisible(const std::string &screenId) const;
         void SetScreenTitle(const std::string &screenId, const std::string &title);
+        void SetScreenOverlay(const std::string &screenId, bool overlay);
         void ClearScreen(const std::string &screenId);
         void RemoveWidget(const std::string &screenId, const std::string &widgetId);
 
@@ -116,9 +168,18 @@ namespace pe
                       const std::string &path,
                       float width = 0.0f,
                       float height = 0.0f);
+        void SetQuad(const std::string &screenId,
+                     const std::string &widgetId,
+                     const RuntimeUiQuadDesc &desc,
+                     const std::string &path = {});
 
         bool GetBool(const std::string &screenId, const std::string &widgetId, bool fallback = false) const;
         bool ConsumeButtonClick(const std::string &screenId, const std::string &widgetId);
+        bool GetWidgetState(const std::string &screenId,
+                            const std::string &widgetId,
+                            RuntimeUiWidgetState &state) const;
+        bool GetNodeRect(NodeId *node, float &x, float &y, float &w, float &h) const;
+        NodeId *PickNode(float x, float y) const;
 
     private:
         enum class WidgetType
@@ -127,7 +188,8 @@ namespace pe
             Number,
             Bool,
             Button,
-            Image
+            Image,
+            Quad
         };
 
         struct Widget
@@ -135,14 +197,31 @@ namespace pe
             WidgetType type = WidgetType::Text;
             std::string id;
             std::string label;
+            std::string title;
+            std::string subtitle;
             std::string textValue;
+            std::string footer;
             double numberValue = 0.0;
             bool boolValue = false;
             bool clicked = false;
+            bool draggable = false;
+            bool selected = false;
+            bool visible = true;
             std::string imagePath;
             Image *image = nullptr;
             float imageWidth = 0.0f;
             float imageHeight = 0.0f;
+            float x = 0.0f;
+            float y = 0.0f;
+            float width = 0.0f;
+            float height = 0.0f;
+            RuntimeUiColor fillColor{0.07f, 0.08f, 0.10f, 0.94f};
+            RuntimeUiColor borderColor{0.45f, 0.48f, 0.54f, 0.95f};
+            RuntimeUiColor accentColor{0.96f, 0.74f, 0.22f, 1.0f};
+            RuntimeUiColor textColor{0.92f, 0.93f, 0.94f, 1.0f};
+            RuntimeUiColor imageTint{1.0f, 1.0f, 1.0f, 1.0f};
+            NodeId *node = nullptr;
+            RuntimeUiWidgetState state{};
         };
 
         struct Screen
@@ -150,6 +229,7 @@ namespace pe
             std::string id;
             std::string title;
             bool visible = false;
+            bool overlay = false;
             std::vector<Widget> widgets;
         };
 

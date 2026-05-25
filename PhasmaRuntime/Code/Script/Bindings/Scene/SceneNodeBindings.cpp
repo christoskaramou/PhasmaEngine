@@ -12,6 +12,23 @@ namespace pe
         return GetActiveScene();
     }
 
+    static mat4 ComputeNodeWorldMatrix(Scene &scene, NodeId *node)
+    {
+        if (!node || !scene.IsNodeAlive(node))
+            return mat4(1.0f);
+
+        NodeId *parent = scene.GetParent(node);
+        if (!parent)
+            return scene.GetLocalMatrix(node);
+
+        return ComputeNodeWorldMatrix(scene, parent) * scene.GetLocalMatrix(node);
+    }
+
+    static vec3 MatrixScale(const mat4 &m)
+    {
+        return vec3(glm::length(vec3(m[0])), glm::length(vec3(m[1])), glm::length(vec3(m[2])));
+    }
+
     static struct SceneNodeBindings
     {
         SceneNodeBindings()
@@ -62,6 +79,26 @@ namespace pe
                     return s->GetNodeName(h.nodeId);
                 });
 
+                ut.set_function("get_index", [](SceneNodeHandle &h) -> int {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return -1;
+                    return static_cast<int>(h.nodeId->index);
+                });
+
+                ut.set_function("is_runtime_ui", [](SceneNodeHandle &h) -> bool {
+                    Scene *s = GetScene();
+                    return s && h.IsValid(*s) && (s->GetComponentFlags(h.nodeId) & Component_RuntimeUi) != 0;
+                });
+
+                ut.set_function("set_runtime_ui", [](SceneNodeHandle &h, bool enabled) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    if (enabled)
+                        s->AddComponentFlag(h.nodeId, Component_RuntimeUi);
+                    else
+                        s->RemoveComponentFlag(h.nodeId, Component_RuntimeUi);
+                });
+
                 ut.set_function("set_name", [](SceneNodeHandle &h, const std::string &name) {
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return;
@@ -72,6 +109,12 @@ namespace pe
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return vec3(0.f);
                     return vec3(s->GetLocalMatrix(h.nodeId)[3]);
+                });
+
+                ut.set_function("get_world_position", [](SceneNodeHandle &h) -> vec3 {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return vec3(0.f);
+                    return vec3(ComputeNodeWorldMatrix(*s, h.nodeId)[3]);
                 });
 
                 ut.set_function("set_position", [](SceneNodeHandle &h, const vec3 &pos) {
@@ -106,8 +149,13 @@ namespace pe
                 ut.set_function("get_scale", [](SceneNodeHandle &h) -> vec3 {
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return vec3(1.f);
-                    const mat4 &m = s->GetLocalMatrix(h.nodeId);
-                    return vec3(glm::length(vec3(m[0])), glm::length(vec3(m[1])), glm::length(vec3(m[2])));
+                    return MatrixScale(s->GetLocalMatrix(h.nodeId));
+                });
+
+                ut.set_function("get_world_scale", [](SceneNodeHandle &h) -> vec3 {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return vec3(1.f);
+                    return MatrixScale(ComputeNodeWorldMatrix(*s, h.nodeId));
                 });
 
                 ut.set_function("set_scale", [](SceneNodeHandle &h, const vec3 &newScale) {

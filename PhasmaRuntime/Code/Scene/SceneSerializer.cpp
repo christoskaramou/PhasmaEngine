@@ -2137,7 +2137,7 @@ namespace pe
 
                     uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
                     // Clear subsystem tags before restoring — Mesh/Script are already set by SetMeshRef/SetNodeScript above
-                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Audio | Component_Skybox);
+                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Audio | Component_Skybox | Component_RuntimeUi);
                     uint32_t restoreFlags = flags & ~(Component_Mesh | Component_Script | Component_GpuPending);
                     if (restoreFlags)
                         AddComponentFlag(node, restoreFlags);

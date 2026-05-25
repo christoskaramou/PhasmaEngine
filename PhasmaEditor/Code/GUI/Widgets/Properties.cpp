@@ -392,6 +392,12 @@ namespace pe
                 }
 #endif
 
+                if (!(flags & Component_RuntimeUi))
+                {
+                    if (ImGui::MenuItem("Runtime UI"))
+                        scene.AddComponentFlag(node, Component_RuntimeUi);
+                }
+
                 if (!(flags & Component_Script))
                 {
                     if (ImGui::BeginMenu("Lua Script"))
