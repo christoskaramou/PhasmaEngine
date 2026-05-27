@@ -246,25 +246,33 @@ namespace pe
             return;
 
         const float dt = std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetDelta()));
+
+        for (TransientEmitter &transient : m_transientEmitters)
+            transient.timeRemaining -= dt;
+
+        // Compact from the tail only: RemoveEmitterNoUpdate zeros the particle buffer
+        // from the removed emitter's offset to the end, which would wipe live particles
+        // of any later emitter. A transient stranded behind an active one stays put
+        // until the tail clears; its particles age out on the GPU (token mismatch
+        // never re-fires once Reset() runs), so leaving the slot is visually harmless.
         bool changed = false;
-        for (auto it = m_transientEmitters.begin(); it != m_transientEmitters.end();)
+        while (!m_emitters.empty())
         {
-            it->timeRemaining -= dt;
-            if (it->timeRemaining <= 0.0f)
+            const int tail = static_cast<int>(m_emitters.size() - 1);
+            const TransientEmitter *tailTransient = nullptr;
+            for (const TransientEmitter &candidate : m_transientEmitters)
             {
-                if (it->index < 0 || it->index >= static_cast<int>(m_emitters.size()))
-                    it = m_transientEmitters.erase(it);
-                else
+                if (candidate.index == tail)
                 {
-                    RemoveEmitterNoUpdate(it->index);
-                    it = m_transientEmitters.begin();
+                    tailTransient = &candidate;
+                    break;
                 }
-                changed = true;
             }
-            else
-            {
-                ++it;
-            }
+            if (!tailTransient || tailTransient->timeRemaining > 0.0f)
+                break;
+
+            RemoveEmitterNoUpdate(tail);
+            changed = true;
         }
 
         if (changed)

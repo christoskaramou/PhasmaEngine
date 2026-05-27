@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-05-28
+
+- Hardened transient particle burst cleanup so one-shot projectile emitters cannot visually refire when older bursts retire. `ParticleManager::Update()` now compacts only expired transient emitters at the emitter-list tail, avoiding particle-offset shifts for any later persistent or transient emitter; stranded expired transients age out on the GPU until the tail clears.
+
 ## 2026-05-27
 
 - Added a runtime Lua burst helper for short-lived particle effects. `particles.emit_burst(...)` creates one-shot transient emitters with presets for hero/enemy hit give/take feedback, the particle compute shader treats negative spawn rates as single-fire bursts, and `ParticleManager::Update()` retires transient emitters automatically. AgainstTheHero horde combat now emits hit particles when the hero takes damage, the hero deals damage, enemies take damage, and enemies land damage. Transient cleanup also exposes `particles.kill_emitter_particles`, zeros affected particle ranges during emitter removal, and resets one-shot particles whose burst token no longer matches their current emitter so dead-enemy hit particles cannot linger through emitter-slot reuse.
