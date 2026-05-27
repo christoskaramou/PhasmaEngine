@@ -55,12 +55,16 @@ set(PE_CORE_LINK_DIRS
     "${PE_LIBS_DIR}/vulkan"
 )
 
-set(PE_SPIRV_CROSS_CORE_LIB
-    $<$<CONFIG:Debug>:spirv-cross-cored>
-    $<$<CONFIG:Release>:spirv-cross-core>
-    $<$<CONFIG:MinSizeRel>:spirv-cross-core>
-    $<$<CONFIG:RelWithDebInfo>:spirv-cross-core>
-)
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set(PE_SPIRV_CROSS_CORE_LIB
+        $<$<CONFIG:Debug>:spirv-cross-cored>
+        $<$<CONFIG:Release>:spirv-cross-core>
+        $<$<CONFIG:MinSizeRel>:spirv-cross-core>
+        $<$<CONFIG:RelWithDebInfo>:spirv-cross-core>
+    )
+else()
+    set(PE_SPIRV_CROSS_CORE_LIB spirv-cross-core)
+endif()
 
 # --- Tracy Profiler ---
 option(PE_TRACY "Enable Tracy profiler integration" OFF)
