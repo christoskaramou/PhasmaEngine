@@ -1,7 +1,7 @@
 -- camera_fly.lua
 -- phasma: editor-only
 -- Replaces C++ camera movement (Window::SmoothMouseRotation + WASD handling)
--- Uses update_editor() so it runs every frame, not just in play mode
+-- Uses update_editor() so play-mode camera behavior stays project-owned
 
 -- Variables declared here are editable from the Properties panel when this
 -- script is attached to a node. The returned table is live: changes made in
@@ -62,6 +62,5 @@ local function update_editor()
 end
 
 hooks {
-    update_editor = update_editor,
-    update = update_editor
+    update_editor = update_editor
 }

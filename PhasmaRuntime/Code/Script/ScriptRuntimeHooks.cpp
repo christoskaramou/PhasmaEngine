@@ -49,6 +49,11 @@ namespace pe
         return s_scriptRuntimeHooks.isEditorHost;
     }
 
+    const std::string &GetEditorScriptAssetsRoot()
+    {
+        return s_scriptRuntimeHooks.editorAssetsRoot;
+    }
+
     void SetScriptModelLoading(bool loading)
     {
         if (s_scriptRuntimeHooks.setModelLoading)

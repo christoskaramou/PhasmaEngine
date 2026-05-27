@@ -2947,6 +2947,7 @@ namespace pe
         {
             const auto &settings = d["settings"];
             ApplyGlobalSettingsMembers(settings);
+            EnsureSkyboxNodeFromSettings(false);
             MarkUniformsDirty();
         }
 

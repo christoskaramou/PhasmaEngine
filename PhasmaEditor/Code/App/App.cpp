@@ -37,6 +37,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <vector>
+
 namespace pe
 {
     namespace
@@ -102,6 +104,41 @@ namespace pe
             nextFrame += std::chrono::duration_cast<Clock::duration>(frameDuration);
             if (nextFrame < afterSleep)
                 nextFrame = afterSleep + std::chrono::duration_cast<Clock::duration>(frameDuration);
+        }
+
+        std::string NormalizeDirectoryPath(const std::filesystem::path &path)
+        {
+            std::string value = path.lexically_normal().generic_string();
+            if (!value.empty() && value.back() != '/')
+                value.push_back('/');
+            return value;
+        }
+
+        std::string ResolveEditorAssetsRoot()
+        {
+            Path::Init();
+
+            const std::vector<std::filesystem::path> candidates = {
+                std::filesystem::path(Path::Executable) / "Assets",
+                std::filesystem::path(Path::Root) / "Assets",
+                std::filesystem::path(Path::Root) / "PhasmaEditor" / "Assets",
+                std::filesystem::path(Path::Root) / "Editor" / "Assets",
+                std::filesystem::path(Path::Assets),
+            };
+
+            for (const std::filesystem::path &candidate : candidates)
+            {
+                if (std::filesystem::exists(candidate / "Scripts" / "global" / "fly_camera.lua"))
+                    return NormalizeDirectoryPath(candidate);
+            }
+
+            for (const std::filesystem::path &candidate : candidates)
+            {
+                if (std::filesystem::exists(candidate))
+                    return NormalizeDirectoryPath(candidate);
+            }
+
+            return Path::Assets;
         }
 
         bool ConfigureRuntimeUiFrame(RuntimeUiSystem &runtimeUi, RendererSystem &rendererSystem)
@@ -193,6 +230,8 @@ namespace pe
 
         bool EditorScriptViewportFocused()
         {
+            if (GUIState::s_playMode)
+                return true;
             return GUIState::s_sceneViewFocused;
         }
 
@@ -205,6 +244,7 @@ namespace pe
     App::App() : m_frameTimer(FrameTimer::Instance())
     {
         Path::Init();
+        const std::string editorAssetsRoot = ResolveEditorAssetsRoot();
         const ProjectSelection projectSelection = ResolveProjectSelection();
         ApplyProjectSelectionAssetsRoot(projectSelection);
         if (!projectSelection.warning.empty())
@@ -229,14 +269,20 @@ namespace pe
             EventSystem::PushEvent(fileEvent);
             EventSystem::PushEvent(EventType::CompileScripts);
         };
-        if (std::filesystem::exists(Path::Assets + "Scripts"))
+        auto registerScriptWatchers = [&](const std::string &assetsRoot)
         {
-            for (auto &file : std::filesystem::recursive_directory_iterator(Path::Assets + "Scripts"))
+            const std::filesystem::path scriptsDir = std::filesystem::path(assetsRoot) / "Scripts";
+            if (!std::filesystem::exists(scriptsDir))
+                return;
+
+            for (auto &file : std::filesystem::recursive_directory_iterator(scriptsDir))
             {
                 if (file.path().extension() == ".lua" && !ScriptSystem::IsTestScriptPath(file.path().string()))
                     FileWatcher::Add(file.path().string(), scriptCallback);
             }
-        }
+        };
+        registerScriptWatchers(editorAssetsRoot);
+        registerScriptWatchers(Path::Assets);
 
         // Watch for external commands (file-based IPC)
         // Write script to command.lua, then write anything to command.run to trigger execution
@@ -308,6 +354,7 @@ namespace pe
         scriptHooks.setModelLoading = EditorSetScriptModelLoading;
         scriptHooks.loadEditorOnlyGlobalScripts = true;
         scriptHooks.isEditorHost = true;
+        scriptHooks.editorAssetsRoot = editorAssetsRoot;
         SetScriptRuntimeHooks(scriptHooks);
         GetGlobalSystem<RendererSystem>()->Init(cmd);
         m_runtimeUi = std::make_unique<RuntimeUiSystem>();

@@ -12,6 +12,7 @@
 #include "Particles/ParticleManager.h"
 #include "Runtime/RuntimePlaySession.h"
 #include "Runtime/RuntimeStartup.h"
+#include "Script/ScriptRuntimeHooks.h"
 #include "Script/ScriptSystem.h"
 #include "Scene/SelectionManager.h"
 #include "Scene/SceneHost.h"
@@ -2507,6 +2508,22 @@ namespace pe
         if (!m_initialized)
             return;
 
+        if (!GUIState::s_playMode && !m_playModeSnapshot.empty())
+            Stop();
+        else if (GUIState::s_playMode && !m_restoreRenderAfterPlay)
+        {
+            m_prePlayRender = m_render;
+            m_restoreRenderAfterPlay = true;
+            m_render = false;
+        }
+        else if (!GUIState::s_playMode && m_restoreRenderAfterPlay && m_playModeSnapshot.empty())
+        {
+            m_render = m_prePlayRender;
+            m_restoreRenderAfterPlay = false;
+        }
+        if (GUIState::s_playMode)
+            m_render = false;
+
         // Runtime UI input must not use stale Viewport coordinates when the editor GUI is hidden.
         GUIState::s_sceneViewImageRectValid = false;
 
@@ -2653,6 +2670,13 @@ namespace pe
             DrawOverwriteConfirmationPopup();
             Toolbar();
             BuildDockspace();
+        }
+
+        if (GUIState::s_playMode && !m_render)
+        {
+            if (currentFont)
+                ImGui::PopFont();
+            return;
         }
 
         if (m_show_demo_window)
@@ -2881,12 +2905,16 @@ namespace pe
     void GUI::Play()
     {
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
-        if (rs)
+        if (rs && !GUIState::s_playMode)
         {
             rs->WaitAllFramesCommands();
             m_playModeSnapshot = rs->GetScene().TakeSnapshot();
-            GUIState::s_playMode = true;
+            m_prePlayRender = m_render;
+            m_restoreRenderAfterPlay = true;
+            m_render = false;
             GUIState::s_isPaused = false;
+            SetRuntimePlaySessionPaused(false);
+            SetScriptPlayMode(true);
             StartRuntimePlaySession(rs->GetScene());
         }
     }
@@ -2897,8 +2925,12 @@ namespace pe
         if (rs)
         {
             StopRuntimePlaySession();
-            GUIState::s_playMode = false;
-            GUIState::s_isPaused = false;
+            SetScriptPlayMode(false);
+            if (m_restoreRenderAfterPlay)
+            {
+                m_render = m_prePlayRender;
+                m_restoreRenderAfterPlay = false;
+            }
             if (!m_playModeSnapshot.empty())
             {
                 rs->WaitAllFramesCommands();

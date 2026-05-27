@@ -737,15 +737,16 @@ namespace pe
         GUIState::s_sceneViewImageWidth = imageMax.x - imageMin.x;
         GUIState::s_sceneViewImageHeight = imageMax.y - imageMin.y;
 
-        // Gizmos (hit tests are in ImGuizmo)
-        DrawGizmos(imageMin, imageSize);
+        const bool playMode = GUIState::s_playMode;
+        if (!playMode)
+            DrawGizmos(imageMin, imageSize);
 
-        const bool overGizmo = ImGuizmo::IsOver();
-        const bool usingGizmo = ImGuizmo::IsUsing();
+        const bool overGizmo = !playMode && ImGuizmo::IsOver();
+        const bool usingGizmo = !playMode && ImGuizmo::IsUsing();
         const bool runtimeUiMouseCaptured = InputState::IsMouseCapturedByUi();
 
         // Input (picking / focus) only when not interacting with gizmos
-        if (!overGizmo && !usingGizmo)
+        if (!playMode && !overGizmo && !usingGizmo)
         {
             if (imageHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
@@ -769,7 +770,7 @@ namespace pe
         }
 
         // Drag&drop
-        if (ImGui::BeginDragDropTarget())
+        if (!playMode && ImGui::BeginDragDropTarget())
         {
             if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
             {

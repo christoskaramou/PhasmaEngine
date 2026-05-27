@@ -59,6 +59,24 @@ namespace pe
         return false;
     }
 
+    static bool HasLoadedScriptPath(const std::vector<ScriptEntry> &scripts, const std::string &path)
+    {
+        for (const auto &script : scripts)
+        {
+            if (script.path == path)
+                return true;
+        }
+        return false;
+    }
+
+    static std::string MakeScriptDir(const std::string &assetsRoot, const char *subdir)
+    {
+        if (assetsRoot.empty())
+            return {};
+
+        return (std::filesystem::path(assetsRoot) / "Scripts" / subdir).string();
+    }
+
     static bool MeshBindingPayloadChanged(const Scene &scene, const NodeScriptInstance &inst, int meshRef)
     {
         if (meshRef != inst.bindingMeshRef)
@@ -1302,17 +1320,24 @@ namespace pe
 
     void ScriptSystem::LoadScripts()
     {
-        LoadScriptsFromDir(Path::Assets + "Scripts/global", ScriptLifecycle::Always);
         if (IsEditorHost())
-            LoadScriptsFromDir(Path::Assets + "Scripts/Editor", ScriptLifecycle::EditorOnly);
+        {
+            const std::string &editorAssetsRoot = GetEditorScriptAssetsRoot();
+            LoadScriptsFromDir(MakeScriptDir(editorAssetsRoot, "global"), ScriptLifecycle::EditorOnly);
+            LoadScriptsFromDir(MakeScriptDir(editorAssetsRoot, "Editor"), ScriptLifecycle::EditorOnly);
+        }
+
+        LoadScriptsFromDir(MakeScriptDir(Path::Assets, "global"), ScriptLifecycle::Always);
+        if (IsEditorHost())
+            LoadScriptsFromDir(MakeScriptDir(Path::Assets, "Editor"), ScriptLifecycle::EditorOnly);
         // PlayerOnly scripts auto-load always (so their globals exist), but their init is
         // deferred to play-mode entry in the editor; in the player they fire as normal.
-        LoadScriptsFromDir(Path::Assets + "Scripts/Player", ScriptLifecycle::PlayerOnly);
+        LoadScriptsFromDir(MakeScriptDir(Path::Assets, "Player"), ScriptLifecycle::PlayerOnly);
     }
 
     void ScriptSystem::LoadScriptsFromDir(const std::string &dir, ScriptLifecycle lifecycle)
     {
-        if (!std::filesystem::exists(dir))
+        if (dir.empty() || !std::filesystem::exists(dir))
             return;
 
         for (auto &file : std::filesystem::recursive_directory_iterator(dir))
@@ -1321,6 +1346,9 @@ namespace pe
                 continue;
 
             std::string filePath = NormalizePath(file.path().string());
+            if (HasLoadedScriptPath(m_scripts, filePath))
+                continue;
+
             if (lifecycle == ScriptLifecycle::Always &&
                 !ShouldLoadGlobalScript(file.path(), filePath, true))
                 continue;
@@ -1373,41 +1401,36 @@ namespace pe
             return;
         m_scanTimer = 0.0;
 
-        const std::string globalDir = Path::Assets + "Scripts/global";
-        if (!std::filesystem::exists(globalDir))
-            return;
-
         bool foundNew = false;
-        for (auto &file : std::filesystem::recursive_directory_iterator(globalDir))
+        std::vector<std::string> globalDirs;
+        if (IsEditorHost())
+            globalDirs.push_back(MakeScriptDir(GetEditorScriptAssetsRoot(), "global"));
+        globalDirs.push_back(MakeScriptDir(Path::Assets, "global"));
+
+        for (const std::string &globalDir : globalDirs)
         {
-            if (file.path().extension() != ".lua")
+            if (globalDir.empty() || !std::filesystem::exists(globalDir))
                 continue;
 
-            std::string filePath = NormalizePath(file.path().string());
-            if (!ShouldLoadGlobalScript(file.path(), filePath, false))
-                continue;
-
-            // Check if already tracked
-            bool known = false;
-            for (auto &existing : m_scripts)
+            for (auto &file : std::filesystem::recursive_directory_iterator(globalDir))
             {
-                if (existing.path == filePath)
+                if (file.path().extension() != ".lua")
+                    continue;
+
+                std::string filePath = NormalizePath(file.path().string());
+                if (!ShouldLoadGlobalScript(file.path(), filePath, false))
+                    continue;
+
+                if (!HasLoadedScriptPath(m_scripts, filePath))
                 {
-                    known = true;
-                    break;
+                    FileWatcher::Add(filePath, [](size_t fileEvent)
+                                     {
+                        EventSystem::PushEvent(fileEvent);
+                        EventSystem::PushEvent(EventType::CompileScripts); });
+
+                    foundNew = true;
+                    PE_INFO("New Lua script detected: %s", filePath.c_str());
                 }
-            }
-
-            if (!known)
-            {
-                // Register with FileWatcher for future change detection
-                FileWatcher::Add(filePath, [](size_t fileEvent)
-                                 {
-                    EventSystem::PushEvent(fileEvent);
-                    EventSystem::PushEvent(EventType::CompileScripts); });
-
-                foundNew = true;
-                PE_INFO("New Lua script detected: %s", filePath.c_str());
             }
         }
 

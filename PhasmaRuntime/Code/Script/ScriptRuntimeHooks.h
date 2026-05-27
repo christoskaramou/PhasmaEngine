@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 namespace pe
 {
     struct ScriptRuntimeHooks
@@ -12,6 +14,7 @@ namespace pe
         void (*setModelLoading)(bool loading) = nullptr;
         bool loadEditorOnlyGlobalScripts = false;
         bool isEditorHost = false;
+        std::string editorAssetsRoot;
     };
 
     void SetScriptRuntimeHooks(ScriptRuntimeHooks hooks);
@@ -22,5 +25,6 @@ namespace pe
     [[nodiscard]] bool IsScriptViewportFocused();
     [[nodiscard]] bool ShouldLoadEditorOnlyGlobalScripts();
     [[nodiscard]] bool IsEditorHost();
+    [[nodiscard]] const std::string &GetEditorScriptAssetsRoot();
     void SetScriptModelLoading(bool loading);
 } // namespace pe

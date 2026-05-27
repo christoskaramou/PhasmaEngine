@@ -126,6 +126,8 @@ namespace pe
         void ResetDockspaceLayout(uint32_t dockspaceId);
 
         bool m_render;
+        bool m_restoreRenderAfterPlay = false;
+        bool m_prePlayRender = true;
         bool m_initialized = false;
         std::unique_ptr<Attachment> m_attachment;
         bool m_show_demo_window;

@@ -1876,23 +1876,17 @@ namespace
         rapidjson::Document runtimeSettings;
         std::string runtimeSettingsWarning;
         const bool loadedRuntimeSettings = TryLoadJsonObject(RuntimeSettingsPath(), runtimeSettings, runtimeSettingsWarning);
-        if (loadedRuntimeSettings &&
-            runtimeSettings.HasMember(pe::kStartupSceneSettingsKey) &&
-            runtimeSettings[pe::kStartupSceneSettingsKey].IsString())
-        {
-            currentScene = runtimeSettings[pe::kStartupSceneSettingsKey].GetString();
-        }
-        else
-        {
+        const bool hasRuntimeStartupScene =
+            loadedRuntimeSettings &&
+            pe::TryReadRuntimeStartupScene({}, currentScene, nullptr);
+        if (!hasRuntimeStartupScene)
             currentScene = ReadEditorConfigStartupScene();
-        }
 
         std::string currentProjectPath = ReadJsonStringField(RuntimeSettingsPath(), pe::kProjectPathSettingsKey);
         if (currentProjectPath.empty() || !std::filesystem::exists(currentProjectPath))
             currentProjectPath = NormalizeProjectPath(std::filesystem::path(pe::Path::Assets));
         else
             currentProjectPath = NormalizeConfiguredProjectPath(currentProjectPath);
-
         std::string currentLaunchTarget = ReadJsonStringField(RuntimeSettingsPath(), k_launchTargetKey);
         if (currentLaunchTarget.empty())
             currentLaunchTarget = k_editorLaunchTarget;
