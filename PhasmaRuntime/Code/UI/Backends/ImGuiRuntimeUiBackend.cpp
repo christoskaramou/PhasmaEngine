@@ -449,7 +449,10 @@ namespace pe
                         return;
 
                     const std::string candidate = line.empty() ? next : line + " " + next;
-                    if (ImGui::CalcTextSize(candidate.c_str()).x <= maxWidth)
+                    const ImVec2 measured = font
+                                                ? font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, candidate.c_str())
+                                                : ImGui::CalcTextSize(candidate.c_str());
+                    if (measured.x <= maxWidth)
                     {
                         line = candidate;
                         return;
@@ -499,6 +502,8 @@ namespace pe
 
                 ImGui::SetNextWindowPos(ImVec2(quad.x, quad.y), ImGuiCond_Always);
                 ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+                if (quad.bringToFront)
+                    ImGui::SetNextWindowFocus();
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
@@ -565,10 +570,25 @@ namespace pe
                     border = accent;
 
                 drawList->AddRectFilled(pos, max, fill, rounding);
+
+                const bool textless = !HasText(quad.label) && !HasText(quad.title) && !HasText(quad.subtitle) &&
+                                      !HasText(quad.body) && !HasText(quad.footer);
+                if (quad.image && textless)
+                {
+                    if (void *textureID = GetImageTexture(quad.image))
+                    {
+                        drawList->AddImageRounded((ImTextureID)textureID, pos, max, ImVec2(0.0f, 0.0f),
+                                                  ImVec2(1.0f, 1.0f), ToColor(quad.imageTint), rounding);
+                    }
+                    drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
+                    return;
+                }
+
                 drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
 
-                const float pad = 10.0f;
-                const float artHeight = std::clamp(size.y * 0.34f, 42.0f, 82.0f);
+                const float scale = quad.fontScale > 0.0f ? quad.fontScale : 1.0f;
+                const float pad = 10.0f * scale;
+                const float artHeight = std::clamp(size.y * 0.34f, 42.0f * scale, 82.0f * scale);
                 const ImVec2 artMin(pos.x + pad, pos.y + pad);
                 const ImVec2 artMax(max.x - pad, pos.y + pad + artHeight);
                 drawList->AddRectFilled(artMin, artMax, accent, 5.0f);
@@ -587,30 +607,30 @@ namespace pe
                 }
 
                 ImFont *font = ImGui::GetFont();
-                const float fontSize = ImGui::GetFontSize();
-                float y = artMax.y + 9.0f;
+                const float fontSize = ImGui::GetFontSize() * scale;
+                float y = artMax.y + 9.0f * scale;
                 const float textWidth = std::max(1.0f, size.x - pad * 2.0f);
 
                 if (HasText(quad.label))
                 {
-                    drawList->AddText(font, fontSize * 0.83f, ImVec2(pos.x + pad, pos.y + pad + 5.0f), text, quad.label);
+                    drawList->AddText(font, fontSize * 0.83f, ImVec2(pos.x + pad, pos.y + pad + 5.0f * scale), text, quad.label);
                 }
                 if (HasText(quad.title))
                 {
                     drawList->AddText(font, fontSize * 1.08f, ImVec2(pos.x + pad, y), text, quad.title);
-                    y += fontSize + 6.0f;
+                    y += fontSize + 6.0f * scale;
                 }
                 if (HasText(quad.subtitle))
                 {
                     drawList->AddText(font, fontSize * 0.86f, ImVec2(pos.x + pad, y), accent, quad.subtitle);
-                    y += fontSize + 5.0f;
+                    y += fontSize + 5.0f * scale;
                 }
                 if (HasText(quad.body))
-                    y += DrawWrappedText(drawList, font, fontSize * 0.88f, quad.body, ImVec2(pos.x + pad, y), textWidth, text, 3);
+                    y += DrawWrappedText(drawList, font, fontSize * 0.88f, quad.body, ImVec2(pos.x + pad, y), textWidth, text, 8);
                 if (HasText(quad.footer))
                 {
-                    drawList->AddLine(ImVec2(pos.x + pad, max.y - 30.0f), ImVec2(max.x - pad, max.y - 30.0f), border, 1.0f);
-                    drawList->AddText(font, fontSize * 0.82f, ImVec2(pos.x + pad, max.y - 23.0f), text, quad.footer);
+                    drawList->AddLine(ImVec2(pos.x + pad, max.y - 30.0f * scale), ImVec2(max.x - pad, max.y - 30.0f * scale), border, 1.0f);
+                    drawList->AddText(font, fontSize * 0.82f, ImVec2(pos.x + pad, max.y - 23.0f * scale), text, quad.footer);
                 }
             }
 

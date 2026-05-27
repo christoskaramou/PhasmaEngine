@@ -8,7 +8,6 @@
 #include "Scene/SceneHost.h"
 #include "Script/ScriptRuntimeHooks.h"
 
-
 namespace pe
 {
     namespace
@@ -612,8 +611,14 @@ namespace pe
 
         if (scope == InitScope::AllScripts)
         {
+            const bool inEditor = IsEditorHost();
+            const bool playMode = IsScriptPlayMode();
             for (auto &script : m_scripts)
             {
+                if (script.lifecycle == ScriptLifecycle::PlayerOnly && inEditor && !playMode)
+                    continue;
+                if (script.lifecycle == ScriptLifecycle::EditorOnly && !inEditor)
+                    continue;
                 if (script.initFn.valid() && !HasNodeInstanceForPath(m_nodeInstances, script.path))
                 {
                     auto result = CallProtected(script.initFn);
@@ -622,12 +627,56 @@ namespace pe
                         sol::error err = result;
                         Log::Error(PeFormat("[Lua] init() error in '%s': %s", script.path.c_str(), err.what()));
                     }
+                    else
+                    {
+                        script.initialized = true;
+                    }
                 }
             }
         }
 
         for (auto &inst : m_nodeInstances)
             InitializeNodeInstance(inst);
+    }
+
+    void ScriptSystem::OnPlayModeChanged(bool nowPlay)
+    {
+        if (!IsEditorHost())
+            return;
+
+        for (auto &script : m_scripts)
+        {
+            if (script.lifecycle != ScriptLifecycle::PlayerOnly)
+                continue;
+
+            if (nowPlay && !script.initialized && script.initFn.valid() &&
+                !HasNodeInstanceForPath(m_nodeInstances, script.path))
+            {
+                auto result = CallProtected(script.initFn);
+                if (!result.valid())
+                {
+                    sol::error err = result;
+                    Log::Error(PeFormat("[Lua] init() error in '%s': %s", script.path.c_str(), err.what()));
+                }
+                else
+                {
+                    script.initialized = true;
+                }
+            }
+            else if (!nowPlay && script.initialized)
+            {
+                if (script.destroyFn.valid())
+                {
+                    auto result = CallProtected(script.destroyFn);
+                    if (!result.valid())
+                    {
+                        sol::error err = result;
+                        Log::Error(PeFormat("[Lua] destroy() error in '%s': %s", script.path.c_str(), err.what()));
+                    }
+                }
+                script.initialized = false;
+            }
+        }
     }
 
     void ScriptSystem::AddPendingAsyncLoad(PendingAsyncLoad load)
@@ -1253,59 +1302,65 @@ namespace pe
 
     void ScriptSystem::LoadScripts()
     {
-        // Only auto-load scripts from Scripts/global
-        const std::string globalDir = Path::Assets + "Scripts/global";
+        LoadScriptsFromDir(Path::Assets + "Scripts/global", ScriptLifecycle::Always);
+        if (IsEditorHost())
+            LoadScriptsFromDir(Path::Assets + "Scripts/Editor", ScriptLifecycle::EditorOnly);
+        // PlayerOnly scripts auto-load always (so their globals exist), but their init is
+        // deferred to play-mode entry in the editor; in the player they fire as normal.
+        LoadScriptsFromDir(Path::Assets + "Scripts/Player", ScriptLifecycle::PlayerOnly);
+    }
 
-        if (!std::filesystem::exists(globalDir))
+    void ScriptSystem::LoadScriptsFromDir(const std::string &dir, ScriptLifecycle lifecycle)
+    {
+        if (!std::filesystem::exists(dir))
             return;
 
-        for (auto &file : std::filesystem::recursive_directory_iterator(globalDir))
+        for (auto &file : std::filesystem::recursive_directory_iterator(dir))
         {
-            if (file.path().extension() == ".lua")
+            if (file.path().extension() != ".lua")
+                continue;
+
+            std::string filePath = NormalizePath(file.path().string());
+            if (lifecycle == ScriptLifecycle::Always &&
+                !ShouldLoadGlobalScript(file.path(), filePath, true))
+                continue;
+
+            sol::environment env(m_lua, sol::create, m_lua.globals());
+
+            auto result = m_lua.safe_script_file(filePath, env, sol::script_pass_on_error);
+            if (!result.valid())
             {
-                std::string filePath = NormalizePath(file.path().string());
-                if (!ShouldLoadGlobalScript(file.path(), filePath, true))
-                    continue;
-
-                // Each script gets its own environment that inherits globals
-                sol::environment env(m_lua, sol::create, m_lua.globals());
-
-                auto result = m_lua.safe_script_file(filePath, env, sol::script_pass_on_error);
-                if (!result.valid())
-                {
-                    sol::error err = result;
-                    Log::Error(PeFormat("[Lua] script error in '%s': %s", filePath.c_str(), err.what()));
-                    continue;
-                }
-
-                // Promote non-hook globals so other scripts can access them
-                // (e.g. main.lua calling run_buffer_tests(), or T table from test_utils)
-                static const std::set<std::string> hookNames = {"init", "update", "update_editor", "destroy"};
-                for (auto &[key, val] : env)
-                {
-                    if (key.is<std::string>())
-                    {
-                        std::string name = key.as<std::string>();
-                        if (hookNames.find(name) != hookNames.end())
-                            continue;
-                        if (name.size() >= 2 && name[0] == '_' && name[1] == '_')
-                            continue;
-                        sol::object existing = m_lua.globals().raw_get<sol::object>(name);
-                        if (existing.valid() && existing.get_type() != sol::type::lua_nil)
-                            PE_WARN("[Lua] global '%s' redefined by '%s'", name.c_str(), filePath.c_str());
-                        m_lua.globals()[name] = val;
-                    }
-                }
-
-                ScriptEntry entry;
-                entry.path = filePath;
-                entry.env = std::move(env);
-                CollectHooks(entry);
-                CollectExposedVars(entry);
-                m_scripts.push_back(std::move(entry));
-
-                PE_INFO("Loaded Lua script: %s", filePath.c_str());
+                sol::error err = result;
+                Log::Error(PeFormat("[Lua] script error in '%s': %s", filePath.c_str(), err.what()));
+                continue;
             }
+
+            static const std::set<std::string> hookNames = {"init", "update", "update_editor", "destroy"};
+            for (auto &[key, val] : env)
+            {
+                if (key.is<std::string>())
+                {
+                    std::string name = key.as<std::string>();
+                    if (hookNames.find(name) != hookNames.end())
+                        continue;
+                    if (name.size() >= 2 && name[0] == '_' && name[1] == '_')
+                        continue;
+                    sol::object existing = m_lua.globals().raw_get<sol::object>(name);
+                    if (existing.valid() && existing.get_type() != sol::type::lua_nil)
+                        PE_WARN("[Lua] global '%s' redefined by '%s'", name.c_str(), filePath.c_str());
+                    m_lua.globals()[name] = val;
+                }
+            }
+
+            ScriptEntry entry;
+            entry.path = filePath;
+            entry.env = std::move(env);
+            entry.lifecycle = lifecycle;
+            CollectHooks(entry);
+            CollectExposedVars(entry);
+            m_scripts.push_back(std::move(entry));
+
+            PE_INFO("Loaded Lua script: %s", filePath.c_str());
         }
     }
 

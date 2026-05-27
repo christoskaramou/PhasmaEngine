@@ -75,6 +75,8 @@ namespace pe
         bool draggable = false;
         bool selected = false;
         bool visible = true;
+        bool bringToFront = false;
+        float fontScale = 1.0f;
     };
 
     struct RuntimeUiWidgetState
@@ -222,6 +224,8 @@ namespace pe
             RuntimeUiColor imageTint{1.0f, 1.0f, 1.0f, 1.0f};
             NodeId *node = nullptr;
             RuntimeUiWidgetState state{};
+            bool bringToFront = false;
+            float fontScale = 1.0f;
         };
 
         struct Screen

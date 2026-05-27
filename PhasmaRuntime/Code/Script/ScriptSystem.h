@@ -60,6 +60,13 @@ namespace pe
         Type type;
     };
 
+    enum class ScriptLifecycle
+    {
+        Always,
+        PlayerOnly,
+        EditorOnly,
+    };
+
     struct ScriptEntry
     {
         std::string path;
@@ -69,6 +76,8 @@ namespace pe
         sol::function updateEditModeFn;
         sol::function destroyFn;
         std::vector<ExposedVar> exposedVars;
+        ScriptLifecycle lifecycle = ScriptLifecycle::Always;
+        bool initialized = false;
     };
 
     enum class ScriptUpdateMode
@@ -147,8 +156,12 @@ namespace pe
 
         static void AddBindings(LuaBindingFunc func);
 
+        // Fire pending init for PlayerOnly scripts on entry, destroy on exit.
+        void OnPlayModeChanged(bool nowPlay);
+
     private:
         void LoadScripts();
+        void LoadScriptsFromDir(const std::string &dir, ScriptLifecycle lifecycle);
         void ScanForNewScripts();
         void CollectHooks(ScriptEntry &entry);
         void CollectExposedVars(ScriptEntry &entry);

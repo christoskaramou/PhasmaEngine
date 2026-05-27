@@ -172,6 +172,8 @@ namespace pe
             result.desc.draggable = ReadBoolOption(options, "draggable", result.desc.draggable);
             result.desc.selected = ReadBoolOption(options, "selected", result.desc.selected);
             result.desc.visible = ReadBoolOption(options, "visible", result.desc.visible);
+            result.desc.bringToFront = ReadBoolOption(options, "bring_to_front", result.desc.bringToFront);
+            result.desc.fontScale = ReadFloatOption(options, "font_scale", result.desc.fontScale);
 
             sol::object nodeObject = options["node"];
             if (nodeObject.is<SceneNodeHandle>())

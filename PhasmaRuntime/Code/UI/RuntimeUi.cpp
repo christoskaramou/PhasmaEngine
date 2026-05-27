@@ -384,6 +384,8 @@ namespace pe
         widget.draggable = desc.draggable;
         widget.selected = desc.selected;
         widget.visible = desc.visible;
+        widget.bringToFront = desc.bringToFront;
+        widget.fontScale = desc.fontScale > 0.0f ? desc.fontScale : 1.0f;
         widget.imagePath = path;
         widget.image = path.empty() ? desc.image : LoadImageResource(path);
     }
@@ -661,6 +663,8 @@ namespace pe
                         quadDesc.draggable = widget.draggable;
                         quadDesc.selected = widget.selected;
                         quadDesc.visible = widget.visible;
+                        quadDesc.bringToFront = widget.bringToFront;
+                        quadDesc.fontScale = widget.fontScale;
                         widget.state = m_backend->Quad(quadDesc);
                         break;
                     }

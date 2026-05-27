@@ -11,6 +11,7 @@ namespace pe
         bool (*isViewportFocused)() = nullptr;
         void (*setModelLoading)(bool loading) = nullptr;
         bool loadEditorOnlyGlobalScripts = false;
+        bool isEditorHost = false;
     };
 
     void SetScriptRuntimeHooks(ScriptRuntimeHooks hooks);
@@ -20,5 +21,6 @@ namespace pe
     void SetScriptPaused(bool paused);
     [[nodiscard]] bool IsScriptViewportFocused();
     [[nodiscard]] bool ShouldLoadEditorOnlyGlobalScripts();
+    [[nodiscard]] bool IsEditorHost();
     void SetScriptModelLoading(bool loading);
 } // namespace pe

@@ -44,6 +44,11 @@ namespace pe
         return s_scriptRuntimeHooks.loadEditorOnlyGlobalScripts;
     }
 
+    bool IsEditorHost()
+    {
+        return s_scriptRuntimeHooks.isEditorHost;
+    }
+
     void SetScriptModelLoading(bool loading)
     {
         if (s_scriptRuntimeHooks.setModelLoading)

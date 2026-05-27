@@ -166,11 +166,17 @@ namespace pe
 
         void EditorSetScriptPlayMode(bool enabled)
         {
+            const bool wasPlay = GUIState::s_playMode;
             GUIState::s_playMode = enabled;
             if (!enabled)
             {
                 GUIState::s_isPaused = false;
                 SetRuntimePlaySessionPaused(false);
+            }
+            if (wasPlay != enabled)
+            {
+                if (auto *ss = GetGlobalSystem<ScriptSystem>())
+                    ss->OnPlayModeChanged(enabled);
             }
         }
 
@@ -301,6 +307,7 @@ namespace pe
         scriptHooks.isViewportFocused = EditorScriptViewportFocused;
         scriptHooks.setModelLoading = EditorSetScriptModelLoading;
         scriptHooks.loadEditorOnlyGlobalScripts = true;
+        scriptHooks.isEditorHost = true;
         SetScriptRuntimeHooks(scriptHooks);
         GetGlobalSystem<RendererSystem>()->Init(cmd);
         m_runtimeUi = std::make_unique<RuntimeUiSystem>();
