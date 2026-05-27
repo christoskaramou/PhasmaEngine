@@ -36,5 +36,22 @@ namespace pe
             buffer->Flush();
             buffer->Unmap();
         }
+
+        void ZeroParticleBufferRange(Buffer *buffer, size_t byteOffset, size_t byteSize)
+        {
+            if (!buffer || byteSize == 0 || byteOffset >= buffer->Size())
+                return;
+
+            byteSize = std::min(byteSize, buffer->Size() - byteOffset);
+
+            Queue *queue = RHII.GetMainQueue();
+            CommandBuffer *cmd = queue->AcquireCommandBuffer();
+            cmd->Begin();
+            cmd->FillBuffer(buffer, byteOffset, byteSize, 0);
+            cmd->End();
+            queue->Submit(1, &cmd, nullptr, nullptr);
+            cmd->Wait();
+            cmd->Return();
+        }
     } // namespace ParticleBufferBackend
 } // namespace pe

@@ -209,6 +209,8 @@ namespace pe
 
         UpdateGeometry();
         UpdateLights();
+        if (m_particleManager)
+            m_particleManager->Update();
     }
 
     bool Scene::HasPendingRenderUpdate() const

@@ -25,6 +25,10 @@ The Lua `runtime_ui` table exposes helper operations for visibility, titles, cle
 
 The engine no longer has a native sprite feature: no sprite scene component, Lua table, editor component panel, dedicated render pass, or sprite shader path is part of the runtime contract. Regular material helpers such as `material.set_texture(node, path)` remain for normal scene meshes.
 
+## Runtime Particle Helper Surface
+
+The runtime particle manager owns persistent emitters plus short-lived burst helpers. Lua still exposes the editable emitter surface (`particles.add_emitter`, `particles.set_emitter`, `particles.remove_emitter`, `particles.kill_emitter_particles`, `particles.clear`, texture helpers, and count queries), and also exposes `particles.emit_burst({...})` for one-shot effects. Burst options use the normal emitter vocabulary (`position`, `velocity`, `color_start`, `color_end`, `count`, `size_min`, `size_max`, `life_min`, `life_max`, `spawn_radius`, `noise_strength`, `drag`, `texture_index`, `orientation`) plus optional `preset` and `cleanup_delay`; the built-in hit presets are `hero_take`, `hero_give`, `enemy_take`, and `enemy_give`. The helper marks burst emitters with a negative spawn rate, the particle compute shader fires those particles once using the emitter token in `position.w`, and `ParticleManager::Update()` removes the transient emitters after their lifetime so gameplay scripts can trigger impact feedback without manually pooling or cleaning emitters. Emitter removal zeros the affected particle range before compacting offsets, and one-shot particles reset when their stored burst token no longer matches the current emitter token, so shifted transient slots cannot keep rendering stale particles at old world positions.
+
 ## MyProject Contract
 
 The project contract starts as a small descriptor:

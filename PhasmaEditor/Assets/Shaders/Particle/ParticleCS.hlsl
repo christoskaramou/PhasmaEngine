@@ -57,7 +57,7 @@ void Reset(inout Particle p, uint index, ParticleEmitter emitter, uint emitterIn
     
     p.extra.x = float(emitterIndex); // Store Emitter Index
     p.extra.z = rand(seed); // Random variation factor
-    p.extra.w = rand(seed); // Random offset
+    p.extra.w = emitter.physics.x < 0.0 ? emitter.position.w : rand(seed); // Burst token or random offset
     
     // --- 5. Color ---
     p.color = emitter.colorStart;
@@ -94,16 +94,23 @@ void mainCS(uint3 DTid : SV_DispatchThreadID)
     // Update Life
     particles[index].position.w -= pc.deltaTime;
     float currentLife = particles[index].position.w;
+    float spawnRate = emitter.physics.x;
+    bool oneShot = spawnRate < 0.0;
+    if (oneShot && currentLife > 0.0 && abs(particles[index].extra.w - emitter.position.w) > 0.5)
+    {
+        currentLife = 0.0;
+        particles[index].position.w = 0.0;
+    }
     
     if (currentLife <= 0.0)
     {
         // Respawn check
         float2 seed = float2(index * 1.37, pc.totalTime * (index + 1));
         
-        float spawnRate = emitter.physics.x;
-        float spawnProbability = saturate(spawnRate * pc.deltaTime);
-        
-        if (rand(seed) < spawnProbability)
+        bool shouldSpawn = oneShot ? abs(particles[index].extra.w - emitter.position.w) > 0.5
+                                   : rand(seed) < saturate(spawnRate * pc.deltaTime);
+
+        if (shouldSpawn)
         {
             Reset(particles[index], index, emitter, emitterIndex);
         }

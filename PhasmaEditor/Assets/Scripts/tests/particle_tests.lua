@@ -103,6 +103,20 @@ function run_particle_tests()
     local pc = particles.get_particle_count()
     T.check("get_particle_count", type(pc) == "number")
 
+    -- transient burst helper
+    local burst_idx = particles.emit_burst({
+        preset = "hero_take",
+        position = vec3(0, 1, 0),
+        count = 12,
+        life_max = 0.25,
+        cleanup_delay = 5.0
+    })
+    T.check("emit_burst returns index", burst_idx >= 0)
+    local burst = particles.get_emitter(burst_idx)
+    T.check("emit_burst creates emitter", burst ~= nil and burst.count == 12)
+    particles.kill_emitter_particles(burst_idx)
+    particles.remove_emitter(burst_idx)
+
     -- invalid index
     local bad = particles.get_emitter(999)
     T.check("invalid index returns nil", bad == nil)

@@ -149,8 +149,126 @@ namespace pe
         m_bufferVersion++;
     }
 
+    int ParticleManager::EmitBurst(const ParticleBurstDesc &desc)
+    {
+        ParticleEmitter e{};
+        const float lifeMin = std::max(0.01f, desc.lifeMin);
+        const float lifeMax = std::max(lifeMin, desc.lifeMax);
+        const float burstToken = static_cast<float>(m_nextBurstToken++);
+
+        e.position = vec4(desc.position, burstToken);
+        e.velocity = vec4(desc.velocity, 0.0f);
+        e.colorStart = desc.colorStart;
+        e.colorEnd = desc.colorEnd;
+        e.sizeLife = vec4(std::max(0.0f, desc.sizeMin), std::max(0.0f, desc.sizeMax), lifeMin, lifeMax);
+        e.physics = vec4(-1.0f, std::max(0.0f, desc.spawnRadius), desc.noiseStrength, std::max(0.0f, desc.drag));
+        e.gravity = vec4(desc.gravity, 0.0f);
+        e.animation = vec4(1.0f, 1.0f, 1.0f, 0.0f);
+        e.textureIndex = desc.textureIndex;
+        e.count = std::max(desc.count, 1u);
+        e.offset = 0;
+        e.orientation = desc.orientation;
+
+        m_emitters.push_back(e);
+        m_emitterNames.push_back(desc.name.empty() ? "Burst" : desc.name);
+
+        const int index = static_cast<int>(m_emitters.size() - 1);
+        const float cleanupDelay = desc.cleanupDelay > 0.0f ? desc.cleanupDelay : lifeMax + 0.25f;
+        m_transientEmitters.push_back({index, cleanupDelay});
+
+        UpdateEmitterBuffer();
+        return index;
+    }
+
+    void ParticleManager::ZeroParticleRange(uint32_t firstParticle, uint32_t particleCount)
+    {
+        if (!m_particleBuffer || particleCount == 0)
+            return;
+
+        const size_t byteOffset = static_cast<size_t>(firstParticle) * sizeof(Particle);
+        const size_t byteSize = static_cast<size_t>(particleCount) * sizeof(Particle);
+        ParticleBufferBackend::ZeroParticleBufferRange(m_particleBuffer, byteOffset, byteSize);
+    }
+
+    void ParticleManager::KillEmitterParticles(int index)
+    {
+        if (index < 0 || index >= static_cast<int>(m_emitters.size()))
+            return;
+
+        const ParticleEmitter &emitter = m_emitters[index];
+        ZeroParticleRange(emitter.offset, emitter.count);
+    }
+
+    void ParticleManager::RemoveEmitterNoUpdate(int index)
+    {
+        if (index < 0 || index >= static_cast<int>(m_emitters.size()))
+            return;
+
+        const uint32_t oldParticleCount = m_particleCount;
+        const uint32_t firstShiftedParticle = m_emitters[index].offset;
+        if (firstShiftedParticle < oldParticleCount)
+            ZeroParticleRange(firstShiftedParticle, oldParticleCount - firstShiftedParticle);
+
+        m_emitters.erase(m_emitters.begin() + index);
+        if (index < static_cast<int>(m_emitterNames.size()))
+            m_emitterNames.erase(m_emitterNames.begin() + index);
+
+        for (auto it = m_transientEmitters.begin(); it != m_transientEmitters.end();)
+        {
+            if (it->index == index)
+                it = m_transientEmitters.erase(it);
+            else
+            {
+                if (it->index > index)
+                    --it->index;
+                ++it;
+            }
+        }
+    }
+
+    void ParticleManager::RemoveEmitter(int index)
+    {
+        RemoveEmitterNoUpdate(index);
+        UpdateEmitterBuffer();
+    }
+
+    void ParticleManager::ClearEmitters()
+    {
+        m_emitters.clear();
+        m_emitterNames.clear();
+        m_transientEmitters.clear();
+        UpdateEmitterBuffer();
+    }
+
     void ParticleManager::Update()
     {
+        if (m_transientEmitters.empty())
+            return;
+
+        const float dt = std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetDelta()));
+        bool changed = false;
+        for (auto it = m_transientEmitters.begin(); it != m_transientEmitters.end();)
+        {
+            it->timeRemaining -= dt;
+            if (it->timeRemaining <= 0.0f)
+            {
+                if (it->index < 0 || it->index >= static_cast<int>(m_emitters.size()))
+                    it = m_transientEmitters.erase(it);
+                else
+                {
+                    RemoveEmitterNoUpdate(it->index);
+                    it = m_transientEmitters.begin();
+                }
+                changed = true;
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
+        if (changed)
+            UpdateEmitterBuffer();
     }
 
     void ParticleManager::InitTextures(CommandBuffer *cmd)
@@ -252,5 +370,6 @@ namespace pe
         }
         m_emitters.clear();
         m_emitterNames.clear();
+        m_transientEmitters.clear();
     }
 } // namespace pe

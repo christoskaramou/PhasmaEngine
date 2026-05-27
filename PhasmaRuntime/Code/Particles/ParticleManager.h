@@ -31,6 +31,27 @@ namespace pe
         uint32_t orientation; // 0: Billboard, 1: Horizontal, 2: Vertical, 3: Velocity
     };
 
+    struct ParticleBurstDesc
+    {
+        std::string name = "Burst";
+        vec3 position = vec3(0.0f);
+        vec3 velocity = vec3(0.0f, 3.0f, 0.0f);
+        vec4 colorStart = vec4(1.0f);
+        vec4 colorEnd = vec4(1.0f, 0.0f, 0.0f, 0.0f);
+        vec3 gravity = vec3(0.0f, -4.0f, 0.0f);
+        uint32_t count = 48;
+        float sizeMin = 0.04f;
+        float sizeMax = 0.16f;
+        float lifeMin = 0.20f;
+        float lifeMax = 0.50f;
+        float spawnRadius = 0.15f;
+        float noiseStrength = 3.0f;
+        float drag = 1.0f;
+        uint32_t textureIndex = 0;
+        uint32_t orientation = 0;
+        float cleanupDelay = 0.0f;
+    };
+
     class ParticleManager
     {
     public:
@@ -38,7 +59,7 @@ namespace pe
         ~ParticleManager();
 
         void Init();
-        void Update(); // Future logic
+        void Update();
         void Destroy();
 
         Buffer *GetParticleBuffer() { return m_particleBuffer; }
@@ -49,6 +70,10 @@ namespace pe
         std::vector<std::string> &GetEmitterNames() { return m_emitterNames; }
         const std::vector<std::string> &GetEmitterNames() const { return m_emitterNames; }
         void UpdateEmitterBuffer(); // Call this when emitters change
+        int EmitBurst(const ParticleBurstDesc &desc);
+        void KillEmitterParticles(int index);
+        void RemoveEmitter(int index);
+        void ClearEmitters();
 
         // Texture Management
         void InitTextures(CommandBuffer *cmd);
@@ -75,5 +100,17 @@ namespace pe
         std::vector<std::string> m_textureNames;
         Sampler *m_sampler = nullptr;
         bool m_texturesChanged = false;
+
+        struct TransientEmitter
+        {
+            int index = -1;
+            float timeRemaining = 0.0f;
+        };
+
+        std::vector<TransientEmitter> m_transientEmitters;
+        uint32_t m_nextBurstToken = 1;
+
+        void ZeroParticleRange(uint32_t firstParticle, uint32_t particleCount);
+        void RemoveEmitterNoUpdate(int index);
     };
 } // namespace pe

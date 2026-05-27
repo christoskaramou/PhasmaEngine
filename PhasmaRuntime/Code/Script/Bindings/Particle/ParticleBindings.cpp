@@ -8,6 +8,98 @@ namespace pe
     static const std::unordered_map<std::string_view, uint32_t> s_orientationMap = {
         {"billboard", 0}, {"horizontal", 1}, {"vertical", 2}, {"velocity", 3}};
 
+    static bool GetOrientation(sol::object value, uint32_t &orientation)
+    {
+        if (!value.valid())
+            return false;
+        if (value.is<std::string>())
+        {
+            std::string o = value.as<std::string>();
+            auto it = s_orientationMap.find(std::string_view(o));
+            if (it != s_orientationMap.end())
+            {
+                orientation = it->second;
+                return true;
+            }
+            return false;
+        }
+        if (value.is<double>() || value.is<int>() || value.is<unsigned int>())
+        {
+            orientation = static_cast<uint32_t>(value.as<double>());
+            return true;
+        }
+        return false;
+    }
+
+    static bool FillBurstPreset(const std::string &preset, ParticleBurstDesc &desc)
+    {
+        if (preset == "hero_take")
+        {
+            desc.name = "Hero Hit Taken";
+            desc.velocity = vec3(0.0f, 2.5f, 0.0f);
+            desc.colorStart = vec4(1.0f, 0.16f, 0.08f, 0.95f);
+            desc.colorEnd = vec4(0.55f, 0.02f, 0.01f, 0.0f);
+            desc.count = 48;
+            desc.sizeMin = 0.035f;
+            desc.sizeMax = 0.16f;
+            desc.lifeMin = 0.18f;
+            desc.lifeMax = 0.44f;
+            desc.spawnRadius = 0.22f;
+            desc.noiseStrength = 3.7f;
+            desc.drag = 1.2f;
+            return true;
+        }
+        if (preset == "hero_give")
+        {
+            desc.name = "Hero Hit Given";
+            desc.velocity = vec3(0.0f, 1.8f, 0.0f);
+            desc.colorStart = vec4(1.0f, 0.88f, 0.30f, 0.90f);
+            desc.colorEnd = vec4(1.0f, 0.36f, 0.04f, 0.0f);
+            desc.count = 36;
+            desc.sizeMin = 0.035f;
+            desc.sizeMax = 0.18f;
+            desc.lifeMin = 0.14f;
+            desc.lifeMax = 0.34f;
+            desc.spawnRadius = 0.16f;
+            desc.noiseStrength = 4.4f;
+            desc.drag = 1.0f;
+            return true;
+        }
+        if (preset == "enemy_take")
+        {
+            desc.name = "Enemy Hit Taken";
+            desc.velocity = vec3(0.0f, 1.9f, 0.0f);
+            desc.colorStart = vec4(1.0f, 0.34f, 0.08f, 0.90f);
+            desc.colorEnd = vec4(0.42f, 0.02f, 0.01f, 0.0f);
+            desc.count = 32;
+            desc.sizeMin = 0.03f;
+            desc.sizeMax = 0.14f;
+            desc.lifeMin = 0.14f;
+            desc.lifeMax = 0.32f;
+            desc.spawnRadius = 0.14f;
+            desc.noiseStrength = 3.8f;
+            desc.drag = 1.1f;
+            return true;
+        }
+        if (preset == "enemy_give")
+        {
+            desc.name = "Enemy Hit Given";
+            desc.velocity = vec3(0.0f, 1.5f, 0.0f);
+            desc.colorStart = vec4(0.62f, 0.24f, 1.0f, 0.82f);
+            desc.colorEnd = vec4(0.14f, 0.04f, 0.28f, 0.0f);
+            desc.count = 22;
+            desc.sizeMin = 0.025f;
+            desc.sizeMax = 0.12f;
+            desc.lifeMin = 0.12f;
+            desc.lifeMax = 0.28f;
+            desc.spawnRadius = 0.12f;
+            desc.noiseStrength = 2.8f;
+            desc.drag = 1.3f;
+            return true;
+        }
+        return false;
+    }
+
     static ParticleManager *GetPM()
     {
         Scene *scene = GetActiveScene();
@@ -72,12 +164,7 @@ namespace pe
                         if (t["anim_cols"].valid()) e.animation.y = t["anim_cols"].get<float>();
                         if (t["anim_speed"].valid()) e.animation.z = t["anim_speed"].get<float>();
                         if (t["interpolate"].valid()) e.animation.w = t["interpolate"].get<bool>() ? 1.0f : 0.0f;
-                        if (t["orientation"].valid())
-                        {
-                            std::string o = t["orientation"].get<std::string>();
-                            auto it = s_orientationMap.find(std::string_view(o));
-                            if (it != s_orientationMap.end()) e.orientation = it->second;
-                        }
+                        if (t["orientation"].valid()) GetOrientation(t["orientation"], e.orientation);
                     }
 
                     auto &emitters = pm->GetEmitters();
@@ -91,13 +178,13 @@ namespace pe
                 particles.set_function("remove_emitter", [](int index) {
                     auto *pm = GetPM();
                     if (!pm) return;
-                    auto &emitters = pm->GetEmitters();
-                    auto &names = pm->GetEmitterNames();
-                    if (index < 0 || index >= static_cast<int>(emitters.size())) return;
-                    emitters.erase(emitters.begin() + index);
-                    if (index < static_cast<int>(names.size()))
-                        names.erase(names.begin() + index);
-                    pm->UpdateEmitterBuffer();
+                    pm->RemoveEmitter(index);
+                });
+
+                particles.set_function("kill_emitter_particles", [](int index) {
+                    auto *pm = GetPM();
+                    if (!pm) return;
+                    pm->KillEmitterParticles(index);
                 });
 
                 particles.set_function("get_emitter", [](int index, sol::this_state ts) -> sol::object {
@@ -159,8 +246,7 @@ namespace pe
                         else if (prop == "drag") e.physics.w = val.as<float>();
                         else if (prop == "orientation")
                         {
-                            auto it = s_orientationMap.find(std::string_view(val.as<std::string>()));
-                            if (it != s_orientationMap.end()) e.orientation = it->second;
+                            GetOrientation(val, e.orientation);
                         }
                         else if (prop == "texture_index") e.textureIndex = static_cast<uint32_t>(val.as<double>());
                         else if (prop == "anim_rows") e.animation.x = val.as<float>();
@@ -200,6 +286,38 @@ namespace pe
                     return static_cast<int>(pm->LoadTexture(path));
                 });
 
+                particles.set_function("emit_burst", [](sol::table opts) -> int {
+                    auto *pm = GetPM();
+                    if (!pm) return -1;
+
+                    ParticleBurstDesc desc{};
+                    if (opts["preset"].valid())
+                    {
+                        std::string preset = opts["preset"].get<std::string>();
+                        FillBurstPreset(preset, desc);
+                    }
+
+                    if (opts["name"].valid()) desc.name = opts["name"].get<std::string>();
+                    if (opts["position"].valid()) desc.position = opts["position"].get<vec3>();
+                    if (opts["velocity"].valid()) desc.velocity = opts["velocity"].get<vec3>();
+                    if (opts["color_start"].valid()) desc.colorStart = opts["color_start"].get<vec4>();
+                    if (opts["color_end"].valid()) desc.colorEnd = opts["color_end"].get<vec4>();
+                    if (opts["gravity"].valid()) desc.gravity = opts["gravity"].get<vec3>();
+                    if (opts["count"].valid()) desc.count = opts["count"].get<uint32_t>();
+                    if (opts["size_min"].valid()) desc.sizeMin = opts["size_min"].get<float>();
+                    if (opts["size_max"].valid()) desc.sizeMax = opts["size_max"].get<float>();
+                    if (opts["life_min"].valid()) desc.lifeMin = opts["life_min"].get<float>();
+                    if (opts["life_max"].valid()) desc.lifeMax = opts["life_max"].get<float>();
+                    if (opts["spawn_radius"].valid()) desc.spawnRadius = opts["spawn_radius"].get<float>();
+                    if (opts["noise_strength"].valid()) desc.noiseStrength = opts["noise_strength"].get<float>();
+                    if (opts["drag"].valid()) desc.drag = opts["drag"].get<float>();
+                    if (opts["texture_index"].valid()) desc.textureIndex = opts["texture_index"].get<uint32_t>();
+                    if (opts["cleanup_delay"].valid()) desc.cleanupDelay = opts["cleanup_delay"].get<float>();
+                    if (opts["orientation"].valid()) GetOrientation(opts["orientation"], desc.orientation);
+
+                    return pm->EmitBurst(desc);
+                });
+
                 particles.set_function("get_texture_names", [](sol::this_state ts) -> sol::table {
                     sol::state_view lua(ts);
                     auto *pm = GetPM();
@@ -232,9 +350,7 @@ namespace pe
                 particles.set_function("clear", []() {
                     auto *pm = GetPM();
                     if (!pm) return;
-                    pm->GetEmitters().clear();
-                    pm->GetEmitterNames().clear();
-                    pm->UpdateEmitterBuffer();
+                    pm->ClearEmitters();
                 }); });
         }
     } s_particleBindings;
