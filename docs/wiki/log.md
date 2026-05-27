@@ -5,6 +5,7 @@
 - Made editor-owned Lua controls independent of the selected project. The editor now passes its built-in assets root to `ScriptSystem`, which loads editor global/editor scripts from that stable root before project scripts and de-duplicates canonical script paths. `fly_camera.lua` now runs only through `update_editor`, so edit-mode viewport flight is consistent across projects while play-mode camera behavior remains project-owned.
 - Routed editor toolbar play/stop through the script play-mode lifecycle so project `Scripts/Player` hooks init/destroy around play, including script-built projects such as AgainstTheHero, while the editor restores its pre-play snapshot afterward. Snapshot restore now re-ensures a skybox node from restored skybox settings so stopping play mode cannot drop the editor skybox.
 - Made editor play mode hide editor UI and disable SceneView gizmo/picking/drop manipulation so the live editor test path behaves like PhasmaPlayer. Runtime UI input now uses the full window while play mode hides the editor GUI, so card hover/click/drag is not blocked or remapped through editor widgets.
+- Fixed editor play-mode crashes from script-driven node deletion after ATH horde spawns. Node deletion now dirties raster instance/TLAS render state and clears stale moved-node tracking, and the editor renderer performs a late scene/render-pass catch-up before drawing if scripts mutate the scene after the normal renderer update.
 
 ## 2026-05-25
 

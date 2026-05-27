@@ -254,6 +254,7 @@ namespace pe
         }
         bool IsGeometryDirty() const { return m_geometryDirty; }
         void SetGeometryDirty() { m_geometryDirty = true; }
+        bool HasPendingRenderUpdate() const;
         void SetMaterialDirty() { m_materialDirty = true; }
         void SetTexturesDirty() { m_texturesDirty = true; }
         void FlushPendingGpuWork();

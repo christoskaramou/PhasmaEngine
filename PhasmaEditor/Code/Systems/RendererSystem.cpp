@@ -128,6 +128,31 @@ namespace pe
         }
     }
 
+    void RendererSystem::LateCatchUpForScriptMutations()
+    {
+        if (!m_scene.HasPendingRenderUpdate())
+            return;
+
+        if (m_scene.IsGeometryDirty())
+            WaitAllFramesCommands();
+        m_scene.FlushPendingGpuWork();
+
+        {
+            PE_PROFILE_SCOPE("Scene Late");
+            m_scene.Update();
+        }
+
+        {
+            PE_PROFILE_SCOPE("Render Graph Pass States Late");
+            UpdateRenderGraphPassStates();
+        }
+
+        {
+            PE_PROFILE_SCOPE("Render Pass Updates Late");
+            m_sceneRenderer.UpdateRenderPassComponents();
+        }
+    }
+
     void RendererSystem::UpdateRenderGraphPassStates()
     {
         const bool hasRTGeom = SupportsRayTracingPass() && m_scene.GetTLAS() != nullptr;

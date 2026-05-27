@@ -622,6 +622,12 @@ namespace pe
         if (runtimeUiFrameOpen)
             runtimeUi->EndFrame();
 
+        if (!m_window->isMinimized())
+        {
+            PE_PROFILE_SCOPE("Late Script Mutation Catch-Up");
+            rendererSystem->LateCatchUpForScriptMutations();
+        }
+
         // Get ImGui render data ready
         if (hasImGuiRenderer)
             ImGui::Render();

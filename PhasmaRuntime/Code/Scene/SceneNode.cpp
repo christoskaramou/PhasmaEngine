@@ -138,6 +138,7 @@ namespace pe
         // Re-read index after child deletions (swap-and-pop may have moved this node)
         const uint32_t idx = node->index;
         const auto &cache = m_nodeComponentCache[idx];
+        const bool hasMeshRefs = !cache.meshRefs->meshRefs.empty();
 
         // Null out material pointers on meshes so stale entries in m_meshes
         // don't dereference freed Materials after the owning model is deleted.
@@ -233,12 +234,20 @@ namespace pe
             node->entity = nullptr;
         }
 
+        m_nodesMoved.erase(std::remove(m_nodesMoved.begin(), m_nodesMoved.end(), node), m_nodesMoved.end());
+
         SwapAndPopNode(idx);
         node->revision++; // Invalidate all old IDs pointing to this deleted node
         node->index = UINT32_MAX;
         m_freeNodeIds.push_back(node);
 
         m_nodesDirty = true;
+        if (hasMeshRefs)
+        {
+            m_instancesDirty = true;
+            m_tlasDirty = true;
+        }
+        m_dirty = true;
     }
 
     void Scene::SwapAndPopNode(uint32_t index)

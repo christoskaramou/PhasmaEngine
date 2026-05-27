@@ -60,6 +60,7 @@ namespace pe
         void Destroy() override;
         void Draw();
         void DrawPlatformWindows();
+        void LateCatchUpForScriptMutations();
 
         Scene &GetScene() override { return m_scene; }
         const SkyBox &GetSkyBoxDay() const override { return m_sceneRenderer.GetSkyBoxDay(); }

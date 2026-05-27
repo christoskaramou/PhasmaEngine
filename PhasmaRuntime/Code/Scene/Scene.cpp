@@ -211,6 +211,12 @@ namespace pe
         UpdateLights();
     }
 
+    bool Scene::HasPendingRenderUpdate() const
+    {
+        const bool rtDirty = RHII.GetCaps().rayTracing && (m_blasDirty || m_tlasDirty);
+        return m_nodesDirty || m_geometryDirty || m_instancesDirty || m_materialDirty || m_texturesDirty || rtDirty;
+    }
+
     void Scene::UpdateGeometryBuffers()
     {
         CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
