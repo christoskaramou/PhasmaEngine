@@ -200,13 +200,13 @@ namespace pe
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
 
-        LoadIcon(cmd, Path::Assets + "Icons/folder_icon.png", m_folderIcon);
-        LoadIcon(cmd, Path::Assets + "Icons/file_icon.png", m_fileIcon);
-        LoadIcon(cmd, Path::Assets + "Icons/txt_icon.png", m_txtIcon);
-        LoadIcon(cmd, Path::Assets + "Icons/shader_icon.png", m_shaderIcon);
-        LoadIcon(cmd, Path::Assets + "Icons/model_icon.png", m_modelIcon);
-        LoadIcon(cmd, Path::Assets + "Icons/script_icon.png", m_scriptIcon);
-        LoadIcon(cmd, Path::Assets + "Icons/image_icon.png", m_imageIcon);
+        LoadIcon(cmd, Path::EditorAssets + "Icons/folder_icon.png", m_folderIcon);
+        LoadIcon(cmd, Path::EditorAssets + "Icons/file_icon.png", m_fileIcon);
+        LoadIcon(cmd, Path::EditorAssets + "Icons/txt_icon.png", m_txtIcon);
+        LoadIcon(cmd, Path::EditorAssets + "Icons/shader_icon.png", m_shaderIcon);
+        LoadIcon(cmd, Path::EditorAssets + "Icons/model_icon.png", m_modelIcon);
+        LoadIcon(cmd, Path::EditorAssets + "Icons/script_icon.png", m_scriptIcon);
+        LoadIcon(cmd, Path::EditorAssets + "Icons/image_icon.png", m_imageIcon);
 
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);

@@ -8,6 +8,7 @@ namespace pe
         inline static std::string Root;
         inline static std::string Executable;
         inline static std::string Assets;
+        inline static std::string EditorAssets;
 
         static void Init()
         {
@@ -63,13 +64,17 @@ namespace pe
 
                                const std::filesystem::path rootAssets = rootDir / "Assets";
                                const std::filesystem::path executableAssets = executableDir / "Assets";
-                               const std::filesystem::path editorAssets = rootDir / "Editor" / "Assets";
                                if (std::filesystem::exists(rootAssets))
                                    Assets = normalizeDirectory(rootAssets);
                                else if (std::filesystem::exists(executableAssets))
                                    Assets = normalizeDirectory(executableAssets);
-                               else if (std::filesystem::exists(editorAssets))
-                                   Assets = normalizeDirectory(editorAssets);
+
+                               const std::filesystem::path rootEditorAssets = rootDir / "EditorAssets";
+                               const std::filesystem::path executableEditorAssets = executableDir / "EditorAssets";
+                               if (std::filesystem::exists(rootEditorAssets))
+                                   EditorAssets = normalizeDirectory(rootEditorAssets);
+                               else if (std::filesystem::exists(executableEditorAssets))
+                                   EditorAssets = normalizeDirectory(executableEditorAssets);
                            });
         }
 
@@ -89,6 +94,12 @@ namespace pe
         {
             Init();
             return Assets;
+        }
+
+        static const std::string &EditorAssetsPath()
+        {
+            Init();
+            return EditorAssets;
         }
     };
 } // namespace pe

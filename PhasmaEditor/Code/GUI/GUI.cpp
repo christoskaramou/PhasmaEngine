@@ -2193,12 +2193,12 @@ namespace pe
         if (m_ownsImGuiContext)
         {
             static const ImWchar icon_ranges[] = {0xf000, 0xf8ff, 0}; // FontAwesome range
-            std::string iconFontPath = Path::Assets + "Fonts/fa-solid-900.ttf";
-            std::string interFontPath = Path::Assets + "Fonts/Inter-Regular.ttf";
-            std::string robotoFontPath = Path::Assets + "Fonts/Roboto-Regular.ttf";
-            // std::string sourceSansFontPath = Path::Assets + "Fonts/SourceSans3-Regular.ttf";
-            std::string openSansFontPath = Path::Assets + "Fonts/OpenSans-Regular.ttf";
-            // std::string latoFontPath = Path::Assets + "Fonts/Lato-Regular.ttf";
+            std::string iconFontPath = Path::EditorAssets + "Fonts/fa-solid-900.ttf";
+            std::string interFontPath = Path::EditorAssets + "Fonts/Inter-Regular.ttf";
+            std::string robotoFontPath = Path::EditorAssets + "Fonts/Roboto-Regular.ttf";
+            // std::string sourceSansFontPath = Path::EditorAssets + "Fonts/SourceSans3-Regular.ttf";
+            std::string openSansFontPath = Path::EditorAssets + "Fonts/OpenSans-Regular.ttf";
+            // std::string latoFontPath = Path::EditorAssets + "Fonts/Lato-Regular.ttf";
             float fontSize = 15.0f;
 
             // Symbol glyph ranges for fallback font (DejaVu Sans covers these)
@@ -2221,7 +2221,7 @@ namespace pe
                 0x27BF, // Dingbats
                 0,
             };
-            std::string fallbackFontPath = Path::Assets + "Fonts/DejaVuSans.ttf";
+            std::string fallbackFontPath = Path::EditorAssets + "Fonts/DejaVuSans.ttf";
 
             // Helper lambda to merge icon font + symbol fallback into the current base font
             auto addMergedFonts = [&]()

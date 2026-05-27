@@ -2,7 +2,7 @@
 
 PhasmaEngine is a Vulkan and DirectX 12 3D engine for learning graphics techniques, with an experimental WebGPU C API layer. Vulkan runs on Windows and Linux; DX12 is Windows-only.
 
-![Screenshot](PhasmaEditor/Images/ABeautifulGame.png)
+![Screenshot](PhasmaEditor/EditorAssets/Images/ABeautifulGame.png)
 
 ## Features
 

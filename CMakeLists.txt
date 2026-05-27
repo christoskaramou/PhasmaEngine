@@ -45,6 +45,7 @@ set(PE_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/third_party")
 set(PE_SHARED_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaRuntime/third_party")
 set(PE_EDITOR_THIRD_PARTY_DIR "${PE_SHARED_THIRD_PARTY_DIR}")
 set(PE_RUNTIME_ASSETS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Assets")
+set(PE_EDITOR_ASSETS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/EditorAssets")
 include(cmake/PhasmaRuntimeLayout.cmake)
 pe_add_root_runtime_dependencies_target()
 
@@ -186,6 +187,7 @@ file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/
 file(GLOB_RECURSE IMGUI_SRC_FILES CONFIGURE_DEPENDS "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/*.cpp")
 file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${PE_RUNTIME_ASSETS_SOURCE_DIR}/*")
 list(FILTER ASSET_FILES EXCLUDE REGEX "\\.obj$")
+file(GLOB_RECURSE EDITOR_ASSET_FILES CONFIGURE_DEPENDS "${PE_EDITOR_ASSETS_SOURCE_DIR}/*")
 set(PE_SHARED_IMGUI_BACKEND_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaRuntime/Code/UI/Backends/ImGuiRuntimeUiBackend.cpp"
 )
@@ -344,9 +346,22 @@ add_custom_command(
     COMMENT "[Phasma] Copying assets to build directory"
 )
 add_custom_target(PhasmaRuntimeAssets ALL DEPENDS "${ASSETS_COPY_STAMP}")
-add_custom_target(PhasmaEditorAssets DEPENDS "${ASSETS_COPY_STAMP}")
 add_dependencies(PhasmaEditor PhasmaRuntimeAssets)
 add_dependencies(PhasmaLauncher PhasmaRuntimeAssets)
 add_dependencies(PhasmaPlayer PhasmaRuntimeAssets)
+
+# Editor-only assets (Icons, Fonts, SplashScreen-free chrome, Profiler, Temp, Images).
+# Copied next to the editor exe; not shipped with the standalone player.
+set(EDITOR_ASSETS_COPY_STAMP "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/PhasmaEditorAssets-$<CONFIG>.stamp")
+add_custom_command(
+    OUTPUT "${EDITOR_ASSETS_COPY_STAMP}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles" "${PHASMA_CONFIG_OUTPUT_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PE_EDITOR_ASSETS_SOURCE_DIR}" "${PHASMA_CONFIG_OUTPUT_DIR}/EditorAssets"
+    COMMAND ${CMAKE_COMMAND} -E touch "${EDITOR_ASSETS_COPY_STAMP}"
+    DEPENDS ${EDITOR_ASSET_FILES}
+    COMMENT "[Phasma] Copying editor assets to build directory"
+)
+add_custom_target(PhasmaEditorAssets ALL DEPENDS "${EDITOR_ASSETS_COPY_STAMP}")
+add_dependencies(PhasmaEditor PhasmaEditorAssets)
 
 pe_install_runtime_layout()

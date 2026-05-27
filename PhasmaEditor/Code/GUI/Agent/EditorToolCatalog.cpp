@@ -1431,7 +1431,7 @@ namespace pe
                 ToolDefinition tool;
                 tool.name = "profiler_snapshot";
                 tool.description = "Takes a snapshot of the current profiler data (Overview, CPU, GPU) and saves it as a JSON file "
-                                   "to Assets/Profiler/profiler_snapshot_<datetime>.json. "
+                                   "to EditorAssets/Profiler/profiler_snapshot_<datetime>.json. "
                                    "Returns the saved file path. "
                                    "Use this to capture frame timings, memory usage, GPU pass breakdown, and CPU scope timings.";
                 tool.inputSchema = schema::Object({});

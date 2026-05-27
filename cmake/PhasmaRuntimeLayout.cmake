@@ -104,6 +104,13 @@ function(pe_install_runtime_layout)
         COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
     )
 
+    if(DEFINED PE_EDITOR_ASSETS_SOURCE_DIR AND EXISTS "${PE_EDITOR_ASSETS_SOURCE_DIR}")
+        install(DIRECTORY "${PE_EDITOR_ASSETS_SOURCE_DIR}/"
+            DESTINATION "EditorAssets"
+            COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
+        )
+    endif()
+
     pe_install_default_runtime_settings()
 endfunction()
 

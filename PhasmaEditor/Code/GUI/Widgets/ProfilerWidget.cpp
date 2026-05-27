@@ -578,7 +578,7 @@ namespace pe
         char ts[32];
         strftime(ts, sizeof(ts), "%Y-%m-%dT%H-%M-%S", &tm);
 
-        const std::string dir = Path::Assets + "Profiler/";
+        const std::string dir = Path::EditorAssets + "Profiler/";
         std::filesystem::create_directories(dir);
         const std::string path = dir + "profiler_snapshot_" + ts + ".json";
 
