@@ -116,7 +116,11 @@ void mainCS(uint3 DTid : SV_DispatchThreadID)
         }
         else
         {
+            // Dead particles keep their last alive-frame color, which at 60fps
+            // can still be well above the PS alpha-discard threshold. Force
+            // alpha to 0 so the corpse stops rendering immediately.
             particles[index].position.w = 0.0;
+            particles[index].color.a = 0.0;
         }
     }
     else

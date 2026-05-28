@@ -617,6 +617,36 @@ namespace
         Error
     };
 
+    enum class BrowseDialogKind
+    {
+        None,
+        Project,
+        StartupScene,
+        SettingsFile
+    };
+
+    struct BrowseDialogState
+    {
+        BrowseDialogKind kind = BrowseDialogKind::None;
+        LaunchProfile *profile = nullptr;
+        std::filesystem::path currentDirectory;
+        std::filesystem::path selectedPath;
+        bool selectedPathIsDirectory = false;
+        bool directoriesOnly = false;
+        bool openRequested = false;
+        bool closeRequested = false;
+        const char *extensionFilter = nullptr;
+        char pathBuffer[2048] = {};
+        std::string error;
+    };
+
+    struct BrowseEntry
+    {
+        std::filesystem::path path;
+        std::string label;
+        bool isDirectory = false;
+    };
+
     std::string SceneDisplayName(const LaunchProfile &profile, const std::string &scene)
     {
         if (scene.empty())
@@ -1422,11 +1452,373 @@ namespace
         RefreshStartupScenes(profile);
     }
 
+    std::filesystem::path ExistingBrowseDirectory(std::filesystem::path path)
+    {
+        if (path.empty())
+            path = pe::Path::Root;
+
+        std::error_code ec;
+        if (path.is_relative())
+            path = std::filesystem::absolute(path, ec);
+        if (ec)
+        {
+            ec.clear();
+            path = pe::Path::Root;
+        }
+
+        path = path.lexically_normal();
+        if (std::filesystem::is_regular_file(path, ec))
+            path = path.parent_path();
+
+        while (!path.empty() && !std::filesystem::is_directory(path, ec))
+        {
+            const std::filesystem::path parent = path.parent_path();
+            if (parent == path)
+                break;
+            path = parent;
+        }
+
+        if (!path.empty() && std::filesystem::is_directory(path, ec))
+            return path.lexically_normal();
+
+#if defined(PE_WIN32)
+        return std::filesystem::path(pe::Path::Root).lexically_normal();
+#else
+        return std::filesystem::path("/").lexically_normal();
+#endif
+    }
+
+    void CopyBrowsePath(BrowseDialogState &dialog, const std::filesystem::path &path)
+    {
+        CopyStringToArray(dialog.pathBuffer, path.generic_string());
+    }
+
+    void ClearBrowseSelection(BrowseDialogState &dialog)
+    {
+        dialog.selectedPath.clear();
+        dialog.selectedPathIsDirectory = false;
+        CopyBrowsePath(dialog, dialog.currentDirectory);
+    }
+
+    void SetBrowseDirectory(BrowseDialogState &dialog, const std::filesystem::path &directory)
+    {
+        dialog.currentDirectory = ExistingBrowseDirectory(directory);
+        dialog.error.clear();
+        ClearBrowseSelection(dialog);
+    }
+
+    void SetBrowseSelection(BrowseDialogState &dialog, const std::filesystem::path &path, bool isDirectory)
+    {
+        dialog.selectedPath = path.lexically_normal();
+        dialog.selectedPathIsDirectory = isDirectory;
+        CopyBrowsePath(dialog, dialog.selectedPath);
+    }
+
+    bool BrowseExtensionMatches(const BrowseDialogState &dialog, const std::filesystem::path &path)
+    {
+        if (!dialog.extensionFilter || dialog.extensionFilter[0] == '\0')
+            return true;
+        return path.extension() == dialog.extensionFilter;
+    }
+
+    std::filesystem::path ResolveBrowseInputPath(const BrowseDialogState &dialog)
+    {
+        std::filesystem::path path(dialog.pathBuffer);
+        if (path.is_relative())
+            path = dialog.currentDirectory / path;
+
+        std::error_code ec;
+        const std::filesystem::path absolutePath = std::filesystem::absolute(path, ec);
+        if (ec)
+            return path.lexically_normal();
+        return absolutePath.lexically_normal();
+    }
+
+    bool ApplyBrowsePathBuffer(BrowseDialogState &dialog)
+    {
+        const std::filesystem::path path = ResolveBrowseInputPath(dialog);
+
+        std::error_code ec;
+        if (std::filesystem::is_directory(path, ec))
+        {
+            SetBrowseDirectory(dialog, path);
+            return true;
+        }
+
+        if (!dialog.directoriesOnly && std::filesystem::is_regular_file(path, ec) && BrowseExtensionMatches(dialog, path))
+        {
+            SetBrowseSelection(dialog, path, false);
+            dialog.error.clear();
+            return true;
+        }
+
+        dialog.error = "Path not found";
+        return false;
+    }
+
+    void ResetBrowseDialog(BrowseDialogState &dialog)
+    {
+        dialog = {};
+    }
+
+    void OpenBrowseDialog(BrowseDialogState &dialog,
+                          BrowseDialogKind kind,
+                          LaunchProfile *profile,
+                          const std::filesystem::path &initialDirectory,
+                          bool directoriesOnly,
+                          const char *extensionFilter)
+    {
+        dialog.kind = kind;
+        dialog.profile = profile;
+        dialog.currentDirectory = ExistingBrowseDirectory(initialDirectory);
+        dialog.directoriesOnly = directoriesOnly;
+        dialog.extensionFilter = extensionFilter;
+        dialog.openRequested = true;
+        dialog.error.clear();
+        ClearBrowseSelection(dialog);
+    }
+
+    const char *BrowseDialogTitle(BrowseDialogKind kind)
+    {
+        switch (kind)
+        {
+        case BrowseDialogKind::Project:
+            return "Select project";
+        case BrowseDialogKind::StartupScene:
+            return "Select startup scene";
+        case BrowseDialogKind::SettingsFile:
+            return "Select settings file";
+        case BrowseDialogKind::None:
+            break;
+        }
+        return "Browse";
+    }
+
+    std::vector<BrowseEntry> ReadBrowseEntries(const BrowseDialogState &dialog, std::string &error)
+    {
+        std::vector<BrowseEntry> directories;
+        std::vector<BrowseEntry> files;
+
+        std::error_code ec;
+        std::filesystem::directory_iterator iterator(
+            dialog.currentDirectory, std::filesystem::directory_options::skip_permission_denied, ec);
+        if (ec)
+        {
+            error = "Could not read " + dialog.currentDirectory.string() + ": " + ec.message();
+            return {};
+        }
+
+        for (const auto &entry : iterator)
+        {
+            std::error_code entryEc;
+            const std::filesystem::path path = entry.path().lexically_normal();
+            const std::string fileName = path.filename().generic_string();
+            if (fileName.empty())
+                continue;
+
+            if (entry.is_directory(entryEc))
+            {
+                directories.push_back({path, fileName + "/", true});
+            }
+            else if (!dialog.directoriesOnly && entry.is_regular_file(entryEc) && BrowseExtensionMatches(dialog, path))
+            {
+                files.push_back({path, fileName, false});
+            }
+        }
+
+        auto sortByLabel = [](const BrowseEntry &a, const BrowseEntry &b)
+        {
+            return a.label < b.label;
+        };
+        std::sort(directories.begin(), directories.end(), sortByLabel);
+        std::sort(files.begin(), files.end(), sortByLabel);
+
+        directories.insert(directories.end(), files.begin(), files.end());
+        return directories;
+    }
+
+    void CompleteBrowseDialog(BrowseDialogState &dialog,
+                              const std::filesystem::path &path,
+                              std::vector<char> &settingsBuffer,
+                              bool &settingsEditorOpen,
+                              bool &settingsDirty,
+                              std::string &statusText)
+    {
+        const std::string selectedPath = path.generic_string();
+        switch (dialog.kind)
+        {
+        case BrowseDialogKind::Project:
+            if (dialog.profile)
+            {
+                ApplyPickedProject(*dialog.profile, selectedPath);
+                statusText.clear();
+            }
+            break;
+        case BrowseDialogKind::StartupScene:
+            if (dialog.profile)
+            {
+                ApplyPickedScene(*dialog.profile, selectedPath);
+                statusText.clear();
+            }
+            break;
+        case BrowseDialogKind::SettingsFile:
+        {
+            std::string pickedText;
+            std::string readError;
+            if (ReadTextFile(path, pickedText, readError))
+            {
+                if (!CopyTextToBuffer(settingsBuffer, pickedText))
+                    statusText = "Picked settings file is too large; showing a truncated copy.";
+                else
+                    statusText = "Picked settings loaded into the editor.";
+                settingsEditorOpen = true;
+                settingsDirty = true;
+            }
+            else
+            {
+                statusText = readError;
+            }
+            break;
+        }
+        case BrowseDialogKind::None:
+            break;
+        }
+
+        ResetBrowseDialog(dialog);
+        ImGui::CloseCurrentPopup();
+    }
+
+    void RenderBrowseDialog(BrowseDialogState &dialog,
+                            std::vector<char> &settingsBuffer,
+                            bool &settingsEditorOpen,
+                            bool &settingsDirty,
+                            std::string &statusText)
+    {
+        if (dialog.kind == BrowseDialogKind::None)
+            return;
+
+        const char *title = BrowseDialogTitle(dialog.kind);
+        if (dialog.openRequested)
+        {
+            ImGui::OpenPopup(title);
+            dialog.openRequested = false;
+        }
+
+        bool modalOpen = true;
+        ImGui::SetNextWindowSize(ImVec2(760.0f, 500.0f), ImGuiCond_Appearing);
+        if (!ImGui::BeginPopupModal(title, &modalOpen, ImGuiWindowFlags_NoSavedSettings))
+        {
+            if (!modalOpen)
+                ResetBrowseDialog(dialog);
+            return;
+        }
+
+        if (dialog.closeRequested)
+        {
+            ResetBrowseDialog(dialog);
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            return;
+        }
+
+        if (ImGui::Button("Up", ImVec2(70.0f, 0.0f)))
+        {
+            const std::filesystem::path parent = dialog.currentDirectory.parent_path();
+            if (!parent.empty() && parent != dialog.currentDirectory)
+                SetBrowseDirectory(dialog, parent);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Home", ImVec2(70.0f, 0.0f)))
+        {
+            const char *home = std::getenv("HOME");
+            if (home && home[0] != '\0')
+                SetBrowseDirectory(dialog, home);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Root", ImVec2(70.0f, 0.0f)))
+            SetBrowseDirectory(dialog, std::filesystem::path("/"));
+
+        ImGui::SetNextItemWidth(620.0f);
+        if (ImGui::InputText("##browse_path",
+                             dialog.pathBuffer,
+                             sizeof(dialog.pathBuffer),
+                             ImGuiInputTextFlags_EnterReturnsTrue))
+        {
+            ApplyBrowsePathBuffer(dialog);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Go", ImVec2(70.0f, 0.0f)))
+            ApplyBrowsePathBuffer(dialog);
+
+        if (!dialog.error.empty())
+            ImGui::TextDisabled("%s", dialog.error.c_str());
+
+        std::string entriesError;
+        const std::vector<BrowseEntry> entries = ReadBrowseEntries(dialog, entriesError);
+        if (!entriesError.empty())
+            ImGui::TextDisabled("%s", entriesError.c_str());
+
+        std::optional<std::filesystem::path> directoryToEnter;
+        std::optional<std::filesystem::path> pathToAccept;
+        ImGui::BeginChild("##browse_entries", ImVec2(0.0f, 335.0f), true);
+        for (const BrowseEntry &entry : entries)
+        {
+            const bool selected = dialog.selectedPath == entry.path;
+            if (ImGui::Selectable(entry.label.c_str(), selected))
+                SetBrowseSelection(dialog, entry.path, entry.isDirectory);
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            {
+                if (entry.isDirectory)
+                    directoryToEnter = entry.path;
+                else
+                    pathToAccept = entry.path;
+            }
+        }
+        ImGui::EndChild();
+
+        if (directoryToEnter)
+            SetBrowseDirectory(dialog, *directoryToEnter);
+        if (pathToAccept)
+            CompleteBrowseDialog(dialog, *pathToAccept, settingsBuffer, settingsEditorOpen, settingsDirty, statusText);
+
+        const bool canAccept = dialog.pathBuffer[0] != '\0';
+        ImGui::BeginDisabled(!canAccept);
+        if (ImGui::Button(dialog.directoriesOnly ? "Choose" : "Open", ImVec2(96.0f, 0.0f)))
+        {
+            if (ApplyBrowsePathBuffer(dialog))
+            {
+                const bool pathIsDirectory = !dialog.selectedPath.empty() && dialog.selectedPathIsDirectory;
+                const bool pathIsFile = !dialog.selectedPath.empty() && !dialog.selectedPathIsDirectory;
+                if (pathIsDirectory && !dialog.directoriesOnly)
+                {
+                    SetBrowseDirectory(dialog, dialog.selectedPath);
+                }
+                else if (dialog.directoriesOnly || pathIsFile)
+                {
+                    const std::filesystem::path acceptedPath =
+                        dialog.selectedPath.empty() ? dialog.currentDirectory : dialog.selectedPath;
+                    CompleteBrowseDialog(dialog, acceptedPath, settingsBuffer, settingsEditorOpen, settingsDirty, statusText);
+                }
+            }
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(96.0f, 0.0f)))
+        {
+            ResetBrowseDialog(dialog);
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
     void RenderProjectSceneControls(const char *id,
                                     SDL_Window *window,
                                     LaunchProfile &profile,
-                                    std::string &statusText)
+                                    std::string &statusText,
+                                    BrowseDialogState &browseDialog)
     {
+        (void)window;
         ImGui::PushID(id);
 
         ImGui::TextUnformatted("Project");
@@ -1438,6 +1830,7 @@ namespace
         ImGui::SameLine();
         if (ImGui::Button("Open##project", ImVec2(110.0f, 0.0f)))
         {
+#if defined(PE_WIN32)
             std::string selectedPath;
             std::string browseError;
             if (PickProjectPath(window, profile.projectPath, selectedPath, browseError))
@@ -1449,6 +1842,10 @@ namespace
             {
                 statusText = browseError;
             }
+#else
+            OpenBrowseDialog(browseDialog, BrowseDialogKind::Project, &profile, profile.projectPath, true, nullptr);
+            statusText.clear();
+#endif
         }
 
         ImGui::TextUnformatted("Startup scene");
@@ -1473,6 +1870,7 @@ namespace
         ImGui::SameLine();
         if (ImGui::Button("Open##startup_scene", ImVec2(110.0f, 0.0f)))
         {
+#if defined(PE_WIN32)
             std::string selectedPath;
             std::string browseError;
             if (PickStartupScene(window, profile.projectPath, selectedPath, browseError))
@@ -1484,6 +1882,15 @@ namespace
             {
                 statusText = browseError;
             }
+#else
+            OpenBrowseDialog(browseDialog,
+                             BrowseDialogKind::StartupScene,
+                             &profile,
+                             ProjectAssetsRoot(profile.projectPath) / "Scenes",
+                             false,
+                             ".pescene");
+            statusText.clear();
+#endif
         }
 
         ImGui::PopID();
@@ -1610,6 +2017,7 @@ namespace
         }
         bool settingsEditorOpen = false;
         bool settingsDirty = false;
+        BrowseDialogState browseDialog;
         bool applyInitialTabSelection = true;
         while (running)
         {
@@ -1620,7 +2028,16 @@ namespace
                 if (event.type == SDL_QUIT)
                     running = false;
                 if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)
-                    running = false;
+                {
+                    if (browseDialog.kind != BrowseDialogKind::None)
+                    {
+                        browseDialog.closeRequested = true;
+                    }
+                    else
+                    {
+                        running = false;
+                    }
+                }
             }
 
             ImGui_ImplSDL2_NewFrame();
@@ -1670,6 +2087,7 @@ namespace
             ImGui::SameLine();
             if (ImGui::Button("Open", ImVec2(100.0f, 0.0f)))
             {
+#if defined(PE_WIN32)
                 std::string selectedPath;
                 std::string browseError;
                 if (PickSettingsFile(window, selectedPath, browseError))
@@ -1694,6 +2112,15 @@ namespace
                 {
                     statusText = browseError;
                 }
+#else
+                OpenBrowseDialog(browseDialog,
+                                 BrowseDialogKind::SettingsFile,
+                                 nullptr,
+                                 RuntimeSettingsPath().parent_path(),
+                                 false,
+                                 ".json");
+                statusText.clear();
+#endif
             }
 
             if (settingsEditorOpen)
@@ -1751,7 +2178,7 @@ namespace
                 {
                     selection.activeTab = LauncherTab::Editor;
                     selection.launchTarget = k_editorLaunchTarget;
-                    RenderProjectSceneControls("editor", window, selection.editor, statusText);
+                    RenderProjectSceneControls("editor", window, selection.editor, statusText, browseDialog);
                     ImGui::EndTabItem();
                 }
 
@@ -1768,13 +2195,15 @@ namespace
                     const bool projectSceneTarget =
                         playerTargetIndex >= 0 && LaunchesProjectScene(targets[playerTargetIndex]);
                     ImGui::BeginDisabled(!projectSceneTarget);
-                    RenderProjectSceneControls("player", window, selection.player, statusText);
+                    RenderProjectSceneControls("player", window, selection.player, statusText, browseDialog);
                     ImGui::EndDisabled();
                     ImGui::EndTabItem();
                 }
                 ImGui::EndTabBar();
                 applyInitialTabSelection = false;
             }
+
+            RenderBrowseDialog(browseDialog, settingsBuffer, settingsEditorOpen, settingsDirty, statusText);
 
             if (!statusText.empty())
             {
