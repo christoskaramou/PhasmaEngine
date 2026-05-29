@@ -7,6 +7,9 @@
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vertex.h"
 
+#include <algorithm>
+#include <cstring>
+
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12AccelerationStructure.h"
 #undef MemoryBarrier
@@ -85,7 +88,167 @@ namespace pe
             transform[2][3] = t[3][2];
         }
 #endif
+
+        void WriteDisabledVulkanInstance(vk::AccelerationStructureInstanceKHR &instance,
+                                         uint32_t customIndex,
+                                         uint64_t blasAddress)
+        {
+            vk::TransformMatrixKHR transformMatrix{};
+            FillVulkanTransform(transformMatrix, mat4(1.0f));
+            instance.transform = transformMatrix;
+            instance.instanceCustomIndex = customIndex;
+            instance.mask = 0x00;
+            instance.instanceShaderBindingTableRecordOffset = 0;
+            instance.flags = static_cast<VkGeometryInstanceFlagBitsKHR>(
+                vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
+            instance.accelerationStructureReference = blasAddress;
+        }
+
+#if defined(PE_WIN32)
+        void WriteDisabledDx12Instance(D3D12_RAYTRACING_INSTANCE_DESC &instance,
+                                       UINT instanceId,
+                                       uint64_t blasAddress)
+        {
+            FillDx12Transform(instance.Transform, mat4(1.0f));
+            instance.InstanceID = instanceId;
+            instance.InstanceMask = 0x00;
+            instance.InstanceContributionToHitGroupIndex = 0;
+            instance.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE;
+            instance.AccelerationStructure = blasAddress;
+        }
+#endif
     } // namespace
+
+    size_t Scene::RTInstanceDescSize() const
+    {
+        if (IsVulkanSceneRayTracing())
+            return sizeof(vk::AccelerationStructureInstanceKHR);
+#if defined(PE_WIN32)
+        if (IsDx12SceneRayTracing())
+            return sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
+#endif
+        return sizeof(vk::AccelerationStructureInstanceKHR);
+    }
+
+    Buffer *Scene::CreateRTInstanceBuffer(const std::string &name) const
+    {
+        return Buffer::Create({
+            .size = std::max<size_t>(1, m_rtInstanceCount) * RTInstanceDescSize(),
+            .usage = PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR |
+                     PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS |
+                     PE_BUFFER_USAGE_TRANSFER_DST,
+            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+            .name = name,
+        });
+    }
+
+    void Scene::RetireTLASUpdateInstanceBuffers()
+    {
+        for (Buffer *&buffer : m_tlasUpdateInstanceBuffers)
+        {
+            if (!buffer)
+                continue;
+            RHII.AddToDeletionQueue([b = buffer]()
+                                    { Buffer *buf = b; Buffer::Destroy(buf); });
+            buffer = nullptr;
+        }
+        m_tlasUpdateInstanceBuffers.clear();
+    }
+
+    bool Scene::WriteRTInstances(Buffer *buffer)
+    {
+        if (!buffer || m_rtInstances.empty())
+            return false;
+
+        AccelerationStructure *fallbackBlas = nullptr;
+        for (const auto &entry : m_blasByMesh)
+        {
+            if (entry.second)
+            {
+                fallbackBlas = entry.second;
+                break;
+            }
+        }
+        if (!fallbackBlas)
+            return false;
+
+        buffer->Map();
+        std::memset(buffer->Data(), 0, std::min(buffer->Size(), m_rtInstances.size() * RTInstanceDescSize()));
+        auto *vkInstances = IsVulkanSceneRayTracing()
+                                ? static_cast<vk::AccelerationStructureInstanceKHR *>(buffer->Data())
+                                : nullptr;
+#if defined(PE_WIN32)
+        auto *dxInstances = IsDx12SceneRayTracing()
+                                ? static_cast<D3D12_RAYTRACING_INSTANCE_DESC *>(buffer->Data())
+                                : nullptr;
+#endif
+
+        for (size_t i = 0; i < m_rtInstances.size(); i++)
+        {
+            const RtInstanceRecord &record = m_rtInstances[i];
+            if (record.meshIndex < 0 || record.meshIndex >= static_cast<int>(m_meshes.size()) ||
+                record.nodeIndex >= GetNodeCount())
+            {
+                if (vkInstances)
+                    WriteDisabledVulkanInstance(vkInstances[i], static_cast<uint32_t>(i),
+                                                fallbackBlas->GetDeviceAddress());
+#if defined(PE_WIN32)
+                if (dxInstances)
+                    WriteDisabledDx12Instance(dxInstances[i], static_cast<UINT>(i),
+                                              fallbackBlas->GetDeviceAddress());
+#endif
+                continue;
+            }
+
+            auto blasIt = m_blasByMesh.find(record.meshIndex);
+            if (blasIt == m_blasByMesh.end() || !blasIt->second)
+            {
+                if (vkInstances)
+                    WriteDisabledVulkanInstance(vkInstances[i], static_cast<uint32_t>(i),
+                                                fallbackBlas->GetDeviceAddress());
+#if defined(PE_WIN32)
+                if (dxInstances)
+                    WriteDisabledDx12Instance(dxInstances[i], static_cast<UINT>(i),
+                                              fallbackBlas->GetDeviceAddress());
+#endif
+                continue;
+            }
+
+            const Mesh &mesh = m_meshes[record.meshIndex];
+            const bool isTransparent = (mesh.renderType == RenderType::AlphaBlend ||
+                                        mesh.renderType == RenderType::Transmission ||
+                                        mesh.renderType == RenderType::AlphaCut);
+            const mat4 &t = m_nodeRuntime[record.nodeIndex].gpuData.worldMatrix;
+
+            if (vkInstances)
+            {
+                vk::TransformMatrixKHR transformMatrix{};
+                FillVulkanTransform(transformMatrix, t);
+                vkInstances[i].transform = transformMatrix;
+                vkInstances[i].instanceCustomIndex = static_cast<uint32_t>(i);
+                vkInstances[i].mask = isTransparent ? 0x80 : 0x01;
+                vkInstances[i].instanceShaderBindingTableRecordOffset = 0;
+                vkInstances[i].flags = static_cast<VkGeometryInstanceFlagBitsKHR>(
+                    vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
+                vkInstances[i].accelerationStructureReference = blasIt->second->GetDeviceAddress();
+            }
+#if defined(PE_WIN32)
+            if (dxInstances)
+            {
+                FillDx12Transform(dxInstances[i].Transform, t);
+                dxInstances[i].InstanceID = static_cast<UINT>(i);
+                dxInstances[i].InstanceMask = isTransparent ? 0x80 : 0x01;
+                dxInstances[i].InstanceContributionToHitGroupIndex = 0;
+                dxInstances[i].Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE;
+                dxInstances[i].AccelerationStructure = blasIt->second->GetDeviceAddress();
+            }
+#endif
+        }
+
+        buffer->Flush();
+        buffer->Unmap();
+        return true;
+    }
 
     void Scene::BuildAllBLASes(CommandBuffer *cmd)
     {
@@ -141,7 +304,7 @@ namespace pe
         for (int meshIndex = 0; meshIndex < static_cast<int>(m_meshes.size()); meshIndex++)
         {
             const Mesh &mesh = m_meshes[meshIndex];
-            if (mesh.indexCount == 0)
+            if (!mesh.live || mesh.indexCount == 0)
                 continue;
             if (hasSkeleton && mesh.skinned)
                 continue;
@@ -283,22 +446,14 @@ namespace pe
                                 { Buffer *buf = b; Buffer::Destroy(buf); });
         m_tlas = nullptr;
         m_instanceBuffer = nullptr;
+        RetireTLASUpdateInstanceBuffers();
+        m_rtInstances.clear();
 
         if (m_blasByMesh.empty())
             return;
 
         // --- Collect instances ---
-        struct InstanceReq
-        {
-            AccelerationStructure *blas;
-            int meshIndex;
-            uint32_t constantsIndex;
-            uint32_t nodeIndex;
-            uint32_t meshSlot;
-            mat4 transform;
-        };
-        std::vector<InstanceReq> instanceReqs;
-        instanceReqs.reserve(m_meshCount);
+        m_rtInstances.reserve(m_meshCount);
 
         bool hasSkeleton = GetSkeleton().GetBoneCount() > 0;
         uint32_t constantsIndex = 0;
@@ -312,7 +467,7 @@ namespace pe
             for (uint32_t slot = 0; slot < static_cast<uint32_t>(refs.size()); slot++)
             {
                 int meshIdx = refs[slot];
-                if (meshIdx < 0)
+                if (!IsValidMeshIndex(meshIdx))
                     continue;
                 if (m_meshes[meshIdx].indexCount == 0)
                     continue;
@@ -325,11 +480,11 @@ namespace pe
                 if (it == m_blasByMesh.end())
                     continue; // mesh has no BLAS (e.g., removed mesh, dead entry)
 
-                instanceReqs.push_back({it->second, meshIdx, currentConstantsIndex, i, slot, m_nodeRuntime[i].gpuData.worldMatrix});
+                m_rtInstances.push_back({meshIdx, currentConstantsIndex, i, slot});
             }
         }
 
-        m_rtInstanceCount = static_cast<uint32_t>(instanceReqs.size());
+        m_rtInstanceCount = static_cast<uint32_t>(m_rtInstances.size());
 
         if (m_rtInstanceCount == 0)
             return;
@@ -388,71 +543,14 @@ namespace pe
         });
 
         // --- Build instance buffer ---
-        m_instanceBuffer = Buffer::Create({
-            .size = std::max<size_t>(1, m_rtInstanceCount) *
-                    (IsVulkanSceneRayTracing() ? sizeof(vk::AccelerationStructureInstanceKHR)
-#if defined(PE_WIN32)
-                                               : sizeof(D3D12_RAYTRACING_INSTANCE_DESC)
-#else
-                                               : sizeof(vk::AccelerationStructureInstanceKHR)
-#endif
-                         ),
-            .usage = PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR |
-                     PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS |
-                     PE_BUFFER_USAGE_TRANSFER_DST,
-            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
-            .name = "TLAS_Instance_Buffer",
-        });
-
-        m_instanceBuffer->Map();
-        auto *vkInstances = IsVulkanSceneRayTracing()
-                                ? static_cast<vk::AccelerationStructureInstanceKHR *>(m_instanceBuffer->Data())
-                                : nullptr;
-#if defined(PE_WIN32)
-        auto *dxInstances = IsDx12SceneRayTracing()
-                                ? static_cast<D3D12_RAYTRACING_INSTANCE_DESC *>(m_instanceBuffer->Data())
-                                : nullptr;
-#endif
-
-        for (size_t i = 0; i < instanceReqs.size(); i++)
+        m_instanceBuffer = CreateRTInstanceBuffer("TLAS_Instance_Buffer");
+        for (size_t i = 0; i < m_rtInstances.size(); i++)
         {
-            auto &req = instanceReqs[i];
-
-            mat4 &t = req.transform;
-
-            const Mesh &mesh = m_meshes[req.meshIndex];
-            bool isTransparent = (mesh.renderType == RenderType::AlphaBlend ||
-                                  mesh.renderType == RenderType::Transmission ||
-                                  mesh.renderType == RenderType::AlphaCut);
-
-            if (vkInstances)
-            {
-                vk::TransformMatrixKHR transformMatrix{};
-                FillVulkanTransform(transformMatrix, t);
-                vkInstances[i].transform = transformMatrix;
-                vkInstances[i].instanceCustomIndex = static_cast<uint32_t>(i);
-                vkInstances[i].mask = isTransparent ? 0x80 : 0x01;
-                vkInstances[i].instanceShaderBindingTableRecordOffset = 0;
-                vkInstances[i].flags = static_cast<VkGeometryInstanceFlagBitsKHR>(
-                    vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
-                vkInstances[i].accelerationStructureReference = req.blas->GetDeviceAddress();
-            }
-#if defined(PE_WIN32)
-            if (dxInstances)
-            {
-                FillDx12Transform(dxInstances[i].Transform, t);
-                dxInstances[i].InstanceID = static_cast<UINT>(i);
-                dxInstances[i].InstanceMask = isTransparent ? 0x80 : 0x01;
-                dxInstances[i].InstanceContributionToHitGroupIndex = 0;
-                dxInstances[i].Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE;
-                dxInstances[i].AccelerationStructure = req.blas->GetDeviceAddress();
-            }
-#endif
-
-            m_nodeRuntime[req.nodeIndex].rtInstanceIndices[req.meshSlot] = static_cast<int>(i);
+            const RtInstanceRecord &record = m_rtInstances[i];
+            m_nodeRuntime[record.nodeIndex].rtInstanceIndices[record.meshSlot] = static_cast<int>(i);
         }
-        m_instanceBuffer->Flush();
-        m_instanceBuffer->Unmap();
+        if (!WriteRTInstances(m_instanceBuffer))
+            return;
 
         // --- Build TLAS ---
         m_tlas = AccelerationStructure::Create("TLAS", nullptr, 0);
@@ -482,13 +580,13 @@ namespace pe
         m_meshInfoBuffer->Map();
         auto *meshInfosGPU = (MeshInfoGPU *)m_meshInfoBuffer->Data();
 
-        for (size_t i = 0; i < instanceReqs.size(); i++)
+        for (size_t i = 0; i < m_rtInstances.size(); i++)
         {
-            auto &req = instanceReqs[i];
+            const RtInstanceRecord &record = m_rtInstances[i];
             auto &meshInfoGPU = meshInfosGPU[i];
 
-            const Mesh &mesh = m_meshes[req.meshIndex];
-            const MeshRuntime &meshRt = m_meshRuntimes[req.meshIndex];
+            const Mesh &mesh = m_meshes[record.meshIndex];
+            const MeshRuntime &meshRt = m_meshRuntimes[record.meshIndex];
 
             meshInfoGPU.indexOffset = mesh.indexOffset * 4;
             meshInfoGPU.vertexOffset =
@@ -496,7 +594,7 @@ namespace pe
             meshInfoGPU.positionsOffset =
                 static_cast<uint32_t>(m_positionsOffset) + mesh.positionsOffset * sizeof(PositionUvVertex);
             meshInfoGPU.renderType = static_cast<uint32_t>(mesh.renderType);
-            meshInfoGPU.constantsIndex = req.constantsIndex;
+            meshInfoGPU.constantsIndex = record.constantsIndex;
 
             for (int k = 0; k < 5; k++)
                 meshInfoGPU.textures[k] = static_cast<int32_t>(meshRt.imageViewIndices[k]);
@@ -545,48 +643,35 @@ namespace pe
         if (!SupportsSceneRayTracing())
             return;
 
-        if (!m_tlas || !m_instanceBuffer || !m_scratchBuffer)
+        if (!m_tlas || !m_scratchBuffer || m_rtInstances.empty())
             return;
 
         if (m_nodesMoved.empty())
             return;
 
-        m_instanceBuffer->Map();
-        auto *vkInstances = IsVulkanSceneRayTracing()
-                                ? static_cast<vk::AccelerationStructureInstanceKHR *>(m_instanceBuffer->Data())
-                                : nullptr;
-#if defined(PE_WIN32)
-        auto *dxInstances = IsDx12SceneRayTracing()
-                                ? static_cast<D3D12_RAYTRACING_INSTANCE_DESC *>(m_instanceBuffer->Data())
-                                : nullptr;
-#endif
+        const uint32_t frameCount = RHII.GetSwapchainImageCount();
+        if (frameCount == 0)
+            return;
 
-        for (NodeId *node : m_nodesMoved)
+        if (m_tlasUpdateInstanceBuffers.size() != frameCount)
+            m_tlasUpdateInstanceBuffers.resize(frameCount, nullptr);
+
+        const uint32_t frame = RHII.GetFrameIndex();
+        if (frame >= frameCount)
+            return;
+
+        Buffer *&instanceBuffer = m_tlasUpdateInstanceBuffers[frame];
+        const size_t requiredSize = std::max<size_t>(1, m_rtInstanceCount) * RTInstanceDescSize();
+        if (!instanceBuffer || instanceBuffer->Size() < requiredSize)
         {
-            const NodeRuntime &rt = m_nodeRuntime[node->index];
-            const mat4 &t = rt.gpuData.worldMatrix;
-
-            for (int instanceIndex : rt.rtInstanceIndices)
-            {
-                if (instanceIndex >= 0 && instanceIndex < static_cast<int>(m_rtInstanceCount))
-                {
-                    if (vkInstances)
-                    {
-                        vk::TransformMatrixKHR transformMatrix{};
-                        FillVulkanTransform(transformMatrix, t);
-                        vkInstances[instanceIndex].transform = transformMatrix;
-                    }
-#if defined(PE_WIN32)
-                    if (dxInstances)
-                        FillDx12Transform(dxInstances[instanceIndex].Transform, t);
-#endif
-                }
-            }
+            if (instanceBuffer)
+                RHII.AddToDeletionQueue([b = instanceBuffer]()
+                                        { Buffer *buf = b; Buffer::Destroy(buf); });
+            instanceBuffer = CreateRTInstanceBuffer("TLAS_Update_Instance_Buffer_" + std::to_string(frame));
         }
 
-        m_instanceBuffer->Flush();
-        m_instanceBuffer->Unmap();
-
-        m_tlas->UpdateTLAS(cmd, m_rtInstanceCount, m_instanceBuffer, m_scratchBuffer->GetDeviceAddress());
+        if (!WriteRTInstances(instanceBuffer))
+            return;
+        m_tlas->UpdateTLAS(cmd, m_rtInstanceCount, instanceBuffer, m_scratchBuffer->GetDeviceAddress());
     }
 } // namespace pe

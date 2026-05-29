@@ -221,6 +221,29 @@ namespace pe
         }
         RemoveSceneAnimation(node);
 
+        for (auto modelRootIt = m_modelRootNodes.begin(); modelRootIt != m_modelRootNodes.end();)
+        {
+            auto &roots = modelRootIt->second;
+            roots.erase(std::remove(roots.begin(), roots.end(), node), roots.end());
+            if (!roots.empty())
+            {
+                ++modelRootIt;
+                continue;
+            }
+
+            const size_t modelId = modelRootIt->first;
+            modelRootIt = m_modelRootNodes.erase(modelRootIt);
+            auto modelIt = m_models.find(modelId);
+            if (modelIt != m_models.end())
+            {
+                ModelAsset *model = *modelIt;
+                if (m_skeletonModel == model)
+                    ResetSkeletonCache();
+                m_models.erase(modelId);
+                delete model;
+            }
+        }
+
         NodeId *parent = cache.hierarchy->parent;
         if (parent)
         {

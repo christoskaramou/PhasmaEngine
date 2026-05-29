@@ -73,8 +73,7 @@ namespace pe
             auto &descriptors = m_passInfo->GetDescriptors(i);
             descriptors[0]->SetBuffer(0, particleBuffer);
 
-            Buffer *emitterBuffer = scene.GetParticleManager()->GetEmitterBuffer();
-            if (emitterBuffer)
+            if (Buffer *emitterBuffer = scene.GetParticleManager()->GetEmitterBuffer(i))
                 descriptors[0]->SetBuffer(1, emitterBuffer);
 
             descriptors[0]->Update();
@@ -123,6 +122,19 @@ namespace pe
         if (!particleBuffer)
             return;
 
+        const uint32_t frame = RHII.GetFrameIndex();
+        Buffer *emitterBuffer = m_scene->GetParticleManager()->PrepareEmitterBufferForFrame(frame);
+        if (!emitterBuffer)
+            return;
+
+        auto &descriptors = m_passInfo->GetDescriptors(frame);
+        if (!descriptors.empty())
+        {
+            descriptors[0]->SetBuffer(0, particleBuffer);
+            descriptors[0]->SetBuffer(1, emitterBuffer);
+            descriptors[0]->Update();
+        }
+
         // 1. Barrier: Wait for Compute Write to finish before Vertex Read
         BufferBarrierInfo barrier{};
         barrier.stageMask = PE_STAGE_VERTEX_SHADER;
@@ -149,6 +161,8 @@ namespace pe
             pc.cameraPosition = vec4(camera->GetPosition(), 1.0f);
             pc.cameraForward = vec4(camera->GetFront(), 0.0f);
         }
+        // ParticleVS uses .w as emitterCount for its defensive emitter-index guard.
+        pc.cameraForward.w = static_cast<float>(m_scene->GetParticleManager()->GetEmitterCount());
 
         cmd->BeginPass(static_cast<uint32_t>(m_attachments.size()), m_attachments.data(), "ParticlePass");
         cmd->BindPipeline(*m_passInfo);

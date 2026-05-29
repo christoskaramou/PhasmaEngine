@@ -31,21 +31,9 @@ namespace pe
             .memoryUsage = ParticleBufferBackend::ParticleBufferMemoryUsage(),
             .name = "particle_buffer",
         });
-        ParticleBufferBackend::ZeroParticleBuffer(m_particleBuffer);
+        QueueParticleByteClear(0, m_particleBuffer->Size());
 
-        // Create emitter buffer (start with space for 16 emitters, will resize if needed)
-        size_t emitterBufferSize = 16 * sizeof(ParticleEmitter);
-        m_emitterBuffer = Buffer::Create({
-            .size = emitterBufferSize,
-            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
-            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
-            .name = "emitter_buffer",
-        });
-
-        m_emitterBuffer->Map();
-        m_emitterBuffer->Zero();
-        m_emitterBuffer->Flush();
-        m_emitterBuffer->Unmap();
+        m_emitterDataVersion++;
     }
 
     void ParticleManager::UpdateEmitterBuffer()
@@ -97,6 +85,7 @@ namespace pe
                 Buffer::Destroy(m_particleBuffer);
                 m_particleBuffer = nullptr;
             }
+            m_pendingParticleClears.clear();
 
             if (m_gpuCapacity > 0)
             {
@@ -107,46 +96,85 @@ namespace pe
                     .memoryUsage = ParticleBufferBackend::ParticleBufferMemoryUsage(),
                     .name = "particle_buffer",
                 });
-                ParticleBufferBackend::ZeroParticleBuffer(m_particleBuffer);
+                QueueParticleByteClear(0, m_particleBuffer->Size());
             }
         }
 
         // Update active count for dispatch/draw
         m_particleCount = totalParticles;
 
-        // 3. Update Emitter Buffer
-        size_t emitterCount = m_emitters.size();
-        size_t requiredSize = std::max(emitterCount, size_t(1)) * sizeof(ParticleEmitter);
+        m_emitterDataVersion++;
+        m_bufferVersion++;
+    }
 
-        if (!m_emitterBuffer || requiredSize > m_emitterBuffer->Size())
+    Buffer *ParticleManager::GetEmitterBuffer(uint32_t frame) const
+    {
+        if (frame >= m_emitterBuffers.size())
+            return nullptr;
+        return m_emitterBuffers[frame];
+    }
+
+    Buffer *ParticleManager::PrepareEmitterBufferForFrame(uint32_t frame)
+    {
+        const uint32_t frameCount = RHII.GetSwapchainImageCount();
+        if (frameCount == 0)
+            return nullptr;
+        if (frame >= frameCount)
+            frame %= frameCount;
+
+        if (m_emitterBuffers.size() > frameCount)
         {
-            if (m_emitterBuffer)
-                Buffer::Destroy(m_emitterBuffer);
-            m_emitterBuffer = Buffer::Create({
+            for (size_t i = frameCount; i < m_emitterBuffers.size(); i++)
+            {
+                if (m_emitterBuffers[i])
+                {
+                    Buffer *buffer = m_emitterBuffers[i];
+                    Buffer::Destroy(buffer);
+                }
+            }
+            m_emitterBuffers.resize(frameCount);
+            m_emitterBufferUploadVersions.resize(frameCount);
+        }
+        else if (m_emitterBuffers.size() < frameCount)
+        {
+            m_emitterBuffers.resize(frameCount, nullptr);
+            m_emitterBufferUploadVersions.resize(frameCount, 0);
+        }
+
+        const size_t requiredSize = std::max<size_t>(m_emitters.size(), 1) * sizeof(ParticleEmitter);
+        Buffer *&buffer = m_emitterBuffers[frame];
+        if (!buffer || buffer->Size() < requiredSize)
+        {
+            if (buffer)
+                Buffer::Destroy(buffer);
+
+            buffer = Buffer::Create({
                 .size = requiredSize,
                 .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
                 .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
-                .name = "emitter_buffer",
+                .name = "emitter_buffer_" + std::to_string(frame),
             });
+            m_emitterBufferUploadVersions[frame] = 0;
         }
 
-        if (m_emitters.empty())
+        if (m_emitterBufferUploadVersions[frame] != m_emitterDataVersion)
         {
-            // Create a dummy emitter if none exist to satisfy shader binding
-            // But with 0 count so it does nothing
-            ParticleEmitter emitter{};
-            emitter.count = 0;
-            BufferRange range = {&emitter, sizeof(ParticleEmitter), 0};
-            m_emitterBuffer->Copy(1, &range, false);
-        }
-        else
-        {
-            BufferRange range = {m_emitters.data(), m_emitters.size() * sizeof(ParticleEmitter), 0};
-            m_emitterBuffer->Copy(1, &range, false);
+            if (m_emitters.empty())
+            {
+                ParticleEmitter emitter{};
+                emitter.count = 0;
+                BufferRange range = {&emitter, sizeof(ParticleEmitter), 0};
+                buffer->Copy(1, &range, false);
+            }
+            else
+            {
+                BufferRange range = {m_emitters.data(), m_emitters.size() * sizeof(ParticleEmitter), 0};
+                buffer->Copy(1, &range, false);
+            }
+            m_emitterBufferUploadVersions[frame] = m_emitterDataVersion;
         }
 
-        // Increment version to signal changes to passes
-        m_bufferVersion++;
+        return buffer;
     }
 
     int ParticleManager::EmitBurst(const ParticleBurstDesc &desc)
@@ -180,14 +208,67 @@ namespace pe
         return index;
     }
 
-    void ParticleManager::ZeroParticleRange(uint32_t firstParticle, uint32_t particleCount)
+    void ParticleManager::FlushPendingParticleClears(CommandBuffer *cmd)
+    {
+        if (m_pendingParticleClears.empty())
+            return;
+
+        if (!cmd || !m_particleBuffer)
+        {
+            m_pendingParticleClears.clear();
+            return;
+        }
+
+        std::sort(m_pendingParticleClears.begin(), m_pendingParticleClears.end(),
+                  [](const PendingParticleClear &lhs, const PendingParticleClear &rhs)
+                  { return lhs.byteOffset < rhs.byteOffset; });
+
+        const size_t bufferSize = m_particleBuffer->Size();
+        PendingParticleClear merged = m_pendingParticleClears.front();
+        auto flushMerged = [&]()
+        {
+            if (merged.byteOffset >= bufferSize || merged.byteSize == 0)
+                return;
+
+            const size_t byteSize = std::min(merged.byteSize, bufferSize - merged.byteOffset);
+            cmd->FillBuffer(m_particleBuffer, merged.byteOffset, byteSize, 0);
+        };
+
+        for (size_t i = 1; i < m_pendingParticleClears.size(); ++i)
+        {
+            const PendingParticleClear &next = m_pendingParticleClears[i];
+            const size_t mergedEnd = merged.byteOffset + merged.byteSize;
+            if (next.byteOffset <= mergedEnd)
+            {
+                const size_t nextEnd = next.byteOffset + next.byteSize;
+                merged.byteSize = std::max(mergedEnd, nextEnd) - merged.byteOffset;
+                continue;
+            }
+
+            flushMerged();
+            merged = next;
+        }
+
+        flushMerged();
+        m_pendingParticleClears.clear();
+    }
+
+    void ParticleManager::QueueParticleByteClear(size_t byteOffset, size_t byteSize)
+    {
+        if (!m_particleBuffer || byteSize == 0 || byteOffset >= m_particleBuffer->Size())
+            return;
+
+        m_pendingParticleClears.push_back({byteOffset, byteSize});
+    }
+
+    void ParticleManager::QueueParticleRangeClear(uint32_t firstParticle, uint32_t particleCount)
     {
         if (!m_particleBuffer || particleCount == 0)
             return;
 
         const size_t byteOffset = static_cast<size_t>(firstParticle) * sizeof(Particle);
         const size_t byteSize = static_cast<size_t>(particleCount) * sizeof(Particle);
-        ParticleBufferBackend::ZeroParticleBufferRange(m_particleBuffer, byteOffset, byteSize);
+        QueueParticleByteClear(byteOffset, byteSize);
     }
 
     void ParticleManager::KillEmitterParticles(int index)
@@ -196,7 +277,7 @@ namespace pe
             return;
 
         const ParticleEmitter &emitter = m_emitters[index];
-        ZeroParticleRange(emitter.offset, emitter.count);
+        QueueParticleRangeClear(emitter.offset, emitter.count);
     }
 
     void ParticleManager::RemoveEmitterNoUpdate(int index)
@@ -207,7 +288,7 @@ namespace pe
         const uint32_t oldParticleCount = m_particleCount;
         const uint32_t firstShiftedParticle = m_emitters[index].offset;
         if (firstShiftedParticle < oldParticleCount)
-            ZeroParticleRange(firstShiftedParticle, oldParticleCount - firstShiftedParticle);
+            QueueParticleRangeClear(firstShiftedParticle, oldParticleCount - firstShiftedParticle);
 
         m_emitters.erase(m_emitters.begin() + index);
         if (index < static_cast<int>(m_emitterNames.size()))
@@ -237,6 +318,7 @@ namespace pe
         m_emitters.clear();
         m_emitterNames.clear();
         m_transientEmitters.clear();
+        QueueParticleRangeClear(0, m_particleCount);
         UpdateEmitterBuffer();
     }
 
@@ -250,7 +332,7 @@ namespace pe
         for (TransientEmitter &transient : m_transientEmitters)
             transient.timeRemaining -= dt;
 
-        // Compact from the tail only: RemoveEmitterNoUpdate zeros the particle buffer
+        // Compact from the tail only: RemoveEmitterNoUpdate clears the particle buffer
         // from the removed emitter's offset to the end, which would wipe live particles
         // of any later emitter. A transient stranded behind an active one stays put
         // until the tail clears; its particles age out on the GPU (token mismatch
@@ -362,11 +444,14 @@ namespace pe
             Buffer::Destroy(m_particleBuffer);
             m_particleBuffer = nullptr;
         }
-        if (m_emitterBuffer)
+        for (Buffer *&buffer : m_emitterBuffers)
         {
-            Buffer::Destroy(m_emitterBuffer);
-            m_emitterBuffer = nullptr;
+            if (buffer)
+                Buffer::Destroy(buffer);
+            buffer = nullptr;
         }
+        m_emitterBuffers.clear();
+        m_emitterBufferUploadVersions.clear();
         for (auto *img : m_textures)
             Image::Destroy(img);
         m_textures.clear();
@@ -379,5 +464,6 @@ namespace pe
         m_emitters.clear();
         m_emitterNames.clear();
         m_transientEmitters.clear();
+        m_pendingParticleClears.clear();
     }
 } // namespace pe

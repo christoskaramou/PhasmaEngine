@@ -38,18 +38,14 @@ namespace pe
         if (!particleBuffer)
             return;
 
-        Buffer *emitterBuffer = scene.GetParticleManager()->GetEmitterBuffer();
-
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto &descriptors = m_passInfo->GetDescriptors(i);
             if (descriptors.size() > 0)
             {
                 descriptors[0]->SetBuffer(0, particleBuffer);
-                if (emitterBuffer)
-                {
+                if (Buffer *emitterBuffer = scene.GetParticleManager()->GetEmitterBuffer(i))
                     descriptors[0]->SetBuffer(1, emitterBuffer);
-                }
                 descriptors[0]->Update();
             }
         }
@@ -75,6 +71,11 @@ namespace pe
 
         Buffer *particleBuffer = scene.GetParticleManager()->GetParticleBuffer();
         if (!particleBuffer)
+            return;
+
+        const uint32_t frame = RHII.GetFrameIndex();
+        Buffer *emitterBuffer = scene.GetParticleManager()->PrepareEmitterBufferForFrame(frame);
+        if (!emitterBuffer)
             return;
 
         struct PushConstants
@@ -106,7 +107,16 @@ namespace pe
             }
         }
 
+        auto &descriptors = m_passInfo->GetDescriptors(frame);
+        if (!descriptors.empty())
+        {
+            descriptors[0]->SetBuffer(0, particleBuffer);
+            descriptors[0]->SetBuffer(1, emitterBuffer);
+            descriptors[0]->Update();
+        }
+
         cmd->BeginDebugRegion("ParticleComputePass");
+        scene.GetParticleManager()->FlushPendingParticleClears(cmd);
 
         BufferBarrierInfo barrier{};
         barrier.stageMask = PE_STAGE_COMPUTE_SHADER;

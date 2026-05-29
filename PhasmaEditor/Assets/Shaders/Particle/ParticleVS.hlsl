@@ -12,6 +12,19 @@ VS_OUTPUT_Particle mainVS(uint vertexID : SV_VertexID)
     uint cornerIndex = vertexID % 6;
 
     Particle p = particles[particleIndex];
+    uint emitterIndex = (uint)p.extra.x;
+    // ParticlePass packs emitterCount into cameraForward.w for this guard.
+    uint emitterCount = (uint)pc.cameraForward.w;
+
+    output.pos = float4(0.0, 0.0, 0.0, 1.0);
+    output.color = float4(0.0, 0.0, 0.0, 0.0);
+    output.uv = float2(0.0, 0.0);
+    output.uv2 = float2(0.0, 0.0);
+    output.blendFactor = 0.0;
+    output.textureIndex = 0.0;
+
+    if (p.position.w <= 0.0 || p.color.a <= 0.0 || p.velocity.w <= 0.0 || emitterIndex >= emitterCount)
+        return output;
 
     float3 right = pc.cameraRight.xyz;
     float3 up = pc.cameraUp.xyz;
@@ -23,7 +36,6 @@ VS_OUTPUT_Particle mainVS(uint vertexID : SV_VertexID)
     float3 center = p.position.xyz;
     
     // Animation
-    uint emitterIndex = (uint)p.extra.x;
     ParticleEmitter emitter = emitters[emitterIndex];
     float rows = max(emitter.animation.x, 1.0);
     float cols = max(emitter.animation.y, 1.0);

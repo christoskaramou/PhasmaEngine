@@ -169,6 +169,7 @@ namespace pe
                                 { AccelerationStructure* as = t; AccelerationStructure::Destroy(as); });
         RHII.AddToDeletionQueue([b = m_instanceBuffer]()
                                 { Buffer* buf = b; Buffer::Destroy(buf); });
+        RetireTLASUpdateInstanceBuffers();
         RHII.AddToDeletionQueue([b = m_blasMergedBuffer]()
                                 { Buffer* buf = b; Buffer::Destroy(buf); });
         RHII.AddToDeletionQueue([b = m_scratchBuffer]()
@@ -514,17 +515,18 @@ namespace pe
     {
         size_t modelId = model->GetId();
 
-        // Delete SoA subtrees rooted at this model's root nodes
         auto rootIt = m_modelRootNodes.find(modelId);
         if (rootIt != m_modelRootNodes.end())
         {
-            for (NodeId *root : rootIt->second)
+            std::vector<NodeId *> roots = rootIt->second;
+            for (NodeId *root : roots)
             {
-                // Skip nodes already deleted (sentinel from DeleteNode)
-                if (root && root->index != UINT32_MAX)
+                if (IsNodeAlive(root))
                     DeleteNode(root);
             }
-            m_modelRootNodes.erase(rootIt);
+            if (m_modelRootNodes.find(modelId) == m_modelRootNodes.end())
+                return;
+            m_modelRootNodes.erase(modelId);
         }
 
         if (m_skeletonModel == model)

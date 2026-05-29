@@ -415,6 +415,14 @@ namespace pe
             int sourceMeshIndex = -1;
         };
 
+        struct RtInstanceRecord
+        {
+            int meshIndex = -1;
+            uint32_t constantsIndex = 0;
+            uint32_t nodeIndex = 0;
+            uint32_t meshSlot = 0;
+        };
+
         struct alignas(16) MeshInfoGPU
         {
             uint32_t indexOffset;
@@ -448,6 +456,10 @@ namespace pe
         void BuildAllBLASes(CommandBuffer *cmd);              // only BLAS build, populates m_blasByMesh
         void BuildTLASFromInstances(CommandBuffer *cmd);      // only TLAS build, uses m_blasByMesh
         void RebuildTLASOnly();                               // creates cmd, rebuilds TLAS, submits
+        void RetireTLASUpdateInstanceBuffers();
+        size_t RTInstanceDescSize() const;
+        Buffer *CreateRTInstanceBuffer(const std::string &name) const;
+        bool WriteRTInstances(Buffer *buffer);
 
         // Node graph internals (SceneNode.cpp)
         void SwapAndPopNode(uint32_t index);
@@ -504,10 +516,12 @@ namespace pe
         std::unordered_map<int, AccelerationStructure *> m_blasByMesh; // keyed by mesh index, persistent across TLAS-only rebuilds
         AccelerationStructure *m_tlas = nullptr;
         Buffer *m_instanceBuffer = nullptr;
+        std::vector<Buffer *> m_tlasUpdateInstanceBuffers;
         Buffer *m_blasMergedBuffer = nullptr;
         Buffer *m_scratchBuffer = nullptr;
         Buffer *m_meshInfoBuffer = nullptr;
         uint32_t m_rtInstanceCount = 0;
+        std::vector<RtInstanceRecord> m_rtInstances;
         Buffer *m_meshConstants = nullptr;
         Buffer *m_materialTable = nullptr;
         Buffer *m_materialByteBuffer = nullptr; // ByteAddressBuffer for shader-driven materials

@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-05-29
+
+- Fixed a DX12 device-removal crash during high-churn ATH horde combat. Particle emitter metadata is now uploaded into per-swapchain-frame GPU buffers, queued particle clears flush through the particle compute command buffer, and the particle draw shader clamps stale emitter references. Scene deletion also cleans model-root lookup entries, model removal copies root handles before deleting nodes, and the raster/DXR scene paths skip dead meshes while TLAS updates use frame-local instance buffers with zero-mask stale slots.
+
 ## 2026-05-28
 
 - Hardened transient particle burst cleanup so one-shot projectile emitters cannot visually refire when older bursts retire. `ParticleManager::Update()` now compacts only expired transient emitters at the emitter-list tail, avoiding particle-offset shifts for any later persistent or transient emitter; stranded expired transients age out on the GPU until the tail clears.

@@ -48,7 +48,7 @@ namespace pe
                 continue;
             for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
             {
-                if (meshIdx >= 0 && m_meshes[meshIdx].indexCount > 0)
+                if (IsValidMeshIndex(meshIdx) && m_meshes[meshIdx].indexCount > 0)
                     m_meshCount++;
             }
         }
@@ -174,7 +174,7 @@ namespace pe
             bool hasDrawable = false;
             for (int mr : m_nodeComponentCache[i].meshRefs->meshRefs)
             {
-                if (mr >= 0 && m_meshes[mr].indexCount > 0)
+                if (IsValidMeshIndex(mr) && m_meshes[mr].indexCount > 0)
                 {
                     hasDrawable = true;
                     break;
@@ -225,7 +225,7 @@ namespace pe
             for (uint32_t slot = 0; slot < static_cast<uint32_t>(refs.size()); slot++)
             {
                 int meshIdx = refs[slot];
-                if (meshIdx < 0)
+                if (!IsValidMeshIndex(meshIdx))
                     continue;
 
                 const Mesh &mesh = m_meshes[meshIdx];
@@ -351,7 +351,7 @@ namespace pe
 
             for (int meshIndex : m_nodeComponentCache[ni].meshRefs->meshRefs)
             {
-                if (meshIndex < 0 || meshIndex >= static_cast<int>(m_meshes.size()))
+                if (!IsValidMeshIndex(meshIndex))
                     continue;
 
                 const Mesh &mesh = m_meshes[meshIndex];
@@ -463,7 +463,7 @@ namespace pe
 
             for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
             {
-                if (meshIdx < 0)
+                if (!IsValidMeshIndex(meshIdx))
                     continue;
 
                 Mesh &mesh = m_meshes[meshIdx];
@@ -531,7 +531,7 @@ namespace pe
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
             for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
-                if (meshIdx >= 0 && m_meshes[meshIdx].materialInstance)
+                if (IsValidMeshIndex(meshIdx) && m_meshes[meshIdx].materialInstance)
                 {
                     m_meshes[meshIdx].materialInstance->gpuByteOffset = 0xFFFFFFFF;
                     m_meshes[meshIdx].materialInstance->gpuByteSize = 0;
@@ -544,7 +544,7 @@ namespace pe
 
             for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
             {
-                if (meshIdx < 0)
+                if (!IsValidMeshIndex(meshIdx))
                     continue;
                 Mesh &mesh = m_meshes[meshIdx];
                 if (mesh.indexCount == 0 || !mesh.material || !mesh.material->passInfoAsset)
@@ -685,7 +685,7 @@ namespace pe
 
             for (int meshIdx : m_nodeComponentCache[ni].meshRefs->meshRefs)
             {
-                if (meshIdx < 0)
+                if (!IsValidMeshIndex(meshIdx))
                     continue;
 
                 Mesh &mesh = m_meshes[meshIdx];
@@ -764,7 +764,7 @@ namespace pe
 
             for (int meshIdx : m_nodeComponentCache[ni].meshRefs->meshRefs)
             {
-                if (meshIdx < 0)
+                if (!IsValidMeshIndex(meshIdx))
                     continue;
                 Mesh &mesh = m_meshes[meshIdx];
                 MaterialInstance *inst = mesh.materialInstance;
@@ -859,7 +859,7 @@ namespace pe
 
             for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
             {
-                if (meshIdx < 0)
+                if (!IsValidMeshIndex(meshIdx))
                     continue;
 
                 const Mesh &mesh = m_meshes[meshIdx];
@@ -1056,7 +1056,7 @@ namespace pe
                 continue;
             for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
             {
-                if (meshIdx >= 0 && m_meshes[meshIdx].indexCount > 0)
+                if (IsValidMeshIndex(meshIdx) && m_meshes[meshIdx].indexCount > 0)
                     m_meshCount++;
             }
         }

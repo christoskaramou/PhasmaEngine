@@ -63,13 +63,15 @@ namespace pe
         void Destroy();
 
         Buffer *GetParticleBuffer() { return m_particleBuffer; }
-        Buffer *GetEmitterBuffer() { return m_emitterBuffer; }
+        Buffer *GetEmitterBuffer(uint32_t frame) const;
+        Buffer *PrepareEmitterBufferForFrame(uint32_t frame);
         uint32_t GetParticleCount() const { return m_particleCount; }
         uint32_t GetEmitterCount() const { return static_cast<uint32_t>(m_emitters.size()); }
         std::vector<ParticleEmitter> &GetEmitters() { return m_emitters; }
         std::vector<std::string> &GetEmitterNames() { return m_emitterNames; }
         const std::vector<std::string> &GetEmitterNames() const { return m_emitterNames; }
         void UpdateEmitterBuffer(); // Call this when emitters change
+        void FlushPendingParticleClears(CommandBuffer *cmd);
         int EmitBurst(const ParticleBurstDesc &desc);
         void KillEmitterParticles(int index);
         void RemoveEmitter(int index);
@@ -89,10 +91,12 @@ namespace pe
 
     private:
         Buffer *m_particleBuffer = nullptr;
-        Buffer *m_emitterBuffer = nullptr;
+        std::vector<Buffer *> m_emitterBuffers;
+        std::vector<uint32_t> m_emitterBufferUploadVersions;
         uint32_t m_particleCount = 0;
         uint32_t m_gpuCapacity = 0;
         uint32_t m_bufferVersion = 0;
+        uint32_t m_emitterDataVersion = 1;
         std::vector<ParticleEmitter> m_emitters;
         std::vector<std::string> m_emitterNames;
 
@@ -107,10 +111,18 @@ namespace pe
             float timeRemaining = 0.0f;
         };
 
+        struct PendingParticleClear
+        {
+            size_t byteOffset = 0;
+            size_t byteSize = 0;
+        };
+
         std::vector<TransientEmitter> m_transientEmitters;
+        std::vector<PendingParticleClear> m_pendingParticleClears;
         uint32_t m_nextBurstToken = 1;
 
-        void ZeroParticleRange(uint32_t firstParticle, uint32_t particleCount);
+        void QueueParticleByteClear(size_t byteOffset, size_t byteSize);
+        void QueueParticleRangeClear(uint32_t firstParticle, uint32_t particleCount);
         void RemoveEmitterNoUpdate(int index);
     };
 } // namespace pe
