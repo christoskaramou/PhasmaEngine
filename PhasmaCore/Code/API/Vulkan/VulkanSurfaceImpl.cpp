@@ -21,11 +21,11 @@ namespace pe
         SDL_Vulkan_GetDrawableSize(window, &w, &h);
         m_owner->m_actualExtent = Rect2Du{0, 0, static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
 
-        // Check transfer support
         auto capabilities = VulkanRhi::Gpu().getSurfaceCapabilitiesKHR(m_apiHandle);
-        // Ensure blit operations
-        vk::ImageUsageFlags flags = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
-        PE_ERROR_IF(!(capabilities.supportedUsageFlags & flags), "Surface doesnt support nessesary operations");
+        vk::ImageUsageFlags requiredUsage =
+            vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
+        PE_ERROR_IF((capabilities.supportedUsageFlags & requiredUsage) != requiredUsage,
+                    "Surface does not support required swapchain image usage");
 
         // Find format
         auto formats = VulkanRhi::Gpu().getSurfaceFormatsKHR(m_apiHandle);

@@ -1,8 +1,11 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.22)
 project(PhasmaCore CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message(STATUS "PhasmaCore = ${CMAKE_CURRENT_SOURCE_DIR}")
+if(NOT DEFINED PE_SDL2_INCLUDE_DIR)
+    set(PE_SDL2_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL2")
+endif()
 
 # Check the operating system
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -21,8 +24,26 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
         _UNICODE
         _CONSOLE
     )
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    message(STATUS "CMAKE_SYSTEM_NAME = ${CMAKE_SYSTEM_NAME}")
+    set(PE_DEFS
+        PE_ANDROID
+    )
 else()
     message(FATAL_ERROR "Unsupported operating system: ${CMAKE_SYSTEM_NAME}")
+endif()
+
+if(NOT DEFINED PE_ENABLE_RUNTIME_SHADER_COMPILER)
+    set(PE_RUNTIME_SHADER_COMPILER_DEFAULT ON)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+        set(PE_RUNTIME_SHADER_COMPILER_DEFAULT OFF)
+    endif()
+    option(PE_ENABLE_RUNTIME_SHADER_COMPILER "Enable runtime shader compilation from source files" ${PE_RUNTIME_SHADER_COMPILER_DEFAULT})
+endif()
+
+set(PE_HAS_DXC ON)
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    set(PE_HAS_DXC OFF)
 endif()
 
 set(PE_DEFS ${PE_DEFS} PE_TRACK_RESOURCES PE_TRACK_RESOURCES_NOSPAM)
@@ -74,14 +95,12 @@ target_precompile_headers(PhasmaCore PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/pch/Ph
 target_include_directories(PhasmaCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/Code
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/glm
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL2
+    ${PE_SDL2_INCLUDE_DIR}
 )
 
-target_include_directories(PhasmaCore PRIVATE
+set(PHASMACORE_PRIVATE_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/dxc
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/RenderDoc
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/shaderc
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/spirv_cross
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vk_video
@@ -89,6 +108,13 @@ target_include_directories(PhasmaCore PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vulkan
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/rapidjson/include
 )
+if(PE_HAS_DXC)
+    list(APPEND PHASMACORE_PRIVATE_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/third_party/dxc)
+endif()
+if(PE_ENABLE_RUNTIME_SHADER_COMPILER)
+    list(APPEND PHASMACORE_PRIVATE_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/third_party/shaderc)
+endif()
+target_include_directories(PhasmaCore PRIVATE ${PHASMACORE_PRIVATE_INCLUDES})
 
 if(TARGET TracyClient)
     target_include_directories(PhasmaCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tracy/public)
@@ -111,12 +137,14 @@ if(WIN32)
     target_link_libraries(PhasmaCore PRIVATE d3d12.lib dxgi.lib dxguid.lib)
 endif()
 
-target_link_directories(PhasmaCore PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/Libs/dx"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Libs/SDL2"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Libs/spirv"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Libs/vulkan"
-)
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
+    target_link_directories(PhasmaCore PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/Libs/dx"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Libs/SDL2"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Libs/spirv"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Libs/vulkan"
+    )
+endif()
 
 # Compile Definitions
 set(COMPILE_DEFS
@@ -127,6 +155,15 @@ set(COMPILE_DEFS
     VULKAN_HPP_STORAGE_SHARED
     ${PE_DEFS}
 )
+if(PE_ENABLE_RUNTIME_SHADER_COMPILER)
+    list(APPEND COMPILE_DEFS PE_RUNTIME_SHADER_COMPILER)
+endif()
+if(PE_HAS_DXC)
+    list(APPEND COMPILE_DEFS PE_HAS_DXC)
+endif()
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    list(APPEND COMPILE_DEFS VMA_STATIC_VULKAN_FUNCTIONS=0 VMA_DYNAMIC_VULKAN_FUNCTIONS=1)
+endif()
 target_compile_definitions(PhasmaCore PUBLIC ${COMPILE_DEFS})
 
 # Libraries
@@ -142,13 +179,16 @@ else()
         spirv-cross-core
     )
 endif()
-list(APPEND LIB_FILES
-    shaderc_shared
-    dxcompiler
-    SDL2
-    SDL2main
-    vulkan
-)
+if(PE_ENABLE_RUNTIME_SHADER_COMPILER)
+    list(APPEND LIB_FILES shaderc_shared)
+endif()
+if(PE_HAS_DXC)
+    list(APPEND LIB_FILES dxcompiler)
+endif()
+list(APPEND LIB_FILES SDL2 vulkan)
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
+    list(APPEND LIB_FILES SDL2main)
+endif()
 target_link_libraries(PhasmaCore PRIVATE ${LIB_FILES})
 
 # Tracy profiler (linked when PE_TRACY is set in the root CMakeLists.txt)

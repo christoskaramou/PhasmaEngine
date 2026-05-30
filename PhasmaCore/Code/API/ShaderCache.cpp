@@ -55,13 +55,13 @@ namespace pe
         m_code = ParseShader(m_sourcePath);
 
         m_hash = StringHash(m_code);
-        m_hash.Combine(entryPoint);
+        m_hash.CombineString(entryPoint);
         m_hash.Combine(definesHash);
-        m_hash.Combine(static_cast<uint32_t>(RHII.GetApi()));
+        m_hash.CombineValue(static_cast<uint32_t>(RHII.GetApi()));
         if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
-            m_hash.Combine(RHII.GetCaps().spirvTargetVulkanVersion);
+            m_hash.CombineValue(RHII.GetCaps().spirvTargetVulkanVersion);
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-            m_hash.Combine(11u); // DX12 cache embeds readable source in a private DXIL container part.
+            m_hash.CombineValue(11u); // DX12 cache embeds readable source in a private DXIL container part.
 
         m_tempFilePath = Path::Root;
         m_tempFilePath += "ShaderCache/";

@@ -14,6 +14,8 @@ namespace pe
         static void Erase(size_t hash);
         static void Erase(const std::string &file);
         static void Clear();
+        static void SetEnabled(bool enabled);
+        inline static bool IsEnabled() { return s_enabled; }
         static void Start(double interval = 1.0);
         inline static void Stop() { s_running = false; }
         static void StopAndJoin();
@@ -40,6 +42,7 @@ namespace pe
         inline static std::vector<std::string> s_files{};
         inline static std::vector<std::string> s_folders{};
         inline static std::unordered_map<size_t, FileWatcher *> s_watchers{};
+        inline static std::atomic_bool s_enabled{true};
         inline static std::atomic_bool s_running{false};
         inline static std::mutex s_mutex{};
     };

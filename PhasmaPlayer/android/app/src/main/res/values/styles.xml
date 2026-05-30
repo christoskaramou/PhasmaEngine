@@ -1,0 +1,7 @@
+<resources>
+    <style name="PhasmaPlayerTheme" parent="android:style/Theme.Black.NoTitleBar.Fullscreen">
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

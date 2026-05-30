@@ -1,7 +1,9 @@
 #include "Script/ScriptSystem.h"
 #include "Script/ScriptRuntimeHooks.h"
 #include "Scene/ModelAsset.h"
+#if defined(PE_ENABLE_ASSIMP)
 #include "Scene/ModelAssetAssimp.h"
+#endif
 #include "Scene/Primitives.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
@@ -13,6 +15,16 @@ namespace pe
     static std::filesystem::path U8Path(const std::string &utf8)
     {
         return std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));
+    }
+
+    static ModelAsset *LoadModelCpuOnly(const std::filesystem::path &path)
+    {
+#if defined(PE_ENABLE_ASSIMP)
+        return ModelAssetAssimp::LoadCpuOnly(path);
+#else
+        PE_WARN("[ModelAsset] Runtime model file loading is disabled: %s", path.generic_string().c_str());
+        return nullptr;
+#endif
     }
 
     static SceneNodeHandle AddPrimitiveDeferred(ModelAsset *model)
@@ -47,7 +59,7 @@ namespace pe
 
                     // CPU-only load on background thread; GPU upload deferred to main thread
                     auto future = ThreadPool::General.Enqueue([fullPath]() -> ModelAsset * {
-                        ModelAsset *result = ModelAssetAssimp::LoadCpuOnly(U8Path(fullPath));
+                        ModelAsset *result = LoadModelCpuOnly(U8Path(fullPath));
                         if (!result)
                             SetScriptModelLoading(false);
                         return result;
@@ -98,7 +110,7 @@ namespace pe
 
                         // CPU-only load on background thread; GPU upload deferred to main thread
                         auto future = ThreadPool::General.Enqueue([fullPath]() -> ModelAsset * {
-                            ModelAsset *result = ModelAssetAssimp::LoadCpuOnly(U8Path(fullPath));
+                            ModelAsset *result = LoadModelCpuOnly(U8Path(fullPath));
                             if (!result)
                                 SetScriptModelLoading(false);
                             return result;

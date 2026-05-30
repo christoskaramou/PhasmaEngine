@@ -1,11 +1,14 @@
 #include "AnimationImporter.h"
 #include "API/Vertex.h"
+#if defined(PE_ENABLE_ASSIMP)
 #include <assimp/scene.h>
+#endif
 
 namespace pe
 {
     namespace AnimationImporter
     {
+#if defined(PE_ENABLE_ASSIMP)
         void ExtractBoneWeights(const aiMesh *mesh,
                                 Skeleton &skeleton,
                                 std::vector<Vertex> &vertices,
@@ -195,5 +198,23 @@ namespace pe
             if (!skeleton.bones.empty())
                 PE_INFO("[Assimp] Loaded %d bones, %d animation clips", (int)skeleton.bones.size(), (int)outClips.size());
         }
+#else
+        void ExtractBoneWeights(const aiMesh *,
+                                Skeleton &,
+                                std::vector<Vertex> &,
+                                std::vector<PositionUvVertex> &)
+        {
+        }
+
+        void ResolveBoneParents(const aiScene *, Skeleton &)
+        {
+        }
+
+        void ExtractAnimationClips(const aiScene *,
+                                   const Skeleton &,
+                                   std::vector<AnimationClip> &)
+        {
+        }
+#endif
     } // namespace AnimationImporter
 } // namespace pe

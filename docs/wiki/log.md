@@ -1,5 +1,12 @@
 # PhasmaEngine Wiki Log
 
+## 2026-05-30
+
+- Started the Android/lean runtime build shape. CMake now has switches for desktop hosts, WebGPU, Assimp model loading, and runtime source-shader compilation; Android defaults those desktop/compiler/model-loader pieces off while keeping `PhasmaPlayer` buildable. PhasmaCore recognizes `PE_ANDROID`, skips desktop library directories there, disables DXC/runtime shader compiler by default, and maps Android paths to SDL app-private storage. The player host disables file watchers by default for packaged/runtime launches, and the no-Assimp runtime path now stubs model-file loading while leaving primitive helpers compiled.
+- Added the first Android player scaffold under `PhasmaPlayer/android`: Android Gradle Plugin project files, SDLActivity subclass, asset extraction into app-private storage, local dependency-root documentation, and an Android `libmain.so` entrypoint for `PhasmaPlayer`. Android CMake now accepts external SDL2/SPIRV-Cross source roots and builds the NDK `PhasmaPlayer` target with dynamic Vulkan/VMA function loading so Vulkan 1.1+ entrypoints are not linked directly from Android's platform loader.
+- Completed the first debug APK assemble path. The Android Gradle project now targets Gradle 8.9+, AGP 8.7.3, NDK 28.2.13676358, and SDK CMake 3.22.1; the root CMake minimum was lowered to 3.22 with a portable whole-archive link fallback for `PhasmaPlayer`. Android skips the desktop asset-copy CMake target and relies on Gradle asset staging, with an APK-local `Assets/editor_config.json` pointing first launch at `Assets/Scenes/new.pescene`.
+- Applied Android review follow-ups: AGP `.cxx/` output is ignored, desktop `PhasmaPlayer` explicitly opts into file watchers while Android keeps the packaged default off, watcher registration skips asset scans when disabled, and Android no longer links the unused `SDL2main` helper.
+
 ## 2026-05-29
 
 - Fixed a DX12 device-removal crash during high-churn ATH horde combat. Particle emitter metadata is now uploaded into per-swapchain-frame GPU buffers, queued particle clears flush through the particle compute command buffer, and the particle draw shader clamps stale emitter references. Scene deletion also cleans model-root lookup entries, model removal copies root handles before deleting nodes, and the raster/DXR scene paths skip dead meshes while TLAS updates use frame-local instance buffers with zero-mask stale slots.

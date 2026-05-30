@@ -1,7 +1,9 @@
 #include "ScriptSystem.h"
 #include "Camera/Camera.h"
 #include "Scene/ModelAsset.h"
+#if defined(PE_ENABLE_ASSIMP)
 #include "Scene/ModelAssetAssimp.h"
+#endif
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
 #include "Scene/SceneNodeHandle.h"
@@ -857,8 +859,10 @@ namespace pe
             }
 
             // GPU upload on main thread (textures were only decoded on the background thread)
+#if defined(PE_ENABLE_ASSIMP)
             if (auto *assimp = dynamic_cast<ModelAssetAssimp *>(c.model))
                 assimp->UploadGpu();
+#endif
 
             c.handle = scene->AddModelDeferred(c.model);
         }

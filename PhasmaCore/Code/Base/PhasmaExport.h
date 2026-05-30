@@ -8,7 +8,7 @@
 #else
 #define PE_API __declspec(dllimport)
 #endif
-#elif defined(PE_LINUX)
+#elif defined(PE_LINUX) || defined(PE_ANDROID)
 #if defined(PE_PHASMACORE_EXPORTS)
 #define PE_API __attribute__((visibility("default")))
 #else

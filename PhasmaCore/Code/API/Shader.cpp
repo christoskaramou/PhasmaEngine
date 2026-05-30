@@ -138,15 +138,15 @@ namespace pe
         Hash definesHash;
         for (const Define &def : m_globalDefines)
         {
-            definesHash.Combine(def.name);
-            definesHash.Combine(def.value);
+            definesHash.CombineString(def.name);
+            definesHash.CombineString(def.value);
         }
         for (const Define &def : desc.defines)
         {
-            definesHash.Combine(def.name);
-            definesHash.Combine(def.value);
+            definesHash.CombineString(def.name);
+            definesHash.CombineString(def.value);
         }
-        definesHash.Combine(static_cast<uint32_t>(desc.stage));
+        definesHash.CombineValue(static_cast<uint32_t>(desc.stage));
 
         shader->m_cache.Init(path, shader->m_entryName, definesHash);
         const bool needsCompile = shader->m_cache.ShaderNeedsCompile();

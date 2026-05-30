@@ -16,11 +16,24 @@ namespace pe
             std::call_once(s_once,
                            []()
                            {
+                               auto normalizeDirectory = [](std::filesystem::path path)
+                               {
+                                   std::string value = path.lexically_normal().string();
+                                   std::replace(value.begin(), value.end(), '\\', '/');
+                                   if (!value.empty() && value.back() != '/')
+                                       value.push_back('/');
+                                   return value;
+                               };
+
 #if defined(PE_WIN32)
                                char *str = nullptr;
                                _get_pgmptr(&str);
                                if (str)
                                    Executable = std::filesystem::path(str).remove_filename().string();
+#elif defined(PE_ANDROID)
+                               const char *storagePath = SDL_AndroidGetInternalStoragePath();
+                               if (storagePath && storagePath[0] != '\0')
+                                   Executable = storagePath;
 #else
                                char str[PATH_MAX];
                                ssize_t length = readlink("/proc/self/exe", str, sizeof(str) - 1);
@@ -38,6 +51,14 @@ namespace pe
                                if (executableDir.filename().empty())
                                    executableDir = executableDir.parent_path();
 
+#if defined(PE_ANDROID)
+                               Executable = normalizeDirectory(executableDir);
+                               Root = Executable;
+                               Assets = normalizeDirectory(executableDir / "Assets");
+                               EditorAssets.clear();
+                               return;
+#endif
+
                                std::filesystem::path rootDir = executableDir;
                                const std::string executableLeaf = executableDir.filename().string();
                                if (executableLeaf == "Editor" || executableLeaf == "Player")
@@ -49,15 +70,6 @@ namespace pe
                                {
                                    rootDir = executableDir.parent_path().parent_path();
                                }
-
-                               auto normalizeDirectory = [](std::filesystem::path path)
-                               {
-                                   std::string value = path.lexically_normal().string();
-                                   std::replace(value.begin(), value.end(), '\\', '/');
-                                   if (!value.empty() && value.back() != '/')
-                                       value.push_back('/');
-                                   return value;
-                               };
 
                                Executable = normalizeDirectory(executableDir);
                                Root = normalizeDirectory(rootDir);

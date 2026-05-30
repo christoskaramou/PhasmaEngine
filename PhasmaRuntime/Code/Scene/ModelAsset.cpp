@@ -2,7 +2,9 @@
 #include "API/Image.h"
 #include "API/RHI.h"
 #include "Scene/Material.h"
+#if defined(PE_ENABLE_ASSIMP)
 #include "Scene/ModelAssetAssimp.h"
+#endif
 #include "Scene/SceneNode.h"
 
 namespace pe
@@ -70,6 +72,7 @@ namespace pe
             return nullptr;
         }
 
+#if defined(PE_ENABLE_ASSIMP)
         // For now we route everything through Assimp (it supports many formats).
         ModelAsset *model = ModelAssetAssimp::Load(file);
         if (!model)
@@ -80,6 +83,10 @@ namespace pe
 
         PE_INFO("Loaded model: %s", fileStr.c_str());
         return model;
+#else
+        PE_WARN("[ModelAsset] Runtime model file loading is disabled: %s", fileStr.c_str());
+        return nullptr;
+#endif
     }
 
     void ModelAsset::DefaultResources::EnsureCreated(CommandBuffer *cmd)

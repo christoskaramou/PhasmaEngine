@@ -15,6 +15,22 @@ namespace pe
     template <class T>
     constexpr bool is_hashable_v = is_hashable<T>::value;
 
+    // Deterministic, STL/compiler-independent 64-bit FNV-1a. std::hash<std::string> is
+    // implementation-defined (MSVC and libc++ disagree), so anything persisted to disk and
+    // re-derived on another toolchain (e.g. the Android shader cache, baked on desktop/MSVC
+    // and read on-device/NDK-libc++) must hash strings through this instead of std::hash.
+    // Mirrors the FNV constants used by the type-ID hasher in Base.h.
+    constexpr uint64_t Fnv1a64(std::string_view sv) noexcept
+    {
+        uint64_t hash = 14695981039346656037ULL; // FNV offset basis
+        for (unsigned char c : sv)
+        {
+            hash ^= c;
+            hash *= 1099511628211ULL; // FNV prime
+        }
+        return hash;
+    }
+
     class Hash
     {
     public:
@@ -41,6 +57,24 @@ namespace pe
             Combine(std::hash<T>()(value));
         }
 
+        // Portable string combine: hashes the bytes with FNV-1a so the resulting key is
+        // identical across compilers/STLs. Use this (not the std::hash-based templated
+        // Combine) for any string folded into a key that is persisted and re-derived
+        // elsewhere — e.g. shader-cache source text, entry points, and shader defines.
+        void CombineString(std::string_view value)
+        {
+            Combine(static_cast<size_t>(Fnv1a64(value)));
+        }
+
+        // Portable integer combine. The templated Combine<T> routes integers through std::hash<T>,
+        // which is NOT portable: MSVC hashes the bytes (FNV-1a) while libc++ returns the value
+        // (identity). For any integer folded into a persisted, cross-toolchain key (shader-cache
+        // API/target/stage), feed the raw value straight into the portable mixer instead.
+        void CombineValue(uint64_t value)
+        {
+            Combine(static_cast<size_t>(value));
+        }
+
         bool operator==(const Hash &other) { return m_hash == other.m_hash; }
         operator size_t() { return m_hash; }
         operator size_t() const { return m_hash; }
@@ -53,7 +87,7 @@ namespace pe
     {
     public:
         StringHash() : Hash() {}
-        StringHash(const std::string &string) { Combine(string); }
+        StringHash(std::string_view string) { CombineString(string); }
     };
 
     class Hashable

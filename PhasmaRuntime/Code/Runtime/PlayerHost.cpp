@@ -23,7 +23,6 @@
 #include "UI/RuntimeUi.h"
 #include "Window/WindowEvents.h"
 
-
 namespace pe
 {
     namespace
@@ -65,6 +64,24 @@ namespace pe
         bool s_playerPlayMode = true;
         bool s_playerPaused = false;
 
+        class ScopedFileWatcherState : public NoCopy, public NoMove
+        {
+        public:
+            explicit ScopedFileWatcherState(bool enabled)
+                : m_previousEnabled(FileWatcher::IsEnabled())
+            {
+                FileWatcher::SetEnabled(enabled);
+            }
+
+            ~ScopedFileWatcherState()
+            {
+                FileWatcher::SetEnabled(m_previousEnabled);
+            }
+
+        private:
+            bool m_previousEnabled = true;
+        };
+
         Scene *GetPlayerActiveScene()
         {
             return s_playerScene;
@@ -95,6 +112,9 @@ namespace pe
 
         void RegisterPlayerFileWatchers()
         {
+            if (!FileWatcher::IsEnabled())
+                return;
+
             auto shaderCallback = [](size_t fileEvent)
             {
                 EventSystem::PushEvent(EventType::CompileShaders, fileEvent);
@@ -377,15 +397,11 @@ namespace pe
         };
     } // namespace
 
-    int RunPlayerHost(int argc, char *argv[])
-    {
-        return RunPlayerHost(argc, argv, {});
-    }
-
     int RunPlayerHost(int argc, char *argv[], PlayerHostDesc desc)
     {
         Path::Init();
         Log::Init();
+        ScopedFileWatcherState fileWatcherState(desc.fileWatchersEnabled);
 
         try
         {

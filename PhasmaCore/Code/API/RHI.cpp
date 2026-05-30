@@ -95,6 +95,24 @@ namespace pe
         return flag == "0" || flag == "false" || flag == "FALSE" || flag == "off" || flag == "OFF";
     }
 
+    static void CheckRequiredVulkanFeature(bool supported, const char *message)
+    {
+#if defined(PE_ANDROID)
+        if (!supported)
+            PE_WARN("[Vulkan] Required feature missing: %s", message);
+#else
+        PE_ERROR_IF(!supported, "%s", message);
+#endif
+    }
+
+    // Features the engine consumes unconditionally (no runtime capability guard exists for
+    // them), so a missing one cannot be tolerated on any platform — fail fast instead of
+    // warning and then crashing in the VMA / buffer-device-address paths moments later.
+    static void RequireVulkanFeature(bool supported, const char *message)
+    {
+        PE_ERROR_IF(!supported, "%s", message);
+    }
+
     static uint32_t QueryLoaderApiVersion(PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr)
     {
         uint32_t version = VK_API_VERSION_1_0;
@@ -950,7 +968,7 @@ namespace pe
         VkPhysicalDeviceFeatures2 features2{};
         features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
         features2.pNext = &vk11Features;
-        vkGetPhysicalDeviceFeatures2(static_cast<VkPhysicalDevice>(vk->m_gpu), &features2);
+        VULKAN_HPP_DEFAULT_DISPATCHER.vkGetPhysicalDeviceFeatures2(static_cast<VkPhysicalDevice>(vk->m_gpu), &features2);
 
         m_gpuAdapterInfo.vendorId = gpuPropertiesVK.properties.vendorID;
         m_gpuAdapterInfo.deviceId = gpuPropertiesVK.properties.deviceID;
@@ -1131,7 +1149,24 @@ namespace pe
         m_caps.meshShaders = false;
         m_caps.pushDescriptor = false;
         m_caps.indirectCount = true;
+#if defined(PE_ANDROID)
+        m_caps.spirvTargetVulkanVersion = VK_API_VERSION_1_2;
+#else
         m_caps.spirvTargetVulkanVersion = vulkan13Available ? VK_API_VERSION_1_3 : VK_API_VERSION_1_2;
+        // Offline shader-bake override. Android hard-forces the SPIR-V target to 1.2 above; to
+        // pre-bake that exact cache on a desktop host, run a desktop Vulkan build with
+        // PHASMA_SPIRV_TARGET=1.2 so the baked blobs are keyed and compiled for the device's
+        // target. Mirrors the committed PHASMA_API env override; see tools/bake_android_shaders.ps1.
+        if (const std::string target = ReadEnv("PHASMA_SPIRV_TARGET"); !target.empty())
+        {
+            if (target == "1.2")
+                m_caps.spirvTargetVulkanVersion = VK_API_VERSION_1_2;
+            else if (target == "1.3")
+                m_caps.spirvTargetVulkanVersion = VK_API_VERSION_1_3;
+            else
+                PE_WARN("[Vulkan] Ignoring PHASMA_SPIRV_TARGET='%s' (expected 1.2 or 1.3)", target.c_str());
+        }
+#endif
 
         auto queueFamilyProperties = vk->m_gpu.getQueueFamilyProperties();
         float priority = 1.f;
@@ -1251,19 +1286,52 @@ namespace pe
             static_cast<bool>(deviceFeatures12.descriptorBindingStorageTexelBufferUpdateAfterBind);
         Settings::Get<GlobalSettings>().dynamic_rendering &= m_caps.dynamicRendering;
 
-        // Check needed features
-        PE_ERROR_IF(!deviceFeatures12.descriptorBindingPartiallyBound, "Partially bound descriptors are not supported on this device!");
-        PE_ERROR_IF(!deviceFeatures12.runtimeDescriptorArray, "Runtime descriptor array is not supported on this device!");
-        PE_ERROR_IF(!deviceFeatures12.shaderSampledImageArrayNonUniformIndexing, "Sampled image array non uniform indexing is not supported on this device!");
-        PE_ERROR_IF(!deviceFeatures12.shaderStorageBufferArrayNonUniformIndexing, "Storage buffer array non uniform indexing is not supported on this device!");
-        PE_ERROR_IF(!deviceFeatures12.descriptorBindingVariableDescriptorCount, "Variable descriptor count is not supported on this device!");
-        PE_ERROR_IF(!deviceFeatures12.separateDepthStencilLayouts, "Separate depth stencil layouts are not supported!");
-        PE_ERROR_IF(!deviceFeatures12.bufferDeviceAddress, "Buffer Device Address not supported!");
-        PE_ERROR_IF(!deviceFeatures12.shaderFloat16, "Float16 is not supported on this device!");
-        PE_ERROR_IF(!deviceFeatures2.features.shaderInt16, "Int16 is not supported on this device!");
-        PE_ERROR_IF(!deviceFeatures2.features.shaderInt64, "Int64 is not supported on this device!");
-        PE_ERROR_IF(!deviceFeatures2.features.multiDrawIndirect, "Multi draw indirect is not supported!");
-        PE_ERROR_IF(!deviceFeatures2.features.drawIndirectFirstInstance, "Draw indirect first instance is not supported!");
+        // --- Device feature contract (portable across all Vulkan-1.2 Android GPUs, not Mali-specific) ---
+        // RequireVulkanFeature: consumed unconditionally with no runtime fallback, so a missing one is
+        // a hard, clearly-named abort at startup (on every platform) instead of a confusing crash
+        // deeper in. CheckRequiredVulkanFeature: warn-on-Android — either genuinely optional, or proven
+        // unused by the shipped shaders. "Proven unused" is enforced by the offline bake
+        // (tools/bake_android_shaders.ps1), which scans every baked SPIR-V blob for the matching
+        // OpCapability; if a future shader starts using one, the bake fails and the feature must move
+        // back up to RequireVulkanFeature here.
+
+        // Bindless descriptor model: SPIR-V declares RuntimeDescriptorArray / ShaderNonUniform /
+        // SampledImageArrayNonUniformIndexing, and VulkanDescriptorImpl unconditionally sets
+        // ePartiallyBound / eVariableDescriptorCount on every bindless layout — no non-bindless path.
+        RequireVulkanFeature(deviceFeatures12.descriptorBindingPartiallyBound,
+                             "Partially bound descriptors are not supported on this device");
+        RequireVulkanFeature(deviceFeatures12.runtimeDescriptorArray,
+                             "Runtime descriptor array is not supported on this device");
+        RequireVulkanFeature(deviceFeatures12.shaderSampledImageArrayNonUniformIndexing,
+                             "Sampled image array non uniform indexing is not supported on this device");
+        RequireVulkanFeature(deviceFeatures12.descriptorBindingVariableDescriptorCount,
+                             "Variable descriptor count is not supported on this device");
+        // Depth-only / stencil-only image layouts (eDepthAttachmentOptimal, eDepthReadOnlyOptimal,
+        // eStencilAttachmentOptimal) are used unconditionally in VulkanImageImpl layout transitions.
+        RequireVulkanFeature(deviceFeatures12.separateDepthStencilLayouts,
+                             "Separate depth stencil layouts are not supported");
+        // VMA + acceleration-structure / shader-binding-table device addresses (host-side).
+        RequireVulkanFeature(deviceFeatures12.bufferDeviceAddress,
+                             "Buffer device address is not supported");
+        // GPU-culling indirect draws: ShadowPass issues drawIndexedIndirect with drawCount = mesh
+        // count (>1, needs multiDrawIndirect), and each indirect command carries a per-draw
+        // firstInstance (SceneBuffers, needs drawIndirectFirstInstance) used for bindless lookups.
+        RequireVulkanFeature(deviceFeatures2.features.multiDrawIndirect,
+                             "Multi draw indirect is not supported");
+        RequireVulkanFeature(deviceFeatures2.features.drawIndirectFirstInstance,
+                             "Draw indirect first instance is not supported");
+
+        // Soft (warn-on-Android): the shipped shaders declare none of the matching SPIR-V
+        // capabilities (verified by the bake's OpCapability scan), so requiring these would
+        // needlessly reject otherwise-capable Android GPUs that happen to lack them.
+        CheckRequiredVulkanFeature(deviceFeatures12.shaderStorageBufferArrayNonUniformIndexing,
+                                   "Storage buffer array non uniform indexing is not supported on this device");
+        CheckRequiredVulkanFeature(deviceFeatures12.shaderFloat16,
+                                   "Float16 is not supported on this device");
+        CheckRequiredVulkanFeature(deviceFeatures2.features.shaderInt16,
+                                   "Int16 is not supported on this device");
+        CheckRequiredVulkanFeature(deviceFeatures2.features.shaderInt64,
+                                   "Int64 is not supported on this device");
 
         if (!m_caps.descriptorUpdateAfterBind)
         {
@@ -1348,6 +1416,12 @@ namespace pe
         allocator_info.device = vk->m_device;
         allocator_info.instance = vk->m_instance;
         allocator_info.vulkanApiVersion = apiVersion;
+#if defined(PE_ANDROID)
+        VmaVulkanFunctions vmaFunctions{};
+        vmaFunctions.vkGetInstanceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetInstanceProcAddr;
+        vmaFunctions.vkGetDeviceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr;
+        allocator_info.pVulkanFunctions = &vmaFunctions;
+#endif
 
         PE_CHECK(vmaCreateAllocator(&allocator_info, &vk->m_allocator));
 

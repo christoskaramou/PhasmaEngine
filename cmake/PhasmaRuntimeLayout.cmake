@@ -10,29 +10,47 @@ set(PHASMA_WEBGPU_SAMPLE_OUTPUT_DIR "${PHASMA_CONFIG_OUTPUT_DIR}/Samples/WebGPU"
 set(PHASMA_WEBGPU_SAMPLE_INSTALL_DIR "Samples/WebGPU")
 set(PHASMA_RUNTIME_INSTALL_COMPONENT "Runtime")
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    set(PE_CORE_RUNTIME_DEPENDENCY_FILES)
+    set(PE_MODEL_RUNTIME_DEPENDENCY_FILES)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set(PE_CORE_RUNTIME_DEPENDENCY_FILES
-        "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/dxcompiler.dll"
-        "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/shaderc_shared.dll"
         "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/SDL2.dll"
+    )
+    if(PE_ENABLE_RUNTIME_SHADER_COMPILER)
+        list(APPEND PE_CORE_RUNTIME_DEPENDENCY_FILES
+            "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/shaderc_shared.dll"
+        )
+    endif()
+    list(APPEND PE_CORE_RUNTIME_DEPENDENCY_FILES
+        "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/dxcompiler.dll"
     )
     set(PE_MODEL_RUNTIME_DEPENDENCY_FILES
         "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/assimp-vc143-mt.dll"
     )
 else()
     set(PE_CORE_RUNTIME_DEPENDENCY_FILES
-        "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/dx/libdxcompiler.so"
-        "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/spirv/libshaderc_shared.so"
-        "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/spirv/libshaderc_shared.so.1"
         "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/vulkan/libvulkan.so"
         "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/vulkan/libvulkan.so.1"
         "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/vulkan/libvulkan.so.1.4.328"
+    )
+    if(PE_ENABLE_RUNTIME_SHADER_COMPILER)
+        list(APPEND PE_CORE_RUNTIME_DEPENDENCY_FILES
+            "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/spirv/libshaderc_shared.so"
+            "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/spirv/libshaderc_shared.so.1"
+        )
+    endif()
+    list(APPEND PE_CORE_RUNTIME_DEPENDENCY_FILES
+        "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/dx/libdxcompiler.so"
     )
     set(PE_MODEL_RUNTIME_DEPENDENCY_FILES
         "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/assimp/libassimp.so"
         "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/assimp/libassimp.so.6"
         "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/assimp/libassimp.so.6.0.4"
     )
+endif()
+if(NOT PE_ENABLE_ASSIMP)
+    set(PE_MODEL_RUNTIME_DEPENDENCY_FILES)
 endif()
 set(PE_ROOT_RUNTIME_DEPENDENCY_FILES
     ${PE_CORE_RUNTIME_DEPENDENCY_FILES}
@@ -54,12 +72,19 @@ function(pe_set_target_output_subdir TARGET_NAME OUTPUT_SUBDIR)
 endfunction()
 
 function(pe_add_root_runtime_dependencies_target)
-    add_custom_target(PhasmaRootRuntimeDependencies ALL
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${PHASMA_CONFIG_OUTPUT_DIR}"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PE_ROOT_RUNTIME_DEPENDENCY_FILES} "${PHASMA_CONFIG_OUTPUT_DIR}"
-        DEPENDS ${PE_ROOT_RUNTIME_DEPENDENCY_FILES}
-        COMMENT "[Phasma] Copying root runtime dependencies"
-    )
+    if(PE_ROOT_RUNTIME_DEPENDENCY_FILES)
+        add_custom_target(PhasmaRootRuntimeDependencies ALL
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${PHASMA_CONFIG_OUTPUT_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PE_ROOT_RUNTIME_DEPENDENCY_FILES} "${PHASMA_CONFIG_OUTPUT_DIR}"
+            DEPENDS ${PE_ROOT_RUNTIME_DEPENDENCY_FILES}
+            COMMENT "[Phasma] Copying root runtime dependencies"
+        )
+    else()
+        add_custom_target(PhasmaRootRuntimeDependencies ALL
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${PHASMA_CONFIG_OUTPUT_DIR}"
+            COMMENT "[Phasma] No root runtime dependencies to copy"
+        )
+    endif()
 endfunction()
 
 function(pe_depend_on_root_runtime_dependencies TARGET_NAME)
@@ -82,20 +107,30 @@ function(pe_install_root_runtime_dependency_files INSTALL_DESTINATION)
 endfunction()
 
 function(pe_install_runtime_layout)
-    install(TARGETS PhasmaCore PhasmaLauncher
+    set(PHASMA_INSTALL_SHARED_TARGETS PhasmaCore)
+    if(TARGET PhasmaLauncher)
+        list(APPEND PHASMA_INSTALL_SHARED_TARGETS PhasmaLauncher)
+    endif()
+    install(TARGETS ${PHASMA_INSTALL_SHARED_TARGETS}
         RUNTIME DESTINATION "." COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
         LIBRARY DESTINATION "." COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
     )
-    install(TARGETS PhasmaEditor
-        RUNTIME DESTINATION "." COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
-    )
-    install(TARGETS PhasmaEditorModule
-        RUNTIME DESTINATION "." COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
-        LIBRARY DESTINATION "." COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
-    )
-    install(TARGETS PhasmaPlayer
-        RUNTIME DESTINATION "." COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
-    )
+    if(TARGET PhasmaEditor)
+        install(TARGETS PhasmaEditor
+            RUNTIME DESTINATION "." COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
+        )
+    endif()
+    if(TARGET PhasmaEditorModule)
+        install(TARGETS PhasmaEditorModule
+            RUNTIME DESTINATION "." COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
+            LIBRARY DESTINATION "." COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
+        )
+    endif()
+    if(TARGET PhasmaPlayer)
+        install(TARGETS PhasmaPlayer
+            RUNTIME DESTINATION "." COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
+        )
+    endif()
 
     pe_install_root_runtime_dependency_files(".")
 
@@ -104,7 +139,7 @@ function(pe_install_runtime_layout)
         COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
     )
 
-    if(DEFINED PE_EDITOR_ASSETS_SOURCE_DIR AND EXISTS "${PE_EDITOR_ASSETS_SOURCE_DIR}")
+    if(TARGET PhasmaEditor AND DEFINED PE_EDITOR_ASSETS_SOURCE_DIR AND EXISTS "${PE_EDITOR_ASSETS_SOURCE_DIR}")
         install(DIRECTORY "${PE_EDITOR_ASSETS_SOURCE_DIR}/"
             DESTINATION "EditorAssets"
             COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"

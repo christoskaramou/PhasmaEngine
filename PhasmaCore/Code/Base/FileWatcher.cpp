@@ -4,6 +4,9 @@ namespace pe
     void FileWatcher::Add(const std::string &file, Func &&callback)
     {
         PE_ERROR_IF(file.empty() || callback == nullptr, "FileWatcher: Invalid parameters");
+        if (!s_enabled)
+            return;
+
         PE_ERROR_IF(!std::filesystem::exists(file), "FileWatcher: File does not exist");
 
         std::error_code ec;
@@ -63,6 +66,16 @@ namespace pe
         s_watchers.clear();
     }
 
+    void FileWatcher::SetEnabled(bool enabled)
+    {
+        const bool wasEnabled = s_enabled.exchange(enabled);
+        if (wasEnabled && !enabled)
+        {
+            StopAndJoin();
+            Clear();
+        }
+    }
+
     size_t FileWatcher::GetFileEvent(const std::string &file)
     {
         const FileWatcher *watcher = FileWatcher::Get(file);
@@ -81,6 +94,9 @@ namespace pe
 
     void FileWatcher::Start(double interval)
     {
+        if (!s_enabled)
+            return;
+
         if (s_running)
             return;
 

@@ -52,20 +52,24 @@
 #include "SDL.h"
 #if defined(PE_WIN32)
 #include <share.h>
-#elif defined(PE_LINUX)
+#elif defined(PE_LINUX) || defined(PE_ANDROID)
+#if defined(PE_LINUX)
 #include <cxxabi.h>
+#include <sys/sysinfo.h>
+#endif
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/sysinfo.h>
 #include <unistd.h>
+#if defined(PE_LINUX)
 // Undefine X11 macros that conflict with third-party libraries (httplib, etc.)
 #ifdef Complex
 #undef Complex
 #endif
 #ifdef Success
 #undef Success
+#endif
 #endif
 #endif
 

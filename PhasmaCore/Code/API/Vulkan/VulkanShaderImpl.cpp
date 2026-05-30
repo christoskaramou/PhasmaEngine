@@ -1,18 +1,23 @@
 #include "API/Vulkan/VulkanShaderImpl.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#if defined(PE_RUNTIME_SHADER_COMPILER)
 #include "shaderc/shaderc.hpp"
+#endif
+#if defined(PE_RUNTIME_SHADER_COMPILER) && defined(PE_HAS_DXC)
 #if defined(PE_WIN32)
 #include <windows.h>
 #include <unknwn.h>
 #include <objidl.h>
 #endif
 #include "dxcapi.h"
+#endif
 
 namespace pe
 {
     namespace
     {
+#if defined(PE_RUNTIME_SHADER_COMPILER)
         class FileIncluder : public shaderc::CompileOptions::IncluderInterface
         {
         public:
@@ -81,7 +86,9 @@ namespace pe
             delete info;
             delete include_result;
         }
+#endif
 
+#if defined(PE_RUNTIME_SHADER_COMPILER) && defined(PE_HAS_DXC)
         std::wstring ConvertUtf8ToWide(const std::string &str)
         {
 #ifdef _WIN32
@@ -120,7 +127,9 @@ namespace pe
             if (pErrors)
                 pErrors->Release();
         }
+#endif
 
+#if defined(PE_RUNTIME_SHADER_COMPILER)
         void AddDefineGlsl(const Define &def, shaderc::CompileOptions &options)
         {
             if (def.name.empty())
@@ -192,7 +201,19 @@ namespace pe
             outSpirv = {module.cbegin(), module.cend()};
             return true;
         }
+#else
+        bool CompileGlsl(Shader *,
+                         PeShaderStageFlags,
+                         const std::vector<Define> &,
+                         const std::vector<Define> &,
+                         std::vector<uint32_t> &)
+        {
+            PE_ERROR("[Shader] Runtime GLSL compilation is disabled; ship precompiled SPIR-V bytecode");
+            return false;
+        }
+#endif
 
+#if defined(PE_RUNTIME_SHADER_COMPILER) && defined(PE_HAS_DXC)
         bool CompileHlsl(Shader *owner,
                          PeShaderStageFlags stage,
                          const std::vector<Define> &globalDefines,
@@ -342,6 +363,17 @@ namespace pe
             pObject->Release();
             return true;
         }
+#else
+        bool CompileHlsl(Shader *,
+                         PeShaderStageFlags,
+                         const std::vector<Define> &,
+                         const std::vector<Define> &,
+                         std::vector<uint32_t> &)
+        {
+            PE_ERROR("[Shader] Runtime HLSL compilation is disabled; ship a precompiled SPIR-V cache or bytecode");
+            return false;
+        }
+#endif
     } // namespace
 
     vk::ShaderStageFlagBits ToVkSingleShaderStage(PeShaderStageFlags stage)

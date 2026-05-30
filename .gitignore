@@ -36,6 +36,13 @@
 !/PhasmaPlayer/*.h
 !/PhasmaPlayer/Code/
 !/PhasmaPlayer/Code/**
+!/PhasmaPlayer/android/
+!/PhasmaPlayer/android/**
+/PhasmaPlayer/android/.gradle/
+/PhasmaPlayer/android/**/.cxx/
+/PhasmaPlayer/android/**/build/
+/PhasmaPlayer/android/local.properties
+/PhasmaPlayer/android/prebaked/
 
 !/PhasmaLauncher/*.cpp
 !/PhasmaLauncher/*.h

@@ -1,0 +1,3 @@
+sdk.dir=C:\\Users\\Christos\\AppData\\Local\\Android\\Sdk
+sdl2Root=C:\\path\\to\\SDL2-2.30.x
+spirvCrossRoot=C:\\path\\to\\SPIRV-Cross

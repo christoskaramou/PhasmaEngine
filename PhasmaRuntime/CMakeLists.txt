@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.22)
 project(PhasmaRuntime CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -7,12 +7,18 @@ message(STATUS "PhasmaRuntime = ${CMAKE_CURRENT_SOURCE_DIR}")
 if(NOT DEFINED PE_SHARED_THIRD_PARTY_DIR)
     set(PE_SHARED_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 endif()
+if(NOT DEFINED PE_ENABLE_ASSIMP)
+    set(PE_ENABLE_ASSIMP ON)
+endif()
 
 file(GLOB_RECURSE PHASMARUNTIME_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/Code/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Code/*.h"
 )
 list(FILTER PHASMARUNTIME_SOURCES EXCLUDE REGEX "/UI/Backends/")
+if(NOT PE_ENABLE_ASSIMP)
+    list(FILTER PHASMARUNTIME_SOURCES EXCLUDE REGEX "/Scene/ModelAssetAssimp\\.(cpp|h)$")
+endif()
 file(GLOB_RECURSE PHASMARUNTIME_CACAO_SOURCES CONFIGURE_DEPENDS
     "${PE_SHARED_THIRD_PARTY_DIR}/CACAO/*.cpp"
 )
@@ -27,10 +33,15 @@ target_precompile_headers(PhasmaRuntime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../
 
 target_include_directories(PhasmaRuntime PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/Code"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaCore/third_party/assimp/include"
     "${PE_SHARED_THIRD_PARTY_DIR}/lua"
     "${PE_SHARED_THIRD_PARTY_DIR}/sol2"
 )
+if(PE_ENABLE_ASSIMP)
+    target_include_directories(PhasmaRuntime PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaCore/third_party/assimp/include"
+    )
+    target_compile_definitions(PhasmaRuntime PUBLIC PE_ENABLE_ASSIMP)
+endif()
 target_include_directories(PhasmaRuntime PRIVATE
     "${PE_SHARED_THIRD_PARTY_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaCore/third_party"
@@ -59,7 +70,7 @@ if(WIN32)
     endif()
 endif()
 target_link_libraries(PhasmaRuntime PUBLIC PhasmaCore)
-if(DEFINED PE_CORE_LINK_DIRS)
+if(PE_CORE_LINK_DIRS)
     target_link_directories(PhasmaRuntime PUBLIC ${PE_CORE_LINK_DIRS})
 endif()
 if(DEFINED PE_SPIRV_CROSS_CORE_LIB)
@@ -77,7 +88,7 @@ if(PE_AUDIO)
     target_include_directories(PhasmaRuntime PRIVATE "${PE_SHARED_THIRD_PARTY_DIR}/miniaudio")
     target_compile_definitions(PhasmaRuntime PRIVATE PE_AUDIO)
 endif()
-if(TARGET assimp)
+if(PE_ENABLE_ASSIMP AND TARGET assimp)
     target_link_libraries(PhasmaRuntime PRIVATE assimp)
 endif()
 if(TARGET meshoptimizer)

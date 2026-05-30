@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.22)
 project(PhasmaPlayer CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,10 +22,18 @@ if(WIN32)
     )
 endif()
 
-add_executable(PhasmaPlayer
-    "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp"
-    ${PHASMAPLAYER_RUNTIME_UI_SOURCES}
-)
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    add_library(PhasmaPlayer SHARED
+        "${CMAKE_CURRENT_SOURCE_DIR}/android_main.cpp"
+        ${PHASMAPLAYER_RUNTIME_UI_SOURCES}
+    )
+    set_target_properties(PhasmaPlayer PROPERTIES OUTPUT_NAME "main")
+else()
+    add_executable(PhasmaPlayer
+        "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp"
+        ${PHASMAPLAYER_RUNTIME_UI_SOURCES}
+    )
+endif()
 
 target_precompile_headers(PhasmaPlayer PRIVATE "${CMAKE_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
 target_include_directories(PhasmaPlayer PRIVATE
@@ -35,8 +43,22 @@ target_include_directories(PhasmaPlayer PRIVATE
     "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/vma"
     "${CMAKE_SOURCE_DIR}/PhasmaCore/third_party/vulkan"
 )
-target_link_directories(PhasmaPlayer PRIVATE ${PE_CORE_LINK_DIRS})
-target_link_libraries(PhasmaPlayer PRIVATE PhasmaCore "$<LINK_LIBRARY:WHOLE_ARCHIVE,PhasmaRuntime>" vulkan SDL2 SDL2main)
+if(PE_CORE_LINK_DIRS)
+    target_link_directories(PhasmaPlayer PRIVATE ${PE_CORE_LINK_DIRS})
+endif()
+target_link_libraries(PhasmaPlayer PRIVATE PhasmaCore)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.24)
+    target_link_libraries(PhasmaPlayer PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,PhasmaRuntime>")
+elseif(MSVC)
+    target_link_libraries(PhasmaPlayer PRIVATE PhasmaRuntime)
+    target_link_options(PhasmaPlayer PRIVATE "/WHOLEARCHIVE:$<TARGET_LINKER_FILE:PhasmaRuntime>")
+else()
+    target_link_libraries(PhasmaPlayer PRIVATE -Wl,--whole-archive PhasmaRuntime -Wl,--no-whole-archive)
+endif()
+target_link_libraries(PhasmaPlayer PRIVATE vulkan SDL2)
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
+    target_link_libraries(PhasmaPlayer PRIVATE SDL2main)
+endif()
 
 if(WIN32)
     target_link_libraries(PhasmaPlayer PRIVATE d3d12.lib dxgi.lib dxguid.lib d3dcompiler.lib)
