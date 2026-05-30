@@ -2,6 +2,7 @@
 #include "API/Image.h"
 #include "API/RHI.h"
 #include "Scene/Material.h"
+#include "Scene/ModelAssetCooked.h"
 #if defined(PE_ENABLE_ASSIMP)
 #include "Scene/ModelAssetAssimp.h"
 #endif
@@ -72,8 +73,13 @@ namespace pe
             return nullptr;
         }
 
+        // Cooked meshes (".pemesh") are the player's only mesh source and load on every platform with
+        // no Assimp dependency. Source models (glTF/FBX/OBJ) are imported and cooked editor-side.
+        if (ModelAssetCooked::IsCookedPath(file))
+            return ModelAssetCooked::Load(file);
+
 #if defined(PE_ENABLE_ASSIMP)
-        // For now we route everything through Assimp (it supports many formats).
+        // Editor-only: import a source model via Assimp (used by the import/cook path).
         ModelAsset *model = ModelAssetAssimp::Load(file);
         if (!model)
         {
@@ -84,7 +90,7 @@ namespace pe
         PE_INFO("Loaded model: %s", fileStr.c_str());
         return model;
 #else
-        PE_WARN("[ModelAsset] Runtime model file loading is disabled: %s", fileStr.c_str());
+        PE_WARN("[ModelAsset] Source model loading is disabled in the player; only .pemesh is supported: %s", fileStr.c_str());
         return nullptr;
 #endif
     }

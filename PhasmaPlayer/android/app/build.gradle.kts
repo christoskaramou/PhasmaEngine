@@ -44,6 +44,12 @@ val spirvCrossRoot = if (spirvCrossRootPath.isBlank()) {
 // underscore) and PhasmaPlayerActivity renames `spv` -> `_spv` when extracting to internal storage.
 val prebakedSpvDir = rootProject.layout.projectDirectory.dir("prebaked/ShaderCache/_spv")
 
+// Cooked models (".pemesh" + their textures), produced by tools/cook_model.ps1 into the gitignored
+// prebaked staging. Cooked assets are build artifacts, not source, so they never live under
+// PhasmaEditor/Assets; they are staged into the APK at Assets/Models/<name>/ where the player loads
+// them (the player loads only .pemesh; Assimp/import is editor-only).
+val prebakedModelsDir = rootProject.layout.projectDirectory.dir("prebaked/Models")
+
 // A single Sync owns the whole generated assets tree (engine assets under Assets/, the pre-baked
 // shader cache under ShaderCache/spv/). One task with one output dir is what the AGP asset merger
 // reliably tracks — a second srcDir or a separate Sync into a subdir was silently dropped by the
@@ -63,6 +69,9 @@ val stagePhasmaAssets by tasks.registering(Sync::class) {
     }
     from(prebakedSpvDir) {
         into("ShaderCache/spv")
+    }
+    from(prebakedModelsDir) {
+        into("Assets/Models")
     }
     into(stagedAssetsDir)
     // Hard-fail (at task time, not configuration time so `gradlew tasks`/IDE sync still work):
@@ -88,8 +97,8 @@ android {
         applicationId = "dev.phasma.player"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.4"
+        versionCode = 6
+        versionName = "0.6"
 
         ndk {
             abiFilters += "arm64-v8a"

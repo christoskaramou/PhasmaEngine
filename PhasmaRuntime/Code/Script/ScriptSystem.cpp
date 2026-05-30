@@ -446,7 +446,14 @@ namespace pe
         NodeScriptInstance inst;
         inst.handle = scene->MakeHandle(node);
         inst.sourcePath = NormalizeSlashes(path);
-        inst.path = NormalizePath(path);
+        // Node-script paths are stored project-root-relative (e.g. "Assets/Scripts/x.lua"). Resolve
+        // them against the asset root, not the process CWD: NormalizePath()/weakly_canonical resolve
+        // relative paths against the CWD, which is the bin dir on desktop (so it happens to work) but
+        // "/" on a packaged player (Android), where the raw relative path fails to open.
+        std::filesystem::path scriptPath(path);
+        if (scriptPath.is_relative())
+            scriptPath = std::filesystem::path(Path::Root) / scriptPath;
+        inst.path = NormalizePath(scriptPath.string());
 
         // Fresh environment inheriting globals (bindings, pe_log, etc.)
         inst.env = sol::environment(m_lua, sol::create, m_lua.globals());

@@ -10,6 +10,7 @@
 #include "Scene/SceneAccess.h"
 #include "Scene/SceneHost.h"
 #include "Scene/ModelAsset.h"
+#include "Scene/ModelAssetCooked.h"
 #include "Scene/SceneRuntimeHooks.h"
 #include "Runtime/RuntimeHost.h"
 #include "Runtime/RuntimePlaySession.h"
@@ -444,6 +445,24 @@ namespace pe
 
             RuntimeWindow window(windowDesc);
             RuntimeRhiSession rhi(window.Get(), api, true);
+
+            // Mesh cook mode (desktop tooling): import a source model via Assimp and write a cooked
+            // ".pemesh", then exit before the frame loop. The RHI is up so the importer's GPU upload
+            // path runs unchanged; the cooked file is the player's portable, Assimp-free mesh asset.
+            if (!desc.cookModelPath.empty())
+            {
+                PE_INFO("[Cook] Importing '%s' -> '%s'", desc.cookModelPath.c_str(), desc.cookOutputPath.c_str());
+                ModelAsset *model = ModelAsset::Load(desc.cookModelPath);
+                if (!model)
+                {
+                    PE_ERROR("[Cook] Failed to import source model: %s", desc.cookModelPath.c_str());
+                    return 1;
+                }
+                const bool cooked = ModelAssetCooked::WriteToFile(model, desc.cookOutputPath);
+                delete model;
+                ModelAsset::DestroyDefaults();
+                return cooked ? 0 : 1;
+            }
             {
                 Scene scene;
                 PlayerSceneRegistration sceneRegistration(scene);

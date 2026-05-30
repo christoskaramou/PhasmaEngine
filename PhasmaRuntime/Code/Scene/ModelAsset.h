@@ -136,6 +136,7 @@ namespace pe
     protected:
         friend class Scene;
         friend class Primitives;
+        friend class ModelAssetCooked;
 
         static constexpr uint32_t TextureBit(TextureType type) { return 1u << static_cast<uint32_t>(type); }
         mat4 ComputeNodeWorldMatrix(int nodeIndex) const;
