@@ -32,10 +32,10 @@ The Gradle build passes these first-mile engine switches to CMake:
 - `PE_WEBGPU=OFF`
 - `PE_ENABLE_ASSIMP=OFF`
 - `PE_ENABLE_RUNTIME_SHADER_COMPILER=OFF`
-- `PE_PHYSICS=OFF`
+- `PE_PHYSICS=ON`
 - `PE_AUDIO=OFF`
 
-The app packages `PhasmaEditor/Assets` under APK `Assets/`, excluding the large model sample folders and `Scenes/**` for the primitive-only bring-up. The startup scene and `editor_config.json` are shipped as **tracked** Android-local assets under `app/src/main/assets/Assets/` (`Scenes/new.pescene` + `editor_config.json` pointing at it). They live there — rather than relying on `PhasmaEditor/Assets/Scenes/*.pescene`, which `.gitignore` treats as user scenes — so a clean checkout produces a deterministic APK and does not bundle whatever local scene files happen to be on disk. `new.pescene` does not require Assimp. `PhasmaPlayerActivity` extracts the asset tree into app-private storage before SDL starts native code, matching the Android `Path::Assets` setup.
+The app packages `PhasmaEditor/Assets` under APK `Assets/`, excluding the large model sample folders and `Scenes/**` so Android startup does not depend on local editor scene files. The startup scene and `editor_config.json` are shipped as **tracked** Android-local assets under `app/src/main/assets/Assets/` (`Scenes/android_physics_balls.pescene` + `editor_config.json` pointing at it). They live there — rather than relying on `PhasmaEditor/Assets/Scenes/*.pescene`, which `.gitignore` treats as user scenes — so a clean checkout produces a deterministic APK and does not bundle whatever local scene files happen to be on disk. The default Android scene is a primitive-only physics loop that drops 10 colorful balls into a box every five seconds, deletes the previous batch, and repeats. `PhasmaPlayerActivity` extracts the asset tree into app-private storage before SDL starts native code, matching the Android `Path::Assets` setup.
 
 ## Pre-baked shaders (required to render)
 
@@ -74,4 +74,4 @@ pwsh tools/cook_model.ps1 -Source PhasmaEditor/Assets/Objects/glTF-Sample-Models
 cd PhasmaPlayer/android ; .\gradlew.bat :app:assembleDebug
 ```
 
-The bundled startup scene (`app/src/main/assets/Assets/Scenes/sponza.pescene`, set via `editor_config.json`) references `../Models/Sponza/Sponza.pemesh`; without the cook step that source is skipped (file-not-found) and Sponza will not appear. Like the shader bake, the cook host and the engine must be the same revision (the `.pemesh` header carries a `sizeof(Vertex)` ABI guard that rejects a stale cooked file).
+Cooked model scenes can be added as Android-local scenes that reference `../Models/<name>/<name>.pemesh`; without the cook step those sources are skipped (file-not-found) and the model will not appear. Like the shader bake, the cook host and the engine must be the same revision (the `.pemesh` header carries a `sizeof(Vertex)` ABI guard that rejects a stale cooked file).

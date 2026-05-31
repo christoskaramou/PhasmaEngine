@@ -373,6 +373,15 @@ namespace pe
                     if (!uiCaptured && event.type == SDL_MOUSEWHEEL)
                         InputState::AddMouseWheel(event.wheel.x, event.wheel.y);
 
+                    // Touch (Android). SDL_TouchFingerEvent coords/deltas are normalized [0,1].
+                    if (!uiCaptured && event.type == SDL_FINGERDOWN)
+                        InputState::OnFingerDown(event.tfinger.fingerId, event.tfinger.x, event.tfinger.y);
+                    else if (!uiCaptured && event.type == SDL_FINGERUP)
+                        InputState::OnFingerUp(event.tfinger.fingerId, event.tfinger.x, event.tfinger.y);
+                    else if (!uiCaptured && event.type == SDL_FINGERMOTION)
+                        InputState::OnFingerMotion(event.tfinger.fingerId, event.tfinger.x, event.tfinger.y,
+                                                   event.tfinger.dx, event.tfinger.dy);
+
                     if (IsRuntimeWindowResizeEvent(event))
                         m_resizePending = true;
                 }

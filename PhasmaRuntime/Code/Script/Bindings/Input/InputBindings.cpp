@@ -19,6 +19,38 @@ namespace pe
             int s_lastMouseX = 0;
             int s_lastMouseY = 0;
 
+            // Touch tracking (Android). SDL finger coords are normalized [0,1] in the window.
+            struct Finger
+            {
+                long long id = 0;
+                float x = 0.0f;
+                float y = 0.0f;
+                bool active = false;
+            };
+            std::array<Finger, 2> s_fingers{};
+            int s_fingerCount = 0;
+            float s_touchDx = 0.0f;
+            float s_touchDy = 0.0f;
+            float s_touchPinch = 0.0f;
+            float s_prevPinchDist = 0.0f;
+
+            int FindFinger(long long id)
+            {
+                for (int i = 0; i < static_cast<int>(s_fingers.size()); ++i)
+                    if (s_fingers[i].active && s_fingers[i].id == id)
+                        return i;
+                return -1;
+            }
+
+            float PinchDistance()
+            {
+                if (!s_fingers[0].active || !s_fingers[1].active)
+                    return 0.0f;
+                const float dx = s_fingers[0].x - s_fingers[1].x;
+                const float dy = s_fingers[0].y - s_fingers[1].y;
+                return std::sqrt(dx * dx + dy * dy);
+            }
+
             bool IsWslEnvironment()
             {
                 static const bool isWsl = []()
@@ -49,6 +81,10 @@ namespace pe
             s_mouseWheel = {};
             s_mouseCapturedByUi = false;
             s_keyboardCapturedByUi = false;
+            // Per-frame touch motion/pinch reset; finger down-state persists across frames.
+            s_touchDx = 0.0f;
+            s_touchDy = 0.0f;
+            s_touchPinch = 0.0f;
         }
 
         void AddMouseMotion(int xrel, int yrel)
@@ -61,6 +97,55 @@ namespace pe
         {
             s_mouseWheel.x += x;
             s_mouseWheel.y += y;
+        }
+
+        void OnFingerDown(long long fingerId, float x, float y)
+        {
+            if (FindFinger(fingerId) >= 0)
+                return;
+            for (auto &f : s_fingers)
+            {
+                if (!f.active)
+                {
+                    f = Finger{fingerId, x, y, true};
+                    break;
+                }
+            }
+            s_fingerCount = std::min<int>(s_fingerCount + 1, static_cast<int>(s_fingers.size()));
+            s_prevPinchDist = PinchDistance(); // reset pinch baseline when the 2nd finger lands
+        }
+
+        void OnFingerUp(long long fingerId, float, float)
+        {
+            const int i = FindFinger(fingerId);
+            if (i >= 0)
+                s_fingers[i].active = false;
+            s_fingerCount = std::max(0, s_fingerCount - 1);
+            s_prevPinchDist = 0.0f;
+        }
+
+        void OnFingerMotion(long long fingerId, float x, float y, float dx, float dy)
+        {
+            const int i = FindFinger(fingerId);
+            if (i < 0)
+                return;
+            s_fingers[i].x = x;
+            s_fingers[i].y = y;
+
+            if (s_fingerCount >= 2)
+            {
+                // Two fingers: pinch-to-zoom; ignore per-finger pan to avoid fighting the look.
+                const float dist = PinchDistance();
+                if (s_prevPinchDist > 0.0f)
+                    s_touchPinch += dist - s_prevPinchDist;
+                s_prevPinchDist = dist;
+            }
+            else if (i == 0)
+            {
+                // One finger: accumulate primary-finger drag (normalized units).
+                s_touchDx += dx;
+                s_touchDy += dy;
+            }
         }
 
         MouseDelta ConsumeMouseDelta()
@@ -106,6 +191,27 @@ namespace pe
             int discardY = 0;
             SDL_GetRelativeMouseState(&discardX, &discardY);
             ResetAbsoluteMouseDelta();
+        }
+
+        TouchState ConsumeTouchState()
+        {
+            TouchState out{};
+            if (!s_mouseCapturedByUi)
+            {
+                out.dx = s_touchDx;
+                out.dy = s_touchDy;
+                out.pinch = s_touchPinch;
+                out.fingers = s_fingerCount;
+            }
+            s_touchDx = 0.0f;
+            s_touchDy = 0.0f;
+            s_touchPinch = 0.0f;
+            return out;
+        }
+
+        int GetTouchFingerCount()
+        {
+            return s_fingerCount;
         }
 
         void SetRelativeMouseRequested(bool enabled)
@@ -230,6 +336,23 @@ namespace pe
                     t["x"] = delta.x;
                     t["y"] = delta.y;
                     return t;
+                });
+
+                // Touch (Android / touchscreens). One-finger drag -> dx/dy (normalized fraction of the
+                // surface); two-finger -> pinch (normalized). fingers = number currently down.
+                input.set_function("get_touch", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
+                    InputState::TouchState t = InputState::ConsumeTouchState();
+                    sol::table out = lua.create_table();
+                    out["dx"] = t.dx;
+                    out["dy"] = t.dy;
+                    out["pinch"] = t.pinch;
+                    out["fingers"] = t.fingers;
+                    return out;
+                });
+
+                input.set_function("touch_fingers", []() -> int {
+                    return InputState::GetTouchFingerCount();
                 });
 
                 input.set_function("get_mouse_wheel", [](sol::this_state ts) -> sol::table {

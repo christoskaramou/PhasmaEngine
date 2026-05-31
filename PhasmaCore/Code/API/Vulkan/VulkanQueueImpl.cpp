@@ -198,16 +198,14 @@ namespace pe
         try
         {
             auto result = m_apiHandle.presentKHR(pi);
-            // VK_SUBOPTIMAL_KHR is a success code, so vulkan.hpp returns (does not throw) it. On Android,
-            // rotating the device changes the surface's currentTransform and the driver reports the
-            // swapchain as suboptimal without ever going OUT_OF_DATE. If we keep presenting, the
-            // compositor scales our stale-extent frame onto the rotated panel and the aspect ratio
-            // breaks. Treat suboptimal like out-of-date so the frame loop rebuilds the swapchain at the
-            // surface's current extent and transform. SwapchainOutOfDateError is unrelated to
-            // vk::SystemError, so it propagates past the catches below to the frame loop.
-            if (result == vk::Result::eSuboptimalKHR)
-                throw SwapchainOutOfDateError{};
-            if (result != vk::Result::eSuccess)
+            // VK_SUBOPTIMAL_KHR is a success code (vulkan.hpp returns it, does not throw). We
+            // deliberately create the swapchain with preTransform=IDENTITY instead of currentTransform
+            // (see VulkanSwapchainImpl) so the compositor handles Android panel rotation; some drivers
+            // then report every present as suboptimal. That is expected and benign here — treating it
+            // as out-of-date would rebuild the swapchain every frame. Only a genuine
+            // VK_ERROR_OUT_OF_DATE_KHR (the surface actually changed size) rebuilds, via the frame
+            // loop's SwapchainOutOfDateError handler.
+            if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
                 PE_ERROR("[Queue] Failed to present swapchain image!");
         }
         catch (vk::OutOfDateKHRError &)

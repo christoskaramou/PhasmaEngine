@@ -38,6 +38,32 @@ namespace pe
                                              capabilities.maxImageExtent.height);
         }
 
+        // Surface transform selection (matters on Android). A device whose panel is mounted in a
+        // different orientation than the app reports a rotated currentTransform (e.g. ROTATE_90 for a
+        // landscape-locked app on a portrait panel). The engine renders un-rotated content into an
+        // offscreen displayRT and blits it 1:1 to the swapchain image, so if we request
+        // preTransform=currentTransform the presentation engine rotates that image — it shows up
+        // rotated and aspect-stretched. Prefer IDENTITY so the compositor presents our content as-is;
+        // fall back to currentTransform only if IDENTITY is unsupported. imageExtent stays at
+        // currentExtent: on Android minImageExtent==maxImageExtent==currentExtent, so any other size is
+        // illegal — we must not swap width/height here.
+        vk::SurfaceTransformFlagBitsKHR chosenTransform = capabilities.currentTransform;
+        if (capabilities.supportedTransforms & vk::SurfaceTransformFlagBitsKHR::eIdentity)
+            chosenTransform = vk::SurfaceTransformFlagBitsKHR::eIdentity;
+
+        // One-time-per-(re)create diagnostics: the correct pre-rotation handling is device-specific and
+        // depends on exactly what the driver reports, so log it. Read on device via
+        // `adb shell run-as dev.phasma.player cat files/PhasmaEngine.log`.
+        PE_INFO("[Swapchain] currentTransform=0x%x chosen=0x%x supported=0x%x currentExtent=%ux%u "
+                "final=%ux%u min=%ux%u max=%ux%u",
+                static_cast<uint32_t>(static_cast<VkSurfaceTransformFlagBitsKHR>(capabilities.currentTransform)),
+                static_cast<uint32_t>(static_cast<VkSurfaceTransformFlagBitsKHR>(chosenTransform)),
+                static_cast<uint32_t>(static_cast<VkSurfaceTransformFlagsKHR>(capabilities.supportedTransforms)),
+                capabilities.currentExtent.width, capabilities.currentExtent.height,
+                chosenExtent.width, chosenExtent.height,
+                capabilities.minImageExtent.width, capabilities.minImageExtent.height,
+                capabilities.maxImageExtent.width, capabilities.maxImageExtent.height);
+
         surface->SetActualExtent({0, 0, chosenExtent.width, chosenExtent.height});
         m_owner->m_width = chosenExtent.width;
         m_owner->m_height = chosenExtent.height;
@@ -64,7 +90,7 @@ namespace pe
         if (capabilities.supportedUsageFlags & vk::ImageUsageFlagBits::eTransferSrc)
             swapchainUsage |= vk::ImageUsageFlagBits::eTransferSrc;
         swapchainCreateInfo.imageUsage = swapchainUsage;
-        swapchainCreateInfo.preTransform = capabilities.currentTransform;
+        swapchainCreateInfo.preTransform = chosenTransform;
         swapchainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
         swapchainCreateInfo.presentMode = ToVkPresentMode(surface->GetPresentMode());
         swapchainCreateInfo.clipped = VK_TRUE;

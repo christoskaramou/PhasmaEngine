@@ -97,8 +97,8 @@ android {
         applicationId = "dev.phasma.player"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.7"
+        versionCode = 9
+        versionName = "0.9"
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -117,7 +117,7 @@ android {
                     "-DPE_WEBGPU=OFF",
                     "-DPE_ENABLE_ASSIMP=OFF",
                     "-DPE_ENABLE_RUNTIME_SHADER_COMPILER=OFF",
-                    "-DPE_PHYSICS=OFF",
+                    "-DPE_PHYSICS=ON",
                     "-DPE_AUDIO=OFF",
                     "-DPE_TRACY=OFF"
                 )
