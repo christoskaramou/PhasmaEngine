@@ -119,6 +119,7 @@ namespace pe
         m_frameOpen = false;
         m_frameSurfaceWidth = 0;
         m_frameSurfaceHeight = 0;
+        m_frameUiScale = 1.0f;
         m_frameInputEnabled = true;
         m_frameInputRectValid = false;
         m_frameInputRectMinX = 0.0f;
@@ -140,6 +141,7 @@ namespace pe
         const double delta = FrameTimer::Instance().GetDelta();
         RuntimeUiFrameInfo frameInfo{};
         frameInfo.deltaSeconds = static_cast<float>(delta);
+        frameInfo.uiScale = m_frameUiScale > 0.0f ? m_frameUiScale : 1.0f;
         frameInfo.width = m_frameSurfaceWidth > 0 ? m_frameSurfaceWidth : RHII.GetWidth();
         frameInfo.height = m_frameSurfaceHeight > 0 ? m_frameSurfaceHeight : RHII.GetHeight();
         frameInfo.inputEnabled = m_frameInputEnabled;
@@ -179,6 +181,11 @@ namespace pe
         m_frameSurfaceHeight = height;
         m_frameInputEnabled = true;
         m_frameInputRectValid = false;
+    }
+
+    void RuntimeUiSystem::SetFrameUiScale(float scale)
+    {
+        m_frameUiScale = scale > 0.0f ? scale : 1.0f;
     }
 
     void RuntimeUiSystem::SetFrameInputRect(float minX, float minY, float width, float height)

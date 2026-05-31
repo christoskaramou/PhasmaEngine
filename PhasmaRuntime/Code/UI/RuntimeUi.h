@@ -9,6 +9,7 @@ namespace pe
     struct RuntimeUiFrameInfo
     {
         float deltaSeconds = 0.0f;
+        float uiScale = 1.0f;
         uint32_t width = 0;
         uint32_t height = 0;
         bool inputEnabled = true;
@@ -136,6 +137,7 @@ namespace pe
         void EndFrame();
         void Render(CommandBuffer *cmd, Image *renderTarget);
         void SetFrameSurfaceSize(uint32_t width, uint32_t height);
+        void SetFrameUiScale(float scale);
         void SetFrameInputRect(float minX, float minY, float width, float height);
         void DisableFrameInput();
         void GetFrameSurfaceSize(uint32_t &width, uint32_t &height) const;
@@ -252,6 +254,7 @@ namespace pe
         bool m_frameOpen = false;
         uint32_t m_frameSurfaceWidth = 0;
         uint32_t m_frameSurfaceHeight = 0;
+        float m_frameUiScale = 1.0f;
         bool m_frameInputEnabled = true;
         bool m_frameInputRectValid = false;
         float m_frameInputRectMinX = 0.0f;

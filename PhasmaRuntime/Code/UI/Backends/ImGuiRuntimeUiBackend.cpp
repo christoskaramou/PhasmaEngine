@@ -183,8 +183,11 @@ namespace pe
 
                 ScopedImGuiContext contextScope(m_context);
                 m_frameInfo = frameInfo;
-                runtime_ui_imgui::ApplyContextSettings(ImGui::GetIO());
-                runtime_ui_imgui::ApplyStyle();
+                const float uiScale = frameInfo.uiScale > 0.0f ? frameInfo.uiScale : 1.0f;
+                ImGuiIO &io = ImGui::GetIO();
+                runtime_ui_imgui::ApplyContextSettings(io);
+                runtime_ui_imgui::ApplyStyle(uiScale);
+                io.FontGlobalScale = uiScale;
                 ImGui_ImplSDL2_NewFrame();
                 if (m_api == PE_GRAPHICS_API_VULKAN)
                 {
@@ -197,9 +200,10 @@ namespace pe
                 }
 #endif
                 if (frameInfo.width > 0 && frameInfo.height > 0)
-                    ImGui::GetIO().DisplaySize =
+                    io.DisplaySize =
                         ImVec2(static_cast<float>(frameInfo.width), static_cast<float>(frameInfo.height));
-                m_nextScreenPos = ImVec2(runtime_ui_imgui::kViewportPadding, runtime_ui_imgui::kViewportPadding);
+                const float padding = runtime_ui_imgui::kViewportPadding * uiScale;
+                m_nextScreenPos = ImVec2(padding, padding);
                 ImGui::NewFrame();
                 m_frameOpen = true;
                 m_rendered = false;
@@ -216,8 +220,10 @@ namespace pe
                 if (screen.overlay)
                     return true;
 
+                const float uiScale = m_frameInfo.uiScale > 0.0f ? m_frameInfo.uiScale : 1.0f;
                 ImGui::SetNextWindowPos(m_nextScreenPos, ImGuiCond_Always);
-                ImGui::SetNextWindowSize(ImVec2(runtime_ui_imgui::kWindowWidth, 0.0f), ImGuiCond_FirstUseEver);
+                ImGui::SetNextWindowSize(ImVec2(runtime_ui_imgui::kWindowWidth * uiScale, 0.0f),
+                                         ImGuiCond_FirstUseEver);
                 const std::string windowId = screen.title + "##" + screen.id;
                 return ImGui::Begin(windowId.c_str(), nullptr, runtime_ui_imgui::kPlayerWindowFlags);
             }
@@ -302,9 +308,10 @@ namespace pe
                 if (m_frameOpen && !m_currentScreenOverlay)
                 {
                     ScopedImGuiContext contextScope(m_context);
+                    const float uiScale = m_frameInfo.uiScale > 0.0f ? m_frameInfo.uiScale : 1.0f;
                     const ImVec2 windowSize = ImGui::GetWindowSize();
                     ImGui::End();
-                    m_nextScreenPos.y += windowSize.y + runtime_ui_imgui::kScreenGap;
+                    m_nextScreenPos.y += windowSize.y + runtime_ui_imgui::kScreenGap * uiScale;
                 }
 
                 m_currentScreenOverlay = false;

@@ -106,6 +106,11 @@ namespace pe
         }
         catch (const SwapchainOutOfDateError &)
         {
+            // Acquire or present reported the swapchain out-of-date/suboptimal (a window resize, or an
+            // Android device rotation that changed the surface transform). Request a rebuild: the editor
+            // and player frame loops both handle EventType::Resize by recreating the swapchain at the
+            // surface's current extent and transform, which keeps the rendered aspect ratio correct.
+            EventSystem::PushEvent(EventType::Resize);
         }
     }
 

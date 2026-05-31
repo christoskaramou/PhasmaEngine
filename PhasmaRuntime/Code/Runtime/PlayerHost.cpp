@@ -61,6 +61,34 @@ namespace pe
                    (!uiCaptured && event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE);
         }
 
+        // The runtime-UI HUD is authored at desktop pixel sizes. On high-density surfaces (phones,
+        // hi-DPI monitors) those sizes are physically tiny -- the Android HUD rendered as an invisible
+        // speck. Scale the UI by real display density, falling back to surface-height scaling when the
+        // driver reports no DPI. Clamped so standard ~96 dpi desktops stay at 1.0 (no editor/desktop
+        // regression) and pathological DPI reports can't balloon the UI.
+        float ComputeRuntimeUiScale(SDL_Window *window, uint32_t surfaceHeight)
+        {
+            float scale = 0.0f;
+
+            if (window)
+            {
+                const int display = SDL_GetWindowDisplayIndex(window);
+                float ddpi = 0.0f;
+                float hdpi = 0.0f;
+                float vdpi = 0.0f;
+                if (display >= 0 && SDL_GetDisplayDPI(display, &ddpi, &hdpi, &vdpi) == 0 && ddpi > 0.0f)
+                    scale = ddpi / 96.0f;
+            }
+
+            if (scale <= 0.0f && surfaceHeight > 0)
+                scale = static_cast<float>(surfaceHeight) / 1080.0f;
+
+            if (scale <= 0.0f)
+                scale = 1.0f;
+
+            return std::clamp(scale, 1.0f, 4.0f);
+        }
+
         Scene *s_playerScene = nullptr;
         bool s_playerPlayMode = true;
         bool s_playerPaused = false;
@@ -259,7 +287,10 @@ namespace pe
                 if (m_runtimeUi)
                 {
                     if (Image *displayRT = m_renderer.GetDisplayRT())
+                    {
                         m_runtimeUi->SetFrameSurfaceSize(displayRT->GetWidth(), displayRT->GetHeight());
+                        m_runtimeUi->SetFrameUiScale(ComputeRuntimeUiScale(m_window, displayRT->GetHeight()));
+                    }
                     m_runtimeUi->BeginFrame();
                 }
 
@@ -293,6 +324,7 @@ namespace pe
                 m_renderer.Draw();
                 FrameTimer::Instance().CountUpdatesStamp();
                 FrameTimer::Instance().CountCpuTotalStamp();
+                LogFrameRate();
                 return true;
             }
 
@@ -304,6 +336,26 @@ namespace pe
             }
 
         private:
+            // Emit one averaged FPS line per second. The on-screen runtime-UI HUD is unreadable on the
+            // packaged player's surface (and device screencaps come back black), so this is the portable
+            // way to measure frame rate from PhasmaEngine.log.
+            void LogFrameRate()
+            {
+                m_fpsAccumSeconds += FrameTimer::Instance().GetDelta();
+                ++m_fpsAccumFrames;
+                if (m_fpsAccumSeconds < 1.0)
+                    return;
+
+                const double avgFps = m_fpsAccumFrames / m_fpsAccumSeconds;
+                const double avgMs = (m_fpsAccumSeconds * 1000.0) / m_fpsAccumFrames;
+                PE_INFO("[Runtime] FPS: %.1f (%.2f ms/frame avg over %u frames)",
+                        avgFps,
+                        avgMs,
+                        m_fpsAccumFrames);
+                m_fpsAccumSeconds = 0.0;
+                m_fpsAccumFrames = 0;
+            }
+
             bool ProcessEvents()
             {
                 SDL_Event event{};
@@ -395,6 +447,8 @@ namespace pe
             RuntimeSceneRenderer &m_renderer;
             RuntimeUiSystem *m_runtimeUi = nullptr;
             bool m_resizePending = false;
+            double m_fpsAccumSeconds = 0.0;
+            uint32_t m_fpsAccumFrames = 0;
         };
     } // namespace
 

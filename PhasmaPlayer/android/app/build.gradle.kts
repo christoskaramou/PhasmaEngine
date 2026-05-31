@@ -97,8 +97,8 @@ android {
         applicationId = "dev.phasma.player"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.6"
+        versionCode = 7
+        versionName = "0.7"
 
         ndk {
             abiFilters += "arm64-v8a"
