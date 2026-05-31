@@ -11,7 +11,7 @@
       2. Harvests the resulting ShaderCache/_spv/* blobs into the APK staging dir
          (PhasmaPlayer/android/prebaked/ShaderCache/_spv), which gradle bundles and the Activity
          extracts to <internalStorage>/ShaderCache/ on device.
-      3. Disassembles every baked blob and FAILS if any declares "OpCapability Int64" — the
+      3. Disassembles every baked blob and FAILS if any declares "OpCapability Int64" - the
          evidence gate that keeps the shaderInt64 warn-on-Android downgrade (RHI.cpp) provably safe.
 
     PREREQUISITE: rebuild the desktop bake host AFTER any engine change so its portable cache hash
@@ -129,7 +129,7 @@ Write-Host "[bake] SPIR-V capabilities across blobs (count = #blobs):"
 $allCaps.GetEnumerator() | Sort-Object Name | ForEach-Object { Write-Host ("[bake]   {0,-40} {1}" -f $_.Name, $_.Value) }
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Host "[bake]   VIOLATION $_" -ForegroundColor Red }
-    Fail "Baked SPIR-V uses a capability whose Vulkan feature is softened to warn-on-Android in RHI.cpp. Promote that feature back to RequireVulkanFeature (or drop the shader usage) — otherwise Android GPUs that lack it will warn then crash."
+    Fail "Baked SPIR-V uses a capability whose Vulkan feature is softened to warn-on-Android in RHI.cpp. Promote that feature back to RequireVulkanFeature (or drop the shader usage) - otherwise Android GPUs that lack it will warn then crash."
 }
 Write-Host "[bake] softened-feature capabilities (Int64/Int16/Float16/StorageBufferNonUniform): NONE -> warn-on-Android gates are SAFE." -ForegroundColor Green
 Write-Host "[bake] Next: cd PhasmaPlayer/android ; .\gradlew.bat :app:assembleDebug"

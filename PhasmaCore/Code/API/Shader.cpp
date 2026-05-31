@@ -152,8 +152,10 @@ namespace pe
         const bool needsCompile = shader->m_cache.ShaderNeedsCompile();
         if (needsCompile)
         {
-            PE_INFO("[Shader] Compile(hlsl) -> source='%s' | path='%s' | hash=%llu",
-                    desc.sourcePath.c_str(), path.c_str(), static_cast<unsigned long long>(shader->m_pathID));
+            PE_INFO("[Shader] Compile(hlsl) -> source='%s' | path='%s' | path_hash=%llu | cache_hash=%llu",
+                    desc.sourcePath.c_str(), path.c_str(),
+                    static_cast<unsigned long long>(shader->m_pathID),
+                    static_cast<unsigned long long>(shader->m_cache.GetHash()));
         }
 
         shader->m_impl = CreateShaderImpl(shader, desc, needsCompile);

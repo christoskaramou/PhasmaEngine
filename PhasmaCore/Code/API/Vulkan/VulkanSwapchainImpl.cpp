@@ -38,15 +38,14 @@ namespace pe
                                              capabilities.maxImageExtent.height);
         }
 
-        // Surface transform selection (matters on Android). A device whose panel is mounted in a
+        // Surface transform selection matters on Android. A device whose panel is mounted in a
         // different orientation than the app reports a rotated currentTransform (e.g. ROTATE_90 for a
         // landscape-locked app on a portrait panel). The engine renders un-rotated content into an
         // offscreen displayRT and blits it 1:1 to the swapchain image, so if we request
-        // preTransform=currentTransform the presentation engine rotates that image — it shows up
-        // rotated and aspect-stretched. Prefer IDENTITY so the compositor presents our content as-is;
-        // fall back to currentTransform only if IDENTITY is unsupported. imageExtent stays at
-        // currentExtent: on Android minImageExtent==maxImageExtent==currentExtent, so any other size is
-        // illegal — we must not swap width/height here.
+        // preTransform=currentTransform the presentation engine expects us to pre-rotate that image. We
+        // do not do that yet, so prefer IDENTITY and let the compositor present our normal frames. Keep
+        // imageExtent at currentExtent: on Android minImageExtent/maxImageExtent can still allow a range,
+        // but the swapchain image size must match the surface size SDL reports.
         vk::SurfaceTransformFlagBitsKHR chosenTransform = capabilities.currentTransform;
         if (capabilities.supportedTransforms & vk::SurfaceTransformFlagBitsKHR::eIdentity)
             chosenTransform = vk::SurfaceTransformFlagBitsKHR::eIdentity;

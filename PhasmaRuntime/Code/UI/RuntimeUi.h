@@ -18,6 +18,11 @@ namespace pe
         float inputRectMinY = 0.0f;
         float inputRectWidth = 0.0f;
         float inputRectHeight = 0.0f;
+        bool safeAreaValid = false;
+        float safeAreaMinX = 0.0f;
+        float safeAreaMinY = 0.0f;
+        float safeAreaWidth = 0.0f;
+        float safeAreaHeight = 0.0f;
     };
 
     struct RuntimeUiBackendInitInfo
@@ -138,6 +143,7 @@ namespace pe
         void Render(CommandBuffer *cmd, Image *renderTarget);
         void SetFrameSurfaceSize(uint32_t width, uint32_t height);
         void SetFrameUiScale(float scale);
+        void SetFrameSafeArea(float minX, float minY, float width, float height);
         void SetFrameInputRect(float minX, float minY, float width, float height);
         void DisableFrameInput();
         void GetFrameSurfaceSize(uint32_t &width, uint32_t &height) const;
@@ -261,6 +267,11 @@ namespace pe
         float m_frameInputRectMinY = 0.0f;
         float m_frameInputRectWidth = 0.0f;
         float m_frameInputRectHeight = 0.0f;
+        bool m_frameSafeAreaValid = false;
+        float m_frameSafeAreaMinX = 0.0f;
+        float m_frameSafeAreaMinY = 0.0f;
+        float m_frameSafeAreaWidth = 0.0f;
+        float m_frameSafeAreaHeight = 0.0f;
     };
 
     void SetActiveRuntimeUi(RuntimeUiSystem *runtimeUi);

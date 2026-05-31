@@ -126,6 +126,11 @@ namespace pe
         m_frameInputRectMinY = 0.0f;
         m_frameInputRectWidth = 0.0f;
         m_frameInputRectHeight = 0.0f;
+        m_frameSafeAreaValid = false;
+        m_frameSafeAreaMinX = 0.0f;
+        m_frameSafeAreaMinY = 0.0f;
+        m_frameSafeAreaWidth = 0.0f;
+        m_frameSafeAreaHeight = 0.0f;
     }
 
     bool RuntimeUiSystem::ProcessEvent(const SDL_Event &event)
@@ -150,6 +155,11 @@ namespace pe
         frameInfo.inputRectMinY = m_frameInputRectMinY;
         frameInfo.inputRectWidth = m_frameInputRectWidth;
         frameInfo.inputRectHeight = m_frameInputRectHeight;
+        frameInfo.safeAreaValid = m_frameSafeAreaValid;
+        frameInfo.safeAreaMinX = m_frameSafeAreaMinX;
+        frameInfo.safeAreaMinY = m_frameSafeAreaMinY;
+        frameInfo.safeAreaWidth = m_frameSafeAreaWidth;
+        frameInfo.safeAreaHeight = m_frameSafeAreaHeight;
         m_backend->BeginFrame(frameInfo);
         m_frameOpen = true;
     }
@@ -186,6 +196,15 @@ namespace pe
     void RuntimeUiSystem::SetFrameUiScale(float scale)
     {
         m_frameUiScale = scale > 0.0f ? scale : 1.0f;
+    }
+
+    void RuntimeUiSystem::SetFrameSafeArea(float minX, float minY, float width, float height)
+    {
+        m_frameSafeAreaValid = width > 0.0f && height > 0.0f;
+        m_frameSafeAreaMinX = minX;
+        m_frameSafeAreaMinY = minY;
+        m_frameSafeAreaWidth = width;
+        m_frameSafeAreaHeight = height;
     }
 
     void RuntimeUiSystem::SetFrameInputRect(float minX, float minY, float width, float height)

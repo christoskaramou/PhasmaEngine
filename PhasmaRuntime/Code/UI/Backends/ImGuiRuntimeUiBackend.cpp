@@ -203,7 +203,7 @@ namespace pe
                     io.DisplaySize =
                         ImVec2(static_cast<float>(frameInfo.width), static_cast<float>(frameInfo.height));
                 const float padding = runtime_ui_imgui::kViewportPadding * uiScale;
-                m_nextScreenPos = ImVec2(padding, padding);
+                m_nextScreenPos = ImVec2(SafeAreaMinX() + padding, SafeAreaMinY() + padding);
                 ImGui::NewFrame();
                 m_frameOpen = true;
                 m_rendered = false;
@@ -221,9 +221,13 @@ namespace pe
                     return true;
 
                 const float uiScale = m_frameInfo.uiScale > 0.0f ? m_frameInfo.uiScale : 1.0f;
+                const float padding = runtime_ui_imgui::kViewportPadding * uiScale;
+                const float safeWidth = SafeAreaWidth();
+                float windowWidth = runtime_ui_imgui::kWindowWidth * uiScale;
+                if (safeWidth > padding * 2.0f)
+                    windowWidth = std::min(windowWidth, safeWidth - padding * 2.0f);
                 ImGui::SetNextWindowPos(m_nextScreenPos, ImGuiCond_Always);
-                ImGui::SetNextWindowSize(ImVec2(runtime_ui_imgui::kWindowWidth * uiScale, 0.0f),
-                                         ImGuiCond_FirstUseEver);
+                ImGui::SetNextWindowSize(ImVec2(windowWidth, 0.0f), ImGuiCond_FirstUseEver);
                 const std::string windowId = screen.title + "##" + screen.id;
                 return ImGui::Begin(windowId.c_str(), nullptr, runtime_ui_imgui::kPlayerWindowFlags);
             }
@@ -723,6 +727,30 @@ namespace pe
                        m_frameInfo.inputRectHeight > 0.0f &&
                        m_frameInfo.width > 0 &&
                        m_frameInfo.height > 0;
+            }
+
+            bool HasSafeArea() const
+            {
+                return m_frameInfo.safeAreaValid &&
+                       m_frameInfo.safeAreaWidth > 0.0f &&
+                       m_frameInfo.safeAreaHeight > 0.0f;
+            }
+
+            float SafeAreaMinX() const
+            {
+                return HasSafeArea() ? m_frameInfo.safeAreaMinX : 0.0f;
+            }
+
+            float SafeAreaMinY() const
+            {
+                return HasSafeArea() ? m_frameInfo.safeAreaMinY : 0.0f;
+            }
+
+            float SafeAreaWidth() const
+            {
+                if (HasSafeArea())
+                    return m_frameInfo.safeAreaWidth;
+                return m_frameInfo.width > 0 ? static_cast<float>(m_frameInfo.width) : 0.0f;
             }
 
             SDL_Event MapEventToSurface(const SDL_Event &event) const

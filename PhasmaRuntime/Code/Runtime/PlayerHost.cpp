@@ -24,10 +24,107 @@
 #include "UI/RuntimeUi.h"
 #include "Window/WindowEvents.h"
 
+#if defined(PE_ANDROID)
+#include <SDL_system.h>
+#include <jni.h>
+#endif
+
 namespace pe
 {
     namespace
     {
+        struct RuntimeUiSafeArea
+        {
+            float minX = 0.0f;
+            float minY = 0.0f;
+            float width = 0.0f;
+            float height = 0.0f;
+            bool valid = false;
+        };
+
+#if defined(PE_ANDROID)
+        int QueryPhasmaPlayerSafeInset(JNIEnv *env, jclass activityClass, const char *methodName)
+        {
+            jmethodID method = env->GetStaticMethodID(activityClass, methodName, "()I");
+            if (!method || env->ExceptionCheck())
+            {
+                env->ExceptionClear();
+                return 0;
+            }
+
+            const jint value = env->CallStaticIntMethod(activityClass, method);
+            if (env->ExceptionCheck())
+            {
+                env->ExceptionClear();
+                return 0;
+            }
+            return static_cast<int>(value);
+        }
+
+        RuntimeUiSafeArea QueryAndroidRuntimeUiSafeArea(uint32_t surfaceWidth, uint32_t surfaceHeight)
+        {
+            RuntimeUiSafeArea area{};
+            if (surfaceWidth == 0 || surfaceHeight == 0)
+                return area;
+
+            JNIEnv *env = static_cast<JNIEnv *>(SDL_AndroidGetJNIEnv());
+            if (!env)
+                return area;
+
+            jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
+            if (!activity || env->ExceptionCheck())
+            {
+                env->ExceptionClear();
+                return area;
+            }
+
+            jclass activityClass = env->GetObjectClass(activity);
+            if (!activityClass || env->ExceptionCheck())
+            {
+                env->ExceptionClear();
+                env->DeleteLocalRef(activity);
+                return area;
+            }
+
+            const int left = QueryPhasmaPlayerSafeInset(env, activityClass, "getSafeAreaInsetLeft");
+            const int top = QueryPhasmaPlayerSafeInset(env, activityClass, "getSafeAreaInsetTop");
+            const int right = QueryPhasmaPlayerSafeInset(env, activityClass, "getSafeAreaInsetRight");
+            const int bottom = QueryPhasmaPlayerSafeInset(env, activityClass, "getSafeAreaInsetBottom");
+            env->DeleteLocalRef(activityClass);
+            env->DeleteLocalRef(activity);
+
+            const float clampedLeft = static_cast<float>(std::clamp(left, 0, static_cast<int>(surfaceWidth)));
+            const float clampedTop = static_cast<float>(std::clamp(top, 0, static_cast<int>(surfaceHeight)));
+            const float clampedRight = static_cast<float>(std::clamp(right, 0, static_cast<int>(surfaceWidth)));
+            const float clampedBottom = static_cast<float>(std::clamp(bottom, 0, static_cast<int>(surfaceHeight)));
+
+            area.minX = clampedLeft;
+            area.minY = clampedTop;
+            area.width = std::max(0.0f, static_cast<float>(surfaceWidth) - clampedLeft - clampedRight);
+            area.height = std::max(0.0f, static_cast<float>(surfaceHeight) - clampedTop - clampedBottom);
+            area.valid = area.width > 0.0f && area.height > 0.0f;
+            static int s_loggedLeft = -1;
+            static int s_loggedTop = -1;
+            static int s_loggedRight = -1;
+            static int s_loggedBottom = -1;
+            if (area.valid &&
+                (left != s_loggedLeft || top != s_loggedTop || right != s_loggedRight || bottom != s_loggedBottom))
+            {
+                PE_INFO("[RuntimeUI] Android safe area insets: left=%d top=%d right=%d bottom=%d", left, top, right, bottom);
+                s_loggedLeft = left;
+                s_loggedTop = top;
+                s_loggedRight = right;
+                s_loggedBottom = bottom;
+            }
+            return area;
+        }
+#else
+        RuntimeUiSafeArea QueryAndroidRuntimeUiSafeArea(uint32_t, uint32_t)
+        {
+            return {};
+        }
+#endif
+
         void LogProjectSelection(const ProjectSelection &selection,
                                  const RuntimeStartupSceneSelection &startupScene)
         {
@@ -284,32 +381,30 @@ namespace pe
                 FrameTimer::Instance().Tick();
                 m_renderer.WaitPreviousFrameCommands();
 
+                if (!ProcessEvents())
+                    return false;
+
+                if (m_resizePending || WindowDrawableExtentChanged())
+                    ResizeSwapchain();
+
+                if (IsWindowMinimized(m_window))
+                {
+                    SDL_Delay(16);
+                    return true;
+                }
+
                 if (m_runtimeUi)
                 {
                     if (Image *displayRT = m_renderer.GetDisplayRT())
                     {
                         m_runtimeUi->SetFrameSurfaceSize(displayRT->GetWidth(), displayRT->GetHeight());
                         m_runtimeUi->SetFrameUiScale(ComputeRuntimeUiScale(m_window, displayRT->GetHeight()));
+                        const RuntimeUiSafeArea safeArea =
+                            QueryAndroidRuntimeUiSafeArea(displayRT->GetWidth(), displayRT->GetHeight());
+                        if (safeArea.valid)
+                            m_runtimeUi->SetFrameSafeArea(safeArea.minX, safeArea.minY, safeArea.width, safeArea.height);
                     }
                     m_runtimeUi->BeginFrame();
-                }
-
-                if (!ProcessEvents())
-                {
-                    if (m_runtimeUi)
-                        m_runtimeUi->EndFrame();
-                    return false;
-                }
-
-                if (m_resizePending)
-                    ResizeSwapchain();
-
-                if (IsWindowMinimized(m_window))
-                {
-                    if (m_runtimeUi)
-                        m_runtimeUi->EndFrame();
-                    SDL_Delay(16);
-                    return true;
                 }
 
                 UpdateGlobalSystems();
@@ -336,6 +431,18 @@ namespace pe
             }
 
         private:
+            bool WindowDrawableExtentChanged() const
+            {
+                Image *displayRT = m_renderer.GetDisplayRT();
+                if (!displayRT)
+                    return false;
+
+                const WindowDrawableExtent extent = GetWindowDrawableExtent(m_window);
+                return extent.IsValid() &&
+                       (extent.width != static_cast<int>(displayRT->GetWidth()) ||
+                        extent.height != static_cast<int>(displayRT->GetHeight()));
+            }
+
             // Emit one averaged FPS line per second. The on-screen runtime-UI HUD is unreadable on the
             // packaged player's surface (and device screencaps come back black), so this is the portable
             // way to measure frame rate from PhasmaEngine.log.

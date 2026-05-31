@@ -2,8 +2,12 @@ package dev.phasma.player;
 
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
+import android.graphics.Insets;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
+import android.view.WindowInsets;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -22,16 +26,37 @@ public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
     private static final String SHADER_CACHE_ASSET = "ShaderCache/spv";
     private static final String SHADER_CACHE_DEST = "ShaderCache/_spv";
     private static final String VERSION_MARKER = ".assets_version";
+    private static volatile int sSafeAreaInsetLeft = 0;
+    private static volatile int sSafeAreaInsetTop = 0;
+    private static volatile int sSafeAreaInsetRight = 0;
+    private static volatile int sSafeAreaInsetBottom = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         extractBundledAssets();
         super.onCreate(savedInstanceState);
+        installSafeAreaInsetsListener();
     }
 
     @Override
     protected String[] getLibraries() {
         return new String[] {"SDL2", "main"};
+    }
+
+    public static int getSafeAreaInsetLeft() {
+        return sSafeAreaInsetLeft;
+    }
+
+    public static int getSafeAreaInsetTop() {
+        return sSafeAreaInsetTop;
+    }
+
+    public static int getSafeAreaInsetRight() {
+        return sSafeAreaInsetRight;
+    }
+
+    public static int getSafeAreaInsetBottom() {
+        return sSafeAreaInsetBottom;
     }
 
     // Extract the packaged Assets/ tree into app-private storage so the native engine's
@@ -50,12 +75,42 @@ public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
         }
         try {
             copyAssetTree(getAssets(), ASSET_ROOT, assetsDir);
+            deleteTree(shaderCacheDir);
             // Pre-baked shader cache is optional in the APK (absent until a bake is staged);
             // copyAssetTree just mkdirs an empty dir if no ShaderCache assets are bundled.
             copyAssetTree(getAssets(), SHADER_CACHE_ASSET, new File(getFilesDir(), SHADER_CACHE_DEST));
             writeMarker(marker, version);
         } catch (IOException e) {
             Log.e(TAG, "Failed to extract bundled assets", e);
+        }
+    }
+
+    private void installSafeAreaInsetsListener() {
+        View decor = getWindow().getDecorView();
+        decor.setOnApplyWindowInsetsListener((view, insets) -> {
+            updateSafeAreaInsets(insets);
+            return insets;
+        });
+        decor.post(() -> updateSafeAreaInsets(decor.getRootWindowInsets()));
+    }
+
+    private static void updateSafeAreaInsets(WindowInsets insets) {
+        if (insets == null) {
+            return;
+        }
+
+        if (Build.VERSION.SDK_INT >= 30) {
+            Insets systemBars =
+                    insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            sSafeAreaInsetLeft = systemBars.left;
+            sSafeAreaInsetTop = systemBars.top;
+            sSafeAreaInsetRight = systemBars.right;
+            sSafeAreaInsetBottom = systemBars.bottom;
+        } else {
+            sSafeAreaInsetLeft = insets.getSystemWindowInsetLeft();
+            sSafeAreaInsetTop = insets.getSystemWindowInsetTop();
+            sSafeAreaInsetRight = insets.getSystemWindowInsetRight();
+            sSafeAreaInsetBottom = insets.getSystemWindowInsetBottom();
         }
     }
 
@@ -86,6 +141,23 @@ public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
             output.write(version.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             Log.w(TAG, "Failed to write asset version marker", e);
+        }
+    }
+
+    private static void deleteTree(File file) throws IOException {
+        if (!file.exists()) {
+            return;
+        }
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deleteTree(child);
+                }
+            }
+        }
+        if (!file.delete()) {
+            throw new IOException("Failed to delete: " + file);
         }
     }
 

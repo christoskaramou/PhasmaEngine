@@ -5,8 +5,8 @@
 -- Touch deltas from input.get_touch() are normalized to the surface (a full-screen swipe = 1.0),
 -- so behavior is resolution-independent. Tune the two sensitivities below to taste.
 
-local LOOK_RADIANS_PER_SWIPE = math.pi -- a full-screen drag turns ~180 degrees
-local DOLLY_UNITS_PER_PINCH = 40.0     -- world units moved per full-diagonal pinch
+local LOOK_RADIANS_PER_SWIPE = math.pi * 50.0 -- a full-screen drag turns ~9000 degrees
+local DOLLY_UNITS_PER_PINCH = 15.0            -- world units moved per full-diagonal pinch
 
 local function update(dt)
     local cam = get_camera()
