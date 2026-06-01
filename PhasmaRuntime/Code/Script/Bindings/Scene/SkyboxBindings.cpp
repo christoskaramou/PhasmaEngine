@@ -14,7 +14,7 @@ namespace pe
                                       {
                 sol::table skybox = lua.create_named_table("skybox");
 
-                skybox.set_function("load", [](const std::string &path, sol::optional<std::string> time) {
+                skybox.set_function("load", [](const std::string &path) {
                     std::string fullPath = path;
                     if (path.find('/') == std::string::npos && path.find('\\') == std::string::npos)
                         fullPath = Path::Assets + "Skybox/" + path;
@@ -25,11 +25,8 @@ namespace pe
                         return;
                     }
 
-                    std::string t = time.value_or("day");
-                    const bool useDaySky = t != "night";
                     const std::string normalizedPath = MakeSceneSkyPathSetting(fullPath);
                     auto &settings = Settings::Get<GlobalSettings>();
-                    settings.day = useDaySky;
 
                     if (Scene *scene = GetActiveScene())
                     {
@@ -39,34 +36,13 @@ namespace pe
 
                         if (skyboxNode)
                         {
-                            std::string dayPath = settings.skybox_day_path;
-                            std::string nightPath = settings.skybox_night_path;
-                            if (auto *skybox = scene->GetSkyboxForNode(skyboxNode))
-                            {
-                                dayPath = skybox->dayPath;
-                                nightPath = skybox->nightPath;
-                            }
-                            if (useDaySky)
-                                dayPath = normalizedPath;
-                            else
-                                nightPath = normalizedPath;
-                            scene->SetSkyboxPaths(skyboxNode, std::move(dayPath), std::move(nightPath));
+                            scene->SetSkyboxPath(skyboxNode, normalizedPath);
                             return;
                         }
                     }
 
-                    std::string &skyboxPath = useDaySky ? settings.skybox_day_path : settings.skybox_night_path;
-                    skyboxPath = normalizedPath;
+                    settings.skybox_path = normalizedPath;
                     RefreshSceneSky();
-                });
-
-                skybox.set_function("set_time", [](const std::string &time) {
-                    Settings::Get<GlobalSettings>().day = (time == "day");
-                    RefreshSceneRenderDescriptors();
-                });
-
-                skybox.set_function("is_day", []() -> bool {
-                    return Settings::Get<GlobalSettings>().day;
                 }); });
         }
     } s_skyboxBindings;

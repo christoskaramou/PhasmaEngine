@@ -6,7 +6,6 @@
 #include "Render/SceneRenderTargets.h"
 #include "Skybox/Skybox.h"
 
-
 namespace pe
 {
     class Buffer;
@@ -25,8 +24,7 @@ namespace pe
         Image *GetViewportRT() const { return m_viewportRT; }
         Image *GetDepthStencilRT() const { return m_depthStencil; }
         Image *GetScreenshotRT() const { return m_screenshotRT; }
-        const SkyBox &GetSkyBoxDay() const { return m_skyBoxDay; }
-        const SkyBox &GetSkyBoxNight() const { return m_skyBoxNight; }
+        const SkyBox &GetSkyBox() const { return m_skyBox; }
         Image *GetIBL_LUT() const { return m_ibl_brdf_lut; }
 
         Image *CreateRenderTarget(const std::string &name,
@@ -104,8 +102,7 @@ namespace pe
         std::array<bool, kSceneRenderGraphPassCount> m_renderGraphPassEnabled{};
         SceneRenderGraphPassComponents m_scenePasses{};
 
-        SkyBox m_skyBoxDay;
-        SkyBox m_skyBoxNight;
+        SkyBox m_skyBox;
         Image *m_ibl_brdf_lut = nullptr;
     };
 } // namespace pe

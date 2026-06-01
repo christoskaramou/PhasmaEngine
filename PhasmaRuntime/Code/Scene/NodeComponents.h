@@ -58,8 +58,7 @@ namespace pe
     class NodeSkyboxTag : public IComponent
     {
     public:
-        std::string dayPath;
-        std::string nightPath;
+        std::string path;
     };
 
     class NodeRuntimeUiTag : public IComponent

@@ -187,7 +187,7 @@ namespace pe
         NodeId *CreateSkyboxNode(NodeId *parent = nullptr, bool markDirty = true);
         NodeId *GetSkyboxNode() const;
         NodeSkyboxTag *GetSkyboxForNode(const NodeId *node) const;
-        void SetSkyboxPaths(NodeId *node, std::string dayPath, std::string nightPath, bool markDirty = true);
+        void SetSkyboxPath(NodeId *node, std::string path, bool markDirty = true);
         void ApplySkyboxSettingsFromNode(NodeId *node = nullptr);
         void EnsureSkyboxNodeFromSettings(bool markDirty = false);
         bool SetMeshUvRect(int meshIndex, const vec4 &uvRect);

@@ -1,7 +1,5 @@
 #include "Script/ScriptSystem.h"
 #include "API/RHI.h"
-#include "RenderPasses/LightPass.h"
-#include "RenderPasses/RayTracingPass.h"
 
 namespace pe
 {
@@ -19,7 +17,6 @@ namespace pe
         {"cas_sharpening", &GlobalSettings::cas_sharpening},
         {"draw_grid", &GlobalSettings::draw_grid},
         {"draw_aabbs", &GlobalSettings::draw_aabbs},
-        {"day", &GlobalSettings::day},
         {"frustum_culling", &GlobalSettings::frustum_culling},
         {"randomize_lights", &GlobalSettings::randomize_lights},
         {"use_Disney_PBR", &GlobalSettings::use_Disney_PBR},
@@ -97,15 +94,6 @@ namespace pe
                         if (it != s_boolSettings.end())
                         {
                             gs.*(it->second) = value.as<bool>();
-                            if (name == "day")
-                            {
-                                if (auto *p = GetGlobalComponent<LightOpaquePass>())
-                                    p->UpdateDescriptorSets();
-                                if (auto *p = GetGlobalComponent<LightTransparentPass>())
-                                    p->UpdateDescriptorSets();
-                                if (auto *p = GetGlobalComponent<RayTracingPass>())
-                                    p->UpdateDescriptorSets();
-                            }
                         }
                     }
                     else if (value.is<float>() || value.is<double>())

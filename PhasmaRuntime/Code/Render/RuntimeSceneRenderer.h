@@ -4,7 +4,6 @@
 #include "Render/SceneRendererHost.h"
 #include "Scene/Scene.h"
 
-
 namespace pe
 {
     class CommandBuffer;
@@ -29,8 +28,7 @@ namespace pe
         void SetRuntimeUi(RuntimeUiSystem *runtimeUi) { m_runtimeUi = runtimeUi; }
 
         Scene &GetScene() override { return m_scene; }
-        const SkyBox &GetSkyBoxDay() const override { return m_sceneRenderer.GetSkyBoxDay(); }
-        const SkyBox &GetSkyBoxNight() const override { return m_sceneRenderer.GetSkyBoxNight(); }
+        const SkyBox &GetSkyBox() const override { return m_sceneRenderer.GetSkyBox(); }
         Image *GetIBL_LUT() const override { return m_sceneRenderer.GetIBL_LUT(); }
         void ReloadSkyFromSettings() override { m_sceneRenderer.ReloadSkyFromSettings(); }
 

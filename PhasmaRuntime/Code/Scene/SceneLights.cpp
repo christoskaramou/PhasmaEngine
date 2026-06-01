@@ -84,15 +84,6 @@ namespace pe
             }
         }
 
-        // Directional light day/night toggle
-        if (!m_directionalLights.empty())
-        {
-            static float lastIntensity = m_directionalLights[0].color.w == 0.0f ? 7.0f : m_directionalLights[0].color.w;
-            if (m_directionalLights[0].color.w > 0.0f)
-                lastIntensity = m_directionalLights[0].color.w;
-            m_directionalLights[0].color.w = gSettings.day ? lastIntensity : 0.0f;
-        }
-
         // Sync position/rotation from node world matrices
         auto extractRotation = [](const mat4 &world) -> quat
         {

@@ -662,15 +662,6 @@ run_test("fs_write_read_roundtrip", function()
     assert_eq(read, content, "content round-trips")
 end)
 
-run_test("skybox_time_toggle", function()
-    local orig = skybox.is_day()
-    skybox.set_time("day")
-    assert_true(skybox.is_day(), "is_day after set_time('day')")
-    skybox.set_time("night")
-    assert_false(skybox.is_day(), "is_day after set_time('night')")
-    if orig then skybox.set_time("day") else skybox.set_time("night") end
-end)
-
 run_test("shaders_list_non_empty", function()
     local list = shaders.list()
     assert_true(#list > 0, "shader list non-empty, got " .. #list)

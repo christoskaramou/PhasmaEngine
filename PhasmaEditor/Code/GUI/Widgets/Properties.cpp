@@ -433,29 +433,22 @@ namespace pe
             if (!skybox)
                 return;
 
-            auto applyPath = [&](bool daySky, std::string path)
+            auto applyPath = [&](std::string path)
             {
-                std::string dayPath = skybox->dayPath;
-                std::string nightPath = skybox->nightPath;
-                if (daySky)
-                    dayPath = std::move(path);
-                else
-                    nightPath = std::move(path);
-
-                scene.SetSkyboxPaths(node, std::move(dayPath), std::move(nightPath));
+                scene.SetSkyboxPath(node, std::move(path));
                 if (m_gui)
                     m_gui->NotifyChange();
             };
 
-            auto drawRow = [&](const char *label, bool daySky)
+            auto drawRow = [&]()
             {
-                const std::string &path = daySky ? skybox->dayPath : skybox->nightPath;
-                ImGui::PushID(label);
+                const std::string &path = skybox->path;
+                ImGui::PushID("SkyboxPath");
 
                 const ImGuiStyle &style = ImGui::GetStyle();
                 const float buttonSize = ImGui::GetFrameHeight();
                 const float clearWidth = ImGui::CalcTextSize("Clear").x + style.FramePadding.x * 2.0f;
-                const float labelWidth = ImGui::CalcTextSize("Night").x;
+                const float labelWidth = ImGui::CalcTextSize("Path").x;
                 const float actionWidth = buttonSize * 2.0f + clearWidth + style.ItemInnerSpacing.x * 2.0f;
                 const float pathWidth =
                     std::max(48.0f,
@@ -467,7 +460,7 @@ namespace pe
                 const float rowStartX = ImGui::GetCursorPosX();
                 const float rowStartY = ImGui::GetCursorPosY();
                 ImGui::AlignTextToFramePadding();
-                ImGui::TextUnformatted(label);
+                ImGui::TextUnformatted("Path");
                 ImGui::SetCursorPos(ImVec2(rowStartX + labelWidth + style.ItemInnerSpacing.x, rowStartY));
                 DrawSkyboxPathPreview(path, pathWidth);
 
@@ -477,24 +470,16 @@ namespace pe
                 {
                     if (auto *fs = m_gui ? m_gui->GetWidget<FileSelector>() : nullptr)
                     {
-                        fs->OpenSelection([node, daySky, this](const std::string &selectedPath) -> bool
+                        fs->OpenSelection([node, this](const std::string &selectedPath) -> bool
                                           {
                             Scene *activeScene = GetActiveScene();
                             if (!activeScene || !activeScene->IsNodeAlive(node))
                                 return true;
 
-                            NodeSkyboxTag *activeSkybox = activeScene->GetSkyboxForNode(node);
-                            if (!activeSkybox)
+                            if (!activeScene->GetSkyboxForNode(node))
                                 return true;
 
-                            std::string dayPath = activeSkybox->dayPath;
-                            std::string nightPath = activeSkybox->nightPath;
-                            if (daySky)
-                                dayPath = MakeSceneSkyPathSetting(selectedPath);
-                            else
-                                nightPath = MakeSceneSkyPathSetting(selectedPath);
-
-                            activeScene->SetSkyboxPaths(node, std::move(dayPath), std::move(nightPath));
+                            activeScene->SetSkyboxPath(node, MakeSceneSkyPathSetting(selectedPath));
                             if (m_gui)
                                 m_gui->NotifyChange();
                             return true; },
@@ -509,7 +494,7 @@ namespace pe
                 if (path.empty())
                     ImGui::BeginDisabled();
                 if (ImGui::Button("Clear", ImVec2(clearWidth, buttonSize)))
-                    applyPath(daySky, {});
+                    applyPath({});
                 if (path.empty())
                     ImGui::EndDisabled();
                 if (ImGui::IsItemHovered())
@@ -517,18 +502,14 @@ namespace pe
 
                 ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
                 if (DrawCenteredIconButton("##Default", ICON_FA_ROTATE_LEFT, ImVec2(buttonSize, buttonSize)))
-                    applyPath(daySky,
-                              daySky ? GlobalSettings::DefaultSkyboxDayPath
-                                     : GlobalSettings::DefaultSkyboxNightPath);
+                    applyPath(GlobalSettings::DefaultSkyboxPath);
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("Default");
                 ImGui::PopStyleVar();
                 ImGui::PopID();
             };
 
-            drawRow("Day", true);
-            ImGui::Spacing();
-            drawRow("Night", false);
+            drawRow();
         };
 
         // Set when the selected node can receive a .lua script drop;

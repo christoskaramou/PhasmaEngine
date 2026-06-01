@@ -88,9 +88,7 @@ namespace pe
             views[i] = shadows.m_textures[i]->GetSRV();
 
         SceneRendererHost &renderer = RequireActiveSceneRendererHost();
-        const SkyBox &skybox = Settings::Get<GlobalSettings>().day
-                                   ? renderer.GetSkyBoxDay()
-                                   : renderer.GetSkyBoxNight();
+        const SkyBox &skybox = renderer.GetSkyBox();
 
         Scene &scene = *GetActiveScene();
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
@@ -287,9 +285,7 @@ namespace pe
             views[i] = shadows.m_textures[i]->GetSRV();
 
         SceneRendererHost &renderer = RequireActiveSceneRendererHost();
-        const SkyBox &skybox = Settings::Get<GlobalSettings>().day
-                                   ? renderer.GetSkyBoxDay()
-                                   : renderer.GetSkyBoxNight();
+        const SkyBox &skybox = renderer.GetSkyBox();
 
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {

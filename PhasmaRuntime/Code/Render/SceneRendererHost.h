@@ -2,7 +2,6 @@
 
 #include "API/RHITypes.h"
 
-
 namespace pe
 {
     class CommandBuffer;
@@ -16,8 +15,7 @@ namespace pe
         virtual ~SceneRendererHost() = default;
 
         virtual Scene &GetScene() = 0;
-        virtual const SkyBox &GetSkyBoxDay() const = 0;
-        virtual const SkyBox &GetSkyBoxNight() const = 0;
+        virtual const SkyBox &GetSkyBox() const = 0;
         virtual Image *GetIBL_LUT() const = 0;
         virtual void ReloadSkyFromSettings() = 0;
 

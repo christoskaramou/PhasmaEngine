@@ -147,14 +147,6 @@ namespace pe
             ImGui::Separator();
         }
 
-        if (ImGui::Checkbox("Day/Night", &gSettings.day))
-        {
-            if (gSettings.render_mode == RenderMode::Raster)
-                gSettings.shadows = gSettings.day;
-
-            UpdateLightingDescriptorSets();
-        }
-
         if (gSettings.render_mode != RenderMode::RayTracing)
         {
             if (ImGui::Checkbox("Cast Shadows", &gSettings.shadows))
@@ -162,12 +154,8 @@ namespace pe
                 UpdateLightingDescriptorSets();
             }
         }
-        else
-        {
-            gSettings.shadows = gSettings.day;
-        }
 
-        if (gSettings.day)
+        if (gSettings.render_mode != RenderMode::RayTracing && gSettings.shadows)
         {
             ImGui::Indent(16.0f);
             ImGui::DragFloat("Distance##Shadow", &gSettings.shadow_distance, 5.0f, 10.0f, 1000.0f);

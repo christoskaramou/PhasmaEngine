@@ -8,7 +8,6 @@
 #include "Render/SceneScreenshot.h"
 #include "Render/SceneSky.h"
 
-
 namespace pe
 {
     Image *SceneRendererCore::CreateRenderTarget(const std::string &name,
@@ -87,7 +86,7 @@ namespace pe
 
     void SceneRendererCore::LoadSky(CommandBuffer *cmd)
     {
-        LoadDefaultSceneSky(cmd, m_skyBoxDay, m_skyBoxNight, m_ibl_brdf_lut);
+        LoadDefaultSceneSky(cmd, m_skyBox, m_ibl_brdf_lut);
     }
 
     void SceneRendererCore::ReloadSkyFromSettings()
@@ -97,7 +96,7 @@ namespace pe
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
-        LoadConfiguredSceneSkyboxes(cmd, m_skyBoxDay, m_skyBoxNight);
+        LoadConfiguredSceneSkybox(cmd, m_skyBox);
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
@@ -106,7 +105,7 @@ namespace pe
 
     void SceneRendererCore::DestroySky()
     {
-        DestroyDefaultSceneSky(m_skyBoxDay, m_skyBoxNight, m_ibl_brdf_lut);
+        DestroyDefaultSceneSky(m_skyBox, m_ibl_brdf_lut);
     }
 
     void SceneRendererCore::CreateRenderPassComponents(bool includeRayTracingPass, CommandBuffer *cmd)

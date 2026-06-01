@@ -74,8 +74,7 @@ namespace pe
             if (descriptors.size() > 0 && descriptors[0])
             {
                 auto *rs = &RequireActiveSceneRendererHost();
-                bool day = Settings::Get<GlobalSettings>().day;
-                auto *skybox = day ? rs->GetSkyBoxDay().GetCubeMap() : rs->GetSkyBoxNight().GetCubeMap();
+                auto *skybox = rs->GetSkyBox().GetCubeMap();
                 auto *desc = descriptors[0];
                 desc->SetAccelerationStructure(0, scene.GetTLAS());
                 desc->SetImageView(1, m_display->GetUAV(0));
@@ -96,7 +95,6 @@ namespace pe
             // Set 1
             if (descriptors.size() > 1 && descriptors[1])
             {
-                Scene &scene = *GetActiveScene();
                 auto *desc = descriptors[1];
                 desc->SetBuffer(0, scene.GetLightUniform(i));
                 desc->SetBuffer(1, m_uniforms[i]);

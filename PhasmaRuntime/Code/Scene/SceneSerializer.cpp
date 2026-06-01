@@ -145,9 +145,7 @@ namespace pe
             settings.AddMember("IBL_intensity", gSettings.IBL_intensity, allocator);
             settings.AddMember("lights_intensity", gSettings.lights_intensity, allocator);
             settings.AddMember("randomize_lights", gSettings.randomize_lights, allocator);
-            settings.AddMember("day", gSettings.day, allocator);
-            settings.AddMember("skybox_day_path", rapidjson::Value(gSettings.skybox_day_path.c_str(), allocator), allocator);
-            settings.AddMember("skybox_night_path", rapidjson::Value(gSettings.skybox_night_path.c_str(), allocator), allocator);
+            settings.AddMember("skybox_path", rapidjson::Value(gSettings.skybox_path.c_str(), allocator), allocator);
 
             rapidjson::Value depthBias(rapidjson::kArrayType);
             depthBias.PushBack(gSettings.depth_bias[0], allocator);
@@ -171,8 +169,7 @@ namespace pe
         void ApplyGlobalSettingsMembers(const rapidjson::Value &settings)
         {
             auto &gSettings = Settings::Get<GlobalSettings>();
-            const std::string previousDaySkyboxPath = gSettings.skybox_day_path;
-            const std::string previousNightSkyboxPath = gSettings.skybox_night_path;
+            const std::string previousSkyboxPath = gSettings.skybox_path;
             if (settings.HasMember("right_handed") && settings["right_handed"].GetBool() != gSettings.right_handed)
             {
                 PE_WARN("[Scene] Ignoring saved right_handed=%s; this is fixed by the active runtime/backend setup",
@@ -248,16 +245,10 @@ namespace pe
                 gSettings.lights_intensity = settings["lights_intensity"].GetFloat();
             if (settings.HasMember("randomize_lights"))
                 gSettings.randomize_lights = settings["randomize_lights"].GetBool();
-            if (settings.HasMember("day"))
-                gSettings.day = settings["day"].GetBool();
-            gSettings.skybox_day_path = settings.HasMember("skybox_day_path") && settings["skybox_day_path"].IsString()
-                                            ? settings["skybox_day_path"].GetString()
-                                            : GlobalSettings::DefaultSkyboxDayPath;
-            gSettings.skybox_night_path = settings.HasMember("skybox_night_path") && settings["skybox_night_path"].IsString()
-                                              ? settings["skybox_night_path"].GetString()
-                                              : GlobalSettings::DefaultSkyboxNightPath;
-            if (gSettings.skybox_day_path != previousDaySkyboxPath ||
-                gSettings.skybox_night_path != previousNightSkyboxPath)
+            gSettings.skybox_path = settings.HasMember("skybox_path") && settings["skybox_path"].IsString()
+                                        ? settings["skybox_path"].GetString()
+                                        : GlobalSettings::DefaultSkyboxPath;
+            if (gSettings.skybox_path != previousSkyboxPath)
                 RefreshSceneSky();
             if (settings.HasMember("depth_bias") && settings["depth_bias"].IsArray() && settings["depth_bias"].Size() == 3)
             {
@@ -325,15 +316,12 @@ namespace pe
 
             const auto &sv = nodeValue["skybox"];
             auto &settings = Settings::Get<GlobalSettings>();
-            const std::string dayPath = sv.HasMember("day_path") && sv["day_path"].IsString()
-                                            ? sv["day_path"].GetString()
-                                            : settings.skybox_day_path;
-            const std::string nightPath = sv.HasMember("night_path") && sv["night_path"].IsString()
-                                              ? sv["night_path"].GetString()
-                                              : settings.skybox_night_path;
+            const std::string path = sv.HasMember("path") && sv["path"].IsString()
+                                         ? sv["path"].GetString()
+                                         : settings.skybox_path;
 
             scene.AddComponentFlag(node, Component_Skybox);
-            scene.SetSkyboxPaths(node, dayPath, nightPath, false);
+            scene.SetSkyboxPath(node, path, false);
         }
 
         std::filesystem::path ResolveSerializedTexturePath(const rapidjson::Value &textureValue,
@@ -799,8 +787,7 @@ namespace pe
                 {
                     const NodeSkyboxTag &skybox = *cache.skybox;
                     rapidjson::Value skyboxObj(rapidjson::kObjectType);
-                    skyboxObj.AddMember("day_path", MakeStringValue(skybox.dayPath), allocator);
-                    skyboxObj.AddMember("night_path", MakeStringValue(skybox.nightPath), allocator);
+                    skyboxObj.AddMember("path", MakeStringValue(skybox.path), allocator);
                     nodeObj.AddMember("skybox", skyboxObj.Move(), allocator);
                 }
 
@@ -2954,7 +2941,7 @@ namespace pe
         // Update texture descriptors (needed when material texture masks change)
         UpdateTextures();
 
-        // Update render pass descriptor sets (needed when shadows/day settings change)
+        // Update render pass descriptor sets (needed when shadow settings change)
         RefreshSceneRenderDescriptors();
 
         if (replayDefaultAnimations && !GetAnimationClips().empty())

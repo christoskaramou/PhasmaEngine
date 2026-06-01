@@ -63,8 +63,7 @@ namespace pe
         void LateCatchUpForScriptMutations();
 
         Scene &GetScene() override { return m_scene; }
-        const SkyBox &GetSkyBoxDay() const override { return m_sceneRenderer.GetSkyBoxDay(); }
-        const SkyBox &GetSkyBoxNight() const override { return m_sceneRenderer.GetSkyBoxNight(); }
+        const SkyBox &GetSkyBox() const override { return m_sceneRenderer.GetSkyBox(); }
         const SkyBox &GetSkyBoxWhite() const { return m_skyBoxWhite; }
         Image *GetIBL_LUT() const override { return m_sceneRenderer.GetIBL_LUT(); }
         void ReloadSkyFromSettings() override { m_sceneRenderer.ReloadSkyFromSettings(); }

@@ -43,16 +43,15 @@ namespace pe
             return true;
         }
 
-        vec4 FallbackSceneSkyColor(bool day)
+        vec4 FallbackSceneSkyColor()
         {
-            return day ? vec4(0.48f, 0.58f, 0.68f, 1.0f)
-                       : vec4(0.015f, 0.018f, 0.028f, 1.0f);
+            return vec4(0.48f, 0.58f, 0.68f, 1.0f);
         }
 
-        const std::string &ConfiguredSceneSkyPath(bool day)
+        const std::string &ConfiguredSceneSkyPath()
         {
             const auto &settings = Settings::Get<GlobalSettings>();
-            return day ? settings.skybox_day_path : settings.skybox_night_path;
+            return settings.skybox_path;
         }
     } // namespace
 
@@ -79,12 +78,12 @@ namespace pe
         return NormalizeSeparators(PathToUtf8String(normalizedPath));
     }
 
-    bool LoadSceneSkyPath(CommandBuffer *cmd, SkyBox &skybox, bool day, const std::string &path)
+    bool LoadSceneSkyPath(CommandBuffer *cmd, SkyBox &skybox, const std::string &path)
     {
         const std::filesystem::path resolvedPath = ResolveSceneSkyPath(path);
         if (resolvedPath.empty())
         {
-            LoadFallbackSceneSky(cmd, skybox, day);
+            LoadFallbackSceneSky(cmd, skybox);
             return false;
         }
 
@@ -93,33 +92,31 @@ namespace pe
             return true;
 
         PE_WARN("[SceneSky] Using solid-color sky fallback for missing skybox: %s", skyboxPath.c_str());
-        LoadFallbackSceneSky(cmd, skybox, day);
+        LoadFallbackSceneSky(cmd, skybox);
         return false;
     }
 
-    void LoadConfiguredSceneSkyboxes(CommandBuffer *cmd, SkyBox &day, SkyBox &night)
+    void LoadConfiguredSceneSkybox(CommandBuffer *cmd, SkyBox &skybox)
     {
-        LoadSceneSkyPath(cmd, day, true, ConfiguredSceneSkyPath(true));
-        LoadSceneSkyPath(cmd, night, false, ConfiguredSceneSkyPath(false));
+        LoadSceneSkyPath(cmd, skybox, ConfiguredSceneSkyPath());
     }
 
-    void LoadDefaultSceneSky(CommandBuffer *cmd, SkyBox &day, SkyBox &night, Image *&iblBrdfLut)
+    void LoadDefaultSceneSky(CommandBuffer *cmd, SkyBox &skybox, Image *&iblBrdfLut)
     {
-        LoadConfiguredSceneSkyboxes(cmd, day, night);
+        LoadConfiguredSceneSkybox(cmd, skybox);
 
         Image::LoadRawParams loadImageParams = {256, 256, PE_FORMAT_R16G16_SFLOAT, false, true, 0.0f};
         iblBrdfLut = Image::LoadRaw(cmd, Path::Assets + "Objects/ibl_brdf_lut_rg16f_256.bin", loadImageParams);
     }
 
-    void LoadFallbackSceneSky(CommandBuffer *cmd, SkyBox &skybox, bool day)
+    void LoadFallbackSceneSky(CommandBuffer *cmd, SkyBox &skybox)
     {
-        skybox.LoadSolidColor(cmd, FallbackSceneSkyColor(day), day ? "Skybox_Day_SolidColor" : "Skybox_Night_SolidColor");
+        skybox.LoadSolidColor(cmd, FallbackSceneSkyColor(), "Skybox_SolidColor");
     }
 
-    void DestroyDefaultSceneSky(SkyBox &day, SkyBox &night, Image *&iblBrdfLut)
+    void DestroyDefaultSceneSky(SkyBox &skybox, Image *&iblBrdfLut)
     {
-        day.Destroy();
-        night.Destroy();
+        skybox.Destroy();
         Image::Destroy(iblBrdfLut);
     }
 } // namespace pe
