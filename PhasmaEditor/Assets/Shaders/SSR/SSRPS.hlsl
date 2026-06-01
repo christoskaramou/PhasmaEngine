@@ -105,6 +105,13 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     float3 albedo            = Albedo.Sample(sampler_Albedo, input.uv).xyz;
     float4 color             = Color.Sample(sampler_Color, input.uv);
     float depth              = Depth.Sample(sampler_Depth, input.uv).x;
+
+    if (depth == 0.0)
+    {
+        output.color = color;
+        return output;
+    }
+
     float3 position          = GetPosFromUV(input.uv, depth, cb_invProj);
     float4 tangent_normal    = float4(Normal.Sample(sampler_Normal, input.uv).xyz * 2.0 - 1.0, 0.0);
     float3 normal            = normalize(mul(tangent_normal, cb_view).xyz);
@@ -113,7 +120,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     float roughness          = metallicRoughness.b;
 
     float3 ssr = ScreenSpaceReflections(position, normal, metallic, roughness, albedo);
-    output.color = color + float4(ssr, 1.0);
+    output.color = float4(color.rgb + ssr, color.a);
 
     return output;
 }
