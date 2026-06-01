@@ -98,7 +98,9 @@ namespace pe
         // Import helpers (run on ThreadPool::GUI; refresh the browser when done).
         void ImportModelsAsync(std::vector<std::string> paths); // Import > Assets: batch-cook source models
         void ImportFolderAsync(std::string srcFolder);          // Import > Folder: mirror tree + cook models in place
-        // Load a source model, cook it to outPemesh, free the model on the main thread. Returns success.
+        // Cook a set of source models to .pemesh in ONE PhasmaCook process (one hidden device
+        // bring-up). Returns the number cooked. CookModelToPemesh is the single-job convenience.
+        int CookModelsToPemesh(const std::vector<std::pair<std::filesystem::path, std::filesystem::path>> &jobs);
         bool CookModelToPemesh(const std::filesystem::path &src, const std::filesystem::path &outPemesh);
         void ShowLoadSceneMenuItem();
         void ShowSaveSceneMenuItem();

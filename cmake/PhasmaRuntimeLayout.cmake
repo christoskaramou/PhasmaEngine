@@ -131,6 +131,13 @@ function(pe_install_runtime_layout)
             RUNTIME DESTINATION "." COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
         )
     endif()
+    # The mesh-cook tool ships beside the editor so File > Import (which shells out to it) works in
+    # installed layouts too, not only the build tree. It is the only target that links Assimp.
+    if(TARGET PhasmaCook)
+        install(TARGETS PhasmaCook
+            RUNTIME DESTINATION "." COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
+        )
+    endif()
 
     pe_install_root_runtime_dependency_files(".")
 

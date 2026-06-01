@@ -148,7 +148,7 @@ namespace pe
         ".bmp", ".gif", ".hdr", ".jpeg", ".jpg", ".pic", ".png", ".psd", ".tga"};
     // A "loadable model" in the editor is a cooked ".pemesh"; source formats (glTF/FBX/OBJ/...) are
     // import-only and live in s_modelExtensionsVec (the File > Import picker). This set drives the mesh
-    // icon, the browser model preview, the Models palette, and every scene-load affordance.
+    // icon, the browser model preview, and every scene-load affordance.
     std::unordered_set<std::string> FileBrowser::s_modelExtensions = {".pemesh"};
     std::vector<const char *> FileBrowser::s_modelExtensionsVec = {
         ".3d", ".3ds", ".3mf", ".amf", ".ase", ".assbin", ".b3d", ".blend", ".bvh", ".cob",

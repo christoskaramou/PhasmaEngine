@@ -33,7 +33,6 @@
 #include "Widgets/Loading.h"
 #include "Widgets/MeshWidget.h"
 #include "Widgets/ProfilerWidget.h"
-#include "Widgets/Models.h"
 #include "Widgets/Particles.h"
 #include "Widgets/Properties.h"
 #include "Widgets/SceneView.h"
@@ -51,6 +50,18 @@
 #include "UndoRedo.h"
 #include <nlohmann/json.hpp>
 #include "imgui/imgui_internal.h"
+
+#include <chrono>
+#include <fstream>
+#include <thread>
+
+#if defined(PE_WIN32)
+#include <windows.h>
+#else
+#include <cerrno>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 namespace pe
 {
@@ -1232,49 +1243,194 @@ namespace pe
         return outTime >= srcTime;
     }
 
+    // Path to the PhasmaCook tool, which sits next to the editor executable.
+    static std::filesystem::path PhasmaCookExePath()
+    {
+        const std::filesystem::path exeDir(reinterpret_cast<const char8_t *>(Path::Executable.c_str()));
+#if defined(PE_WIN32)
+        return exeDir / "PhasmaCook.exe";
+#else
+        return exeDir / "PhasmaCook";
+#endif
+    }
+
+    // Launch PhasmaCook (the only Assimp-linking target) with the given args and wait. Synchronous —
+    // runs on the import worker thread. Returns true iff PhasmaCook exits 0. Assimp is intentionally
+    // absent from the editor process. The cook window is created hidden, so nothing flashes.
+    static bool RunPhasmaCookProcess(const std::vector<std::filesystem::path> &args)
+    {
+        const std::filesystem::path exe = PhasmaCookExePath();
+        std::error_code ec;
+        if (!std::filesystem::exists(exe, ec))
+        {
+            PE_WARN("[Import] PhasmaCook tool not found at: %s", PathUtf8(exe).c_str());
+            return false;
+        }
+
+#if defined(PE_WIN32)
+        // Wide, quoted command line so Unicode paths reach PhasmaCook intact.
+        std::wstring cmd = L"\"" + exe.wstring() + L"\"";
+        for (const std::filesystem::path &arg : args)
+            cmd += L" \"" + arg.wstring() + L"\"";
+        std::vector<wchar_t> cmdBuf(cmd.begin(), cmd.end());
+        cmdBuf.push_back(L'\0');
+
+        STARTUPINFOW si{};
+        si.cb = sizeof(si);
+        PROCESS_INFORMATION pi{};
+        if (!CreateProcessW(exe.wstring().c_str(), cmdBuf.data(), nullptr, nullptr, FALSE,
+                            CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
+        {
+            PE_WARN("[Import] Failed to launch PhasmaCook (error %lu)", static_cast<unsigned long>(GetLastError()));
+            return false;
+        }
+        WaitForSingleObject(pi.hProcess, INFINITE);
+        DWORD exitCode = 1;
+        GetExitCodeProcess(pi.hProcess, &exitCode);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        return exitCode == 0;
+#else
+        std::vector<std::string> argStrings;
+        argStrings.push_back(exe.string());
+        for (const std::filesystem::path &arg : args)
+            argStrings.push_back(arg.string());
+        std::vector<char *> argv;
+        for (std::string &s : argStrings)
+            argv.push_back(s.data());
+        argv.push_back(nullptr);
+
+        const pid_t pid = fork();
+        if (pid < 0)
+        {
+            PE_WARN("[Import] fork failed launching PhasmaCook");
+            return false;
+        }
+        if (pid == 0)
+        {
+            execv(argStrings[0].c_str(), argv.data());
+            _exit(127);
+        }
+        int status = 0;
+        int rc;
+        do
+        {
+            rc = waitpid(pid, &status, 0);
+        }
+        while (rc < 0 && errno == EINTR);
+        return rc >= 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+#endif
+    }
+
+    int GUI::CookModelsToPemesh(const std::vector<std::pair<std::filesystem::path, std::filesystem::path>> &jobs)
+    {
+        if (jobs.empty())
+            return 0;
+
+        std::error_code ec;
+
+        // Snapshot each output's current state — do NOT delete first: a cook that cannot launch, or a
+        // model that fails, must never destroy a last-known-good .pemesh. An output counts as cooked
+        // only once it is freshly written (newly created, or its write-time advances past the snapshot).
+        std::vector<bool> existedBefore(jobs.size());
+        std::vector<std::filesystem::file_time_type> beforeTime(jobs.size());
+        for (size_t i = 0; i < jobs.size(); ++i)
+        {
+            std::filesystem::create_directories(jobs[i].second.parent_path(), ec);
+            existedBefore[i] = std::filesystem::exists(jobs[i].second, ec);
+            if (existedBefore[i])
+                beforeTime[i] = std::filesystem::last_write_time(jobs[i].second, ec);
+        }
+        auto freshlyCooked = [&](size_t i) -> bool
+        {
+            std::error_code fec;
+            if (!std::filesystem::exists(jobs[i].second, fec))
+                return false;
+            if (!existedBefore[i])
+                return true;
+            return std::filesystem::last_write_time(jobs[i].second, fec) != beforeTime[i];
+        };
+
+        // Cook the whole set in ONE PhasmaCook process via a UTF-8 manifest (one "<src>\t<out>" per
+        // line) — a single hidden device bring-up instead of one window/RHI per model.
+        static std::atomic<unsigned> s_manifestCounter{0};
+        const std::filesystem::path manifest =
+            std::filesystem::temp_directory_path(ec) /
+            ("phasma_cook_" + std::to_string(s_manifestCounter.fetch_add(1)) + ".txt");
+        {
+            std::ofstream out(manifest, std::ios::binary | std::ios::trunc);
+            if (!out)
+            {
+                PE_WARN("[Import] Could not write cook manifest: %s", PathUtf8(manifest).c_str());
+                return 0;
+            }
+            for (const auto &job : jobs)
+                out << PathUtf8(job.first) << '\t' << PathUtf8(job.second) << '\n';
+        }
+
+        // Drive the real progress bar (replacing the stale "Uploading to GPU"): a helper thread blocks
+        // on PhasmaCook while this worker polls how many output files have appeared.
+        auto &loading = Settings::Get<GlobalSettings>().loading;
+        loading.SetName("Cooking models");
+        loading.total = static_cast<uint32_t>(jobs.size());
+        loading.current = 0;
+
+        std::atomic<bool> finished{false};
+        std::thread cookThread([&]()
+                               {
+            RunPhasmaCookProcess({std::filesystem::path("--batch"), manifest});
+            finished.store(true); });
+        while (!finished.load())
+        {
+            uint32_t done = 0;
+            for (size_t i = 0; i < jobs.size(); ++i)
+                if (freshlyCooked(i))
+                    ++done;
+            loading.current = done;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        cookThread.join();
+
+        int cooked = 0;
+        for (size_t i = 0; i < jobs.size(); ++i)
+            if (freshlyCooked(i))
+                ++cooked;
+        loading.current = static_cast<uint32_t>(cooked);
+
+        // Surface which models failed and why, from PhasmaCook's "<manifest>.failed" sidecar.
+        std::filesystem::path failedPath = manifest;
+        failedPath += ".failed";
+        if (std::ifstream failedIn{failedPath, std::ios::binary})
+        {
+            std::string line;
+            while (std::getline(failedIn, line))
+            {
+                if (!line.empty() && line.back() == '\r')
+                    line.pop_back();
+                if (line.empty())
+                    continue;
+                const size_t tab = line.find('\t');
+                const std::string failedSrc = tab == std::string::npos ? line : line.substr(0, tab);
+                const std::string reason = tab == std::string::npos ? std::string() : line.substr(tab + 1);
+                PE_WARN("[Import] cook failed: %s (%s)", failedSrc.c_str(), reason.c_str());
+            }
+        }
+
+        std::filesystem::remove(manifest, ec);
+        std::filesystem::remove(failedPath, ec);
+
+        // Leave a neutral, non-empty title (ImGui windows need a non-empty id) so the next operation
+        // does not inherit a misleading full "Cooking models" bar.
+        loading.total = 0;
+        loading.current = 0;
+
+        PE_INFO("[Import] Cooked %d / %zu model(s) via PhasmaCook batch", cooked, jobs.size());
+        return cooked;
+    }
+
     bool GUI::CookModelToPemesh(const std::filesystem::path &src, const std::filesystem::path &outPemesh)
     {
-        ModelAsset *model = nullptr;
-        try
-        {
-            model = ModelAsset::Load(src);
-            if (!model)
-            {
-                PE_WARN("[Import] Failed to import source model: %s", PathUtf8(src).c_str());
-                return false;
-            }
-
-            std::error_code ec;
-            std::filesystem::create_directories(outPemesh.parent_path(), ec);
-            const bool ok = ModelAssetCooked::WriteToFile(model, outPemesh);
-            if (ok)
-                PE_INFO("[Import] Cooked '%s' -> %s", PathUtf8(src.filename()).c_str(),
-                        PathUtf8(outPemesh).c_str());
-            else
-                PE_WARN("[Import] Cook failed for: %s", PathUtf8(src).c_str());
-
-            // The imported model was never added to a scene; free its GPU resources on the main
-            // thread, where the model lifecycle normally ends.
-            QueueMainThreadAction([model]()
-                                  { delete model; });
-            return ok;
-        }
-        catch (const std::exception &e)
-        {
-            PE_WARN("[Import] Exception importing '%s': %s", PathUtf8(src).c_str(), e.what());
-        }
-        catch (...)
-        {
-            // Assimp (and other loaders) can throw non-std types on malformed assets. Contain
-            // everything so one bad model can't abort a batch import or escape the worker thread
-            // (an uncaught task exception is captured into the discarded future and surfaces as a
-            // user-unhandled exception under the debugger).
-            PE_WARN("[Import] Unknown exception importing '%s'", PathUtf8(src).c_str());
-        }
-        if (model)
-            QueueMainThreadAction([model]()
-                                  { delete model; });
-        return false;
+        return CookModelsToPemesh({{src, outPemesh}}) == 1;
     }
 
     void GUI::ImportModelsAsync(std::vector<std::string> paths)
@@ -1287,7 +1443,8 @@ namespace pe
                                 {
             try
             {
-                int ok = 0, skipped = 0;
+                int skipped = 0;
+                std::vector<std::pair<std::filesystem::path, std::filesystem::path>> jobs;
                 for (const std::string &p : paths)
                 {
                     // The selector hands back UTF-8; reconstruct the path from UTF-8 (path(std::string)
@@ -1306,9 +1463,9 @@ namespace pe
                         ++skipped; // already cooked and source unchanged
                         continue;
                     }
-                    if (CookModelToPemesh(src, outPemesh))
-                        ++ok;
+                    jobs.emplace_back(std::move(src), std::move(outPemesh));
                 }
+                const int ok = CookModelsToPemesh(jobs); // one PhasmaCook process for the whole set
                 PE_INFO("[Import] Cooked %d, skipped %d up-to-date / %zu model(s)", ok, skipped, paths.size());
             }
             catch (const std::exception &e)
@@ -1346,6 +1503,13 @@ namespace pe
                                 {
             try
             {
+                // Show a sensible progress title from the start so the long scan/copy phase doesn't
+                // sit under a stale "Uploading to GPU" bar (CookModelsToPemesh drives it after).
+                auto &loading = Settings::Get<GlobalSettings>().loading;
+                loading.SetName("Importing folder");
+                loading.total = 0;
+                loading.current = 0;
+
                 // Mirror the source tree under Assets/<folderName>/. Source models are cooked to
                 // ".pemesh" in place (the cook brings their textures to the same relative paths);
                 // every other file is copied verbatim. The source model files are not copied.
@@ -1392,9 +1556,13 @@ namespace pe
 
                 // 1) Copy all non-model data verbatim (mirroring the tree). Skip files already mirrored
                 //    (same size + not older) so re-importing the same folder is incremental.
+                loading.SetName("Copying files");
+                loading.total = static_cast<uint32_t>(copies.size());
+                loading.current = 0;
                 int copied = 0, copySkipped = 0;
                 for (const auto &io : copies)
                 {
+                    loading.current = static_cast<uint32_t>(copied + copySkipped);
                     if (CopyTargetUpToDate(io.first, io.second))
                     {
                         ++copySkipped;
@@ -1412,8 +1580,9 @@ namespace pe
                 }
 
                 // 2) Cook each source model into its mirrored location. Skip ones whose ".pemesh" is
-                //    already up to date with the source.
-                int cooked = 0, cookSkipped = 0;
+                //    already up to date with the source, then cook the rest in ONE PhasmaCook process.
+                int cookSkipped = 0;
+                std::vector<std::pair<std::filesystem::path, std::filesystem::path>> cookJobs;
                 for (const std::filesystem::path &m : models)
                 {
                     std::error_code relEc;
@@ -1427,9 +1596,9 @@ namespace pe
                         ++cookSkipped;
                         continue;
                     }
-                    if (CookModelToPemesh(m, outPemesh))
-                        ++cooked;
+                    cookJobs.emplace_back(m, std::move(outPemesh));
                 }
+                const int cooked = CookModelsToPemesh(cookJobs);
 
                 PE_INFO("[Import] Folder '%s' -> %s : cooked %d (skipped %d), copied %d (skipped %d)",
                         PathUtf8(src.filename()).c_str(), PathUtf8(destRoot).c_str(),
@@ -2066,8 +2235,7 @@ namespace pe
         // Central node is now dockMainId - dock the Viewport there
         ImGui::DockBuilderDockWindow("Viewport", dockMainId);
 
-        // Left - Models, Hierarchy (Profiler is floating)
-        ImGui::DockBuilderDockWindow("Models", dockLeft);
+        // Left - Hierarchy (Profiler is floating)
         ImGui::DockBuilderDockWindow("Hierarchy", dockLeft);
 
         // Right - Global Properties and Properties
@@ -2438,32 +2606,6 @@ namespace pe
         if (!GUIBackend::IsSupported())
             return;
 
-        auto &gSettings = Settings::Get<GlobalSettings>();
-
-        gSettings.model_list.clear();
-
-        auto Deduplicate = [](auto &vec)
-        {
-            std::sort(vec.begin(), vec.end());
-            vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
-        };
-
-        // The Models palette lists loadable cooked meshes (.pemesh) under Assets/Models, not source models.
-        const std::filesystem::path modelsDir = std::filesystem::path(Path::Assets + "Models");
-        if (std::filesystem::exists(modelsDir))
-        {
-            for (auto &file : std::filesystem::recursive_directory_iterator(modelsDir))
-            {
-                if (FileBrowser::IsModelFile(file.path()))
-                {
-                    auto relativePath = std::filesystem::relative(file.path(), modelsDir);
-                    auto u8str = relativePath.generic_u8string();
-                    gSettings.model_list.push_back(std::string(reinterpret_cast<const char *>(u8str.c_str())));
-                }
-            }
-        }
-        Deduplicate(gSettings.model_list);
-
         m_hasIniFile = std::filesystem::exists("imgui.ini");
 
         if (s_hotReloadCtx)
@@ -2633,7 +2775,6 @@ namespace pe
 
         auto properties = std::make_shared<Properties>();
         auto profiler = std::make_shared<ProfilerWidget>();
-        auto models = std::make_shared<Models>();
         auto assetInfo = std::make_shared<AssetInfo>();
         auto sceneView = std::make_shared<SceneView>();
         auto loading = std::make_shared<Loading>();
@@ -2661,7 +2802,6 @@ namespace pe
             console,
             properties,
             profiler,
-            models,
             assetInfo,
             sceneView,
             loading,
@@ -2693,7 +2833,6 @@ namespace pe
         m_menuWindowWidgets = {console,
                                profiler,
                                properties,
-                               models,
                                assetInfo,
                                fileBrowser,
                                hierarchy,

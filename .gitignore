@@ -8,6 +8,7 @@
 !/PhasmaEditor/
 !/PhasmaMCP/
 !/PhasmaPlayer/
+!/PhasmaCook/
 !/PhasmaLauncher/
 !/PhasmaRuntime/
 !/PhasmaWebGPU/
@@ -43,6 +44,12 @@
 /PhasmaPlayer/android/**/build/
 /PhasmaPlayer/android/local.properties
 /PhasmaPlayer/android/prebaked/
+
+!/PhasmaCook/CMakeLists.txt
+!/PhasmaCook/*.cpp
+!/PhasmaCook/*.h
+!/PhasmaCook/Code/
+!/PhasmaCook/Code/**
 
 !/PhasmaLauncher/*.cpp
 !/PhasmaLauncher/*.h

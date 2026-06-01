@@ -242,6 +242,12 @@ if(PE_BUILD_PLAYER)
     add_subdirectory(PhasmaPlayer)
 endif()
 
+if(PE_ENABLE_ASSIMP AND NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
+    # Desktop mesh-cook tool: imports source models via Assimp and writes ".pemesh". The only
+    # target that compiles ModelAssetAssimp / links Assimp; the editor and tools shell out to it.
+    add_subdirectory(PhasmaCook)
+endif()
+
 if(PE_BUILD_MCP)
     # Engine-agnostic MCP server library (protocol + transport + optional codebase indexer).
     # The codebase indexer (BM25 / CodebaseIndexer / CodebaseContext) is included by default
@@ -310,7 +316,6 @@ target_include_directories(PhasmaEditorModule PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code"
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaRuntime/Code/UI/Backends"
     "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaMCP/third_party"
-    "${PE_THIRD_PARTY_DIR}/assimp/include"
     "${PE_THIRD_PARTY_DIR}/meshoptimizer"
     "${PE_THIRD_PARTY_DIR}/rapidjson/include"
     "${PE_THIRD_PARTY_DIR}/spirv_cross"
@@ -351,9 +356,7 @@ endif()
 if(TARGET PhasmaMCP)
     target_link_libraries(PhasmaEditorModule PRIVATE PhasmaMCP)
 endif()
-if(TARGET assimp)
-    target_link_libraries(PhasmaEditorModule PRIVATE assimp)
-endif()
+# Assimp is no longer linked into the editor: source-model import is delegated to PhasmaCook.exe.
 if(WIN32)
     target_link_libraries(PhasmaEditorModule PRIVATE d3d12.lib dxgi.lib dxguid.lib d3dcompiler.lib)
 endif()

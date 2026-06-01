@@ -7,18 +7,15 @@ message(STATUS "PhasmaRuntime = ${CMAKE_CURRENT_SOURCE_DIR}")
 if(NOT DEFINED PE_SHARED_THIRD_PARTY_DIR)
     set(PE_SHARED_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 endif()
-if(NOT DEFINED PE_ENABLE_ASSIMP)
-    set(PE_ENABLE_ASSIMP ON)
-endif()
 
+# Assimp lives only in PhasmaCook (the desktop mesh-cook tool). The runtime library never compiles
+# ModelAssetAssimp, never defines PE_ENABLE_ASSIMP, and never links Assimp on any platform; source
+# models reach the runtime exclusively as cooked ".pemesh".
 file(GLOB_RECURSE PHASMARUNTIME_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/Code/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Code/*.h"
 )
 list(FILTER PHASMARUNTIME_SOURCES EXCLUDE REGEX "/UI/Backends/")
-if(NOT PE_ENABLE_ASSIMP)
-    list(FILTER PHASMARUNTIME_SOURCES EXCLUDE REGEX "/Scene/ModelAssetAssimp\\.(cpp|h)$")
-endif()
 file(GLOB_RECURSE PHASMARUNTIME_CACAO_SOURCES CONFIGURE_DEPENDS
     "${PE_SHARED_THIRD_PARTY_DIR}/CACAO/*.cpp"
 )
@@ -36,12 +33,6 @@ target_include_directories(PhasmaRuntime PUBLIC
     "${PE_SHARED_THIRD_PARTY_DIR}/lua"
     "${PE_SHARED_THIRD_PARTY_DIR}/sol2"
 )
-if(PE_ENABLE_ASSIMP)
-    target_include_directories(PhasmaRuntime PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaCore/third_party/assimp/include"
-    )
-    target_compile_definitions(PhasmaRuntime PUBLIC PE_ENABLE_ASSIMP)
-endif()
 target_include_directories(PhasmaRuntime PRIVATE
     "${PE_SHARED_THIRD_PARTY_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaCore/third_party"
@@ -87,9 +78,6 @@ endif()
 if(PE_AUDIO)
     target_include_directories(PhasmaRuntime PRIVATE "${PE_SHARED_THIRD_PARTY_DIR}/miniaudio")
     target_compile_definitions(PhasmaRuntime PRIVATE PE_AUDIO)
-endif()
-if(PE_ENABLE_ASSIMP AND TARGET assimp)
-    target_link_libraries(PhasmaRuntime PRIVATE assimp)
 endif()
 if(TARGET meshoptimizer)
     target_link_libraries(PhasmaRuntime PRIVATE meshoptimizer)
