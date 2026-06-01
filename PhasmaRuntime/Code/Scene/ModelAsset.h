@@ -57,6 +57,20 @@ namespace pe
 
         ResourceHandle<Image> LoadTexture(CommandBuffer *cmd, const std::filesystem::path &texturePath);
 
+        // Embedded textures (e.g. inside a .glb) have no source file on disk. The cook calls this to
+        // recover the ORIGINAL encoded bytes (PNG/JPG) so it can write them next to the .pemesh and
+        // store a portable relative path. The base model has no embedded source and returns false;
+        // ModelAssetAssimp overrides it to read from the retained aiScene.
+        virtual bool GetEmbeddedTextureBytes(const std::string &textureName,
+                                             std::vector<uint8_t> &outBytes,
+                                             std::string &outExtension) const
+        {
+            (void)textureName;
+            (void)outBytes;
+            (void)outExtension;
+            return false;
+        }
+
         // Getters
         size_t GetId() const { return m_id; }
 

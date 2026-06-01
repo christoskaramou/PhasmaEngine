@@ -22,6 +22,11 @@ namespace pe
         ModelAssetAssimp();
         ~ModelAssetAssimp() override = default;
 
+        // Recover an embedded texture's original encoded bytes from the retained aiScene (cook support).
+        bool GetEmbeddedTextureBytes(const std::string &textureName,
+                                     std::vector<uint8_t> &outBytes,
+                                     std::string &outExtension) const override;
+
     private:
         bool LoadFile(const std::filesystem::path &file);
 

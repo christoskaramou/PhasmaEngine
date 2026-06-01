@@ -780,10 +780,8 @@ namespace pe
                 std::string ext = path.extension().string();
                 std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-                const char *modelExts[] = {".gltf", ".glb", ".obj", ".fbx"};
-                const bool isModel = std::any_of(std::begin(modelExts), std::end(modelExts),
-                                                 [&](const char *e)
-                                                 { return ext == e; });
+                // Only cooked .pemesh loads into the scene; source models are import-only (File > Import).
+                const bool isModel = (ext == ".pemesh");
 
                 if (isModel && !GUIState::s_modelLoading)
                 {

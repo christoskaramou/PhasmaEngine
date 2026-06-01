@@ -61,7 +61,7 @@ namespace pe
                 if (!canLoad)
                     ImGui::BeginDisabled();
 
-                if (ImGui::Button("Load ModelAsset"))
+                if (ImGui::Button("Load Cooked Mesh"))
                 {
                     // Use u8path to properly interpret UTF-8 string as path on Windows
                     std::filesystem::path path(reinterpret_cast<const char8_t *>(GUIState::s_assetPreview.fullPath.c_str()));

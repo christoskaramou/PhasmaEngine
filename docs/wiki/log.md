@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-06-01
+
+- Bumped the cooked `.pemesh` model contract to v2 for runtime/player use. Cooked meshes now carry material scalar state, texture masks, and relative texture slot paths; the cook path copies referenced textures beside the output so editor import, `tools/cook_model.ps1`, and Android prebake staging use the same self-contained folder. Embedded `.glb` textures remain deferred to default fallback textures.
+
 ## 2026-05-30
 
 - Started the Android/lean runtime build shape. CMake now has switches for desktop hosts, WebGPU, Assimp model loading, and runtime source-shader compilation; Android defaults those desktop/compiler/model-loader pieces off while keeping `PhasmaPlayer` buildable. PhasmaCore recognizes `PE_ANDROID`, skips desktop library directories there, disables DXC/runtime shader compiler by default, and maps Android paths to SDL app-private storage. The player host disables file watchers by default for packaged/runtime launches, and the no-Assimp runtime path now stubs model-file loading while leaving primitive helpers compiled.

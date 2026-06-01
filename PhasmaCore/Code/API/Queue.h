@@ -66,5 +66,10 @@ namespace pe
         Semaphore *m_submissionsSemaphore{nullptr};
         std::unordered_map<std::thread::id, std::vector<CommandPool *>> m_commandPools{};
         std::mutex m_cmdMutex{};
+        // Vulkan/D3D12 require host access to a queue (submit/present/wait) to be externally
+        // synchronized. Background GPU work (e.g. cooking/loading models on a worker thread) submits to
+        // the same queue as the render thread, so all host-side queue access takes this lock — and it
+        // keeps the timeline submission counter in lockstep with actual submit order.
+        std::mutex m_submitMutex{};
     };
 } // namespace pe

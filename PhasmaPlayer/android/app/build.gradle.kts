@@ -44,7 +44,7 @@ val spirvCrossRoot = if (spirvCrossRootPath.isBlank()) {
 // underscore) and PhasmaPlayerActivity renames `spv` -> `_spv` when extracting to internal storage.
 val prebakedSpvDir = rootProject.layout.projectDirectory.dir("prebaked/ShaderCache/_spv")
 
-// Cooked models (".pemesh" + their textures), produced by tools/cook_model.ps1 into the gitignored
+// Cooked models (".pemesh" + their textures), produced by tools/cook_model.py into the gitignored
 // prebaked staging. Cooked assets are build artifacts, not source, so they never live under
 // PhasmaEditor/Assets; they are staged into the APK at Assets/Models/<name>/ where the player loads
 // them (the player loads only .pemesh; Assimp/import is editor-only).

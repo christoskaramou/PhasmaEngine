@@ -146,18 +146,39 @@ namespace pe
         ".pecpp", ".peh"};
     std::unordered_set<std::string> FileBrowser::s_imageExtensions = {
         ".bmp", ".gif", ".hdr", ".jpeg", ".jpg", ".pic", ".png", ".psd", ".tga"};
-    std::unordered_set<std::string> FileBrowser::s_modelExtensions = {
-        ".3d", ".3ds", ".3mf", ".amf", ".ase", ".assbin", ".b3d", ".blend", ".bvh", ".cob",
-        ".collada", ".csm", ".dae", ".dxf", ".fbx", ".glb", ".gltf", ".hmp", ".ifc", ".iqm",
-        ".irr", ".irrmesh", ".lwo", ".lws", ".m3d", ".md2", ".md3", ".md5", ".mdc", ".mdl",
-        ".mmd", ".ms3d", ".ndo", ".nff", ".obj", ".off", ".ogre", ".opengex", ".ply",
-        ".q3bsp", ".q3d", ".raw", ".sib", ".smd", ".stl", ".terragen", ".x", ".x3d", ".xgl"};
+    // A "loadable model" in the editor is a cooked ".pemesh"; source formats (glTF/FBX/OBJ/...) are
+    // import-only and live in s_modelExtensionsVec (the File > Import picker). This set drives the mesh
+    // icon, the browser model preview, the Models palette, and every scene-load affordance.
+    std::unordered_set<std::string> FileBrowser::s_modelExtensions = {".pemesh"};
     std::vector<const char *> FileBrowser::s_modelExtensionsVec = {
         ".3d", ".3ds", ".3mf", ".amf", ".ase", ".assbin", ".b3d", ".blend", ".bvh", ".cob",
         ".collada", ".csm", ".dae", ".dxf", ".fbx", ".glb", ".gltf", ".hmp", ".ifc", ".iqm",
         ".irr", ".irrmesh", ".lwo", ".lws", ".m3d", ".md2", ".md3", ".md5", ".mdc", ".mdl",
         ".mmd", ".ms3d", ".ndo", ".nff", ".obj", ".off", ".ogre", ".opengex", ".ply",
         ".q3bsp", ".q3d", ".raw", ".sib", ".smd", ".stl", ".terragen", ".x", ".x3d", ".xgl"};
+
+    bool FileBrowser::IsCookedModelFile(const std::filesystem::path &path)
+    {
+        auto u8ext = path.extension().u8string();
+        std::string ext(reinterpret_cast<const char *>(u8ext.c_str()));
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c)
+                       { return static_cast<char>(std::tolower(c)); });
+        return ext == ".pemesh";
+    }
+
+    bool FileBrowser::IsSourceModelFile(const std::filesystem::path &path)
+    {
+        auto u8ext = path.extension().u8string();
+        std::string ext(reinterpret_cast<const char *>(u8ext.c_str()));
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c)
+                       { return static_cast<char>(std::tolower(c)); });
+        for (const char *me : s_modelExtensionsVec)
+            if (ext == me)
+                return true;
+        return false;
+    }
 
     FileBrowser::~FileBrowser()
     {
@@ -254,7 +275,9 @@ namespace pe
             return m_txtIconDS ? m_txtIconDS : m_fileIconDS;
         if (IsShaderFile(path))
             return m_shaderIconDS ? m_shaderIconDS : m_fileIconDS;
-        if (IsModelFile(path))
+        // The mesh icon denotes the engine's cooked ".pemesh" asset; source models (glTF/FBX/OBJ/...)
+        // are import inputs only and fall through to the generic file icon.
+        if (IsCookedModelFile(path))
             return m_modelIconDS ? m_modelIconDS : m_fileIconDS;
         if (IsScriptFile(path))
             return m_scriptIconDS ? m_scriptIconDS : m_fileIconDS;
@@ -828,7 +851,8 @@ namespace pe
                         GUIState::UpdateAssetPreview(type, filenameStr, pathStr);
                     }
 
-                    if (type == AssetPreviewType::ModelAsset && !GUIState::s_modelLoading)
+                    // Only cooked .pemesh loads into the scene; source models are import-only (File > Import).
+                    if (type == AssetPreviewType::ModelAsset && IsCookedModelFile(path) && !GUIState::s_modelLoading)
                     {
                         auto loadAsync = [path]()
                         {
@@ -912,37 +936,53 @@ namespace pe
         m_cache.clear();
         m_cachePath = m_currentPath;
 
-        if (std::filesystem::exists(m_cachePath) && std::filesystem::is_directory(m_cachePath))
+        std::error_code ec;
+        if (!std::filesystem::is_directory(m_cachePath, ec))
+            return;
+
+        try
         {
-            try
+            m_cache.reserve(100); // Reserve some potential space
+
+            // skip_permission_denied + error_code iteration: navigating system folders routinely hits
+            // inaccessible entries (junctions, protected dirs). Degrade to a partial listing instead of
+            // letting a filesystem_error escape and crash the editor.
+            std::error_code itEc;
+            auto it = std::filesystem::directory_iterator(
+                m_cachePath, std::filesystem::directory_options::skip_permission_denied, itEc);
+            const std::filesystem::directory_iterator end;
+            for (; it != end; it.increment(itEc))
             {
-                m_cache.reserve(100); // Reserve some potential space
-                for (const auto &entry : std::filesystem::directory_iterator(m_cachePath))
+                if (itEc)
                 {
-                    FileEntry e;
-                    e.path = entry.path();
-
-                    // Cache UTF-8 filename
-                    auto filenameU8 = e.path.filename().u8string();
-                    e.filename = std::string(reinterpret_cast<const char *>(filenameU8.c_str()));
-
-                    e.isDirectory = IsDirectory(e.path);
-                    e.iconID = GetIconForFile(e.path);
-
-                    m_cache.push_back(e);
+                    itEc.clear();
+                    continue;
                 }
 
-                // Sort: Directories first, then alphabetical
-                std::sort(m_cache.begin(), m_cache.end(), [](const FileEntry &a, const FileEntry &b)
-                          {
-                              if (a.isDirectory != b.isDirectory)
-                                  return a.isDirectory > b.isDirectory;
-                              return a.filename < b.filename; });
+                FileEntry e;
+                e.path = it->path();
+
+                // Cache UTF-8 filename
+                auto filenameU8 = e.path.filename().u8string();
+                e.filename = std::string(reinterpret_cast<const char *>(filenameU8.c_str()));
+
+                std::error_code dirEc;
+                e.isDirectory = it->is_directory(dirEc);
+                e.iconID = GetIconForFile(e.path);
+
+                m_cache.push_back(e);
             }
-            catch (const std::filesystem::filesystem_error &e)
-            {
-                PE_ERROR("[FileBrowser] Error accessing directory: %s", e.what());
-            }
+
+            // Sort: Directories first, then alphabetical
+            std::sort(m_cache.begin(), m_cache.end(), [](const FileEntry &a, const FileEntry &b)
+                      {
+                          if (a.isDirectory != b.isDirectory)
+                              return a.isDirectory > b.isDirectory;
+                          return a.filename < b.filename; });
+        }
+        catch (const std::filesystem::filesystem_error &e)
+        {
+            PE_ERROR("[FileBrowser] Error accessing directory: %s", e.what());
         }
     }
 

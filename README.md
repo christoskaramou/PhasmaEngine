@@ -63,6 +63,14 @@ Toggle the server from **Connection → MCP Server** in the editor. The **Connec
 
 **Available MCP tools:** scene/model management, camera, lights, materials, shaders, Lua execution, screenshots, mouse injection, codebase search (BM25), file read/write, and more. See [PhasmaMCP README](PhasmaMCP/README.md) for the underlying library.
 
+## Sample Models
+
+The glTF sample models used for testing are **not bundled** with this repository — they are large and freely available upstream. Download them externally from the Khronos glTF Sample Models repo:
+
+> https://github.com/KhronosGroup/glTF-Sample-Models
+
+Keep them outside the project tree. In the editor, use **File → Import** to cook a source model (glTF/FBX/OBJ/…) into the engine's portable `.pemesh` format (GPU-ready geometry + materials + embedded textures written alongside), or **File → Import → Folder** to mirror and cook a whole folder at once. The runtime (desktop **and** Android) loads only `.pemesh`; the repository itself ships only a primitives scene, so a clean checkout has no external asset dependencies.
+
 ## Building and Compiling
 
 PhasmaEngine uses CMake to configure and generate project files. The CMakeLists.txt is in the root folder.

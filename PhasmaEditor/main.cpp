@@ -11,7 +11,7 @@
 static constexpr const char *k_moduleName = "libPhasmaEditorModule.so";
 #elif defined(PE_WIN32)
 #include <windows.h>
-static constexpr const char *k_moduleName = "PhasmaEditorModule.dll";
+static constexpr const char *k_moduleName = "PhasmaEditorModule2.dll"; // TEMP (Bitdefender lock workaround): revert to "PhasmaEditorModule.dll"
 #endif
 
 using TickFunc = bool (*)();
@@ -62,13 +62,44 @@ namespace
         m.getImguiCtx = reinterpret_cast<GetImGuiCtxFunc>(dlsym(m.lib, "GetImGuiContextEditorModule"));
         m.initWithCtx = reinterpret_cast<InitWithCtxFunc>(dlsym(m.lib, "InitEditorModuleWithContext"));
 #elif defined(PE_WIN32)
+        // The module copy can transiently fail with ACCESS_DENIED/SHARING_VIOLATION when an anti-virus
+        // (e.g. Bitdefender) is scanning the freshly-built DLL, or when a stale versioned copy from a
+        // previous/force-killed run is still locked. Probe a fresh versioned name on each try and retry
+        // briefly so the scan/lock can clear instead of failing the whole launch on the first attempt.
         static int s_gen = 0;
-        char versioned[256];
-        std::snprintf(versioned, sizeof(versioned), "PhasmaEditorModule_%04d.dll", s_gen++);
-        const std::filesystem::path versionedPath = std::filesystem::path(pe::Path::Executable) / versioned;
-        if (!CopyFileA(modulePath.string().c_str(), versionedPath.string().c_str(), FALSE))
+        const std::string srcPath = modulePath.string();
+        constexpr int kMaxCopyAttempts = 50; // ~5s of 100ms retries — outlasts a typical AV scan
+        std::filesystem::path versionedPath;
+        for (int attempt = 0; attempt < kMaxCopyAttempts; ++attempt)
         {
-            PE_ERROR("CopyFileA failed: %lu", ::GetLastError());
+            char versioned[256];
+            std::snprintf(versioned, sizeof(versioned), "PhasmaEditorModule_%04d.dll", s_gen++);
+            std::filesystem::path candidate = std::filesystem::path(pe::Path::Executable) / versioned;
+
+            std::error_code ec;
+            std::filesystem::remove(candidate, ec); // clear a removable stale copy at this name
+
+            if (CopyFileA(srcPath.c_str(), candidate.string().c_str(), FALSE))
+            {
+                versionedPath = std::move(candidate);
+                break;
+            }
+
+            const DWORD err = ::GetLastError();
+            std::filesystem::remove(candidate, ec); // don't leave a partial copy behind
+            if (err != ERROR_ACCESS_DENIED && err != ERROR_SHARING_VIOLATION)
+            {
+                PE_ERROR("CopyFileA failed: %lu", err);
+                return m;
+            }
+            if (attempt + 1 < kMaxCopyAttempts)
+                ::Sleep(100); // transient AV scan / file lock — wait, then try a fresh name
+        }
+        if (versionedPath.empty())
+        {
+            PE_ERROR("CopyFileA failed: module '%s' stayed locked after %d attempts "
+                     "(anti-virus scan or a running editor instance?)",
+                     k_moduleName, kMaxCopyAttempts);
             return m;
         }
         m.loadedPath = versionedPath.string();

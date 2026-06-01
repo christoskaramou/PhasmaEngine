@@ -762,6 +762,54 @@ namespace pe
             ProcessNode(node->mChildren[i], transformNodeIdx);
     }
 
+    bool ModelAssetAssimp::GetEmbeddedTextureBytes(const std::string &textureName,
+                                                   std::vector<uint8_t> &outBytes,
+                                                   std::string &outExtension) const
+    {
+        // Embedded textures are named "*N" (index into aiScene::mTextures). The Importer keeps the
+        // aiScene alive for the model's lifetime, so the bytes are still available at cook time.
+        if (!m_scene || textureName.empty() || textureName[0] != '*')
+            return false;
+
+        int index = -1;
+        try
+        {
+            index = std::stoi(textureName.substr(1));
+        }
+        catch (...)
+        {
+            return false;
+        }
+        if (index < 0 || static_cast<unsigned int>(index) >= m_scene->mNumTextures)
+            return false;
+
+        const aiTexture *tex = m_scene->mTextures[index];
+        if (!tex || !tex->pcData)
+            return false;
+
+        // mHeight == 0 => pcData is a compressed image FILE (PNG/JPG/...) of mWidth bytes. This is what
+        // glTF/.glb embeds; write those bytes verbatim — exact fidelity, no re-encode.
+        if (tex->mHeight == 0)
+        {
+            const uint8_t *data = reinterpret_cast<const uint8_t *>(tex->pcData);
+            outBytes.assign(data, data + tex->mWidth);
+
+            std::string hint = tex->achFormatHint;
+            if (hint.empty())
+                hint = "png";
+            if (hint == "jpeg")
+                hint = "jpg";
+            outExtension = hint;
+            return !outBytes.empty();
+        }
+
+        // Raw uncompressed BGRA (uncommon for glTF). We don't re-encode here, so defer to the default
+        // texture on load rather than emit a headerless blob no loader can read.
+        PE_WARN("[ModelAssetAssimp] Embedded texture %s is raw (uncompressed); skipping cook extraction",
+                textureName.c_str());
+        return false;
+    }
+
     std::filesystem::path ModelAssetAssimp::GetTexturePath(const aiMaterial *material, aiTextureType type, int index) const
     {
         aiString path;

@@ -3,7 +3,7 @@
     "shadows": true,
     "shadow_map_size": 2048,
     "num_cascades": 4,
-    "render_scale": 0.75,
+    "render_scale": 1.0,
     "ssao": true,
     "fxaa": false,
     "taa": true,

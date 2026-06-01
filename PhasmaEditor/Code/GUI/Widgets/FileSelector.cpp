@@ -11,6 +11,10 @@ namespace pe
 
     void FileSelector::OpenSelection(FileSelectCallback callback, const std::vector<std::string> &allowedExtensions, const std::string &defaultPath, CancelCallback cancelCallback, const std::string &defaultName, const std::string &confirmLabel)
     {
+        m_pickMode = PickMode::File;
+        m_multiCallback = nullptr;
+        m_folderCallback = nullptr;
+        m_basket.clear();
         m_selectionCallback = callback;
         m_cancelCallback = cancelCallback;
         m_allowedExtensions = allowedExtensions;
@@ -42,6 +46,58 @@ namespace pe
         ImGui::SetWindowFocus("Select File"); // The window name set in constructor
     }
 
+    void FileSelector::OpenMultiSelection(MultiSelectCallback callback, const std::vector<std::string> &allowedExtensions, const std::string &defaultPath)
+    {
+        m_pickMode = PickMode::Files;
+        m_selectionCallback = nullptr;
+        m_folderCallback = nullptr;
+        m_cancelCallback = nullptr;
+        m_multiCallback = std::move(callback);
+        m_allowedExtensions = allowedExtensions;
+        m_confirmLabel = "Import";
+        m_basket.clear();
+
+        if (!defaultPath.empty())
+            NavigateTo(std::filesystem::path(defaultPath));
+
+        memset(m_currentFile, 0, sizeof(m_currentFile));
+        m_focusOnce = false;
+        m_open = true;
+        RefreshCache();
+        ImGui::SetWindowFocus("Select File");
+    }
+
+    void FileSelector::OpenFolderSelection(FolderSelectCallback callback, const std::string &defaultPath)
+    {
+        m_pickMode = PickMode::Folder;
+        m_selectionCallback = nullptr;
+        m_multiCallback = nullptr;
+        m_cancelCallback = nullptr;
+        m_folderCallback = std::move(callback);
+        m_allowedExtensions.clear();
+        m_confirmLabel = "Use This Folder";
+        m_basket.clear();
+
+        if (!defaultPath.empty())
+            NavigateTo(std::filesystem::path(defaultPath));
+
+        memset(m_currentFile, 0, sizeof(m_currentFile));
+        m_focusOnce = false;
+        m_open = true;
+        RefreshCache();
+        ImGui::SetWindowFocus("Select File");
+    }
+
+    void FileSelector::AddToBasket(const std::filesystem::path &path)
+    {
+        if (path.empty() || IsDirectory(path))
+            return;
+        for (const auto &p : m_basket)
+            if (p == path)
+                return; // already staged
+        m_basket.push_back(path);
+    }
+
     void FileSelector::CancelSelection()
     {
         if (m_cancelCallback)
@@ -50,7 +106,11 @@ namespace pe
             m_cancelCallback = nullptr;
         }
         m_selectionCallback = nullptr;
+        m_multiCallback = nullptr;
+        m_folderCallback = nullptr;
         m_allowedExtensions.clear();
+        m_basket.clear();
+        m_pickMode = PickMode::File;
         m_focusOnce = false;
         m_open = false;
     }
@@ -78,32 +138,44 @@ namespace pe
             DrawNavBar(false);
             ImGui::Separator();
 
-            // --- Content ---
-            // Callback for Selection Mode: Double click confirms selection
-            auto onSelectAction = [this](const std::filesystem::path &path)
+            const bool folderMode = (m_pickMode == PickMode::Folder);
+            const bool filesMode = (m_pickMode == PickMode::Files);
+
+            // --- Content interaction (double-click) ---
+            auto onSelectAction = [this, folderMode, filesMode](const std::filesystem::path &path)
             {
-                if (std::filesystem::is_directory(path))
+                if (IsDirectory(path))
                 {
                     NavigateTo(path);
+                    return;
                 }
-                else
+                if (folderMode)
+                    return; // files aren't pickable when choosing a folder
+
+                if (filesMode)
                 {
-                    bool shouldClose = true;
-                    if (m_selectionCallback)
-                    {
-                        auto pathU8 = path.u8string();
-                        std::string pathStr(reinterpret_cast<const char *>(pathU8.c_str()));
-                        shouldClose = m_selectionCallback(pathStr);
-                    }
-                    if (shouldClose)
-                        CancelSelection();
+                    AddToBasket(path); // stage the file; don't close
+                    return;
                 }
+
+                // Single-file mode: double-click confirms.
+                bool shouldClose = true;
+                if (m_selectionCallback)
+                {
+                    auto pathU8 = path.u8string();
+                    std::string pathStr(reinterpret_cast<const char *>(pathU8.c_str()));
+                    shouldClose = m_selectionCallback(pathStr);
+                }
+                if (shouldClose)
+                    CancelSelection();
             };
 
-            auto filterAction = [this](const std::filesystem::path &path) -> bool
+            auto filterAction = [this, folderMode](const std::filesystem::path &path) -> bool
             {
-                if (std::filesystem::is_directory(path))
+                if (IsDirectory(path))
                     return true;
+                if (folderMode)
+                    return false; // only directories are relevant when picking a folder
                 if (m_allowedExtensions.empty())
                     return true;
 
@@ -116,13 +188,20 @@ namespace pe
                 return false;
             };
 
+            // Reserve footer space; multi-select needs room for the staged-files basket.
             float footerHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 2.0f;
+            if (filesMode)
+                footerHeight += ImGui::GetTextLineHeightWithSpacing() * 5.0f;
+            else if (folderMode)
+                footerHeight += ImGui::GetTextLineHeightWithSpacing();
+
             DrawDirectoryContent(m_currentPath, onSelectAction, filterAction, footerHeight);
 
-            if (m_selectedEntry != m_prevSelectedEntry)
+            // Mirror single-click selection into the filename box (single-file mode only).
+            if (m_pickMode == PickMode::File && m_selectedEntry != m_prevSelectedEntry)
             {
                 m_prevSelectedEntry = m_selectedEntry;
-                if (!std::filesystem::is_directory(m_selectedEntry))
+                if (!IsDirectory(m_selectedEntry))
                 {
                     auto filename = m_selectedEntry.filename().u8string();
                     if (filename.length() < sizeof(m_currentFile))
@@ -139,54 +218,129 @@ namespace pe
 
             ImGui::Separator();
 
-            if (m_focusOnce)
+            if (filesMode)
             {
-                ImGui::SetKeyboardFocusHere();
-                m_focusOnce = false;
-            }
-
-            auto stemSelectCb = [](ImGuiInputTextCallbackData *d) -> int
-            {
-                auto *self = static_cast<FileSelector *>(d->UserData);
-                if (self->m_selectStemLen >= 0)
+                // --- Multi-file basket footer ---
+                ImGui::Text("Staged: %d file(s)", static_cast<int>(m_basket.size()));
+                if (ImGui::BeginChild("##basket", ImVec2(0, ImGui::GetTextLineHeightWithSpacing() * 3.0f), true))
                 {
-                    d->SelectionStart = 0;
-                    d->SelectionEnd = self->m_selectStemLen;
-                    self->m_selectStemLen = -1;
-                }
-                return 0;
-            };
-            bool confirm = ImGui::InputText("##filename", m_currentFile, sizeof(m_currentFile),
-                                            ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_EnterReturnsTrue,
-                                            stemSelectCb, this);
-            ImGui::SameLine();
-
-            if (ImGui::Button("Cancel"))
-                CancelSelection();
-            ImGui::SameLine();
-            confirm |= ImGui::Button(m_confirmLabel.c_str());
-            if (confirm)
-            {
-                std::string fileStr = m_currentFile;
-                if (!fileStr.empty())
-                {
-                    std::filesystem::path selectedPath = m_currentPath / fileStr;
-                    if (std::filesystem::is_directory(selectedPath))
+                    int removeIdx = -1;
+                    for (int i = 0; i < static_cast<int>(m_basket.size()); ++i)
                     {
-                        NavigateTo(selectedPath);
-                        memset(m_currentFile, 0, sizeof(m_currentFile));
+                        ImGui::PushID(i);
+                        if (ImGui::SmallButton("x"))
+                            removeIdx = i;
+                        ImGui::SameLine();
+                        auto u8 = m_basket[i].filename().u8string();
+                        ImGui::TextUnformatted(reinterpret_cast<const char *>(u8.c_str()));
+                        ImGui::PopID();
                     }
-                    else
+                    if (removeIdx >= 0)
+                        m_basket.erase(m_basket.begin() + removeIdx);
+                }
+                ImGui::EndChild();
+
+                const bool canAdd = !m_selectedEntry.empty() && !IsDirectory(m_selectedEntry);
+                if (!canAdd)
+                    ImGui::BeginDisabled();
+                if (ImGui::Button("Add Selected"))
+                    AddToBasket(m_selectedEntry);
+                if (!canAdd)
+                    ImGui::EndDisabled();
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel"))
+                    CancelSelection();
+                ImGui::SameLine();
+                const bool canImport = !m_basket.empty();
+                if (!canImport)
+                    ImGui::BeginDisabled();
+                if (ImGui::Button(m_confirmLabel.c_str()))
+                {
+                    std::vector<std::string> out;
+                    out.reserve(m_basket.size());
+                    for (const auto &p : m_basket)
                     {
-                        bool shouldClose = true;
-                        if (m_selectionCallback)
+                        auto u8 = p.u8string();
+                        out.emplace_back(reinterpret_cast<const char *>(u8.c_str()));
+                    }
+                    auto cb = m_multiCallback;
+                    CancelSelection();
+                    if (cb)
+                        cb(out);
+                }
+                if (!canImport)
+                    ImGui::EndDisabled();
+            }
+            else if (folderMode)
+            {
+                // --- Folder pick footer ---
+                auto cu8 = m_currentPath.u8string();
+                ImGui::Text("Folder: %s", reinterpret_cast<const char *>(cu8.c_str()));
+                if (ImGui::Button("Cancel"))
+                    CancelSelection();
+                ImGui::SameLine();
+                if (ImGui::Button(m_confirmLabel.c_str()))
+                {
+                    auto u8 = m_currentPath.u8string();
+                    std::string pathStr(reinterpret_cast<const char *>(u8.c_str()));
+                    auto cb = m_folderCallback;
+                    CancelSelection();
+                    if (cb)
+                        cb(pathStr);
+                }
+            }
+            else
+            {
+                // --- Single-file footer (default) ---
+                if (m_focusOnce)
+                {
+                    ImGui::SetKeyboardFocusHere();
+                    m_focusOnce = false;
+                }
+
+                auto stemSelectCb = [](ImGuiInputTextCallbackData *d) -> int
+                {
+                    auto *self = static_cast<FileSelector *>(d->UserData);
+                    if (self->m_selectStemLen >= 0)
+                    {
+                        d->SelectionStart = 0;
+                        d->SelectionEnd = self->m_selectStemLen;
+                        self->m_selectStemLen = -1;
+                    }
+                    return 0;
+                };
+                bool confirm = ImGui::InputText("##filename", m_currentFile, sizeof(m_currentFile),
+                                                ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_EnterReturnsTrue,
+                                                stemSelectCb, this);
+                ImGui::SameLine();
+
+                if (ImGui::Button("Cancel"))
+                    CancelSelection();
+                ImGui::SameLine();
+                confirm |= ImGui::Button(m_confirmLabel.c_str());
+                if (confirm)
+                {
+                    std::string fileStr = m_currentFile;
+                    if (!fileStr.empty())
+                    {
+                        std::filesystem::path selectedPath = m_currentPath / fileStr;
+                        if (IsDirectory(selectedPath))
                         {
-                            auto pathU8 = selectedPath.u8string();
-                            std::string pathStr(reinterpret_cast<const char *>(pathU8.c_str()));
-                            shouldClose = m_selectionCallback(pathStr);
+                            NavigateTo(selectedPath);
+                            memset(m_currentFile, 0, sizeof(m_currentFile));
                         }
-                        if (shouldClose)
-                            CancelSelection();
+                        else
+                        {
+                            bool shouldClose = true;
+                            if (m_selectionCallback)
+                            {
+                                auto pathU8 = selectedPath.u8string();
+                                std::string pathStr(reinterpret_cast<const char *>(pathU8.c_str()));
+                                shouldClose = m_selectionCallback(pathStr);
+                            }
+                            if (shouldClose)
+                                CancelSelection();
+                        }
                     }
                 }
             }

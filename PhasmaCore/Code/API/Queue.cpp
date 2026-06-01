@@ -103,12 +103,16 @@ namespace pe
 
     void Queue::Submit(uint32_t commandBuffersCount, CommandBuffer *const *commandBuffers, Semaphore *wait, Semaphore *signal)
     {
+        // Externally synchronize queue host-access; also keeps the assigned timeline value in lockstep
+        // with the actual vkQueueSubmit order (a worker-thread cook/load submits to this same queue).
+        std::lock_guard<std::mutex> lock(m_submitMutex);
         const uint64_t value = ++m_submission;
         m_impl->Submit(commandBuffersCount, commandBuffers, wait, signal, m_submissionsSemaphore, value);
     }
 
     void Queue::Present(Swapchain *swapchain, uint32_t imageIndex, Semaphore *wait)
     {
+        std::lock_guard<std::mutex> lock(m_submitMutex);
         m_impl->Present(swapchain, imageIndex, wait);
     }
 
@@ -119,6 +123,7 @@ namespace pe
 
     void Queue::WaitIdle()
     {
+        std::lock_guard<std::mutex> lock(m_submitMutex);
         m_impl->WaitIdle();
     }
 

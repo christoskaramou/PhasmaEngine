@@ -35,7 +35,7 @@ namespace pe
                 const bool selected = (GUIState::s_assetPreview.type == AssetPreviewType::ModelAsset && GUIState::s_assetPreview.label == entry);
                 if (ImGui::Selectable(entry.c_str(), selected, selectFlags))
                 {
-                    std::string fullPath = Path::Assets + "Objects/" + entry;
+                    std::string fullPath = Path::Assets + "Models/" + entry;
                     GUIState::UpdateAssetPreview(AssetPreviewType::ModelAsset, entry, fullPath);
                     if (ImGui::IsMouseDoubleClicked(0) && !GUIState::s_modelLoading)
                     {
@@ -61,7 +61,7 @@ namespace pe
 
                 if (ImGui::BeginDragDropSource())
                 {
-                    std::string fullPath = Path::Assets + "Objects/" + entry;
+                    std::string fullPath = Path::Assets + "Models/" + entry;
                     ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", fullPath.c_str(), fullPath.length() + 1);
                     ImGui::Text("%s", entry.c_str());
                     ImGui::EndDragDropSource();

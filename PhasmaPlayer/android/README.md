@@ -66,12 +66,14 @@ The baked blobs live in `PhasmaPlayer/android/prebaked/ShaderCache/_spv/` (git-i
 
 Cooked assets are **build artifacts, not source** — they live in the git-ignored `prebaked/Models/` staging (never under `PhasmaEditor/Assets/`). Gradle bundles `prebaked/Models/<name>/` into the APK at `Assets/Models/<name>/`. To cook a model:
 
-```powershell
+```bash
 # Rebuild the desktop cook host (it runs Assimp), then cook the model into prebaked/Models/<name>/
 #  + copy its textures alongside (self-contained). The scene references ../Models/<name>/<name>.pemesh.
-pwsh tools/cook_model.ps1 -Source PhasmaEditor/Assets/Objects/glTF-Sample-Models/Sponza/glTF/Sponza.gltf -Name Sponza -Build
+# cook_model.py is cross-platform (Windows/Linux). Source models are downloaded externally
+# (see the repo README — glTF-Sample-Models is not bundled).
+python tools/cook_model.py /path/to/glTF-Sample-Models/Sponza/glTF/Sponza.gltf --name Sponza --build
 # Then assemble; gradle stages prebaked/Models/ automatically:
-cd PhasmaPlayer/android ; .\gradlew.bat :app:assembleDebug
+cd PhasmaPlayer/android && ./gradlew :app:assembleDebug
 ```
 
 Cooked model scenes can be added as Android-local scenes that reference `../Models/<name>/<name>.pemesh`; without the cook step those sources are skipped (file-not-found) and the model will not appear. Like the shader bake, the cook host and the engine must be the same revision (the `.pemesh` header carries a `sizeof(Vertex)` ABI guard that rejects a stale cooked file).

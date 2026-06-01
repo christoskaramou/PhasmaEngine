@@ -94,6 +94,12 @@ namespace pe
         friend class Hierarchy;
 
         void ShowLoadModelMenuItem();
+        void ShowImportModelMenuItem(); // File > Import: Assimp import -> cook .pemesh -> show in browser
+        // Import helpers (run on ThreadPool::GUI; refresh the browser when done).
+        void ImportModelsAsync(std::vector<std::string> paths); // Import > Assets: batch-cook source models
+        void ImportFolderAsync(std::string srcFolder);          // Import > Folder: mirror tree + cook models in place
+        // Load a source model, cook it to outPemesh, free the model on the main thread. Returns success.
+        bool CookModelToPemesh(const std::filesystem::path &src, const std::filesystem::path &outPemesh);
         void ShowLoadSceneMenuItem();
         void ShowSaveSceneMenuItem();
         void ShowSaveSceneMenuItem_Action(); // Opens file selector for Save As

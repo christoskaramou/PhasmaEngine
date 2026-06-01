@@ -15,8 +15,18 @@ namespace pe
         void SetCurrentPath(const std::filesystem::path &path);
         void RefreshCache();
 
-        inline static bool IsRegularFile(const std::filesystem::path &path) { return std::filesystem::is_regular_file(path); }
-        inline static bool IsDirectory(const std::filesystem::path &path) { return std::filesystem::is_directory(path); }
+        // Non-throwing: protected reparse points (e.g. C:\Users\All Users) make the throwing overloads
+        // raise access-denied mid-navigation, which would crash the editor. Treat any error as "no".
+        inline static bool IsRegularFile(const std::filesystem::path &path)
+        {
+            std::error_code ec;
+            return std::filesystem::is_regular_file(path, ec);
+        }
+        inline static bool IsDirectory(const std::filesystem::path &path)
+        {
+            std::error_code ec;
+            return std::filesystem::is_directory(path, ec);
+        }
         inline static bool IsTextFile(const std::filesystem::path &path)
         {
             auto u8ext = path.extension().u8string();
@@ -47,6 +57,12 @@ namespace pe
             std::string ext(reinterpret_cast<const char *>(u8ext.c_str()));
             return s_modelExtensions.find(ext) != s_modelExtensions.end();
         }
+        // Only cooked ".pemesh" assets load directly into the scene; source models (glTF/FBX/OBJ/...)
+        // are import-only (File > Import cooks them to .pemesh first).
+        static bool IsCookedModelFile(const std::filesystem::path &path);
+        // True for an importable source model (an extension in s_modelExtensionsVec): glTF/FBX/OBJ/...
+        // Drives the File > Import pickers and the folder-import cook/skip decision.
+        static bool IsSourceModelFile(const std::filesystem::path &path);
 
     protected:
         friend class GUI;

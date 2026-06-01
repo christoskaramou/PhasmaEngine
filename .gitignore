@@ -348,7 +348,7 @@ Projects/*/Assets/Agent/
 !/tools/compare_snapshots.py
 !/tools/perf_cycle.sh
 !/tools/bake_android_shaders.ps1
-!/tools/cook_model.ps1
+!/tools/cook_model.py
 !/tools/phasma_adk_agent/
 !/tools/phasma_adk_agent/**
 /tools/phasma_adk_agent/.venv/

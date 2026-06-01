@@ -19,6 +19,7 @@
 #include "UI/RuntimeUi.h"
 #include "IconsFontAwesome.h"
 #include "Scene/ModelAsset.h"
+#include "Scene/ModelAssetCooked.h"
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 #include "Widgets/AssetInfo.h"
@@ -1117,7 +1118,7 @@ namespace pe
 
     void GUI::ShowLoadModelMenuItem()
     {
-        if (ImGui::MenuItem("Load ModelAsset...", "Choose ModelAsset"))
+        if (ImGui::MenuItem("Load Cooked Mesh...", "Load a .pemesh"))
         {
             if (GUIState::s_modelLoading)
                 return;
@@ -1125,9 +1126,8 @@ namespace pe
             auto *fs = GetWidget<FileSelector>();
             if (fs)
             {
-                std::vector<std::string> exts;
-                for (const char *ext : FileBrowser::s_modelExtensionsVec)
-                    exts.push_back(ext);
+                // Loadable meshes are cooked ".pemesh" only; source models are import-only (File > Import).
+                std::vector<std::string> exts = {ModelAssetCooked::kExtension};
 
                 fs->OpenSelection([](const std::string &path)
                                   {
@@ -1148,6 +1148,308 @@ namespace pe
                     ThreadPool::GUI.Enqueue(loadAsync); return true; }, exts);
             }
         }
+    }
+
+    void GUI::ShowImportModelMenuItem()
+    {
+        if (!ImGui::BeginMenu("Import"))
+            return;
+
+        // Editor-only: import source models (glTF/FBX/OBJ/...) via Assimp and cook GPU-ready geometry
+        // to portable ".pemesh". The player (desktop + Android) loads only ".pemesh".
+        const bool busy = GUIState::s_modelLoading;
+
+        // 1) Assets: pick one or more source models; cook each to Assets/Models/<stem>/<stem>.pemesh.
+        if (ImGui::MenuItem("Assets (cook models)...", busy ? "busy..." : nullptr, false, !busy))
+        {
+            if (auto *fs = GetWidget<FileSelector>())
+            {
+                std::vector<std::string> exts;
+                for (const char *ext : FileBrowser::s_modelExtensionsVec)
+                    exts.push_back(ext);
+                fs->OpenMultiSelection([this](const std::vector<std::string> &paths)
+                                       { ImportModelsAsync(paths); }, exts);
+            }
+        }
+
+        // 2) Folder: mirror a folder under Assets/<name>/, cooking every source model to .pemesh in
+        //    place and copying all other data verbatim (source model files are replaced, not copied).
+        if (ImGui::MenuItem("Folder (mirror + cook)...", busy ? "busy..." : nullptr, false, !busy))
+        {
+            if (auto *fs = GetWidget<FileSelector>())
+                fs->OpenFolderSelection([this](const std::string &folder)
+                                        { ImportFolderAsync(folder); });
+        }
+
+        ImGui::EndMenu();
+    }
+
+    // UTF-8-safe path display. std::filesystem::path::string()/generic_string() THROW on Windows when a
+    // path contains characters with no mapping in the active ANSI code page (e.g. "Unicode❤♻Test");
+    // u8string() always succeeds. Use this for any path that goes into a log/format string.
+    static std::string PathUtf8(const std::filesystem::path &p)
+    {
+        const auto u8 = p.u8string();
+        return std::string(reinterpret_cast<const char *>(u8.c_str()), u8.size());
+    }
+
+    // Incremental import: skip a verbatim copy when the destination already mirrors the source
+    // (exists, identical size, and not older). Name + size + mtime identity check.
+    static bool CopyTargetUpToDate(const std::filesystem::path &src, const std::filesystem::path &dst)
+    {
+        std::error_code ec;
+        if (!std::filesystem::exists(dst, ec))
+            return false;
+        const auto srcSize = std::filesystem::file_size(src, ec);
+        if (ec)
+            return false;
+        const auto dstSize = std::filesystem::file_size(dst, ec);
+        if (ec || srcSize != dstSize)
+            return false;
+        const auto srcTime = std::filesystem::last_write_time(src, ec);
+        if (ec)
+            return false;
+        const auto dstTime = std::filesystem::last_write_time(dst, ec);
+        if (ec)
+            return false;
+        return dstTime >= srcTime; // dst at least as new as src -> unchanged
+    }
+
+    // Incremental import: skip a cook when the cooked ".pemesh" exists and is at least as new as the
+    // source model. The .pemesh is derived, so its size can't be compared to the source — date is the
+    // signal (re-edit the source and its newer mtime forces a re-cook).
+    static bool CookTargetUpToDate(const std::filesystem::path &src, const std::filesystem::path &outPemesh)
+    {
+        std::error_code ec;
+        if (!std::filesystem::exists(outPemesh, ec))
+            return false;
+        const auto srcTime = std::filesystem::last_write_time(src, ec);
+        if (ec)
+            return false;
+        const auto outTime = std::filesystem::last_write_time(outPemesh, ec);
+        if (ec)
+            return false;
+        return outTime >= srcTime;
+    }
+
+    bool GUI::CookModelToPemesh(const std::filesystem::path &src, const std::filesystem::path &outPemesh)
+    {
+        ModelAsset *model = nullptr;
+        try
+        {
+            model = ModelAsset::Load(src);
+            if (!model)
+            {
+                PE_WARN("[Import] Failed to import source model: %s", PathUtf8(src).c_str());
+                return false;
+            }
+
+            std::error_code ec;
+            std::filesystem::create_directories(outPemesh.parent_path(), ec);
+            const bool ok = ModelAssetCooked::WriteToFile(model, outPemesh);
+            if (ok)
+                PE_INFO("[Import] Cooked '%s' -> %s", PathUtf8(src.filename()).c_str(),
+                        PathUtf8(outPemesh).c_str());
+            else
+                PE_WARN("[Import] Cook failed for: %s", PathUtf8(src).c_str());
+
+            // The imported model was never added to a scene; free its GPU resources on the main
+            // thread, where the model lifecycle normally ends.
+            QueueMainThreadAction([model]()
+                                  { delete model; });
+            return ok;
+        }
+        catch (const std::exception &e)
+        {
+            PE_WARN("[Import] Exception importing '%s': %s", PathUtf8(src).c_str(), e.what());
+        }
+        catch (...)
+        {
+            // Assimp (and other loaders) can throw non-std types on malformed assets. Contain
+            // everything so one bad model can't abort a batch import or escape the worker thread
+            // (an uncaught task exception is captured into the discarded future and surfaces as a
+            // user-unhandled exception under the debugger).
+            PE_WARN("[Import] Unknown exception importing '%s'", PathUtf8(src).c_str());
+        }
+        if (model)
+            QueueMainThreadAction([model]()
+                                  { delete model; });
+        return false;
+    }
+
+    void GUI::ImportModelsAsync(std::vector<std::string> paths)
+    {
+        if (paths.empty())
+            return;
+
+        GUIState::s_modelLoading = true;
+        ThreadPool::GUI.Enqueue([this, paths = std::move(paths)]()
+                                {
+            try
+            {
+                int ok = 0, skipped = 0;
+                for (const std::string &p : paths)
+                {
+                    // The selector hands back UTF-8; reconstruct the path from UTF-8 (path(std::string)
+                    // would mis-decode it as ANSI on Windows for non-ASCII names) and keep the stem as a
+                    // path object so we never call the throwing narrow string() conversion.
+                    std::filesystem::path src(reinterpret_cast<const char8_t *>(p.c_str()));
+                    std::filesystem::path stem = src.stem();
+
+                    // Cooked assets are build artifacts: write under the build-tree Assets dir
+                    // (gitignored), where the file browser also shows them. Never the source tree.
+                    std::filesystem::path outDir = std::filesystem::path(Path::Assets) / "Models" / stem;
+                    std::filesystem::path outPemesh = outDir / stem;
+                    outPemesh += ModelAssetCooked::kExtension;
+                    if (CookTargetUpToDate(src, outPemesh))
+                    {
+                        ++skipped; // already cooked and source unchanged
+                        continue;
+                    }
+                    if (CookModelToPemesh(src, outPemesh))
+                        ++ok;
+                }
+                PE_INFO("[Import] Cooked %d, skipped %d up-to-date / %zu model(s)", ok, skipped, paths.size());
+            }
+            catch (const std::exception &e)
+            {
+                PE_WARN("[Import] Batch import aborted: %s", e.what());
+            }
+            catch (...)
+            {
+                PE_WARN("[Import] Batch import aborted by an unknown error");
+            }
+
+            // Always clear the busy flag and refresh, even if the batch threw — otherwise every
+            // import/load menu item stays disabled for the rest of the session.
+            GUIState::s_modelLoading = false;
+            QueueMainThreadAction([this]()
+                                  {
+                if (auto *fb = GetWidget<FileBrowser>())
+                    fb->RefreshCache(); }); });
+    }
+
+    void GUI::ImportFolderAsync(std::string srcFolder)
+    {
+        // The selector hands back UTF-8; decode it as UTF-8 (not ANSI) so a folder path with non-ASCII
+        // characters resolves correctly on Windows.
+        std::filesystem::path src(reinterpret_cast<const char8_t *>(srcFolder.c_str()));
+        std::error_code ec;
+        if (!std::filesystem::is_directory(src, ec))
+        {
+            PE_WARN("[Import] Not a folder: %s", srcFolder.c_str());
+            return;
+        }
+
+        GUIState::s_modelLoading = true;
+        ThreadPool::GUI.Enqueue([this, src]()
+                                {
+            try
+            {
+                // Mirror the source tree under Assets/<folderName>/. Source models are cooked to
+                // ".pemesh" in place (the cook brings their textures to the same relative paths);
+                // every other file is copied verbatim. The source model files are not copied.
+                const std::filesystem::path destRoot = std::filesystem::path(Path::Assets) / src.filename();
+
+                // Skip version-control metadata: when the picked folder is a git checkout, ".git" holds
+                // gigabytes of objects that are not asset data.
+                auto isVcsPath = [](const std::filesystem::path &rel)
+                {
+                    for (const auto &part : rel)
+                        if (part == ".git")
+                            return true;
+                    return false;
+                };
+
+                std::vector<std::filesystem::path> models;
+                std::vector<std::pair<std::filesystem::path, std::filesystem::path>> copies; // (src, dst)
+
+                std::error_code itEc;
+                for (auto it = std::filesystem::recursive_directory_iterator(
+                         src, std::filesystem::directory_options::skip_permission_denied, itEc);
+                     it != std::filesystem::recursive_directory_iterator(); it.increment(itEc))
+                {
+                    if (itEc)
+                    {
+                        itEc.clear();
+                        continue;
+                    }
+                    std::error_code regEc;
+                    if (!it->is_regular_file(regEc) || regEc)
+                        continue;
+
+                    const std::filesystem::path &p = it->path();
+                    std::error_code relEc;
+                    std::filesystem::path rel = std::filesystem::relative(p, src, relEc);
+                    if (relEc || rel.empty() || isVcsPath(rel))
+                        continue;
+
+                    if (FileBrowser::IsSourceModelFile(p))
+                        models.push_back(p);
+                    else
+                        copies.emplace_back(p, destRoot / rel);
+                }
+
+                // 1) Copy all non-model data verbatim (mirroring the tree). Skip files already mirrored
+                //    (same size + not older) so re-importing the same folder is incremental.
+                int copied = 0, copySkipped = 0;
+                for (const auto &io : copies)
+                {
+                    if (CopyTargetUpToDate(io.first, io.second))
+                    {
+                        ++copySkipped;
+                        continue;
+                    }
+                    std::error_code cec;
+                    std::filesystem::create_directories(io.second.parent_path(), cec);
+                    std::filesystem::copy_file(io.first, io.second,
+                                               std::filesystem::copy_options::overwrite_existing, cec);
+                    if (cec)
+                        PE_WARN("[Import] Copy failed '%s': %s", PathUtf8(io.first.filename()).c_str(),
+                                cec.message().c_str());
+                    else
+                        ++copied;
+                }
+
+                // 2) Cook each source model into its mirrored location. Skip ones whose ".pemesh" is
+                //    already up to date with the source.
+                int cooked = 0, cookSkipped = 0;
+                for (const std::filesystem::path &m : models)
+                {
+                    std::error_code relEc;
+                    std::filesystem::path rel = std::filesystem::relative(m, src, relEc);
+                    if (relEc)
+                        continue;
+                    std::filesystem::path outPemesh =
+                        (destRoot / rel).replace_extension(ModelAssetCooked::kExtension);
+                    if (CookTargetUpToDate(m, outPemesh))
+                    {
+                        ++cookSkipped;
+                        continue;
+                    }
+                    if (CookModelToPemesh(m, outPemesh))
+                        ++cooked;
+                }
+
+                PE_INFO("[Import] Folder '%s' -> %s : cooked %d (skipped %d), copied %d (skipped %d)",
+                        PathUtf8(src.filename()).c_str(), PathUtf8(destRoot).c_str(),
+                        cooked, cookSkipped, copied, copySkipped);
+            }
+            catch (const std::exception &e)
+            {
+                PE_WARN("[Import] Folder import aborted: %s", e.what());
+            }
+            catch (...)
+            {
+                PE_WARN("[Import] Folder import aborted by an unknown error");
+            }
+
+            // Always clear the busy flag and refresh, even if the import threw.
+            GUIState::s_modelLoading = false;
+            QueueMainThreadAction([this]()
+                                  {
+                if (auto *fb = GetWidget<FileBrowser>())
+                    fb->RefreshCache(); }); });
     }
 
     void GUI::ShowLoadSceneMenuItem()
@@ -1863,6 +2165,7 @@ namespace pe
         {
             if (ImGui::BeginMenu("File"))
             {
+                ShowImportModelMenuItem();
                 ShowLoadModelMenuItem();
                 if (ImGui::MenuItem("New Scene"))
                     NewScene();
@@ -2145,7 +2448,8 @@ namespace pe
             vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
         };
 
-        const std::filesystem::path modelsDir = std::filesystem::path(Path::Assets + "Objects");
+        // The Models palette lists loadable cooked meshes (.pemesh) under Assets/Models, not source models.
+        const std::filesystem::path modelsDir = std::filesystem::path(Path::Assets + "Models");
         if (std::filesystem::exists(modelsDir))
         {
             for (auto &file : std::filesystem::recursive_directory_iterator(modelsDir))
