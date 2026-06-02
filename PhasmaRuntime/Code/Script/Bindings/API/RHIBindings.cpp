@@ -4,6 +4,8 @@
 #include "API/RHI.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
+#include "Base/EventSystem.h"
+#include "Base/Settings.h"
 
 namespace pe
 {
@@ -150,6 +152,35 @@ namespace pe
                         return RHII.GetSurface() ? PresentModeToString(RHII.GetSurface()->GetPresentMode()) : "unknown";
                     }
                     return "unknown";
+                });
+
+                // SetPresentMode — deferred, player-safe variant of change_present_mode for use from a
+                // per-frame script update: set the desired surface mode (cheap), then let the swapchain be
+                // recreated at the frame boundary via the Resize event. Calling ChangePresentMode directly
+                // from a script update destroys the swapchain mid-frame and crashes.
+                rhi.set_function("set_present_mode", [](const std::string &mode) -> std::string {
+                    auto it = s_presentModeMap.find(std::string_view(mode));
+                    if (it == s_presentModeMap.end() || !RHII.GetSurface())
+                        return "unknown";
+                    RHII.GetSurface()->SetPresentMode(it->second);
+                    RHII.WaitDeviceIdle();
+                    EventSystem::PushEvent(EventType::Resize);
+                    return PresentModeToString(RHII.GetSurface()->GetPresentMode());
+                });
+
+                // SetRenderScale — apply like the editor Global widget "Apply" (device-idle + Resize).
+                // Returns the clamped value so callers can sync their UI.
+                rhi.set_function("set_render_scale", [](double scale) -> float {
+                    auto &gs = Settings::Get<GlobalSettings>();
+                    gs.render_scale = std::clamp(static_cast<float>(scale), 0.1f, 2.0f);
+                    RHII.WaitDeviceIdle();
+                    EventSystem::PushEvent(EventType::Resize);
+                    return gs.render_scale;
+                });
+
+                // GetRenderScale
+                rhi.set_function("get_render_scale", []() -> float {
+                    return Settings::Get<GlobalSettings>().render_scale;
                 });
 
                 // GetPresentMode

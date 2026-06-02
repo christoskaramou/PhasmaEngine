@@ -290,7 +290,20 @@ namespace pe
 
         m_scene = m_importer.ReadFile(fileStr, flags);
 
+        // aiProcess_ValidateDataStructure is the only post-process step that can reject a scene
+        // (reset it to NULL or flag it AI_SCENE_FLAGS_INCOMPLETE). It is overly strict and rejects
+        // otherwise-valid Khronos sample assets over non-geometry nits (e.g. SpecularTest's
+        // out-of-range specular texture index, TransmissionSuzanne's light/name collision). For a
+        // cook tool we'd rather salvage the geometry, so on a validation rejection retry once
+        // WITHOUT the validation pass and cook whatever Assimp parsed.
         if (!m_scene || (m_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) || !m_scene->mRootNode)
+        {
+            PE_WARN("[ModelAsset] Assimp validation rejected model; retrying without validation: %s",
+                    m_importer.GetErrorString());
+            m_scene = m_importer.ReadFile(fileStr, flags & ~aiProcess_ValidateDataStructure);
+        }
+
+        if (!m_scene || !m_scene->mRootNode)
         {
             PE_WARN("[ModelAsset] Assimp error: %s", m_importer.GetErrorString());
             return false;

@@ -1,13 +1,13 @@
 {
   "settings": {
-    "shadows": true,
-    "shadow_map_size": 2048,
-    "num_cascades": 4,
-    "render_scale": 1.0,
-    "ssao": true,
+    "shadows": false,
+    "shadow_map_size": 1024,
+    "num_cascades": 3,
+    "render_scale": 0.4,
+    "ssao": false,
     "fxaa": false,
     "taa": true,
-    "cas_sharpening": true,
+    "cas_sharpening": false,
     "cas_sharpness": 0.5,
     "ssr": false,
     "tonemapping": false,
@@ -17,7 +17,7 @@
     "bloom": false,
     "bloom_strength": 1.0,
     "bloom_range": 1.0,
-    "motion_blur": true,
+    "motion_blur": false,
     "motion_blur_strength": 1.0,
     "motion_blur_samples": 16,
     "IBL": true,
@@ -29,7 +29,7 @@
       0.0,
       -5.15
     ],
-    "draw_grid": true,
+    "draw_grid": false,
     "draw_aabbs": false,
     "render_mode": 0,
     "present_mode": 1
@@ -37,15 +37,6 @@
   "sources": [
     {
       "path": "../Models/Sponza/Sponza.pemesh"
-    },
-    {
-      "primitive_type": "sphere",
-      "primitive_params": [
-        1.0
-      ]
-    },
-    {
-      "path": "../Objects/glTF-Sample-Models/ABeautifulGame/glTF/ABeautifulGame.gltf"
     }
   ],
   "meshes": [
