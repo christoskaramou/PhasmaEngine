@@ -25,12 +25,12 @@ namespace pe
     {
         bool IsComputePipeline(const Pipeline *pipeline)
         {
-            return pipeline && pipeline->GetInfo().pCompShader != nullptr;
+            return pipeline && pipeline->GetType() == Pipeline::Type::Compute;
         }
 
         bool IsRayTracingPipeline(const Pipeline *pipeline)
         {
-            return pipeline && Dx12PipelineImpl::From(pipeline)->IsRayTracing();
+            return pipeline && pipeline->GetType() == Pipeline::Type::RayTracing;
         }
 
         bool UsesComputeRootSignature(const Pipeline *pipeline)
@@ -1064,7 +1064,7 @@ namespace pe
     {
         PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::PushConstants: No bound pipeline found!");
 
-        const auto &sizes = m_owner->m_boundPipeline->GetInfo().m_pushConstantSizes;
+        const auto &sizes = m_owner->m_boundPipeline->GetPushConstantSizes();
         if (sizes.empty() || sizes[0] == 0)
             return;
 

@@ -150,6 +150,13 @@ namespace pe
     class Pipeline : public NoCopy
     {
     public:
+        enum class Type : uint8_t
+        {
+            Graphics,
+            Compute,
+            RayTracing,
+        };
+
         struct Impl;
 
         static Pipeline *Create(RenderPass *renderPass, PassInfo &info);
@@ -161,6 +168,10 @@ namespace pe
 
         PassInfo &GetInfo() { return m_info; }
         const PassInfo &GetInfo() const { return m_info; }
+        Type GetType() const { return m_type; }
+        const std::vector<PeShaderStageFlags> &GetPushConstantStages() const { return m_pushConstantStages; }
+        const std::vector<uint32_t> &GetPushConstantOffsets() const { return m_pushConstantOffsets; }
+        const std::vector<uint32_t> &GetPushConstantSizes() const { return m_pushConstantSizes; }
 
     private:
         friend class CommandBuffer;
@@ -170,5 +181,9 @@ namespace pe
 
         Impl *m_impl{};
         PassInfo &m_info;
+        Type m_type{Type::Graphics};
+        std::vector<PeShaderStageFlags> m_pushConstantStages{};
+        std::vector<uint32_t> m_pushConstantOffsets{};
+        std::vector<uint32_t> m_pushConstantSizes{};
     };
 } // namespace pe

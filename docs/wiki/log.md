@@ -1,5 +1,10 @@
 # PhasmaEngine Wiki Log
 
+## 2026-06-02
+
+- Fixed a Vulkan runtime skybox reload failure where transient HDR-to-cubemap conversion could reuse a cached pipeline whose original `PassInfo` had already been destroyed. Cached `Pipeline` objects now copy immutable type and push-constant metadata at creation, Vulkan command buffers use that metadata instead of stale `PassInfo` state, and Vulkan descriptor auto-binding runs even when the same cached pipeline is already bound. Runtime MCP reloads to `rogland_clear_night` and then `golden_gate_hills` both produced nonzero sky screenshots.
+- Added `architecture/rendering.md` to document the cached-pipeline/transient-pass pitfall and skybox reload verification shape.
+
 ## 2026-06-01
 
 - Removed the Global sky-time toggle, its serialized/script setting, and the hidden directional-light intensity override it drove. Directional light intensity now stays authored and shadow controls follow `Cast Shadows`. The skybox path model is now a single configurable resource instead of paired environment slots.

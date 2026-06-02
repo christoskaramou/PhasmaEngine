@@ -411,25 +411,32 @@ namespace pe
         }
     }
 
+    namespace
+    {
+        vk::PipelineBindPoint GetVulkanBindPoint(const Pipeline *pipeline)
+        {
+            PE_ERROR_IF(!pipeline, "GetVulkanBindPoint: pipeline is null");
+
+            switch (pipeline->GetType())
+            {
+            case Pipeline::Type::Compute:
+                return vk::PipelineBindPoint::eCompute;
+            case Pipeline::Type::RayTracing:
+                return vk::PipelineBindPoint::eRayTracingKHR;
+            case Pipeline::Type::Graphics:
+            default:
+                return vk::PipelineBindPoint::eGraphics;
+            }
+        }
+    } // namespace
+
     void VulkanCommandBufferImpl::BindPipeline(PassInfo &passInfo, bool bindDescriptors)
     {
         Pipeline *pipeline = CommandBuffer::GetPipeline(m_owner->m_renderPass, passInfo);
-        if (pipeline == m_owner->m_boundPipeline)
-            return;
-
-        m_owner->m_boundPipeline = pipeline;
-
-        if (passInfo.pCompShader)
+        if (pipeline != m_owner->m_boundPipeline)
         {
-            m_apiHandle.bindPipeline(vk::PipelineBindPoint::eCompute, GetVulkanPipeline(m_owner->m_boundPipeline));
-        }
-        else if (passInfo.acceleration.rayGen)
-        {
-            m_apiHandle.bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, GetVulkanPipeline(m_owner->m_boundPipeline));
-        }
-        else
-        {
-            m_apiHandle.bindPipeline(vk::PipelineBindPoint::eGraphics, GetVulkanPipeline(m_owner->m_boundPipeline));
+            m_owner->m_boundPipeline = pipeline;
+            m_apiHandle.bindPipeline(GetVulkanBindPoint(m_owner->m_boundPipeline), GetVulkanPipeline(m_owner->m_boundPipeline));
         }
 
         if (bindDescriptors)
@@ -474,14 +481,7 @@ namespace pe
     {
         PE_ERROR_IF(!m_owner->m_boundPipeline, "CommandBuffer::BindDescriptors: No bound pipeline found!");
 
-        vk::PipelineBindPoint point;
-        if (m_owner->m_boundPipeline->m_info.pCompShader)
-            point = vk::PipelineBindPoint::eCompute;
-        else if (m_owner->m_boundPipeline->m_info.acceleration.rayGen)
-            point = vk::PipelineBindPoint::eRayTracingKHR;
-        else
-            point = vk::PipelineBindPoint::eGraphics;
-
+        const vk::PipelineBindPoint point = GetVulkanBindPoint(m_owner->m_boundPipeline);
         BatchBindDescriptorsVk(m_apiHandle, m_owner->m_boundPipeline, point, count, descriptors);
     }
 
@@ -560,7 +560,7 @@ namespace pe
         PE_ERROR_IF(!vkCmdPushDescriptorSetFn, "CommandBuffer::PushDescriptor: vkCmdPushDescriptorSet not found!");
 
         vkCmdPushDescriptorSetFn(m_apiHandle,
-                                 m_owner->m_boundPipeline->m_info.pCompShader ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 static_cast<VkPipelineBindPoint>(GetVulkanBindPoint(m_owner->m_boundPipeline)),
                                  GetVulkanPipelineLayout(m_owner->m_boundPipeline),
                                  set,
                                  static_cast<uint32_t>(writes.size()),
@@ -627,9 +627,9 @@ namespace pe
     {
         PE_ERROR_IF(!m_owner->m_boundPipeline, "CommandBuffer::PushConstants: No bound pipeline found!");
 
-        const auto &stages = m_owner->m_boundPipeline->m_info.m_pushConstantStages;
-        const auto &offsets = m_owner->m_boundPipeline->m_info.m_pushConstantOffsets;
-        const auto &sizes = m_owner->m_boundPipeline->m_info.m_pushConstantSizes;
+        const auto &stages = m_owner->m_boundPipeline->GetPushConstantStages();
+        const auto &offsets = m_owner->m_boundPipeline->GetPushConstantOffsets();
+        const auto &sizes = m_owner->m_boundPipeline->GetPushConstantSizes();
 
         for (size_t i = 0; i < stages.size(); i++)
         {

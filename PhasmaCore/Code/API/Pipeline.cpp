@@ -12,6 +12,18 @@
 #include "API/Shader.h"
 namespace pe
 {
+    namespace
+    {
+        Pipeline::Type GetPipelineType(const PassInfo &info)
+        {
+            if (info.pCompShader)
+                return Pipeline::Type::Compute;
+            if (info.acceleration.rayGen)
+                return Pipeline::Type::RayTracing;
+            return Pipeline::Type::Graphics;
+        }
+    } // namespace
+
     PE_API const BlendState BlendState::Default = BlendState(
         /*blendEnable*/ true,
         /*srcColorBlendFactor*/ PE_BLEND_FACTOR_SRC_ALPHA,
@@ -446,9 +458,13 @@ namespace pe
     }
 
     Pipeline::Pipeline(RenderPass *renderPass, PassInfo &info)
-        : m_info(info)
+        : m_info(info),
+          m_type(GetPipelineType(info))
     {
         m_impl = CreatePipelineImpl(this, renderPass, info);
+        m_pushConstantStages = info.m_pushConstantStages;
+        m_pushConstantOffsets = info.m_pushConstantOffsets;
+        m_pushConstantSizes = info.m_pushConstantSizes;
     }
 
     Pipeline::~Pipeline()
