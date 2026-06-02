@@ -18,7 +18,6 @@ namespace pe
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
 
-        m_ssrRT = rs->GetRenderTarget("ssr");
         m_viewportRT = rs->GetRenderTarget("viewport");
         m_normalRT = rs->GetRenderTarget("normal");
         m_depth = rs->GetDepthStencilTarget("depthStencil");
@@ -43,7 +42,7 @@ namespace pe
         m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
         m_passInfo->cullMode = PE_CULL_MODE_NONE;
         m_passInfo->colorBlendAttachments = {BlendState::Default};
-        m_passInfo->colorFormats = {m_ssrRT->GetFormat()};
+        m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
         m_passInfo->Update();
     }
 
@@ -125,8 +124,8 @@ namespace pe
 
         cmd->BeginPass(1, m_attachments.data(), "SSR");
         cmd->BindPipeline(*m_passInfo);
-        cmd->SetViewport(0.f, 0.f, m_ssrRT->GetWidth_f(), m_ssrRT->GetHeight_f());
-        cmd->SetScissor(0, 0, m_ssrRT->GetWidth(), m_ssrRT->GetHeight());
+        cmd->SetViewport(0.f, 0.f, m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());
+        cmd->SetScissor(0, 0, m_viewportRT->GetWidth(), m_viewportRT->GetHeight());
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
 

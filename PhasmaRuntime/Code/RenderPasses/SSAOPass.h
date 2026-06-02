@@ -20,9 +20,9 @@ namespace pe
         void Destroy() override;
 
     private:
-        Image *m_ssaoRT;
-        Image *m_normalRT;
-        Image *m_depth;
+        Image *m_ssaoRT = nullptr;
+        Image *m_normalRT = nullptr;
+        Image *m_depth = nullptr;
         mat4 m_proj;
         mat4 m_normalsToView;
     };

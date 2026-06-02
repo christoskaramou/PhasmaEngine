@@ -41,6 +41,7 @@ namespace pe
                                         uint32_t clearStencil = Color::Stencil);
         Image *GetRenderTarget(const std::string &name) const;
         Image *GetRenderTarget(size_t hash) const;
+        bool DestroyRenderTarget(const std::string &name);
         Image *GetDepthStencilTarget(const std::string &name) const;
         Image *GetDepthStencilTarget(size_t hash) const;
         Image *CreateFSSampledImage(const std::string &name, bool useRenderTargetScale = true);
@@ -54,10 +55,11 @@ namespace pe
 
         void CreateRenderPassComponents(bool includeRayTracingPass, CommandBuffer *cmd);
         void DestroyRenderPassComponents();
-        void ResizeRenderPassComponents(uint32_t width, uint32_t height);
+        void PrepareRenderTargetResize(bool hasRayTracingGeometry);
+        void ResizeRenderPassComponents(uint32_t width, uint32_t height, bool hasRayTracingGeometry);
         void CacheGlobalComponents();
         const SceneRenderGraphPassComponents &GetSceneRenderGraphPassComponents() const { return m_scenePasses; }
-        void UpdateRenderGraphPassStates(bool hasRayTracingGeometry);
+        void UpdateRenderGraphPassStates(bool hasRayTracingGeometry, CommandBuffer *cmd = nullptr);
         bool IsPassEnabled(SceneRenderGraphPassId passId) const;
         void AddScenePassesToRenderGraph();
         void UpdateRenderPassComponents();
@@ -84,6 +86,10 @@ namespace pe
         void DestroyScreenshotBuffer();
 
     private:
+        void InitEnabledRenderPassComponents(CommandBuffer *cmd);
+        bool HasDisabledRenderPassComponents() const;
+        void DestroyDisabledRenderPassComponents();
+
         RenderGraph m_renderGraph;
         Image *m_displayRT = nullptr;
         Image *m_viewportRT = nullptr;
@@ -100,6 +106,7 @@ namespace pe
         std::vector<Semaphore *> m_acquireSemaphores;
         std::vector<Semaphore *> m_submitSemaphores;
         std::array<bool, kSceneRenderGraphPassCount> m_renderGraphPassEnabled{};
+        std::array<bool, kSceneRenderGraphPassCount> m_renderGraphPassInitialized{};
         SceneRenderGraphPassComponents m_scenePasses{};
 
         SkyBox m_skyBox;

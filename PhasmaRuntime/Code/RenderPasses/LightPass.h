@@ -22,8 +22,10 @@ namespace pe
     };
 
     class Image;
+    class ImageView;
     class Buffer;
     class CommandBuffer;
+    class Sampler;
 
     class LightOpaquePass : public IRenderPassComponent
     {
@@ -50,6 +52,11 @@ namespace pe
         Image *m_depthStencilRT;
         Image *m_ssaoRT;
         Image *m_transparencyRT;
+        std::vector<Buffer *> m_shadowFallbackUniforms;
+        Image *m_shadowFallbackTexture = nullptr;
+        Sampler *m_shadowFallbackSampler = nullptr;
+        std::vector<ImageView *> m_shadowFallbackViews;
+        bool m_boundShadowsAvailable = false;
         LightPassUBO m_ubo;
     };
 
@@ -78,6 +85,11 @@ namespace pe
         Image *m_depthStencilRT;
         Image *m_ssaoRT;
         Image *m_transparencyRT;
+        std::vector<Buffer *> m_shadowFallbackUniforms;
+        Image *m_shadowFallbackTexture = nullptr;
+        Sampler *m_shadowFallbackSampler = nullptr;
+        std::vector<ImageView *> m_shadowFallbackViews;
+        bool m_boundShadowsAvailable = false;
         LightPassUBO m_ubo;
     };
 } // namespace pe

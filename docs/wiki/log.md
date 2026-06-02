@@ -2,6 +2,9 @@
 
 ## 2026-06-02
 
+- Made scene render-pass resource initialization conditional on enabled pass state. The shared render graph now creates pass components for registration but initializes pipelines/descriptors/resources only when their pass becomes enabled; SSAO and bloom scratch render targets moved out of the default scene target set and into their passes, and the unused SSR/vertical-blur target mappings were removed or corrected.
+- Fixed the lazy render-target resize path after toggling SSAO off. Editor/player resize now recomputes pass state and destroys newly disabled initialized passes before old scene images are destroyed, then recomputes again before resizing kept passes or lazily initializing newly enabled passes; `SSAOPass::Destroy` also clears cached target pointers after tearing down CACAO.
+- Completed toggle-off resource reclamation for lazy passes: normal per-frame pass-state updates now wait idle only when initialized passes become disabled, then destroy those passes immediately. SSAO and bloom passes remove their optional scene render targets from the renderer target map on destroy, and LightPass now binds fallback shadow descriptor resources so `ShadowPass` and its cascade maps can be freed while shadows are off.
 - Fixed a Vulkan runtime skybox reload failure where transient HDR-to-cubemap conversion could reuse a cached pipeline whose original `PassInfo` had already been destroyed. Cached `Pipeline` objects now copy immutable type and push-constant metadata at creation, Vulkan command buffers use that metadata instead of stale `PassInfo` state, and Vulkan descriptor auto-binding runs even when the same cached pipeline is already bound. Runtime MCP reloads to `rogland_clear_night` and then `golden_gate_hills` both produced nonzero sky screenshots.
 - Added `architecture/rendering.md` to document the cached-pipeline/transient-pass pitfall and skybox reload verification shape.
 

@@ -3,6 +3,7 @@
 namespace pe
 {
     class Image;
+    class ImageView;
     class Buffer;
     class CommandBuffer;
     class Sampler;
@@ -28,6 +29,13 @@ namespace pe
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
 
+        [[nodiscard]] bool HasLiveResources() const;
+        [[nodiscard]] const std::vector<Image *> &GetTextures() const { return m_textures; }
+        [[nodiscard]] std::vector<ImageView *> GetTextureViews() const;
+        [[nodiscard]] Buffer *GetUniform(uint32_t frame) const;
+        [[nodiscard]] Sampler *GetSampler() const { return m_sampler; }
+        [[nodiscard]] float GetCascadeViewZ(uint32_t cascade) const;
+        [[nodiscard]] float GetCascadeTexelSizeWorld(uint32_t cascade) const;
         void SetScene(Scene *scene) { m_scene = scene; }
         void ClearDepths(CommandBuffer *cmd);
 
@@ -42,10 +50,10 @@ namespace pe
 
         std::vector<Buffer *> m_uniforms;
         std::vector<mat4> m_cascades;
-        vec4 m_viewZ;
-        vec4 m_texelSizeWorld;
+        vec4 m_viewZ = vec4(0.0f);
+        vec4 m_texelSizeWorld = vec4(0.0f);
         std::vector<Image *> m_textures{};
-        Sampler *m_sampler;
+        Sampler *m_sampler = nullptr;
         Scene *m_scene = nullptr;
 
         std::vector<std::array<vec4, 6>> m_cascadePlanes; // [cascade]

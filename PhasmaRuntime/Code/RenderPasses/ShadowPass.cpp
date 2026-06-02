@@ -87,6 +87,48 @@ namespace pe
     {
     }
 
+    bool ShadowPass::HasLiveResources() const
+    {
+        const uint32_t cascadeCount = Settings::Get<GlobalSettings>().num_cascades;
+        if (cascadeCount == 0 || !m_sampler || m_textures.size() < cascadeCount ||
+            m_uniforms.size() < RHII.GetSwapchainImageCount())
+        {
+            return false;
+        }
+
+        for (uint32_t i = 0; i < cascadeCount; i++)
+        {
+            if (!m_textures[i])
+                return false;
+        }
+
+        return true;
+    }
+
+    std::vector<ImageView *> ShadowPass::GetTextureViews() const
+    {
+        const uint32_t cascadeCount = Settings::Get<GlobalSettings>().num_cascades;
+        std::vector<ImageView *> views(cascadeCount);
+        for (uint32_t i = 0; i < cascadeCount; i++)
+            views[i] = m_textures[i]->GetSRV();
+        return views;
+    }
+
+    Buffer *ShadowPass::GetUniform(uint32_t frame) const
+    {
+        return frame < m_uniforms.size() ? m_uniforms[frame] : nullptr;
+    }
+
+    float ShadowPass::GetCascadeViewZ(uint32_t cascade) const
+    {
+        return cascade < 4 ? m_viewZ[cascade] : 0.0f;
+    }
+
+    float ShadowPass::GetCascadeTexelSizeWorld(uint32_t cascade) const
+    {
+        return cascade < 4 ? m_texelSizeWorld[cascade] : 0.0f;
+    }
+
     void ShadowPass::Update()
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
@@ -354,12 +396,22 @@ namespace pe
 
     void ShadowPass::Destroy()
     {
+        CommandBuffer::ClearFramebufferCache();
+
         for (auto &texture : m_textures)
             Image::Destroy(texture);
+        m_textures.clear();
 
         Sampler::Destroy(m_sampler);
+        m_sampler = nullptr;
 
         for (auto &uniform : m_uniforms)
             Buffer::Destroy(uniform);
+        m_uniforms.clear();
+
+        m_cascades.clear();
+        m_cascadePlanes.clear();
+        m_attachments.clear();
+        m_scene = nullptr;
     }
 } // namespace pe

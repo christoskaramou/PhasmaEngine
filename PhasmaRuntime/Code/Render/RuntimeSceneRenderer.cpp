@@ -78,6 +78,7 @@ namespace pe
 
             m_scene.UploadBuffers(initCmd);
             m_sceneRenderer.CacheGlobalComponents();
+            m_sceneRenderer.UpdateRenderGraphPassStates(SupportsRayTracingPass() && m_scene.GetTLAS() != nullptr, initCmd);
             BuildRenderGraph();
             if (ownsInitCmd)
             {
@@ -244,6 +245,11 @@ namespace pe
         return m_sceneRenderer.GetRenderTarget(hash);
     }
 
+    bool RuntimeSceneRenderer::DestroyRenderTarget(const std::string &name)
+    {
+        return m_sceneRenderer.DestroyRenderTarget(name);
+    }
+
     Image *RuntimeSceneRenderer::GetDepthStencilTarget(const std::string &name)
     {
         return m_sceneRenderer.GetDepthStencilTarget(name);
@@ -265,6 +271,8 @@ namespace pe
             return;
 
         RHII.WaitDeviceIdle();
+        const bool hasRTGeom = SupportsRayTracingPass() && m_scene.GetTLAS() != nullptr;
+        m_sceneRenderer.PrepareRenderTargetResize(hasRTGeom);
         m_sceneRenderer.DestroyFrameResources();
         RHII.GetSurface()->SetActualExtent({0, 0, width, height});
 
@@ -292,7 +300,7 @@ namespace pe
         resizeCmd->Wait();
         resizeCmd->Return();
 
-        m_sceneRenderer.ResizeRenderPassComponents(width, height);
+        m_sceneRenderer.ResizeRenderPassComponents(width, height, hasRTGeom);
 
         BuildRenderGraph();
     }

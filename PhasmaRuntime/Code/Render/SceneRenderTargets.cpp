@@ -6,6 +6,7 @@
 #include "API/Sampler.h"
 #include "API/Swapchain.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace pe
@@ -49,6 +50,9 @@ namespace pe
                                    bool useMips,
                                    vec4 clearColor)
     {
+        if (Image *existing = GetSceneRenderTarget(renderTargets, name))
+            return existing;
+
         auto &gSettings = Settings::Get<GlobalSettings>();
 
         const uint32_t width = GetScaledRenderWidth(useRenderTargetScale);
@@ -90,6 +94,9 @@ namespace pe
                                          float clearDepth,
                                          uint32_t clearStencil)
     {
+        if (Image *existing = GetSceneRenderTarget(depthStencilTargets, name))
+            return existing;
+
         auto &gSettings = Settings::Get<GlobalSettings>();
 
         ImageDesc desc{};
@@ -130,6 +137,21 @@ namespace pe
     {
         auto it = renderTargets.find(hash);
         return it != renderTargets.end() ? it->second : nullptr;
+    }
+
+    bool DestroySceneRenderTarget(SceneRenderTargetMap &renderTargets, const std::string &name)
+    {
+        auto it = renderTargets.find(StringHash(name));
+        if (it == renderTargets.end())
+            return false;
+
+        Image *image = it->second;
+        auto &renderingImages = Settings::Get<GlobalSettings>().rendering_images;
+        renderingImages.erase(std::remove(renderingImages.begin(), renderingImages.end(), image), renderingImages.end());
+        CommandBuffer::ClearFramebufferCache();
+        Image::Destroy(image);
+        renderTargets.erase(it);
+        return true;
     }
 
     Image *CreateSceneFSSampledImage(const std::string &name, bool useRenderTargetScale)
@@ -181,13 +203,8 @@ namespace pe
         CreateSceneRenderTarget(renderTargets, "normal", PE_FORMAT_R16G16B16A16_SFLOAT);
         CreateSceneRenderTarget(renderTargets, "albedo", surfaceFormat);
         CreateSceneRenderTarget(renderTargets, "srm", surfaceFormat);
-        CreateSceneRenderTarget(renderTargets, "ssao", PE_FORMAT_R8_UNORM);
-        CreateSceneRenderTarget(renderTargets, "ssr", surfaceFormat);
         CreateSceneRenderTarget(renderTargets, "velocity", PE_FORMAT_R16G16_SFLOAT);
         CreateSceneRenderTarget(renderTargets, "emissive", surfaceFormat);
-        CreateSceneRenderTarget(renderTargets, "brightFilter", surfaceFormat, PE_IMAGE_USAGE_NONE, false);
-        CreateSceneRenderTarget(renderTargets, "gaussianBlurHorizontal", surfaceFormat, PE_IMAGE_USAGE_NONE, false);
-        CreateSceneRenderTarget(renderTargets, "gaussianBlurVertical", surfaceFormat, PE_IMAGE_USAGE_NONE, false);
         CreateSceneRenderTarget(renderTargets, "transparency", PE_FORMAT_R8_UNORM, PE_IMAGE_USAGE_NONE, true, false, Color::Black);
 
         return targets;

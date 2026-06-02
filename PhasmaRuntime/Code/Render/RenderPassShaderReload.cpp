@@ -3,7 +3,6 @@
 #include "API/RHI.h"
 #include "API/Shader.h"
 
-
 namespace pe
 {
     namespace
@@ -144,6 +143,9 @@ namespace pe
             return false;
 
         const std::vector<PassInfoShaderState> oldStates = CaptureShaderStates(passInfos);
+        if (CollectShaders(oldStates).empty())
+            return false;
+
         if (!MatchesShaderHash(oldStates, changedShaderHash))
             return false;
 

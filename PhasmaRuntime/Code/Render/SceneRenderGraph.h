@@ -79,14 +79,27 @@ namespace pe
     void CreateSceneRenderGraphPassComponents(OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,
                                               bool includeRayTracingPass);
 
-    void InitSceneRenderGraphPassComponents(OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,
-                                            CommandBuffer *cmd);
+    void InitEnabledSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
+                                                   SceneRenderGraphPassCondition isPassEnabled,
+                                                   std::span<bool> passInitialized,
+                                                   CommandBuffer *cmd);
 
-    void ResizeSceneRenderGraphPassComponents(OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,
-                                              uint32_t width,
-                                              uint32_t height);
+    void ResizeInitializedSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
+                                                         SceneRenderGraphPassCondition isPassEnabled,
+                                                         std::span<bool> passInitialized,
+                                                         uint32_t width,
+                                                         uint32_t height);
 
-    void DestroySceneRenderGraphPassComponents(OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents);
+    bool HasDisabledInitializedSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
+                                                              SceneRenderGraphPassCondition isPassEnabled,
+                                                              std::span<const bool> passInitialized);
+
+    void DestroyDisabledSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
+                                                       SceneRenderGraphPassCondition isPassEnabled,
+                                                       std::span<bool> passInitialized);
+
+    void DestroyInitializedSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
+                                                          std::span<bool> passInitialized);
 
     [[nodiscard]] SceneRenderGraphPassComponents GetGlobalSceneRenderGraphPassComponents();
 

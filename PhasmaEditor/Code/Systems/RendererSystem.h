@@ -76,15 +76,16 @@ namespace pe
                                   PeImageUsageFlags usage = PE_IMAGE_USAGE_NONE,
                                   bool useRenderTergetScale = true,
                                   bool useMips = false,
-                                  vec4 clearColor = Color::Transparent);
+                                  vec4 clearColor = Color::Transparent) override;
         Image *GetRenderTarget(const std::string &name) override;
         Image *GetRenderTarget(size_t hash) override;
+        bool DestroyRenderTarget(const std::string &name) override;
         Image *CreateDepthStencilTarget(const std::string &name,
                                         ::PeFormat format,
                                         PeImageUsageFlags usage = PE_IMAGE_USAGE_NONE,
                                         bool useRenderTergetScale = true,
                                         float clearDepth = Color::Depth,
-                                        uint32_t clearStencil = Color::Stencil);
+                                        uint32_t clearStencil = Color::Stencil) override;
         Image *GetDepthStencilTarget(const std::string &name) override;
         Image *GetDepthStencilTarget(size_t hash) override;
         Image *GetDisplayRT() override { return m_sceneRenderer.GetDisplayRT(); }

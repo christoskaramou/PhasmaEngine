@@ -21,7 +21,6 @@
 #include "RenderPasses/TonemapPass.h"
 #include "RenderPasses/UpsamplePass.h"
 
-
 namespace pe
 {
     namespace
@@ -87,6 +86,19 @@ namespace pe
         {
             if (component)
                 static_cast<T *>(component)->SetScene(&scene);
+        }
+
+        void InitSceneRenderGraphPassComponent(IRenderPassComponent *component, CommandBuffer *cmd)
+        {
+            component->Init();
+            component->UpdatePassInfo();
+            component->CreateUniforms(cmd);
+        }
+
+        bool ShouldKeepSceneRenderGraphPassInitialized(SceneRenderGraphPassId passId,
+                                                       const SceneRenderGraphPassCondition &isPassEnabled)
+        {
+            return isPassEnabled(passId);
         }
 
         bool ShouldUpdateSceneRenderGraphPass(const SceneRenderGraphPassComponents &components,
@@ -197,29 +209,116 @@ namespace pe
             CreateSceneRenderGraphPassComponent<RayTracingPass>(renderPassComponents);
     }
 
-    void InitSceneRenderGraphPassComponents(OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,
-                                            CommandBuffer *cmd)
+    void InitEnabledSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
+                                                   SceneRenderGraphPassCondition isPassEnabled,
+                                                   std::span<bool> passInitialized,
+                                                   CommandBuffer *cmd)
     {
-        for (auto &renderPassComponent : renderPassComponents)
+        PE_ASSERT(passInitialized.size() >= kSceneRenderGraphPassCount,
+                  "Scene render graph pass init state span is too small");
+
+        for (const SceneRenderGraphPassDesc &desc : kSceneRenderGraphPasses)
         {
-            renderPassComponent->Init();
-            renderPassComponent->UpdatePassInfo();
-            renderPassComponent->CreateUniforms(cmd);
+            const size_t index = static_cast<size_t>(desc.id);
+            if (passInitialized[index] || !ShouldKeepSceneRenderGraphPassInitialized(desc.id, isPassEnabled))
+                continue;
+
+            IRenderPassComponent *component = components.*desc.component;
+            if (!component)
+                continue;
+
+            InitSceneRenderGraphPassComponent(component, cmd);
+            passInitialized[index] = true;
         }
     }
 
-    void ResizeSceneRenderGraphPassComponents(OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,
-                                              uint32_t width,
-                                              uint32_t height)
+    void ResizeInitializedSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
+                                                         SceneRenderGraphPassCondition isPassEnabled,
+                                                         std::span<bool> passInitialized,
+                                                         uint32_t width,
+                                                         uint32_t height)
     {
-        for (auto &renderPassComponent : renderPassComponents)
-            renderPassComponent->Resize(width, height);
+        PE_ASSERT(passInitialized.size() >= kSceneRenderGraphPassCount,
+                  "Scene render graph pass init state span is too small");
+
+        for (const SceneRenderGraphPassDesc &desc : kSceneRenderGraphPasses)
+        {
+            const size_t index = static_cast<size_t>(desc.id);
+            if (!passInitialized[index])
+                continue;
+
+            IRenderPassComponent *component = components.*desc.component;
+            if (!component)
+            {
+                passInitialized[index] = false;
+                continue;
+            }
+
+            if (ShouldKeepSceneRenderGraphPassInitialized(desc.id, isPassEnabled))
+            {
+                component->Resize(width, height);
+            }
+            else
+            {
+                component->Destroy();
+                passInitialized[index] = false;
+            }
+        }
     }
 
-    void DestroySceneRenderGraphPassComponents(OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents)
+    bool HasDisabledInitializedSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
+                                                              SceneRenderGraphPassCondition isPassEnabled,
+                                                              std::span<const bool> passInitialized)
     {
-        for (auto &renderPassComponent : renderPassComponents)
-            renderPassComponent->Destroy();
+        (void)components;
+        PE_ASSERT(passInitialized.size() >= kSceneRenderGraphPassCount,
+                  "Scene render graph pass init state span is too small");
+
+        for (const SceneRenderGraphPassDesc &desc : kSceneRenderGraphPasses)
+        {
+            const size_t index = static_cast<size_t>(desc.id);
+            if (passInitialized[index] && !ShouldKeepSceneRenderGraphPassInitialized(desc.id, isPassEnabled))
+                return true;
+        }
+
+        return false;
+    }
+
+    void DestroyDisabledSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
+                                                       SceneRenderGraphPassCondition isPassEnabled,
+                                                       std::span<bool> passInitialized)
+    {
+        PE_ASSERT(passInitialized.size() >= kSceneRenderGraphPassCount,
+                  "Scene render graph pass init state span is too small");
+
+        for (const SceneRenderGraphPassDesc &desc : kSceneRenderGraphPasses)
+        {
+            const size_t index = static_cast<size_t>(desc.id);
+            if (!passInitialized[index] || ShouldKeepSceneRenderGraphPassInitialized(desc.id, isPassEnabled))
+                continue;
+
+            if (IRenderPassComponent *component = components.*desc.component)
+                component->Destroy();
+            passInitialized[index] = false;
+        }
+    }
+
+    void DestroyInitializedSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
+                                                          std::span<bool> passInitialized)
+    {
+        PE_ASSERT(passInitialized.size() >= kSceneRenderGraphPassCount,
+                  "Scene render graph pass init state span is too small");
+
+        for (const SceneRenderGraphPassDesc &desc : kSceneRenderGraphPasses)
+        {
+            const size_t index = static_cast<size_t>(desc.id);
+            if (!passInitialized[index])
+                continue;
+
+            if (IRenderPassComponent *component = components.*desc.component)
+                component->Destroy();
+            passInitialized[index] = false;
+        }
     }
 
     SceneRenderGraphPassComponents GetGlobalSceneRenderGraphPassComponents()

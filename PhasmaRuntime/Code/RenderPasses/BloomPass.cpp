@@ -14,6 +14,9 @@ namespace pe
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
         m_brightFilterRT = rs->GetRenderTarget("brightFilter");
+        if (!m_brightFilterRT)
+            m_brightFilterRT =
+                rs->CreateRenderTarget("brightFilter", RHII.GetSwapchainFormat(), PE_IMAGE_USAGE_NONE, false);
         m_displayRT = rs->GetRenderTarget("display");
 
         m_attachments.resize(1);
@@ -72,10 +75,21 @@ namespace pe
         UpdateDescriptorSets();
     }
 
+    void BloomBrightFilterPass::Destroy()
+    {
+        if (SceneRendererHost *rs = GetActiveSceneRendererHost())
+            rs->DestroyRenderTarget("brightFilter");
+        m_brightFilterRT = nullptr;
+        m_displayRT = nullptr;
+    }
+
     void BloomGaussianBlurHorizontalPass::Init()
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
         m_gaussianBlurHorizontalRT = rs->GetRenderTarget("gaussianBlurHorizontal");
+        if (!m_gaussianBlurHorizontalRT)
+            m_gaussianBlurHorizontalRT =
+                rs->CreateRenderTarget("gaussianBlurHorizontal", RHII.GetSwapchainFormat(), PE_IMAGE_USAGE_NONE, false);
         m_brightFilterRT = rs->GetRenderTarget("brightFilter");
 
         m_attachments.resize(1);
@@ -137,6 +151,14 @@ namespace pe
     {
         Init();
         UpdateDescriptorSets();
+    }
+
+    void BloomGaussianBlurHorizontalPass::Destroy()
+    {
+        if (SceneRendererHost *rs = GetActiveSceneRendererHost())
+            rs->DestroyRenderTarget("gaussianBlurHorizontal");
+        m_gaussianBlurHorizontalRT = nullptr;
+        m_brightFilterRT = nullptr;
     }
 
     void BloomGaussianBlurVerticalPass::Init()
@@ -206,5 +228,11 @@ namespace pe
     {
         Init();
         UpdateDescriptorSets();
+    }
+
+    void BloomGaussianBlurVerticalPass::Destroy()
+    {
+        m_displayRT = nullptr;
+        m_gaussianBlurHorizontalRT = nullptr;
     }
 } // namespace pe

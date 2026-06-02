@@ -1,8 +1,9 @@
 #include "SSAOPass.h"
-#include "RenderPasses/Backends/SSAOCacaoBackend.h"
 #include "API/Command.h"
+#include "API/RHI.h"
 #include "API/RenderGraph.h"
 #include "Camera/Camera.h"
+#include "RenderPasses/Backends/SSAOCacaoBackend.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
 #include "Render/SceneRendererHost.h"
@@ -13,6 +14,8 @@ namespace pe
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
         m_ssaoRT = rs->GetRenderTarget("ssao");
+        if (!m_ssaoRT)
+            m_ssaoRT = rs->CreateRenderTarget("ssao", PE_FORMAT_R8_UNORM);
         m_normalRT = rs->GetRenderTarget("normal");
         m_depth = rs->GetDepthStencilTarget("depthStencil");
 
@@ -71,6 +74,8 @@ namespace pe
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
         m_ssaoRT = rs->GetRenderTarget("ssao");
+        if (!m_ssaoRT)
+            m_ssaoRT = rs->CreateRenderTarget("ssao", PE_FORMAT_R8_UNORM);
         m_normalRT = rs->GetRenderTarget("normal");
         m_depth = rs->GetDepthStencilTarget("depthStencil");
 
@@ -80,5 +85,10 @@ namespace pe
     void SSAOPass::Destroy()
     {
         SSAOCacaoBackend::Destroy();
+        if (SceneRendererHost *rs = GetActiveSceneRendererHost())
+            rs->DestroyRenderTarget("ssao");
+        m_ssaoRT = nullptr;
+        m_normalRT = nullptr;
+        m_depth = nullptr;
     }
 } // namespace pe

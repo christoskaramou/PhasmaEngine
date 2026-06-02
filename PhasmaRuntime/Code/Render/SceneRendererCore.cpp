@@ -46,6 +46,11 @@ namespace pe
         return GetSceneRenderTarget(m_renderTargets, hash);
     }
 
+    bool SceneRendererCore::DestroyRenderTarget(const std::string &name)
+    {
+        return DestroySceneRenderTarget(m_renderTargets, name);
+    }
+
     Image *SceneRendererCore::GetDepthStencilTarget(const std::string &name) const
     {
         return GetSceneRenderTarget(m_depthStencilTargets, name);
@@ -110,18 +115,27 @@ namespace pe
 
     void SceneRendererCore::CreateRenderPassComponents(bool includeRayTracingPass, CommandBuffer *cmd)
     {
+        (void)cmd;
         CreateSceneRenderGraphPassComponents(m_renderPassComponents, includeRayTracingPass);
-        InitSceneRenderGraphPassComponents(m_renderPassComponents, cmd);
     }
 
     void SceneRendererCore::DestroyRenderPassComponents()
     {
-        DestroySceneRenderGraphPassComponents(m_renderPassComponents);
+        DestroyInitializedSceneRenderGraphPassComponents(m_scenePasses, m_renderGraphPassInitialized);
     }
 
-    void SceneRendererCore::ResizeRenderPassComponents(uint32_t width, uint32_t height)
+    void SceneRendererCore::PrepareRenderTargetResize(bool hasRayTracingGeometry)
     {
-        ResizeSceneRenderGraphPassComponents(m_renderPassComponents, width, height);
+        pe::UpdateSceneRenderGraphPassStates(m_renderGraphPassEnabled, hasRayTracingGeometry);
+        DestroyDisabledRenderPassComponents();
+    }
+
+    void SceneRendererCore::ResizeRenderPassComponents(uint32_t width, uint32_t height, bool hasRayTracingGeometry)
+    {
+        pe::UpdateSceneRenderGraphPassStates(m_renderGraphPassEnabled, hasRayTracingGeometry);
+        ResizeInitializedSceneRenderGraphPassComponents(m_scenePasses, [this](SceneRenderGraphPassId passId)
+                                                        { return IsPassEnabled(passId); }, m_renderGraphPassInitialized, width, height);
+        InitEnabledRenderPassComponents(nullptr);
     }
 
     void SceneRendererCore::CacheGlobalComponents()
@@ -129,9 +143,17 @@ namespace pe
         m_scenePasses = GetGlobalSceneRenderGraphPassComponents();
     }
 
-    void SceneRendererCore::UpdateRenderGraphPassStates(bool hasRayTracingGeometry)
+    void SceneRendererCore::UpdateRenderGraphPassStates(bool hasRayTracingGeometry, CommandBuffer *cmd)
     {
         pe::UpdateSceneRenderGraphPassStates(m_renderGraphPassEnabled, hasRayTracingGeometry);
+        if (HasDisabledRenderPassComponents())
+        {
+            RHII.WaitDeviceIdle();
+            DestroyDisabledRenderPassComponents();
+        }
+
+        // Per-frame setting toggles call this with no command buffer; lazily initable passes must tolerate nullptr here.
+        InitEnabledRenderPassComponents(cmd);
     }
 
     bool SceneRendererCore::IsPassEnabled(SceneRenderGraphPassId passId) const
@@ -153,6 +175,24 @@ namespace pe
                                              m_scenePasses,
                                              [this](SceneRenderGraphPassId passId)
                                              { return IsPassEnabled(passId); });
+    }
+
+    void SceneRendererCore::InitEnabledRenderPassComponents(CommandBuffer *cmd)
+    {
+        InitEnabledSceneRenderGraphPassComponents(m_scenePasses, [this](SceneRenderGraphPassId passId)
+                                                  { return IsPassEnabled(passId); }, m_renderGraphPassInitialized, cmd);
+    }
+
+    bool SceneRendererCore::HasDisabledRenderPassComponents() const
+    {
+        return HasDisabledInitializedSceneRenderGraphPassComponents(m_scenePasses, [this](SceneRenderGraphPassId passId)
+                                                                    { return IsPassEnabled(passId); }, m_renderGraphPassInitialized);
+    }
+
+    void SceneRendererCore::DestroyDisabledRenderPassComponents()
+    {
+        DestroyDisabledSceneRenderGraphPassComponents(m_scenePasses, [this](SceneRenderGraphPassId passId)
+                                                      { return IsPassEnabled(passId); }, m_renderGraphPassInitialized);
     }
 
     void SceneRendererCore::SetRenderPassScene(Scene &scene)

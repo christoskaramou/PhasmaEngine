@@ -230,6 +230,9 @@ namespace pe
 
     void TAAPass::GenerateJitter()
     {
+        if (!m_viewportRT || m_jitterPhaseCount <= 0)
+            return;
+
         m_jitterIndex = (m_jitterIndex + 1) % m_jitterPhaseCount;
 
         // Halton sequence (2, 3)

@@ -37,6 +37,7 @@ namespace pe
 
     Image *GetSceneRenderTarget(const SceneRenderTargetMap &renderTargets, const std::string &name);
     Image *GetSceneRenderTarget(const SceneRenderTargetMap &renderTargets, size_t hash);
+    bool DestroySceneRenderTarget(SceneRenderTargetMap &renderTargets, const std::string &name);
 
     Image *CreateSceneFSSampledImage(const std::string &name, bool useRenderTargetScale = true);
 

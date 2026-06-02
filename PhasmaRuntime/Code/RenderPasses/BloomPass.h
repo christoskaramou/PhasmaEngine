@@ -21,11 +21,11 @@ namespace pe
         void DeclareInputs(RGBuilder &builder) override;
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
-        void Destroy() override {};
+        void Destroy() override;
 
     private:
-        Image *m_brightFilterRT; // Render target
-        Image *m_displayRT;      // Shader Input
+        Image *m_brightFilterRT = nullptr; // Render target
+        Image *m_displayRT = nullptr;      // Shader Input
     };
 
     class BloomGaussianBlurHorizontalPass : public IRenderPassComponent
@@ -39,11 +39,11 @@ namespace pe
         void DeclareInputs(RGBuilder &builder) override;
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
-        void Destroy() override {};
+        void Destroy() override;
 
     private:
-        Image *m_gaussianBlurHorizontalRT; // Render target
-        Image *m_brightFilterRT;           // Shader Input
+        Image *m_gaussianBlurHorizontalRT = nullptr; // Render target
+        Image *m_brightFilterRT = nullptr;           // Shader Input
     };
 
     class BloomGaussianBlurVerticalPass : public IRenderPassComponent
@@ -57,10 +57,10 @@ namespace pe
         void DeclareInputs(RGBuilder &builder) override;
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
-        void Destroy() override {};
+        void Destroy() override;
 
     private:
-        Image *m_displayRT;                // Render target
-        Image *m_gaussianBlurHorizontalRT; // Shader Input
+        Image *m_displayRT = nullptr;                // Render target
+        Image *m_gaussianBlurHorizontalRT = nullptr; // Shader Input
     };
 } // namespace pe

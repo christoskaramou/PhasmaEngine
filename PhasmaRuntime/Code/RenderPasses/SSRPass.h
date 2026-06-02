@@ -22,12 +22,11 @@ namespace pe
     private:
         mat4 m_reflectionInput[4];
         std::vector<Buffer *> m_reflectionUBs;
-        Image *m_ssrRT;
-        Image *m_viewportRT;
-        Image *m_normalRT;
-        Image *m_depth;
-        Image *m_srmRT;
-        Image *m_albedoRT;
-        Image *m_frameImage;
+        Image *m_viewportRT = nullptr;
+        Image *m_normalRT = nullptr;
+        Image *m_depth = nullptr;
+        Image *m_srmRT = nullptr;
+        Image *m_albedoRT = nullptr;
+        Image *m_frameImage = nullptr;
     };
 } // namespace pe

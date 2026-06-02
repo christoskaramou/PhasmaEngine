@@ -85,6 +85,7 @@ namespace pe
 
         m_scene.UploadBuffers(initCmd);
         m_sceneRenderer.CacheGlobalComponents();
+        m_sceneRenderer.UpdateRenderGraphPassStates(SupportsRayTracingPass() && m_scene.GetTLAS() != nullptr, initCmd);
         BuildRenderGraph();
 
         if (ownsInitCmd)
@@ -386,6 +387,11 @@ namespace pe
         return m_sceneRenderer.GetRenderTarget(hash);
     }
 
+    bool RendererSystem::DestroyRenderTarget(const std::string &name)
+    {
+        return m_sceneRenderer.DestroyRenderTarget(name);
+    }
+
     Image *RendererSystem::GetDepthStencilTarget(const std::string &name)
     {
         return m_sceneRenderer.GetDepthStencilTarget(name);
@@ -405,6 +411,8 @@ namespace pe
     {
         // Wait idle, we dont want to destroy objects in use
         RHII.WaitDeviceIdle();
+        const bool hasRTGeom = SupportsRayTracingPass() && m_scene.GetTLAS() != nullptr;
+        m_sceneRenderer.PrepareRenderTargetResize(hasRTGeom);
         RHII.GetSurface()->SetActualExtent({0, 0, width, height});
 
         Swapchain *swapchain = RHII.GetSwapchain();
@@ -415,7 +423,7 @@ namespace pe
 
         m_sceneRenderer.CreateRenderTargets();
 
-        m_sceneRenderer.ResizeRenderPassComponents(width, height);
+        m_sceneRenderer.ResizeRenderPassComponents(width, height, hasRTGeom);
     }
 
     void RendererSystem::PollShaders(std::optional<size_t> hash)

@@ -7,6 +7,7 @@
 #include "API/RHI.h"
 #include "API/RenderGraph.h"
 #include "API/RenderPass.h"
+#include "API/Sampler.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
 #include "Render/SceneRendererHost.h"
@@ -15,8 +16,96 @@
 #include "ShadowPass.h"
 #include "Skybox/Skybox.h"
 
+#include <algorithm>
+
 namespace pe
 {
+    namespace
+    {
+        void DestroyLightShadowFallbackResources(std::vector<Buffer *> &uniforms,
+                                                 Image *&texture,
+                                                 Sampler *&sampler,
+                                                 std::vector<ImageView *> &views)
+        {
+            for (auto *&uniform : uniforms)
+                Buffer::Destroy(uniform);
+            uniforms.clear();
+
+            Image::Destroy(texture);
+            Sampler::Destroy(sampler);
+            views.clear();
+        }
+
+        void EnsureLightShadowFallbackResources(std::vector<Buffer *> &uniforms,
+                                                Image *&texture,
+                                                Sampler *&sampler,
+                                                std::vector<ImageView *> &views,
+                                                const std::string &namePrefix)
+        {
+            const uint32_t cascadeCount = std::max(1u, Settings::Get<GlobalSettings>().num_cascades);
+            const uint32_t frameCount = RHII.GetSwapchainImageCount();
+
+            if (!texture)
+            {
+                ImageDesc desc{};
+                desc.format = RHII.GetDepthFormat();
+                desc.width = 1;
+                desc.height = 1;
+                desc.usage = PE_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_TRANSFER_DST;
+                desc.clearColor = vec4(Color::Depth, Color::Stencil, 0.0f, 1.0f);
+                desc.name = namePrefix + "_ShadowFallback";
+                texture = Image::Create(desc);
+                texture->SetClearColor(desc.clearColor);
+                texture->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
+            }
+
+            if (!sampler)
+            {
+                SamplerDesc samplerInfo = Sampler::CreateInfoInit();
+                samplerInfo.addressModeU = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+                samplerInfo.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+                samplerInfo.addressModeW = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+                samplerInfo.maxAnisotropy = 1.f;
+                samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+                samplerInfo.compareEnable = true;
+                samplerInfo.compareOp = PE_COMPARE_OP_GREATER_OR_EQUAL;
+                sampler = Sampler::Create(samplerInfo, namePrefix + "_ShadowFallbackSampler");
+            }
+
+            if (uniforms.size() != frameCount)
+            {
+                for (auto *&uniform : uniforms)
+                    Buffer::Destroy(uniform);
+                uniforms.resize(frameCount, nullptr);
+
+                for (auto *&uniform : uniforms)
+                {
+                    uniform = Buffer::Create({
+                        .size = RHII.AlignUniform(cascadeCount * sizeof(mat4)),
+                        .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER,
+                        .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                        .name = namePrefix + "_ShadowFallbackUniform",
+                    });
+                    uniform->Map();
+                    uniform->Zero();
+                    uniform->Flush();
+                }
+            }
+
+            views.assign(cascadeCount, texture->GetSRV());
+        }
+
+        bool HasLiveShadowResources(const ShadowPass &shadows)
+        {
+            return shadows.HasLiveResources();
+        }
+
+        std::vector<ImageView *> GetLiveShadowViews(const ShadowPass &shadows)
+        {
+            return shadows.GetTextureViews();
+        }
+    } // namespace
+
     void LightOpaquePass::Init()
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
@@ -37,6 +126,11 @@ namespace pe
         m_attachments[0].loadOp = PE_LOAD_OP_CLEAR;
 
         m_uniforms.resize(RHII.GetSwapchainImageCount());
+        EnsureLightShadowFallbackResources(m_shadowFallbackUniforms,
+                                           m_shadowFallbackTexture,
+                                           m_shadowFallbackSampler,
+                                           m_shadowFallbackViews,
+                                           "LightOpaque");
     }
 
     void LightOpaquePass::UpdatePassInfo()
@@ -83,9 +177,14 @@ namespace pe
     void LightOpaquePass::UpdateDescriptorSets()
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        std::vector<ImageView *> views(shadows.m_textures.size());
-        for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
-            views[i] = shadows.m_textures[i]->GetSRV();
+        const bool useShadowResources = Settings::Get<GlobalSettings>().shadows && HasLiveShadowResources(shadows);
+        EnsureLightShadowFallbackResources(m_shadowFallbackUniforms,
+                                           m_shadowFallbackTexture,
+                                           m_shadowFallbackSampler,
+                                           m_shadowFallbackViews,
+                                           "LightOpaque");
+        const std::vector<ImageView *> shadowViews = useShadowResources ? GetLiveShadowViews(shadows) : m_shadowFallbackViews;
+        Sampler *shadowSampler = useShadowResources ? shadows.GetSampler() : m_shadowFallbackSampler;
 
         SceneRendererHost &renderer = RequireActiveSceneRendererHost();
         const SkyBox &skybox = renderer.GetSkyBox();
@@ -97,12 +196,13 @@ namespace pe
             auto &sets = m_passInfo->GetDescriptors(i);
 
             auto *DSet = sets[0];
+            Image *ssaoRT = m_ssaoRT ? m_ssaoRT : m_albedoRT;
             DSet->SetImageView(0, m_depthStencilRT->GetSRV(), m_depthStencilRT->GetSampler());
             DSet->SetImageView(1, m_normalRT->GetSRV(), m_normalRT->GetSampler());
             DSet->SetImageView(2, m_albedoRT->GetSRV(), m_albedoRT->GetSampler());
             DSet->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler());
             DSet->SetBuffer(4, scene.GetLightUniform(i));
-            DSet->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler());
+            DSet->SetImageView(5, ssaoRT->GetSRV(), ssaoRT->GetSampler());
             DSet->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler());
             DSet->SetBuffer(7, m_uniforms[i]);
             DSet->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler());
@@ -111,20 +211,32 @@ namespace pe
             DSet->Update();
 
             auto *DSetShadows = sets[1];
-            DSetShadows->SetBuffer(0, shadows.m_uniforms[i]);
-            DSetShadows->SetImageViews(1, views, {});
-            DSetShadows->SetSampler(2, shadows.m_sampler);
+            Buffer *shadowUniform = useShadowResources ? shadows.GetUniform(i) : m_shadowFallbackUniforms[i];
+            DSetShadows->SetBuffer(0, shadowUniform);
+            DSetShadows->SetImageViews(1, shadowViews, {});
+            DSetShadows->SetSampler(2, shadowSampler);
             DSetShadows->Update();
 
             auto *DSetSkybox = sets[2];
             DSetSkybox->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler());
             DSetSkybox->Update();
         }
+
+        m_boundShadowsAvailable = useShadowResources;
     }
 
     void LightOpaquePass::Update()
     {
         const auto &gSettings = Settings::Get<GlobalSettings>();
+        SceneRendererHost &renderer = RequireActiveSceneRendererHost();
+        ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
+        const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
+        if (Image *ssaoRT = renderer.GetRenderTarget("ssao");
+            ssaoRT != m_ssaoRT || shadowsAvailable != m_boundShadowsAvailable)
+        {
+            m_ssaoRT = ssaoRT;
+            UpdateDescriptorSets();
+        }
 
         Camera *camera = GetActiveScene()->GetActiveCamera();
 
@@ -134,13 +246,13 @@ namespace pe
 #if defined(PE_ANDROID)
         m_ubo.ssao = 0u; // FidelityFX CACAO produces incorrect AO on Mali GPUs; disable SSAO on Android.
 #else
-        m_ubo.ssao = gSettings.ssao;
+        m_ubo.ssao = gSettings.ssao && m_ssaoRT ? 1u : 0u;
 #endif
         m_ubo.ssr = gSettings.ssr;
         m_ubo.IBL = gSettings.IBL;
         m_ubo.IBL_intensity = gSettings.IBL_intensity;
         m_ubo.lights_intensity = gSettings.lights_intensity;
-        m_ubo.shadows = gSettings.shadows;
+        m_ubo.shadows = shadowsAvailable ? 1u : 0u;
         m_ubo.use_Disney_PBR = gSettings.use_Disney_PBR;
         m_ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;
         m_ubo.skyboxTanHalfFovY = tan(camera->Fovy() * 0.5f);
@@ -154,8 +266,8 @@ namespace pe
 
     void LightOpaquePass::DeclareInputs(RGBuilder &builder)
     {
-        const bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
+        const bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows && HasLiveShadowResources(shadows);
 
         builder.Read(m_depthStencilRT);
         builder.Read(m_normalRT);
@@ -163,13 +275,13 @@ namespace pe
         builder.Read(m_srmRT);
         builder.Read(m_velocityRT);
         builder.Read(m_emissiveRT);
-        if (Settings::Get<GlobalSettings>().ssao)
+        if (Settings::Get<GlobalSettings>().ssao && m_ssaoRT)
             builder.Read(m_ssaoRT);
         builder.Read(m_transparencyRT);
 
         if (shadowsEnabled)
         {
-            for (auto *tex : shadows.m_textures)
+            for (auto *tex : shadows.GetTextures())
                 builder.Read(tex);
         }
     }
@@ -179,6 +291,7 @@ namespace pe
         uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().num_cascades;
         const auto &gSettings = Settings::Get<GlobalSettings>();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
+        const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
 
         Scene &scene = *GetActiveScene();
         cmd->SetConstantAt(0, (uint32_t)scene.GetPointLights().size()); // num point lights
@@ -189,9 +302,11 @@ namespace pe
         cmd->SetConstantAt(5, m_viewportRT->GetHeight_f());             // framebuffer height
         cmd->SetConstantAt(6, 0u);                                      // is transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
-            cmd->SetConstantAt(i + 8, shadows.m_viewZ[i]); // shadowmap cascade distances
+            cmd->SetConstantAt(i + 8,
+                               shadowsAvailable ? shadows.GetCascadeViewZ(i) : 0.0f); // shadowmap cascade distances
         for (uint32_t i = 0; i < shadowmapCascades; i++)
-            cmd->SetConstantAt(i + 12, shadows.m_texelSizeWorld[i]); // cascade world-space texel sizes
+            cmd->SetConstantAt(i + 12,
+                               shadowsAvailable ? shadows.GetCascadeTexelSizeWorld(i) : 0.0f); // cascade world-space texel sizes
         cmd->SetConstantAt(16, gSettings.shadow_distance);
         cmd->SetConstantAt(17, gSettings.shadow_distance * std::clamp(gSettings.shadow_fade_fraction, 0.0f, 1.0f));
         cmd->SetConstantAt(18, gSettings.shadow_normal_bias);
@@ -218,6 +333,11 @@ namespace pe
 
         for (auto &uniform : m_uniforms)
             Buffer::Destroy(uniform);
+        m_uniforms.clear();
+        DestroyLightShadowFallbackResources(m_shadowFallbackUniforms,
+                                            m_shadowFallbackTexture,
+                                            m_shadowFallbackSampler,
+                                            m_shadowFallbackViews);
     }
 
     void LightTransparentPass::Init()
@@ -240,6 +360,11 @@ namespace pe
         m_attachments[0].loadOp = PE_LOAD_OP_LOAD;
 
         m_uniforms.resize(RHII.GetSwapchainImageCount());
+        EnsureLightShadowFallbackResources(m_shadowFallbackUniforms,
+                                           m_shadowFallbackTexture,
+                                           m_shadowFallbackSampler,
+                                           m_shadowFallbackViews,
+                                           "LightTransparent");
     }
 
     void LightTransparentPass::UpdatePassInfo()
@@ -284,9 +409,14 @@ namespace pe
     void LightTransparentPass::UpdateDescriptorSets()
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        std::vector<ImageView *> views(shadows.m_textures.size());
-        for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
-            views[i] = shadows.m_textures[i]->GetSRV();
+        const bool useShadowResources = Settings::Get<GlobalSettings>().shadows && HasLiveShadowResources(shadows);
+        EnsureLightShadowFallbackResources(m_shadowFallbackUniforms,
+                                           m_shadowFallbackTexture,
+                                           m_shadowFallbackSampler,
+                                           m_shadowFallbackViews,
+                                           "LightTransparent");
+        const std::vector<ImageView *> shadowViews = useShadowResources ? GetLiveShadowViews(shadows) : m_shadowFallbackViews;
+        Sampler *shadowSampler = useShadowResources ? shadows.GetSampler() : m_shadowFallbackSampler;
 
         SceneRendererHost &renderer = RequireActiveSceneRendererHost();
         const SkyBox &skybox = renderer.GetSkyBox();
@@ -296,12 +426,13 @@ namespace pe
             auto &sets = m_passInfo->GetDescriptors(i);
 
             auto *DSet = sets[0];
+            Image *ssaoRT = m_ssaoRT ? m_ssaoRT : m_albedoRT;
             DSet->SetImageView(0, m_depthStencilRT->GetSRV(), m_depthStencilRT->GetSampler());
             DSet->SetImageView(1, m_normalRT->GetSRV(), m_normalRT->GetSampler());
             DSet->SetImageView(2, m_albedoRT->GetSRV(), m_albedoRT->GetSampler());
             DSet->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler());
             DSet->SetBuffer(4, GetActiveScene()->GetLightUniform(i));
-            DSet->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler());
+            DSet->SetImageView(5, ssaoRT->GetSRV(), ssaoRT->GetSampler());
             DSet->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler());
             DSet->SetBuffer(7, m_uniforms[i]);
             DSet->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler());
@@ -311,20 +442,32 @@ namespace pe
             DSet->Update();
 
             auto *DSetShadows = sets[1];
-            DSetShadows->SetBuffer(0, shadows.m_uniforms[i]);
-            DSetShadows->SetImageViews(1, views);
-            DSetShadows->SetSampler(2, shadows.m_sampler);
+            Buffer *shadowUniform = useShadowResources ? shadows.GetUniform(i) : m_shadowFallbackUniforms[i];
+            DSetShadows->SetBuffer(0, shadowUniform);
+            DSetShadows->SetImageViews(1, shadowViews);
+            DSetShadows->SetSampler(2, shadowSampler);
             DSetShadows->Update();
 
             auto *DSetSkybox = sets[2];
             DSetSkybox->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler());
             DSetSkybox->Update();
         }
+
+        m_boundShadowsAvailable = useShadowResources;
     }
 
     void LightTransparentPass::Update()
     {
         const auto &gSettings = Settings::Get<GlobalSettings>();
+        SceneRendererHost &renderer = RequireActiveSceneRendererHost();
+        ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
+        const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
+        if (Image *ssaoRT = renderer.GetRenderTarget("ssao");
+            ssaoRT != m_ssaoRT || shadowsAvailable != m_boundShadowsAvailable)
+        {
+            m_ssaoRT = ssaoRT;
+            UpdateDescriptorSets();
+        }
 
         Camera *camera = GetActiveScene()->GetActiveCamera();
 
@@ -334,13 +477,13 @@ namespace pe
 #if defined(PE_ANDROID)
         m_ubo.ssao = 0u; // FidelityFX CACAO produces incorrect AO on Mali GPUs; disable SSAO on Android.
 #else
-        m_ubo.ssao = gSettings.ssao;
+        m_ubo.ssao = gSettings.ssao && m_ssaoRT ? 1u : 0u;
 #endif
         m_ubo.ssr = gSettings.ssr;
         m_ubo.IBL = gSettings.IBL;
         m_ubo.IBL_intensity = gSettings.IBL_intensity;
         m_ubo.lights_intensity = gSettings.lights_intensity;
-        m_ubo.shadows = gSettings.shadows;
+        m_ubo.shadows = shadowsAvailable ? 1u : 0u;
         m_ubo.use_Disney_PBR = gSettings.use_Disney_PBR;
         m_ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;
         m_ubo.skyboxTanHalfFovY = tan(camera->Fovy() * 0.5f);
@@ -354,8 +497,8 @@ namespace pe
 
     void LightTransparentPass::DeclareInputs(RGBuilder &builder)
     {
-        const bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
+        const bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows && HasLiveShadowResources(shadows);
 
         builder.Read(m_depthStencilRT);
         builder.Read(m_normalRT);
@@ -363,13 +506,13 @@ namespace pe
         builder.Read(m_srmRT);
         builder.Read(m_velocityRT);
         builder.Read(m_emissiveRT);
-        if (Settings::Get<GlobalSettings>().ssao)
+        if (Settings::Get<GlobalSettings>().ssao && m_ssaoRT)
             builder.Read(m_ssaoRT);
         builder.Read(m_transparencyRT);
 
         if (shadowsEnabled)
         {
-            for (auto *tex : shadows.m_textures)
+            for (auto *tex : shadows.GetTextures())
                 builder.Read(tex);
         }
     }
@@ -379,6 +522,7 @@ namespace pe
         uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().num_cascades;
         const auto &gSettings = Settings::Get<GlobalSettings>();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
+        const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
 
         Scene &scene = *GetActiveScene();
         cmd->SetConstantAt(0, (uint32_t)scene.GetPointLights().size()); // num point lights
@@ -389,9 +533,11 @@ namespace pe
         cmd->SetConstantAt(5, m_viewportRT->GetHeight_f());             // framebuffer height
         cmd->SetConstantAt(6, 1u);                                      // transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
-            cmd->SetConstantAt(i + 8, shadows.m_viewZ[i]); // shadowmap cascade distances
+            cmd->SetConstantAt(i + 8,
+                               shadowsAvailable ? shadows.GetCascadeViewZ(i) : 0.0f); // shadowmap cascade distances
         for (uint32_t i = 0; i < shadowmapCascades; i++)
-            cmd->SetConstantAt(i + 12, shadows.m_texelSizeWorld[i]); // cascade world-space texel sizes
+            cmd->SetConstantAt(i + 12,
+                               shadowsAvailable ? shadows.GetCascadeTexelSizeWorld(i) : 0.0f); // cascade world-space texel sizes
         cmd->SetConstantAt(16, gSettings.shadow_distance);
         cmd->SetConstantAt(17, gSettings.shadow_distance * std::clamp(gSettings.shadow_fade_fraction, 0.0f, 1.0f));
         cmd->SetConstantAt(18, gSettings.shadow_normal_bias);
@@ -417,5 +563,10 @@ namespace pe
     {
         for (auto &uniform : m_uniforms)
             Buffer::Destroy(uniform);
+        m_uniforms.clear();
+        DestroyLightShadowFallbackResources(m_shadowFallbackUniforms,
+                                            m_shadowFallbackTexture,
+                                            m_shadowFallbackSampler,
+                                            m_shadowFallbackViews);
     }
 } // namespace pe
