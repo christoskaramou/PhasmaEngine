@@ -15,7 +15,6 @@ local menu_open = false
 local toggles = {
     { "Cast Shadows",   "shadows" },
     { "IBL",            "IBL" },
-    { "SSAO",           "ssao" },
     { "SSR",            "ssr" },
     { "FXAA",           "fxaa" },
     { "TAA",            "taa" },

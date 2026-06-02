@@ -131,7 +131,11 @@ namespace pe
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.camPos = vec4(camera->GetPosition(), 1.0f);
         m_ubo.camForward = vec4(camera->GetFront(), 0.0f);
+#if defined(PE_ANDROID)
+        m_ubo.ssao = 0u; // FidelityFX CACAO produces incorrect AO on Mali GPUs; disable SSAO on Android.
+#else
         m_ubo.ssao = gSettings.ssao;
+#endif
         m_ubo.ssr = gSettings.ssr;
         m_ubo.IBL = gSettings.IBL;
         m_ubo.IBL_intensity = gSettings.IBL_intensity;
@@ -327,7 +331,11 @@ namespace pe
         m_ubo.invViewProj = camera->GetInvViewProjection();
         m_ubo.camPos = vec4(camera->GetPosition(), 1.0f);
         m_ubo.camForward = vec4(camera->GetFront(), 0.0f);
+#if defined(PE_ANDROID)
+        m_ubo.ssao = 0u; // FidelityFX CACAO produces incorrect AO on Mali GPUs; disable SSAO on Android.
+#else
         m_ubo.ssao = gSettings.ssao;
+#endif
         m_ubo.ssr = gSettings.ssr;
         m_ubo.IBL = gSettings.IBL;
         m_ubo.IBL_intensity = gSettings.IBL_intensity;
