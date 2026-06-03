@@ -7,9 +7,11 @@
 #endif
 
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#if !(defined(PE_ANDROID) && (defined(__i386__) || defined(__x86_64__)))
 #define GLM_FORCE_INTRINSICS
 #if defined(_M_IX86) || defined(_M_X64) || defined(__i386__) || defined(__x86_64__)
 #define GLM_FORCE_SSE2
+#endif
 #endif
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_LEFT_HANDED

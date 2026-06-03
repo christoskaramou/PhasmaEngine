@@ -51,10 +51,6 @@
 #include <nlohmann/json.hpp>
 #include "imgui/imgui_internal.h"
 
-#include <chrono>
-#include <fstream>
-#include <thread>
-
 #if defined(PE_WIN32)
 #include <windows.h>
 #else
@@ -258,6 +254,87 @@ namespace pe
                 return "Unreal";
             default:
                 return "Unknown";
+            }
+        }
+
+        const char *SceneViewAspectId(SceneViewAspectMode mode)
+        {
+            switch (mode)
+            {
+            case SceneViewAspectMode::Free:
+                return "free";
+            case SceneViewAspectMode::Landscape16x9:
+                return "16_9";
+            case SceneViewAspectMode::Portrait9x16:
+                return "9_16";
+            case SceneViewAspectMode::Landscape19_5x9:
+                return "19_5_9";
+            case SceneViewAspectMode::Portrait9x19_5:
+                return "9_19_5";
+            case SceneViewAspectMode::Square1x1:
+                return "1_1";
+            default:
+                return "unknown";
+            }
+        }
+
+        const char *SceneViewAspectLabel(SceneViewAspectMode mode)
+        {
+            switch (mode)
+            {
+            case SceneViewAspectMode::Free:
+                return "Free Aspect";
+            case SceneViewAspectMode::Landscape16x9:
+                return "16:9";
+            case SceneViewAspectMode::Portrait9x16:
+                return "9:16";
+            case SceneViewAspectMode::Landscape19_5x9:
+                return "19.5:9";
+            case SceneViewAspectMode::Portrait9x19_5:
+                return "9:19.5";
+            case SceneViewAspectMode::Square1x1:
+                return "1:1";
+            default:
+                return "Unknown";
+            }
+        }
+
+        std::optional<SceneViewAspectMode> SceneViewAspectFromId(std::string id)
+        {
+            std::transform(id.begin(), id.end(), id.begin(),
+                           [](unsigned char c)
+                           { return static_cast<char>(std::tolower(c)); });
+            std::replace(id.begin(), id.end(), ':', '_');
+            std::replace(id.begin(), id.end(), '.', '_');
+            std::replace(id.begin(), id.end(), 'x', '_');
+
+            if (id == "free" || id == "default")
+                return SceneViewAspectMode::Free;
+            if (id == "16_9" || id == "landscape_16_9")
+                return SceneViewAspectMode::Landscape16x9;
+            if (id == "9_16" || id == "portrait_9_16" || id == "phone")
+                return SceneViewAspectMode::Portrait9x16;
+            if (id == "19_5_9" || id == "landscape_19_5_9")
+                return SceneViewAspectMode::Landscape19_5x9;
+            if (id == "9_19_5" || id == "portrait_9_19_5" || id == "android")
+                return SceneViewAspectMode::Portrait9x19_5;
+            if (id == "1_1" || id == "square")
+                return SceneViewAspectMode::Square1x1;
+            return std::nullopt;
+        }
+
+        void SetSceneViewAspectMode(SceneViewAspectMode mode)
+        {
+            auto &settings = Settings::Get<GlobalSettings>();
+            if (settings.scene_view_aspect_mode == mode)
+                return;
+
+            settings.scene_view_aspect_mode = mode;
+            if (RendererSystem *rs = GetGlobalSystem<RendererSystem>())
+            {
+                rs->ResetTAAHistory();
+                rs->GetScene().MarkDirty();
+                rs->GetGUI().NotifyChange();
             }
         }
 
@@ -607,6 +684,7 @@ namespace pe
 
     std::string GUI::QueryEditorActions()
     {
+        auto &globalSettings = Settings::Get<GlobalSettings>();
         nlohmann::json result;
         result["windows"] = nlohmann::json::array();
         result["actions"] = nlohmann::json::array();
@@ -615,6 +693,7 @@ namespace pe
             {"play_mode", GUIState::s_playMode},
             {"paused", GUIState::s_isPaused},
             {"viewport_floating", GUIState::s_sceneViewFloating},
+            {"viewport_aspect", SceneViewAspectId(globalSettings.scene_view_aspect_mode)},
             {"style", StyleId(GUIState::s_guiStyle)},
             {"font_scale", ImGui::GetIO().FontGlobalScale},
             {"render_enabled", m_render},
@@ -658,7 +737,6 @@ namespace pe
         addWindow("Dear ImGui Demo", m_show_demo_window, false);
 
         auto &undoRedo = UndoRedo::Instance();
-        auto &globalSettings = Settings::Get<GlobalSettings>();
         addAction("file.load_model", "Load ModelAsset", "File", "command", !GUIState::s_modelLoading.load(), false, false);
         addAction("file.new_scene", "New Scene", "File", "command", true, false, false);
         addAction("file.load_scene", "Load Scene", "File", "command", true, false, false);
@@ -678,6 +756,16 @@ namespace pe
 
         addAction("viewport.floating", "Viewport Floating", "Window", "toggle", true, GUIState::s_sceneViewFloating, true);
         addAction("viewport.redock", "Redock Viewport", "Window", "command", GUIState::s_sceneViewFloating, false, false);
+        for (SceneViewAspectMode mode : {SceneViewAspectMode::Free,
+                                         SceneViewAspectMode::Landscape16x9,
+                                         SceneViewAspectMode::Portrait9x16,
+                                         SceneViewAspectMode::Landscape19_5x9,
+                                         SceneViewAspectMode::Portrait9x19_5,
+                                         SceneViewAspectMode::Square1x1})
+        {
+            const std::string id = std::string("viewport.aspect.") + SceneViewAspectId(mode);
+            addAction(id, SceneViewAspectLabel(mode), "Window", "choice", true, globalSettings.scene_view_aspect_mode == mode, true);
+        }
 
         addAction("gizmo.transform", "Transform Gizmo", "Gizmos", "toggle", true, GUIState::s_useTransformGizmo, true);
         addAction("gizmo.lights", "Light Gizmos", "Gizmos", "toggle", true, GUIState::s_useLightGizmos, true);
@@ -1000,6 +1088,17 @@ namespace pe
             GUIState::s_sceneViewFloating = false;
             GUIState::s_sceneViewRedockQueued = true;
             return ok({{"floating", false}});
+        }
+
+        if (action.rfind("viewport.aspect.", 0) == 0 || action == "viewport.aspect")
+        {
+            const std::string value = action == "viewport.aspect" ? args.value("aspect", "") : action.substr(16);
+            if (auto mode = SceneViewAspectFromId(value))
+            {
+                SetSceneViewAspectMode(*mode);
+                return ok({{"aspect", SceneViewAspectId(Settings::Get<GlobalSettings>().scene_view_aspect_mode)}});
+            }
+            return nlohmann::json{{"error", "unknown viewport aspect: " + value}}.dump();
         }
 
         auto toggleBool = [&](bool &target) -> std::string
@@ -2384,6 +2483,7 @@ namespace pe
 
                 if (ImGui::BeginMenu("Viewport"))
                 {
+                    auto &gSettings = Settings::Get<GlobalSettings>();
                     if (auto *sv = GetWidget<SceneView>())
                         ImGui::MenuItem("Enabled", nullptr, sv->GetOpen());
 
@@ -2403,6 +2503,24 @@ namespace pe
                     {
                         GUIState::s_sceneViewFloating = false;
                         GUIState::s_sceneViewRedockQueued = true;
+                    }
+                    if (ImGui::BeginMenu("Aspect Ratio"))
+                    {
+                        for (SceneViewAspectMode mode : {SceneViewAspectMode::Free,
+                                                         SceneViewAspectMode::Landscape16x9,
+                                                         SceneViewAspectMode::Portrait9x16,
+                                                         SceneViewAspectMode::Landscape19_5x9,
+                                                         SceneViewAspectMode::Portrait9x19_5,
+                                                         SceneViewAspectMode::Square1x1})
+                        {
+                            if (ImGui::MenuItem(SceneViewAspectLabel(mode),
+                                                nullptr,
+                                                gSettings.scene_view_aspect_mode == mode))
+                            {
+                                SetSceneViewAspectMode(mode);
+                            }
+                        }
+                        ImGui::EndMenu();
                     }
                     ImGui::EndMenu();
                 }

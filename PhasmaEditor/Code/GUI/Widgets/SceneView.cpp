@@ -716,7 +716,12 @@ namespace pe
             return;
         }
 
-        const float targetAspect = (float)sceneTexture->GetWidth() / (float)sceneTexture->GetHeight();
+        const ImVec2 panelMin = ImGui::GetCursorScreenPos();
+        const ImVec2 panelMax(panelMin.x + panel.x, panelMin.y + panel.y);
+        ImGui::GetWindowDrawList()->AddRectFilled(panelMin, panelMax, IM_COL32(0, 0, 0, 255));
+
+        const float sourceAspect = (float)sceneTexture->GetWidth() / (float)sceneTexture->GetHeight();
+        const float targetAspect = GUIState::GetSceneViewAspectRatio(sourceAspect);
         const ImVec2 imageSize = ComputeAspectFitSize(panel, targetAspect);
 
         CenterCursorForImage(panel, imageSize);

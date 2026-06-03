@@ -32,7 +32,8 @@
     "draw_grid": false,
     "draw_aabbs": false,
     "render_mode": 0,
-    "present_mode": 1
+    "present_mode": 1,
+    "scene_view_aspect_mode": 4
   },
   "sources": [
     {

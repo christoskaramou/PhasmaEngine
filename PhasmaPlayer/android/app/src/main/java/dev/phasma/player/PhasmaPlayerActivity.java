@@ -61,13 +61,13 @@ public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
 
     // Extract the packaged Assets/ tree into app-private storage so the native engine's
     // Path::Assets (SDL_AndroidGetInternalStoragePath()/Assets/) resolves on device.
-    // Re-extract only when the app versionCode changes: this avoids re-paying the full
-    // copy on every cold start and avoids clobbering files a game writes under Assets/.
+    // Re-extract only when the installed APK changes: this avoids re-paying the full
+    // copy on every cold start while still refreshing assets during same-version debug reinstalls.
     private void extractBundledAssets() {
         File assetsDir = new File(getFilesDir(), ASSET_ROOT);
         File shaderCacheDir = new File(getFilesDir(), SHADER_CACHE_DEST);
         File marker = new File(getFilesDir(), VERSION_MARKER);
-        String version = Integer.toString(appVersionCode());
+        String version = appAssetVersion();
         // Also require the shader cache to be present, so updating over an install that predates
         // the pre-baked cache (same versionCode, marker already written) still extracts it.
         if (assetsDir.isDirectory() && shaderCacheDir.isDirectory() && version.equals(readMarker(marker))) {
@@ -115,11 +115,13 @@ public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
     }
 
     @SuppressWarnings("deprecation")
-    private int appVersionCode() {
+    private String appAssetVersion() {
         try {
-            return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+            android.content.pm.PackageInfo packageInfo =
+                    getPackageManager().getPackageInfo(getPackageName(), 0);
+            return packageInfo.versionCode + ":" + packageInfo.lastUpdateTime;
         } catch (PackageManager.NameNotFoundException e) {
-            return -1;
+            return "-1";
         }
     }
 

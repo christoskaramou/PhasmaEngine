@@ -2,11 +2,11 @@
 -- Mirrors the editor "Global" widget's effect toggles via runtime_ui checkboxes bound to
 -- settings.get/set. Attached to a scene node (Component_Script).
 --
--- NOTE: every effect listed below must have its shader baked into the SPIR-V cache
--- (tools/bake_android_shaders.ps1 against an all-effects-on scene); the Android player has no
--- runtime shader compiler, so toggling on an unbaked effect would hard-fault. render_scale and
--- the float sliders/cascade-count are intentionally omitted (no slider primitive; render_scale
--- needs a Resize event, and cascade count / shadow-map size are compile-time shader defines).
+-- NOTE: every pass-enabling effect listed below must be covered by tools/bake_android_shaders.ps1.
+-- The Android player has no runtime shader compiler, so toggling on an unbaked pass would abort.
+-- render_scale and the float sliders/cascade-count are intentionally omitted (no slider primitive;
+-- render_scale needs a Resize event, and cascade count / shadow-map size are compile-time shader
+-- defines).
 
 local hud_shown = false
 local menu_open = false

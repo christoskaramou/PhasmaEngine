@@ -36,7 +36,6 @@
 #endif
 #include "renderdoc_app.h"
 
-
 #define PE_RENDER_DOC 0
 
 #if defined(WIN32) && PE_RENDER_DOC == 1
@@ -456,6 +455,12 @@ namespace pe
 
     void Debug::SetObjectNameRaw(uint32_t objectType, uint64_t objectHandle, const char *name)
     {
+#if defined(PE_ANDROID)
+        (void)objectType;
+        (void)objectHandle;
+        (void)name;
+        return;
+#else
         if (!vkSetDebugUtilsObjectNameEXT)
             return;
 
@@ -472,6 +477,7 @@ namespace pe
 #endif
 
         vkSetDebugUtilsObjectNameEXT(VulkanRhi::Device(), &info);
+#endif
     }
 
     void Debug::SetObjectName(Buffer *buffer, const std::string &name)

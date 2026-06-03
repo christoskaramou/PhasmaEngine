@@ -849,7 +849,6 @@ namespace pe
         appInfo.sType = vk::StructureType::eApplicationInfo;
         appInfo.pApplicationName = "PhasmaEngine";
         appInfo.pEngineName = "PhasmaEngine";
-        appInfo.apiVersion = m_caps.instanceApiVersion;
 
         // Create Instance
         {
@@ -862,7 +861,34 @@ namespace pe
             instanceCI.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
             instanceCI.ppEnabledLayerNames = instanceLayers.data();
 
-            vk->m_instance = ::vk::createInstance(instanceCI);
+            auto createInstance = [&](uint32_t apiVersion)
+            {
+                appInfo.apiVersion = apiVersion;
+                return ::vk::createInstance(instanceCI);
+            };
+
+#if defined(PE_ANDROID)
+            try
+            {
+                vk->m_instance = createInstance(m_caps.instanceApiVersion);
+            }
+            catch (const vk::SystemError &error)
+            {
+                const uint32_t fallbackApiVersion =
+                    std::min(m_caps.loaderApiVersion ? m_caps.loaderApiVersion : VK_API_VERSION_1_0,
+                             VK_API_VERSION_1_2);
+                if (m_caps.instanceApiVersion <= fallbackApiVersion)
+                    throw;
+
+                PE_WARN("[Vulkan] Instance creation failed with loader API version; retrying with Vulkan 1.2: %s",
+                        error.what());
+                m_caps.instanceApiVersion = fallbackApiVersion;
+                LogVulkanApiVersion("Requested instance API version", m_caps.instanceApiVersion);
+                vk->m_instance = createInstance(m_caps.instanceApiVersion);
+            }
+#else
+            vk->m_instance = createInstance(m_caps.instanceApiVersion);
+#endif
 
             VULKAN_HPP_DEFAULT_DISPATCHER.init(vk->m_instance);
         }

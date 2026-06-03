@@ -69,5 +69,6 @@ namespace pe
 
         static void OpenExternalPath(const std::string &absPath);
         static void UpdateAssetPreview(AssetPreviewType type, const std::string &label, const std::string &fullPath);
+        static float GetSceneViewAspectRatio(float fallbackAspect);
     };
 } // namespace pe

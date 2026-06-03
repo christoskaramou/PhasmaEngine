@@ -13,6 +13,7 @@
 #include "API/RHI.h"
 #include "Camera/Camera.h"
 #include "Particles/ParticleManager.h"
+#include <cstddef>
 
 namespace pe
 {
@@ -832,9 +833,10 @@ namespace pe
             float cameraPositionY;
             float cameraPositionZ;
             float pad0;
-            vec4 frustumPlanes[6];
+            alignas(16) vec4 frustumPlanes[6];
         } constants{};
-        static_assert(sizeof(PushConstants) <= 128, "PushConstants exceeds 128 bytes");
+        static_assert(offsetof(PushConstants, frustumPlanes) == 32, "PushConstants frustum planes must match std430 layout");
+        static_assert(sizeof(PushConstants) == 128, "PushConstants must fill the Vulkan guaranteed push-constant budget");
         {
             PE_PROFILE_SCOPE("Culling Build Constants");
             constants.maxDrawCount = m_meshCount;

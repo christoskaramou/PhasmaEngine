@@ -174,6 +174,20 @@ namespace pe
             return true;
         }
 
+        float EditorCameraAspect()
+        {
+            RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+            Image *displayRT = renderer ? renderer->GetDisplayRT() : nullptr;
+            float fallbackAspect = 16.0f / 9.0f;
+            if (displayRT && displayRT->GetHeight() > 0)
+                fallbackAspect = displayRT->GetWidth_f() / displayRT->GetHeight_f();
+
+            if (!renderer || !renderer->GetGUI().Render())
+                return fallbackAspect;
+
+            return GUIState::GetSceneViewAspectRatio(fallbackAspect);
+        }
+
         Scene *GetEditorActiveScene()
         {
             RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
@@ -344,7 +358,9 @@ namespace pe
         sceneHooks.clearSelection = EditorClearSceneSelection;
         sceneHooks.isNodeSelected = EditorIsSceneNodeSelected;
         SetSceneRuntimeHooks(sceneHooks);
-        SetCameraRuntimeCallbacks(CreateDefaultCameraRuntimeCallbacks());
+        CameraRuntimeCallbacks cameraHooks = CreateDefaultCameraRuntimeCallbacks();
+        cameraHooks.getAspect = EditorCameraAspect;
+        SetCameraRuntimeCallbacks(cameraHooks);
         ScriptRuntimeHooks scriptHooks{};
         scriptHooks.isPlayMode = EditorScriptPlayMode;
         scriptHooks.setPlayMode = EditorSetScriptPlayMode;

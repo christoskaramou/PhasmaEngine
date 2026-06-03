@@ -164,6 +164,23 @@ namespace pe
             settings.AddMember("render_mode", static_cast<int>(gSettings.render_mode), allocator);
             settings.AddMember("use_Disney_PBR", gSettings.use_Disney_PBR, allocator);
             settings.AddMember("present_mode", static_cast<int>(gSettings.preferred_present_mode), allocator);
+            settings.AddMember("scene_view_aspect_mode", static_cast<int>(gSettings.scene_view_aspect_mode), allocator);
+        }
+
+        SceneViewAspectMode ClampSceneViewAspectMode(int mode)
+        {
+            switch (static_cast<SceneViewAspectMode>(mode))
+            {
+            case SceneViewAspectMode::Free:
+            case SceneViewAspectMode::Landscape16x9:
+            case SceneViewAspectMode::Portrait9x16:
+            case SceneViewAspectMode::Landscape19_5x9:
+            case SceneViewAspectMode::Portrait9x19_5:
+            case SceneViewAspectMode::Square1x1:
+                return static_cast<SceneViewAspectMode>(mode);
+            default:
+                return SceneViewAspectMode::Free;
+            }
         }
 
         void ApplyGlobalSettingsMembers(const rapidjson::Value &settings)
@@ -281,6 +298,8 @@ namespace pe
                 gSettings.preferred_present_mode = static_cast<PePresentMode>(settings["present_mode"].GetInt());
                 EventSystem::PushEvent(EventType::PresentMode);
             }
+            if (settings.HasMember("scene_view_aspect_mode") && settings["scene_view_aspect_mode"].IsInt())
+                gSettings.scene_view_aspect_mode = ClampSceneViewAspectMode(settings["scene_view_aspect_mode"].GetInt());
         }
 
         std::string MakePrimitiveSourceId(const std::string &ptype, const vec4 &params, uint32_t count)

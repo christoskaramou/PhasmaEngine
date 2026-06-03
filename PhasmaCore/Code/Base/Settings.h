@@ -26,6 +26,16 @@ namespace pe
         RayTracing = 2 // Full Ray Tracing
     };
 
+    enum class SceneViewAspectMode : int
+    {
+        Free = 0,
+        Landscape16x9,
+        Portrait9x16,
+        Landscape19_5x9,
+        Portrait9x19_5,
+        Square1x1
+    };
+
     inline RenderMode ClampRenderModeToRayTracingSupport(RenderMode mode, bool rayTracingSupported)
     {
         switch (mode)
@@ -116,6 +126,7 @@ namespace pe
         RenderMode render_mode = RenderMode::Hybrid;
         bool use_Disney_PBR = true;
         PePresentMode preferred_present_mode = PE_PRESENT_MODE_MAILBOX;
+        SceneViewAspectMode scene_view_aspect_mode = SceneViewAspectMode::Free;
     };
 
     // Suppress per-TU instantiation — PhasmaCore.dll provides the one canonical instance.

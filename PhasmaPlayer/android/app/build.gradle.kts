@@ -35,6 +35,10 @@ val spirvCrossRoot = if (spirvCrossRootPath.isBlank()) {
 } else {
     file(spirvCrossRootPath).canonicalFile
 }
+val androidAbiFilters = (localProperty("androidAbiFilters") ?: "arm64-v8a")
+    .split(',')
+    .map { it.trim() }
+    .filter { it.isNotEmpty() }
 
 // Pre-baked SPIR-V shader cache (produced by tools/bake_android_shaders.ps1). Android builds with
 // no runtime shader compiler, so these vulkan1.2-keyed blobs are the only way the device can create
@@ -101,7 +105,7 @@ android {
         versionName = "0.16"
 
         ndk {
-            abiFilters += "arm64-v8a"
+            abiFilters += androidAbiFilters
         }
 
         externalNativeBuild {
