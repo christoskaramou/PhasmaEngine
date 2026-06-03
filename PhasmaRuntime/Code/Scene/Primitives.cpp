@@ -10,6 +10,28 @@ namespace pe
 {
     static const float PI = 3.14159265359f;
 
+    static int ClampSegments(int value, int minValue, int maxValue)
+    {
+        return std::clamp(value, minValue, maxValue);
+    }
+
+    static Vertex MakeVertex(const glm::vec3 &pos, const glm::vec3 &normal, const glm::vec2 &uv)
+    {
+        Vertex v{};
+        FillVertexPosition(v, pos.x, pos.y, pos.z);
+        FillVertexNormal(v, normal.x, normal.y, normal.z);
+        FillVertexUV(v, uv.x, uv.y);
+        FillVertexColor(v, 1.f, 1.f, 1.f, 1.f);
+        return v;
+    }
+
+    static glm::vec2 SphericalUV(const glm::vec3 &normal)
+    {
+        const float u = 0.5f + std::atan2(normal.z, normal.x) / (2.0f * PI);
+        const float v = 0.5f - std::asin(std::clamp(normal.y, -1.0f, 1.0f)) / PI;
+        return {u, v};
+    }
+
     static inline glm::vec3 VPos(const Vertex &v)
     {
         return {v.position[0], v.position[1], v.position[2]};
@@ -247,6 +269,51 @@ namespace pe
         return model;
     }
 
+    ModelAsset *Primitives::CreateGrid(float width, float depth, int subdivisions)
+    {
+        subdivisions = ClampSegments(subdivisions, 1, 512);
+
+        const float halfW = width * 0.5f;
+        const float halfD = depth * 0.5f;
+        const int vertsPerSide = subdivisions + 1;
+
+        std::vector<Vertex> vertices;
+        std::vector<uint32_t> indices;
+        vertices.reserve(static_cast<size_t>(vertsPerSide) * static_cast<size_t>(vertsPerSide));
+        indices.reserve(static_cast<size_t>(subdivisions) * static_cast<size_t>(subdivisions) * 6u);
+
+        for (int z = 0; z <= subdivisions; ++z)
+        {
+            const float v = z / static_cast<float>(subdivisions);
+            const float pz = -halfD + depth * v;
+            for (int x = 0; x <= subdivisions; ++x)
+            {
+                const float u = x / static_cast<float>(subdivisions);
+                const float px = -halfW + width * u;
+                vertices.push_back(MakeVertex({px, 0.0f, pz}, {0.0f, 1.0f, 0.0f}, {u, v}));
+            }
+        }
+
+        for (int z = 0; z < subdivisions; ++z)
+        {
+            for (int x = 0; x < subdivisions; ++x)
+            {
+                const uint32_t v00 = static_cast<uint32_t>(z * vertsPerSide + x);
+                const uint32_t v01 = static_cast<uint32_t>((z + 1) * vertsPerSide + x);
+                const uint32_t v11 = static_cast<uint32_t>((z + 1) * vertsPerSide + x + 1);
+                const uint32_t v10 = static_cast<uint32_t>(z * vertsPerSide + x + 1);
+                indices.insert(indices.end(), {v00, v01, v11, v00, v11, v10});
+            }
+        }
+
+        ModelAsset *model = CreatePrimitiveModel(vertices, indices);
+        model->SetLabel("Grid");
+        model->SetPrimitiveType("grid");
+        model->SetPrimitiveParams(vec4(width, depth, static_cast<float>(subdivisions), 0.f), 3);
+        model->SetNodeName(model->GetRootNodeIndex(), "Grid");
+        return model;
+    }
+
     ModelAsset *Primitives::CreateCube(float size)
     {
         float s = size * 0.5f;
@@ -323,6 +390,19 @@ namespace pe
 
     ModelAsset *Primitives::CreateSphere(float radius, int slices, int stacks)
     {
+        ModelAsset *model = CreateUvSphere(radius, slices, stacks);
+        model->SetLabel("Sphere");
+        model->SetPrimitiveType("sphere");
+        model->SetPrimitiveParams(vec4(radius, 0.f, 0.f, 0.f), 1);
+        model->SetNodeName(model->GetRootNodeIndex(), "Sphere");
+        return model;
+    }
+
+    ModelAsset *Primitives::CreateUvSphere(float radius, int slices, int stacks)
+    {
+        slices = ClampSegments(slices, 3, 512);
+        stacks = ClampSegments(stacks, 2, 512);
+
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
 
@@ -370,10 +450,250 @@ namespace pe
         }
 
         ModelAsset *model = CreatePrimitiveModel(vertices, indices);
-        model->SetLabel("Sphere");
-        model->SetPrimitiveType("sphere");
-        model->SetPrimitiveParams(vec4(radius, 0.f, 0.f, 0.f), 1);
-        model->SetNodeName(model->GetRootNodeIndex(), "Sphere");
+        model->SetLabel("UV Sphere");
+        model->SetPrimitiveType("uv_sphere");
+        model->SetPrimitiveParams(vec4(radius, static_cast<float>(slices), static_cast<float>(stacks), 0.f), 3);
+        model->SetNodeName(model->GetRootNodeIndex(), "UV Sphere");
+        return model;
+    }
+
+    ModelAsset *Primitives::CreateIcoSphere(float radius, int subdivisions)
+    {
+        subdivisions = ClampSegments(subdivisions, 0, 6);
+
+        const float t = (1.0f + std::sqrt(5.0f)) * 0.5f;
+        std::vector<glm::vec3> positions = {
+            {-1, +t, 0},
+            {+1, +t, 0},
+            {-1, -t, 0},
+            {+1, -t, 0},
+            {0, -1, +t},
+            {0, +1, +t},
+            {0, -1, -t},
+            {0, +1, -t},
+            {+t, 0, -1},
+            {+t, 0, +1},
+            {-t, 0, -1},
+            {-t, 0, +1},
+        };
+
+        for (auto &p : positions)
+            p = glm::normalize(p);
+
+        std::vector<std::array<uint32_t, 3>> faces = {
+            std::array<uint32_t, 3>{0, 11, 5},
+            {0, 5, 1},
+            {0, 1, 7},
+            {0, 7, 10},
+            {0, 10, 11},
+            {1, 5, 9},
+            {5, 11, 4},
+            {11, 10, 2},
+            {10, 7, 6},
+            {7, 1, 8},
+            {3, 9, 4},
+            {3, 4, 2},
+            {3, 2, 6},
+            {3, 6, 8},
+            {3, 8, 9},
+            {4, 9, 5},
+            {2, 4, 11},
+            {6, 2, 10},
+            {8, 6, 7},
+            {9, 8, 1},
+        };
+
+        auto edgeKey = [](uint32_t a, uint32_t b) -> uint64_t
+        {
+            const uint32_t lo = std::min(a, b);
+            const uint32_t hi = std::max(a, b);
+            return (static_cast<uint64_t>(lo) << 32u) | static_cast<uint64_t>(hi);
+        };
+
+        for (int level = 0; level < subdivisions; ++level)
+        {
+            std::unordered_map<uint64_t, uint32_t> midpointCache;
+            std::vector<std::array<uint32_t, 3>> nextFaces;
+            nextFaces.reserve(faces.size() * 4u);
+
+            auto midpoint = [&](uint32_t a, uint32_t b) -> uint32_t
+            {
+                const uint64_t key = edgeKey(a, b);
+                auto it = midpointCache.find(key);
+                if (it != midpointCache.end())
+                    return it->second;
+
+                glm::vec3 p = glm::normalize((positions[a] + positions[b]) * 0.5f);
+                const uint32_t index = static_cast<uint32_t>(positions.size());
+                positions.push_back(p);
+                midpointCache.emplace(key, index);
+                return index;
+            };
+
+            for (const auto &f : faces)
+            {
+                const uint32_t ab = midpoint(f[0], f[1]);
+                const uint32_t bc = midpoint(f[1], f[2]);
+                const uint32_t ca = midpoint(f[2], f[0]);
+                nextFaces.push_back({f[0], ab, ca});
+                nextFaces.push_back({f[1], bc, ab});
+                nextFaces.push_back({f[2], ca, bc});
+                nextFaces.push_back({ab, bc, ca});
+            }
+            faces = std::move(nextFaces);
+        }
+
+        std::vector<Vertex> vertices;
+        std::vector<uint32_t> indices;
+        vertices.reserve(positions.size());
+        indices.reserve(faces.size() * 3u);
+
+        for (const glm::vec3 &p : positions)
+            vertices.push_back(MakeVertex(p * radius, p, SphericalUV(p)));
+
+        for (const auto &f : faces)
+            indices.insert(indices.end(), {f[0], f[1], f[2]});
+
+        ModelAsset *model = CreatePrimitiveModel(vertices, indices);
+        model->SetLabel("Ico Sphere");
+        model->SetPrimitiveType("ico_sphere");
+        model->SetPrimitiveParams(vec4(radius, static_cast<float>(subdivisions), 0.f, 0.f), 2);
+        model->SetNodeName(model->GetRootNodeIndex(), "Ico Sphere");
+        return model;
+    }
+
+    ModelAsset *Primitives::CreatePyramid(float baseSize, float height)
+    {
+        const float s = baseSize * 0.5f;
+        const float halfH = height * 0.5f;
+
+        const glm::vec3 backLeft = {-s, -halfH, -s};
+        const glm::vec3 backRight = {+s, -halfH, -s};
+        const glm::vec3 frontRight = {+s, -halfH, +s};
+        const glm::vec3 frontLeft = {-s, -halfH, +s};
+        const glm::vec3 apex = {0.0f, +halfH, 0.0f};
+
+        std::vector<Vertex> vertices;
+        std::vector<uint32_t> indices;
+        vertices.reserve(18);
+        indices.reserve(18);
+
+        auto addTri = [&](const glm::vec3 &a, const glm::vec3 &b, const glm::vec3 &c,
+                          const glm::vec2 &uvA, const glm::vec2 &uvB, const glm::vec2 &uvC)
+        {
+            glm::vec3 normal = glm::cross(b - a, c - a);
+            const float len2 = glm::dot(normal, normal);
+            normal = len2 > 1e-20f ? normal * glm::inversesqrt(len2) : glm::vec3(0.0f, 1.0f, 0.0f);
+            const uint32_t base = static_cast<uint32_t>(vertices.size());
+            vertices.push_back(MakeVertex(a, normal, uvA));
+            vertices.push_back(MakeVertex(b, normal, uvB));
+            vertices.push_back(MakeVertex(c, normal, uvC));
+            indices.insert(indices.end(), {base, base + 1u, base + 2u});
+        };
+
+        addTri(backLeft, backRight, frontRight, {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f});
+        addTri(backLeft, frontRight, frontLeft, {0.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f});
+        addTri(frontLeft, frontRight, apex, {0.0f, 1.0f}, {1.0f, 1.0f}, {0.5f, 0.0f});
+        addTri(frontRight, backRight, apex, {0.0f, 1.0f}, {1.0f, 1.0f}, {0.5f, 0.0f});
+        addTri(backRight, backLeft, apex, {0.0f, 1.0f}, {1.0f, 1.0f}, {0.5f, 0.0f});
+        addTri(backLeft, frontLeft, apex, {0.0f, 1.0f}, {1.0f, 1.0f}, {0.5f, 0.0f});
+
+        ModelAsset *model = CreatePrimitiveModel(vertices, indices);
+        model->SetLabel("Pyramid");
+        model->SetPrimitiveType("pyramid");
+        model->SetPrimitiveParams(vec4(baseSize, height, 0.f, 0.f), 2);
+        model->SetNodeName(model->GetRootNodeIndex(), "Pyramid");
+        return model;
+    }
+
+    ModelAsset *Primitives::CreateCircle(float radius, int segments)
+    {
+        segments = ClampSegments(segments, 3, 512);
+
+        std::vector<Vertex> vertices;
+        std::vector<uint32_t> indices;
+        vertices.reserve(static_cast<size_t>(segments) + 1u);
+        indices.reserve(static_cast<size_t>(segments) * 3u);
+
+        vertices.push_back(MakeVertex({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.5f, 0.5f}));
+        for (int i = 0; i < segments; ++i)
+        {
+            const float u = i / static_cast<float>(segments);
+            const float theta = u * PI * 2.0f;
+            const float x = std::cos(theta);
+            const float y = std::sin(theta);
+            vertices.push_back(MakeVertex({x * radius, y * radius, 0.0f},
+                                          {0.0f, 0.0f, 1.0f},
+                                          {(x + 1.0f) * 0.5f, (y + 1.0f) * 0.5f}));
+        }
+
+        for (int i = 0; i < segments; ++i)
+        {
+            const uint32_t a = static_cast<uint32_t>(i + 1);
+            const uint32_t b = static_cast<uint32_t>(((i + 1) % segments) + 1);
+            indices.insert(indices.end(), {0u, a, b});
+        }
+
+        ModelAsset *model = CreatePrimitiveModel(vertices, indices);
+        model->SetLabel("Circle");
+        model->SetPrimitiveType("circle");
+        model->SetPrimitiveParams(vec4(radius, static_cast<float>(segments), 0.f, 0.f), 2);
+        model->SetNodeName(model->GetRootNodeIndex(), "Circle");
+        return model;
+    }
+
+    ModelAsset *Primitives::CreateTorus(float majorRadius, float minorRadius, int majorSegments, int minorSegments)
+    {
+        majorSegments = ClampSegments(majorSegments, 3, 512);
+        minorSegments = ClampSegments(minorSegments, 3, 256);
+        majorRadius = std::max(majorRadius, 0.001f);
+        minorRadius = std::max(minorRadius, 0.001f);
+
+        std::vector<Vertex> vertices;
+        std::vector<uint32_t> indices;
+        vertices.reserve(static_cast<size_t>(majorSegments + 1) * static_cast<size_t>(minorSegments + 1));
+        indices.reserve(static_cast<size_t>(majorSegments) * static_cast<size_t>(minorSegments) * 6u);
+
+        for (int i = 0; i <= majorSegments; ++i)
+        {
+            const float u = i / static_cast<float>(majorSegments);
+            const float theta = u * PI * 2.0f;
+            const float cx = std::cos(theta);
+            const float cz = std::sin(theta);
+
+            for (int j = 0; j <= minorSegments; ++j)
+            {
+                const float v = j / static_cast<float>(minorSegments);
+                const float phi = v * PI * 2.0f;
+                const float cp = std::cos(phi);
+                const float sp = std::sin(phi);
+                const glm::vec3 normal = glm::normalize(glm::vec3(cx * cp, sp, cz * cp));
+                const glm::vec3 pos = {cx * (majorRadius + minorRadius * cp), minorRadius * sp,
+                                       cz * (majorRadius + minorRadius * cp)};
+                vertices.push_back(MakeVertex(pos, normal, {u, v}));
+            }
+        }
+
+        const int ring = minorSegments + 1;
+        for (int i = 0; i < majorSegments; ++i)
+        {
+            for (int j = 0; j < minorSegments; ++j)
+            {
+                const uint32_t a = static_cast<uint32_t>(i * ring + j);
+                const uint32_t b = static_cast<uint32_t>((i + 1) * ring + j);
+                const uint32_t c = static_cast<uint32_t>((i + 1) * ring + j + 1);
+                const uint32_t d = static_cast<uint32_t>(i * ring + j + 1);
+                indices.insert(indices.end(), {a, b, c, a, c, d});
+            }
+        }
+
+        ModelAsset *model = CreatePrimitiveModel(vertices, indices);
+        model->SetLabel("Torus");
+        model->SetPrimitiveType("torus");
+        model->SetPrimitiveParams(vec4(majorRadius, minorRadius, static_cast<float>(majorSegments),
+                                       static_cast<float>(minorSegments)),
+                                  4);
+        model->SetNodeName(model->GetRootNodeIndex(), "Torus");
         return model;
     }
 

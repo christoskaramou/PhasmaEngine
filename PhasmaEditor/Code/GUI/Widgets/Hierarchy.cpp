@@ -180,14 +180,26 @@ namespace pe
                 };
                 if (ImGui::MenuItem("Plane"))
                     AddPrimitive(Primitives::CreatePlane());
+                if (ImGui::MenuItem("Grid"))
+                    AddPrimitive(Primitives::CreateGrid());
                 if (ImGui::MenuItem("Cube"))
                     AddPrimitive(Primitives::CreateCube());
                 if (ImGui::MenuItem("Sphere"))
                     AddPrimitive(Primitives::CreateSphere());
+                if (ImGui::MenuItem("UV Sphere"))
+                    AddPrimitive(Primitives::CreateUvSphere());
+                if (ImGui::MenuItem("Ico Sphere"))
+                    AddPrimitive(Primitives::CreateIcoSphere());
                 if (ImGui::MenuItem("Cylinder"))
                     AddPrimitive(Primitives::CreateCylinder());
                 if (ImGui::MenuItem("Cone"))
                     AddPrimitive(Primitives::CreateCone());
+                if (ImGui::MenuItem("Pyramid"))
+                    AddPrimitive(Primitives::CreatePyramid());
+                if (ImGui::MenuItem("Torus"))
+                    AddPrimitive(Primitives::CreateTorus());
+                if (ImGui::MenuItem("Circle"))
+                    AddPrimitive(Primitives::CreateCircle());
                 if (ImGui::MenuItem("Quad"))
                     AddPrimitive(Primitives::CreateQuad());
                 ImGui::EndMenu();
@@ -318,14 +330,26 @@ namespace pe
                 };
                 if (ImGui::MenuItem("Plane"))
                     AddPrim(Primitives::CreatePlane());
+                if (ImGui::MenuItem("Grid"))
+                    AddPrim(Primitives::CreateGrid());
                 if (ImGui::MenuItem("Cube"))
                     AddPrim(Primitives::CreateCube());
                 if (ImGui::MenuItem("Sphere"))
                     AddPrim(Primitives::CreateSphere());
+                if (ImGui::MenuItem("UV Sphere"))
+                    AddPrim(Primitives::CreateUvSphere());
+                if (ImGui::MenuItem("Ico Sphere"))
+                    AddPrim(Primitives::CreateIcoSphere());
                 if (ImGui::MenuItem("Cylinder"))
                     AddPrim(Primitives::CreateCylinder());
                 if (ImGui::MenuItem("Cone"))
                     AddPrim(Primitives::CreateCone());
+                if (ImGui::MenuItem("Pyramid"))
+                    AddPrim(Primitives::CreatePyramid());
+                if (ImGui::MenuItem("Torus"))
+                    AddPrim(Primitives::CreateTorus());
+                if (ImGui::MenuItem("Circle"))
+                    AddPrim(Primitives::CreateCircle());
                 if (ImGui::MenuItem("Quad"))
                     AddPrim(Primitives::CreateQuad());
                 ImGui::EndMenu();
@@ -695,14 +719,26 @@ namespace pe
                             };
                             if (ImGui::MenuItem("Plane"))
                                 AttachPrimitive(Primitives::CreatePlane());
+                            if (ImGui::MenuItem("Grid"))
+                                AttachPrimitive(Primitives::CreateGrid());
                             if (ImGui::MenuItem("Cube"))
                                 AttachPrimitive(Primitives::CreateCube());
                             if (ImGui::MenuItem("Sphere"))
                                 AttachPrimitive(Primitives::CreateSphere());
+                            if (ImGui::MenuItem("UV Sphere"))
+                                AttachPrimitive(Primitives::CreateUvSphere());
+                            if (ImGui::MenuItem("Ico Sphere"))
+                                AttachPrimitive(Primitives::CreateIcoSphere());
                             if (ImGui::MenuItem("Cylinder"))
                                 AttachPrimitive(Primitives::CreateCylinder());
                             if (ImGui::MenuItem("Cone"))
                                 AttachPrimitive(Primitives::CreateCone());
+                            if (ImGui::MenuItem("Pyramid"))
+                                AttachPrimitive(Primitives::CreatePyramid());
+                            if (ImGui::MenuItem("Torus"))
+                                AttachPrimitive(Primitives::CreateTorus());
+                            if (ImGui::MenuItem("Circle"))
+                                AttachPrimitive(Primitives::CreateCircle());
                             if (ImGui::MenuItem("Quad"))
                                 AttachPrimitive(Primitives::CreateQuad());
                             ImGui::EndMenu();
@@ -977,14 +1013,26 @@ namespace pe
                     };
                     if (ImGui::MenuItem("Plane"))
                         AddPrim(Primitives::CreatePlane());
+                    if (ImGui::MenuItem("Grid"))
+                        AddPrim(Primitives::CreateGrid());
                     if (ImGui::MenuItem("Cube"))
                         AddPrim(Primitives::CreateCube());
                     if (ImGui::MenuItem("Sphere"))
                         AddPrim(Primitives::CreateSphere());
+                    if (ImGui::MenuItem("UV Sphere"))
+                        AddPrim(Primitives::CreateUvSphere());
+                    if (ImGui::MenuItem("Ico Sphere"))
+                        AddPrim(Primitives::CreateIcoSphere());
                     if (ImGui::MenuItem("Cylinder"))
                         AddPrim(Primitives::CreateCylinder());
                     if (ImGui::MenuItem("Cone"))
                         AddPrim(Primitives::CreateCone());
+                    if (ImGui::MenuItem("Pyramid"))
+                        AddPrim(Primitives::CreatePyramid());
+                    if (ImGui::MenuItem("Torus"))
+                        AddPrim(Primitives::CreateTorus());
+                    if (ImGui::MenuItem("Circle"))
+                        AddPrim(Primitives::CreateCircle());
                     if (ImGui::MenuItem("Quad"))
                         AddPrim(Primitives::CreateQuad());
                     ImGui::EndMenu();

@@ -135,8 +135,20 @@ namespace pe
                     ModelAsset *m = Primitives::CreateSphere(radius.value_or(1.0f));
                     return AddPrimitiveDeferred(m);
                 });
+                prim.set_function("uv_sphere", [](sol::optional<float> radius, sol::optional<int> slices, sol::optional<int> stacks) -> SceneNodeHandle {
+                    ModelAsset *m = Primitives::CreateUvSphere(radius.value_or(1.0f), slices.value_or(32), stacks.value_or(32));
+                    return AddPrimitiveDeferred(m);
+                });
+                prim.set_function("ico_sphere", [](sol::optional<float> radius, sol::optional<int> subdivisions) -> SceneNodeHandle {
+                    ModelAsset *m = Primitives::CreateIcoSphere(radius.value_or(1.0f), subdivisions.value_or(2));
+                    return AddPrimitiveDeferred(m);
+                });
                 prim.set_function("plane", [](sol::optional<float> width, sol::optional<float> depth) -> SceneNodeHandle {
                     ModelAsset *m = Primitives::CreatePlane(width.value_or(10.0f), depth.value_or(10.0f));
+                    return AddPrimitiveDeferred(m);
+                });
+                prim.set_function("grid", [](sol::optional<float> width, sol::optional<float> depth, sol::optional<int> subdivisions) -> SceneNodeHandle {
+                    ModelAsset *m = Primitives::CreateGrid(width.value_or(10.0f), depth.value_or(10.0f), subdivisions.value_or(10));
                     return AddPrimitiveDeferred(m);
                 });
                 prim.set_function("cylinder", [](sol::optional<float> radius, sol::optional<float> height) -> SceneNodeHandle {
@@ -147,8 +159,20 @@ namespace pe
                     ModelAsset *m = Primitives::CreateCone(radius.value_or(1.0f), height.value_or(2.0f));
                     return AddPrimitiveDeferred(m);
                 });
+                prim.set_function("pyramid", [](sol::optional<float> baseSize, sol::optional<float> height) -> SceneNodeHandle {
+                    ModelAsset *m = Primitives::CreatePyramid(baseSize.value_or(1.0f), height.value_or(1.0f));
+                    return AddPrimitiveDeferred(m);
+                });
                 prim.set_function("quad", [](sol::optional<float> width, sol::optional<float> height) -> SceneNodeHandle {
                     ModelAsset *m = Primitives::CreateQuad(width.value_or(1.0f), height.value_or(1.0f));
+                    return AddPrimitiveDeferred(m);
+                });
+                prim.set_function("circle", [](sol::optional<float> radius, sol::optional<int> segments) -> SceneNodeHandle {
+                    ModelAsset *m = Primitives::CreateCircle(radius.value_or(1.0f), segments.value_or(64));
+                    return AddPrimitiveDeferred(m);
+                });
+                prim.set_function("torus", [](sol::optional<float> majorRadius, sol::optional<float> minorRadius, sol::optional<int> majorSegments, sol::optional<int> minorSegments) -> SceneNodeHandle {
+                    ModelAsset *m = Primitives::CreateTorus(majorRadius.value_or(1.0f), minorRadius.value_or(0.25f), majorSegments.value_or(64), minorSegments.value_or(16));
                     return AddPrimitiveDeferred(m);
                 }); });
         }

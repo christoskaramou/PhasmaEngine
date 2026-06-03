@@ -367,9 +367,10 @@ namespace pe
     std::string EditorToolRuntime::AddMeshToNode(const std::string &nodeId, const std::string &primitive) const
     {
         // Validate primitive type upfront
-        static const std::unordered_set<std::string> validPrims = {"plane", "cube", "sphere", "cylinder", "cone", "quad"};
+        static const std::unordered_set<std::string> validPrims = {
+            "plane", "grid", "cube", "sphere", "uv_sphere", "ico_sphere", "cylinder", "cone", "pyramid", "quad", "circle", "torus"};
         if (validPrims.find(primitive) == validPrims.end())
-            return R"({"error":"unknown primitive type. Valid: plane, cube, sphere, cylinder, cone, quad"})";
+            return R"({"error":"unknown primitive type. Valid: plane, grid, cube, sphere, uv_sphere, ico_sphere, cylinder, cone, pyramid, quad, circle, torus"})";
 
         struct State
         {
@@ -394,11 +395,17 @@ namespace pe
                 {
                     ModelAsset *model = nullptr;
                     if (primitive == "plane") model = Primitives::CreatePlane();
+                    else if (primitive == "grid") model = Primitives::CreateGrid();
                     else if (primitive == "cube") model = Primitives::CreateCube();
                     else if (primitive == "sphere") model = Primitives::CreateSphere();
+                    else if (primitive == "uv_sphere") model = Primitives::CreateUvSphere();
+                    else if (primitive == "ico_sphere") model = Primitives::CreateIcoSphere();
                     else if (primitive == "cylinder") model = Primitives::CreateCylinder();
                     else if (primitive == "cone") model = Primitives::CreateCone();
+                    else if (primitive == "pyramid") model = Primitives::CreatePyramid();
                     else if (primitive == "quad") model = Primitives::CreateQuad();
+                    else if (primitive == "circle") model = Primitives::CreateCircle();
+                    else if (primitive == "torus") model = Primitives::CreateTorus();
 
                     if (model)
                     {

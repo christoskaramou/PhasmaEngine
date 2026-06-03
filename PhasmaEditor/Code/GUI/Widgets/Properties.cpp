@@ -182,14 +182,26 @@ namespace pe
             {
                 if (ImGui::MenuItem("Plane"))
                     attachPrimitive(node, Primitives::CreatePlane());
+                if (ImGui::MenuItem("Grid"))
+                    attachPrimitive(node, Primitives::CreateGrid());
                 if (ImGui::MenuItem("Cube"))
                     attachPrimitive(node, Primitives::CreateCube());
                 if (ImGui::MenuItem("Sphere"))
                     attachPrimitive(node, Primitives::CreateSphere());
+                if (ImGui::MenuItem("UV Sphere"))
+                    attachPrimitive(node, Primitives::CreateUvSphere());
+                if (ImGui::MenuItem("Ico Sphere"))
+                    attachPrimitive(node, Primitives::CreateIcoSphere());
                 if (ImGui::MenuItem("Cylinder"))
                     attachPrimitive(node, Primitives::CreateCylinder());
                 if (ImGui::MenuItem("Cone"))
                     attachPrimitive(node, Primitives::CreateCone());
+                if (ImGui::MenuItem("Pyramid"))
+                    attachPrimitive(node, Primitives::CreatePyramid());
+                if (ImGui::MenuItem("Torus"))
+                    attachPrimitive(node, Primitives::CreateTorus());
+                if (ImGui::MenuItem("Circle"))
+                    attachPrimitive(node, Primitives::CreateCircle());
                 if (ImGui::MenuItem("Quad"))
                     attachPrimitive(node, Primitives::CreateQuad());
                 ImGui::EndPopup();
@@ -350,14 +362,26 @@ namespace pe
                     {
                         if (ImGui::MenuItem("Plane"))
                             attachPrimitive(node, Primitives::CreatePlane());
+                        if (ImGui::MenuItem("Grid"))
+                            attachPrimitive(node, Primitives::CreateGrid());
                         if (ImGui::MenuItem("Cube"))
                             attachPrimitive(node, Primitives::CreateCube());
                         if (ImGui::MenuItem("Sphere"))
                             attachPrimitive(node, Primitives::CreateSphere());
+                        if (ImGui::MenuItem("UV Sphere"))
+                            attachPrimitive(node, Primitives::CreateUvSphere());
+                        if (ImGui::MenuItem("Ico Sphere"))
+                            attachPrimitive(node, Primitives::CreateIcoSphere());
                         if (ImGui::MenuItem("Cylinder"))
                             attachPrimitive(node, Primitives::CreateCylinder());
                         if (ImGui::MenuItem("Cone"))
                             attachPrimitive(node, Primitives::CreateCone());
+                        if (ImGui::MenuItem("Pyramid"))
+                            attachPrimitive(node, Primitives::CreatePyramid());
+                        if (ImGui::MenuItem("Torus"))
+                            attachPrimitive(node, Primitives::CreateTorus());
+                        if (ImGui::MenuItem("Circle"))
+                            attachPrimitive(node, Primitives::CreateCircle());
                         if (ImGui::MenuItem("Quad"))
                             attachPrimitive(node, Primitives::CreateQuad());
                         ImGui::EndMenu();

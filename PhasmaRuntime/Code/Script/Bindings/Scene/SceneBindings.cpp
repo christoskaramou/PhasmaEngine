@@ -156,11 +156,17 @@ namespace pe
                     if (!h.IsValid(*sc)) return;
                     ModelAsset *model = nullptr;
                     if (type == "plane") model = Primitives::CreatePlane();
+                    else if (type == "grid") model = Primitives::CreateGrid();
                     else if (type == "cube") model = Primitives::CreateCube();
                     else if (type == "sphere") model = Primitives::CreateSphere();
+                    else if (type == "uv_sphere") model = Primitives::CreateUvSphere();
+                    else if (type == "ico_sphere") model = Primitives::CreateIcoSphere();
                     else if (type == "cylinder") model = Primitives::CreateCylinder();
                     else if (type == "cone") model = Primitives::CreateCone();
+                    else if (type == "pyramid") model = Primitives::CreatePyramid();
                     else if (type == "quad") model = Primitives::CreateQuad();
+                    else if (type == "circle") model = Primitives::CreateCircle();
+                    else if (type == "torus") model = Primitives::CreateTorus();
                     if (model)
                     {
                         sc->AttachPrimitiveToNode(h.nodeId, model);

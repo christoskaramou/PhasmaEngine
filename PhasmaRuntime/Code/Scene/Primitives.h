@@ -9,11 +9,17 @@ namespace pe
     {
     public:
         static ModelAsset *CreatePlane(float width = 10.0f, float depth = 10.0f);
+        static ModelAsset *CreateGrid(float width = 10.0f, float depth = 10.0f, int subdivisions = 10);
         static ModelAsset *CreateCube(float size = 1.0f);
         static ModelAsset *CreateSphere(float radius = 1.0f, int slices = 32, int stacks = 32);
+        static ModelAsset *CreateUvSphere(float radius = 1.0f, int slices = 32, int stacks = 32);
+        static ModelAsset *CreateIcoSphere(float radius = 1.0f, int subdivisions = 2);
         static ModelAsset *CreateCylinder(float radius = 1.0f, float height = 2.0f, int slices = 32);
         static ModelAsset *CreateCone(float radius = 1.0f, float height = 2.0f, int slices = 32);
+        static ModelAsset *CreatePyramid(float baseSize = 1.0f, float height = 1.0f);
         static ModelAsset *CreateQuad(float width = 1.0f, float height = 1.0f); // Screen facing
+        static ModelAsset *CreateCircle(float radius = 1.0f, int segments = 64);
+        static ModelAsset *CreateTorus(float majorRadius = 1.0f, float minorRadius = 0.25f, int majorSegments = 64, int minorSegments = 16);
 
     private:
         static ModelAsset *CreatePrimitiveModel(const std::vector<Vertex> &vertices, const std::vector<uint32_t> &indices);

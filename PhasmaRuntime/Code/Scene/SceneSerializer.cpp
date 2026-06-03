@@ -45,18 +45,46 @@ namespace pe
 
         ModelAsset *CreatePrimitiveModelFromSource(const std::string &ptype, const vec4 &params, uint32_t paramCount)
         {
+            auto intParam = [&](uint32_t index, int fallback, int minValue, int maxValue) -> int
+            {
+                if (paramCount <= index)
+                    return fallback;
+                if (!std::isfinite(params[index]))
+                    return fallback;
+                return std::clamp(static_cast<int>(std::round(params[index])), minValue, maxValue);
+            };
+
             if (ptype == "cube")
                 return Primitives::CreateCube(paramCount >= 1 ? params.x : 1.0f);
             if (ptype == "sphere")
                 return Primitives::CreateSphere(paramCount >= 1 ? params.x : 1.0f);
+            if (ptype == "uv_sphere")
+                return Primitives::CreateUvSphere(paramCount >= 1 ? params.x : 1.0f,
+                                                  intParam(1, 32, 3, 512),
+                                                  intParam(2, 32, 2, 512));
+            if (ptype == "ico_sphere")
+                return Primitives::CreateIcoSphere(paramCount >= 1 ? params.x : 1.0f, intParam(1, 2, 0, 6));
             if (ptype == "plane")
                 return Primitives::CreatePlane(paramCount >= 1 ? params.x : 10.0f, paramCount >= 2 ? params.y : 10.0f);
+            if (ptype == "grid")
+                return Primitives::CreateGrid(paramCount >= 1 ? params.x : 10.0f,
+                                              paramCount >= 2 ? params.y : 10.0f,
+                                              intParam(2, 10, 1, 512));
             if (ptype == "cylinder")
                 return Primitives::CreateCylinder(paramCount >= 1 ? params.x : 1.0f, paramCount >= 2 ? params.y : 2.0f);
             if (ptype == "cone")
                 return Primitives::CreateCone(paramCount >= 1 ? params.x : 1.0f, paramCount >= 2 ? params.y : 2.0f);
+            if (ptype == "pyramid")
+                return Primitives::CreatePyramid(paramCount >= 1 ? params.x : 1.0f, paramCount >= 2 ? params.y : 1.0f);
             if (ptype == "quad")
                 return Primitives::CreateQuad(paramCount >= 1 ? params.x : 1.0f, paramCount >= 2 ? params.y : 1.0f);
+            if (ptype == "circle")
+                return Primitives::CreateCircle(paramCount >= 1 ? params.x : 1.0f, intParam(1, 64, 3, 512));
+            if (ptype == "torus")
+                return Primitives::CreateTorus(paramCount >= 1 ? params.x : 1.0f,
+                                               paramCount >= 2 ? params.y : 0.25f,
+                                               intParam(2, 64, 3, 512),
+                                               intParam(3, 16, 3, 256));
             return nullptr;
         }
 

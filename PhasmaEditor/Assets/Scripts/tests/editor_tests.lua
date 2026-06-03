@@ -61,13 +61,45 @@ run_test("all_primitive_types_valid", function()
     local nodes = {
         primitives.cube(1.0),
         primitives.sphere(0.5),
+        primitives.uv_sphere(0.5, 16, 8),
+        primitives.ico_sphere(0.5, 1),
         primitives.plane(5.0, 5.0),
+        primitives.grid(5.0, 5.0, 4),
         primitives.cylinder(0.5, 2.0),
         primitives.cone(0.5, 2.0),
+        primitives.pyramid(1.0, 1.0),
+        primitives.circle(0.75, 24),
+        primitives.torus(0.75, 0.18, 24, 8),
         primitives.quad(1.0, 1.0),
     }
     for i, n in ipairs(nodes) do
         assert_true(n:is_valid(), "node " .. i .. " is_valid")
+    end
+    scene.clear()
+end)
+
+run_test("blender_parity_primitives_save_load", function()
+    scene.clear()
+    local nodes = {
+        primitives.uv_sphere(0.5, 16, 8),
+        primitives.ico_sphere(0.5, 1),
+        primitives.grid(4.0, 4.0, 3),
+        primitives.pyramid(1.0, 1.25),
+        primitives.circle(0.75, 24),
+        primitives.torus(0.75, 0.18, 24, 8),
+    }
+    local names = {"ParityUVSphere", "ParityIcoSphere", "ParityGrid", "ParityPyramid", "ParityCircle", "ParityTorus"}
+    for i, n in ipairs(nodes) do
+        n:set_name(names[i])
+    end
+
+    scene.save("temp_blender_parity_primitives_test.pescene")
+    scene.load("temp_blender_parity_primitives_test.pescene")
+
+    for _, name in ipairs(names) do
+        local loaded = scene.find_model(name)
+        assert_not_nil(loaded, name .. " loaded")
+        assert_true(loaded:is_valid(), name .. " is_valid")
     end
     scene.clear()
 end)

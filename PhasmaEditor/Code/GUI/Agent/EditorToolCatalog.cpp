@@ -751,7 +751,8 @@ namespace pe
                 tool.name = "add_mesh_to_node";
                 tool.description = "Attaches a primitive mesh to a node (synchronous). "
                                    "Node can be a name or stable id (node:index:revision). "
-                                   "Valid primitives: cube, sphere, plane, cylinder, cone, quad.";
+                                   "Valid primitives: cube, sphere, uv_sphere, ico_sphere, plane, grid, cylinder, cone, "
+                                   "pyramid, quad, circle, torus.";
                 tool.inputSchema = schema::Object({
                     {"node", "Node name or id", schema::String(), true},
                     {"primitive", "Primitive type", schema::String(), true},

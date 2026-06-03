@@ -2,6 +2,7 @@
 
 ## 2026-06-03
 
+- Added Blender-parity mesh primitives except Suzanne/monkey to the runtime primitive factory: UV sphere, ico sphere, grid, pyramid, circle, and torus. Lua, scene attach, editor menus, MCP `add_mesh_to_node`, and `.pescene` primitive reload now understand the new primitive names, with editor script tests covering creation and save/load.
 - Fixed Android HUD effect toggles crashing when they enabled lazy render passes whose shaders were absent from the APK's pre-baked SPIR-V cache. `tools/bake_android_shaders.ps1` now bakes temporary runtime-toggle scene variants, including shadows and a TAA-off Upsample variant, and the Android HUD/docs now call out that new pass toggles must be covered by the bake.
 - Added an editor Viewport aspect-ratio selector under `Window > Viewport > Aspect Ratio`. Fixed modes keep the Viewport widget and editor layout unchanged, render the SceneView image into the selected phone/landscape/square rectangle with black unused space, drive the editor camera aspect while the GUI is visible, and persist through `.pescene` global settings as `scene_view_aspect_mode`.
 - Fixed Android debug reinstalls keeping stale extracted assets. `PhasmaPlayerActivity` now keys its extraction marker to the installed APK update time as well as `versionCode`, so same-version debug reinstalls refresh bundled scenes and the pre-baked SPIR-V cache; the Android Sponza startup scene was re-baked with its actual settings so the phone no longer falls back to disabled runtime HLSL compilation.
