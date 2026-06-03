@@ -1,6 +1,6 @@
 # PhasmaEngine — Agent Instructions
 
-> Identical to `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md`. If you edit one, sync the other four.
+> Identical to `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `HERMES.md`, and `.github/copilot-instructions.md`. If you edit one, sync the other four.
 
 `INSTRUCTIONS.md` is a dispatcher pointing to code, MemPalace, and the wiki — read it to know where to look for what. `docs/wiki/index.md` is the synthesis layer; find pages with `bash docs/wiki/tools/search.sh "query"`.
 

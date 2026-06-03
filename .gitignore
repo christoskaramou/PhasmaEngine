@@ -341,6 +341,7 @@ Projects/*/Assets/Agent/
 !/AGENTS.md
 !/CLAUDE.md
 !/GEMINI.md
+!/HERMES.md
 !/.github/
 !/.github/copilot-instructions.md
 !/docs/
