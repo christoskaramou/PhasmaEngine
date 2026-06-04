@@ -1029,7 +1029,7 @@ namespace pe
                 tool.name = "invoke_editor_action";
                 tool.description = "Invokes a named editor action without mouse input. "
                                    "Call list_editor_actions first, then pass an action id such as file.save_scene, "
-                                   "layout.reset, gizmo.grid, play.start, or status.console_errors. "
+                                   "layout.reset, gizmo.orientation, play.start, or status.console_errors. "
                                    "Common optional arguments include state/open for toggles, path for file actions, "
                                    "discard_unsaved for scene load/new/exit, overwrite for save, steps for undo/redo, "
                                    "and style/preset/scale for layout actions.";

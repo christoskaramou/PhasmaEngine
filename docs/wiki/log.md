@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-06-04
+
+- Added a Unity-style active-camera orientation gizmo to the editor Viewport. SceneView draws transparent red Right/X, blue Front/Z, and green Up/Y arrows in the rendered image rect, projects them from the active camera orientation, preserves camera position when snapping to an arrow direction, supports perspective and orthographic active cameras, blocks viewport picking while an arrow is hovered or active, and exposes an editor-only Gizmos > Orientation toggle.
+
 ## 2026-06-03
 
 - Added Blender-parity mesh primitives except Suzanne/monkey to the runtime primitive factory: UV sphere, ico sphere, grid, pyramid, circle, and torus. Lua, scene attach, editor menus, MCP `add_mesh_to_node`, and `.pescene` primitive reload now understand the new primitive names, with editor script tests covering creation and save/load.

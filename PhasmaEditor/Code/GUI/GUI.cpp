@@ -770,6 +770,7 @@ namespace pe
         addAction("gizmo.transform", "Transform Gizmo", "Gizmos", "toggle", true, GUIState::s_useTransformGizmo, true);
         addAction("gizmo.lights", "Light Gizmos", "Gizmos", "toggle", true, GUIState::s_useLightGizmos, true);
         addAction("gizmo.cameras", "Camera Gizmos", "Gizmos", "toggle", true, GUIState::s_useCameraGizmos, true);
+        addAction("gizmo.orientation", "Orientation Gizmo", "Gizmos", "toggle", true, GUIState::s_useOrientationGizmo, true);
         addAction("gizmo.grid", "Grid", "Gizmos", "toggle", true, globalSettings.draw_grid, true);
 
         for (GUIStyle style : {GUIStyle::Classic, GUIStyle::Dark, GUIStyle::Light, GUIStyle::Modern, GUIStyle::Unity, GUIStyle::Unreal})
@@ -1117,6 +1118,8 @@ namespace pe
             return toggleBool(GUIState::s_useLightGizmos);
         if (action == "gizmo.cameras")
             return toggleBool(GUIState::s_useCameraGizmos);
+        if (action == "gizmo.orientation")
+            return toggleBool(GUIState::s_useOrientationGizmo);
         if (action == "gizmo.grid")
             return toggleBool(Settings::Get<GlobalSettings>().draw_grid);
 
@@ -2533,6 +2536,7 @@ namespace pe
                 ImGui::MenuItem("Transform", nullptr, &GUIState::s_useTransformGizmo);
                 ImGui::MenuItem("Lights", nullptr, &GUIState::s_useLightGizmos);
                 ImGui::MenuItem("Cameras", nullptr, &GUIState::s_useCameraGizmos);
+                ImGui::MenuItem("Orientation", nullptr, &GUIState::s_useOrientationGizmo);
                 ImGui::MenuItem("Grid", nullptr, &gSettings.draw_grid);
                 ImGui::EndMenu();
             }
