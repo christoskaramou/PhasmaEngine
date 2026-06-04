@@ -2,6 +2,8 @@
 
 ## 2026-06-04
 
+- Fixed the GGX roughness-prefilter (next bullet) producing a regular grid of bright squares on rough reflections of the HDR skybox sun. The sun is a sub-texel, very-bright delta sampled by a fixed per-texel Hammersley set, so it lit isolated texels on a low-discrepancy lattice that the floor reflection magnified into squares. `PrefilterCubemap.hlsl` now clamps per-sample radiance (`MAX_PREFILTER_RADIANCE`), biases each sample toward a blurrier pre-averaged source mip scaled by roughness (`SOURCE_MIP_BIAS`) so the integral converges to a smooth blur, and `Skybox.cpp` raises load-time `PrefilterSampleCount` to 64/128/256/512. A per-texel Cranley-Patterson jitter was tried and removed — once the mip bias converged the integral it only traded the grid for swimming grain. The prefilter stays a one-time bake at skybox load, not per frame. Verified in the editor on `golden_gate_hills_4k.hdr`.
+- Replaced raw skybox downsample mips with roughness-prefiltered cubemap mips for IBL. `SkyBox::LoadSkyBox()` now keeps equirect-to-cubemap output in mip 0, fills mips 1+ with `PrefilterCubemap.hlsl`, and `ComputeIBL_Common()` samples the prefiltered mip range linearly by roughness so bright HDR sun reflections spread as GGX-like lobes instead of square mip texels. Release Vulkan and DX12 smokes loaded `playable_reference_colonial_mansion_high_tessellation.pescene` and compiled the new shader plus updated lighting shader.
 - Expanded the editor MCP inspection/control surface. New tools provide compact
   scene and renderer summaries (`get_scene_info`, `get_renderer_status`),
   detailed node inspection (`get_node_info`), deterministic active-camera
