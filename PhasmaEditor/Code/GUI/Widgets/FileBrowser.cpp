@@ -54,6 +54,78 @@ namespace pe
             return ".../" + toStr(parent.filename()) + "/" + toStr(name);
         }
 
+        std::string ToLower(std::string value)
+        {
+            std::transform(value.begin(), value.end(), value.begin(),
+                           [](unsigned char c)
+                           { return static_cast<char>(std::tolower(c)); });
+            return value;
+        }
+
+        std::string PathToUtf8(const std::filesystem::path &path)
+        {
+            auto u8 = path.u8string();
+            return std::string(reinterpret_cast<const char *>(u8.c_str()));
+        }
+
+        bool IsPathAncestorOf(const std::filesystem::path &ancestor, const std::filesystem::path &path)
+        {
+            auto normalizedAncestor = ancestor.lexically_normal();
+            auto normalizedPath = path.lexically_normal();
+
+            auto ancestorIt = normalizedAncestor.begin();
+            auto pathIt = normalizedPath.begin();
+            for (; ancestorIt != normalizedAncestor.end(); ++ancestorIt, ++pathIt)
+            {
+                if (pathIt == normalizedPath.end() || *ancestorIt != *pathIt)
+                    return false;
+            }
+
+            return true;
+        }
+
+        bool HasChildDirectory(const std::filesystem::path &path)
+        {
+            std::error_code itEc;
+            auto it = std::filesystem::directory_iterator(
+                path, std::filesystem::directory_options::skip_permission_denied, itEc);
+            const std::filesystem::directory_iterator end;
+            for (; it != end; it.increment(itEc))
+            {
+                if (itEc)
+                {
+                    itEc.clear();
+                    continue;
+                }
+
+                std::error_code dirEc;
+                if (it->is_directory(dirEc))
+                    return true;
+            }
+
+            return false;
+        }
+
+        std::string PathExtensionLower(const std::filesystem::path &path)
+        {
+            auto extU8 = path.extension().u8string();
+            return ToLower(std::string(reinterpret_cast<const char *>(extU8.c_str())));
+        }
+
+        std::filesystem::file_time_type SafeLastWriteTime(const std::filesystem::path &path)
+        {
+            std::error_code ec;
+            auto time = std::filesystem::last_write_time(path, ec);
+            return ec ? std::filesystem::file_time_type{} : time;
+        }
+
+        uintmax_t SafeFileSize(const std::filesystem::path &path)
+        {
+            std::error_code ec;
+            auto size = std::filesystem::file_size(path, ec);
+            return ec ? 0 : size;
+        }
+
         void LoadIcon(CommandBuffer *cmd, const std::string &path, Image *&outIcon)
         {
             outIcon = Image::LoadRGBA8(cmd, path);
@@ -212,7 +284,8 @@ namespace pe
     void FileBrowser::Init(GUI *gui)
     {
         Widget::Init(gui);
-        m_currentPath = StripTrailingSep(std::filesystem::path(Path::Assets).lexically_normal());
+        m_folderTreeRoot = StripTrailingSep(std::filesystem::path(Path::Assets).lexically_normal());
+        m_currentPath = m_folderTreeRoot;
         m_navHistory.push_back(m_currentPath);
         m_navHistoryIndex = 0;
 
@@ -615,6 +688,127 @@ namespace pe
         }
     }
 
+    void FileBrowser::DrawFilterSortBar()
+    {
+        ImGui::PushItemWidth(220.0f);
+        ImGui::InputTextWithHint("##filebrowser_search", "Search files", m_searchBuffer, sizeof(m_searchBuffer));
+        ImGui::PopItemWidth();
+
+        ImGui::SameLine();
+        static const char *typeLabels[] = {"All", "Text", "Shaders", "Scripts", "Images", "Models", "Source Models",
+                                           "Other"};
+        int typeIndex = static_cast<int>(m_typeFilter);
+        ImGui::SetNextItemWidth(135.0f);
+        if (ImGui::Combo("Type##filebrowser_type", &typeIndex, typeLabels, IM_ARRAYSIZE(typeLabels)))
+            m_typeFilter = static_cast<TypeFilter>(typeIndex);
+
+        ImGui::SameLine();
+        static const char *sortLabels[] = {"Name", "Date", "Size"};
+        int sortIndex = static_cast<int>(m_sortMode);
+        ImGui::SetNextItemWidth(110.0f);
+        if (ImGui::Combo("Sort##filebrowser_sort", &sortIndex, sortLabels, IM_ARRAYSIZE(sortLabels)))
+        {
+            m_sortMode = static_cast<SortMode>(sortIndex);
+            SortCache();
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button(m_sortDescending ? "Desc##filebrowser_sortdir" : "Asc##filebrowser_sortdir"))
+        {
+            m_sortDescending = !m_sortDescending;
+            SortCache();
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Toggle ascending / descending");
+    }
+
+    void FileBrowser::DrawFolderTree(float height)
+    {
+        if (m_folderTreeRoot.empty())
+            m_folderTreeRoot = StripTrailingSep(std::filesystem::path(Path::Assets).lexically_normal());
+
+        ImGui::BeginChild("##filebrowser_folder_tree", ImVec2(m_folderTreeWidth, height), true);
+        ImGui::TextUnformatted("Folders");
+        ImGui::Separator();
+
+        const ImGuiStyle &style = ImGui::GetStyle();
+        ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, style.IndentSpacing * 0.5f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(style.FramePadding.x * 0.5f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(style.ItemSpacing.x * 0.5f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(style.ItemInnerSpacing.x * 0.5f, 0.0f));
+        DrawFolderTreeNode(m_folderTreeRoot);
+        ImGui::PopStyleVar(4);
+        ImGui::EndChild();
+    }
+
+    void FileBrowser::DrawFolderTreeNode(const std::filesystem::path &path)
+    {
+        std::error_code ec;
+        if (!std::filesystem::is_directory(path, ec))
+            return;
+
+        std::string pathStr = PathToUtf8(path);
+        std::string label = path.filename().empty() ? pathStr : PathToUtf8(path.filename());
+
+        std::filesystem::path treeSelectionPath = m_currentPath;
+        if (!m_selectedEntry.empty() && std::filesystem::is_directory(m_selectedEntry, ec))
+        {
+            ec.clear();
+            std::filesystem::path selectedParent = StripTrailingSep(m_selectedEntry.parent_path().lexically_normal());
+            if (std::filesystem::equivalent(selectedParent, m_currentPath, ec))
+                treeSelectionPath = m_selectedEntry;
+        }
+        ec.clear();
+
+        bool selected = std::filesystem::equivalent(path, treeSelectionPath, ec);
+        ec.clear();
+        const bool ancestor = !selected && IsPathAncestorOf(path, treeSelectionPath);
+        const bool hasChildFolders = HasChildDirectory(path);
+
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth |
+                                   ImGuiTreeNodeFlags_FramePadding;
+        if (selected)
+            flags |= ImGuiTreeNodeFlags_Selected;
+        if (!hasChildFolders)
+            flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+        if (ancestor)
+            ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+
+        ImGui::PushID(pathStr.c_str());
+        bool open = ImGui::TreeNodeEx(label.c_str(), flags);
+        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+            NavigateTo(path);
+
+        if (open && hasChildFolders)
+        {
+            std::vector<std::filesystem::path> folders;
+            std::error_code itEc;
+            auto it = std::filesystem::directory_iterator(
+                path, std::filesystem::directory_options::skip_permission_denied, itEc);
+            const std::filesystem::directory_iterator end;
+            for (; it != end; it.increment(itEc))
+            {
+                if (itEc)
+                {
+                    itEc.clear();
+                    continue;
+                }
+                std::error_code dirEc;
+                if (it->is_directory(dirEc))
+                    folders.push_back(it->path());
+            }
+
+            std::sort(folders.begin(), folders.end(), [](const std::filesystem::path &a, const std::filesystem::path &b)
+                      { return ToLower(PathToUtf8(a.filename())) < ToLower(PathToUtf8(b.filename())); });
+
+            for (const auto &folder : folders)
+                DrawFolderTreeNode(folder);
+
+            ImGui::TreePop();
+        }
+        ImGui::PopID();
+    }
+
     void FileBrowser::DrawItemContextMenu(const std::function<void(const std::filesystem::path &)> &onOpen)
     {
         if (!ImGui::BeginPopup("ItemContext##filebrowser"))
@@ -824,6 +1018,7 @@ namespace pe
             }
 
             DrawNavBar(true);
+            DrawFilterSortBar();
             ImGui::Separator();
 
             auto onNormalActionCaptured = [this](const std::filesystem::path &path)
@@ -931,6 +1126,104 @@ namespace pe
         ImGui::End();
     }
 
+    bool FileBrowser::MatchesBrowserFilters(
+        const FileEntry &entry, const std::function<bool(const std::filesystem::path &)> &externalFilter) const
+    {
+        if (externalFilter && !externalFilter(entry.path))
+            return false;
+
+        if (m_searchBuffer[0] != '\0')
+        {
+            std::string filename = ToLower(entry.filename);
+            std::string search = ToLower(m_searchBuffer);
+            if (filename.find(search) == std::string::npos)
+                return false;
+        }
+
+        if (entry.isDirectory || m_typeFilter == TypeFilter::All)
+            return true;
+
+        const std::string ext = PathExtensionLower(entry.path);
+        const bool isText = s_textExtensions.find(ext) != s_textExtensions.end();
+        const bool isShader = s_shaderExtensions.find(ext) != s_shaderExtensions.end();
+        const bool isScript = s_scriptExtensions.find(ext) != s_scriptExtensions.end();
+        const bool isImage = s_imageExtensions.find(ext) != s_imageExtensions.end();
+        const bool isModel = s_modelExtensions.find(ext) != s_modelExtensions.end();
+        const bool isSourceModel = IsSourceModelFile(entry.path);
+
+        switch (m_typeFilter)
+        {
+        case TypeFilter::Text:
+            return isText;
+        case TypeFilter::Shader:
+            return isShader;
+        case TypeFilter::Script:
+            return isScript;
+        case TypeFilter::Image:
+            return isImage;
+        case TypeFilter::Model:
+            return isModel;
+        case TypeFilter::SourceModel:
+            return isSourceModel;
+        case TypeFilter::Other:
+            return !isText && !isShader && !isScript && !isImage && !isModel && !isSourceModel;
+        case TypeFilter::All:
+        default:
+            return true;
+        }
+    }
+
+    std::vector<const FileBrowser::FileEntry *> FileBrowser::BuildVisibleEntries(
+        const std::function<bool(const std::filesystem::path &)> &externalFilter) const
+    {
+        std::vector<const FileEntry *> visible;
+        visible.reserve(m_cache.size());
+        for (const auto &entry : m_cache)
+            if (MatchesBrowserFilters(entry, externalFilter))
+                visible.push_back(&entry);
+        return visible;
+    }
+
+    void FileBrowser::SortCache()
+    {
+        std::sort(m_cache.begin(), m_cache.end(), [this](const FileEntry &a, const FileEntry &b)
+                  {
+                      if (a.isDirectory != b.isDirectory)
+                          return a.isDirectory > b.isDirectory;
+
+                      int result = 0;
+                      switch (m_sortMode)
+                      {
+                      case SortMode::Date:
+                          if (a.lastWriteTime < b.lastWriteTime)
+                              result = -1;
+                          else if (b.lastWriteTime < a.lastWriteTime)
+                              result = 1;
+                          break;
+                      case SortMode::Size:
+                          if (a.size < b.size)
+                              result = -1;
+                          else if (a.size > b.size)
+                              result = 1;
+                          break;
+                      case SortMode::Name:
+                      default:
+                          break;
+                      }
+
+                      if (result == 0)
+                      {
+                          std::string aName = ToLower(a.filename);
+                          std::string bName = ToLower(b.filename);
+                          if (aName < bName)
+                              result = -1;
+                          else if (aName > bName)
+                              result = 1;
+                      }
+
+                      return m_sortDescending ? result > 0 : result < 0; });
+    }
+
     void FileBrowser::RefreshCache()
     {
         m_cache.clear();
@@ -968,17 +1261,14 @@ namespace pe
 
                 std::error_code dirEc;
                 e.isDirectory = it->is_directory(dirEc);
+                e.size = e.isDirectory ? 0 : SafeFileSize(e.path);
+                e.lastWriteTime = SafeLastWriteTime(e.path);
                 e.iconID = GetIconForFile(e.path);
 
                 m_cache.push_back(e);
             }
 
-            // Sort: Directories first, then alphabetical
-            std::sort(m_cache.begin(), m_cache.end(), [](const FileEntry &a, const FileEntry &b)
-                      {
-                          if (a.isDirectory != b.isDirectory)
-                              return a.isDirectory > b.isDirectory;
-                          return a.filename < b.filename; });
+            SortCache();
         }
         catch (const std::filesystem::filesystem_error &e)
         {
@@ -1001,10 +1291,42 @@ namespace pe
         if (footerHeight == 0.0f)
             footerHeight = ImGui::GetStyle().ItemSpacing.y;
 
+        auto visibleEntries = BuildVisibleEntries(filter);
+        const bool showFolderTree = (m_name == "File Browser");
+        if (showFolderTree)
+        {
+            const float splitterWidth = 6.0f;
+            const float minFolderTreeWidth = 140.0f;
+            const float minContentWidth = 220.0f;
+            const float contentHeight = std::max(1.0f, ImGui::GetContentRegionAvail().y - footerHeight);
+            const float maxFolderTreeWidth = std::max(minFolderTreeWidth,
+                                                      ImGui::GetContentRegionAvail().x - splitterWidth - minContentWidth);
+            m_folderTreeWidth = std::min(std::max(m_folderTreeWidth, minFolderTreeWidth), maxFolderTreeWidth);
+
+            DrawFolderTree(contentHeight);
+            ImGui::SameLine(0.0f, 0.0f);
+
+            ImGui::InvisibleButton("##filebrowser_folder_tree_splitter", ImVec2(splitterWidth, contentHeight));
+            if (ImGui::IsItemActive())
+            {
+                m_folderTreeWidth = std::min(std::max(m_folderTreeWidth + ImGui::GetIO().MouseDelta.x,
+                                                      minFolderTreeWidth),
+                                             maxFolderTreeWidth);
+            }
+            if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+
+            const ImU32 splitterColor = ImGui::GetColorU32(
+                ImGui::IsItemActive() ? ImGuiCol_SeparatorActive
+                                      : (ImGui::IsItemHovered() ? ImGuiCol_SeparatorHovered : ImGuiCol_Separator));
+            ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), splitterColor);
+            ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+        }
+
         if (ImGui::BeginChild("##file_browser_list", ImVec2(0, -footerHeight), true))
         {
             bool isList = (m_viewMode == ViewMode::List);
-            int count = static_cast<int>(m_cache.size());
+            int count = static_cast<int>(visibleEntries.size());
 
             if (isList)
             {
@@ -1015,11 +1337,7 @@ namespace pe
                 {
                     for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
                     {
-                        const auto &entry = m_cache[i];
-
-                        // Filter
-                        if (filter && !filter(entry.path))
-                            continue;
+                        const auto &entry = *visibleEntries[i];
 
                         bool isSelected = (m_selectedEntry == entry.path);
 
@@ -1090,11 +1408,7 @@ namespace pe
                             if (index >= count)
                                 break;
 
-                            const auto &entry = m_cache[index];
-
-                            // Note: Filter currently breaks grid alignment if used here without pre-filtering the cache.
-                            if (filter && !filter(entry.path))
-                                continue;
+                            const auto &entry = *visibleEntries[index];
 
                             ImGui::PushID(index);
 

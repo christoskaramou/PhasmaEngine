@@ -71,10 +71,20 @@ namespace pe
         void ProcessLoadedImages();
         void *RegisterImageForImGui(Image *image);
         void ReleaseImGuiTexture(void *&textureID);
+
+        struct FileEntry;
         void DrawDirectoryContent(const std::filesystem::path &path,
                                   std::function<void(const std::filesystem::path &)> onDoubleClick = nullptr,
                                   std::function<bool(const std::filesystem::path &)> filter = nullptr,
                                   float footerHeight = 0.0f);
+        void DrawFolderTree(float height);
+        void DrawFolderTreeNode(const std::filesystem::path &path);
+        void DrawFilterSortBar();
+        bool MatchesBrowserFilters(const FileEntry &entry,
+                                   const std::function<bool(const std::filesystem::path &)> &externalFilter) const;
+        std::vector<const FileEntry *> BuildVisibleEntries(
+            const std::function<bool(const std::filesystem::path &)> &externalFilter) const;
+        void SortCache();
 
         static std::unordered_set<std::string> s_textExtensions;
         static std::unordered_set<std::string> s_shaderExtensions;
@@ -115,15 +125,42 @@ namespace pe
         ViewMode m_viewMode = ViewMode::Grid;
         float m_gridIconSize = 64.0f;
 
+        enum class TypeFilter
+        {
+            All,
+            Text,
+            Shader,
+            Script,
+            Image,
+            Model,
+            SourceModel,
+            Other
+        };
+
+        enum class SortMode
+        {
+            Name,
+            Date,
+            Size
+        };
+
         struct FileEntry
         {
             std::filesystem::path path;
             std::string filename; // Cached UTF-8 filename
             bool isDirectory;
+            uintmax_t size = 0;
+            std::filesystem::file_time_type lastWriteTime{};
             void *iconID;
         };
         std::vector<FileEntry> m_cache;
         std::filesystem::path m_cachePath; // Path currently cached
+        std::filesystem::path m_folderTreeRoot;
+        float m_folderTreeWidth = 220.0f;
+        char m_searchBuffer[128] = {};
+        TypeFilter m_typeFilter = TypeFilter::All;
+        SortMode m_sortMode = SortMode::Name;
+        bool m_sortDescending = false;
         bool m_wasOpen = false;
         std::filesystem::path m_clipboardPath; // set by Ctrl+C, consumed by Ctrl+V
 
