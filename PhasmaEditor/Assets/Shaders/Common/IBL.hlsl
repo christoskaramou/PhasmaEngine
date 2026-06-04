@@ -32,7 +32,7 @@ float3 ComputeIBL_Common(
     float3 diffuse = irradiance * albedo * occlusion;
 
     // Specular (Reflection)
-    float mip = roughness * roughness * max(0, l - 1); 
+    float mip = roughness * max(0, l - 1);
     float3 prefilteredColor = texCube.SampleLevel(samplerCube, R, mip).rgb;
 
     float3 specular = prefilteredColor * kS * occlusion;

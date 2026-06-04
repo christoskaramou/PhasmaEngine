@@ -10,4 +10,14 @@ The render path is split between PhasmaRuntime's shared scene renderer and Phasm
 
 ## Skybox Runtime Reload
 
-Runtime `skybox.load(...)` exercises this path: `SkyBox::LoadSkyBox()` loads an equirect HDR, generates mips through the shared Downsampler, then dispatches `EquirectangularToCubemap.hlsl` through a transient compute `PassInfo`. Startup and runtime reloads should both produce nonzero cubemap memory; a black cubemap after runtime reload points first at descriptor/pipeline binding and transient-pass lifetime.
+Runtime `skybox.load(...)` exercises this path: `SkyBox::LoadSkyBox()` loads an equirect HDR, dispatches `EquirectangularToCubemap.hlsl` into cubemap mip 0, then dispatches `PrefilterCubemap.hlsl` through another transient compute `PassInfo` to fill roughness-filtered mips for IBL. Startup and runtime reloads should both produce nonzero cubemap memory; a black cubemap after runtime reload points first at descriptor/pipeline binding and transient-pass lifetime.
+
+IBL specular sampling expects those roughness-filtered cubemap mips, with roughness mapped linearly to the mip range (`ComputeIBL_Common()` uses `mip = roughness * (mipCount - 1)`).
+
+A bright HDR sun is a sub-texel, very-high-radiance delta. Naive GGX importance-sampling of it during prefiltering lights up isolated texels on a regular lattice (the sample set is identical per texel, so the sun falls into the same fixed sample slots everywhere), which the floor reflection magnifies into a grid of bright squares. `PrefilterCubemap.hlsl` suppresses this with three load-time measures:
+
+- **`MAX_PREFILTER_RADIANCE`** — clamps per-sample radiance so the delta sun has no high-contrast spike to expose.
+- **`SOURCE_MIP_BIAS`** — biases each sample toward a blurrier (pre-averaged) source mip, scaled by roughness, so the integral converges to a smooth blur (low roughness stays sharp). This is the main lever; raise it if squares/blotches return, lower it if rough reflections over-blur.
+- **`PrefilterSampleCount`** (in `Skybox.cpp`) — generous counts (64/128/256/512); load-time only.
+
+Per-texel jitter was tried and removed — once the mip bias converges the integral, jitter only trades the grid for swimming grain. The prefilter is a one-time bake at skybox load/reload (`LoadSkyBox` → `PrefilterSkyboxMips`), not a per-frame pass; per-frame IBL is a single `SampleLevel` of the baked mips. If the prefilter failed to compile/run, the mips are black.

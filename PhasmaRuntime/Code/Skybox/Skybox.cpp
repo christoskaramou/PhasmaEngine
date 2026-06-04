@@ -31,6 +31,82 @@ namespace pe
             barrier.mipLevels = image->GetMipLevels();
             cmd->ImageBarrier(barrier);
         }
+
+        struct PrefilterPushConstants
+        {
+            uint32_t mipLevel = 0;
+            uint32_t faceSize = 1;
+            uint32_t sampleCount = 1;
+            float roughness = 0.0f;
+        };
+
+        static_assert(sizeof(PrefilterPushConstants) == 16);
+
+        uint32_t PrefilterSampleCount(float roughness)
+        {
+            // Skybox prefiltering runs once at load, so sample counts are
+            // generous: more samples shrink the gaps between importance-sample
+            // directions that let a sub-texel sun fall through and alias into a
+            // lattice of bright squares on rough reflections.
+            if (roughness < 0.2f)
+                return 64;
+            if (roughness < 0.5f)
+                return 128;
+            if (roughness < 0.75f)
+                return 256;
+            return 512;
+        }
+
+        void PrefilterSkyboxMips(CommandBuffer *cmd, Image *cubeMap, Image *equiImage)
+        {
+            const uint32_t mipLevels = cubeMap->GetMipLevels();
+            if (mipLevels <= 1)
+                return;
+
+            for (uint32_t mip = 0; mip < mipLevels; ++mip)
+            {
+                if (!cubeMap->HasUAV(mip))
+                    cubeMap->CreateUAV(PE_IMAGE_VIEW_TYPE_2D_ARRAY, mip);
+            }
+
+            PassInfo *passInfo = new PassInfo();
+            passInfo->name = "Skybox_PrefilterCubemap_pipeline";
+            passInfo->pCompShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Compute/PrefilterCubemap.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
+            passInfo->Update();
+
+            auto &descriptors = passInfo->GetDescriptors(RHII.GetFrameIndex());
+            Descriptor *descriptor = descriptors[0];
+
+            std::vector<ImageView *> mipViews(mipLevels);
+            for (uint32_t mip = 0; mip < mipLevels; ++mip)
+                mipViews[mip] = cubeMap->GetUAV(mip);
+
+            descriptor->SetImageViews(0, mipViews);
+            descriptor->SetImageView(1, equiImage->GetSRV());
+            descriptor->SetSampler(2, equiImage->GetSampler());
+            descriptor->Update();
+
+            cmd->BeginDebugRegion("Skybox Prefilter");
+            cmd->BindPipeline(*passInfo);
+            for (uint32_t mip = 1; mip < mipLevels; ++mip)
+            {
+                const float roughness = static_cast<float>(mip) / static_cast<float>(mipLevels - 1);
+                const uint32_t faceSize = std::max(1u, cubeMap->GetWidth() >> mip);
+                PrefilterPushConstants constants{};
+                constants.mipLevel = mip;
+                constants.faceSize = faceSize;
+                constants.sampleCount = PrefilterSampleCount(roughness);
+                constants.roughness = roughness;
+
+                cmd->SetConstants(constants);
+                cmd->PushConstants();
+                cmd->Dispatch((faceSize + 7u) / 8u, (faceSize + 7u) / 8u, cubeMap->GetArrayLayers());
+            }
+            cmd->EndDebugRegion();
+
+            cmd->AddAfterWaitCallback([passInfo]()
+                                      { delete passInfo; });
+        }
     } // namespace
 
     bool SkyBox::LoadSkyBox(CommandBuffer *cmd, const std::array<std::string, 6> &textureNames)
@@ -163,8 +239,8 @@ namespace pe
         uint32_t groups = (cubemapSize + 31) / 32;
         cmd->Dispatch(groups, groups, 6);
 
-        // 7. Generate Mips
-        cmd->GenerateMipMaps(m_cubeMap);
+        // 7. Generate roughness-prefiltered mips for image-based lighting
+        PrefilterSkyboxMips(cmd, m_cubeMap, equiImage);
 
         // 8. Final Barrier
         TransitionSkyboxToShaderRead(cmd, m_cubeMap);
