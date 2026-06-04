@@ -50,6 +50,7 @@ namespace pe
         size_t Size() const { return m_size; }
         void *Data() const { return m_data; }
         PeBufferUsageFlags Usage() const { return m_usage; }
+        PeMemoryUsage MemoryUsage() const { return m_memoryUsage; }
         const std::string &GetName() const { return m_name; }
         uint64_t GetDeviceAddress() const;
         BufferTrackInfo &GetTrackInfo() { return m_trackInfo; }

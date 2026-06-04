@@ -312,30 +312,36 @@ namespace pe
         }
     }
 
-    void Dx12ImageImpl::CopyToBuffer(CommandBuffer *cmd, Buffer *dst)
+    void Dx12ImageImpl::CopyToBuffer(CommandBuffer *cmd, Buffer *dst, uint32_t mipLevel, uint32_t baseArrayLayer, uint32_t layerCount)
     {
         Image *src = m_owner;
         PE_ERROR_IF(!cmd, "Dx12ImageImpl::CopyToBuffer: no command buffer specified");
         PE_ERROR_IF(!dst, "Dx12ImageImpl::CopyToBuffer: null destination buffer");
         PE_ERROR_IF(src->GetSamples() != PE_SAMPLE_COUNT_1, "Dx12ImageImpl::CopyToBuffer: multisampled image readback is not supported yet");
         PE_ERROR_IF(IsDepthStencilFormat(m_viewFormat), "Dx12ImageImpl::CopyToBuffer: depth/stencil image readback is not supported yet");
+        PE_ERROR_IF(mipLevel >= src->GetMipLevels(), "Dx12ImageImpl::CopyToBuffer: mip level out of range");
+        PE_ERROR_IF(baseArrayLayer >= src->GetArrayLayers(), "Dx12ImageImpl::CopyToBuffer: array layer out of range");
+        layerCount = layerCount ? layerCount : 1;
+        PE_ERROR_IF(baseArrayLayer + layerCount > src->GetArrayLayers(), "Dx12ImageImpl::CopyToBuffer: layer range out of bounds");
+        PE_ERROR_IF(layerCount != 1, "Dx12ImageImpl::CopyToBuffer: multi-layer readback is not supported yet");
 
         TransitionForCopy(cmd, src, PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
         ID3D12Device *device = static_cast<Dx12RhiImpl *>(RHII.GetImpl())->GetDevice();
         const D3D12_RESOURCE_DESC desc = m_resource->GetDesc();
+        const UINT firstSubresource = SubresourceIndex(src, baseArrayLayer, mipLevel);
 
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout{};
         UINT rowCount = 0;
         UINT64 rowSize = 0;
         UINT64 totalBytes = 0;
-        device->GetCopyableFootprints(&desc, 0, 1, 0, &layout, &rowCount, &rowSize, &totalBytes);
+        device->GetCopyableFootprints(&desc, firstSubresource, 1, 0, &layout, &rowCount, &rowSize, &totalBytes);
         PE_ERROR_IF(totalBytes > dst->Size(), "Dx12ImageImpl::CopyToBuffer: destination buffer is too small");
 
         D3D12_TEXTURE_COPY_LOCATION source{};
         source.pResource = m_resource.Get();
         source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-        source.SubresourceIndex = 0;
+        source.SubresourceIndex = firstSubresource;
 
         D3D12_TEXTURE_COPY_LOCATION dest{};
         dest.pResource = Dx12BufferImpl::From(dst)->GetResource();

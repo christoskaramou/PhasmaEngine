@@ -1225,10 +1225,10 @@ namespace pe
         dst->CopyImage(m_owner, src);
     }
 
-    void Dx12CommandBufferImpl::CopyImageToBuffer(Image *src, Buffer *dst)
+    void Dx12CommandBufferImpl::CopyImageToBuffer(Image *src, Buffer *dst, uint32_t mipLevel, uint32_t baseArrayLayer, uint32_t layerCount)
     {
         PE_ERROR_IF(!src || !dst, "Dx12CommandBufferImpl::CopyImageToBuffer: null resource");
-        src->CopyToBuffer(m_owner, dst);
+        src->CopyToBuffer(m_owner, dst, mipLevel, baseArrayLayer, layerCount);
     }
     void Dx12CommandBufferImpl::GenerateMipMaps(Image *image)
     {

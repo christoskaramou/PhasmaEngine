@@ -748,6 +748,55 @@ namespace pe
 
             {
                 ToolDefinition tool;
+                tool.name = "set_camera";
+                tool.description = "Sets the active camera, or a camera node, to a deterministic viewpoint. "
+                                   "Use position plus target/direction or rotation_euler_deg. "
+                                   "Supports projection, fov_y_deg/fov_x_deg, orthographic_size, near_plane, and far_plane.";
+                tool.inputSchema = schema::Object({
+                    {"node", "Optional camera node name or id (node:index:revision). Omit for active camera.", schema::String()},
+                    {"position", "Camera position as [x,y,z]", schema::ArrayOf(schema::Number())},
+                    {"target", "World point for the camera to look at as [x,y,z]", schema::ArrayOf(schema::Number())},
+                    {"direction", "World direction for the camera to face as [x,y,z]", schema::ArrayOf(schema::Number())},
+                    {"rotation_euler_deg", "Camera rotation in degrees as [pitch,yaw,roll]", schema::ArrayOf(schema::Number())},
+                    {"projection", "Projection mode: perspective or orthographic", schema::String()},
+                    {"fov_y_deg", "Vertical perspective field of view in degrees", schema::Number()},
+                    {"fov_x_deg", "Horizontal perspective field of view in degrees", schema::Number()},
+                    {"orthographic_size", "Orthographic camera size", schema::Number()},
+                    {"near_plane", "Near plane distance", schema::Number()},
+                    {"far_plane", "Far plane distance", schema::Number()},
+                    {"make_active", "If node is supplied, make that camera the active camera", schema::Boolean()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->SetCamera(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "frame_node";
+                tool.description = "Moves the active camera to frame a node's world AABB. "
+                                   "Use this before visual captures to get a reproducible viewpoint.";
+                tool.inputSchema = schema::Object({
+                    {"node", "Node name or id (node:index:revision)", schema::String(), true},
+                    {"direction", "Optional direction from target center toward the camera as [x,y,z]", schema::ArrayOf(schema::Number())},
+                    {"padding", "Distance/size multiplier (default 1.25)", schema::Number()},
+                    {"adjust_orthographic_size", "Resize orthographic camera to fit the node (default true)", schema::Boolean()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->FrameNode(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
                 tool.name = "add_mesh_to_node";
                 tool.description = "Attaches a primitive mesh to a node (synchronous). "
                                    "Node can be a name or stable id (node:index:revision). "
@@ -799,6 +848,27 @@ namespace pe
 
             {
                 ToolDefinition tool;
+                tool.name = "set_node_texture";
+                tool.description = "Sets or clears a texture on a node mesh material slot. "
+                                   "Creates a material instance when the mesh currently shares its parent material.";
+                tool.inputSchema = schema::Object({
+                    {"node", "Node name or id (node:index:revision)", schema::String(), true},
+                    {"mesh_slot", "Mesh slot index on the node (default 0)", schema::Integer()},
+                    {"slot", "Texture slot: base_color, metallic_roughness, normal, occlusion, or emissive", schema::String(), true},
+                    {"path", "Texture path, absolute or relative to Assets/, Assets/Textures/, or Assets/Objects/", schema::String()},
+                    {"clear", "Clear this texture override and restore the engine default for the slot", schema::Boolean()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->SetNodeTexture(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
                 tool.name = "add_light";
                 tool.description = "Adds a light to the scene (synchronous). "
                                    "Valid types: directional, point, spot, area.";
@@ -831,9 +901,58 @@ namespace pe
 
             {
                 ToolDefinition tool;
+                tool.name = "get_scene_info";
+                tool.description = "Returns a compact scene summary: scene path/name, active camera, counts, render mode, skybox, "
+                                   "editor play state, and optional shallow tree. Prefer this before query_scene unless you need the full tree.";
+                tool.inputSchema = schema::Object({
+                    {"include_tree", "Include the node tree payload like query_scene (default false)", schema::Boolean()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->GetSceneInfo(args.value("include_tree", false)));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "get_node_info";
+                tool.description = "Returns detailed node data: transform matrices, world AABB, parent/children, component flags, "
+                                   "camera/light/script details, mesh refs, material scalars, and texture ids.";
+                tool.inputSchema = schema::Object({
+                    {"node", "Node name or id (node:index:revision)", schema::String(), true},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->GetNodeInfo(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "get_renderer_status";
+                tool.description = "Returns renderer status and metrics: API, GPU name, present mode, render scale, "
+                                   "swapchain/display/viewport sizes, fps/delta_ms, feature toggles, and GPU memory.";
+                tool.inputSchema = schema::Object({});
+                tool.handler = [runtime](const nlohmann::json &, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->GetRendererStatus());
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
                 tool.name = "find_loadable_model";
                 tool.description = "Searches for 3D model files (.glb, .gltf, .obj, .fbx) in Assets/Objects/ by name. "
-                                   "Returns paths ready to use with load_model(). "
+                                   "Use import_model to cook one of these source assets, then load_cooked_mesh on the resulting .pemesh. "
                                    "Example: query 'helmet' finds 'DamagedHelmet/glTF-Binary/DamagedHelmet.glb'.";
                 tool.inputSchema = schema::Object({
                     {"query", "Model name to search for (e.g. 'helmet', 'avocado', 'sponza')", schema::String(), true},
@@ -843,6 +962,60 @@ namespace pe
                     if (!runtime)
                         return RuntimeUnavailable();
                     return RuntimeJsonResult(runtime->FindLoadableModel(args.value("query", "")));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "import_model";
+                tool.description = "Starts an asynchronous PhasmaCook job for source models (.glb, .gltf, .obj, .fbx). "
+                                   "Returns a job_id; poll get_import_status for cooked .pemesh outputs.";
+                tool.inputSchema = schema::Object({
+                    {"path", "Single source model path, absolute or relative to Assets/ or Assets/Objects/", schema::String()},
+                    {"paths", "Multiple source model paths", schema::ArrayOf(schema::String())},
+                    {"output_path", "Optional .pemesh output path for a single source, relative to Assets/ or absolute under Assets/", schema::String()},
+                    {"force", "Recook even if the output .pemesh is newer than the source", schema::Boolean()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->ImportModel(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "get_import_status";
+                tool.description = "Returns status for an import_model job, including cooked, skipped, and failed outputs.";
+                tool.inputSchema = schema::Object({
+                    {"job_id", "Job id returned by import_model", schema::String(), true},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->GetImportStatus(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "load_cooked_mesh";
+                tool.description = "Loads a cooked .pemesh into the active scene and returns the created root node ids. "
+                                   "Use this after import_model completes, or with an existing .pemesh under Assets/.";
+                tool.inputSchema = schema::Object({
+                    {"path", ".pemesh path, absolute or relative to Assets/ or Assets/Models/", schema::String(), true},
+                    {"parent", "Optional parent node name or id (node:index:revision)", schema::String()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->LoadCookedMesh(args.dump()));
                 };
                 tools.push_back(std::move(tool));
             }
@@ -1457,6 +1630,112 @@ namespace pe
                     if (!runtime)
                         return RuntimeUnavailable();
                     return RuntimeJsonResult(runtime->TakeScreenshot());
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "take_scene_screenshot";
+                tool.description = "Captures the scene display or viewport render target to PNG, without editor UI or cursor overlay. "
+                                   "Use set_camera/frame_node first for deterministic visual tests.";
+                tool.inputSchema = schema::Object({
+                    {"target", "display or viewport (default display)", schema::String()},
+                    {"settle_frames", "Approximate frames to wait before capture (default 2)", schema::Integer()},
+                    {"max_width", "Maximum output dimension before downscale (default 1024)", schema::Integer()},
+                    {"visualize", "auto, linear, srgb, normal, velocity, depth, or linear_depth", schema::String()},
+                    {"return_base64", "Include image_base64 in structured output (default false)", schema::Boolean()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->TakeSceneScreenshot(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "list_image_resources";
+                tool.description = "Lists editor-visible image resources: loaded GPU images/textures/render targets/depth targets "
+                                   "and, optionally, image files under Assets/. Use returned ids with capture_image_resource.";
+                tool.inputSchema = schema::Object({
+                    {"scope", "all, runtime/images/textures/render_targets, or files/assets (default all)", schema::String()},
+                    {"max_files", "Maximum asset image files to list when scope includes files (default 200)", schema::Integer()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->ListImageResources(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "capture_image_resource";
+                tool.description = "Captures an image resource to PNG and returns metadata plus the saved path. "
+                                   "Ids come from list_image_resources; aliases include rt:<name>, depth:<name>, image:<name>, and file:<asset-path>. "
+                                   "Use mip and array_index to capture a specific texture subresource when present.";
+                tool.inputSchema = schema::Object({
+                    {"id", "Resource id, e.g. rt:normal, depth:depthStencil, image:0x..., image:name, or file:Textures/foo.png", schema::String(), true},
+                    {"mip", "Mip level to capture (default 0)", schema::Integer()},
+                    {"array_index", "Array layer / cubemap face index to capture (default 0)", schema::Integer()},
+                    {"aspect", "Aspect to capture: color, depth, stencil, or auto. Stencil is not supported yet.", schema::String()},
+                    {"visualize", "auto, linear, srgb, normal, velocity, depth, or linear_depth", schema::String()},
+                    {"format", "Output format, currently png", schema::String()},
+                    {"max_width", "Maximum output dimension before downscale (default 1024)", schema::Integer()},
+                    {"allow_large", "Allow GPU readback staging allocations up to the large cap (default false)", schema::Boolean()},
+                    {"return_base64", "Include image_base64 in structured output (default false)", schema::Boolean()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->CaptureImageResource(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "list_buffer_resources";
+                tool.description = "Lists tracked GPU/CPU buffers with ids, names, sizes, usage flags, and expected readback path. "
+                                   "Use returned ids with capture_buffer_resource.";
+                tool.inputSchema = schema::Object({
+                    {"max_results", "Maximum buffers to list (default 500)", schema::Integer()},
+                    {"include_empty", "Include zero-sized buffers", schema::Boolean()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->ListBufferResources(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "capture_buffer_resource";
+                tool.description = "Copies bytes from a buffer into Assets/Agent/*.bin and returns metadata. "
+                                   "Host-readable buffers are mapped; GPU-only buffers use a staging readback copy.";
+                tool.inputSchema = schema::Object({
+                    {"id", "Buffer id from list_buffer_resources, e.g. buffer:0x... or buffer:<name>", schema::String(), true},
+                    {"offset", "Byte offset to start reading (default 0)", schema::Integer()},
+                    {"size", "Byte count to read. Omit to capture up to the default safe cap.", schema::Integer()},
+                    {"allow_large", "Allow captures up to the larger cap (64 MiB)", schema::Boolean()},
+                    {"return_base64", "Include data_base64 in structured output", schema::Boolean()},
+                    {"return_hex", "Include data_hex in structured output", schema::Boolean()},
+                    {"preview_u32", "Include up to 64 uint32 values decoded from the start of the capture", schema::Boolean()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->CaptureBufferResource(args.dump()));
                 };
                 tools.push_back(std::move(tool));
             }

@@ -73,7 +73,7 @@ namespace pe
         void CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t dstOffset) override;
         void CopyDataToImageStaged(Image *image, void *data, size_t size, uint32_t baseArrayLayer, uint32_t layerCount, uint32_t mipLevel) override;
         void CopyImage(Image *src, Image *dst) override;
-        void CopyImageToBuffer(Image *src, Buffer *dst) override;
+        void CopyImageToBuffer(Image *src, Buffer *dst, uint32_t mipLevel, uint32_t baseArrayLayer, uint32_t layerCount) override;
         void GenerateMipMaps(Image *image) override;
 
         void TraceRays(uint32_t width, uint32_t height, uint32_t depth) override;

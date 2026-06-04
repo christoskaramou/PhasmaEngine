@@ -150,7 +150,7 @@ namespace pe
                                    uint32_t layerCount = 0,
                                    uint32_t mipLevel = 0);
         void CopyImage(CommandBuffer *cmd, Image *src);
-        void CopyToBuffer(CommandBuffer *cmd, Buffer *dst);
+        void CopyToBuffer(CommandBuffer *cmd, Buffer *dst, uint32_t mipLevel, uint32_t baseArrayLayer, uint32_t layerCount);
         void GenerateMipMaps(CommandBuffer *cmd);
         void Blit(CommandBuffer *cmd, Image *src, const ImageBlit &region, PeFilter filter);
 

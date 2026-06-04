@@ -19,7 +19,7 @@ namespace pe
         ~Dx12ImageImpl() override;
 
         void CopyImage(CommandBuffer *cmd, Image *src) override;
-        void CopyToBuffer(CommandBuffer *cmd, Buffer *dst) override;
+        void CopyToBuffer(CommandBuffer *cmd, Buffer *dst, uint32_t mipLevel, uint32_t baseArrayLayer, uint32_t layerCount) override;
         void Blit(CommandBuffer *cmd, Image *src, const ImageBlit &region, PeFilter filter) override;
         void CopyDataToImageStaged(CommandBuffer *cmd,
                                    void *data,

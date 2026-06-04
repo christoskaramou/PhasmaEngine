@@ -2,6 +2,22 @@
 
 ## 2026-06-04
 
+- Expanded the editor MCP inspection/control surface. New tools provide compact
+  scene and renderer summaries (`get_scene_info`, `get_renderer_status`),
+  detailed node inspection (`get_node_info`), deterministic active-camera
+  setup/framing (`set_camera`, `frame_node`), material texture assignment
+  (`set_node_texture`), scene-only screenshots (`take_scene_screenshot`),
+  generic image resource inspection/capture (`list_image_resources`,
+  `capture_image_resource`), buffer inspection/capture (`list_buffer_resources`,
+  `capture_buffer_resource`), and native cooked-asset flow (`import_model`,
+  `get_import_status`, `load_cooked_mesh`). GPU image capture now passes
+  `mip`/`array_index` through neutral RHI readback on Vulkan/DX12, with DX12
+  depth/stencil readback still explicitly unsupported. Follow-up review tightened
+  readback safety: large image staging allocations require `allow_large`, and
+  Vulkan image capture plus buffer capture only advertise/use staged GPU
+  readback when the resource has `TRANSFER_SRC`. Completed import jobs are
+  pruned after 30 minutes and capped to the newest 64 finished records; source
+  model imports stay inside `Assets/` and custom outputs must be `.pemesh`.
 - Added a Unity-style active-camera orientation gizmo to the editor Viewport. SceneView draws transparent red Right/X, blue Front/Z, and green Up/Y arrows in the rendered image rect, projects them from the active camera orientation, preserves camera position when snapping to an arrow direction, supports perspective and orthographic active cameras, blocks viewport picking while an arrow is hovered or active, and exposes an editor-only Gizmos > Orientation toggle.
 
 ## 2026-06-03

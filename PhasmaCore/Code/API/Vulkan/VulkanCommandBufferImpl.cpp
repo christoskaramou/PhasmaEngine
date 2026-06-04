@@ -818,9 +818,9 @@ namespace pe
         dst->CopyImage(m_owner, src);
     }
 
-    void VulkanCommandBufferImpl::CopyImageToBuffer(Image *src, Buffer *dst)
+    void VulkanCommandBufferImpl::CopyImageToBuffer(Image *src, Buffer *dst, uint32_t mipLevel, uint32_t baseArrayLayer, uint32_t layerCount)
     {
-        src->CopyToBuffer(m_owner, dst);
+        src->CopyToBuffer(m_owner, dst, mipLevel, baseArrayLayer, layerCount);
     }
 
     void VulkanCommandBufferImpl::GenerateMipMaps(Image *image)

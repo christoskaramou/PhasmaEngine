@@ -621,16 +621,29 @@ namespace pe
         cmd->EndDebugRegion();
     }
 
-    void VulkanImageImpl::CopyToBuffer(CommandBuffer *cmd, Buffer *dst)
+    void VulkanImageImpl::CopyToBuffer(CommandBuffer *cmd, Buffer *dst, uint32_t mipLevel, uint32_t baseArrayLayer, uint32_t layerCount)
     {
         Image *src = m_owner;
         cmd->BeginDebugRegion("CopyImageToBuffer");
+        PE_ERROR_IF(!dst, "VulkanImageImpl::CopyToBuffer: null destination buffer");
+        PE_ERROR_IF(!(src->GetUsage() & PE_IMAGE_USAGE_TRANSFER_SRC),
+                    "VulkanImageImpl::CopyToBuffer: image was not created with transfer source usage");
+        PE_ERROR_IF(mipLevel >= src->GetMipLevels(), "VulkanImageImpl::CopyToBuffer: mip level out of range");
+        PE_ERROR_IF(baseArrayLayer >= src->GetArrayLayers(), "VulkanImageImpl::CopyToBuffer: array layer out of range");
+        layerCount = layerCount ? layerCount : 1;
+        PE_ERROR_IF(baseArrayLayer + layerCount > src->GetArrayLayers(), "VulkanImageImpl::CopyToBuffer: layer range out of bounds");
+        const uint32_t width = std::max(src->GetWidth() >> mipLevel, 1u);
+        const uint32_t height = std::max(src->GetHeight() >> mipLevel, 1u);
 
         ImageBarrierInfo barrier{};
         barrier.image = src;
         barrier.stageFlags = PE_STAGE_TRANSFER;
         barrier.accessMask = PE_ACCESS_TRANSFER_READ;
         barrier.layout = PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.baseMipLevel = mipLevel;
+        barrier.mipLevels = 1;
+        barrier.baseArrayLayer = baseArrayLayer;
+        barrier.arrayLayers = layerCount;
         Image::Barrier(cmd, barrier);
 
         BufferBarrierInfo bufBarrier{};
@@ -646,11 +659,11 @@ namespace pe
             region.bufferRowLength = 0;
             region.bufferImageHeight = 0;
             region.imageSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
-            region.imageSubresource.mipLevel = 0;
-            region.imageSubresource.baseArrayLayer = 0;
-            region.imageSubresource.layerCount = 1;
+            region.imageSubresource.mipLevel = mipLevel;
+            region.imageSubresource.baseArrayLayer = baseArrayLayer;
+            region.imageSubresource.layerCount = layerCount;
             region.imageOffset = vk::Offset3D{0, 0, 0};
-            region.imageExtent = vk::Extent3D{src->GetWidth(), src->GetHeight(), 1};
+            region.imageExtent = vk::Extent3D{width, height, 1};
 
             vk::CopyImageToBufferInfo2 copyInfo{};
             copyInfo.srcImage = m_image;
@@ -668,11 +681,11 @@ namespace pe
             region.bufferRowLength = 0;
             region.bufferImageHeight = 0;
             region.imageSubresource.aspectMask = VulkanHelpers::GetAspectMask(m_vkFormat);
-            region.imageSubresource.mipLevel = 0;
-            region.imageSubresource.baseArrayLayer = 0;
-            region.imageSubresource.layerCount = 1;
+            region.imageSubresource.mipLevel = mipLevel;
+            region.imageSubresource.baseArrayLayer = baseArrayLayer;
+            region.imageSubresource.layerCount = layerCount;
             region.imageOffset = vk::Offset3D{0, 0, 0};
-            region.imageExtent = vk::Extent3D{src->GetWidth(), src->GetHeight(), 1};
+            region.imageExtent = vk::Extent3D{width, height, 1};
 
             GetVulkanCommandBuffer(cmd).copyImageToBuffer(m_image, vk::ImageLayout::eTransferSrcOptimal,
                                                           pe::GetVulkanBuffer(dst),

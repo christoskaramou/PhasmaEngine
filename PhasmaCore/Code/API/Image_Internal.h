@@ -10,7 +10,7 @@ namespace pe
     {
         virtual ~Impl() = default;
         virtual void CopyImage(CommandBuffer *cmd, Image *src) = 0;
-        virtual void CopyToBuffer(CommandBuffer *cmd, Buffer *dst) = 0;
+        virtual void CopyToBuffer(CommandBuffer *cmd, Buffer *dst, uint32_t mipLevel, uint32_t baseArrayLayer, uint32_t layerCount) = 0;
         virtual void Blit(CommandBuffer *cmd, Image *src, const ImageBlit &region, PeFilter filter) = 0;
         virtual void CopyDataToImageStaged(CommandBuffer *cmd,
                                            void *data,

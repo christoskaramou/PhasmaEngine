@@ -59,7 +59,7 @@ namespace pe
         virtual void CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t dstOffset) = 0;
         virtual void CopyDataToImageStaged(Image *image, void *data, size_t size, uint32_t baseArrayLayer, uint32_t layerCount, uint32_t mipLevel) = 0;
         virtual void CopyImage(Image *src, Image *dst) = 0;
-        virtual void CopyImageToBuffer(Image *src, Buffer *dst) = 0;
+        virtual void CopyImageToBuffer(Image *src, Buffer *dst, uint32_t mipLevel, uint32_t baseArrayLayer, uint32_t layerCount) = 0;
         virtual void GenerateMipMaps(Image *image) = 0;
 
         // Ray tracing

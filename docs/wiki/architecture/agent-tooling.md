@@ -11,6 +11,25 @@ remains the source of truth.
 - `PhasmaEditor` hosts the in-process MCP server at
   `http://127.0.0.1:8765/mcp`, toggled from `Connection -> MCP Server`.
   Editor tools live in `PhasmaEditor/Code/GUI/Agent/EditorToolCatalog.cpp`.
+- The editor MCP scene/visual surface includes compact scene and renderer
+  readers (`get_scene_info`, `get_renderer_status`), detailed node inspection
+  (`get_node_info`), deterministic camera helpers (`set_camera`, `frame_node`),
+  material texture editing (`set_node_texture`), scene-only screenshots
+  (`take_scene_screenshot`), image inspection/capture
+  (`list_image_resources`, `capture_image_resource`), buffer inspection/capture
+  (`list_buffer_resources`, `capture_buffer_resource`), and native cooked-asset
+  flow (`import_model`, `get_import_status`, `load_cooked_mesh`). Image
+  resources cover live GPU images such as render targets, depth targets, loaded
+  textures, plus simple image files under `Assets/`; captures write PNGs to
+  `Assets/Agent/` unless `return_base64` is requested. GPU image captures can
+  target a specific `mip` and `array_index` through the neutral RHI
+  `CopyImageToBuffer` path where the backend format/aspect supports readback;
+  Vulkan GPU images must also be created with `TRANSFER_SRC`, and large GPU
+  image readbacks require `allow_large`. Buffer capture reports readback as
+  available only for host-readable buffers or GPU buffers created with
+  `TRANSFER_SRC`, because staged readback must copy from a valid transfer
+  source. `import_model` reads source models from `Assets/` and writes `.pemesh`
+  outputs under `Assets/`.
 - `tools/phasma_adk_agent/` is the external ADK sidecar scaffold. Phase 1 uses
   ADK's MCP toolset over Streamable HTTP and filters its ADK-visible MCP toolset
   down to `query_scene`, `take_screenshot`, and `get_console_log`.

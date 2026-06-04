@@ -501,9 +501,9 @@ namespace pe
         m_impl->CopyImage(cmd, src);
     }
 
-    void Image::CopyToBuffer(CommandBuffer *cmd, Buffer *dst)
+    void Image::CopyToBuffer(CommandBuffer *cmd, Buffer *dst, uint32_t mipLevel, uint32_t baseArrayLayer, uint32_t layerCount)
     {
-        m_impl->CopyToBuffer(cmd, dst);
+        m_impl->CopyToBuffer(cmd, dst, mipLevel, baseArrayLayer, layerCount);
     }
 
     void Image::GenerateMipMaps(CommandBuffer *cmd)
