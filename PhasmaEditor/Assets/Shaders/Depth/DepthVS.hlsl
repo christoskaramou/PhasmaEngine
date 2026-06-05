@@ -43,6 +43,7 @@ VS_OUTPUT_Position_Uv_ID mainVS(VS_INPUT_Depth input)
     if (pc.jointsCount > 0)
     {
         float weightSum = input.weights[0] + input.weights[1] + input.weights[2] + input.weights[3];
+        // Non-skinned nodes allocate no joint tail; zero weights keep them from loading past NodeGpuData.
         if (weightSum > 0.0)
         {
             jointTransform = mul(GetJointMatrix(id, input.joints[0]), input.weights[0]) +

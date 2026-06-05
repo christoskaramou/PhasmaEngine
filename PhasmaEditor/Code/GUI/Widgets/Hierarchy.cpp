@@ -224,6 +224,9 @@ namespace pe
                 if (ImGui::MenuItem("Circle"))
                     AddPrimitive(Primitives::CreateCircle());
                 ui::ItemTooltip("Create a circle mesh.");
+                if (ImGui::MenuItem("Skinned Strip 2D"))
+                    AddPrimitive(Primitives::CreateSkinnedStrip2D());
+                ui::ItemTooltip("Create a GPU-skinned 2D strip mesh.");
                 if (ImGui::MenuItem("Quad"))
                     AddPrimitive(Primitives::CreateQuad());
                 ui::ItemTooltip("Create a quad mesh.");
@@ -400,6 +403,9 @@ namespace pe
                 if (ImGui::MenuItem("Circle"))
                     AddPrim(Primitives::CreateCircle());
                 ui::ItemTooltip("Create a circle mesh.");
+                if (ImGui::MenuItem("Skinned Strip 2D"))
+                    AddPrim(Primitives::CreateSkinnedStrip2D());
+                ui::ItemTooltip("Create a GPU-skinned 2D strip mesh.");
                 if (ImGui::MenuItem("Quad"))
                     AddPrim(Primitives::CreateQuad());
                 ui::ItemTooltip("Create a quad mesh.");
@@ -838,6 +844,9 @@ namespace pe
                             if (ImGui::MenuItem("Circle"))
                                 AttachPrimitive(Primitives::CreateCircle());
                             ui::ItemTooltip("Attach a circle mesh.");
+                            if (ImGui::MenuItem("Skinned Strip 2D"))
+                                AttachPrimitive(Primitives::CreateSkinnedStrip2D());
+                            ui::ItemTooltip("Attach a GPU-skinned 2D strip mesh.");
                             if (ImGui::MenuItem("Quad"))
                                 AttachPrimitive(Primitives::CreateQuad());
                             ui::ItemTooltip("Attach a quad mesh.");
@@ -1180,6 +1189,9 @@ namespace pe
                     if (ImGui::MenuItem("Circle"))
                         AddPrim(Primitives::CreateCircle());
                     ui::ItemTooltip("Create a circle mesh.");
+                    if (ImGui::MenuItem("Skinned Strip 2D"))
+                        AddPrim(Primitives::CreateSkinnedStrip2D());
+                    ui::ItemTooltip("Create a GPU-skinned 2D strip mesh.");
                     if (ImGui::MenuItem("Quad"))
                         AddPrim(Primitives::CreateQuad());
                     ui::ItemTooltip("Create a quad mesh.");

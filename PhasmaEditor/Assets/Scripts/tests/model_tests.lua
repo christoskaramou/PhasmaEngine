@@ -24,6 +24,17 @@ function run_model_tests()
     end
     scene.clear()
 
+    -- attached skinned_strip_2d keeps its skeleton source
+    local mixed = primitives.cube(1.0)
+    T.check("mixed host cube created", mixed ~= nil)
+    if mixed then
+        scene.attach_primitive(mixed, "skinned_strip_2d")
+        T.check("attached skinned strip mesh_count", mixed:get_mesh_count() == 2)
+        T.check("attached skinned strip joint_count", animation.get_joint_count(mixed) == 6)
+        T.check("attached skinned strip ik solve", animation.solve_strip_ik_2d(mixed, vec2(1.0, 0.25), 4))
+    end
+    scene.clear()
+
     -- get_scale / get_rotation defaults
     local cube = primitives.cube(1.0)
     T.check("cube created", cube ~= nil)

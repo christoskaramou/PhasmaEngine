@@ -2,6 +2,8 @@
 
 ## 2026-06-06
 
+- Exposed the generated `skinned_strip_2d` primitive through the editor's Mesh creation and mesh-component attach menus as `Skinned Strip 2D`, plus MCP `add_mesh_to_node`. Live skinned primitive attachment now keeps the source `ModelAsset` in the scene and prefers skinned source models when resolving a multi-mesh node for skeleton/clip queries, preserving procedural animation and IK after attachment. The scene also caches the maximum joint count across owned models, invalidates that cache when model ownership changes, and documents the zero-weight shader guard that protects non-skinned nodes now that packed node storage carries no joint-tail padding.
+
 - Added a generated-strip IK helper for the 2D skinning path. `animation.solve_strip_ik_2d(node, targetLocal, iterations)` solves the `skinned_strip_2d` bone chain toward a node-local XY target with FABRIK and applies the resulting local Z rotations through the existing joint-matrix upload path. Added `Scripts/samples/skinned2d_ik_sample.lua` as a runnable target-following smoke sample.
 
 ## 2026-06-05

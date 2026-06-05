@@ -351,17 +351,28 @@ namespace pe
             return id;
         }
 
-        int CountSkinnedAnimationNodes(const Scene &scene)
+        struct SkinnedAnimationStats
         {
-            int count = 0;
+            int nodes = 0;
+            size_t boneRefs = 0;
+            size_t clipRefs = 0;
+        };
+
+        SkinnedAnimationStats GetSkinnedAnimationStats(const Scene &scene)
+        {
+            SkinnedAnimationStats stats;
             for (uint32_t ni = 0; ni < scene.GetNodeCount(); ++ni)
             {
                 const NodeId *node = scene.GetNodeId(ni);
                 if (node && scene.NodeHasSkinnedMesh(node))
-                    ++count;
+                {
+                    ++stats.nodes;
+                    stats.boneRefs += scene.GetSkeletonForNode(node).bones.size();
+                    stats.clipRefs += scene.GetAnimationClipsForNode(node).size();
+                }
             }
 
-            return count;
+            return stats;
         }
 
         void RestoreSkyboxNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
@@ -3161,15 +3172,14 @@ namespace pe
             }
         }
 
-        const Skeleton &restoredSkeleton = GetSkeleton();
-        const auto &restoredClips = GetAnimationClips();
-        PE_INFO("[Scene] RestoreSnapshot end: geometryMatch=%d nodes=%u meshes=%zu skinnedNodes=%d bones=%zu clips=%zu replayed=%d",
+        const SkinnedAnimationStats restoredAnimationStats = GetSkinnedAnimationStats(*this);
+        PE_INFO("[Scene] RestoreSnapshot end: geometryMatch=%d nodes=%u meshes=%zu skinnedNodes=%d boneRefs=%zu clipRefs=%zu replayed=%d",
                 geometryMatch ? 1 : 0,
                 GetNodeCount(),
                 m_meshes.size(),
-                CountSkinnedAnimationNodes(*this),
-                restoredSkeleton.bones.size(),
-                restoredClips.size(),
+                restoredAnimationStats.nodes,
+                restoredAnimationStats.boneRefs,
+                restoredAnimationStats.clipRefs,
                 replayedAnimationNodes);
         return true;
     }

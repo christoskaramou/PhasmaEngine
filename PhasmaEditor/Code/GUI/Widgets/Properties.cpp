@@ -225,6 +225,9 @@ namespace pe
                 if (ImGui::MenuItem("Circle"))
                     attachPrimitive(node, Primitives::CreateCircle());
                 ui::ItemTooltip("Attach a circle primitive.");
+                if (ImGui::MenuItem("Skinned Strip 2D"))
+                    attachPrimitive(node, Primitives::CreateSkinnedStrip2D());
+                ui::ItemTooltip("Attach a GPU-skinned 2D strip primitive.");
                 if (ImGui::MenuItem("Quad"))
                     attachPrimitive(node, Primitives::CreateQuad());
                 ui::ItemTooltip("Attach a quad primitive.");
@@ -538,6 +541,9 @@ namespace pe
                         if (ImGui::MenuItem("Circle"))
                             attachPrimitive(node, Primitives::CreateCircle());
                         ui::ItemTooltip("Add a circle mesh.");
+                        if (ImGui::MenuItem("Skinned Strip 2D"))
+                            attachPrimitive(node, Primitives::CreateSkinnedStrip2D());
+                        ui::ItemTooltip("Add a GPU-skinned 2D strip mesh.");
                         if (ImGui::MenuItem("Quad"))
                             attachPrimitive(node, Primitives::CreateQuad());
                         ui::ItemTooltip("Add a quad mesh.");

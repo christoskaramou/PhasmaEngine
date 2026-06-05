@@ -246,9 +246,8 @@ namespace pe
             if (modelIt != m_models.end())
             {
                 ModelAsset *model = *modelIt;
-                if (m_skeletonModel == model)
-                    ResetSkeletonCache();
                 m_models.erase(modelId);
+                ResetSkeletonCache();
                 delete model;
             }
         }
@@ -535,25 +534,38 @@ namespace pe
 
     void Scene::AttachPrimitiveToNode(NodeId *node, ModelAsset *primitiveModel)
     {
+        const bool keepModel = primitiveModel->HasSkeleton() || primitiveModel->HasAnimations();
+
         int sourceIndex = static_cast<int>(m_sources.size());
         SceneSource source;
         source.filePath = primitiveModel->GetFilePath();
         source.primitiveType = primitiveModel->GetPrimitiveType();
         source.primitiveParams = primitiveModel->GetPrimitiveParams();
         source.primitiveParamCount = primitiveModel->GetPrimitiveParamCount();
+        if (keepModel)
+            source.modelId = primitiveModel->GetId();
         m_sources.push_back(std::move(source));
 
         std::vector<int> meshMap = AddModelGeometry(primitiveModel, sourceIndex);
         if (!meshMap.empty() && meshMap[0] >= 0)
             AddMeshRef(node, meshMap[0]);
 
-        // Transfer material ownership from the temporary ModelAsset to the scene
-        // before deleting it — mesh.material holds a raw pointer into these.
-        for (auto &mat : primitiveModel->GetOwnedMaterials())
-            m_ownedMaterials.push_back(std::move(mat));
+        if (keepModel)
+        {
+            m_models.insert(primitiveModel->GetId(), primitiveModel);
+            m_modelRootNodes[primitiveModel->GetId()].push_back(node);
+            ResetSkeletonCache();
+        }
+        else
+        {
+            // Transfer material ownership from the temporary ModelAsset to the scene
+            // before deleting it — mesh.material holds a raw pointer into these.
+            for (auto &mat : primitiveModel->GetOwnedMaterials())
+                m_ownedMaterials.push_back(std::move(mat));
+            delete primitiveModel;
+        }
 
         MarkNodeDirty(node);
-        delete primitiveModel;
     }
 
     bool Scene::SetMeshUvRect(int meshIndex, const vec4 &uvRect)

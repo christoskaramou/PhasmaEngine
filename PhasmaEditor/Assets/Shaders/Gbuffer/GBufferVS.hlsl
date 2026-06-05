@@ -46,6 +46,7 @@ VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
     if (pc.jointsCount)
     {
         float weightSum = input.weights[0] + input.weights[1] + input.weights[2] + input.weights[3];
+        // Non-skinned nodes allocate no joint tail; zero weights keep them from loading past NodeGpuData.
         if (weightSum > 0.0)
         {
             boneTransform = mul(GetJointMatrix(id, input.joints[0]), input.weights[0]) +

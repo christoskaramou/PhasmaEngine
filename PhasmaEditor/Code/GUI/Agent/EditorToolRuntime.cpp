@@ -1192,9 +1192,9 @@ namespace pe
     {
         // Validate primitive type upfront
         static const std::unordered_set<std::string> validPrims = {
-            "plane", "grid", "cube", "sphere", "uv_sphere", "ico_sphere", "cylinder", "cone", "pyramid", "quad", "circle", "torus"};
+            "plane", "grid", "cube", "sphere", "uv_sphere", "ico_sphere", "cylinder", "cone", "pyramid", "quad", "circle", "torus", "skinned_strip_2d"};
         if (validPrims.find(primitive) == validPrims.end())
-            return R"({"error":"unknown primitive type. Valid: plane, grid, cube, sphere, uv_sphere, ico_sphere, cylinder, cone, pyramid, quad, circle, torus"})";
+            return R"({"error":"unknown primitive type. Valid: plane, grid, cube, sphere, uv_sphere, ico_sphere, cylinder, cone, pyramid, quad, circle, torus, skinned_strip_2d"})";
 
         struct State
         {
@@ -1230,6 +1230,7 @@ namespace pe
                     else if (primitive == "quad") model = Primitives::CreateQuad();
                     else if (primitive == "circle") model = Primitives::CreateCircle();
                     else if (primitive == "torus") model = Primitives::CreateTorus();
+                    else if (primitive == "skinned_strip_2d") model = Primitives::CreateSkinnedStrip2D();
 
                     if (model)
                     {

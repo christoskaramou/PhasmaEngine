@@ -31,16 +31,28 @@ namespace pe
         if (refs.empty())
             return nullptr;
 
-        int meshIdx = refs[0];
-        if (meshIdx < 0 || meshIdx >= (int)m_meshSourceInfos.size())
-            return nullptr;
+        ModelAsset *firstModel = nullptr;
+        for (int meshIdx : refs)
+        {
+            if (meshIdx < 0 || meshIdx >= (int)m_meshSourceInfos.size())
+                continue;
 
-        int srcIdx = m_meshSourceInfos[meshIdx].sourceIndex;
-        if (srcIdx < 0 || srcIdx >= (int)m_sources.size())
-            return nullptr;
+            int srcIdx = m_meshSourceInfos[meshIdx].sourceIndex;
+            if (srcIdx < 0 || srcIdx >= (int)m_sources.size())
+                continue;
 
-        auto it = m_models.find(m_sources[srcIdx].modelId);
-        return it != m_models.end() ? *it : nullptr;
+            auto it = m_models.find(m_sources[srcIdx].modelId);
+            if (it == m_models.end())
+                continue;
+
+            ModelAsset *model = *it;
+            if (!firstModel)
+                firstModel = model;
+            if (model && model->HasSkeleton())
+                return model;
+        }
+
+        return firstModel;
     }
 
     ModelAsset *Scene::FindSkeletonModel() const
@@ -80,6 +92,7 @@ namespace pe
     void Scene::ResetSkeletonCache() const
     {
         m_skeletonModel = nullptr;
+        m_maxJointCount = -1;
     }
 
     const Skeleton &Scene::GetSkeletonForNode(const NodeId *node) const
@@ -103,13 +116,17 @@ namespace pe
 
     int Scene::GetMaxJointCount() const
     {
+        if (m_maxJointCount >= 0)
+            return m_maxJointCount;
+
         int maxJointCount = 0;
         for (auto *model : m_models)
         {
             if (model && model->HasSkeleton())
                 maxJointCount = std::max(maxJointCount, model->GetSkeleton().GetBoneCount());
         }
-        return maxJointCount;
+        m_maxJointCount = maxJointCount;
+        return m_maxJointCount;
     }
 
     bool Scene::NodeHasSkinnedMesh(const NodeId *node) const
@@ -392,6 +409,7 @@ namespace pe
     void Scene::AddModel(ModelAsset *model)
     {
         m_models.insert(model->GetId(), model);
+        ResetSkeletonCache();
 
         int sourceIndex = static_cast<int>(m_sources.size());
         SceneSource source;
@@ -469,6 +487,7 @@ namespace pe
     SceneNodeHandle Scene::AddModelDeferred(ModelAsset *model)
     {
         m_models.insert(model->GetId(), model);
+        ResetSkeletonCache();
 
         int sourceIndex = static_cast<int>(m_sources.size());
         SceneSource source;
@@ -566,10 +585,11 @@ namespace pe
             m_modelRootNodes.erase(modelId);
         }
 
-        if (m_skeletonModel == model)
-            ResetSkeletonCache();
         if (m_models.erase(modelId))
+        {
+            ResetSkeletonCache();
             delete model;
+        }
     }
 
     void Scene::RemoveModels(std::vector<ModelAsset *> models)

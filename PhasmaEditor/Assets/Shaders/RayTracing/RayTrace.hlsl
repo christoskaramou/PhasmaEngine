@@ -210,6 +210,7 @@ Vertex SkinVertex(Vertex v, uint meshId)
         return v; // No skeleton in scene
 
     float weightSum = v.weights.x + v.weights.y + v.weights.z + v.weights.w;
+    // Non-skinned nodes allocate no joint tail; zero weights keep them from loading past NodeGpuData.
     if (weightSum < 0.001f)
         return v; // Not skinned
 

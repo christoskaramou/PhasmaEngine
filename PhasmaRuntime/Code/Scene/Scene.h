@@ -544,6 +544,7 @@ namespace pe
 
         bool m_autoplayAnimations = true;
         mutable ModelAsset *m_skeletonModel = nullptr;
+        mutable int m_maxJointCount = -1;
 
         std::filesystem::path m_scenePath;
         bool m_dirty = false;
