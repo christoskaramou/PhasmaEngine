@@ -125,7 +125,7 @@ namespace pe
         bool ray_tracing_support = false;
         RenderMode render_mode = RenderMode::Hybrid;
         bool use_Disney_PBR = true;
-        PePresentMode preferred_present_mode = PE_PRESENT_MODE_MAILBOX;
+        PePresentMode preferred_present_mode = PE_PRESENT_MODE_FIFO;
         SceneViewAspectMode scene_view_aspect_mode = SceneViewAspectMode::Free;
     };
 
