@@ -232,7 +232,12 @@ namespace pe
         const std::vector<AnimationClip> &GetAnimationClips() const;
         ModelAsset *FindSkeletonModel() const;
         void ResetSkeletonCache() const;
+        const Skeleton &GetSkeletonForNode(const NodeId *node) const;
+        const std::vector<AnimationClip> &GetAnimationClipsForNode(const NodeId *node) const;
+        int GetJointCountForNode(const NodeId *node) const;
+        int GetMaxJointCount() const;
         bool NodeHasSkinnedMesh(const NodeId *node) const;
+        bool NodeUsesSkinnedStrip2D(const NodeId *node) const;
         Camera *GetCamera(int index) const { return m_cameras.at(index); }
         const std::vector<Camera *> &GetCameras() const { return m_cameras; }
         Camera *GetCameraForNode(const NodeId *node) const;

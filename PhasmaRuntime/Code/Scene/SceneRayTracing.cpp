@@ -299,7 +299,7 @@ namespace pe
         static constexpr PeAccelerationStructureBuildFlags kBlasFlags =
             PE_ACCELERATION_STRUCTURE_BUILD_PREFER_FAST_TRACE;
 
-        bool hasSkeleton = GetSkeleton().GetBoneCount() > 0;
+        bool hasSkeleton = GetMaxJointCount() > 0;
 
         for (int meshIndex = 0; meshIndex < static_cast<int>(m_meshes.size()); meshIndex++)
         {
@@ -455,7 +455,7 @@ namespace pe
         // --- Collect instances ---
         m_rtInstances.reserve(m_meshCount);
 
-        bool hasSkeleton = GetSkeleton().GetBoneCount() > 0;
+        bool hasSkeleton = GetMaxJointCount() > 0;
         uint32_t constantsIndex = 0;
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)

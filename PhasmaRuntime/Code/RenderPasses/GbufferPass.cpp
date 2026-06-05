@@ -145,7 +145,7 @@ namespace pe
         else
         {
             PushConstants_GBuffer pushConstants{};
-            pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetSkeleton().GetBoneCount());
+            pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetMaxJointCount());
             pushConstants.projJitter = camera->GetProjJitter();
             pushConstants.prevProjJitter = camera->GetPrevProjJitter();
             pushConstants.passType = 0u;
@@ -310,7 +310,7 @@ namespace pe
         Camera *camera = GetActiveScene()->GetActiveCamera();
 
         PushConstants_GBuffer pushConstants{};
-        pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetSkeleton().GetBoneCount());
+        pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetMaxJointCount());
         pushConstants.projJitter = camera->GetProjJitter();
         pushConstants.prevProjJitter = camera->GetPrevProjJitter();
         pushConstants.passType = 1u;

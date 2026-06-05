@@ -167,6 +167,7 @@ namespace pe
                     else if (type == "quad") model = Primitives::CreateQuad();
                     else if (type == "circle") model = Primitives::CreateCircle();
                     else if (type == "torus") model = Primitives::CreateTorus();
+                    else if (type == "skinned_strip_2d") model = Primitives::CreateSkinnedStrip2D();
                     if (model)
                     {
                         sc->AttachPrimitiveToNode(h.nodeId, model);

@@ -174,6 +174,10 @@ namespace pe
                 prim.set_function("torus", [](sol::optional<float> majorRadius, sol::optional<float> minorRadius, sol::optional<int> majorSegments, sol::optional<int> minorSegments) -> SceneNodeHandle {
                     ModelAsset *m = Primitives::CreateTorus(majorRadius.value_or(1.0f), minorRadius.value_or(0.25f), majorSegments.value_or(64), minorSegments.value_or(16));
                     return AddPrimitiveDeferred(m);
+                });
+                prim.set_function("skinned_strip_2d", [](sol::optional<float> width, sol::optional<float> height, sol::optional<int> segments, sol::optional<int> bones) -> SceneNodeHandle {
+                    ModelAsset *m = Primitives::CreateSkinnedStrip2D(width.value_or(4.0f), height.value_or(1.0f), segments.value_or(32), bones.value_or(6));
+                    return AddPrimitiveDeferred(m);
                 }); });
         }
     } s_modelBindings;

@@ -82,6 +82,36 @@ namespace pe
         m_skeletonModel = nullptr;
     }
 
+    const Skeleton &Scene::GetSkeletonForNode(const NodeId *node) const
+    {
+        static const Skeleton empty;
+        ModelAsset *model = GetModelForNode(node);
+        return (model && model->HasSkeleton()) ? model->GetSkeleton() : empty;
+    }
+
+    const std::vector<AnimationClip> &Scene::GetAnimationClipsForNode(const NodeId *node) const
+    {
+        static const std::vector<AnimationClip> empty;
+        ModelAsset *model = GetModelForNode(node);
+        return (model && model->HasAnimations()) ? model->GetAnimations() : empty;
+    }
+
+    int Scene::GetJointCountForNode(const NodeId *node) const
+    {
+        return GetSkeletonForNode(node).GetBoneCount();
+    }
+
+    int Scene::GetMaxJointCount() const
+    {
+        int maxJointCount = 0;
+        for (auto *model : m_models)
+        {
+            if (model && model->HasSkeleton())
+                maxJointCount = std::max(maxJointCount, model->GetSkeleton().GetBoneCount());
+        }
+        return maxJointCount;
+    }
+
     bool Scene::NodeHasSkinnedMesh(const NodeId *node) const
     {
         ValidateNodeId(node);
@@ -93,6 +123,12 @@ namespace pe
                 return true;
         }
         return false;
+    }
+
+    bool Scene::NodeUsesSkinnedStrip2D(const NodeId *node) const
+    {
+        ModelAsset *model = GetModelForNode(node);
+        return model && model->GetPrimitiveType() == "skinned_strip_2d";
     }
 
     Scene::Scene()
@@ -613,11 +649,9 @@ namespace pe
         jointRanges.clear();
         allJointMatrices.clear();
 
-        int jointCount = GetSkeleton().GetBoneCount();
-        if (jointCount > 0)
-            allJointMatrices.reserve(GetNodeCount() * static_cast<uint32_t>(jointCount));
-
-        const mat4 invRoot = jointCount > 0 ? glm::inverse(GetSkeleton().rootTransform) : mat4(1.f);
+        const int maxJointCount = GetMaxJointCount();
+        if (maxJointCount > 0)
+            allJointMatrices.reserve(static_cast<size_t>(GetNodeCount()) * static_cast<size_t>(maxJointCount));
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
@@ -640,8 +674,15 @@ namespace pe
             r.offset = rt.dataOffset;
             nodeRanges.push_back(r);
 
+            const bool skinned = NodeHasSkinnedMesh(m_nodeIds[i]);
+            int jointCount = skinned ? GetJointCountForNode(m_nodeIds[i]) : 0;
+            if (jointCount <= 0 && skinned)
+                jointCount = maxJointCount;
             if (jointCount > 0)
             {
+                const Skeleton &skeleton = GetSkeletonForNode(m_nodeIds[i]);
+                const bool hasMatchingSkeleton = skeleton.GetBoneCount() == jointCount;
+                const mat4 invRoot = hasMatchingSkeleton ? glm::inverse(skeleton.rootTransform) : mat4(1.f);
                 size_t base = allJointMatrices.size();
                 allJointMatrices.resize(base + static_cast<size_t>(jointCount));
                 if (!rt.jointMatrices.empty() && static_cast<int>(rt.jointMatrices.size()) == jointCount)

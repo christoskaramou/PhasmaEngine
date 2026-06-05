@@ -88,6 +88,11 @@ namespace pe
                                                paramCount >= 2 ? params.y : 0.25f,
                                                intParam(2, 64, 3, 512),
                                                intParam(3, 16, 3, 256));
+            if (ptype == "skinned_strip_2d")
+                return Primitives::CreateSkinnedStrip2D(paramCount >= 1 ? params.x : 4.0f,
+                                                        paramCount >= 2 ? params.y : 1.0f,
+                                                        intParam(2, 32, 1, 512),
+                                                        intParam(3, 6, 2, 64));
             return nullptr;
         }
 
@@ -2097,14 +2102,11 @@ namespace pe
 
         m_autoplayAnimations = true;
 
-        if (!GetAnimationClips().empty())
+        for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
         {
-            for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
-            {
-                NodeId *node = m_nodeIds[ni];
-                if (NodeHasSkinnedMesh(node))
-                    PlaySceneAnimation(*this, node, 0, true);
-            }
+            NodeId *node = m_nodeIds[ni];
+            if (NodeHasSkinnedMesh(node) && !GetAnimationClipsForNode(node).empty())
+                PlaySceneAnimation(*this, node, 0, true);
         }
 
         Log::Info("Scene loaded from: " + preload.filePath.string());
@@ -3146,12 +3148,12 @@ namespace pe
         // Update render pass descriptor sets (needed when shadow settings change)
         RefreshSceneRenderDescriptors();
 
-        if (replayDefaultAnimations && !GetAnimationClips().empty())
+        if (replayDefaultAnimations)
         {
             for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
             {
                 NodeId *node = m_nodeIds[ni];
-                if (NodeHasSkinnedMesh(node))
+                if (NodeHasSkinnedMesh(node) && !GetAnimationClipsForNode(node).empty())
                 {
                     PlaySceneAnimation(*this, node, 0, true);
                     ++replayedAnimationNodes;

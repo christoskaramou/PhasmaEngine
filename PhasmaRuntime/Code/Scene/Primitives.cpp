@@ -79,6 +79,27 @@ namespace pe
         }
     }
 
+    static void FillAabbVertices(std::vector<AabbVertex> &aabbVertices, const AABB &aabb)
+    {
+        aabbVertices.resize(8);
+        const vec3 corners[8] = {
+            {aabb.min.x, aabb.min.y, aabb.min.z},
+            {aabb.max.x, aabb.min.y, aabb.min.z},
+            {aabb.max.x, aabb.max.y, aabb.min.z},
+            {aabb.min.x, aabb.max.y, aabb.min.z},
+            {aabb.min.x, aabb.min.y, aabb.max.z},
+            {aabb.max.x, aabb.min.y, aabb.max.z},
+            {aabb.max.x, aabb.max.y, aabb.max.z},
+            {aabb.min.x, aabb.max.y, aabb.max.z}};
+
+        for (int i = 0; i < 8; i++)
+        {
+            aabbVertices[i].position[0] = corners[i].x;
+            aabbVertices[i].position[1] = corners[i].y;
+            aabbVertices[i].position[2] = corners[i].z;
+        }
+    }
+
     ModelAsset *Primitives::CreatePrimitiveModel(const std::vector<Vertex> &vertices, const std::vector<uint32_t> &indices)
     {
         ModelAsset *model = new ModelAsset();
@@ -694,6 +715,154 @@ namespace pe
                                        static_cast<float>(minorSegments)),
                                   4);
         model->SetNodeName(model->GetRootNodeIndex(), "Torus");
+        return model;
+    }
+
+    ModelAsset *Primitives::CreateSkinnedStrip2D(float width, float height, int segments, int bones)
+    {
+        width = std::max(width, 0.01f);
+        height = std::max(height, 0.01f);
+        segments = ClampSegments(segments, 1, 512);
+        bones = ClampSegments(bones, 2, 64);
+
+        std::vector<Vertex> vertices;
+        vertices.resize(static_cast<size_t>(segments + 1) * 2);
+
+        const float halfWidth = width * 0.5f;
+        const float halfHeight = height * 0.5f;
+        for (int column = 0; column <= segments; column++)
+        {
+            const float u = static_cast<float>(column) / static_cast<float>(segments);
+            const float x = -halfWidth + u * width;
+
+            Vertex &top = vertices[static_cast<size_t>(column) * 2];
+            FillVertexPosition(top, x, halfHeight, 0.0f);
+            FillVertexNormal(top, 0.0f, 0.0f, 1.0f);
+            FillVertexUV(top, u, 0.0f);
+            FillVertexColor(top, 1.0f, 1.0f, 1.0f, 1.0f);
+
+            Vertex &bottom = vertices[static_cast<size_t>(column) * 2 + 1];
+            FillVertexPosition(bottom, x, -halfHeight, 0.0f);
+            FillVertexNormal(bottom, 0.0f, 0.0f, 1.0f);
+            FillVertexUV(bottom, u, 1.0f);
+            FillVertexColor(bottom, 1.0f, 1.0f, 1.0f, 1.0f);
+        }
+
+        std::vector<uint32_t> indices;
+        indices.reserve(static_cast<size_t>(segments) * 6);
+        for (int column = 0; column < segments; column++)
+        {
+            const uint32_t top0 = static_cast<uint32_t>(column * 2);
+            const uint32_t bottom0 = top0 + 1;
+            const uint32_t top1 = static_cast<uint32_t>((column + 1) * 2);
+            const uint32_t bottom1 = top1 + 1;
+
+            indices.push_back(top0);
+            indices.push_back(bottom0);
+            indices.push_back(bottom1);
+            indices.push_back(top0);
+            indices.push_back(bottom1);
+            indices.push_back(top1);
+        }
+
+        ModelAsset *model = CreatePrimitiveModel(vertices, indices);
+        model->SetLabel("Skinned Strip 2D");
+        model->SetPrimitiveType("skinned_strip_2d");
+        model->SetPrimitiveParams(vec4(width, height, static_cast<float>(segments), static_cast<float>(bones)), 4);
+        model->SetNodeName(model->GetRootNodeIndex(), "Skinned Strip 2D");
+
+        MeshInfo *meshInfo = model->GetMeshInfo(0);
+        if (meshInfo)
+        {
+            meshInfo->skinned = true;
+            const float deformationPad = width + height;
+            meshInfo->boundingBox.min = vec3(-halfWidth - deformationPad, -halfHeight - deformationPad, -0.01f);
+            meshInfo->boundingBox.max = vec3(halfWidth + deformationPad, halfHeight + deformationPad, 0.01f);
+            FillAabbVertices(model->m_aabbVertices, meshInfo->boundingBox);
+        }
+
+        const float boneStep = width / static_cast<float>(bones - 1);
+        model->m_skeleton.bones.reserve(static_cast<size_t>(bones));
+        for (int i = 0; i < bones; i++)
+        {
+            BoneInfo bone{};
+            bone.name = "strip2d_" + std::to_string(i);
+            bone.parentIndex = i == 0 ? -1 : i - 1;
+
+            const float bindX = -halfWidth + static_cast<float>(i) * boneStep;
+            const float localX = i == 0 ? -halfWidth : boneStep;
+            bone.localBindTransform = glm::translate(mat4(1.0f), vec3(localX, 0.0f, 0.0f));
+            bone.offsetMatrix = glm::inverse(glm::translate(mat4(1.0f), vec3(bindX, 0.0f, 0.0f)));
+            bone.intermediatePrefix = mat4(1.0f);
+
+            const int boneIndex = static_cast<int>(model->m_skeleton.bones.size());
+            model->m_skeleton.boneNameToIndex[bone.name] = boneIndex;
+            model->m_skeleton.bones.push_back(bone);
+        }
+
+        for (int column = 0; column <= segments; column++)
+        {
+            const float u = static_cast<float>(column) / static_cast<float>(segments);
+            const float scaled = u * static_cast<float>(bones - 1);
+            const int j0 = std::clamp(static_cast<int>(std::floor(scaled)), 0, bones - 1);
+            const int j1 = std::min(j0 + 1, bones - 1);
+            const float blend = j0 == j1 ? 0.0f : scaled - static_cast<float>(j0);
+            const float w0 = 1.0f - blend;
+            const float w1 = blend;
+
+            for (int row = 0; row < 2; row++)
+            {
+                const size_t index = static_cast<size_t>(column) * 2 + static_cast<size_t>(row);
+                FillVertexJointsWeights(model->m_vertices[index],
+                                        static_cast<uint8_t>(j0),
+                                        static_cast<uint8_t>(j1),
+                                        0,
+                                        0,
+                                        w0,
+                                        w1,
+                                        0.0f,
+                                        0.0f);
+                FillVertexJointsWeights(model->m_positionUvs[index],
+                                        static_cast<uint8_t>(j0),
+                                        static_cast<uint8_t>(j1),
+                                        0,
+                                        0,
+                                        w0,
+                                        w1,
+                                        0.0f,
+                                        0.0f);
+            }
+        }
+
+        AnimationClip wave{};
+        wave.name = "wave";
+        wave.duration = 60.0f;
+        wave.ticksPerSecond = 60.0f;
+        wave.channels.reserve(static_cast<size_t>(bones));
+
+        static constexpr int KEY_COUNT = 9;
+        for (int i = 0; i < bones; i++)
+        {
+            AnimationChannel channel{};
+            channel.boneIndex = i;
+
+            const float localX = i == 0 ? -halfWidth : boneStep;
+            const float boneT = bones > 1 ? static_cast<float>(i) / static_cast<float>(bones - 1) : 0.0f;
+            for (int key = 0; key < KEY_COUNT; key++)
+            {
+                const float t = wave.duration * static_cast<float>(key) / static_cast<float>(KEY_COUNT - 1);
+                const float phase = (t / wave.duration) * PI * 2.0f + boneT * PI * 1.25f;
+                const float angle = std::sin(phase) * glm::radians(16.0f) * boneT;
+
+                channel.positionKeys.push_back({t, vec3(localX, 0.0f, 0.0f)});
+                channel.rotationKeys.push_back({t, glm::angleAxis(angle, vec3(0.0f, 0.0f, 1.0f))});
+                channel.scaleKeys.push_back({t, vec3(1.0f)});
+            }
+
+            wave.channels.push_back(std::move(channel));
+        }
+        model->m_animations.push_back(std::move(wave));
+
         return model;
     }
 

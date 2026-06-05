@@ -48,6 +48,9 @@ namespace pe
         // Read-only access to animation state for UI. Returns nullptr if node has no state.
         const AnimationNodeState *GetAnimationState(const NodeId *node) const;
 
+        // Procedural pose helper for generated skinned_strip_2d nodes.
+        bool SetJointLocalRotationsZ(Scene &scene, NodeId *node, const std::vector<float> &rotationsRadians);
+
         void ClearAllAnimations();
 
     private:

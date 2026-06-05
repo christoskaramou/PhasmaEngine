@@ -22,21 +22,27 @@ namespace pe
         if (!scene)
             return;
 
-        const Skeleton &skeleton = scene->GetSkeleton();
-        const auto &clips = scene->GetAnimationClips();
         float dt = static_cast<float>(FrameTimer::Instance().GetDelta());
 
-        if (skeleton.bones.empty() || clips.empty() || m_states.empty())
+        if (m_states.empty())
             return;
 
         for (auto &state : m_states)
         {
-            if (!state.playing || state.clipIndex < 0 || state.clipIndex >= static_cast<int>(clips.size()))
+            if (!state.playing)
                 continue;
 
-            if (!state.nodeId || state.nodeId->revision != state.nodeRevision)
+            if (!state.nodeId || state.nodeId->revision != state.nodeRevision || !scene->IsNodeAlive(state.nodeId))
             {
                 PE_INFO("[Animation] Update invalidated state: node=%p storedRevision=%u", static_cast<void *>(state.nodeId), state.nodeRevision);
+                state.playing = false;
+                continue;
+            }
+
+            const Skeleton &skeleton = scene->GetSkeletonForNode(state.nodeId);
+            const auto &clips = scene->GetAnimationClipsForNode(state.nodeId);
+            if (skeleton.bones.empty() || clips.empty() || state.clipIndex < 0 || state.clipIndex >= static_cast<int>(clips.size()))
+            {
                 state.playing = false;
                 continue;
             }
@@ -70,13 +76,13 @@ namespace pe
 
     void AnimationSystem::PlayAnimation(Scene &scene, NodeId *node, int clipIndex, bool loop)
     {
-        if (!node)
+        if (!node || !scene.IsNodeAlive(node))
         {
-            PE_INFO("[Animation] PlayAnimation rejected: null node clipIndex=%d", clipIndex);
+            PE_INFO("[Animation] PlayAnimation rejected: invalid node clipIndex=%d", clipIndex);
             return;
         }
 
-        const auto &clips = scene.GetAnimationClips();
+        const auto &clips = scene.GetAnimationClipsForNode(node);
         if (clipIndex < 0 || clipIndex >= static_cast<int>(clips.size()))
         {
             PE_INFO("[Animation] PlayAnimation rejected: node='%s' clipIndex=%d clips=%zu",
@@ -84,7 +90,7 @@ namespace pe
             return;
         }
 
-        const Skeleton &skeleton = scene.GetSkeleton();
+        const Skeleton &skeleton = scene.GetSkeletonForNode(node);
         const char *clipName = clips[clipIndex].name.empty() ? "<unnamed>" : clips[clipIndex].name.c_str();
         PE_INFO("[Animation] PlayAnimation node='%s' clipIndex=%d clip='%s' loop=%d skinned=%d bones=%zu clips=%zu",
                 scene.GetNodeName(node).c_str(),
@@ -120,7 +126,10 @@ namespace pe
 
     void AnimationSystem::PlayAnimation(Scene &scene, NodeId *node, const std::string &clipName, bool loop)
     {
-        const auto &clips = scene.GetAnimationClips();
+        if (!node)
+            return;
+
+        const auto &clips = scene.GetAnimationClipsForNode(node);
         for (int i = 0; i < static_cast<int>(clips.size()); i++)
         {
             if (clips[i].name == clipName)
@@ -191,7 +200,7 @@ namespace pe
             return;
 
         auto &state = m_states[it->second];
-        const auto &clips = scene.GetAnimationClips();
+        const auto &clips = scene.GetAnimationClipsForNode(state.nodeId);
         if (state.clipIndex < 0 || state.clipIndex >= static_cast<int>(clips.size()))
             return;
 
@@ -199,7 +208,7 @@ namespace pe
         state.time = std::clamp(timeTicks, 0.f, clip.duration);
         state.playing = false; // pause during scrub
 
-        const Skeleton &skeleton = scene.GetSkeleton();
+        const Skeleton &skeleton = scene.GetSkeletonForNode(state.nodeId);
         if (!skeleton.bones.empty())
         {
             NodeRuntime &rt = scene.GetNodeRuntime(state.nodeId);
@@ -230,6 +239,80 @@ namespace pe
         if (it == m_nodeToIndex.end())
             return nullptr;
         return &m_states[it->second];
+    }
+
+    bool AnimationSystem::SetJointLocalRotationsZ(Scene &scene, NodeId *node, const std::vector<float> &rotationsRadians)
+    {
+        if (!node || !scene.IsNodeAlive(node) || !scene.NodeHasSkinnedMesh(node) || !scene.NodeUsesSkinnedStrip2D(node))
+            return false;
+
+        const Skeleton &skeleton = scene.GetSkeletonForNode(node);
+        const int boneCount = skeleton.GetBoneCount();
+        if (boneCount <= 0)
+            return false;
+
+        StopAnimation(node);
+
+        static thread_local std::vector<mat4> localTransforms;
+        static thread_local std::vector<mat4> globalTransforms;
+        static thread_local std::vector<bool> computed;
+
+        localTransforms.resize(boneCount);
+        globalTransforms.resize(boneCount);
+        computed.assign(boneCount, false);
+
+        for (int i = 0; i < boneCount; i++)
+        {
+            localTransforms[i] = skeleton.bones[i].localBindTransform;
+            if (i < static_cast<int>(rotationsRadians.size()) && std::isfinite(rotationsRadians[i]))
+            {
+                const quat rotation = glm::angleAxis(rotationsRadians[i], vec3(0.0f, 0.0f, 1.0f));
+                localTransforms[i] = localTransforms[i] * glm::mat4_cast(rotation);
+            }
+        }
+
+        int remaining = boneCount;
+        while (remaining > 0)
+        {
+            int progress = 0;
+            for (int i = 0; i < boneCount; i++)
+            {
+                if (computed[i])
+                    continue;
+
+                const int parent = skeleton.bones[i].parentIndex;
+                if (parent < 0 || parent >= boneCount)
+                {
+                    globalTransforms[i] = localTransforms[i];
+                    computed[i] = true;
+                    progress++;
+                    remaining--;
+                }
+                else if (computed[parent])
+                {
+                    globalTransforms[i] = globalTransforms[parent] * localTransforms[i];
+                    computed[i] = true;
+                    progress++;
+                    remaining--;
+                }
+            }
+
+            if (progress == 0)
+                break;
+        }
+
+        NodeRuntime &rt = scene.GetNodeRuntime(node);
+        rt.jointMatrices.resize(boneCount, mat4(1.0f));
+        for (int i = 0; i < boneCount; i++)
+        {
+            if (computed[i])
+                rt.jointMatrices[i] = globalTransforms[i] * skeleton.bones[i].offsetMatrix;
+            else
+                rt.jointMatrices[i] = mat4(1.0f);
+        }
+
+        scene.MarkNodeDirty(node);
+        return true;
     }
 
     void AnimationSystem::ClearAllAnimations()

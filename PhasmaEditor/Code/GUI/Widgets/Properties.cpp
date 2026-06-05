@@ -388,7 +388,7 @@ namespace pe
             if (!anim)
                 return false;
 
-            const auto &clips = scene.GetAnimationClips();
+            const auto &clips = scene.GetAnimationClipsForNode(node);
             const AnimationNodeState *state = anim->GetAnimationState(node);
             const bool hasAnimationSurface = state || (scene.NodeHasSkinnedMesh(node) && !clips.empty());
             if (!hasAnimationSurface)
@@ -796,7 +796,7 @@ namespace pe
             const bool showAnimationRuntime =
                 animationSystem &&
                 (animationSystem->GetAnimationState(node) ||
-                 (scene.NodeHasSkinnedMesh(node) && !scene.GetAnimationClips().empty()));
+                 (scene.NodeHasSkinnedMesh(node) && !scene.GetAnimationClipsForNode(node).empty()));
             if (showAnimationRuntime)
             {
                 ImGui::Separator();

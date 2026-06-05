@@ -162,6 +162,7 @@ namespace pe
     void Scene::CreateStorageBuffers()
     {
         size_t storageSize = sizeof(PerFrameData);
+        const int maxJointCount = GetMaxJointCount();
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
@@ -185,7 +186,10 @@ namespace pe
 
             m_nodeRuntime[i].hasUniformData = true;
             m_nodeRuntime[i].dataOffset = storageSize;
-            int jointCount = GetSkeleton().GetBoneCount();
+            const bool skinned = NodeHasSkinnedMesh(m_nodeIds[i]);
+            int jointCount = skinned ? GetJointCountForNode(m_nodeIds[i]) : 0;
+            if (jointCount <= 0 && skinned)
+                jointCount = maxJointCount;
             size_t nodeDataSize = sizeof(NodeGpuData) + jointCount * sizeof(mat4);
             storageSize += nodeDataSize;
         }

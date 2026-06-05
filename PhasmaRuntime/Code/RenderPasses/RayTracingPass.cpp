@@ -229,7 +229,7 @@ namespace pe
         cmd->SetConstantAt(0, (uint32_t)scene.GetPointLights().size());
         cmd->SetConstantAt(1, (uint32_t)scene.GetSpotLights().size());
         cmd->SetConstantAt(2, (uint32_t)scene.GetAreaLights().size());
-        cmd->SetConstantAt(3, (uint32_t)scene.GetSkeleton().GetBoneCount());
+        cmd->SetConstantAt(3, (uint32_t)scene.GetMaxJointCount());
         cmd->PushConstants();
         cmd->TraceRays(m_display->GetWidth(), m_display->GetHeight(), 1);
         cmd->EndDebugRegion();

@@ -9,6 +9,20 @@ function run_model_tests()
     T.check("primitives.quad", q ~= nil)
     if q then q:remove() end
 
+    -- primitives.skinned_strip_2d
+    local strip = primitives.skinned_strip_2d(2.0, 0.5, 8, 4)
+    T.check("primitives.skinned_strip_2d", strip ~= nil)
+    if strip then
+        local strip_info = strip:get_mesh_info()
+        T.check("skinned strip mesh_info", strip_info ~= nil)
+        if strip_info then
+            T.check("skinned strip vertex_count", strip_info.vertex_count == 18)
+            T.check("skinned strip index_count", strip_info.index_count == 48)
+        end
+        T.check("skinned strip joint_count", animation.get_joint_count(strip) == 4)
+    end
+    scene.clear()
+
     -- get_scale / get_rotation defaults
     local cube = primitives.cube(1.0)
     T.check("cube created", cube ~= nil)
