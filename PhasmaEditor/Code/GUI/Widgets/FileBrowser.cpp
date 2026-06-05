@@ -70,40 +70,15 @@ namespace pe
 
         bool IsPathAncestorOf(const std::filesystem::path &ancestor, const std::filesystem::path &path)
         {
-            auto normalizedAncestor = ancestor.lexically_normal();
-            auto normalizedPath = path.lexically_normal();
-
-            auto ancestorIt = normalizedAncestor.begin();
-            auto pathIt = normalizedPath.begin();
-            for (; ancestorIt != normalizedAncestor.end(); ++ancestorIt, ++pathIt)
+            auto ancestorIt = ancestor.begin();
+            auto pathIt = path.begin();
+            for (; ancestorIt != ancestor.end(); ++ancestorIt, ++pathIt)
             {
-                if (pathIt == normalizedPath.end() || *ancestorIt != *pathIt)
+                if (pathIt == path.end() || *ancestorIt != *pathIt)
                     return false;
             }
 
             return true;
-        }
-
-        bool HasChildDirectory(const std::filesystem::path &path)
-        {
-            std::error_code itEc;
-            auto it = std::filesystem::directory_iterator(
-                path, std::filesystem::directory_options::skip_permission_denied, itEc);
-            const std::filesystem::directory_iterator end;
-            for (; it != end; it.increment(itEc))
-            {
-                if (itEc)
-                {
-                    itEc.clear();
-                    continue;
-                }
-
-                std::error_code dirEc;
-                if (it->is_directory(dirEc))
-                    return true;
-            }
-
-            return false;
         }
 
         std::string PathExtensionLower(const std::filesystem::path &path)
@@ -340,23 +315,31 @@ namespace pe
         NavigateTo(path);
     }
 
-    void *FileBrowser::GetIconForFile(const std::filesystem::path &path)
+    void *FileBrowser::GetIconForFile(const std::filesystem::path &path, bool loadImageThumbnail)
     {
-        if (IsDirectory(path))
+        FileEntry entry;
+        entry.path = path;
+        entry.isDirectory = IsDirectory(path);
+        return GetIconForEntry(entry, loadImageThumbnail);
+    }
+
+    void *FileBrowser::GetIconForEntry(const FileEntry &entry, bool loadImageThumbnail)
+    {
+        if (entry.isDirectory)
             return m_folderIconDS;
-        if (IsTextFile(path))
+        if (IsTextFile(entry.path))
             return m_txtIconDS ? m_txtIconDS : m_fileIconDS;
-        if (IsShaderFile(path))
+        if (IsShaderFile(entry.path))
             return m_shaderIconDS ? m_shaderIconDS : m_fileIconDS;
         // The mesh icon denotes the engine's cooked ".pemesh" asset; source models (glTF/FBX/OBJ/...)
         // are import inputs only and fall through to the generic file icon.
-        if (IsCookedModelFile(path))
+        if (IsCookedModelFile(entry.path))
             return m_modelIconDS ? m_modelIconDS : m_fileIconDS;
-        if (IsScriptFile(path))
+        if (IsScriptFile(entry.path))
             return m_scriptIconDS ? m_scriptIconDS : m_fileIconDS;
-        if (IsImageFile(path))
+        if (IsImageFile(entry.path))
         {
-            auto u8str = path.u8string();
+            auto u8str = entry.path.u8string();
             std::string pathStr(reinterpret_cast<const char *>(u8str.c_str()));
 
             // Check cache
@@ -365,7 +348,7 @@ namespace pe
                 return it->second;
 
             // Check if already pending
-            if (m_pendingFiles.find(pathStr) == m_pendingFiles.end())
+            if (loadImageThumbnail && m_pendingFiles.find(pathStr) == m_pendingFiles.end())
             {
                 m_pendingFiles.insert(pathStr);
 
@@ -646,7 +629,7 @@ namespace pe
         {
             --m_navHistoryIndex;
             m_currentPath = m_navHistory[m_navHistoryIndex];
-            RefreshCache();
+            RefreshCache(false);
         }
         if (!canBack)
             ImGui::EndDisabled();
@@ -659,7 +642,7 @@ namespace pe
         {
             ++m_navHistoryIndex;
             m_currentPath = m_navHistory[m_navHistoryIndex];
-            RefreshCache();
+            RefreshCache(false);
         }
         if (!canForward)
             ImGui::EndDisabled();
@@ -736,55 +719,120 @@ namespace pe
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(style.FramePadding.x * 0.5f, 0.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(style.ItemSpacing.x * 0.5f, 0.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(style.ItemInnerSpacing.x * 0.5f, 0.0f));
-        DrawFolderTreeNode(m_folderTreeRoot);
+
+        std::filesystem::path treeSelectionPath = StripTrailingSep(m_currentPath.lexically_normal());
+        if (!m_selectedEntry.empty())
+        {
+            const std::filesystem::path selectedPath = StripTrailingSep(m_selectedEntry.lexically_normal());
+            const std::filesystem::path selectedParent = StripTrailingSep(selectedPath.parent_path().lexically_normal());
+            if (selectedParent == treeSelectionPath)
+            {
+                const auto selectedIt = std::find_if(m_cache.begin(), m_cache.end(), [&selectedPath](const FileEntry &cacheEntry)
+                                                     { return cacheEntry.isDirectory &&
+                                                              StripTrailingSep(cacheEntry.path.lexically_normal()) == selectedPath; });
+                if (selectedIt != m_cache.end())
+                    treeSelectionPath = selectedPath;
+            }
+        }
+
+        const DirectoryCacheEntry &rootEntry = GetDirectoryCacheEntry(m_folderTreeRoot, false, false);
+        m_expandedFolderTreePaths.insert(rootEntry.node.pathId);
+
+        const std::string treeSelectionPathId = PathToUtf8(treeSelectionPath);
+        if (m_folderTreeRows.empty() ||
+            m_folderTreeRowsDirectoryGeneration != m_directoryCacheGeneration ||
+            m_folderTreeRowsExpansionGeneration != m_folderTreeExpansionGeneration ||
+            m_folderTreeRowsSelectionPathId != treeSelectionPathId)
+        {
+            m_folderTreeRows.clear();
+            m_folderTreeRows.reserve(128);
+            BuildFolderTreeRows(rootEntry.node, 0, treeSelectionPath);
+            m_folderTreeRowsDirectoryGeneration = m_directoryCacheGeneration;
+            m_folderTreeRowsExpansionGeneration = m_folderTreeExpansionGeneration;
+            m_folderTreeRowsSelectionPathId = treeSelectionPathId;
+        }
+
+        const float rowHeight = ImGui::GetTextLineHeightWithSpacing();
+        ImGuiListClipper clipper;
+        clipper.Begin(static_cast<int>(m_folderTreeRows.size()), rowHeight);
+        while (clipper.Step())
+        {
+            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i)
+            {
+                const FolderTreeRow &row = m_folderTreeRows[i];
+                const FolderTreeChild &node = *row.node;
+                const bool selected = node.normalizedPath == treeSelectionPath;
+
+                ImGui::PushID(node.pathId.c_str());
+                ImGui::Selectable("##folder_tree_row", selected, ImGuiSelectableFlags_SpanAvailWidth,
+                                  ImVec2(0.0f, rowHeight));
+
+                const bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+                const bool doubleClicked = ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+                const ImVec2 itemMin = ImGui::GetItemRectMin();
+                const float contentX = itemMin.x + static_cast<float>(row.depth) * style.IndentSpacing;
+                const float textY = itemMin.y + (rowHeight - ImGui::GetTextLineHeight()) * 0.5f;
+                constexpr float arrowWidth = 14.0f;
+                const char *arrow = row.hasChildFolders ? (row.expanded ? ICON_FA_CARET_DOWN : ICON_FA_CARET_RIGHT) : " ";
+
+                ImDrawList *drawList = ImGui::GetWindowDrawList();
+                drawList->AddText(ImVec2(contentX, textY), ImGui::GetColorU32(ImGuiCol_Text), arrow);
+                drawList->AddText(ImVec2(contentX + arrowWidth, textY), ImGui::GetColorU32(ImGuiCol_Text),
+                                  node.label.c_str());
+
+                const float mouseX = ImGui::GetMousePos().x;
+                if ((clicked || doubleClicked) && row.hasChildFolders &&
+                    mouseX >= contentX && mouseX < contentX + arrowWidth)
+                {
+                    if (row.expanded)
+                        m_expandedFolderTreePaths.erase(node.pathId);
+                    else
+                        m_expandedFolderTreePaths.insert(node.pathId);
+                    ++m_folderTreeExpansionGeneration;
+                }
+                else if (clicked || doubleClicked)
+                {
+                    NavigateTo(node.normalizedPath);
+                }
+
+                ImGui::PopID();
+            }
+        }
         ImGui::PopStyleVar(4);
         ImGui::EndChild();
     }
 
-    void FileBrowser::DrawFolderTreeNode(const std::filesystem::path &path)
+    const FileBrowser::DirectoryCacheEntry &FileBrowser::GetDirectoryCacheEntry(const std::filesystem::path &path,
+                                                                                bool forceRefresh,
+                                                                                bool loadEntries)
     {
-        std::error_code ec;
-        if (!std::filesystem::is_directory(path, ec))
-            return;
+        const std::filesystem::path normalizedPath = StripTrailingSep(path.lexically_normal());
+        const std::string pathStr = PathToUtf8(normalizedPath);
 
-        std::string pathStr = PathToUtf8(path);
-        std::string label = path.filename().empty() ? pathStr : PathToUtf8(path.filename());
-
-        std::filesystem::path treeSelectionPath = m_currentPath;
-        if (!m_selectedEntry.empty() && std::filesystem::is_directory(m_selectedEntry, ec))
+        auto cached = m_directoryCache.find(pathStr);
+        if (!forceRefresh && cached != m_directoryCache.end())
         {
-            ec.clear();
-            std::filesystem::path selectedParent = StripTrailingSep(m_selectedEntry.parent_path().lexically_normal());
-            if (std::filesystem::equivalent(selectedParent, m_currentPath, ec))
-                treeSelectionPath = m_selectedEntry;
+            if ((loadEntries && cached->second.entriesLoaded) || (!loadEntries && cached->second.childFoldersLoaded))
+                return cached->second;
         }
-        ec.clear();
 
-        bool selected = std::filesystem::equivalent(path, treeSelectionPath, ec);
-        ec.clear();
-        const bool ancestor = !selected && IsPathAncestorOf(path, treeSelectionPath);
-        const bool hasChildFolders = HasChildDirectory(path);
+        DirectoryCacheEntry entry;
+        entry.generation = ++m_directoryCacheGeneration;
+        entry.node.path = normalizedPath;
+        entry.node.normalizedPath = normalizedPath;
+        entry.node.pathId = pathStr;
+        entry.node.label = normalizedPath.filename().empty() ? pathStr : PathToUtf8(normalizedPath.filename());
 
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth |
-                                   ImGuiTreeNodeFlags_FramePadding;
-        if (selected)
-            flags |= ImGuiTreeNodeFlags_Selected;
-        if (!hasChildFolders)
-            flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-        if (ancestor)
-            ImGui::SetNextItemOpen(true, ImGuiCond_Always);
-
-        ImGui::PushID(pathStr.c_str());
-        bool open = ImGui::TreeNodeEx(label.c_str(), flags);
-        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
-            NavigateTo(path);
-
-        if (open && hasChildFolders)
+        std::error_code ec;
+        entry.isDirectory = std::filesystem::is_directory(normalizedPath, ec);
+        if (entry.isDirectory)
         {
-            std::vector<std::filesystem::path> folders;
+            entry.childFoldersLoaded = true;
+            entry.entriesLoaded = loadEntries;
+
             std::error_code itEc;
             auto it = std::filesystem::directory_iterator(
-                path, std::filesystem::directory_options::skip_permission_denied, itEc);
+                normalizedPath, std::filesystem::directory_options::skip_permission_denied, itEc);
             const std::filesystem::directory_iterator end;
             for (; it != end; it.increment(itEc))
             {
@@ -793,20 +841,67 @@ namespace pe
                     itEc.clear();
                     continue;
                 }
+
                 std::error_code dirEc;
-                if (it->is_directory(dirEc))
-                    folders.push_back(it->path());
+                const bool isDirectory = it->is_directory(dirEc);
+                if (isDirectory)
+                {
+                    FolderTreeChild child;
+                    child.path = it->path();
+                    child.normalizedPath = StripTrailingSep(child.path.lexically_normal());
+                    child.pathId = PathToUtf8(child.normalizedPath);
+                    child.label = child.normalizedPath.filename().empty() ? child.pathId : PathToUtf8(child.normalizedPath.filename());
+                    entry.childFolders.push_back(std::move(child));
+                }
+
+                if (loadEntries)
+                {
+                    FileEntry fileEntry;
+                    fileEntry.path = it->path();
+
+                    auto filenameU8 = fileEntry.path.filename().u8string();
+                    fileEntry.filename = std::string(reinterpret_cast<const char *>(filenameU8.c_str()));
+
+                    fileEntry.isDirectory = isDirectory;
+                    fileEntry.size = fileEntry.isDirectory ? 0 : SafeFileSize(fileEntry.path);
+                    fileEntry.lastWriteTime = SafeLastWriteTime(fileEntry.path);
+
+                    entry.entries.push_back(std::move(fileEntry));
+                }
             }
 
-            std::sort(folders.begin(), folders.end(), [](const std::filesystem::path &a, const std::filesystem::path &b)
-                      { return ToLower(PathToUtf8(a.filename())) < ToLower(PathToUtf8(b.filename())); });
-
-            for (const auto &folder : folders)
-                DrawFolderTreeNode(folder);
-
-            ImGui::TreePop();
+            std::sort(entry.childFolders.begin(), entry.childFolders.end(),
+                      [](const FolderTreeChild &a, const FolderTreeChild &b)
+                      { return ToLower(a.label) < ToLower(b.label); });
         }
-        ImGui::PopID();
+
+        auto [inserted, _] = m_directoryCache.insert_or_assign(pathStr, std::move(entry));
+        return inserted->second;
+    }
+
+    void FileBrowser::BuildFolderTreeRows(const FolderTreeChild &node,
+                                          int depth,
+                                          const std::filesystem::path &treeSelectionPath)
+    {
+        auto cached = m_directoryCache.find(node.pathId);
+        const DirectoryCacheEntry *entry = cached != m_directoryCache.end() ? &cached->second : nullptr;
+        if (entry && !entry->isDirectory)
+            return;
+
+        const bool childFoldersKnown = entry && entry->childFoldersLoaded;
+        const bool hasChildFolders = !childFoldersKnown || !entry->childFolders.empty();
+        const bool selected = node.normalizedPath == treeSelectionPath;
+        const bool ancestor = !selected && IsPathAncestorOf(node.normalizedPath, treeSelectionPath);
+        const bool expanded = depth == 0 || ancestor || m_expandedFolderTreePaths.find(node.pathId) != m_expandedFolderTreePaths.end();
+
+        m_folderTreeRows.push_back({&node, depth, expanded, hasChildFolders});
+
+        if (!expanded || !hasChildFolders)
+            return;
+
+        const DirectoryCacheEntry &openEntry = GetDirectoryCacheEntry(node.normalizedPath, false, false);
+        for (const auto &folder : openEntry.childFolders)
+            BuildFolderTreeRows(folder, depth + 1, treeSelectionPath);
     }
 
     void FileBrowser::DrawItemContextMenu(const std::function<void(const std::filesystem::path &)> &onOpen)
@@ -982,7 +1077,7 @@ namespace pe
             RefreshCache();
 
         if (m_open && !m_wasOpen)
-            RefreshCache();
+            RefreshCache(false);
         m_wasOpen = m_open;
 
         if (!m_open)
@@ -1224,56 +1319,34 @@ namespace pe
                       return m_sortDescending ? result > 0 : result < 0; });
     }
 
-    void FileBrowser::RefreshCache()
+    void FileBrowser::RefreshCache(bool forceRefresh)
     {
-        m_cache.clear();
-        m_cachePath = m_currentPath;
+        const std::filesystem::path cachePath = StripTrailingSep(m_currentPath.lexically_normal());
+        if (forceRefresh)
+        {
+            m_directoryCache.clear();
+            m_folderTreeRows.clear();
+            m_cacheGeneration = 0;
+            ++m_directoryCacheGeneration;
+        }
 
-        std::error_code ec;
-        if (!std::filesystem::is_directory(m_cachePath, ec))
+        const DirectoryCacheEntry &directory = GetDirectoryCacheEntry(cachePath, false, true);
+
+        if (!directory.isDirectory)
+        {
+            m_cache.clear();
+            m_cachePath = cachePath;
+            m_cacheGeneration = directory.generation;
+            return;
+        }
+
+        if (!forceRefresh && m_cachePath == cachePath && m_cacheGeneration == directory.generation)
             return;
 
-        try
-        {
-            m_cache.reserve(100); // Reserve some potential space
-
-            // skip_permission_denied + error_code iteration: navigating system folders routinely hits
-            // inaccessible entries (junctions, protected dirs). Degrade to a partial listing instead of
-            // letting a filesystem_error escape and crash the editor.
-            std::error_code itEc;
-            auto it = std::filesystem::directory_iterator(
-                m_cachePath, std::filesystem::directory_options::skip_permission_denied, itEc);
-            const std::filesystem::directory_iterator end;
-            for (; it != end; it.increment(itEc))
-            {
-                if (itEc)
-                {
-                    itEc.clear();
-                    continue;
-                }
-
-                FileEntry e;
-                e.path = it->path();
-
-                // Cache UTF-8 filename
-                auto filenameU8 = e.path.filename().u8string();
-                e.filename = std::string(reinterpret_cast<const char *>(filenameU8.c_str()));
-
-                std::error_code dirEc;
-                e.isDirectory = it->is_directory(dirEc);
-                e.size = e.isDirectory ? 0 : SafeFileSize(e.path);
-                e.lastWriteTime = SafeLastWriteTime(e.path);
-                e.iconID = GetIconForFile(e.path);
-
-                m_cache.push_back(e);
-            }
-
-            SortCache();
-        }
-        catch (const std::filesystem::filesystem_error &e)
-        {
-            PE_ERROR("[FileBrowser] Error accessing directory: %s", e.what());
-        }
+        m_cache = directory.entries;
+        m_cachePath = cachePath;
+        m_cacheGeneration = directory.generation;
+        SortCache();
     }
 
     void FileBrowser::DrawDirectoryContent(const std::filesystem::path &path,
@@ -1281,12 +1354,8 @@ namespace pe
                                            std::function<bool(const std::filesystem::path &)> filter,
                                            float footerHeight)
     {
-        // Re-cache if path changed
-        if (m_cachePath != path)
-        {
-            m_currentPath = path;
-            RefreshCache();
-        }
+        m_currentPath = StripTrailingSep(path.lexically_normal());
+        RefreshCache(false);
 
         if (footerHeight == 0.0f)
             footerHeight = ImGui::GetStyle().ItemSpacing.y;
@@ -1341,9 +1410,10 @@ namespace pe
 
                         bool isSelected = (m_selectedEntry == entry.path);
 
-                        if (entry.iconID)
+                        void *iconID = GetIconForEntry(entry, true);
+                        if (iconID)
                         {
-                            ImGui::Image((ImTextureID)entry.iconID, ImVec2(20, 20));
+                            ImGui::Image((ImTextureID)iconID, ImVec2(20, 20));
                             ImGui::SameLine();
                         }
 
@@ -1424,9 +1494,10 @@ namespace pe
                                 ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
 
                             bool clicked = false;
-                            if (entry.iconID)
+                            void *iconID = GetIconForEntry(entry, true);
+                            if (iconID)
                             {
-                                if (ImGui::ImageButton("##icon", (ImTextureID)entry.iconID, ImVec2(buttonSize, buttonSize)))
+                                if (ImGui::ImageButton("##icon", (ImTextureID)iconID, ImVec2(buttonSize, buttonSize)))
                                     clicked = true;
                             }
                             else

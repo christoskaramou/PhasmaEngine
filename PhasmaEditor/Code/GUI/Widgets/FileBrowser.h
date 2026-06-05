@@ -13,7 +13,7 @@ namespace pe
         void Update() override;
 
         void SetCurrentPath(const std::filesystem::path &path);
-        void RefreshCache();
+        void RefreshCache(bool forceRefresh = true);
 
         // Non-throwing: protected reparse points (e.g. C:\Users\All Users) make the throwing overloads
         // raise access-denied mid-navigation, which would crash the editor. Treat any error as "no".
@@ -67,18 +67,27 @@ namespace pe
     protected:
         friend class GUI;
 
-        void *GetIconForFile(const std::filesystem::path &path);
+        void *GetIconForFile(const std::filesystem::path &path, bool loadImageThumbnail = true);
         void ProcessLoadedImages();
         void *RegisterImageForImGui(Image *image);
         void ReleaseImGuiTexture(void *&textureID);
 
         struct FileEntry;
+        struct FolderTreeChild;
+        struct FolderTreeRow;
+        struct DirectoryCacheEntry;
         void DrawDirectoryContent(const std::filesystem::path &path,
                                   std::function<void(const std::filesystem::path &)> onDoubleClick = nullptr,
                                   std::function<bool(const std::filesystem::path &)> filter = nullptr,
                                   float footerHeight = 0.0f);
         void DrawFolderTree(float height);
-        void DrawFolderTreeNode(const std::filesystem::path &path);
+        void BuildFolderTreeRows(const FolderTreeChild &node,
+                                 int depth,
+                                 const std::filesystem::path &treeSelectionPath);
+        const DirectoryCacheEntry &GetDirectoryCacheEntry(const std::filesystem::path &path,
+                                                          bool forceRefresh = false,
+                                                          bool loadEntries = true);
+        void *GetIconForEntry(const FileEntry &entry, bool loadImageThumbnail);
         void DrawFilterSortBar();
         bool MatchesBrowserFilters(const FileEntry &entry,
                                    const std::function<bool(const std::filesystem::path &)> &externalFilter) const;
@@ -151,9 +160,43 @@ namespace pe
             bool isDirectory;
             uintmax_t size = 0;
             std::filesystem::file_time_type lastWriteTime{};
-            void *iconID;
+        };
+        struct FolderTreeChild
+        {
+            std::filesystem::path path;
+            std::filesystem::path normalizedPath;
+            std::string pathId;
+            std::string label;
+        };
+        struct FolderTreeRow
+        {
+            // Borrowed from m_directoryCache. Any directory cache mutation must bump
+            // m_directoryCacheGeneration and rebuild rows before drawing them.
+            const FolderTreeChild *node = nullptr;
+            int depth = 0;
+            bool expanded = false;
+            bool hasChildFolders = false;
+        };
+        struct DirectoryCacheEntry
+        {
+            bool isDirectory = false;
+            bool childFoldersLoaded = false;
+            bool entriesLoaded = false;
+            uint64_t generation = 0;
+            FolderTreeChild node;
+            std::vector<FileEntry> entries;
+            std::vector<FolderTreeChild> childFolders;
         };
         std::vector<FileEntry> m_cache;
+        uint64_t m_cacheGeneration = 0;
+        uint64_t m_directoryCacheGeneration = 0;
+        std::unordered_map<std::string, DirectoryCacheEntry> m_directoryCache;
+        std::unordered_set<std::string> m_expandedFolderTreePaths;
+        std::vector<FolderTreeRow> m_folderTreeRows;
+        uint64_t m_folderTreeRowsDirectoryGeneration = 0;
+        uint64_t m_folderTreeRowsExpansionGeneration = 0;
+        std::string m_folderTreeRowsSelectionPathId;
+        uint64_t m_folderTreeExpansionGeneration = 0;
         std::filesystem::path m_cachePath; // Path currently cached
         std::filesystem::path m_folderTreeRoot;
         float m_folderTreeWidth = 220.0f;
