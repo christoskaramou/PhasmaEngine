@@ -347,10 +347,13 @@ namespace pe
                     ImGui::TreeNodeEx(e.name, ImGuiTreeNodeFlags_Leaf |
                                                   ImGuiTreeNodeFlags_NoTreePushOnOpen |
                                                   ImGuiTreeNodeFlags_SpanFullWidth);
+                    const bool rowHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
                     ImGui::TableSetColumnIndex(1);
                     ImGui::TextColored(ui::Heat(rel), "%.3f", e.timeMs);
                     ImGui::TableSetColumnIndex(2);
                     CenteredTinyBar(rel);
+                    if (rowHovered)
+                        ui::TooltipText("GPU timing row for this render pass.");
                     ImGui::PopID();
                     continue;
                 }
@@ -379,11 +382,14 @@ namespace pe
                     nodeFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
 
                 bool open = ImGui::TreeNodeEx(e.name, nodeFlags);
+                const bool rowHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
 
                 ImGui::TableSetColumnIndex(1);
                 ImGui::TextColored(ui::Heat(rel), "%.3f", e.timeMs);
                 ImGui::TableSetColumnIndex(2);
                 CenteredTinyBar(rel);
+                if (rowHovered)
+                    ui::TooltipText(hasChildren ? "Expand or collapse this GPU timing group." : "GPU timing row for this render pass.");
                 ImGui::PopID();
 
                 if (hasChildren)
@@ -507,9 +513,11 @@ namespace pe
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - totalW);
             if (ImGui::SmallButton("Reset"))
                 ResetStats();
+            ui::ItemTooltip("Reset accumulated profiler statistics.");
             ImGui::SameLine();
             if (ImGui::SmallButton("Snapshot"))
                 TakeSnapshot();
+            ui::ItemTooltip("Capture the current profiler data into the snapshot view.");
         }
 
         // Pause button on its own line, below the metrics
@@ -521,6 +529,7 @@ namespace pe
                 m_paused = !m_paused;
             if (wasPaused)
                 ImGui::PopStyleColor();
+            ui::ItemTooltip(wasPaused ? "Resume profiler updates." : "Pause profiler updates on the current data.");
             if (m_paused)
             {
                 ImGui::SameLine();
@@ -532,26 +541,31 @@ namespace pe
         {
             if (ImGui::BeginTabItem("Overview"))
             {
+                ui::ItemTooltip("Show high-level frame, memory, and pass summaries.");
                 DrawOverviewTab();
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("CPU"))
             {
+                ui::ItemTooltip("Inspect CPU timing scopes.");
                 DrawCpuTab();
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("GPU"))
             {
+                ui::ItemTooltip("Inspect GPU pass timings.");
                 DrawGpuTab();
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Counters"))
             {
+                ui::ItemTooltip("Inspect profiler counters.");
                 DrawCountersTab();
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Capture"))
             {
+                ui::ItemTooltip("Trigger RenderDoc captures in debug builds.");
                 DrawCaptureTab();
                 ImGui::EndTabItem();
             }
@@ -706,7 +720,9 @@ namespace pe
         ui::ShowCpuGpuSummary(m_data.cpuTotalMs, m_data.cpuUpdateMs, m_data.cpuDrawMs, m_data.gpuTotal);
         ImGui::PopStyleVar();
 
-        if (ImGui::CollapsingHeader("Memory"))
+        const bool memoryOpen = ImGui::CollapsingHeader("Memory");
+        ui::ItemTooltip("Show RAM and GPU memory usage bars.");
+        if (memoryOpen)
         {
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,
                                 {ImGui::GetStyle().ItemSpacing.x, 2.f});
@@ -794,11 +810,13 @@ namespace pe
         ImGui::SameLine();
         ImGui::SetNextItemWidth(80.f);
         ImGui::SliderFloat("##zoom", &m_timelineZoom, 0.2f, 32.f, "%.1fx");
+        ui::ItemTooltip("Horizontal zoom for the GPU timeline.");
         ImGui::SameLine();
         ImGui::TextDisabled("V:");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(80.f);
         ImGui::SliderFloat("##vzoom", &m_timelineZoomV, 0.2f, 4.f, "%.1fx");
+        ui::ItemTooltip("Vertical zoom for GPU timeline rows.");
 
         // ── Layout ───────────────────────────────────────────────────────────────
         const float rowH = 22.f * m_timelineZoomV;
@@ -930,9 +948,11 @@ namespace pe
         static const char *viewNames[] = {"Table", "Timeline"};
         if (ImGui::Checkbox("GPU timers", &m_gpuTimingEnabled))
             Debug::SetGpuTimingEnabled(m_open && m_gpuTimingEnabled);
+        ui::ItemTooltip("Enable GPU timestamp collection for render passes.");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(110.f);
         ImGui::Combo("##gpuview", &m_gpuViewMode, viewNames, 2);
+        ui::ItemTooltip("Switch GPU profiling between table and timeline views.");
         ImGui::SameLine();
         ImGui::TextDisabled("Total GPU: %.3f ms", m_data.gpuTotal);
         if (m_gpuViewMode == 0)
@@ -940,6 +960,7 @@ namespace pe
             ImGui::SameLine();
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
             ImGui::InputTextWithHint("##gpuf", "filter...", m_gpuFilter, IM_ARRAYSIZE(m_gpuFilter));
+            ui::ItemTooltip("Filter GPU pass rows by name.");
         }
 
         ImGui::Separator();
@@ -1013,6 +1034,7 @@ namespace pe
                     ImGui::TreeNodeEx(e.name, ImGuiTreeNodeFlags_Leaf |
                                                   ImGuiTreeNodeFlags_NoTreePushOnOpen |
                                                   ImGuiTreeNodeFlags_SpanFullWidth);
+                    const bool rowHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
                     ImGui::TableSetColumnIndex(1);
                     ImGui::TextDisabled(st ? "%.3f" : "--", st ? st->minMs : 0.f);
                     ImGui::TableSetColumnIndex(2);
@@ -1026,6 +1048,8 @@ namespace pe
                     ImGui::TextDisabled(st ? "%.3f" : "--", st ? st->avgMs : 0.f);
                     ImGui::TableSetColumnIndex(5);
                     CenteredTinyBar(rel);
+                    if (rowHovered)
+                        ui::TooltipText("CPU timing row for this scope.");
                     ImGui::PopID();
                     continue;
                 }
@@ -1053,6 +1077,7 @@ namespace pe
                     nodeFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
 
                 bool open = ImGui::TreeNodeEx(e.name, nodeFlags);
+                const bool rowHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
 
                 ImGui::TableSetColumnIndex(1);
                 ImGui::TextDisabled(st ? "%.3f" : "--", st ? st->minMs : 0.f);
@@ -1067,6 +1092,8 @@ namespace pe
                 ImGui::TextDisabled(st ? "%.3f" : "--", st ? st->avgMs : 0.f);
                 ImGui::TableSetColumnIndex(5);
                 CenteredTinyBar(rel);
+                if (rowHovered)
+                    ui::TooltipText(hasChildren ? "Expand or collapse this CPU timing scope." : "CPU timing row for this scope.");
                 ImGui::PopID();
 
                 if (hasChildren)
@@ -1094,6 +1121,7 @@ namespace pe
         static const char *viewNames[] = {"Table", "Timeline"};
         ImGui::SetNextItemWidth(110.f);
         ImGui::Combo("##cpuview", &m_cpuViewMode, viewNames, 2);
+        ui::ItemTooltip("Switch CPU profiling between table and timeline views.");
         ImGui::SameLine();
         ImGui::TextDisabled("Total CPU: %.3f ms", m_data.frameMs);
         if (m_cpuViewMode == 0)
@@ -1101,6 +1129,7 @@ namespace pe
             ImGui::SameLine();
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
             ImGui::InputTextWithHint("##cpuf", "filter...", m_cpuFilter, IM_ARRAYSIZE(m_cpuFilter));
+            ui::ItemTooltip("Filter CPU scope rows by name.");
         }
 
         ImGui::Separator();
@@ -1170,11 +1199,13 @@ namespace pe
         ImGui::SameLine();
         ImGui::SetNextItemWidth(80.f);
         ImGui::SliderFloat("##cpuzoom", &m_cpuTimelineZoom, 0.2f, 32.f, "%.1fx");
+        ui::ItemTooltip("Horizontal zoom for the CPU timeline.");
         ImGui::SameLine();
         ImGui::TextDisabled("V:");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(80.f);
         ImGui::SliderFloat("##cpuvzoom", &m_cpuTimelineZoomV, 0.2f, 4.f, "%.1fx");
+        ui::ItemTooltip("Vertical zoom for CPU timeline rows.");
 
         const float rowH = 22.f * m_cpuTimelineZoomV;
         const float rowGap = 2.f;
@@ -1308,6 +1339,7 @@ namespace pe
 
         ImGui::SetNextItemWidth(120.f);
         ImGui::InputInt("Frames##captureN", &m_captureFrameCount);
+        ui::ItemTooltip("Number of frames to include in the RenderDoc capture.");
         m_captureFrameCount = std::max(1, m_captureFrameCount);
         ImGui::SameLine();
         if (ImGui::Button("Capture", {-1, 0.f}))
@@ -1317,6 +1349,7 @@ namespace pe
             m_waitingForCapture = true;
             Debug::TriggerMultiFrameCapture(static_cast<uint32_t>(m_captureFrameCount));
         }
+        ui::ItemTooltip("Start a RenderDoc capture for the requested frame count.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
 
         ImGui::EndDisabled();
 #else

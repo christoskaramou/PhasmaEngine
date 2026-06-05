@@ -47,6 +47,18 @@ namespace
     constexpr const char *kModelExtensions[] = {
         ".gltf", ".glb", ".fbx", ".obj", ".dae", ".ply", ".stl", ".3ds", ".blend"};
 
+    void ItemTooltip(const char *text, ImGuiHoveredFlags flags = ImGuiHoveredFlags_DelayShort)
+    {
+        if (!text || !text[0] || !ImGui::IsItemHovered(flags))
+            return;
+
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 32.0f);
+        ImGui::TextUnformatted(text);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+
     std::string PathUtf8(const std::filesystem::path &p)
     {
         const auto u8 = p.u8string();
@@ -368,10 +380,12 @@ namespace
         ImGui::TextDisabled("%s", PathUtf8(st.browseDir).c_str());
         if (ImGui::SmallButton("Queue all models in this folder (recursive)"))
             AddFolderRecursive(st, st.browseDir);
+        ItemTooltip("Queue every supported source model found under this folder.");
         ImGui::Separator();
 
         if (ImGui::Selectable(".. (up)", false) && st.browseDir.has_parent_path())
             st.browseDir = st.browseDir.parent_path();
+        ItemTooltip("Navigate to the parent folder.");
 
         std::error_code ec;
         std::vector<std::filesystem::path> dirs, files;
@@ -394,12 +408,14 @@ namespace
             const std::string label = "[ + ] " + PathUtf8(d.filename());
             if (ImGui::Selectable(label.c_str(), false))
                 navigateTo = d;
+            ItemTooltip("Open this folder in the browser.");
         }
         for (const auto &f : files)
         {
             const std::string label = "      " + PathUtf8(f.filename());
             if (ImGui::Selectable(label.c_str(), false))
                 AddSource(st, f);
+            ItemTooltip("Queue this source model for cooking.");
         }
         if (!navigateTo.empty())
             st.browseDir = navigateTo;
@@ -434,6 +450,7 @@ namespace
             {
                 if (ImGui::SmallButton("x"))
                     removeIndex = static_cast<int>(i);
+                ItemTooltip("Remove this model from the cook queue.");
                 ImGui::SameLine();
             }
             ImGui::Text("%s %s", tag, PathUtf8(st.items[i].src.filename()).c_str());
@@ -453,6 +470,7 @@ namespace
         ImGui::SameLine();
         ImGui::SetNextItemWidth(-1.0f);
         ImGui::InputText("##outdir", st.outDirBuf, sizeof(st.outDirBuf));
+        ItemTooltip("Directory where cooked .pemesh files will be written.");
         ImGui::Spacing();
 
         bool cooking;
@@ -475,12 +493,14 @@ namespace
             ImGui::BeginDisabled();
         if (ImGui::Button("Cook all", ImVec2(120.0f, 0.0f)))
             StartCook(st, exe);
+        ItemTooltip("Cook every queued source model.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         ImGui::SameLine();
         if (ImGui::Button("Clear"))
         {
             std::lock_guard l(st.mutex);
             st.items.clear();
         }
+        ItemTooltip("Clear the current cook queue.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         if (cooking)
         {
             ImGui::EndDisabled();

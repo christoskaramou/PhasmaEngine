@@ -1,5 +1,6 @@
 #include "TransformWidget.h"
 #include "Camera/Camera.h"
+#include "GUI/Helpers.h"
 #include "GUI/IconsFontAwesome.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
@@ -33,14 +34,18 @@ namespace pe
 
     void TransformWidget::DrawEmbed(NodeId *node)
     {
-        if (ImGui::CollapsingHeader("Node Info", ImGuiTreeNodeFlags_DefaultOpen))
+        const bool nodeInfoOpen = ImGui::CollapsingHeader("Node Info", ImGuiTreeNodeFlags_DefaultOpen);
+        ui::ItemTooltip("Show the selected node's name, parent, children, and bounds.");
+        if (nodeInfoOpen)
         {
             DrawNodeInfo(node);
         }
 
         ImGui::Separator();
 
-        if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
+        const bool transformOpen = ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen);
+        ui::ItemTooltip("Edit the selected node's local transform and active gizmo mode.");
+        if (transformOpen)
         {
             DrawGizmoModeButtons();
             ImGui::Text("Local Transform");
@@ -65,6 +70,7 @@ namespace pe
         {
             scene.SetNodeName(node, buffer);
         }
+        ui::ItemTooltip("Rename the selected scene node.");
 
         if (ImGui::BeginTable("NodeInfoTypes", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
         {
@@ -90,7 +96,9 @@ namespace pe
         uint32_t nodeFlags = scene.GetComponentFlags(node);
         if (!(nodeFlags & (Component_Camera | Component_Light)))
         {
-            if (ImGui::CollapsingHeader("World AABB"))
+            const bool worldBoundsOpen = ImGui::CollapsingHeader("World AABB");
+            ui::ItemTooltip("Show the selected node's world-space bounding box.");
+            if (worldBoundsOpen)
             {
                 const AABB &worldBounds = scene.GetWorldAABB(node);
                 ImGui::LabelText("Min", "(%.2f, %.2f, %.2f)", worldBounds.min.x, worldBounds.min.y, worldBounds.min.z);
@@ -111,6 +119,7 @@ namespace pe
             selection.SetGizmoOperation(GizmoOperation::Translate);
         if (isTranslate)
             ImGui::PopStyleColor();
+        ui::ItemTooltip("Use the move gizmo for the current selection.");
 
         ImGui::SameLine();
 
@@ -121,6 +130,7 @@ namespace pe
             selection.SetGizmoOperation(GizmoOperation::Rotate);
         if (isRotate)
             ImGui::PopStyleColor();
+        ui::ItemTooltip("Use the rotation gizmo for the current selection.");
 
         ImGui::SameLine();
 
@@ -131,6 +141,7 @@ namespace pe
             selection.SetGizmoOperation(GizmoOperation::Scale);
         if (isScale)
             ImGui::PopStyleColor();
+        ui::ItemTooltip("Use the scale gizmo for the current selection.");
     }
 
     void TransformWidget::DrawPositionEditor(NodeId *node)
@@ -269,16 +280,19 @@ namespace pe
 
         // X
         ImGui::DragFloat("##X", &values.x, 0.1f, 0.0f, 0.0f, "%.2f");
+        ui::ItemTooltip(type == TransformType::Position ? "Edit local X position." : (type == TransformType::Rotation ? "Edit local X rotation in degrees." : "Edit local X scale."));
         ImGui::PopItemWidth();
         ImGui::SameLine();
 
         // Y
         ImGui::DragFloat("##Y", &values.y, 0.1f, 0.0f, 0.0f, "%.2f");
+        ui::ItemTooltip(type == TransformType::Position ? "Edit local Y position." : (type == TransformType::Rotation ? "Edit local Y rotation in degrees." : "Edit local Y scale."));
         ImGui::PopItemWidth();
         ImGui::SameLine();
 
         // Z
         ImGui::DragFloat("##Z", &values.z, 0.1f, 0.0f, 0.0f, "%.2f");
+        ui::ItemTooltip(type == TransformType::Position ? "Edit local Z position." : (type == TransformType::Rotation ? "Edit local Z rotation in degrees." : "Edit local Z scale."));
         ImGui::PopItemWidth();
 
         ImGui::PopStyleVar();

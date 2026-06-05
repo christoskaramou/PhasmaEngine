@@ -3,6 +3,7 @@
 #include "Camera/Camera.h"
 #include "GUI/GUI.h"
 #include "GUI/GUIState.h"
+#include "GUI/Helpers.h"
 #include "GUI/IconsFontAwesome.h"
 #include "Particles/ParticleManager.h"
 #include "Scene/ModelAsset.h"
@@ -1224,7 +1225,7 @@ namespace pe
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
                 GizmoUtils::ApplyCameraOrientationFromDirection(camera, axes[hoveredIndex].direction);
 
-            ImGui::SetTooltip("%s", axes[hoveredIndex].name);
+            ImGui::SetTooltip("Snap the camera to the %s view.", axes[hoveredIndex].name);
         }
 
         int drawOrder[3] = {0, 1, 2};
@@ -1354,6 +1355,7 @@ namespace pe
 
         ImGui::SetCursorScreenPos(iconPos);
         bool pressed = ImGui::InvisibleButton(id, textSize);
+        ui::ItemTooltip("Select this viewport gizmo.");
         return pressed && !ImGui::IsMouseDown(ImGuiMouseButton_Right);
     }
 

@@ -1264,11 +1264,14 @@ namespace pe
                     ThreadPool::GUI.Enqueue(loadAsync); return true; }, exts);
             }
         }
+        ui::ItemTooltip("Load a cooked .pemesh asset into the current scene.");
     }
 
     void GUI::ShowImportModelMenuItem()
     {
-        if (!ImGui::BeginMenu("Import"))
+        const bool importOpen = ImGui::BeginMenu("Import");
+        ui::ItemTooltip("Cook source model assets into engine-ready .pemesh files.");
+        if (!importOpen)
             return;
 
         // Editor-only: import source models (glTF/FBX/OBJ/...) via Assimp and cook GPU-ready geometry
@@ -1287,6 +1290,7 @@ namespace pe
                                        { ImportModelsAsync(paths); }, exts);
             }
         }
+        ui::ItemTooltip("Select one or more source model files and cook them under Assets/Models.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
 
         // 2) Folder: mirror a folder under Assets/<name>/, cooking every source model to .pemesh in
         //    place and copying all other data verbatim (source model files are replaced, not copied).
@@ -1296,6 +1300,7 @@ namespace pe
                 fs->OpenFolderSelection([this](const std::string &folder)
                                         { ImportFolderAsync(folder); });
         }
+        ui::ItemTooltip("Mirror a folder into Assets while cooking any source models it contains.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
 
         ImGui::EndMenu();
     }
@@ -1740,6 +1745,7 @@ namespace pe
                 OpenLoadSceneDialog();
             }
         }
+        ui::ItemTooltip("Load a .pescene file, prompting first if the current scene is dirty.");
     }
 
     void GUI::OpenLoadSceneDialog()
@@ -1795,17 +1801,20 @@ namespace pe
                 ImGui::CloseCurrentPopup();
                 OpenLoadSceneDialog();
             }
+            ui::ItemTooltip("Save the current scene, then continue loading another scene.");
             ImGui::SameLine();
             if (ImGui::Button("Don't Save", ImVec2(80, 0)))
             {
                 ImGui::CloseCurrentPopup();
                 OpenLoadSceneDialog();
             }
+            ui::ItemTooltip("Discard unsaved changes and continue loading another scene.");
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2(80, 0)))
             {
                 ImGui::CloseCurrentPopup();
             }
+            ui::ItemTooltip("Cancel loading and keep the current scene open.");
             ImGui::EndPopup();
         }
     }
@@ -1855,6 +1864,7 @@ namespace pe
                 }
                 ImGui::CloseCurrentPopup();
             }
+            ui::ItemTooltip("Save the current scene, then create a new scene.");
             ImGui::SameLine();
             if (ImGui::Button("Don't Save", ImVec2(80, 0)))
             {
@@ -1867,9 +1877,11 @@ namespace pe
                 UndoRedo::Instance().Clear();
                 ImGui::CloseCurrentPopup();
             }
+            ui::ItemTooltip("Discard unsaved changes and create a new scene.");
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2(80, 0)))
                 ImGui::CloseCurrentPopup();
+            ui::ItemTooltip("Cancel creating a new scene.");
 
             ImGui::EndPopup();
         }
@@ -1885,6 +1897,7 @@ namespace pe
             else
                 ShowSaveSceneMenuItem_Action();
         }
+        ui::ItemTooltip("Save the current scene, or choose a path if it has not been saved yet.");
     }
 
     void GUI::ShowSaveSceneMenuItem_Action()
@@ -1961,12 +1974,14 @@ namespace pe
                 if (auto *fs = GetWidget<FileSelector>())
                     fs->CancelSelection();
             }
+            ui::ItemTooltip("Overwrite the existing scene file.");
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2(120, 0)))
             {
                 m_pendingSavePath.clear();
                 m_showOverwriteConfirmation = false;
             }
+            ui::ItemTooltip("Choose a different save path.");
         }
         ImGui::End();
 
@@ -1981,6 +1996,7 @@ namespace pe
     {
         if (ImGui::MenuItem("Exit", "Exit"))
             m_showExitConfirmation = true;
+        ui::ItemTooltip("Exit the editor, prompting if the scene has unsaved changes.");
     }
 
     void GUI::RunScriptTests(const std::vector<std::string> &paths, const std::string &label)
@@ -2025,13 +2041,16 @@ namespace pe
 
     void GUI::ShowRunScriptTestsMenu()
     {
-        if (!ImGui::BeginMenu("Run Script Tests"))
+        const bool runTestsOpen = ImGui::BeginMenu("Run Script Tests");
+        ui::ItemTooltip("Run Lua editor script tests and focus the console output.");
+        if (!runTestsOpen)
             return;
 
         auto *scriptSystem = GetGlobalSystem<ScriptSystem>();
         if (!scriptSystem)
         {
             ImGui::MenuItem("Script System Unavailable", nullptr, false, false);
+            ui::ItemTooltip("ScriptSystem is not available in this editor session.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
             ImGui::EndMenu();
             return;
         }
@@ -2039,12 +2058,14 @@ namespace pe
         const std::vector<std::string> tests = scriptSystem->GetTestScriptPaths();
         if (ImGui::MenuItem("Run All", nullptr, false, !tests.empty()))
             RunScriptTests(tests, "all script tests");
+        ui::ItemTooltip("Run every discovered Lua script test.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
 
         ImGui::Separator();
 
         if (tests.empty())
         {
             ImGui::MenuItem("No Test Scripts Found", nullptr, false, false);
+            ui::ItemTooltip("No scripts were discovered in the test script folders.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
             ImGui::EndMenu();
             return;
         }
@@ -2054,6 +2075,7 @@ namespace pe
             const std::string label = std::filesystem::path(testPath).stem().string();
             if (ImGui::MenuItem(label.c_str()))
                 RunScriptTests({testPath}, label);
+            ui::ItemTooltip("Run this Lua script test.");
         }
 
         ImGui::EndMenu();
@@ -2246,6 +2268,7 @@ namespace pe
                 }
                 ImGui::CloseCurrentPopup();
             }
+            ui::ItemTooltip("Save the current scene, then exit the editor.");
             ImGui::SameLine();
             if (ImGui::Button("Discard & Exit", ImVec2(110, 0)))
             {
@@ -2253,9 +2276,11 @@ namespace pe
                 EventSystem::PushEvent(EventType::Quit);
                 ImGui::CloseCurrentPopup();
             }
+            ui::ItemTooltip("Exit the editor without saving scene changes.");
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2(80, 0)))
                 ImGui::CloseCurrentPopup();
+            ui::ItemTooltip("Cancel exit and return to the editor.");
 
             ImGui::EndPopup();
         }
@@ -2389,8 +2414,7 @@ namespace pe
             if (ImGui::SmallButton(buf) && console)
                 console->FocusWithFilter("[ERROR]");
             ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Click to filter console for errors");
+            ui::ItemTooltip("Filter the console to error messages.");
         }
 
         ImGui::SameLine(0, 8);
@@ -2404,8 +2428,7 @@ namespace pe
             if (ImGui::SmallButton(buf) && console)
                 console->FocusWithFilter("[WARN]");
             ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Click to filter console for warnings");
+            ui::ItemTooltip("Filter the console to warning messages.");
         }
 
         // MCP status button — right-aligned
@@ -2421,8 +2444,7 @@ namespace pe
             if (ImGui::SmallButton("MCP"))
                 SetMcpServerEnabled(!mcpRunning);
             ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip(mcpRunning ? "MCP server: ready" : "MCP server: off");
+            ui::ItemTooltip(mcpRunning ? "Disable the running editor MCP server." : "Start the editor MCP server.");
         }
 
         ImGui::PopStyleVar();
@@ -2436,25 +2458,32 @@ namespace pe
     {
         if (ImGui::BeginMainMenuBar())
         {
-            if (ImGui::BeginMenu("File"))
+            const bool fileMenuOpen = ImGui::BeginMenu("File");
+            ui::ItemTooltip("Scene loading, saving, import, and exit commands.");
+            if (fileMenuOpen)
             {
                 ShowImportModelMenuItem();
                 ShowLoadModelMenuItem();
                 if (ImGui::MenuItem("New Scene"))
                     NewScene();
+                ui::ItemTooltip("Create a new empty scene.");
                 ShowLoadSceneMenuItem();
                 ShowSaveSceneMenuItem();
                 if (ImGui::MenuItem("Save Scene As..."))
                     ShowSaveSceneMenuItem_Action();
+                ui::ItemTooltip("Save the current scene to a new .pescene path.");
                 ImGui::Separator();
                 if (ImGui::MenuItem("Reload Module"))
                     EventSystem::PushEvent(EventType::ReloadModule);
+                ui::ItemTooltip("Reload the hot-reload editor module.");
                 ImGui::Separator();
                 ShowExitMenuItem();
                 ImGui::EndMenu();
             }
 
-            if (ImGui::BeginMenu("Edit"))
+            const bool editMenuOpen = ImGui::BeginMenu("Edit");
+            ui::ItemTooltip("Undo and redo scene edits.");
+            if (editMenuOpen)
             {
                 auto &undoRedo = UndoRedo::Instance();
                 if (ImGui::MenuItem("Undo", "Ctrl+Z", false, undoRedo.CanUndo()))
@@ -2463,35 +2492,51 @@ namespace pe
                     if (rs)
                         undoRedo.Undo(rs->GetScene());
                 }
+                ui::ItemTooltip("Undo the most recent scene edit.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
                 if (ImGui::MenuItem("Redo", "Ctrl+Y", false, undoRedo.CanRedo()))
                 {
                     RendererSystem *rs = GetGlobalSystem<RendererSystem>();
                     if (rs)
                         undoRedo.Redo(rs->GetScene());
                 }
+                ui::ItemTooltip("Redo the most recently undone scene edit.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
                 ImGui::EndMenu();
             }
 
-            if (ImGui::BeginMenu("Connection"))
+            const bool connectionMenuOpen = ImGui::BeginMenu("Connection");
+            ui::ItemTooltip("Editor service and indexing commands.");
+            if (connectionMenuOpen)
             {
                 const bool mcpRunning = IsMcpServerRunning();
                 if (ImGui::MenuItem("MCP Server", nullptr, mcpRunning))
                     SetMcpServerEnabled(!mcpRunning);
+                ui::ItemTooltip("Toggle the editor MCP server.");
                 if (ImGui::MenuItem("Index Codebase"))
                     StartCodebaseIndexing();
+                ui::ItemTooltip("Start or refresh the editor codebase index.");
                 ImGui::EndMenu();
             }
 
-            if (ImGui::BeginMenu("Window"))
+            const bool windowMenuOpen = ImGui::BeginMenu("Window");
+            ui::ItemTooltip("Show, hide, and configure editor windows.");
+            if (windowMenuOpen)
             {
                 for (auto &widget : m_menuWindowWidgets)
+                {
                     ImGui::MenuItem(widget->GetName().c_str(), nullptr, widget->GetOpen());
+                    ui::ItemTooltip("Show or hide this editor panel.");
+                }
 
-                if (ImGui::BeginMenu("Viewport"))
+                const bool viewportMenuOpen = ImGui::BeginMenu("Viewport");
+                ui::ItemTooltip("Configure viewport visibility and aspect behavior.");
+                if (viewportMenuOpen)
                 {
                     auto &gSettings = Settings::Get<GlobalSettings>();
                     if (auto *sv = GetWidget<SceneView>())
+                    {
                         ImGui::MenuItem("Enabled", nullptr, sv->GetOpen());
+                        ui::ItemTooltip("Show or hide the docked viewport.");
+                    }
 
                     if (ImGui::MenuItem("Floating", nullptr, &GUIState::s_sceneViewFloating))
                     {
@@ -2505,12 +2550,16 @@ namespace pe
                             GUIState::s_sceneViewRedockQueued = true;
                         }
                     }
+                    ui::ItemTooltip("Move the viewport into its own floating window.");
                     if (ImGui::MenuItem("Redock", nullptr, false, GUIState::s_sceneViewFloating))
                     {
                         GUIState::s_sceneViewFloating = false;
                         GUIState::s_sceneViewRedockQueued = true;
                     }
-                    if (ImGui::BeginMenu("Aspect Ratio"))
+                    ui::ItemTooltip("Return the floating viewport to the docked layout.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+                    const bool aspectMenuOpen = ImGui::BeginMenu("Aspect Ratio");
+                    ui::ItemTooltip("Constrain the viewport render image to a fixed aspect ratio.");
+                    if (aspectMenuOpen)
                     {
                         for (SceneViewAspectMode mode : {SceneViewAspectMode::Free,
                                                          SceneViewAspectMode::Landscape16x9,
@@ -2525,6 +2574,7 @@ namespace pe
                             {
                                 SetSceneViewAspectMode(mode);
                             }
+                            ui::ItemTooltip("Use this viewport aspect ratio.");
                         }
                         ImGui::EndMenu();
                     }
@@ -2533,20 +2583,31 @@ namespace pe
                 ImGui::EndMenu();
             }
 
-            if (ImGui::BeginMenu("Gizmos"))
+            const bool gizmosMenuOpen = ImGui::BeginMenu("Gizmos");
+            ui::ItemTooltip("Toggle viewport helper gizmos.");
+            if (gizmosMenuOpen)
             {
                 auto &gSettings = Settings::Get<GlobalSettings>();
                 ImGui::MenuItem("Transform", nullptr, &GUIState::s_useTransformGizmo);
+                ui::ItemTooltip("Show the transform gizmo for selected nodes.");
                 ImGui::MenuItem("Lights", nullptr, &GUIState::s_useLightGizmos);
+                ui::ItemTooltip("Show editor light gizmos in the viewport.");
                 ImGui::MenuItem("Cameras", nullptr, &GUIState::s_useCameraGizmos);
+                ui::ItemTooltip("Show editor camera gizmos in the viewport.");
                 ImGui::MenuItem("Orientation", nullptr, &GUIState::s_useOrientationGizmo);
+                ui::ItemTooltip("Show the viewport orientation gizmo.");
                 ImGui::MenuItem("Grid", nullptr, &gSettings.draw_grid);
+                ui::ItemTooltip("Show or hide the editor grid.");
                 ImGui::EndMenu();
             }
 
-            if (ImGui::BeginMenu("Layout"))
+            const bool layoutMenuOpen = ImGui::BeginMenu("Layout");
+            ui::ItemTooltip("Adjust editor appearance, scale, and layout.");
+            if (layoutMenuOpen)
             {
-                if (ImGui::BeginMenu("Style"))
+                const bool styleMenuOpen = ImGui::BeginMenu("Style");
+                ui::ItemTooltip("Choose the editor color theme.");
+                if (styleMenuOpen)
                 {
                     bool isClassic = GUIState::s_guiStyle == GUIStyle::Classic;
                     bool isModern = GUIState::s_guiStyle == GUIStyle::Modern;
@@ -2560,58 +2621,74 @@ namespace pe
                         GUIState::s_guiStyle = GUIStyle::Classic;
                         ui::ApplyClassicTheme();
                     }
+                    ui::ItemTooltip("Use the classic editor color theme.");
                     if (ImGui::MenuItem("Dark", nullptr, isDark))
                     {
                         GUIState::s_guiStyle = GUIStyle::Dark;
                         ui::ApplyDarkTheme();
                     }
+                    ui::ItemTooltip("Use the dark editor color theme.");
                     if (ImGui::MenuItem("Light", nullptr, isLight))
                     {
                         GUIState::s_guiStyle = GUIStyle::Light;
                         ui::ApplyLightTheme();
                     }
+                    ui::ItemTooltip("Use the light editor color theme.");
                     if (ImGui::MenuItem("Modern", nullptr, isModern))
                     {
                         GUIState::s_guiStyle = GUIStyle::Modern;
                         ui::ApplyModernTheme();
                     }
+                    ui::ItemTooltip("Use the modern editor color theme.");
                     if (ImGui::MenuItem("Unity", nullptr, isUnity))
                     {
                         GUIState::s_guiStyle = GUIStyle::Unity;
                         ui::ApplyUnityTheme();
                     }
+                    ui::ItemTooltip("Use the Unity-inspired editor theme.");
                     if (ImGui::MenuItem("Unreal", nullptr, isUnreal))
                     {
                         ui::ApplyUnrealTheme();
                     }
+                    ui::ItemTooltip("Use the Unreal-inspired editor theme.");
                     ImGui::EndMenu();
                 }
-                if (ImGui::BeginMenu("Font Size"))
+                const bool fontSizeMenuOpen = ImGui::BeginMenu("Font Size");
+                ui::ItemTooltip("Choose the global editor font scale.");
+                if (fontSizeMenuOpen)
                 {
                     ImGuiIO &io = ImGui::GetIO();
                     float scale = io.FontGlobalScale;
 
                     if (ImGui::MenuItem("Small", nullptr, scale < 0.95f))
                         io.FontGlobalScale = 0.85f;
+                    ui::ItemTooltip("Use a compact editor font scale.");
                     if (ImGui::MenuItem("Medium", nullptr, scale >= 0.95f && scale < 1.15f))
                         io.FontGlobalScale = 1.0f;
+                    ui::ItemTooltip("Use the default editor font scale.");
                     if (ImGui::MenuItem("Large", nullptr, scale >= 1.15f && scale < 1.35f))
                         io.FontGlobalScale = 1.25f;
+                    ui::ItemTooltip("Use a larger editor font scale.");
                     if (ImGui::MenuItem("Extra Large", nullptr, scale >= 1.35f))
                         io.FontGlobalScale = 1.5f;
+                    ui::ItemTooltip("Use the largest editor font scale.");
                     ImGui::EndMenu();
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Reset to Default Layout", "Ctrl+Shift+L"))
                     m_requestDockReset = true;
+                ui::ItemTooltip("Reset all editor panels to the default dock layout.");
                 ImGui::EndMenu();
             }
 
-            if (ImGui::BeginMenu("Help"))
+            const bool helpMenuOpen = ImGui::BeginMenu("Help");
+            ui::ItemTooltip("Testing and ImGui diagnostic tools.");
+            if (helpMenuOpen)
             {
                 ShowRunScriptTestsMenu();
                 ImGui::Separator();
                 ImGui::MenuItem("Dear ImGui Demo", nullptr, &m_show_demo_window);
+                ui::ItemTooltip("Show the Dear ImGui demo window.");
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
@@ -3340,8 +3417,7 @@ namespace pe
                 if (undoRS)
                     ur.Undo(undoRS->GetScene());
             }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Undo (Ctrl+Z)");
+            ui::ItemTooltip("Undo the most recent scene edit.");
             if (!canUndo)
                 ImGui::PopStyleColor();
 
@@ -3351,6 +3427,7 @@ namespace pe
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
             if (ImGui::ArrowButton("##undoArrow", ImGuiDir_Down) && canUndo)
                 ImGui::OpenPopup("##UndoHistory");
+            ui::ItemTooltip("Open undo history.");
             if (!canUndo)
                 ImGui::PopStyleColor();
 
@@ -3374,6 +3451,7 @@ namespace pe
                                 ur.UndoTo(undoRS->GetScene(), i + 1);
                             ImGui::CloseCurrentPopup();
                         }
+                        ui::ItemTooltip("Undo back to this recorded scene state.");
                         if (isNext)
                             ImGui::PopStyleColor();
                     }
@@ -3393,8 +3471,7 @@ namespace pe
                 if (undoRS)
                     ur.Redo(undoRS->GetScene());
             }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Redo (Ctrl+Y)");
+            ui::ItemTooltip("Redo the most recently undone scene edit.");
             if (!canRedo)
                 ImGui::PopStyleColor();
 
@@ -3404,6 +3481,7 @@ namespace pe
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
             if (ImGui::ArrowButton("##redoArrow", ImGuiDir_Down) && canRedo)
                 ImGui::OpenPopup("##RedoHistory");
+            ui::ItemTooltip("Open redo history.");
             if (!canRedo)
                 ImGui::PopStyleColor();
 
@@ -3426,6 +3504,7 @@ namespace pe
                                 ur.RedoTo(undoRS->GetScene(), i + 1);
                             ImGui::CloseCurrentPopup();
                         }
+                        ui::ItemTooltip("Redo forward to this recorded scene state.");
                         if (isNext)
                             ImGui::PopStyleColor();
                     }
@@ -3446,6 +3525,7 @@ namespace pe
             if (ImGui::Button(ICON_FA_STOP, ImVec2(buttonSize, buttonSize)))
                 Stop();
             ImGui::PopStyleColor();
+            ui::ItemTooltip("Stop play mode and restore the editor scene.");
 
             ImGui::SameLine();
 
@@ -3458,6 +3538,7 @@ namespace pe
                 SetRuntimePlaySessionPaused(GUIState::s_isPaused);
             }
             ImGui::PopStyleColor();
+            ui::ItemTooltip(GUIState::s_isPaused ? "Resume play mode simulation." : "Pause play mode simulation.");
         }
         else
         {
@@ -3469,6 +3550,7 @@ namespace pe
             if (ImGui::Button(ICON_FA_PLAY, ImVec2(buttonSize, buttonSize)))
                 Play();
             ImGui::PopStyleColor();
+            ui::ItemTooltip("Enter play mode from the current scene.");
         }
 
         ImGui::PopStyleVar();    // Pop FramePadding

@@ -28,6 +28,24 @@ namespace pe::ui
         return buf;
     }
 
+    inline void TooltipText(const char *text)
+    {
+        if (!text || !text[0])
+            return;
+
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 32.0f);
+        ImGui::TextUnformatted(text);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+
+    inline void ItemTooltip(const char *text, ImGuiHoveredFlags flags = ImGuiHoveredFlags_DelayShort)
+    {
+        if (ImGui::IsItemHovered(flags))
+            TooltipText(text);
+    }
+
     inline ImVec4 UsageColor(float frac)
     {
         // 0..1 -> green->yellow->red

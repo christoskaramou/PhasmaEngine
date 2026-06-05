@@ -39,21 +39,27 @@ namespace pe
             emitter.count = static_cast<uint32_t>(count);
             changed = true;
         }
+        ui::ItemTooltip("Maximum number of particles maintained by this emitter.");
 
         // Position
         if (ImGui::DragFloat3("Position", &emitter.position.x, 0.01f))
             changed = true;
+        ui::ItemTooltip("World-space origin where new particles spawn.");
         if (ImGui::DragFloat3("Velocity", &emitter.velocity.x, 0.01f))
             changed = true;
+        ui::ItemTooltip("Initial velocity applied to newly spawned particles.");
         if (ImGui::DragFloat3("Gravity", &emitter.gravity.x, 0.01f))
             changed = true;
+        ui::ItemTooltip("Acceleration applied to particles after spawn.");
 
         ImGui::Separator();
 
         if (ImGui::ColorEdit4("Color Start", &emitter.colorStart.x))
             changed = true;
+        ui::ItemTooltip("Color and alpha at the beginning of each particle's lifetime.");
         if (ImGui::ColorEdit4("Color End", &emitter.colorEnd.x))
             changed = true;
+        ui::ItemTooltip("Color and alpha blended toward the end of each particle's lifetime.");
 
         ImGui::Separator();
 
@@ -65,6 +71,7 @@ namespace pe
             emitter.sizeLife.y = size[1];
             changed = true;
         }
+        ui::ItemTooltip("Particle size at spawn and at the end of its lifetime.");
 
         float life[2] = {emitter.sizeLife.z, emitter.sizeLife.w};
         if (ImGui::DragFloat2("Life (Min/Max)", life, 0.001f, 0.0f, 100.0f))
@@ -73,18 +80,23 @@ namespace pe
             emitter.sizeLife.w = life[1];
             changed = true;
         }
+        ui::ItemTooltip("Random lifetime range in seconds for each new particle.");
 
         ImGui::Separator();
 
         // Physics
         if (ImGui::DragFloat("Spawn Rate", &emitter.physics.x, 0.01f, 0.0f, 10000.0f))
             changed = true;
+        ui::ItemTooltip("Particles emitted per second.");
         if (ImGui::DragFloat("Spawn Radius", &emitter.physics.y, 0.01f, 0.0f, 100.0f))
             changed = true;
+        ui::ItemTooltip("Radius around the emitter origin used for random spawn positions.");
         if (ImGui::DragFloat("Noise Strength", &emitter.physics.z, 0.01f, 0.0f, 10.0f))
             changed = true;
+        ui::ItemTooltip("Random motion variation added to each particle.");
         if (ImGui::DragFloat("Drag", &emitter.physics.w, 0.01f, 0.0f, 5.0f))
             changed = true;
+        ui::ItemTooltip("Velocity damping applied over the particle lifetime.");
 
         ImGui::Separator();
 
@@ -96,6 +108,7 @@ namespace pe
             emitter.orientation = static_cast<uint32_t>(currentOrientation);
             changed = true;
         }
+        ui::ItemTooltip("Controls how particle quads face the camera or velocity direction.");
 
         // Animation
         if (ImGui::DragFloat2("Anim Rows/Cols", &emitter.animation.x, 1.0f, 1.0f, 64.0f, "%.0f"))
@@ -106,8 +119,10 @@ namespace pe
                 emitter.animation.y = 1.0f;
             changed = true;
         }
+        ui::ItemTooltip("Rows and columns in the texture atlas used for flipbook animation.");
         if (ImGui::DragFloat("Anim Speed", &emitter.animation.z, 0.1f, 0.0f, 10.0f))
             changed = true;
+        ui::ItemTooltip("Rate at which particles advance through atlas frames.");
 
         bool interpolate = emitter.animation.w > 0.5f;
         if (ImGui::Checkbox("Interpolate Frames", &interpolate))
@@ -115,6 +130,7 @@ namespace pe
             emitter.animation.w = interpolate ? 1.0f : 0.0f;
             changed = true;
         }
+        ui::ItemTooltip("Blend between neighboring atlas frames for smoother flipbooks.");
 
         ImGui::Separator();
 
@@ -147,6 +163,8 @@ namespace pe
             if (ImGui::IsItemHovered())
             {
                 ImGui::BeginTooltip();
+                ImGui::TextUnformatted("Preview of the currently assigned particle texture.");
+                ImGui::Separator();
                 ImGui::Image((ImTextureID)textureID, ImVec2(256, 256));
                 ImGui::EndTooltip();
             }
@@ -157,6 +175,7 @@ namespace pe
         {
             if (ImGui::Button("Load", ImVec2(imgSize, imgSize)))
                 clicked = true;
+            ui::ItemTooltip("Load a particle texture for this emitter.");
         }
         ImGui::SameLine();
 
@@ -191,6 +210,7 @@ namespace pe
                 emitter.textureIndex = static_cast<uint32_t>(currentItem);
                 changed = true;
             }
+            ui::ItemTooltip("Choose one of the loaded particle textures.");
         }
         else
         {
@@ -279,6 +299,7 @@ namespace pe
             names.push_back("Emitter " + std::to_string(emitters.size() - 1));
             particleManager->UpdateEmitterBuffer();
         }
+        ui::ItemTooltip("Create a new emitter near the active camera.");
 
         ImGui::Separator();
 
@@ -293,11 +314,14 @@ namespace pe
                 bool emitterOpen = ImGui::TreeNodeEx(
                     label.c_str(),
                     ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth);
+                const bool emitterHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
 
                 // Delete button
                 if (ImGui::BeginPopupContextItem())
                 {
-                    if (ImGui::MenuItem("Delete Emitter"))
+                    const bool deleteEmitter = ImGui::MenuItem("Delete Emitter");
+                    ui::ItemTooltip("Remove this emitter and its particle settings.");
+                    if (deleteEmitter)
                     {
                         emitters.erase(emitters.begin() + i);
                         if (i < names.size())
@@ -311,6 +335,8 @@ namespace pe
                     }
                     ImGui::EndPopup();
                 }
+                if (emitterHovered)
+                    ui::TooltipText("Expand or collapse this emitter's editable particle settings.");
 
                 if (emitterOpen)
                 {

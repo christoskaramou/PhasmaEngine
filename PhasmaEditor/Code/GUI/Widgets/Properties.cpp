@@ -65,7 +65,10 @@ namespace pe
             if (path.empty())
                 ImGui::PopStyleColor();
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", displayPath);
+            {
+                std::string tooltip = std::string("Skybox texture path: ") + displayPath;
+                ui::TooltipText(tooltip.c_str());
+            }
         }
 
         bool DrawCenteredIconButton(const char *id, const char *icon, const ImVec2 &size)
@@ -158,11 +161,13 @@ namespace pe
                     bool open = ImGui::CollapsingHeader(
                         ("Mesh " + std::to_string(slot)).c_str(),
                         ImGuiTreeNodeFlags_DefaultOpen);
+                    ui::ItemTooltip("Show controls for this mesh slot on the selected node.");
                     if (open)
                     {
                         w->DrawEmbed(&mesh, node);
                         if (ImGui::SmallButton("Remove"))
                             removeIdx = meshIndex;
+                        ui::ItemTooltip("Remove this mesh slot from the selected node.");
                     }
                     ImGui::PopID();
                 }
@@ -178,37 +183,51 @@ namespace pe
             {
                 if (ImGui::SmallButton("Remove Mesh Component"))
                     scene.SetMeshRef(node, -1);
+                ui::ItemTooltip("Remove the mesh component from this node.");
             }
 
             if (ImGui::SmallButton("+ Add Mesh"))
                 ImGui::OpenPopup("AddMeshPopup");
+            ui::ItemTooltip("Attach an additional primitive mesh to this node.");
 
             if (ImGui::BeginPopup("AddMeshPopup"))
             {
                 if (ImGui::MenuItem("Plane"))
                     attachPrimitive(node, Primitives::CreatePlane());
+                ui::ItemTooltip("Attach a flat plane primitive.");
                 if (ImGui::MenuItem("Grid"))
                     attachPrimitive(node, Primitives::CreateGrid());
+                ui::ItemTooltip("Attach a subdivided grid primitive.");
                 if (ImGui::MenuItem("Cube"))
                     attachPrimitive(node, Primitives::CreateCube());
+                ui::ItemTooltip("Attach a cube primitive.");
                 if (ImGui::MenuItem("Sphere"))
                     attachPrimitive(node, Primitives::CreateSphere());
+                ui::ItemTooltip("Attach a sphere primitive.");
                 if (ImGui::MenuItem("UV Sphere"))
                     attachPrimitive(node, Primitives::CreateUvSphere());
+                ui::ItemTooltip("Attach a UV sphere primitive.");
                 if (ImGui::MenuItem("Ico Sphere"))
                     attachPrimitive(node, Primitives::CreateIcoSphere());
+                ui::ItemTooltip("Attach an ico-sphere primitive.");
                 if (ImGui::MenuItem("Cylinder"))
                     attachPrimitive(node, Primitives::CreateCylinder());
+                ui::ItemTooltip("Attach a cylinder primitive.");
                 if (ImGui::MenuItem("Cone"))
                     attachPrimitive(node, Primitives::CreateCone());
+                ui::ItemTooltip("Attach a cone primitive.");
                 if (ImGui::MenuItem("Pyramid"))
                     attachPrimitive(node, Primitives::CreatePyramid());
+                ui::ItemTooltip("Attach a pyramid primitive.");
                 if (ImGui::MenuItem("Torus"))
                     attachPrimitive(node, Primitives::CreateTorus());
+                ui::ItemTooltip("Attach a torus primitive.");
                 if (ImGui::MenuItem("Circle"))
                     attachPrimitive(node, Primitives::CreateCircle());
+                ui::ItemTooltip("Attach a circle primitive.");
                 if (ImGui::MenuItem("Quad"))
                     attachPrimitive(node, Primitives::CreateQuad());
+                ui::ItemTooltip("Attach a quad primitive.");
                 ImGui::EndPopup();
             }
 
@@ -236,9 +255,11 @@ namespace pe
                 if (auto *se = m_gui->GetWidget<ScriptEditor>())
                     se->OpenScript(node, scriptPath);
             }
+            ui::ItemTooltip("Open this node's Lua script in the script editor.");
             ImGui::SameLine();
             if (ImGui::SmallButton("Remove##Script"))
                 scene.SetNodeScript(node, "");
+            ui::ItemTooltip("Detach the Lua script from this node.");
 
             // Show exposed variables from the per-node script instance
             if (!ss)
@@ -276,6 +297,7 @@ namespace pe
                     float val = static_cast<float>(*opt);
                     if (ImGui::DragFloat(var.name.c_str(), &val, 0.1f))
                         exposed[var.name] = static_cast<double>(val);
+                    ui::ItemTooltip("Edit this numeric value exposed by the node script.");
                     break;
                 }
                 case ExposedVar::Type::Bool:
@@ -286,6 +308,7 @@ namespace pe
                     bool val = *opt;
                     if (ImGui::Checkbox(var.name.c_str(), &val))
                         exposed[var.name] = val;
+                    ui::ItemTooltip("Toggle this boolean value exposed by the node script.");
                     break;
                 }
                 case ExposedVar::Type::String:
@@ -298,6 +321,7 @@ namespace pe
                     std::snprintf(buf, sizeof(buf), "%s", val.c_str());
                     if (ImGui::InputText(var.name.c_str(), buf, sizeof(buf)))
                         exposed[var.name] = std::string(buf);
+                    ui::ItemTooltip("Edit this string value exposed by the node script.");
                     break;
                 }
                 }
@@ -355,6 +379,7 @@ namespace pe
                 if (m_gui)
                     m_gui->NotifyChange();
             }
+            ui::ItemTooltip("Remove the Runtime UI tag from this node.");
         };
 
         auto drawAnimationRuntime = [&](NodeId *node) -> bool
@@ -387,6 +412,7 @@ namespace pe
                 anim->PlayAnimation(scene, node, clipIndex, loop);
                 state = anim->GetAnimationState(node);
             }
+            ui::ItemTooltip("Choose the animation clip to preview on this node.");
 
             const bool playing = state && state->playing;
             if (ImGui::Button(playing ? "Pause" : "Play"))
@@ -405,6 +431,7 @@ namespace pe
                 }
                 state = anim->GetAnimationState(node);
             }
+            ui::ItemTooltip(playing ? "Pause the current animation preview." : "Start or resume the selected animation preview.");
 
             ImGui::SameLine();
             if (!state)
@@ -414,6 +441,7 @@ namespace pe
                 anim->StopAnimation(node);
                 state = anim->GetAnimationState(node);
             }
+            ui::ItemTooltip("Stop animation playback and clear the preview state.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
             if (!state)
                 ImGui::EndDisabled();
 
@@ -423,6 +451,7 @@ namespace pe
                 if (state)
                     anim->SetLoop(node, loop);
             }
+            ui::ItemTooltip("Loop the selected animation clip during playback.");
 
             float speed = state ? state->speed : 1.0f;
             if (ImGui::DragFloat("Speed", &speed, 0.01f, -10.0f, 10.0f, "%.3f"))
@@ -430,6 +459,7 @@ namespace pe
                 if (state)
                     anim->SetSpeed(node, speed);
             }
+            ui::ItemTooltip("Playback speed multiplier; negative values play backward.");
 
             if (state && clipIndex >= 0 && clipIndex < static_cast<int>(clips.size()))
             {
@@ -440,6 +470,7 @@ namespace pe
                     anim->SetPlaybackTime(scene, node, time);
                     state = anim->GetAnimationState(node);
                 }
+                ui::ItemTooltip("Scrub the active animation to a specific tick.");
                 const float tps = clip.ticksPerSecond > 0.0f ? clip.ticksPerSecond : 1.0f;
                 ImGui::Text("Time: %.3fs / %.3fs", time / tps, clip.duration / tps);
             }
@@ -464,37 +495,52 @@ namespace pe
 
             if (ImGui::Button("+ Add Component", ImVec2(btnWidth, 0.f)))
                 ImGui::OpenPopup("AddComponentPopup");
+            ui::ItemTooltip("Open the menu of components that can be added to this node.");
 
             if (ImGui::BeginPopup("AddComponentPopup"))
             {
                 if (!(flags & Component_Mesh))
                 {
-                    if (ImGui::BeginMenu("Mesh"))
+                    const bool meshMenuOpen = ImGui::BeginMenu("Mesh");
+                    ui::ItemTooltip("Add a mesh component using a built-in primitive.");
+                    if (meshMenuOpen)
                     {
                         if (ImGui::MenuItem("Plane"))
                             attachPrimitive(node, Primitives::CreatePlane());
+                        ui::ItemTooltip("Add a flat plane mesh.");
                         if (ImGui::MenuItem("Grid"))
                             attachPrimitive(node, Primitives::CreateGrid());
+                        ui::ItemTooltip("Add a subdivided grid mesh.");
                         if (ImGui::MenuItem("Cube"))
                             attachPrimitive(node, Primitives::CreateCube());
+                        ui::ItemTooltip("Add a cube mesh.");
                         if (ImGui::MenuItem("Sphere"))
                             attachPrimitive(node, Primitives::CreateSphere());
+                        ui::ItemTooltip("Add a sphere mesh.");
                         if (ImGui::MenuItem("UV Sphere"))
                             attachPrimitive(node, Primitives::CreateUvSphere());
+                        ui::ItemTooltip("Add a UV sphere mesh.");
                         if (ImGui::MenuItem("Ico Sphere"))
                             attachPrimitive(node, Primitives::CreateIcoSphere());
+                        ui::ItemTooltip("Add an ico-sphere mesh.");
                         if (ImGui::MenuItem("Cylinder"))
                             attachPrimitive(node, Primitives::CreateCylinder());
+                        ui::ItemTooltip("Add a cylinder mesh.");
                         if (ImGui::MenuItem("Cone"))
                             attachPrimitive(node, Primitives::CreateCone());
+                        ui::ItemTooltip("Add a cone mesh.");
                         if (ImGui::MenuItem("Pyramid"))
                             attachPrimitive(node, Primitives::CreatePyramid());
+                        ui::ItemTooltip("Add a pyramid mesh.");
                         if (ImGui::MenuItem("Torus"))
                             attachPrimitive(node, Primitives::CreateTorus());
+                        ui::ItemTooltip("Add a torus mesh.");
                         if (ImGui::MenuItem("Circle"))
                             attachPrimitive(node, Primitives::CreateCircle());
+                        ui::ItemTooltip("Add a circle mesh.");
                         if (ImGui::MenuItem("Quad"))
                             attachPrimitive(node, Primitives::CreateQuad());
+                        ui::ItemTooltip("Add a quad mesh.");
                         ImGui::EndMenu();
                     }
                 }
@@ -510,6 +556,7 @@ namespace pe
                             ps->AddBody(scene, node, desc);
                         }
                     }
+                    ui::ItemTooltip("Add a 3D physics body component.");
                 }
 #endif
 
@@ -524,6 +571,7 @@ namespace pe
                             physics2d->AddBody(scene, node, desc);
                         }
                     }
+                    ui::ItemTooltip("Add a 2D Box2D physics body component.");
                 }
 #endif
 
@@ -538,6 +586,7 @@ namespace pe
                             as->AddSource(scene, node, desc);
                         }
                     }
+                    ui::ItemTooltip("Add an audio source component.");
                 }
 #endif
 
@@ -545,11 +594,14 @@ namespace pe
                 {
                     if (ImGui::MenuItem("Runtime UI"))
                         scene.AddComponentFlag(node, Component_RuntimeUi);
+                    ui::ItemTooltip("Tag this node as a Runtime UI surface.");
                 }
 
                 if (!(flags & Component_Script))
                 {
-                    if (ImGui::BeginMenu("Lua Script"))
+                    const bool scriptMenuOpen = ImGui::BeginMenu("Lua Script");
+                    ui::ItemTooltip("Attach a Lua script component to this node.");
+                    if (scriptMenuOpen)
                     {
                         if (ImGui::MenuItem("Browse Existing..."))
                         {
@@ -563,11 +615,13 @@ namespace pe
                                                   {".lua"});
                             }
                         }
+                        ui::ItemTooltip("Choose an existing Lua script asset.");
                         if (ImGui::MenuItem("New Empty Script"))
                         {
                             if (auto *se = m_gui->GetWidget<ScriptEditor>())
                                 se->OpenNewScript(node);
                         }
+                        ui::ItemTooltip("Create a new Lua script and attach it to this node.");
                         ImGui::EndMenu();
                     }
                 }
@@ -636,8 +690,7 @@ namespace pe
                                           Path::Assets + "Skyboxes");
                     }
                 }
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Browse");
+                ui::ItemTooltip("Choose an HDR or image file for the skybox.");
 
                 ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
                 if (path.empty())
@@ -646,14 +699,12 @@ namespace pe
                     applyPath({});
                 if (path.empty())
                     ImGui::EndDisabled();
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Clear");
+                ui::ItemTooltip("Clear the skybox texture and use the solid-color fallback.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
 
                 ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
                 if (DrawCenteredIconButton("##Default", ICON_FA_ROTATE_LEFT, ImVec2(buttonSize, buttonSize)))
                     applyPath(GlobalSettings::DefaultSkyboxPath);
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Default");
+                ui::ItemTooltip("Restore the engine's default skybox path.");
                 ImGui::PopStyleVar();
                 ImGui::PopID();
             };
@@ -686,7 +737,9 @@ namespace pe
 
             if (flags & Component_Skybox)
             {
-                if (ImGui::CollapsingHeader("Skybox Component", ImGuiTreeNodeFlags_DefaultOpen))
+                const bool skyboxOpen = ImGui::CollapsingHeader("Skybox Component", ImGuiTreeNodeFlags_DefaultOpen);
+                ui::ItemTooltip("Edit the scene skybox attached to this node.");
+                if (skyboxOpen)
                 {
                     ImGui::Indent(8.f);
                     drawSkyboxComponent(node);
@@ -702,7 +755,9 @@ namespace pe
             if (flags & Component_Mesh)
             {
                 ImGui::Separator();
-                if (ImGui::CollapsingHeader("Mesh Component", ImGuiTreeNodeFlags_DefaultOpen))
+                const bool meshOpen = ImGui::CollapsingHeader("Mesh Component", ImGuiTreeNodeFlags_DefaultOpen);
+                ui::ItemTooltip("Edit mesh data, materials, and textures for this node.");
+                if (meshOpen)
                 {
                     ImGui::Indent(8.f);
                     ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.20f, 0.20f, 0.22f, 1.0f));
@@ -719,6 +774,7 @@ namespace pe
             {
                 ImGui::Separator();
                 bool open = ImGui::CollapsingHeader("Script Component", ImGuiTreeNodeFlags_DefaultOpen);
+                const bool scriptHeaderHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
                 // Drop a .lua file on the header to replace the current script
                 if (ImGui::BeginDragDropTarget())
                 {
@@ -730,6 +786,8 @@ namespace pe
                     }
                     ImGui::EndDragDropTarget();
                 }
+                if (scriptHeaderHovered)
+                    ui::TooltipText("Edit the Lua script attached to this node; drop a .lua file here to replace it.");
                 if (open)
                     drawScriptComponent(node);
             }
@@ -742,7 +800,9 @@ namespace pe
             if (showAnimationRuntime)
             {
                 ImGui::Separator();
-                if (ImGui::CollapsingHeader("Animation Runtime", ImGuiTreeNodeFlags_DefaultOpen))
+                const bool animationOpen = ImGui::CollapsingHeader("Animation Runtime", ImGuiTreeNodeFlags_DefaultOpen);
+                ui::ItemTooltip("Preview and scrub animation playback on this node.");
+                if (animationOpen)
                 {
                     ImGui::Indent(8.f);
                     drawAnimationRuntime(node);
@@ -779,7 +839,9 @@ namespace pe
             if (flags & Component_Physics)
             {
                 ImGui::Separator();
-                if (ImGui::CollapsingHeader("Physics Component", ImGuiTreeNodeFlags_DefaultOpen))
+                const bool physicsOpen = ImGui::CollapsingHeader("Physics Component", ImGuiTreeNodeFlags_DefaultOpen);
+                ui::ItemTooltip("Edit the 3D physics body attached to this node.");
+                if (physicsOpen)
                 {
                     ImGui::Indent(8.f);
                     if (auto *w = m_gui->GetWidget<PhysicsWidget>())
@@ -794,7 +856,9 @@ namespace pe
             if (flags & Component_Physics2D)
             {
                 ImGui::Separator();
-                if (ImGui::CollapsingHeader("Physics2D Component", ImGuiTreeNodeFlags_DefaultOpen))
+                const bool physics2DOpen = ImGui::CollapsingHeader("Physics2D Component", ImGuiTreeNodeFlags_DefaultOpen);
+                ui::ItemTooltip("Edit the 2D physics body attached to this node.");
+                if (physics2DOpen)
                 {
                     ImGui::Indent(8.f);
                     if (auto *w = m_gui->GetWidget<Physics2DWidget>())
@@ -809,7 +873,9 @@ namespace pe
             if (flags & Component_Audio)
             {
                 ImGui::Separator();
-                if (ImGui::CollapsingHeader("Audio Source", ImGuiTreeNodeFlags_DefaultOpen))
+                const bool audioOpen = ImGui::CollapsingHeader("Audio Source", ImGuiTreeNodeFlags_DefaultOpen);
+                ui::ItemTooltip("Edit the audio source attached to this node.");
+                if (audioOpen)
                 {
                     ImGui::Indent(8.f);
                     if (auto *w = m_gui->GetWidget<AudioWidget>())
@@ -822,7 +888,9 @@ namespace pe
             if (flags & Component_RuntimeUi)
             {
                 ImGui::Separator();
-                if (ImGui::CollapsingHeader("Runtime UI Component", ImGuiTreeNodeFlags_DefaultOpen))
+                const bool runtimeUiOpen = ImGui::CollapsingHeader("Runtime UI Component", ImGuiTreeNodeFlags_DefaultOpen);
+                ui::ItemTooltip("Edit the Runtime UI tag attached to this node.");
+                if (runtimeUiOpen)
                 {
                     ImGui::Indent(8.f);
                     drawRuntimeUiComponent(node);

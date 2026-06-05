@@ -230,6 +230,7 @@ namespace pe
                         ImGui::PushID(i);
                         if (ImGui::SmallButton("x"))
                             removeIdx = i;
+                        ui::ItemTooltip("Remove this file from the staged import list.");
                         ImGui::SameLine();
                         auto u8 = m_basket[i].filename().u8string();
                         ImGui::TextUnformatted(reinterpret_cast<const char *>(u8.c_str()));
@@ -245,11 +246,13 @@ namespace pe
                     ImGui::BeginDisabled();
                 if (ImGui::Button("Add Selected"))
                     AddToBasket(m_selectedEntry);
+                ui::ItemTooltip("Add the selected file to the staged import list.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
                 if (!canAdd)
                     ImGui::EndDisabled();
                 ImGui::SameLine();
                 if (ImGui::Button("Cancel"))
                     CancelSelection();
+                ui::ItemTooltip("Cancel file selection.");
                 ImGui::SameLine();
                 const bool canImport = !m_basket.empty();
                 if (!canImport)
@@ -268,6 +271,7 @@ namespace pe
                     if (cb)
                         cb(out);
                 }
+                ui::ItemTooltip("Confirm the staged file list.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
                 if (!canImport)
                     ImGui::EndDisabled();
             }
@@ -278,6 +282,7 @@ namespace pe
                 ImGui::Text("Folder: %s", reinterpret_cast<const char *>(cu8.c_str()));
                 if (ImGui::Button("Cancel"))
                     CancelSelection();
+                ui::ItemTooltip("Cancel folder selection.");
                 ImGui::SameLine();
                 if (ImGui::Button(m_confirmLabel.c_str()))
                 {
@@ -288,6 +293,7 @@ namespace pe
                     if (cb)
                         cb(pathStr);
                 }
+                ui::ItemTooltip("Use the currently open folder.");
             }
             else
             {
@@ -312,12 +318,16 @@ namespace pe
                 bool confirm = ImGui::InputText("##filename", m_currentFile, sizeof(m_currentFile),
                                                 ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_EnterReturnsTrue,
                                                 stemSelectCb, this);
+                ui::ItemTooltip("Selected filename or folder name to open.");
                 ImGui::SameLine();
 
                 if (ImGui::Button("Cancel"))
                     CancelSelection();
+                ui::ItemTooltip("Cancel file selection.");
                 ImGui::SameLine();
-                confirm |= ImGui::Button(m_confirmLabel.c_str());
+                const bool confirmClicked = ImGui::Button(m_confirmLabel.c_str());
+                ui::ItemTooltip("Confirm the selected file.");
+                confirm |= confirmClicked;
                 if (confirm)
                 {
                     std::string fileStr = m_currentFile;

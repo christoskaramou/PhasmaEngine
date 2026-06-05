@@ -42,6 +42,7 @@ namespace pe
             ImGui::TextWrapped("Path: %s", GUIState::s_assetPreview.fullPath.c_str());
             if (ImGui::Button("Open File"))
                 GUIState::OpenExternalPath(GUIState::s_assetPreview.fullPath);
+            ui::ItemTooltip("Open this asset with the operating system default application.");
 
             // Use u8path to properly interpret UTF-8 string as path on Windows
             std::filesystem::path p(reinterpret_cast<const char8_t *>(GUIState::s_assetPreview.fullPath.c_str()));
@@ -52,6 +53,7 @@ namespace pe
                 ImGui::SameLine();
                 if (ImGui::Button("Reveal In Explorer"))
                     GUIState::OpenExternalPath(folder);
+                ui::ItemTooltip("Open the folder containing this asset.");
             }
 
             if (GUIState::s_assetPreview.type == AssetPreviewType::ModelAsset)
@@ -81,6 +83,7 @@ namespace pe
                     };
                     ThreadPool::GUI.Enqueue(loadAsync);
                 }
+                ui::ItemTooltip("Load this cooked .pemesh into the current scene.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
 
                 if (!canLoad)
                     ImGui::EndDisabled();

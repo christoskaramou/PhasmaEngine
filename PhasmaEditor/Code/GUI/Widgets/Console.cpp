@@ -1,6 +1,7 @@
 #include "Console.h"
 
 #include "GUI/GUIState.h"
+#include "GUI/Helpers.h"
 
 namespace pe
 {
@@ -44,24 +45,30 @@ namespace pe
         if (ImGui::BeginPopup("Options"))
         {
             ImGui::Checkbox("Auto-scroll", &m_autoScroll);
+            ui::ItemTooltip("Keep the console scrolled to the newest log entry.");
             ImGui::EndPopup();
         }
 
         // Main window
         if (ImGui::Button("Options"))
             ImGui::OpenPopup("Options");
+        ui::ItemTooltip("Open console display options.");
         ImGui::SameLine();
         bool clear = ImGui::Button("Clear");
+        ui::ItemTooltip("Clear visible console entries and warning/error counters.");
         ImGui::SameLine();
         bool copy = ImGui::Button("Copy");
+        ui::ItemTooltip("Copy visible console output to the clipboard.");
         ImGui::SameLine();
         if (ImGui::Button("Open Log"))
         {
             std::string logPath = Path::Root + "PhasmaEngine.log";
             GUIState::OpenExternalPath(logPath);
         }
+        ui::ItemTooltip("Open the current engine log file externally.");
         ImGui::SameLine();
         m_filter.Draw("Filter", -100.0f);
+        ui::ItemTooltip("Filter console messages by text.");
 
         if (clear)
             Clear();

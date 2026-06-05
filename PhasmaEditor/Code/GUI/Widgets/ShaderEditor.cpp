@@ -1,5 +1,6 @@
 // PhasmaEditor/Code/GUI/Widgets/ShaderEditor.cpp
 #include "ShaderEditor.h"
+#include "GUI/Helpers.h"
 #include "imgui/imgui.h"
 
 namespace pe
@@ -141,17 +142,20 @@ namespace pe
             if (ImGui::Button("Save & Recompile", {-1, 0}))
                 SaveAndRecompile();
             ImGui::PopStyleColor();
+            ui::ItemTooltip("Save the edited shader file and recompile shaders.");
         }
         else
         {
             if (ImGui::Button("Recompile All Shaders", {-1, 0}))
                 EventSystem::PushEvent(EventType::CompileShaders);
+            ui::ItemTooltip("Recompile all discovered shader files.");
         }
 
         // Toolbar
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 270.f);
         ImGui::InputTextWithHint("##shsearch", "filter shaders...", m_shaderSearchFilter,
                                  IM_ARRAYSIZE(m_shaderSearchFilter));
+        ui::ItemTooltip("Filter the shader file list by path.");
         ImGui::SameLine();
         static const char *paletteNames[] = {"Dark", "Light", "Retro", "Soft", "VSCode"};
         ImGui::SetNextItemWidth(100.f);
@@ -168,12 +172,14 @@ namespace pe
             else
                 m_editor.SetPalette(s_vscode);
         }
+        ui::ItemTooltip("Choose the source editor color palette.");
         ImGui::SameLine();
         static const char *sizeNames[] = {"S", "M", "L", "XL"};
         static const float sizeScales[] = {0.85f, 1.0f, 1.25f, 1.5f};
         ImGui::SetNextItemWidth(55.f);
         if (ImGui::Combo("##fontsize", &m_editorFontSizeIdx, sizeNames, 4))
             m_editorFontScale = sizeScales[m_editorFontSizeIdx];
+        ui::ItemTooltip("Set the shader editor font size.");
         ImGui::SameLine();
         if (ImGui::SmallButton("Rescan"))
         {
@@ -182,6 +188,7 @@ namespace pe
             m_editor.SetText("");
             m_shaderModified = false;
         }
+        ui::ItemTooltip("Rescan the shader directory and clear the current selection.");
         ImGui::Separator();
 
         float listW = 200.f;
@@ -210,6 +217,7 @@ namespace pe
                     LoadShaderFile(m_shaderFiles[i]);
                 }
             }
+            ui::ItemTooltip("Open this shader file in the editor.");
         }
         ImGui::EndChild();
         ImGui::SameLine();

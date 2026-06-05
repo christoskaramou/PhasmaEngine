@@ -1,5 +1,6 @@
 #include "ScriptEditor.h"
 #include "GUI/GUI.h"
+#include "GUI/Helpers.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "Systems/RendererSystem.h"
@@ -155,11 +156,11 @@ namespace pe
         ImGui::SetNextItemWidth(280.f);
         bool enterPressed = ImGui::InputText("##scriptname", m_scriptNameBuf, sizeof(m_scriptNameBuf),
                                              ImGuiInputTextFlags_EnterReturnsTrue);
+        ui::ItemTooltip("Script filename to save under Assets/Scripts.");
         ImGui::SameLine();
 
         bool saveClicked = ImGui::Button("Save");
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Save script  (Ctrl+S)");
+        ui::ItemTooltip("Save the script and compile Lua scripts.");
 
         if (m_modified)
         {

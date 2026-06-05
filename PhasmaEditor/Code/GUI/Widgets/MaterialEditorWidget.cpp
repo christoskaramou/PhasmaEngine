@@ -1,4 +1,5 @@
 #include "GUI/Widgets/MaterialEditorWidget.h"
+#include "GUI/Helpers.h"
 #include "Scene/Material.h"
 #include "Scene/PassInfoAsset.h"
 #include "Scene/SceneNode.h"
@@ -63,7 +64,9 @@ namespace pe
             return modified;
         }
 
-        if (ImGui::TreeNodeEx("Parameters", ImGuiTreeNodeFlags_DefaultOpen))
+        const bool parametersOpen = ImGui::TreeNodeEx("Parameters", ImGuiTreeNodeFlags_DefaultOpen);
+        ui::ItemTooltip("Shader-reflected scalar and color parameters for this material.");
+        if (parametersOpen)
         {
             if (inst)
                 modified |= DrawInstanceParams(*inst, m_cachedLayout);
@@ -72,46 +75,58 @@ namespace pe
             ImGui::TreePop();
         }
 
-        if (!m_cachedLayout.textureSlots.empty() && ImGui::TreeNodeEx("Textures", ImGuiTreeNodeFlags_DefaultOpen))
+        if (!m_cachedLayout.textureSlots.empty())
         {
-            if (inst)
-                modified |= DrawInstanceTextures(*inst, m_cachedLayout);
-            else
-                modified |= DrawReflectedTextures(mat, m_cachedLayout);
-            ImGui::TreePop();
+            const bool texturesOpen = ImGui::TreeNodeEx("Textures", ImGuiTreeNodeFlags_DefaultOpen);
+            ui::ItemTooltip("Shader-reflected texture bindings for this material.");
+            if (texturesOpen)
+            {
+                if (inst)
+                    modified |= DrawInstanceTextures(*inst, m_cachedLayout);
+                else
+                    modified |= DrawReflectedTextures(mat, m_cachedLayout);
+                ImGui::TreePop();
+            }
         }
 
         // Instance override management buttons
-        if (inst && ImGui::TreeNodeEx("Overrides", ImGuiTreeNodeFlags_DefaultOpen))
+        if (inst)
         {
-            if (ImGui::Button("Promote All to Base"))
+            const bool overridesOpen = ImGui::TreeNodeEx("Overrides", ImGuiTreeNodeFlags_DefaultOpen);
+            ui::ItemTooltip("Manage all per-instance material overrides.");
+            if (overridesOpen)
             {
-                for (const auto &field : m_cachedLayout.fields)
+                if (ImGui::Button("Promote All to Base"))
                 {
-                    if (inst->HasParamOverride(field.name))
-                        mat.params[field.name] = inst->GetParam(field.name);
+                    for (const auto &field : m_cachedLayout.fields)
+                    {
+                        if (inst->HasParamOverride(field.name))
+                            mat.params[field.name] = inst->GetParam(field.name);
+                    }
+                    for (const auto &slot : m_cachedLayout.textureSlots)
+                    {
+                        Image *texOverride = inst->GetNamedTexture(slot.bindingName);
+                        if (texOverride)
+                            mat.namedTextures[slot.bindingName] = ResourceManager::Get().Load<Image>(texOverride->GetResourceId());
+                    }
+                    mat.SyncLegacyFromParams();
+                    mat.dirty = true;
+                    modified = true;
                 }
-                for (const auto &slot : m_cachedLayout.textureSlots)
+                ui::ItemTooltip("Copy every instance override back onto the shared base material.");
+                ImGui::SameLine();
+                if (ImGui::Button("Clear All Overrides"))
                 {
-                    Image *texOverride = inst->GetNamedTexture(slot.bindingName);
-                    if (texOverride)
-                        mat.namedTextures[slot.bindingName] = ResourceManager::Get().Load<Image>(texOverride->GetResourceId());
+                    for (const auto &field : m_cachedLayout.fields)
+                        inst->ClearParam(field.name);
+                    for (const auto &slot : m_cachedLayout.textureSlots)
+                        inst->ClearNamedTexture(slot.bindingName);
+                    inst->dirty = true;
+                    modified = true;
                 }
-                mat.SyncLegacyFromParams();
-                mat.dirty = true;
-                modified = true;
+                ui::ItemTooltip("Remove every per-instance override and fall back to base material values.");
+                ImGui::TreePop();
             }
-            ImGui::SameLine();
-            if (ImGui::Button("Clear All Overrides"))
-            {
-                for (const auto &field : m_cachedLayout.fields)
-                    inst->ClearParam(field.name);
-                for (const auto &slot : m_cachedLayout.textureSlots)
-                    inst->ClearNamedTexture(slot.bindingName);
-                inst->dirty = true;
-                modified = true;
-            }
-            ImGui::TreePop();
         }
 
         if (modified)
@@ -141,6 +156,7 @@ namespace pe
         {
             // TODO: open file picker for .pass files
         }
+        const bool passInfoHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
 
         if (ImGui::BeginDragDropTarget())
         {
@@ -155,6 +171,8 @@ namespace pe
             }
             ImGui::EndDragDropTarget();
         }
+        if (passInfoHovered)
+            ui::TooltipText("Current PassInfo shader reflection asset; drag a .pass asset here to replace it.");
 
         return changed;
     }
@@ -173,6 +191,8 @@ namespace pe
                 mat.params[field.name] = value;
                 modified = true;
             }
+            std::string tooltip = "Edit reflected material parameter '" + field.name + "'.";
+            ui::ItemTooltip(tooltip.c_str());
         }
 
         return modified;
@@ -208,6 +228,7 @@ namespace pe
                 inst.SetParam(field.name, value);
                 modified = true;
             }
+            const bool fieldHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
 
             if (!hasOverride)
                 ImGui::PopStyleVar();
@@ -217,12 +238,16 @@ namespace pe
             {
                 if (hasOverride)
                 {
-                    if (ImGui::MenuItem("Clear Override"))
+                    const bool clearOverride = ImGui::MenuItem("Clear Override");
+                    ui::ItemTooltip("Discard this instance value and use the base material value.");
+                    if (clearOverride)
                     {
                         inst.ClearParam(field.name);
                         modified = true;
                     }
-                    if (ImGui::MenuItem("Promote to Base"))
+                    const bool promoteOverride = ImGui::MenuItem("Promote to Base");
+                    ui::ItemTooltip("Copy this instance value to the base material, then clear the override.");
+                    if (promoteOverride)
                     {
                         parent->params[field.name] = inst.GetParam(field.name);
                         inst.ClearParam(field.name);
@@ -236,6 +261,11 @@ namespace pe
                     ImGui::TextDisabled("No override (using base)");
                 }
                 ImGui::EndPopup();
+            }
+            if (fieldHovered)
+            {
+                std::string tooltip = hasOverride ? "Edit instance override for '" + field.name + "'." : "Edit '" + field.name + "' to create an instance override.";
+                ui::TooltipText(tooltip.c_str());
             }
         }
 
@@ -324,7 +354,8 @@ namespace pe
 
             ImGui::Text("%s:", label.c_str());
             ImGui::SameLine();
-            ImGui::TextDisabled(current ? current->GetResourceId().c_str() : "(none)");
+            ImGui::TextDisabled("%s", current ? current->GetResourceId().c_str() : "(none)");
+            const bool slotHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
 
             if (ImGui::BeginDragDropTarget())
             {
@@ -335,6 +366,11 @@ namespace pe
                     modified = true;
                 }
                 ImGui::EndDragDropTarget();
+            }
+            if (slotHovered)
+            {
+                std::string tooltip = "Drop an image asset here for texture slot '" + label + "'.";
+                ui::TooltipText(tooltip.c_str());
             }
         }
 
@@ -368,7 +404,8 @@ namespace pe
 
             ImGui::Text("%s:", label.c_str());
             ImGui::SameLine();
-            ImGui::TextDisabled(effective ? effective->GetResourceId().c_str() : "(none)");
+            ImGui::TextDisabled("%s", effective ? effective->GetResourceId().c_str() : "(none)");
+            const bool slotHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
 
             if (!hasOverride)
                 ImGui::PopStyleVar();
@@ -389,12 +426,16 @@ namespace pe
             {
                 if (hasOverride)
                 {
-                    if (ImGui::MenuItem("Clear Override"))
+                    const bool clearOverride = ImGui::MenuItem("Clear Override");
+                    ui::ItemTooltip("Discard this instance texture and use the base material texture.");
+                    if (clearOverride)
                     {
                         inst.ClearNamedTexture(slot.bindingName);
                         modified = true;
                     }
-                    if (ImGui::MenuItem("Promote to Base"))
+                    const bool promoteOverride = ImGui::MenuItem("Promote to Base");
+                    ui::ItemTooltip("Copy this instance texture to the base material, then clear the override.");
+                    if (promoteOverride)
                     {
                         parent->namedTextures[slot.bindingName] = ResourceManager::Get().Load<Image>(overrideTex->GetResourceId());
                         inst.ClearNamedTexture(slot.bindingName);
@@ -407,6 +448,11 @@ namespace pe
                     ImGui::TextDisabled("No override (using base)");
                 }
                 ImGui::EndPopup();
+            }
+            if (slotHovered)
+            {
+                std::string tooltip = hasOverride ? "Drop an image asset here to replace the instance texture override." : "Drop an image asset here to create an instance texture override.";
+                ui::TooltipText(tooltip.c_str());
             }
         }
 

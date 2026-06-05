@@ -552,6 +552,7 @@ namespace pe
             m_pendingCopySources.clear();
             ImGui::CloseCurrentPopup();
         }
+        ui::ItemTooltip("Copy all dropped files and replace existing files.");
         ImGui::SameLine();
         if (ImGui::Button("Skip Existing"))
         {
@@ -560,12 +561,14 @@ namespace pe
             m_pendingCopySources.clear();
             ImGui::CloseCurrentPopup();
         }
+        ui::ItemTooltip("Copy only files that do not already exist here.");
         ImGui::SameLine();
         if (ImGui::Button("Cancel"))
         {
             m_pendingCopySources.clear();
             ImGui::CloseCurrentPopup();
         }
+        ui::ItemTooltip("Cancel the pending file copy.");
 
         ImGui::EndPopup();
     }
@@ -631,6 +634,7 @@ namespace pe
             m_currentPath = m_navHistory[m_navHistoryIndex];
             RefreshCache(false);
         }
+        ui::ItemTooltip("Go back to the previous folder.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         if (!canBack)
             ImGui::EndDisabled();
 
@@ -644,6 +648,7 @@ namespace pe
             m_currentPath = m_navHistory[m_navHistoryIndex];
             RefreshCache(false);
         }
+        ui::ItemTooltip("Go forward in folder history.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         if (!canForward)
             ImGui::EndDisabled();
 
@@ -653,6 +658,7 @@ namespace pe
             ImGui::BeginDisabled();
         if (ImGui::Button(ICON_FA_ARROW_UP "##navup"))
             NavigateTo(m_currentPath.parent_path());
+        ui::ItemTooltip("Go to the parent folder.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         if (!canUp)
             ImGui::EndDisabled();
 
@@ -665,9 +671,11 @@ namespace pe
             ImGui::SameLine(ImGui::GetWindowWidth() - 120);
             if (ImGui::Button("List"))
                 m_viewMode = ViewMode::List;
+            ui::ItemTooltip("Show files in a compact list.");
             ImGui::SameLine();
             if (ImGui::Button("Grid"))
                 m_viewMode = ViewMode::Grid;
+            ui::ItemTooltip("Show files as thumbnail tiles.");
         }
     }
 
@@ -675,6 +683,7 @@ namespace pe
     {
         ImGui::PushItemWidth(220.0f);
         ImGui::InputTextWithHint("##filebrowser_search", "Search files", m_searchBuffer, sizeof(m_searchBuffer));
+        ui::ItemTooltip("Filter visible files and folders by name.");
         ImGui::PopItemWidth();
 
         ImGui::SameLine();
@@ -684,6 +693,7 @@ namespace pe
         ImGui::SetNextItemWidth(135.0f);
         if (ImGui::Combo("Type##filebrowser_type", &typeIndex, typeLabels, IM_ARRAYSIZE(typeLabels)))
             m_typeFilter = static_cast<TypeFilter>(typeIndex);
+        ui::ItemTooltip("Filter visible entries by asset type.");
 
         ImGui::SameLine();
         static const char *sortLabels[] = {"Name", "Date", "Size"};
@@ -694,6 +704,7 @@ namespace pe
             m_sortMode = static_cast<SortMode>(sortIndex);
             SortCache();
         }
+        ui::ItemTooltip("Choose the column used to sort entries.");
 
         ImGui::SameLine();
         if (ImGui::Button(m_sortDescending ? "Desc##filebrowser_sortdir" : "Asc##filebrowser_sortdir"))
@@ -701,8 +712,7 @@ namespace pe
             m_sortDescending = !m_sortDescending;
             SortCache();
         }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Toggle ascending / descending");
+        ui::ItemTooltip("Toggle ascending or descending sort order.");
     }
 
     void FileBrowser::DrawFolderTree(float height)
@@ -768,6 +778,7 @@ namespace pe
                                   ImVec2(0.0f, rowHeight));
 
                 const bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+                const bool rowHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
                 const bool doubleClicked = ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
                 const ImVec2 itemMin = ImGui::GetItemRectMin();
                 const float contentX = itemMin.x + static_cast<float>(row.depth) * style.IndentSpacing;
@@ -794,6 +805,8 @@ namespace pe
                 {
                     NavigateTo(node.normalizedPath);
                 }
+                if (rowHovered)
+                    ui::TooltipText(row.hasChildFolders ? "Open this folder; click the arrow to expand or collapse it." : "Open this folder.");
 
                 ImGui::PopID();
             }
@@ -911,9 +924,11 @@ namespace pe
 
         if (ImGui::MenuItem("Open"))
             onOpen(m_selectedEntry);
+        ui::ItemTooltip("Open this entry with the editor's default action.");
 
         if (ImGui::MenuItem("Open in File Manager"))
             OpenInFileManager(m_selectedEntry);
+        ui::ItemTooltip("Reveal this entry in the operating system file manager.");
 
         ImGui::Separator();
 
@@ -926,17 +941,21 @@ namespace pe
             m_renameNeedsFocus = true;
             m_pendingOpenRename = true;
         }
+        ui::ItemTooltip("Rename this file or folder.");
 
         if (ImGui::MenuItem("Copy", "Ctrl+C"))
             m_clipboardPath = m_selectedEntry;
+        ui::ItemTooltip("Copy this entry for pasting into another folder.");
 
         if (ImGui::MenuItem("Paste", "Ctrl+V", false, !m_clipboardPath.empty()))
             TryStartCopy({m_clipboardPath});
+        ui::ItemTooltip("Paste the copied entry into this folder.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
 
         ImGui::Separator();
 
         if (ImGui::MenuItem("Delete", "Del"))
             m_pendingOpenDelete = true;
+        ui::ItemTooltip("Delete this file or folder.");
 
         ImGui::EndPopup();
     }
@@ -975,14 +994,17 @@ namespace pe
                 PE_WARN("[FileBrowser] Failed to create folder: %s", e.what());
             }
         }
+        ui::ItemTooltip("Create a new folder in the current directory.");
 
         if (ImGui::MenuItem("Paste", "Ctrl+V", false, !m_clipboardPath.empty()))
             TryStartCopy({m_clipboardPath});
+        ui::ItemTooltip("Paste the copied entry into the current folder.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
 
         ImGui::Separator();
 
         if (ImGui::MenuItem("Refresh"))
             RefreshCache();
+        ui::ItemTooltip("Refresh this folder from disk.");
 
         ImGui::EndPopup();
     }
@@ -1003,6 +1025,7 @@ namespace pe
 
         bool confirmed = ImGui::InputText("##renameinput", m_renameBuffer, sizeof(m_renameBuffer),
                                           ImGuiInputTextFlags_EnterReturnsTrue);
+        ui::ItemTooltip("New name for the selected file or folder.");
         ImGui::Spacing();
         if (confirmed || ImGui::Button("OK"))
         {
@@ -1026,12 +1049,14 @@ namespace pe
             m_renamingEntry.clear();
             ImGui::CloseCurrentPopup();
         }
+        ui::ItemTooltip("Apply the rename.");
         ImGui::SameLine();
         if (ImGui::Button("Cancel"))
         {
             m_renamingEntry.clear();
             ImGui::CloseCurrentPopup();
         }
+        ui::ItemTooltip("Close without renaming.");
 
         ImGui::EndPopup();
     }
@@ -1062,9 +1087,11 @@ namespace pe
             }
             ImGui::CloseCurrentPopup();
         }
+        ui::ItemTooltip("Permanently delete this file or folder.");
         ImGui::SameLine();
         if (ImGui::Button("Cancel"))
             ImGui::CloseCurrentPopup();
+        ui::ItemTooltip("Close without deleting.");
 
         ImGui::EndPopup();
     }
@@ -1384,6 +1411,7 @@ namespace pe
             }
             if (ImGui::IsItemHovered() || ImGui::IsItemActive())
                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+            ui::ItemTooltip("Drag to resize the folder tree.");
 
             const ImU32 splitterColor = ImGui::GetColorU32(
                 ImGui::IsItemActive() ? ImGuiCol_SeparatorActive
@@ -1423,6 +1451,7 @@ namespace pe
                             if (ImGui::IsMouseDoubleClicked(0))
                                 onDoubleClick(entry.path);
                         }
+                        const bool entryHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
 
                         if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
                         {
@@ -1437,6 +1466,8 @@ namespace pe
                             ImGui::Text("%s", entry.filename.c_str());
                             ImGui::EndDragDropSource();
                         }
+                        if (entryHovered)
+                            ui::TooltipText("Select this entry; double-click to open it or drag it into the scene.");
                     }
                 }
             }
@@ -1543,6 +1574,7 @@ namespace pe
                             }
 
                             bool rightClicked = ImGui::IsItemClicked(ImGuiMouseButton_Right);
+                            const bool entryHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
                             if (rightClicked)
                                 m_selectedEntry = entry.path;
 
@@ -1553,6 +1585,8 @@ namespace pe
                                 ImGui::Text("%s", entry.filename.c_str());
                                 ImGui::EndDragDropSource();
                             }
+                            if (entryHovered)
+                                ui::TooltipText("Select this entry; double-click to open it or drag it into the scene.");
 
                             ImGui::PopID();
 

@@ -2,6 +2,7 @@
 
 #include "Physics2DWidget.h"
 #include "GUI/GUI.h"
+#include "GUI/Helpers.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "Systems/Physics2DSystem.h"
@@ -67,6 +68,7 @@ namespace pe
             changed = true;
             rebuildNow = true;
         }
+        ui::ItemTooltip("Select whether the 2D body is static, kinematic, or dynamically simulated.");
 
         static const char *shapeTypeNames[] = {"Box", "Circle", "Capsule"};
         int shapeType = static_cast<int>(edit.shapeType);
@@ -76,36 +78,53 @@ namespace pe
             changed = true;
             rebuildNow = true;
         }
+        ui::ItemTooltip("Choose the 2D collision shape for this body.");
 
         switch (edit.shapeType)
         {
         case Physics2DShapeType::Box:
             noteEdit(DragPositiveFloat("Width", edit.width));
+            ui::ItemTooltip("Width of the box collider in scene units.");
             noteEdit(DragPositiveFloat("Height", edit.height));
+            ui::ItemTooltip("Height of the box collider in scene units.");
             break;
         case Physics2DShapeType::Circle:
             noteEdit(DragPositiveFloat("Radius", edit.radius));
+            ui::ItemTooltip("Radius of the circle collider.");
             break;
         case Physics2DShapeType::Capsule:
             noteEdit(DragPositiveFloat("Capsule Height", edit.capsuleHeight));
+            ui::ItemTooltip("Overall height of the capsule collider.");
             noteEdit(DragPositiveFloat("Capsule Radius", edit.capsuleRadius));
+            ui::ItemTooltip("Radius of the capsule ends.");
             break;
         }
 
         ImGui::SeparatorText("Material");
         noteEdit(ImGui::DragFloat("Density", &edit.density, 0.01f, 0.001f, 10000.0f, "%.3f"));
+        ui::ItemTooltip("Mass density used when Box2D computes body mass.");
         noteEdit(ImGui::DragFloat("Friction", &edit.friction, 0.01f, 0.0f, 10.0f, "%.3f"));
+        ui::ItemTooltip("Surface resistance when this body contacts another.");
         noteEdit(ImGui::DragFloat("Restitution", &edit.restitution, 0.01f, 0.0f, 10.0f, "%.3f"));
+        ui::ItemTooltip("Bounciness applied during 2D contacts.");
         noteEdit(ImGui::DragFloat("Linear Damping", &edit.linearDamping, 0.01f, 0.0f, 100.0f, "%.3f"));
+        ui::ItemTooltip("Slows translational velocity over time.");
         noteEdit(ImGui::DragFloat("Angular Damping", &edit.angularDamping, 0.01f, 0.0f, 100.0f, "%.3f"));
+        ui::ItemTooltip("Slows rotational velocity over time.");
         noteEdit(ImGui::DragFloat("Gravity Scale", &edit.gravityScale, 0.01f, -100.0f, 100.0f, "%.3f"));
+        ui::ItemTooltip("Multiplier for the world's gravity on this body.");
 
         ImGui::SeparatorText("Flags");
         noteEdit(ImGui::Checkbox("Sensor", &edit.isSensor), false);
+        ui::ItemTooltip("Detect overlaps without producing collision response.");
         noteEdit(ImGui::Checkbox("Fixed Rotation", &edit.fixedRotation), false);
+        ui::ItemTooltip("Prevent physics contacts from rotating this body.");
         noteEdit(ImGui::Checkbox("Bullet", &edit.bullet), false);
+        ui::ItemTooltip("Use continuous collision detection for fast-moving bodies.");
         noteEdit(ImGui::Checkbox("Enable Sleep", &edit.enableSleep), false);
+        ui::ItemTooltip("Allow Box2D to sleep this body when it is inactive.");
         noteEdit(ImGui::Checkbox("Sync Node Transform", &edit.syncNode), false);
+        ui::ItemTooltip("Write the simulated 2D body transform back to the scene node.");
 
         ImGui::SeparatorText("Collision Filter");
         uint64_t categoryBits = edit.categoryBits;
@@ -115,6 +134,7 @@ namespace pe
             edit.categoryBits = categoryBits;
         }
         noteEdit(filterEdited);
+        ui::ItemTooltip("Bitfield describing which collision categories this body belongs to.");
         uint64_t maskBits = edit.maskBits;
         filterEdited = ImGui::InputScalar("Mask Bits", ImGuiDataType_U64, &maskBits);
         if (filterEdited)
@@ -122,7 +142,9 @@ namespace pe
             edit.maskBits = maskBits;
         }
         noteEdit(filterEdited);
+        ui::ItemTooltip("Bitfield describing which categories this body can collide with.");
         noteEdit(ImGui::InputInt("Group Index", &edit.groupIndex));
+        ui::ItemTooltip("Optional Box2D group override for always-collide or never-collide pairs.");
 
         ImGui::Spacing();
         if (ImGui::SmallButton("Remove Physics2D"))
@@ -132,6 +154,7 @@ namespace pe
                 m_gui->NotifyChange();
             return;
         }
+        ui::ItemTooltip("Remove the 2D physics body from this node.");
 
         if (!changed && !rebuildNow)
             return;

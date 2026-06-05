@@ -5,6 +5,7 @@
 #include "API/RHI.h"
 #include "FileSelector.h"
 #include "GUI/GUI.h"
+#include "GUI/Helpers.h"
 #include "Scene/Material.h"
 #include "Scene/MaterialAsset.h"
 #include "Scene/Scene.h"
@@ -87,7 +88,9 @@ namespace pe
             ImGui::EndTable();
         }
 
-        if (ImGui::CollapsingHeader("Bounds"))
+        const bool boundsOpen = ImGui::CollapsingHeader("Bounds");
+        ui::ItemTooltip("Show mesh bounds and debug AABB display settings.");
+        if (boundsOpen)
         {
             ImGui::LabelText("Local AABB", "Min: (%.2f, %.2f, %.2f)\nMax: (%.2f, %.2f, %.2f)",
                              mesh->boundingBox.min.x, mesh->boundingBox.min.y, mesh->boundingBox.min.z,
@@ -110,6 +113,7 @@ namespace pe
                 PropagateMeshChange(node);
                 m_gui->NotifyChange();
             }
+            ui::ItemTooltip("Color used when drawing this mesh's debug AABB.");
         }
 
         DrawMaterialInfo(mesh, node);
@@ -117,7 +121,9 @@ namespace pe
 
     void MeshWidget::DrawMaterialInfo(Mesh *mesh, NodeId *node)
     {
-        if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen))
+        const bool materialOpen = ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen);
+        ui::ItemTooltip("Edit the mesh material, shader parameters, and texture bindings.");
+        if (materialOpen)
         {
             // If material has a PassInfoAsset, use the reflection-driven editor
             if (mesh->material && mesh->material->passInfoAsset)
@@ -158,6 +164,7 @@ namespace pe
                         m_gui->NotifyChange();
                     }
                 }
+                ui::ItemTooltip("Use per-mesh material overrides instead of editing the shared base material.");
                 ImGui::SameLine();
                 if (isInstanced)
                     ImGui::TextDisabled("(per-mesh overrides)");
@@ -174,6 +181,7 @@ namespace pe
                 std::snprintf(s_matSaveName, sizeof(s_matSaveName), "material");
                 s_openSavePopup = true;
             }
+            const bool saveMaterialHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
 
             if (ImGui::BeginDragDropTarget())
             {
@@ -197,6 +205,8 @@ namespace pe
                 }
                 ImGui::EndDragDropTarget();
             }
+            if (saveMaterialHovered)
+                ui::TooltipText("Save the current material settings as a .mat asset, or drop a .mat here to apply it.");
 
             if (s_openSavePopup)
             {
@@ -209,10 +219,13 @@ namespace pe
                 ImGui::Text("Save to Assets/Materials/");
                 ImGui::SetNextItemWidth(200.f);
                 ImGui::InputText("##matname", s_matSaveName, sizeof(s_matSaveName));
+                ui::ItemTooltip("Filename for the material asset under Assets/Materials.");
                 ImGui::SameLine();
                 ImGui::Text(".mat");
 
-                if (ImGui::Button("Save") && s_matSaveName[0] != '\0')
+                const bool saveClicked = ImGui::Button("Save");
+                ui::ItemTooltip("Write the material asset to disk.");
+                if (saveClicked && s_matSaveName[0] != '\0')
                 {
                     std::filesystem::path savePath =
                         std::filesystem::path(Path::Assets) / "Materials" / (std::string(s_matSaveName) + ".mat");
@@ -225,6 +238,7 @@ namespace pe
                 ImGui::SameLine();
                 if (ImGui::Button("Cancel"))
                     ImGui::CloseCurrentPopup();
+                ui::ItemTooltip("Close without saving a material asset.");
 
                 ImGui::EndPopup();
             }
@@ -269,6 +283,7 @@ namespace pe
                         mesh->renderType = newRT;
                         changed = true;
                     }
+                    ui::ItemTooltip("Select the material render path: opaque, cutout, blended, or transmission.");
                 }
                 else
                 {
@@ -292,6 +307,7 @@ namespace pe
                         mat->alphaCutoff = alphaCutoff;
                     changed = true;
                 }
+                ui::ItemTooltip("Alpha threshold used by AlphaCut materials.");
 
                 // Base Color Factor
                 ImGui::TableNextRow();
@@ -310,6 +326,7 @@ namespace pe
                         mat->baseColorFactor = baseColorFactor;
                     changed = true;
                 }
+                ui::ItemTooltip("Base color multiplier and alpha for this material.");
 
                 // Metallic
                 float metallic = curMetallic;
@@ -328,6 +345,7 @@ namespace pe
                         mat->metallic = metallic;
                     changed = true;
                 }
+                ui::ItemTooltip("Metalness factor used by the PBR shader.");
 
                 // Roughness
                 float roughness = curRoughness;
@@ -346,6 +364,7 @@ namespace pe
                         mat->roughness = roughness;
                     changed = true;
                 }
+                ui::ItemTooltip("Surface roughness used by the PBR shader.");
 
                 ImGui::EndTable();
 
@@ -419,8 +438,7 @@ namespace pe
                         }
                         if (wasActive)
                             ImGui::PopStyleColor(2);
-                        if (ImGui::IsItemHovered())
-                            ImGui::SetTooltip("%s", fullNames[i]);
+                        ui::ItemTooltip(fullNames[i]);
 
                         ImGui::SameLine();
                     }
@@ -470,6 +488,8 @@ namespace pe
                             if (ImGui::IsItemHovered())
                             {
                                 ImGui::BeginTooltip();
+                                ImGui::TextUnformatted("Click to choose a replacement texture.");
+                                ImGui::Separator();
                                 ImGui::Text("%s", img->GetName().c_str());
                                 ImGui::Text("Resolution: %ux%u", img->GetWidth(), img->GetHeight());
                                 ImGui::Text("Format: %s", ::PeFormatName(img->GetFormat()));
@@ -484,6 +504,7 @@ namespace pe
                     {
                         if (ImGui::Button(("Select..." + id).c_str(), ImVec2(-FLT_MIN, 0.f)))
                             clicked = true;
+                        ui::ItemTooltip("Select a texture asset for this material slot.");
                     }
 
                     ImGui::SameLine();
@@ -509,6 +530,7 @@ namespace pe
                                 renderer->GetScene().UpdateTextures();
                             m_gui->NotifyChange();
                         }
+                        ui::ItemTooltip("Clear this texture slot and disable its texture mask bit.");
                     }
                     else
                     {

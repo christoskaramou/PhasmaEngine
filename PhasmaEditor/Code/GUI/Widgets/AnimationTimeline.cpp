@@ -1,5 +1,6 @@
 #include "AnimationTimeline.h"
 #include "Animation/AnimationEvaluator.h"
+#include "GUI/Helpers.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
@@ -333,8 +334,7 @@ namespace pe
                         anim->SetPaused(n, false); });
             }
         }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip(isPlaying ? "Pause" : "Play");
+        ui::ItemTooltip(isPlaying ? "Pause animation playback." : "Play animation playback.");
 
         ImGui::SameLine();
         if (ImGui::Button("[]", {28, 0}))
@@ -344,14 +344,14 @@ namespace pe
                 anim->StopAnimation(n);
                 anim->SetPlaybackTime(scene, n, 0.f); });
         }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Stop");
+        ui::ItemTooltip("Stop playback and rewind animated nodes.");
 
         ImGui::SameLine();
         bool loopVal = loop;
         if (ImGui::Checkbox("Loop", &loopVal))
             ForEachAnimatedNode([&](NodeId *n)
                                 { anim->SetLoop(n, loopVal); });
+        ui::ItemTooltip("Loop playback when the animation reaches the end.");
 
         ImGui::SameLine();
         ImGui::SetNextItemWidth(70.f);
@@ -367,6 +367,7 @@ namespace pe
         if (ImGui::Combo("##speed", &speedIdx, speedLabels, 5))
             ForEachAnimatedNode([&](NodeId *n)
                                 { anim->SetSpeed(n, speedValues[speedIdx]); });
+        ui::ItemTooltip("Set animation playback speed.");
 
         ImGui::SameLine();
         std::string timeStr = FormatTime(currentTime, clip.ticksPerSecond) + " / " +
@@ -379,12 +380,14 @@ namespace pe
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {6.f, 2.f});
         if (ImGui::RadioButton("Dope", !m_curveMode))
             m_curveMode = false;
+        ui::ItemTooltip("Show keyframes in the dope-sheet timeline.");
         ImGui::SameLine();
         if (ImGui::RadioButton("Curves", m_curveMode))
         {
             m_curveMode = true;
             m_curveFitDirty = true;
         }
+        ui::ItemTooltip("Show animation curves for selected channels.");
         ImGui::PopStyleVar();
     }
 
@@ -438,6 +441,7 @@ namespace pe
             bool selected = (m_selectedBone == i);
             if (ImGui::Selectable(bone.name.c_str(), selected, 0, {0, kTrackRowHeight}))
                 m_selectedBone = i;
+            ui::ItemTooltip("Select this bone's animation track.");
             if (depth > 0)
                 ImGui::Unindent(depth * 8.f);
         }
@@ -961,6 +965,7 @@ namespace pe
                 DeleteSelectedKeys(clip);
                 ReevaluatePose(scene, anim, clip, currentTimeTicks);
             }
+            ui::ItemTooltip("Delete the selected keyframes.");
             if (ImGui::MenuItem("Duplicate"))
             {
                 CopySelectedKeys(clip);
@@ -970,14 +975,17 @@ namespace pe
                     SortChannelKeys(chan);
                 ReevaluatePose(scene, anim, clip, currentTimeTicks);
             }
+            ui::ItemTooltip("Duplicate selected keyframes slightly after the current time.");
             ImGui::Separator();
             if (ImGui::MenuItem("Copy", "Ctrl+C"))
                 CopySelectedKeys(clip);
+            ui::ItemTooltip("Copy selected keyframes to the timeline clipboard.");
             if (ImGui::MenuItem("Paste", "Ctrl+V", false, !m_clipboard.empty()))
             {
                 PasteKeys(clip, currentTimeTicks);
                 ReevaluatePose(scene, anim, clip, currentTimeTicks);
             }
+            ui::ItemTooltip("Paste copied keyframes at the current time.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
             ImGui::EndPopup();
         }
 
@@ -1028,6 +1036,7 @@ namespace pe
                 m_selectedBone = i;
                 m_curveFitDirty = true;
             }
+            ui::ItemTooltip("Select this bone's curve track.");
             if (depth > 0)
                 ImGui::Unindent(depth * 8.f);
         }
@@ -1577,13 +1586,16 @@ namespace pe
                     DeleteSelectedKeys(clip);
                     ReevaluatePose(scene, anim, clip, currentTimeTicks);
                 }
+                ui::ItemTooltip("Delete the selected curve keyframes.");
                 if (ImGui::MenuItem("Copy", "Ctrl+C"))
                     CopySelectedKeys(clip);
+                ui::ItemTooltip("Copy selected curve keyframes.");
                 if (ImGui::MenuItem("Paste", "Ctrl+V", false, !m_clipboard.empty()))
                 {
                     PasteKeys(clip, currentTimeTicks);
                     ReevaluatePose(scene, anim, clip, currentTimeTicks);
                 }
+                ui::ItemTooltip("Paste copied keyframes at the current time.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
                 ImGui::EndPopup();
             }
 
@@ -1750,9 +1762,11 @@ namespace pe
                             clips[i].name.empty() ? "<unnamed>" : clips[i].name.c_str();
                         if (ImGui::Selectable(label, selected))
                             m_selectedClip = i;
+                        ui::ItemTooltip("Select this animation clip for timeline editing.");
                     }
                     ImGui::EndCombo();
                 }
+                ui::ItemTooltip("Choose the active animation clip.");
             }
         }
 
@@ -1818,14 +1832,17 @@ namespace pe
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.35f, 0.35f, 1.f));
         ImGui::Checkbox("Pos", &m_showPosition);
         ImGui::PopStyleColor();
+        ui::ItemTooltip("Show or hide position channels.");
         ImGui::SameLine();
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.8f, 0.35f, 1.f));
         ImGui::Checkbox("Rot", &m_showRotation);
         ImGui::PopStyleColor();
+        ui::ItemTooltip("Show or hide rotation channels.");
         ImGui::SameLine();
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.5f, 0.9f, 1.f));
         ImGui::Checkbox("Scl", &m_showScale);
         ImGui::PopStyleColor();
+        ui::ItemTooltip("Show or hide scale channels.");
     }
 
     // -------------------------------------------------------------------------

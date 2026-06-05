@@ -3,8 +3,9 @@
 #include "FileSelector.h"
 #include "GUI/GUI.h"
 #include "GUI/GUIState.h"
-#include "GUI/UndoRedo.h"
+#include "GUI/Helpers.h"
 #include "GUI/IconsFontAwesome.h"
+#include "GUI/UndoRedo.h"
 #include "Particles/ParticleManager.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/Primitives.h"
@@ -98,6 +99,7 @@ namespace pe
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + x);
         if (ImGui::Button("Add", ImVec2(buttonWidth, 0.f)))
             ImGui::OpenPopup("AddEntityPopup");
+        ui::ItemTooltip("Open the scene-object creation menu.");
 
         // Scene name with new scene button
         {
@@ -114,8 +116,7 @@ namespace pe
 
             if (ImGui::Button(ICON_FA_PLUS, ImVec2(btnSize, btnSize)))
                 m_gui->NewScene();
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("New Scene");
+            ui::ItemTooltip("Create a new empty scene.");
 
             ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.7f, 0.8f, 1.0f));
@@ -133,29 +134,36 @@ namespace pe
                 recordSnapshot("Added Camera");
                 scene.AddCamera();
             }
+            ui::ItemTooltip("Create a camera node.");
 
-            if (ImGui::BeginMenu("Light"))
+            const bool lightMenuOpen = ImGui::BeginMenu("Light");
+            ui::ItemTooltip("Create a light node.");
+            if (lightMenuOpen)
             {
                 if (ImGui::MenuItem("Directional Light"))
                 {
                     recordSnapshot("Added Directional Light");
                     scene.CreateDirectionalLight();
                 }
+                ui::ItemTooltip("Create a sun-like directional light.");
                 if (ImGui::MenuItem("Point Light"))
                 {
                     recordSnapshot("Added Point Light");
                     scene.CreatePointLight();
                 }
+                ui::ItemTooltip("Create an omnidirectional point light.");
                 if (ImGui::MenuItem("Spot Light"))
                 {
                     recordSnapshot("Added Spot Light");
                     scene.CreateSpotLight();
                 }
+                ui::ItemTooltip("Create a cone-shaped spot light.");
                 if (ImGui::MenuItem("Area Light"))
                 {
                     recordSnapshot("Added Area Light");
                     scene.CreateAreaLight();
                 }
+                ui::ItemTooltip("Create a rectangular area light.");
                 ImGui::EndMenu();
             }
 
@@ -165,11 +173,16 @@ namespace pe
                 NodeId *node = scene.CreateNode("Empty Node");
                 selection.Select(node, SelectionType::Node);
             }
+            ui::ItemTooltip("Create an empty transform node.");
 
             if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
                 createSkybox();
+            if (!scene.GetSkyboxNode())
+                ui::ItemTooltip("Create the scene skybox node.");
 
-            if (ImGui::BeginMenu("Mesh"))
+            const bool meshMenuOpen = ImGui::BeginMenu("Mesh");
+            ui::ItemTooltip("Create a built-in primitive mesh.");
+            if (meshMenuOpen)
             {
                 auto AddPrimitive = [&](ModelAsset *m)
                 {
@@ -180,28 +193,40 @@ namespace pe
                 };
                 if (ImGui::MenuItem("Plane"))
                     AddPrimitive(Primitives::CreatePlane());
+                ui::ItemTooltip("Create a flat plane mesh.");
                 if (ImGui::MenuItem("Grid"))
                     AddPrimitive(Primitives::CreateGrid());
+                ui::ItemTooltip("Create a subdivided grid mesh.");
                 if (ImGui::MenuItem("Cube"))
                     AddPrimitive(Primitives::CreateCube());
+                ui::ItemTooltip("Create a cube mesh.");
                 if (ImGui::MenuItem("Sphere"))
                     AddPrimitive(Primitives::CreateSphere());
+                ui::ItemTooltip("Create a sphere mesh.");
                 if (ImGui::MenuItem("UV Sphere"))
                     AddPrimitive(Primitives::CreateUvSphere());
+                ui::ItemTooltip("Create a UV sphere mesh.");
                 if (ImGui::MenuItem("Ico Sphere"))
                     AddPrimitive(Primitives::CreateIcoSphere());
+                ui::ItemTooltip("Create an ico-sphere mesh.");
                 if (ImGui::MenuItem("Cylinder"))
                     AddPrimitive(Primitives::CreateCylinder());
+                ui::ItemTooltip("Create a cylinder mesh.");
                 if (ImGui::MenuItem("Cone"))
                     AddPrimitive(Primitives::CreateCone());
+                ui::ItemTooltip("Create a cone mesh.");
                 if (ImGui::MenuItem("Pyramid"))
                     AddPrimitive(Primitives::CreatePyramid());
+                ui::ItemTooltip("Create a pyramid mesh.");
                 if (ImGui::MenuItem("Torus"))
                     AddPrimitive(Primitives::CreateTorus());
+                ui::ItemTooltip("Create a torus mesh.");
                 if (ImGui::MenuItem("Circle"))
                     AddPrimitive(Primitives::CreateCircle());
+                ui::ItemTooltip("Create a circle mesh.");
                 if (ImGui::MenuItem("Quad"))
                     AddPrimitive(Primitives::CreateQuad());
+                ui::ItemTooltip("Create a quad mesh.");
                 ImGui::EndMenu();
             }
 
@@ -235,6 +260,7 @@ namespace pe
                     selection.SelectEmitter(static_cast<int>(emitters.size() - 1));
                 }
             }
+            ui::ItemTooltip("Create a particle emitter near the active camera.");
 
             ImGui::EndPopup();
         }
@@ -281,6 +307,7 @@ namespace pe
                                        ImGuiTreeNodeFlags_FramePadding |
                                        ImGuiTreeNodeFlags_OpenOnArrow;
         bool rootOpen = ImGui::TreeNodeEx("##RootNode", rootFlags, "%s  Root Node", ICON_FA_CUBE);
+        const bool rootHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
 
         if (ImGui::BeginPopupContextItem("RootNodeContext"))
         {
@@ -289,28 +316,35 @@ namespace pe
                 recordSnapshot("Added Camera");
                 scene.AddCamera();
             }
-            if (ImGui::BeginMenu("Light"))
+            ui::ItemTooltip("Create a camera node at the scene root.");
+            const bool lightMenuOpen = ImGui::BeginMenu("Light");
+            ui::ItemTooltip("Create a light node at the scene root.");
+            if (lightMenuOpen)
             {
                 if (ImGui::MenuItem("Directional Light"))
                 {
                     recordSnapshot("Added Directional Light");
                     scene.CreateDirectionalLight();
                 }
+                ui::ItemTooltip("Create a sun-like directional light.");
                 if (ImGui::MenuItem("Point Light"))
                 {
                     recordSnapshot("Added Point Light");
                     scene.CreatePointLight();
                 }
+                ui::ItemTooltip("Create an omnidirectional point light.");
                 if (ImGui::MenuItem("Spot Light"))
                 {
                     recordSnapshot("Added Spot Light");
                     scene.CreateSpotLight();
                 }
+                ui::ItemTooltip("Create a cone-shaped spot light.");
                 if (ImGui::MenuItem("Area Light"))
                 {
                     recordSnapshot("Added Area Light");
                     scene.CreateAreaLight();
                 }
+                ui::ItemTooltip("Create a rectangular area light.");
                 ImGui::EndMenu();
             }
             if (ImGui::MenuItem("Empty Node"))
@@ -319,9 +353,14 @@ namespace pe
                 NodeId *node = scene.CreateNode("Empty Node");
                 selection.Select(node, SelectionType::Node);
             }
+            ui::ItemTooltip("Create an empty transform node at the scene root.");
             if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
                 createSkybox();
-            if (ImGui::BeginMenu("Mesh"))
+            if (!scene.GetSkyboxNode())
+                ui::ItemTooltip("Create the scene skybox node.");
+            const bool meshMenuOpen = ImGui::BeginMenu("Mesh");
+            ui::ItemTooltip("Create a built-in primitive mesh at the scene root.");
+            if (meshMenuOpen)
             {
                 auto AddPrim = [&](ModelAsset *m)
                 {
@@ -330,32 +369,46 @@ namespace pe
                 };
                 if (ImGui::MenuItem("Plane"))
                     AddPrim(Primitives::CreatePlane());
+                ui::ItemTooltip("Create a flat plane mesh.");
                 if (ImGui::MenuItem("Grid"))
                     AddPrim(Primitives::CreateGrid());
+                ui::ItemTooltip("Create a subdivided grid mesh.");
                 if (ImGui::MenuItem("Cube"))
                     AddPrim(Primitives::CreateCube());
+                ui::ItemTooltip("Create a cube mesh.");
                 if (ImGui::MenuItem("Sphere"))
                     AddPrim(Primitives::CreateSphere());
+                ui::ItemTooltip("Create a sphere mesh.");
                 if (ImGui::MenuItem("UV Sphere"))
                     AddPrim(Primitives::CreateUvSphere());
+                ui::ItemTooltip("Create a UV sphere mesh.");
                 if (ImGui::MenuItem("Ico Sphere"))
                     AddPrim(Primitives::CreateIcoSphere());
+                ui::ItemTooltip("Create an ico-sphere mesh.");
                 if (ImGui::MenuItem("Cylinder"))
                     AddPrim(Primitives::CreateCylinder());
+                ui::ItemTooltip("Create a cylinder mesh.");
                 if (ImGui::MenuItem("Cone"))
                     AddPrim(Primitives::CreateCone());
+                ui::ItemTooltip("Create a cone mesh.");
                 if (ImGui::MenuItem("Pyramid"))
                     AddPrim(Primitives::CreatePyramid());
+                ui::ItemTooltip("Create a pyramid mesh.");
                 if (ImGui::MenuItem("Torus"))
                     AddPrim(Primitives::CreateTorus());
+                ui::ItemTooltip("Create a torus mesh.");
                 if (ImGui::MenuItem("Circle"))
                     AddPrim(Primitives::CreateCircle());
+                ui::ItemTooltip("Create a circle mesh.");
                 if (ImGui::MenuItem("Quad"))
                     AddPrim(Primitives::CreateQuad());
+                ui::ItemTooltip("Create a quad mesh.");
                 ImGui::EndMenu();
             }
             ImGui::EndPopup();
         }
+        if (rootHovered)
+            ui::TooltipText("Root of the scene hierarchy; right-click to create root-level objects.");
 
         if (rootOpen)
         {
@@ -372,7 +425,14 @@ namespace pe
                     while (names.size() < emitters.size())
                         names.push_back("Emitter " + std::to_string(names.size()));
 
-                    if (!emitters.empty() && ImGui::TreeNodeEx("Particle Emitters", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_FramePadding))
+                    bool emittersOpen = false;
+                    bool emittersHovered = false;
+                    if (!emitters.empty())
+                    {
+                        emittersOpen = ImGui::TreeNodeEx("Particle Emitters", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_FramePadding);
+                        emittersHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
+                    }
+                    if (emittersOpen)
                     {
                         bool deleteAllEmitters = false;
                         if (ImGui::BeginPopupContextItem("EmittersContextMenu"))
@@ -382,8 +442,11 @@ namespace pe
                                 recordUndo();
                                 deleteAllEmitters = true;
                             }
+                            ui::ItemTooltip("Remove every particle emitter from the scene.");
                             ImGui::EndPopup();
                         }
+                        if (emittersHovered)
+                            ui::TooltipText("Group containing all scene particle emitters.");
 
                         int emitterToDelete = -1;
 
@@ -401,6 +464,7 @@ namespace pe
                                 std::string emitterName = (i < static_cast<int>(names.size())) ? names[i] : ("Emitter " + std::to_string(i));
 
                                 bool emitterOpen = ImGui::TreeNodeEx((void *)(intptr_t)(i + 5000), emitterFlags, "%s  %s", ICON_FA_FIRE, emitterName.c_str());
+                                const bool emitterHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
 
                                 if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
                                 {
@@ -425,6 +489,7 @@ namespace pe
                                         camera->SetPosition(emitterPos - camera->GetFront() * 5.0f);
                                         ImGui::SetWindowFocus("Properties");
                                     }
+                                    ui::ItemTooltip("Move the active camera to frame this emitter.");
                                     if (ImGui::MenuItem("Rename"))
                                     {
                                         s_renameNode = nullptr;
@@ -432,13 +497,17 @@ namespace pe
                                         snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", emitterName.c_str());
                                         s_openRenamePopup = true;
                                     }
+                                    ui::ItemTooltip("Rename this particle emitter.");
                                     if (ImGui::MenuItem("Delete"))
                                     {
                                         recordUndo();
                                         emitterToDelete = i;
                                     }
+                                    ui::ItemTooltip("Delete this particle emitter.");
                                     ImGui::EndPopup();
                                 }
+                                if (emitterHovered)
+                                    ui::TooltipText("Select this particle emitter; double-click to focus the camera.");
 
                                 if (emitterOpen)
                                     ImGui::TreePop();
@@ -463,6 +532,10 @@ namespace pe
                         }
 
                         ImGui::TreePop();
+                    }
+                    else if (emittersHovered)
+                    {
+                        ui::TooltipText("Group containing all scene particle emitters.");
                     }
                 }
             }
@@ -545,19 +618,16 @@ namespace pe
                     recordSnapshot(enabledEdit ? "Enabled Node" : "Disabled Node");
                     scene.SetNodeEnabled(node, enabledEdit);
                 }
-                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
-                    ImGui::SetTooltip("%s", enabledEdit ? "Disable node and subtree rendering" : "Enable node rendering");
+                ui::ItemTooltip(enabledEdit ? "Disable this node and its subtree for rendering." : "Enable this node for rendering.");
                 ImGui::SameLine(0.0f, 4.0f);
 
                 if (!hierarchyEnabled)
                     ImGui::PushStyleColor(ImGuiCol_Text, HierarchyStyle::TextDisabled);
                 bool nodeOpen = ImGui::TreeNodeEx((void *)uniqueId, nodeFlags, "%s", displayNodeName.c_str());
+                const bool nodeHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
                 if (!hierarchyEnabled)
                     ImGui::PopStyleColor();
                 ImGui::PopID();
-
-                if (!scriptError.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
-                    ImGui::SetTooltip("Script error:\n%s", scriptError.c_str());
 
                 // Drag & Drop Source — SourceAllowNullID lets the drag initiate
                 // from the tree node label even when OpenOnArrow is set
@@ -653,11 +723,15 @@ namespace pe
                         camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
                         ImGui::SetWindowFocus("Properties");
                     }
+                    if (!(nodeCompFlags & Component_Skybox))
+                        ui::ItemTooltip("Move the active camera to frame this node.");
                     if (nodeCompFlags & Component_Camera)
                     {
                         Camera *thisCam = scene.GetCameraForNode(node);
                         if (thisCam && thisCam != scene.GetActiveCamera() && ImGui::MenuItem("Set as Active Camera"))
                             scene.SetActiveCamera(thisCam);
+                        if (thisCam && thisCam != scene.GetActiveCamera())
+                            ui::ItemTooltip("Use this camera for viewport rendering.");
                     }
                     if (ImGui::MenuItem("Rename"))
                     {
@@ -666,36 +740,46 @@ namespace pe
                         snprintf(s_renameBuf, sizeof(s_renameBuf), "%s", nodeName.c_str());
                         s_openRenamePopup = true;
                     }
-                    if (ImGui::BeginMenu("Add"))
+                    ui::ItemTooltip("Rename this node.");
+                    const bool addMenuOpen = ImGui::BeginMenu("Add");
+                    ui::ItemTooltip("Add a child object or component under this node.");
+                    if (addMenuOpen)
                     {
                         if (ImGui::MenuItem("Camera"))
                         {
                             recordSnapshot("Added Camera");
                             scene.AddCamera(node);
                         }
+                        ui::ItemTooltip("Add a child camera node.");
 
-                        if (ImGui::BeginMenu("Light"))
+                        const bool lightMenuOpen = ImGui::BeginMenu("Light");
+                        ui::ItemTooltip("Add a child light node.");
+                        if (lightMenuOpen)
                         {
                             if (ImGui::MenuItem("Directional Light"))
                             {
                                 recordSnapshot("Added Directional Light");
                                 scene.CreateDirectionalLight(node);
                             }
+                            ui::ItemTooltip("Add a sun-like directional light.");
                             if (ImGui::MenuItem("Point Light"))
                             {
                                 recordSnapshot("Added Point Light");
                                 scene.CreatePointLight(node);
                             }
+                            ui::ItemTooltip("Add an omnidirectional point light.");
                             if (ImGui::MenuItem("Spot Light"))
                             {
                                 recordSnapshot("Added Spot Light");
                                 scene.CreateSpotLight(node);
                             }
+                            ui::ItemTooltip("Add a cone-shaped spot light.");
                             if (ImGui::MenuItem("Area Light"))
                             {
                                 recordSnapshot("Added Area Light");
                                 scene.CreateAreaLight(node);
                             }
+                            ui::ItemTooltip("Add a rectangular area light.");
                             ImGui::EndMenu();
                         }
 
@@ -706,10 +790,14 @@ namespace pe
                             scene.MarkNodeDirty(newNode);
                             selection.Select(newNode, SelectionType::Node);
                         }
+                        ui::ItemTooltip("Add an empty child transform node.");
 
                         uint32_t componentFlags = scene.GetComponentFlags(node);
 
-                        if (!(componentFlags & Component_Mesh) && ImGui::BeginMenu("Mesh"))
+                        const bool meshMenuOpen = !(componentFlags & Component_Mesh) && ImGui::BeginMenu("Mesh");
+                        if (!(componentFlags & Component_Mesh))
+                            ui::ItemTooltip("Attach a primitive mesh component to this node.");
+                        if (meshMenuOpen)
                         {
                             auto AttachPrimitive = [&](ModelAsset *m)
                             {
@@ -719,32 +807,47 @@ namespace pe
                             };
                             if (ImGui::MenuItem("Plane"))
                                 AttachPrimitive(Primitives::CreatePlane());
+                            ui::ItemTooltip("Attach a flat plane mesh.");
                             if (ImGui::MenuItem("Grid"))
                                 AttachPrimitive(Primitives::CreateGrid());
+                            ui::ItemTooltip("Attach a subdivided grid mesh.");
                             if (ImGui::MenuItem("Cube"))
                                 AttachPrimitive(Primitives::CreateCube());
+                            ui::ItemTooltip("Attach a cube mesh.");
                             if (ImGui::MenuItem("Sphere"))
                                 AttachPrimitive(Primitives::CreateSphere());
+                            ui::ItemTooltip("Attach a sphere mesh.");
                             if (ImGui::MenuItem("UV Sphere"))
                                 AttachPrimitive(Primitives::CreateUvSphere());
+                            ui::ItemTooltip("Attach a UV sphere mesh.");
                             if (ImGui::MenuItem("Ico Sphere"))
                                 AttachPrimitive(Primitives::CreateIcoSphere());
+                            ui::ItemTooltip("Attach an ico-sphere mesh.");
                             if (ImGui::MenuItem("Cylinder"))
                                 AttachPrimitive(Primitives::CreateCylinder());
+                            ui::ItemTooltip("Attach a cylinder mesh.");
                             if (ImGui::MenuItem("Cone"))
                                 AttachPrimitive(Primitives::CreateCone());
+                            ui::ItemTooltip("Attach a cone mesh.");
                             if (ImGui::MenuItem("Pyramid"))
                                 AttachPrimitive(Primitives::CreatePyramid());
+                            ui::ItemTooltip("Attach a pyramid mesh.");
                             if (ImGui::MenuItem("Torus"))
                                 AttachPrimitive(Primitives::CreateTorus());
+                            ui::ItemTooltip("Attach a torus mesh.");
                             if (ImGui::MenuItem("Circle"))
                                 AttachPrimitive(Primitives::CreateCircle());
+                            ui::ItemTooltip("Attach a circle mesh.");
                             if (ImGui::MenuItem("Quad"))
                                 AttachPrimitive(Primitives::CreateQuad());
+                            ui::ItemTooltip("Attach a quad mesh.");
                             ImGui::EndMenu();
                         }
 
-                        if (!(componentFlags & Component_Script) && ImGui::BeginMenu("Lua Script"))
+                        const bool scriptMenuOpen = !(componentFlags & Component_Script) && ImGui::BeginMenu("Lua Script");
+                        if (!(componentFlags & Component_Script))
+                            ui::ItemTooltip("Attach a Lua script component to this node.");
+                        if (scriptMenuOpen)
                         {
                             if (ImGui::MenuItem("Browse Existing..."))
                             {
@@ -758,11 +861,13 @@ namespace pe
                                                       {".lua"});
                                 }
                             }
+                            ui::ItemTooltip("Choose an existing Lua script asset.");
                             if (ImGui::MenuItem("New Empty Script"))
                             {
                                 if (auto *se = m_gui->GetWidget<ScriptEditor>())
                                     se->OpenNewScript(node);
                             }
+                            ui::ItemTooltip("Create a new Lua script and attach it to this node.");
                             ImGui::EndMenu();
                         }
 
@@ -795,6 +900,7 @@ namespace pe
                                 selection.SelectEmitter(static_cast<int>(emitters.size() - 1));
                             }
                         }
+                        ui::ItemTooltip("Create a particle emitter near the active camera.");
                         ImGui::EndMenu();
                     }
 
@@ -812,7 +918,20 @@ namespace pe
                             nodesToDelete.push_back(node);
                         }
                     }
+                    ui::ItemTooltip("Delete this node when allowed.");
                     ImGui::EndPopup();
+                }
+                if (nodeHovered)
+                {
+                    if (!scriptError.empty())
+                    {
+                        std::string tooltip = "Script error:\n" + scriptError;
+                        ui::TooltipText(tooltip.c_str());
+                    }
+                    else
+                    {
+                        ui::TooltipText("Select this scene node; double-click to frame it in the viewport.");
+                    }
                 }
 
                 if (nodeOpen)
@@ -897,6 +1016,7 @@ namespace pe
         if (ImGui::BeginPopupModal("Rename Entity", NULL, ImGuiWindowFlags_AlwaysAutoResize))
         {
             ImGui::InputText("Name", s_renameBuf, IM_ARRAYSIZE(s_renameBuf));
+            ui::ItemTooltip("Edit the node or emitter display name.");
             if (ImGui::Button("OK", ImVec2(120, 0)))
             {
                 if (s_renameEmitterIndex >= 0)
@@ -939,6 +1059,7 @@ namespace pe
                 s_renameEmitterIndex = -1;
                 ImGui::CloseCurrentPopup();
             }
+            ui::ItemTooltip("Apply the new name.");
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2(120, 0)))
             {
@@ -946,6 +1067,7 @@ namespace pe
                 s_renameEmitterIndex = -1;
                 ImGui::CloseCurrentPopup();
             }
+            ui::ItemTooltip("Close without renaming.");
             ImGui::EndPopup();
         }
 
@@ -961,36 +1083,45 @@ namespace pe
 
         if (ImGui::BeginPopupContextWindow("HierarchyBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
         {
-            if (ImGui::BeginMenu("Add"))
+            const bool addMenuOpen = ImGui::BeginMenu("Add");
+            ui::ItemTooltip("Create a root-level scene object.");
+            if (addMenuOpen)
             {
                 if (ImGui::MenuItem("Camera"))
                 {
                     recordSnapshot("Added Camera");
                     scene.AddCamera();
                 }
+                ui::ItemTooltip("Create a camera node at the scene root.");
 
-                if (ImGui::BeginMenu("Light"))
+                const bool lightMenuOpen = ImGui::BeginMenu("Light");
+                ui::ItemTooltip("Create a light node at the scene root.");
+                if (lightMenuOpen)
                 {
                     if (ImGui::MenuItem("Directional Light"))
                     {
                         recordSnapshot("Added Directional Light");
                         scene.CreateDirectionalLight();
                     }
+                    ui::ItemTooltip("Create a sun-like directional light.");
                     if (ImGui::MenuItem("Point Light"))
                     {
                         recordSnapshot("Added Point Light");
                         scene.CreatePointLight();
                     }
+                    ui::ItemTooltip("Create an omnidirectional point light.");
                     if (ImGui::MenuItem("Spot Light"))
                     {
                         recordSnapshot("Added Spot Light");
                         scene.CreateSpotLight();
                     }
+                    ui::ItemTooltip("Create a cone-shaped spot light.");
                     if (ImGui::MenuItem("Area Light"))
                     {
                         recordSnapshot("Added Area Light");
                         scene.CreateAreaLight();
                     }
+                    ui::ItemTooltip("Create a rectangular area light.");
                     ImGui::EndMenu();
                 }
 
@@ -1000,11 +1131,16 @@ namespace pe
                     NodeId *node = scene.CreateNode("Empty Node");
                     selection.Select(node, SelectionType::Node);
                 }
+                ui::ItemTooltip("Create an empty transform node at the scene root.");
 
                 if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
                     createSkybox();
+                if (!scene.GetSkyboxNode())
+                    ui::ItemTooltip("Create the scene skybox node.");
 
-                if (ImGui::BeginMenu("Mesh"))
+                const bool meshMenuOpen = ImGui::BeginMenu("Mesh");
+                ui::ItemTooltip("Create a built-in primitive mesh at the scene root.");
+                if (meshMenuOpen)
                 {
                     auto AddPrim = [&](ModelAsset *m)
                     {
@@ -1013,28 +1149,40 @@ namespace pe
                     };
                     if (ImGui::MenuItem("Plane"))
                         AddPrim(Primitives::CreatePlane());
+                    ui::ItemTooltip("Create a flat plane mesh.");
                     if (ImGui::MenuItem("Grid"))
                         AddPrim(Primitives::CreateGrid());
+                    ui::ItemTooltip("Create a subdivided grid mesh.");
                     if (ImGui::MenuItem("Cube"))
                         AddPrim(Primitives::CreateCube());
+                    ui::ItemTooltip("Create a cube mesh.");
                     if (ImGui::MenuItem("Sphere"))
                         AddPrim(Primitives::CreateSphere());
+                    ui::ItemTooltip("Create a sphere mesh.");
                     if (ImGui::MenuItem("UV Sphere"))
                         AddPrim(Primitives::CreateUvSphere());
+                    ui::ItemTooltip("Create a UV sphere mesh.");
                     if (ImGui::MenuItem("Ico Sphere"))
                         AddPrim(Primitives::CreateIcoSphere());
+                    ui::ItemTooltip("Create an ico-sphere mesh.");
                     if (ImGui::MenuItem("Cylinder"))
                         AddPrim(Primitives::CreateCylinder());
+                    ui::ItemTooltip("Create a cylinder mesh.");
                     if (ImGui::MenuItem("Cone"))
                         AddPrim(Primitives::CreateCone());
+                    ui::ItemTooltip("Create a cone mesh.");
                     if (ImGui::MenuItem("Pyramid"))
                         AddPrim(Primitives::CreatePyramid());
+                    ui::ItemTooltip("Create a pyramid mesh.");
                     if (ImGui::MenuItem("Torus"))
                         AddPrim(Primitives::CreateTorus());
+                    ui::ItemTooltip("Create a torus mesh.");
                     if (ImGui::MenuItem("Circle"))
                         AddPrim(Primitives::CreateCircle());
+                    ui::ItemTooltip("Create a circle mesh.");
                     if (ImGui::MenuItem("Quad"))
                         AddPrim(Primitives::CreateQuad());
+                    ui::ItemTooltip("Create a quad mesh.");
                     ImGui::EndMenu();
                 }
                 ImGui::EndMenu();
