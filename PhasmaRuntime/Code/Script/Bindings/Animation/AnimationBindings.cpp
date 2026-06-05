@@ -28,19 +28,22 @@ namespace pe
 
                 anim.set_function("stop", [](SceneNodeHandle &h) {
                     auto *as = GetGlobalSystem<AnimationSystem>();
-                    if (as && h.nodeId)
+                    Scene *scene = GetActiveScene();
+                    if (as && scene && h.IsValid(*scene))
                         as->StopAnimation(h.nodeId);
                 });
 
                 anim.set_function("set_speed", [](SceneNodeHandle &h, float speed) {
                     auto *as = GetGlobalSystem<AnimationSystem>();
-                    if (as && h.nodeId)
+                    Scene *scene = GetActiveScene();
+                    if (as && scene && h.IsValid(*scene))
                         as->SetSpeed(h.nodeId, speed);
                 });
 
                 anim.set_function("is_playing", [](SceneNodeHandle &h) -> bool {
                     auto *as = GetGlobalSystem<AnimationSystem>();
-                    return as && h.nodeId && as->IsPlaying(h.nodeId);
+                    Scene *scene = GetActiveScene();
+                    return as && scene && h.IsValid(*scene) && as->IsPlaying(h.nodeId);
                 });
 
                 auto makeClipTable = [](sol::this_state ts, const std::vector<AnimationClip> &clips) -> sol::table {
@@ -84,8 +87,9 @@ namespace pe
                         return false;
 
                     std::vector<float> values;
-                    values.reserve(rotations.size());
-                    for (size_t i = 1; i <= rotations.size(); i++)
+                    const size_t rotationCount = rotations.size();
+                    values.reserve(rotationCount);
+                    for (size_t i = 1; i <= rotationCount; i++)
                     {
                         sol::object value = rotations.get<sol::object>(static_cast<int>(i));
                         if (value.is<double>())
