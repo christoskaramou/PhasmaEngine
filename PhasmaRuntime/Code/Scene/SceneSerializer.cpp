@@ -11,6 +11,9 @@
 #include "API/RHI.h"
 #include "Camera/Camera.h"
 #include "Particles/ParticleManager.h"
+#ifdef PE_PHYSICS2D
+#include "Systems/Physics2DSystem.h"
+#endif
 #define _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING
 #include "rapidjson/document.h"
 #include "rapidjson/istreamwrapper.h"
@@ -370,6 +373,109 @@ namespace pe
             scene.AddComponentFlag(node, Component_Skybox);
             scene.SetSkyboxPath(node, path, false);
         }
+
+#ifdef PE_PHYSICS2D
+        void WritePhysics2DDesc(rapidjson::Value &phys, const Physics2DBodyDesc &desc, rapidjson::Document::AllocatorType &allocator)
+        {
+            phys.AddMember("body_type", static_cast<int>(desc.bodyType), allocator);
+            phys.AddMember("shape_type", static_cast<int>(desc.shapeType), allocator);
+            phys.AddMember("width", desc.width, allocator);
+            phys.AddMember("height", desc.height, allocator);
+            phys.AddMember("radius", desc.radius, allocator);
+            phys.AddMember("capsule_height", desc.capsuleHeight, allocator);
+            phys.AddMember("capsule_radius", desc.capsuleRadius, allocator);
+            phys.AddMember("density", desc.density, allocator);
+            phys.AddMember("friction", desc.friction, allocator);
+            phys.AddMember("restitution", desc.restitution, allocator);
+            phys.AddMember("linear_damping", desc.linearDamping, allocator);
+            phys.AddMember("angular_damping", desc.angularDamping, allocator);
+            phys.AddMember("gravity_scale", desc.gravityScale, allocator);
+
+            rapidjson::Value category;
+            category.SetUint64(desc.categoryBits);
+            phys.AddMember("category_bits", category, allocator);
+
+            rapidjson::Value mask;
+            mask.SetUint64(desc.maskBits);
+            phys.AddMember("mask_bits", mask, allocator);
+
+            phys.AddMember("group_index", desc.groupIndex, allocator);
+            phys.AddMember("fixed_rotation", desc.fixedRotation, allocator);
+            phys.AddMember("is_sensor", desc.isSensor, allocator);
+            phys.AddMember("sync_node", desc.syncNode, allocator);
+            phys.AddMember("bullet", desc.bullet, allocator);
+            phys.AddMember("enable_sleep", desc.enableSleep, allocator);
+        }
+
+        Physics2DBodyDesc ReadPhysics2DDesc(const rapidjson::Value &pv)
+        {
+            Physics2DBodyDesc desc;
+            if (!pv.IsObject())
+                return desc;
+
+            auto readUint64 = [](const rapidjson::Value &value, uint64_t fallback) -> uint64_t
+            {
+                if (value.IsUint64())
+                    return value.GetUint64();
+                if (value.IsUint())
+                    return value.GetUint();
+                if (value.IsInt() && value.GetInt() >= 0)
+                    return static_cast<uint64_t>(value.GetInt());
+                return fallback;
+            };
+
+            if (pv.HasMember("body_type") && pv["body_type"].IsInt())
+                desc.bodyType = static_cast<Physics2DBodyType>(std::clamp(pv["body_type"].GetInt(), 0, 2));
+            if (pv.HasMember("shape_type") && pv["shape_type"].IsInt())
+                desc.shapeType = static_cast<Physics2DShapeType>(std::clamp(pv["shape_type"].GetInt(), 0, 2));
+            if (pv.HasMember("width") && pv["width"].IsNumber())
+                desc.width = pv["width"].GetFloat();
+            if (pv.HasMember("height") && pv["height"].IsNumber())
+                desc.height = pv["height"].GetFloat();
+            if (pv.HasMember("radius") && pv["radius"].IsNumber())
+                desc.radius = pv["radius"].GetFloat();
+            if (pv.HasMember("capsule_height") && pv["capsule_height"].IsNumber())
+                desc.capsuleHeight = pv["capsule_height"].GetFloat();
+            if (pv.HasMember("capsule_radius") && pv["capsule_radius"].IsNumber())
+                desc.capsuleRadius = pv["capsule_radius"].GetFloat();
+            if (pv.HasMember("density") && pv["density"].IsNumber())
+                desc.density = pv["density"].GetFloat();
+            if (pv.HasMember("friction") && pv["friction"].IsNumber())
+                desc.friction = pv["friction"].GetFloat();
+            if (pv.HasMember("restitution") && pv["restitution"].IsNumber())
+                desc.restitution = pv["restitution"].GetFloat();
+            if (pv.HasMember("linear_damping") && pv["linear_damping"].IsNumber())
+                desc.linearDamping = pv["linear_damping"].GetFloat();
+            if (pv.HasMember("angular_damping") && pv["angular_damping"].IsNumber())
+                desc.angularDamping = pv["angular_damping"].GetFloat();
+            if (pv.HasMember("gravity_scale") && pv["gravity_scale"].IsNumber())
+                desc.gravityScale = pv["gravity_scale"].GetFloat();
+            if (pv.HasMember("category_bits"))
+                desc.categoryBits = readUint64(pv["category_bits"], desc.categoryBits);
+            if (pv.HasMember("mask_bits"))
+                desc.maskBits = readUint64(pv["mask_bits"], desc.maskBits);
+            if (pv.HasMember("group_index") && pv["group_index"].IsInt())
+                desc.groupIndex = pv["group_index"].GetInt();
+            if (pv.HasMember("fixed_rotation") && pv["fixed_rotation"].IsBool())
+                desc.fixedRotation = pv["fixed_rotation"].GetBool();
+            if (pv.HasMember("is_sensor") && pv["is_sensor"].IsBool())
+                desc.isSensor = pv["is_sensor"].GetBool();
+            if (pv.HasMember("sync_node") && pv["sync_node"].IsBool())
+                desc.syncNode = pv["sync_node"].GetBool();
+            if (pv.HasMember("bullet") && pv["bullet"].IsBool())
+                desc.bullet = pv["bullet"].GetBool();
+            if (pv.HasMember("enable_sleep") && pv["enable_sleep"].IsBool())
+                desc.enableSleep = pv["enable_sleep"].GetBool();
+            return desc;
+        }
+
+        void RestorePhysics2DNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
+        {
+            if (!node || !nodeValue.HasMember("physics2d") || !nodeValue["physics2d"].IsObject())
+                return;
+            AddScenePhysics2DBody(scene, node, ReadPhysics2DDesc(nodeValue["physics2d"]));
+        }
+#endif
 
         std::filesystem::path ResolveSerializedTexturePath(const rapidjson::Value &textureValue,
                                                            const std::filesystem::path *relativeToDir)
@@ -812,6 +918,19 @@ namespace pe
                     }
                 }
 
+#ifdef PE_PHYSICS2D
+                if (flags & Component_Physics2D)
+                {
+                    const Physics2DBodyDesc *desc = GetScenePhysics2DBodyDesc(node);
+                    if (desc)
+                    {
+                        rapidjson::Value phys2d(rapidjson::kObjectType);
+                        WritePhysics2DDesc(phys2d, *desc, allocator);
+                        nodeObj.AddMember("physics2d", phys2d.Move(), allocator);
+                    }
+                }
+#endif
+
                 if (flags & Component_Audio)
                 {
                     const AudioSourceDesc *desc = GetSceneAudioSourceDesc(node);
@@ -1089,6 +1208,9 @@ namespace pe
         if (IsScenePhysicsSimulating())
             StopScenePhysicsSimulation();
         ClearScenePhysicsBodies();
+#ifdef PE_PHYSICS2D
+        ClearScenePhysics2DBodies();
+#endif
 
         ClearSceneSelection();
         ClearSceneAnimations();
@@ -1284,6 +1406,9 @@ namespace pe
         if (IsScenePhysicsSimulating())
             StopScenePhysicsSimulation();
         ClearScenePhysicsBodies();
+#ifdef PE_PHYSICS2D
+        ClearScenePhysics2DBodies();
+#endif
         ClearSceneAudioSources();
         ClearSceneAnimations();
 
@@ -1712,6 +1837,11 @@ namespace pe
                         desc.capsuleRadius = pv["capsule_radius"].GetFloat();
                     AddScenePhysicsBody(*this, node, desc);
                 }
+
+#ifdef PE_PHYSICS2D
+                for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+                    RestorePhysics2DNode(*this, nodeMap[ni], nodesVal[ni]);
+#endif
 
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                 {
@@ -2171,7 +2301,7 @@ namespace pe
 
                     uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
                     // Clear subsystem tags before restoring — Mesh/Script are already set by SetMeshRef/SetNodeScript above
-                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Audio | Component_Skybox | Component_RuntimeUi);
+                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Physics2D | Component_Audio | Component_Skybox | Component_RuntimeUi);
                     uint32_t restoreFlags = flags & ~(Component_Mesh | Component_Script | Component_GpuPending);
                     if (restoreFlags)
                         AddComponentFlag(node, restoreFlags);
@@ -2395,6 +2525,23 @@ namespace pe
                     }
                 }
 
+#ifdef PE_PHYSICS2D
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                {
+                    const auto &nv = snapshotNodes[ni];
+                    NodeId *node = m_nodeIds[ni];
+                    if (nv.HasMember("physics2d") && nv["physics2d"].IsObject())
+                    {
+                        Physics2DBodyDesc desc = ReadPhysics2DDesc(nv["physics2d"]);
+                        AddScenePhysics2DBody(*this, node, desc);
+                    }
+                    else if (HasScenePhysics2DBody(node))
+                    {
+                        RemoveScenePhysics2DBody(node);
+                    }
+                }
+#endif
+
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                 {
                     const auto &nv = snapshotNodes[ni];
@@ -2456,6 +2603,9 @@ namespace pe
                     l.nodeId = nullptr;
 
                 ClearScenePhysicsBodies();
+#ifdef PE_PHYSICS2D
+                ClearScenePhysics2DBodies();
+#endif
                 ClearSceneAudioSources();
                 ClearSceneAnimations();
 
@@ -2794,6 +2944,11 @@ namespace pe
                         AddScenePhysicsBody(*this, node, desc);
                     }
                 }
+
+#ifdef PE_PHYSICS2D
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestorePhysics2DNode(*this, nodeMap[ni], snapshotNodes[ni]);
+#endif
 
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                 {

@@ -9,6 +9,9 @@
 #ifdef PE_PHYSICS
 #include "Systems/PhysicsSystem.h"
 #endif
+#ifdef PE_PHYSICS2D
+#include "Systems/Physics2DSystem.h"
+#endif
 
 namespace pe
 {
@@ -111,6 +114,47 @@ namespace pe
         }
 #endif
 
+#ifdef PE_PHYSICS2D
+        void DefaultClearScenePhysics2DBodies()
+        {
+            if (auto *physics = GetGlobalSystem<Physics2DSystem>())
+                physics->ClearWorld();
+        }
+
+        void DefaultRemoveScenePhysics2DBody(NodeId *node)
+        {
+            if (auto *physics = GetGlobalSystem<Physics2DSystem>())
+                physics->RemoveBody(node);
+        }
+
+        void DefaultAddScenePhysics2DBody(Scene &scene, NodeId *node, const Physics2DBodyDesc &desc)
+        {
+            if (auto *physics = GetGlobalSystem<Physics2DSystem>())
+                physics->AddBody(scene, node, desc);
+        }
+
+        bool DefaultHasScenePhysics2DBody(const NodeId *node)
+        {
+            if (auto *physics = GetGlobalSystem<Physics2DSystem>())
+                return physics->HasBody(node);
+            return false;
+        }
+
+        Physics2DBodyDesc *DefaultGetScenePhysics2DBodyDesc(NodeId *node)
+        {
+            if (auto *physics = GetGlobalSystem<Physics2DSystem>())
+                return physics->GetBodyDesc(node);
+            return nullptr;
+        }
+
+        const Physics2DBodyDesc *DefaultGetScenePhysics2DBodyDescConst(const NodeId *node)
+        {
+            if (auto *physics = GetGlobalSystem<Physics2DSystem>())
+                return physics->GetBodyDesc(node);
+            return nullptr;
+        }
+#endif
+
 #ifdef PE_AUDIO
         void DefaultClearSceneAudioSources()
         {
@@ -170,6 +214,14 @@ namespace pe
         hooks.hasPhysicsBody = DefaultHasScenePhysicsBody;
         hooks.getPhysicsBodyDesc = DefaultGetScenePhysicsBodyDesc;
         hooks.getPhysicsBodyDescConst = DefaultGetScenePhysicsBodyDescConst;
+#endif
+#ifdef PE_PHYSICS2D
+        hooks.clearPhysics2DBodies = DefaultClearScenePhysics2DBodies;
+        hooks.removePhysics2DBody = DefaultRemoveScenePhysics2DBody;
+        hooks.addPhysics2DBody = DefaultAddScenePhysics2DBody;
+        hooks.hasPhysics2DBody = DefaultHasScenePhysics2DBody;
+        hooks.getPhysics2DBodyDesc = DefaultGetScenePhysics2DBodyDesc;
+        hooks.getPhysics2DBodyDescConst = DefaultGetScenePhysics2DBodyDescConst;
 #endif
 #ifdef PE_AUDIO
         hooks.clearAudioSources = DefaultClearSceneAudioSources;
@@ -271,6 +323,41 @@ namespace pe
     {
         return s_sceneRuntimeHooks.getPhysicsBodyDescConst ? s_sceneRuntimeHooks.getPhysicsBodyDescConst(node) : nullptr;
     }
+
+#ifdef PE_PHYSICS2D
+    void ClearScenePhysics2DBodies()
+    {
+        if (s_sceneRuntimeHooks.clearPhysics2DBodies)
+            s_sceneRuntimeHooks.clearPhysics2DBodies();
+    }
+
+    void RemoveScenePhysics2DBody(NodeId *node)
+    {
+        if (s_sceneRuntimeHooks.removePhysics2DBody)
+            s_sceneRuntimeHooks.removePhysics2DBody(node);
+    }
+
+    void AddScenePhysics2DBody(Scene &scene, NodeId *node, const Physics2DBodyDesc &desc)
+    {
+        if (s_sceneRuntimeHooks.addPhysics2DBody)
+            s_sceneRuntimeHooks.addPhysics2DBody(scene, node, desc);
+    }
+
+    bool HasScenePhysics2DBody(const NodeId *node)
+    {
+        return s_sceneRuntimeHooks.hasPhysics2DBody ? s_sceneRuntimeHooks.hasPhysics2DBody(node) : false;
+    }
+
+    Physics2DBodyDesc *GetScenePhysics2DBodyDesc(NodeId *node)
+    {
+        return s_sceneRuntimeHooks.getPhysics2DBodyDesc ? s_sceneRuntimeHooks.getPhysics2DBodyDesc(node) : nullptr;
+    }
+
+    const Physics2DBodyDesc *GetScenePhysics2DBodyDesc(const NodeId *node)
+    {
+        return s_sceneRuntimeHooks.getPhysics2DBodyDescConst ? s_sceneRuntimeHooks.getPhysics2DBodyDescConst(node) : nullptr;
+    }
+#endif
 
     void ClearSceneAudioSources()
     {

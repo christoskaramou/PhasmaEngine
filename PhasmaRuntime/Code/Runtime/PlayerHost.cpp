@@ -19,6 +19,7 @@
 #include "Script/ScriptSystem.h"
 #include "Systems/AnimationSystem.h"
 #include "Systems/AudioSystem.h"
+#include "Systems/Physics2DSystem.h"
 #include "Systems/PhysicsSystem.h"
 #include "UI/RuntimeUi.h"
 #include "Window/WindowEvents.h"
@@ -624,6 +625,9 @@ namespace pe
                 CreateGlobalSystem<AnimationSystem>()->Init(nullptr);
 #ifdef PE_PHYSICS
                 CreateGlobalSystem<PhysicsSystem>()->Init(nullptr);
+#endif
+#ifdef PE_PHYSICS2D
+                CreateGlobalSystem<Physics2DSystem>()->Init(nullptr);
 #endif
 #ifdef PE_AUDIO
                 CreateGlobalSystem<AudioSystem>()->Init(nullptr);

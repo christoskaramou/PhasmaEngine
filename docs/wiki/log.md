@@ -1,5 +1,12 @@
 # PhasmaEngine Wiki Log
 
+## 2026-06-05
+
+- Added a Box2D-backed 2D physics surface beside the existing Jolt 3D physics path. `PE_PHYSICS2D` fetches Box2D, `Physics2DSystem` owns a fixed-step 2D world and syncs body transforms back to scene nodes, and Lua exposes `physics2d.*` helpers for box/circle/capsule bodies, gravity, motion, impulses, transforms, pause, and contact polling. Added `Scripts/global/ath_shapes2d.lua` so AgainstTheHero can build visible 2D box/circle/capsule primitives in an orthographic XY scene and optionally attach matching Box2D bodies.
+- Added `Scripts/samples/ath_physics2d_sample.lua`, a runnable orthographic 2D smoke scene that exercises `ath_shapes2d` plus Box2D bodies with static bounds, dynamic primitives, a kinematic paddle, a sensor gate, reset/recycle behavior, and contact logging.
+- Trimmed the sample's editor catch-up cost: `Physics2DSystem` now skips scene-node sync when a Box2D body transform is unchanged, and the sample switches to raster mode plus only recolors the sensor when its overlap state changes. This keeps the editor's late script-mutation catch-up from rebuilding render/ray-tracing state every 2D physics tick.
+- Made Lua-authored Physics2D bodies first-class in the editor. Box2D bodies now add `Component_Physics2D` tags, keep editable descriptors, serialize as `physics2d`, restore through scene runtime hooks, appear in editor/MCP component lists, and have a Properties panel for body/shape/material/filter/sync settings. Properties also gained compact panels for Runtime UI node tags and animation runtime playback state so those Lua-authorable surfaces are visible when selected.
+
 ## 2026-06-04
 
 - Fixed the GGX roughness-prefilter (next bullet) producing a regular grid of bright squares on rough reflections of the HDR skybox sun. The sun is a sub-texel, very-bright delta sampled by a fixed per-texel Hammersley set, so it lit isolated texels on a low-discrepancy lattice that the floor reflection magnified into squares. `PrefilterCubemap.hlsl` now clamps per-sample radiance (`MAX_PREFILTER_RADIANCE`), biases each sample toward a blurrier pre-averaged source mip scaled by roughness (`SOURCE_MIP_BIAS`) so the integral converges to a smooth blur, and `Skybox.cpp` raises load-time `PrefilterSampleCount` to 64/128/256/512. A per-texel Cranley-Patterson jitter was tried and removed — once the mip bias converged the integral it only traded the grid for swimming grain. The prefilter stays a one-time bake at skybox load, not per frame. Verified in the editor on `golden_gate_hills_4k.hdr`.

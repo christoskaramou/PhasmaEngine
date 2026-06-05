@@ -32,6 +32,7 @@ namespace pe
         Component_GpuPending = 1 << 6, // Node geometry not yet uploaded to GPU
         Component_Skybox = 1 << 8,
         Component_RuntimeUi = 1 << 9,
+        Component_Physics2D = 1 << 10,
     };
 
     // Lightweight mesh descriptor — references into Scene's data stores

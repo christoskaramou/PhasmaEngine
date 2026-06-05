@@ -44,6 +44,9 @@
 #ifdef PE_PHYSICS
 #include "Widgets/PhysicsWidget.h"
 #endif
+#ifdef PE_PHYSICS2D
+#include "Widgets/Physics2DWidget.h"
+#endif
 #ifdef PE_AUDIO
 #include "Widgets/AudioWidget.h"
 #endif
@@ -2916,6 +2919,9 @@ namespace pe
 #ifdef PE_PHYSICS
         auto physicsWidget = std::make_shared<PhysicsWidget>();
 #endif
+#ifdef PE_PHYSICS2D
+        auto physics2DWidget = std::make_shared<Physics2DWidget>();
+#endif
 #ifdef PE_AUDIO
         auto audioWidget = std::make_shared<AudioWidget>();
 #endif
@@ -2941,6 +2947,9 @@ namespace pe
             animTimeline,
 #ifdef PE_PHYSICS
             physicsWidget,
+#endif
+#ifdef PE_PHYSICS2D
+            physics2DWidget,
 #endif
 #ifdef PE_AUDIO
             audioWidget,

@@ -25,6 +25,9 @@
 #ifdef PE_PHYSICS
 #include "Systems/PhysicsSystem.h"
 #endif
+#ifdef PE_PHYSICS2D
+#include "Systems/Physics2DSystem.h"
+#endif
 #ifdef PE_AUDIO
 #include "Systems/AudioSystem.h"
 #endif
@@ -385,6 +388,9 @@ namespace pe
         }
 #ifdef PE_PHYSICS
         CreateGlobalSystem<PhysicsSystem>()->Init(nullptr);
+#endif
+#ifdef PE_PHYSICS2D
+        CreateGlobalSystem<Physics2DSystem>()->Init(nullptr);
 #endif
 #ifdef PE_AUDIO
         CreateGlobalSystem<AudioSystem>()->Init(nullptr);

@@ -17,12 +17,17 @@
 #include "Scene/SelectionManager.h"
 #include "Script/ScriptSystem.h"
 #include "ScriptEditor.h"
+#include "Systems/AnimationSystem.h"
 #include "Systems/RendererSystem.h"
 #include "TransformWidget.h"
 #ifdef PE_PHYSICS
 #include "PhysicsWidget.h"
 #include "Physics/PhysicsTypes.h"
 #include "Systems/PhysicsSystem.h"
+#endif
+#ifdef PE_PHYSICS2D
+#include "Physics2DWidget.h"
+#include "Systems/Physics2DSystem.h"
 #endif
 #ifdef PE_AUDIO
 #include "AudioWidget.h"
@@ -340,6 +345,112 @@ namespace pe
             w->DrawEmbed(pm, sel.GetSelectedEmitterIndex());
         };
 
+        auto drawRuntimeUiComponent = [&](NodeId *node)
+        {
+            ImGui::TextDisabled("Runtime UI node");
+            ImGui::Spacing();
+            if (ImGui::SmallButton("Remove Runtime UI"))
+            {
+                scene.RemoveComponentFlag(node, Component_RuntimeUi);
+                if (m_gui)
+                    m_gui->NotifyChange();
+            }
+        };
+
+        auto drawAnimationRuntime = [&](NodeId *node) -> bool
+        {
+            AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
+            if (!anim)
+                return false;
+
+            const auto &clips = scene.GetAnimationClips();
+            const AnimationNodeState *state = anim->GetAnimationState(node);
+            const bool hasAnimationSurface = state || (scene.NodeHasSkinnedMesh(node) && !clips.empty());
+            if (!hasAnimationSurface)
+                return false;
+
+            if (clips.empty())
+            {
+                ImGui::TextDisabled("No animation clips");
+                return true;
+            }
+
+            int clipIndex = state && state->clipIndex >= 0 && state->clipIndex < static_cast<int>(clips.size()) ? state->clipIndex : 0;
+            std::vector<const char *> clipNames;
+            clipNames.reserve(clips.size());
+            for (const AnimationClip &clip : clips)
+                clipNames.push_back(clip.name.empty() ? "<unnamed>" : clip.name.c_str());
+
+            bool loop = state ? state->loop : true;
+            if (ImGui::Combo("Clip", &clipIndex, clipNames.data(), static_cast<int>(clipNames.size())))
+            {
+                anim->PlayAnimation(scene, node, clipIndex, loop);
+                state = anim->GetAnimationState(node);
+            }
+
+            const bool playing = state && state->playing;
+            if (ImGui::Button(playing ? "Pause" : "Play"))
+            {
+                if (playing)
+                {
+                    anim->SetPaused(node, true);
+                }
+                else if (state && state->clipIndex == clipIndex)
+                {
+                    anim->SetPaused(node, false);
+                }
+                else
+                {
+                    anim->PlayAnimation(scene, node, clipIndex, loop);
+                }
+                state = anim->GetAnimationState(node);
+            }
+
+            ImGui::SameLine();
+            if (!state)
+                ImGui::BeginDisabled();
+            if (ImGui::Button("Stop"))
+            {
+                anim->StopAnimation(node);
+                state = anim->GetAnimationState(node);
+            }
+            if (!state)
+                ImGui::EndDisabled();
+
+            loop = state ? state->loop : loop;
+            if (ImGui::Checkbox("Loop", &loop))
+            {
+                if (state)
+                    anim->SetLoop(node, loop);
+            }
+
+            float speed = state ? state->speed : 1.0f;
+            if (ImGui::DragFloat("Speed", &speed, 0.01f, -10.0f, 10.0f, "%.3f"))
+            {
+                if (state)
+                    anim->SetSpeed(node, speed);
+            }
+
+            if (state && clipIndex >= 0 && clipIndex < static_cast<int>(clips.size()))
+            {
+                const AnimationClip &clip = clips[clipIndex];
+                float time = state->time;
+                if (ImGui::SliderFloat("Time", &time, 0.0f, std::max(clip.duration, 0.001f), "%.2f ticks"))
+                {
+                    anim->SetPlaybackTime(scene, node, time);
+                    state = anim->GetAnimationState(node);
+                }
+                const float tps = clip.ticksPerSecond > 0.0f ? clip.ticksPerSecond : 1.0f;
+                ImGui::Text("Time: %.3fs / %.3fs", time / tps, clip.duration / tps);
+            }
+            else
+            {
+                ImGui::TextDisabled("No active playback state");
+            }
+
+            return true;
+        };
+
         auto drawAddComponentButton = [&](NodeId *node)
         {
             uint32_t flags = scene.GetComponentFlags(node);
@@ -397,6 +508,20 @@ namespace pe
                         {
                             PhysicsBodyDesc desc;
                             ps->AddBody(scene, node, desc);
+                        }
+                    }
+                }
+#endif
+
+#ifdef PE_PHYSICS2D
+                if (!(flags & Component_Physics2D))
+                {
+                    if (ImGui::MenuItem("Physics2D Body"))
+                    {
+                        if (auto *physics2d = GetGlobalSystem<Physics2DSystem>())
+                        {
+                            Physics2DBodyDesc desc;
+                            physics2d->AddBody(scene, node, desc);
                         }
                     }
                 }
@@ -609,6 +734,22 @@ namespace pe
                     drawScriptComponent(node);
             }
 
+            AnimationSystem *animationSystem = GetGlobalSystem<AnimationSystem>();
+            const bool showAnimationRuntime =
+                animationSystem &&
+                (animationSystem->GetAnimationState(node) ||
+                 (scene.NodeHasSkinnedMesh(node) && !scene.GetAnimationClips().empty()));
+            if (showAnimationRuntime)
+            {
+                ImGui::Separator();
+                if (ImGui::CollapsingHeader("Animation Runtime", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    ImGui::Indent(8.f);
+                    drawAnimationRuntime(node);
+                    ImGui::Unindent(8.f);
+                }
+            }
+
             // Camera component
             if (flags & Component_Camera)
             {
@@ -648,6 +789,21 @@ namespace pe
             }
 #endif
 
+#ifdef PE_PHYSICS2D
+            // Physics2D component
+            if (flags & Component_Physics2D)
+            {
+                ImGui::Separator();
+                if (ImGui::CollapsingHeader("Physics2D Component", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    ImGui::Indent(8.f);
+                    if (auto *w = m_gui->GetWidget<Physics2DWidget>())
+                        w->DrawEmbed(node, &scene);
+                    ImGui::Unindent(8.f);
+                }
+            }
+#endif
+
 #ifdef PE_AUDIO
             // Audio component
             if (flags & Component_Audio)
@@ -662,6 +818,17 @@ namespace pe
                 }
             }
 #endif
+
+            if (flags & Component_RuntimeUi)
+            {
+                ImGui::Separator();
+                if (ImGui::CollapsingHeader("Runtime UI Component", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    ImGui::Indent(8.f);
+                    drawRuntimeUiComponent(node);
+                    ImGui::Unindent(8.f);
+                }
+            }
 
             if (!(flags & (Component_Camera | Component_Light | Component_Skybox)))
                 drawAddComponentButton(node);

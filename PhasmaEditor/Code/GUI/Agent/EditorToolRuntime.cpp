@@ -537,6 +537,7 @@ namespace pe
             add(Component_GpuPending, "gpu_pending");
             add(Component_Skybox, "skybox");
             add(Component_RuntimeUi, "runtime_ui");
+            add(Component_Physics2D, "physics2d");
             return components;
         }
 

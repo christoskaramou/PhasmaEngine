@@ -7,6 +7,9 @@ namespace pe
 {
     class Scene;
     struct NodeId;
+#ifdef PE_PHYSICS2D
+    struct Physics2DBodyDesc;
+#endif
 
     struct SceneRuntimeHooks
     {
@@ -25,6 +28,14 @@ namespace pe
         bool (*hasPhysicsBody)(const NodeId *node) = nullptr;
         PhysicsBodyDesc *(*getPhysicsBodyDesc)(NodeId *node) = nullptr;
         const PhysicsBodyDesc *(*getPhysicsBodyDescConst)(const NodeId *node) = nullptr;
+#ifdef PE_PHYSICS2D
+        void (*clearPhysics2DBodies)() = nullptr;
+        void (*removePhysics2DBody)(NodeId *node) = nullptr;
+        void (*addPhysics2DBody)(Scene &scene, NodeId *node, const Physics2DBodyDesc &desc) = nullptr;
+        bool (*hasPhysics2DBody)(const NodeId *node) = nullptr;
+        Physics2DBodyDesc *(*getPhysics2DBodyDesc)(NodeId *node) = nullptr;
+        const Physics2DBodyDesc *(*getPhysics2DBodyDescConst)(const NodeId *node) = nullptr;
+#endif
         void (*clearAudioSources)() = nullptr;
         void (*removeAudioSource)(NodeId *node) = nullptr;
         void (*addAudioSource)(Scene &scene, NodeId *node, const AudioSourceDesc &desc) = nullptr;
@@ -50,6 +61,14 @@ namespace pe
     [[nodiscard]] bool HasScenePhysicsBody(const NodeId *node);
     [[nodiscard]] PhysicsBodyDesc *GetScenePhysicsBodyDesc(NodeId *node);
     [[nodiscard]] const PhysicsBodyDesc *GetScenePhysicsBodyDesc(const NodeId *node);
+#ifdef PE_PHYSICS2D
+    void ClearScenePhysics2DBodies();
+    void RemoveScenePhysics2DBody(NodeId *node);
+    void AddScenePhysics2DBody(Scene &scene, NodeId *node, const Physics2DBodyDesc &desc);
+    [[nodiscard]] bool HasScenePhysics2DBody(const NodeId *node);
+    [[nodiscard]] Physics2DBodyDesc *GetScenePhysics2DBodyDesc(NodeId *node);
+    [[nodiscard]] const Physics2DBodyDesc *GetScenePhysics2DBodyDesc(const NodeId *node);
+#endif
     void ClearSceneAudioSources();
     void RemoveSceneAudioSource(NodeId *node);
     void AddSceneAudioSource(Scene &scene, NodeId *node, const AudioSourceDesc &desc);

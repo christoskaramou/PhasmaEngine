@@ -3,6 +3,7 @@
 #include "Script/ScriptSystem.h"
 #include "Systems/AnimationSystem.h"
 #include "Systems/AudioSystem.h"
+#include "Systems/Physics2DSystem.h"
 #include "Systems/PhysicsSystem.h"
 
 namespace pe
@@ -20,6 +21,13 @@ namespace pe
         {
             if (auto *physics = GetGlobalSystem<PhysicsSystem>())
                 physics->StartSimulation(scene);
+        }
+#endif
+#ifdef PE_PHYSICS2D
+        if (desc.startPhysics)
+        {
+            if (auto *physics2d = GetGlobalSystem<Physics2DSystem>())
+                physics2d->SetPaused(false);
         }
 #endif
 
@@ -49,6 +57,13 @@ namespace pe
                 physics->StopSimulation();
         }
 #endif
+#ifdef PE_PHYSICS2D
+        if (desc.stopPhysics)
+        {
+            if (auto *physics2d = GetGlobalSystem<Physics2DSystem>())
+                physics2d->ClearWorld();
+        }
+#endif
     }
 
     void SetRuntimePlaySessionPaused(bool paused)
@@ -56,7 +71,12 @@ namespace pe
 #ifdef PE_PHYSICS
         if (auto *physics = GetGlobalSystem<PhysicsSystem>())
             physics->SetPaused(paused);
-#else
+#endif
+#ifdef PE_PHYSICS2D
+        if (auto *physics2d = GetGlobalSystem<Physics2DSystem>())
+            physics2d->SetPaused(paused);
+#endif
+#if !defined(PE_PHYSICS) && !defined(PE_PHYSICS2D)
         (void)paused;
 #endif
     }

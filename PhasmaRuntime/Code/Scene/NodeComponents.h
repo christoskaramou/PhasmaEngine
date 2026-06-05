@@ -51,6 +51,10 @@ namespace pe
     {
     };
 
+    class NodePhysics2DTag : public IComponent
+    {
+    };
+
     class NodeAudioTag : public IComponent
     {
     };
@@ -75,6 +79,7 @@ namespace pe
         NodeCameraTag *camera = nullptr;
         NodeLightTag *light = nullptr;
         NodePhysicsTag *physics = nullptr;
+        NodePhysics2DTag *physics2d = nullptr;
         NodeAudioTag *audio = nullptr;
         NodeSkyboxTag *skybox = nullptr;
         NodeRuntimeUiTag *runtimeUi = nullptr;

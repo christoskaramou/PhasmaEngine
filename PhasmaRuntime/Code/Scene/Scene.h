@@ -340,6 +340,8 @@ namespace pe
                 flags |= Component_Light;
             if (c.physics)
                 flags |= Component_Physics;
+            if (c.physics2d)
+                flags |= Component_Physics2D;
             if (!c.script->path.empty())
                 flags |= Component_Script;
             if (c.audio)

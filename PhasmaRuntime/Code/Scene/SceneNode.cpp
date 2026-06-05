@@ -21,6 +21,8 @@ namespace pe
             c.light = entity->CreateComponent<NodeLightTag>();
         if ((flag & Component_Physics) && !c.physics)
             c.physics = entity->CreateComponent<NodePhysicsTag>();
+        if ((flag & Component_Physics2D) && !c.physics2d)
+            c.physics2d = entity->CreateComponent<NodePhysics2DTag>();
         if ((flag & Component_Audio) && !c.audio)
             c.audio = entity->CreateComponent<NodeAudioTag>();
         if ((flag & Component_Skybox) && !c.skybox)
@@ -55,6 +57,11 @@ namespace pe
         {
             entity->RemoveComponent<NodePhysicsTag>();
             c.physics = nullptr;
+        }
+        if ((flag & Component_Physics2D) && c.physics2d)
+        {
+            entity->RemoveComponent<NodePhysics2DTag>();
+            c.physics2d = nullptr;
         }
         if ((flag & Component_Audio) && c.audio)
         {
@@ -116,7 +123,7 @@ namespace pe
         auto *scriptComp = entity->CreateComponent<NodeScriptComponent>();
 
         m_nodeComponentCache.push_back({nameComp, hierarchyComp, transformComp, meshRefsComp, scriptComp,
-                                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr});
+                                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr});
 
         m_nodesDirty = true;
 
@@ -209,6 +216,10 @@ namespace pe
         }
         if (cache.physics)
             RemoveScenePhysicsBody(node);
+#ifdef PE_PHYSICS2D
+        if (cache.physics2d)
+            RemoveScenePhysics2DBody(node);
+#endif
         if (cache.audio)
             RemoveSceneAudioSource(node);
         if (cache.skybox)

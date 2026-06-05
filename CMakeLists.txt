@@ -175,6 +175,29 @@ if(PE_PHYSICS)
     endif()
 endif()
 
+# --- Box2D Physics ---
+option(PE_PHYSICS2D "Enable Box2D 2D physics integration" ON)
+if(PE_PHYSICS2D)
+    include(FetchContent)
+    set(BOX2D_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set(BOX2D_BUILD_TESTBED OFF CACHE BOOL "" FORCE)
+    set(BOX2D_BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+    set(BOX2D_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(Box2D
+        GIT_REPOSITORY https://github.com/erincatto/box2d.git
+        GIT_TAG        v3.1.1
+        GIT_PROGRESS   TRUE
+    )
+    FetchContent_MakeAvailable(Box2D)
+
+    if(TARGET box2d AND MSVC)
+        target_compile_options(box2d PRIVATE /W0)
+    elseif(TARGET box2d)
+        target_compile_options(box2d PRIVATE -w)
+    endif()
+endif()
+
 option(PE_AUDIO "Enable miniaudio integration" ON)
 
 # --- MeshOptimizer (built from source with -fPIC) ---
@@ -308,6 +331,9 @@ target_compile_definitions(PhasmaEditorModule PRIVATE
 if(PE_PHYSICS AND TARGET Jolt)
     target_compile_definitions(PhasmaEditorModule PRIVATE PE_PHYSICS)
 endif()
+if(PE_PHYSICS2D AND TARGET box2d)
+    target_compile_definitions(PhasmaEditorModule PRIVATE PE_PHYSICS2D)
+endif()
 
 target_precompile_headers(PhasmaEditorModule PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
 
@@ -352,6 +378,9 @@ else()
 endif()
 if(PE_PHYSICS AND TARGET Jolt)
     target_link_libraries(PhasmaEditorModule PRIVATE Jolt)
+endif()
+if(PE_PHYSICS2D AND TARGET box2d)
+    target_link_libraries(PhasmaEditorModule PRIVATE box2d)
 endif()
 if(TARGET PhasmaMCP)
     target_link_libraries(PhasmaEditorModule PRIVATE PhasmaMCP)
