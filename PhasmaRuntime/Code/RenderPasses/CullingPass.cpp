@@ -8,6 +8,8 @@ namespace pe
 {
     void CullingPass::Init()
     {
+        if (!m_sortPassInfo)
+            m_sortPassInfo = std::make_unique<PassInfo>();
     }
 
     void CullingPass::UpdatePassInfo()

@@ -96,6 +96,7 @@ namespace pe
         ~PassInfo();
 
         void Apply(const PassVariant &variant);
+        void DestroyShaders();
         void Update();
         const std::vector<Descriptor *> &GetDescriptors(uint32_t frame) const { return m_descriptorsPF[frame]; }
 

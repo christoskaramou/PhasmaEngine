@@ -1,4 +1,5 @@
 #include "Render/SceneRenderGraph.h"
+#include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "RenderPasses/AabbsPass.h"
 #include "RenderPasses/BloomPass.h"
@@ -91,6 +92,11 @@ namespace pe
         void InitSceneRenderGraphPassComponent(IRenderPassComponent *component, CommandBuffer *cmd)
         {
             component->Init();
+            for (PassInfo *passInfo : component->GetPassInfos())
+            {
+                if (passInfo)
+                    passInfo->DestroyShaders();
+            }
             component->UpdatePassInfo();
             component->CreateUniforms(cmd);
         }

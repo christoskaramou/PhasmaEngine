@@ -22,6 +22,21 @@ namespace pe
                 return Pipeline::Type::RayTracing;
             return Pipeline::Type::Graphics;
         }
+
+        void DestroyShaderSlot(Shader *&shader, std::vector<Shader *> &destroyed)
+        {
+            if (!shader)
+                return;
+
+            if (std::find(destroyed.begin(), destroyed.end(), shader) != destroyed.end())
+            {
+                shader = nullptr;
+                return;
+            }
+
+            destroyed.push_back(shader);
+            Shader::Destroy(shader);
+        }
     } // namespace
 
     PE_API const BlendState BlendState::Default = BlendState(
@@ -99,23 +114,31 @@ namespace pe
 
     PassInfo::~PassInfo()
     {
-        Shader::Destroy(pCompShader);
-        Shader::Destroy(pVertShader);
-        Shader::Destroy(pFragShader);
-        Shader::Destroy(acceleration.rayGen);
-        for (auto *miss : acceleration.miss)
-            Shader::Destroy(miss);
-        for (auto &hitGroup : acceleration.hitGroups)
-        {
-            Shader::Destroy(hitGroup.closestHit);
-            Shader::Destroy(hitGroup.anyHit);
-            Shader::Destroy(hitGroup.intersection);
-        }
+        DestroyShaders();
         for (auto &descriptors : m_descriptorsPF)
         {
             for (auto &descriptor : descriptors)
                 Descriptor::Destroy(descriptor);
         }
+    }
+
+    void PassInfo::DestroyShaders()
+    {
+        std::vector<Shader *> destroyed;
+        DestroyShaderSlot(pCompShader, destroyed);
+        DestroyShaderSlot(pVertShader, destroyed);
+        DestroyShaderSlot(pFragShader, destroyed);
+        DestroyShaderSlot(acceleration.rayGen, destroyed);
+        for (auto &miss : acceleration.miss)
+            DestroyShaderSlot(miss, destroyed);
+        acceleration.miss.clear();
+        for (auto &hitGroup : acceleration.hitGroups)
+        {
+            DestroyShaderSlot(hitGroup.closestHit, destroyed);
+            DestroyShaderSlot(hitGroup.anyHit, destroyed);
+            DestroyShaderSlot(hitGroup.intersection, destroyed);
+        }
+        acceleration.hitGroups.clear();
     }
 
     static PeCullMode ParseCullMode(const std::string &s)
