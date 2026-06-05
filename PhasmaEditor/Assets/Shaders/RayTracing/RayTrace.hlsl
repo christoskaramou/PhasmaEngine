@@ -23,6 +23,7 @@ struct HitPayload
     uint   depth;
     uint   isRefractive;
     float  alpha;   // Alpha channel for blending
+    float  opaqueTMax;
 };
 
 struct Vertex
@@ -633,6 +634,7 @@ void raygeneration()
     payload.depth    = 0;
     payload.isRefractive = 0;
     payload.alpha    = 1.0;
+    payload.opaqueTMax = tMax;
 
     TraceRay(
         tlas,
@@ -862,6 +864,10 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
 
         ray.Direction = isTransmissive ? nextDir : WorldRayDirection(); // refract or pass through
 
+        bool clampToHybridOpaqueDepth = isAlphaBlendMaterial && cb_renderMode == 1;
+        if (clampToHybridOpaqueDepth)
+            ray.TMax = max(0.0, payload.opaqueTMax - RayTCurrent() - 0.001);
+
         HitPayload transPayload;
         transPayload.radiance = 0.0.xxx;
         transPayload.t        = -1.0;
@@ -869,18 +875,27 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         transPayload.rayType  = 0;
         transPayload.depth    = payload.depth + 1;
         transPayload.isRefractive = isTransmissive ? 1 : 0;
+        transPayload.opaqueTMax = clampToHybridOpaqueDepth ? ray.TMax : 10000.0;
 
         // In Full RT mode, alpha blended objects need to see opaque geometry behind them
         uint mask = (isTransmissive || cb_renderMode == 2) ? 0xFF : 0x80;
 
-        TraceRay(
-            tlas,
-            RAY_FLAG_NONE,
-            mask,
-            0, 0, 0,
-            ray,
-            transPayload
-        );
+        if (ray.TMax > ray.TMin)
+        {
+            TraceRay(
+                tlas,
+                RAY_FLAG_NONE,
+                mask,
+                0, 0, 0,
+                ray,
+                transPayload
+            );
+        }
+        else if (clampToHybridOpaqueDepth)
+        {
+            uint3 launchIndex = DispatchRaysIndex();
+            transPayload.radiance = output[launchIndex.xy].rgb;
+        }
 
         float3 transColor = transPayload.radiance;
 
