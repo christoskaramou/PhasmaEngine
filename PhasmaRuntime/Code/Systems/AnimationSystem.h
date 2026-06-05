@@ -50,6 +50,7 @@ namespace pe
 
         // Procedural pose helper for generated skinned_strip_2d nodes.
         bool SetJointLocalRotationsZ(Scene &scene, NodeId *node, const std::vector<float> &rotationsRadians);
+        bool SolveStripIk2D(Scene &scene, NodeId *node, const vec2 &targetLocal, int iterations = 8);
 
         void ClearAllAnimations();
 

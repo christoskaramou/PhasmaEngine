@@ -20,6 +20,7 @@ function run_model_tests()
             T.check("skinned strip index_count", strip_info.index_count == 48)
         end
         T.check("skinned strip joint_count", animation.get_joint_count(strip) == 4)
+        T.check("skinned strip ik solve", animation.solve_strip_ik_2d(strip, vec2(0.75, 0.35), 4))
     end
     scene.clear()
 

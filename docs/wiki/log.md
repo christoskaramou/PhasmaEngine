@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-06-06
+
+- Added a generated-strip IK helper for the 2D skinning path. `animation.solve_strip_ik_2d(node, targetLocal, iterations)` solves the `skinned_strip_2d` bone chain toward a node-local XY target with FABRIK and applies the resulting local Z rotations through the existing joint-matrix upload path. Added `Scripts/samples/skinned2d_ik_sample.lua` as a runnable target-following smoke sample.
+
 ## 2026-06-05
 
 - Added the first raster-first 2D procedural deformation slice. `primitives.skinned_strip_2d(width, height, segments, bones)` generates an XY triangulated strip with joint weights, a chain skeleton, and a built-in `wave` clip; animation playback, storage allocation, and joint uploads resolve skeletons per node, while `animation.set_joint_rotations_z(node, rotations)` lets Lua drive generated strip joints directly over the bind pose and `animation.get_joint_count(node)` exposes the selected node's skeleton count. Added `Scripts/samples/skinned2d_wave_sample.lua` as a runnable orthographic sample that drives the strip from Lua each frame.

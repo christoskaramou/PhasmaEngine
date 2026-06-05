@@ -97,6 +97,14 @@ namespace pe
                     }
 
                     return as->SetJointLocalRotationsZ(*scene, h.nodeId, values);
+                });
+
+                anim.set_function("solve_strip_ik_2d", [](SceneNodeHandle &h, const vec2 &targetLocal, sol::optional<int> iterations) -> bool {
+                    auto *as = GetGlobalSystem<AnimationSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (!as || !scene || !h.IsValid(*scene))
+                        return false;
+                    return as->SolveStripIk2D(*scene, h.nodeId, targetLocal, iterations.value_or(8));
                 }); });
         }
     } s_animationBindings;
