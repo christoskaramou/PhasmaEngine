@@ -19,6 +19,8 @@ namespace pe::skinned_strip_2d_editor
     inline constexpr float kMaxStretchLimit = 3.0f;
     inline constexpr float kMinJointInfluence = 0.0f;
     inline constexpr float kMaxJointInfluence = 2.0f;
+    inline constexpr float kMinWidthScale = 0.05f;
+    inline constexpr float kMaxWidthScale = 3.0f;
 
     struct State
     {
@@ -26,6 +28,7 @@ namespace pe::skinned_strip_2d_editor
         int jointCount = 0;
         std::vector<float> rotationsRadians;
         std::vector<float> jointInfluences;
+        std::vector<float> widthScales;
         vec2 ikTargetLocal = vec2(1.0f, 0.0f);
         int ikIterations = 8;
         float maxBendDegrees = kDefaultBendLimitDegrees;
@@ -134,6 +137,16 @@ namespace pe::skinned_strip_2d_editor
                 influence = 1.0f;
             influence = std::clamp(influence, kMinJointInfluence, kMaxJointInfluence);
         }
+        if (state.widthScales.empty())
+            state.widthScales.assign(static_cast<size_t>(std::max(jointCount, 0)), 1.0f);
+        else
+            state.widthScales.resize(static_cast<size_t>(std::max(jointCount, 0)), 1.0f);
+        for (float &widthScale : state.widthScales)
+        {
+            if (!std::isfinite(widthScale))
+                widthScale = 1.0f;
+            widthScale = std::clamp(widthScale, kMinWidthScale, kMaxWidthScale);
+        }
     }
 
     inline void PersistState(Scene &scene, NodeId *node, State &state)
@@ -145,6 +158,7 @@ namespace pe::skinned_strip_2d_editor
         NodeSkinnedStrip2DComponent &stored = scene.GetOrCreateSkinnedStrip2DState(node);
         stored.rotationsRadians = state.rotationsRadians;
         stored.jointInfluences = state.jointInfluences;
+        stored.widthScales = state.widthScales;
         stored.ikTargetLocal = state.ikTargetLocal;
         stored.ikIterations = state.ikIterations;
         stored.maxBendDegrees = state.maxBendDegrees;
@@ -177,6 +191,7 @@ namespace pe::skinned_strip_2d_editor
             {
                 state.rotationsRadians = stored->rotationsRadians;
                 state.jointInfluences = stored->jointInfluences;
+                state.widthScales = stored->widthScales;
                 state.ikTargetLocal = stored->ikTargetLocal;
                 state.ikIterations = stored->ikIterations;
                 state.maxBendDegrees = stored->maxBendDegrees;
@@ -188,6 +203,7 @@ namespace pe::skinned_strip_2d_editor
             {
                 state.rotationsRadians.clear();
                 state.jointInfluences.clear();
+                state.widthScales.clear();
                 state.ikTargetLocal = GetBindEndLocal(scene, node);
                 state.ikIterations = std::clamp(state.ikIterations, 1, 64);
                 state.maxBendDegrees = std::clamp(state.maxBendDegrees, kMinBendLimitDegrees, kMaxBendLimitDegrees);
@@ -208,7 +224,7 @@ namespace pe::skinned_strip_2d_editor
         if (!anim || state.jointCount <= 0)
             return false;
         NormalizeState(state, state.jointCount);
-        if (!anim->SetJointLocalRotationsZ(scene, node, state.rotationsRadians, state.stretchScale))
+        if (!anim->SetJointLocalRotationsZ(scene, node, state.rotationsRadians, state.stretchScale, &state.widthScales))
             return false;
         PersistState(scene, node, state);
         return true;
@@ -240,7 +256,8 @@ namespace pe::skinned_strip_2d_editor
                                   state.bendSign,
                                   state.maxStretchScale,
                                   &state.stretchScale,
-                                  &state.jointInfluences))
+                                  &state.jointInfluences,
+                                  &state.widthScales))
         {
             return false;
         }

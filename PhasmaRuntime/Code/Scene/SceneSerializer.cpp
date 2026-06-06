@@ -466,6 +466,23 @@ namespace pe
                 }
             }
 
+            state.widthScales.clear();
+            if (sv.HasMember("width_scales") && sv["width_scales"].IsArray())
+            {
+                const auto &widthScales = sv["width_scales"];
+                rapidjson::SizeType widthScaleCount = widthScales.Size();
+                const int jointCount = scene.GetJointCountForNode(node);
+                if (jointCount > 0)
+                    widthScaleCount = std::min(widthScaleCount, static_cast<rapidjson::SizeType>(jointCount));
+
+                state.widthScales.reserve(widthScaleCount);
+                for (rapidjson::SizeType i = 0; i < widthScaleCount; ++i)
+                {
+                    const float widthScale = widthScales[i].IsNumber() ? widthScales[i].GetFloat() : 1.0f;
+                    state.widthScales.push_back(std::isfinite(widthScale) ? std::clamp(widthScale, 0.05f, 3.0f) : 1.0f);
+                }
+            }
+
             ApplySceneSkinnedStrip2DPose(scene, node);
         }
 
@@ -1075,6 +1092,11 @@ namespace pe
                     for (float influence : strip.jointInfluences)
                         influences.PushBack(SafeFloat(std::clamp(influence, 0.0f, 2.0f)), allocator);
                     stripObj.AddMember("joint_influences", influences.Move(), allocator);
+
+                    rapidjson::Value widthScales(rapidjson::kArrayType);
+                    for (float widthScale : strip.widthScales)
+                        widthScales.PushBack(SafeFloat(std::clamp(widthScale, 0.05f, 3.0f)), allocator);
+                    stripObj.AddMember("width_scales", widthScales.Move(), allocator);
 
                     nodeObj.AddMember("skinned_strip_2d", stripObj.Move(), allocator);
                 }

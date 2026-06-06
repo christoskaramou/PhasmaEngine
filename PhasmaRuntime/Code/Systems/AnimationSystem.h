@@ -52,7 +52,8 @@ namespace pe
         bool SetJointLocalRotationsZ(Scene &scene,
                                      NodeId *node,
                                      const std::vector<float> &rotationsRadians,
-                                     float stretchScale = 1.0f);
+                                     float stretchScale = 1.0f,
+                                     const std::vector<float> *widthScales = nullptr);
         bool SolveStripIk2D(Scene &scene,
                             NodeId *node,
                             const vec2 &targetLocal,
@@ -62,7 +63,8 @@ namespace pe
                             float bendSignHint = 0.0f,
                             float maxStretchScale = 1.5f,
                             float *outStretchScale = nullptr,
-                            const std::vector<float> *jointInfluences = nullptr);
+                            const std::vector<float> *jointInfluences = nullptr,
+                            const std::vector<float> *widthScales = nullptr);
 
         void ClearAllAnimations();
 

@@ -6,6 +6,24 @@
 
 namespace pe
 {
+    static std::vector<float> ReadFloatTable(const sol::table &table, float fallback)
+    {
+        std::vector<float> values;
+        const size_t valueCount = table.size();
+        values.reserve(valueCount);
+        for (size_t i = 1; i <= valueCount; i++)
+        {
+            sol::object value = table.get<sol::object>(static_cast<int>(i));
+            if (value.is<double>())
+                values.push_back(static_cast<float>(value.as<double>()));
+            else if (value.is<int>())
+                values.push_back(static_cast<float>(value.as<int>()));
+            else
+                values.push_back(fallback);
+        }
+        return values;
+    }
+
     static struct AnimationBindings
     {
         AnimationBindings()
@@ -80,27 +98,23 @@ namespace pe
                         return scene && h.IsValid(*scene) ? scene->GetJointCountForNode(h.nodeId) : 0;
                     }));
 
-                anim.set_function("set_joint_rotations_z", [](SceneNodeHandle &h, sol::table rotations, sol::optional<float> stretchScale) -> bool {
+                anim.set_function("set_joint_rotations_z", [](SceneNodeHandle &h,
+                                                               sol::table rotations,
+                                                               sol::optional<float> stretchScale,
+                                                               sol::optional<sol::table> widthScales) -> bool {
                     auto *as = GetGlobalSystem<AnimationSystem>();
                     Scene *scene = GetActiveScene();
                     if (!as || !scene || !h.IsValid(*scene))
                         return false;
 
-                    std::vector<float> values;
-                    const size_t rotationCount = rotations.size();
-                    values.reserve(rotationCount);
-                    for (size_t i = 1; i <= rotationCount; i++)
-                    {
-                        sol::object value = rotations.get<sol::object>(static_cast<int>(i));
-                        if (value.is<double>())
-                            values.push_back(static_cast<float>(value.as<double>()));
-                        else if (value.is<int>())
-                            values.push_back(static_cast<float>(value.as<int>()));
-                        else
-                            values.push_back(0.0f);
-                    }
+                    std::vector<float> values = ReadFloatTable(rotations, 0.0f);
+                    std::vector<float> widths = widthScales ? ReadFloatTable(*widthScales, 1.0f) : std::vector<float>{};
 
-                    return as->SetJointLocalRotationsZ(*scene, h.nodeId, values, stretchScale.value_or(1.0f));
+                    return as->SetJointLocalRotationsZ(*scene,
+                                                       h.nodeId,
+                                                       values,
+                                                       stretchScale.value_or(1.0f),
+                                                       widthScales ? &widths : nullptr);
                 });
 
                 anim.set_function("solve_strip_ik_2d", [](SceneNodeHandle &h,
@@ -108,28 +122,15 @@ namespace pe
                                                            sol::optional<int> iterations,
                                                            sol::optional<float> maxBendDegrees,
                                                            sol::optional<float> maxStretchScale,
-                                                           sol::optional<sol::table> jointInfluences) -> bool {
+                                                           sol::optional<sol::table> jointInfluences,
+                                                           sol::optional<sol::table> widthScales) -> bool {
                     auto *as = GetGlobalSystem<AnimationSystem>();
                     Scene *scene = GetActiveScene();
                     if (!as || !scene || !h.IsValid(*scene))
                         return false;
 
-                    std::vector<float> influences;
-                    if (jointInfluences)
-                    {
-                        const size_t influenceCount = jointInfluences->size();
-                        influences.reserve(influenceCount);
-                        for (size_t i = 1; i <= influenceCount; i++)
-                        {
-                            sol::object value = jointInfluences->get<sol::object>(static_cast<int>(i));
-                            if (value.is<double>())
-                                influences.push_back(static_cast<float>(value.as<double>()));
-                            else if (value.is<int>())
-                                influences.push_back(static_cast<float>(value.as<int>()));
-                            else
-                                influences.push_back(1.0f);
-                        }
-                    }
+                    std::vector<float> influences = jointInfluences ? ReadFloatTable(*jointInfluences, 1.0f) : std::vector<float>{};
+                    std::vector<float> widths = widthScales ? ReadFloatTable(*widthScales, 1.0f) : std::vector<float>{};
 
                     return as->SolveStripIk2D(*scene,
                                               h.nodeId,
@@ -140,7 +141,8 @@ namespace pe
                                               0.0f,
                                               maxStretchScale.value_or(1.5f),
                                               nullptr,
-                                              jointInfluences ? &influences : nullptr);
+                                              jointInfluences ? &influences : nullptr,
+                                              widthScales ? &widths : nullptr);
                 }); });
         }
     } s_animationBindings;

@@ -42,6 +42,7 @@ namespace pe
     public:
         std::vector<float> rotationsRadians;
         std::vector<float> jointInfluences;
+        std::vector<float> widthScales;
         vec2 ikTargetLocal = vec2(1.0f, 0.0f);
         int ikIterations = 8;
         float maxBendDegrees = 60.0f;

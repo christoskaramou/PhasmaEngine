@@ -23,6 +23,8 @@ namespace pe
         constexpr float kMaxStripIkStretch = 3.0f;
         constexpr float kMinStripIkJointInfluence = 0.0f;
         constexpr float kMaxStripIkJointInfluence = 2.0f;
+        constexpr float kMinStripWidthScale = 0.05f;
+        constexpr float kMaxStripWidthScale = 3.0f;
         constexpr float kRadToDeg = 57.29577951308232f;
 
         float NormalizeAngle(float angle)
@@ -76,10 +78,43 @@ namespace pe
             }
         }
 
+        float StripWidthScale(const std::vector<float> *widthScales, int jointIndex)
+        {
+            if (!widthScales || jointIndex < 0 || jointIndex >= static_cast<int>(widthScales->size()))
+                return 1.0f;
+
+            const float widthScale = (*widthScales)[static_cast<size_t>(jointIndex)];
+            if (!std::isfinite(widthScale))
+                return 1.0f;
+            return std::clamp(widthScale, kMinStripWidthScale, kMaxStripWidthScale);
+        }
+
+        void NormalizeStripWidthScales(std::vector<float> &widthScales, int jointCount)
+        {
+            if (jointCount <= 0)
+            {
+                widthScales.clear();
+                return;
+            }
+
+            if (widthScales.empty())
+                widthScales.assign(static_cast<size_t>(jointCount), 1.0f);
+            else
+                widthScales.resize(static_cast<size_t>(jointCount), 1.0f);
+
+            for (float &widthScale : widthScales)
+            {
+                if (!std::isfinite(widthScale))
+                    widthScale = 1.0f;
+                widthScale = std::clamp(widthScale, kMinStripWidthScale, kMaxStripWidthScale);
+            }
+        }
+
         void WriteSmoothStripJointMatrices(const Skeleton &skeleton,
                                            const std::vector<mat4> &globalTransforms,
                                            const std::vector<bool> &computed,
-                                           std::vector<mat4> &outMatrices)
+                                           std::vector<mat4> &outMatrices,
+                                           const std::vector<float> *widthScales = nullptr)
         {
             const int boneCount = skeleton.GetBoneCount();
             outMatrices.resize(boneCount, mat4(1.0f));
@@ -111,13 +146,17 @@ namespace pe
 
                 const vec2 dir = SafeDirection(tangent, fallbackTangent);
                 const float angle = std::atan2(dir.y, dir.x);
+                const float widthScale = StripWidthScale(widthScales, i);
                 const mat4 curveFrame = glm::translate(mat4(1.0f), vec3(jointPositions[i], 0.0f)) *
-                                        glm::mat4_cast(glm::angleAxis(angle, vec3(0.0f, 0.0f, 1.0f)));
+                                        glm::mat4_cast(glm::angleAxis(angle, vec3(0.0f, 0.0f, 1.0f))) *
+                                        glm::scale(mat4(1.0f), vec3(1.0f, widthScale, 1.0f));
                 outMatrices[i] = curveFrame * skeleton.bones[i].offsetMatrix;
             }
         }
 
-        void SmoothExistingStripJointMatrices(const Skeleton &skeleton, std::vector<mat4> &jointMatrices)
+        void SmoothExistingStripJointMatrices(const Skeleton &skeleton,
+                                              std::vector<mat4> &jointMatrices,
+                                              const std::vector<float> *widthScales = nullptr)
         {
             const int boneCount = skeleton.GetBoneCount();
             if (boneCount <= 0 || static_cast<int>(jointMatrices.size()) != boneCount)
@@ -130,14 +169,15 @@ namespace pe
             for (int i = 0; i < boneCount; i++)
                 globalTransforms[i] = jointMatrices[i] * glm::inverse(skeleton.bones[i].offsetMatrix);
 
-            WriteSmoothStripJointMatrices(skeleton, globalTransforms, computed, jointMatrices);
+            WriteSmoothStripJointMatrices(skeleton, globalTransforms, computed, jointMatrices, widthScales);
         }
 
         bool ApplyLocalRotationsZ(Scene &scene,
                                   NodeId *node,
                                   const Skeleton &skeleton,
                                   const std::vector<float> &rotationsRadians,
-                                  float stretchScale)
+                                  float stretchScale,
+                                  const std::vector<float> *widthScales)
         {
             const int boneCount = skeleton.GetBoneCount();
             if (boneCount <= 0)
@@ -146,6 +186,10 @@ namespace pe
             if (!std::isfinite(stretchScale))
                 stretchScale = 1.0f;
             stretchScale = std::clamp(stretchScale, kMinStripIkStretch, kMaxStripIkStretch);
+
+            const NodeSkinnedStrip2DComponent *storedState = scene.GetSkinnedStrip2DState(node);
+            if (!widthScales && storedState && !storedState->widthScales.empty())
+                widthScales = &storedState->widthScales;
 
             static thread_local std::vector<mat4> localTransforms;
             static thread_local std::vector<mat4> globalTransforms;
@@ -201,7 +245,7 @@ namespace pe
             }
 
             NodeRuntime &rt = scene.GetNodeRuntime(node);
-            WriteSmoothStripJointMatrices(skeleton, globalTransforms, computed, rt.jointMatrices);
+            WriteSmoothStripJointMatrices(skeleton, globalTransforms, computed, rt.jointMatrices, widthScales);
 
             scene.MarkNodeDirty(node);
             return true;
@@ -267,7 +311,12 @@ namespace pe
             NodeRuntime &rt = scene->GetNodeRuntime(state.nodeId);
             AnimationEvaluator::EvaluatePose(clip, skeleton, state.time, rt.jointMatrices);
             if (scene->NodeUsesSkinnedStrip2D(state.nodeId))
-                SmoothExistingStripJointMatrices(skeleton, rt.jointMatrices);
+            {
+                const NodeSkinnedStrip2DComponent *stripState = scene->GetSkinnedStrip2DState(state.nodeId);
+                SmoothExistingStripJointMatrices(skeleton,
+                                                 rt.jointMatrices,
+                                                 stripState ? &stripState->widthScales : nullptr);
+            }
             scene->MarkNodeDirty(state.nodeId);
         }
     }
@@ -418,7 +467,12 @@ namespace pe
             NodeRuntime &rt = scene.GetNodeRuntime(state.nodeId);
             AnimationEvaluator::EvaluatePose(clip, skeleton, state.time, rt.jointMatrices);
             if (scene.NodeUsesSkinnedStrip2D(state.nodeId))
-                SmoothExistingStripJointMatrices(skeleton, rt.jointMatrices);
+            {
+                const NodeSkinnedStrip2DComponent *stripState = scene.GetSkinnedStrip2DState(state.nodeId);
+                SmoothExistingStripJointMatrices(skeleton,
+                                                 rt.jointMatrices,
+                                                 stripState ? &stripState->widthScales : nullptr);
+            }
             scene.MarkNodeDirty(state.nodeId);
         }
     }
@@ -450,7 +504,8 @@ namespace pe
     bool AnimationSystem::SetJointLocalRotationsZ(Scene &scene,
                                                   NodeId *node,
                                                   const std::vector<float> &rotationsRadians,
-                                                  float stretchScale)
+                                                  float stretchScale,
+                                                  const std::vector<float> *widthScales)
     {
         if (!node || !scene.IsNodeAlive(node) || !scene.NodeHasSkinnedMesh(node) || !scene.NodeUsesSkinnedStrip2D(node))
             return false;
@@ -465,8 +520,13 @@ namespace pe
         NodeSkinnedStrip2DComponent &state = scene.GetOrCreateSkinnedStrip2DState(node);
         state.rotationsRadians = rotationsRadians;
         state.stretchScale = std::clamp(stretchScale, kMinStripIkStretch, kMaxStripIkStretch);
+        if (widthScales)
+        {
+            state.widthScales = *widthScales;
+            NormalizeStripWidthScales(state.widthScales, boneCount);
+        }
 
-        return ApplyLocalRotationsZ(scene, node, skeleton, rotationsRadians, stretchScale);
+        return ApplyLocalRotationsZ(scene, node, skeleton, rotationsRadians, stretchScale, widthScales);
     }
 
     bool AnimationSystem::SolveStripIk2D(Scene &scene,
@@ -478,7 +538,8 @@ namespace pe
                                          float bendSignHint,
                                          float maxStretchScale,
                                          float *outStretchScale,
-                                         const std::vector<float> *jointInfluences)
+                                         const std::vector<float> *jointInfluences,
+                                         const std::vector<float> *widthScales)
     {
         if (!node || !scene.IsNodeAlive(node) || !scene.NodeHasSkinnedMesh(node) || !scene.NodeUsesSkinnedStrip2D(node))
             return false;
@@ -493,6 +554,8 @@ namespace pe
         const NodeSkinnedStrip2DComponent *storedState = scene.GetSkinnedStrip2DState(node);
         if (!jointInfluences && storedState && !storedState->jointInfluences.empty())
             jointInfluences = &storedState->jointInfluences;
+        if (!widthScales && storedState && !storedState->widthScales.empty())
+            widthScales = &storedState->widthScales;
 
         static thread_local std::vector<vec2> bindPositions;
         static thread_local std::vector<float> lengths;
@@ -628,8 +691,13 @@ namespace pe
             state.jointInfluences = *jointInfluences;
             NormalizeStripJointInfluences(state.jointInfluences, boneCount);
         }
+        if (widthScales)
+        {
+            state.widthScales = *widthScales;
+            NormalizeStripWidthScales(state.widthScales, boneCount);
+        }
 
-        return ApplyLocalRotationsZ(scene, node, skeleton, rotations, stretchScale);
+        return ApplyLocalRotationsZ(scene, node, skeleton, rotations, stretchScale, widthScales);
     }
 
     void AnimationSystem::ClearAllAnimations()

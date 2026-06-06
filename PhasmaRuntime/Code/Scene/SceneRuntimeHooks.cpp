@@ -48,7 +48,11 @@ namespace pe
             if (!state)
                 return;
             if (auto *animation = GetGlobalSystem<AnimationSystem>())
-                animation->SetJointLocalRotationsZ(scene, node, state->rotationsRadians, state->stretchScale);
+                animation->SetJointLocalRotationsZ(scene,
+                                                   node,
+                                                   state->rotationsRadians,
+                                                   state->stretchScale,
+                                                   &state->widthScales);
         }
 
         void DefaultRefreshSceneRenderDescriptors()

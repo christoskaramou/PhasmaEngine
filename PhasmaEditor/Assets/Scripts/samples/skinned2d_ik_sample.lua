@@ -9,6 +9,7 @@ local state = {
     strip = nil,
     target = nil,
     joint_influences = nil,
+    width_scales = nil,
     time = 0.0,
     previous_render_mode = nil,
 }
@@ -74,7 +75,7 @@ local function update()
         state.target:set_position(vec3(target.x, target.y, 0.08))
     end
 
-    animation.solve_strip_ik_2d(state.strip, target, 10, 60.0, 1.45, state.joint_influences)
+    animation.solve_strip_ik_2d(state.strip, target, 10, 60.0, 1.45, state.joint_influences, state.width_scales)
 end
 
 function M.stop()
@@ -85,6 +86,7 @@ function M.stop()
     state.strip = nil
     state.target = nil
     state.joint_influences = nil
+    state.width_scales = nil
     state.time = 0.0
 end
 
@@ -107,10 +109,12 @@ function M.reset()
     state.strip:set_name("Skinned2D IK Strip")
     state.strip:set_position(vec3(0.0, 0.0, 0.0))
     state.joint_influences = {}
+    state.width_scales = {}
     local joint_count = animation.get_joint_count(state.strip)
     for i = 1, joint_count do
         local t = (i - 1) / math.max(joint_count - 1, 1)
         state.joint_influences[i] = 0.35 + math.sin(t * math.pi) * 1.15
+        state.width_scales[i] = 1.2 - t * 0.75
     end
 
     state.target = primitives.circle(0.16, 32)

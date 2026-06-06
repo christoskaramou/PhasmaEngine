@@ -654,6 +654,43 @@ namespace pe
             }
             ui::ItemTooltip("Set per-joint bend weights used by the IK solver.");
 
+            if (ImGui::TreeNodeEx("Width Scales", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                if (stripState.widthScales.size() != static_cast<size_t>(stripState.jointCount))
+                    stripState.widthScales.resize(static_cast<size_t>(stripState.jointCount), 1.0f);
+
+                if (ImGui::Button("Reset Widths"))
+                {
+                    stripState.widthScales.assign(static_cast<size_t>(stripState.jointCount), 1.0f);
+                    applyRotations();
+                }
+                ui::ItemTooltip("Restore all strip width scales to normal.");
+
+                for (int i = 0; i < stripState.jointCount; i++)
+                {
+                    ImGui::PushID(i);
+                    ImGui::Text("J%02d", i);
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+                    float &widthScale = stripState.widthScales[static_cast<size_t>(i)];
+                    if (ImGui::SliderFloat("##width_scale",
+                                           &widthScale,
+                                           skinned_strip_2d_editor::kMinWidthScale,
+                                           skinned_strip_2d_editor::kMaxWidthScale,
+                                           "%.2fx"))
+                    {
+                        widthScale = std::clamp(widthScale,
+                                                skinned_strip_2d_editor::kMinWidthScale,
+                                                skinned_strip_2d_editor::kMaxWidthScale);
+                        applyRotations();
+                    }
+                    ImGui::PopID();
+                }
+
+                ImGui::TreePop();
+            }
+            ui::ItemTooltip("Set per-joint thickness scales for tapering or bulging the strip.");
+
             if (ImGui::TreeNodeEx("Joint Rotations", ImGuiTreeNodeFlags_DefaultOpen))
             {
                 static constexpr float kRadToDeg = 57.29577951308232f;
