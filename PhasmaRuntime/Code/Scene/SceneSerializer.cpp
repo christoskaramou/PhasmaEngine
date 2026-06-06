@@ -92,7 +92,7 @@ namespace pe
                 return Primitives::CreateSkinnedStrip2D(paramCount >= 1 ? params.x : 4.0f,
                                                         paramCount >= 2 ? params.y : 1.0f,
                                                         intParam(2, 32, 1, 512),
-                                                        intParam(3, 6, 2, 64));
+                                                        intParam(3, 24, 2, 64));
             return nullptr;
         }
 
@@ -388,6 +388,85 @@ namespace pe
 
             scene.AddComponentFlag(node, Component_Skybox);
             scene.SetSkyboxPath(node, path, false);
+        }
+
+        void RestoreSkinnedStrip2DNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
+        {
+            if (!node || !scene.IsNodeAlive(node))
+                return;
+
+            if (!scene.NodeUsesSkinnedStrip2D(node) || !nodeValue.HasMember("skinned_strip_2d") ||
+                !nodeValue["skinned_strip_2d"].IsObject())
+            {
+                scene.ClearSkinnedStrip2DState(node);
+                return;
+            }
+
+            const auto &sv = nodeValue["skinned_strip_2d"];
+            NodeSkinnedStrip2DComponent &state = scene.GetOrCreateSkinnedStrip2DState(node);
+
+            auto readFloat = [&](const char *name, float fallback) -> float
+            {
+                if (!sv.HasMember(name) || !sv[name].IsNumber())
+                    return fallback;
+                const float value = sv[name].GetFloat();
+                return std::isfinite(value) ? value : fallback;
+            };
+
+            auto readInt = [&](const char *name, int fallback) -> int
+            {
+                return sv.HasMember(name) && sv[name].IsInt() ? sv[name].GetInt() : fallback;
+            };
+
+            if (sv.HasMember("ik_target") && sv["ik_target"].IsArray() && sv["ik_target"].Size() >= 2 &&
+                sv["ik_target"][0].IsNumber() && sv["ik_target"][1].IsNumber())
+            {
+                const vec2 target(sv["ik_target"][0].GetFloat(), sv["ik_target"][1].GetFloat());
+                if (std::isfinite(target.x) && std::isfinite(target.y))
+                    state.ikTargetLocal = target;
+            }
+
+            state.ikIterations = std::clamp(readInt("ik_iterations", state.ikIterations), 1, 64);
+            state.maxBendDegrees = std::clamp(readFloat("max_bend_degrees", state.maxBendDegrees), 5.0f, 180.0f);
+            state.bendSign = readFloat("bend_sign", state.bendSign) < 0.0f ? -1.0f : 1.0f;
+            state.maxStretchScale = std::clamp(readFloat("max_stretch_scale", state.maxStretchScale), 1.0f, 3.0f);
+            state.stretchScale = std::clamp(readFloat("stretch_scale", state.stretchScale), 1.0f, state.maxStretchScale);
+
+            state.rotationsRadians.clear();
+            if (sv.HasMember("rotations") && sv["rotations"].IsArray())
+            {
+                const auto &rotations = sv["rotations"];
+                rapidjson::SizeType rotationCount = rotations.Size();
+                const int jointCount = scene.GetJointCountForNode(node);
+                if (jointCount > 0)
+                    rotationCount = std::min(rotationCount, static_cast<rapidjson::SizeType>(jointCount));
+
+                state.rotationsRadians.reserve(rotationCount);
+                for (rapidjson::SizeType i = 0; i < rotationCount; ++i)
+                {
+                    const float rotation = rotations[i].IsNumber() ? rotations[i].GetFloat() : 0.0f;
+                    state.rotationsRadians.push_back(std::isfinite(rotation) ? rotation : 0.0f);
+                }
+            }
+
+            state.jointInfluences.clear();
+            if (sv.HasMember("joint_influences") && sv["joint_influences"].IsArray())
+            {
+                const auto &influences = sv["joint_influences"];
+                rapidjson::SizeType influenceCount = influences.Size();
+                const int jointCount = scene.GetJointCountForNode(node);
+                if (jointCount > 0)
+                    influenceCount = std::min(influenceCount, static_cast<rapidjson::SizeType>(jointCount));
+
+                state.jointInfluences.reserve(influenceCount);
+                for (rapidjson::SizeType i = 0; i < influenceCount; ++i)
+                {
+                    const float influence = influences[i].IsNumber() ? influences[i].GetFloat() : 1.0f;
+                    state.jointInfluences.push_back(std::isfinite(influence) ? std::clamp(influence, 0.0f, 2.0f) : 1.0f);
+                }
+            }
+
+            ApplySceneSkinnedStrip2DPose(scene, node);
         }
 
 #ifdef PE_PHYSICS2D
@@ -971,6 +1050,33 @@ namespace pe
                     rapidjson::Value skyboxObj(rapidjson::kObjectType);
                     skyboxObj.AddMember("path", MakeStringValue(skybox.path), allocator);
                     nodeObj.AddMember("skybox", skyboxObj.Move(), allocator);
+                }
+
+                if (scene.NodeUsesSkinnedStrip2D(node) && cache.skinnedStrip2D)
+                {
+                    const NodeSkinnedStrip2DComponent &strip = *cache.skinnedStrip2D;
+                    rapidjson::Value stripObj(rapidjson::kObjectType);
+
+                    rapidjson::Value target;
+                    SetVec2(target, strip.ikTargetLocal);
+                    stripObj.AddMember("ik_target", target.Move(), allocator);
+                    stripObj.AddMember("ik_iterations", strip.ikIterations, allocator);
+                    stripObj.AddMember("max_bend_degrees", SafeFloat(strip.maxBendDegrees), allocator);
+                    stripObj.AddMember("bend_sign", SafeFloat(strip.bendSign), allocator);
+                    stripObj.AddMember("stretch_scale", SafeFloat(strip.stretchScale), allocator);
+                    stripObj.AddMember("max_stretch_scale", SafeFloat(strip.maxStretchScale), allocator);
+
+                    rapidjson::Value rotations(rapidjson::kArrayType);
+                    for (float rotation : strip.rotationsRadians)
+                        rotations.PushBack(SafeFloat(rotation), allocator);
+                    stripObj.AddMember("rotations", rotations.Move(), allocator);
+
+                    rapidjson::Value influences(rapidjson::kArrayType);
+                    for (float influence : strip.jointInfluences)
+                        influences.PushBack(SafeFloat(std::clamp(influence, 0.0f, 2.0f)), allocator);
+                    stripObj.AddMember("joint_influences", influences.Move(), allocator);
+
+                    nodeObj.AddMember("skinned_strip_2d", stripObj.Move(), allocator);
                 }
 
                 nodesArr.PushBack(nodeObj.Move(), allocator);
@@ -1818,6 +1924,8 @@ namespace pe
 
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreSkyboxNode(*this, nodeMap[ni], nodesVal[ni]);
+                for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+                    RestoreSkinnedStrip2DNode(*this, nodeMap[ni], nodesVal[ni]);
                 EnsureSkyboxNodeFromSettings(false);
 
                 // Restore physics bodies from embedded node data
@@ -2116,7 +2224,7 @@ namespace pe
         for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
         {
             NodeId *node = m_nodeIds[ni];
-            if (NodeHasSkinnedMesh(node) && !GetAnimationClipsForNode(node).empty())
+            if (NodeHasSkinnedMesh(node) && !GetAnimationClipsForNode(node).empty() && !GetSkinnedStrip2DState(node))
                 PlaySceneAnimation(*this, node, 0, true);
         }
 
@@ -2495,6 +2603,8 @@ namespace pe
 
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkyboxNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestoreSkinnedStrip2DNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
 
                 // Restore physics bodies from embedded node data
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
@@ -2920,6 +3030,8 @@ namespace pe
 
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkyboxNode(*this, nodeMap[ni], snapshotNodes[ni]);
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestoreSkinnedStrip2DNode(*this, nodeMap[ni], snapshotNodes[ni]);
 
                 // Restore physics bodies from embedded node data (slow path)
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
@@ -3164,7 +3276,7 @@ namespace pe
             for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
             {
                 NodeId *node = m_nodeIds[ni];
-                if (NodeHasSkinnedMesh(node) && !GetAnimationClipsForNode(node).empty())
+                if (NodeHasSkinnedMesh(node) && !GetAnimationClipsForNode(node).empty() && !GetSkinnedStrip2DState(node))
                 {
                     PlaySceneAnimation(*this, node, 0, true);
                     ++replayedAnimationNodes;

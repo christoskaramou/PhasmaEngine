@@ -8,6 +8,7 @@ local UPDATE_ID = "skinned2d_ik_sample"
 local state = {
     strip = nil,
     target = nil,
+    joint_influences = nil,
     time = 0.0,
     previous_render_mode = nil,
 }
@@ -66,14 +67,14 @@ local function update()
     state.time = state.time + dt
 
     local target = vec2(
-        2.35 + math.sin(state.time * 1.4) * 1.15,
+        2.60 + math.sin(state.time * 1.4) * 2.10,
         math.sin(state.time * 2.1) * 1.55)
 
     if state.target and state.target:is_valid() then
         state.target:set_position(vec3(target.x, target.y, 0.08))
     end
 
-    animation.solve_strip_ik_2d(state.strip, target, 10)
+    animation.solve_strip_ik_2d(state.strip, target, 10, 60.0, 1.45, state.joint_influences)
 end
 
 function M.stop()
@@ -83,6 +84,7 @@ function M.stop()
     restore_render_settings()
     state.strip = nil
     state.target = nil
+    state.joint_influences = nil
     state.time = 0.0
 end
 
@@ -101,9 +103,15 @@ function M.reset()
     apply_sample_render_settings()
     configure_camera()
 
-    state.strip = primitives.skinned_strip_2d(7.0, 0.75, 64, 12)
+    state.strip = primitives.skinned_strip_2d(7.0, 0.75, 64, 32)
     state.strip:set_name("Skinned2D IK Strip")
     state.strip:set_position(vec3(0.0, 0.0, 0.0))
+    state.joint_influences = {}
+    local joint_count = animation.get_joint_count(state.strip)
+    for i = 1, joint_count do
+        local t = (i - 1) / math.max(joint_count - 1, 1)
+        state.joint_influences[i] = 0.35 + math.sin(t * math.pi) * 1.15
+    end
 
     state.target = primitives.circle(0.16, 32)
     state.target:set_name("Skinned2D IK Target")

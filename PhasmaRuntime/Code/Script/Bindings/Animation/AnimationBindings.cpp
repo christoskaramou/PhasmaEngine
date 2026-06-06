@@ -80,7 +80,7 @@ namespace pe
                         return scene && h.IsValid(*scene) ? scene->GetJointCountForNode(h.nodeId) : 0;
                     }));
 
-                anim.set_function("set_joint_rotations_z", [](SceneNodeHandle &h, sol::table rotations) -> bool {
+                anim.set_function("set_joint_rotations_z", [](SceneNodeHandle &h, sol::table rotations, sol::optional<float> stretchScale) -> bool {
                     auto *as = GetGlobalSystem<AnimationSystem>();
                     Scene *scene = GetActiveScene();
                     if (!as || !scene || !h.IsValid(*scene))
@@ -100,15 +100,47 @@ namespace pe
                             values.push_back(0.0f);
                     }
 
-                    return as->SetJointLocalRotationsZ(*scene, h.nodeId, values);
+                    return as->SetJointLocalRotationsZ(*scene, h.nodeId, values, stretchScale.value_or(1.0f));
                 });
 
-                anim.set_function("solve_strip_ik_2d", [](SceneNodeHandle &h, const vec2 &targetLocal, sol::optional<int> iterations) -> bool {
+                anim.set_function("solve_strip_ik_2d", [](SceneNodeHandle &h,
+                                                           const vec2 &targetLocal,
+                                                           sol::optional<int> iterations,
+                                                           sol::optional<float> maxBendDegrees,
+                                                           sol::optional<float> maxStretchScale,
+                                                           sol::optional<sol::table> jointInfluences) -> bool {
                     auto *as = GetGlobalSystem<AnimationSystem>();
                     Scene *scene = GetActiveScene();
                     if (!as || !scene || !h.IsValid(*scene))
                         return false;
-                    return as->SolveStripIk2D(*scene, h.nodeId, targetLocal, iterations.value_or(8));
+
+                    std::vector<float> influences;
+                    if (jointInfluences)
+                    {
+                        const size_t influenceCount = jointInfluences->size();
+                        influences.reserve(influenceCount);
+                        for (size_t i = 1; i <= influenceCount; i++)
+                        {
+                            sol::object value = jointInfluences->get<sol::object>(static_cast<int>(i));
+                            if (value.is<double>())
+                                influences.push_back(static_cast<float>(value.as<double>()));
+                            else if (value.is<int>())
+                                influences.push_back(static_cast<float>(value.as<int>()));
+                            else
+                                influences.push_back(1.0f);
+                        }
+                    }
+
+                    return as->SolveStripIk2D(*scene,
+                                              h.nodeId,
+                                              targetLocal,
+                                              iterations.value_or(8),
+                                              nullptr,
+                                              glm::radians(maxBendDegrees.value_or(60.0f)),
+                                              0.0f,
+                                              maxStretchScale.value_or(1.5f),
+                                              nullptr,
+                                              jointInfluences ? &influences : nullptr);
                 }); });
         }
     } s_animationBindings;

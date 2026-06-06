@@ -183,6 +183,10 @@ namespace pe
         void AddMeshRef(NodeId *node, int meshIndex);    // append mesh ref
         void RemoveMeshRef(NodeId *node, int meshIndex); // remove specific mesh ref
         void SetNodeScript(NodeId *node, const std::string &path);
+        NodeSkinnedStrip2DComponent *GetSkinnedStrip2DState(NodeId *node);
+        const NodeSkinnedStrip2DComponent *GetSkinnedStrip2DState(const NodeId *node) const;
+        NodeSkinnedStrip2DComponent &GetOrCreateSkinnedStrip2DState(NodeId *node);
+        void ClearSkinnedStrip2DState(NodeId *node);
         void AttachPrimitiveToNode(NodeId *node, ModelAsset *primitiveModel);
         NodeId *CreateSkyboxNode(NodeId *parent = nullptr, bool markDirty = true);
         NodeId *GetSkyboxNode() const;

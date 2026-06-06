@@ -18,6 +18,7 @@ namespace pe
         void (*clearAnimations)() = nullptr;
         void (*removeAnimation)(NodeId *node) = nullptr;
         void (*playAnimation)(Scene &scene, NodeId *node, int clipIndex, bool loop) = nullptr;
+        void (*applySkinnedStrip2DPose)(Scene &scene, NodeId *node) = nullptr;
         void (*refreshRenderDescriptors)() = nullptr;
         void (*refreshSceneSky)() = nullptr;
         bool (*isPhysicsSimulating)() = nullptr;
@@ -51,6 +52,7 @@ namespace pe
     void ClearSceneAnimations();
     void RemoveSceneAnimation(NodeId *node);
     void PlaySceneAnimation(Scene &scene, NodeId *node, int clipIndex, bool loop);
+    void ApplySceneSkinnedStrip2DPose(Scene &scene, NodeId *node);
     void RefreshSceneRenderDescriptors();
     void RefreshSceneSky();
     [[nodiscard]] bool IsScenePhysicsSimulating();

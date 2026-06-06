@@ -1,4 +1,5 @@
 #include "Scene/SceneRuntimeHooks.h"
+#include "Scene/Scene.h"
 #include "Render/SceneRendererHost.h"
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/RayTracingPass.h"
@@ -39,6 +40,15 @@ namespace pe
         {
             if (auto *animation = GetGlobalSystem<AnimationSystem>())
                 animation->PlayAnimation(scene, node, clipIndex, loop);
+        }
+
+        void DefaultApplySkinnedStrip2DPose(Scene &scene, NodeId *node)
+        {
+            const NodeSkinnedStrip2DComponent *state = scene.GetSkinnedStrip2DState(node);
+            if (!state)
+                return;
+            if (auto *animation = GetGlobalSystem<AnimationSystem>())
+                animation->SetJointLocalRotationsZ(scene, node, state->rotationsRadians, state->stretchScale);
         }
 
         void DefaultRefreshSceneRenderDescriptors()
@@ -203,6 +213,7 @@ namespace pe
         hooks.clearAnimations = DefaultClearSceneAnimations;
         hooks.removeAnimation = DefaultRemoveSceneAnimation;
         hooks.playAnimation = DefaultPlaySceneAnimation;
+        hooks.applySkinnedStrip2DPose = DefaultApplySkinnedStrip2DPose;
         hooks.refreshRenderDescriptors = DefaultRefreshSceneRenderDescriptors;
         hooks.refreshSceneSky = DefaultRefreshSceneSky;
 #ifdef PE_PHYSICS
@@ -266,6 +277,12 @@ namespace pe
     {
         if (s_sceneRuntimeHooks.playAnimation)
             s_sceneRuntimeHooks.playAnimation(scene, node, clipIndex, loop);
+    }
+
+    void ApplySceneSkinnedStrip2DPose(Scene &scene, NodeId *node)
+    {
+        if (s_sceneRuntimeHooks.applySkinnedStrip2DPose)
+            s_sceneRuntimeHooks.applySkinnedStrip2DPose(scene, node);
     }
 
     void RefreshSceneRenderDescriptors()

@@ -37,6 +37,19 @@ namespace pe
         std::string path;
     };
 
+    class NodeSkinnedStrip2DComponent : public IComponent
+    {
+    public:
+        std::vector<float> rotationsRadians;
+        std::vector<float> jointInfluences;
+        vec2 ikTargetLocal = vec2(1.0f, 0.0f);
+        int ikIterations = 8;
+        float maxBendDegrees = 60.0f;
+        float bendSign = 1.0f;
+        float stretchScale = 1.0f;
+        float maxStretchScale = 1.5f;
+    };
+
     class NodeCameraTag : public IComponent
     {
     public:
@@ -76,6 +89,7 @@ namespace pe
         NodeTransformComponent *transform = nullptr;
         NodeMeshRefsComponent *meshRefs = nullptr;
         NodeScriptComponent *script = nullptr;
+        NodeSkinnedStrip2DComponent *skinnedStrip2D = nullptr;
         NodeCameraTag *camera = nullptr;
         NodeLightTag *light = nullptr;
         NodePhysicsTag *physics = nullptr;

@@ -41,6 +41,12 @@ namespace pe
         return {v.normals[0], v.normals[1], v.normals[2]};
     }
 
+    static int ChooseSkinnedStripRows(float width, float height, int segments)
+    {
+        const float aspectRows = static_cast<float>(segments) * height / std::max(width, 0.01f);
+        return std::clamp(static_cast<int>(std::round(aspectRows)), 4, 12) + 1;
+    }
+
     // Your current raster state: FrontFace = CW, CullMode = Front => CW is culled, CCW is visible.
     // So we enforce *CCW* winding for all primitive triangles.
     static void ForceWindingCCW(const std::vector<Vertex> &vertices, std::vector<uint32_t> &indices)
@@ -724,9 +730,12 @@ namespace pe
         height = std::max(height, 0.01f);
         segments = ClampSegments(segments, 1, 512);
         bones = ClampSegments(bones, 2, 64);
+        bones = std::max(bones, std::min(segments + 1, 24));
 
+        const int rows = ChooseSkinnedStripRows(width, height, segments);
+        const int rowSegments = rows - 1;
         std::vector<Vertex> vertices;
-        vertices.resize(static_cast<size_t>(segments + 1) * 2);
+        vertices.resize(static_cast<size_t>(segments + 1) * static_cast<size_t>(rows));
 
         const float halfWidth = width * 0.5f;
         const float halfHeight = height * 0.5f;
@@ -735,34 +744,36 @@ namespace pe
             const float u = static_cast<float>(column) / static_cast<float>(segments);
             const float x = -halfWidth + u * width;
 
-            Vertex &top = vertices[static_cast<size_t>(column) * 2];
-            FillVertexPosition(top, x, halfHeight, 0.0f);
-            FillVertexNormal(top, 0.0f, 0.0f, 1.0f);
-            FillVertexUV(top, u, 0.0f);
-            FillVertexColor(top, 1.0f, 1.0f, 1.0f, 1.0f);
-
-            Vertex &bottom = vertices[static_cast<size_t>(column) * 2 + 1];
-            FillVertexPosition(bottom, x, -halfHeight, 0.0f);
-            FillVertexNormal(bottom, 0.0f, 0.0f, 1.0f);
-            FillVertexUV(bottom, u, 1.0f);
-            FillVertexColor(bottom, 1.0f, 1.0f, 1.0f, 1.0f);
+            for (int row = 0; row < rows; row++)
+            {
+                const float rowT = static_cast<float>(row) / static_cast<float>(rowSegments);
+                const float y = -halfHeight + rowT * height;
+                Vertex &vertex = vertices[static_cast<size_t>(column) * static_cast<size_t>(rows) + static_cast<size_t>(row)];
+                FillVertexPosition(vertex, x, y, 0.0f);
+                FillVertexNormal(vertex, 0.0f, 0.0f, 1.0f);
+                FillVertexUV(vertex, u, 1.0f - rowT);
+                FillVertexColor(vertex, 1.0f, 1.0f, 1.0f, 1.0f);
+            }
         }
 
         std::vector<uint32_t> indices;
-        indices.reserve(static_cast<size_t>(segments) * 6);
+        indices.reserve(static_cast<size_t>(segments) * static_cast<size_t>(rowSegments) * 6);
         for (int column = 0; column < segments; column++)
         {
-            const uint32_t top0 = static_cast<uint32_t>(column * 2);
-            const uint32_t bottom0 = top0 + 1;
-            const uint32_t top1 = static_cast<uint32_t>((column + 1) * 2);
-            const uint32_t bottom1 = top1 + 1;
+            for (int row = 0; row < rowSegments; row++)
+            {
+                const uint32_t v00 = static_cast<uint32_t>(column * rows + row);
+                const uint32_t v01 = v00 + 1;
+                const uint32_t v10 = static_cast<uint32_t>((column + 1) * rows + row);
+                const uint32_t v11 = v10 + 1;
 
-            indices.push_back(top0);
-            indices.push_back(bottom0);
-            indices.push_back(bottom1);
-            indices.push_back(top0);
-            indices.push_back(bottom1);
-            indices.push_back(top1);
+                indices.push_back(v00);
+                indices.push_back(v10);
+                indices.push_back(v11);
+                indices.push_back(v00);
+                indices.push_back(v11);
+                indices.push_back(v01);
+            }
         }
 
         ModelAsset *model = CreatePrimitiveModel(vertices, indices);
@@ -800,39 +811,59 @@ namespace pe
             model->m_skeleton.bones.push_back(bone);
         }
 
-        for (int column = 0; column <= segments; column++)
+        auto assignCurveWeights = [&](size_t vertexIndex, float x)
         {
-            const float u = static_cast<float>(column) / static_cast<float>(segments);
+            const float u = std::clamp((x + halfWidth) / width, 0.0f, 1.0f);
             const float scaled = u * static_cast<float>(bones - 1);
-            const int j0 = std::clamp(static_cast<int>(std::floor(scaled)), 0, bones - 1);
-            const int j1 = std::min(j0 + 1, bones - 1);
-            const float blend = j0 == j1 ? 0.0f : scaled - static_cast<float>(j0);
-            const float w0 = 1.0f - blend;
-            const float w1 = blend;
-
-            for (int row = 0; row < 2; row++)
+            int j1 = static_cast<int>(std::floor(scaled));
+            float t = scaled - static_cast<float>(j1);
+            if (j1 >= bones - 1)
             {
-                const size_t index = static_cast<size_t>(column) * 2 + static_cast<size_t>(row);
-                FillVertexJointsWeights(model->m_vertices[index],
-                                        static_cast<uint8_t>(j0),
-                                        static_cast<uint8_t>(j1),
-                                        0,
-                                        0,
-                                        w0,
-                                        w1,
-                                        0.0f,
-                                        0.0f);
-                FillVertexJointsWeights(model->m_positionUvs[index],
-                                        static_cast<uint8_t>(j0),
-                                        static_cast<uint8_t>(j1),
-                                        0,
-                                        0,
-                                        w0,
-                                        w1,
-                                        0.0f,
-                                        0.0f);
+                j1 = bones - 2;
+                t = 1.0f;
             }
-        }
+
+            const float t2 = t * t;
+            const float t3 = t2 * t;
+            const int joints[4] = {
+                std::max(j1 - 1, 0),
+                j1,
+                std::min(j1 + 1, bones - 1),
+                std::min(j1 + 2, bones - 1),
+            };
+            const float weights[4] = {
+                -0.5f * t + t2 - 0.5f * t3,
+                1.0f - 2.5f * t2 + 1.5f * t3,
+                0.5f * t + 2.0f * t2 - 1.5f * t3,
+                -0.5f * t2 + 0.5f * t3,
+            };
+
+            FillVertexJointsWeights(model->m_vertices[vertexIndex],
+                                    static_cast<uint8_t>(joints[0]),
+                                    static_cast<uint8_t>(joints[1]),
+                                    static_cast<uint8_t>(joints[2]),
+                                    static_cast<uint8_t>(joints[3]),
+                                    weights[0],
+                                    weights[1],
+                                    weights[2],
+                                    weights[3]);
+            FillVertexJointsWeights(model->m_positionUvs[vertexIndex],
+                                    static_cast<uint8_t>(joints[0]),
+                                    static_cast<uint8_t>(joints[1]),
+                                    static_cast<uint8_t>(joints[2]),
+                                    static_cast<uint8_t>(joints[3]),
+                                    weights[0],
+                                    weights[1],
+                                    weights[2],
+                                    weights[3]);
+        };
+
+        for (int column = 0; column <= segments; column++)
+            for (int row = 0; row < rows; row++)
+            {
+                const size_t index = static_cast<size_t>(column) * static_cast<size_t>(rows) + static_cast<size_t>(row);
+                assignCurveWeights(index, model->m_vertices[index].position[0]);
+            }
 
         AnimationClip wave{};
         wave.name = "wave";

@@ -122,7 +122,7 @@ namespace pe
         auto *meshRefsComp = entity->CreateComponent<NodeMeshRefsComponent>();
         auto *scriptComp = entity->CreateComponent<NodeScriptComponent>();
 
-        m_nodeComponentCache.push_back({nameComp, hierarchyComp, transformComp, meshRefsComp, scriptComp,
+        m_nodeComponentCache.push_back({nameComp, hierarchyComp, transformComp, meshRefsComp, scriptComp, nullptr,
                                         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr});
 
         m_nodesDirty = true;
@@ -530,6 +530,44 @@ namespace pe
             return;
         }
         cache.script->path = path;
+    }
+
+    NodeSkinnedStrip2DComponent *Scene::GetSkinnedStrip2DState(NodeId *node)
+    {
+        if (!node || !IsNodeAlive(node))
+            return nullptr;
+        return m_nodeComponentCache[node->index].skinnedStrip2D;
+    }
+
+    const NodeSkinnedStrip2DComponent *Scene::GetSkinnedStrip2DState(const NodeId *node) const
+    {
+        if (!node || !IsNodeAlive(node))
+            return nullptr;
+        return m_nodeComponentCache[node->index].skinnedStrip2D;
+    }
+
+    NodeSkinnedStrip2DComponent &Scene::GetOrCreateSkinnedStrip2DState(NodeId *node)
+    {
+        ValidateNodeId(node);
+        PE_ERROR_IF(!node->entity, "Scene::GetOrCreateSkinnedStrip2DState requires a node entity");
+        NodeSkinnedStrip2DComponent *&state = m_nodeComponentCache[node->index].skinnedStrip2D;
+        if (!state)
+            state = node->entity->CreateComponent<NodeSkinnedStrip2DComponent>();
+        return *state;
+    }
+
+    void Scene::ClearSkinnedStrip2DState(NodeId *node)
+    {
+        if (!node || !IsNodeAlive(node))
+            return;
+
+        NodeSkinnedStrip2DComponent *&state = m_nodeComponentCache[node->index].skinnedStrip2D;
+        if (!state || !node->entity)
+            return;
+
+        node->entity->RemoveComponent<NodeSkinnedStrip2DComponent>();
+        state = nullptr;
+        m_dirty = true;
     }
 
     void Scene::AttachPrimitiveToNode(NodeId *node, ModelAsset *primitiveModel)

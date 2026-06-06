@@ -101,7 +101,7 @@ function M.reset()
     apply_sample_render_settings()
     configure_camera()
 
-    state.strip = primitives.skinned_strip_2d(8.0, 1.25, 64, 9)
+    state.strip = primitives.skinned_strip_2d(8.0, 1.25, 64, 24)
     state.strip:set_name("Skinned2D Procedural Strip")
     state.strip:set_position(vec3(0.0, 0.0, 0.0))
     if material then

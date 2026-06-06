@@ -16,11 +16,31 @@ function run_model_tests()
         local strip_info = strip:get_mesh_info()
         T.check("skinned strip mesh_info", strip_info ~= nil)
         if strip_info then
-            T.check("skinned strip vertex_count", strip_info.vertex_count == 18)
-            T.check("skinned strip index_count", strip_info.index_count == 48)
+            T.check("skinned strip vertex_count", strip_info.vertex_count == 45)
+            T.check("skinned strip index_count", strip_info.index_count == 192)
         end
-        T.check("skinned strip joint_count", animation.get_joint_count(strip) == 4)
+        T.check("skinned strip joint_count", animation.get_joint_count(strip) == 9)
         T.check("skinned strip ik solve", animation.solve_strip_ik_2d(strip, vec2(0.75, 0.35), 4))
+        T.check("skinned strip ik stretch solve", animation.solve_strip_ik_2d(strip, vec2(1.35, 0.20), 4, 60.0, 1.5))
+        T.check("skinned strip weighted ik solve", animation.solve_strip_ik_2d(strip, vec2(0.75, 0.35), 4, 60.0, 1.5, {0.25, 0.5, 1.0, 1.5, 1.25, 1.0, 0.75, 0.5, 0.25}))
+        strip:set_name("SkinnedStrip2DPosePersistence")
+        local pose_scene_name = "temp_skinned_strip_2d_pose_test.pescene"
+        local pose_scene_path = assets_path .. "Scenes/" .. pose_scene_name
+        scene.save(pose_scene_name)
+        local saved = fs.read(pose_scene_path)
+        T.check("skinned strip pose serialized", saved ~= nil and saved:find('"skinned_strip_2d"', 1, true) ~= nil)
+        T.check("skinned strip stretch serialized", saved ~= nil and saved:find('"max_stretch_scale"', 1, true) ~= nil)
+        T.check("skinned strip influences serialized", saved ~= nil and saved:find('"joint_influences"', 1, true) ~= nil)
+        scene.load(pose_scene_name)
+        local loaded_strip = scene.find_model("SkinnedStrip2DPosePersistence")
+        T.check("skinned strip pose reload", loaded_strip ~= nil)
+        if loaded_strip then
+            T.check("skinned strip reload joint_count", animation.get_joint_count(loaded_strip) == 9)
+            T.check("skinned strip reload ik solve", animation.solve_strip_ik_2d(loaded_strip, vec2(1.35, 0.20), 4, 60.0, 1.5))
+        end
+        if os and os.remove then
+            os.remove(pose_scene_path)
+        end
     end
     scene.clear()
 
@@ -30,8 +50,9 @@ function run_model_tests()
     if mixed then
         scene.attach_primitive(mixed, "skinned_strip_2d")
         T.check("attached skinned strip mesh_count", mixed:get_mesh_count() == 2)
-        T.check("attached skinned strip joint_count", animation.get_joint_count(mixed) == 6)
+        T.check("attached skinned strip joint_count", animation.get_joint_count(mixed) == 24)
         T.check("attached skinned strip ik solve", animation.solve_strip_ik_2d(mixed, vec2(1.0, 0.25), 4))
+        T.check("attached skinned strip stretched rotations", animation.set_joint_rotations_z(mixed, {0.0, 0.05, -0.05}, 1.2))
     end
     scene.clear()
 

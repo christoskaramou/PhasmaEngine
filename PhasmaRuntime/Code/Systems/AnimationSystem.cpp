@@ -4,6 +4,9 @@
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 
+#include <algorithm>
+#include <cmath>
+
 namespace pe
 {
     namespace
@@ -11,6 +14,16 @@ namespace pe
         constexpr float kPi = 3.14159265358979323846f;
         constexpr float kTwoPi = 6.28318530717958647692f;
         constexpr float kEpsilon = 0.00001f;
+        constexpr float kDefaultStripIkMaxBendRadians = kPi / 3.0f;
+        constexpr float kMinStripIkBendPerSegment = kPi / 36.0f;
+        constexpr float kMaxStripIkTotalArc = kPi * 5.0f / 3.0f;
+        constexpr float kMinStripIkReachFraction = 0.15f;
+        constexpr float kDefaultStripIkMaxStretch = 1.5f;
+        constexpr float kMinStripIkStretch = 1.0f;
+        constexpr float kMaxStripIkStretch = 3.0f;
+        constexpr float kMinStripIkJointInfluence = 0.0f;
+        constexpr float kMaxStripIkJointInfluence = 2.0f;
+        constexpr float kRadToDeg = 57.29577951308232f;
 
         float NormalizeAngle(float angle)
         {
@@ -31,11 +44,108 @@ namespace pe
             return fallbackLen > kEpsilon ? fallback / fallbackLen : vec2(1.0f, 0.0f);
         }
 
-        bool ApplyLocalRotationsZ(Scene &scene, NodeId *node, const Skeleton &skeleton, const std::vector<float> &rotationsRadians)
+        float StripJointInfluence(const std::vector<float> *jointInfluences, int jointIndex)
+        {
+            if (!jointInfluences || jointIndex < 0 || jointIndex >= static_cast<int>(jointInfluences->size()))
+                return 1.0f;
+
+            const float influence = (*jointInfluences)[static_cast<size_t>(jointIndex)];
+            if (!std::isfinite(influence))
+                return 1.0f;
+            return std::clamp(influence, kMinStripIkJointInfluence, kMaxStripIkJointInfluence);
+        }
+
+        void NormalizeStripJointInfluences(std::vector<float> &jointInfluences, int jointCount)
+        {
+            if (jointCount <= 0)
+            {
+                jointInfluences.clear();
+                return;
+            }
+
+            if (jointInfluences.empty())
+                jointInfluences.assign(static_cast<size_t>(jointCount), 1.0f);
+            else
+                jointInfluences.resize(static_cast<size_t>(jointCount), 1.0f);
+
+            for (float &influence : jointInfluences)
+            {
+                if (!std::isfinite(influence))
+                    influence = 1.0f;
+                influence = std::clamp(influence, kMinStripIkJointInfluence, kMaxStripIkJointInfluence);
+            }
+        }
+
+        void WriteSmoothStripJointMatrices(const Skeleton &skeleton,
+                                           const std::vector<mat4> &globalTransforms,
+                                           const std::vector<bool> &computed,
+                                           std::vector<mat4> &outMatrices)
+        {
+            const int boneCount = skeleton.GetBoneCount();
+            outMatrices.resize(boneCount, mat4(1.0f));
+
+            static thread_local std::vector<vec2> jointPositions;
+            jointPositions.resize(boneCount);
+            for (int i = 0; i < boneCount; i++)
+                jointPositions[i] = computed[i] ? vec2(globalTransforms[i][3]) : vec2(0.0f);
+
+            for (int i = 0; i < boneCount; i++)
+            {
+                if (!computed[i])
+                {
+                    outMatrices[i] = mat4(1.0f);
+                    continue;
+                }
+
+                const vec2 fallbackTangent = SafeDirection(vec2(globalTransforms[i][0]), vec2(1.0f, 0.0f));
+                vec2 tangent = fallbackTangent;
+                if (boneCount > 1)
+                {
+                    if (i == 0)
+                        tangent = jointPositions[1] - jointPositions[0];
+                    else if (i == boneCount - 1)
+                        tangent = jointPositions[boneCount - 1] - jointPositions[boneCount - 2];
+                    else
+                        tangent = jointPositions[i + 1] - jointPositions[i - 1];
+                }
+
+                const vec2 dir = SafeDirection(tangent, fallbackTangent);
+                const float angle = std::atan2(dir.y, dir.x);
+                const mat4 curveFrame = glm::translate(mat4(1.0f), vec3(jointPositions[i], 0.0f)) *
+                                        glm::mat4_cast(glm::angleAxis(angle, vec3(0.0f, 0.0f, 1.0f)));
+                outMatrices[i] = curveFrame * skeleton.bones[i].offsetMatrix;
+            }
+        }
+
+        void SmoothExistingStripJointMatrices(const Skeleton &skeleton, std::vector<mat4> &jointMatrices)
+        {
+            const int boneCount = skeleton.GetBoneCount();
+            if (boneCount <= 0 || static_cast<int>(jointMatrices.size()) != boneCount)
+                return;
+
+            static thread_local std::vector<mat4> globalTransforms;
+            static thread_local std::vector<bool> computed;
+            globalTransforms.resize(boneCount);
+            computed.assign(boneCount, true);
+            for (int i = 0; i < boneCount; i++)
+                globalTransforms[i] = jointMatrices[i] * glm::inverse(skeleton.bones[i].offsetMatrix);
+
+            WriteSmoothStripJointMatrices(skeleton, globalTransforms, computed, jointMatrices);
+        }
+
+        bool ApplyLocalRotationsZ(Scene &scene,
+                                  NodeId *node,
+                                  const Skeleton &skeleton,
+                                  const std::vector<float> &rotationsRadians,
+                                  float stretchScale)
         {
             const int boneCount = skeleton.GetBoneCount();
             if (boneCount <= 0)
                 return false;
+
+            if (!std::isfinite(stretchScale))
+                stretchScale = 1.0f;
+            stretchScale = std::clamp(stretchScale, kMinStripIkStretch, kMaxStripIkStretch);
 
             static thread_local std::vector<mat4> localTransforms;
             static thread_local std::vector<mat4> globalTransforms;
@@ -48,6 +158,11 @@ namespace pe
             for (int i = 0; i < boneCount; i++)
             {
                 localTransforms[i] = skeleton.bones[i].localBindTransform;
+                if (i > 0 && stretchScale != 1.0f)
+                {
+                    const vec3 localTranslation = vec3(localTransforms[i][3]);
+                    localTransforms[i][3] = vec4(localTranslation * stretchScale, localTransforms[i][3].w);
+                }
                 if (i < static_cast<int>(rotationsRadians.size()) && std::isfinite(rotationsRadians[i]))
                 {
                     const quat rotation = glm::angleAxis(rotationsRadians[i], vec3(0.0f, 0.0f, 1.0f));
@@ -86,14 +201,7 @@ namespace pe
             }
 
             NodeRuntime &rt = scene.GetNodeRuntime(node);
-            rt.jointMatrices.resize(boneCount, mat4(1.0f));
-            for (int i = 0; i < boneCount; i++)
-            {
-                if (computed[i])
-                    rt.jointMatrices[i] = globalTransforms[i] * skeleton.bones[i].offsetMatrix;
-                else
-                    rt.jointMatrices[i] = mat4(1.0f);
-            }
+            WriteSmoothStripJointMatrices(skeleton, globalTransforms, computed, rt.jointMatrices);
 
             scene.MarkNodeDirty(node);
             return true;
@@ -158,6 +266,8 @@ namespace pe
 
             NodeRuntime &rt = scene->GetNodeRuntime(state.nodeId);
             AnimationEvaluator::EvaluatePose(clip, skeleton, state.time, rt.jointMatrices);
+            if (scene->NodeUsesSkinnedStrip2D(state.nodeId))
+                SmoothExistingStripJointMatrices(skeleton, rt.jointMatrices);
             scene->MarkNodeDirty(state.nodeId);
         }
     }
@@ -307,6 +417,8 @@ namespace pe
         {
             NodeRuntime &rt = scene.GetNodeRuntime(state.nodeId);
             AnimationEvaluator::EvaluatePose(clip, skeleton, state.time, rt.jointMatrices);
+            if (scene.NodeUsesSkinnedStrip2D(state.nodeId))
+                SmoothExistingStripJointMatrices(skeleton, rt.jointMatrices);
             scene.MarkNodeDirty(state.nodeId);
         }
     }
@@ -335,7 +447,10 @@ namespace pe
         return &m_states[it->second];
     }
 
-    bool AnimationSystem::SetJointLocalRotationsZ(Scene &scene, NodeId *node, const std::vector<float> &rotationsRadians)
+    bool AnimationSystem::SetJointLocalRotationsZ(Scene &scene,
+                                                  NodeId *node,
+                                                  const std::vector<float> &rotationsRadians,
+                                                  float stretchScale)
     {
         if (!node || !scene.IsNodeAlive(node) || !scene.NodeHasSkinnedMesh(node) || !scene.NodeUsesSkinnedStrip2D(node))
             return false;
@@ -347,10 +462,23 @@ namespace pe
 
         StopAnimation(node);
 
-        return ApplyLocalRotationsZ(scene, node, skeleton, rotationsRadians);
+        NodeSkinnedStrip2DComponent &state = scene.GetOrCreateSkinnedStrip2DState(node);
+        state.rotationsRadians = rotationsRadians;
+        state.stretchScale = std::clamp(stretchScale, kMinStripIkStretch, kMaxStripIkStretch);
+
+        return ApplyLocalRotationsZ(scene, node, skeleton, rotationsRadians, stretchScale);
     }
 
-    bool AnimationSystem::SolveStripIk2D(Scene &scene, NodeId *node, const vec2 &targetLocal, int iterations)
+    bool AnimationSystem::SolveStripIk2D(Scene &scene,
+                                         NodeId *node,
+                                         const vec2 &targetLocal,
+                                         int iterations,
+                                         std::vector<float> *outRotationsRadians,
+                                         float maxBendRadians,
+                                         float bendSignHint,
+                                         float maxStretchScale,
+                                         float *outStretchScale,
+                                         const std::vector<float> *jointInfluences)
     {
         if (!node || !scene.IsNodeAlive(node) || !scene.NodeHasSkinnedMesh(node) || !scene.NodeUsesSkinnedStrip2D(node))
             return false;
@@ -362,14 +490,18 @@ namespace pe
         if (boneCount < 2)
             return false;
 
+        const NodeSkinnedStrip2DComponent *storedState = scene.GetSkinnedStrip2DState(node);
+        if (!jointInfluences && storedState && !storedState->jointInfluences.empty())
+            jointInfluences = &storedState->jointInfluences;
+
         static thread_local std::vector<vec2> bindPositions;
-        static thread_local std::vector<vec2> positions;
         static thread_local std::vector<float> lengths;
+        static thread_local std::vector<float> bendInfluences;
         static thread_local std::vector<float> rotations;
 
         bindPositions.resize(boneCount);
-        positions.resize(boneCount);
         lengths.resize(boneCount - 1);
+        bendInfluences.resize(boneCount - 1);
         rotations.assign(boneCount, 0.0f);
 
         for (int i = 0; i < boneCount; i++)
@@ -377,7 +509,6 @@ namespace pe
             const vec2 localPosition = vec2(skeleton.bones[i].localBindTransform[3]);
             const int parent = skeleton.bones[i].parentIndex;
             bindPositions[i] = parent >= 0 && parent < i ? bindPositions[parent] + localPosition : localPosition;
-            positions[i] = bindPositions[i];
         }
 
         float totalLength = 0.0f;
@@ -389,50 +520,116 @@ namespace pe
         if (totalLength <= kEpsilon)
             return false;
 
+        float influenceSum = 0.0f;
+        float maxInfluence = 0.0f;
+        for (int i = 0; i < boneCount - 1; i++)
+        {
+            bendInfluences[i] = StripJointInfluence(jointInfluences, i);
+            influenceSum += bendInfluences[i];
+            maxInfluence = std::max(maxInfluence, bendInfluences[i]);
+        }
+
         const vec2 root = bindPositions[0];
-        const float targetDistance = glm::length(targetLocal - root);
+        const vec2 targetVector = targetLocal - root;
+        const float targetDistance = glm::length(targetVector);
         iterations = std::clamp(iterations, 1, 64);
 
-        if (targetDistance >= totalLength)
+        if (!std::isfinite(maxStretchScale))
+            maxStretchScale = kDefaultStripIkMaxStretch;
+        maxStretchScale = std::clamp(maxStretchScale, kMinStripIkStretch, kMaxStripIkStretch);
+        if (!std::isfinite(maxBendRadians))
+            maxBendRadians = kDefaultStripIkMaxBendRadians;
+        const float requestedMaxBend = std::clamp(maxBendRadians, kMinStripIkBendPerSegment, kPi);
+
+        const float stretchScale = std::clamp(targetDistance / totalLength, kMinStripIkStretch, maxStretchScale);
+        const float stretchedTotalLength = totalLength * stretchScale;
+        const float solveDistance = std::clamp(targetDistance, totalLength * kMinStripIkReachFraction, stretchedTotalLength);
+
+        const int segmentCount = boneCount - 1;
+        float bendSign = bendSignHint < -0.5f ? -1.0f : 1.0f;
+        const float centerlineThreshold = glm::max(totalLength * 0.02f, kEpsilon);
+        if (targetVector.y > centerlineThreshold)
+            bendSign = 1.0f;
+        else if (targetVector.y < -centerlineThreshold)
+            bendSign = -1.0f;
+
+        if (segmentCount <= 1 || targetDistance >= stretchedTotalLength - kEpsilon)
         {
-            const vec2 dir = SafeDirection(targetLocal - root, vec2(1.0f, 0.0f));
-            positions[0] = root;
-            for (int i = 0; i < boneCount - 1; i++)
-                positions[i + 1] = positions[i] + dir * lengths[i];
+            const vec2 dir = SafeDirection(targetVector, vec2(1.0f, 0.0f));
+            rotations[0] = std::atan2(dir.y, dir.x);
         }
         else
         {
+            auto chordForBend = [&](float bend) -> vec2
+            {
+                vec2 chord(0.0f);
+                float accumulatedAngle = 0.0f;
+                for (int i = 0; i < segmentCount; i++)
+                {
+                    const float segmentBend = bend * bendInfluences[i];
+                    const float angle = accumulatedAngle + segmentBend * 0.5f;
+                    chord += lengths[i] * stretchScale * vec2(std::cos(angle), std::sin(angle));
+                    accumulatedAngle += segmentBend;
+                }
+                return chord;
+            };
+
+            float low = 0.0f;
+            const float effectiveInfluenceSum = std::max(influenceSum, kEpsilon);
+            const float physicalMaxBend = std::max(kTwoPi / effectiveInfluenceSum - 0.0001f, 0.0f);
+            const float totalArcMaxBend = kMaxStripIkTotalArc / effectiveInfluenceSum;
+            const float localMaxBend = maxInfluence > kEpsilon ? requestedMaxBend / maxInfluence : requestedMaxBend;
+            float high = std::min({requestedMaxBend, totalArcMaxBend, physicalMaxBend, localMaxBend});
             for (int iteration = 0; iteration < iterations; iteration++)
             {
-                positions[boneCount - 1] = targetLocal;
-                for (int i = boneCount - 2; i >= 0; i--)
-                {
-                    const vec2 fallback = bindPositions[i] - bindPositions[i + 1];
-                    const vec2 dir = SafeDirection(positions[i] - positions[i + 1], fallback);
-                    positions[i] = positions[i + 1] + dir * lengths[i];
-                }
+                const float mid = (low + high) * 0.5f;
+                const float chordLength = glm::length(chordForBend(mid));
+                if (chordLength > solveDistance)
+                    low = mid;
+                else
+                    high = mid;
+            }
 
-                positions[0] = root;
-                for (int i = 0; i < boneCount - 1; i++)
-                {
-                    const vec2 fallback = bindPositions[i + 1] - bindPositions[i];
-                    const vec2 dir = SafeDirection(positions[i + 1] - positions[i], fallback);
-                    positions[i + 1] = positions[i] + dir * lengths[i];
-                }
+            const float bend = high * bendSign;
+            const vec2 chord = chordForBend(bend);
+            const vec2 targetDir = SafeDirection(targetVector, vec2(1.0f, 0.0f));
+            const float chordAngle = std::atan2(targetDir.y, targetDir.x);
+            const float rawChordAngle = std::atan2(chord.y, chord.x);
+            const float startAngle = chordAngle - rawChordAngle;
+
+            float parentGlobalAngle = 0.0f;
+            float accumulatedAngle = 0.0f;
+            for (int i = 0; i < segmentCount; i++)
+            {
+                const float segmentBend = bend * bendInfluences[i];
+                const float globalAngle = startAngle + accumulatedAngle + segmentBend * 0.5f;
+                rotations[i] = NormalizeAngle(globalAngle - parentGlobalAngle);
+                parentGlobalAngle = globalAngle;
+                accumulatedAngle += segmentBend;
             }
         }
 
-        float parentGlobalAngle = 0.0f;
-        for (int i = 0; i < boneCount - 1; i++)
-        {
-            const vec2 dir = SafeDirection(positions[i + 1] - positions[i], bindPositions[i + 1] - bindPositions[i]);
-            const float globalAngle = std::atan2(dir.y, dir.x);
-            rotations[i] = NormalizeAngle(globalAngle - parentGlobalAngle);
-            parentGlobalAngle = globalAngle;
-        }
+        if (outRotationsRadians)
+            *outRotationsRadians = rotations;
+        if (outStretchScale)
+            *outStretchScale = stretchScale;
 
         StopAnimation(node);
-        return ApplyLocalRotationsZ(scene, node, skeleton, rotations);
+        NodeSkinnedStrip2DComponent &state = scene.GetOrCreateSkinnedStrip2DState(node);
+        state.rotationsRadians = rotations;
+        state.ikTargetLocal = targetLocal;
+        state.ikIterations = iterations;
+        state.maxBendDegrees = requestedMaxBend * kRadToDeg;
+        state.bendSign = bendSign;
+        state.stretchScale = stretchScale;
+        state.maxStretchScale = maxStretchScale;
+        if (jointInfluences)
+        {
+            state.jointInfluences = *jointInfluences;
+            NormalizeStripJointInfluences(state.jointInfluences, boneCount);
+        }
+
+        return ApplyLocalRotationsZ(scene, node, skeleton, rotations, stretchScale);
     }
 
     void AnimationSystem::ClearAllAnimations()

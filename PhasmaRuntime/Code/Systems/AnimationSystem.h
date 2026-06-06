@@ -49,8 +49,20 @@ namespace pe
         const AnimationNodeState *GetAnimationState(const NodeId *node) const;
 
         // Procedural pose helper for generated skinned_strip_2d nodes.
-        bool SetJointLocalRotationsZ(Scene &scene, NodeId *node, const std::vector<float> &rotationsRadians);
-        bool SolveStripIk2D(Scene &scene, NodeId *node, const vec2 &targetLocal, int iterations = 8);
+        bool SetJointLocalRotationsZ(Scene &scene,
+                                     NodeId *node,
+                                     const std::vector<float> &rotationsRadians,
+                                     float stretchScale = 1.0f);
+        bool SolveStripIk2D(Scene &scene,
+                            NodeId *node,
+                            const vec2 &targetLocal,
+                            int iterations = 8,
+                            std::vector<float> *outRotationsRadians = nullptr,
+                            float maxBendRadians = 1.04719755f,
+                            float bendSignHint = 0.0f,
+                            float maxStretchScale = 1.5f,
+                            float *outStretchScale = nullptr,
+                            const std::vector<float> *jointInfluences = nullptr);
 
         void ClearAllAnimations();
 

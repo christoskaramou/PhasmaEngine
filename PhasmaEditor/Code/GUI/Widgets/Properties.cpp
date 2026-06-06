@@ -4,11 +4,13 @@
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
 #include "GUI/IconsFontAwesome.h"
+#include "GUI/SkinnedStrip2DEditor.h"
 #include "LightWidget.h"
 #include "MeshWidget.h"
 #include "Particles.h"
 #include "Particles/ParticleManager.h"
 #include "Render/SceneSky.h"
+#include "Scene/ModelAsset.h"
 #include "Scene/NodeComponents.h"
 #include "Scene/Primitives.h"
 #include "Scene/Scene.h"
@@ -92,6 +94,7 @@ namespace pe
             drawList->AddText(iconPos, ImGui::GetColorU32(ImGuiCol_Text), icon);
             return clicked;
         }
+
     } // namespace
 
     void Properties::Update()
@@ -485,6 +488,205 @@ namespace pe
             return true;
         };
 
+        auto drawSkinnedStrip2D = [&](NodeId *node) -> bool
+        {
+            if (!scene.NodeUsesSkinnedStrip2D(node))
+                return false;
+
+            AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
+            skinned_strip_2d_editor::State &stripState = skinned_strip_2d_editor::GetState(scene, node);
+
+            if (ModelAsset *model = scene.GetModelForNode(node))
+            {
+                const vec4 &params = model->GetPrimitiveParams();
+                if (model->GetPrimitiveParamCount() >= 4)
+                {
+                    ImGui::Text("Size: %.2f x %.2f", params.x, params.y);
+                    ImGui::Text("Segments: %d", static_cast<int>(params.z));
+                }
+            }
+            ImGui::Text("Joints: %d", stripState.jointCount);
+
+            if (!anim || stripState.jointCount <= 0)
+                ImGui::BeginDisabled();
+
+            auto notifyPoseEdit = [&]()
+            {
+                if (m_gui)
+                    m_gui->NotifyChange();
+            };
+
+            auto applyRotations = [&]() -> bool
+            {
+                if (!anim || stripState.jointCount <= 0)
+                    return false;
+                const bool applied = skinned_strip_2d_editor::ApplyRotations(anim, scene, node, stripState);
+                if (applied)
+                    notifyPoseEdit();
+                return applied;
+            };
+
+            if (ImGui::Button("Reset Pose"))
+            {
+                stripState.rotationsRadians.assign(static_cast<size_t>(stripState.jointCount), 0.0f);
+                stripState.stretchScale = 1.0f;
+                applyRotations();
+            }
+            ui::ItemTooltip("Reset the generated strip to its bind pose.");
+            ImGui::SameLine();
+            if (ImGui::Button("Bind Target"))
+            {
+                stripState.ikTargetLocal = skinned_strip_2d_editor::GetBindEndLocal(scene, node);
+                skinned_strip_2d_editor::PersistState(scene, node, stripState);
+                notifyPoseEdit();
+            }
+            ui::ItemTooltip("Move the IK target back to the strip's bind-pose tip.");
+
+            ImGui::SetNextItemWidth(120.0f);
+            if (ImGui::DragInt("IK Iterations", &stripState.ikIterations, 0.25f, 1, 64))
+            {
+                stripState.ikIterations = std::clamp(stripState.ikIterations, 1, 64);
+                skinned_strip_2d_editor::PersistState(scene, node, stripState);
+                notifyPoseEdit();
+            }
+            ui::ItemTooltip("Solver iterations used when applying the IK target.");
+
+            ImGui::SetNextItemWidth(120.0f);
+            if (ImGui::DragFloat("Bend Limit",
+                                 &stripState.maxBendDegrees,
+                                 0.25f,
+                                 skinned_strip_2d_editor::kMinBendLimitDegrees,
+                                 skinned_strip_2d_editor::kMaxBendLimitDegrees,
+                                 "%.1f deg"))
+            {
+                stripState.maxBendDegrees = std::clamp(stripState.maxBendDegrees,
+                                                       skinned_strip_2d_editor::kMinBendLimitDegrees,
+                                                       skinned_strip_2d_editor::kMaxBendLimitDegrees);
+                if (skinned_strip_2d_editor::SolveIk(anim, scene, node, stripState))
+                    notifyPoseEdit();
+            }
+            ui::ItemTooltip("Maximum local bend used while solving IK.");
+
+            ImGui::SetNextItemWidth(120.0f);
+            if (ImGui::DragFloat("Stretch Limit",
+                                 &stripState.maxStretchScale,
+                                 0.01f,
+                                 skinned_strip_2d_editor::kMinStretchScale,
+                                 skinned_strip_2d_editor::kMaxStretchLimit,
+                                 "%.2fx"))
+            {
+                stripState.maxStretchScale = std::clamp(stripState.maxStretchScale,
+                                                        skinned_strip_2d_editor::kMinStretchScale,
+                                                        skinned_strip_2d_editor::kMaxStretchLimit);
+                if (stripState.stretchScale > stripState.maxStretchScale)
+                    stripState.stretchScale = stripState.maxStretchScale;
+                if (skinned_strip_2d_editor::SolveIk(anim, scene, node, stripState))
+                    notifyPoseEdit();
+            }
+            ui::ItemTooltip("Maximum elongation allowed while solving IK.");
+
+            ImGui::SetNextItemWidth(120.0f);
+            if (ImGui::DragFloat("Pose Stretch",
+                                 &stripState.stretchScale,
+                                 0.01f,
+                                 skinned_strip_2d_editor::kMinStretchScale,
+                                 stripState.maxStretchScale,
+                                 "%.2fx"))
+            {
+                stripState.stretchScale = std::clamp(stripState.stretchScale,
+                                                     skinned_strip_2d_editor::kMinStretchScale,
+                                                     stripState.maxStretchScale);
+                applyRotations();
+            }
+            ui::ItemTooltip("Current strip elongation for direct joint posing.");
+
+            if (ImGui::DragFloat2("IK Target", &stripState.ikTargetLocal.x, 0.02f, -100.0f, 100.0f, "%.2f"))
+            {
+                if (skinned_strip_2d_editor::SolveIk(anim, scene, node, stripState))
+                    notifyPoseEdit();
+            }
+            ui::ItemTooltip("Node-local XY target for the generated strip chain.");
+
+            if (ImGui::Button("Solve IK"))
+            {
+                if (skinned_strip_2d_editor::SolveIk(anim, scene, node, stripState))
+                    notifyPoseEdit();
+            }
+            ui::ItemTooltip("Apply the current IK target to the strip pose.");
+
+            if (ImGui::TreeNodeEx("Joint Influences", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                if (stripState.jointInfluences.size() != static_cast<size_t>(stripState.jointCount))
+                    stripState.jointInfluences.resize(static_cast<size_t>(stripState.jointCount), 1.0f);
+
+                if (ImGui::Button("Reset Influences"))
+                {
+                    stripState.jointInfluences.assign(static_cast<size_t>(stripState.jointCount), 1.0f);
+                    if (skinned_strip_2d_editor::SolveIk(anim, scene, node, stripState))
+                        notifyPoseEdit();
+                }
+                ui::ItemTooltip("Restore all IK bend weights to normal.");
+
+                const int influenceCount = std::max(stripState.jointCount - 1, 0);
+                for (int i = 0; i < influenceCount; i++)
+                {
+                    ImGui::PushID(i);
+                    ImGui::Text("J%02d", i);
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+                    float &influence = stripState.jointInfluences[static_cast<size_t>(i)];
+                    if (ImGui::SliderFloat("##joint_influence",
+                                           &influence,
+                                           skinned_strip_2d_editor::kMinJointInfluence,
+                                           skinned_strip_2d_editor::kMaxJointInfluence,
+                                           "%.2f"))
+                    {
+                        influence = std::clamp(influence,
+                                               skinned_strip_2d_editor::kMinJointInfluence,
+                                               skinned_strip_2d_editor::kMaxJointInfluence);
+                        if (skinned_strip_2d_editor::SolveIk(anim, scene, node, stripState))
+                            notifyPoseEdit();
+                    }
+                    ImGui::PopID();
+                }
+
+                ImGui::TreePop();
+            }
+            ui::ItemTooltip("Set per-joint bend weights used by the IK solver.");
+
+            if (ImGui::TreeNodeEx("Joint Rotations", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                static constexpr float kRadToDeg = 57.29577951308232f;
+                static constexpr float kDegToRad = 0.017453292519943295f;
+
+                if (stripState.rotationsRadians.size() != static_cast<size_t>(stripState.jointCount))
+                    stripState.rotationsRadians.resize(static_cast<size_t>(stripState.jointCount), 0.0f);
+
+                for (int i = 0; i < stripState.jointCount; i++)
+                {
+                    ImGui::PushID(i);
+                    ImGui::Text("J%02d", i);
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+                    float degrees = stripState.rotationsRadians[static_cast<size_t>(i)] * kRadToDeg;
+                    if (ImGui::SliderFloat("##rotation_z", &degrees, -180.0f, 180.0f, "%.1f deg"))
+                    {
+                        stripState.rotationsRadians[static_cast<size_t>(i)] = degrees * kDegToRad;
+                        applyRotations();
+                    }
+                    ImGui::PopID();
+                }
+
+                ImGui::TreePop();
+            }
+            ui::ItemTooltip("Edit per-joint local Z rotations for procedural strip posing.");
+
+            if (!anim || stripState.jointCount <= 0)
+                ImGui::EndDisabled();
+
+            return true;
+        };
+
         auto drawAddComponentButton = [&](NodeId *node)
         {
             uint32_t flags = scene.GetComponentFlags(node);
@@ -796,6 +998,19 @@ namespace pe
                     ui::TooltipText("Edit the Lua script attached to this node; drop a .lua file here to replace it.");
                 if (open)
                     drawScriptComponent(node);
+            }
+
+            if (scene.NodeUsesSkinnedStrip2D(node))
+            {
+                ImGui::Separator();
+                const bool stripOpen = ImGui::CollapsingHeader("Skinned Strip 2D", ImGuiTreeNodeFlags_DefaultOpen);
+                ui::ItemTooltip("Pose the generated 2D skinned strip.");
+                if (stripOpen)
+                {
+                    ImGui::Indent(8.f);
+                    drawSkinnedStrip2D(node);
+                    ImGui::Unindent(8.f);
+                }
             }
 
             AnimationSystem *animationSystem = GetGlobalSystem<AnimationSystem>();

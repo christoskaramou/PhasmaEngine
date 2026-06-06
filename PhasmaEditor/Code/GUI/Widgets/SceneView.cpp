@@ -5,6 +5,7 @@
 #include "GUI/GUIState.h"
 #include "GUI/Helpers.h"
 #include "GUI/IconsFontAwesome.h"
+#include "GUI/SkinnedStrip2DEditor.h"
 #include "Particles/ParticleManager.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
@@ -12,6 +13,7 @@
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
 #include "Script/Bindings/Input/InputState.h"
+#include "Systems/AnimationSystem.h"
 #include "Systems/RendererSystem.h"
 #include "UI/RuntimeUi.h"
 #include "imgui/ImGuizmo.h"
@@ -23,6 +25,8 @@ namespace pe
     {
         bool s_orientationGizmoHovered = false;
         bool s_orientationGizmoActive = false;
+        bool s_stripIkGizmoHovered = false;
+        bool s_stripIkGizmoActive = false;
     } // namespace
 
     static void HandleViewportDocking(GUI *gui)
@@ -178,6 +182,103 @@ namespace pe
             return scene.GetLocalMatrix(node);
 
         return ComputeNodeWorldMatrix(scene, parent) * scene.GetLocalMatrix(node);
+    }
+
+    static bool ProjectWorldToViewport(const vec3 &world,
+                                       const mat4 &viewProj,
+                                       const ImVec2 &imageMin,
+                                       const ImVec2 &imageSize,
+                                       ImVec2 &screen)
+    {
+        const vec4 clipPos = viewProj * vec4(world, 1.0f);
+        if (clipPos.w <= 0.0f)
+            return false;
+
+        const vec2 ndcPos = vec2(clipPos) / clipPos.w;
+        screen.x = (ndcPos.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
+        screen.y = (ndcPos.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
+        return std::isfinite(screen.x) && std::isfinite(screen.y);
+    }
+
+    static bool BuildViewportRay(Camera *camera, float normalizedX, float normalizedY, vec3 &rayOrigin, vec3 &rayDir)
+    {
+        if (!camera)
+            return false;
+
+        const float ndcX = normalizedX * 2.0f - 1.0f;
+        const float ndcY = normalizedY * 2.0f - 1.0f;
+
+        const mat4 invViewProj = camera->GetInvViewProjection();
+        // Reverse-Z projection: near = 1, far = 0.
+        vec4 nearPoint = invViewProj * vec4(ndcX, ndcY, 1.0f, 1.0f);
+        if (std::abs(nearPoint.w) < 1e-6f)
+            return false;
+        nearPoint /= nearPoint.w;
+
+        vec4 farPoint = invViewProj * vec4(ndcX, ndcY, 0.0f, 1.0f);
+        rayOrigin = vec3(nearPoint);
+        if (std::abs(farPoint.w) < 1e-6f)
+            rayDir = normalize(vec3(farPoint));
+        else
+        {
+            farPoint /= farPoint.w;
+            rayDir = normalize(vec3(farPoint) - rayOrigin);
+        }
+
+        return std::isfinite(rayOrigin.x) && std::isfinite(rayOrigin.y) && std::isfinite(rayOrigin.z) &&
+               std::isfinite(rayDir.x) && std::isfinite(rayDir.y) && std::isfinite(rayDir.z);
+    }
+
+    static bool BuildViewportRay(Camera *camera,
+                                 const ImVec2 &mouse,
+                                 const ImVec2 &imageMin,
+                                 const ImVec2 &imageSize,
+                                 vec3 &rayOrigin,
+                                 vec3 &rayDir)
+    {
+        if (imageSize.x <= 0.0f || imageSize.y <= 0.0f)
+            return false;
+
+        const float normalizedX = (mouse.x - imageMin.x) / imageSize.x;
+        const float normalizedY = (mouse.y - imageMin.y) / imageSize.y;
+        return BuildViewportRay(camera, normalizedX, normalizedY, rayOrigin, rayDir);
+    }
+
+    static bool ScreenPointToStripLocalXY(Scene &scene,
+                                          NodeId *node,
+                                          Camera *camera,
+                                          const ImVec2 &mouse,
+                                          const ImVec2 &imageMin,
+                                          const ImVec2 &imageSize,
+                                          vec2 &localXY)
+    {
+        vec3 rayOrigin(0.0f);
+        vec3 rayDir(0.0f);
+        if (!BuildViewportRay(camera, mouse, imageMin, imageSize, rayOrigin, rayDir))
+            return false;
+
+        const mat4 nodeWorld = ComputeNodeWorldMatrix(scene, node);
+        const float det = glm::determinant(nodeWorld);
+        if (std::abs(det) < 1e-6f)
+            return false;
+
+        const vec3 planePoint = vec3(nodeWorld[3]);
+        const vec3 planeNormal = normalize(mat3(nodeWorld) * vec3(0.0f, 0.0f, 1.0f));
+        const float denom = dot(rayDir, planeNormal);
+        if (std::abs(denom) < 1e-6f)
+            return false;
+
+        const float t = dot(planePoint - rayOrigin, planeNormal) / denom;
+        if (t < 0.0f)
+            return false;
+
+        const vec3 worldPoint = rayOrigin + rayDir * t;
+        const vec4 localPoint = inverse(nodeWorld) * vec4(worldPoint, 1.0f);
+        if (std::abs(localPoint.w) < 1e-6f)
+            return false;
+
+        localXY = vec2(localPoint) / localPoint.w;
+        return std::isfinite(localXY.x) && std::isfinite(localXY.y);
     }
 
     static bool DecomposeRuntimeUiRect(const mat4 &matrix, float &x, float &y, float &w, float &h)
@@ -779,8 +880,8 @@ namespace pe
         if (!playMode)
             DrawGizmos(imageMin, imageSize);
 
-        const bool overGizmo = !playMode && (ImGuizmo::IsOver() || s_orientationGizmoHovered);
-        const bool usingGizmo = !playMode && (ImGuizmo::IsUsing() || s_orientationGizmoActive);
+        const bool overGizmo = !playMode && (ImGuizmo::IsOver() || s_orientationGizmoHovered || s_stripIkGizmoHovered);
+        const bool usingGizmo = !playMode && (ImGuizmo::IsUsing() || s_orientationGizmoActive || s_stripIkGizmoActive);
         const bool runtimeUiMouseCaptured = InputState::IsMouseCapturedByUi();
 
         // Input (picking / focus) only when not interacting with gizmos
@@ -853,29 +954,10 @@ namespace pe
         if (!camera)
             return;
 
-        // Convert screen [0,1] to NDC [-1,1]
-        float ndcX = normalizedX * 2.0f - 1.0f;
-        float ndcY = normalizedY * 2.0f - 1.0f;
-
-        mat4 invViewProj = camera->GetInvViewProjection();
-
-        // Unproject near and far points (reverse-Z: near=1, far=0)
-        vec4 nearPoint = invViewProj * vec4(ndcX, ndcY, 1.0f, 1.0f);
-        nearPoint /= nearPoint.w;
-
-        vec4 farPoint = invViewProj * vec4(ndcX, ndcY, 0.0f, 1.0f);
-        vec3 rayOrigin = vec3(nearPoint);
-        vec3 rayDir;
-
-        if (abs(farPoint.w) < 1e-6f)
-        {
-            rayDir = normalize(vec3(farPoint));
-        }
-        else
-        {
-            farPoint /= farPoint.w;
-            rayDir = normalize(vec3(farPoint) - vec3(nearPoint));
-        }
+        vec3 rayOrigin(0.0f);
+        vec3 rayDir(0.0f);
+        if (!BuildViewportRay(camera, normalizedX, normalizedY, rayOrigin, rayDir))
+            return;
         vec3 camPos = camera->GetPosition();
 
         struct Intersection
@@ -1034,6 +1116,98 @@ namespace pe
         }
 
         return true;
+    }
+
+    void SceneView::DrawSkinnedStrip2DIkGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    {
+        auto &selection = SelectionManager::Instance();
+        if (!selection.HasSelection() || selection.GetSelectionType() != SelectionType::Node)
+            return;
+
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        if (!renderer)
+            return;
+
+        Scene &scene = renderer->GetScene();
+        NodeId *node = selection.GetSelectedNode();
+        if (!node || !scene.IsNodeAlive(node) || !scene.NodeUsesSkinnedStrip2D(node))
+            return;
+
+        AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
+        Camera *camera = scene.GetActiveCamera();
+        if (!anim || !camera)
+            return;
+
+        auto &state = skinned_strip_2d_editor::GetState(scene, node);
+        const mat4 nodeWorld = ComputeNodeWorldMatrix(scene, node);
+        const vec3 targetWorld = vec3(nodeWorld * vec4(state.ikTargetLocal, 0.0f, 1.0f));
+        const mat4 viewProj = camera->GetProjectionNoJitter() * camera->GetView();
+
+        ImVec2 targetScreen;
+        if (!ProjectWorldToViewport(targetWorld, viewProj, imageMin, imageSize, targetScreen))
+            return;
+
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        const ImU32 lineColor = IM_COL32(63, 205, 190, 180);
+        const ImU32 fillColor = IM_COL32(63, 205, 190, 230);
+        const ImU32 hoverColor = IM_COL32(255, 226, 102, 255);
+        std::vector<vec2> jointPositions;
+        if (skinned_strip_2d_editor::GetPoseJointPositionsLocal(scene, node, state, jointPositions))
+        {
+            ImVec2 previousScreen;
+            bool hasPrevious = false;
+            for (const vec2 &jointLocal : jointPositions)
+            {
+                const vec3 jointWorld = vec3(nodeWorld * vec4(jointLocal, 0.0f, 1.0f));
+                ImVec2 jointScreen;
+                if (!ProjectWorldToViewport(jointWorld, viewProj, imageMin, imageSize, jointScreen))
+                {
+                    hasPrevious = false;
+                    continue;
+                }
+
+                drawList->AddCircleFilled(jointScreen, 3.5f, IM_COL32(63, 205, 190, 180), 12);
+                if (hasPrevious)
+                    drawList->AddLine(previousScreen, jointScreen, lineColor, 1.5f);
+                previousScreen = jointScreen;
+                hasPrevious = true;
+            }
+
+            if (!jointPositions.empty())
+            {
+                const vec3 rootWorld = vec3(nodeWorld * vec4(jointPositions.front(), 0.0f, 1.0f));
+                ImVec2 rootScreen;
+                if (ProjectWorldToViewport(rootWorld, viewProj, imageMin, imageSize, rootScreen))
+                    drawList->AddLine(rootScreen, targetScreen, IM_COL32(63, 205, 190, 95), 1.0f);
+            }
+        }
+
+        constexpr float kRadius = 8.0f;
+        ImGui::SetCursorScreenPos(ImVec2(targetScreen.x - kRadius, targetScreen.y - kRadius));
+        ImGui::InvisibleButton("##skinned_strip_2d_ik_target", ImVec2(kRadius * 2.0f, kRadius * 2.0f));
+
+        const bool hovered = ImGui::IsItemHovered();
+        const bool active = ImGui::IsItemActive();
+        s_stripIkGizmoHovered = hovered;
+        s_stripIkGizmoActive = active;
+
+        drawList->AddCircleFilled(targetScreen, kRadius, (hovered || active) ? hoverColor : fillColor, 24);
+        drawList->AddCircle(targetScreen, kRadius + 2.0f, IM_COL32(24, 38, 38, 220), 24, 1.5f);
+        drawList->AddCircle(targetScreen, kRadius + 4.0f, lineColor, 24, 1.0f);
+
+        if (hovered)
+            ui::TooltipText("Drag IK target");
+
+        if (!active || ImGui::IsMouseDown(ImGuiMouseButton_Right))
+            return;
+
+        vec2 localTarget(0.0f);
+        if (!ScreenPointToStripLocalXY(scene, node, camera, ImGui::GetMousePos(), imageMin, imageSize, localTarget))
+            return;
+
+        state.ikTargetLocal = localTarget;
+        if (skinned_strip_2d_editor::SolveIk(anim, scene, node, state) && m_gui)
+            m_gui->NotifyChange();
     }
 
     void SceneView::DrawTransformGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize)
@@ -1295,6 +1469,8 @@ namespace pe
     {
         s_orientationGizmoHovered = false;
         s_orientationGizmoActive = false;
+        s_stripIkGizmoHovered = false;
+        s_stripIkGizmoActive = false;
 
         ImDrawList *dl = ImGui::GetWindowDrawList();
         const ImVec2 imageMax(imageMin.x + imageSize.x, imageMin.y + imageSize.y);
@@ -1303,8 +1479,13 @@ namespace pe
 
         ImGuizmo::BeginFrame();
 
-        if (GUIState::s_useTransformGizmo && !DrawRuntimeUiTransformGizmo(imageMin, imageSize))
-            DrawTransformGizmo(imageMin, imageSize);
+        const bool runtimeUiGizmoActive = GUIState::s_useTransformGizmo && DrawRuntimeUiTransformGizmo(imageMin, imageSize);
+        if (!runtimeUiGizmoActive)
+        {
+            DrawSkinnedStrip2DIkGizmo(imageMin, imageSize);
+            if (GUIState::s_useTransformGizmo && !s_stripIkGizmoHovered && !s_stripIkGizmoActive)
+                DrawTransformGizmo(imageMin, imageSize);
+        }
 
         if (GUIState::s_useLightGizmos)
             DrawLightGizmos(imageMin, imageSize);
