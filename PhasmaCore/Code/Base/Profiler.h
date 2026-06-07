@@ -4,7 +4,6 @@
 #include <tracy/Tracy.hpp>
 #endif
 
-
 namespace pe
 {
     class Profiler
@@ -68,8 +67,12 @@ namespace pe
 #define PE_PROFILE_SCOPE(name) \
     ZoneScopedN(name);         \
     pe::CpuProfileScope PE_CONCAT(_peProfile_, __LINE__)(name)
+#define PE_PROFILE_SCOPE_DYNAMIC(name)                              \
+    ZoneTransientN(PE_CONCAT(_peTracyZone_, __LINE__), name, true); \
+    pe::CpuProfileScope PE_CONCAT(_peProfile_, __LINE__)(name)
 #define PE_FRAME_MARK FrameMark
 #else
 #define PE_PROFILE_SCOPE(name) pe::CpuProfileScope PE_CONCAT(_peProfile_, __LINE__)(name)
+#define PE_PROFILE_SCOPE_DYNAMIC(name) pe::CpuProfileScope PE_CONCAT(_peProfile_, __LINE__)(name)
 #define PE_FRAME_MARK ((void)0)
 #endif

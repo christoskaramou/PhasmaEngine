@@ -75,25 +75,25 @@ namespace pe
             Swapchain *swapchain = RHII.GetSwapchain();
             uint32_t imageIndex = 0;
             {
-                PE_PROFILE_SCOPE(labels.acquire);
+                PE_PROFILE_SCOPE_DYNAMIC(labels.acquire);
                 imageIndex = swapchain->AquireNextImage(acquireSemaphore);
             }
 
             auto &frameCmd = cmds[frame];
             {
-                PE_PROFILE_SCOPE(labels.record);
+                PE_PROFILE_SCOPE_DYNAMIC(labels.record);
                 frameCmd = recordFrame(imageIndex);
             }
 
             Semaphore *submitSemaphore = submitSemaphores[imageIndex];
             Queue *queue = RHII.GetMainQueue();
             {
-                PE_PROFILE_SCOPE(labels.submit);
+                PE_PROFILE_SCOPE_DYNAMIC(labels.submit);
                 queue->Submit(1, &frameCmd, acquireSemaphore, submitSemaphore);
             }
 
             {
-                PE_PROFILE_SCOPE(labels.present);
+                PE_PROFILE_SCOPE_DYNAMIC(labels.present);
                 queue->Present(swapchain, imageIndex, submitSemaphore);
             }
 

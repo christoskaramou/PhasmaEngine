@@ -4,6 +4,13 @@
 
 #include "API/RHI_Internal.h"
 
+#ifdef PE_TRACY
+namespace tracy
+{
+    class VkCtx;
+}
+#endif
+
 namespace pe
 {
     struct VulkanRhiImpl final : public RHI::Impl
@@ -19,7 +26,7 @@ namespace pe
         vk::Device m_device{};
         VmaAllocator m_allocator = nullptr;
 #ifdef PE_TRACY
-        TracyVkCtx m_tracyVkCtx = nullptr;
+        tracy::VkCtx *m_tracyVkCtx = nullptr;
 #endif
     };
 } // namespace pe

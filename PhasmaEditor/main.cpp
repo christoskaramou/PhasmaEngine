@@ -9,9 +9,13 @@
 #if defined(PE_LINUX)
 #include <dlfcn.h>
 static constexpr const char *k_moduleName = "libPhasmaEditorModule.so";
+static constexpr const char *k_versionedModulePrefix = "libPhasmaEditorModule_";
+static constexpr const char *k_versionedModuleSuffix = ".so";
 #elif defined(PE_WIN32)
 #include <windows.h>
 static constexpr const char *k_moduleName = "PhasmaEditorModule2.dll"; // TEMP (Bitdefender lock workaround): revert to "PhasmaEditorModule.dll"
+static constexpr const char *k_versionedModulePrefix = "PhasmaEditorModule_";
+static constexpr const char *k_versionedModuleSuffix = ".dll";
 #endif
 
 using TickFunc = bool (*)();
@@ -22,6 +26,12 @@ using InitWithCtxFunc = void (*)(void *);
 
 namespace
 {
+    enum class ModuleUnloadMode
+    {
+        Reload,
+        ProcessExit,
+    };
+
     struct ModuleHandle
     {
         void *lib = nullptr;
@@ -33,10 +43,55 @@ namespace
         std::string loadedPath;
     };
 
+    bool IsVersionedModuleCopy(const std::filesystem::path &path)
+    {
+        const std::string filename = path.filename().string();
+        const std::string prefix = k_versionedModulePrefix;
+        const std::string suffix = k_versionedModuleSuffix;
+
+        if (filename.size() <= prefix.size() + suffix.size())
+            return false;
+        if (filename.rfind(prefix, 0) != 0)
+            return false;
+        if (filename.compare(filename.size() - suffix.size(), suffix.size(), suffix) != 0)
+            return false;
+
+        const std::string generation = filename.substr(prefix.size(), filename.size() - prefix.size() - suffix.size());
+        return !generation.empty() &&
+               std::all_of(generation.begin(), generation.end(), [](unsigned char c)
+                           { return std::isdigit(c) != 0; });
+    }
+
+    void RemoveStaleModuleCopies(const std::filesystem::path &directory)
+    {
+        std::error_code ec;
+        for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(directory, ec))
+        {
+            if (ec)
+                break;
+            if (!entry.is_regular_file(ec))
+            {
+                ec.clear();
+                continue;
+            }
+            if (!IsVersionedModuleCopy(entry.path()))
+                continue;
+
+            std::filesystem::remove(entry.path(), ec);
+            ec.clear();
+        }
+    }
+
     ModuleHandle LoadModule()
     {
         ModuleHandle m;
         const std::filesystem::path modulePath = std::filesystem::path(pe::Path::Executable) / k_moduleName;
+        static bool s_removedStaleModules = false;
+        if (!s_removedStaleModules)
+        {
+            RemoveStaleModuleCopies(modulePath.parent_path());
+            s_removedStaleModules = true;
+        }
 #if defined(PE_LINUX)
         static int s_gen = 0;
         char versioned[256];
@@ -131,10 +186,20 @@ namespace
         return m;
     }
 
-    void UnloadModule(ModuleHandle &m)
+    void UnloadModule(ModuleHandle &m, ModuleUnloadMode mode = ModuleUnloadMode::Reload)
     {
         if (!m.lib)
             return;
+#if defined(PE_WIN32) && defined(PE_TRACY)
+        if (mode == ModuleUnloadMode::ProcessExit)
+        {
+            // Explicit FreeLibrary during normal exit runs Tracy's DLL-local static profiler
+            // destructor while its worker thread is still alive. Let ExitProcess detach the
+            // module instead; stale copied DLLs are cleaned on the next startup.
+            m = {};
+            return;
+        }
+#endif
 #if defined(PE_LINUX)
         dlclose(m.lib);
 #elif defined(PE_WIN32)
@@ -241,7 +306,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        UnloadModule(mod);
+        UnloadModule(mod, ModuleUnloadMode::ProcessExit);
         return 0;
     }
     catch (const std::exception &e)
