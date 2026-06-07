@@ -21,6 +21,7 @@
 !/LICENCE
 !/README.md
 !/.gitignore
+!/.gitmodules
 
 !/PhasmaCore/Code/
 !/PhasmaCore/DLLs/

@@ -1,0 +1,3 @@
+[submodule "PhasmaCore/third_party/tracy"]
+	path = PhasmaCore/third_party/tracy
+	url = https://github.com/wolfpld/tracy.git
