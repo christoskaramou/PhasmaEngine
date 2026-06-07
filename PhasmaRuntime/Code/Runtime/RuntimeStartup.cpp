@@ -6,7 +6,6 @@
 #include "rapidjson/document.h"
 #include "rapidjson/istreamwrapper.h"
 
-
 namespace pe
 {
     namespace
@@ -166,5 +165,99 @@ namespace pe
             out.renderScale = std::clamp(scaleIt->value.GetFloat(), kMinRenderScale, kMaxRenderScale);
 
         return out;
+    }
+
+    const char *PresentModeToConfigToken(PePresentMode mode)
+    {
+        switch (mode)
+        {
+        case PE_PRESENT_MODE_IMMEDIATE:
+            return "immediate";
+        case PE_PRESENT_MODE_MAILBOX:
+            return "mailbox";
+        case PE_PRESENT_MODE_FIFO:
+            return "fifo";
+        case PE_PRESENT_MODE_FIFO_RELAXED:
+            return "fifo_relaxed";
+        default:
+            return "fifo";
+        }
+    }
+
+    std::optional<PePresentMode> ParsePresentModeToken(std::string_view token)
+    {
+        std::string normalized;
+        normalized.reserve(token.size());
+        for (char c : token)
+        {
+            const char lower = (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+            normalized.push_back(lower == '-' ? '_' : lower);
+        }
+
+        if (normalized == "immediate")
+            return PE_PRESENT_MODE_IMMEDIATE;
+        if (normalized == "mailbox")
+            return PE_PRESENT_MODE_MAILBOX;
+        if (normalized == "fifo")
+            return PE_PRESENT_MODE_FIFO;
+        if (normalized == "fifo_relaxed")
+            return PE_PRESENT_MODE_FIFO_RELAXED;
+        return std::nullopt;
+    }
+
+    std::optional<PePresentMode> ReadPresentModeEnvOverride()
+    {
+        std::string value;
+#if defined(PE_WIN32)
+        char *raw = nullptr;
+        size_t rawSize = 0;
+        if (::_dupenv_s(&raw, &rawSize, kPresentModeEnvVar) != 0 || !raw)
+            return std::nullopt;
+        value = raw;
+        std::free(raw);
+#else
+        const char *raw = std::getenv(kPresentModeEnvVar);
+        if (!raw)
+            return std::nullopt;
+        value = raw;
+#endif
+        if (value.empty())
+            return std::nullopt;
+        return ParsePresentModeToken(value);
+    }
+
+    std::optional<PePresentMode> ReadEditorPresentMode(const std::filesystem::path &editorConfigPath,
+                                                       std::string *warning)
+    {
+        rapidjson::Document document;
+        std::string loadWarning;
+        project_detail::TryLoadJsonObject(RuntimeEditorConfigPath(editorConfigPath), document, loadWarning);
+        if (warning)
+            *warning = loadWarning;
+
+        const std::string token = project_detail::ReadJsonStringField(document, kEditorPresentModeKey);
+        if (token.empty())
+            return std::nullopt;
+        return ParsePresentModeToken(token);
+    }
+
+    bool WriteEditorPresentMode(const std::filesystem::path &editorConfigPath,
+                                PePresentMode mode,
+                                std::string *error)
+    {
+        const std::filesystem::path path = RuntimeEditorConfigWritePath(editorConfigPath);
+        rapidjson::Document document;
+        std::string warning;
+        project_detail::TryLoadJsonObject(path, document, warning);
+
+        project_detail::SetJsonStringMember(document, kEditorPresentModeKey, PresentModeToConfigToken(mode));
+        return project_detail::WriteJsonObject(path, document, error);
+    }
+
+    std::optional<PePresentMode> ReadStartupPresentModeOverride(const std::filesystem::path &editorConfigPath)
+    {
+        if (const std::optional<PePresentMode> envMode = ReadPresentModeEnvOverride())
+            return envMode;
+        return ReadEditorPresentMode(editorConfigPath);
     }
 } // namespace pe

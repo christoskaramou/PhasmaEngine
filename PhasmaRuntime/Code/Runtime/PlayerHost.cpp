@@ -3,6 +3,7 @@
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#include "API/Surface.h"
 #include "Project/ProjectSelection.h"
 #include "Camera/Camera.h"
 #include "Render/RuntimeSceneRenderer.h"
@@ -524,6 +525,14 @@ namespace pe
                     case EventType::Resize:
                         m_resizePending = true;
                         break;
+                    case EventType::PresentMode:
+                    {
+                        const PePresentMode previous = RHII.GetSurface()->GetPresentMode();
+                        RHII.GetSurface()->SetPresentMode(Settings::Get<GlobalSettings>().preferred_present_mode);
+                        if (RHII.GetSurface()->GetPresentMode() != previous)
+                            m_resizePending = true;
+                        break;
+                    }
                     case EventType::CompileShaders:
                     {
                         std::optional<size_t> hash = std::nullopt;
@@ -614,7 +623,25 @@ namespace pe
 #endif
 
             RuntimeWindow window(windowDesc);
-            RuntimeRhiSession rhi(window.Get(), api, true);
+            RuntimeRhiSession rhi(window.Get(), api, false);
+
+            const std::optional<PePresentMode> forcedPresentMode = ReadStartupPresentModeOverride();
+            PePresentMode effectiveStartupMode = PE_PRESENT_MODE_FIFO;
+            {
+                GlobalSettings &settings = Settings::Get<GlobalSettings>();
+                const RuntimeStartupSceneSettings startupSceneSettings =
+                    ReadRuntimeStartupSceneSettings(startupScene);
+                const PePresentMode startupMode = forcedPresentMode.value_or(
+                    startupSceneSettings.presentMode.value_or(PE_PRESENT_MODE_FIFO));
+                settings.preferred_present_mode = startupMode;
+                RHII.GetSurface()->SetPresentMode(startupMode);
+                effectiveStartupMode = RHII.GetSurface()->GetPresentMode();
+                settings.preferred_present_mode = effectiveStartupMode;
+            }
+            if (RHII.GetSwapchain())
+                RHII.ChangePresentMode(effectiveStartupMode);
+            else
+                RHII.InitSwapchain();
 
             {
                 Scene scene;
@@ -647,6 +674,12 @@ namespace pe
                                 startupScene.scenePath.generic_string().c_str());
                     }
                 }
+
+                // LoadScene() copies the scene's saved present_mode into GlobalSettings and queues a
+                // PresentMode event. An explicit env/config preference outranks the scene, so re-assert it
+                // before the frame pump applies the queued event.
+                if (forcedPresentMode)
+                    Settings::Get<GlobalSettings>().preferred_present_mode = effectiveStartupMode;
 
                 RuntimeSceneRenderer renderer(scene);
                 renderer.Init(nullptr);

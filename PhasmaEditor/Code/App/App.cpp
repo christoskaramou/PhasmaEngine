@@ -339,6 +339,8 @@ namespace pe
         const RuntimeStartupSceneSettings startupSceneSettings = ReadRuntimeStartupSceneSettings(startupScene);
         if (startupSceneSettings.presentMode)
             settings.preferred_present_mode = *startupSceneSettings.presentMode;
+        if (const std::optional<PePresentMode> forcedPresentMode = ReadStartupPresentModeOverride())
+            settings.preferred_present_mode = *forcedPresentMode;
         if (startupSceneSettings.renderScale)
             settings.render_scale = *startupSceneSettings.renderScale;
         RHII.GetSurface()->SetPresentMode(settings.preferred_present_mode);

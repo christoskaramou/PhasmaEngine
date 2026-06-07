@@ -3,11 +3,12 @@
 #include "API/RHITypes.h"
 #include "Project/ProjectSelection.h"
 
-
 namespace pe
 {
     inline constexpr const char *kEditorConfigRelativePath = "Assets/editor_config.json";
     inline constexpr const char *kEditorLastSceneKey = "last_scene";
+    inline constexpr const char *kEditorPresentModeKey = "present_mode";
+    inline constexpr const char *kPresentModeEnvVar = "PE_PRESENT_MODE";
 
     enum class RuntimeStartupSceneSource : uint8_t
     {
@@ -58,4 +59,15 @@ namespace pe
         const RuntimeStartupSceneResolveOptions &options = {});
     [[nodiscard]] RuntimeStartupSceneSettings ReadRuntimeStartupSceneSettings(
         const RuntimeStartupSceneSelection &selection);
+
+    [[nodiscard]] const char *PresentModeToConfigToken(PePresentMode mode);
+    [[nodiscard]] std::optional<PePresentMode> ParsePresentModeToken(std::string_view token);
+    [[nodiscard]] std::optional<PePresentMode> ReadPresentModeEnvOverride();
+    [[nodiscard]] std::optional<PePresentMode> ReadEditorPresentMode(
+        const std::filesystem::path &editorConfigPath = {}, std::string *warning = nullptr);
+    [[nodiscard]] bool WriteEditorPresentMode(const std::filesystem::path &editorConfigPath,
+                                              PePresentMode mode,
+                                              std::string *error = nullptr);
+    [[nodiscard]] std::optional<PePresentMode> ReadStartupPresentModeOverride(
+        const std::filesystem::path &editorConfigPath = {});
 } // namespace pe

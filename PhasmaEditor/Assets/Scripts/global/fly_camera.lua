@@ -9,9 +9,26 @@
 local props = exposed {
     speed_multiplier = 1.0,
     invert_y = false,
+    -- Movement smoothing rate: higher = snappier, lower = floatier glide.
+    -- Set to 0 to disable smoothing (instant start/stop, original feel).
+    move_smoothing = 12.0,
 }
 
 local skip_next_rotation = false
+
+-- Smoothed movement axes carried between frames so the camera eases into
+-- motion on key-press and coasts to a stop on release (lerp-style follow).
+local move_fwd = 0.0  -- +forward (W) / -backward (S)
+local move_side = 0.0 -- +right (D) / -left (A)
+
+-- Frame-rate independent exponential smoothing toward a target value.
+local function approach(current, target, rate, delta)
+    if rate <= 0.0 then
+        return target
+    end
+    local t = 1.0 - math.exp(-rate * delta)
+    return current + (target - current) * t
+end
 
 local function update_editor()
     local cam = get_camera()
@@ -43,21 +60,44 @@ local function update_editor()
         end
     end
 
-    -- WASD movement (only while right-click held)
+    -- Desired movement from input (only while right-click held). When the
+    -- button or keys are released the target falls to zero and the smoothed
+    -- axes decay, so the camera glides to a stop instead of snapping.
+    local target_fwd = 0.0
+    local target_side = 0.0
     if rmb then
-        local speed = cam:get_speed() * delta * props.speed_multiplier
+        if input.is_key_down("W") then target_fwd = target_fwd + 1.0 end
+        if input.is_key_down("S") then target_fwd = target_fwd - 1.0 end
+        if input.is_key_down("D") then target_side = target_side + 1.0 end
+        if input.is_key_down("A") then target_side = target_side - 1.0 end
+    end
 
-        -- Diagonal normalization
-        local fwd = input.is_key_down("W") or input.is_key_down("S")
-        local side = input.is_key_down("A") or input.is_key_down("D")
-        if fwd and side then
-            speed = speed * 0.707
+    move_fwd = approach(move_fwd, target_fwd, props.move_smoothing, delta)
+    move_side = approach(move_side, target_side, props.move_smoothing, delta)
+
+    -- Apply the smoothed velocity, skipping once it decays to a negligible amount.
+    local mag = math.sqrt(move_fwd * move_fwd + move_side * move_side)
+    if mag > 0.0001 then
+        local speed = cam:get_speed() * delta * props.speed_multiplier
+        -- Clamp the combined vector to unit length so diagonals are not faster.
+        local scale = mag > 1.0 and (1.0 / mag) or 1.0
+        local fwd_amt = move_fwd * scale * speed
+        local side_amt = move_side * scale * speed
+
+        if fwd_amt > 0.0 then
+            cam:move("forward", fwd_amt)
+        elseif fwd_amt < 0.0 then
+            cam:move("backward", -fwd_amt)
         end
 
-        if input.is_key_down("W") then cam:move("forward", speed) end
-        if input.is_key_down("S") then cam:move("backward", speed) end
-        if input.is_key_down("A") then cam:move("left", speed) end
-        if input.is_key_down("D") then cam:move("right", speed) end
+        if side_amt > 0.0 then
+            cam:move("right", side_amt)
+        elseif side_amt < 0.0 then
+            cam:move("left", -side_amt)
+        end
+    else
+        move_fwd = 0.0
+        move_side = 0.0
     end
 end
 

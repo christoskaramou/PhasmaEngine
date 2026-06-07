@@ -33,6 +33,7 @@ namespace
 {
     constexpr const char *k_graphicsApiKey = "graphics_api";
     constexpr const char *k_launchTargetKey = "launch_target";
+    constexpr const char *k_displayIndexKey = "display_index";
     constexpr const char *kVulkanValidationModeKey = "vulkan_validation_mode";
     constexpr const char *kDx12ValidationModeKey = "dx12_validation_mode";
     constexpr const char *kVulkanCoreValidationKey = "vulkan_core_validation";
@@ -336,6 +337,18 @@ namespace
             document.AddMember(jsonKey.Move(), jsonValue.Move(), allocator);
     }
 
+    void SetJsonIntMember(rapidjson::Document &document, const char *key, int value)
+    {
+        rapidjson::Document::AllocatorType &allocator = document.GetAllocator();
+        rapidjson::Value jsonKey(key, allocator);
+        rapidjson::Value jsonValue(value);
+
+        if (document.HasMember(key))
+            document[key] = jsonValue;
+        else
+            document.AddMember(jsonKey.Move(), jsonValue.Move(), allocator);
+    }
+
     void RemoveJsonMember(rapidjson::Document &document, const char *key)
     {
         if (document.HasMember(key))
@@ -535,6 +548,7 @@ namespace
                                  const std::string &startupScene,
                                  const std::string &launchTarget,
                                  const ValidationOptions &validation,
+                                 int displayIndex,
                                  bool launchesEditor,
                                  std::string &error)
     {
@@ -547,6 +561,7 @@ namespace
         SetJsonStringMember(document, pe::kProjectPathSettingsKey, projectPath);
         SetJsonStringMember(document, pe::kStartupSceneSettingsKey, startupScene);
         SetJsonStringMember(document, k_launchTargetKey, launchTarget.empty() ? k_editorLaunchTarget : launchTarget);
+        SetJsonIntMember(document, k_displayIndexKey, displayIndex < 0 ? 0 : displayIndex);
         SetJsonBoolMember(document, kVulkanCoreValidationKey, validation.vulkanCoreValidation);
         SetJsonBoolMember(document, kDx12CoreValidationKey, validation.dx12CoreValidation);
         RemoveJsonMember(document, kVulkanValidationModeKey);
@@ -598,6 +613,7 @@ namespace
         LaunchProfile player;
         ValidationOptions validation;
         std::string launchTarget;
+        int displayIndex = 0;
         bool apiLocked = false;
         bool accepted = false;
     };
@@ -872,7 +888,7 @@ namespace
         return true;
     }
 
-    bool LaunchExternalTarget(const LaunchTarget &target, PeGraphicsApi api, std::string &error)
+    bool LaunchExternalTarget(const LaunchTarget &target, PeGraphicsApi api, int displayIndex, std::string &error)
     {
         const std::filesystem::path executablePath = target.executablePath.lexically_normal();
         if (!std::filesystem::exists(executablePath))
@@ -881,9 +897,11 @@ namespace
             return false;
         }
 
+        const std::string displayValue = std::to_string(displayIndex < 0 ? 0 : displayIndex);
+
 #if defined(PE_WIN32)
-        std::string commandLine =
-            QuoteCommandLineArg(executablePath.string()) + " --api " + pe::GraphicsApiConfigName(api);
+        std::string commandLine = QuoteCommandLineArg(executablePath.string()) + " --api " +
+                                  pe::GraphicsApiConfigName(api) + " --display " + displayValue;
 
         STARTUPINFOA startupInfo{};
         startupInfo.cb = sizeof(startupInfo);
@@ -921,11 +939,42 @@ namespace
             const std::filesystem::path workingDirectory = pe::Path::Root;
             if (!workingDirectory.empty() && chdir(workingDirectory.c_str()) != 0)
                 _exit(127);
-            execl(executablePath.c_str(), executablePath.filename().c_str(), "--api", apiName.c_str(), nullptr);
+            execl(executablePath.c_str(),
+                  executablePath.filename().c_str(),
+                  "--api",
+                  apiName.c_str(),
+                  "--display",
+                  displayValue.c_str(),
+                  nullptr);
             _exit(127);
         }
         return true;
 #endif
+    }
+
+    struct DisplayOption
+    {
+        int index = 0;
+        std::string label;
+    };
+
+    std::vector<DisplayOption> EnumerateDisplays()
+    {
+        std::vector<DisplayOption> displays;
+        const int count = SDL_GetNumVideoDisplays();
+        for (int i = 0; i < count; ++i)
+        {
+            std::string label = std::to_string(i) + ": ";
+            const char *name = SDL_GetDisplayName(i);
+            label += (name && name[0] != '\0') ? name : "Display";
+
+            SDL_Rect bounds{};
+            if (SDL_GetDisplayBounds(i, &bounds) == 0)
+                label += " (" + std::to_string(bounds.w) + "x" + std::to_string(bounds.h) + ")";
+
+            displays.push_back({i, std::move(label)});
+        }
+        return displays;
     }
 
     constexpr int kLauncherWidth = 1120;
@@ -2019,6 +2068,10 @@ namespace
         bool settingsDirty = false;
         BrowseDialogState browseDialog;
         bool applyInitialTabSelection = true;
+        const std::vector<DisplayOption> displays = EnumerateDisplays();
+        if (!displays.empty() &&
+            (selection.displayIndex < 0 || selection.displayIndex >= static_cast<int>(displays.size())))
+            selection.displayIndex = 0;
         while (running)
         {
             SDL_Event event{};
@@ -2073,6 +2126,34 @@ namespace
             if (selection.api == PE_GRAPHICS_API_DX12)
                 RenderValidationControls("dx12_validation", selection.validation.dx12CoreValidation);
 #endif
+
+            if (!displays.empty())
+            {
+                ImGui::TextUnformatted("Display");
+                ImGui::SameLine(kFieldX);
+                ImGui::SetNextItemWidth(kFieldWidth);
+                const char *displayPreview = displays.front().label.c_str();
+                for (const DisplayOption &option : displays)
+                {
+                    if (option.index == selection.displayIndex)
+                    {
+                        displayPreview = option.label.c_str();
+                        break;
+                    }
+                }
+                if (ImGui::BeginCombo("##display", displayPreview))
+                {
+                    for (const DisplayOption &option : displays)
+                    {
+                        const bool selected = option.index == selection.displayIndex;
+                        if (ImGui::Selectable(option.label.c_str(), selected))
+                            selection.displayIndex = option.index;
+                        if (selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+            }
 
             ImGui::TextUnformatted("Settings");
             ImGui::SameLine(kFieldX);
@@ -2320,6 +2401,12 @@ namespace
         if (currentLaunchTarget.empty())
             currentLaunchTarget = k_editorLaunchTarget;
 
+        int currentDisplayIndex = 0;
+        if (loadedRuntimeSettings && runtimeSettings.HasMember(k_displayIndexKey) && runtimeSettings[k_displayIndexKey].IsInt())
+            currentDisplayIndex = runtimeSettings[k_displayIndexKey].GetInt();
+        if (currentDisplayIndex < 0)
+            currentDisplayIndex = 0;
+
         auto readRuntimeBool = [&](const char *key)
         {
             return loadedRuntimeSettings &&
@@ -2347,6 +2434,7 @@ namespace
         selection.validation.vulkanCoreValidation = readCoreValidation(kVulkanValidationModeKey, kVulkanCoreValidationKey);
         selection.validation.dx12CoreValidation = readCoreValidation(kDx12ValidationModeKey, kDx12CoreValidationKey);
         selection.launchTarget = currentLaunchTarget;
+        selection.displayIndex = currentDisplayIndex;
         selection.activeTab = currentLaunchTarget == k_editorLaunchTarget ? LauncherTab::Editor : LauncherTab::Player;
 
         const LauncherDialogResult dialogResult = ShowLauncherWindow(selection);
@@ -2371,6 +2459,7 @@ namespace
                 profile.startupScene,
                 selection.launchTarget,
                 selection.validation,
+                selection.displayIndex,
                 launchesEditor,
                 error))
         {
@@ -2394,7 +2483,7 @@ namespace
             return 1;
         }
 
-        if (!LaunchExternalTarget(targets[targetIndex], selectedApi, error))
+        if (!LaunchExternalTarget(targets[targetIndex], selectedApi, selection.displayIndex, error))
         {
             pe::Log::Error(error);
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Phasma Launcher", error.c_str(), nullptr);

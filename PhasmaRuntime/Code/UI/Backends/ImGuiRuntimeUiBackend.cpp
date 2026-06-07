@@ -5,6 +5,7 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/RenderPass.h"
+#include "API/Surface.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
@@ -13,6 +14,7 @@
 #include "API/Vulkan/VulkanRenderPassImpl.h"
 #include "API/Vulkan/VulkanSamplerImpl.h"
 #include "UI/RuntimeUiInputEvents.h"
+#include "Runtime/RuntimeStartup.h"
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12CommandBufferImpl.h"
 #include "API/DX12/Dx12DescriptorHeap.h"
@@ -328,6 +330,9 @@ namespace pe
                     return;
 
                 ScopedImGuiContext contextScope(m_context);
+                if (ImGui::IsKeyPressed(ImGuiKey_P, false))
+                    m_showFrameGraph = !m_showFrameGraph;
+                DrawFrameTimeOverlay();
                 ImGui::Render();
                 m_frameOpen = false;
                 m_rendered = true;
@@ -403,6 +408,92 @@ namespace pe
             }
 
         private:
+            void DrawFrameTimeOverlay()
+            {
+                const float dt = static_cast<float>(FrameTimer::Instance().GetDelta());
+                const float ms = dt * 1000.0f;
+                if (ms > m_frameGraphPeakMs)
+                    m_frameGraphPeakMs = ms;
+                m_frameGraphSumMs += ms;
+                ++m_frameGraphFrames;
+                m_frameGraphAccum += dt;
+                if (m_frameGraphAccum >= kFrameGraphRefreshSeconds)
+                {
+                    m_frameGraphAccum = 0.0f;
+                    m_frameGraphDispMs = m_frameGraphFrames > 0
+                                             ? m_frameGraphSumMs / static_cast<float>(m_frameGraphFrames)
+                                             : m_frameGraphPeakMs;
+                    m_frameGraphDispPeakMs = m_frameGraphPeakMs;
+                    m_frameMs[m_frameMsHead] = m_frameGraphPeakMs;
+                    m_frameMsHead = (m_frameMsHead + 1) % kFrameMsHistory;
+                    if (m_frameMsCount < kFrameMsHistory)
+                        ++m_frameMsCount;
+                    m_frameGraphPeakMs = 0.0f;
+                    m_frameGraphSumMs = 0.0f;
+                    m_frameGraphFrames = 0;
+                }
+
+                if (!m_showFrameGraph)
+                    return;
+
+                float maxMs = 0.0f;
+                for (int i = 0; i < m_frameMsCount; ++i)
+                {
+                    if (m_frameMs[i] > maxMs)
+                        maxMs = m_frameMs[i];
+                }
+                const float dispMs = m_frameGraphDispMs;
+                const float fps = dispMs > 0.0001f ? 1000.0f / dispMs : 0.0f;
+                const float plotMax = maxMs * 1.25f > 2.0f ? maxMs * 1.25f : 2.0f;
+
+                const ImGuiViewport *vp = ImGui::GetMainViewport();
+                ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + 10.0f, vp->WorkPos.y + 10.0f),
+                                        ImGuiCond_FirstUseEver);
+                ImGui::SetNextWindowBgAlpha(0.55f);
+                const ImGuiWindowFlags flags = ImGuiWindowFlags_NoNav |
+                                               ImGuiWindowFlags_NoFocusOnAppearing |
+                                               ImGuiWindowFlags_AlwaysAutoResize;
+                if (ImGui::Begin("Frame Time (P)", nullptr, flags))
+                {
+                    ImGui::Text("avg %.2f ms   %.0f FPS", dispMs, fps);
+                    ImGui::Text("max %.2f ms (spikes)", maxMs);
+                    char overlay[48];
+                    std::snprintf(overlay, sizeof(overlay), "%.1f ms peak", m_frameGraphDispPeakMs);
+                    ImGui::PlotLines("##frame_ms", m_frameMs, kFrameMsHistory, m_frameMsHead,
+                                     overlay, 0.0f, plotMax, ImVec2(240.0f, 60.0f));
+                    DrawPresentModeSelector();
+                }
+                ImGui::End();
+            }
+
+            void DrawPresentModeSelector()
+            {
+                Surface *surface = RHII.GetSurface();
+                if (!surface)
+                    return;
+
+                ImGui::Separator();
+                const PePresentMode currentMode = surface->GetPresentMode();
+                if (!ImGui::BeginCombo("Present Mode", RHII.PresentModeToString(currentMode)))
+                    return;
+
+                for (const PePresentMode mode : surface->GetSupportedPresentModes())
+                {
+                    const bool isSelected = (mode == currentMode);
+                    if (ImGui::Selectable(RHII.PresentModeToString(mode), isSelected) && mode != currentMode)
+                    {
+                        Settings::Get<GlobalSettings>().preferred_present_mode = mode;
+                        std::string writeError;
+                        if (!WriteEditorPresentMode({}, mode, &writeError))
+                            PE_WARN("[RuntimeUI] Could not persist present mode: %s", writeError.c_str());
+                        EventSystem::PushEvent(EventType::PresentMode);
+                    }
+                    if (isSelected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
             void *GetImageTexture(Image *image)
             {
                 auto it = m_imageTextureIds.find(image);
@@ -907,6 +998,19 @@ namespace pe
             bool m_rendered = false;
             bool m_currentScreenOverlay = false;
             std::unordered_map<Image *, void *> m_imageTextureIds;
+
+            static constexpr int kFrameMsHistory = 180;
+            static constexpr float kFrameGraphRefreshSeconds = 0.25f;
+            float m_frameMs[kFrameMsHistory] = {}; // per-interval PEAK ms (graph points)
+            int m_frameMsHead = 0;
+            int m_frameMsCount = 0;
+            float m_frameGraphAccum = 0.0f;      // time toward the next committed sample
+            float m_frameGraphPeakMs = 0.0f;     // worst frame within the current interval
+            float m_frameGraphSumMs = 0.0f;      // summed frame ms within the current interval
+            int m_frameGraphFrames = 0;          // frames counted within the current interval
+            float m_frameGraphDispMs = 0.0f;     // committed interval AVG (headline; matches FPS HUD)
+            float m_frameGraphDispPeakMs = 0.0f; // committed interval PEAK (newest graph point)
+            bool m_showFrameGraph = false;
 #if defined(PE_WIN32)
             std::unordered_map<uint64_t, uint32_t> m_dx12ImGuiSlots;
 #endif
