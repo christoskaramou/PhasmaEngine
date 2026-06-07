@@ -44,6 +44,9 @@
 /PhasmaPlayer/android/**/build/
 /PhasmaPlayer/android/local.properties
 /PhasmaPlayer/android/prebaked/
+# Staged player assets (copied from Assets at build time, not source)
+/PhasmaPlayer/android/app/src/main/assets/Assets/editor_config.json
+/PhasmaPlayer/android/app/src/main/assets/Assets/Scenes/
 
 !/PhasmaCook/CMakeLists.txt
 !/PhasmaCook/*.cpp
