@@ -173,6 +173,7 @@ namespace pe
             result.desc.selected = ReadBoolOption(options, "selected", result.desc.selected);
             result.desc.visible = ReadBoolOption(options, "visible", result.desc.visible);
             result.desc.bringToFront = ReadBoolOption(options, "bring_to_front", result.desc.bringToFront);
+            result.desc.noInput = ReadBoolOption(options, "no_input", result.desc.noInput);
             result.desc.fontScale = ReadFloatOption(options, "font_scale", result.desc.fontScale);
 
             sol::object nodeObject = options["node"];

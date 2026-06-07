@@ -82,6 +82,7 @@ namespace pe
         bool selected = false;
         bool visible = true;
         bool bringToFront = false;
+        bool noInput = false;
         float fontScale = 1.0f;
     };
 
@@ -233,6 +234,7 @@ namespace pe
             NodeId *node = nullptr;
             RuntimeUiWidgetState state{};
             bool bringToFront = false;
+            bool noInput = false;
             float fontScale = 1.0f;
         };
 

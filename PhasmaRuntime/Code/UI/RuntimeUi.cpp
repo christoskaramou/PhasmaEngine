@@ -411,6 +411,7 @@ namespace pe
         widget.selected = desc.selected;
         widget.visible = desc.visible;
         widget.bringToFront = desc.bringToFront;
+        widget.noInput = desc.noInput;
         widget.fontScale = desc.fontScale > 0.0f ? desc.fontScale : 1.0f;
         widget.imagePath = path;
         widget.image = path.empty() ? desc.image : LoadImageResource(path);
@@ -690,6 +691,7 @@ namespace pe
                         quadDesc.selected = widget.selected;
                         quadDesc.visible = widget.visible;
                         quadDesc.bringToFront = widget.bringToFront;
+                        quadDesc.noInput = widget.noInput;
                         quadDesc.fontScale = widget.fontScale;
                         widget.state = m_backend->Quad(quadDesc);
                         break;

@@ -501,7 +501,7 @@ namespace pe
 
             RuntimeUiWidgetState QuadOverlay(const std::string &id, const RuntimeUiQuadDesc &quad, ImVec2 size)
             {
-                const ImGuiWindowFlags flags =
+                ImGuiWindowFlags flags =
                     ImGuiWindowFlags_NoDecoration |
                     ImGuiWindowFlags_NoMove |
                     ImGuiWindowFlags_NoResize |
@@ -510,6 +510,13 @@ namespace pe
                     ImGuiWindowFlags_NoScrollbar |
                     ImGuiWindowFlags_NoScrollWithMouse |
                     ImGuiWindowFlags_NoBackground;
+                // A non-interactive quad (e.g. the full-screen menu background) must
+                // never capture a click or become the active/raised window —
+                // otherwise clicking empty space raises that opaque backdrop over the
+                // whole UI ("black screen" on any empty-space click). NoInputs makes
+                // the quad transparent to the mouse so clicks fall through it.
+                if (quad.noInput)
+                    flags |= ImGuiWindowFlags_NoInputs;
 
                 ImGui::SetNextWindowPos(ImVec2(quad.x, quad.y), ImGuiCond_Always);
                 ImGui::SetNextWindowSize(size, ImGuiCond_Always);
