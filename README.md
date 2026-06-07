@@ -71,6 +71,26 @@ The glTF sample models used for testing are **not bundled** with this repository
 
 Keep them outside the project tree. In the editor, use **File → Import** to cook a source model (glTF/FBX/OBJ/…) into the engine's portable `.pemesh` format (GPU-ready geometry + materials + embedded textures written alongside), or **File → Import → Folder** to mirror and cook a whole folder at once. The runtime (desktop **and** Android) loads only `.pemesh`; the repository itself ships only a primitives scene, so a clean checkout has no external asset dependencies.
 
+## Getting the Source
+
+PhasmaEngine uses Tracy as a Git submodule. For a normal clone, fetch submodules with the repository:
+
+```bash
+git clone --recurse-submodules https://github.com/christoskaramou/PhasmaEngine.git
+```
+
+If you already cloned without submodules, initialize them afterwards:
+
+```bash
+git submodule update --init --recursive
+```
+
+For a smaller day-to-day checkout that avoids downloading old reachable history, clone only current `master` with blob filtering:
+
+```bash
+git clone --depth 1 --single-branch --branch master --filter=blob:none --recurse-submodules --shallow-submodules --also-filter-submodules https://github.com/christoskaramou/PhasmaEngine.git
+```
+
 ## Building and Compiling
 
 PhasmaEngine uses CMake to configure and generate project files. The CMakeLists.txt is in the root folder.
@@ -88,13 +108,12 @@ WebGPU support is experimental and lives in `PhasmaWebGPU`, a WebGPU C API layer
 
 ## GitHub Release Builds
 
-The `latest` GitHub prerelease publishes prebuilt packages from the same commit:
+Download prebuilt packages from the [`latest` GitHub prerelease](https://github.com/christoskaramou/PhasmaEngine/releases/tag/latest):
 
-- `PhasmaEngine-Windows-Vulkan.zip` launches `PhasmaEditor.exe --api vulkan`
-- `PhasmaEngine-Windows-DX12.zip` launches `PhasmaEditor.exe --api dx12`
-- `PhasmaEngine-Linux-Vulkan.tar.gz` includes `Launch-PhasmaEditor-Vulkan.sh`, which runs `./PhasmaEditor --api vulkan`
+- [PhasmaEngine-Full-Windows.zip](https://github.com/christoskaramou/PhasmaEngine/releases/download/latest/PhasmaEngine-Full-Windows.zip)
+- [PhasmaEngine-Full-Linux.tar.gz](https://github.com/christoskaramou/PhasmaEngine/releases/download/latest/PhasmaEngine-Full-Linux.tar.gz)
 
-The Windows packages contain the same runtime files; the included launcher script selects the graphics backend. DX12 is Windows-only, so the Linux package ships the Vulkan backend.
+The Windows package includes Vulkan and DX12 launchers; DX12 is Windows-only, so the Linux package ships the Vulkan backend.
 
 **CMake:**
 Download [CMake](https://cmake.org/download/) and install it.
