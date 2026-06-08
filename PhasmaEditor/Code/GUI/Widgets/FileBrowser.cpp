@@ -7,6 +7,7 @@
 #include "GUI/GUIState.h"
 #include "GUI/Helpers.h"
 #include "GUI/IconsFontAwesome.h"
+#include "PrefabViewer.h"
 #include "Scene/ModelAsset.h"
 #if defined(PE_WIN32)
 #include <windows.h>
@@ -191,6 +192,7 @@ namespace pe
     // import-only and live in s_modelExtensionsVec (the File > Import picker). This set drives the mesh
     // icon, the browser model preview, and every scene-load affordance.
     std::unordered_set<std::string> FileBrowser::s_modelExtensions = {".pemesh"};
+    std::unordered_set<std::string> FileBrowser::s_prefabExtensions = {".peprefab"};
     std::vector<const char *> FileBrowser::s_modelExtensionsVec = {
         ".3d", ".3ds", ".3mf", ".amf", ".ase", ".assbin", ".b3d", ".blend", ".bvh", ".cob",
         ".collada", ".csm", ".dae", ".dxf", ".fbx", ".glb", ".gltf", ".hmp", ".ifc", ".iqm",
@@ -230,6 +232,7 @@ namespace pe
         ReleaseImGuiTexture(m_txtIconDS);
         ReleaseImGuiTexture(m_shaderIconDS);
         ReleaseImGuiTexture(m_modelIconDS);
+        ReleaseImGuiTexture(m_prefabIconDS);
         ReleaseImGuiTexture(m_scriptIconDS);
         ReleaseImGuiTexture(m_imageIconDS);
 
@@ -242,6 +245,7 @@ namespace pe
         Image::Destroy(m_txtIcon);
         Image::Destroy(m_shaderIcon);
         Image::Destroy(m_modelIcon);
+        Image::Destroy(m_prefabIcon);
         Image::Destroy(m_scriptIcon);
         Image::Destroy(m_imageIcon);
 
@@ -268,6 +272,7 @@ namespace pe
         LoadIcon(cmd, Path::EditorAssets + "Icons/txt_icon.png", m_txtIcon);
         LoadIcon(cmd, Path::EditorAssets + "Icons/shader_icon.png", m_shaderIcon);
         LoadIcon(cmd, Path::EditorAssets + "Icons/model_icon.png", m_modelIcon);
+        LoadIcon(cmd, Path::EditorAssets + "Icons/prefab_icon.png", m_prefabIcon);
         LoadIcon(cmd, Path::EditorAssets + "Icons/script_icon.png", m_scriptIcon);
         LoadIcon(cmd, Path::EditorAssets + "Icons/image_icon.png", m_imageIcon);
 
@@ -281,6 +286,7 @@ namespace pe
         m_txtIconDS = RegisterImageForImGui(m_txtIcon);
         m_shaderIconDS = RegisterImageForImGui(m_shaderIcon);
         m_modelIconDS = RegisterImageForImGui(m_modelIcon);
+        m_prefabIconDS = RegisterImageForImGui(m_prefabIcon);
         m_scriptIconDS = RegisterImageForImGui(m_scriptIcon);
         m_imageIconDS = RegisterImageForImGui(m_imageIcon);
 
@@ -329,6 +335,8 @@ namespace pe
         // are import inputs only and fall through to the generic file icon.
         if (IsCookedModelFile(entry.path))
             return m_modelIconDS ? m_modelIconDS : m_fileIconDS;
+        if (IsPrefabFile(entry.path))
+            return m_prefabIconDS ? m_prefabIconDS : m_fileIconDS;
         if (IsScriptFile(entry.path))
             return m_scriptIconDS ? m_scriptIconDS : m_fileIconDS;
         if (IsImageFile(entry.path))
@@ -911,6 +919,16 @@ namespace pe
             onOpen(m_selectedEntry);
         ui::ItemTooltip("Open this entry with the editor's default action.");
 
+        if (IsPrefabFile(m_selectedEntry))
+        {
+            if (ImGui::MenuItem("Open in Prefab Viewer"))
+            {
+                if (auto *viewer = m_gui ? m_gui->GetWidget<PrefabViewer>() : nullptr)
+                    viewer->OpenPrefab(m_selectedEntry);
+            }
+            ui::ItemTooltip("Edit this prefab asset without instantiating it.");
+        }
+
         if (ImGui::MenuItem("Open in File Manager"))
             OpenInFileManager(m_selectedEntry);
         ui::ItemTooltip("Reveal this entry in the operating system file manager.");
@@ -1136,6 +1154,13 @@ namespace pe
                 }
                 else
                 {
+                    if (IsPrefabFile(path))
+                    {
+                        if (auto *viewer = m_gui ? m_gui->GetWidget<PrefabViewer>() : nullptr)
+                            viewer->OpenPrefab(path);
+                        return;
+                    }
+
                     AssetPreviewType type = AssetPreviewType::None;
                     if (IsModelFile(path))
                         type = AssetPreviewType::ModelAsset;

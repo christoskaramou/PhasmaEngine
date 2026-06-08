@@ -83,6 +83,12 @@ namespace pe
     {
     };
 
+    class NodePrefabComponent : public IComponent
+    {
+    public:
+        std::string path;
+    };
+
     struct NodeComponentCache
     {
         NodeNameComponent *name = nullptr;
@@ -98,5 +104,6 @@ namespace pe
         NodeAudioTag *audio = nullptr;
         NodeSkyboxTag *skybox = nullptr;
         NodeRuntimeUiTag *runtimeUi = nullptr;
+        NodePrefabComponent *prefab = nullptr;
     };
 } // namespace pe

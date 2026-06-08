@@ -35,6 +35,7 @@
 #include "Widgets/ProfilerWidget.h"
 #include "Widgets/Particles.h"
 #include "Widgets/Properties.h"
+#include "Widgets/PrefabViewer.h"
 #include "Widgets/SceneView.h"
 #include "Widgets/ScriptEditor.h"
 #include "Widgets/ShaderEditor.h"
@@ -2976,6 +2977,7 @@ namespace pe
         InitAgentServices();
 
         auto properties = std::make_shared<Properties>();
+        auto prefabViewer = std::make_shared<PrefabViewer>();
         auto profiler = std::make_shared<ProfilerWidget>();
         auto assetInfo = std::make_shared<AssetInfo>();
         auto sceneView = std::make_shared<SceneView>();
@@ -3006,6 +3008,7 @@ namespace pe
         m_widgets = {
             console,
             properties,
+            prefabViewer,
             profiler,
             assetInfo,
             sceneView,
@@ -3041,6 +3044,7 @@ namespace pe
         m_menuWindowWidgets = {console,
                                profiler,
                                properties,
+                               prefabViewer,
                                assetInfo,
                                fileBrowser,
                                hierarchy,

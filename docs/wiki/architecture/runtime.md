@@ -135,6 +135,14 @@ Path resolution rules:
 
 After resolving the active project, editor and player hosts apply the selected assets root to `Path::Assets` before registering file watchers, resolving startup scenes, loading scripts, or creating render resources. Manifest projects use the manifest `assets` directory; legacy no-manifest projects keep treating the selected `project_path` as the assets root.
 
+## Scene Prefabs
+
+Prefabs are runtime scene-subtree assets with the `.peprefab` extension. `Scene::SavePrefab` writes a scoped snapshot of a root node and its descendants: referenced sources, meshes, and nodes are remapped into a standalone JSON document with `asset_type: prefab`, `version: 1`, and `root: 0`. Asset/model paths are serialized relative to the prefab file when possible, just like scene paths are kept portable relative to the scene file.
+
+Scene nodes can carry a lightweight `Component_Prefab` marker through `NodePrefabComponent::path`. Normal `.pescene` save/load and hot-reload snapshots preserve that `prefab` path on the node, while the node's other components and children remain ordinary scene data. `Scene::InstantiatePrefab` loads the prefab document into the active scene, recreates the referenced sources/meshes, restores component payloads, remaps mesh references, optionally reparents the prefab root under the requested hierarchy node, and marks the affected render/material/texture state dirty for the next frame.
+
+The editor surface is host-owned. FileBrowser recognizes `.peprefab` files and shows the dedicated prefab icon, Hierarchy drag-drop instantiates a prefab at the root or under the hovered node, and the Properties panel exposes the prefab source plus Save, Save As, Unpack, Add Child, Remove Item, and Open Asset controls for the selected prefab root or child. Prefab Viewer is the asset-side editor: it opens `.peprefab` files directly, displays the prefab-internal tree, edits names/enabled state/local transforms, adds/removes/reparents items, authors generated primitive and cooked `.pemesh` mesh references, adds/removes common component payloads, saves the asset, and can instantiate the prefab into the active scene without using the scene hierarchy as the editing surface.
+
 ## First Implementation Slice
 
 The first code slice is intentionally boring:

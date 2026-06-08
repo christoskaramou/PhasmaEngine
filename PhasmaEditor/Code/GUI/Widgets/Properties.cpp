@@ -1,14 +1,17 @@
 #include "Properties.h"
 #include "CameraWidget.h"
+#include "FileBrowser.h"
 #include "FileSelector.h"
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
 #include "GUI/IconsFontAwesome.h"
 #include "GUI/SkinnedStrip2DEditor.h"
+#include "GUI/UndoRedo.h"
 #include "LightWidget.h"
 #include "MeshWidget.h"
 #include "Particles.h"
 #include "Particles/ParticleManager.h"
+#include "PrefabViewer.h"
 #include "Render/SceneSky.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/NodeComponents.h"
@@ -93,6 +96,34 @@ namespace pe
                                  min.y + (size.y - iconSize.y) * 0.5f - 1.0f);
             drawList->AddText(iconPos, ImGui::GetColorU32(ImGuiCol_Text), icon);
             return clicked;
+        }
+
+        std::string MakePrefabFileName(std::string name)
+        {
+            if (name.empty())
+                name = "Prefab";
+
+            for (char &c : name)
+            {
+                switch (c)
+                {
+                case '<':
+                case '>':
+                case ':':
+                case '"':
+                case '/':
+                case '\\':
+                case '|':
+                case '?':
+                case '*':
+                    c = '_';
+                    break;
+                default:
+                    break;
+                }
+            }
+
+            return name + ".peprefab";
         }
 
     } // namespace
@@ -957,6 +988,186 @@ namespace pe
             drawRow();
         };
 
+        auto findPrefabRoot = [&](NodeId *node) -> NodeId *
+        {
+            for (NodeId *current = node; current; current = scene.GetParent(current))
+            {
+                if (!scene.GetNodePrefabPath(current).empty())
+                    return current;
+            }
+            return nullptr;
+        };
+
+        auto refreshFileBrowser = [&]()
+        {
+            if (auto *browser = m_gui ? m_gui->GetWidget<FileBrowser>() : nullptr)
+                browser->RefreshCache();
+        };
+
+        auto savePrefab = [&](NodeId *root, std::filesystem::path path) -> bool
+        {
+            if (!root || path.empty())
+                return false;
+
+            if (path.extension() != ".peprefab")
+                path += ".peprefab";
+
+            const bool saved = scene.SavePrefab(root, path);
+            if (saved)
+            {
+                refreshFileBrowser();
+                if (m_gui)
+                    m_gui->NotifyChange();
+            }
+            return saved;
+        };
+
+        auto openSavePrefabDialog = [&](NodeId *root)
+        {
+            if (!root || !m_gui)
+                return;
+
+            auto *fs = m_gui->GetWidget<FileSelector>();
+            if (!fs)
+                return;
+
+            std::filesystem::path defaultPath = std::filesystem::path(Path::Assets) / "Prefabs";
+            std::error_code ec;
+            std::filesystem::create_directories(defaultPath, ec);
+            const std::string defaultName = MakePrefabFileName(scene.GetNodeName(root));
+            const SceneNodeHandle rootHandle = scene.MakeHandle(root);
+            fs->OpenSelection([rootHandle, this](const std::string &path) -> bool
+                              {
+                                  Scene *activeScene = GetActiveScene();
+                                  if (!activeScene || !rootHandle.IsValid(*activeScene))
+                                      return true;
+
+                                  NodeId *root = rootHandle.nodeId;
+                                  std::filesystem::path savePath(path);
+                                  if (savePath.extension() != ".peprefab")
+                                      savePath += ".peprefab";
+
+                                  if (activeScene->GetNodePrefabPath(root) != savePath.generic_string())
+                                      UndoRedo::Instance().RecordSnapshot(*activeScene, "Linked Prefab");
+
+                                  const bool saved = activeScene->SavePrefab(root, savePath);
+                                  if (saved)
+                                  {
+                                      if (auto *browser = m_gui ? m_gui->GetWidget<FileBrowser>() : nullptr)
+                                          browser->RefreshCache();
+                                      if (m_gui)
+                                          m_gui->NotifyChange();
+                                  }
+                                  return saved; },
+                              {".peprefab"},
+                              defaultPath.string(),
+                              {},
+                              defaultName,
+                              "Save");
+        };
+
+        auto drawPrefabWidget = [&](NodeId *node) -> bool
+        {
+            NodeId *prefabRoot = findPrefabRoot(node);
+            const bool linked = prefabRoot && !scene.GetNodePrefabPath(prefabRoot).empty();
+            NodeId *saveRoot = linked ? prefabRoot : node;
+
+            ImGui::Separator();
+            const bool prefabOpen = ImGui::CollapsingHeader("Prefab", linked ? ImGuiTreeNodeFlags_DefaultOpen : 0);
+            ui::ItemTooltip("Manage the prefab asset for this node subtree.");
+            if (!prefabOpen)
+                return false;
+
+            ImGui::Indent(8.f);
+
+            if (linked)
+            {
+                ImGui::TextUnformatted("Source");
+                ImGui::SameLine();
+                ImGui::TextWrapped("%s", scene.GetNodePrefabPath(prefabRoot).c_str());
+            }
+            else
+            {
+                ImGui::TextDisabled("Source");
+                ImGui::SameLine();
+                ImGui::TextDisabled("<none>");
+            }
+
+            const bool canSaveLinked = linked && saveRoot && !scene.GetNodePrefabPath(saveRoot).empty();
+            if (!canSaveLinked)
+                ImGui::BeginDisabled();
+            if (ImGui::Button("Save"))
+                savePrefab(saveRoot, scene.GetNodePrefabPath(saveRoot));
+            ui::ItemTooltip("Save the prefab root subtree to its linked prefab asset.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+            if (!canSaveLinked)
+                ImGui::EndDisabled();
+
+            ImGui::SameLine();
+            if (ImGui::Button("Save As..."))
+                openSavePrefabDialog(saveRoot);
+            ui::ItemTooltip("Save this subtree as a prefab asset.");
+
+            ImGui::SameLine();
+            if (!linked)
+                ImGui::BeginDisabled();
+            if (ImGui::Button("Open Asset"))
+            {
+                if (auto *viewer = m_gui ? m_gui->GetWidget<PrefabViewer>() : nullptr)
+                    viewer->OpenPrefab(scene.GetNodePrefabPath(prefabRoot));
+            }
+            ui::ItemTooltip("Open the linked prefab in Prefab Viewer.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+            if (!linked)
+                ImGui::EndDisabled();
+
+            ImGui::SameLine();
+            if (!linked)
+                ImGui::BeginDisabled();
+            if (ImGui::Button("Unpack"))
+            {
+                UndoRedo::Instance().RecordSnapshot(scene, "Unpacked Prefab");
+                scene.ClearNodePrefab(prefabRoot);
+                if (m_gui)
+                    m_gui->NotifyChange();
+            }
+            ui::ItemTooltip("Remove the prefab link from the root instance.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+            if (!linked)
+                ImGui::EndDisabled();
+
+            if (ImGui::Button("+ Add Child"))
+            {
+                UndoRedo::Instance().RecordSnapshot(scene, "Added Prefab Child");
+                NodeId *child = scene.CreateNode("Prefab Child", node);
+                scene.MarkNodeDirty(child);
+                sel.Select(child, SelectionType::Node);
+                if (m_gui)
+                    m_gui->NotifyChange();
+            }
+            ui::ItemTooltip("Add a child item under the selected prefab node.");
+
+            ImGui::SameLine();
+            const bool canRemoveItem = linked && node != prefabRoot;
+            if (!canRemoveItem)
+                ImGui::BeginDisabled();
+            if (ImGui::Button("Remove Item"))
+            {
+                UndoRedo::Instance().RecordSnapshot(scene, "Removed Prefab Item");
+                NodeId *rootAfterRemove = prefabRoot;
+                sel.Select(rootAfterRemove, SelectionType::Node);
+                scene.DeleteNode(node);
+                EventSystem::PushEvent(EventType::NodeRemoved);
+                if (m_gui)
+                    m_gui->NotifyChange();
+                ImGui::Unindent(8.f);
+                return true;
+            }
+            ui::ItemTooltip("Remove this child item from the prefab instance.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+            if (!canRemoveItem)
+                ImGui::EndDisabled();
+
+            ImGui::Unindent(8.f);
+            return false;
+        };
+
         // Set when the selected node can receive a .lua script drop;
         // consumed after the switch to place the whole-window drop target.
         NodeId *scriptDropNode = nullptr;
@@ -995,6 +1206,14 @@ namespace pe
 
             // Transform is always shown for scene objects with spatial meaning
             drawTransform();
+            if (drawPrefabWidget(node))
+            {
+                scriptDropNode = nullptr;
+#ifdef PE_AUDIO
+                audioDropNode = nullptr;
+#endif
+                break;
+            }
 
             // Mesh component
             if (flags & Component_Mesh)

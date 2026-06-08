@@ -33,6 +33,8 @@ namespace pe
         }
         if ((flag & Component_RuntimeUi) && !c.runtimeUi)
             c.runtimeUi = entity->CreateComponent<NodeRuntimeUiTag>();
+        if ((flag & Component_Prefab) && !c.prefab)
+            c.prefab = entity->CreateComponent<NodePrefabComponent>();
     }
 
     void Scene::RemoveComponentFlag(NodeId *node, uint32_t flag)
@@ -79,6 +81,11 @@ namespace pe
             entity->RemoveComponent<NodeRuntimeUiTag>();
             c.runtimeUi = nullptr;
         }
+        if ((flag & Component_Prefab) && c.prefab)
+        {
+            entity->RemoveComponent<NodePrefabComponent>();
+            c.prefab = nullptr;
+        }
     }
 
     NodeId *Scene::CreateNode(const std::string &name, NodeId *parent)
@@ -123,7 +130,7 @@ namespace pe
         auto *scriptComp = entity->CreateComponent<NodeScriptComponent>();
 
         m_nodeComponentCache.push_back({nameComp, hierarchyComp, transformComp, meshRefsComp, scriptComp, nullptr,
-                                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr});
+                                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr});
 
         m_nodesDirty = true;
 
@@ -530,6 +537,52 @@ namespace pe
             return;
         }
         cache.script->path = path;
+    }
+
+    void Scene::SetNodePrefabPath(NodeId *node, const std::string &path, bool markDirty)
+    {
+        if (!IsNodeAlive(node))
+            return;
+
+        if (path.empty())
+        {
+            ClearNodePrefab(node);
+            return;
+        }
+
+        const std::string normalizedPath = std::filesystem::path(path).generic_string();
+        AddComponentFlag(node, Component_Prefab);
+        if (NodePrefabComponent *prefab = m_nodeComponentCache[node->index].prefab)
+        {
+            if (prefab->path == normalizedPath)
+                return;
+
+            prefab->path = normalizedPath;
+            if (markDirty)
+                m_dirty = true;
+        }
+    }
+
+    void Scene::ClearNodePrefab(NodeId *node)
+    {
+        if (!IsNodeAlive(node))
+            return;
+
+        if (m_nodeComponentCache[node->index].prefab)
+        {
+            RemoveComponentFlag(node, Component_Prefab);
+            m_dirty = true;
+        }
+    }
+
+    const std::string &Scene::GetNodePrefabPath(const NodeId *node) const
+    {
+        static const std::string empty;
+        if (!IsNodeAlive(node))
+            return empty;
+
+        const NodePrefabComponent *prefab = m_nodeComponentCache[node->index].prefab;
+        return prefab ? prefab->path : empty;
     }
 
     NodeSkinnedStrip2DComponent *Scene::GetSkinnedStrip2DState(NodeId *node)

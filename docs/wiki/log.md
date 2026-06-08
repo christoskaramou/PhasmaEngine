@@ -1,5 +1,10 @@
 # PhasmaEngine Wiki Log
 
+## 2026-06-08
+
+- Added Unity-style scene prefabs. PhasmaRuntime now saves and instantiates `.peprefab` subtree assets with scoped source/mesh/node remapping plus a lightweight `Component_Prefab` source-path marker that round-trips through scenes and snapshots. The editor recognizes `.peprefab` files with a dedicated icon, lets hierarchy drag-drop instantiate them at the root or under a target node, and adds a Properties prefab panel for Save, Save As, Unpack, Add Child, and Remove Item workflows.
+- Added a Prefab Viewer editor panel for asset-side prefab editing. FileBrowser double-click/context open `.peprefab` files in the viewer, and linked prefab instances expose Open Asset from Properties. The viewer edits the prefab-internal tree directly, preserving unknown component JSON while supporting rename, enabled state, local transforms, add/remove, drag-reparent, generated primitive and cooked `.pemesh` mesh authoring, common component add/remove/edit defaults, save, reload, and instantiate actions.
+
 ## 2026-06-06
 
 - Added live editor pose controls for generated `skinned_strip_2d` nodes. The Properties panel now exposes strip metadata, bind-pose reset, local IK target solving, solver iteration count, bend limit, stretch limit, current pose stretch, and per-joint Z rotation sliders; the viewport also draws a draggable IK target for the selected strip. The C++ IK helper can return the solved rotation array and stretch scale so the editor sliders stay synchronized after IK application, and scene/snapshot JSON now persists the authored strip pose and IK settings under `skinned_strip_2d`.

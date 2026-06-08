@@ -149,6 +149,8 @@ namespace pe
         void NewScene();
         void SaveScene(const std::filesystem::path &file);
         void LoadScene(const std::filesystem::path &file);
+        bool SavePrefab(NodeId *root, const std::filesystem::path &file);
+        SceneNodeHandle InstantiatePrefab(const std::filesystem::path &file, NodeId *parent = nullptr);
 
         // Two-phase async loading
         struct ScenePreload
@@ -183,6 +185,9 @@ namespace pe
         void AddMeshRef(NodeId *node, int meshIndex);    // append mesh ref
         void RemoveMeshRef(NodeId *node, int meshIndex); // remove specific mesh ref
         void SetNodeScript(NodeId *node, const std::string &path);
+        void SetNodePrefabPath(NodeId *node, const std::string &path, bool markDirty = true);
+        void ClearNodePrefab(NodeId *node);
+        const std::string &GetNodePrefabPath(const NodeId *node) const;
         NodeSkinnedStrip2DComponent *GetSkinnedStrip2DState(NodeId *node);
         const NodeSkinnedStrip2DComponent *GetSkinnedStrip2DState(const NodeId *node) const;
         NodeSkinnedStrip2DComponent &GetOrCreateSkinnedStrip2DState(NodeId *node);
@@ -359,6 +364,8 @@ namespace pe
                 flags |= Component_Skybox;
             if (c.runtimeUi)
                 flags |= Component_RuntimeUi;
+            if (c.prefab)
+                flags |= Component_Prefab;
             if (m_nodeRuntime[idx].gpuPending)
                 flags |= Component_GpuPending;
             return flags;

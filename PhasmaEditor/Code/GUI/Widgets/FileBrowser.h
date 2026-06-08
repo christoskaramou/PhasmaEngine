@@ -57,6 +57,12 @@ namespace pe
             std::string ext(reinterpret_cast<const char *>(u8ext.c_str()));
             return s_modelExtensions.find(ext) != s_modelExtensions.end();
         }
+        inline static bool IsPrefabFile(const std::filesystem::path &path)
+        {
+            auto u8ext = path.extension().u8string();
+            std::string ext(reinterpret_cast<const char *>(u8ext.c_str()));
+            return s_prefabExtensions.find(ext) != s_prefabExtensions.end();
+        }
         // Only cooked ".pemesh" assets load directly into the scene; source models (glTF/FBX/OBJ/...)
         // are import-only (File > Import cooks them to .pemesh first).
         static bool IsCookedModelFile(const std::filesystem::path &path);
@@ -100,6 +106,7 @@ namespace pe
         static std::unordered_set<std::string> s_scriptExtensions;
         static std::unordered_set<std::string> s_imageExtensions;
         static std::unordered_set<std::string> s_modelExtensions;
+        static std::unordered_set<std::string> s_prefabExtensions;
         static std::vector<const char *> s_modelExtensionsVec;
 
         std::filesystem::path m_currentPath;
@@ -114,6 +121,8 @@ namespace pe
         void *m_shaderIconDS = nullptr;
         Image *m_modelIcon = nullptr;
         void *m_modelIconDS = nullptr;
+        Image *m_prefabIcon = nullptr;
+        void *m_prefabIconDS = nullptr;
         Image *m_scriptIcon = nullptr;
         void *m_scriptIconDS = nullptr;
         Image *m_imageIcon = nullptr;

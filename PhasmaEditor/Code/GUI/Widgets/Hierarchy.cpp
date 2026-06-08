@@ -1,5 +1,6 @@
 #include "Hierarchy.h"
 #include "Camera/Camera.h"
+#include "FileBrowser.h"
 #include "FileSelector.h"
 #include "GUI/GUI.h"
 #include "GUI/GUIState.h"
@@ -11,6 +12,7 @@
 #include "Scene/Primitives.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
+#include "Scene/SceneHost.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
 #include "Script/ScriptSystem.h"
@@ -79,6 +81,20 @@ namespace pe
         { UndoRedo::Instance().RecordSnapshot(scene, label); };
         auto recordUndo = [&recordSnapshot]()
         { recordSnapshot("Deleted Node"); };
+
+        auto instantiatePrefab = [&](const std::filesystem::path &path, NodeId *parent)
+        {
+            recordSnapshot("Instantiated Prefab");
+            SyncSceneBeforeMutation();
+            SceneNodeHandle handle = scene.InstantiatePrefab(path, parent);
+            if (handle.nodeId && scene.IsNodeAlive(handle.nodeId))
+            {
+                selection.Select(handle.nodeId, SelectionType::Node);
+                ImGui::SetWindowFocus("Properties");
+                if (m_gui)
+                    m_gui->NotifyChange();
+            }
+        };
 
         auto createSkybox = [&scene, &selection, &recordSnapshot]()
         {
@@ -416,6 +432,18 @@ namespace pe
         if (rootHovered)
             ui::TooltipText("Root of the scene hierarchy; right-click to create root-level objects.");
 
+        if (ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+            {
+                const char *pathStr = (const char *)payload->Data;
+                std::filesystem::path path(pathStr);
+                if (FileBrowser::IsPrefabFile(path))
+                    instantiatePrefab(path, nullptr);
+            }
+            ImGui::EndDragDropTarget();
+        }
+
         if (rootOpen)
         {
 
@@ -567,7 +595,9 @@ namespace pe
                 // Choose icon based on component flags
                 uint32_t nodeCompFlags = scene.GetComponentFlags(node);
                 const char *icon;
-                if (nodeCompFlags & Component_Camera)
+                if (nodeCompFlags & Component_Prefab)
+                    icon = ICON_FA_CUBES;
+                else if (nodeCompFlags & Component_Camera)
                     icon = ICON_FA_VIDEO;
                 else if (nodeCompFlags & Component_Light)
                     icon = ICON_FA_LIGHTBULB;
@@ -678,9 +708,13 @@ namespace pe
                         std::string ext = path.extension().string();
                         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
                         // Only cooked .pemesh loads into the scene; source models are import-only (File > Import).
-                        bool isModel = (ext == ".pemesh");
+                        bool isModel = FileBrowser::IsCookedModelFile(path);
 
-                        if (isModel && !GUIState::s_modelLoading)
+                        if (FileBrowser::IsPrefabFile(path))
+                        {
+                            instantiatePrefab(path, node);
+                        }
+                        else if (isModel && !GUIState::s_modelLoading)
                         {
                             auto loadTask = [path, node]()
                             {
@@ -979,9 +1013,13 @@ namespace pe
                     std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
                     // Only cooked .pemesh loads into the scene; source models are import-only (File > Import).
-                    bool isModel = (ext == ".pemesh");
+                    bool isModel = FileBrowser::IsCookedModelFile(path);
 
-                    if (isModel && !GUIState::s_modelLoading)
+                    if (FileBrowser::IsPrefabFile(path))
+                    {
+                        instantiatePrefab(path, nullptr);
+                    }
+                    else if (isModel && !GUIState::s_modelLoading)
                     {
                         auto loadTask = [path]()
                         {

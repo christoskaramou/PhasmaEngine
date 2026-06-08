@@ -33,6 +33,7 @@ namespace pe
         Component_Skybox = 1 << 8,
         Component_RuntimeUi = 1 << 9,
         Component_Physics2D = 1 << 10,
+        Component_Prefab = 1 << 11,
     };
 
     // Lightweight mesh descriptor — references into Scene's data stores

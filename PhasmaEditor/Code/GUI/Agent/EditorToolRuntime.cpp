@@ -538,6 +538,7 @@ namespace pe
             add(Component_Skybox, "skybox");
             add(Component_RuntimeUi, "runtime_ui");
             add(Component_Physics2D, "physics2d");
+            add(Component_Prefab, "prefab");
             return components;
         }
 
