@@ -67,6 +67,7 @@ namespace pe
 {
     namespace
     {
+        constexpr float kToolbarHeight = 35.0f;
         ImGuiContext *s_hotReloadCtx = nullptr;
 
         bool IsScriptTestFailureLine(const std::string &line)
@@ -611,6 +612,14 @@ namespace pe
 
         if (GUIState::s_viewportTextureId)
             ReleaseImageTexture(GUIState::s_viewportTextureId);
+
+        if (m_initialized)
+        {
+            SaveWindowState();
+
+            if (!m_iniFilePath.empty() && ImGui::GetCurrentContext())
+                ImGui::SaveIniSettingsToDisk(m_iniFilePath.c_str());
+        }
 
         m_menuWindowWidgets.clear();
         m_widgets.clear();
@@ -2101,6 +2110,37 @@ namespace pe
             PE_WARN("[Runtime] Could not write startup scene setting: %s", error.c_str());
     }
 
+    void GUI::SaveWindowState()
+    {
+        const std::string path = Path::Assets + "editor_windows.json";
+        nlohmann::json j;
+        for (const auto &w : m_menuWindowWidgets)
+            j[w->GetName()] = *w->GetOpen();
+
+        std::ofstream f(path);
+        if (f)
+            f << j.dump(2);
+    }
+
+    void GUI::LoadWindowState()
+    {
+        const std::string path = Path::Assets + "editor_windows.json";
+        std::ifstream f(path);
+        if (!f)
+            return;
+
+        nlohmann::json j = nlohmann::json::parse(f, nullptr, false);
+        if (j.is_discarded())
+            return;
+
+        for (auto &w : m_menuWindowWidgets)
+        {
+            auto it = j.find(w->GetName());
+            if (it != j.end() && it->is_boolean())
+                *w->GetOpen() = it->get<bool>();
+        }
+    }
+
     void GUI::LoadAgentConfig()
     {
         const std::string configPath = Path::Assets + "Agent/agent_config.json";
@@ -2302,9 +2342,8 @@ namespace pe
             return;
 
         ImGuiViewport *viewport = ImGui::GetMainViewport();
-        float toolbarHeight = 35.0f;
-        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + toolbarHeight));
-        ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, viewport->WorkSize.y - toolbarHeight));
+        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + kToolbarHeight));
+        ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, viewport->WorkSize.y - kToolbarHeight));
         ImGui::SetNextWindowViewport(viewport->ID);
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
@@ -2333,8 +2372,12 @@ namespace pe
 
         if (m_requestDockReset)
         {
-            ResetDockspaceLayout(m_dockspaceId);
-            m_requestDockReset = false;
+            ImGuiViewport *vp = ImGui::GetMainViewport();
+            if (vp->WorkSize.x > 0 && vp->WorkSize.y > 0)
+            {
+                ResetDockspaceLayout(m_dockspaceId);
+                m_requestDockReset = false;
+            }
         }
 
         ImGui::End();
@@ -2347,11 +2390,13 @@ namespace pe
 
         ImGuiID dockspace = static_cast<ImGuiID>(dockspaceId);
         ImGuiViewport *viewport = ImGui::GetMainViewport();
+        ImVec2 dockPos(viewport->WorkPos.x, viewport->WorkPos.y + kToolbarHeight);
+        ImVec2 dockSize(viewport->WorkSize.x, viewport->WorkSize.y - kToolbarHeight);
 
         ImGui::DockBuilderRemoveNode(dockspace);
         ImGui::DockBuilderAddNode(dockspace, ImGuiDockNodeFlags_DockSpace);
-        ImGui::DockBuilderSetNodePos(dockspace, viewport->WorkPos);
-        ImGui::DockBuilderSetNodeSize(dockspace, viewport->WorkSize);
+        ImGui::DockBuilderSetNodePos(dockspace, dockPos);
+        ImGui::DockBuilderSetNodeSize(dockspace, dockSize);
 
         constexpr float dockRightFrac = 1.0f / 7.0f;
         constexpr float dockLeftFrac = 1.0f / 6.0f;
@@ -2809,7 +2854,9 @@ namespace pe
         if (!GUIBackend::IsSupported())
             return;
 
-        m_hasIniFile = std::filesystem::exists("imgui.ini");
+        Path::Init();
+        m_iniFilePath = Path::Assets + "imgui.ini";
+        m_hasIniFile = std::filesystem::exists(m_iniFilePath);
 
         if (s_hotReloadCtx)
         {
@@ -2825,6 +2872,7 @@ namespace pe
         }
 
         ImGuiIO &io = ImGui::GetIO();
+        io.IniFilename = nullptr;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
         io.ConfigFlags |= ImGuiConfigFlags_IsSRGB;
         GUIBackend::ConfigureIO();
@@ -3082,9 +3130,13 @@ namespace pe
         SDL_PumpEvents();
 
         if (m_hasIniFile)
-            ImGui::LoadIniSettingsFromDisk("imgui.ini");
+            ImGui::LoadIniSettingsFromDisk(m_iniFilePath.c_str());
         else
             m_requestDockReset = true;
+
+        LoadWindowState();
+
+        ImGui::GetIO().IniFilename = m_iniFilePath.c_str();
 
         if (restoreLastScene)
         {
@@ -3386,9 +3438,8 @@ namespace pe
         ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBringToFrontOnFocus;
 
         ImGuiViewport *viewport = ImGui::GetMainViewport();
-        float toolbarHeight = 35.0f;
         ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y));
-        ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, toolbarHeight));
+        ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, kToolbarHeight));
         ImGui::SetNextWindowViewport(viewport->ID);
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
@@ -3397,7 +3448,7 @@ namespace pe
 
         float buttonSize = 25.0f;
         float centerX = ImGui::GetWindowWidth() * 0.5f;
-        float centerY = (toolbarHeight - buttonSize) * 0.5f;
+        float centerY = (kToolbarHeight - buttonSize) * 0.5f;
         float spacing = ImGui::GetStyle().ItemSpacing.x;
 
         // Transparent button backgrounds

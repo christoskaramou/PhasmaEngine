@@ -115,6 +115,8 @@ namespace pe
         void Stop();
         void NewScene();
         void SaveEditorConfig();
+        void SaveWindowState();
+        void LoadWindowState();
         void LoadAgentConfig();
 
         bool m_showExitConfirmation = false;
@@ -143,6 +145,7 @@ namespace pe
         bool m_dockspaceInitialized;
         bool m_requestDockReset;
         bool m_hasIniFile = false;
+        std::string m_iniFilePath;
         bool m_ownsImGuiContext = true;
 
         // Undo/Redo state tracking
