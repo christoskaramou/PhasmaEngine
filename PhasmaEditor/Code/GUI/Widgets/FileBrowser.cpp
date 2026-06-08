@@ -81,12 +81,6 @@ namespace pe
             return true;
         }
 
-        std::string PathExtensionLower(const std::filesystem::path &path)
-        {
-            auto extU8 = path.extension().u8string();
-            return ToLower(std::string(reinterpret_cast<const char *>(extU8.c_str())));
-        }
-
         std::filesystem::file_time_type SafeLastWriteTime(const std::filesystem::path &path)
         {
             std::error_code ec;
@@ -687,15 +681,6 @@ namespace pe
         ImGui::PopItemWidth();
 
         ImGui::SameLine();
-        static const char *typeLabels[] = {"All", "Text", "Shaders", "Scripts", "Images", "Models", "Source Models",
-                                           "Other"};
-        int typeIndex = static_cast<int>(m_typeFilter);
-        ImGui::SetNextItemWidth(135.0f);
-        if (ImGui::Combo("Type##filebrowser_type", &typeIndex, typeLabels, IM_ARRAYSIZE(typeLabels)))
-            m_typeFilter = static_cast<TypeFilter>(typeIndex);
-        ui::ItemTooltip("Filter visible entries by asset type.");
-
-        ImGui::SameLine();
         static const char *sortLabels[] = {"Name", "Date", "Size"};
         int sortIndex = static_cast<int>(m_sortMode);
         ImGui::SetNextItemWidth(110.0f);
@@ -1262,37 +1247,7 @@ namespace pe
                 return false;
         }
 
-        if (entry.isDirectory || m_typeFilter == TypeFilter::All)
-            return true;
-
-        const std::string ext = PathExtensionLower(entry.path);
-        const bool isText = s_textExtensions.find(ext) != s_textExtensions.end();
-        const bool isShader = s_shaderExtensions.find(ext) != s_shaderExtensions.end();
-        const bool isScript = s_scriptExtensions.find(ext) != s_scriptExtensions.end();
-        const bool isImage = s_imageExtensions.find(ext) != s_imageExtensions.end();
-        const bool isModel = s_modelExtensions.find(ext) != s_modelExtensions.end();
-        const bool isSourceModel = IsSourceModelFile(entry.path);
-
-        switch (m_typeFilter)
-        {
-        case TypeFilter::Text:
-            return isText;
-        case TypeFilter::Shader:
-            return isShader;
-        case TypeFilter::Script:
-            return isScript;
-        case TypeFilter::Image:
-            return isImage;
-        case TypeFilter::Model:
-            return isModel;
-        case TypeFilter::SourceModel:
-            return isSourceModel;
-        case TypeFilter::Other:
-            return !isText && !isShader && !isScript && !isImage && !isModel && !isSourceModel;
-        case TypeFilter::All:
-        default:
-            return true;
-        }
+        return true;
     }
 
     std::vector<const FileBrowser::FileEntry *> FileBrowser::BuildVisibleEntries(

@@ -134,18 +134,6 @@ namespace pe
         ViewMode m_viewMode = ViewMode::Grid;
         float m_gridIconSize = 64.0f;
 
-        enum class TypeFilter
-        {
-            All,
-            Text,
-            Shader,
-            Script,
-            Image,
-            Model,
-            SourceModel,
-            Other
-        };
-
         enum class SortMode
         {
             Name,
@@ -201,7 +189,6 @@ namespace pe
         std::filesystem::path m_folderTreeRoot;
         float m_folderTreeWidth = 220.0f;
         char m_searchBuffer[128] = {};
-        TypeFilter m_typeFilter = TypeFilter::All;
         SortMode m_sortMode = SortMode::Name;
         bool m_sortDescending = false;
         bool m_wasOpen = false;
