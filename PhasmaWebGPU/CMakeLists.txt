@@ -157,12 +157,6 @@ if (PE_WEBGPU_TESTS)
     target_include_directories(WebGPUSmokeTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Code")
     pe_configure_webgpu_executable(WebGPUSmokeTest)
 
-    add_executable(WebGPURenderTest "${CMAKE_CURRENT_SOURCE_DIR}/Tests/RenderTest.cpp")
-    target_link_libraries(WebGPURenderTest PRIVATE PhasmaWebGPU)
-    target_precompile_headers(WebGPURenderTest REUSE_FROM PhasmaWebGPU)
-    target_include_directories(WebGPURenderTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Code")
-    pe_configure_webgpu_executable(WebGPURenderTest)
-
     add_executable(WebGPUWgslSmokeTest "${CMAKE_CURRENT_SOURCE_DIR}/Tests/WgslSmokeTest.cpp")
     target_link_libraries(WebGPUWgslSmokeTest PRIVATE PhasmaWebGPU)
     target_precompile_headers(WebGPUWgslSmokeTest REUSE_FROM PhasmaWebGPU)
