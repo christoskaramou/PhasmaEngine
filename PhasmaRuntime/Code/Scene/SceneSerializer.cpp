@@ -1362,6 +1362,7 @@ namespace pe
         m_sources.clear();
         m_meshSourceInfos.clear();
         m_modelRootNodes.clear();
+        m_primitiveGeometryCache.clear();
 
         // Null out camera nodeIds before freeing node memory
         for (auto *cam : m_cameras)
@@ -1562,6 +1563,7 @@ namespace pe
         m_sources.clear();
         m_meshSourceInfos.clear();
         m_modelRootNodes.clear();
+        m_primitiveGeometryCache.clear();
 
         // Null out camera nodeIds before freeing node memory
         for (auto *cam : m_cameras)
@@ -2776,6 +2778,7 @@ namespace pe
                 m_sources.clear();
                 m_meshSourceInfos.clear();
                 m_modelRootNodes.clear();
+                m_primitiveGeometryCache.clear();
                 ResetSkeletonCache();
                 for (auto *model : m_models)
                     delete model;

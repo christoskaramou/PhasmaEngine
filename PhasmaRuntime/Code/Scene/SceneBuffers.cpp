@@ -1012,8 +1012,6 @@ namespace pe
     }
     void Scene::RebuildRasterInstances(CommandBuffer *cmd)
     {
-        RHII.WaitDeviceIdle();
-
         for (auto &storage : m_storages)
         {
             if (storage)

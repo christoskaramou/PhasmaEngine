@@ -8,6 +8,32 @@
 
 namespace pe
 {
+    namespace
+    {
+        constexpr uint32_t kParticleCapacityStep = 1024;
+
+        ParticleEmitter MakeBurstEmitter(const ParticleBurstDesc &desc, float burstToken)
+        {
+            ParticleEmitter e{};
+            const float lifeMin = std::max(0.01f, desc.lifeMin);
+            const float lifeMax = std::max(lifeMin, desc.lifeMax);
+
+            e.position = vec4(desc.position, burstToken);
+            e.velocity = vec4(desc.velocity, 0.0f);
+            e.colorStart = desc.colorStart;
+            e.colorEnd = desc.colorEnd;
+            e.sizeLife = vec4(std::max(0.0f, desc.sizeMin), std::max(0.0f, desc.sizeMax), lifeMin, lifeMax);
+            e.physics = vec4(-1.0f, std::max(0.0f, desc.spawnRadius), desc.noiseStrength, std::max(0.0f, desc.drag));
+            e.gravity = vec4(desc.gravity, 0.0f);
+            e.animation = vec4(1.0f, 1.0f, 1.0f, 0.0f);
+            e.textureIndex = desc.textureIndex;
+            e.count = std::max(desc.count, 1u);
+            e.offset = 0;
+            e.orientation = desc.orientation;
+            return e;
+        }
+    } // namespace
+
     ParticleManager::ParticleManager()
     {
     }
@@ -22,8 +48,9 @@ namespace pe
         if (m_particleBuffer)
             return;
 
-        m_particleCount = 100; // Default particle count, can change at runtime
-        size_t bufferSize = m_particleCount * sizeof(Particle);
+        m_gpuCapacity = kParticleCapacityStep;
+        m_particleCount = 0;
+        size_t bufferSize = m_gpuCapacity * sizeof(Particle);
 
         m_particleBuffer = Buffer::Create({
             .size = bufferSize,
@@ -46,31 +73,17 @@ namespace pe
             totalParticles += e.count;
         }
 
-        // 2. Resize Particle Buffer if needed
-        // Logic: Grown/Shrink with hysteresis (step of 1024)
-        uint32_t step = 1024;
+        // 2. Grow the particle buffer if needed. Do not shrink on transient-burst
+        // cleanup; destroying in-use buffers requires a queue idle and causes frame
+        // spikes during effect-heavy gameplay.
         bool reallocate = false;
         uint32_t newCapacity = m_gpuCapacity;
 
         if (totalParticles > m_gpuCapacity)
         {
-            // Grow: Ensure strictly enough space, multiple of step
-            newCapacity = ((totalParticles + step - 1) / step) * step;
+            newCapacity = ((totalParticles + kParticleCapacityStep - 1) / kParticleCapacityStep) *
+                          kParticleCapacityStep;
             reallocate = true;
-        }
-        else if (m_gpuCapacity > step && totalParticles < (m_gpuCapacity - step))
-        {
-            // Shrink: If we have more than one full step of unused space
-            // e.g. Capacity 2048, Particles 1000 -> Keep 2048
-            //      Capacity 2048, Particles 100  -> Shrink to 1024
-
-            // Safe check to avoid 0 capacity if totalParticles is 0 (though 0 usually means 0 buffer)
-            uint32_t needed = ((totalParticles + step - 1) / step) * step;
-            if (needed < m_gpuCapacity)
-            {
-                newCapacity = needed;
-                reallocate = true;
-            }
         }
 
         if (reallocate || !m_particleBuffer)
@@ -179,29 +192,39 @@ namespace pe
 
     int ParticleManager::EmitBurst(const ParticleBurstDesc &desc)
     {
-        ParticleEmitter e{};
         const float lifeMin = std::max(0.01f, desc.lifeMin);
         const float lifeMax = std::max(lifeMin, desc.lifeMax);
         const float burstToken = static_cast<float>(m_nextBurstToken++);
+        ParticleEmitter e = MakeBurstEmitter(desc, burstToken);
+        const std::string name = desc.name.empty() ? "Burst" : desc.name;
+        const float cleanupDelay = desc.cleanupDelay > 0.0f ? desc.cleanupDelay : lifeMax + 0.25f;
 
-        e.position = vec4(desc.position, burstToken);
-        e.velocity = vec4(desc.velocity, 0.0f);
-        e.colorStart = desc.colorStart;
-        e.colorEnd = desc.colorEnd;
-        e.sizeLife = vec4(std::max(0.0f, desc.sizeMin), std::max(0.0f, desc.sizeMax), lifeMin, lifeMax);
-        e.physics = vec4(-1.0f, std::max(0.0f, desc.spawnRadius), desc.noiseStrength, std::max(0.0f, desc.drag));
-        e.gravity = vec4(desc.gravity, 0.0f);
-        e.animation = vec4(1.0f, 1.0f, 1.0f, 0.0f);
-        e.textureIndex = desc.textureIndex;
-        e.count = std::max(desc.count, 1u);
-        e.offset = 0;
-        e.orientation = desc.orientation;
+        for (TransientEmitter &transient : m_transientEmitters)
+        {
+            if (transient.timeRemaining > 0.0f)
+                continue;
+
+            const int index = transient.index;
+            if (index < 0 || index >= static_cast<int>(m_emitters.size()))
+                continue;
+
+            const ParticleEmitter &oldEmitter = m_emitters[index];
+            if (oldEmitter.count != e.count)
+                continue;
+
+            QueueParticleRangeClear(oldEmitter.offset, oldEmitter.count);
+            m_emitters[index] = e;
+            if (index < static_cast<int>(m_emitterNames.size()))
+                m_emitterNames[index] = name;
+            transient.timeRemaining = cleanupDelay;
+            UpdateEmitterBuffer();
+            return index;
+        }
 
         m_emitters.push_back(e);
-        m_emitterNames.push_back(desc.name.empty() ? "Burst" : desc.name);
+        m_emitterNames.push_back(name);
 
         const int index = static_cast<int>(m_emitters.size() - 1);
-        const float cleanupDelay = desc.cleanupDelay > 0.0f ? desc.cleanupDelay : lifeMax + 0.25f;
         m_transientEmitters.push_back({index, cleanupDelay});
 
         UpdateEmitterBuffer();

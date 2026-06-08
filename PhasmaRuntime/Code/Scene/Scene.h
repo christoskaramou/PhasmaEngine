@@ -426,6 +426,11 @@ namespace pe
             int sourceMeshIndex = -1;
         };
 
+        struct PrimitiveGeometryCacheEntry
+        {
+            int meshIndex = -1;
+        };
+
         struct RtInstanceRecord
         {
             int meshIndex = -1;
@@ -480,6 +485,7 @@ namespace pe
 
         // Model geometry
         std::vector<int> AddModelGeometry(ModelAsset *model, int sourceIndex);
+        SceneNodeHandle AddPrimitiveDeferred(ModelAsset *model);
 
         // --- Private variables ---
         PerFrameData m_frameData{};
@@ -545,6 +551,7 @@ namespace pe
         std::vector<SceneSource> m_sources;
         std::vector<MeshSourceInfo> m_meshSourceInfos;
         std::unordered_map<size_t, std::vector<NodeId *>> m_modelRootNodes;
+        std::unordered_map<std::string, PrimitiveGeometryCacheEntry> m_primitiveGeometryCache;
 
         bool m_autoplayAnimations = true;
         mutable ModelAsset *m_skeletonModel = nullptr;

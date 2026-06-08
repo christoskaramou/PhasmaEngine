@@ -537,6 +537,41 @@ namespace
         return pe::WriteEditorStartupScene({}, scene, &error);
     }
 
+    struct PresentModeOption
+    {
+        const char *label = "";
+        std::optional<PePresentMode> mode;
+    };
+
+    std::array<PresentModeOption, 5> PresentModeOptions()
+    {
+        return {{
+            {"Default", std::nullopt},
+            {"Immediate", PE_PRESENT_MODE_IMMEDIATE},
+            {"Mailbox", PE_PRESENT_MODE_MAILBOX},
+            {"FIFO", PE_PRESENT_MODE_FIFO},
+            {"FIFO relaxed", PE_PRESENT_MODE_FIFO_RELAXED},
+        }};
+    }
+
+    int FindPresentModeOptionIndex(const std::optional<PePresentMode> &mode)
+    {
+        const std::array<PresentModeOption, 5> options = PresentModeOptions();
+        for (int i = 0; i < static_cast<int>(options.size()); ++i)
+        {
+            if (options[i].mode == mode)
+                return i;
+        }
+        return 0;
+    }
+
+    bool PersistEditorPresentMode(const std::optional<PePresentMode> &mode, std::string &error)
+    {
+        if (mode)
+            return pe::WriteEditorPresentMode({}, *mode, &error);
+        return pe::ClearEditorPresentMode({}, &error);
+    }
+
     struct ValidationOptions
     {
         bool vulkanCoreValidation = false;
@@ -549,6 +584,7 @@ namespace
                                  const std::string &launchTarget,
                                  const ValidationOptions &validation,
                                  int displayIndex,
+                                 const std::optional<PePresentMode> &presentModeOverride,
                                  bool launchesEditor,
                                  std::string &error)
     {
@@ -577,6 +613,9 @@ namespace
             RemoveJsonMember(document, pe::kProjectManifestSettingsKey);
 
         if (!WriteJsonObject(RuntimeSettingsPath(), document, error))
+            return false;
+
+        if (!PersistEditorPresentMode(presentModeOverride, error))
             return false;
 
         if (launchesEditor && !WriteEditorConfigStartupScene(startupScene, error))
@@ -614,6 +653,7 @@ namespace
         ValidationOptions validation;
         std::string launchTarget;
         int displayIndex = 0;
+        std::optional<PePresentMode> presentModeOverride;
         bool apiLocked = false;
         bool accepted = false;
     };
@@ -1473,6 +1513,16 @@ namespace
         if (!selection.apiLocked)
             selection.api = PE_GRAPHICS_API_VULKAN;
 
+        const std::array<PresentModeOption, 5> presentOptions = PresentModeOptions();
+        std::vector<std::string> presentLabels;
+        presentLabels.reserve(presentOptions.size());
+        for (const PresentModeOption &option : presentOptions)
+            presentLabels.emplace_back(option.label);
+
+        const int presentIndex =
+            PromptIndex("Present mode", presentLabels, FindPresentModeOptionIndex(selection.presentModeOverride));
+        selection.presentModeOverride = presentOptions[presentIndex].mode;
+
         std::cout << "\nProject: " << ActiveProfile(selection).projectPath << '\n'
                   << "Backend: " << pe::GraphicsApiConfigName(selection.api) << '\n'
                   << "Settings: " << RuntimeSettingsPath().generic_string() << '\n';
@@ -2155,6 +2205,24 @@ namespace
                 }
             }
 
+            const std::array<PresentModeOption, 5> presentOptions = PresentModeOptions();
+            const int presentIndex = FindPresentModeOptionIndex(selection.presentModeOverride);
+            ImGui::TextUnformatted("Present mode");
+            ImGui::SameLine(kFieldX);
+            ImGui::SetNextItemWidth(kFieldWidth);
+            if (ImGui::BeginCombo("##present_mode", presentOptions[presentIndex].label))
+            {
+                for (int i = 0; i < static_cast<int>(presentOptions.size()); ++i)
+                {
+                    const bool selected = (i == presentIndex);
+                    if (ImGui::Selectable(presentOptions[i].label, selected))
+                        selection.presentModeOverride = presentOptions[i].mode;
+                    if (selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
             ImGui::TextUnformatted("Settings");
             ImGui::SameLine(kFieldX);
             char settingsPathBuffer[2048] = {};
@@ -2407,6 +2475,11 @@ namespace
         if (currentDisplayIndex < 0)
             currentDisplayIndex = 0;
 
+        std::string presentModeWarning;
+        const std::optional<PePresentMode> currentPresentMode = pe::ReadEditorPresentMode({}, &presentModeWarning);
+        if (!presentModeWarning.empty())
+            PE_WARN("[editor_config] %s", presentModeWarning.c_str());
+
         auto readRuntimeBool = [&](const char *key)
         {
             return loadedRuntimeSettings &&
@@ -2435,6 +2508,7 @@ namespace
         selection.validation.dx12CoreValidation = readCoreValidation(kDx12ValidationModeKey, kDx12CoreValidationKey);
         selection.launchTarget = currentLaunchTarget;
         selection.displayIndex = currentDisplayIndex;
+        selection.presentModeOverride = currentPresentMode;
         selection.activeTab = currentLaunchTarget == k_editorLaunchTarget ? LauncherTab::Editor : LauncherTab::Player;
 
         const LauncherDialogResult dialogResult = ShowLauncherWindow(selection);
@@ -2460,6 +2534,7 @@ namespace
                 selection.launchTarget,
                 selection.validation,
                 selection.displayIndex,
+                selection.presentModeOverride,
                 launchesEditor,
                 error))
         {

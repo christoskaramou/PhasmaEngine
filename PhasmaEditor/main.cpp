@@ -13,7 +13,7 @@ static constexpr const char *k_versionedModulePrefix = "libPhasmaEditorModule_";
 static constexpr const char *k_versionedModuleSuffix = ".so";
 #elif defined(PE_WIN32)
 #include <windows.h>
-static constexpr const char *k_moduleName = "PhasmaEditorModule2.dll"; // TEMP (Bitdefender lock workaround): revert to "PhasmaEditorModule.dll"
+static constexpr const char *k_moduleName = "PhasmaEditorModule.dll";
 static constexpr const char *k_versionedModulePrefix = "PhasmaEditorModule_";
 static constexpr const char *k_versionedModuleSuffix = ".dll";
 #endif

@@ -309,7 +309,6 @@ add_library(PhasmaEditorModule SHARED
 )
 set_target_properties(PhasmaEditorModule PROPERTIES
     POSITION_INDEPENDENT_CODE ON
-    OUTPUT_NAME "PhasmaEditorModule2" # TEMP (Bitdefender delete-pending lock workaround): revert to default name once the lock clears
 )
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(PhasmaEditorModule PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS OFF)

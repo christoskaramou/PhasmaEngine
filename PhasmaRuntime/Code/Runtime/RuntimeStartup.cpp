@@ -254,6 +254,18 @@ namespace pe
         return project_detail::WriteJsonObject(path, document, error);
     }
 
+    bool ClearEditorPresentMode(const std::filesystem::path &editorConfigPath, std::string *error)
+    {
+        const std::filesystem::path path = RuntimeEditorConfigWritePath(editorConfigPath);
+        rapidjson::Document document;
+        std::string warning;
+        project_detail::TryLoadJsonObject(path, document, warning);
+
+        if (document.HasMember(kEditorPresentModeKey))
+            document.RemoveMember(kEditorPresentModeKey);
+        return project_detail::WriteJsonObject(path, document, error);
+    }
+
     std::optional<PePresentMode> ReadStartupPresentModeOverride(const std::filesystem::path &editorConfigPath)
     {
         if (const std::optional<PePresentMode> envMode = ReadPresentModeEnvOverride())

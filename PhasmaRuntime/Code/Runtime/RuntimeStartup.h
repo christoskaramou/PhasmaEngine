@@ -68,6 +68,8 @@ namespace pe
     [[nodiscard]] bool WriteEditorPresentMode(const std::filesystem::path &editorConfigPath,
                                               PePresentMode mode,
                                               std::string *error = nullptr);
+    [[nodiscard]] bool ClearEditorPresentMode(const std::filesystem::path &editorConfigPath,
+                                              std::string *error = nullptr);
     [[nodiscard]] std::optional<PePresentMode> ReadStartupPresentModeOverride(
         const std::filesystem::path &editorConfigPath = {});
 } // namespace pe

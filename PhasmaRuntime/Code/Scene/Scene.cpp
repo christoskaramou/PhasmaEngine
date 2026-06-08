@@ -14,9 +14,29 @@
 #include "Camera/Camera.h"
 #include "Particles/ParticleManager.h"
 #include <cstddef>
+#include <iomanip>
+#include <sstream>
 
 namespace pe
 {
+    namespace
+    {
+        bool CanSharePrimitiveGeometry(const ModelAsset *model)
+        {
+            return model && model->IsPrimitive() && !model->HasSkeleton() && !model->HasAnimations() &&
+                   model->GetNodeCount() == 1 && model->GetMeshInfoCount() == 1 && model->GetNodeMesh(0) == 0;
+        }
+
+        std::string PrimitiveGeometryKey(const ModelAsset &model)
+        {
+            std::ostringstream key;
+            key << model.GetPrimitiveType() << ':' << model.GetPrimitiveParamCount();
+            const vec4 &p = model.GetPrimitiveParams();
+            key << std::setprecision(9) << ':' << p.x << ':' << p.y << ':' << p.z << ':' << p.w;
+            return key.str();
+        }
+    } // namespace
+
     std::vector<uint32_t> Scene::s_aabbIndices = {
         0, 1, 1, 2, 2, 3, 3, 0,
         4, 5, 5, 6, 6, 7, 7, 4,
@@ -484,8 +504,79 @@ namespace pe
         }
     }
 
+    SceneNodeHandle Scene::AddPrimitiveDeferred(ModelAsset *model)
+    {
+        if (!model)
+            return {};
+
+        const std::string key = PrimitiveGeometryKey(*model);
+        int sourceIndex = static_cast<int>(m_sources.size());
+        SceneSource source;
+        source.filePath = model->GetFilePath();
+        source.primitiveType = model->GetPrimitiveType();
+        source.primitiveParams = model->GetPrimitiveParams();
+        source.primitiveParamCount = model->GetPrimitiveParamCount();
+        m_sources.push_back(std::move(source));
+
+        const MeshInfo *sourceMesh = model->GetMeshInfo(0);
+        if (!sourceMesh)
+        {
+            delete model;
+            return {};
+        }
+
+        int meshIndex = -1;
+        auto cacheIt = m_primitiveGeometryCache.find(key);
+        if (cacheIt != m_primitiveGeometryCache.end() && IsValidMeshIndex(cacheIt->second.meshIndex))
+        {
+            Mesh mesh = m_meshes[cacheIt->second.meshIndex];
+            mesh.renderType = sourceMesh->renderType;
+            mesh.material = sourceMesh->material;
+            mesh.materialInstance = nullptr;
+            mesh.skinned = false;
+            mesh.boundingBox = sourceMesh->boundingBox;
+            mesh.aabbColor = sourceMesh->aabbColor;
+            meshIndex = AddMesh(std::move(mesh));
+        }
+        else
+        {
+            std::vector<int> meshMap = AddModelGeometry(model, sourceIndex);
+            if (!meshMap.empty())
+                meshIndex = meshMap[0];
+            if (meshIndex >= 0)
+                m_primitiveGeometryCache[key] = {meshIndex};
+            m_geometryDirty = true;
+        }
+
+        if (meshIndex >= 0)
+        {
+            if (static_cast<int>(m_meshSourceInfos.size()) <= meshIndex)
+                m_meshSourceInfos.resize(meshIndex + 1);
+            m_meshSourceInfos[meshIndex] = {sourceIndex, 0};
+        }
+
+        const NodeInfo *nodeInfo = model->GetNodeInfo(0);
+        NodeId *node = CreateNode(nodeInfo ? nodeInfo->name : model->GetLabel(), nullptr);
+        if (nodeInfo)
+            SetLocalMatrix(node, model->GetMatrix() * nodeInfo->localMatrix, false);
+        if (meshIndex >= 0)
+            SetMeshRef(node, meshIndex);
+        m_nodeRuntime[node->index].gpuPending = true;
+        MarkNodeDirty(node);
+        UpdateNodeMatrices();
+
+        for (auto &mat : model->GetOwnedMaterials())
+            m_ownedMaterials.push_back(std::move(mat));
+        delete model;
+
+        return MakeHandle(node);
+    }
+
     SceneNodeHandle Scene::AddModelDeferred(ModelAsset *model)
     {
+        if (CanSharePrimitiveGeometry(model))
+            return AddPrimitiveDeferred(model);
+
         m_models.insert(model->GetId(), model);
         ResetSkeletonCache();
 
