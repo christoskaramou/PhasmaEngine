@@ -708,6 +708,494 @@ namespace pe
 
             {
                 ToolDefinition tool;
+                tool.name = "create_sprite_node";
+                tool.description = "Creates a sprite scene node with Component_Sprite metadata on a textured quad. "
+                                   "Path can be an image or .sprite.json metadata asset. "
+                                   "Supports parent, frame/frame_name, tint, size, and transform.";
+                tool.inputSchema = schema::Object({
+                    {"path", "Image or .sprite.json path, absolute or relative to Assets/. Omit for a white placeholder sprite.", schema::String()},
+                    {"name", "Optional node name", schema::String()},
+                    {"parent", "Parent node name or stable id (node:index:revision)", schema::String()},
+                    {"frame", "Frame index from .sprite.json metadata", schema::Integer()},
+                    {"frame_name", "Frame name from .sprite.json metadata", schema::String()},
+                    {"uv_rect", "Normalized UV rectangle as [u0,v0,u1,v1]", schema::ArrayOf(schema::Number())},
+                    {"tint", "Base color tint as [r,g,b,a]", schema::ArrayOf(schema::Number())},
+                    {"size", "World size as [width,height]", schema::ArrayOf(schema::Number())},
+                    {"position", "Position as [x,y,z]", schema::ArrayOf(schema::Number())},
+                    {"rotation", "Rotation in degrees as [x,y,z]", schema::ArrayOf(schema::Number())},
+                    {"scale", "Scale as [x,y,z]", schema::ArrayOf(schema::Number())},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->CreateSpriteNode(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "get_sprite_node";
+                tool.description = "Inspects a sprite node's Component_Sprite metadata, UV rect, tint, frame, image/metadata paths, and transform.";
+                tool.inputSchema = schema::Object({
+                    {"node", "Node name or stable id (node:index:revision)", schema::String(), true},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->GetSpriteNode(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "set_sprite_node";
+                tool.description = "Tweaks an existing Component_Sprite node. "
+                                   "Use path plus frame/frame_name to select metadata frames, uv_rect for custom sheet regions, "
+                                   "and tint/size/transform for material and placement changes.";
+                tool.inputSchema = schema::Object({
+                    {"node", "Node name or stable id (node:index:revision)", schema::String(), true},
+                    {"path", "Optional image or .sprite.json path, absolute or relative to Assets/", schema::String()},
+                    {"mesh_slot", "Mesh slot index on the node (default 0)", schema::Integer()},
+                    {"frame", "Frame index from .sprite.json metadata", schema::Integer()},
+                    {"frame_name", "Frame name from .sprite.json metadata", schema::String()},
+                    {"uv_rect", "Normalized UV rectangle as [u0,v0,u1,v1]", schema::ArrayOf(schema::Number())},
+                    {"tint", "Base color tint as [r,g,b,a]", schema::ArrayOf(schema::Number())},
+                    {"size", "World size as [width,height]", schema::ArrayOf(schema::Number())},
+                    {"position", "Position as [x,y,z]", schema::ArrayOf(schema::Number())},
+                    {"rotation", "Rotation in degrees as [x,y,z]", schema::ArrayOf(schema::Number())},
+                    {"scale", "Scale as [x,y,z]", schema::ArrayOf(schema::Number())},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->SetSpriteNode(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "set_sprite_frame";
+                tool.description = "Switches an existing sprite node to a frame from sprite metadata. "
+                                   "Uses the node's current metadata_path when path is omitted.";
+                tool.inputSchema = schema::Object({
+                    {"node", "Node name or stable id (node:index:revision)", schema::String(), true},
+                    {"path", "Optional .sprite.json path, absolute or relative to Assets/", schema::String()},
+                    {"mesh_slot", "Mesh slot index on the node (default 0)", schema::Integer()},
+                    {"frame", "Frame index from .sprite.json metadata", schema::Integer()},
+                    {"frame_name", "Frame name from .sprite.json metadata", schema::String()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->SetSpriteFrame(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "reload_sprite_metadata";
+                tool.description = "Reloads a sprite node's .sprite.json metadata into its Component_Sprite frame and clip cache.";
+                tool.inputSchema = schema::Object({
+                    {"node", "Node name or stable id (node:index:revision)", schema::String(), true},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->ReloadSpriteMetadata(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "play_sprite_clip";
+                tool.description = "Starts sprite runtime playback for a metadata clip and advances the quad UVs each frame.";
+                tool.inputSchema = schema::Object({
+                    {"node", "Node name or stable id (node:index:revision)", schema::String(), true},
+                    {"clip_name", "Clip name from the sprite metadata. Omit to use the current or first clip.", schema::String()},
+                    {"clip", "Alias for clip_name", schema::String()},
+                    {"restart", "Restart from the clip start frame. Defaults true.", schema::Boolean()},
+                    {"mesh_slot", "Mesh slot index on the node. Defaults to the sprite component slot.", schema::Integer()},
+                    {"speed", "Playback speed multiplier. Defaults 1.0.", schema::Number()},
+                    {"loop", "Override the component loop flag for this playback.", schema::Boolean()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->PlaySpriteClip(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "set_sprite_playback";
+                tool.description = "Tweaks sprite playback state, active clip, frame, speed, loop flag, and optional metadata reload.";
+                tool.inputSchema = schema::Object({
+                    {"node", "Node name or stable id (node:index:revision)", schema::String(), true},
+                    {"clip_name", "Clip name to make active", schema::String()},
+                    {"clip", "Alias for clip_name", schema::String()},
+                    {"frame", "Frame index to apply immediately", schema::Integer()},
+                    {"frame_index", "Alias for frame", schema::Integer()},
+                    {"frame_name", "Frame name to apply immediately", schema::String()},
+                    {"playing", "Whether playback should be running after applying changes", schema::Boolean()},
+                    {"restart", "Restart active clip when a clip is supplied. Defaults true when changing clips.", schema::Boolean()},
+                    {"mesh_slot", "Mesh slot index on the node", schema::Integer()},
+                    {"speed", "Playback speed multiplier", schema::Number()},
+                    {"loop", "Runtime loop flag", schema::Boolean()},
+                    {"reload_metadata", "Reload .sprite.json before applying playback changes", schema::Boolean()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->SetSpritePlayback(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "pause_sprite";
+                tool.description = "Pauses or resumes sprite runtime playback without changing the current frame.";
+                tool.inputSchema = schema::Object({
+                    {"node", "Node name or stable id (node:index:revision)", schema::String(), true},
+                    {"paused", "true pauses, false resumes. Defaults true.", schema::Boolean()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->PauseSprite(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "stop_sprite";
+                tool.description = "Stops sprite runtime playback and returns to the active clip's start frame.";
+                tool.inputSchema = schema::Object({
+                    {"node", "Node name or stable id (node:index:revision)", schema::String(), true},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->StopSprite(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "read_sprite_metadata";
+                tool.description = "Reads a .sprite.json metadata asset and returns its frames, clips, grid settings, and image path.";
+                tool.inputSchema = schema::Object({
+                    {"path", "Sprite metadata path, absolute or relative to Assets/", schema::String(), true},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->ReadSpriteMetadata(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "validate_sprite_asset";
+                tool.description = "Read-only validation for a .sprite.json asset. "
+                                   "Checks image existence/size, frame rect bounds, clip ranges, duplicate frame names, "
+                                   "and optionally verifies a node's sprite mesh is a quad. "
+                                   "Also returns resolved clip timelines for agent review.";
+                tool.inputSchema = schema::Object({
+                    {"path", "Sprite metadata path, absolute or relative to Assets/. Optional when node has Component_Sprite metadata.", schema::String()},
+                    {"metadata_path", "Alias for path", schema::String()},
+                    {"node", "Optional node name or stable id to validate the attached sprite component and mesh", schema::String()},
+                    {"mesh_slot", "Optional mesh slot to validate on the node; defaults to Component_Sprite mesh_slot", schema::Integer()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->ValidateSpriteAsset(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "write_sprite_metadata";
+                tool.description = "Creates or replaces a .sprite.json metadata asset. "
+                                   "Can accept explicit frames/clips or generate grid frames from image size and grid settings.";
+                tool.inputSchema = schema::Object({
+                    {"path", "Output .sprite.json path, absolute or relative to Assets/", schema::String(), true},
+                    {"image", "Sprite sheet image path stored in the metadata", schema::String()},
+                    {"image_size", "Optional image size object with width and height", schema::Object({
+                                                                                           {"width", "Image width", schema::Integer()},
+                                                                                           {"height", "Image height", schema::Integer()},
+                                                                                       })},
+                    {"grid", "Grid settings: frame_width, frame_height, margin_x, margin_y, spacing_x, spacing_y, max_frames, duration", schema::Object({
+                                                                                                                                             {"frame_width", "Frame width in pixels", schema::Integer()},
+                                                                                                                                             {"frame_height", "Frame height in pixels", schema::Integer()},
+                                                                                                                                             {"margin_x", "Left margin in pixels", schema::Integer()},
+                                                                                                                                             {"margin_y", "Top margin in pixels", schema::Integer()},
+                                                                                                                                             {"spacing_x", "Horizontal spacing in pixels", schema::Integer()},
+                                                                                                                                             {"spacing_y", "Vertical spacing in pixels", schema::Integer()},
+                                                                                                                                             {"max_frames", "Optional frame limit; 0 means no limit", schema::Integer()},
+                                                                                                                                             {"duration", "Default frame duration in seconds", schema::Number()},
+                                                                                                                                         })},
+                    {"generate_grid", "Generate frames from grid settings", schema::Boolean()},
+                    {"frames", "Explicit frame array. Each frame uses name, rect [x,y,w,h], pivot [x,y], duration, optional hitbox.", schema::ArrayOf(schema::Object({}))},
+                    {"clips", "Animation clip array. Each clip uses name, start, end, fps, loop.", schema::ArrayOf(schema::Object({}))},
+                    {"fps", "Default clip FPS when auto-creating the default clip", schema::Number()},
+                    {"loop", "Default clip loop flag when auto-creating the default clip", schema::Boolean()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->WriteSpriteMetadata(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "add_sprite_frame";
+                tool.description = "Adds a frame to an existing .sprite.json metadata asset and returns the updated metadata.";
+                tool.inputSchema = schema::Object({
+                    {"path", "Sprite metadata path, absolute or relative to Assets/", schema::String(), true},
+                    {"index", "Optional insertion index; defaults to append", schema::Integer()},
+                    {"name", "Frame name", schema::String()},
+                    {"rect", "Frame rectangle in pixels as [x,y,w,h]", schema::ArrayOf(schema::Integer())},
+                    {"pivot", "Pivot as [x,y] in normalized 0..1 frame space", schema::ArrayOf(schema::Number())},
+                    {"duration", "Frame duration in seconds", schema::Number()},
+                    {"hitbox_rect", "Optional hitbox rectangle as [x,y,w,h]", schema::ArrayOf(schema::Integer())},
+                    {"frame", "Optional frame object with name, rect, pivot, duration, hitbox", schema::Object({})},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->AddSpriteFrame(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "update_sprite_frame";
+                tool.description = "Updates a frame in an existing .sprite.json metadata asset by index or frame_name.";
+                tool.inputSchema = schema::Object({
+                    {"path", "Sprite metadata path, absolute or relative to Assets/", schema::String(), true},
+                    {"index", "Frame index", schema::Integer()},
+                    {"frame_name", "Frame name to update", schema::String()},
+                    {"name", "New frame name", schema::String()},
+                    {"rect", "Frame rectangle in pixels as [x,y,w,h]", schema::ArrayOf(schema::Integer())},
+                    {"pivot", "Pivot as [x,y] in normalized 0..1 frame space", schema::ArrayOf(schema::Number())},
+                    {"duration", "Frame duration in seconds", schema::Number()},
+                    {"hitbox_rect", "Optional hitbox rectangle as [x,y,w,h]", schema::ArrayOf(schema::Integer())},
+                    {"frame", "Optional partial frame object", schema::Object({})},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->UpdateSpriteFrame(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "remove_sprite_frame";
+                tool.description = "Removes a frame from an existing .sprite.json metadata asset by index or frame_name and clamps clips.";
+                tool.inputSchema = schema::Object({
+                    {"path", "Sprite metadata path, absolute or relative to Assets/", schema::String(), true},
+                    {"index", "Frame index", schema::Integer()},
+                    {"frame_name", "Frame name to remove", schema::String()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->RemoveSpriteFrame(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "reorder_sprite_frames";
+                tool.description = "Reorders frames in a .sprite.json metadata asset and remaps clip ranges. "
+                                   "Use order as a full new-to-old index permutation, or move one frame with from_index/frame_name and to_index. "
+                                   "Because clips are stored as contiguous ranges, remapping may expand a clip range; the result reports clip_remaps.";
+                tool.inputSchema = schema::Object({
+                    {"path", "Sprite metadata path, absolute or relative to Assets/", schema::String(), true},
+                    {"order", "Optional full permutation: new frame order expressed as old frame indices", schema::ArrayOf(schema::Integer())},
+                    {"from_index", "Old frame index to move when order is omitted", schema::Integer()},
+                    {"frame_name", "Frame name to move when order is omitted", schema::String()},
+                    {"to_index", "Destination frame index for single-frame move", schema::Integer()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->ReorderSpriteFrames(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "add_sprite_clip";
+                tool.description = "Adds an animation clip to an existing .sprite.json metadata asset and returns the updated metadata.";
+                tool.inputSchema = schema::Object({
+                    {"path", "Sprite metadata path, absolute or relative to Assets/", schema::String(), true},
+                    {"index", "Optional insertion index; defaults to append", schema::Integer()},
+                    {"name", "Clip name", schema::String()},
+                    {"start", "Start frame index", schema::Integer()},
+                    {"end", "End frame index", schema::Integer()},
+                    {"fps", "Playback frames per second", schema::Number()},
+                    {"loop", "Whether the clip loops", schema::Boolean()},
+                    {"clip", "Optional clip object with name, start, end, fps, loop", schema::Object({})},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->AddSpriteClip(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "update_sprite_clip";
+                tool.description = "Updates an animation clip in an existing .sprite.json metadata asset by index or clip_name.";
+                tool.inputSchema = schema::Object({
+                    {"path", "Sprite metadata path, absolute or relative to Assets/", schema::String(), true},
+                    {"index", "Clip index", schema::Integer()},
+                    {"clip_name", "Clip name to update", schema::String()},
+                    {"name", "New clip name", schema::String()},
+                    {"start", "Start frame index", schema::Integer()},
+                    {"end", "End frame index", schema::Integer()},
+                    {"fps", "Playback frames per second", schema::Number()},
+                    {"loop", "Whether the clip loops", schema::Boolean()},
+                    {"clip", "Optional partial clip object", schema::Object({})},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->UpdateSpriteClip(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "remove_sprite_clip";
+                tool.description = "Removes an animation clip from an existing .sprite.json metadata asset by index or clip_name.";
+                tool.inputSchema = schema::Object({
+                    {"path", "Sprite metadata path, absolute or relative to Assets/", schema::String(), true},
+                    {"index", "Clip index", schema::Integer()},
+                    {"clip_name", "Clip name to remove", schema::String()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->RemoveSpriteClip(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "read_sprite_sheet";
+                tool.description = "Reads a .sheet.json sprite sheet asset containing an ordered list of source images.";
+                tool.inputSchema = schema::Object({
+                    {"path", "Sprite sheet asset path, absolute or relative to Assets/", schema::String(), true},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->ReadSpriteSheet(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "write_sprite_sheet";
+                tool.description = "Creates or replaces a .sheet.json sprite sheet asset. "
+                                   "A sheet asset stores an ordered images array of objects with path and optional label.";
+                tool.inputSchema = schema::Object({
+                    {"path", "Output .sheet.json path, absolute or relative to Assets/", schema::String(), true},
+                    {"images", "Ordered image list. Each entry uses path and optional label.", schema::ArrayOf(schema::Object({})), true},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->WriteSpriteSheet(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "create_sprite_from_sheet";
+                tool.description = "Creates .sprite.json metadata for one image from a .sheet.json sheet asset, "
+                                   "and can optionally create a sprite node from that metadata. "
+                                   "Use image_index to choose the active source image.";
+                tool.inputSchema = schema::Object({
+                    {"sheet", ".sheet.json sprite sheet asset path, absolute or relative to Assets/", schema::String(), true},
+                    {"metadata_path", "Output .sprite.json metadata path; defaults beside the sheet", schema::String()},
+                    {"image_index", "Index of the image inside the sheet asset", schema::Integer()},
+                    {"grid", "Optional grid settings for frame generation", schema::Object({})},
+                    {"generate_grid", "Generate frames from grid settings", schema::Boolean()},
+                    {"frames", "Explicit frame array", schema::ArrayOf(schema::Object({}))},
+                    {"clips", "Explicit clip array", schema::ArrayOf(schema::Object({}))},
+                    {"frame_name", "Default full-image frame name when no frames/grid are supplied", schema::String()},
+                    {"clip_name", "Default clip name", schema::String()},
+                    {"fps", "Default clip FPS", schema::Number()},
+                    {"loop", "Default clip loop flag", schema::Boolean()},
+                    {"create_node", "Also create a sprite scene node from the generated metadata", schema::Boolean()},
+                    {"name", "Optional node name when create_node is true", schema::String()},
+                    {"parent", "Parent node name or stable id when create_node is true", schema::String()},
+                    {"tint", "Base color tint as [r,g,b,a]", schema::ArrayOf(schema::Number())},
+                    {"size", "World size as [width,height]", schema::ArrayOf(schema::Number())},
+                    {"position", "Position as [x,y,z]", schema::ArrayOf(schema::Number())},
+                    {"rotation", "Rotation in degrees as [x,y,z]", schema::ArrayOf(schema::Number())},
+                    {"scale", "Scale as [x,y,z]", schema::ArrayOf(schema::Number())},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->CreateSpriteFromSheet(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
                 tool.name = "set_node_transform";
                 tool.description = "Sets position, rotation (degrees), and/or scale on a node. "
                                    "Node can be a name or stable id (node:index:revision).";

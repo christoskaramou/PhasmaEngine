@@ -127,7 +127,7 @@ namespace pe
             const bool hasFiniteFarPlane = std::isfinite(m_farPlane) && m_farPlane > m_nearPlane &&
                                            m_farPlane < std::numeric_limits<float>::max() * 0.5f;
             const float farPlane = hasFiniteFarPlane ? m_farPlane : 1000.0f;
-            m_projection = ortho(-halfWidth, halfWidth, -halfHeight, halfHeight, farPlane, m_nearPlane);
+            m_projection = ortho(-halfWidth, halfWidth, -halfHeight, halfHeight, m_nearPlane, farPlane);
         }
         else
         {

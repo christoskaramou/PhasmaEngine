@@ -22,7 +22,6 @@
 #include "Scene/ModelAssetCooked.h"
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
-#include "Widgets/AssetInfo.h"
 #include "Widgets/CameraWidget.h"
 #include "Widgets/Console.h"
 #include "Widgets/FileBrowser.h"
@@ -39,6 +38,7 @@
 #include "Widgets/SceneView.h"
 #include "Widgets/ScriptEditor.h"
 #include "Widgets/ShaderEditor.h"
+#include "Widgets/SpriteEditor.h"
 #include "Widgets/AnimationTimeline.h"
 #include "PhasmaMCP/Codebase/CodebaseIndexer.h"
 #include "Widgets/TransformWidget.h"
@@ -2419,9 +2419,8 @@ namespace pe
         ImGui::DockBuilderDockWindow("Properties", dockRight);
         ImGui::DockBuilderDockWindow("Camera", dockRight);
 
-        // Bottom - Console, Asset Viewer, File Browser (Tabbed)
+        // Bottom - Console and File Browser (Tabbed)
         ImGui::DockBuilderDockWindow("Console", dockBottom);
-        ImGui::DockBuilderDockWindow("Asset Info", dockBottom);
         ImGui::DockBuilderDockWindow("File Browser", dockBottom);
 
         ImGui::DockBuilderFinish(dockspace);
@@ -3027,7 +3026,6 @@ namespace pe
         auto properties = std::make_shared<Properties>();
         auto prefabViewer = std::make_shared<PrefabViewer>();
         auto profiler = std::make_shared<ProfilerWidget>();
-        auto assetInfo = std::make_shared<AssetInfo>();
         auto sceneView = std::make_shared<SceneView>();
         auto loading = std::make_shared<Loading>();
         auto fileBrowser = std::make_shared<FileBrowser>();
@@ -3042,6 +3040,7 @@ namespace pe
         auto globalWidget = std::make_shared<GlobalWidget>();
         auto scriptEditor = std::make_shared<ScriptEditor>();
         auto shaderEditor = std::make_shared<ShaderEditor>();
+        auto spriteEditor = std::make_shared<SpriteEditor>();
         auto animTimeline = std::make_shared<AnimationTimeline>();
 #ifdef PE_PHYSICS
         auto physicsWidget = std::make_shared<PhysicsWidget>();
@@ -3058,7 +3057,6 @@ namespace pe
             properties,
             prefabViewer,
             profiler,
-            assetInfo,
             sceneView,
             loading,
             fileBrowser,
@@ -3072,6 +3070,7 @@ namespace pe
             globalWidget,
             scriptEditor,
             shaderEditor,
+            spriteEditor,
             animTimeline,
 #ifdef PE_PHYSICS
             physicsWidget,
@@ -3093,13 +3092,13 @@ namespace pe
                                profiler,
                                properties,
                                prefabViewer,
-                               assetInfo,
                                fileBrowser,
                                hierarchy,
                                particles,
                                globalWidget,
                                scriptEditor,
                                shaderEditor,
+                               spriteEditor,
                                animTimeline};
         for (auto &widget : m_widgets)
             widget->Init(this);

@@ -34,6 +34,7 @@ namespace pe
         Component_RuntimeUi = 1 << 9,
         Component_Physics2D = 1 << 10,
         Component_Prefab = 1 << 11,
+        Component_Sprite = 1 << 12,
     };
 
     // Lightweight mesh descriptor — references into Scene's data stores

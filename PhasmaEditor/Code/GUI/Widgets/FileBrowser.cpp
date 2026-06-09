@@ -6,9 +6,13 @@
 #include "GUI/GUI.h"
 #include "GUI/GUIState.h"
 #include "GUI/Helpers.h"
+#include "GUI/HierarchyPayload.h"
 #include "GUI/IconsFontAwesome.h"
+#include "GUI/UndoRedo.h"
 #include "PrefabViewer.h"
 #include "Scene/ModelAsset.h"
+#include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
 #if defined(PE_WIN32)
 #include <windows.h>
 #include <shellapi.h>
@@ -31,6 +35,34 @@ namespace pe
         std::filesystem::path StripTrailingSep(const std::filesystem::path &p)
         {
             return p.filename().empty() ? p.parent_path() : p;
+        }
+
+        std::string MakePrefabFileName(std::string name)
+        {
+            if (name.empty())
+                name = "Prefab";
+
+            for (char &c : name)
+            {
+                switch (c)
+                {
+                case '<':
+                case '>':
+                case ':':
+                case '"':
+                case '/':
+                case '\\':
+                case '|':
+                case '?':
+                case '*':
+                    c = '_';
+                    break;
+                default:
+                    break;
+                }
+            }
+
+            return name + ".peprefab";
         }
 
         // Returns a UTF-8 string showing the last 2 path components, prefixed with "…/" if deeper.
@@ -67,6 +99,42 @@ namespace pe
         {
             auto u8 = path.u8string();
             return std::string(reinterpret_cast<const char *>(u8.c_str()));
+        }
+
+        AssetPreviewType PreviewTypeForPath(const std::filesystem::path &path)
+        {
+            if (FileBrowser::IsModelFile(path))
+                return AssetPreviewType::ModelAsset;
+            if (FileBrowser::IsScriptFile(path))
+                return AssetPreviewType::Script;
+            if (FileBrowser::IsShaderFile(path))
+                return AssetPreviewType::Shader;
+            if (FileBrowser::IsSpriteMetadataFile(path))
+                return AssetPreviewType::Sprite;
+            if (FileBrowser::IsSpriteSheetFile(path))
+                return AssetPreviewType::SpriteSheet;
+            if (FileBrowser::IsImageFile(path))
+                return AssetPreviewType::Image;
+            return AssetPreviewType::None;
+        }
+
+        AssetPreviewType UpdateAssetPreviewForPath(const std::filesystem::path &path)
+        {
+            AssetPreviewType type = PreviewTypeForPath(path);
+            if (type == AssetPreviewType::None)
+                return type;
+
+            GUIState::UpdateAssetPreview(type, PathToUtf8(path.filename()), PathToUtf8(path));
+            return type;
+        }
+
+        template <size_t N>
+        void CopyToCharBuffer(char (&buffer)[N], const std::string &value)
+        {
+            static_assert(N > 0);
+            std::fill(std::begin(buffer), std::end(buffer), '\0');
+            const size_t count = std::min(value.size(), N - 1);
+            std::copy_n(value.data(), count, buffer);
         }
 
         bool IsPathAncestorOf(const std::filesystem::path &ancestor, const std::filesystem::path &path)
@@ -223,6 +291,26 @@ namespace pe
         return false;
     }
 
+    bool FileBrowser::IsSpriteMetadataFile(const std::filesystem::path &path)
+    {
+        auto u8name = path.filename().u8string();
+        std::string name(reinterpret_cast<const char *>(u8name.c_str()));
+        std::transform(name.begin(), name.end(), name.begin(),
+                       [](unsigned char c)
+                       { return static_cast<char>(std::tolower(c)); });
+        return name.ends_with(".sprite.json");
+    }
+
+    bool FileBrowser::IsSpriteSheetFile(const std::filesystem::path &path)
+    {
+        auto u8name = path.filename().u8string();
+        std::string name(reinterpret_cast<const char *>(u8name.c_str()));
+        std::transform(name.begin(), name.end(), name.begin(),
+                       [](unsigned char c)
+                       { return static_cast<char>(std::tolower(c)); });
+        return name.ends_with(".sheet.json");
+    }
+
     FileBrowser::~FileBrowser()
     {
         EventSystem::UnregisterCallback(EventType::FileDrop, m_fileDropToken);
@@ -235,6 +323,7 @@ namespace pe
         ReleaseImGuiTexture(m_prefabIconDS);
         ReleaseImGuiTexture(m_scriptIconDS);
         ReleaseImGuiTexture(m_imageIconDS);
+        ReleaseImGuiTexture(m_spriteIconDS);
 
         for (auto &pair : m_fileDescriptors)
             ReleaseImGuiTexture(pair.second);
@@ -248,6 +337,7 @@ namespace pe
         Image::Destroy(m_prefabIcon);
         Image::Destroy(m_scriptIcon);
         Image::Destroy(m_imageIcon);
+        Image::Destroy(m_spriteIcon);
 
         for (auto &pair : m_fileCache)
             Image::Destroy(pair.second);
@@ -275,6 +365,7 @@ namespace pe
         LoadIcon(cmd, Path::EditorAssets + "Icons/prefab_icon.png", m_prefabIcon);
         LoadIcon(cmd, Path::EditorAssets + "Icons/script_icon.png", m_scriptIcon);
         LoadIcon(cmd, Path::EditorAssets + "Icons/image_icon.png", m_imageIcon);
+        LoadIcon(cmd, Path::EditorAssets + "Icons/sprite_icon.png", m_spriteIcon);
 
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
@@ -289,6 +380,7 @@ namespace pe
         m_prefabIconDS = RegisterImageForImGui(m_prefabIcon);
         m_scriptIconDS = RegisterImageForImGui(m_scriptIcon);
         m_imageIconDS = RegisterImageForImGui(m_imageIcon);
+        m_spriteIconDS = RegisterImageForImGui(m_spriteIcon);
 
         m_fileDropToken = EventSystem::RegisterCallbackWithToken(EventType::FileDrop, [this](const std::any &data)
                                                                  {
@@ -327,6 +419,8 @@ namespace pe
     {
         if (entry.isDirectory)
             return m_folderIconDS;
+        if (IsSpriteMetadataFile(entry.path) || IsSpriteSheetFile(entry.path))
+            return m_spriteIconDS ? m_spriteIconDS : (m_imageIconDS ? m_imageIconDS : m_fileIconDS);
         if (IsTextFile(entry.path))
             return m_txtIconDS ? m_txtIconDS : m_fileIconDS;
         if (IsShaderFile(entry.path))
@@ -938,8 +1032,7 @@ namespace pe
         if (ImGui::MenuItem("Rename", "F2"))
         {
             auto filename = m_selectedEntry.filename().string();
-            std::strncpy(m_renameBuffer, filename.c_str(), sizeof(m_renameBuffer) - 1);
-            m_renameBuffer[sizeof(m_renameBuffer) - 1] = '\0';
+            CopyToCharBuffer(m_renameBuffer, filename);
             m_renamingEntry = m_selectedEntry;
             m_renameNeedsFocus = true;
             m_pendingOpenRename = true;
@@ -986,8 +1079,7 @@ namespace pe
                 RefreshCache();
                 m_selectedEntry = newFolder;
                 auto filename = newFolder.filename().string();
-                std::strncpy(m_renameBuffer, filename.c_str(), sizeof(m_renameBuffer) - 1);
-                m_renameBuffer[sizeof(m_renameBuffer) - 1] = '\0';
+                CopyToCharBuffer(m_renameBuffer, filename);
                 m_renamingEntry = newFolder;
                 m_renameNeedsFocus = true;
                 m_pendingOpenRename = true;
@@ -1099,6 +1191,91 @@ namespace pe
         ImGui::EndPopup();
     }
 
+    bool FileBrowser::AcceptHierarchyPrefabDrop(const std::filesystem::path &targetFolder)
+    {
+        if (!ImGui::BeginDragDropTarget())
+            return false;
+
+        bool accepted = false;
+        if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("HIERARCHY_NODE"))
+        {
+            HierarchyDragDropPayload data = *(const HierarchyDragDropPayload *)payload->Data;
+            StartPrefabDrop(data.node, targetFolder);
+            accepted = true;
+        }
+        ImGui::EndDragDropTarget();
+        return accepted;
+    }
+
+    void FileBrowser::StartPrefabDrop(NodeId *node, const std::filesystem::path &targetFolder)
+    {
+        Scene *scene = GetActiveScene();
+        if (!scene || !node || !scene->IsNodeAlive(node))
+            return;
+
+        std::filesystem::path folder = targetFolder;
+        if (!IsDirectory(folder))
+            folder = folder.parent_path();
+        if (folder.empty())
+            folder = m_currentPath;
+
+        m_pendingPrefabNode = scene->MakeHandle(node);
+        m_pendingPrefabFolder = folder;
+        CopyToCharBuffer(m_prefabNameBuffer, MakePrefabFileName(scene->GetNodeName(node)));
+        m_pendingOpenPrefabPrompt = true;
+    }
+
+    void FileBrowser::DrawPrefabDropPrompt()
+    {
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        if (!ImGui::BeginPopupModal("Create Prefab##filebrowser", nullptr,
+                                    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+            return;
+
+        Scene *scene = GetActiveScene();
+        const bool validNode = scene && m_pendingPrefabNode.IsValid(*scene);
+
+        ImGui::TextUnformatted("Save prefab to");
+        ImGui::TextWrapped("%s", m_pendingPrefabFolder.string().c_str());
+        ImGui::Spacing();
+        ImGui::SetNextItemWidth(360.0f);
+        ImGui::InputText("Name", m_prefabNameBuffer, IM_ARRAYSIZE(m_prefabNameBuffer));
+        ui::ItemTooltip("Prefab asset filename.");
+
+        std::filesystem::path savePath = m_pendingPrefabFolder / (m_prefabNameBuffer[0] ? m_prefabNameBuffer : "Prefab.peprefab");
+        if (savePath.extension() != ".peprefab")
+            savePath += ".peprefab";
+        ImGui::TextDisabled("%s", savePath.string().c_str());
+
+        if (!validNode)
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.25f, 1.0f), "Source node is no longer valid.");
+
+        if (!validNode)
+            ImGui::BeginDisabled();
+        if (ImGui::Button("Create", ImVec2(120, 0)))
+        {
+            UndoRedo::Instance().RecordSnapshot(*scene, "Created Prefab");
+            const bool saved = scene->SavePrefab(m_pendingPrefabNode.nodeId, savePath);
+            if (saved)
+            {
+                RefreshCache();
+                if (m_gui)
+                    m_gui->NotifyChange();
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ui::ItemTooltip("Create a prefab from the dragged node subtree.");
+        if (!validNode)
+            ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            ImGui::CloseCurrentPopup();
+        ui::ItemTooltip("Close without creating a prefab.");
+
+        ImGui::EndPopup();
+    }
+
     void FileBrowser::Update()
     {
         ProcessLoadedImages();
@@ -1161,22 +1338,7 @@ namespace pe
                         return;
                     }
 
-                    AssetPreviewType type = AssetPreviewType::None;
-                    if (IsModelFile(path))
-                        type = AssetPreviewType::ModelAsset;
-                    else if (IsScriptFile(path))
-                        type = AssetPreviewType::Script;
-                    else if (IsShaderFile(path))
-                        type = AssetPreviewType::Shader;
-
-                    if (type != AssetPreviewType::None)
-                    {
-                        auto filenameU8 = path.filename().u8string();
-                        auto pathU8 = path.u8string();
-                        std::string filenameStr(reinterpret_cast<const char *>(filenameU8.c_str()));
-                        std::string pathStr(reinterpret_cast<const char *>(pathU8.c_str()));
-                        GUIState::UpdateAssetPreview(type, filenameStr, pathStr);
-                    }
+                    AssetPreviewType type = UpdateAssetPreviewForPath(path);
 
                     // Only cooked .pemesh loads into the scene; source models are import-only (File > Import).
                     if (type == AssetPreviewType::ModelAsset && IsCookedModelFile(path) && !GUIState::s_modelLoading)
@@ -1218,8 +1380,7 @@ namespace pe
                 if (ImGui::IsKeyPressed(ImGuiKey_F2, false))
                 {
                     auto filename = m_selectedEntry.filename().string();
-                    std::strncpy(m_renameBuffer, filename.c_str(), sizeof(m_renameBuffer) - 1);
-                    m_renameBuffer[sizeof(m_renameBuffer) - 1] = '\0';
+                    CopyToCharBuffer(m_renameBuffer, filename);
                     m_renamingEntry = m_selectedEntry;
                     m_renameNeedsFocus = true;
                     m_pendingOpenRename = true;
@@ -1250,10 +1411,16 @@ namespace pe
                 ImGui::OpenPopup("Overwrite?##filebrowser");
                 m_pendingOpenOverwritePrompt = false;
             }
+            if (m_pendingOpenPrefabPrompt)
+            {
+                ImGui::OpenPopup("Create Prefab##filebrowser");
+                m_pendingOpenPrefabPrompt = false;
+            }
 
             DrawRenamePopup();
             DrawDeleteConfirmPopup();
             DrawOverwritePrompt();
+            DrawPrefabDropPrompt();
         }
         ImGui::End();
     }
@@ -1428,6 +1595,7 @@ namespace pe
                         if (ImGui::Selectable(entry.filename.c_str(), isSelected, ImGuiSelectableFlags_AllowDoubleClick))
                         {
                             m_selectedEntry = entry.path;
+                            UpdateAssetPreviewForPath(entry.path);
                             if (ImGui::IsMouseDoubleClicked(0))
                                 onDoubleClick(entry.path);
                         }
@@ -1446,6 +1614,8 @@ namespace pe
                             ImGui::Text("%s", entry.filename.c_str());
                             ImGui::EndDragDropSource();
                         }
+                        if (entry.isDirectory)
+                            AcceptHierarchyPrefabDrop(entry.path);
                         if (entryHovered)
                             ui::TooltipText("Select this entry; double-click to open it or drag it into the scene.");
                     }
@@ -1551,12 +1721,16 @@ namespace pe
                             else if (clicked || ImGui::IsItemClicked())
                             {
                                 m_selectedEntry = entry.path;
+                                UpdateAssetPreviewForPath(entry.path);
                             }
 
                             bool rightClicked = ImGui::IsItemClicked(ImGuiMouseButton_Right);
                             const bool entryHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
                             if (rightClicked)
+                            {
                                 m_selectedEntry = entry.path;
+                                UpdateAssetPreviewForPath(entry.path);
+                            }
 
                             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
                             {
@@ -1565,6 +1739,8 @@ namespace pe
                                 ImGui::Text("%s", entry.filename.c_str());
                                 ImGui::EndDragDropSource();
                             }
+                            if (entry.isDirectory)
+                                AcceptHierarchyPrefabDrop(entry.path);
                             if (entryHovered)
                                 ui::TooltipText("Select this entry; double-click to open it or drag it into the scene.");
 
@@ -1576,6 +1752,18 @@ namespace pe
                         }
                     }
                 }
+            }
+
+            const ImGuiPayload *drag = ImGui::GetDragDropPayload();
+            if (drag && strcmp(drag->DataType, "HIERARCHY_NODE") == 0)
+            {
+                ImVec2 dropSize = ImGui::GetContentRegionAvail();
+                dropSize.x = std::max(dropSize.x, 1.0f);
+                dropSize.y = std::max(dropSize.y, 28.0f);
+                ImGui::InvisibleButton("##current_folder_prefab_drop", dropSize);
+                AcceptHierarchyPrefabDrop(m_currentPath);
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                    ui::TooltipText("Drop a hierarchy node here to create a prefab in this folder.");
             }
 
             DrawItemContextMenu(onDoubleClick);

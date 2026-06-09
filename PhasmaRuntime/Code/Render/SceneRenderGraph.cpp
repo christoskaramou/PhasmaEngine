@@ -389,7 +389,7 @@ namespace pe
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferOpaque, dx12NeedGBuffer);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSAO, gs.ssao && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightOpaque, dx12RenderRaster);
-            SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferTransparent, gs.render_mode == RenderMode::Raster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferTransparent, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightTransparent, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::RayTracing, dx12RayTracing);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::ParticleCompute, dx12RenderRaster);
@@ -418,7 +418,7 @@ namespace pe
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferOpaque, needGBuffer);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSAO, renderSSAO);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightOpaque, renderRaster);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferTransparent, gs.render_mode == RenderMode::Raster);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferTransparent, renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightTransparent, renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::RayTracing, renderRayTracing);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::ParticleCompute, true);

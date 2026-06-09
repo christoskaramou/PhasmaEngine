@@ -1,4 +1,5 @@
 #include "Scene/Scene.h"
+#include "Base/Timer.h"
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/SceneRuntimeHooks.h"
@@ -281,6 +282,8 @@ namespace pe
                 }
             }
         }
+
+        UpdateSpriteAnimations(std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetDelta())));
 
         UpdateGeometry();
         UpdateLights();

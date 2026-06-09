@@ -1,17 +1,16 @@
 #include "Properties.h"
 #include "CameraWidget.h"
-#include "FileBrowser.h"
 #include "FileSelector.h"
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
 #include "GUI/IconsFontAwesome.h"
+#include "GUI/SpriteAuthoring.h"
 #include "GUI/SkinnedStrip2DEditor.h"
 #include "GUI/UndoRedo.h"
 #include "LightWidget.h"
 #include "MeshWidget.h"
 #include "Particles.h"
 #include "Particles/ParticleManager.h"
-#include "PrefabViewer.h"
 #include "Render/SceneSky.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/NodeComponents.h"
@@ -52,6 +51,11 @@ namespace pe
         const char *SkyboxDisplayPath(const std::string &path)
         {
             return path.empty() ? "<solid color>" : path.c_str();
+        }
+
+        std::filesystem::path U8Path(const std::string &utf8)
+        {
+            return std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));
         }
 
         void DrawSkyboxPathPreview(const std::string &path, float width = 0.0f)
@@ -96,34 +100,6 @@ namespace pe
                                  min.y + (size.y - iconSize.y) * 0.5f - 1.0f);
             drawList->AddText(iconPos, ImGui::GetColorU32(ImGuiCol_Text), icon);
             return clicked;
-        }
-
-        std::string MakePrefabFileName(std::string name)
-        {
-            if (name.empty())
-                name = "Prefab";
-
-            for (char &c : name)
-            {
-                switch (c)
-                {
-                case '<':
-                case '>':
-                case ':':
-                case '"':
-                case '/':
-                case '\\':
-                case '|':
-                case '?':
-                case '*':
-                    c = '_';
-                    break;
-                default:
-                    break;
-                }
-            }
-
-            return name + ".peprefab";
         }
 
     } // namespace
@@ -417,6 +393,158 @@ namespace pe
                     m_gui->NotifyChange();
             }
             ui::ItemTooltip("Remove the Runtime UI tag from this node.");
+        };
+
+        auto drawSpriteComponent = [&](NodeId *node)
+        {
+            NodeSpriteComponent *sprite = scene.GetSpriteComponent(node);
+            if (!sprite)
+                return;
+
+            auto drawTextRow = [](const char *label, const std::string &value)
+            {
+                ImGui::TextUnformatted(label);
+                ImGui::SameLine();
+                ImGui::TextDisabled("%s", value.empty() ? "<none>" : value.c_str());
+            };
+
+            drawTextRow("Image", sprite->imagePath);
+            drawTextRow("Metadata", sprite->metadataPath);
+            drawTextRow("Frame", sprite->frameName.empty() ? std::to_string(sprite->frameIndex) : sprite->frameName);
+            ImGui::TextDisabled("Image %dx%d  Frame %dx%d", sprite->imageWidth, sprite->imageHeight, sprite->frameWidth, sprite->frameHeight);
+            ImGui::TextDisabled("UV %.3f %.3f %.3f %.3f", sprite->uvRect.x, sprite->uvRect.y, sprite->uvRect.z, sprite->uvRect.w);
+
+            auto applySpriteAsset = [node, this](const std::string &path) -> bool
+            {
+                auto *renderer = GetGlobalSystem<RendererSystem>();
+                if (!renderer)
+                    return true;
+
+                Scene &targetScene = renderer->GetScene();
+                if (!targetScene.IsNodeAlive(node))
+                    return true;
+
+                SpriteAuthoring::Options options;
+                options.assetPath = U8Path(path);
+                SpriteAuthoring::Result result = SpriteAuthoring::ApplyToNode(targetScene, node, options);
+                if (!result.error.empty())
+                    PE_WARN("[Sprite] %s", result.error.c_str());
+                if (m_gui)
+                    m_gui->NotifyChange();
+                return true;
+            };
+
+            if (ImGui::SmallButton("Select Image"))
+            {
+                if (auto *fs = m_gui ? m_gui->GetWidget<FileSelector>() : nullptr)
+                    fs->OpenSelection(applySpriteAsset, {".png", ".jpg", ".jpeg", ".bmp", ".tga", ".hdr", ".dds", ".ktx", ".ktx2"}, Path::Assets);
+            }
+            ui::ItemTooltip("Choose an image asset for this sprite.");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Select Metadata"))
+            {
+                if (auto *fs = m_gui ? m_gui->GetWidget<FileSelector>() : nullptr)
+                    fs->OpenSelection(applySpriteAsset, {".json"}, Path::Assets);
+            }
+            ui::ItemTooltip("Choose a .sprite.json metadata asset for this sprite.");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Reload Metadata"))
+            {
+                std::string err;
+                if (!scene.LoadSpriteMetadata(node, &err))
+                    PE_WARN("[Sprite] %s", err.c_str());
+            }
+            ui::ItemTooltip("Reload frames and clips from the metadata file.");
+
+            int frameIndex = sprite->frameIndex;
+            ImGui::SetNextItemWidth(96.0f);
+            if (ImGui::DragInt("Frame", &frameIndex, 1.0f, 0, std::max(0, static_cast<int>(sprite->frames.size()) - 1)))
+            {
+                std::string err;
+                if (!scene.SetSpriteFrame(node, frameIndex, sprite->meshSlot, &err))
+                    PE_WARN("[Sprite] %s", err.c_str());
+                if (m_gui)
+                    m_gui->NotifyChange();
+            }
+
+            vec4 tint = sprite->tint;
+            if (ImGui::ColorEdit4("Tint", &tint.x))
+            {
+                SpriteAuthoring::Options options;
+                options.hasTint = true;
+                options.tint = tint;
+                SpriteAuthoring::Result result = SpriteAuthoring::ApplyToNode(scene, node, options, sprite->meshSlot);
+                if (!result.error.empty())
+                    PE_WARN("[Sprite] %s", result.error.c_str());
+                if (m_gui)
+                    m_gui->NotifyChange();
+            }
+
+            if (!sprite->clips.empty())
+            {
+                int clipIndex = std::clamp(sprite->activeClipIndex >= 0 ? sprite->activeClipIndex : 0, 0, static_cast<int>(sprite->clips.size()) - 1);
+                std::vector<const char *> clipNames;
+                clipNames.reserve(sprite->clips.size());
+                for (const NodeSpriteClip &clip : sprite->clips)
+                    clipNames.push_back(clip.name.c_str());
+
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::Combo("Clip", &clipIndex, clipNames.data(), static_cast<int>(clipNames.size())))
+                {
+                    sprite->activeClipIndex = clipIndex;
+                    sprite->activeClipName = sprite->clips[clipIndex].name;
+                    sprite->loop = sprite->clips[clipIndex].loop;
+                    if (m_gui)
+                        m_gui->NotifyChange();
+                }
+
+                ImGui::SetNextItemWidth(96.0f);
+                if (ImGui::DragFloat("Speed", &sprite->playbackSpeed, 0.05f, 0.0f, 16.0f, "%.2f"))
+                {
+                    sprite->playbackSpeed = std::clamp(sprite->playbackSpeed, 0.0f, 16.0f);
+                    if (m_gui)
+                        m_gui->NotifyChange();
+                }
+                if (ImGui::Checkbox("Loop", &sprite->loop))
+                {
+                    if (m_gui)
+                        m_gui->NotifyChange();
+                }
+
+                if (ImGui::SmallButton(sprite->playing ? "Pause" : "Play"))
+                {
+                    if (sprite->playing)
+                        scene.SetSpritePlaying(node, false);
+                    else
+                    {
+                        std::string err;
+                        if (!scene.PlaySpriteClip(node, sprite->clips[clipIndex].name, false, sprite->meshSlot, &err))
+                            PE_WARN("[Sprite] %s", err.c_str());
+                    }
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Restart"))
+                {
+                    std::string err;
+                    if (!scene.PlaySpriteClip(node, sprite->clips[clipIndex].name, true, sprite->meshSlot, &err))
+                        PE_WARN("[Sprite] %s", err.c_str());
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Stop"))
+                    scene.StopSprite(node);
+            }
+            else
+            {
+                ImGui::TextDisabled("No sprite clips loaded.");
+            }
+
+            if (ImGui::SmallButton("Remove Sprite Component"))
+            {
+                scene.ClearSpriteComponent(node);
+                if (m_gui)
+                    m_gui->NotifyChange();
+            }
+            ui::ItemTooltip("Remove the sprite authoring tag. The mesh and material remain unchanged.");
         };
 
         auto drawAnimationRuntime = [&](NodeId *node) -> bool
@@ -873,6 +1001,13 @@ namespace pe
                     ui::ItemTooltip("Tag this node as a Runtime UI surface.");
                 }
 
+                if (!(flags & Component_Sprite))
+                {
+                    if (ImGui::MenuItem("Sprite"))
+                        scene.AddComponentFlag(node, Component_Sprite);
+                    ui::ItemTooltip("Tag this mesh node as a sprite authoring surface.");
+                }
+
                 if (!(flags & Component_Script))
                 {
                     const bool scriptMenuOpen = ImGui::BeginMenu("Lua Script");
@@ -988,186 +1123,6 @@ namespace pe
             drawRow();
         };
 
-        auto findPrefabRoot = [&](NodeId *node) -> NodeId *
-        {
-            for (NodeId *current = node; current; current = scene.GetParent(current))
-            {
-                if (!scene.GetNodePrefabPath(current).empty())
-                    return current;
-            }
-            return nullptr;
-        };
-
-        auto refreshFileBrowser = [&]()
-        {
-            if (auto *browser = m_gui ? m_gui->GetWidget<FileBrowser>() : nullptr)
-                browser->RefreshCache();
-        };
-
-        auto savePrefab = [&](NodeId *root, std::filesystem::path path) -> bool
-        {
-            if (!root || path.empty())
-                return false;
-
-            if (path.extension() != ".peprefab")
-                path += ".peprefab";
-
-            const bool saved = scene.SavePrefab(root, path);
-            if (saved)
-            {
-                refreshFileBrowser();
-                if (m_gui)
-                    m_gui->NotifyChange();
-            }
-            return saved;
-        };
-
-        auto openSavePrefabDialog = [&](NodeId *root)
-        {
-            if (!root || !m_gui)
-                return;
-
-            auto *fs = m_gui->GetWidget<FileSelector>();
-            if (!fs)
-                return;
-
-            std::filesystem::path defaultPath = std::filesystem::path(Path::Assets) / "Prefabs";
-            std::error_code ec;
-            std::filesystem::create_directories(defaultPath, ec);
-            const std::string defaultName = MakePrefabFileName(scene.GetNodeName(root));
-            const SceneNodeHandle rootHandle = scene.MakeHandle(root);
-            fs->OpenSelection([rootHandle, this](const std::string &path) -> bool
-                              {
-                                  Scene *activeScene = GetActiveScene();
-                                  if (!activeScene || !rootHandle.IsValid(*activeScene))
-                                      return true;
-
-                                  NodeId *root = rootHandle.nodeId;
-                                  std::filesystem::path savePath(path);
-                                  if (savePath.extension() != ".peprefab")
-                                      savePath += ".peprefab";
-
-                                  if (activeScene->GetNodePrefabPath(root) != savePath.generic_string())
-                                      UndoRedo::Instance().RecordSnapshot(*activeScene, "Linked Prefab");
-
-                                  const bool saved = activeScene->SavePrefab(root, savePath);
-                                  if (saved)
-                                  {
-                                      if (auto *browser = m_gui ? m_gui->GetWidget<FileBrowser>() : nullptr)
-                                          browser->RefreshCache();
-                                      if (m_gui)
-                                          m_gui->NotifyChange();
-                                  }
-                                  return saved; },
-                              {".peprefab"},
-                              defaultPath.string(),
-                              {},
-                              defaultName,
-                              "Save");
-        };
-
-        auto drawPrefabWidget = [&](NodeId *node) -> bool
-        {
-            NodeId *prefabRoot = findPrefabRoot(node);
-            const bool linked = prefabRoot && !scene.GetNodePrefabPath(prefabRoot).empty();
-            NodeId *saveRoot = linked ? prefabRoot : node;
-
-            ImGui::Separator();
-            const bool prefabOpen = ImGui::CollapsingHeader("Prefab", linked ? ImGuiTreeNodeFlags_DefaultOpen : 0);
-            ui::ItemTooltip("Manage the prefab asset for this node subtree.");
-            if (!prefabOpen)
-                return false;
-
-            ImGui::Indent(8.f);
-
-            if (linked)
-            {
-                ImGui::TextUnformatted("Source");
-                ImGui::SameLine();
-                ImGui::TextWrapped("%s", scene.GetNodePrefabPath(prefabRoot).c_str());
-            }
-            else
-            {
-                ImGui::TextDisabled("Source");
-                ImGui::SameLine();
-                ImGui::TextDisabled("<none>");
-            }
-
-            const bool canSaveLinked = linked && saveRoot && !scene.GetNodePrefabPath(saveRoot).empty();
-            if (!canSaveLinked)
-                ImGui::BeginDisabled();
-            if (ImGui::Button("Save"))
-                savePrefab(saveRoot, scene.GetNodePrefabPath(saveRoot));
-            ui::ItemTooltip("Save the prefab root subtree to its linked prefab asset.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-            if (!canSaveLinked)
-                ImGui::EndDisabled();
-
-            ImGui::SameLine();
-            if (ImGui::Button("Save As..."))
-                openSavePrefabDialog(saveRoot);
-            ui::ItemTooltip("Save this subtree as a prefab asset.");
-
-            ImGui::SameLine();
-            if (!linked)
-                ImGui::BeginDisabled();
-            if (ImGui::Button("Open Asset"))
-            {
-                if (auto *viewer = m_gui ? m_gui->GetWidget<PrefabViewer>() : nullptr)
-                    viewer->OpenPrefab(scene.GetNodePrefabPath(prefabRoot));
-            }
-            ui::ItemTooltip("Open the linked prefab in Prefab Viewer.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-            if (!linked)
-                ImGui::EndDisabled();
-
-            ImGui::SameLine();
-            if (!linked)
-                ImGui::BeginDisabled();
-            if (ImGui::Button("Unpack"))
-            {
-                UndoRedo::Instance().RecordSnapshot(scene, "Unpacked Prefab");
-                scene.ClearNodePrefab(prefabRoot);
-                if (m_gui)
-                    m_gui->NotifyChange();
-            }
-            ui::ItemTooltip("Remove the prefab link from the root instance.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-            if (!linked)
-                ImGui::EndDisabled();
-
-            if (ImGui::Button("+ Add Child"))
-            {
-                UndoRedo::Instance().RecordSnapshot(scene, "Added Prefab Child");
-                NodeId *child = scene.CreateNode("Prefab Child", node);
-                scene.MarkNodeDirty(child);
-                sel.Select(child, SelectionType::Node);
-                if (m_gui)
-                    m_gui->NotifyChange();
-            }
-            ui::ItemTooltip("Add a child item under the selected prefab node.");
-
-            ImGui::SameLine();
-            const bool canRemoveItem = linked && node != prefabRoot;
-            if (!canRemoveItem)
-                ImGui::BeginDisabled();
-            if (ImGui::Button("Remove Item"))
-            {
-                UndoRedo::Instance().RecordSnapshot(scene, "Removed Prefab Item");
-                NodeId *rootAfterRemove = prefabRoot;
-                sel.Select(rootAfterRemove, SelectionType::Node);
-                scene.DeleteNode(node);
-                EventSystem::PushEvent(EventType::NodeRemoved);
-                if (m_gui)
-                    m_gui->NotifyChange();
-                ImGui::Unindent(8.f);
-                return true;
-            }
-            ui::ItemTooltip("Remove this child item from the prefab instance.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-            if (!canRemoveItem)
-                ImGui::EndDisabled();
-
-            ImGui::Unindent(8.f);
-            return false;
-        };
-
         // Set when the selected node can receive a .lua script drop;
         // consumed after the switch to place the whole-window drop target.
         NodeId *scriptDropNode = nullptr;
@@ -1206,13 +1161,18 @@ namespace pe
 
             // Transform is always shown for scene objects with spatial meaning
             drawTransform();
-            if (drawPrefabWidget(node))
+
+            if (flags & Component_Sprite)
             {
-                scriptDropNode = nullptr;
-#ifdef PE_AUDIO
-                audioDropNode = nullptr;
-#endif
-                break;
+                ImGui::Separator();
+                const bool spriteOpen = ImGui::CollapsingHeader("Sprite Component", ImGuiTreeNodeFlags_DefaultOpen);
+                ui::ItemTooltip("Inspect the sprite authoring metadata attached to this node.");
+                if (spriteOpen)
+                {
+                    ImGui::Indent(8.f);
+                    drawSpriteComponent(node);
+                    ImGui::Unindent(8.f);
+                }
             }
 
             // Mesh component

@@ -188,6 +188,17 @@ namespace pe
         void SetNodePrefabPath(NodeId *node, const std::string &path, bool markDirty = true);
         void ClearNodePrefab(NodeId *node);
         const std::string &GetNodePrefabPath(const NodeId *node) const;
+        NodeSpriteComponent *GetSpriteComponent(NodeId *node);
+        const NodeSpriteComponent *GetSpriteComponent(const NodeId *node) const;
+        NodeSpriteComponent &GetOrCreateSpriteComponent(NodeId *node);
+        void ClearSpriteComponent(NodeId *node);
+        bool LoadSpriteMetadata(NodeId *node, std::string *outError = nullptr);
+        bool SetSpriteFrame(NodeId *node, int frameIndex, int meshSlot = -1, std::string *outError = nullptr);
+        bool SetSpriteFrame(NodeId *node, const std::string &frameName, int meshSlot = -1, std::string *outError = nullptr);
+        bool PlaySpriteClip(NodeId *node, const std::string &clipName = {}, bool restart = true, int meshSlot = -1, std::string *outError = nullptr);
+        void SetSpritePlaying(NodeId *node, bool playing);
+        void StopSprite(NodeId *node);
+        void UpdateSpriteAnimations(float dt);
         NodeSkinnedStrip2DComponent *GetSkinnedStrip2DState(NodeId *node);
         const NodeSkinnedStrip2DComponent *GetSkinnedStrip2DState(const NodeId *node) const;
         NodeSkinnedStrip2DComponent &GetOrCreateSkinnedStrip2DState(NodeId *node);
@@ -200,6 +211,7 @@ namespace pe
         void ApplySkyboxSettingsFromNode(NodeId *node = nullptr);
         void EnsureSkyboxNodeFromSettings(bool markDirty = false);
         bool SetMeshUvRect(int meshIndex, const vec4 &uvRect);
+        bool SetMeshUvRectTransient(int meshIndex, const vec4 &uvRect);
         void SetNodeName(NodeId *node, const std::string &name)
         {
             ValidateNodeId(node);
@@ -366,6 +378,8 @@ namespace pe
                 flags |= Component_RuntimeUi;
             if (c.prefab)
                 flags |= Component_Prefab;
+            if (c.sprite)
+                flags |= Component_Sprite;
             if (m_nodeRuntime[idx].gpuPending)
                 flags |= Component_GpuPending;
             return flags;
@@ -460,6 +474,7 @@ namespace pe
         NodeId *CreateLightNode(const std::string &name, const mat4 &localMatrix, NodeId *parent);
         void UpdateGeometry();
         void UpdateUniformData();
+        bool ApplyMeshUvRect(int meshIndex, const vec4 &uvRect, bool markGeometryDirty, bool uploadGpu);
 
         // Buffer management (SceneBuffers.cpp)
         void DestroyBuffers();

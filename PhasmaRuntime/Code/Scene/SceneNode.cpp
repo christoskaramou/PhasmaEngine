@@ -2,6 +2,9 @@
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/SceneRuntimeHooks.h"
+#include "API/Buffer.h"
+#include "API/Command.h"
+#include "API/Queue.h"
 #include "Camera/Camera.h"
 #include "API/RHI.h"
 
@@ -35,6 +38,8 @@ namespace pe
             c.runtimeUi = entity->CreateComponent<NodeRuntimeUiTag>();
         if ((flag & Component_Prefab) && !c.prefab)
             c.prefab = entity->CreateComponent<NodePrefabComponent>();
+        if ((flag & Component_Sprite) && !c.sprite)
+            c.sprite = entity->CreateComponent<NodeSpriteComponent>();
     }
 
     void Scene::RemoveComponentFlag(NodeId *node, uint32_t flag)
@@ -86,6 +91,11 @@ namespace pe
             entity->RemoveComponent<NodePrefabComponent>();
             c.prefab = nullptr;
         }
+        if ((flag & Component_Sprite) && c.sprite)
+        {
+            entity->RemoveComponent<NodeSpriteComponent>();
+            c.sprite = nullptr;
+        }
     }
 
     NodeId *Scene::CreateNode(const std::string &name, NodeId *parent)
@@ -130,7 +140,7 @@ namespace pe
         auto *scriptComp = entity->CreateComponent<NodeScriptComponent>();
 
         m_nodeComponentCache.push_back({nameComp, hierarchyComp, transformComp, meshRefsComp, scriptComp, nullptr,
-                                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr});
+                                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr});
 
         m_nodesDirty = true;
 
@@ -585,6 +595,41 @@ namespace pe
         return prefab ? prefab->path : empty;
     }
 
+    NodeSpriteComponent *Scene::GetSpriteComponent(NodeId *node)
+    {
+        if (!node || !IsNodeAlive(node))
+            return nullptr;
+        return m_nodeComponentCache[node->index].sprite;
+    }
+
+    const NodeSpriteComponent *Scene::GetSpriteComponent(const NodeId *node) const
+    {
+        if (!node || !IsNodeAlive(node))
+            return nullptr;
+        return m_nodeComponentCache[node->index].sprite;
+    }
+
+    NodeSpriteComponent &Scene::GetOrCreateSpriteComponent(NodeId *node)
+    {
+        ValidateNodeId(node);
+        PE_ERROR_IF(!node->entity, "Scene::GetOrCreateSpriteComponent requires a node entity");
+        NodeSpriteComponent *&sprite = m_nodeComponentCache[node->index].sprite;
+        if (!sprite)
+        {
+            AddComponentFlag(node, Component_Sprite);
+            sprite = m_nodeComponentCache[node->index].sprite;
+        }
+        return *sprite;
+    }
+
+    void Scene::ClearSpriteComponent(NodeId *node)
+    {
+        if (!node || !IsNodeAlive(node))
+            return;
+        RemoveComponentFlag(node, Component_Sprite);
+        m_dirty = true;
+    }
+
     NodeSkinnedStrip2DComponent *Scene::GetSkinnedStrip2DState(NodeId *node)
     {
         if (!node || !IsNodeAlive(node))
@@ -659,7 +704,7 @@ namespace pe
         MarkNodeDirty(node);
     }
 
-    bool Scene::SetMeshUvRect(int meshIndex, const vec4 &uvRect)
+    bool Scene::ApplyMeshUvRect(int meshIndex, const vec4 &uvRect, bool markGeometryDirty, bool uploadGpu)
     {
         if (!IsValidMeshIndex(meshIndex))
             return false;
@@ -690,8 +735,59 @@ namespace pe
             FillVertexUV(positionUv, uvs[i].x, uvs[i].y);
         }
 
-        m_geometryDirty = true;
+        if (uploadGpu && m_buffer && !m_geometryDirty)
+        {
+            Queue *queue = RHII.GetMainQueue();
+            const size_t vertexBytes = mesh.vertexCount * sizeof(Vertex);
+            const size_t positionUvBytes = mesh.vertexCount * sizeof(PositionUvVertex);
+            const size_t vertexDstOffset = m_verticesOffset + mesh.vertexOffset * sizeof(Vertex);
+            const size_t positionUvDstOffset = m_positionsOffset + mesh.positionsOffset * sizeof(PositionUvVertex);
+            const bool rangesFit = vertexDstOffset + vertexBytes <= m_buffer->Size() &&
+                                   positionUvDstOffset + positionUvBytes <= m_buffer->Size();
+            if (queue && rangesFit)
+            {
+                CommandBuffer *cmd = queue->AcquireCommandBuffer();
+                cmd->Begin();
+                cmd->CopyBufferStaged(m_buffer, &m_vertexStore[mesh.vertexOffset], vertexBytes, vertexDstOffset);
+                cmd->CopyBufferStaged(m_buffer, &m_positionUvStore[mesh.positionsOffset], positionUvBytes, positionUvDstOffset);
+
+                BufferBarrierInfo vertexBarrier{};
+                vertexBarrier.buffer = m_buffer;
+                vertexBarrier.stageMask = PE_STAGE_VERTEX_INPUT;
+                vertexBarrier.accessMask = PE_ACCESS_VERTEX_ATTRIBUTE_READ;
+                vertexBarrier.offset = vertexDstOffset;
+                vertexBarrier.size = vertexBytes;
+                cmd->BufferBarrier(vertexBarrier);
+
+                BufferBarrierInfo positionUvBarrier{};
+                positionUvBarrier.buffer = m_buffer;
+                positionUvBarrier.stageMask = PE_STAGE_VERTEX_INPUT;
+                positionUvBarrier.accessMask = PE_ACCESS_VERTEX_ATTRIBUTE_READ;
+                positionUvBarrier.offset = positionUvDstOffset;
+                positionUvBarrier.size = positionUvBytes;
+                cmd->BufferBarrier(positionUvBarrier);
+
+                cmd->End();
+                queue->Submit(1, &cmd, nullptr, nullptr);
+                cmd->Wait();
+                cmd->Return();
+                return true;
+            }
+        }
+
+        if (markGeometryDirty || uploadGpu)
+            m_geometryDirty = true;
         return true;
+    }
+
+    bool Scene::SetMeshUvRect(int meshIndex, const vec4 &uvRect)
+    {
+        return ApplyMeshUvRect(meshIndex, uvRect, true, false);
+    }
+
+    bool Scene::SetMeshUvRectTransient(int meshIndex, const vec4 &uvRect)
+    {
+        return ApplyMeshUvRect(meshIndex, uvRect, false, true);
     }
 
     int Scene::AddMesh(Mesh &&mesh)

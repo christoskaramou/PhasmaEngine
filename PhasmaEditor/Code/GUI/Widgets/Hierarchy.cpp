@@ -5,6 +5,8 @@
 #include "GUI/GUI.h"
 #include "GUI/GUIState.h"
 #include "GUI/Helpers.h"
+#include "GUI/HierarchyPayload.h"
+#include "GUI/SpriteAuthoring.h"
 #include "GUI/IconsFontAwesome.h"
 #include "GUI/UndoRedo.h"
 #include "Particles/ParticleManager.h"
@@ -37,13 +39,44 @@ namespace pe
         const ImVec4 TreeLineBg = ImVec4(0.35f, 0.35f, 0.35f, 0.5f);
     } // namespace HierarchyStyle
 
-    struct HierarchyDragDropPayload
+    static std::string ToLower(std::string value)
     {
-        NodeId *node;
-    };
+        std::transform(value.begin(), value.end(), value.begin(),
+                       [](unsigned char c)
+                       { return static_cast<char>(std::tolower(c)); });
+        return value;
+    }
+
+    static bool ContainsSpriteMarker(const std::string &value)
+    {
+        return value.find("sprite") != std::string::npos || value.find("atlas") != std::string::npos;
+    }
+
+    static bool IsSpriteHierarchyNode(Scene &scene, NodeId *node, const std::string &nodeName, uint32_t componentFlags)
+    {
+        if (componentFlags & Component_Sprite)
+            return true;
+
+        if (ContainsSpriteMarker(ToLower(nodeName)))
+            return true;
+
+        if ((componentFlags & Component_Script) && ContainsSpriteMarker(ToLower(scene.GetNodeScriptPath(node))))
+            return true;
+
+        return scene.NodeUsesSkinnedStrip2D(node);
+    }
 
     Hierarchy::Hierarchy() : Widget("Hierarchy")
     {
+    }
+
+    Hierarchy::~Hierarchy()
+    {
+    }
+
+    void Hierarchy::Init(GUI *gui)
+    {
+        Widget::Init(gui);
     }
 
     void Hierarchy::Update()
@@ -107,6 +140,109 @@ namespace pe
             recordSnapshot("Added Skybox");
             NodeId *node = scene.CreateSkyboxNode();
             selection.Select(node, SelectionType::Node);
+        };
+
+        auto selectedSpriteAsset = []() -> std::filesystem::path
+        {
+            const AssetPreviewState &preview = GUIState::s_assetPreview;
+            if ((preview.type == AssetPreviewType::Image || preview.type == AssetPreviewType::Sprite) && !preview.fullPath.empty())
+                return std::filesystem::path(preview.fullPath);
+            return {};
+        };
+
+        auto createSprite = [&](NodeId *parent, const std::filesystem::path &assetPath = std::filesystem::path())
+        {
+            recordSnapshot("Added Sprite");
+            SyncSceneBeforeMutation();
+
+            SpriteAuthoring::Options options;
+            options.assetPath = assetPath;
+            SpriteAuthoring::Result result = SpriteAuthoring::CreateNode(scene, options, parent);
+            if (!result.error.empty())
+            {
+                PE_WARN("[Sprite] Failed to create sprite: %s", result.error.c_str());
+                return;
+            }
+
+            selection.Select(result.node, SelectionType::Node);
+            ImGui::SetWindowFocus("Properties");
+            if (m_gui)
+                m_gui->NotifyChange();
+        };
+
+        auto createSpriteFromSelection = [&](NodeId *parent)
+        {
+            createSprite(parent, selectedSpriteAsset());
+        };
+
+        auto makePrefabFileName = [](std::string name)
+        {
+            if (name.empty())
+                name = "Prefab";
+
+            for (char &c : name)
+            {
+                switch (c)
+                {
+                case '<':
+                case '>':
+                case ':':
+                case '"':
+                case '/':
+                case '\\':
+                case '|':
+                case '?':
+                case '*':
+                    c = '_';
+                    break;
+                default:
+                    break;
+                }
+            }
+
+            return name + ".peprefab";
+        };
+
+        auto openCreatePrefabDialog = [&](NodeId *root)
+        {
+            if (!root || !m_gui)
+                return;
+
+            auto *fs = m_gui->GetWidget<FileSelector>();
+            if (!fs)
+                return;
+
+            std::filesystem::path defaultPath = std::filesystem::path(Path::Assets) / "Prefabs";
+            std::error_code ec;
+            std::filesystem::create_directories(defaultPath, ec);
+
+            const SceneNodeHandle rootHandle = scene.MakeHandle(root);
+            const std::string defaultName = makePrefabFileName(scene.GetNodeName(root));
+            fs->OpenSelection([rootHandle, this](const std::string &path) -> bool
+                              {
+                                  Scene *activeScene = GetActiveScene();
+                                  if (!activeScene || !rootHandle.IsValid(*activeScene))
+                                      return true;
+
+                                  std::filesystem::path prefabPath(path);
+                                  if (prefabPath.extension() != ".peprefab")
+                                      prefabPath += ".peprefab";
+
+                                  UndoRedo::Instance().RecordSnapshot(*activeScene, "Created Prefab");
+                                  const bool saved = activeScene->SavePrefab(rootHandle.nodeId, prefabPath);
+                                  if (saved)
+                                  {
+                                      if (auto *browser = m_gui ? m_gui->GetWidget<FileBrowser>() : nullptr)
+                                          browser->RefreshCache();
+                                      if (m_gui)
+                                          m_gui->NotifyChange();
+                                  }
+                                  return saved; },
+                              {".peprefab"},
+                              defaultPath.string(),
+                              {},
+                              defaultName,
+                              "Save");
         };
 
         // Add Button
@@ -190,6 +326,10 @@ namespace pe
                 selection.Select(node, SelectionType::Node);
             }
             ui::ItemTooltip("Create an empty transform node.");
+
+            if (ImGui::MenuItem("Sprite"))
+                createSpriteFromSelection(nullptr);
+            ui::ItemTooltip("Create a Component_Sprite node from the selected image or sprite metadata when available.");
 
             if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
                 createSkybox();
@@ -373,6 +513,9 @@ namespace pe
                 selection.Select(node, SelectionType::Node);
             }
             ui::ItemTooltip("Create an empty transform node at the scene root.");
+            if (ImGui::MenuItem("Sprite"))
+                createSpriteFromSelection(nullptr);
+            ui::ItemTooltip("Create a root-level Component_Sprite node from the selected sprite asset when available.");
             if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
                 createSkybox();
             if (!scene.GetSkyboxNode())
@@ -440,6 +583,8 @@ namespace pe
                 std::filesystem::path path(pathStr);
                 if (FileBrowser::IsPrefabFile(path))
                     instantiatePrefab(path, nullptr);
+                else if (SpriteAuthoring::IsSpriteAssetPath(path))
+                    createSprite(nullptr, path);
             }
             ImGui::EndDragDropTarget();
         }
@@ -594,6 +739,7 @@ namespace pe
 
                 // Choose icon based on component flags
                 uint32_t nodeCompFlags = scene.GetComponentFlags(node);
+                const bool spriteHierarchyNode = IsSpriteHierarchyNode(scene, node, nodeName, nodeCompFlags);
                 const char *icon;
                 if (nodeCompFlags & Component_Prefab)
                     icon = ICON_FA_CUBES;
@@ -603,6 +749,8 @@ namespace pe
                     icon = ICON_FA_LIGHTBULB;
                 else if (nodeCompFlags & Component_Skybox)
                     icon = ICON_FA_SUN;
+                else if (spriteHierarchyNode)
+                    icon = ICON_FA_IMAGE;
                 else
                     icon = ICON_FA_VECTOR_SQUARE;
 
@@ -714,6 +862,10 @@ namespace pe
                         {
                             instantiatePrefab(path, node);
                         }
+                        else if (SpriteAuthoring::IsSpriteAssetPath(path))
+                        {
+                            createSprite(node, path);
+                        }
                         else if (isModel && !GUIState::s_modelLoading)
                         {
                             auto loadTask = [path, node]()
@@ -781,6 +933,11 @@ namespace pe
                         s_openRenamePopup = true;
                     }
                     ui::ItemTooltip("Rename this node.");
+
+                    if (ImGui::MenuItem("Create Prefab..."))
+                        openCreatePrefabDialog(node);
+                    ui::ItemTooltip("Save this node and all descendants as a .peprefab asset.");
+
                     const bool addMenuOpen = ImGui::BeginMenu("Add");
                     ui::ItemTooltip("Add a child object or component under this node.");
                     if (addMenuOpen)
@@ -831,6 +988,10 @@ namespace pe
                             selection.Select(newNode, SelectionType::Node);
                         }
                         ui::ItemTooltip("Add an empty child transform node.");
+
+                        if (ImGui::MenuItem("Sprite"))
+                            createSpriteFromSelection(node);
+                        ui::ItemTooltip("Add a child Component_Sprite node from the selected sprite asset when available.");
 
                         uint32_t componentFlags = scene.GetComponentFlags(node);
 
@@ -971,6 +1132,10 @@ namespace pe
                         std::string tooltip = "Script error:\n" + scriptError;
                         ui::TooltipText(tooltip.c_str());
                     }
+                    else if (spriteHierarchyNode)
+                    {
+                        ui::TooltipText("Sprite-related scene node; double-click to frame it in the viewport.");
+                    }
                     else
                     {
                         ui::TooltipText("Select this scene node; double-click to frame it in the viewport.");
@@ -1018,6 +1183,10 @@ namespace pe
                     if (FileBrowser::IsPrefabFile(path))
                     {
                         instantiatePrefab(path, nullptr);
+                    }
+                    else if (SpriteAuthoring::IsSpriteAssetPath(path))
+                    {
+                        createSprite(nullptr, path);
                     }
                     else if (isModel && !GUIState::s_modelLoading)
                     {
@@ -1179,6 +1348,10 @@ namespace pe
                     selection.Select(node, SelectionType::Node);
                 }
                 ui::ItemTooltip("Create an empty transform node at the scene root.");
+
+                if (ImGui::MenuItem("Sprite"))
+                    createSpriteFromSelection(nullptr);
+                ui::ItemTooltip("Create a root-level Component_Sprite node from the selected sprite asset when available.");
 
                 if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
                     createSkybox();

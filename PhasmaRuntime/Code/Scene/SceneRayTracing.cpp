@@ -475,6 +475,9 @@ namespace pe
                 const uint32_t currentConstantsIndex = constantsIndex++;
                 if (hasSkeleton && m_meshes[meshIdx].skinned)
                     continue;
+                if (m_nodeComponentCache[i].sprite &&
+                    m_nodeComponentCache[i].sprite->meshSlot == static_cast<int>(slot))
+                    continue;
 
                 auto it = m_blasByMesh.find(meshIdx);
                 if (it == m_blasByMesh.end())

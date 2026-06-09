@@ -9,7 +9,10 @@ namespace pe
         None,
         ModelAsset,
         Script,
-        Shader
+        Shader,
+        Image,
+        SpriteSheet,
+        Sprite
     };
 
     enum class GUIStyle

@@ -12,6 +12,28 @@ namespace pe
 
         std::string ExecuteLua(const std::string &code) const;
         std::string CreateNode(const std::string &name, const std::string &parent) const;
+        std::string CreateSpriteNode(const std::string &argsJson) const;
+        std::string GetSpriteNode(const std::string &argsJson) const;
+        std::string SetSpriteNode(const std::string &argsJson) const;
+        std::string SetSpriteFrame(const std::string &argsJson) const;
+        std::string ReloadSpriteMetadata(const std::string &argsJson) const;
+        std::string PlaySpriteClip(const std::string &argsJson) const;
+        std::string SetSpritePlayback(const std::string &argsJson) const;
+        std::string PauseSprite(const std::string &argsJson) const;
+        std::string StopSprite(const std::string &argsJson) const;
+        std::string ReadSpriteMetadata(const std::string &argsJson) const;
+        std::string ValidateSpriteAsset(const std::string &argsJson) const;
+        std::string WriteSpriteMetadata(const std::string &argsJson) const;
+        std::string AddSpriteFrame(const std::string &argsJson) const;
+        std::string UpdateSpriteFrame(const std::string &argsJson) const;
+        std::string RemoveSpriteFrame(const std::string &argsJson) const;
+        std::string ReorderSpriteFrames(const std::string &argsJson) const;
+        std::string AddSpriteClip(const std::string &argsJson) const;
+        std::string UpdateSpriteClip(const std::string &argsJson) const;
+        std::string RemoveSpriteClip(const std::string &argsJson) const;
+        std::string ReadSpriteSheet(const std::string &argsJson) const;
+        std::string WriteSpriteSheet(const std::string &argsJson) const;
+        std::string CreateSpriteFromSheet(const std::string &argsJson) const;
         std::string SetNodeTransform(const std::string &nodeId, const float *pos, const float *rot, const float *scale) const;
         std::string AddMeshToNode(const std::string &nodeId, const std::string &primitive) const;
         std::string SetNodeMaterial(const std::string &nodeId, int slot, const std::string &propsJson) const;

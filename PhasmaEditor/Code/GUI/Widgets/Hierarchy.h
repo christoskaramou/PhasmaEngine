@@ -9,6 +9,8 @@ namespace pe
     {
     public:
         Hierarchy();
+        ~Hierarchy() override;
+        void Init(GUI *gui) override;
         void Update() override;
 
     private:

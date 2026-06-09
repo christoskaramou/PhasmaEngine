@@ -414,6 +414,76 @@ namespace pe
                 scene.SetNodePrefabPath(node, prefabPath.generic_string(), false);
         }
 
+        void RestoreSpriteNode(Scene &scene,
+                               NodeId *node,
+                               const rapidjson::Value &nodeValue,
+                               const std::filesystem::path *relativeToDir)
+        {
+            if (!node || !scene.IsNodeAlive(node))
+                return;
+
+            if (!nodeValue.HasMember("sprite") || !nodeValue["sprite"].IsObject())
+            {
+                if (!(nodeValue.HasMember("component_flags") && (nodeValue["component_flags"].GetUint() & Component_Sprite)))
+                    scene.ClearSpriteComponent(node);
+                return;
+            }
+
+            const auto &sv = nodeValue["sprite"];
+            NodeSpriteComponent &sprite = scene.GetOrCreateSpriteComponent(node);
+
+            auto readString = [&](const char *name) -> std::string
+            {
+                return sv.HasMember(name) && sv[name].IsString() ? sv[name].GetString() : "";
+            };
+            auto readInt = [&](const char *name, int fallback) -> int
+            {
+                return sv.HasMember(name) && sv[name].IsInt() ? sv[name].GetInt() : fallback;
+            };
+            auto readFloat = [&](const char *name, float fallback) -> float
+            {
+                if (!sv.HasMember(name) || !sv[name].IsNumber())
+                    return fallback;
+                const float value = sv[name].GetFloat();
+                return std::isfinite(value) ? value : fallback;
+            };
+            auto readVec4 = [&](const char *name, const vec4 &fallback) -> vec4
+            {
+                if (!sv.HasMember(name) || !sv[name].IsArray() || sv[name].Size() < 4)
+                    return fallback;
+                const auto &arr = sv[name];
+                if (!arr[0].IsNumber() || !arr[1].IsNumber() || !arr[2].IsNumber() || !arr[3].IsNumber())
+                    return fallback;
+                vec4 value(arr[0].GetFloat(), arr[1].GetFloat(), arr[2].GetFloat(), arr[3].GetFloat());
+                return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z) && std::isfinite(value.w) ? value : fallback;
+            };
+
+            sprite.imagePath = sv.HasMember("image") && sv["image"].IsString()
+                                   ? ResolveSerializedFilePath(sv["image"], relativeToDir).generic_string()
+                                   : "";
+            sprite.metadataPath = sv.HasMember("metadata") && sv["metadata"].IsString()
+                                      ? ResolveSerializedFilePath(sv["metadata"], relativeToDir).generic_string()
+                                      : "";
+            sprite.frameName = readString("frame_name");
+            sprite.frameIndex = readInt("frame_index", -1);
+            sprite.imageWidth = readInt("image_width", 0);
+            sprite.imageHeight = readInt("image_height", 0);
+            sprite.frameWidth = readInt("frame_width", 0);
+            sprite.frameHeight = readInt("frame_height", 0);
+            sprite.quadWidth = readFloat("quad_width", 1.0f);
+            sprite.quadHeight = readFloat("quad_height", 1.0f);
+            sprite.uvRect = readVec4("uv_rect", sprite.uvRect);
+            sprite.tint = readVec4("tint", sprite.tint);
+            sprite.activeClipName = readString("active_clip");
+            sprite.activeClipIndex = readInt("active_clip_index", -1);
+            sprite.meshSlot = readInt("mesh_slot", 0);
+            sprite.playbackAccumulator = 0.0f;
+            sprite.playbackSpeed = readFloat("playback_speed", 1.0f);
+            sprite.playing = false;
+            sprite.loop = sv.HasMember("loop") && sv["loop"].IsBool() ? sv["loop"].GetBool() : true;
+            sprite.metadataLoaded = false;
+        }
+
         void RestoreSkinnedStrip2DNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
         {
             if (!node || !scene.IsNodeAlive(node))
@@ -1174,6 +1244,42 @@ namespace pe
                     rapidjson::Value skyboxObj(rapidjson::kObjectType);
                     skyboxObj.AddMember("path", MakeStringValue(skybox.path), allocator);
                     nodeObj.AddMember("skybox", skyboxObj.Move(), allocator);
+                }
+
+                if ((flags & Component_Sprite) && cache.sprite)
+                {
+                    const NodeSpriteComponent &sprite = *cache.sprite;
+                    rapidjson::Value spriteObj(rapidjson::kObjectType);
+                    if (!sprite.imagePath.empty())
+                        spriteObj.AddMember("image", MakeStringValue(SerializePath(sprite.imagePath, relativeToDir)), allocator);
+                    if (!sprite.metadataPath.empty())
+                        spriteObj.AddMember("metadata", MakeStringValue(SerializePath(sprite.metadataPath, relativeToDir)), allocator);
+                    if (!sprite.frameName.empty())
+                        spriteObj.AddMember("frame_name", MakeStringValue(sprite.frameName), allocator);
+                    spriteObj.AddMember("frame_index", sprite.frameIndex, allocator);
+                    spriteObj.AddMember("image_width", sprite.imageWidth, allocator);
+                    spriteObj.AddMember("image_height", sprite.imageHeight, allocator);
+                    spriteObj.AddMember("frame_width", sprite.frameWidth, allocator);
+                    spriteObj.AddMember("frame_height", sprite.frameHeight, allocator);
+                    spriteObj.AddMember("quad_width", SafeFloat(sprite.quadWidth), allocator);
+                    spriteObj.AddMember("quad_height", SafeFloat(sprite.quadHeight), allocator);
+
+                    rapidjson::Value uvRect;
+                    SetVec4(uvRect, sprite.uvRect);
+                    spriteObj.AddMember("uv_rect", uvRect.Move(), allocator);
+
+                    rapidjson::Value tint;
+                    SetVec4(tint, sprite.tint);
+                    spriteObj.AddMember("tint", tint.Move(), allocator);
+
+                    if (!sprite.activeClipName.empty())
+                        spriteObj.AddMember("active_clip", MakeStringValue(sprite.activeClipName), allocator);
+                    spriteObj.AddMember("active_clip_index", sprite.activeClipIndex, allocator);
+                    spriteObj.AddMember("mesh_slot", sprite.meshSlot, allocator);
+                    spriteObj.AddMember("playback_speed", SafeFloat(sprite.playbackSpeed), allocator);
+                    spriteObj.AddMember("loop", sprite.loop, allocator);
+
+                    nodeObj.AddMember("sprite", spriteObj.Move(), allocator);
                 }
 
                 if (scene.NodeUsesSkinnedStrip2D(node) && cache.skinnedStrip2D)
@@ -2118,6 +2224,8 @@ namespace pe
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreSkyboxNode(*this, nodeMap[ni], nodesVal[ni]);
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+                    RestoreSpriteNode(*this, nodeMap[ni], nodesVal[ni], &sceneDir);
+                for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreSkinnedStrip2DNode(*this, nodeMap[ni], nodesVal[ni]);
                 EnsureSkyboxNodeFromSettings(false);
 
@@ -2796,6 +2904,8 @@ namespace pe
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreSkyboxNode(*this, nodeMap[ni], nodesVal[ni]);
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+            RestoreSpriteNode(*this, nodeMap[ni], nodesVal[ni], &prefabDir);
+        for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreSkinnedStrip2DNode(*this, nodeMap[ni], nodesVal[ni]);
 
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
@@ -3079,7 +3189,7 @@ namespace pe
 
                     uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
                     // Clear subsystem tags before restoring — Mesh/Script are already set by SetMeshRef/SetNodeScript above
-                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Physics2D | Component_Audio | Component_Skybox | Component_RuntimeUi | Component_Prefab);
+                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Physics2D | Component_Audio | Component_Skybox | Component_RuntimeUi | Component_Prefab | Component_Sprite);
                     uint32_t restoreFlags = flags & ~(Component_Mesh | Component_Script | Component_GpuPending);
                     if (restoreFlags)
                         AddComponentFlag(node, restoreFlags);
@@ -3261,6 +3371,8 @@ namespace pe
 
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkyboxNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestoreSpriteNode(*this, m_nodeIds[ni], snapshotNodes[ni], nullptr);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkinnedStrip2DNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
 
@@ -3690,6 +3802,8 @@ namespace pe
 
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkyboxNode(*this, nodeMap[ni], snapshotNodes[ni]);
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestoreSpriteNode(*this, nodeMap[ni], snapshotNodes[ni], nullptr);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkinnedStrip2DNode(*this, nodeMap[ni], snapshotNodes[ni]);
 

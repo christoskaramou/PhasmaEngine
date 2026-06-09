@@ -1,9 +1,12 @@
 #pragma once
 
 #include "GUI/Widget.h"
+#include "Scene/SceneNodeHandle.h"
 
 namespace pe
 {
+    struct NodeId;
+
     class FileBrowser : public Widget
     {
     public:
@@ -51,6 +54,8 @@ namespace pe
             std::string ext(reinterpret_cast<const char *>(u8ext.c_str()));
             return s_imageExtensions.find(ext) != s_imageExtensions.end();
         }
+        static bool IsSpriteMetadataFile(const std::filesystem::path &path);
+        static bool IsSpriteSheetFile(const std::filesystem::path &path);
         inline static bool IsModelFile(const std::filesystem::path &path)
         {
             auto u8ext = path.extension().u8string();
@@ -127,6 +132,8 @@ namespace pe
         void *m_scriptIconDS = nullptr;
         Image *m_imageIcon = nullptr;
         void *m_imageIconDS = nullptr;
+        Image *m_spriteIcon = nullptr;
+        void *m_spriteIconDS = nullptr;
 
         // Thumbnail Cache
         std::unordered_map<std::string, Image *> m_fileCache;
@@ -224,6 +231,9 @@ namespace pe
         void TryStartCopy(const std::vector<std::filesystem::path> &sources);
         void CopyDroppedFiles(const std::vector<std::filesystem::path> &sources, bool skipExisting = false);
         void DrawCopyProgress();
+        bool AcceptHierarchyPrefabDrop(const std::filesystem::path &targetFolder);
+        void StartPrefabDrop(NodeId *node, const std::filesystem::path &targetFolder);
+        void DrawPrefabDropPrompt();
 
         // Context menu / action state
         std::filesystem::path m_renamingEntry;
@@ -235,6 +245,10 @@ namespace pe
         bool m_pendingOpenOverwritePrompt = false;
         std::vector<std::filesystem::path> m_pendingCopySources;
         std::vector<std::string> m_conflictNames;
+        SceneNodeHandle m_pendingPrefabNode;
+        std::filesystem::path m_pendingPrefabFolder;
+        char m_prefabNameBuffer[256] = {};
+        bool m_pendingOpenPrefabPrompt = false;
 
         EventSystem::CallbackToken m_fileDropToken{0};
 
