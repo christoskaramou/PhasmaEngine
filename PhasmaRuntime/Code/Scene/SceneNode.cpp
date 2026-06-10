@@ -595,6 +595,41 @@ namespace pe
         return prefab ? prefab->path : empty;
     }
 
+    NodeRuntimeUiTag *Scene::GetRuntimeUiComponent(NodeId *node)
+    {
+        if (!node || !IsNodeAlive(node))
+            return nullptr;
+        return m_nodeComponentCache[node->index].runtimeUi;
+    }
+
+    const NodeRuntimeUiTag *Scene::GetRuntimeUiComponent(const NodeId *node) const
+    {
+        if (!node || !IsNodeAlive(node))
+            return nullptr;
+        return m_nodeComponentCache[node->index].runtimeUi;
+    }
+
+    NodeRuntimeUiTag &Scene::GetOrCreateRuntimeUiComponent(NodeId *node)
+    {
+        ValidateNodeId(node);
+        PE_ERROR_IF(!node->entity, "Scene::GetOrCreateRuntimeUiComponent requires a node entity");
+        NodeRuntimeUiTag *&runtimeUi = m_nodeComponentCache[node->index].runtimeUi;
+        if (!runtimeUi)
+        {
+            AddComponentFlag(node, Component_RuntimeUi);
+            runtimeUi = m_nodeComponentCache[node->index].runtimeUi;
+        }
+        return *runtimeUi;
+    }
+
+    void Scene::ClearRuntimeUiComponent(NodeId *node)
+    {
+        if (!node || !IsNodeAlive(node))
+            return;
+        RemoveComponentFlag(node, Component_RuntimeUi);
+        m_dirty = true;
+    }
+
     NodeSpriteComponent *Scene::GetSpriteComponent(NodeId *node)
     {
         if (!node || !IsNodeAlive(node))

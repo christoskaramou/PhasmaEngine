@@ -13,6 +13,7 @@ namespace pe
     class Camera;
     class Image;
     class ModelAsset;
+    struct RuntimeUiWidgetState;
 
     struct LuaImage
     {
@@ -140,6 +141,7 @@ namespace pe
         sol::state &GetLua() { return m_lua; }
         bool IsInitialized() const { return m_initialized; }
         static bool IsTestScriptPath(const std::string &path);
+        std::vector<std::string> ListLuaFunctions();
 
         // Execute Lua code and return captured output + return value
         std::string ExecuteLua(const std::string &code);
@@ -153,6 +155,12 @@ namespace pe
 
         // Per-node instance lookup — returns the instance for a specific node, or nullptr
         NodeScriptInstance *FindNodeInstance(const NodeId *node);
+        bool InvokeNodeRuntimeUiAction(NodeId *node,
+                                       const std::string &functionName,
+                                       const std::string &actionName,
+                                       const RuntimeUiWidgetState &state,
+                                       const std::string &screenId,
+                                       const std::string &widgetId);
 
         static void AddBindings(LuaBindingFunc func);
 

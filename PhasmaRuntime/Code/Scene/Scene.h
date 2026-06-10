@@ -188,6 +188,10 @@ namespace pe
         void SetNodePrefabPath(NodeId *node, const std::string &path, bool markDirty = true);
         void ClearNodePrefab(NodeId *node);
         const std::string &GetNodePrefabPath(const NodeId *node) const;
+        NodeRuntimeUiTag *GetRuntimeUiComponent(NodeId *node);
+        const NodeRuntimeUiTag *GetRuntimeUiComponent(const NodeId *node) const;
+        NodeRuntimeUiTag &GetOrCreateRuntimeUiComponent(NodeId *node);
+        void ClearRuntimeUiComponent(NodeId *node);
         NodeSpriteComponent *GetSpriteComponent(NodeId *node);
         const NodeSpriteComponent *GetSpriteComponent(const NodeId *node) const;
         NodeSpriteComponent &GetOrCreateSpriteComponent(NodeId *node);

@@ -20,6 +20,9 @@ namespace pe
         static ModelAsset *CreateQuad(float width = 1.0f, float height = 1.0f); // Screen facing
         static ModelAsset *CreateCircle(float radius = 1.0f, int segments = 64);
         static ModelAsset *CreateTorus(float majorRadius = 1.0f, float minorRadius = 0.25f, int majorSegments = 64, int minorSegments = 16);
+        // Flat double-sided ribbon along a point path (e.g. orbit lines). Width is in
+        // model units; `normal` is the ribbon plane normal the strip expands across.
+        static ModelAsset *CreatePolylineRibbon(const std::vector<vec3> &points, float width = 1.0f, const vec3 &normal = vec3(0.0f, 1.0f, 0.0f), bool closed = true);
         static ModelAsset *CreateSkinnedStrip2D(float width = 4.0f, float height = 1.0f, int segments = 32, int bones = 24);
 
     private:

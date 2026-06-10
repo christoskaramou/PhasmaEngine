@@ -411,6 +411,8 @@ namespace pe
                 UpdateGlobalSystems();
                 const bool keepRunning = ProcessRuntimeEvents();
                 if (m_runtimeUi)
+                    m_runtimeUi->SyncSceneWidgets(m_renderer.GetScene());
+                if (m_runtimeUi)
                     m_runtimeUi->EndFrame();
 
                 if (!keepRunning)

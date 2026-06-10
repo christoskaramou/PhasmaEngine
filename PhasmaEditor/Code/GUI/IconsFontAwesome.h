@@ -16,6 +16,7 @@
 #define ICON_FA_CIRCLE_DOT "\xef\x86\x92"           // f192 - circle-dot (for mesh nodes)
 #define ICON_FA_VECTOR_SQUARE "\xef\x97\x8b"        // f5cb - vector-square (for nodes)
 #define ICON_FA_IMAGE "\xef\x80\xbe"                // f03e - image (for sprites)
+#define ICON_FA_WINDOW_MAXIMIZE "\xef\x8b\x90"      // f2d0 - window-maximize (for runtime UI)
 #define ICON_FA_VIDEO "\xef\x80\xbd"                // f03d - video (for cameras)
 #define ICON_FA_LIGHTBULB "\xef\x83\xab"            // f0eb - lightbulb (for lights)
 #define ICON_FA_SUN "\xef\x86\x85"                  // f185 - sun (for directional lights)

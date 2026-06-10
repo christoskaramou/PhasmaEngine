@@ -6,6 +6,7 @@
 #include "GUI/GUIState.h"
 #include "GUI/Helpers.h"
 #include "GUI/HierarchyPayload.h"
+#include "GUI/RuntimeUiAuthoring.h"
 #include "GUI/SpriteAuthoring.h"
 #include "GUI/IconsFontAwesome.h"
 #include "GUI/UndoRedo.h"
@@ -175,6 +176,45 @@ namespace pe
             createSprite(parent, selectedSpriteAsset());
         };
 
+        auto createRuntimeUiElement = [&](NodeRuntimeUiWidgetType type, NodeId *parent)
+        {
+            recordSnapshot("Added UI Element");
+            SyncSceneBeforeMutation();
+            NodeId *node = RuntimeUiAuthoring::CreateNode(scene, type, vec2(48.0f, 48.0f), parent);
+            scene.MarkNodeDirty(node);
+            selection.Select(node, SelectionType::Node);
+            ImGui::SetWindowFocus("Properties");
+            if (m_gui)
+                m_gui->NotifyChange();
+        };
+
+        auto acceptRuntimeUiDrop = [&](NodeId *parent) -> bool
+        {
+            const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(RuntimeUiAuthoring::kDragPayloadType);
+            if (!payload || payload->DataSize != sizeof(RuntimeUiAuthoring::DragPayload))
+                return false;
+
+            const auto data = *static_cast<const RuntimeUiAuthoring::DragPayload *>(payload->Data);
+            createRuntimeUiElement(data.type, parent);
+            return true;
+        };
+
+        auto drawRuntimeUiCreateMenu = [&](NodeId *parent)
+        {
+            const bool menuOpen = ImGui::BeginMenu("UI");
+            ui::ItemTooltip("Create a Runtime UI node.");
+            if (!menuOpen)
+                return;
+
+            for (const RuntimeUiAuthoring::ElementTemplate &element : RuntimeUiAuthoring::Templates())
+            {
+                if (ImGui::MenuItem(element.name))
+                    createRuntimeUiElement(element.type, parent);
+                ui::ItemTooltip(element.tooltip);
+            }
+            ImGui::EndMenu();
+        };
+
         auto makePrefabFileName = [](std::string name)
         {
             if (name.empty())
@@ -330,6 +370,8 @@ namespace pe
             if (ImGui::MenuItem("Sprite"))
                 createSpriteFromSelection(nullptr);
             ui::ItemTooltip("Create a Component_Sprite node from the selected image or sprite metadata when available.");
+
+            drawRuntimeUiCreateMenu(nullptr);
 
             if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
                 createSkybox();
@@ -516,6 +558,7 @@ namespace pe
             if (ImGui::MenuItem("Sprite"))
                 createSpriteFromSelection(nullptr);
             ui::ItemTooltip("Create a root-level Component_Sprite node from the selected sprite asset when available.");
+            drawRuntimeUiCreateMenu(nullptr);
             if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
                 createSkybox();
             if (!scene.GetSkyboxNode())
@@ -577,14 +620,18 @@ namespace pe
 
         if (ImGui::BeginDragDropTarget())
         {
-            if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+            const bool acceptedRuntimeUi = acceptRuntimeUiDrop(nullptr);
+            if (!acceptedRuntimeUi)
             {
-                const char *pathStr = (const char *)payload->Data;
-                std::filesystem::path path(pathStr);
-                if (FileBrowser::IsPrefabFile(path))
-                    instantiatePrefab(path, nullptr);
-                else if (SpriteAuthoring::IsSpriteAssetPath(path))
-                    createSprite(nullptr, path);
+                if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+                {
+                    const char *pathStr = (const char *)payload->Data;
+                    std::filesystem::path path(pathStr);
+                    if (FileBrowser::IsPrefabFile(path))
+                        instantiatePrefab(path, nullptr);
+                    else if (SpriteAuthoring::IsSpriteAssetPath(path))
+                        createSprite(nullptr, path);
+                }
             }
             ImGui::EndDragDropTarget();
         }
@@ -749,6 +796,8 @@ namespace pe
                     icon = ICON_FA_LIGHTBULB;
                 else if (nodeCompFlags & Component_Skybox)
                     icon = ICON_FA_SUN;
+                else if (nodeCompFlags & Component_RuntimeUi)
+                    icon = ICON_FA_WINDOW_MAXIMIZE;
                 else if (spriteHierarchyNode)
                     icon = ICON_FA_IMAGE;
                 else
@@ -838,56 +887,60 @@ namespace pe
                 // Drag & Drop Target
                 if (ImGui::BeginDragDropTarget())
                 {
-                    if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("HIERARCHY_NODE"))
+                    const bool acceptedRuntimeUi = acceptRuntimeUiDrop(node);
+                    if (!acceptedRuntimeUi)
                     {
-                        HierarchyDragDropPayload data = *(const HierarchyDragDropPayload *)payload->Data;
-                        if (scene.IsNodeAlive(data.node) && data.node != node && scene.GetParent(data.node) != node)
+                        if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("HIERARCHY_NODE"))
                         {
-                            recordSnapshot("Reparented Node");
-                            scene.ReparentNode(data.node, node);
-                        }
-                    }
-
-                    if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
-                    {
-                        const char *pathStr = (const char *)payload->Data;
-                        std::filesystem::path path(pathStr);
-
-                        std::string ext = path.extension().string();
-                        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                        // Only cooked .pemesh loads into the scene; source models are import-only (File > Import).
-                        bool isModel = FileBrowser::IsCookedModelFile(path);
-
-                        if (FileBrowser::IsPrefabFile(path))
-                        {
-                            instantiatePrefab(path, node);
-                        }
-                        else if (SpriteAuthoring::IsSpriteAssetPath(path))
-                        {
-                            createSprite(node, path);
-                        }
-                        else if (isModel && !GUIState::s_modelLoading)
-                        {
-                            auto loadTask = [path, node]()
+                            HierarchyDragDropPayload data = *(const HierarchyDragDropPayload *)payload->Data;
+                            if (scene.IsNodeAlive(data.node) && data.node != node && scene.GetParent(data.node) != node)
                             {
-                                GUIState::s_modelLoading = true;
-                                try
-                                {
-                                    if (ModelAsset *m = ModelAsset::Load(path))
-                                        EventSystem::PushEvent(EventType::ModelLoadedForNode,
-                                                               Scene::ModelLoadForNodeRequest{node, m});
-                                }
-                                catch (const std::exception &e)
-                                {
-                                    PE_WARN("[Scene] Failed to load model: %s", e.what());
-                                }
-                                GUIState::s_modelLoading = false;
-                            };
-                            ThreadPool::GUI.Enqueue(loadTask);
+                                recordSnapshot("Reparented Node");
+                                scene.ReparentNode(data.node, node);
+                            }
                         }
 
-                        if (ext == ".lua")
-                            scene.SetNodeScript(node, path.string());
+                        if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+                        {
+                            const char *pathStr = (const char *)payload->Data;
+                            std::filesystem::path path(pathStr);
+
+                            std::string ext = path.extension().string();
+                            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                            // Only cooked .pemesh loads into the scene; source models are import-only (File > Import).
+                            bool isModel = FileBrowser::IsCookedModelFile(path);
+
+                            if (FileBrowser::IsPrefabFile(path))
+                            {
+                                instantiatePrefab(path, node);
+                            }
+                            else if (SpriteAuthoring::IsSpriteAssetPath(path))
+                            {
+                                createSprite(node, path);
+                            }
+                            else if (isModel && !GUIState::s_modelLoading)
+                            {
+                                auto loadTask = [path, node]()
+                                {
+                                    GUIState::s_modelLoading = true;
+                                    try
+                                    {
+                                        if (ModelAsset *m = ModelAsset::Load(path))
+                                            EventSystem::PushEvent(EventType::ModelLoadedForNode,
+                                                                   Scene::ModelLoadForNodeRequest{node, m});
+                                    }
+                                    catch (const std::exception &e)
+                                    {
+                                        PE_WARN("[Scene] Failed to load model: %s", e.what());
+                                    }
+                                    GUIState::s_modelLoading = false;
+                                };
+                                ThreadPool::GUI.Enqueue(loadTask);
+                            }
+
+                            if (ext == ".lua")
+                                scene.SetNodeScript(node, path.string());
+                        }
                     }
                     ImGui::EndDragDropTarget();
                 }
@@ -992,6 +1045,8 @@ namespace pe
                         if (ImGui::MenuItem("Sprite"))
                             createSpriteFromSelection(node);
                         ui::ItemTooltip("Add a child Component_Sprite node from the selected sprite asset when available.");
+
+                        drawRuntimeUiCreateMenu(node);
 
                         uint32_t componentFlags = scene.GetComponentFlags(node);
 
@@ -1132,6 +1187,10 @@ namespace pe
                         std::string tooltip = "Script error:\n" + scriptError;
                         ui::TooltipText(tooltip.c_str());
                     }
+                    else if (nodeCompFlags & Component_RuntimeUi)
+                    {
+                        ui::TooltipText("Runtime UI scene node; double-click to frame it in the viewport.");
+                    }
                     else if (spriteHierarchyNode)
                     {
                         ui::TooltipText("Sprite-related scene node; double-click to frame it in the viewport.");
@@ -1169,52 +1228,56 @@ namespace pe
             // Window-wide Drop Target for loading models from FileBrowser
             if (ImGui::BeginDragDropTarget())
             {
-                if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+                const bool acceptedRuntimeUi = acceptRuntimeUiDrop(nullptr);
+                if (!acceptedRuntimeUi)
                 {
-                    const char *pathStr = (const char *)payload->Data;
-                    std::filesystem::path path(pathStr);
-
-                    std::string ext = path.extension().string();
-                    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-                    // Only cooked .pemesh loads into the scene; source models are import-only (File > Import).
-                    bool isModel = FileBrowser::IsCookedModelFile(path);
-
-                    if (FileBrowser::IsPrefabFile(path))
+                    if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
                     {
-                        instantiatePrefab(path, nullptr);
-                    }
-                    else if (SpriteAuthoring::IsSpriteAssetPath(path))
-                    {
-                        createSprite(nullptr, path);
-                    }
-                    else if (isModel && !GUIState::s_modelLoading)
-                    {
-                        auto loadTask = [path]()
+                        const char *pathStr = (const char *)payload->Data;
+                        std::filesystem::path path(pathStr);
+
+                        std::string ext = path.extension().string();
+                        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+                        // Only cooked .pemesh loads into the scene; source models are import-only (File > Import).
+                        bool isModel = FileBrowser::IsCookedModelFile(path);
+
+                        if (FileBrowser::IsPrefabFile(path))
                         {
-                            GUIState::s_modelLoading = true;
-                            try
+                            instantiatePrefab(path, nullptr);
+                        }
+                        else if (SpriteAuthoring::IsSpriteAssetPath(path))
+                        {
+                            createSprite(nullptr, path);
+                        }
+                        else if (isModel && !GUIState::s_modelLoading)
+                        {
+                            auto loadTask = [path]()
                             {
-                                if (ModelAsset *m = ModelAsset::Load(path))
-                                    EventSystem::PushEvent(EventType::ModelLoaded, m);
-                            }
-                            catch (const std::exception &e)
-                            {
-                                PE_WARN("[Scene] Failed to load model: %s", e.what());
-                            }
-                            GUIState::s_modelLoading = false;
-                        };
-                        ThreadPool::GUI.Enqueue(loadTask);
+                                GUIState::s_modelLoading = true;
+                                try
+                                {
+                                    if (ModelAsset *m = ModelAsset::Load(path))
+                                        EventSystem::PushEvent(EventType::ModelLoaded, m);
+                                }
+                                catch (const std::exception &e)
+                                {
+                                    PE_WARN("[Scene] Failed to load model: %s", e.what());
+                                }
+                                GUIState::s_modelLoading = false;
+                            };
+                            ThreadPool::GUI.Enqueue(loadTask);
+                        }
                     }
-                }
 
-                if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("HIERARCHY_NODE"))
-                {
-                    HierarchyDragDropPayload data = *(const HierarchyDragDropPayload *)payload->Data;
-                    if (scene.IsNodeAlive(data.node) && scene.GetParent(data.node))
+                    if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("HIERARCHY_NODE"))
                     {
-                        recordSnapshot("Reparented Node");
-                        scene.ReparentNode(data.node, nullptr);
+                        HierarchyDragDropPayload data = *(const HierarchyDragDropPayload *)payload->Data;
+                        if (scene.IsNodeAlive(data.node) && scene.GetParent(data.node))
+                        {
+                            recordSnapshot("Reparented Node");
+                            scene.ReparentNode(data.node, nullptr);
+                        }
                     }
                 }
                 ImGui::EndDragDropTarget();
@@ -1352,6 +1415,8 @@ namespace pe
                 if (ImGui::MenuItem("Sprite"))
                     createSpriteFromSelection(nullptr);
                 ui::ItemTooltip("Create a root-level Component_Sprite node from the selected sprite asset when available.");
+
+                drawRuntimeUiCreateMenu(nullptr);
 
                 if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
                     createSkybox();

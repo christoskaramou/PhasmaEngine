@@ -175,6 +175,29 @@ namespace pe
                     }
                 });
 
+                scene.set_function("attach_polyline", [](SceneNodeHandle h, sol::table pointsTable, sol::optional<float> width, sol::optional<vec3> normal, sol::optional<bool> closed) {
+                    Scene *sc = GetActiveScene();
+                    if (!sc) return;
+                    if (!h.IsValid(*sc)) return;
+                    std::vector<vec3> points;
+                    points.reserve(pointsTable.size());
+                    for (size_t i = 1; i <= pointsTable.size(); ++i)
+                    {
+                        sol::object p = pointsTable[i];
+                        if (p.is<vec3>())
+                            points.push_back(p.as<vec3>());
+                    }
+                    ModelAsset *model = Primitives::CreatePolylineRibbon(points,
+                                                                         width.value_or(1.0f),
+                                                                         normal.value_or(vec3(0.0f, 1.0f, 0.0f)),
+                                                                         closed.value_or(true));
+                    if (model)
+                    {
+                        sc->AttachPrimitiveToNode(h.nodeId, model);
+                        sc->SetGeometryDirty();
+                    }
+                });
+
                 scene.set_function("add_directional_light", []() {
                     if (Scene *sc = GetActiveScene()) sc->CreateDirectionalLight();
                 });

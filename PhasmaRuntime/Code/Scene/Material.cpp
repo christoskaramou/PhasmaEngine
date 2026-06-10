@@ -60,10 +60,11 @@ namespace pe
         factors[1][0][1] = attenuationDistance;
         factors[1][0][2] = ior;
 
-        // [1] = attenuationColor rgb
+        // [1] = attenuationColor rgb + nightEmissive
         factors[1][1][0] = attenuationColor.r;
         factors[1][1][1] = attenuationColor.g;
         factors[1][1][2] = attenuationColor.b;
+        factors[1][1][3] = nightEmissive;
     }
 
     void Material::UnpackLegacyFactors(const mat4 factors[2], uint32_t mask)
@@ -92,6 +93,7 @@ namespace pe
         attenuationColor.r = factors[1][1][0];
         attenuationColor.g = factors[1][1][1];
         attenuationColor.b = factors[1][1][2];
+        nightEmissive = factors[1][1][3];
 
         textureMask = mask;
 
@@ -166,6 +168,8 @@ namespace pe
             return false;
         if (attenuationColor != other.attenuationColor)
             return false;
+        if (nightEmissive != other.nightEmissive)
+            return false;
 
         for (int i = 0; i < 5; i++)
         {
@@ -189,6 +193,7 @@ namespace pe
         params["attenuationDistance"] = attenuationDistance;
         params["ior"] = ior;
         params["attenuationColor"] = attenuationColor;
+        params["nightEmissive"] = nightEmissive;
     }
 
     void Material::SyncLegacyFromParams()
@@ -232,6 +237,7 @@ namespace pe
         attenuationDistance = getFloat("attenuationDistance", attenuationDistance);
         ior = getFloat("ior", ior);
         attenuationColor = getVec3("attenuationColor", attenuationColor);
+        nightEmissive = getFloat("nightEmissive", nightEmissive);
     }
 
     MaterialGpuData Material::BuildGpuData() const
@@ -242,7 +248,7 @@ namespace pe
         float effectiveAlphaCutoff = (renderType == RenderType::AlphaCut) ? alphaCutoff : 0.0f;
         data.pbrParams = vec4(metallic, roughness, effectiveAlphaCutoff, occlusionStrength);
         data.transmissionVolume = vec4(thicknessFactor, attenuationDistance, ior, 0.f);
-        data.attenuationColor = vec4(attenuationColor, 0.f);
+        data.attenuationColor = vec4(attenuationColor, nightEmissive);
         return data;
     }
 

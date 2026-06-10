@@ -109,6 +109,9 @@ namespace pe
         float IBL_intensity = 1.0f;
         float lights_intensity = 1.0f;
         bool randomize_lights = false;
+        // Point lights attenuate by windowed inverse-square (intensity in units of
+        // luminance * distance^2) instead of the range-relative artistic falloff.
+        bool physical_point_falloff = false;
         static constexpr const char *DefaultSkyboxPath = "Skyboxes/golden_gate_hills/golden_gate_hills_4k.hdr";
         std::string skybox_path = DefaultSkyboxPath;
         std::array<float, 3> depth_bias{0.0f, 0.0f, -6.2f};

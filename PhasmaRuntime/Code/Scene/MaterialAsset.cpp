@@ -214,6 +214,7 @@ namespace pe
                 attDist = kInfiniteAttenuationSentinel;
             d.AddMember("attenuation_distance", attDist, alloc);
             d.AddMember("ior", material.ior, alloc);
+            d.AddMember("night_emissive", material.nightEmissive, alloc);
 
             {
                 rapidjson::Value ac(rapidjson::kArrayType);
@@ -334,6 +335,9 @@ namespace pe
 
                 if (d.HasMember("ior"))
                     material.ior = d["ior"].GetFloat();
+
+                if (d.HasMember("night_emissive"))
+                    material.nightEmissive = d["night_emissive"].GetFloat();
 
                 if (d.HasMember("attenuation_color") && d["attenuation_color"].IsArray())
                 {

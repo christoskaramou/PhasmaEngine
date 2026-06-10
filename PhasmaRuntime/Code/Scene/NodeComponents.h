@@ -79,8 +79,39 @@ namespace pe
         std::string path;
     };
 
+    enum class NodeRuntimeUiWidgetType : uint8_t
+    {
+        Panel,
+        Text,
+        Button,
+        Image
+    };
+
     class NodeRuntimeUiTag : public IComponent
     {
+    public:
+        NodeRuntimeUiWidgetType widgetType = NodeRuntimeUiWidgetType::Panel;
+        std::string screenId = "__scene_ui";
+        std::string widgetId;
+        std::string label;
+        std::string title;
+        std::string subtitle;
+        std::string body;
+        std::string footer;
+        std::string imagePath;
+        std::string actionName = "click";
+        std::string actionFunction;
+        vec4 fillColor = vec4(0.07f, 0.08f, 0.10f, 0.94f);
+        vec4 borderColor = vec4(0.45f, 0.48f, 0.54f, 0.95f);
+        vec4 accentColor = vec4(0.96f, 0.74f, 0.22f, 1.0f);
+        vec4 textColor = vec4(0.92f, 0.93f, 0.94f, 1.0f);
+        vec4 imageTint = vec4(1.0f);
+        float fontScale = 1.0f;
+        bool authored = false;
+        bool visible = true;
+        bool draggable = false;
+        bool noInput = false;
+        bool bringToFront = false;
     };
 
     class NodePrefabComponent : public IComponent

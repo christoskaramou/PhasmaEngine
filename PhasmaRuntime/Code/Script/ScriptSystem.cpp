@@ -9,13 +9,147 @@
 #include "Scene/SceneNodeHandle.h"
 #include "Scene/SceneHost.h"
 #include "Script/ScriptRuntimeHooks.h"
+#include "UI/RuntimeUi.h"
+
+#include <algorithm>
+#include <cctype>
+#include <unordered_set>
 
 namespace pe
 {
     namespace
     {
         constexpr const char *kEditorOnlyScriptMarker = "phasma: editor-only";
-    }
+
+        static bool IsLuaIdentifier(const std::string &name)
+        {
+            if (name.empty())
+                return false;
+
+            const auto isIdentFirst = [](unsigned char c)
+            {
+                return std::isalpha(c) || c == '_';
+            };
+            const auto isIdent = [](unsigned char c)
+            {
+                return std::isalnum(c) || c == '_';
+            };
+
+            if (!isIdentFirst(static_cast<unsigned char>(name.front())))
+                return false;
+
+            for (char c : name)
+            {
+                if (!isIdent(static_cast<unsigned char>(c)))
+                    return false;
+            }
+
+            return true;
+        }
+
+        static bool IsSkippedLuaGlobal(const std::string &name)
+        {
+            static constexpr const char *kSkippedGlobals[] = {
+                "_G",
+                "_VERSION",
+                "arg",
+                "assert",
+                "collectgarbage",
+                "coroutine",
+                "debug",
+                "dofile",
+                "error",
+                "getmetatable",
+                "io",
+                "ipairs",
+                "load",
+                "loadfile",
+                "math",
+                "next",
+                "os",
+                "package",
+                "pairs",
+                "pcall",
+                "print",
+                "rawequal",
+                "rawget",
+                "rawlen",
+                "rawset",
+                "require",
+                "select",
+                "setmetatable",
+                "string",
+                "table",
+                "tonumber",
+                "tostring",
+                "type",
+                "utf8",
+                "xpcall",
+            };
+
+            for (const char *skipped : kSkippedGlobals)
+            {
+                if (name == skipped)
+                    return true;
+            }
+
+            return false;
+        }
+
+        static bool ShouldSkipLuaFunctionKey(const std::string &key, bool topLevel)
+        {
+            if (key.empty() || key.front() == '_')
+                return true;
+
+            return topLevel && IsSkippedLuaGlobal(key);
+        }
+
+        static void CollectLuaFunctions(lua_State *L,
+                                        int tableIndex,
+                                        const std::string &prefix,
+                                        int depth,
+                                        std::vector<std::string> &functions,
+                                        std::unordered_set<const void *> &visitedTables)
+        {
+            if (depth < 0)
+                return;
+
+            tableIndex = lua_absindex(L, tableIndex);
+            const void *tablePtr = lua_topointer(L, tableIndex);
+            if (!tablePtr || !visitedTables.insert(tablePtr).second)
+                return;
+
+            lua_pushnil(L);
+            while (lua_next(L, tableIndex) != 0)
+            {
+                const int keyType = lua_type(L, -2);
+                if (keyType != LUA_TSTRING)
+                {
+                    lua_pop(L, 1);
+                    continue;
+                }
+
+                size_t keyLen = 0;
+                const char *keyPtr = lua_tolstring(L, -2, &keyLen);
+                std::string key(keyPtr ? keyPtr : "", keyLen);
+                const bool topLevel = prefix.empty();
+                if (ShouldSkipLuaFunctionKey(key, topLevel) || !IsLuaIdentifier(key))
+                {
+                    lua_pop(L, 1);
+                    continue;
+                }
+
+                const std::string name = topLevel ? key : prefix + "." + key;
+                const int valueType = lua_type(L, -1);
+                if (valueType == LUA_TFUNCTION)
+                    functions.push_back(name + "()");
+                else if (valueType == LUA_TTABLE && depth > 0)
+                    CollectLuaFunctions(L, -1, name, depth - 1, functions, visitedTables);
+
+                lua_pop(L, 1);
+            }
+        }
+    } // namespace
 
     static std::string NormalizeSlashes(std::string path)
     {
@@ -632,6 +766,95 @@ namespace pe
         return nullptr;
     }
 
+    bool ScriptSystem::InvokeNodeRuntimeUiAction(NodeId *node,
+                                                 const std::string &functionName,
+                                                 const std::string &actionName,
+                                                 const RuntimeUiWidgetState &state,
+                                                 const std::string &screenId,
+                                                 const std::string &widgetId)
+    {
+        if (!m_initialized || !node || functionName.empty())
+            return false;
+
+        Scene *scene = GetActiveScene();
+        if (!scene || !scene->IsNodeAlive(node))
+            return false;
+
+        ReconcileNodeInstances();
+        NodeScriptInstance *inst = FindNodeInstance(node);
+        if (!inst)
+            return false;
+
+        RefreshNodeInstanceBindings(*inst);
+        InitializeNodeInstance(*inst);
+        if (!inst->lastError.empty())
+            return false;
+
+        sol::function callback;
+        sol::object hooksObj = RawGetLiteral(m_lua.lua_state(), inst->env, "__hooks");
+        if (hooksObj.is<sol::table>())
+        {
+            sol::object hook = hooksObj.as<sol::table>()[functionName];
+            if (hook.is<sol::function>())
+                callback = hook.as<sol::function>();
+        }
+        if (!callback.valid())
+        {
+            sol::object fn = inst->env[functionName];
+            if (fn.is<sol::function>())
+                callback = fn.as<sol::function>();
+        }
+
+        if (!callback.valid())
+        {
+            PE_WARN("[Lua] Runtime UI action function '%s' not found in node script '%s'",
+                    functionName.c_str(),
+                    inst->sourcePath.c_str());
+            return false;
+        }
+
+        sol::table event = m_lua.create_table();
+        event["action"] = actionName.empty() ? "click" : actionName;
+        event["screen"] = screenId;
+        event["widget"] = widgetId;
+        event["node"] = inst->handle;
+        event["self"] = inst->handle;
+        event["hovered"] = state.hovered;
+        event["active"] = state.active;
+        event["clicked"] = state.clicked;
+        event["down"] = state.down;
+        event["dragging"] = state.dragging;
+        event["drag_started"] = state.dragStarted;
+        event["drag_released"] = state.dragReleased;
+        event["mouse_x"] = state.mouseX;
+        event["mouse_y"] = state.mouseY;
+        event["drag_delta_x"] = state.dragDeltaX;
+        event["drag_delta_y"] = state.dragDeltaY;
+
+        sol::table mouse = m_lua.create_table();
+        mouse["x"] = state.mouseX;
+        mouse["y"] = state.mouseY;
+        event["mouse"] = mouse;
+
+        sol::table dragDelta = m_lua.create_table();
+        dragDelta["x"] = state.dragDeltaX;
+        dragDelta["y"] = state.dragDeltaY;
+        event["drag_delta"] = dragDelta;
+
+        auto result = CallProtected(callback, event);
+        if (!result.valid())
+        {
+            sol::error err = result;
+            Log::Error(PeFormat("[Lua] Runtime UI action '%s' error in node script '%s': %s",
+                                functionName.c_str(),
+                                inst->path.c_str(),
+                                err.what()));
+            inst->lastError = err.what();
+            return false;
+        }
+        return true;
+    }
+
     void ScriptSystem::CallInit(InitScope scope)
     {
         ReconcileNodeInstances();
@@ -1140,6 +1363,25 @@ namespace pe
     {
         static std::vector<LuaBindingFunc> bindings;
         return bindings;
+    }
+
+    std::vector<std::string> ScriptSystem::ListLuaFunctions()
+    {
+        std::vector<std::string> functions;
+        if (!m_initialized)
+            return functions;
+
+        lua_State *L = m_lua.lua_state();
+        lua_getglobal(L, "_G");
+
+        std::unordered_set<const void *> visitedTables;
+        CollectLuaFunctions(L, -1, "", 3, functions, visitedTables);
+
+        lua_pop(L, 1);
+
+        std::sort(functions.begin(), functions.end());
+        functions.erase(std::unique(functions.begin(), functions.end()), functions.end());
+        return functions;
     }
 
     std::string ScriptSystem::ExecuteLua(const std::string &code)

@@ -262,14 +262,18 @@ namespace pe
             return result == 0 && SDL_GetRelativeMouseMode() == SDL_TRUE;
         }
 
+        // Hosts (editor Window / PlayerHost) write the full capture state once per
+        // frame after event polling; plain assignment keeps the flags in sync. An
+        // OR-latch here sticks forever after a single captured frame and permanently
+        // disables input.* for scripts (dead fly camera).
         void SetMouseCapturedByUi(bool captured)
         {
-            s_mouseCapturedByUi = s_mouseCapturedByUi || captured;
+            s_mouseCapturedByUi = captured;
         }
 
         void SetKeyboardCapturedByUi(bool captured)
         {
-            s_keyboardCapturedByUi = s_keyboardCapturedByUi || captured;
+            s_keyboardCapturedByUi = captured;
         }
 
         bool IsMouseCapturedByUi()

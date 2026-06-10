@@ -4,6 +4,7 @@
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
 #include "GUI/IconsFontAwesome.h"
+#include "GUI/RuntimeUiAuthoring.h"
 #include "GUI/SpriteAuthoring.h"
 #include "GUI/SkinnedStrip2DEditor.h"
 #include "GUI/UndoRedo.h"
@@ -384,7 +385,152 @@ namespace pe
 
         auto drawRuntimeUiComponent = [&](NodeId *node)
         {
-            ImGui::TextDisabled("Runtime UI node");
+            NodeRuntimeUiTag *uiComponent = scene.GetRuntimeUiComponent(node);
+            if (!uiComponent)
+                return;
+
+            auto markRuntimeUiChanged = [&]()
+            {
+                uiComponent->authored = true;
+                scene.MarkNodeDirty(node);
+                scene.MarkDirty();
+                if (m_gui)
+                    m_gui->NotifyChange();
+            };
+
+            if (!uiComponent->authored)
+            {
+                ImGui::TextDisabled("Runtime UI tag");
+                if (ImGui::SmallButton("Create Authored UI"))
+                {
+                    RuntimeUiAuthoring::ConfigureDefaults(*uiComponent, NodeRuntimeUiWidgetType::Panel);
+                    markRuntimeUiChanged();
+                }
+                ui::ItemTooltip("Add editable Runtime UI widget data to this node.");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Remove Runtime UI"))
+                {
+                    scene.RemoveComponentFlag(node, Component_RuntimeUi);
+                    if (m_gui)
+                        m_gui->NotifyChange();
+                }
+                ui::ItemTooltip("Remove the Runtime UI tag from this node.");
+                return;
+            }
+
+            const auto &templates = RuntimeUiAuthoring::Templates();
+            int currentType = 0;
+            for (int i = 0; i < static_cast<int>(templates.size()); ++i)
+                if (templates[i].type == uiComponent->widgetType)
+                    currentType = i;
+
+            if (ImGui::BeginCombo("Type", templates[currentType].name))
+            {
+                for (int i = 0; i < static_cast<int>(templates.size()); ++i)
+                {
+                    const bool selected = i == currentType;
+                    if (ImGui::Selectable(templates[i].name, selected))
+                    {
+                        RuntimeUiAuthoring::ConfigureDefaults(*uiComponent, templates[i].type);
+                        markRuntimeUiChanged();
+                    }
+                    if (selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            ui::ItemTooltip("Choose the authored Runtime UI element type.");
+
+            auto editString = [&](const char *label, std::string &value)
+            {
+                char buffer[512];
+                snprintf(buffer, sizeof(buffer), "%s", value.c_str());
+                if (ImGui::InputText(label, buffer, sizeof(buffer)))
+                {
+                    value = buffer;
+                    markRuntimeUiChanged();
+                }
+            };
+
+            editString("Label", uiComponent->label);
+            editString("Title", uiComponent->title);
+            editString("Subtitle", uiComponent->subtitle);
+            editString("Body", uiComponent->body);
+            editString("Footer", uiComponent->footer);
+            editString("Image", uiComponent->imagePath);
+
+            struct RuntimeUiActionOption
+            {
+                const char *id;
+                const char *label;
+            };
+            static constexpr RuntimeUiActionOption kRuntimeUiActions[] = {
+                {"click", "Click"},
+                {"hover_enter", "Hover Enter"},
+                {"press", "Press"},
+                {"release", "Release"},
+                {"drag_start", "Drag Start"},
+                {"dragging", "Dragging"},
+                {"drag_release", "Drag Release"},
+            };
+            static constexpr int kRuntimeUiActionCount = static_cast<int>(sizeof(kRuntimeUiActions) / sizeof(kRuntimeUiActions[0]));
+            auto findActionIndex = [&]()
+            {
+                for (int i = 0; i < kRuntimeUiActionCount; ++i)
+                    if (uiComponent->actionName == kRuntimeUiActions[i].id)
+                        return i;
+                return 0;
+            };
+
+            int currentAction = findActionIndex();
+            if (ImGui::BeginCombo("Action", kRuntimeUiActions[currentAction].label))
+            {
+                for (int i = 0; i < kRuntimeUiActionCount; ++i)
+                {
+                    const bool selected = i == currentAction;
+                    if (ImGui::Selectable(kRuntimeUiActions[i].label, selected))
+                    {
+                        uiComponent->actionName = kRuntimeUiActions[i].id;
+                        markRuntimeUiChanged();
+                    }
+                    if (selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            ui::ItemTooltip("Choose when the Action Function runs.");
+            editString("Action Function", uiComponent->actionFunction);
+            ui::ItemTooltip("Lua function to call on this node's script when the selected action fires. Leave empty for no action.");
+            if (!uiComponent->actionFunction.empty() && !(scene.GetComponentFlags(node) & Component_Script))
+                ImGui::TextDisabled("Attach a Script component to run this action.");
+
+            auto editColor = [&](const char *label, vec4 &color)
+            {
+                float value[4] = {color.r, color.g, color.b, color.a};
+                if (ImGui::ColorEdit4(label, value))
+                {
+                    color = vec4(value[0], value[1], value[2], value[3]);
+                    markRuntimeUiChanged();
+                }
+            };
+
+            editColor("Fill", uiComponent->fillColor);
+            editColor("Border", uiComponent->borderColor);
+            editColor("Accent", uiComponent->accentColor);
+            editColor("Text", uiComponent->textColor);
+            editColor("Image Tint", uiComponent->imageTint);
+
+            if (ImGui::DragFloat("Font Scale", &uiComponent->fontScale, 0.01f, 0.1f, 4.0f, "%.2f"))
+                markRuntimeUiChanged();
+            if (ImGui::Checkbox("Visible", &uiComponent->visible))
+                markRuntimeUiChanged();
+            if (ImGui::Checkbox("Draggable", &uiComponent->draggable))
+                markRuntimeUiChanged();
+            if (ImGui::Checkbox("No Input", &uiComponent->noInput))
+                markRuntimeUiChanged();
+            if (ImGui::Checkbox("Bring To Front", &uiComponent->bringToFront))
+                markRuntimeUiChanged();
+
             ImGui::Spacing();
             if (ImGui::SmallButton("Remove Runtime UI"))
             {

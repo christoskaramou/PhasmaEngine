@@ -42,7 +42,7 @@ TexSamplerDecl(6, 0, Emission)
     uint        cb_use_Disney_PBR;
     uint        cb_orthographicCamera;
     float       cb_skyboxTanHalfFovY;
-    float       cb_lightPassPad0;
+    float       cb_physicalPointFalloff;
     float       cb_lightPassPad1;
     float       cb_lightPassPad2;
 };
@@ -314,6 +314,12 @@ float3 ComputePointLight(int lightIndex, Material material, float3 worldPos, flo
     float attenuation       = (1.0 - lightDistRatio * lightDistRatio);
     attenuation             = max(0.0, attenuation);  // Clamp to [0, 1]
     attenuation             *= attenuation; // Quadratic fall-off
+    if (cb_physicalPointFalloff > 0.5)
+    {
+        // Physical mode: windowed inverse-square. The range window above only
+        // fades the hard cutoff; intensity is luminance * distance^2.
+        attenuation /= max(lightDist * lightDist, 1e-4);
+    }
     float3 lightDir         = normalize(-lightDirFull);
     float3 pointColor       = light.color.xyz * attenuation; // color is .xyz
     pointColor              *= light.color.w * cb_lightsIntensity; // intensity is .w

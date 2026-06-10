@@ -286,6 +286,9 @@ namespace pe
                     else if (prop == "ior") inst->SetIor(value);
                     else if (prop == "thickness_factor") inst->SetThicknessFactor(value);
                     else if (prop == "attenuation_distance") inst->SetAttenuationDistance(value);
+                    // No instance override: night emissive is a property of the material
+                    // itself (a shared material is night-emissive for every user).
+                    else if (prop == "night_emissive") mesh.material->nightEmissive = value;
                     else return;
                     s->SetMaterialDirty();
                     s->MarkNodeDirty(nodeId);

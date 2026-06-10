@@ -3,11 +3,32 @@
 #include "GUI/Helpers.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
+#include "Script/ScriptSystem.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui.h"
 
+#include <algorithm>
+#include <cctype>
+
 namespace pe
 {
+    namespace
+    {
+        bool ContainsInsensitive(const std::string &text, const char *filter)
+        {
+            if (!filter || filter[0] == '\0')
+                return true;
+
+            const std::string needle(filter);
+            return std::search(text.begin(), text.end(), needle.begin(), needle.end(),
+                               [](char a, char b)
+                               {
+                                   return std::tolower(static_cast<unsigned char>(a)) ==
+                                          std::tolower(static_cast<unsigned char>(b));
+                               }) != text.end();
+        }
+    } // namespace
+
     ScriptEditor::ScriptEditor() : Widget("Script Editor")
     {
         m_open = false; // only shows when explicitly opened
@@ -161,6 +182,15 @@ namespace pe
 
         bool saveClicked = ImGui::Button("Save");
         ui::ItemTooltip("Save the script and compile Lua scripts.");
+        ImGui::SameLine();
+
+        if (ImGui::Button(m_showFunctions ? "Hide Functions" : "Show Functions"))
+        {
+            m_showFunctions = !m_showFunctions;
+            if (m_showFunctions)
+                RefreshFunctionList();
+        }
+        ui::ItemTooltip("Show Lua functions available to scripts.");
 
         if (m_modified)
         {
@@ -172,6 +202,9 @@ namespace pe
             SaveScript();
 
         ImGui::Separator();
+
+        if (m_showFunctions)
+            DrawFunctionBrowser();
 
         // ── Editor ───────────────────────────────────────────────────────────────
         float availH = ImGui::GetContentRegionAvail().y;
@@ -197,5 +230,98 @@ namespace pe
         ImGui::EndChild();
 
         ImGui::End();
+    }
+
+    void ScriptEditor::RefreshFunctionList()
+    {
+        m_luaFunctions.clear();
+        if (ScriptSystem *scriptSystem = GetGlobalSystem<ScriptSystem>())
+            m_luaFunctions = scriptSystem->ListLuaFunctions();
+
+        RebuildFunctionListText();
+    }
+
+    void ScriptEditor::RebuildFunctionListText()
+    {
+        m_luaFunctionsText.clear();
+        if (m_luaFunctions.empty())
+        {
+            m_luaFunctionsText = "No Lua functions available. Make sure the ScriptSystem is initialized.";
+        }
+        else
+        {
+            for (const std::string &functionName : m_luaFunctions)
+            {
+                m_luaFunctionsText += functionName;
+                m_luaFunctionsText += '\n';
+            }
+        }
+
+        m_luaFunctionsTextBuffer.assign(m_luaFunctionsText.begin(), m_luaFunctionsText.end());
+        m_luaFunctionsTextBuffer.push_back('\0');
+    }
+
+    void ScriptEditor::DrawFunctionBrowser()
+    {
+        if (m_luaFunctionsTextBuffer.empty())
+            RefreshFunctionList();
+
+        const float availableHeight = ImGui::GetContentRegionAvail().y;
+        const float panelHeight = std::clamp(availableHeight * 0.34f, 170.f, 260.f);
+        if (!ImGui::BeginChild("##script_function_browser", ImVec2(-1.f, panelHeight), true))
+        {
+            ImGui::EndChild();
+            return;
+        }
+
+        ImGui::Text("Lua Functions (%zu)", m_luaFunctions.size());
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Refresh"))
+            RefreshFunctionList();
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Copy All"))
+            ImGui::SetClipboardText(m_luaFunctionsText.c_str());
+
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(220.f);
+        ImGui::InputTextWithHint("##lua_function_filter", "Filter", m_functionFilterBuf, sizeof(m_functionFilterBuf));
+
+        ImGui::Separator();
+
+        const float availableWidth = ImGui::GetContentRegionAvail().x;
+        const float rowListWidth = std::clamp(availableWidth * 0.45f, 280.f, 420.f);
+        ImGui::BeginChild("##lua_function_rows", ImVec2(rowListWidth, -1.f), true);
+        for (int i = 0; i < static_cast<int>(m_luaFunctions.size()); ++i)
+        {
+            const std::string &functionName = m_luaFunctions[i];
+            if (!ContainsInsensitive(functionName, m_functionFilterBuf))
+                continue;
+
+            ImGui::PushID(i);
+            if (ImGui::SmallButton("Copy"))
+                ImGui::SetClipboardText(functionName.c_str());
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Insert"))
+            {
+                m_editor.InsertText(functionName + "\n");
+                m_modified = (m_editor.GetText() != m_originalSource);
+            }
+            ImGui::SameLine();
+            ImGui::TextUnformatted(functionName.c_str());
+            ImGui::PopID();
+        }
+        ImGui::EndChild();
+
+        ImGui::SameLine();
+        if (!m_luaFunctionsTextBuffer.empty())
+        {
+            ImGui::InputTextMultiline("##lua_function_text",
+                                      m_luaFunctionsTextBuffer.data(),
+                                      m_luaFunctionsTextBuffer.size(),
+                                      ImVec2(-1.f, -1.f),
+                                      ImGuiInputTextFlags_ReadOnly);
+        }
+
+        ImGui::EndChild();
     }
 } // namespace pe

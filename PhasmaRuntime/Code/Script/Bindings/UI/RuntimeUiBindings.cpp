@@ -121,6 +121,7 @@ namespace pe
         {
             desc.x = ReadFloatOption(options, "x", desc.x);
             desc.y = ReadFloatOption(options, "y", desc.y);
+            desc.z = ReadFloatOption(options, "z", desc.z);
             desc.width = ReadFloatOption(options, "width", desc.width);
             desc.height = ReadFloatOption(options, "height", desc.height);
             desc.width = ReadFloatOption(options, "w", desc.width);
@@ -132,8 +133,10 @@ namespace pe
                 sol::table position = positionObject.as<sol::table>();
                 desc.x = ReadFloatOption(position, "x", desc.x);
                 desc.y = ReadFloatOption(position, "y", desc.y);
+                desc.z = ReadFloatOption(position, "z", desc.z);
                 desc.x = ReadFloatOption(position, 1, desc.x);
                 desc.y = ReadFloatOption(position, 2, desc.y);
+                desc.z = ReadFloatOption(position, 3, desc.z);
             }
 
             sol::object sizeObject = options["size"];

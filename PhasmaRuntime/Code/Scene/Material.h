@@ -17,7 +17,7 @@ namespace pe
         vec4 emissiveTransmission; // xyz = emissive, w = transmissionFactor
         vec4 pbrParams;            // x = metallic, y = roughness, z = alphaCutoff, w = occlusionStrength
         vec4 transmissionVolume;   // x = thicknessFactor, y = attenuationDistance, z = ior, w = unused
-        vec4 attenuationColor;     // xyz = attenuationColor, w = unused
+        vec4 attenuationColor;     // xyz = attenuationColor, w = nightEmissive
     };
 
     // Identifies which VS/PS shaders a material uses per render pass.
@@ -77,6 +77,10 @@ namespace pe
         float attenuationDistance = std::numeric_limits<float>::infinity();
         float ior = 1.5f;
         vec3 attenuationColor = vec3(1.f);
+
+        // Opaque-only: when > 0, emissive shows only where direct lighting is
+        // dim (city lights fading across a planet's day side).
+        float nightEmissive = 0.f;
 
         // --- Render state ---
         RenderType renderType = RenderType::Opaque;

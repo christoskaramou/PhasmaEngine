@@ -210,6 +210,8 @@ namespace pe
         ui::ItemTooltip("Request a one-shot randomization of scene light settings.");
         ImGui::SliderFloat("Light Intst", &gSettings.lights_intensity, 0.01f, 30.f);
         ui::ItemTooltip("Global multiplier for scene light intensity.");
+        ImGui::Checkbox("Physical Falloff", &gSettings.physical_point_falloff);
+        ui::ItemTooltip("Point lights attenuate by windowed inverse-square (raster path). Intensity is interpreted as luminance * distance^2, so expect to raise it massively.");
         ImGui::Checkbox("Frustum Culling", &gSettings.frustum_culling);
         ui::ItemTooltip("Cull renderables outside the active camera frustum.");
         ImGui::Checkbox("FreezeCamCull", &gSettings.freeze_frustum_culling);

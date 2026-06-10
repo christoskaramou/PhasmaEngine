@@ -24,6 +24,7 @@
 #include "imgui_impl_dx12.h"
 #endif
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_vulkan.h"
 
@@ -169,11 +170,14 @@ namespace pe
                 if (IsRuntimeUiMouseInputEvent(mappedEvent))
                     return io.WantCaptureMouse;
 
+                // Keyboard: swallow only while a text field is active. ImGui keeps
+                // WantCaptureKeyboard latched while any window holds focus (e.g. after
+                // a button click), which would permanently steal WASD from the host.
                 if (IsRuntimeUiTextInputEvent(mappedEvent))
-                    return io.WantTextInput || io.WantCaptureKeyboard;
+                    return io.WantTextInput;
 
                 if (IsRuntimeUiKeyboardInputEvent(mappedEvent))
-                    return io.WantCaptureKeyboard;
+                    return io.WantTextInput;
 
                 return false;
             }
@@ -191,6 +195,7 @@ namespace pe
                 runtime_ui_imgui::ApplyStyle(uiScale);
                 io.FontGlobalScale = uiScale;
                 ImGui_ImplSDL2_NewFrame();
+                SyncMousePosition(io);
                 if (m_api == PE_GRAPHICS_API_VULKAN)
                 {
                     ImGui_ImplVulkan_NewFrame();
@@ -370,7 +375,9 @@ namespace pe
 
                 ScopedImGuiContext contextScope(m_context);
                 const ImGuiIO &io = ImGui::GetIO();
-                return io.WantCaptureKeyboard || io.WantTextInput;
+                // Only text entry captures the keyboard; focus alone must not steal
+                // movement keys from the host (see ProcessEvent note).
+                return io.WantTextInput;
             }
 
             void Render(const RuntimeUiRenderContext &context) override
@@ -511,6 +518,16 @@ namespace pe
                 return ImGui::ColorConvertFloat4ToU32(ImVec4(color.r, color.g, color.b, color.a));
             }
 
+            static RuntimeUiColor LerpColor(const RuntimeUiColor &a, const RuntimeUiColor &b, float t)
+            {
+                t = std::clamp(t, 0.0f, 1.0f);
+                return RuntimeUiColor{
+                    a.r + (b.r - a.r) * t,
+                    a.g + (b.g - a.g) * t,
+                    a.b + (b.b - a.b) * t,
+                    a.a + (b.a - a.a) * t};
+            }
+
             static bool HasText(const char *text)
             {
                 return text && text[0] != '\0';
@@ -598,6 +615,7 @@ namespace pe
                     ImGuiWindowFlags_NoResize |
                     ImGuiWindowFlags_NoSavedSettings |
                     ImGuiWindowFlags_NoFocusOnAppearing |
+                    ImGuiWindowFlags_NoBringToFrontOnFocus |
                     ImGuiWindowFlags_NoScrollbar |
                     ImGuiWindowFlags_NoScrollWithMouse |
                     ImGuiWindowFlags_NoBackground;
@@ -619,6 +637,7 @@ namespace pe
                 RuntimeUiWidgetState state{};
                 if (ImGui::Begin(("##runtime-ui-quad-" + id).c_str(), nullptr, flags))
                 {
+                    ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
                     ImGui::PushID(id.c_str());
                     state = QuadInCurrentWindow(id, quad, size);
                     ImGui::PopID();
@@ -678,6 +697,117 @@ namespace pe
                 if (quad.selected || state.dragging)
                     border = accent;
 
+                const float scale = quad.fontScale > 0.0f ? quad.fontScale : 1.0f;
+                const float pad = 10.0f * scale;
+                ImFont *font = ImGui::GetFont();
+                const float fontSize = ImGui::GetFontSize() * scale;
+
+                auto drawSimpleText = [&](const char *value, float y, int maxLines)
+                {
+                    if (!HasText(value))
+                        return 0.0f;
+                    return DrawWrappedText(drawList,
+                                           font,
+                                           fontSize,
+                                           value,
+                                           ImVec2(pos.x + pad, y),
+                                           std::max(1.0f, size.x - pad * 2.0f),
+                                           text,
+                                           maxLines);
+                };
+
+                if (quad.visualStyle == RuntimeUiQuadVisualStyle::Image)
+                {
+                    if (quad.fillColor.a > 0.0f)
+                        drawList->AddRectFilled(pos, max, fill, rounding);
+                    if (quad.image)
+                    {
+                        if (void *textureID = GetImageTexture(quad.image))
+                        {
+                            drawList->AddImageRounded((ImTextureID)textureID, pos, max, ImVec2(0.0f, 0.0f),
+                                                      ImVec2(1.0f, 1.0f), ToColor(quad.imageTint), rounding);
+                        }
+                    }
+                    else if (quad.accentColor.a > 0.0f)
+                    {
+                        drawList->AddRectFilled(ImVec2(pos.x + pad, pos.y + pad),
+                                                ImVec2(max.x - pad, max.y - pad),
+                                                accent,
+                                                std::max(0.0f, rounding - 2.0f));
+                    }
+                    if (quad.borderColor.a > 0.0f || quad.selected || state.dragging)
+                        drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
+                    return;
+                }
+
+                if (quad.visualStyle == RuntimeUiQuadVisualStyle::Button)
+                {
+                    RuntimeUiColor buttonFill = state.down ? quad.accentColor
+                                                           : (state.hovered ? LerpColor(quad.fillColor, quad.accentColor, 0.35f)
+                                                                            : quad.fillColor);
+                    drawList->AddRectFilled(pos, max, ToColor(buttonFill), rounding);
+                    drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
+
+                    const char *caption = HasText(quad.title) ? quad.title : (HasText(quad.label) ? quad.label : quad.body);
+                    if (!HasText(caption))
+                        caption = "Button";
+
+                    const ImVec2 captionSize = font ? font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, caption)
+                                                    : ImGui::CalcTextSize(caption);
+                    ImVec2 textPos(pos.x + (size.x - captionSize.x) * 0.5f,
+                                   pos.y + (size.y - captionSize.y) * 0.5f);
+                    textPos.x = std::max(pos.x + pad, textPos.x);
+                    drawList->PushClipRect(pos, max, true);
+                    drawList->AddText(font, fontSize, textPos, text, caption);
+                    drawList->PopClipRect();
+                    return;
+                }
+
+                if (quad.visualStyle == RuntimeUiQuadVisualStyle::Text)
+                {
+                    if (quad.fillColor.a > 0.0f)
+                        drawList->AddRectFilled(pos, max, fill, rounding);
+                    if (quad.borderColor.a > 0.0f || quad.selected || state.dragging)
+                        drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
+
+                    const char *content = HasText(quad.body) ? quad.body : (HasText(quad.title) ? quad.title : quad.label);
+                    drawSimpleText(content, pos.y + pad, 12);
+                    return;
+                }
+
+                if (quad.visualStyle == RuntimeUiQuadVisualStyle::Panel)
+                {
+                    drawList->AddRectFilled(pos, max, fill, rounding);
+                    drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
+                    float y = pos.y + pad;
+                    if (HasText(quad.label))
+                    {
+                        drawList->AddText(font, fontSize * 0.83f, ImVec2(pos.x + pad, y), accent, quad.label);
+                        y += fontSize + 2.0f * scale;
+                    }
+                    if (HasText(quad.title))
+                    {
+                        drawList->AddText(font, fontSize * 1.08f, ImVec2(pos.x + pad, y), text, quad.title);
+                        y += fontSize + 6.0f * scale;
+                    }
+                    if (HasText(quad.subtitle))
+                    {
+                        drawList->AddText(font, fontSize * 0.86f, ImVec2(pos.x + pad, y), accent, quad.subtitle);
+                        y += fontSize + 5.0f * scale;
+                    }
+                    if (HasText(quad.body))
+                        y += drawSimpleText(quad.body, y, 8);
+                    if (HasText(quad.footer))
+                    {
+                        drawList->AddLine(ImVec2(pos.x + pad, max.y - 30.0f * scale),
+                                          ImVec2(max.x - pad, max.y - 30.0f * scale),
+                                          border,
+                                          1.0f);
+                        drawList->AddText(font, fontSize * 0.82f, ImVec2(pos.x + pad, max.y - 23.0f * scale), text, quad.footer);
+                    }
+                    return;
+                }
+
                 drawList->AddRectFilled(pos, max, fill, rounding);
 
                 const bool textless = !HasText(quad.label) && !HasText(quad.title) && !HasText(quad.subtitle) &&
@@ -695,8 +825,6 @@ namespace pe
 
                 drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
 
-                const float scale = quad.fontScale > 0.0f ? quad.fontScale : 1.0f;
-                const float pad = 10.0f * scale;
                 const float artHeight = std::clamp(size.y * 0.34f, 42.0f * scale, 82.0f * scale);
                 const ImVec2 artMin(pos.x + pad, pos.y + pad);
                 const ImVec2 artMax(max.x - pad, pos.y + pad + artHeight);
@@ -715,8 +843,6 @@ namespace pe
                     }
                 }
 
-                ImFont *font = ImGui::GetFont();
-                const float fontSize = ImGui::GetFontSize() * scale;
                 float y = artMax.y + 9.0f * scale;
                 const float textWidth = std::max(1.0f, size.x - pad * 2.0f);
 
@@ -851,38 +977,63 @@ namespace pe
                 return m_frameInfo.width > 0 ? static_cast<float>(m_frameInfo.width) : 0.0f;
             }
 
+            float MapXToSurface(float x) const
+            {
+                return (x - m_frameInfo.inputRectMinX) *
+                       static_cast<float>(m_frameInfo.width) /
+                       m_frameInfo.inputRectWidth;
+            }
+
+            float MapYToSurface(float y) const
+            {
+                return (y - m_frameInfo.inputRectMinY) *
+                       static_cast<float>(m_frameInfo.height) /
+                       m_frameInfo.inputRectHeight;
+            }
+
             SDL_Event MapEventToSurface(const SDL_Event &event) const
             {
                 if (!HasInputRect())
                     return event;
 
                 SDL_Event mapped = event;
-                const auto mapX = [this](float x)
-                {
-                    return (x - m_frameInfo.inputRectMinX) *
-                           static_cast<float>(m_frameInfo.width) /
-                           m_frameInfo.inputRectWidth;
-                };
-                const auto mapY = [this](float y)
-                {
-                    return (y - m_frameInfo.inputRectMinY) *
-                           static_cast<float>(m_frameInfo.height) /
-                           m_frameInfo.inputRectHeight;
-                };
-
                 if (mapped.type == SDL_MOUSEMOTION)
                 {
-                    mapped.motion.x = static_cast<int>(mapX(static_cast<float>(event.motion.x)));
-                    mapped.motion.y = static_cast<int>(mapY(static_cast<float>(event.motion.y)));
+                    mapped.motion.x = static_cast<int>(MapXToSurface(static_cast<float>(event.motion.x)));
+                    mapped.motion.y = static_cast<int>(MapYToSurface(static_cast<float>(event.motion.y)));
                 }
                 else if (mapped.type == SDL_MOUSEBUTTONDOWN || mapped.type == SDL_MOUSEBUTTONUP)
                 {
-                    mapped.button.x = static_cast<int>(mapX(static_cast<float>(event.button.x)));
-                    mapped.button.y = static_cast<int>(mapY(static_cast<float>(event.button.y)));
+                    mapped.button.x = static_cast<int>(MapXToSurface(static_cast<float>(event.button.x)));
+                    mapped.button.y = static_cast<int>(MapYToSurface(static_cast<float>(event.button.y)));
                 }
                 // SDL mouse-wheel events have no cursor coordinates; ImGui applies them at its cached mouse position.
 
                 return mapped;
+            }
+
+            void SyncMousePosition(ImGuiIO &io) const
+            {
+                // ImGui_ImplSDL2_NewFrame (UpdateMouseData) re-injects the raw
+                // window-relative mouse position from global state whenever no button
+                // is held, bypassing MapEventToSurface. Queue the surface-mapped
+                // position after it so this context never sees editor-window
+                // coordinates — otherwise hover/click land on the wrong widgets when
+                // the Viewport image is offset or letterboxed.
+                if (!m_frameInfo.inputEnabled)
+                {
+                    io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+                    return;
+                }
+
+                if (!HasInputRect())
+                    return;
+
+                int mouseX = 0;
+                int mouseY = 0;
+                SDL_GetMouseState(&mouseX, &mouseY);
+                io.AddMousePosEvent(MapXToSurface(static_cast<float>(mouseX)),
+                                    MapYToSurface(static_cast<float>(mouseY)));
             }
 
             bool InitVulkan(Image *renderTarget)

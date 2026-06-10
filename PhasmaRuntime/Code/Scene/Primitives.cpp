@@ -724,6 +724,63 @@ namespace pe
         return model;
     }
 
+    ModelAsset *Primitives::CreatePolylineRibbon(const std::vector<vec3> &points, float width, const vec3 &normal, bool closed)
+    {
+        const size_t count = points.size();
+        if (count < 2)
+            return nullptr;
+
+        const vec3 n = normalize(normal);
+        const float halfWidth = std::max(width, 1e-6f) * 0.5f;
+
+        std::vector<Vertex> vertices;
+        std::vector<uint32_t> indices;
+        vertices.reserve(count * 2u);
+        indices.reserve(count * 12u);
+
+        for (size_t i = 0; i < count; ++i)
+        {
+            vec3 dir;
+            if (closed)
+                dir = points[(i + 1) % count] - points[(i + count - 1) % count];
+            else if (i == 0)
+                dir = points[1] - points[0];
+            else if (i == count - 1)
+                dir = points[count - 1] - points[count - 2];
+            else
+                dir = points[i + 1] - points[i - 1];
+
+            const float dirLen = length(dir);
+            dir = dirLen > 1e-6f ? dir / dirLen : vec3(1.0f, 0.0f, 0.0f);
+            vec3 side = cross(n, dir);
+            const float sideLen = length(side);
+            side = sideLen > 1e-6f ? side / sideLen : vec3(0.0f, 0.0f, 1.0f);
+
+            const float u = i / static_cast<float>(count);
+            vertices.push_back(MakeVertex(points[i] - side * halfWidth, n, {u, 0.0f}));
+            vertices.push_back(MakeVertex(points[i] + side * halfWidth, n, {u, 1.0f}));
+        }
+
+        const size_t segments = closed ? count : count - 1;
+        for (size_t i = 0; i < segments; ++i)
+        {
+            const uint32_t a = static_cast<uint32_t>(i * 2);
+            const uint32_t b = a + 1;
+            const uint32_t c = static_cast<uint32_t>(((i + 1) % count) * 2);
+            const uint32_t d = c + 1;
+            // both windings so the ribbon reads from either side of the plane
+            indices.insert(indices.end(), {a, c, b, b, c, d});
+            indices.insert(indices.end(), {a, b, c, c, b, d});
+        }
+
+        ModelAsset *model = CreatePrimitiveModel(vertices, indices);
+        model->SetLabel("PolylineRibbon");
+        model->SetPrimitiveType("polyline_ribbon");
+        model->SetPrimitiveParams(vec4(width, static_cast<float>(count), closed ? 1.0f : 0.0f, 0.0f), 3);
+        model->SetNodeName(model->GetRootNodeIndex(), "PolylineRibbon");
+        return model;
+    }
+
     ModelAsset *Primitives::CreateSkinnedStrip2D(float width, float height, int segments, int bones)
     {
         width = std::max(width, 0.01f);

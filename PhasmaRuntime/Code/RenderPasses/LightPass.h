@@ -16,7 +16,7 @@ namespace pe
         uint32_t use_Disney_PBR = 1;
         uint32_t orthographicCamera = 0;
         float skyboxTanHalfFovY = 1.0f;
-        float pad0 = 0.0f;
+        float physical_point_falloff = 0.0f;
         float pad1 = 0.0f;
         float pad2 = 0.0f;
     };

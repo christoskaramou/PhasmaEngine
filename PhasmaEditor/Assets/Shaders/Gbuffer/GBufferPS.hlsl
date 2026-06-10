@@ -94,7 +94,10 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     output.albedo = float4(combinedColor.xyz, combinedColor.a);
     float transmission = (pc.passType == 2) ? 1.0f : 0.0f;
     output.metRough = float4(occlusion, roughness, metallic, transmission);
-    output.emissive = float4(emissive, combinedColor.a);
+    // attenuationColor.w = nightEmissive flag; alpha 0 marks the pixel for the
+    // opaque lighting pass to fade emissive where direct light is strong.
+    float nightEmissive = mat.attenuationColor.w;
+    output.emissive = float4(emissive, nightEmissive > 0.5f ? 0.0f : combinedColor.a);
     output.transparency = pc.passType ? 1.0f : 0.0f;
 
     // Calculate the velocity

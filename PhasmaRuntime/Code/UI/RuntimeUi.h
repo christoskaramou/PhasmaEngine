@@ -4,6 +4,7 @@ namespace pe
 {
     class CommandBuffer;
     class Image;
+    class Scene;
     struct NodeId;
 
     struct RuntimeUiFrameInfo
@@ -59,6 +60,15 @@ namespace pe
         float a = 1.0f;
     };
 
+    enum class RuntimeUiQuadVisualStyle
+    {
+        Card,
+        Panel,
+        Text,
+        Button,
+        Image
+    };
+
     struct RuntimeUiQuadDesc
     {
         const char *id = nullptr;
@@ -70,6 +80,7 @@ namespace pe
         Image *image = nullptr;
         float x = 0.0f;
         float y = 0.0f;
+        float z = 0.0f;
         float width = 0.0f;
         float height = 0.0f;
         RuntimeUiColor fillColor{0.07f, 0.08f, 0.10f, 0.94f};
@@ -84,6 +95,7 @@ namespace pe
         bool bringToFront = false;
         bool noInput = false;
         float fontScale = 1.0f;
+        RuntimeUiQuadVisualStyle visualStyle = RuntimeUiQuadVisualStyle::Card;
     };
 
     struct RuntimeUiWidgetState
@@ -183,6 +195,7 @@ namespace pe
                      const std::string &widgetId,
                      const RuntimeUiQuadDesc &desc,
                      const std::string &path = {});
+        void SyncSceneWidgets(Scene &scene);
 
         bool GetBool(const std::string &screenId, const std::string &widgetId, bool fallback = false) const;
         bool ConsumeButtonClick(const std::string &screenId, const std::string &widgetId);
@@ -224,6 +237,7 @@ namespace pe
             float imageHeight = 0.0f;
             float x = 0.0f;
             float y = 0.0f;
+            float z = 0.0f;
             float width = 0.0f;
             float height = 0.0f;
             RuntimeUiColor fillColor{0.07f, 0.08f, 0.10f, 0.94f};
@@ -236,6 +250,7 @@ namespace pe
             bool bringToFront = false;
             bool noInput = false;
             float fontScale = 1.0f;
+            RuntimeUiQuadVisualStyle visualStyle = RuntimeUiQuadVisualStyle::Card;
         };
 
         struct Screen
@@ -252,10 +267,12 @@ namespace pe
         Screen *FindScreen(const std::string &screenId);
         Widget &GetOrCreateWidget(Screen &screen, const std::string &widgetId, WidgetType type);
         Image *LoadImageResource(const std::string &path);
+        void SortQuadWidgets(Screen &screen);
         void BuildFrame();
 
         std::unique_ptr<IRuntimeUiBackend> m_backend;
         std::vector<Screen> m_screens;
+        std::unordered_map<std::string, std::unordered_set<std::string>> m_sceneAuthoredWidgetIds;
         std::unordered_map<std::string, std::shared_ptr<Image>> m_imageCache;
         std::string m_backendName = "none";
         bool m_initialized = false;

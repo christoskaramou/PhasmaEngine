@@ -45,7 +45,8 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     float4 albedo    = Albedo.Sample(sampler_Albedo, input.uv);
     float3 normal    = normalize(Normal.Sample(sampler_Normal, input.uv).xyz * 2.0 - 1.0);
     float4 metRough  = MetRough.Sample(sampler_MetRough, input.uv);
-    float3 emmission = Emission.Sample(sampler_Emission, input.uv).xyz;
+    float4 emissionSample = Emission.Sample(sampler_Emission, input.uv);
+    float3 emmission = emissionSample.xyz;
     float3 wolrdPos  = GetPosFromUV(input.uv, depth, cb_invViewProj);
 
     Material material;
@@ -130,6 +131,12 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
         float3 transmitted = Cube.SampleLevel(sampler_Cube, transmissionDir, transmissionMip).rgb * material.albedo;
         fragColor = lerp(fragColor, transmitted, transmissionWeight * 0.8f);
     }
+
+    // Night emissive: the opaque gbuffer flags it with emissive alpha 0. Show
+    // emissive only where direct light is dim, so city lights fade smoothly
+    // across the terminator instead of glowing on the day side.
+    if (!pc.passType && emissionSample.a < 0.1)
+        emmission *= 1.0 - saturate(dot(fragColor, float3(0.2126, 0.7152, 0.0722)) * 4.0);
 
     // Add emmission
     output.color.rgb = fragColor + emmission;

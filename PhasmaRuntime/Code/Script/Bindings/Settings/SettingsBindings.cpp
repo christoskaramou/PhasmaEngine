@@ -19,6 +19,7 @@ namespace pe
         {"draw_aabbs", &GlobalSettings::draw_aabbs},
         {"frustum_culling", &GlobalSettings::frustum_culling},
         {"randomize_lights", &GlobalSettings::randomize_lights},
+        {"physical_point_falloff", &GlobalSettings::physical_point_falloff},
         {"use_Disney_PBR", &GlobalSettings::use_Disney_PBR},
         {"freeze_frustum_culling", &GlobalSettings::freeze_frustum_culling},
         {"aabbs_depth_aware", &GlobalSettings::aabbs_depth_aware},

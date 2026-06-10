@@ -3,6 +3,9 @@
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
+#include "Script/ScriptSystem.h"
 
 namespace pe
 {
@@ -62,6 +65,110 @@ namespace pe
                 normalized = path.lexically_normal();
             return PathToUtf8(normalized);
         }
+
+        RuntimeUiColor ToRuntimeUiColor(const vec4 &value)
+        {
+            return RuntimeUiColor{value.r, value.g, value.b, value.a};
+        }
+
+        RuntimeUiQuadVisualStyle ToRuntimeUiVisualStyle(NodeRuntimeUiWidgetType type)
+        {
+            switch (type)
+            {
+            case NodeRuntimeUiWidgetType::Text:
+                return RuntimeUiQuadVisualStyle::Text;
+            case NodeRuntimeUiWidgetType::Button:
+                return RuntimeUiQuadVisualStyle::Button;
+            case NodeRuntimeUiWidgetType::Image:
+                return RuntimeUiQuadVisualStyle::Image;
+            case NodeRuntimeUiWidgetType::Panel:
+            default:
+                return RuntimeUiQuadVisualStyle::Panel;
+            }
+        }
+
+        bool GetRuntimeUiNodeRect(const Scene &scene, const NodeId *node, float &x, float &y, float &z, float &w, float &h)
+        {
+            if (!node)
+                return false;
+
+            const mat4 &world = scene.GetWorldMatrix(node);
+            x = world[3].x;
+            y = world[3].y;
+            z = world[3].z;
+            w = glm::length(vec3(world[0]));
+            h = glm::length(vec3(world[1]));
+
+            if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) || !std::isfinite(w) || !std::isfinite(h))
+                return false;
+
+            w = std::max(w, 1.0f);
+            h = std::max(h, 1.0f);
+            return true;
+        }
+
+        std::string MakeSceneWidgetId(const NodeRuntimeUiTag &ui, const NodeId *node)
+        {
+            if (!ui.widgetId.empty())
+                return ui.widgetId;
+            if (!node)
+                return "node";
+            return "node_" + std::to_string(node->index) + "_" + std::to_string(node->revision);
+        }
+
+        bool ShouldDispatchRuntimeUiAction(const std::string &actionName,
+                                           const RuntimeUiWidgetState &state,
+                                           const RuntimeUiWidgetState &previousState)
+        {
+            const std::string action = actionName.empty() ? "click" : actionName;
+            if (action == "click")
+                return state.clicked;
+            if (action == "hover_enter" || action == "hover")
+                return state.hovered && !previousState.hovered;
+            if (action == "press")
+                return state.down && !previousState.down;
+            if (action == "release")
+                return !state.down && previousState.down;
+            if (action == "drag_start")
+                return state.dragStarted;
+            if (action == "dragging" || action == "drag")
+                return state.dragging;
+            if (action == "drag_release")
+                return state.dragReleased;
+
+            return state.clicked;
+        }
+
+        void DispatchRuntimeUiNodeAction(const std::string &screenId,
+                                         const std::string &widgetId,
+                                         NodeId *node,
+                                         const RuntimeUiWidgetState &state,
+                                         const RuntimeUiWidgetState &previousState)
+        {
+            if (!node)
+                return;
+
+            Scene *scene = GetActiveScene();
+            if (!scene || !scene->IsNodeAlive(node))
+                return;
+
+            const NodeRuntimeUiTag *ui = scene->GetRuntimeUiComponent(node);
+            if (!ui || !ui->authored || ui->actionFunction.empty())
+                return;
+            if (!ShouldDispatchRuntimeUiAction(ui->actionName, state, previousState))
+                return;
+
+            ScriptSystem *scripts = GetGlobalSystem<ScriptSystem>();
+            if (!scripts)
+                return;
+
+            scripts->InvokeNodeRuntimeUiAction(node,
+                                               ui->actionFunction,
+                                               ui->actionName,
+                                               state,
+                                               screenId,
+                                               widgetId);
+        }
     } // namespace
 
     RuntimeUiSystem::RuntimeUiSystem() = default;
@@ -113,6 +220,7 @@ namespace pe
             m_backend->Shutdown();
 
         m_backend.reset();
+        m_sceneAuthoredWidgetIds.clear();
         m_imageCache.clear();
         m_backendName = "none";
         m_initialized = false;
@@ -399,6 +507,7 @@ namespace pe
         widget.footer = desc.footer ? desc.footer : "";
         widget.x = desc.x;
         widget.y = desc.y;
+        widget.z = desc.z;
         widget.width = desc.width;
         widget.height = desc.height;
         widget.fillColor = desc.fillColor;
@@ -413,8 +522,76 @@ namespace pe
         widget.bringToFront = desc.bringToFront;
         widget.noInput = desc.noInput;
         widget.fontScale = desc.fontScale > 0.0f ? desc.fontScale : 1.0f;
+        widget.visualStyle = desc.visualStyle;
         widget.imagePath = path;
         widget.image = path.empty() ? desc.image : LoadImageResource(path);
+        SortQuadWidgets(screen);
+    }
+
+    void RuntimeUiSystem::SyncSceneWidgets(Scene &scene)
+    {
+        for (const auto &[screenId, widgetIds] : m_sceneAuthoredWidgetIds)
+        {
+            for (const std::string &widgetId : widgetIds)
+                RemoveWidget(screenId, widgetId);
+
+            if (Screen *screen = FindScreen(screenId); screen && screen->widgets.empty())
+            {
+                screen->visible = false;
+                screen->overlay = true;
+            }
+        }
+        m_sceneAuthoredWidgetIds.clear();
+
+        for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
+        {
+            NodeId *node = scene.GetNodeId(i);
+            const NodeRuntimeUiTag *ui = scene.GetRuntimeUiComponent(node);
+            if (!ui || !ui->authored || !ui->visible || !scene.IsNodeHierarchyEnabled(node))
+                continue;
+
+            float x = 0.0f;
+            float y = 0.0f;
+            float z = 0.0f;
+            float w = 0.0f;
+            float h = 0.0f;
+            if (!GetRuntimeUiNodeRect(scene, node, x, y, z, w, h))
+                continue;
+
+            const std::string screenId = ui->screenId.empty() ? "__scene_ui" : ui->screenId;
+            const std::string widgetId = MakeSceneWidgetId(*ui, node);
+            m_sceneAuthoredWidgetIds[screenId].insert(widgetId);
+
+            SetScreenVisible(screenId, true);
+            SetScreenOverlay(screenId, true);
+            SetScreenTitle(screenId, "Scene UI");
+
+            RuntimeUiQuadDesc desc{};
+            desc.id = widgetId.c_str();
+            desc.label = ui->label.c_str();
+            desc.title = ui->title.c_str();
+            desc.subtitle = ui->subtitle.c_str();
+            desc.body = ui->body.c_str();
+            desc.footer = ui->footer.c_str();
+            desc.x = x;
+            desc.y = y;
+            desc.z = z;
+            desc.width = w;
+            desc.height = h;
+            desc.fillColor = ToRuntimeUiColor(ui->fillColor);
+            desc.borderColor = ToRuntimeUiColor(ui->borderColor);
+            desc.accentColor = ToRuntimeUiColor(ui->accentColor);
+            desc.textColor = ToRuntimeUiColor(ui->textColor);
+            desc.imageTint = ToRuntimeUiColor(ui->imageTint);
+            desc.node = node;
+            desc.draggable = ui->draggable;
+            desc.visible = ui->visible;
+            desc.bringToFront = ui->bringToFront;
+            desc.noInput = ui->noInput;
+            desc.fontScale = ui->fontScale;
+            desc.visualStyle = ToRuntimeUiVisualStyle(ui->widgetType);
+            SetQuad(screenId, widgetId, desc, ui->imagePath);
+        }
     }
 
     bool RuntimeUiSystem::GetBool(const std::string &screenId,
@@ -548,6 +725,24 @@ namespace pe
         return nullptr;
     }
 
+    void RuntimeUiSystem::SortQuadWidgets(Screen &screen)
+    {
+        std::stable_sort(screen.widgets.begin(),
+                         screen.widgets.end(),
+                         [](const Widget &a, const Widget &b)
+                         {
+                             const bool aQuad = a.type == WidgetType::Quad;
+                             const bool bQuad = b.type == WidgetType::Quad;
+                             if (aQuad != bQuad)
+                                 return !aQuad && bQuad;
+                             if (!aQuad)
+                                 return false;
+                             if (a.bringToFront != b.bringToFront)
+                                 return !a.bringToFront && b.bringToFront;
+                             return a.z < b.z;
+                         });
+    }
+
     Image *RuntimeUiSystem::LoadImageResource(const std::string &path)
     {
         const std::filesystem::path resolvedPath = ResolveImagePath(path);
@@ -679,6 +874,7 @@ namespace pe
                         quadDesc.image = widget.image;
                         quadDesc.x = widget.x;
                         quadDesc.y = widget.y;
+                        quadDesc.z = widget.z;
                         quadDesc.width = widget.width;
                         quadDesc.height = widget.height;
                         quadDesc.fillColor = widget.fillColor;
@@ -693,7 +889,10 @@ namespace pe
                         quadDesc.bringToFront = widget.bringToFront;
                         quadDesc.noInput = widget.noInput;
                         quadDesc.fontScale = widget.fontScale;
+                        quadDesc.visualStyle = widget.visualStyle;
+                        const RuntimeUiWidgetState previousState = widget.state;
                         widget.state = m_backend->Quad(quadDesc);
+                        DispatchRuntimeUiNodeAction(screen.id, widget.id, widget.node, widget.state, previousState);
                         break;
                     }
                     }

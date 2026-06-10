@@ -5,11 +5,14 @@
 #include "GUI/GUIState.h"
 #include "GUI/Helpers.h"
 #include "GUI/IconsFontAwesome.h"
+#include "GUI/RuntimeUiAuthoring.h"
 #include "GUI/SkinnedStrip2DEditor.h"
+#include "GUI/UndoRedo.h"
 #include "Particles/ParticleManager.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
+#include "Scene/SceneHost.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
 #include "Script/Bindings/Input/InputState.h"
@@ -909,7 +912,8 @@ namespace pe
         }
 
         // Drag&drop
-        if (!playMode && ImGui::BeginDragDropTarget())
+        const ImGuiID viewportDropId = ImGui::GetID("ViewportRuntimeUiDropTarget");
+        if (!playMode && ImGui::BeginDragDropTargetCustom(ImRect(imageMin, imageMax), viewportDropId))
         {
             if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
             {
@@ -937,6 +941,41 @@ namespace pe
                             PE_WARN("[Scene] Failed to load model: %s", e.what());
                         }
                         GUIState::s_modelLoading = false; });
+                }
+            }
+
+            if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(RuntimeUiAuthoring::kDragPayloadType))
+            {
+                if (payload->DataSize == sizeof(RuntimeUiAuthoring::DragPayload))
+                {
+                    const auto data = *static_cast<const RuntimeUiAuthoring::DragPayload *>(payload->Data);
+                    RendererSystem *dropRenderer = GetGlobalSystem<RendererSystem>();
+                    if (dropRenderer)
+                    {
+                        float surfaceWidth = 0.0f;
+                        float surfaceHeight = 0.0f;
+                        if (!GetRuntimeUiSurfaceSize(surfaceWidth, surfaceHeight))
+                        {
+                            surfaceWidth = imageSize.x;
+                            surfaceHeight = imageSize.y;
+                        }
+
+                        const RuntimeUiAuthoring::ElementTemplate *element = RuntimeUiAuthoring::FindTemplate(data.type);
+                        const vec2 elementSize = element ? element->size : vec2(240.0f, 120.0f);
+                        const ImVec2 mouse = ImGui::GetMousePos();
+                        const float surfaceX = (mouse.x - imageMin.x) * surfaceWidth / imageSize.x;
+                        const float surfaceY = (mouse.y - imageMin.y) * surfaceHeight / imageSize.y;
+                        const float x = glm::clamp(surfaceX - elementSize.x * 0.5f, 0.0f, std::max(0.0f, surfaceWidth - elementSize.x));
+                        const float y = glm::clamp(surfaceY - elementSize.y * 0.5f, 0.0f, std::max(0.0f, surfaceHeight - elementSize.y));
+
+                        Scene &scene = dropRenderer->GetScene();
+                        UndoRedo::Instance().RecordSnapshot(scene, "Added UI Element");
+                        SyncSceneBeforeMutation();
+                        NodeId *node = RuntimeUiAuthoring::CreateNode(scene, data.type, vec2(x, y));
+                        SelectionManager::Instance().Select(node, SelectionType::Node);
+                        if (m_gui)
+                            m_gui->NotifyChange();
+                    }
                 }
             }
             ImGui::EndDragDropTarget();

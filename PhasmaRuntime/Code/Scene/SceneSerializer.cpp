@@ -199,6 +199,7 @@ namespace pe
             settings.AddMember("ray_tracing_support", gSettings.ray_tracing_support, allocator);
             settings.AddMember("render_mode", static_cast<int>(gSettings.render_mode), allocator);
             settings.AddMember("use_Disney_PBR", gSettings.use_Disney_PBR, allocator);
+            settings.AddMember("physical_point_falloff", gSettings.physical_point_falloff, allocator);
             settings.AddMember("present_mode", static_cast<int>(gSettings.preferred_present_mode), allocator);
             settings.AddMember("scene_view_aspect_mode", static_cast<int>(gSettings.scene_view_aspect_mode), allocator);
         }
@@ -329,6 +330,8 @@ namespace pe
                     static_cast<RenderMode>(settings["render_mode"].GetInt()), RHII.GetCaps().rayTracing);
             if (settings.HasMember("use_Disney_PBR"))
                 gSettings.use_Disney_PBR = settings["use_Disney_PBR"].GetBool();
+            if (settings.HasMember("physical_point_falloff"))
+                gSettings.physical_point_falloff = settings["physical_point_falloff"].GetBool();
             if (settings.HasMember("present_mode"))
             {
                 gSettings.preferred_present_mode = static_cast<PePresentMode>(settings["present_mode"].GetInt());
@@ -412,6 +415,115 @@ namespace pe
                 scene.ClearNodePrefab(node);
             else
                 scene.SetNodePrefabPath(node, prefabPath.generic_string(), false);
+        }
+
+        const char *RuntimeUiWidgetTypeToString(NodeRuntimeUiWidgetType type)
+        {
+            switch (type)
+            {
+            case NodeRuntimeUiWidgetType::Text:
+                return "text";
+            case NodeRuntimeUiWidgetType::Button:
+                return "button";
+            case NodeRuntimeUiWidgetType::Image:
+                return "image";
+            case NodeRuntimeUiWidgetType::Panel:
+            default:
+                return "panel";
+            }
+        }
+
+        NodeRuntimeUiWidgetType RuntimeUiWidgetTypeFromString(const char *type)
+        {
+            if (!type)
+                return NodeRuntimeUiWidgetType::Panel;
+
+            std::string value = type;
+            std::transform(value.begin(), value.end(), value.begin(),
+                           [](unsigned char c)
+                           { return static_cast<char>(std::tolower(c)); });
+
+            if (value == "text" || value == "label")
+                return NodeRuntimeUiWidgetType::Text;
+            if (value == "button")
+                return NodeRuntimeUiWidgetType::Button;
+            if (value == "image")
+                return NodeRuntimeUiWidgetType::Image;
+            return NodeRuntimeUiWidgetType::Panel;
+        }
+
+        void RestoreRuntimeUiNode(Scene &scene,
+                                  NodeId *node,
+                                  const rapidjson::Value &nodeValue,
+                                  const std::filesystem::path *relativeToDir)
+        {
+            if (!node || !scene.IsNodeAlive(node))
+                return;
+
+            const bool hasFlag = nodeValue.HasMember("component_flags") &&
+                                 (nodeValue["component_flags"].GetUint() & Component_RuntimeUi) != 0;
+            if (!nodeValue.HasMember("runtime_ui") || !nodeValue["runtime_ui"].IsObject())
+            {
+                if (!hasFlag)
+                    scene.ClearRuntimeUiComponent(node);
+                else if (NodeRuntimeUiTag *ui = scene.GetRuntimeUiComponent(node))
+                    ui->authored = false;
+                return;
+            }
+
+            const auto &uv = nodeValue["runtime_ui"];
+            NodeRuntimeUiTag &ui = scene.GetOrCreateRuntimeUiComponent(node);
+
+            auto readString = [&](const char *name, const std::string &fallback = {}) -> std::string
+            {
+                return uv.HasMember(name) && uv[name].IsString() ? uv[name].GetString() : fallback;
+            };
+            auto readFloat = [&](const char *name, float fallback) -> float
+            {
+                if (!uv.HasMember(name) || !uv[name].IsNumber())
+                    return fallback;
+                const float value = uv[name].GetFloat();
+                return std::isfinite(value) ? value : fallback;
+            };
+            auto readBool = [&](const char *name, bool fallback) -> bool
+            {
+                return uv.HasMember(name) && uv[name].IsBool() ? uv[name].GetBool() : fallback;
+            };
+            auto readVec4 = [&](const char *name, const vec4 &fallback) -> vec4
+            {
+                if (!uv.HasMember(name) || !uv[name].IsArray() || uv[name].Size() < 4)
+                    return fallback;
+                const auto &arr = uv[name];
+                if (!arr[0].IsNumber() || !arr[1].IsNumber() || !arr[2].IsNumber() || !arr[3].IsNumber())
+                    return fallback;
+                vec4 value(arr[0].GetFloat(), arr[1].GetFloat(), arr[2].GetFloat(), arr[3].GetFloat());
+                return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z) && std::isfinite(value.w) ? value : fallback;
+            };
+
+            ui.authored = true;
+            ui.widgetType = RuntimeUiWidgetTypeFromString(readString("type", "panel").c_str());
+            ui.screenId = readString("screen", "__scene_ui");
+            ui.widgetId = readString("id");
+            ui.label = readString("label");
+            ui.title = readString("title");
+            ui.subtitle = readString("subtitle");
+            ui.body = readString("body");
+            ui.footer = readString("footer");
+            ui.imagePath = uv.HasMember("image") && uv["image"].IsString()
+                               ? ResolveSerializedFilePath(uv["image"], relativeToDir).generic_string()
+                               : "";
+            ui.actionName = readString("action", "click");
+            ui.actionFunction = readString("action_function");
+            ui.fillColor = readVec4("fill", ui.fillColor);
+            ui.borderColor = readVec4("border", ui.borderColor);
+            ui.accentColor = readVec4("accent", ui.accentColor);
+            ui.textColor = readVec4("text_color", ui.textColor);
+            ui.imageTint = readVec4("image_tint", ui.imageTint);
+            ui.fontScale = readFloat("font_scale", 1.0f);
+            ui.visible = readBool("visible", true);
+            ui.draggable = readBool("draggable", false);
+            ui.noInput = readBool("no_input", false);
+            ui.bringToFront = readBool("bring_to_front", false);
         }
 
         void RestoreSpriteNode(Scene &scene,
@@ -1244,6 +1356,61 @@ namespace pe
                     rapidjson::Value skyboxObj(rapidjson::kObjectType);
                     skyboxObj.AddMember("path", MakeStringValue(skybox.path), allocator);
                     nodeObj.AddMember("skybox", skyboxObj.Move(), allocator);
+                }
+
+                if ((flags & Component_RuntimeUi) && cache.runtimeUi && cache.runtimeUi->authored)
+                {
+                    const NodeRuntimeUiTag &ui = *cache.runtimeUi;
+                    rapidjson::Value uiObj(rapidjson::kObjectType);
+                    uiObj.AddMember("type", MakeStringValue(RuntimeUiWidgetTypeToString(ui.widgetType)), allocator);
+                    if (!ui.screenId.empty())
+                        uiObj.AddMember("screen", MakeStringValue(ui.screenId), allocator);
+                    if (!ui.widgetId.empty())
+                        uiObj.AddMember("id", MakeStringValue(ui.widgetId), allocator);
+                    if (!ui.label.empty())
+                        uiObj.AddMember("label", MakeStringValue(ui.label), allocator);
+                    if (!ui.title.empty())
+                        uiObj.AddMember("title", MakeStringValue(ui.title), allocator);
+                    if (!ui.subtitle.empty())
+                        uiObj.AddMember("subtitle", MakeStringValue(ui.subtitle), allocator);
+                    if (!ui.body.empty())
+                        uiObj.AddMember("body", MakeStringValue(ui.body), allocator);
+                    if (!ui.footer.empty())
+                        uiObj.AddMember("footer", MakeStringValue(ui.footer), allocator);
+                    if (!ui.imagePath.empty())
+                        uiObj.AddMember("image", MakeStringValue(SerializePath(ui.imagePath, relativeToDir)), allocator);
+                    if (!ui.actionName.empty())
+                        uiObj.AddMember("action", MakeStringValue(ui.actionName), allocator);
+                    if (!ui.actionFunction.empty())
+                        uiObj.AddMember("action_function", MakeStringValue(ui.actionFunction), allocator);
+
+                    rapidjson::Value fill;
+                    SetVec4(fill, ui.fillColor);
+                    uiObj.AddMember("fill", fill.Move(), allocator);
+
+                    rapidjson::Value border;
+                    SetVec4(border, ui.borderColor);
+                    uiObj.AddMember("border", border.Move(), allocator);
+
+                    rapidjson::Value accent;
+                    SetVec4(accent, ui.accentColor);
+                    uiObj.AddMember("accent", accent.Move(), allocator);
+
+                    rapidjson::Value textColor;
+                    SetVec4(textColor, ui.textColor);
+                    uiObj.AddMember("text_color", textColor.Move(), allocator);
+
+                    rapidjson::Value imageTint;
+                    SetVec4(imageTint, ui.imageTint);
+                    uiObj.AddMember("image_tint", imageTint.Move(), allocator);
+
+                    uiObj.AddMember("font_scale", SafeFloat(ui.fontScale), allocator);
+                    uiObj.AddMember("visible", ui.visible, allocator);
+                    uiObj.AddMember("draggable", ui.draggable, allocator);
+                    uiObj.AddMember("no_input", ui.noInput, allocator);
+                    uiObj.AddMember("bring_to_front", ui.bringToFront, allocator);
+
+                    nodeObj.AddMember("runtime_ui", uiObj.Move(), allocator);
                 }
 
                 if ((flags & Component_Sprite) && cache.sprite)
@@ -2224,6 +2391,8 @@ namespace pe
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreSkyboxNode(*this, nodeMap[ni], nodesVal[ni]);
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+                    RestoreRuntimeUiNode(*this, nodeMap[ni], nodesVal[ni], &sceneDir);
+                for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreSpriteNode(*this, nodeMap[ni], nodesVal[ni], &sceneDir);
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreSkinnedStrip2DNode(*this, nodeMap[ni], nodesVal[ni]);
@@ -2904,6 +3073,8 @@ namespace pe
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreSkyboxNode(*this, nodeMap[ni], nodesVal[ni]);
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+            RestoreRuntimeUiNode(*this, nodeMap[ni], nodesVal[ni], &prefabDir);
+        for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreSpriteNode(*this, nodeMap[ni], nodesVal[ni], &prefabDir);
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreSkinnedStrip2DNode(*this, nodeMap[ni], nodesVal[ni]);
@@ -3372,6 +3543,8 @@ namespace pe
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkyboxNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestoreRuntimeUiNode(*this, m_nodeIds[ni], snapshotNodes[ni], nullptr);
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSpriteNode(*this, m_nodeIds[ni], snapshotNodes[ni], nullptr);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkinnedStrip2DNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
@@ -3802,6 +3975,8 @@ namespace pe
 
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkyboxNode(*this, nodeMap[ni], snapshotNodes[ni]);
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestoreRuntimeUiNode(*this, nodeMap[ni], snapshotNodes[ni], nullptr);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSpriteNode(*this, nodeMap[ni], snapshotNodes[ni], nullptr);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)

@@ -644,6 +644,9 @@ namespace pe
         }
 
         if (runtimeUiFrameOpen)
+            runtimeUi->SyncSceneWidgets(rendererSystem->GetScene());
+
+        if (runtimeUiFrameOpen)
             runtimeUi->EndFrame();
 
         if (!m_window->isMinimized())
