@@ -34,6 +34,15 @@ local function update_editor()
     local cam = get_camera()
     if not cam then return end
 
+    if rawget(_G, "phasma_editor_fly_camera_blocked") == true then
+        if input.is_relative_mouse() then
+            input.set_relative_mouse(false)
+        end
+        skip_next_rotation = false
+        move_fwd, move_side = 0.0, 0.0
+        return
+    end
+
     local metrics = engine.get_metrics()
     local delta = metrics.delta_ms / 1000.0 -- seconds
 

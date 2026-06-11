@@ -2,6 +2,10 @@
 
 ## 2026-06-11
 
+- Kept mouse-wheel input contained to the surface under the cursor. Runtime UI still receives first chance to capture wheel events, and the editor forwards uncaptured wheel deltas to Lua `input.get_mouse_wheel()` only when the cursor is inside the SceneView image (or full-window viewport while editor chrome is hidden). This keeps viewport zoom/follow-distance controls from firing while scrolling runtime UI widgets or other editor panels.
+
+- Added non-consuming Lua mouse delta reads with `input.peek_mouse_delta()`. `InputState` now preserves a per-frame mouse-delta copy separately from the existing consuming `input.get_mouse_delta()` path, including the WSL software-relative fallback, so multiple scripts can coordinate editor/play camera controls in one frame. The editor global fly camera also honors `_G.phasma_editor_fly_camera_blocked` so project camera controllers can temporarily own the viewport without fighting RMB fly controls.
+
 - Added a Script Editor function browser. `ScriptSystem::ListLuaFunctions()` walks the initialized Lua globals after all runtime/editor bindings register, filters out Lua stdlib noise, and returns entries like `engine.get_metrics()`; the Script Editor's `Show Functions` panel can refresh, filter, copy all, copy one function, or insert a selected function into the script buffer.
 
 - Added opt-in per-material **night emissive**: `Material::nightEmissive` (Lua `material.set(h, "night_emissive", 1.0)`, serialized in material JSON and legacy factors `[1][1][3]`, GPU-side in `MaterialGpuData.attenuationColor.w` — layout unchanged). The opaque GBuffer flags such pixels by writing emissive alpha 0 (`GBufferPS.hlsl`), and the opaque lighting pass fades their emissive by direct-light luminance (`LightingPS.hlsl`), so emissive shows only where direct lighting is dim — city lights fade smoothly across a planet's terminator instead of glowing on the day side. Opaque-only by design; no instance override (the flag is a property of the material itself). Motivated by PhasmaSpace Earth night lights.

@@ -20,6 +20,7 @@ namespace pe::InputState
     void AddMouseMotion(int xrel, int yrel);
     void AddMouseWheel(int x, int y);
     MouseDelta ConsumeMouseDelta();
+    MouseDelta PeekMouseDelta();
     MouseDelta GetMouseWheel();
     void ResetMouseDelta();
 

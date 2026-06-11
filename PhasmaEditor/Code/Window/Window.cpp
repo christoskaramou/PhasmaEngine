@@ -63,6 +63,25 @@ namespace pe
         return SDL_GetMouseState(x, y) & button;
     }
 
+    inline bool IsMouseOverSceneViewImage()
+    {
+        if (!GUIState::s_sceneViewImageRectValid ||
+            GUIState::s_sceneViewImageWidth <= 0.0f ||
+            GUIState::s_sceneViewImageHeight <= 0.0f)
+            return false;
+
+        int x = 0;
+        int y = 0;
+        SDL_GetMouseState(&x, &y);
+
+        const float fx = static_cast<float>(x);
+        const float fy = static_cast<float>(y);
+        return fx >= GUIState::s_sceneViewImageMinX &&
+               fy >= GUIState::s_sceneViewImageMinY &&
+               fx < GUIState::s_sceneViewImageMinX + GUIState::s_sceneViewImageWidth &&
+               fy < GUIState::s_sceneViewImageMinY + GUIState::s_sceneViewImageHeight;
+    }
+
     inline void SetRelativeMouseMode(bool enable)
     {
         SDL_SetRelativeMouseMode(enable ? SDL_TRUE : SDL_FALSE);
@@ -128,7 +147,9 @@ namespace pe
             if (!runtimeUiCaptured && sdlEvent.type == SDL_MOUSEMOTION)
                 InputState::AddMouseMotion(sdlEvent.motion.xrel, sdlEvent.motion.yrel);
 
-            if (!runtimeUiCaptured && sdlEvent.type == SDL_MOUSEWHEEL)
+            const bool fullWindowViewport = rendererSystem && !rendererSystem->GetGUI().Render();
+            if (!runtimeUiCaptured && sdlEvent.type == SDL_MOUSEWHEEL &&
+                (fullWindowViewport || IsMouseOverSceneViewImage()))
                 InputState::AddMouseWheel(sdlEvent.wheel.x, sdlEvent.wheel.y);
 
             if (IsRuntimeWindowResizeEvent(sdlEvent))

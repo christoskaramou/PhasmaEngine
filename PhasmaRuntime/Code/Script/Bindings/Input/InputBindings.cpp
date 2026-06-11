@@ -10,14 +10,20 @@ namespace pe
         namespace
         {
             MouseDelta s_mouseDelta{};
+            MouseDelta s_mouseDeltaFrame{};
             MouseDelta s_mouseWheel{};
             bool s_relativeMouseRequested = false;
             bool s_softwareMouseDelta = false;
+            bool s_softwareMouseDeltaFrameValid = false;
+            bool s_softwareMouseDeltaConsumed = false;
             bool s_mousePositionInitialized = false;
             bool s_mouseCapturedByUi = false;
             bool s_keyboardCapturedByUi = false;
             int s_lastMouseX = 0;
             int s_lastMouseY = 0;
+            int s_softwareMouseDeltaFrameX = 0;
+            int s_softwareMouseDeltaFrameY = 0;
+            MouseDelta s_softwareMouseDeltaFrame{};
 
             // Touch tracking (Android). SDL finger coords are normalized [0,1] in the window.
             struct Finger
@@ -72,15 +78,55 @@ namespace pe
             {
                 SDL_GetMouseState(&s_lastMouseX, &s_lastMouseY);
                 s_mousePositionInitialized = true;
+                s_softwareMouseDeltaFrame = {};
+                s_softwareMouseDeltaFrameX = s_lastMouseX;
+                s_softwareMouseDeltaFrameY = s_lastMouseY;
+                s_softwareMouseDeltaFrameValid = false;
+                s_softwareMouseDeltaConsumed = false;
+            }
+
+            MouseDelta ReadSoftwareMouseDeltaFrame()
+            {
+                if (s_mouseCapturedByUi)
+                    return {};
+
+                if (!s_softwareMouseDeltaFrameValid)
+                {
+                    int x = 0;
+                    int y = 0;
+                    SDL_GetMouseState(&x, &y);
+                    s_softwareMouseDeltaFrameX = x;
+                    s_softwareMouseDeltaFrameY = y;
+                    s_softwareMouseDeltaFrameValid = true;
+
+                    if (!s_mousePositionInitialized)
+                    {
+                        s_lastMouseX = x;
+                        s_lastMouseY = y;
+                        s_mousePositionInitialized = true;
+                        s_softwareMouseDeltaFrame = {};
+                    }
+                    else
+                    {
+                        s_softwareMouseDeltaFrame.x = std::clamp(x - s_lastMouseX, -128, 128);
+                        s_softwareMouseDeltaFrame.y = std::clamp(y - s_lastMouseY, -128, 128);
+                    }
+                }
+
+                return s_softwareMouseDeltaFrame;
             }
         } // namespace
 
         void BeginFrame()
         {
             s_mouseDelta = {};
+            s_mouseDeltaFrame = {};
             s_mouseWheel = {};
             s_mouseCapturedByUi = false;
             s_keyboardCapturedByUi = false;
+            s_softwareMouseDeltaFrame = {};
+            s_softwareMouseDeltaFrameValid = false;
+            s_softwareMouseDeltaConsumed = false;
             // Per-frame touch motion/pinch reset; finger down-state persists across frames.
             s_touchDx = 0.0f;
             s_touchDy = 0.0f;
@@ -91,6 +137,8 @@ namespace pe
         {
             s_mouseDelta.x += xrel;
             s_mouseDelta.y += yrel;
+            s_mouseDeltaFrame.x += xrel;
+            s_mouseDeltaFrame.y += yrel;
         }
 
         void AddMouseWheel(int x, int y)
@@ -155,28 +203,29 @@ namespace pe
 
             if (s_softwareMouseDelta)
             {
-                int x = 0;
-                int y = 0;
-                SDL_GetMouseState(&x, &y);
-                if (!s_mousePositionInitialized)
-                {
-                    s_lastMouseX = x;
-                    s_lastMouseY = y;
-                    s_mousePositionInitialized = true;
+                if (s_softwareMouseDeltaConsumed)
                     return {};
-                }
-
-                MouseDelta delta{};
-                delta.x = std::clamp(x - s_lastMouseX, -128, 128);
-                delta.y = std::clamp(y - s_lastMouseY, -128, 128);
-                s_lastMouseX = x;
-                s_lastMouseY = y;
+                const MouseDelta delta = ReadSoftwareMouseDeltaFrame();
+                s_lastMouseX = s_softwareMouseDeltaFrameX;
+                s_lastMouseY = s_softwareMouseDeltaFrameY;
+                s_softwareMouseDeltaConsumed = true;
                 return delta;
             }
 
             MouseDelta delta = s_mouseDelta;
             s_mouseDelta = {};
             return delta;
+        }
+
+        MouseDelta PeekMouseDelta()
+        {
+            if (s_mouseCapturedByUi)
+                return {};
+
+            if (s_softwareMouseDelta)
+                return ReadSoftwareMouseDeltaFrame();
+
+            return s_mouseDeltaFrame;
         }
 
         MouseDelta GetMouseWheel()
@@ -187,6 +236,10 @@ namespace pe
         void ResetMouseDelta()
         {
             s_mouseDelta = {};
+            s_mouseDeltaFrame = {};
+            s_softwareMouseDeltaFrame = {};
+            s_softwareMouseDeltaFrameValid = false;
+            s_softwareMouseDeltaConsumed = false;
             int discardX = 0;
             int discardY = 0;
             SDL_GetRelativeMouseState(&discardX, &discardY);
@@ -335,6 +388,16 @@ namespace pe
                 input.set_function("get_mouse_delta", [](sol::this_state ts) -> sol::table {
                     sol::state_view lua(ts);
                     InputState::MouseDelta delta = InputState::ConsumeMouseDelta();
+
+                    sol::table t = lua.create_table();
+                    t["x"] = delta.x;
+                    t["y"] = delta.y;
+                    return t;
+                });
+
+                input.set_function("peek_mouse_delta", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
+                    InputState::MouseDelta delta = InputState::PeekMouseDelta();
 
                     sol::table t = lua.create_table();
                     t["x"] = delta.x;
