@@ -106,7 +106,7 @@ namespace pe
         }
     }
 
-    ModelAsset *Primitives::CreatePrimitiveModel(const std::vector<Vertex> &vertices, const std::vector<uint32_t> &indices)
+    ModelAsset *Primitives::CreatePrimitiveModel(const std::vector<Vertex> &vertices, const std::vector<uint32_t> &indices, bool lineTopology)
     {
         ModelAsset *model = new ModelAsset();
 
@@ -115,7 +115,9 @@ namespace pe
         model->m_indices = indices;
 
         // Enforce CCW visibility with your current pipeline state.
-        ForceWindingCCW(model->m_vertices, model->m_indices);
+        // Line indices are not triangle triples - reordering them corrupts the strip.
+        if (!lineTopology)
+            ForceWindingCCW(model->m_vertices, model->m_indices);
 
         for (auto &v : model->m_vertices)
         {
@@ -186,7 +188,7 @@ namespace pe
         meshInfo.indicesCount = static_cast<uint32_t>(model->m_indices.size());
         meshInfo.verticesCount = static_cast<uint32_t>(model->m_vertices.size());
         meshInfo.boundingBox = aabb;
-        meshInfo.renderType = RenderType::Opaque;
+        meshInfo.renderType = lineTopology ? RenderType::Lines : RenderType::Opaque;
 
         // Default Material
         auto &defaults = ModelAsset::GetDefaultResources();
@@ -204,6 +206,7 @@ namespace pe
         mat->metallic = 0.f;
         mat->roughness = 1.f;
         mat->occlusionStrength = 1.f;
+        mat->renderType = lineTopology ? RenderType::Lines : RenderType::Opaque;
         if (!mat->passInfoAsset)
             mat->passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::Assets + "PassInfo/standard_pbr.pass");
         mat->SyncParamsFromLegacy();
@@ -778,6 +781,36 @@ namespace pe
         model->SetPrimitiveType("polyline_ribbon");
         model->SetPrimitiveParams(vec4(width, static_cast<float>(count), closed ? 1.0f : 0.0f, 0.0f), 3);
         model->SetNodeName(model->GetRootNodeIndex(), "PolylineRibbon");
+        return model;
+    }
+
+    ModelAsset *Primitives::CreatePolyline(const std::vector<vec3> &points, bool closed)
+    {
+        const size_t count = points.size();
+        if (count < 2)
+            return nullptr;
+
+        std::vector<Vertex> vertices;
+        vertices.reserve(count);
+        for (size_t i = 0; i < count; ++i)
+        {
+            const float u = i / static_cast<float>(count);
+            vertices.push_back(MakeVertex(points[i], vec3(0.0f, 1.0f, 0.0f), {u, 0.0f}));
+        }
+
+        // Line-strip indices; a closed loop repeats the first point.
+        std::vector<uint32_t> indices;
+        indices.reserve(count + (closed ? 1u : 0u));
+        for (size_t i = 0; i < count; ++i)
+            indices.push_back(static_cast<uint32_t>(i));
+        if (closed)
+            indices.push_back(0u);
+
+        ModelAsset *model = CreatePrimitiveModel(vertices, indices, true);
+        model->SetLabel("Polyline");
+        model->SetPrimitiveType("polyline");
+        model->SetPrimitiveParams(vec4(static_cast<float>(count), closed ? 1.0f : 0.0f, 0.0f, 0.0f), 2);
+        model->SetNodeName(model->GetRootNodeIndex(), "Polyline");
         return model;
     }
 

@@ -13,6 +13,11 @@
 
 namespace pe
 {
+    static bool IsRasterIndirectMesh(const Mesh &mesh)
+    {
+        return mesh.renderType != RenderType::Lines;
+    }
+
     void Scene::UploadBuffers(CommandBuffer *cmd)
     {
         DestroyBuffers();
@@ -48,8 +53,12 @@ namespace pe
                 continue;
             for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
             {
-                if (IsValidMeshIndex(meshIdx) && m_meshes[meshIdx].indexCount > 0)
+                if (IsValidMeshIndex(meshIdx) &&
+                    m_meshes[meshIdx].indexCount > 0 &&
+                    IsRasterIndirectMesh(m_meshes[meshIdx]))
+                {
                     m_meshCount++;
+                }
             }
         }
 
@@ -233,7 +242,7 @@ namespace pe
                     continue;
 
                 const Mesh &mesh = m_meshes[meshIdx];
-                if (mesh.indexCount == 0)
+                if (mesh.indexCount == 0 || !IsRasterIndirectMesh(mesh))
                     continue;
 
                 m_nodeRuntime[i].meshRefIndirect[slot] = indirectCount;
@@ -853,6 +862,7 @@ namespace pe
         m_hasTransparentMeshes = false;
         m_hasAlphaBlendMeshes = false;
         m_hasTransmissionMeshes = false;
+        m_hasLinesMeshes = false;
         m_alphaBlendMeshCount = 0;
         m_transmissionMeshCount = 0;
         m_meshConstants->Map();
@@ -870,7 +880,12 @@ namespace pe
                 if (mesh.indexCount == 0)
                     continue;
 
-                if (mesh.renderType == RenderType::AlphaBlend)
+                if (mesh.renderType == RenderType::Lines)
+                {
+                    m_hasLinesMeshes = true;
+                    continue;
+                }
+                else if (mesh.renderType == RenderType::AlphaBlend)
                 {
                     m_hasAlphaBlendMeshes = true;
                     m_alphaBlendMeshCount++;
@@ -1058,8 +1073,12 @@ namespace pe
                 continue;
             for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
             {
-                if (IsValidMeshIndex(meshIdx) && m_meshes[meshIdx].indexCount > 0)
+                if (IsValidMeshIndex(meshIdx) &&
+                    m_meshes[meshIdx].indexCount > 0 &&
+                    IsRasterIndirectMesh(m_meshes[meshIdx]))
+                {
                     m_meshCount++;
+                }
             }
         }
 

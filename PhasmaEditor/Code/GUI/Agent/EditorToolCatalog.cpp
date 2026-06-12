@@ -1315,7 +1315,7 @@ namespace pe
                     {"metallic", "Metallic factor (0-1)", schema::Number()},
                     {"roughness", "Roughness factor (0-1)", schema::Number()},
                     {"transmission", "Transmission factor (0-1)", schema::Number()},
-                    {"render_type", "Render type: opaque, alpha_cut, alpha_blend, transmission", schema::String()},
+                    {"render_type", "Render type: opaque, alpha_cut, alpha_blend, transmission, lines", schema::String()},
                 });
                 tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
                 {

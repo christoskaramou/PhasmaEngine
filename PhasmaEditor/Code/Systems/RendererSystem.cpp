@@ -6,6 +6,7 @@
 #include "API/Surface.h"
 #include "API/Swapchain.h"
 #include "RenderPasses/TAAPass.h"
+#include "Render/ScriptRenderPasses.h"
 #include "UI/RuntimeUi.h"
 
 namespace pe
@@ -99,6 +100,14 @@ namespace pe
 
     void RendererSystem::Update()
     {
+        // Scripts added/removed render passes (render_graph.add_pass): rebuild the
+        // graph before this frame records. Pure CPU pass-list rebuild, no GPU wait.
+        if (m_scriptRenderPassesRevision != GetScriptRenderPassesRevision())
+        {
+            m_scriptRenderPassesRevision = GetScriptRenderPassesRevision();
+            BuildRenderGraph();
+        }
+
         {
             PE_PROFILE_SCOPE("GUI");
             m_gui.Update();
@@ -179,6 +188,7 @@ namespace pe
 
     void RendererSystem::BuildRenderGraph()
     {
+        m_scriptRenderPassesRevision = GetScriptRenderPassesRevision();
         RenderGraph &renderGraph = m_sceneRenderer.GetRenderGraph();
         renderGraph.Clear();
 

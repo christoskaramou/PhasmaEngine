@@ -187,6 +187,8 @@ namespace pe
             out = RenderType::AlphaBlend;
         else if (type == "transmission")
             out = RenderType::Transmission;
+        else if (type == "lines")
+            out = RenderType::Lines;
         else
             return false;
         return true;
@@ -328,6 +330,7 @@ namespace pe
                     case RenderType::AlphaCut: return "alpha_cut";
                     case RenderType::AlphaBlend: return "alpha_blend";
                     case RenderType::Transmission: return "transmission";
+                    case RenderType::Lines: return "lines";
                     default: return "opaque";
                     }
                 };

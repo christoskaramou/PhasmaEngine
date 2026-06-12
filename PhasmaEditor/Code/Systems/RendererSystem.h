@@ -115,6 +115,7 @@ namespace pe
         Scene m_scene;
         SceneRendererCore m_sceneRenderer;
         bool m_guiPassEnabled = false;
+        uint64_t m_scriptRenderPassesRevision = 0;
 
         SkyBox m_skyBoxWhite;
         GUI m_gui;

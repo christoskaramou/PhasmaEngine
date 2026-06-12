@@ -21,3 +21,8 @@ A bright HDR sun is a sub-texel, very-high-radiance delta. Naive GGX importance-
 - **`PrefilterSampleCount`** (in `Skybox.cpp`) — generous counts (64/128/256/512); load-time only.
 
 Per-texel jitter was tried and removed — once the mip bias converges the integral, jitter only trades the grid for swimming grain. The prefilter is a one-time bake at skybox load/reload (`LoadSkyBox` → `PrefilterSkyboxMips`), not a per-frame pass; per-frame IBL is a single `SampleLevel` of the baked mips. If the prefilter failed to compile/run, the mips are black.
+
+## Lines And Script Passes
+
+- `RenderType::Lines` is reserved for hardware line-strip meshes from `Primitives::CreatePolyline(...)` / Lua `scene.attach_lines(node, {vec3...}, closed)`. These meshes are skipped by the indirect raster buckets, shadow all-mesh draw, mesh-constants culling path, and ray-tracing BLAS/TLAS triangle path. `LinesPass` draws them directly from the position stream after `LightTransparent` and before TAA, using node uniform data for transforms and material emissive (or base color) for color.
+- Lua can register frame-graph callbacks with `render_graph.add_pass(name, order, fn)` and remove them with `render_graph.remove_pass(name)`. Editor and player renderers watch the script-pass registry revision and rebuild the graph before command recording when scripts add/remove passes. The callback receives the frame `CommandBuffer`; `render_graph.get_target(name)` resolves current render targets such as `viewport`, `display`, and `depthStencil` for passes that need to record their own barriers/blits/attachments.

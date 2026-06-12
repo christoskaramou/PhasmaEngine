@@ -500,6 +500,8 @@ namespace pe
                 return "alpha_blend";
             case RenderType::Transmission:
                 return "transmission";
+            case RenderType::Lines:
+                return "lines";
             default:
                 return "unknown";
             }
@@ -3955,6 +3957,7 @@ namespace pe
                                         else if (rt == "alpha_cut") newRT = RenderType::AlphaCut;
                                         else if (rt == "alpha_blend") newRT = RenderType::AlphaBlend;
                                         else if (rt == "transmission") newRT = RenderType::Transmission;
+                                        else if (rt == "lines") newRT = RenderType::Lines;
                                         if (newRT != mesh.renderType)
                                         {
                                             inst->SetRenderType(newRT);

@@ -5,6 +5,7 @@
 #include "API/RHI.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
+#include "Render/ScriptRenderPasses.h"
 #include "UI/RuntimeUi.h"
 
 namespace pe
@@ -99,6 +100,11 @@ namespace pe
     {
         ApplyRuntimeRenderSettings();
 
+        // Scripts added/removed render passes (render_graph.add_pass): rebuild the
+        // graph before this frame records. Pure CPU pass-list rebuild, no GPU wait.
+        if (m_scriptRenderPassesRevision != GetScriptRenderPassesRevision())
+            BuildRenderGraph();
+
         if (m_scene.IsGeometryDirty())
             WaitAllFramesCommands();
         m_scene.FlushPendingGpuWork();
@@ -148,6 +154,7 @@ namespace pe
 
     void RuntimeSceneRenderer::BuildRenderGraph()
     {
+        m_scriptRenderPassesRevision = GetScriptRenderPassesRevision();
         RenderGraph &renderGraph = m_sceneRenderer.GetRenderGraph();
         renderGraph.Clear();
 

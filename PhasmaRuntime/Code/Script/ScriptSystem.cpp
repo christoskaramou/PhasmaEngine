@@ -1,5 +1,6 @@
 #include "ScriptSystem.h"
 #include "Camera/Camera.h"
+#include "Render/ScriptRenderPasses.h"
 #include "Scene/ModelAsset.h"
 #if defined(PE_ENABLE_ASSIMP)
 #include "Scene/ModelAssetAssimp.h"
@@ -1343,6 +1344,8 @@ namespace pe
 
         m_registeredUpdates.clear();
         m_scripts.clear();
+        // Script render passes capture sol functions; release them before the state.
+        ClearScriptRenderPasses();
         m_lua = sol::state();
         m_initialized = false;
     }

@@ -66,5 +66,6 @@ namespace pe
         RuntimeUiSystem *m_runtimeUi = nullptr;
         bool m_screenshotRequested = false;
         bool m_initialized = false;
+        uint64_t m_scriptRenderPassesRevision = 0;
     };
 } // namespace pe

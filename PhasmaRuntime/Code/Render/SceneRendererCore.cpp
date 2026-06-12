@@ -7,6 +7,7 @@
 #include "Render/RenderPassShaderReload.h"
 #include "Render/SceneScreenshot.h"
 #include "Render/SceneSky.h"
+#include "Render/ScriptRenderPasses.h"
 
 namespace pe
 {
@@ -167,6 +168,23 @@ namespace pe
                                   m_scenePasses,
                                   [this](SceneRenderGraphPassId passId)
                                   { return IsPassEnabled(passId); });
+
+        // Script-registered passes (render_graph.add_pass): inserted by order among
+        // the built-in passes; RenderGraph::Compile sorts them into place. The graph
+        // holds only the pass name - the callback (and its Lua refs) stays in the
+        // registry, so script reloads can release Lua state safely; a stale graph
+        // entry resolves to nothing and no-ops until the next rebuild.
+        const std::vector<ScriptRenderPass> &scriptPasses = GetScriptRenderPasses();
+        for (size_t i = 0; i < scriptPasses.size(); i++)
+        {
+            std::string passName = scriptPasses[i].name;
+            m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(kScriptRenderPassIdBase + i), scriptPasses[i].order, passName, []()
+                                  { return true; }, [passName](CommandBuffer *cmd)
+                                  {
+                                      const ScriptRenderPass *pass = FindScriptRenderPass(passName);
+                                      if (pass && pass->execute)
+                                          pass->execute(cmd); });
+        }
     }
 
     void SceneRendererCore::UpdateRenderPassComponents()

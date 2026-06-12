@@ -187,6 +187,7 @@ namespace pe
         AlphaCut = 2,
         AlphaBlend = 3,
         Transmission = 4,
+        Lines = 5, // line-strip meshes drawn directly by LinesPass
     };
 
     enum class ReflectionVariableType

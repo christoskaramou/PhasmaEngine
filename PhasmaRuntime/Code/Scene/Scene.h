@@ -318,6 +318,7 @@ namespace pe
         bool HasTransparentMeshes() const { return m_hasTransparentMeshes; }
         bool HasAlphaBlendMeshes() const { return m_hasAlphaBlendMeshes; }
         bool HasTransmissionMeshes() const { return m_hasTransmissionMeshes; }
+        bool HasLinesMeshes() const { return m_hasLinesMeshes; }
 
         const std::vector<ImageView *> &GetImageViews() const { return m_imageViews; }
         uint32_t GetMeshCount() const { return m_meshCount; }
@@ -544,6 +545,7 @@ namespace pe
         bool m_hasTransparentMeshes = false;
         bool m_hasAlphaBlendMeshes = false;
         bool m_hasTransmissionMeshes = false;
+        bool m_hasLinesMeshes = false;
         uint32_t m_alphaBlendMeshCount = 0;
         uint32_t m_transmissionMeshCount = 0;
         uint32_t m_indicesCount = 0;

@@ -304,7 +304,7 @@ namespace pe
         for (int meshIndex = 0; meshIndex < static_cast<int>(m_meshes.size()); meshIndex++)
         {
             const Mesh &mesh = m_meshes[meshIndex];
-            if (!mesh.live || mesh.indexCount == 0)
+            if (!mesh.live || mesh.indexCount == 0 || mesh.renderType == RenderType::Lines)
                 continue;
             if (hasSkeleton && mesh.skinned)
                 continue;
@@ -469,8 +469,11 @@ namespace pe
                 int meshIdx = refs[slot];
                 if (!IsValidMeshIndex(meshIdx))
                     continue;
-                if (m_meshes[meshIdx].indexCount == 0)
+                if (m_meshes[meshIdx].indexCount == 0 ||
+                    m_meshes[meshIdx].renderType == RenderType::Lines)
+                {
                     continue;
+                }
 
                 const uint32_t currentConstantsIndex = constantsIndex++;
                 if (hasSkeleton && m_meshes[meshIdx].skinned)

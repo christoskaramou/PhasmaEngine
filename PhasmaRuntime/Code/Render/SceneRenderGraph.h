@@ -21,6 +21,7 @@ namespace pe
         LightOpaque,
         GBufferTransparent,
         LightTransparent,
+        Lines,
         RayTracing,
         ParticleCompute,
         Particle,
@@ -52,6 +53,7 @@ namespace pe
         IRenderPassComponent *lightOpaque = nullptr;
         IRenderPassComponent *gbufferTransparent = nullptr;
         IRenderPassComponent *lightTransparent = nullptr;
+        IRenderPassComponent *lines = nullptr;
         IRenderPassComponent *rayTracing = nullptr;
         IRenderPassComponent *particleCompute = nullptr;
         IRenderPassComponent *particle = nullptr;

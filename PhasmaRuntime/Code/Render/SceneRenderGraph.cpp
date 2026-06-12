@@ -10,6 +10,7 @@
 #include "RenderPasses/GbufferPass.h"
 #include "RenderPasses/GridPass.h"
 #include "RenderPasses/LightPass.h"
+#include "RenderPasses/LinesPass.h"
 #include "RenderPasses/MotionBlurPass.h"
 #include "RenderPasses/ParticleComputePass.h"
 #include "RenderPasses/ParticlePass.h"
@@ -45,6 +46,7 @@ namespace pe
              &SceneRenderGraphPassComponents::gbufferTransparent},
             {SceneRenderGraphPassId::LightTransparent, 700, "LightTransparent",
              &SceneRenderGraphPassComponents::lightTransparent},
+            {SceneRenderGraphPassId::Lines, 720, "Lines", &SceneRenderGraphPassComponents::lines},
             {SceneRenderGraphPassId::RayTracing, 800, "RayTracing", &SceneRenderGraphPassComponents::rayTracing},
             {SceneRenderGraphPassId::ParticleCompute, 900, "ParticleCompute",
              &SceneRenderGraphPassComponents::particleCompute},
@@ -130,6 +132,8 @@ namespace pe
                 return isPassEnabled(SceneRenderGraphPassId::LightOpaque);
             if (component == components.lightTransparent)
                 return isPassEnabled(SceneRenderGraphPassId::LightTransparent);
+            if (component == components.lines)
+                return isPassEnabled(SceneRenderGraphPassId::Lines);
             if (component == components.rayTracing)
                 return isPassEnabled(SceneRenderGraphPassId::RayTracing);
             if (component == components.particleCompute || component == components.particle)
@@ -196,6 +200,7 @@ namespace pe
         CreateSceneRenderGraphPassComponent<SSAOPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<LightOpaquePass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<LightTransparentPass>(renderPassComponents);
+        CreateSceneRenderGraphPassComponent<LinesPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<ParticleComputePass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<ParticlePass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<SSRPass>(renderPassComponents);
@@ -338,6 +343,7 @@ namespace pe
         scenePasses.lightOpaque = GetGlobalComponent<LightOpaquePass>();
         scenePasses.gbufferTransparent = GetGlobalComponent<GbufferTransparentPass>();
         scenePasses.lightTransparent = GetGlobalComponent<LightTransparentPass>();
+        scenePasses.lines = GetGlobalComponent<LinesPass>();
         scenePasses.rayTracing = GetGlobalComponent<RayTracingPass>();
         scenePasses.particleCompute = GetGlobalComponent<ParticleComputePass>();
         scenePasses.particle = GetGlobalComponent<ParticlePass>();
@@ -391,6 +397,7 @@ namespace pe
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightOpaque, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferTransparent, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightTransparent, dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::Lines, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::RayTracing, dx12RayTracing);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::ParticleCompute, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Particle, dx12RenderRaster);
@@ -420,6 +427,7 @@ namespace pe
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightOpaque, renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferTransparent, renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightTransparent, renderRaster);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::Lines, renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::RayTracing, renderRayTracing);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::ParticleCompute, true);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Particle, true);
@@ -469,5 +477,6 @@ namespace pe
         SetPassScene<ParticlePass>(components.particle, scene);
         SetPassScene<GridPass>(components.grid, scene);
         SetPassScene<AabbsPass>(components.aabbs, scene);
+        SetPassScene<LinesPass>(components.lines, scene);
     }
 } // namespace pe
