@@ -2,6 +2,8 @@
 
 ## 2026-06-12
 
+- Mirrored longitude U for generated spherical primitives (`sphere`/`uv_sphere` and `ico_sphere`) so equirectangular planet textures render with the expected east/west orientation instead of appearing horizontally reversed on PhasmaSpace bodies.
+
 - Added hardware line-strip rendering plus Lua custom render-graph passes. `RenderType::Lines` meshes from `Primitives::CreatePolyline` / `scene.attach_lines(...)` now bypass the normal indirect raster, shadow, mesh-constants culling, and RT triangle paths and are drawn directly by `LinesPass` after transparent lighting and before TAA. Lua scripts can register callback passes with `render_graph.add_pass(name, order, fn)`, resolve current render targets with `render_graph.get_target(name)`, and remove passes with `render_graph.remove_pass(name)`; editor and player renderers rebuild their graphs when the script-pass registry changes.
 
 - Bundled a SwiftShader CPU Vulkan ICD so the `CPU / Software` adapter preference works without borrowing another application's copy. The prebuilt `vk_swiftshader.dll` + manifest live in `PhasmaCore/Libs/swiftshader/` and a `PhasmaSwiftShader` CMake target stages them into `<exe>/swiftshader/` (Windows; skipped when the binary is absent). `VulkanSoftwareIcdCandidates` now prefers that bundled manifest and the dropped-in-place / SDK / Linux-lavapipe fallbacks; the previous heuristic scavenging of Chrome/Edge/Steam/Docker install directories was removed. SwiftShader supports every hard-required engine feature, so only the four already-soft capabilities (`shaderInt16/Int64/Float16`, storage-buffer-array-nonuniform-indexing) warn instead of failing on CPU adapters.

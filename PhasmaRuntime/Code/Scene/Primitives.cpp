@@ -25,9 +25,14 @@ namespace pe
         return v;
     }
 
+    static float MirrorLongitudeU(float u)
+    {
+        return 1.0f - u;
+    }
+
     static glm::vec2 SphericalUV(const glm::vec3 &normal)
     {
-        const float u = 0.5f + std::atan2(normal.z, normal.x) / (2.0f * PI);
+        const float u = MirrorLongitudeU(0.5f + std::atan2(normal.z, normal.x) / (2.0f * PI));
         const float v = 0.5f - std::asin(std::clamp(normal.y, -1.0f, 1.0f)) / PI;
         return {u, v};
     }
@@ -453,7 +458,7 @@ namespace pe
                 Vertex v{};
                 FillVertexPosition(v, x * radius, y * radius, z * radius);
                 FillVertexNormal(v, x, y, z); // outward
-                FillVertexUV(v, U, V);
+                FillVertexUV(v, MirrorLongitudeU(U), V);
                 FillVertexColor(v, 1.f, 1.f, 1.f, 1.f);
                 vertices.push_back(v);
             }

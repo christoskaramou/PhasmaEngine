@@ -180,7 +180,8 @@ namespace pe
                 // Render pass: {{image, load_op, store_op, stencil_load_op, stencil_store_op}, ...}
                 // Minimal: {{image}} uses defaults (clear/store/dont_care/dont_care)
                 cmdType["begin_pass"] = [](CommandBuffer &cmd, sol::table attachments, const std::string &name, sol::optional<bool> skipDynamic) {
-                    std::vector<Attachment> atts;
+                    static thread_local std::vector<Attachment> atts;
+                    atts.clear();
                     atts.reserve(attachments.size());
                     for (size_t i = 1; i <= attachments.size(); i++)
                     {
