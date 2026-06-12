@@ -1,6 +1,5 @@
 #pragma once
 
-
 enum PeGraphicsApi : uint32_t
 {
     PE_GRAPHICS_API_VULKAN = 0,
@@ -112,6 +111,30 @@ enum PeFormat : uint32_t
     PE_FORMAT_BC7_UNORM,
     PE_FORMAT_BC7_SRGB,
 
+    // Additional WebGPU plain color/depth formats. Appended to keep existing
+    // PeFormat values stable for serialized engine data.
+    PE_FORMAT_R8_SNORM,
+    PE_FORMAT_R16_UNORM,
+    PE_FORMAT_R16_SNORM,
+    PE_FORMAT_R8G8_UNORM,
+    PE_FORMAT_R8G8_SNORM,
+    PE_FORMAT_R8G8_UINT,
+    PE_FORMAT_R8G8_SINT,
+    PE_FORMAT_R16G16_UNORM,
+    PE_FORMAT_R16G16_SNORM,
+    PE_FORMAT_R16G16_UINT,
+    PE_FORMAT_R16G16_SINT,
+    PE_FORMAT_R8G8B8A8_SNORM,
+    PE_FORMAT_R8G8B8A8_UINT,
+    PE_FORMAT_R8G8B8A8_SINT,
+    PE_FORMAT_R16G16B16A16_UNORM,
+    PE_FORMAT_R16G16B16A16_SNORM,
+    PE_FORMAT_R16G16B16A16_UINT,
+    PE_FORMAT_R16G16B16A16_SINT,
+    PE_FORMAT_A2B10G10R10_UINT_PACK32,
+    PE_FORMAT_E5B9G9R9_UFLOAT_PACK32,
+    PE_FORMAT_D16_UNORM,
+
     PE_FORMAT_COUNT
 };
 
@@ -215,6 +238,48 @@ constexpr const char *PeFormatName(::PeFormat format)
         return "BC7_UNORM";
     case PE_FORMAT_BC7_SRGB:
         return "BC7_SRGB";
+    case PE_FORMAT_R8_SNORM:
+        return "R8_SNORM";
+    case PE_FORMAT_R16_UNORM:
+        return "R16_UNORM";
+    case PE_FORMAT_R16_SNORM:
+        return "R16_SNORM";
+    case PE_FORMAT_R8G8_UNORM:
+        return "R8G8_UNORM";
+    case PE_FORMAT_R8G8_SNORM:
+        return "R8G8_SNORM";
+    case PE_FORMAT_R8G8_UINT:
+        return "R8G8_UINT";
+    case PE_FORMAT_R8G8_SINT:
+        return "R8G8_SINT";
+    case PE_FORMAT_R16G16_UNORM:
+        return "R16G16_UNORM";
+    case PE_FORMAT_R16G16_SNORM:
+        return "R16G16_SNORM";
+    case PE_FORMAT_R16G16_UINT:
+        return "R16G16_UINT";
+    case PE_FORMAT_R16G16_SINT:
+        return "R16G16_SINT";
+    case PE_FORMAT_R8G8B8A8_SNORM:
+        return "R8G8B8A8_SNORM";
+    case PE_FORMAT_R8G8B8A8_UINT:
+        return "R8G8B8A8_UINT";
+    case PE_FORMAT_R8G8B8A8_SINT:
+        return "R8G8B8A8_SINT";
+    case PE_FORMAT_R16G16B16A16_UNORM:
+        return "R16G16B16A16_UNORM";
+    case PE_FORMAT_R16G16B16A16_SNORM:
+        return "R16G16B16A16_SNORM";
+    case PE_FORMAT_R16G16B16A16_UINT:
+        return "R16G16B16A16_UINT";
+    case PE_FORMAT_R16G16B16A16_SINT:
+        return "R16G16B16A16_SINT";
+    case PE_FORMAT_A2B10G10R10_UINT_PACK32:
+        return "A2B10G10R10_UINT_PACK32";
+    case PE_FORMAT_E5B9G9R9_UFLOAT_PACK32:
+        return "E5B9G9R9_UFLOAT_PACK32";
+    case PE_FORMAT_D16_UNORM:
+        return "D16_UNORM";
     default:
         return "UNKNOWN";
     }
@@ -236,6 +301,7 @@ constexpr bool PeFormatIsDepthOnly(::PeFormat format)
 {
     switch (format)
     {
+    case PE_FORMAT_D16_UNORM:
     case PE_FORMAT_D32_SFLOAT:
         return true;
     default:

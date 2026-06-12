@@ -26,12 +26,12 @@ namespace pwgpu
 
         PeGraphicsApi DeviceApi(WGPUDeviceImpl *device)
         {
-            return (device && device->rhi) ? device->rhi->GetApi() : pe::RHII.GetApi();
+            return (device && device->rhi) ? device->rhi->GetApi() : pe::GetRHI().GetApi();
         }
 
         PeGraphicsApi QuerySetApi(WGPUQuerySetImpl *querySet)
         {
-            return querySet ? DeviceApi(querySet->device) : pe::RHII.GetApi();
+            return querySet ? DeviceApi(querySet->device) : pe::GetRHI().GetApi();
         }
 
         bool BackendUnsupported(const char *operation, PeGraphicsApi api)

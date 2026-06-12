@@ -1,4 +1,5 @@
 #include "API/Vulkan/VulkanRHITypeUtils.h"
+#include "API/RHI.h"
 #include "API/Vulkan/VulkanImageViewImpl.h"
 
 namespace pe
@@ -93,9 +94,11 @@ namespace pe
         if (stages & PE_STAGE_BOTTOM_OF_PIPE)
             flags |= vk::PipelineStageFlagBits2::eBottomOfPipe;
         if (stages & PE_STAGE_RAY_TRACING_SHADER_KHR)
-            flags |= vk::PipelineStageFlagBits2::eRayTracingShaderKHR;
+            flags |= RHII.GetCaps().rayTracing ? vk::PipelineStageFlagBits2::eRayTracingShaderKHR
+                                               : vk::PipelineStageFlagBits2::eAllCommands;
         if (stages & PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR)
-            flags |= vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR;
+            flags |= RHII.GetCaps().rayTracing ? vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR
+                                               : vk::PipelineStageFlagBits2::eAllCommands;
         if (stages & PE_STAGE_CLEAR)
             flags |= vk::PipelineStageFlagBits2::eClear;
         if (stages & PE_STAGE_COPY)
@@ -229,9 +232,11 @@ namespace pe
         if (access & PE_ACCESS_HOST_WRITE)
             flags |= vk::AccessFlagBits2::eHostWrite;
         if (access & PE_ACCESS_ACCELERATION_STRUCTURE_READ_KHR)
-            flags |= vk::AccessFlagBits2::eAccelerationStructureReadKHR;
+            flags |= RHII.GetCaps().rayTracing ? vk::AccessFlagBits2::eAccelerationStructureReadKHR
+                                               : vk::AccessFlagBits2::eMemoryRead;
         if (access & PE_ACCESS_ACCELERATION_STRUCTURE_WRITE_KHR)
-            flags |= vk::AccessFlagBits2::eAccelerationStructureWriteKHR;
+            flags |= RHII.GetCaps().rayTracing ? vk::AccessFlagBits2::eAccelerationStructureWriteKHR
+                                               : vk::AccessFlagBits2::eMemoryWrite;
         if (access & PE_ACCESS_UNIFORM_READ)
             flags |= vk::AccessFlagBits2::eUniformRead;
         if (access & PE_ACCESS_SHADER_STORAGE_READ)

@@ -2,6 +2,8 @@
 
 #include "API/RHITypes.h"
 
+#include <string_view>
+
 namespace pe
 {
     class CommandPool;
@@ -73,6 +75,18 @@ namespace pe
         Cpu,
     };
 
+    enum class GpuAdapterPreference
+    {
+        Auto,
+        IntegratedGpu,
+        DiscreteGpu,
+        Cpu,
+    };
+
+    inline constexpr const char *kGpuAdapterPreferenceSettingsKey = "gpu_adapter_preference";
+    inline constexpr const char *kGpuAdapterPreferenceEnvVar = "PHASMA_GPU_ADAPTER";
+    inline constexpr const char *kVulkanCpuIcdEnvVar = "PHASMA_VULKAN_CPU_ICD";
+
     struct GpuAdapterInfo
     {
         uint32_t vendorId = 0;
@@ -116,6 +130,11 @@ namespace pe
         void Push(std::function<void()> &&deletor);
         void Flush();
     };
+
+    PE_API bool TryParseGpuAdapterPreferenceName(std::string_view value, GpuAdapterPreference &preference);
+    PE_API const char *GpuAdapterPreferenceConfigName(GpuAdapterPreference preference);
+    PE_API const char *GpuAdapterPreferenceDisplayName(GpuAdapterPreference preference);
+    PE_API GpuAdapterPreference ResolveGpuAdapterPreference(std::string *warning = nullptr);
 
     class RHI : public NoCopy, public NoMove
     {
@@ -262,5 +281,6 @@ namespace pe
         Impl *m_impl = nullptr;
     };
 
+    PE_API RHI &GetRHI();
     extern PE_API RHI &RHII;
 } // namespace pe

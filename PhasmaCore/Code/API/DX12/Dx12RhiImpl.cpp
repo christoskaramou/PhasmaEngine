@@ -2,7 +2,6 @@
 
 #include <D3D12MemAlloc.h>
 
-
 namespace pe
 {
     using Microsoft::WRL::ComPtr;
@@ -46,6 +45,43 @@ namespace pe
         std::string out(static_cast<size_t>(len - 1), '\0');
         WideCharToMultiByte(CP_UTF8, 0, w, -1, out.data(), len, nullptr, nullptr);
         return out;
+    }
+
+    static GpuAdapterType Dx12AdapterType(const DXGI_ADAPTER_DESC3 &desc)
+    {
+        if (desc.Flags & DXGI_ADAPTER_FLAG3_SOFTWARE)
+            return GpuAdapterType::Cpu;
+        return desc.DedicatedVideoMemory > 0 ? GpuAdapterType::DiscreteGpu : GpuAdapterType::IntegratedGpu;
+    }
+
+    static DXGI_GPU_PREFERENCE Dx12GpuPreferenceOrder(GpuAdapterPreference preference)
+    {
+        switch (preference)
+        {
+        case GpuAdapterPreference::IntegratedGpu:
+            return DXGI_GPU_PREFERENCE_MINIMUM_POWER;
+        case GpuAdapterPreference::DiscreteGpu:
+            return DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE;
+        default:
+            return DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE;
+        }
+    }
+
+    static bool MatchesDx12AdapterPreference(GpuAdapterPreference preference, GpuAdapterType type)
+    {
+        switch (preference)
+        {
+        case GpuAdapterPreference::Auto:
+            return true;
+        case GpuAdapterPreference::IntegratedGpu:
+            return type == GpuAdapterType::IntegratedGpu;
+        case GpuAdapterPreference::DiscreteGpu:
+            return type == GpuAdapterType::DiscreteGpu;
+        case GpuAdapterPreference::Cpu:
+            return type == GpuAdapterType::Cpu;
+        default:
+            return true;
+        }
     }
 
     static const char *D3D12MessageSeverityName(D3D12_MESSAGE_SEVERITY severity)
@@ -170,25 +206,79 @@ namespace pe
             m_allowTearing = allowTearing != FALSE;
         }
 
-        for (UINT i = 0;
-             m_factory->EnumAdapterByGpuPreference(i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
-                                                   IID_PPV_ARGS(&m_adapter)) != DXGI_ERROR_NOT_FOUND;
-             ++i)
+        std::string preferenceWarning;
+        const GpuAdapterPreference adapterPreference = ResolveGpuAdapterPreference(&preferenceWarning);
+        if (!preferenceWarning.empty())
+            PE_WARN("[DX12] %s", preferenceWarning.c_str());
+
+        auto tryCreateWarpDevice = [&]() -> bool
         {
+            m_adapter.Reset();
+            if (FAILED(m_factory->EnumWarpAdapter(IID_PPV_ARGS(&m_adapter))))
+                return false;
+
             DXGI_ADAPTER_DESC3 desc{};
             m_adapter->GetDesc3(&desc);
-            if (desc.Flags & DXGI_ADAPTER_FLAG3_SOFTWARE)
-            {
-                m_adapter.Reset();
-                continue;
-            }
             if (SUCCEEDED(D3D12CreateDevice(m_adapter.Get(), D3D_FEATURE_LEVEL_12_1,
                                             IID_PPV_ARGS(&m_device))))
             {
                 m_adapterName = WideToUtf8(desc.Description);
-                break;
+                return true;
             }
+
             m_adapter.Reset();
+            return false;
+        };
+
+        auto tryCreateDevice = [&](GpuAdapterPreference preference, bool requireMatch) -> bool
+        {
+            if (preference == GpuAdapterPreference::Cpu)
+                return tryCreateWarpDevice();
+
+            const DXGI_GPU_PREFERENCE order = Dx12GpuPreferenceOrder(preference);
+            for (UINT i = 0;
+                 m_factory->EnumAdapterByGpuPreference(i, order, IID_PPV_ARGS(&m_adapter)) != DXGI_ERROR_NOT_FOUND;
+                 ++i)
+            {
+                DXGI_ADAPTER_DESC3 desc{};
+                m_adapter->GetDesc3(&desc);
+                const GpuAdapterType adapterType = Dx12AdapterType(desc);
+                if (adapterType == GpuAdapterType::Cpu)
+                {
+                    m_adapter.Reset();
+                    continue;
+                }
+                if (requireMatch && !MatchesDx12AdapterPreference(preference, adapterType))
+                {
+                    m_adapter.Reset();
+                    continue;
+                }
+                if (SUCCEEDED(D3D12CreateDevice(m_adapter.Get(), D3D_FEATURE_LEVEL_12_1,
+                                                IID_PPV_ARGS(&m_device))))
+                {
+                    m_adapterName = WideToUtf8(desc.Description);
+                    return true;
+                }
+                m_adapter.Reset();
+            }
+            return false;
+        };
+
+        if (adapterPreference == GpuAdapterPreference::Auto)
+        {
+            tryCreateDevice(adapterPreference, false);
+        }
+        else if (tryCreateDevice(adapterPreference, true))
+        {
+            PE_INFO("[DX12] GPU adapter preference '%s' matched: %s",
+                    GpuAdapterPreferenceConfigName(adapterPreference),
+                    m_adapterName.c_str());
+        }
+        else
+        {
+            PE_WARN("[DX12] GPU adapter preference '%s' unavailable; using automatic selection",
+                    GpuAdapterPreferenceConfigName(adapterPreference));
+            tryCreateDevice(GpuAdapterPreference::Auto, false);
         }
 
         if (!m_device)

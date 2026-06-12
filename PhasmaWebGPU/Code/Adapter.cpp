@@ -263,7 +263,13 @@ void pwgpu_PopulateAdapterFeatureCache(WGPUAdapterImpl &a)
                 0, &props);
             return r == VK_SUCCESS && (props.sampleCounts & VK_SAMPLE_COUNT_1_BIT);
         };
+        // Vulkan advertises storage-image support for A2B10G10R10_UNORM, but
+        // tested drivers truncate exact-half imageStore values where WebGPU
+        // requires round-to-nearest packing. Keep Tier1 disabled until the
+        // backend has a conformant storage-write path for this packed format.
+        const bool packedUnormStorageWritesConform = false;
         a.textureFormatsTier1 =
+            packedUnormStorageWritesConform &&
             fmtStorage(VK_FORMAT_R8_UNORM) && fmtStorage(VK_FORMAT_R8_SNORM) &&
             fmtStorage(VK_FORMAT_R8_UINT) && fmtStorage(VK_FORMAT_R8_SINT) &&
             fmtStorage(VK_FORMAT_R8G8_UNORM) && fmtStorage(VK_FORMAT_R8G8_SNORM) &&

@@ -113,8 +113,8 @@ extern "C"
             default:
                 break;
             }
-            pe::RHII.ChangePresentMode(peMode);
-            surface->swapchain = pe::RHII.GetSwapchain();
+            pe::GetRHI().ChangePresentMode(peMode);
+            surface->swapchain = pe::GetRHI().GetSwapchain();
         }
 
         if (surface->currentTexture)

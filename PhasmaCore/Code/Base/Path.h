@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(PE_WIN32)
+#include <windows.h>
+#endif
+
 namespace pe
 {
     class Path
@@ -26,10 +30,20 @@ namespace pe
                                };
 
 #if defined(PE_WIN32)
-                               char *str = nullptr;
-                               _get_pgmptr(&str);
-                               if (str)
-                                   Executable = std::filesystem::path(str).remove_filename().string();
+                               std::vector<char> executablePath(MAX_PATH);
+                               while (!executablePath.empty())
+                               {
+                                   DWORD length = GetModuleFileNameA(nullptr, executablePath.data(), static_cast<DWORD>(executablePath.size()));
+                                   if (length == 0)
+                                       break;
+                                   if (length < executablePath.size() - 1)
+                                   {
+                                       executablePath[length] = '\0';
+                                       Executable = std::filesystem::path(executablePath.data()).remove_filename().string();
+                                       break;
+                                   }
+                                   executablePath.resize(executablePath.size() * 2);
+                               }
 #elif defined(PE_ANDROID)
                                const char *storagePath = SDL_AndroidGetInternalStoragePath();
                                if (storagePath && storagePath[0] != '\0')

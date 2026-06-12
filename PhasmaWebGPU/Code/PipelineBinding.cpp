@@ -14,7 +14,6 @@
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 
-
 #if defined(PE_WIN32)
 #include "API/Buffer.h"
 #include "API/Command.h"
@@ -40,7 +39,7 @@ namespace pwgpu
         bool BackendUnsupported(const char *operation)
         {
             PE_ERROR("[WebGPU] %s has no %s backend binding path yet",
-                     operation, PeGraphicsApiName(pe::RHII.GetApi()));
+                     operation, PeGraphicsApiName(pe::GetRHI().GetApi()));
             return false;
         }
 
@@ -308,7 +307,7 @@ namespace pwgpu
                         table.count,
                         table.gpuHandle))
                 {
-                    auto *rhi = static_cast<pe::Dx12RhiImpl *>(pe::RHII.GetImpl());
+                    auto *rhi = static_cast<pe::Dx12RhiImpl *>(pe::GetRHI().GetImpl());
                     if (rhi && rhi->GetCbvSrvUavHeap())
                     {
                         for (const Dx12DynamicTable &allocated : dynamicTables)
@@ -322,7 +321,7 @@ namespace pwgpu
 
             auto freeDynamicTables = [&dynamicTables]()
             {
-                auto *rhi = static_cast<pe::Dx12RhiImpl *>(pe::RHII.GetImpl());
+                auto *rhi = static_cast<pe::Dx12RhiImpl *>(pe::GetRHI().GetImpl());
                 if (!rhi || !rhi->GetCbvSrvUavHeap())
                     return;
                 for (const Dx12DynamicTable &table : dynamicTables)
@@ -349,7 +348,7 @@ namespace pwgpu
             cmd->AddAfterWaitCallback(
                 [dynamicTables = std::move(dynamicTables)]()
                 {
-                    auto *rhi = static_cast<pe::Dx12RhiImpl *>(pe::RHII.GetImpl());
+                    auto *rhi = static_cast<pe::Dx12RhiImpl *>(pe::GetRHI().GetImpl());
                     if (!rhi || !rhi->GetCbvSrvUavHeap())
                         return;
                     for (const Dx12DynamicTable &table : dynamicTables)
@@ -367,7 +366,7 @@ namespace pwgpu
         if (!cmd || !pipeline || pipeline->backendPipeline == 0)
             return false;
 
-        switch (pe::RHII.GetApi())
+        switch (pe::GetRHI().GetApi())
         {
         case PE_GRAPHICS_API_VULKAN:
             if (cache && cache->renderPipeline == pipeline)
@@ -410,7 +409,7 @@ namespace pwgpu
         if (!cmd || !pipeline || pipeline->backendPipeline == 0)
             return false;
 
-        switch (pe::RHII.GetApi())
+        switch (pe::GetRHI().GetApi())
         {
         case PE_GRAPHICS_API_VULKAN:
             if (cache && cache->computePipeline == pipeline)
@@ -452,7 +451,7 @@ namespace pwgpu
         if (!BglGroupEquivalent(group->layout, bgls[groupIndex]))
             return false;
 
-        switch (pe::RHII.GetApi())
+        switch (pe::GetRHI().GetApi())
         {
         case PE_GRAPHICS_API_VULKAN:
         {
@@ -538,7 +537,7 @@ namespace pwgpu
         if (!cmd)
             return false;
 
-        switch (pe::RHII.GetApi())
+        switch (pe::GetRHI().GetApi())
         {
         case PE_GRAPHICS_API_VULKAN:
             pe::GetVulkanCommandBuffer(cmd).dispatch(x, y, z);
@@ -565,7 +564,7 @@ namespace pwgpu
         if (!cmd || !buffer)
             return false;
 
-        switch (pe::RHII.GetApi())
+        switch (pe::GetRHI().GetApi())
         {
         case PE_GRAPHICS_API_VULKAN:
         {
@@ -600,7 +599,7 @@ namespace pwgpu
         if (!cmd || !buffer)
             return false;
 
-        switch (pe::RHII.GetApi())
+        switch (pe::GetRHI().GetApi())
         {
         case PE_GRAPHICS_API_VULKAN:
         {
@@ -633,7 +632,7 @@ namespace pwgpu
         if (!cmd)
             return;
 
-        switch (pe::RHII.GetApi())
+        switch (pe::GetRHI().GetApi())
         {
         case PE_GRAPHICS_API_VULKAN:
             pe::GetVulkanCommandBuffer(cmd).draw(
@@ -659,7 +658,7 @@ namespace pwgpu
         if (!cmd)
             return;
 
-        switch (pe::RHII.GetApi())
+        switch (pe::GetRHI().GetApi())
         {
         case PE_GRAPHICS_API_VULKAN:
             pe::GetVulkanCommandBuffer(cmd).drawIndexed(

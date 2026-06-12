@@ -255,7 +255,7 @@ namespace pwgpu
             return true;
 
         pe::StagingAllocation alloc =
-            pe::RHII.GetStagingManager()->Allocate(static_cast<size_t>(maxBytes));
+            pe::GetRHI().GetStagingManager()->Allocate(static_cast<size_t>(maxBytes));
         std::memset(alloc.data, 0, static_cast<size_t>(maxBytes));
         alloc.buffer->Flush(static_cast<size_t>(maxBytes), 0);
 
@@ -293,7 +293,7 @@ namespace pwgpu
         pe::GetVulkanCommandBuffer(cmd).copyBufferToImage2(copyInfo);
 
         cmd->AddAfterWaitCallback([alloc = std::move(alloc)]() mutable
-                                  { pe::RHII.GetStagingManager()->SetUnused(alloc); });
+                                  { pe::GetRHI().GetStagingManager()->SetUnused(alloc); });
         return true;
     }
 
@@ -348,7 +348,7 @@ namespace pwgpu
             return;
 
 #if defined(PE_WIN32)
-        if (pe::RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        if (pe::GetRHI().GetApi() == PE_GRAPHICS_API_DX12)
         {
             if ((aspectMask & (PE_IMAGE_ASPECT_DEPTH | PE_IMAGE_ASPECT_STENCIL)) != 0 &&
                 (tex->image->GetUsage() & PE_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT) != 0)
@@ -1023,7 +1023,7 @@ extern "C"
                                              ? (texture->label + "_view")
                                              : view->label;
 #if defined(PE_WIN32)
-            if (pe::RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            if (pe::GetRHI().GetApi() == PE_GRAPHICS_API_DX12)
             {
                 bool nativeCreationFailed = false;
                 auto createNative = [&](pe::ImageView *&slot,
@@ -1157,7 +1157,7 @@ extern "C"
 
             bool deferredNativeView = false;
 #if defined(PE_WIN32)
-            deferredNativeView = pe::RHII.GetApi() == PE_GRAPHICS_API_DX12 &&
+            deferredNativeView = pe::GetRHI().GetApi() == PE_GRAPHICS_API_DX12 &&
                                  resolved.dimension == WGPUTextureViewDimension_3D &&
                                  (viewUsage & WGPUTextureUsage_RenderAttachment) != 0;
 #endif

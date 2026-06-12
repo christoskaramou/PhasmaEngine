@@ -735,7 +735,7 @@ namespace pwgpu
 
     void ApplyDx12WebGPURegisterRemap(pe::DescriptorBindingInfo &info)
     {
-        if (pe::RHII.GetApi() != PE_GRAPHICS_API_DX12 ||
+        if (pe::GetRHI().GetApi() != PE_GRAPHICS_API_DX12 ||
             info.dxSpace != 0 ||
             !IsUniformDescriptorType(info.type))
         {

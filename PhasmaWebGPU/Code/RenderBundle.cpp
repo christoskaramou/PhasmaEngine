@@ -125,7 +125,7 @@ namespace
 
     void DestroyVulkanCommandPool(PeBackendHandle commandPool)
     {
-        if (commandPool == 0 || pe::RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+        if (commandPool == 0 || pe::GetRHI().GetApi() != PE_GRAPHICS_API_VULKAN)
             return;
         pe::VulkanRhi::Device().destroyCommandPool(
             vk::CommandPool{PeFromBackendHandle<VkCommandPool>(commandPool)});
@@ -232,7 +232,7 @@ namespace
 
     void DestroyVulkanNativeRenderBundle(WGPURenderBundleImpl *rb)
     {
-        if (!rb || pe::RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+        if (!rb || pe::GetRHI().GetApi() != PE_GRAPHICS_API_VULKAN)
             return;
 
         const uint64_t serial = rb->lastUsageSerial.load(std::memory_order_acquire);
@@ -265,7 +265,7 @@ namespace
     {
         if (!rb || !rb->vulkanNativeEligible || rb->nativeOps.empty() ||
             !rb->device || !rb->device->peQueue ||
-            pe::RHII.GetApi() != PE_GRAPHICS_API_VULKAN ||
+            pe::GetRHI().GetApi() != PE_GRAPHICS_API_VULKAN ||
             !pe::Settings::Get<pe::GlobalSettings>().dynamic_rendering ||
             renderWidth == 0 || renderHeight == 0)
             return false;

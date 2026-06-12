@@ -29,6 +29,25 @@ namespace pe
                    !info.samplers.empty() ||
                    !info.accelerationStructures.empty();
         }
+
+        template <class T>
+        std::vector<T> LimitDescriptorValues(const std::vector<T> &values,
+                                             uint32_t maxCount,
+                                             const char *kind,
+                                             const std::string &descriptorName,
+                                             uint32_t binding)
+        {
+            if (values.size() <= maxCount)
+                return values;
+
+            PE_WARN("[Descriptor] Truncating %s for '%s' binding %u from %zu to %u entries",
+                    kind,
+                    descriptorName.c_str(),
+                    binding,
+                    values.size(),
+                    maxCount);
+            return std::vector<T>(values.begin(), values.begin() + maxCount);
+        }
     } // namespace
 
     DescriptorPool *DescriptorPool::Create(const DescriptorPoolDesc &desc, const std::string &name)
@@ -348,8 +367,8 @@ namespace pe
 
         DescriptorUpdateInfo info{};
         info.binding = binding;
-        info.views = views;
-        info.samplers = samplers;
+        info.views = LimitDescriptorValues(views, m_bindingInfos[bindingIndex].count, "image views", m_name, binding);
+        info.samplers = LimitDescriptorValues(samplers, m_bindingInfos[bindingIndex].count, "samplers", m_name, binding);
         m_updateInfos[bindingIndex] = info;
     }
 

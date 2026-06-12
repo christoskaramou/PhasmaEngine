@@ -509,4 +509,34 @@ if(TARGET PhasmaEditor)
 endif()
 endif()
 
+# Bundle SwiftShader (CPU / software Vulkan ICD) next to the runtime executables so the
+# "CPU / Software" GPU-adapter preference works without borrowing another app's copy.
+# Optional: on a checkout that did not vendor the binary the files are simply absent,
+# the build still succeeds, and the CPU adapter falls back to PHASMA_VULKAN_CPU_ICD or a
+# system software ICD. The DLL + manifest land in <exe-dir>/swiftshader/, which
+# RHI::VulkanSoftwareIcdCandidates already probes.
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set(PE_SWIFTSHADER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/Libs/swiftshader")
+    set(PE_SWIFTSHADER_DLL "${PE_SWIFTSHADER_DIR}/vk_swiftshader.dll")
+    set(PE_SWIFTSHADER_ICD "${PE_SWIFTSHADER_DIR}/vk_swiftshader_icd.json")
+    if(EXISTS "${PE_SWIFTSHADER_DLL}" AND EXISTS "${PE_SWIFTSHADER_ICD}")
+        set(SWIFTSHADER_COPY_STAMP "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/PhasmaSwiftShader-$<CONFIG>.stamp")
+        add_custom_command(
+            OUTPUT "${SWIFTSHADER_COPY_STAMP}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles" "${PHASMA_CONFIG_OUTPUT_DIR}/swiftshader"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PE_SWIFTSHADER_DLL}" "${PHASMA_CONFIG_OUTPUT_DIR}/swiftshader/vk_swiftshader.dll"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PE_SWIFTSHADER_ICD}" "${PHASMA_CONFIG_OUTPUT_DIR}/swiftshader/vk_swiftshader_icd.json"
+            COMMAND ${CMAKE_COMMAND} -E touch "${SWIFTSHADER_COPY_STAMP}"
+            DEPENDS "${PE_SWIFTSHADER_DLL}" "${PE_SWIFTSHADER_ICD}"
+            COMMENT "[Phasma] Bundling SwiftShader CPU Vulkan ICD"
+        )
+        add_custom_target(PhasmaSwiftShader ALL DEPENDS "${SWIFTSHADER_COPY_STAMP}")
+        foreach(pe_runtime_target PhasmaEditor PhasmaPlayer PhasmaLauncher)
+            if(TARGET ${pe_runtime_target})
+                add_dependencies(${pe_runtime_target} PhasmaSwiftShader)
+            endif()
+        endforeach()
+    endif()
+endif()
+
 pe_install_runtime_layout()

@@ -1,6 +1,14 @@
 # PhasmaEngine Wiki Log
 
+## 2026-06-12
+
+- Bundled a SwiftShader CPU Vulkan ICD so the `CPU / Software` adapter preference works without borrowing another application's copy. The prebuilt `vk_swiftshader.dll` + manifest live in `PhasmaCore/Libs/swiftshader/` and a `PhasmaSwiftShader` CMake target stages them into `<exe>/swiftshader/` (Windows; skipped when the binary is absent). `VulkanSoftwareIcdCandidates` now prefers that bundled manifest and the dropped-in-place / SDK / Linux-lavapipe fallbacks; the previous heuristic scavenging of Chrome/Edge/Steam/Docker install directories was removed. SwiftShader supports every hard-required engine feature, so only the four already-soft capabilities (`shaderInt16/Int64/Float16`, storage-buffer-array-nonuniform-indexing) warn instead of failing on CPU adapters.
+
+- Added a Launcher GPU adapter preference. `PhasmaLauncher` now exposes Auto / Integrated GPU / Discrete GPU / CPU in both GUI and console flows, persists the selection as `phasma_settings.json:gpu_adapter_preference`, and passes it to child processes through `PHASMA_GPU_ADAPTER`. Vulkan and DX12 resolve the shared preference during device selection and fall back to automatic selection when the requested adapter class is unavailable.
+
 ## 2026-06-11
+
+- Advanced the PhasmaWebGPU CTS texture-builtin sweep. The shared WebGPU build now exports and places `PhasmaWebGPU.dll` under `Release/WebGPU`, `pe::GetRHI()` avoids early static RHI initialization for Node-hosted CTS, and Windows executable-path resolution no longer depends on `_get_pgmptr`. Added missing WebGPU color/depth formats to the Phasma RHI/Vulkan/DX12 translation tables so integer sampled texture queries create real backend images. Vulkan no longer advertises `texture-formats-tier1` while packed `rgb10a2unorm` storage writes truncate half values instead of WebGPU round-to-nearest packing, which makes the affected CTS cases skip honestly instead of failing.
 
 - Kept mouse-wheel input contained to the surface under the cursor. Runtime UI still receives first chance to capture wheel events, and the editor forwards uncaptured wheel deltas to Lua `input.get_mouse_wheel()` only when the cursor is inside the SceneView image (or full-window viewport while editor chrome is hidden). This keeps viewport zoom/follow-distance controls from firing while scrolling runtime UI widgets or other editor panels.
 

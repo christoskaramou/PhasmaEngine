@@ -1,4 +1,5 @@
 #include "API/GraphicsApiSelection.h"
+#include "API/RHI.h"
 #include "Project/ProjectSelection.h"
 #include "Runtime/RuntimeStartup.h"
 
@@ -565,6 +566,33 @@ namespace
         return 0;
     }
 
+    struct GpuAdapterPreferenceOption
+    {
+        const char *label = "";
+        pe::GpuAdapterPreference preference = pe::GpuAdapterPreference::Auto;
+    };
+
+    std::array<GpuAdapterPreferenceOption, 4> GpuAdapterPreferenceOptions()
+    {
+        return {{
+            {"Auto", pe::GpuAdapterPreference::Auto},
+            {"Integrated GPU", pe::GpuAdapterPreference::IntegratedGpu},
+            {"Discrete GPU", pe::GpuAdapterPreference::DiscreteGpu},
+            {"CPU / Software", pe::GpuAdapterPreference::Cpu},
+        }};
+    }
+
+    int FindGpuAdapterPreferenceOptionIndex(pe::GpuAdapterPreference preference)
+    {
+        const std::array<GpuAdapterPreferenceOption, 4> options = GpuAdapterPreferenceOptions();
+        for (int i = 0; i < static_cast<int>(options.size()); ++i)
+        {
+            if (options[i].preference == preference)
+                return i;
+        }
+        return 0;
+    }
+
     bool PersistEditorPresentMode(const std::optional<PePresentMode> &mode, std::string &error)
     {
         if (mode)
@@ -584,6 +612,7 @@ namespace
                                  const std::string &launchTarget,
                                  const ValidationOptions &validation,
                                  int displayIndex,
+                                 pe::GpuAdapterPreference gpuAdapterPreference,
                                  const std::optional<PePresentMode> &presentModeOverride,
                                  bool launchesEditor,
                                  std::string &error)
@@ -598,6 +627,9 @@ namespace
         SetJsonStringMember(document, pe::kStartupSceneSettingsKey, startupScene);
         SetJsonStringMember(document, k_launchTargetKey, launchTarget.empty() ? k_editorLaunchTarget : launchTarget);
         SetJsonIntMember(document, k_displayIndexKey, displayIndex < 0 ? 0 : displayIndex);
+        SetJsonStringMember(document,
+                            pe::kGpuAdapterPreferenceSettingsKey,
+                            pe::GpuAdapterPreferenceConfigName(gpuAdapterPreference));
         SetJsonBoolMember(document, kVulkanCoreValidationKey, validation.vulkanCoreValidation);
         SetJsonBoolMember(document, kDx12CoreValidationKey, validation.dx12CoreValidation);
         RemoveJsonMember(document, kVulkanValidationModeKey);
@@ -653,6 +685,7 @@ namespace
         ValidationOptions validation;
         std::string launchTarget;
         int displayIndex = 0;
+        pe::GpuAdapterPreference gpuAdapterPreference = pe::GpuAdapterPreference::Auto;
         std::optional<PePresentMode> presentModeOverride;
         bool apiLocked = false;
         bool accepted = false;
@@ -915,6 +948,24 @@ namespace
         return true;
     }
 
+    bool SetLaunchEnvironmentString(const char *name, const char *value, std::string &error)
+    {
+#if defined(PE_WIN32)
+        if (!SetEnvironmentVariableA(name, value))
+        {
+            error = std::string("Could not set ") + name + ": " + std::to_string(GetLastError());
+            return false;
+        }
+#else
+        if (setenv(name, value, 1) != 0)
+        {
+            error = std::string("Could not set ") + name;
+            return false;
+        }
+#endif
+        return true;
+    }
+
     bool ApplyValidationEnvironment(const ValidationOptions &validation, std::string &error)
     {
         if (!SetLaunchEnvironmentFlag("PE_VULKAN_VALIDATION", validation.vulkanCoreValidation, error))
@@ -926,6 +977,13 @@ namespace
         if (!SetLaunchEnvironmentFlag("PE_DX12_DRED", validation.dx12CoreValidation, error))
             return false;
         return true;
+    }
+
+    bool ApplyGpuAdapterEnvironment(pe::GpuAdapterPreference preference, std::string &error)
+    {
+        return SetLaunchEnvironmentString(pe::kGpuAdapterPreferenceEnvVar,
+                                          pe::GpuAdapterPreferenceConfigName(preference),
+                                          error);
     }
 
     bool LaunchExternalTarget(const LaunchTarget &target, PeGraphicsApi api, int displayIndex, std::string &error)
@@ -1513,6 +1571,16 @@ namespace
         if (!selection.apiLocked)
             selection.api = PE_GRAPHICS_API_VULKAN;
 
+        const std::array<GpuAdapterPreferenceOption, 4> gpuOptions = GpuAdapterPreferenceOptions();
+        std::vector<std::string> gpuLabels;
+        gpuLabels.reserve(gpuOptions.size());
+        for (const GpuAdapterPreferenceOption &option : gpuOptions)
+            gpuLabels.emplace_back(option.label);
+
+        const int gpuIndex =
+            PromptIndex("GPU", gpuLabels, FindGpuAdapterPreferenceOptionIndex(selection.gpuAdapterPreference));
+        selection.gpuAdapterPreference = gpuOptions[gpuIndex].preference;
+
         const std::array<PresentModeOption, 5> presentOptions = PresentModeOptions();
         std::vector<std::string> presentLabels;
         presentLabels.reserve(presentOptions.size());
@@ -1525,6 +1593,7 @@ namespace
 
         std::cout << "\nProject: " << ActiveProfile(selection).projectPath << '\n'
                   << "Backend: " << pe::GraphicsApiConfigName(selection.api) << '\n'
+                  << "GPU: " << pe::GpuAdapterPreferenceDisplayName(selection.gpuAdapterPreference) << '\n'
                   << "Settings: " << RuntimeSettingsPath().generic_string() << '\n';
 
         selection.accepted = PromptLaunch();
@@ -2177,6 +2246,24 @@ namespace
                 RenderValidationControls("dx12_validation", selection.validation.dx12CoreValidation);
 #endif
 
+            const std::array<GpuAdapterPreferenceOption, 4> gpuOptions = GpuAdapterPreferenceOptions();
+            const int gpuIndex = FindGpuAdapterPreferenceOptionIndex(selection.gpuAdapterPreference);
+            ImGui::TextUnformatted("GPU");
+            ImGui::SameLine(kFieldX);
+            ImGui::SetNextItemWidth(kFieldWidth);
+            if (ImGui::BeginCombo("##gpu_adapter_preference", gpuOptions[gpuIndex].label))
+            {
+                for (int i = 0; i < static_cast<int>(gpuOptions.size()); ++i)
+                {
+                    const bool selected = (i == gpuIndex);
+                    if (ImGui::Selectable(gpuOptions[i].label, selected))
+                        selection.gpuAdapterPreference = gpuOptions[i].preference;
+                    if (selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
             if (!displays.empty())
             {
                 ImGui::TextUnformatted("Display");
@@ -2475,6 +2562,18 @@ namespace
         if (currentDisplayIndex < 0)
             currentDisplayIndex = 0;
 
+        pe::GpuAdapterPreference currentGpuAdapterPreference = pe::GpuAdapterPreference::Auto;
+        const std::string currentGpuAdapterPreferenceValue =
+            ReadJsonStringField(RuntimeSettingsPath(), pe::kGpuAdapterPreferenceSettingsKey);
+        if (!currentGpuAdapterPreferenceValue.empty() &&
+            !pe::TryParseGpuAdapterPreferenceName(currentGpuAdapterPreferenceValue, currentGpuAdapterPreference))
+        {
+            PE_WARN("[Runtime] Invalid %s value '%s'; using Auto",
+                    pe::kGpuAdapterPreferenceSettingsKey,
+                    currentGpuAdapterPreferenceValue.c_str());
+            currentGpuAdapterPreference = pe::GpuAdapterPreference::Auto;
+        }
+
         std::string presentModeWarning;
         const std::optional<PePresentMode> currentPresentMode = pe::ReadEditorPresentMode({}, &presentModeWarning);
         if (!presentModeWarning.empty())
@@ -2508,6 +2607,7 @@ namespace
         selection.validation.dx12CoreValidation = readCoreValidation(kDx12ValidationModeKey, kDx12CoreValidationKey);
         selection.launchTarget = currentLaunchTarget;
         selection.displayIndex = currentDisplayIndex;
+        selection.gpuAdapterPreference = currentGpuAdapterPreference;
         selection.presentModeOverride = currentPresentMode;
         selection.activeTab = currentLaunchTarget == k_editorLaunchTarget ? LauncherTab::Editor : LauncherTab::Player;
 
@@ -2534,6 +2634,7 @@ namespace
                 selection.launchTarget,
                 selection.validation,
                 selection.displayIndex,
+                selection.gpuAdapterPreference,
                 selection.presentModeOverride,
                 launchesEditor,
                 error))
@@ -2544,6 +2645,13 @@ namespace
         }
 
         if (!ApplyValidationEnvironment(selection.validation, error))
+        {
+            pe::Log::Error(error);
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Phasma Launcher", error.c_str(), nullptr);
+            return 1;
+        }
+
+        if (!ApplyGpuAdapterEnvironment(selection.gpuAdapterPreference, error))
         {
             pe::Log::Error(error);
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Phasma Launcher", error.c_str(), nullptr);

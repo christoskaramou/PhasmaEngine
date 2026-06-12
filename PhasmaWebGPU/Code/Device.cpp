@@ -810,7 +810,7 @@ void WGPUDeviceImpl::ReclaimCompletedDeferredResources()
     }
     for (const auto &slice : slicesToFree)
         pwgpu::FreeDescriptorBufferSlice(this, slice.offset, slice.size);
-    if (pe::RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+    if (pe::GetRHI().GetApi() == PE_GRAPHICS_API_VULKAN)
     {
         for (PeBackendHandle commandPool : commandPoolsToDestroy)
         {
@@ -1146,7 +1146,7 @@ extern "C"
 
         // pe::Buffer::Create asserts on per-usage VK range limits — pre-reject as OOM.
         if ((usage & WGPUBufferUsage_Uniform) &&
-            size > pe::RHII.GetMaxUniformBufferSize())
+            size > pe::GetRHI().GetMaxUniformBufferSize())
         {
             std::string msg = "descriptor.size exceeds Vulkan maxUniformBufferRange";
             std::string full = std::string("wgpuDeviceCreateBuffer: ") + msg;
@@ -1162,7 +1162,7 @@ extern "C"
             return bad;
         }
         if ((usage & WGPUBufferUsage_Storage) &&
-            size > pe::RHII.GetMaxStorageBufferSize())
+            size > pe::GetRHI().GetMaxStorageBufferSize())
         {
             std::string msg = "descriptor.size exceeds Vulkan maxStorageBufferRange";
             std::string full = std::string("wgpuDeviceCreateBuffer: ") + msg;
@@ -1210,7 +1210,7 @@ extern "C"
             peUsage = PE_BUFFER_USAGE_TRANSFER_SRC;
 
         const bool dx12MappedStorageNeedsStaging =
-            pe::RHII.GetApi() == PE_GRAPHICS_API_DX12 &&
+            pe::GetRHI().GetApi() == PE_GRAPHICS_API_DX12 &&
             mappedAtCreation &&
             (usage & WGPUBufferUsage_Storage) != 0;
         const bool needsHostAccess =
@@ -2287,7 +2287,7 @@ extern "C"
                                     : PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
                     break;
                 case WGPUBufferBindingType_ReadOnlyStorage:
-                    if (pe::RHII.GetApi() == PE_GRAPHICS_API_DX12)
+                    if (pe::GetRHI().GetApi() == PE_GRAPHICS_API_DX12)
                     {
                         info.type = entry.buffer.hasDynamicOffset
                                         ? PE_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC

@@ -1,5 +1,6 @@
 #include "API/Vulkan/VulkanReflection.h"
 #include "API/Vulkan/VulkanShaderImpl.h"
+#include "API/RHI.h"
 #include "API/Shader.h"
 
 namespace pe
@@ -19,13 +20,14 @@ namespace pe
             if (typeInfo.array.empty())
                 return 1;
 
+            const uint32_t bindlessCount = std::max(1u, std::min(PE_MAX_DESCRIPTORS_PER_BINDING, RHII.GetCaps().maxBindlessTextures));
             if (typeInfo.array_size_literal[0])
             {
                 if (typeInfo.array[0] == 0)
-                    return PE_MAX_DESCRIPTORS_PER_BINDING; // Open array
+                    return bindlessCount; // Open array
                 return typeInfo.array[0];
             }
-            return PE_MAX_DESCRIPTORS_PER_BINDING; // Unbounded — partially bound at runtime
+            return bindlessCount; // Unbounded — partially bound at runtime
         }
 
         const std::unordered_map<spirv_cross::SPIRType::BaseType, size_t> &TypeSizeMap()

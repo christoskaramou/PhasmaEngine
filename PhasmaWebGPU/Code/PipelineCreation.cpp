@@ -30,7 +30,7 @@ namespace pwgpu
 
         PeGraphicsApi DeviceApi(WGPUDeviceImpl *device)
         {
-            return (device && device->rhi) ? device->rhi->GetApi() : pe::RHII.GetApi();
+            return (device && device->rhi) ? device->rhi->GetApi() : pe::GetRHI().GetApi();
         }
 
         PipelineCreationResult BackendUnsupported(const char *operation, WGPUDeviceImpl *device)

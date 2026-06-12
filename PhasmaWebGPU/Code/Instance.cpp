@@ -5,7 +5,8 @@
 #include "Utils.h"
 #include "WGPULimits.h"
 #include "API/RHI.h"
-#include "API/Vulkan/RHI_Vulkan.h"
+#include "API/Vulkan/VulkanRhiImpl.h"
+#include "Base/Log.h"
 #include <SDL.h>
 
 namespace
@@ -15,34 +16,52 @@ namespace
     static std::atomic<int> s_standaloneRefCount{0};
     static bool s_standaloneBootstrapped = false;
 
+    static vk::PhysicalDevice GetVulkanGpu(pe::RHI &rhi)
+    {
+        if (rhi.GetApi() != PE_GRAPHICS_API_VULKAN)
+            return {};
+        auto *impl = static_cast<pe::VulkanRhiImpl *>(rhi.GetImpl());
+        return impl ? impl->m_gpu : vk::PhysicalDevice{};
+    }
+
     static bool EnsureRhiInitialized()
     {
-        if (pe::RHII.GetImpl())
+        pe::RHI &rhi = pe::GetRHI();
+        if (rhi.GetImpl())
             return true; // Already initialized by the embedding app/test.
-        if (pe::VulkanRhi::Gpu())
-            return true; // Already initialized (e.g. by PhasmaEditor).
 
         bool ok = false;
-        std::call_once(s_rhiBootstrapOnce, [&ok]()
+        std::call_once(s_rhiBootstrapOnce, [&ok, &rhi]()
                        {
-            pe::Log::Init();
-
-            if (!SDL_WasInit(SDL_INIT_VIDEO))
+            try
             {
-                if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
+                pe::Log::Init();
+
+                if (!SDL_WasInit(SDL_INIT_VIDEO))
+                {
+                    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
+                        return;
+                }
+
+                uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_VULKAN;
+                s_standaloneWindow =
+                    SDL_CreateWindow("PhasmaWebGPU", 0, 0, 64, 64, windowFlags);
+                if (!s_standaloneWindow)
                     return;
+
+                pe::EventSystem::Init();
+                rhi.Init(s_standaloneWindow);
+                s_standaloneBootstrapped = true;
+                ok = true;
             }
-
-            uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_VULKAN;
-            s_standaloneWindow =
-                SDL_CreateWindow("PhasmaWebGPU", 0, 0, 64, 64, windowFlags);
-            if (!s_standaloneWindow)
-                return;
-
-            pe::EventSystem::Init();
-            pe::RHII.Init(s_standaloneWindow);
-            s_standaloneBootstrapped = true;
-            ok = true; });
+            catch (const std::exception &e)
+            {
+                pe::Log::Error(std::string("[WebGPU] Standalone RHI bootstrap failed: ") + e.what());
+            }
+            catch (...)
+            {
+                pe::Log::Error("[WebGPU] Standalone RHI bootstrap failed with an unknown exception");
+            } });
 
         if (!ok && s_standaloneBootstrapped)
             ok = true;
@@ -55,8 +74,8 @@ namespace
         if (!s_standaloneBootstrapped)
             return;
 
-        pe::RHII.WaitDeviceIdle();
-        pe::RHII.Destroy();
+        pe::GetRHI().WaitDeviceIdle();
+        pe::GetRHI().Destroy();
 
         if (s_standaloneWindow)
         {
@@ -145,7 +164,7 @@ extern "C"
             return nullptr;
 
         auto *inst = new WGPUInstanceImpl();
-        inst->rhi = &pe::RHII;
+        inst->rhi = &pe::GetRHI();
 
         if (s_standaloneBootstrapped)
         {
@@ -181,7 +200,7 @@ extern "C"
     WGPUSurface wgpuInstanceCreateSurface(WGPUInstance instance, WGPUSurfaceDescriptor const *descriptor)
     {
         // Prefer the instance's own RHI so multi-instance embeddings don't latch onto the global.
-        pe::RHI *rhi = instance ? instance->rhi : &pe::RHII;
+        pe::RHI *rhi = instance ? instance->rhi : &pe::GetRHI();
         if (!rhi)
             return nullptr;
         auto *surf = new WGPUSurfaceImpl();
@@ -301,7 +320,7 @@ extern "C"
                 return trackError("PhasmaWebGPU: no fallback (software) adapter available");
         }
 
-        pe::RHI *rhi = instance ? instance->rhi : &pe::RHII;
+        pe::RHI *rhi = instance ? instance->rhi : &pe::GetRHI();
         if (!rhi)
             return trackError("PhasmaWebGPU: pe::RHI is not initialized");
 
@@ -309,7 +328,7 @@ extern "C"
         if (options && options->backendType != WGPUBackendType_Undefined &&
             options->backendType != activeBackend)
             return trackError("PhasmaWebGPU: requested backend is not the active pe::RHI backend");
-        if (rhi->GetApi() == PE_GRAPHICS_API_VULKAN && !pe::VulkanRhi::Gpu())
+        if (rhi->GetApi() == PE_GRAPHICS_API_VULKAN && !GetVulkanGpu(*rhi))
             return trackError("PhasmaWebGPU: Vulkan pe::RHI is missing a physical device");
         if (rhi->GetApi() != PE_GRAPHICS_API_VULKAN &&
             rhi->GetApi() != PE_GRAPHICS_API_DX12)
@@ -330,7 +349,7 @@ extern "C"
 
         if (rhi->GetApi() == PE_GRAPHICS_API_VULKAN)
         {
-            adapter->gpu = pe::VulkanRhi::Gpu();
+            adapter->gpu = GetVulkanGpu(*rhi);
 
             VkPhysicalDevice vkGpu = static_cast<VkPhysicalDevice>(adapter->gpu);
             vkGetPhysicalDeviceProperties(vkGpu, &adapter->vkProps);

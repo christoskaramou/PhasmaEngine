@@ -602,7 +602,7 @@ extern "C"
         const bool dx12Backend =
             enc->device && enc->device->rhi
                 ? enc->device->rhi->GetApi() == PE_GRAPHICS_API_DX12
-                : pe::RHII.GetApi() == PE_GRAPHICS_API_DX12;
+                : pe::GetRHI().GetApi() == PE_GRAPHICS_API_DX12;
         uint32_t maxColorAttachments = enc->device ? enc->device->limits.maxColorAttachments : 8;
         if (colorCount > maxColorAttachments)
         {
@@ -2376,7 +2376,7 @@ extern "C"
         const bool dx12Backend =
             enc->device && enc->device->rhi
                 ? enc->device->rhi->GetApi() == PE_GRAPHICS_API_DX12
-                : pe::RHII.GetApi() == PE_GRAPHICS_API_DX12;
+                : pe::GetRHI().GetApi() == PE_GRAPHICS_API_DX12;
         if (dx12Backend)
         {
             const bool srcFullCoverage = IsFullMipRegion(src->texture, src->mipLevel, src->origin, *copySize);

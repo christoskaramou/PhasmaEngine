@@ -26,8 +26,18 @@
 #include "API/StagingManager.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
+#include "Base/Path.h"
 
+#include "rapidjson/document.h"
+#include "rapidjson/error/en.h"
 #include "SDL_vulkan.h"
+
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
+#include <vector>
 
 // System + Process RAM (Windows)
 #if defined(PE_WIN32)
@@ -40,7 +50,12 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 namespace pe
 {
-    RHI &RHII = *RHI::Get();
+    RHI &GetRHI()
+    {
+        return *RHI::Get();
+    }
+
+    RHI &RHII = GetRHI();
 
     vk::Format GetVulkanDepthFormat();
 
@@ -83,6 +98,385 @@ namespace pe
 #endif
     }
 
+    static bool SetEnvValue(const char *name, const std::string &value)
+    {
+#if defined(PE_WIN32)
+        return _putenv_s(name, value.c_str()) == 0;
+#else
+        return setenv(name, value.c_str(), 1) == 0;
+#endif
+    }
+
+    static std::string TrimLowerAscii(std::string_view value)
+    {
+        size_t begin = 0;
+        while (begin < value.size() && std::isspace(static_cast<unsigned char>(value[begin])))
+            ++begin;
+
+        size_t end = value.size();
+        while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1])))
+            --end;
+
+        std::string result(value.substr(begin, end - begin));
+        std::transform(result.begin(), result.end(), result.begin(), [](unsigned char ch)
+                       { return static_cast<char>(std::tolower(ch)); });
+        return result;
+    }
+
+    bool TryParseGpuAdapterPreferenceName(std::string_view value, GpuAdapterPreference &preference)
+    {
+        const std::string normalized = TrimLowerAscii(value);
+        if (normalized.empty() || normalized == "auto" || normalized == "default")
+        {
+            preference = GpuAdapterPreference::Auto;
+            return true;
+        }
+        if (normalized == "integrated" || normalized == "integrated_gpu" ||
+            normalized == "integrated-gpu" || normalized == "igpu" ||
+            normalized == "minimum_power" || normalized == "minimum-power")
+        {
+            preference = GpuAdapterPreference::IntegratedGpu;
+            return true;
+        }
+        if (normalized == "discrete" || normalized == "discrete_gpu" ||
+            normalized == "discrete-gpu" || normalized == "dgpu" ||
+            normalized == "high_performance" || normalized == "high-performance")
+        {
+            preference = GpuAdapterPreference::DiscreteGpu;
+            return true;
+        }
+        if (normalized == "cpu" || normalized == "software")
+        {
+            preference = GpuAdapterPreference::Cpu;
+            return true;
+        }
+        return false;
+    }
+
+    const char *GpuAdapterPreferenceConfigName(GpuAdapterPreference preference)
+    {
+        switch (preference)
+        {
+        case GpuAdapterPreference::Auto:
+            return "auto";
+        case GpuAdapterPreference::IntegratedGpu:
+            return "integrated";
+        case GpuAdapterPreference::DiscreteGpu:
+            return "discrete";
+        case GpuAdapterPreference::Cpu:
+            return "cpu";
+        default:
+            return "auto";
+        }
+    }
+
+    const char *GpuAdapterPreferenceDisplayName(GpuAdapterPreference preference)
+    {
+        switch (preference)
+        {
+        case GpuAdapterPreference::Auto:
+            return "Auto";
+        case GpuAdapterPreference::IntegratedGpu:
+            return "Integrated GPU";
+        case GpuAdapterPreference::DiscreteGpu:
+            return "Discrete GPU";
+        case GpuAdapterPreference::Cpu:
+            return "CPU / Software";
+        default:
+            return "Auto";
+        }
+    }
+
+    static bool TryReadRuntimeGpuAdapterPreference(GpuAdapterPreference &preference,
+                                                   std::string &warning)
+    {
+        Path::Init();
+        const std::filesystem::path path =
+            std::filesystem::path(Path::Root) / "phasma_settings.json";
+
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec))
+            return false;
+
+        std::ifstream file(path, std::ios::binary);
+        if (!file.is_open())
+        {
+            warning = "Could not open " + path.string() + "; using automatic GPU adapter selection";
+            return false;
+        }
+
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        const std::string text = buffer.str();
+
+        rapidjson::Document document;
+        document.Parse(text.c_str(), text.size());
+        if (document.HasParseError())
+        {
+            warning = "Could not parse " + path.string() + ": " +
+                      rapidjson::GetParseError_En(document.GetParseError()) +
+                      "; using automatic GPU adapter selection";
+            return false;
+        }
+        if (!document.IsObject() || !document.HasMember(kGpuAdapterPreferenceSettingsKey))
+            return false;
+
+        const rapidjson::Value &value = document[kGpuAdapterPreferenceSettingsKey];
+        if (!value.IsString())
+        {
+            warning = path.string() + " field '" + kGpuAdapterPreferenceSettingsKey +
+                      "' must be a string; using automatic GPU adapter selection";
+            return false;
+        }
+
+        if (!TryParseGpuAdapterPreferenceName(value.GetString(), preference))
+        {
+            warning = "Invalid " + path.string() + " field '" + kGpuAdapterPreferenceSettingsKey +
+                      "' value '" + value.GetString() +
+                      "' (expected: auto, integrated, discrete, cpu); using automatic GPU adapter selection";
+            return false;
+        }
+        return true;
+    }
+
+    GpuAdapterPreference ResolveGpuAdapterPreference(std::string *warning)
+    {
+        const std::string envValue = ReadEnv(kGpuAdapterPreferenceEnvVar);
+        if (!envValue.empty())
+        {
+            GpuAdapterPreference preference = GpuAdapterPreference::Auto;
+            if (TryParseGpuAdapterPreferenceName(envValue, preference))
+                return preference;
+
+            if (warning)
+                *warning = std::string("Invalid ") + kGpuAdapterPreferenceEnvVar +
+                           " value '" + envValue +
+                           "' (expected: auto, integrated, discrete, cpu); using automatic GPU adapter selection";
+            return GpuAdapterPreference::Auto;
+        }
+
+        GpuAdapterPreference preference = GpuAdapterPreference::Auto;
+        std::string runtimeWarning;
+        if (TryReadRuntimeGpuAdapterPreference(preference, runtimeWarning))
+            return preference;
+        if (warning && !runtimeWarning.empty())
+            *warning = std::move(runtimeWarning);
+        return GpuAdapterPreference::Auto;
+    }
+
+    static bool MatchesGpuAdapterPreference(GpuAdapterPreference preference, GpuAdapterType type)
+    {
+        switch (preference)
+        {
+        case GpuAdapterPreference::Auto:
+            return true;
+        case GpuAdapterPreference::IntegratedGpu:
+            return type == GpuAdapterType::IntegratedGpu;
+        case GpuAdapterPreference::DiscreteGpu:
+            return type == GpuAdapterType::DiscreteGpu;
+        case GpuAdapterPreference::Cpu:
+            return type == GpuAdapterType::Cpu;
+        default:
+            return true;
+        }
+    }
+
+    static bool PathListContains(std::string_view list, const std::filesystem::path &path)
+    {
+        const std::string needle = path.string();
+        size_t begin = 0;
+        while (begin <= list.size())
+        {
+            size_t end = list.find(
+#if defined(PE_WIN32)
+                ';',
+#else
+                ':',
+#endif
+                begin);
+            if (end == std::string_view::npos)
+                end = list.size();
+
+            const std::string entry = std::string(list.substr(begin, end - begin));
+#if defined(PE_WIN32)
+            if (TrimLowerAscii(entry) == TrimLowerAscii(needle))
+                return true;
+#else
+            if (entry == needle)
+                return true;
+#endif
+            if (end == list.size())
+                break;
+            begin = end + 1;
+        }
+        return false;
+    }
+
+    static bool TryReadIcdLibraryPath(const std::filesystem::path &manifest,
+                                      std::filesystem::path &libraryPath)
+    {
+        std::ifstream file(manifest, std::ios::binary);
+        if (!file.is_open())
+            return false;
+
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+
+        rapidjson::Document document;
+        const std::string text = buffer.str();
+        document.Parse(text.c_str(), text.size());
+        if (document.HasParseError() ||
+            !document.IsObject() ||
+            !document.HasMember("ICD") ||
+            !document["ICD"].IsObject() ||
+            !document["ICD"].HasMember("library_path") ||
+            !document["ICD"]["library_path"].IsString())
+        {
+            return false;
+        }
+
+        libraryPath = document["ICD"]["library_path"].GetString();
+        if (libraryPath.is_relative())
+            libraryPath = manifest.parent_path() / libraryPath;
+        return true;
+    }
+
+    static bool IsUsableVulkanIcdManifest(const std::filesystem::path &manifest)
+    {
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(manifest, ec))
+            return false;
+
+        std::filesystem::path libraryPath;
+        if (!TryReadIcdLibraryPath(manifest, libraryPath))
+            return false;
+
+        return std::filesystem::is_regular_file(libraryPath.lexically_normal(), ec);
+    }
+
+    static void AddVulkanIcdCandidate(std::vector<std::filesystem::path> &candidates,
+                                      const std::filesystem::path &manifest)
+    {
+        if (manifest.empty())
+            return;
+
+        std::filesystem::path normalized = manifest.lexically_normal();
+        auto alreadyAdded = std::find_if(candidates.begin(),
+                                         candidates.end(),
+                                         [&normalized](const std::filesystem::path &candidate)
+                                         {
+#if defined(PE_WIN32)
+                                             return TrimLowerAscii(candidate.string()) == TrimLowerAscii(normalized.string());
+#else
+                                             return candidate == normalized;
+#endif
+                                         });
+        if (alreadyAdded == candidates.end())
+            candidates.push_back(std::move(normalized));
+    }
+
+    static std::vector<std::filesystem::path> VulkanSoftwareIcdCandidates()
+    {
+        std::vector<std::filesystem::path> candidates;
+
+        const std::string explicitIcd = ReadEnv(kVulkanCpuIcdEnvVar);
+        if (!explicitIcd.empty())
+            AddVulkanIcdCandidate(candidates, explicitIcd);
+
+        // The engine ships its own SwiftShader build next to the executable
+        // (PhasmaCore/Libs/swiftshader -> <exe>/swiftshader via CMake), so the bundled
+        // manifest is the primary CPU-renderer source. The remaining entries are
+        // fallbacks for developer setups that point at a Vulkan SDK or a hand-placed ICD.
+        Path::Init();
+        const std::filesystem::path root = std::filesystem::path(Path::Root);
+        AddVulkanIcdCandidate(candidates, root / "swiftshader" / "vk_swiftshader_icd.json");
+        AddVulkanIcdCandidate(candidates, root / "vk_swiftshader_icd.json");
+        AddVulkanIcdCandidate(candidates, root / "Vulkan" / "vk_swiftshader_icd.json");
+
+        for (const char *sdkEnv : {"VULKAN_SDK", "VK_SDK_PATH"})
+        {
+            const std::string sdkPath = ReadEnv(sdkEnv);
+            if (sdkPath.empty())
+                continue;
+            const std::filesystem::path sdk = std::filesystem::path(sdkPath);
+            AddVulkanIcdCandidate(candidates, sdk / "Bin" / "vk_swiftshader_icd.json");
+            AddVulkanIcdCandidate(candidates, sdk / "Config" / "vk_swiftshader_icd.json");
+        }
+
+#if !defined(PE_WIN32)
+        // Linux ships Mesa's llvmpipe (lavapipe) as the standard software ICD.
+        AddVulkanIcdCandidate(candidates, "/usr/share/vulkan/icd.d/lvp_icd.x86_64.json");
+        AddVulkanIcdCandidate(candidates, "/usr/local/share/vulkan/icd.d/lvp_icd.x86_64.json");
+#endif
+
+        return candidates;
+    }
+
+    static bool ConfigureVulkanSoftwareIcd(std::string &message)
+    {
+        const std::string driverFiles = ReadEnv("VK_DRIVER_FILES");
+        const std::string legacyDriverFiles = ReadEnv("VK_ICD_FILENAMES");
+        if (!driverFiles.empty() || !legacyDriverFiles.empty())
+        {
+            message = "Vulkan driver override already set; relying on existing VK_DRIVER_FILES/VK_ICD_FILENAMES for CPU renderer discovery";
+            return true;
+        }
+
+        for (const std::filesystem::path &candidate : VulkanSoftwareIcdCandidates())
+        {
+            if (!IsUsableVulkanIcdManifest(candidate))
+                continue;
+
+            const std::string existingAddDrivers = ReadEnv("VK_ADD_DRIVER_FILES");
+            if (PathListContains(existingAddDrivers, candidate))
+            {
+                message = "Vulkan CPU renderer ICD already added: " + candidate.string();
+                return true;
+            }
+
+            std::string value = candidate.string();
+            if (!existingAddDrivers.empty())
+            {
+#if defined(PE_WIN32)
+                value += ';';
+#else
+                value += ':';
+#endif
+                value += existingAddDrivers;
+            }
+
+            if (!SetEnvValue("VK_ADD_DRIVER_FILES", value))
+            {
+                message = "Could not set VK_ADD_DRIVER_FILES for Vulkan CPU renderer ICD: " + candidate.string();
+                return false;
+            }
+
+            message = "Added Vulkan CPU renderer ICD: " + candidate.string();
+            return true;
+        }
+
+        message = std::string("No Vulkan CPU renderer ICD found. Place vk_swiftshader_icd.json next to the executable or set ") +
+                  kVulkanCpuIcdEnvVar + " to a software ICD manifest.";
+        return false;
+    }
+
+    static void ConfigureVulkanAdapterPreferenceBeforeInstance()
+    {
+        std::string preferenceWarning;
+        const GpuAdapterPreference preference = ResolveGpuAdapterPreference(&preferenceWarning);
+        if (!preferenceWarning.empty())
+            PE_WARN("[Vulkan] %s", preferenceWarning.c_str());
+
+        if (preference != GpuAdapterPreference::Cpu)
+            return;
+
+        std::string message;
+        if (ConfigureVulkanSoftwareIcd(message))
+            PE_INFO("[Vulkan] %s", message.c_str());
+        else
+            PE_WARN("[Vulkan] %s", message.c_str());
+    }
+
     static bool IsEnvFlagEnabled(const char *name)
     {
         const std::string flag = ReadEnv(name);
@@ -95,14 +489,15 @@ namespace pe
         return flag == "0" || flag == "false" || flag == "FALSE" || flag == "off" || flag == "OFF";
     }
 
-    static void CheckRequiredVulkanFeature(bool supported, const char *message)
+    static void CheckRequiredVulkanFeature(bool supported, const char *message, bool warnOnly)
     {
 #if defined(PE_ANDROID)
-        if (!supported)
-            PE_WARN("[Vulkan] Required feature missing: %s", message);
-#else
-        PE_ERROR_IF(!supported, "%s", message);
+        warnOnly = true;
 #endif
+        if (!supported && warnOnly)
+            PE_WARN("[Vulkan] Required feature missing: %s", message);
+        else
+            PE_ERROR_IF(!supported, "%s", message);
     }
 
     // Features the engine consumes unconditionally (no runtime capability guard exists for
@@ -620,6 +1015,7 @@ namespace pe
 
         Debug::InitCaptureApi();
 
+        ConfigureVulkanAdapterPreferenceBeforeInstance();
         CreateInstance(window);
         FindGpu();
         CreateSurface();
@@ -915,13 +1311,34 @@ namespace pe
     {
         vk::PhysicalDevice gpu;
         uint32_t score;
+        GpuAdapterType type = GpuAdapterType::Unknown;
+        std::string name;
     };
+
+    static GpuAdapterType VulkanGpuAdapterType(vk::PhysicalDeviceType type)
+    {
+        switch (type)
+        {
+        case vk::PhysicalDeviceType::eIntegratedGpu:
+            return GpuAdapterType::IntegratedGpu;
+        case vk::PhysicalDeviceType::eDiscreteGpu:
+            return GpuAdapterType::DiscreteGpu;
+        case vk::PhysicalDeviceType::eCpu:
+            return GpuAdapterType::Cpu;
+        default:
+            return GpuAdapterType::Unknown;
+        }
+    }
 
     void RHI::FindGpu()
     {
         auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
         auto gpuList = vk->m_instance.enumeratePhysicalDevices();
         std::vector<GPUScore> gpuScores{};
+        std::string preferenceWarning;
+        const GpuAdapterPreference adapterPreference = ResolveGpuAdapterPreference(&preferenceWarning);
+        if (!preferenceWarning.empty())
+            PE_WARN("[Vulkan] %s", preferenceWarning.c_str());
 
         for (auto &gpu : gpuList)
         {
@@ -938,6 +1355,8 @@ namespace pe
 
                     GPUScore gpuScore{};
                     gpuScore.gpu = gpu;
+                    gpuScore.type = VulkanGpuAdapterType(properties2.properties.deviceType);
+                    gpuScore.name = properties2.properties.deviceName.data();
                     switch (properties2.properties.deviceType)
                     {
                     case vk::PhysicalDeviceType::eDiscreteGpu:
@@ -963,9 +1382,32 @@ namespace pe
         }
 
         PE_ERROR_IF(gpuScores.empty(), "No suitable GPU found!");
-        std::sort(gpuScores.begin(), gpuScores.end(), [](const GPUScore &a, const GPUScore &b)
-                  { return a.score > b.score; });
-        vk->m_gpu = gpuScores.front().gpu;
+        std::stable_sort(gpuScores.begin(), gpuScores.end(), [](const GPUScore &a, const GPUScore &b)
+                         { return a.score > b.score; });
+
+        const GPUScore *selectedGpu = &gpuScores.front();
+        if (adapterPreference != GpuAdapterPreference::Auto)
+        {
+            auto preferredGpu = std::find_if(gpuScores.begin(),
+                                             gpuScores.end(),
+                                             [adapterPreference](const GPUScore &gpuScore)
+                                             {
+                                                 return MatchesGpuAdapterPreference(adapterPreference, gpuScore.type);
+                                             });
+            if (preferredGpu != gpuScores.end())
+            {
+                selectedGpu = &*preferredGpu;
+                PE_INFO("[Vulkan] GPU adapter preference '%s' matched: %s",
+                        GpuAdapterPreferenceConfigName(adapterPreference),
+                        selectedGpu->name.c_str());
+            }
+            else
+            {
+                PE_WARN("[Vulkan] GPU adapter preference '%s' unavailable; using automatic selection",
+                        GpuAdapterPreferenceConfigName(adapterPreference));
+            }
+        }
+        vk->m_gpu = selectedGpu->gpu;
 
         const bool descriptorBufferExtensionAvailable =
             IsDeviceExtensionValid(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
@@ -1039,10 +1481,18 @@ namespace pe
         m_maxPushConstantsSize = gpuPropertiesVK.properties.limits.maxPushConstantsSize;
         m_maxDrawIndirectCount = gpuPropertiesVK.properties.limits.maxDrawIndirectCount;
 
-        m_caps.maxPushConstantsBytes = m_maxPushConstantsSize;
-        m_caps.maxBindlessTextures = gpuPropertiesVK.properties.limits.maxPerStageDescriptorSampledImages;
-
         const auto &limits = gpuPropertiesVK.properties.limits;
+        uint32_t maxBindlessTextures = PE_MAX_DESCRIPTORS_PER_BINDING;
+        if (limits.maxPerStageDescriptorSampledImages > 0)
+            maxBindlessTextures = std::min(maxBindlessTextures, limits.maxPerStageDescriptorSampledImages);
+        if (limits.maxPerStageResources > 32)
+            maxBindlessTextures = std::min(maxBindlessTextures, limits.maxPerStageResources - 32);
+        else if (limits.maxPerStageResources > 0)
+            maxBindlessTextures = std::min(maxBindlessTextures, limits.maxPerStageResources);
+
+        m_caps.maxPushConstantsBytes = m_maxPushConstantsSize;
+        m_caps.maxBindlessTextures = std::max(1u, maxBindlessTextures);
+
         m_gpuLimits.maxTextureDimension1D = limits.maxImageDimension1D;
         m_gpuLimits.maxTextureDimension2D = limits.maxImageDimension2D;
         m_gpuLimits.maxTextureDimension3D = limits.maxImageDimension3D;
@@ -1174,7 +1624,7 @@ namespace pe
         m_caps.maintenance5 = m_caps.effectiveApiVersion >= VK_API_VERSION_1_4;
         m_caps.meshShaders = false;
         m_caps.pushDescriptor = false;
-        m_caps.indirectCount = true;
+        m_caps.indirectCount = false;
 #if defined(PE_ANDROID)
         m_caps.spirvTargetVulkanVersion = VK_API_VERSION_1_2;
 #else
@@ -1302,6 +1752,7 @@ namespace pe
 
         m_caps.sync2 = vulkan13Available && static_cast<bool>(deviceFeatures13.synchronization2);
         m_caps.dynamicRendering = vulkan13Available && static_cast<bool>(deviceFeatures13.dynamicRendering);
+        m_caps.indirectCount = vulkan12Available && static_cast<bool>(deviceFeatures12.drawIndirectCount);
         m_caps.descriptorUpdateAfterBind =
             vulkan13Available &&
             static_cast<bool>(deviceFeatures12.descriptorBindingSampledImageUpdateAfterBind) &&
@@ -1347,17 +1798,22 @@ namespace pe
         RequireVulkanFeature(deviceFeatures2.features.drawIndirectFirstInstance,
                              "Draw indirect first instance is not supported");
 
-        // Soft (warn-on-Android): the shipped shaders declare none of the matching SPIR-V
+        // Soft (warn-on-Android/software): the shipped shaders declare none of the matching SPIR-V
         // capabilities (verified by the bake's OpCapability scan), so requiring these would
-        // needlessly reject otherwise-capable Android GPUs that happen to lack them.
+        // needlessly reject otherwise-capable Android GPUs or CPU renderers that happen to lack them.
+        const bool warnOnlyForSoftVulkanFeatures = m_gpuAdapterInfo.type == GpuAdapterType::Cpu;
         CheckRequiredVulkanFeature(deviceFeatures12.shaderStorageBufferArrayNonUniformIndexing,
-                                   "Storage buffer array non uniform indexing is not supported on this device");
+                                   "Storage buffer array non uniform indexing is not supported on this device",
+                                   warnOnlyForSoftVulkanFeatures);
         CheckRequiredVulkanFeature(deviceFeatures12.shaderFloat16,
-                                   "Float16 is not supported on this device");
+                                   "Float16 is not supported on this device",
+                                   warnOnlyForSoftVulkanFeatures);
         CheckRequiredVulkanFeature(deviceFeatures2.features.shaderInt16,
-                                   "Int16 is not supported on this device");
+                                   "Int16 is not supported on this device",
+                                   warnOnlyForSoftVulkanFeatures);
         CheckRequiredVulkanFeature(deviceFeatures2.features.shaderInt64,
-                                   "Int64 is not supported on this device");
+                                   "Int64 is not supported on this device",
+                                   warnOnlyForSoftVulkanFeatures);
 
         if (!m_caps.descriptorUpdateAfterBind)
         {
@@ -1370,6 +1826,7 @@ namespace pe
         }
         deviceFeatures13.synchronization2 = m_caps.sync2 ? VK_TRUE : VK_FALSE;
         deviceFeatures13.dynamicRendering = m_caps.dynamicRendering ? VK_TRUE : VK_FALSE;
+        deviceFeatures12.drawIndirectCount = m_caps.indirectCount ? VK_TRUE : VK_FALSE;
         deviceFeatures14.pushDescriptor = vulkan14Available && m_caps.pushDescriptor ? VK_TRUE : VK_FALSE;
 
         deviceFeatures12.pNext = &deviceFeatures11;
@@ -1403,12 +1860,13 @@ namespace pe
         }
         deviceFeatures2.pNext = deviceFeatureChain;
 
-        PE_INFO("[Vulkan] Effective caps: sync2=%u, copyCommands2=%u, dynamicRendering=%u, extendedDynamicState=%u, descriptorUpdateAfterBind=%u, maintenance5=%u",
+        PE_INFO("[Vulkan] Effective caps: sync2=%u, copyCommands2=%u, dynamicRendering=%u, extendedDynamicState=%u, descriptorUpdateAfterBind=%u, indirectCount=%u, maintenance5=%u",
                 m_caps.sync2 ? 1u : 0u,
                 m_caps.copyCommands2 ? 1u : 0u,
                 m_caps.dynamicRendering ? 1u : 0u,
                 m_caps.extendedDynamicState ? 1u : 0u,
                 m_caps.descriptorUpdateAfterBind ? 1u : 0u,
+                m_caps.indirectCount ? 1u : 0u,
                 m_caps.maintenance5 ? 1u : 0u);
 
         vk::DeviceCreateInfo deviceCreateInfo{};

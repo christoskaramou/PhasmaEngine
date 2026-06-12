@@ -67,6 +67,16 @@ else()
 endif()
 
 set_target_properties(PhasmaWebGPU PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(PE_WEBGPU_SHARED AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set_target_properties(PhasmaWebGPU PROPERTIES
+        WINDOWS_EXPORT_ALL_SYMBOLS ON
+    )
+    foreach(PWGPU_CONFIG DEBUG RELEASE MINSIZEREL RELWITHDEBINFO)
+        set_target_properties(PhasmaWebGPU PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY_${PWGPU_CONFIG} "${CMAKE_BINARY_DIR}/${PWGPU_CONFIG}/WebGPU"
+        )
+    endforeach()
+endif()
 target_precompile_headers(PhasmaWebGPU PRIVATE "${CMAKE_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
 target_include_directories(
     PhasmaWebGPU

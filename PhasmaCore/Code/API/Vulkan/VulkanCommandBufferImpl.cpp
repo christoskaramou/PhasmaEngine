@@ -663,7 +663,20 @@ namespace pe
 
     void VulkanCommandBufferImpl::DrawIndexedIndirectCount(Buffer *indirectBuffer, size_t offset, Buffer *countBuffer, size_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
     {
-        m_apiHandle.drawIndexedIndirectCount(pe::GetVulkanBuffer(indirectBuffer), offset, pe::GetVulkanBuffer(countBuffer), countBufferOffset, maxDrawCount, stride);
+        if (RHII.GetCaps().indirectCount)
+        {
+            m_apiHandle.drawIndexedIndirectCount(pe::GetVulkanBuffer(indirectBuffer),
+                                                 offset,
+                                                 pe::GetVulkanBuffer(countBuffer),
+                                                 countBufferOffset,
+                                                 maxDrawCount,
+                                                 stride);
+            return;
+        }
+
+        (void)countBuffer;
+        (void)countBufferOffset;
+        m_apiHandle.drawIndexedIndirect(pe::GetVulkanBuffer(indirectBuffer), offset, maxDrawCount, stride);
     }
 
     void VulkanCommandBufferImpl::FillBuffer(Buffer *buffer, size_t offset, size_t size, uint32_t data)

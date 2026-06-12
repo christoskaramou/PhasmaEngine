@@ -359,7 +359,7 @@ namespace
             rpe->bindGroupBarriersEmitted = true;
         }
 
-        if (pe::RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        if (pe::GetRHI().GetApi() == PE_GRAPHICS_API_DX12)
         {
             OpenDx12RenderingIfNeeded(rpe);
             return;
@@ -1491,7 +1491,7 @@ extern "C"
         }
 
         bool canUseVulkanNativeBundles =
-            pe::RHII.GetApi() == PE_GRAPHICS_API_VULKAN && !rpe->renderingActive;
+            pe::GetRHI().GetApi() == PE_GRAPHICS_API_VULKAN && !rpe->renderingActive;
         if (canUseVulkanNativeBundles)
         {
             for (size_t i = 0; i < bundleCount; ++i)
@@ -1668,7 +1668,7 @@ extern "C"
             OpenRenderingIfNeeded(rpe);
         if (rpe->renderingActive)
         {
-            if (pe::RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            if (pe::GetRHI().GetApi() == PE_GRAPHICS_API_DX12)
                 rpe->cmd->EndPass();
             else
                 pe::GetVulkanCommandBuffer(rpe->cmd).endRendering();

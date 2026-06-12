@@ -845,6 +845,7 @@ namespace pe
         const bool hasAlphaBlendMeshes = m_hasAlphaBlendMeshes;
         const bool hasTransmissionMeshes = m_hasTransmissionMeshes;
         const bool hasTransparentMeshes = hasAlphaBlendMeshes || hasTransmissionMeshes;
+        const bool needsIndirectCountFallback = !RHII.GetCaps().indirectCount;
 
         auto nextPow2 = [](uint32_t value)
         {
@@ -861,6 +862,8 @@ namespace pe
         uint64_t alphaBlendSortKeySize = static_cast<uint64_t>(alphaBlendSortCapacity) * sizeof(float);
         uint64_t transmissionIndirectSize = static_cast<uint64_t>(transmissionSortCapacity) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
         uint64_t transmissionSortKeySize = static_cast<uint64_t>(transmissionSortCapacity) * sizeof(float);
+        uint64_t alphaBlendIndirectAccessSize = needsIndirectCountFallback ? indirectSize : alphaBlendIndirectSize;
+        uint64_t transmissionIndirectAccessSize = needsIndirectCountFallback ? indirectSize : transmissionIndirectSize;
         PE_PROFILE_COUNTER("Culling AlphaBlend Mesh Count", m_alphaBlendMeshCount);
         PE_PROFILE_COUNTER("Culling Transmission Mesh Count", m_transmissionMeshCount);
         PE_PROFILE_COUNTER("Culling AlphaBlend Sort Capacity", alphaBlendSortCapacity);
@@ -869,14 +872,22 @@ namespace pe
         {
             PE_PROFILE_SCOPE("Culling Fill Buffers");
             cmd->FillBuffer(m_cullingCountersBuffers[frame], 0, 7 * sizeof(uint32_t), 0);
+            if (needsIndirectCountFallback)
+            {
+                cmd->FillBuffer(m_indirectOpaqueSS[frame], 0, indirectSize, 0);
+                cmd->FillBuffer(m_indirectAlphaCutSS[frame], 0, indirectSize, 0);
+                cmd->FillBuffer(m_indirectOpaqueDS[frame], 0, indirectSize, 0);
+                cmd->FillBuffer(m_indirectAlphaCutDS[frame], 0, indirectSize, 0);
+                cmd->FillBuffer(m_indirectSelected[frame], 0, indirectSize, 0);
+            }
             if (hasAlphaBlendMeshes)
             {
-                cmd->FillBuffer(m_indirectAlphaBlend[frame], 0, alphaBlendIndirectSize, 0);
+                cmd->FillBuffer(m_indirectAlphaBlend[frame], 0, alphaBlendIndirectAccessSize, 0);
                 cmd->FillBuffer(m_sortKeysAlphaBlend[frame], 0, alphaBlendSortKeySize, 0x7F7FFFFF);
             }
             if (hasTransmissionMeshes)
             {
-                cmd->FillBuffer(m_indirectTransmission[frame], 0, transmissionIndirectSize, 0);
+                cmd->FillBuffer(m_indirectTransmission[frame], 0, transmissionIndirectAccessSize, 0);
                 cmd->FillBuffer(m_sortKeysTransmission[frame], 0, transmissionSortKeySize, 0x7F7FFFFF);
             }
         }
@@ -929,7 +940,7 @@ namespace pe
                 computeAccessBarriers.push_back(makeBufferBarrier(m_indirectAlphaBlend[frame],
                                                                   PE_STAGE_COMPUTE_SHADER,
                                                                   PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE,
-                                                                  alphaBlendIndirectSize));
+                                                                  alphaBlendIndirectAccessSize));
                 computeAccessBarriers.push_back(makeBufferBarrier(m_sortKeysAlphaBlend[frame],
                                                                   PE_STAGE_COMPUTE_SHADER,
                                                                   PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE,
@@ -940,7 +951,7 @@ namespace pe
                 computeAccessBarriers.push_back(makeBufferBarrier(m_indirectTransmission[frame],
                                                                   PE_STAGE_COMPUTE_SHADER,
                                                                   PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE,
-                                                                  transmissionIndirectSize));
+                                                                  transmissionIndirectAccessSize));
                 computeAccessBarriers.push_back(makeBufferBarrier(m_sortKeysTransmission[frame],
                                                                   PE_STAGE_COMPUTE_SHADER,
                                                                   PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE,
@@ -1070,12 +1081,12 @@ namespace pe
                 sortPrepBarriers.reserve(4);
                 if (hasAlphaBlendMeshes)
                 {
-                    sortPrepBarriers.push_back(makeComputeBarrier(m_indirectAlphaBlend[frame], alphaBlendIndirectSize));
+                    sortPrepBarriers.push_back(makeComputeBarrier(m_indirectAlphaBlend[frame], alphaBlendIndirectAccessSize));
                     sortPrepBarriers.push_back(makeComputeBarrier(m_sortKeysAlphaBlend[frame], alphaBlendSortKeySize));
                 }
                 if (hasTransmissionMeshes)
                 {
-                    sortPrepBarriers.push_back(makeComputeBarrier(m_indirectTransmission[frame], transmissionIndirectSize));
+                    sortPrepBarriers.push_back(makeComputeBarrier(m_indirectTransmission[frame], transmissionIndirectAccessSize));
                     sortPrepBarriers.push_back(makeComputeBarrier(m_sortKeysTransmission[frame], transmissionSortKeySize));
                 }
                 if (!sortPrepBarriers.empty())
@@ -1151,7 +1162,7 @@ namespace pe
                 dispatchBitonicSort(m_indirectAlphaBlend[frame],
                                     m_sortKeysAlphaBlend[frame],
                                     alphaBlendSortCapacity,
-                                    alphaBlendIndirectSize,
+                                    alphaBlendIndirectAccessSize,
                                     alphaBlendSortKeySize);
             }
             if (hasTransmissionMeshes)
@@ -1160,7 +1171,7 @@ namespace pe
                 dispatchBitonicSort(m_indirectTransmission[frame],
                                     m_sortKeysTransmission[frame],
                                     transmissionSortCapacity,
-                                    transmissionIndirectSize,
+                                    transmissionIndirectAccessSize,
                                     transmissionSortKeySize);
             }
         }

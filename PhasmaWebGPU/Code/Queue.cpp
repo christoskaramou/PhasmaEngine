@@ -52,7 +52,7 @@ void WGPUQueueImpl::RecyclePendingSubmits()
             }
         }
     }
-    if (auto *sm = pe::RHII.GetStagingManager())
+    if (auto *sm = pe::GetRHI().GetStagingManager())
         sm->RemoveUnused();
     if (device)
         device->ReclaimCompletedDeferredResources();
@@ -838,7 +838,7 @@ extern "C"
         const uint32_t dstBaseLayer = is3D ? 0u : destination->origin.z;
         const uint32_t dstLayerCount = is3D ? 1u : writeSize->depthOrArrayLayers;
         auto dstAspects = pwgpu::AspectsForView(fmt, destination->aspect);
-        const bool useDx12Upload = pe::RHII.GetApi() == PE_GRAPHICS_API_DX12;
+        const bool useDx12Upload = pe::GetRHI().GetApi() == PE_GRAPHICS_API_DX12;
         if (useDx12Upload)
         {
             if (pwgpu::HasDepthAspect(fmt) || pwgpu::HasStencilAspect(fmt))
@@ -964,7 +964,7 @@ extern "C"
             return;
         }
 
-        pe::StagingAllocation alloc = pe::RHII.GetStagingManager()->Allocate(stagingBytes);
+        pe::StagingAllocation alloc = pe::GetRHI().GetStagingManager()->Allocate(stagingBytes);
         if (stagingBytes > 0 && data)
             copyTightRows(static_cast<uint8_t *>(alloc.data));
         if (stagingBytes > 0)
@@ -1002,7 +1002,7 @@ extern "C"
                                     dstBaseLayer, dstLayerCount, dstAspects);
 
         cmd->AddAfterWaitCallback([alloc = std::move(alloc)]() mutable
-                                  { pe::RHII.GetStagingManager()->SetUnused(alloc); });
+                                  { pe::GetRHI().GetStagingManager()->SetUnused(alloc); });
 
         cmd->End();
         queue->peQueue->Submit(1, &cmd, nullptr, nullptr);
