@@ -27,7 +27,7 @@ namespace pe
                 if (sourcePath.empty())
                     return;
 
-                Shader *shader = Shader::Create({.sourcePath = Path::Assets + sourcePath,
+                Shader *shader = Shader::Create({.sourcePath = Path::ResolveAsset(sourcePath),
                                                  .entryPoint = entryPoint,
                                                  .stage = stage,
                                                  .defines = std::vector<Define>{}});

@@ -86,7 +86,7 @@ namespace
     bool CreateFontTexture(SDL_Renderer *renderer, SDL_Texture *&fontTexture)
     {
         ImGuiIO &io = ImGui::GetIO();
-        const std::filesystem::path fontPath = std::filesystem::path(pe::Path::Assets) / "Fonts/Inter-Regular.ttf";
+        const std::filesystem::path fontPath = std::filesystem::path(pe::Path::ResolveAsset("Fonts/Inter-Regular.ttf"));
         if (std::filesystem::exists(fontPath))
             io.Fonts->AddFontFromFileTTF(PathUtf8(fontPath).c_str(), 16.0f);
 

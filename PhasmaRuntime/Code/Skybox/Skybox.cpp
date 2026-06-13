@@ -71,7 +71,7 @@ namespace pe
 
             PassInfo *passInfo = new PassInfo();
             passInfo->name = "Skybox_PrefilterCubemap_pipeline";
-            passInfo->pCompShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Compute/PrefilterCubemap.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
+            passInfo->pCompShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Compute/PrefilterCubemap.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
             passInfo->Update();
 
             auto &descriptors = passInfo->GetDescriptors(RHII.GetFrameIndex());
@@ -209,7 +209,7 @@ namespace pe
 
         // 3. Setup Compute Pass
         PassInfo *passInfo = new PassInfo();
-        passInfo->pCompShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Compute/EquirectangularToCubemap.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
+        passInfo->pCompShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Compute/EquirectangularToCubemap.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
         passInfo->Update();
 
         // 4. Barriers

@@ -387,7 +387,7 @@ namespace pe
     void ParticleManager::InitTextures(CommandBuffer *cmd)
     {
         // Load default texture
-        m_textures.push_back(Image::LoadRGBA8(cmd, Path::Assets + "Particles/particle_white_soft.png"));
+        m_textures.push_back(Image::LoadRGBA8(cmd, Path::RuntimeAssets + "Particles/particle_white_soft.png"));
         m_textureNames.push_back("Default Soft");
 
         SamplerDesc samplerCI = Sampler::CreateInfoInit();

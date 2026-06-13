@@ -51,7 +51,7 @@ namespace pe
               PE_WARN("[Lua] Unknown shader stage: %s", stage.c_str());
               return nullptr;
             }
-            return Shader::Create({.sourcePath = Path::Assets + path,
+            return Shader::Create({.sourcePath = Path::ResolveAsset(path),
                                    .entryPoint = entry,
                                    .stage = it->second});
           });

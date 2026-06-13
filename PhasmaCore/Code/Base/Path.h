@@ -12,6 +12,7 @@ namespace pe
         inline static std::string Root;
         inline static std::string Executable;
         inline static std::string Assets;
+        inline static std::string RuntimeAssets;
         inline static std::string EditorAssets;
 
         static void Init()
@@ -69,6 +70,7 @@ namespace pe
                                Executable = normalizeDirectory(executableDir);
                                Root = Executable;
                                Assets = normalizeDirectory(executableDir / "Assets");
+                               RuntimeAssets = Assets;
                                EditorAssets.clear();
                                return;
 #endif
@@ -95,6 +97,15 @@ namespace pe
                                else if (std::filesystem::exists(executableAssets))
                                    Assets = normalizeDirectory(executableAssets);
 
+                               const std::filesystem::path rootRuntimeAssets = rootDir / "RuntimeAssets";
+                               const std::filesystem::path executableRuntimeAssets = executableDir / "RuntimeAssets";
+                               if (std::filesystem::exists(rootRuntimeAssets))
+                                   RuntimeAssets = normalizeDirectory(rootRuntimeAssets);
+                               else if (std::filesystem::exists(executableRuntimeAssets))
+                                   RuntimeAssets = normalizeDirectory(executableRuntimeAssets);
+                               else
+                                   RuntimeAssets = Assets; // Pre-carve fallback: engine content still lives in Assets.
+
                                const std::filesystem::path rootEditorAssets = rootDir / "EditorAssets";
                                const std::filesystem::path executableEditorAssets = executableDir / "EditorAssets";
                                if (std::filesystem::exists(rootEditorAssets))
@@ -120,6 +131,29 @@ namespace pe
         {
             Init();
             return Assets;
+        }
+
+        static const std::string &RuntimeAssetsPath()
+        {
+            Init();
+            return RuntimeAssets;
+        }
+
+        // Resolve a relative asset path against the active project first, then fall back to the
+        // engine-required RuntimeAssets tree. Lets a project override an engine default by dropping
+        // a file at the same relative path. While Assets == RuntimeAssets (pre-carve / no project),
+        // this collapses to the legacy "Assets + relative" with no extra filesystem probe.
+        static std::string ResolveAsset(const std::string &relative)
+        {
+            Init();
+            if (!Assets.empty() && Assets != RuntimeAssets)
+            {
+                std::error_code ec;
+                const std::filesystem::path projectPath = std::filesystem::path(Assets) / relative;
+                if (std::filesystem::exists(projectPath, ec))
+                    return projectPath.generic_string();
+            }
+            return RuntimeAssets + relative;
         }
 
         static const std::string &EditorAssetsPath()

@@ -14,7 +14,7 @@ namespace pe
             }
         }
 
-        std::string surface_path = Path::Assets + "SplashScreen/splash_screen.jpg";
+        std::string surface_path = Path::ResolveAsset("SplashScreen/splash_screen.jpg");
         if (!std::filesystem::exists(surface_path))
         {
             PE_ERROR("[SDL] Splash screen not found: %s", surface_path.c_str());

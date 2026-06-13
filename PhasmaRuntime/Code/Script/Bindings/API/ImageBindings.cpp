@@ -360,7 +360,7 @@ namespace pe
 
                 // LoadRGBA
                 lua.set_function("load_image_rgba", [](CommandBuffer *cmd, const std::string &path, const std::string &format, sol::optional<bool> isFloat) -> std::shared_ptr<LuaImage> {
-                    Image *img = Image::LoadRGBA(cmd, Path::Assets + path, ToImageFormat(format), isFloat.value_or(false));
+                    Image *img = Image::LoadRGBA(cmd, Path::ResolveAsset(path), ToImageFormat(format), isFloat.value_or(false));
                     if (!img) return nullptr;
                     auto luaImg = std::make_shared<LuaImage>();
                     luaImg->ptr = img;
@@ -370,7 +370,7 @@ namespace pe
 
                 // LoadRGBA8
                 lua.set_function("load_image_rgba8", [](CommandBuffer *cmd, const std::string &path) -> std::shared_ptr<LuaImage> {
-                    Image *img = Image::LoadRGBA8(cmd, Path::Assets + path);
+                    Image *img = Image::LoadRGBA8(cmd, Path::ResolveAsset(path));
                     if (!img) return nullptr;
                     auto luaImg = std::make_shared<LuaImage>();
                     luaImg->ptr = img;
@@ -380,7 +380,7 @@ namespace pe
 
                 // LoadRGBA32F
                 lua.set_function("load_image_rgba32f", [](CommandBuffer *cmd, const std::string &path) -> std::shared_ptr<LuaImage> {
-                    Image *img = Image::LoadRGBA32F(cmd, Path::Assets + path);
+                    Image *img = Image::LoadRGBA32F(cmd, Path::ResolveAsset(path));
                     if (!img) return nullptr;
                     auto luaImg = std::make_shared<LuaImage>();
                     luaImg->ptr = img;
@@ -397,7 +397,7 @@ namespace pe
                     p.generateMips = params.get_or("generate_mips", false);
                     p.clampToEdge = params.get_or("clamp_to_edge", false);
                     p.mipLodBias = params.get_or("mip_lod_bias", 0.0f);
-                    Image *img = Image::LoadRaw(cmd, Path::Assets + path, p);
+                    Image *img = Image::LoadRaw(cmd, Path::ResolveAsset(path), p);
                     if (!img) return nullptr;
                     auto luaImg = std::make_shared<LuaImage>();
                     luaImg->ptr = img;

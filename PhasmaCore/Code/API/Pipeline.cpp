@@ -288,7 +288,7 @@ namespace pe
         if (!variant.vertexShader.empty())
         {
             ShaderDesc desc{};
-            desc.sourcePath = Path::Assets + variant.vertexShader;
+            desc.sourcePath = Path::ResolveAsset(variant.vertexShader);
             desc.entryPoint = "mainVS";
             desc.stage = PE_SHADER_STAGE_VERTEX;
             pVertShader = Shader::Create(desc);
@@ -296,7 +296,7 @@ namespace pe
         if (!variant.fragmentShader.empty())
         {
             ShaderDesc desc{};
-            desc.sourcePath = Path::Assets + variant.fragmentShader;
+            desc.sourcePath = Path::ResolveAsset(variant.fragmentShader);
             desc.entryPoint = "mainPS";
             desc.stage = PE_SHADER_STAGE_FRAGMENT;
             pFragShader = Shader::Create(desc);

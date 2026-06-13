@@ -26,8 +26,8 @@ namespace pe
     void DepthPass::UpdatePassInfo()
     {
         m_passInfo->name = "DepthPrePass_pipeline";
-        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Depth/DepthVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
-        m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Depth/DepthPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
+        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Depth/DepthVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
+        m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Depth/DepthPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
         m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
         m_passInfo->cullMode = PE_CULL_MODE_FRONT;
         m_passInfo->depthFormat = RHII.GetDepthFormat();

@@ -17,7 +17,7 @@ namespace pe
                 skybox.set_function("load", [](const std::string &path) {
                     std::string fullPath = path;
                     if (path.find('/') == std::string::npos && path.find('\\') == std::string::npos)
-                        fullPath = Path::Assets + "Skybox/" + path;
+                        fullPath = Path::ResolveAsset("Skybox/" + path);
 
                     if (!std::filesystem::exists(fullPath))
                     {

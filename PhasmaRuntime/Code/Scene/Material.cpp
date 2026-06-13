@@ -98,7 +98,7 @@ namespace pe
         textureMask = mask;
 
         if (!passInfoAsset)
-            passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::Assets + "PassInfo/standard_pbr.pass");
+            passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::RuntimeAssets + "PassInfo/standard_pbr.pass");
         SyncParamsFromLegacy();
     }
 

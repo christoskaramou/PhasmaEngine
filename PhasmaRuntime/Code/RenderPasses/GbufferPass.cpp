@@ -49,7 +49,7 @@ namespace pe
     void GbufferOpaquePass::UpdatePassInfo()
     {
         if (!m_passAsset)
-            m_passAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::Assets + "PassInfo/standard_pbr.pass");
+            m_passAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::RuntimeAssets + "PassInfo/standard_pbr.pass");
 
         std::vector<::PeFormat> colorformats{
             m_normalRT->GetFormat(),
@@ -233,7 +233,7 @@ namespace pe
     void GbufferTransparentPass::UpdatePassInfo()
     {
         if (!m_passAsset)
-            m_passAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::Assets + "PassInfo/standard_pbr.pass");
+            m_passAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::RuntimeAssets + "PassInfo/standard_pbr.pass");
 
         std::vector<::PeFormat> colorformats{
             m_normalRT->GetFormat(),

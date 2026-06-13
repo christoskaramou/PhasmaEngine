@@ -27,8 +27,8 @@ namespace pe
     void BloomBrightFilterPass::UpdatePassInfo()
     {
         m_passInfo->name = "BrightFilter_pipeline";
-        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
-        m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Bloom/BrightFilterPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
+        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
+        m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Bloom/BrightFilterPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
         m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
         m_passInfo->cullMode = PE_CULL_MODE_NONE;
         m_passInfo->colorBlendAttachments = {BlendState::Default};
@@ -100,8 +100,8 @@ namespace pe
     void BloomGaussianBlurHorizontalPass::UpdatePassInfo()
     {
         m_passInfo->name = "GaussianBlurHorizontal_pipeline";
-        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
-        m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Bloom/GaussianBlurHPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
+        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
+        m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Bloom/GaussianBlurHPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
         m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
         m_passInfo->cullMode = PE_CULL_MODE_NONE;
         m_passInfo->colorBlendAttachments = {BlendState::Default};
@@ -176,8 +176,8 @@ namespace pe
     void BloomGaussianBlurVerticalPass::UpdatePassInfo()
     {
         m_passInfo->name = "GaussianBlurVertical_pipeline";
-        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
-        m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Bloom/GaussianBlurVPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
+        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
+        m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Bloom/GaussianBlurVPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
         m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
         m_passInfo->cullMode = PE_CULL_MODE_NONE;
         m_passInfo->blendEnable = true;

@@ -38,11 +38,11 @@ namespace pe
     void ColorGradingPass::UpdatePassInfo()
     {
         m_passInfo->name = "color_grading_pipeline";
-        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Common/Quad.hlsl",
+        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Common/Quad.hlsl",
                                                   .entryPoint = "mainVS",
                                                   .stage = PE_SHADER_STAGE_VERTEX,
                                                   .defines = std::vector<Define>{}});
-        m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/ColorGrading/ColorGradingPS.hlsl",
+        m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/ColorGrading/ColorGradingPS.hlsl",
                                                   .entryPoint = "mainPS",
                                                   .stage = PE_SHADER_STAGE_FRAGMENT,
                                                   .defines = std::vector<Define>{}});

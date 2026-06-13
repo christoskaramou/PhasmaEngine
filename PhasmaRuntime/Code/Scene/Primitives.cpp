@@ -213,7 +213,7 @@ namespace pe
         mat->occlusionStrength = 1.f;
         mat->renderType = lineTopology ? RenderType::Lines : RenderType::Opaque;
         if (!mat->passInfoAsset)
-            mat->passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::Assets + "PassInfo/standard_pbr.pass");
+            mat->passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::RuntimeAssets + "PassInfo/standard_pbr.pass");
         mat->SyncParamsFromLegacy();
 
         meshInfo.material = mat.get();

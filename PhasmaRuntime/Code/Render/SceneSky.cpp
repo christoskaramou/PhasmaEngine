@@ -106,7 +106,7 @@ namespace pe
         LoadConfiguredSceneSkybox(cmd, skybox);
 
         Image::LoadRawParams loadImageParams = {256, 256, PE_FORMAT_R16G16_SFLOAT, false, true, 0.0f};
-        iblBrdfLut = Image::LoadRaw(cmd, Path::Assets + "Objects/ibl_brdf_lut_rg16f_256.bin", loadImageParams);
+        iblBrdfLut = Image::LoadRaw(cmd, Path::RuntimeAssets + "Objects/ibl_brdf_lut_rg16f_256.bin", loadImageParams);
     }
 
     void LoadFallbackSceneSky(CommandBuffer *cmd, SkyBox &skybox)

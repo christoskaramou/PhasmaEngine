@@ -1,0 +1,47 @@
+{
+  "name": "standard_pbr",
+  "version": 1,
+  "surface": {
+    "vertexShader": "Shaders/Gbuffer/GBufferVS.hlsl",
+    "fragmentShader": "Shaders/Gbuffer/GBufferPS.hlsl",
+    "cullMode": "front",
+    "depthWriteEnable": false,
+    "depthTestEnable": true,
+    "depthCompareOp": "equal",
+    "blendEnable": false,
+    "dynamicStates": ["viewport", "scissor"],
+    "colorBlendAttachments": ["default", "default", "default", "default", "default", "default"],
+    "materialBinding": {
+      "bufferName": "materialTable",
+      "annotation": "pe_material;color4:baseColorFactor=baseColorFactor;color3:emissiveFactor=emissiveTransmission.xyz;range01:transmissionFactor=emissiveTransmission.w;range01:metallic=pbrParams.x;range01:roughness=pbrParams.y;range01:alphaCutoff=pbrParams.z;range01:occlusionStrength=pbrParams.w;range01:thicknessFactor=transmissionVolume.x;range:attenuationDistance=transmissionVolume.y:0:1000;range:ior=transmissionVolume.z:1:3;color3:attenuationColor=attenuationColor.xyz"
+    }
+  },
+  "depthOnly": {
+    "vertexShader": "Shaders/Depth/DepthVS.hlsl",
+    "fragmentShader": "Shaders/Depth/DepthPS.hlsl",
+    "cullMode": "front",
+    "depthWriteEnable": true,
+    "depthTestEnable": true,
+    "depthCompareOp": "lessOrEqual",
+    "dynamicStates": ["viewport", "scissor"]
+  },
+  "transparent": {
+    "vertexShader": "Shaders/Gbuffer/GBufferVS.hlsl",
+    "fragmentShader": "Shaders/Gbuffer/GBufferPS.hlsl",
+    "cullMode": "front",
+    "depthWriteEnable": true,
+    "depthTestEnable": true,
+    "depthCompareOp": "lessOrEqual",
+    "blendEnable": true,
+    "dynamicStates": ["viewport", "scissor"],
+    "colorBlendAttachments": ["default", "default", "default", "default", "default", "transparency"]
+  },
+  "shadowCaster": {
+    "vertexShader": "Shaders/Shadows/ShadowsVS.hlsl",
+    "cullMode": "front",
+    "depthWriteEnable": true,
+    "depthTestEnable": true,
+    "depthCompareOp": "lessOrEqual",
+    "dynamicStates": ["viewport", "scissor"]
+  }
+}

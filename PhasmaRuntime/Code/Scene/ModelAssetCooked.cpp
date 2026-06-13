@@ -453,7 +453,7 @@ namespace pe
             mat->roughness = 1.f;
             mat->occlusionStrength = 1.f;
             if (!mat->passInfoAsset)
-                mat->passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::Assets + "PassInfo/standard_pbr.pass");
+                mat->passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::RuntimeAssets + "PassInfo/standard_pbr.pass");
             mat->SyncParamsFromLegacy();
             return mat;
         }
@@ -931,7 +931,7 @@ namespace pe
             }
 
             if (!material->passInfoAsset)
-                material->passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::Assets + "PassInfo/standard_pbr.pass");
+                material->passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::RuntimeAssets + "PassInfo/standard_pbr.pass");
             material->SyncParamsFromLegacy();
             model->m_materials.push_back(std::move(material));
         }

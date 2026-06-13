@@ -1,0 +1,29 @@
+#include "../Common/Structures.hlsl"
+#include "../Common/Common.hlsl"
+#include "../Common/MaterialFlags.hlsl"
+
+[[vk::push_constant]] PushConstants_DepthPass pc;
+[[vk::binding(0, 1)]] StructuredBuffer<Mesh_Constants> constants : register(t0, space1);
+[[vk::binding(1, 1)]] SamplerState material_sampler : register(s1, space1);
+[[vk::binding(2, 1)]] Texture2D textures[] : register(t2, space1);
+
+float4 SampleArray(float2 uv, uint index)
+{
+    if (index == 0xFFFFFFFF)
+        return float4(1.0, 1.0, 1.0, 1.0);
+    return textures[NonUniformResourceIndex(index)].Sample(material_sampler, uv);
+}
+
+float4 GetBaseColor(uint id, float2 uv)
+{
+    return SampleArray(uv, constants[id].meshImageIndex[0]);
+}
+
+void mainPS(PS_INPUT_Position_Uv_ID input)
+{
+    const uint id = input.id;
+    float4 sampledBase = HasTexture(constants[id].textureMask, TEX_BASE_COLOR_BIT) ? GetBaseColor(id, input.uv) : float4(1.0f, 1.0f, 1.0f, 1.0f);
+    float alpha = sampledBase.a * input.alphaFactor;
+    if (alpha < constants[id].alphaCut)
+        discard;
+}

@@ -122,6 +122,7 @@ namespace pe
             Path::Init();
 
             const std::vector<std::filesystem::path> candidates = {
+                std::filesystem::path(Path::RuntimeAssets),
                 std::filesystem::path(Path::Executable) / "Assets",
                 std::filesystem::path(Path::Root) / "Assets",
                 std::filesystem::path(Path::Root) / "PhasmaEditor" / "Assets",
@@ -281,11 +282,17 @@ namespace pe
         {
             EventSystem::PushEvent(EventType::CompileShaders, fileEvent);
         };
-        if (std::filesystem::exists(Path::Assets + "Shaders"))
+        auto watchShaders = [&](const std::string &root)
         {
-            for (auto &file : std::filesystem::recursive_directory_iterator(Path::Assets + "Shaders"))
+            const std::string dir = root + "Shaders";
+            if (!std::filesystem::exists(dir))
+                return;
+            for (auto &file : std::filesystem::recursive_directory_iterator(dir))
                 FileWatcher::Add(file.path().string(), shaderCallback);
-        }
+        };
+        watchShaders(Path::RuntimeAssets); // engine shaders
+        if (Path::Assets != Path::RuntimeAssets)
+            watchShaders(Path::Assets); // project shaders (post-carve)
 
         auto scriptCallback = [](size_t fileEvent)
         {

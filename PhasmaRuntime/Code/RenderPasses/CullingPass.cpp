@@ -18,7 +18,7 @@ namespace pe
         m_passInfo->name = "Culling_pipeline";
         try
         {
-            m_passInfo->pCompShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Compute/CullingCS.hlsl", .entryPoint = "mainCS", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
+            m_passInfo->pCompShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Compute/CullingCS.hlsl", .entryPoint = "mainCS", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
             m_passInfo->Update();
         }
         catch (...)
@@ -33,7 +33,7 @@ namespace pe
         m_sortPassInfo->name = "BitonicSort_pipeline";
         try
         {
-            m_sortPassInfo->pCompShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Compute/BitonicSortCS.hlsl", .entryPoint = "mainCS", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
+            m_sortPassInfo->pCompShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Compute/BitonicSortCS.hlsl", .entryPoint = "mainCS", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
             m_sortPassInfo->Update();
         }
         catch (...)

@@ -26,7 +26,7 @@ namespace pe
     void SharpenPass::UpdatePassInfo()
     {
         m_passInfo->name = "Sharpen_Pipeline";
-        m_passInfo->pCompShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Sharpen/RCAS.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
+        m_passInfo->pCompShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Sharpen/RCAS.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
         m_passInfo->Update();
     }
 

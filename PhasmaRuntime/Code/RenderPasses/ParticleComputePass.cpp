@@ -19,7 +19,7 @@ namespace pe
     void ParticleComputePass::UpdatePassInfo()
     {
         m_passInfo->name = "ParticleCompute_pipeline";
-        m_passInfo->pCompShader = Shader::Create({.sourcePath = Path::Assets + "Shaders/Particle/ParticleCS.hlsl", .entryPoint = "mainCS", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
+        m_passInfo->pCompShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Particle/ParticleCS.hlsl", .entryPoint = "mainCS", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
         m_passInfo->Update();
     }
 

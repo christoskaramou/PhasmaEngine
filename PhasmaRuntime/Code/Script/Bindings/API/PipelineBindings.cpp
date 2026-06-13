@@ -181,7 +181,7 @@ namespace pe
                     [](PassInfo &pi, Shader *s) { pi.pVertShader = s; },
                     [](PassInfo &pi, const std::string &path, const std::string &entry) {
                         Shader::Destroy(pi.pVertShader);
-                        pi.pVertShader = Shader::Create({.sourcePath = Path::Assets + path,
+                        pi.pVertShader = Shader::Create({.sourcePath = Path::ResolveAsset(path),
                                                          .entryPoint = entry,
                                                          .stage = PE_SHADER_STAGE_VERTEX});
                     });
@@ -192,7 +192,7 @@ namespace pe
                     [](PassInfo &pi, Shader *s) { pi.pFragShader = s; },
                     [](PassInfo &pi, const std::string &path, const std::string &entry) {
                         Shader::Destroy(pi.pFragShader);
-                        pi.pFragShader = Shader::Create({.sourcePath = Path::Assets + path,
+                        pi.pFragShader = Shader::Create({.sourcePath = Path::ResolveAsset(path),
                                                          .entryPoint = entry,
                                                          .stage = PE_SHADER_STAGE_FRAGMENT});
                     });
@@ -203,7 +203,7 @@ namespace pe
                     [](PassInfo &pi, Shader *s) { pi.pCompShader = s; },
                     [](PassInfo &pi, const std::string &path, const std::string &entry) {
                         Shader::Destroy(pi.pCompShader);
-                        pi.pCompShader = Shader::Create({.sourcePath = Path::Assets + path,
+                        pi.pCompShader = Shader::Create({.sourcePath = Path::ResolveAsset(path),
                                                          .entryPoint = entry,
                                                          .stage = PE_SHADER_STAGE_COMPUTE});
                     });

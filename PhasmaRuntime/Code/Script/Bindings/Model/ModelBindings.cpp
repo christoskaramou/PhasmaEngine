@@ -49,7 +49,7 @@ namespace pe
                 lua.set_function("load_model_async", [](const std::string &path, sol::function callback) {
                     std::string fullPath = path;
                     if (!U8Path(path).is_absolute())
-                        fullPath = Path::Assets + "Objects/" + path;
+                        fullPath = Path::ResolveAsset("Objects/" + path);
 
                     Scene *scene = GetActiveScene();
                     if (!scene) return;
@@ -103,7 +103,7 @@ namespace pe
                         std::string path = kv.second.as<std::string>();
                         std::string fullPath = path;
                         if (!std::filesystem::path(path).is_absolute())
-                            fullPath = Path::Assets + "Objects/" + path;
+                            fullPath = Path::ResolveAsset("Objects/" + path);
 
                         // Set loading flag on main thread before enqueue to avoid race window
                         SetScriptModelLoading(true);

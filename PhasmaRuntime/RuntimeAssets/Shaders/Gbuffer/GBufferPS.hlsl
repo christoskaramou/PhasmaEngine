@@ -1,0 +1,119 @@
+#include "../Common/Structures.hlsl"
+#include "../Common/Common.hlsl"
+#include "../Common/MaterialFlags.hlsl"
+
+[[vk::push_constant]] PushConstants_GBuffer pc;
+[[vk::binding(0, 1)]] StructuredBuffer<Mesh_Constants> constants : register(t0, space1);
+[[vk::binding(1, 1)]] SamplerState material_sampler : register(s1, space1);
+[[vk::binding(2, 1)]] StructuredBuffer<MaterialGpuData> materialTable : register(t2, space1);
+[[vk::binding(3, 1)]] ByteAddressBuffer materialBytes : register(t3, space1);
+[[vk::binding(4, 1)]] Texture2D textures[] : register(t4, space1);
+
+MaterialGpuData LoadMaterialFromBytes(uint byteOffset)
+{
+    MaterialGpuData m;
+    m.baseColorFactor      = asfloat(materialBytes.Load4(byteOffset));
+    m.emissiveTransmission = asfloat(materialBytes.Load4(byteOffset + 16));
+    m.pbrParams            = asfloat(materialBytes.Load4(byteOffset + 32));
+    m.transmissionVolume   = asfloat(materialBytes.Load4(byteOffset + 48));
+    m.attenuationColor     = asfloat(materialBytes.Load4(byteOffset + 64));
+    return m;
+}
+
+float4 SampleArray(float2 uv, uint index)
+{
+    if (index == 0xFFFFFFFF)
+        return float4(1.0, 1.0, 1.0, 1.0);
+    return textures[NonUniformResourceIndex(index)].Sample(material_sampler, uv);
+}
+
+float4 GetBaseColor(uint id, float2 uv)          { return SampleArray(uv, constants[id].meshImageIndex[0]); }
+float4 GetMetallicRoughness(uint id, float2 uv)  { return SampleArray(uv, constants[id].meshImageIndex[1]); }
+float4 GetNormal(uint id, float2 uv)             { return SampleArray(uv, constants[id].meshImageIndex[2]); }
+float4 GetOcclusion(uint id, float2 uv)          { return SampleArray(uv, constants[id].meshImageIndex[3]); }
+float4 GetEmissive(uint id, float2 uv)           { return SampleArray(uv, constants[id].meshImageIndex[4]); }
+
+PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
+{
+    PS_OUTPUT_Gbuffer output;
+
+    const uint id = input.id;
+    const uint byteOff = constants[id].materialByteOffset;
+    MaterialGpuData mat;
+    if (byteOff != 0xFFFFFFFF)
+        mat = LoadMaterialFromBytes(byteOff);
+    else
+        mat = materialTable[constants[id].materialId];
+
+    float2 uv = input.uv;
+    uint textureMask = constants[id].textureMask;
+
+    float4 sampledBaseColor = HasTexture(textureMask, TEX_BASE_COLOR_BIT) ? GetBaseColor(id, uv) : float4(1.0f, 1.0f, 1.0f, 1.0f);
+    float4 combinedColor    = sampledBaseColor * input.color * mat.baseColorFactor;
+
+    if (combinedColor.a <= 0.0f || combinedColor.a < mat.pbrParams.z)
+        discard;
+
+    float3 N = normalize(input.normal);
+    float3 normalWS = N;
+    if (HasTexture(textureMask, TEX_NORMAL_BIT))
+    {
+        float3 tangentNormal = GetNormal(id, uv).xyz;
+        float3 T = normalize(input.tangent.xyz);
+        T = normalize(T - dot(T, N) * N);
+        float3 B = cross(N, T) * input.tangent.w;
+        float3x3 TBN = float3x3(T, B, N);
+        normalWS = normalize(mul(tangentNormal * 2.0 - 1.0, TBN));
+    }
+
+    float metallic = mat.pbrParams.x;
+    float roughness = mat.pbrParams.y;
+    if (HasTexture(textureMask, TEX_METAL_ROUGH_BIT))
+    {
+        float3 mrSample = GetMetallicRoughness(id, uv).xyz;
+        metallic *= mrSample.z;
+        roughness *= mrSample.y;
+    }
+    metallic = saturate(metallic);
+    roughness = saturate(roughness);
+
+    float occlusion = 1.0f;
+    if (HasTexture(textureMask, TEX_OCCLUSION_BIT))
+    {
+        float occlusionSample = GetOcclusion(id, uv).r;
+        occlusion = lerp(1.0f, occlusionSample, mat.pbrParams.w);
+    }
+
+    float3 emissive = mat.emissiveTransmission.xyz;
+    if (HasTexture(textureMask, TEX_EMISSIVE_BIT))
+    {
+        emissive *= GetEmissive(id, uv).xyz;
+    }
+
+    output.normal = float4(normalWS * 0.5f + 0.5f, 1.0f);
+    output.albedo = float4(combinedColor.xyz, combinedColor.a);
+    float transmission = (pc.passType == 2) ? 1.0f : 0.0f;
+    output.metRough = float4(occlusion, roughness, metallic, transmission);
+    // attenuationColor.w = nightEmissive flag; alpha 0 marks the pixel for the
+    // opaque lighting pass to fade emissive where direct light is strong.
+    float nightEmissive = mat.attenuationColor.w;
+    output.emissive = float4(emissive, nightEmissive > 0.5f ? 0.0f : combinedColor.a);
+    output.transparency = pc.passType ? 1.0f : 0.0f;
+
+    // Calculate the velocity
+    // Ensure that the positions are in NDC space by dividing by the w component
+    float2 currentNDC = input.positionCS.xy / input.positionCS.w;
+    float2 previousNDC = input.prevPositionCS.xy / input.prevPositionCS.w;
+    
+    // Apply jitter correction to the NDC positions
+    currentNDC -= float2(pc.projJitter.x, pc.projJitter.y);
+    previousNDC -= float2(pc.prevProjJitter.x, pc.prevProjJitter.y);
+    
+    // Calculate the velocity in NDC space
+    float2 velocityNDC = previousNDC - currentNDC;
+    
+    // Store the velocity in the output
+    output.velocity = velocityNDC;
+
+    return output;
+}

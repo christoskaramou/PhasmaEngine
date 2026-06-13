@@ -489,7 +489,7 @@ namespace pe
                 ComputeMaterialData(*mat, material);
 
                 if (!mat->passInfoAsset)
-                    mat->passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::Assets + "PassInfo/standard_pbr.pass");
+                    mat->passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::RuntimeAssets + "PassInfo/standard_pbr.pass");
                 mat->SyncParamsFromLegacy();
 
                 mi.material = mat.get();
