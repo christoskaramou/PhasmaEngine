@@ -168,6 +168,7 @@ namespace pe
         void SetScreenTitle(const std::string &screenId, const std::string &title);
         void SetScreenOverlay(const std::string &screenId, bool overlay);
         void ClearScreen(const std::string &screenId);
+        void ClearAllScreens();
         void RemoveWidget(const std::string &screenId, const std::string &widgetId);
 
         void SetText(const std::string &screenId,

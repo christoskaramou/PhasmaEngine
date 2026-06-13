@@ -220,7 +220,7 @@ namespace pe
             m_backend->Shutdown();
 
         m_backend.reset();
-        m_sceneAuthoredWidgetIds.clear();
+        ClearAllScreens();
         m_imageCache.clear();
         m_backendName = "none";
         m_initialized = false;
@@ -420,6 +420,12 @@ namespace pe
     void RuntimeUiSystem::ClearScreen(const std::string &screenId)
     {
         GetOrCreateScreen(screenId).widgets.clear();
+    }
+
+    void RuntimeUiSystem::ClearAllScreens()
+    {
+        m_screens.clear();
+        m_sceneAuthoredWidgetIds.clear();
     }
 
     void RuntimeUiSystem::RemoveWidget(const std::string &screenId, const std::string &widgetId)

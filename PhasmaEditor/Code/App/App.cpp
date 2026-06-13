@@ -231,6 +231,12 @@ namespace pe
             {
                 if (auto *ss = GetGlobalSystem<ScriptSystem>())
                     ss->OnPlayModeChanged(enabled);
+
+                if (wasPlay && !enabled)
+                {
+                    if (RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi())
+                        runtimeUi->ClearAllScreens();
+                }
             }
         }
 
