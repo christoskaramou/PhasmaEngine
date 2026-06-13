@@ -151,12 +151,10 @@ namespace pe
             }
             ImGui::Unindent(16.0f);
         }
-        if (TrackChange(ImGui::Checkbox("Tonemapping", &gSettings.tonemapping)) && !gSettings.tonemapping)
-            gSettings.color_grading = false;
+        TrackChange(ImGui::Checkbox("Tonemapping", &gSettings.tonemapping));
         ui::ItemTooltip("Convert HDR lighting to display output.");
-        if (TrackChange(ImGui::Checkbox("Color Grading", &gSettings.color_grading)) && gSettings.color_grading)
-            gSettings.tonemapping = true;
-        ui::ItemTooltip("Apply LDR color grading after tonemapping. Enabling it also enables tonemapping.");
+        TrackChange(ImGui::Checkbox("Color Grading", &gSettings.color_grading));
+        ui::ItemTooltip("Apply color grading after tonemapping and bloom.");
         if (gSettings.color_grading)
         {
             ImGui::Indent(16.0f);

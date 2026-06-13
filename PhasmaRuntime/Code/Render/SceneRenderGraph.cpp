@@ -418,7 +418,7 @@ namespace pe
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Tonemap, gs.tonemapping && dx12RenderRaster);
             SetPassEnabled(passEnabled,
                            SceneRenderGraphPassId::ColorGrading,
-                           gs.color_grading && gs.tonemapping && dx12RenderRaster);
+                           gs.color_grading && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomBF, gs.bloom && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomH, gs.bloom && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomV, gs.bloom && dx12RenderRaster);
@@ -447,7 +447,7 @@ namespace pe
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Sharpen, gs.taa && gs.cas_sharpening);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Upsample, !gs.taa);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Tonemap, gs.tonemapping);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::ColorGrading, gs.color_grading && gs.tonemapping);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::ColorGrading, gs.color_grading);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomBF, gs.bloom);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomH, gs.bloom);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomV, gs.bloom);
