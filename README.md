@@ -71,6 +71,53 @@ The glTF sample models used for testing are **not bundled** with this repository
 
 Keep them outside the project tree. In the editor, use **File → Import** to cook a source model (glTF/FBX/OBJ/…) into the engine's portable `.pemesh` format (GPU-ready geometry + materials + embedded textures written alongside), or **File → Import → Folder** to mirror and cook a whole folder at once. The runtime (desktop **and** Android) loads only `.pemesh`; the repository itself ships only a primitives scene, so a clean checkout has no external asset dependencies.
 
+## Optional Sample Projects
+
+[`christoskaramou/PhasmaProjects`](https://github.com/christoskaramou/PhasmaProjects) is a companion repository for project data rather than engine source. It can contain ready-to-open project roots with `phasma_project.json`, `Assets/Scenes/*.pescene`, scripts, textures, cooked `.pemesh` meshes, and other runtime assets.
+
+Download or clone it anywhere outside the engine checkout, for example beside `PhasmaEngine`:
+
+```bash
+git clone https://github.com/christoskaramou/PhasmaProjects.git
+```
+
+Each project should look like this:
+
+```text
+PhasmaProjects/
+  MyProject/
+    phasma_project.json
+    Assets/
+      Scenes/
+      Scripts/
+      Textures/
+```
+
+The manifest tells the editor and player which assets folder to use and, optionally, which scene to open first:
+
+```json
+{
+    "version": 1,
+    "name": "MyProject",
+    "assets": "Assets",
+    "startup_scene": "Assets/Scenes/sponza.pescene"
+}
+```
+
+The easiest setup is through `PhasmaLauncher`: open the **Project** picker, select a project root that contains `phasma_project.json` (or select an `Assets` folder for older manifest-free projects), then choose a startup scene from `Assets/Scenes` if one is not already set by the manifest. The launcher writes the selection to `phasma_settings.json` next to the executable, and both `PhasmaEditor` and `PhasmaPlayer` use that active project assets root on launch.
+
+If you run the editor or player directly, create or edit the executable-local `phasma_settings.json` yourself:
+
+```json
+{
+    "project_path": "C:/path/to/PhasmaProjects/MyProject/",
+    "project_manifest": "C:/path/to/PhasmaProjects/MyProject/phasma_project.json",
+    "startup_scene": "Assets/Scenes/sponza.pescene"
+}
+```
+
+Use forward slashes in paths on Windows. If the project does not have a manifest, omit `project_manifest` and point `project_path` directly at the assets folder.
+
 ## Getting the Source
 
 PhasmaEngine uses Tracy as a Git submodule. For a normal clone, fetch submodules with the repository:
