@@ -96,6 +96,20 @@ namespace pe
         float cas_sharpness = 0.5f;
         bool ssr = false;
         bool tonemapping = false;
+        bool color_grading = false;
+        // Keep each r/g/b triplet adjacent; GlobalWidget edits them with ImGui::DragFloat3.
+        float color_grading_lift_r = 0.0f;
+        float color_grading_lift_g = 0.0f;
+        float color_grading_lift_b = 0.0f;
+        float color_grading_gamma_r = 1.0f;
+        float color_grading_gamma_g = 1.0f;
+        float color_grading_gamma_b = 1.0f;
+        float color_grading_gain_r = 1.0f;
+        float color_grading_gain_g = 1.0f;
+        float color_grading_gain_b = 1.0f;
+        float color_grading_saturation = 1.0f;
+        float color_grading_contrast = 1.0f;
+        float color_grading_intensity = 1.0f;
         bool dof = false;
         float dof_focus_scale = 15.0f;
         float dof_blur_range = 5.0f;

@@ -168,6 +168,19 @@ namespace pe
             settings.AddMember("cas_sharpness", gSettings.cas_sharpness, allocator);
             settings.AddMember("ssr", gSettings.ssr, allocator);
             settings.AddMember("tonemapping", gSettings.tonemapping, allocator);
+            settings.AddMember("color_grading", gSettings.color_grading, allocator);
+            settings.AddMember("color_grading_lift_r", gSettings.color_grading_lift_r, allocator);
+            settings.AddMember("color_grading_lift_g", gSettings.color_grading_lift_g, allocator);
+            settings.AddMember("color_grading_lift_b", gSettings.color_grading_lift_b, allocator);
+            settings.AddMember("color_grading_gamma_r", gSettings.color_grading_gamma_r, allocator);
+            settings.AddMember("color_grading_gamma_g", gSettings.color_grading_gamma_g, allocator);
+            settings.AddMember("color_grading_gamma_b", gSettings.color_grading_gamma_b, allocator);
+            settings.AddMember("color_grading_gain_r", gSettings.color_grading_gain_r, allocator);
+            settings.AddMember("color_grading_gain_g", gSettings.color_grading_gain_g, allocator);
+            settings.AddMember("color_grading_gain_b", gSettings.color_grading_gain_b, allocator);
+            settings.AddMember("color_grading_saturation", gSettings.color_grading_saturation, allocator);
+            settings.AddMember("color_grading_contrast", gSettings.color_grading_contrast, allocator);
+            settings.AddMember("color_grading_intensity", gSettings.color_grading_intensity, allocator);
             settings.AddMember("dof", gSettings.dof, allocator);
             settings.AddMember("dof_focus_scale", gSettings.dof_focus_scale, allocator);
             settings.AddMember("dof_blur_range", gSettings.dof_blur_range, allocator);
@@ -277,6 +290,32 @@ namespace pe
                 gSettings.ssr = settings["ssr"].GetBool();
             if (settings.HasMember("tonemapping"))
                 gSettings.tonemapping = settings["tonemapping"].GetBool();
+            if (settings.HasMember("color_grading"))
+                gSettings.color_grading = settings["color_grading"].GetBool();
+            if (settings.HasMember("color_grading_lift_r"))
+                gSettings.color_grading_lift_r = settings["color_grading_lift_r"].GetFloat();
+            if (settings.HasMember("color_grading_lift_g"))
+                gSettings.color_grading_lift_g = settings["color_grading_lift_g"].GetFloat();
+            if (settings.HasMember("color_grading_lift_b"))
+                gSettings.color_grading_lift_b = settings["color_grading_lift_b"].GetFloat();
+            if (settings.HasMember("color_grading_gamma_r"))
+                gSettings.color_grading_gamma_r = settings["color_grading_gamma_r"].GetFloat();
+            if (settings.HasMember("color_grading_gamma_g"))
+                gSettings.color_grading_gamma_g = settings["color_grading_gamma_g"].GetFloat();
+            if (settings.HasMember("color_grading_gamma_b"))
+                gSettings.color_grading_gamma_b = settings["color_grading_gamma_b"].GetFloat();
+            if (settings.HasMember("color_grading_gain_r"))
+                gSettings.color_grading_gain_r = settings["color_grading_gain_r"].GetFloat();
+            if (settings.HasMember("color_grading_gain_g"))
+                gSettings.color_grading_gain_g = settings["color_grading_gain_g"].GetFloat();
+            if (settings.HasMember("color_grading_gain_b"))
+                gSettings.color_grading_gain_b = settings["color_grading_gain_b"].GetFloat();
+            if (settings.HasMember("color_grading_saturation"))
+                gSettings.color_grading_saturation = settings["color_grading_saturation"].GetFloat();
+            if (settings.HasMember("color_grading_contrast"))
+                gSettings.color_grading_contrast = settings["color_grading_contrast"].GetFloat();
+            if (settings.HasMember("color_grading_intensity"))
+                gSettings.color_grading_intensity = settings["color_grading_intensity"].GetFloat();
             if (settings.HasMember("dof"))
                 gSettings.dof = settings["dof"].GetBool();
             if (settings.HasMember("dof_focus_scale"))

@@ -3294,19 +3294,19 @@ namespace pe
         auto &undoRedo = UndoRedo::Instance();
         {
             ImGuiIO &io = ImGui::GetIO();
-            if (!io.WantTextInput && io.KeyCtrl)
+            if (io.KeyCtrl)
             {
-                if (ImGui::IsKeyPressed(ImGuiKey_Z, false) && !io.KeyShift)
+                if (!io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Z, false) && !io.KeyShift)
                 {
                     if (undoRedoRS && undoRedo.CanUndo())
                         undoRedo.Undo(undoRedoRS->GetScene());
                 }
-                if (ImGui::IsKeyPressed(ImGuiKey_Y, false))
+                if (!io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Y, false))
                 {
                     if (undoRedoRS && undoRedo.CanRedo())
                         undoRedo.Redo(undoRedoRS->GetScene());
                 }
-                if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_L, false))
+                if (!io.WantTextInput && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_L, false))
                     m_requestDockReset = true;
 
                 // Ctrl+S - save scene

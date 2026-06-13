@@ -4,6 +4,7 @@
 #include "RenderPasses/AabbsPass.h"
 #include "RenderPasses/BloomPass.h"
 #include "RenderPasses/CullingPass.h"
+#include "RenderPasses/ColorGradingPass.h"
 #include "RenderPasses/DOFPass.h"
 #include "RenderPasses/DepthPass.h"
 #include "RenderPasses/FXAAPass.h"
@@ -62,6 +63,7 @@ namespace pe
              &SceneRenderGraphPassComponents::bloomGaussianBlurHorizontal},
             {SceneRenderGraphPassId::BloomV, 1900, "BloomV",
              &SceneRenderGraphPassComponents::bloomGaussianBlurVertical},
+            {SceneRenderGraphPassId::ColorGrading, 1950, "ColorGrading", &SceneRenderGraphPassComponents::colorGrading},
             {SceneRenderGraphPassId::DOF, 2000, "DOF", &SceneRenderGraphPassComponents::dof},
             {SceneRenderGraphPassId::MotionBlur, 2100, "MotionBlur", &SceneRenderGraphPassComponents::motionBlur},
             {SceneRenderGraphPassId::Grid, 2200, "Grid", &SceneRenderGraphPassComponents::grid},
@@ -153,6 +155,8 @@ namespace pe
                 return isPassEnabled(SceneRenderGraphPassId::Upsample);
             if (component == components.tonemap)
                 return isPassEnabled(SceneRenderGraphPassId::Tonemap);
+            if (component == components.colorGrading)
+                return isPassEnabled(SceneRenderGraphPassId::ColorGrading);
             if (component == components.bloomBrightFilter || component == components.bloomGaussianBlurHorizontal ||
                 component == components.bloomGaussianBlurVertical)
             {
@@ -210,6 +214,7 @@ namespace pe
         CreateSceneRenderGraphPassComponent<SharpenPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<UpsamplePass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<TonemapPass>(renderPassComponents);
+        CreateSceneRenderGraphPassComponent<ColorGradingPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<BloomBrightFilterPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<BloomGaussianBlurHorizontalPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<BloomGaussianBlurVerticalPass>(renderPassComponents);
@@ -354,6 +359,7 @@ namespace pe
         scenePasses.sharpen = GetGlobalComponent<SharpenPass>();
         scenePasses.upsample = GetGlobalComponent<UpsamplePass>();
         scenePasses.tonemap = GetGlobalComponent<TonemapPass>();
+        scenePasses.colorGrading = GetGlobalComponent<ColorGradingPass>();
         scenePasses.bloomBrightFilter = GetGlobalComponent<BloomBrightFilterPass>();
         scenePasses.bloomGaussianBlurHorizontal = GetGlobalComponent<BloomGaussianBlurHorizontalPass>();
         scenePasses.bloomGaussianBlurVertical = GetGlobalComponent<BloomGaussianBlurVerticalPass>();
@@ -410,6 +416,9 @@ namespace pe
                            SceneRenderGraphPassId::Upsample,
                            (!gs.taa && dx12RenderRaster) || (dx12RtOnly && !dx12RenderTAA));
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Tonemap, gs.tonemapping && dx12RenderRaster);
+            SetPassEnabled(passEnabled,
+                           SceneRenderGraphPassId::ColorGrading,
+                           gs.color_grading && gs.tonemapping && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomBF, gs.bloom && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomH, gs.bloom && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomV, gs.bloom && dx12RenderRaster);
@@ -438,6 +447,7 @@ namespace pe
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Sharpen, gs.taa && gs.cas_sharpening);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Upsample, !gs.taa);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Tonemap, gs.tonemapping);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::ColorGrading, gs.color_grading && gs.tonemapping);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomBF, gs.bloom);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomH, gs.bloom);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomV, gs.bloom);

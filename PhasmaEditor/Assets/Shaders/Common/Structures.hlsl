@@ -50,6 +50,17 @@ struct PushConstants_Bloom_Combine
     float strength;
 };
 
+struct PushConstants_ColorGrading
+{
+    float4 lift;
+    float4 gamma;
+    float4 gain;
+    float saturation;
+    float contrast;
+    float intensity;
+    float pad0;
+};
+
 #ifdef SHADOWMAP_CASCADES
 struct PushConstants_Lighting
 {

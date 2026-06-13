@@ -32,6 +32,7 @@ namespace pe
         Sharpen,
         Upsample,
         Tonemap,
+        ColorGrading,
         BloomBF,
         BloomH,
         BloomV,
@@ -64,6 +65,7 @@ namespace pe
         IRenderPassComponent *sharpen = nullptr;
         IRenderPassComponent *upsample = nullptr;
         IRenderPassComponent *tonemap = nullptr;
+        IRenderPassComponent *colorGrading = nullptr;
         IRenderPassComponent *bloomBrightFilter = nullptr;
         IRenderPassComponent *bloomGaussianBlurHorizontal = nullptr;
         IRenderPassComponent *bloomGaussianBlurVertical = nullptr;
