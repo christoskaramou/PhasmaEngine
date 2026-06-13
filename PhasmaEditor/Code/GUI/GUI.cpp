@@ -591,6 +591,26 @@ namespace pe
                     changed |= AddJsonStringArrayItem(object, key, item.get<std::string>());
             return changed;
         }
+
+        void ApplyEditorDockedWindowClass()
+        {
+            ImGuiWindowClass windowClass;
+            windowClass.TabItemFlagsOverrideSet = ImGuiTabItemFlags_NoCloseWithMiddleMouseButton;
+            ImGui::SetNextWindowClass(&windowClass);
+        }
+
+        void CloseWidgetOnHovered(const char *windowName, bool &open)
+        {
+            if (!open || !ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
+                return;
+
+            ImGuiWindow *window = ImGui::FindWindowByName(windowName);
+            if (!window || !window->DockIsActive)
+                return;
+
+            if (window->DC.DockTabItemStatusFlags & ImGuiItemStatusFlags_HoveredWindow)
+                open = false;
+        }
     } // namespace
 
     GUI::GUI()
@@ -3390,14 +3410,22 @@ namespace pe
         }
 
         if (m_show_demo_window)
+        {
+            ApplyEditorDockedWindowClass();
             ImGui::ShowDemoWindow(&m_show_demo_window);
+            CloseWidgetOnHovered("Dear ImGui Demo", m_show_demo_window);
+        }
 
         {
             PE_PROFILE_SCOPE("Widgets");
             for (auto &widget : m_widgets)
             {
                 if (widget->IsOpen())
+                {
+                    ApplyEditorDockedWindowClass();
                     widget->Update();
+                    CloseWidgetOnHovered(widget->GetName().c_str(), *widget->GetOpen());
+                }
             }
         }
 
