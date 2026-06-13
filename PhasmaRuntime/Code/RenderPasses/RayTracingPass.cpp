@@ -119,6 +119,7 @@ namespace pe
         ubo.use_Disney_PBR = gSettings.use_Disney_PBR ? 1 : 0;
         ubo.ibl_intensity = gSettings.IBL_intensity;
         ubo.renderMode = static_cast<uint32_t>(gSettings.render_mode);
+        ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;
 
         BufferRange range{};
         range.data = &ubo;
@@ -152,9 +153,12 @@ namespace pe
                     if (rtSets.size() > 0 && rtSets[0])
                     {
                         Descriptor *rtSet0 = rtSets[0];
+                        rtSet0->SetAccelerationStructure(0, scene.GetTLAS());
                         rtSet0->SetBuffer(2, scene.GetUniforms(i));
                         rtSet0->SetBuffer(3, scene.GetMeshConstants());
                         rtSet0->SetSampler(4, m_display->GetSampler());
+                        rtSet0->SetBuffer(6, scene.GetBuffer());
+                        rtSet0->SetBuffer(7, scene.GetMeshInfoBuffer());
                         rtSet0->SetBuffer(11, scene.GetMaterialTable());
                         rtSet0->SetImageViews(12, scene.GetImageViews());
                         rtSet0->Update();

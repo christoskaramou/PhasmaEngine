@@ -540,6 +540,8 @@ namespace pe
             mesh.boundingBox = sourceMesh->boundingBox;
             mesh.aabbColor = sourceMesh->aabbColor;
             meshIndex = AddMesh(std::move(mesh));
+            if (RHII.GetCaps().rayTracing)
+                m_blasDirty = true;
         }
         else
         {

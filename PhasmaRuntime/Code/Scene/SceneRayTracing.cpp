@@ -278,6 +278,7 @@ namespace pe
         uint64_t bufferAddress = GetBuffer()->GetDeviceAddress();
 
         // --- Pass 1: Calculate BLAS sizes ---
+        static constexpr uint64_t kBlasBufferAlignment = 256;
         uint64_t totalBlasSize = 0;
         uint64_t maxScratchSize = 0;
 
@@ -365,7 +366,7 @@ namespace pe
 #endif
 
             PE_ERROR_IF(req.resultSize == 0, "Scene::BuildAllBLASes: mesh %d produced zero BLAS size", meshIndex);
-            totalBlasSize = RHII.Align(totalBlasSize + req.resultSize, 256);
+            totalBlasSize = RHII.Align(totalBlasSize, kBlasBufferAlignment) + req.resultSize;
             buildReqs.push_back(req);
         }
 
@@ -375,7 +376,7 @@ namespace pe
         const uint64_t scratchAlign = GetSceneRtScratchAlignment();
 
         m_blasMergedBuffer = Buffer::Create({
-            .size = totalBlasSize,
+            .size = RHII.Align(totalBlasSize, kBlasBufferAlignment),
             .usage = PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_KHR | PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS,
             .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
             .name = "BLAS_Merged_Buffer",
@@ -412,7 +413,7 @@ namespace pe
         uint64_t currentOffset = 0;
         for (auto &req : buildReqs)
         {
-            currentOffset = RHII.Align(currentOffset, 256);
+            currentOffset = RHII.Align(currentOffset, kBlasBufferAlignment);
 
             std::string name = "BLAS_mesh" + std::to_string(req.meshIndex);
             req.createdBlas = new AccelerationStructure(name, m_blasMergedBuffer, currentOffset);

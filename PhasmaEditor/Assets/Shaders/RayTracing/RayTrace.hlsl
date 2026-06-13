@@ -85,6 +85,7 @@ struct Vertex
     uint cb_use_Disney_PBR;
     float cb_iblIntensity;
     uint cb_renderMode;  // 0=Raster, 1=Hybrid, 2=RayTracing
+    uint cb_orthographicCamera;
 };
 
 // Set 2
@@ -586,17 +587,20 @@ void raygeneration()
     float4x4 invView = LoadMatrix(128); // Offset 128 is invView (64*2)
     float4x4 invProjection = LoadMatrix(192); // Offset 192 is invProjection (64*3)
 
-    // Camera origin in world space = invView * (0,0,0,1)
-    float3 originWorld = mul(float4(0, 0, 0, 1), invView).xyz;
-
     // Unproject an NDC point to view space.
     float4 pView = mul(float4(ndc.x, ndc.y, 1.0, 1.0), invProjection);
     pView.xyz /= pView.w;
 
-    // View-space direction (camera is at view-space origin)
+    float3 originView = 0.0.xxx;
     float3 dirView = normalize(pView.xyz);
+    if (cb_orthographicCamera != 0)
+    {
+        originView = float3(pView.x, pView.y, 0.0);
+        dirView = float3(0.0, 0.0, 1.0);
+    }
 
-    // Transform direction to world space (no translation)
+    // Transform ray to world space.
+    float3 originWorld = mul(float4(originView, 1.0), invView).xyz;
     float3 dirWorld = normalize(mul(dirView, (float3x3)invView));
 
     // Read depth from raster
@@ -605,7 +609,7 @@ void raygeneration()
     // Calculate distance to surface
     float4 pViewOpaque = mul(float4(ndc.x, ndc.y, opaqueDepth, 1.0), invProjection);
     pViewOpaque.xyz /= pViewOpaque.w;
-    float opaqueDist = length(pViewOpaque.xyz);
+    float opaqueDist = length(pViewOpaque.xyz - originView);
 
     // MODE-BASED CONFIGURATION
     // 0 = Raster
