@@ -47,6 +47,7 @@ namespace pe
         Image *CreateFSSampledImage(const std::string &name, bool useRenderTargetScale = true);
         void CreateRenderTargets();
         void DestroyRenderTargets();
+        bool NeedsRenderScaleResize() const;
         void BlitToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex);
 
         void LoadSky(CommandBuffer *cmd);
@@ -108,6 +109,7 @@ namespace pe
         std::array<bool, kSceneRenderGraphPassCount> m_renderGraphPassEnabled{};
         std::array<bool, kSceneRenderGraphPassCount> m_renderGraphPassInitialized{};
         SceneRenderGraphPassComponents m_scenePasses{};
+        float m_renderTargetScale = 0.0f;
 
         SkyBox m_skyBox;
         Image *m_ibl_brdf_lut = nullptr;

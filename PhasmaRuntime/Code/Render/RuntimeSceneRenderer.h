@@ -60,6 +60,7 @@ namespace pe
         CommandBuffer *RecordPasses(uint32_t imageIndex);
         void QueueScreenshotReadback(CommandBuffer *cmd, Image *sourceImage);
         void ApplyRuntimeRenderSettings();
+        void ApplyPendingRenderScaleResize();
 
         Scene &m_scene;
         SceneRendererCore m_sceneRenderer;

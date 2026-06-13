@@ -111,6 +111,7 @@ namespace pe
         CommandBuffer *RecordPasses(uint32_t imageIndex);
         Image *GetFrameOutputImage() const;
         void QueueScreenshotReadback(CommandBuffer *cmd, Image *sourceImage);
+        void ApplyPendingRenderScaleResize();
         std::string m_screenshotSavedPath;
         Scene m_scene;
         SceneRendererCore m_sceneRenderer;

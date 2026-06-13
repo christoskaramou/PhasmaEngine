@@ -104,6 +104,7 @@ namespace pe
         // graph before this frame records. Pure CPU pass-list rebuild, no GPU wait.
         if (m_scriptRenderPassesRevision != GetScriptRenderPassesRevision())
             BuildRenderGraph();
+        ApplyPendingRenderScaleResize();
 
         if (m_scene.IsGeometryDirty())
             WaitAllFramesCommands();
@@ -310,6 +311,14 @@ namespace pe
         m_sceneRenderer.ResizeRenderPassComponents(width, height, hasRTGeom);
 
         BuildRenderGraph();
+    }
+
+    void RuntimeSceneRenderer::ApplyPendingRenderScaleResize()
+    {
+        if (!m_sceneRenderer.NeedsRenderScaleResize())
+            return;
+
+        Resize(RHII.GetWidth(), RHII.GetHeight());
     }
 
     void RuntimeSceneRenderer::QueueScreenshotReadback(CommandBuffer *cmd, Image *sourceImage)

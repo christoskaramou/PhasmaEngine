@@ -112,6 +112,7 @@ namespace pe
             PE_PROFILE_SCOPE("GUI");
             m_gui.Update();
         }
+        ApplyPendingRenderScaleResize();
 
         // Flush any deferred GPU work (primitive batching, async load completion)
         // MUST happen before Scene::Update() so that rebuilt buffers exist
@@ -434,6 +435,20 @@ namespace pe
         m_sceneRenderer.CreateRenderTargets();
 
         m_sceneRenderer.ResizeRenderPassComponents(width, height, hasRTGeom);
+    }
+
+    void RendererSystem::ApplyPendingRenderScaleResize()
+    {
+        if (!m_sceneRenderer.NeedsRenderScaleResize())
+            return;
+
+        Resize(RHII.GetWidth(), RHII.GetHeight());
+
+        // Scene loads queue this resize after the event pump has already run; avoid repeating it next frame.
+        EventSystem::QueuedEvent resizeEvent;
+        while (EventSystem::PeekAndPop(EventType::Resize, resizeEvent))
+        {
+        }
     }
 
     void RendererSystem::PollShaders(std::optional<size_t> hash)

@@ -4,6 +4,8 @@
 
 - Fixed orthographic full ray tracing inflating 2D alpha-cut quads into giant screen-filling surfaces. `RayTracingPass` now passes an orthographic-camera flag to `RayTrace.hlsl`; the raygen shader keeps perspective rays unchanged but uses per-pixel view-space origins plus the engine's positive view-Z forward direction for orthographic cameras, and measures Hybrid depth clamps from that per-pixel origin. RT descriptor refresh now also rebinds the TLAS, combined geometry buffer, and MeshInfo buffer on geometry-version changes. The scene RT path also marks BLAS dirty when adding cache-hit primitive meshes and sizes the merged BLAS buffer with the same aligned placement math used by the build loop.
 
+- Fixed manual editor/player scene loads that change `settings.render_scale` after an empty scene has already initialized render targets. `SceneRendererCore` now records the scale used for current scene targets; editor and runtime renderers synchronously run their existing resize path before same-frame scene/render-pass updates when the scale changes, and editor drains the queued resize event to avoid a redundant next-frame rebuild. Scene settings only queue a render-scale resize when the value actually changes, and Vulkan `CopyImage` now rejects either width or height mismatches.
+
 ## 2026-06-12
 
 - Mirrored longitude U for generated spherical primitives (`sphere`/`uv_sphere` and `ico_sphere`) so equirectangular planet textures render with the expected east/west orientation instead of appearing horizontally reversed on PhasmaSpace bodies.

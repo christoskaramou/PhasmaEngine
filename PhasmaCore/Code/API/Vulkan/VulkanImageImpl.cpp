@@ -639,7 +639,7 @@ namespace pe
     void VulkanImageImpl::CopyImage(CommandBuffer *cmd, Image *src)
     {
         Image *dst = m_owner;
-        PE_ERROR_IF(dst->GetWidth() != src->GetWidth() && dst->GetHeight() != src->GetHeight(),
+        PE_ERROR_IF(dst->GetWidth() != src->GetWidth() || dst->GetHeight() != src->GetHeight(),
                     "Image sizes are different");
 
         cmd->BeginDebugRegion("CopyImage");

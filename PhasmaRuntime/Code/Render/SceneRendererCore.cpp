@@ -74,6 +74,7 @@ namespace pe
         m_viewportRT = targets.viewport;
         m_displayRT = targets.display;
         m_screenshotRT = targets.screenshot;
+        m_renderTargetScale = Settings::Get<GlobalSettings>().render_scale;
     }
 
     void SceneRendererCore::DestroyRenderTargets()
@@ -83,6 +84,12 @@ namespace pe
         m_viewportRT = nullptr;
         m_displayRT = nullptr;
         m_screenshotRT = nullptr;
+        m_renderTargetScale = 0.0f;
+    }
+
+    bool SceneRendererCore::NeedsRenderScaleResize() const
+    {
+        return m_displayRT && m_renderTargetScale != Settings::Get<GlobalSettings>().render_scale;
     }
 
     void SceneRendererCore::BlitToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex)

@@ -256,8 +256,12 @@ namespace pe
                 gSettings.shadow_debug_mode = settings["shadow_debug_mode"].GetInt();
             if (settings.HasMember("render_scale"))
             {
-                gSettings.render_scale = settings["render_scale"].GetFloat();
-                EventSystem::PushEvent(EventType::Resize);
+                const float renderScale = settings["render_scale"].GetFloat();
+                if (gSettings.render_scale != renderScale)
+                {
+                    gSettings.render_scale = renderScale;
+                    EventSystem::PushEvent(EventType::Resize);
+                }
             }
             if (settings.HasMember("ssao"))
                 gSettings.ssao = settings["ssao"].GetBool();
