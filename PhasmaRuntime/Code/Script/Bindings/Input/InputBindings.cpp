@@ -3,6 +3,55 @@
 #include "Script/Bindings/Input/InputState.h"
 #include "Script/ScriptRuntimeHooks.h"
 
+#if defined(__ANDROID__)
+#include <jni.h>
+#include <SDL_system.h>
+namespace
+{
+    // Vibrate the device via the Android Vibrator service (JNI). minSdk is 26, so
+    // VibrationEffect.createOneShot is always available. Best-effort: any JNI
+    // failure is cleared so a missing permission / OEM quirk never crashes the game.
+    // Requires the VIBRATE permission in AndroidManifest.xml.
+    void PlatformVibrate(int ms)
+    {
+        JNIEnv *env = static_cast<JNIEnv *>(SDL_AndroidGetJNIEnv());
+        if (!env)
+            return;
+        jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
+        if (!activity || env->ExceptionCheck())
+        {
+            env->ExceptionClear();
+            return;
+        }
+        jclass activityClass = env->GetObjectClass(activity);
+        jmethodID getService =
+            env->GetMethodID(activityClass, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;");
+        jstring name = env->NewStringUTF("vibrator");
+        jobject vibrator = env->CallObjectMethod(activity, getService, name);
+        if (vibrator && !env->ExceptionCheck())
+        {
+            jclass effectClass = env->FindClass("android/os/VibrationEffect");
+            jmethodID createOneShot =
+                env->GetStaticMethodID(effectClass, "createOneShot", "(JI)Landroid/os/VibrationEffect;");
+            // -1 == VibrationEffect.DEFAULT_AMPLITUDE
+            jobject effect = env->CallStaticObjectMethod(effectClass, createOneShot, static_cast<jlong>(ms), -1);
+            jclass vibratorClass = env->GetObjectClass(vibrator);
+            jmethodID vibrate = env->GetMethodID(vibratorClass, "vibrate", "(Landroid/os/VibrationEffect;)V");
+            env->CallVoidMethod(vibrator, vibrate, effect);
+            env->DeleteLocalRef(effect);
+            env->DeleteLocalRef(effectClass);
+            env->DeleteLocalRef(vibratorClass);
+            env->DeleteLocalRef(vibrator);
+        }
+        if (env->ExceptionCheck())
+            env->ExceptionClear();
+        env->DeleteLocalRef(name);
+        env->DeleteLocalRef(activityClass);
+        env->DeleteLocalRef(activity);
+    }
+} // namespace
+#endif
+
 namespace pe
 {
     namespace InputState
@@ -482,6 +531,15 @@ namespace pe
                         SDL_GetWindowSize(window, &w, &h);
                         SDL_WarpMouseInWindow(window, w / 2, h / 2);
                     }
+                });
+
+                // Haptic pulse (Android Vibrator via JNI); no-op on desktop. ms = duration.
+                input.set_function("vibrate", [](int ms) {
+#if defined(__ANDROID__)
+                    PlatformVibrate(ms > 0 ? ms : 12);
+#else
+                    (void)ms;
+#endif
                 }); });
         }
     } s_inputBindings;

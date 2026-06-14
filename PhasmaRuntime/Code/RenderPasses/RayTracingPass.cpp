@@ -118,6 +118,7 @@ namespace pe
         ubo.shadows = gSettings.shadows ? 1 : 0;
         ubo.use_Disney_PBR = gSettings.use_Disney_PBR ? 1 : 0;
         ubo.ibl_intensity = gSettings.IBL_intensity;
+        ubo.IBL = gSettings.IBL ? 1 : 0;
         ubo.renderMode = static_cast<uint32_t>(gSettings.render_mode);
         ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;
 

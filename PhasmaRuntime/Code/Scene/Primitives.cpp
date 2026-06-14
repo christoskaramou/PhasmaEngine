@@ -52,8 +52,9 @@ namespace pe
         return std::clamp(static_cast<int>(std::round(aspectRows)), 4, 12) + 1;
     }
 
-    // Your current raster state: FrontFace = CW, CullMode = Front => CW is culled, CCW is visible.
-    // So we enforce *CCW* winding for all primitive triangles.
+    // Raster pipelines use FrontFace = CW with front-face culling, so generated
+    // primitives are normalized to CCW-facing triangles unless a flat card needs
+    // to preserve paired windings.
     static void ForceWindingCCW(const std::vector<Vertex> &vertices, std::vector<uint32_t> &indices)
     {
         if (indices.size() < 3)
@@ -111,7 +112,10 @@ namespace pe
         }
     }
 
-    ModelAsset *Primitives::CreatePrimitiveModel(const std::vector<Vertex> &vertices, const std::vector<uint32_t> &indices, bool lineTopology)
+    ModelAsset *Primitives::CreatePrimitiveModel(const std::vector<Vertex> &vertices,
+                                                 const std::vector<uint32_t> &indices,
+                                                 bool lineTopology,
+                                                 bool forceWinding)
     {
         ModelAsset *model = new ModelAsset();
 
@@ -119,9 +123,9 @@ namespace pe
         model->m_vertices = vertices;
         model->m_indices = indices;
 
-        // Enforce CCW visibility with your current pipeline state.
+        // Enforce CCW visibility with the current front-cull pipeline state.
         // Line indices are not triangle triples - reordering them corrupts the strip.
-        if (!lineTopology)
+        if (!lineTopology && forceWinding)
             ForceWindingCCW(model->m_vertices, model->m_indices);
 
         for (auto &v : model->m_vertices)
@@ -254,10 +258,12 @@ namespace pe
         for (auto &v : vertices)
             FillVertexColor(v, 1.f, 1.f, 1.f, 1.f);
 
-        // CCW when viewed from +Z (visible with your CullFront+FrontFace=CW setup)
-        std::vector<uint32_t> indices = {0, 1, 2, 0, 2, 3};
+        // Flat cards need both windings: raster sprite quads use the transparent
+        // GBuffer's front-cull pipeline, while the RT path does not cull them.
+        // Preserve the explicit winding pairs so one side survives either view.
+        std::vector<uint32_t> indices = {0, 1, 2, 0, 2, 3, 0, 2, 1, 0, 3, 2};
 
-        ModelAsset *model = CreatePrimitiveModel(vertices, indices);
+        ModelAsset *model = CreatePrimitiveModel(vertices, indices, false, false);
         model->SetLabel("Quad");
         model->SetPrimitiveType("quad");
         model->SetPrimitiveParams(vec4(width, height, 0.f, 0.f), 2);

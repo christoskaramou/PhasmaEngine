@@ -126,8 +126,15 @@ namespace pe
             const float halfWidth = halfHeight * aspect;
             const bool hasFiniteFarPlane = std::isfinite(m_farPlane) && m_farPlane > m_nearPlane &&
                                            m_farPlane < std::numeric_limits<float>::max() * 0.5f;
-            const float farPlane = hasFiniteFarPlane ? m_farPlane : 1000.0f;
-            m_projection = ortho(-halfWidth, halfWidth, -halfHeight, halfHeight, m_nearPlane, farPlane);
+            float nearPlane = m_nearPlane;
+            float farPlane = hasFiniteFarPlane ? m_farPlane : 1000.0f;
+            // Reverse-Z: swap near/far so ortho maps near->1, far->0, matching the
+            // perspective path below and the GREATER_OR_EQUAL depth compare op. Not
+            // gated on PE_USE_GLM — ortho() itself is GLM-only, so the swap can never
+            // be skipped against a live ortho() call (the prior #if was dead/misleading).
+            if (Settings::Get<GlobalSettings>().reverse_depth)
+                std::swap(nearPlane, farPlane);
+            m_projection = ortho(-halfWidth, halfWidth, -halfHeight, halfHeight, nearPlane, farPlane);
         }
         else
         {

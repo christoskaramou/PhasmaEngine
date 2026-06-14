@@ -376,12 +376,20 @@ namespace pe
                                             sol::table result = lua.create_table();
                                             uint32_t width = 0;
                                             uint32_t height = 0;
+                                            float uiScale = 1.0f;
                                             if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
+                                            {
                                                 runtimeUi->GetFrameSurfaceSize(width, height);
+                                                uiScale = runtimeUi->GetFrameUiScale();
+                                            }
                                             result["w"] = width;
                                             result["h"] = height;
                                             result["width"] = width;
                                             result["height"] = height;
+                                            // DPI/density font scale (io.FontGlobalScale). 1.0 on ~96dpi
+                                            // desktops; up to 4.0 on phones. Resolution-relative UIs divide
+                                            // their font_scale by this to cancel the backend's font DPI bump.
+                                            result["ui_scale"] = uiScale;
                                             result["valid"] = width > 0 && height > 0;
                                             return result; });
                         ui.set_function("set_quad",

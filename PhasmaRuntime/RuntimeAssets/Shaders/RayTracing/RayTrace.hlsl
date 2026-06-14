@@ -84,8 +84,10 @@ struct Vertex
     uint cb_shadows;
     uint cb_use_Disney_PBR;
     float cb_iblIntensity;
+    uint cb_IBL;
     uint cb_renderMode;  // 0=Raster, 1=Hybrid, 2=RayTracing
     uint cb_orthographicCamera;
+    uint cb_rtPassPad;
 };
 
 // Set 2
@@ -150,6 +152,24 @@ float4x4 LoadMatrix(uint offset)
     return result;
 }
 
+MaterialGpuData LoadMaterial(uint id)
+{
+    return materialTable[constants[id].materialId];
+}
+
+bool IsSelfLitMaterial(float3 emissive, MaterialGpuData mat)
+{
+    float emissiveStrength = max(emissive.r, max(emissive.g, emissive.b));
+    return emissiveStrength > 0.001 && mat.attenuationColor.w < 0.5;
+}
+
+float SelfLitMaterialScale(float3 emissive, MaterialGpuData mat)
+{
+    float emissiveStrength = max(emissive.r, max(emissive.g, emissive.b));
+    float baseStrength = max(mat.baseColorFactor.r, max(mat.baseColorFactor.g, mat.baseColorFactor.b));
+    return clamp(emissiveStrength / max(baseStrength, 0.001), 0.0, 1.5);
+}
+
 float4 SampleArray(float2 uv, uint index)
 {
     if (index == 0xFFFFFFFF)
@@ -164,11 +184,6 @@ float4x4 GetPreviousViewProjection()          { return LoadMatrix(64); }
 float4x4 GetMeshMatrix(uint id)               { return LoadMatrix(constants[id].meshDataOffset); }
 float4x4 GetMeshPreviousMatrix(uint id)       { return LoadMatrix(constants[id].meshDataOffset + MATRIX_SIZE); }
 float4x4 GetJointMatrix(uint id, uint index)  { return LoadMatrix(constants[id].meshDataOffset + MESH_DATA_SIZE + index * MATRIX_SIZE); }
-
-// Factors — read from material table (StructuredBuffer<MaterialGpuData>)
-float4 GetBaseColorFactor(uint id)     { return materialTable[constants[id].materialId].baseColorFactor; }
-float3 GetEmissiveFactor(uint id)      { return materialTable[constants[id].materialId].emissiveTransmission.xyz; }
-float4 GetMetRoughAlphacutOcl(uint id) { return materialTable[constants[id].materialId].pbrParams; }
 
 // Textures - Passing defaults matching PBR expectations
 float4 GetBaseColor(uint id, float2 uv)          { return SampleArray(uv, constants[id].meshImageIndex[0]); }
@@ -220,8 +235,8 @@ Vertex SkinVertex(Vertex v, uint meshId)
                             + mul(GetJointMatrix(meshId, v.joints.z), v.weights.z)
                             + mul(GetJointMatrix(meshId, v.joints.w), v.weights.w);
 
-    v.position = mul(boneTransform, float4(v.position, 1.0f)).xyz;
-    v.normal = normalize(mul((float3x3)boneTransform, v.normal));
+    v.position = mul(float4(v.position, 1.0f), boneTransform).xyz;
+    v.normal = normalize(mul(v.normal, (float3x3)boneTransform));
 
     return v;
 }
@@ -670,11 +685,6 @@ void anyhit(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes a
     uint constantsId = meshInfos[instanceId].constantsIndex;
     uint primitiveId = PrimitiveIndex();
 
-    uint textureMask = constants[constantsId].textureMask;
-
-    if (!HasTexture(textureMask, TEX_BASE_COLOR_BIT))
-        return;
-
     uint3 indices = GetIndices(instanceId, primitiveId);
     Vertex v0 = SkinVertex(GetVertex(instanceId, indices.x), constantsId);
     Vertex v1 = SkinVertex(GetVertex(instanceId, indices.y), constantsId);
@@ -682,8 +692,13 @@ void anyhit(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes a
 
     float3 barycentricCoords = float3(1.0f - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
     float2 uv = v0.uv * barycentricCoords.x + v1.uv * barycentricCoords.y + v2.uv * barycentricCoords.z;
+    float4 color = v0.color * barycentricCoords.x + v1.color * barycentricCoords.y + v2.color * barycentricCoords.z;
 
-    float4 baseColor = GetBaseColor(constantsId, uv);
+    uint textureMask = constants[constantsId].textureMask;
+    MaterialGpuData mat = LoadMaterial(constantsId);
+    float4 baseColor = color * mat.baseColorFactor;
+    if (HasTexture(textureMask, TEX_BASE_COLOR_BIT))
+        baseColor *= GetBaseColor(constantsId, uv);
     if (baseColor.a < constants[constantsId].alphaCut)
     {
         IgnoreHit();
@@ -718,25 +733,30 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     // World Space conversion
     float3x4 objToWorld = ObjectToWorld3x4();
     float3x3 worldRotation3x3 = remove_scale3x3((float3x3)objToWorld);
-    float3 normalWorld = normalize(mul(worldRotation3x3, normalObj));
+    float3 normalWorld = normalize(mul(normalObj, worldRotation3x3));
     float3 positionWorld = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
 
     // Tangent Space
-    float3 tangentWorld = normalize(mul(worldRotation3x3, tangentObj.xyz));
+    float3 tangentWorld = normalize(mul(tangentObj.xyz, worldRotation3x3));
 
     // GBuffer Logic Adaptation
     uint textureMask = constants[constantsId].textureMask;
+    MaterialGpuData mat = LoadMaterial(constantsId);
+    uint renderType = meshInfos[instanceId].renderType;
+    bool isAlphaCutMaterial = renderType == 2;
+    bool isAlphaBlendMaterial = renderType == 3;
+    bool isTransmissive = renderType == 4;
 
     // 1. Base Color
-    float4 baseColorFactor = GetBaseColorFactor(constantsId);
-    float4 combinedColor = color * baseColorFactor;
+    float4 combinedColor = color * mat.baseColorFactor;
     if (HasTexture(textureMask, TEX_BASE_COLOR_BIT))
     {
         combinedColor *= GetBaseColor(constantsId, uv);
     }
+    combinedColor = saturate(combinedColor);
 
     // 2. Material Properties
-    float4 metRoughAlphacutOcl = GetMetRoughAlphacutOcl(constantsId);
+    float4 metRoughAlphacutOcl = mat.pbrParams;
     float metallic = metRoughAlphacutOcl.x;
     float roughness = metRoughAlphacutOcl.y;
     if (HasTexture(textureMask, TEX_METAL_ROUGH_BIT))
@@ -755,11 +775,14 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         occlusion = lerp(1.0f, occlusionSample, metRoughAlphacutOcl.w);
     }
 
-    float3 emissive = GetEmissiveFactor(constantsId);
+    float3 emissive = mat.emissiveTransmission.xyz;
     if (HasTexture(textureMask, TEX_EMISSIVE_BIT))
     {
         emissive *= GetEmissive(constantsId, uv).xyz;
     }
+    emissive = saturate(emissive);
+    bool rtOwnsMaterial = cb_renderMode == 2 || isAlphaCutMaterial || isAlphaBlendMaterial;
+    bool selfLitMaterial = rtOwnsMaterial && IsSelfLitMaterial(emissive, mat);
 
     // 3. Normal Mapping
     float3 N = normalWorld;
@@ -785,62 +808,71 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
 
     float3 lighting = 0.0.xxx;
 
-    // IBL
-    lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0, envBRDF) * cb_iblIntensity;
-    lighting *= occlusion;
-
-    // Direct Lighting
-    // Assuming single sun for now, or loop for multiple
-    DirectionalLight sun = LoadDirectionalLight(0);
-    float3 sunDir = normalize(RotateVectorByQuat(float3(0, 0, -1), sun.rotation));
-    float3 L = normalize(-sunDir); // Negate: direction is ray dir, L is to-light
-    float sunShadow = TraceShadowRay(positionWorld, L, 10000.0);
-    for (uint i = 0; i < cb_numDirectionalLights; i++)
+    // ATH-style materials use emissive as a self-lit authoring signal. Hybrid only
+    // ray-traces alpha cards, while full RT owns the opaque stage too.
+    if (selfLitMaterial)
     {
-        // Only shadowing the first one for now as per previous logic (or optimize shadow tracing)
-        float s = (i == 0) ? sunShadow : 1.0;
-        lighting += RT_DirectLight(LoadDirectionalLight(i), positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, s, energyCompensation);
+        lighting = combinedColor.rgb;
+        if (cb_renderMode == 2 && !isAlphaCutMaterial)
+            lighting *= SelfLitMaterialScale(emissive, mat);
+        if (cb_renderMode == 2 && isAlphaBlendMaterial)
+            lighting *= combinedColor.a;
     }
-
-    // Point Lights
-    for (uint i = 0; i < cb_numPointLights; i++)
+    else
     {
-         if (LoadPointLight(i).color.w > 0.0) // intensity is .w
-         {
-             float dist = distance(positionWorld, LoadPointLight(i).position.xyz); // position is .xyz
-             if (dist < LoadPointLight(i).position.w) // radius is .w
-                 lighting += RT_ComputePointLight(i, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
-         }
-    }
+        if (cb_IBL != 0)
+            lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0, envBRDF) * cb_iblIntensity;
+        lighting *= occlusion;
 
-    // Spot Lights
-    for (uint j = 0; j < cb_numSpotLights; j++)
-    {
-         if (LoadSpotLight(j).color.w > 0.0) // intensity is .w
-             lighting += RT_ComputeSpotLight(j, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
-    }
+        // Direct Lighting
+        // Assuming single sun for now, or loop for multiple
+        DirectionalLight sun = LoadDirectionalLight(0);
+        float3 sunDir = normalize(RotateVectorByQuat(float3(0, 0, -1), sun.rotation));
+        float3 L = normalize(-sunDir); // Negate: direction is ray dir, L is to-light
+        float sunShadow = TraceShadowRay(positionWorld, L, 10000.0);
+        for (uint i = 0; i < cb_numDirectionalLights; i++)
+        {
+            // Only shadowing the first one for now as per previous logic (or optimize shadow tracing)
+            float s = (i == 0) ? sunShadow : 1.0;
+            lighting += RT_DirectLight(LoadDirectionalLight(i), positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, s, energyCompensation);
+        }
 
-    // Area Lights
-    for (uint k = 0; k < cb_numAreaLights; k++)
-    {
-         if (LoadAreaLight(k).color.w > 0.0)
-             lighting += RT_ComputeAreaLight(k, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
-    }
+        // Point Lights
+        for (uint i = 0; i < cb_numPointLights; i++)
+        {
+            if (LoadPointLight(i).color.w > 0.0) // intensity is .w
+            {
+                float dist = distance(positionWorld, LoadPointLight(i).position.xyz); // position is .xyz
+                if (dist < LoadPointLight(i).position.w) // radius is .w
+                    lighting += RT_ComputePointLight(i, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
+            }
+        }
 
-    lighting += emissive;
+        // Spot Lights
+        for (uint j = 0; j < cb_numSpotLights; j++)
+        {
+            if (LoadSpotLight(j).color.w > 0.0) // intensity is .w
+                lighting += RT_ComputeSpotLight(j, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
+        }
+
+        // Area Lights
+        for (uint k = 0; k < cb_numAreaLights; k++)
+        {
+            if (LoadAreaLight(k).color.w > 0.0)
+                lighting += RT_ComputeAreaLight(k, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
+        }
+
+        lighting += emissive;
+    }
 
     // Transmission & Volume
-    float transmissionFactor = materialTable[constants[constantsId].materialId].emissiveTransmission.w;
-    float thicknessFactor = materialTable[constants[constantsId].materialId].transmissionVolume.x;
-    float attenuationDistance = materialTable[constants[constantsId].materialId].transmissionVolume.y;
-    float ior = materialTable[constants[constantsId].materialId].transmissionVolume.z;
-    float3 attenuationColor = materialTable[constants[constantsId].materialId].attenuationColor.xyz;
+    float transmissionFactor = mat.emissiveTransmission.w;
+    float thicknessFactor = mat.transmissionVolume.x;
+    float attenuationDistance = mat.transmissionVolume.y;
+    float ior = mat.transmissionVolume.z;
+    float3 attenuationColor = mat.attenuationColor.xyz;
 
     // Check material type from RenderType enum (1: Opaque, 2: AlphaCut, 3: AlphaBlend, 4: Transmission)
-    uint renderType = meshInfos[instanceId].renderType;
-    bool isAlphaCutMaterial = renderType == 2;
-    bool isAlphaBlendMaterial = renderType == 3;
-    bool isTransmissive = renderType == 4;
     bool shouldTraceSecondary = isTransmissive || (isAlphaBlendMaterial && combinedColor.a < 1.0f);
     if (shouldTraceSecondary && payload.depth < 2) // 2 Bounces
     {

@@ -177,6 +177,37 @@ namespace pe
         s->MarkNodeDirty(nodeId);
     }
 
+    static bool GetNodeDoubleSided(Scene *s, int meshIdx)
+    {
+        if (!s || !s->IsValidMeshIndex(meshIdx))
+            return false;
+
+        const Mesh &mesh = s->GetMeshes()[meshIdx];
+        return mesh.material && mesh.material->doubleSided;
+    }
+
+    // NOTE: doubleSided lives on the SHARED Material — it drives cull / indirect-batch
+    // routing, not a per-draw shader uniform, so there is no per-mesh MaterialInstance
+    // fork like the vec3/vec4/float setters use. This therefore flips double-sidedness
+    // for EVERY mesh that shares this material (same shared-state caveat as the
+    // night_emissive setter below). Callers that need it on one mesh only must give
+    // that mesh a unique material first.
+    static void SetNodeDoubleSided(Scene *s, NodeId *nodeId, int meshIdx, bool doubleSided)
+    {
+        if (!s || !s->IsNodeAlive(nodeId) || !s->IsValidMeshIndex(meshIdx))
+            return;
+
+        Mesh &mesh = s->GetMesh(meshIdx);
+        if (!mesh.material || mesh.material->doubleSided == doubleSided)
+            return;
+
+        mesh.material->doubleSided = doubleSided;
+        mesh.material->dirty = true;
+        s->SetGeometryDirty();
+        s->SetMaterialDirty();
+        s->MarkNodeDirty(nodeId);
+    }
+
     static bool ParseRenderType(std::string_view type, RenderType &out)
     {
         if (type == "opaque")
@@ -360,6 +391,34 @@ namespace pe
                     [setRenderTypeImpl](SceneNodeHandle &h, int slot, const std::string &type) {
                         Scene *s = GetScene();
                         setRenderTypeImpl(s, h.nodeId, ResolveMeshIdx(s, h, slot), type);
+                    }));
+
+                auto getDoubleSided = [](Scene *s, int meshIdx) -> bool {
+                    return GetNodeDoubleSided(s, meshIdx);
+                };
+
+                mat.set_function("is_double_sided", sol::overload(
+                    [getDoubleSided](SceneNodeHandle &h) -> bool {
+                        Scene *s = GetScene();
+                        return getDoubleSided(s, ResolveMeshIdx(s, h));
+                    },
+                    [getDoubleSided](SceneNodeHandle &h, int slot) -> bool {
+                        Scene *s = GetScene();
+                        return getDoubleSided(s, ResolveMeshIdx(s, h, slot));
+                    }));
+
+                auto setDoubleSided = [](Scene *s, NodeId *nodeId, int meshIdx, bool doubleSided) {
+                    SetNodeDoubleSided(s, nodeId, meshIdx, doubleSided);
+                };
+
+                mat.set_function("set_double_sided", sol::overload(
+                    [setDoubleSided](SceneNodeHandle &h, bool doubleSided) {
+                        Scene *s = GetScene();
+                        setDoubleSided(s, h.nodeId, ResolveMeshIdx(s, h), doubleSided);
+                    },
+                    [setDoubleSided](SceneNodeHandle &h, int slot, bool doubleSided) {
+                        Scene *s = GetScene();
+                        setDoubleSided(s, h.nodeId, ResolveMeshIdx(s, h, slot), doubleSided);
                     }));
 
                 auto getTexMask = [](Scene *s, int meshIdx) -> uint32_t {

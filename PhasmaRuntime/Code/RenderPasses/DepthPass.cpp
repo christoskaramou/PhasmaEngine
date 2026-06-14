@@ -21,19 +21,31 @@ namespace pe
         m_attachments[0].image = m_depthStencil;
         m_attachments[0].loadOp = PE_LOAD_OP_CLEAR;
         m_attachments[0].storeOp = PE_STORE_OP_STORE;
+
+        if (!m_passInfoDS)
+            m_passInfoDS = std::make_shared<PassInfo>();
     }
 
     void DepthPass::UpdatePassInfo()
     {
-        m_passInfo->name = "DepthPrePass_pipeline";
-        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Depth/DepthVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
-        m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Depth/DepthPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
-        m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
-        m_passInfo->cullMode = PE_CULL_MODE_FRONT;
-        m_passInfo->depthFormat = RHII.GetDepthFormat();
-        m_passInfo->depthTestEnable = true;
-        m_passInfo->depthWriteEnable = true;
-        m_passInfo->Update();
+        auto configureDepthPass = [](PassInfo &passInfo, const std::string &name, PeCullMode cullMode)
+        {
+            passInfo.name = name;
+            passInfo.pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Depth/DepthVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
+            passInfo.pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Depth/DepthPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
+            passInfo.dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
+            passInfo.cullMode = cullMode;
+            passInfo.depthFormat = RHII.GetDepthFormat();
+            passInfo.depthTestEnable = true;
+            passInfo.depthWriteEnable = true;
+            passInfo.Update();
+        };
+
+        configureDepthPass(*m_passInfo, "DepthPrePass_pipeline", PE_CULL_MODE_FRONT);
+
+        if (!m_passInfoDS)
+            m_passInfoDS = std::make_shared<PassInfo>();
+        configureDepthPass(*m_passInfoDS, "DepthPrePass_DS_pipeline", PE_CULL_MODE_NONE);
     }
 
     void DepthPass::Update()
@@ -48,22 +60,34 @@ namespace pe
 
             for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
             {
-                const auto &dpSets = m_passInfo->GetDescriptors(i);
-                Descriptor *dpSetTextures = dpSets[1];
-                dpSetTextures->SetBuffer(0, scene.GetMeshConstants());
-                dpSetTextures->SetSampler(1, scene.GetDefaultSampler());
-                dpSetTextures->SetImageViews(2, scene.GetImageViews());
-                dpSetTextures->Update();
+                for (PassInfo *passInfo : {m_passInfo.get(), m_passInfoDS.get()})
+                {
+                    if (!passInfo)
+                        continue;
+
+                    const auto &dpSets = passInfo->GetDescriptors(i);
+                    Descriptor *dpSetTextures = dpSets[1];
+                    dpSetTextures->SetBuffer(0, scene.GetMeshConstants());
+                    dpSetTextures->SetSampler(1, scene.GetDefaultSampler());
+                    dpSetTextures->SetImageViews(2, scene.GetImageViews());
+                    dpSetTextures->Update();
+                }
             }
         }
 
         if (scene.GetMeshCount() > 0)
         {
-            const auto &sets = m_passInfo->GetDescriptors(frame);
-            Descriptor *setUniforms = sets[0];
-            setUniforms->SetBuffer(0, scene.GetUniforms(frame));
-            setUniforms->SetBuffer(1, scene.GetMeshConstants());
-            setUniforms->Update();
+            for (PassInfo *passInfo : {m_passInfo.get(), m_passInfoDS.get()})
+            {
+                if (!passInfo)
+                    continue;
+
+                const auto &sets = passInfo->GetDescriptors(frame);
+                Descriptor *setUniforms = sets[0];
+                setUniforms->SetBuffer(0, scene.GetUniforms(frame));
+                setUniforms->SetBuffer(1, scene.GetMeshConstants());
+                setUniforms->Update();
+            }
         }
     }
 
@@ -103,6 +127,8 @@ namespace pe
             cmd->PushConstants();
             cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 0 * sizeof(uint32_t), m_scene->GetMeshCount());
             cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 1 * sizeof(uint32_t), m_scene->GetMeshCount());
+
+            cmd->BindPipeline(*m_passInfoDS);
             cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 5 * sizeof(uint32_t), m_scene->GetMeshCount());
             cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 6 * sizeof(uint32_t), m_scene->GetMeshCount());
             cmd->EndPass();
@@ -124,5 +150,11 @@ namespace pe
 
     void DepthPass::Destroy()
     {
+        if (!m_passInfoDS)
+            return;
+
+        Shader::Destroy(m_passInfoDS->pVertShader);
+        Shader::Destroy(m_passInfoDS->pFragShader);
+        m_passInfoDS.reset();
     }
 } // namespace pe

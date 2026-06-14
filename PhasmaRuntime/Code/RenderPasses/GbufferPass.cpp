@@ -106,24 +106,36 @@ namespace pe
             // Update ALL frames' texture descriptors since buffers changed
             for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
             {
-                const auto &sets = m_passInfo->GetDescriptors(i);
-                Descriptor *setTextures = sets[1];
-                setTextures->SetBuffer(0, scene.GetMeshConstants());
-                setTextures->SetSampler(1, scene.GetDefaultSampler());
-                setTextures->SetBuffer(2, scene.GetMaterialTable());
-                setTextures->SetBuffer(3, scene.GetMaterialByteBuffer());
-                setTextures->SetImageViews(4, scene.GetImageViews());
-                setTextures->Update();
+                for (PassInfo *passInfo : {m_passInfo.get(), m_passInfoDS.get()})
+                {
+                    if (!passInfo)
+                        continue;
+
+                    const auto &sets = passInfo->GetDescriptors(i);
+                    Descriptor *setTextures = sets[1];
+                    setTextures->SetBuffer(0, scene.GetMeshConstants());
+                    setTextures->SetSampler(1, scene.GetDefaultSampler());
+                    setTextures->SetBuffer(2, scene.GetMaterialTable());
+                    setTextures->SetBuffer(3, scene.GetMaterialByteBuffer());
+                    setTextures->SetImageViews(4, scene.GetImageViews());
+                    setTextures->Update();
+                }
             }
         }
 
         if (scene.GetMeshCount() > 0)
         {
-            const auto &sets = m_passInfo->GetDescriptors(frame);
-            Descriptor *setUniforms = sets[0];
-            setUniforms->SetBuffer(0, scene.GetUniforms(frame));
-            setUniforms->SetBuffer(1, scene.GetMeshConstants());
-            setUniforms->Update();
+            for (PassInfo *passInfo : {m_passInfo.get(), m_passInfoDS.get()})
+            {
+                if (!passInfo)
+                    continue;
+
+                const auto &sets = passInfo->GetDescriptors(frame);
+                Descriptor *setUniforms = sets[0];
+                setUniforms->SetBuffer(0, scene.GetUniforms(frame));
+                setUniforms->SetBuffer(1, scene.GetMeshConstants());
+                setUniforms->Update();
+            }
         }
     }
 
@@ -164,7 +176,7 @@ namespace pe
             cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 0 * sizeof(uint32_t), m_scene->GetMeshCount());
             cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 1 * sizeof(uint32_t), m_scene->GetMeshCount());
 
-            cmd->BindPipeline(*m_passInfoDS, false);
+            cmd->BindPipeline(*m_passInfoDS);
             cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 5 * sizeof(uint32_t), m_scene->GetMeshCount());
             cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 6 * sizeof(uint32_t), m_scene->GetMeshCount());
 

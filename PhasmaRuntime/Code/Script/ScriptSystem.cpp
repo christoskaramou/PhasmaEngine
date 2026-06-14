@@ -1196,6 +1196,12 @@ namespace pe
     {
         PE_PROFILE_SCOPE("Script System");
 
+        // Frame delta (seconds), forwarded as the first argument to every Lua
+        // update()/update_editor() hook. These were previously called with no args, so
+        // scripts' `function update(dt)` received nil and any `dt` arithmetic threw every
+        // frame. Passing it here makes dt reliable engine-wide (no per-script workaround).
+        const double dt = FrameTimer::Instance().GetDelta();
+
         // Process completed async model loads
         ProcessAsyncLoads();
         // Process completed async scene loads
@@ -1230,7 +1236,7 @@ namespace pe
             {
                 if (script.updateEditModeFn.valid() && !isNodeScript(script))
                 {
-                    auto result = CallProtected(script.updateEditModeFn);
+                    auto result = CallProtected(script.updateEditModeFn, dt);
                     if (!result.valid())
                     {
                         sol::error err = result;
@@ -1244,7 +1250,7 @@ namespace pe
                     continue;
                 if (inst.updateEditModeFn.valid())
                 {
-                    auto result = CallProtected(inst.updateEditModeFn);
+                    auto result = CallProtected(inst.updateEditModeFn, dt);
                     if (!result.valid())
                     {
                         sol::error err = result;
@@ -1262,7 +1268,7 @@ namespace pe
             {
                 if (script.updateFn.valid() && !isNodeScript(script))
                 {
-                    auto result = CallProtected(script.updateFn);
+                    auto result = CallProtected(script.updateFn, dt);
                     if (!result.valid())
                     {
                         sol::error err = result;
@@ -1276,7 +1282,7 @@ namespace pe
                     continue;
                 if (inst.updateFn.valid())
                 {
-                    auto result = CallProtected(inst.updateFn);
+                    auto result = CallProtected(inst.updateFn, dt);
                     if (!result.valid())
                     {
                         sol::error err = result;

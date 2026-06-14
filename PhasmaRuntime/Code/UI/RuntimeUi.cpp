@@ -306,6 +306,11 @@ namespace pe
         m_frameUiScale = scale > 0.0f ? scale : 1.0f;
     }
 
+    float RuntimeUiSystem::GetFrameUiScale() const
+    {
+        return m_frameUiScale;
+    }
+
     void RuntimeUiSystem::SetFrameSafeArea(float minX, float minY, float width, float height)
     {
         m_frameSafeAreaValid = width > 0.0f && height > 0.0f;

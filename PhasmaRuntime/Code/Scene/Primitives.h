@@ -29,6 +29,9 @@ namespace pe
         static ModelAsset *CreateSkinnedStrip2D(float width = 4.0f, float height = 1.0f, int segments = 32, int bones = 24);
 
     private:
-        static ModelAsset *CreatePrimitiveModel(const std::vector<Vertex> &vertices, const std::vector<uint32_t> &indices, bool lineTopology = false);
+        static ModelAsset *CreatePrimitiveModel(const std::vector<Vertex> &vertices,
+                                                const std::vector<uint32_t> &indices,
+                                                bool lineTopology = false,
+                                                bool forceWinding = true);
     };
 } // namespace pe

@@ -63,7 +63,11 @@ val prebakedModelsDir = rootProject.layout.projectDirectory.dir("prebaked/Models
 // exist, making the APK machine-dependent.
 val stagedAssetsDir = layout.buildDirectory.dir("generated/phasmaAssets")
 val stagePhasmaAssets by tasks.registering(Sync::class) {
-    from(engineRoot.resolve("PhasmaEditor/Assets")) {
+    // Engine runtime assets (shaders, objects, particles, fonts, PassInfo) live in
+    // PhasmaRuntime/RuntimeAssets after the 2026-06-13 RuntimeAssets carve;
+    // PhasmaEditor/Assets is now empty. Shader SOURCES must ship because
+    // Shader::Create checks the .hlsl exists before the prebaked cache lookup.
+    from(engineRoot.resolve("PhasmaRuntime/RuntimeAssets")) {
         into("Assets")
         exclude(
             "Objects/glTF-Sample-Models/**",
@@ -77,6 +81,26 @@ val stagePhasmaAssets by tasks.registering(Sync::class) {
     from(prebakedModelsDir) {
         into("Assets/Models")
     }
+    // AgainstTheHero game project (sibling repo): stage its Lua scripts + sprite
+    // textures so the APK runs the actual game (ath_bootstrap.pescene attaches
+    // Scripts/Player/ath_android_boot.lua), not just engine demo scenes. Old
+    // archived modes are excluded to keep the APK lean.
+    val athAssets = engineRoot.resolve("../PhasmaProjects/AgainstTheHero/Assets")
+    if (athAssets.isDirectory) {
+        from(athAssets.resolve("Scripts")) {
+            into("Assets/Scripts")
+            // old/ = archived modes. against_the_hero.lua is the desktop MENU entry;
+            // the engine file-level auto-runs every Player/*.lua, so shipping it would
+            // boot the menu ON TOP of the arena (ath_android_boot is the Android entry).
+            exclude("old/**", "Player/against_the_hero.lua")
+        }
+        from(athAssets.resolve("Textures/modes/spud_fields")) {
+            into("Assets/Textures/modes/spud_fields")
+        }
+    } else {
+        logger.warn("AgainstTheHero project not found at $athAssets — APK will lack the game.")
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     into(stagedAssetsDir)
     // Hard-fail (at task time, not configuration time so `gradlew tasks`/IDE sync still work):
     // without a baked cache the APK is guaranteed to abort at the first Shader::Create on device.
@@ -101,8 +125,8 @@ android {
         applicationId = "dev.phasma.player"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "0.16"
+        versionCode = 19
+        versionName = "0.19"
 
         ndk {
             abiFilters += androidAbiFilters

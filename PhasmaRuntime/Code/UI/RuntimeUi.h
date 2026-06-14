@@ -160,6 +160,10 @@ namespace pe
         void SetFrameInputRect(float minX, float minY, float width, float height);
         void DisableFrameInput();
         void GetFrameSurfaceSize(uint32_t &width, uint32_t &height) const;
+        // The DPI/density font scale the backend applies via io.FontGlobalScale (ddpi/96, clamped
+        // [1,4]). Exposed so resolution-relative UIs (which size their own geometry in raw surface
+        // pixels) can divide it out of their font_scale and stay WYSIWYG across DPIs.
+        float GetFrameUiScale() const;
         bool WantsMouseCapture() const;
         bool WantsKeyboardCapture() const;
 
