@@ -402,7 +402,22 @@ namespace pe
 
         if (HasDirectRuntimeUiNodeRect(node))
         {
-            const mat4 world = glm::translate(mat4(1.0f), vec3(x, y, 0.0f)) *
+            // (x,y) is the desired rendered TOP-LEFT. The node translation stores the
+            // offset from the screen anchor to the element pivot, so invert:
+            //   translation = topLeft - anchor*surface + pivot*size
+            float surfaceWidth = 0.0f;
+            float surfaceHeight = 0.0f;
+            GetRuntimeUiSurfaceSize(surfaceWidth, surfaceHeight);
+            vec2 anchor(0.0f, 0.0f);
+            vec2 pivot(0.5f, 0.5f);
+            if (const NodeRuntimeUiTag *ui = scene.GetRuntimeUiComponent(node))
+            {
+                anchor = ui->anchor;
+                pivot = ui->pivot;
+            }
+            const float tx = x - anchor.x * surfaceWidth + pivot.x * w;
+            const float ty = y - anchor.y * surfaceHeight + pivot.y * h;
+            const mat4 world = glm::translate(mat4(1.0f), vec3(tx, ty, 0.0f)) *
                                glm::scale(mat4(1.0f), vec3(w, h, 1.0f));
             SetRuntimeUiNodeWorldMatrix(scene, node, world);
             return;

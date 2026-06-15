@@ -3,6 +3,8 @@
 #include "Scene/SceneAccess.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SceneNodeHandle.h"
+#include "Scene/NodeComponents.h"
+#include "UI/RuntimeUi.h"
 #include "Camera/Camera.h"
 
 namespace pe
@@ -103,6 +105,81 @@ namespace pe
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return;
                     s->SetNodeName(h.nodeId, name);
+                });
+
+                // Update an authored Runtime UI node's content/style at runtime. The
+                // node carries the real (static) text/colors authored in the editor;
+                // a script attached to it calls node:set_ui{...} to drive the dynamic
+                // parts (e.g. FPS number, "HERO 152/155"). SyncSceneWidgets re-reads the
+                // tag every frame, so mutations show next frame. Accepts any of:
+                //   text|body|title|subtitle|footer|label = string
+                //   image = string (path)
+                //   fill|border|accent|text_color|image_tint = {r,g,b,a} or {1,2,3,4}
+                //   font_scale = number, visible = bool
+                ut.set_function("set_ui", [](SceneNodeHandle &h, sol::table opts) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    NodeRuntimeUiTag *ui = s->GetRuntimeUiComponent(h.nodeId);
+                    if (!ui) return; // node has no authored runtime_ui tag
+
+                    auto readStr = [&](const char *key, std::string &dst) {
+                        sol::object v = opts[key];
+                        if (v.is<std::string>()) dst = v.as<std::string>();
+                    };
+                    readStr("text", ui->body); // convenience alias for the common Text widget
+                    readStr("body", ui->body);
+                    readStr("title", ui->title);
+                    readStr("subtitle", ui->subtitle);
+                    readStr("footer", ui->footer);
+                    readStr("label", ui->label);
+                    readStr("image", ui->imagePath);
+
+                    auto readColor = [&](const char *key, vec4 &dst) {
+                        sol::object v = opts[key];
+                        if (!v.is<sol::table>()) return;
+                        sol::table c = v.as<sol::table>();
+                        auto comp = [&](const char *nk, int ik, float cur) -> float {
+                            sol::object o = c[nk];
+                            if (o.is<double>()) return static_cast<float>(o.as<double>());
+                            sol::object oi = c[ik];
+                            if (oi.is<double>()) return static_cast<float>(oi.as<double>());
+                            return cur;
+                        };
+                        dst.r = comp("r", 1, dst.r);
+                        dst.g = comp("g", 2, dst.g);
+                        dst.b = comp("b", 3, dst.b);
+                        dst.a = comp("a", 4, dst.a);
+                    };
+                    readColor("fill", ui->fillColor);
+                    readColor("border", ui->borderColor);
+                    readColor("accent", ui->accentColor);
+                    readColor("text_color", ui->textColor);
+                    readColor("image_tint", ui->imageTint);
+
+                    sol::object fontScale = opts["font_scale"];
+                    if (fontScale.is<double>()) ui->fontScale = static_cast<float>(fontScale.as<double>());
+                    sol::object visible = opts["visible"];
+                    if (visible.is<bool>()) ui->visible = visible.as<bool>();
+                });
+
+                // Rendered screen rect of an authored UI node (anchor+pivot+surface
+                // applied), as {x,y,w,h} in surface pixels, or nil if not laid out.
+                // Use this (not get_world_position) when a script draws relative to a
+                // UI node, since the node translation is only the anchor offset.
+                ut.set_function("get_ui_rect", [](SceneNodeHandle &h, sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return sol::make_object(ts, sol::nil);
+                    RuntimeUiSystem *rui = GetActiveRuntimeUi();
+                    if (!rui) return sol::make_object(ts, sol::nil);
+                    float x = 0.0f, y = 0.0f, w = 0.0f, rh = 0.0f;
+                    if (!rui->GetNodeRect(h.nodeId, x, y, w, rh)) return sol::make_object(ts, sol::nil);
+                    sol::table t = lua.create_table();
+                    t["x"] = x;
+                    t["y"] = y;
+                    t["w"] = w;
+                    t["h"] = rh;
+                    return sol::make_object(ts, t);
                 });
 
                 ut.set_function("get_position", [](SceneNodeHandle &h) -> vec3 {

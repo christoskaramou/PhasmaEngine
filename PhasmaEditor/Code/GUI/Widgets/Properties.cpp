@@ -520,6 +520,21 @@ namespace pe
             editColor("Text", uiComponent->textColor);
             editColor("Image Tint", uiComponent->imageTint);
 
+            float anchorVals[2] = {uiComponent->anchor.x, uiComponent->anchor.y};
+            if (ImGui::DragFloat2("Anchor", anchorVals, 0.01f, 0.0f, 1.0f, "%.2f"))
+            {
+                uiComponent->anchor = vec2(anchorVals[0], anchorVals[1]);
+                markRuntimeUiChanged();
+            }
+            ui::ItemTooltip("Screen anchor (0..1): 0,0 = top-left, 0.5,0.5 = center, 1,1 = bottom-right. The element stays at this screen point across resolutions.");
+            float pivotVals[2] = {uiComponent->pivot.x, uiComponent->pivot.y};
+            if (ImGui::DragFloat2("Pivot", pivotVals, 0.01f, 0.0f, 1.0f, "%.2f"))
+            {
+                uiComponent->pivot = vec2(pivotVals[0], pivotVals[1]);
+                markRuntimeUiChanged();
+            }
+            ui::ItemTooltip("Element pivot (0..1): the transform position places this point of the element. 0.5,0.5 = center.");
+
             if (ImGui::DragFloat("Font Scale", &uiComponent->fontScale, 0.01f, 0.1f, 4.0f, "%.2f"))
                 markRuntimeUiChanged();
             if (ImGui::Checkbox("Visible", &uiComponent->visible))

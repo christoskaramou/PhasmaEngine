@@ -94,8 +94,14 @@ val stagePhasmaAssets by tasks.registering(Sync::class) {
             // boot the menu ON TOP of the arena (ath_android_boot is the Android entry).
             exclude("old/**", "Player/against_the_hero.lua")
         }
-        from(athAssets.resolve("Textures/modes/spud_fields")) {
-            into("Assets/Textures/modes/spud_fields")
+        from(athAssets.resolve("Textures")) {
+            into("Assets/Textures")
+        }
+        // Scene-driven flow: intro -> hero_select -> map -> game (authored runtime_ui
+        // HUD + node scripts). The startup scene (editor_config last_scene) is
+        // intro.pescene; node scripts (flow.lua, game_boot.lua, hud/*) drive the rest.
+        from(athAssets.resolve("Scenes")) {
+            into("Assets/Scenes")
         }
     } else {
         logger.warn("AgainstTheHero project not found at $athAssets — APK will lack the game.")
@@ -125,8 +131,8 @@ android {
         applicationId = "dev.phasma.player"
         minSdk = 26
         targetSdk = 35
-        versionCode = 19
-        versionName = "0.19"
+        versionCode = 20
+        versionName = "0.20"
 
         ndk {
             abiFilters += androidAbiFilters

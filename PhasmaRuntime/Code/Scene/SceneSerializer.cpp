@@ -542,6 +542,16 @@ namespace pe
                 vec4 value(arr[0].GetFloat(), arr[1].GetFloat(), arr[2].GetFloat(), arr[3].GetFloat());
                 return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z) && std::isfinite(value.w) ? value : fallback;
             };
+            auto readVec2 = [&](const char *name, const vec2 &fallback) -> vec2
+            {
+                if (!uv.HasMember(name) || !uv[name].IsArray() || uv[name].Size() < 2)
+                    return fallback;
+                const auto &arr = uv[name];
+                if (!arr[0].IsNumber() || !arr[1].IsNumber())
+                    return fallback;
+                vec2 value(arr[0].GetFloat(), arr[1].GetFloat());
+                return std::isfinite(value.x) && std::isfinite(value.y) ? value : fallback;
+            };
 
             ui.authored = true;
             ui.widgetType = RuntimeUiWidgetTypeFromString(readString("type", "panel").c_str());
@@ -562,6 +572,8 @@ namespace pe
             ui.accentColor = readVec4("accent", ui.accentColor);
             ui.textColor = readVec4("text_color", ui.textColor);
             ui.imageTint = readVec4("image_tint", ui.imageTint);
+            ui.anchor = readVec2("anchor", vec2(0.0f, 0.0f));
+            ui.pivot = readVec2("pivot", vec2(0.5f, 0.5f));
             ui.fontScale = readFloat("font_scale", 1.0f);
             ui.visible = readBool("visible", true);
             ui.draggable = readBool("draggable", false);
@@ -1446,6 +1458,14 @@ namespace pe
                     rapidjson::Value imageTint;
                     SetVec4(imageTint, ui.imageTint);
                     uiObj.AddMember("image_tint", imageTint.Move(), allocator);
+
+                    rapidjson::Value anchorV(rapidjson::kArrayType);
+                    anchorV.PushBack(SafeFloat(ui.anchor.x), allocator).PushBack(SafeFloat(ui.anchor.y), allocator);
+                    uiObj.AddMember("anchor", anchorV.Move(), allocator);
+
+                    rapidjson::Value pivotV(rapidjson::kArrayType);
+                    pivotV.PushBack(SafeFloat(ui.pivot.x), allocator).PushBack(SafeFloat(ui.pivot.y), allocator);
+                    uiObj.AddMember("pivot", pivotV.Move(), allocator);
 
                     uiObj.AddMember("font_scale", SafeFloat(ui.fontScale), allocator);
                     uiObj.AddMember("visible", ui.visible, allocator);

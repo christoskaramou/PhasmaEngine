@@ -582,12 +582,25 @@ namespace pe
         inst.handle = scene->MakeHandle(node);
         inst.sourcePath = NormalizeSlashes(path);
         // Node-script paths are stored project-root-relative (e.g. "Assets/Scripts/x.lua"). Resolve
-        // them against the asset root, not the process CWD: NormalizePath()/weakly_canonical resolve
-        // relative paths against the CWD, which is the bin dir on desktop (so it happens to work) but
-        // "/" on a packaged player (Android), where the raw relative path fails to open.
+        // them against the active PROJECT root, not the process CWD and not the engine root. Resolving
+        // against the CWD only works on desktop by accident (the bin dir); Path::Root is the engine/exe
+        // dir when an external project is loaded in the editor or desktop player, so a project's node
+        // scripts would not be found there. The project root is the parent of the active Assets dir; on
+        // a packaged player (Android) the bundled Assets sit directly under Path::Root, so this matches.
         std::filesystem::path scriptPath(path);
         if (scriptPath.is_relative())
-            scriptPath = std::filesystem::path(Path::Root) / scriptPath;
+        {
+            std::filesystem::path base(Path::Root);
+            if (!Path::Assets.empty())
+            {
+                std::filesystem::path assets = std::filesystem::path(Path::Assets).lexically_normal();
+                if (assets.filename().empty()) // trailing slash leaves an empty leaf component
+                    assets = assets.parent_path();
+                if (assets.has_parent_path())
+                    base = assets.parent_path();
+            }
+            scriptPath = base / scriptPath;
+        }
         inst.path = NormalizePath(scriptPath.string());
 
         // Fresh environment inheriting globals (bindings, pe_log, etc.)

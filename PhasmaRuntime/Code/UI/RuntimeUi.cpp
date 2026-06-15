@@ -87,23 +87,33 @@ namespace pe
             }
         }
 
-        bool GetRuntimeUiNodeRect(const Scene &scene, const NodeId *node, float &x, float &y, float &z, float &w, float &h)
+        bool GetRuntimeUiNodeRect(const Scene &scene, const NodeId *node, const NodeRuntimeUiTag &ui,
+                                  float surfaceW, float surfaceH, float &x, float &y, float &z, float &w, float &h)
         {
             if (!node)
                 return false;
 
             const mat4 &world = scene.GetWorldMatrix(node);
-            x = world[3].x;
-            y = world[3].y;
+            const float offsetX = world[3].x;
+            const float offsetY = world[3].y;
             z = world[3].z;
             w = glm::length(vec3(world[0]));
             h = glm::length(vec3(world[1]));
 
-            if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) || !std::isfinite(w) || !std::isfinite(h))
+            if (!std::isfinite(offsetX) || !std::isfinite(offsetY) || !std::isfinite(z) || !std::isfinite(w) || !std::isfinite(h))
                 return false;
 
             w = std::max(w, 1.0f);
             h = std::max(h, 1.0f);
+
+            // RectTransform layout: the node translation is the offset from the screen
+            // anchor (anchor*surface) to the element's pivot; the top-left is then the
+            // pivot point minus pivot*size. anchor=(0,0)+pivot=(0,0) reproduces the
+            // legacy "translation = top-left" behaviour.
+            const float anchorX = ui.anchor.x * surfaceW;
+            const float anchorY = ui.anchor.y * surfaceH;
+            x = anchorX + offsetX - ui.pivot.x * w;
+            y = anchorY + offsetY - ui.pivot.y * h;
             return true;
         }
 
@@ -541,6 +551,11 @@ namespace pe
 
     void RuntimeUiSystem::SyncSceneWidgets(Scene &scene)
     {
+        uint32_t surfW = 0, surfH = 0;
+        GetFrameSurfaceSize(surfW, surfH);
+        const float fsw = static_cast<float>(surfW);
+        const float fsh = static_cast<float>(surfH);
+
         for (const auto &[screenId, widgetIds] : m_sceneAuthoredWidgetIds)
         {
             for (const std::string &widgetId : widgetIds)
@@ -566,7 +581,7 @@ namespace pe
             float z = 0.0f;
             float w = 0.0f;
             float h = 0.0f;
-            if (!GetRuntimeUiNodeRect(scene, node, x, y, z, w, h))
+            if (!GetRuntimeUiNodeRect(scene, node, *ui, fsw, fsh, x, y, z, w, h))
                 continue;
 
             const std::string screenId = ui->screenId.empty() ? "__scene_ui" : ui->screenId;

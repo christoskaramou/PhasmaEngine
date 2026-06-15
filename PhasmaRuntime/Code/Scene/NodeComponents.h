@@ -106,6 +106,13 @@ namespace pe
         vec4 accentColor = vec4(0.96f, 0.74f, 0.22f, 1.0f);
         vec4 textColor = vec4(0.92f, 0.93f, 0.94f, 1.0f);
         vec4 imageTint = vec4(1.0f);
+        // RectTransform-style layout. anchor = screen point the element sticks to
+        // (0..1 of the surface; (0,0)=top-left, (1,1)=bottom-right) for resolution
+        // independence. pivot = the element's own reference point (0..1); the node
+        // translation places the pivot, and the rect is laid out around it. Screen
+        // rect: topLeft = anchor*surface + translation - pivot*size.
+        vec2 anchor = vec2(0.0f, 0.0f);
+        vec2 pivot = vec2(0.5f, 0.5f);
         float fontScale = 1.0f;
         bool authored = false;
         bool visible = true;
