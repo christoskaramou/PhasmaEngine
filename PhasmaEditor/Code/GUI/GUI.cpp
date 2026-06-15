@@ -608,7 +608,10 @@ namespace pe
             if (!window || !window->DockIsActive)
                 return;
 
-            if (window->DC.DockTabItemStatusFlags & ImGuiItemStatusFlags_HoveredWindow)
+            const ImGuiItemStatusFlags tabStatusFlags = window->DC.DockTabItemStatusFlags;
+            const bool tabHovered = (tabStatusFlags & ImGuiItemStatusFlags_HoveredRect) != 0 &&
+                                    (tabStatusFlags & ImGuiItemStatusFlags_HoveredWindow) != 0;
+            if (tabHovered)
                 open = false;
         }
     } // namespace
