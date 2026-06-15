@@ -130,6 +130,13 @@ namespace pe
         bool m_exitAfterSave = false; // set when Save & Exit is chosen with no existing path
         void DrawOverwriteConfirmationPopup();
 
+        // Confirm-before-save guard for the interactive Save (Ctrl+S / menu): a stray
+        // keystroke must not silently overwrite the scene on disk.
+        bool m_showConfirmSave = false;
+        std::filesystem::path m_confirmSavePath;
+        void DrawConfirmSavePopup();
+        void RequestSaveScene();
+
         void Menu();
         void StatusBar();
         void BuildDockspace();
@@ -175,6 +182,11 @@ namespace pe
         void *m_indexerPtr = nullptr; // pmcp::CodebaseIndexer*, guarded by m_indexMutex
         std::thread m_indexThread;
         std::string m_playModeSnapshot;
+        // Scene identity captured when entering play, restored on Stop: play mode may
+        // navigate scenes via scene.load() (e.g. a game's ESC->menu), and RestoreSnapshot
+        // only reverts geometry, leaving the editor pointed at the wrong file otherwise.
+        std::filesystem::path m_prePlayScenePath;
+        bool m_prePlayDirty = false;
 
         EventSystem::CallbackToken m_afterCommandWaitToken{0};
     };

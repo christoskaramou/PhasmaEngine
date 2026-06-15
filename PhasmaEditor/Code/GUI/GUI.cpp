@@ -1921,14 +1921,62 @@ namespace pe
     void GUI::ShowSaveSceneMenuItem()
     {
         if (ImGui::MenuItem("Save Scene...", "Ctrl+S"))
-        {
-            RendererSystem *rs = GetGlobalSystem<RendererSystem>();
-            if (rs && !rs->GetScene().GetScenePath().empty())
-                pe::SaveScene(rs->GetScene().GetScenePath());
-            else
-                ShowSaveSceneMenuItem_Action();
-        }
+            RequestSaveScene();
         ui::ItemTooltip("Save the current scene, or choose a path if it has not been saved yet.");
+    }
+
+    // Interactive Save entry point (Ctrl+S / menu). Routes a first-time save to the
+    // Save-As dialog (which already confirms via its own path picker / overwrite
+    // prompt); for an already-saved scene it raises a confirm popup before writing,
+    // so a stray keystroke can't silently overwrite the file on disk.
+    void GUI::RequestSaveScene()
+    {
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
+        if (!rs)
+            return;
+        const auto &scenePath = rs->GetScene().GetScenePath();
+        if (scenePath.empty())
+        {
+            ShowSaveSceneMenuItem_Action();
+            return;
+        }
+        m_confirmSavePath = scenePath;
+        m_showConfirmSave = true;
+    }
+
+    void GUI::DrawConfirmSavePopup()
+    {
+        if (m_showConfirmSave)
+        {
+            ImGui::OpenPopup("Save Scene?##confirm");
+            m_showConfirmSave = false;
+        }
+
+        if (ImGui::BeginPopupModal("Save Scene?##confirm", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Overwrite this scene file on disk?");
+            ImGui::Dummy(ImVec2(0, 4));
+            ImGui::TextDisabled("%s", m_confirmSavePath.string().c_str());
+            ImGui::Dummy(ImVec2(0, 10));
+
+            if (ImGui::Button("Save", ImVec2(100, 0)))
+            {
+                auto savePath = m_confirmSavePath;
+                ThreadPool::GUI.Enqueue([savePath]()
+                                        { pe::SaveScene(savePath); });
+                m_confirmSavePath.clear();
+                ImGui::CloseCurrentPopup();
+            }
+            ui::ItemTooltip("Overwrite the scene file on disk.");
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(100, 0)))
+            {
+                m_confirmSavePath.clear();
+                ImGui::CloseCurrentPopup();
+            }
+            ui::ItemTooltip("Cancel — do not write the scene file.");
+            ImGui::EndPopup();
+        }
     }
 
     void GUI::ShowSaveSceneMenuItem_Action()
@@ -3309,22 +3357,10 @@ namespace pe
                 if (!io.WantTextInput && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_L, false))
                     m_requestDockReset = true;
 
-                // Ctrl+S - save scene
+                // Ctrl+S - save scene (asks for confirmation before overwriting)
                 if (ImGui::IsKeyPressed(ImGuiKey_S, false))
                 {
-                    if (undoRedoRS)
-                    {
-                        Scene &scene = undoRedoRS->GetScene();
-                        if (!scene.GetScenePath().empty())
-                        {
-                            pe::SaveScene(scene.GetScenePath());
-                        }
-                        else
-                        {
-                            // No path yet - open "Save As" dialog
-                            ShowSaveSceneMenuItem_Action();
-                        }
-                    }
+                    RequestSaveScene();
                 }
             }
 
@@ -3398,6 +3434,7 @@ namespace pe
             DrawSaveBeforeLoadPopup();
             DrawSaveBeforeNewPopup();
             DrawOverwriteConfirmationPopup();
+            DrawConfirmSavePopup();
             Toolbar();
             BuildDockspace();
         }
@@ -3651,6 +3688,12 @@ namespace pe
         {
             rs->WaitAllFramesCommands();
             m_playModeSnapshot = rs->GetScene().TakeSnapshot();
+            // Remember which scene we entered play from (and its saved/dirty state).
+            // Play may scene.load() elsewhere (a game's ESC->menu); on Stop we revert
+            // geometry AND this identity so the editor doesn't end up pointed at — and
+            // an accidental Ctrl+S doesn't overwrite — the wrong scene file.
+            m_prePlayScenePath = rs->GetScene().GetScenePath();
+            m_prePlayDirty = rs->GetScene().IsDirty();
             m_prePlayRender = m_render;
             m_restoreRenderAfterPlay = true;
             m_render = false;
@@ -3678,7 +3721,17 @@ namespace pe
                 rs->WaitAllFramesCommands();
                 rs->GetScene().RestoreSnapshot(m_playModeSnapshot);
                 m_playModeSnapshot.clear();
+                // RestoreSnapshot only reverts geometry; restore the scene identity we
+                // entered play with so the title/save target points back at the right
+                // file even if play mode navigated away via scene.load().
+                rs->GetScene().SetScenePath(m_prePlayScenePath);
+                if (m_prePlayDirty)
+                    rs->GetScene().MarkDirty();
+                else
+                    rs->GetScene().ClearDirty();
             }
+            m_prePlayScenePath.clear();
+            m_prePlayDirty = false;
             ClearRuntimeAnimationState();
             UndoRedo::Instance().Clear();
         }
