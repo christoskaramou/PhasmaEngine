@@ -245,6 +245,13 @@ namespace pe
                     }
                     break;
                 }
+                case EventType::ReloadModule:
+                {
+                    // Host-owned event: preserve it for PhasmaEditor/main.cpp, which unloads
+                    // the module only after Frame() returns to the safe reload point.
+                    EventSystem::PushEvent(EventType::ReloadModule, std::move(event.payload));
+                    return true;
+                }
                 case EventType::PresentMode:
                 {
                     GlobalSettings &gSettings = Settings::Get<GlobalSettings>();

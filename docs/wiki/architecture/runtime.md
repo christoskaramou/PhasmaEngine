@@ -6,7 +6,7 @@ PhasmaRuntime is the shared runtime layer between PhasmaCore and the host produc
 
 - `PhasmaCore` remains the low-level engine foundation: RHI, ECS, platform-adjacent services, paths, settings, and shared primitives.
 - `PhasmaRuntime` sits above PhasmaCore and below hosts. It defines how a project is described, how a runtime session resolves project-relative paths, and the shared SDL/window/RHI boot primitives that editor and player hosts use before handing off to their own loops.
-- `PhasmaEditor` remains the desktop editor concept. `PhasmaEditorModule` is the current hot-reload DLL implementation detail, not the product/layer name. The editor host still explicitly unloads copied module DLLs for hot reload, but Tracy-enabled Windows builds leave the final copied module loaded until process termination so Tracy's DLL-local profiler thread is not joined during a normal `FreeLibrary` detach; stale copied modules are cleaned on the next editor startup.
+- `PhasmaEditor` remains the desktop editor concept. `PhasmaEditorModule` is the current hot-reload DLL implementation detail, not the product/layer name. The editor host explicitly unloads copied module DLLs for hot reload except in Tracy-enabled Windows builds, where copied modules stay loaded until process termination so Tracy's DLL-local profiler thread is not joined during `FreeLibrary` detach. `ReloadModule` queue events are preserved by the module event pump for the host-side safe point, and stale copied modules are cleaned on the next editor startup.
 - `PhasmaPlayer` is the first standalone host over PhasmaRuntime instead of a copy of editor startup logic.
 
 ## Lean And Android Build Shape

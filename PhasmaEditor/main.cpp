@@ -191,14 +191,13 @@ namespace
         if (!m.lib)
             return;
 #if defined(PE_WIN32) && defined(PE_TRACY)
-        if (mode == ModuleUnloadMode::ProcessExit)
-        {
-            // Explicit FreeLibrary during normal exit runs Tracy's DLL-local static profiler
-            // destructor while its worker thread is still alive. Let ExitProcess detach the
-            // module instead; stale copied DLLs are cleaned on the next startup.
-            m = {};
-            return;
-        }
+        (void)mode;
+        // Explicit FreeLibrary runs Tracy's DLL-local static profiler destructor and can
+        // hang while it joins Tracy's worker thread. Keep copied modules loaded in Tracy
+        // Windows builds; versioned DLL names avoid source-module locks, and stale copies
+        // are cleaned on the next startup after process exit.
+        m = {};
+        return;
 #endif
 #if defined(PE_LINUX)
         dlclose(m.lib);
