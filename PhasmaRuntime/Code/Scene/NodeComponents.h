@@ -114,6 +114,13 @@ namespace pe
         vec2 anchor = vec2(0.0f, 0.0f);
         vec2 pivot = vec2(0.5f, 0.5f);
         float fontScale = 1.0f;
+        // Text alignment inside the widget rect (title/body/label text + button
+        // captions). 0 = default (text -> top-left, button -> center/middle),
+        // 1 = left/top, 2 = center/middle, 3 = right/bottom. textOffset adds a pixel
+        // nudge (x,y) after alignment.
+        uint8_t textAlignH = 0;
+        uint8_t textAlignV = 0;
+        vec2 textOffset = vec2(0.0f);
         bool authored = false;
         bool visible = true;
         bool draggable = false;

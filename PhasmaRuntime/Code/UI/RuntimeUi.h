@@ -69,6 +69,24 @@ namespace pe
         Image
     };
 
+    // Text alignment inside a widget rect. Default defers to each widget's natural
+    // alignment (text/panel/card -> Left/Top, button -> Center/Middle).
+    enum class RuntimeUiTextAlignH : uint8_t
+    {
+        Default = 0,
+        Left,
+        Center,
+        Right
+    };
+
+    enum class RuntimeUiTextAlignV : uint8_t
+    {
+        Default = 0,
+        Top,
+        Middle,
+        Bottom
+    };
+
     struct RuntimeUiQuadDesc
     {
         const char *id = nullptr;
@@ -95,6 +113,10 @@ namespace pe
         bool bringToFront = false;
         bool noInput = false;
         float fontScale = 1.0f;
+        RuntimeUiTextAlignH textAlignH = RuntimeUiTextAlignH::Default;
+        RuntimeUiTextAlignV textAlignV = RuntimeUiTextAlignV::Default;
+        float textOffsetX = 0.0f;
+        float textOffsetY = 0.0f;
         RuntimeUiQuadVisualStyle visualStyle = RuntimeUiQuadVisualStyle::Card;
     };
 
@@ -255,6 +277,10 @@ namespace pe
             bool bringToFront = false;
             bool noInput = false;
             float fontScale = 1.0f;
+            RuntimeUiTextAlignH textAlignH = RuntimeUiTextAlignH::Default;
+            RuntimeUiTextAlignV textAlignV = RuntimeUiTextAlignV::Default;
+            float textOffsetX = 0.0f;
+            float textOffsetY = 0.0f;
             RuntimeUiQuadVisualStyle visualStyle = RuntimeUiQuadVisualStyle::Card;
         };
 

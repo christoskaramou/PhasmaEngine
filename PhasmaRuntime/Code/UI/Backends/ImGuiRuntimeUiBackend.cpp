@@ -533,63 +533,67 @@ namespace pe
                 return text && text[0] != '\0';
             }
 
-            static float DrawWrappedText(ImDrawList *drawList,
-                                         ImFont *font,
-                                         float fontSize,
-                                         const char *text,
-                                         ImVec2 pos,
-                                         float maxWidth,
-                                         ImU32 color,
-                                         int maxLines)
+            static constexpr float kLineGap = 3.0f;
+
+            static float LineWidth(ImFont *font, float fontSize, const std::string &s)
             {
-                if (!drawList || !HasText(text) || maxWidth <= 0.0f || maxLines <= 0)
-                    return 0.0f;
+                return font ? font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, s.c_str()).x
+                            : ImGui::CalcTextSize(s.c_str()).x;
+            }
+
+            static RuntimeUiTextAlignH ResolveH(RuntimeUiTextAlignH a, RuntimeUiTextAlignH def)
+            {
+                return a == RuntimeUiTextAlignH::Default ? def : a;
+            }
+
+            static RuntimeUiTextAlignV ResolveV(RuntimeUiTextAlignV a, RuntimeUiTextAlignV def)
+            {
+                return a == RuntimeUiTextAlignV::Default ? def : a;
+            }
+
+            // Word-wrap `text` to `maxWidth`, honoring explicit '\n', up to `maxLines`.
+            static std::vector<std::string> WrapTextLines(ImFont *font, float fontSize, const char *text,
+                                                          float maxWidth, int maxLines)
+            {
+                std::vector<std::string> out;
+                if (!HasText(text) || maxWidth <= 0.0f || maxLines <= 0)
+                    return out;
 
                 std::string line;
                 std::string word;
-                int lines = 0;
-                float y = pos.y;
-                const float lineHeight = fontSize + 3.0f;
-                const char *cursor = text;
 
-                auto flushLine = [&]()
+                auto flush = [&]()
                 {
-                    if (line.empty() || lines >= maxLines)
+                    if (line.empty() || static_cast<int>(out.size()) >= maxLines)
                         return;
-                    drawList->AddText(font, fontSize, ImVec2(pos.x, y), color, line.c_str());
+                    out.push_back(line);
                     line.clear();
-                    ++lines;
-                    y += lineHeight;
                 };
 
                 auto pushWord = [&](const std::string &next)
                 {
-                    if (next.empty() || lines >= maxLines)
+                    if (next.empty() || static_cast<int>(out.size()) >= maxLines)
                         return;
-
                     const std::string candidate = line.empty() ? next : line + " " + next;
-                    const ImVec2 measured = font
-                                                ? font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, candidate.c_str())
-                                                : ImGui::CalcTextSize(candidate.c_str());
-                    if (measured.x <= maxWidth)
+                    if (LineWidth(font, fontSize, candidate) <= maxWidth)
                     {
                         line = candidate;
                         return;
                     }
-
-                    flushLine();
-                    if (lines < maxLines)
+                    flush();
+                    if (static_cast<int>(out.size()) < maxLines)
                         line = next;
                 };
 
-                while (*cursor && lines < maxLines)
+                const char *cursor = text;
+                while (*cursor && static_cast<int>(out.size()) < maxLines)
                 {
                     const char c = *cursor++;
                     if (c == '\n')
                     {
                         pushWord(word);
                         word.clear();
-                        flushLine();
+                        flush();
                     }
                     else if (std::isspace(static_cast<unsigned char>(c)))
                     {
@@ -601,10 +605,81 @@ namespace pe
                         word.push_back(c);
                     }
                 }
-
                 pushWord(word);
-                flushLine();
-                return static_cast<float>(lines) * lineHeight;
+                flush();
+                return out;
+            }
+
+            // Draw pre-wrapped lines starting at startY, each H-aligned within
+            // [originX, originX+wrapWidth], plus a pixel offX nudge.
+            static void DrawTextLines(ImDrawList *drawList, ImFont *font, float fontSize,
+                                      const std::vector<std::string> &lines, float originX, float wrapWidth,
+                                      float startY, ImU32 color, RuntimeUiTextAlignH alignH, float offX)
+            {
+                const float lineHeight = fontSize + kLineGap;
+                float y = startY;
+                for (const std::string &ln : lines)
+                {
+                    float x = originX;
+                    if (alignH == RuntimeUiTextAlignH::Center || alignH == RuntimeUiTextAlignH::Right)
+                    {
+                        const float lw = LineWidth(font, fontSize, ln);
+                        x += (alignH == RuntimeUiTextAlignH::Center) ? (wrapWidth - lw) * 0.5f : (wrapWidth - lw);
+                    }
+                    drawList->AddText(font, fontSize, ImVec2(x + offX, y), color, ln.c_str());
+                    y += lineHeight;
+                }
+            }
+
+            // Flow-style wrapped text from a fixed top (pos.y); H-aligned within maxWidth.
+            // Returns the drawn block height. (Vertical placement is the caller's via pos.y.)
+            static float DrawWrappedText(ImDrawList *drawList, ImFont *font, float fontSize, const char *text,
+                                         ImVec2 pos, float maxWidth, ImU32 color, int maxLines,
+                                         RuntimeUiTextAlignH alignH = RuntimeUiTextAlignH::Left, float offX = 0.0f)
+            {
+                if (!drawList || !HasText(text) || maxWidth <= 0.0f || maxLines <= 0)
+                    return 0.0f;
+                const std::vector<std::string> lines = WrapTextLines(font, fontSize, text, maxWidth, maxLines);
+                DrawTextLines(drawList, font, fontSize, lines, pos.x, maxWidth, pos.y, color, alignH, offX);
+                return static_cast<float>(lines.size()) * (fontSize + kLineGap);
+            }
+
+            // Wrapped text aligned in BOTH axes within the box [boxMin, boxMin+boxSize]
+            // (inset by pad), plus a pixel (offX,offY) nudge. Returns block height.
+            static float DrawAlignedText(ImDrawList *drawList, ImFont *font, float fontSize, const char *text,
+                                         ImVec2 boxMin, ImVec2 boxSize, float pad, ImU32 color,
+                                         RuntimeUiTextAlignH alignH, RuntimeUiTextAlignV alignV,
+                                         float offX, float offY, int maxLines)
+            {
+                if (!drawList || !HasText(text))
+                    return 0.0f;
+                const float wrapWidth = std::max(1.0f, boxSize.x - pad * 2.0f);
+                const std::vector<std::string> lines = WrapTextLines(font, fontSize, text, wrapWidth, maxLines);
+                if (lines.empty())
+                    return 0.0f;
+                const float lineHeight = fontSize + kLineGap;
+                const float totalH = static_cast<float>(lines.size()) * lineHeight;
+                float startY = boxMin.y + pad; // Top / Default
+                if (alignV == RuntimeUiTextAlignV::Middle)
+                    startY = boxMin.y + (boxSize.y - totalH) * 0.5f;
+                else if (alignV == RuntimeUiTextAlignV::Bottom)
+                    startY = boxMin.y + boxSize.y - pad - totalH;
+                DrawTextLines(drawList, font, fontSize, lines, boxMin.x + pad, wrapWidth, startY + offY, color, alignH, offX);
+                return totalH;
+            }
+
+            // Aligned X for a single (non-wrapped) line within [boxLeft, boxLeft+boxWidth].
+            static float AlignLineX(ImFont *font, float fontSize, const char *s, float boxLeft, float boxWidth,
+                                    float pad, RuntimeUiTextAlignH alignH, float offX)
+            {
+                float x = boxLeft + pad;
+                if (alignH == RuntimeUiTextAlignH::Center || alignH == RuntimeUiTextAlignH::Right)
+                {
+                    const float wrapW = std::max(1.0f, boxWidth - pad * 2.0f);
+                    const float lw = font ? font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, s).x : ImGui::CalcTextSize(s).x;
+                    x += (alignH == RuntimeUiTextAlignH::Center) ? (wrapW - lw) * 0.5f : (wrapW - lw);
+                }
+                return x + offX;
             }
 
             RuntimeUiWidgetState QuadOverlay(const std::string &id, const RuntimeUiQuadDesc &quad, ImVec2 size)
@@ -713,7 +788,9 @@ namespace pe
                                            ImVec2(pos.x + pad, y),
                                            std::max(1.0f, size.x - pad * 2.0f),
                                            text,
-                                           maxLines);
+                                           maxLines,
+                                           ResolveH(quad.textAlignH, RuntimeUiTextAlignH::Left),
+                                           quad.textOffsetX);
                 };
 
                 if (quad.visualStyle == RuntimeUiQuadVisualStyle::Image)
@@ -754,9 +831,19 @@ namespace pe
 
                     const ImVec2 captionSize = font ? font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, caption)
                                                     : ImGui::CalcTextSize(caption);
-                    ImVec2 textPos(pos.x + (size.x - captionSize.x) * 0.5f,
-                                   pos.y + (size.y - captionSize.y) * 0.5f);
-                    textPos.x = std::max(pos.x + pad, textPos.x);
+                    const RuntimeUiTextAlignH bah = ResolveH(quad.textAlignH, RuntimeUiTextAlignH::Center);
+                    const RuntimeUiTextAlignV bav = ResolveV(quad.textAlignV, RuntimeUiTextAlignV::Middle);
+                    float btx = pos.x + (size.x - captionSize.x) * 0.5f;
+                    if (bah == RuntimeUiTextAlignH::Left)
+                        btx = pos.x + pad;
+                    else if (bah == RuntimeUiTextAlignH::Right)
+                        btx = max.x - pad - captionSize.x;
+                    float bty = pos.y + (size.y - captionSize.y) * 0.5f;
+                    if (bav == RuntimeUiTextAlignV::Top)
+                        bty = pos.y + pad;
+                    else if (bav == RuntimeUiTextAlignV::Bottom)
+                        bty = max.y - pad - captionSize.y;
+                    ImVec2 textPos(std::max(pos.x + pad, btx) + quad.textOffsetX, bty + quad.textOffsetY);
                     drawList->PushClipRect(pos, max, true);
                     drawList->AddText(font, fontSize, textPos, text, caption);
                     drawList->PopClipRect();
@@ -771,7 +858,10 @@ namespace pe
                         drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
 
                     const char *content = HasText(quad.body) ? quad.body : (HasText(quad.title) ? quad.title : quad.label);
-                    drawSimpleText(content, pos.y + pad, 12);
+                    DrawAlignedText(drawList, font, fontSize, content, pos, size, pad, text,
+                                    ResolveH(quad.textAlignH, RuntimeUiTextAlignH::Left),
+                                    ResolveV(quad.textAlignV, RuntimeUiTextAlignV::Top),
+                                    quad.textOffsetX, quad.textOffsetY, 12);
                     return;
                 }
 
@@ -779,20 +869,22 @@ namespace pe
                 {
                     drawList->AddRectFilled(pos, max, fill, rounding);
                     drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
-                    float y = pos.y + pad;
+                    const RuntimeUiTextAlignH ah = ResolveH(quad.textAlignH, RuntimeUiTextAlignH::Left);
+                    const float ox = quad.textOffsetX;
+                    float y = pos.y + pad + quad.textOffsetY;
                     if (HasText(quad.label))
                     {
-                        drawList->AddText(font, fontSize * 0.83f, ImVec2(pos.x + pad, y), accent, quad.label);
+                        drawList->AddText(font, fontSize * 0.83f, ImVec2(AlignLineX(font, fontSize * 0.83f, quad.label, pos.x, size.x, pad, ah, ox), y), accent, quad.label);
                         y += fontSize + 2.0f * scale;
                     }
                     if (HasText(quad.title))
                     {
-                        drawList->AddText(font, fontSize * 1.08f, ImVec2(pos.x + pad, y), text, quad.title);
+                        drawList->AddText(font, fontSize * 1.08f, ImVec2(AlignLineX(font, fontSize * 1.08f, quad.title, pos.x, size.x, pad, ah, ox), y), text, quad.title);
                         y += fontSize + 6.0f * scale;
                     }
                     if (HasText(quad.subtitle))
                     {
-                        drawList->AddText(font, fontSize * 0.86f, ImVec2(pos.x + pad, y), accent, quad.subtitle);
+                        drawList->AddText(font, fontSize * 0.86f, ImVec2(AlignLineX(font, fontSize * 0.86f, quad.subtitle, pos.x, size.x, pad, ah, ox), y), accent, quad.subtitle);
                         y += fontSize + 5.0f * scale;
                     }
                     if (HasText(quad.body))
@@ -803,7 +895,7 @@ namespace pe
                                           ImVec2(max.x - pad, max.y - 30.0f * scale),
                                           border,
                                           1.0f);
-                        drawList->AddText(font, fontSize * 0.82f, ImVec2(pos.x + pad, max.y - 23.0f * scale), text, quad.footer);
+                        drawList->AddText(font, fontSize * 0.82f, ImVec2(AlignLineX(font, fontSize * 0.82f, quad.footer, pos.x, size.x, pad, ah, ox), max.y - 23.0f * scale), text, quad.footer);
                     }
                     return;
                 }
@@ -843,29 +935,31 @@ namespace pe
                     }
                 }
 
-                float y = artMax.y + 9.0f * scale;
+                const RuntimeUiTextAlignH ah = ResolveH(quad.textAlignH, RuntimeUiTextAlignH::Left);
+                const float ox = quad.textOffsetX;
+                float y = artMax.y + 9.0f * scale + quad.textOffsetY;
                 const float textWidth = std::max(1.0f, size.x - pad * 2.0f);
 
                 if (HasText(quad.label))
                 {
-                    drawList->AddText(font, fontSize * 0.83f, ImVec2(pos.x + pad, pos.y + pad + 5.0f * scale), text, quad.label);
+                    drawList->AddText(font, fontSize * 0.83f, ImVec2(AlignLineX(font, fontSize * 0.83f, quad.label, pos.x, size.x, pad, ah, ox), pos.y + pad + 5.0f * scale + quad.textOffsetY), text, quad.label);
                 }
                 if (HasText(quad.title))
                 {
-                    drawList->AddText(font, fontSize * 1.08f, ImVec2(pos.x + pad, y), text, quad.title);
+                    drawList->AddText(font, fontSize * 1.08f, ImVec2(AlignLineX(font, fontSize * 1.08f, quad.title, pos.x, size.x, pad, ah, ox), y), text, quad.title);
                     y += fontSize + 6.0f * scale;
                 }
                 if (HasText(quad.subtitle))
                 {
-                    drawList->AddText(font, fontSize * 0.86f, ImVec2(pos.x + pad, y), accent, quad.subtitle);
+                    drawList->AddText(font, fontSize * 0.86f, ImVec2(AlignLineX(font, fontSize * 0.86f, quad.subtitle, pos.x, size.x, pad, ah, ox), y), accent, quad.subtitle);
                     y += fontSize + 5.0f * scale;
                 }
                 if (HasText(quad.body))
-                    y += DrawWrappedText(drawList, font, fontSize * 0.88f, quad.body, ImVec2(pos.x + pad, y), textWidth, text, 8);
+                    y += DrawWrappedText(drawList, font, fontSize * 0.88f, quad.body, ImVec2(pos.x + pad, y), textWidth, text, 8, ah, ox);
                 if (HasText(quad.footer))
                 {
                     drawList->AddLine(ImVec2(pos.x + pad, max.y - 30.0f * scale), ImVec2(max.x - pad, max.y - 30.0f * scale), border, 1.0f);
-                    drawList->AddText(font, fontSize * 0.82f, ImVec2(pos.x + pad, max.y - 23.0f * scale), text, quad.footer);
+                    drawList->AddText(font, fontSize * 0.82f, ImVec2(AlignLineX(font, fontSize * 0.82f, quad.footer, pos.x, size.x, pad, ah, ox), max.y - 23.0f * scale), text, quad.footer);
                 }
             }
 

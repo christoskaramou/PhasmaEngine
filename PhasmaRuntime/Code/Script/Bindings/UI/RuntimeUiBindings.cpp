@@ -179,6 +179,47 @@ namespace pe
             result.desc.noInput = ReadBoolOption(options, "no_input", result.desc.noInput);
             result.desc.fontScale = ReadFloatOption(options, "font_scale", result.desc.fontScale);
 
+            auto parseAlignH = [](const sol::table &o, const char *k, RuntimeUiTextAlignH cur) -> RuntimeUiTextAlignH
+            {
+                sol::object v = o[k];
+                if (v.is<std::string>())
+                {
+                    const std::string s = v.as<std::string>();
+                    if (s == "left")
+                        return RuntimeUiTextAlignH::Left;
+                    if (s == "center" || s == "centre" || s == "middle")
+                        return RuntimeUiTextAlignH::Center;
+                    if (s == "right")
+                        return RuntimeUiTextAlignH::Right;
+                    return RuntimeUiTextAlignH::Default;
+                }
+                if (v.is<double>())
+                    return static_cast<RuntimeUiTextAlignH>(static_cast<uint8_t>(v.as<double>()));
+                return cur;
+            };
+            auto parseAlignV = [](const sol::table &o, const char *k, RuntimeUiTextAlignV cur) -> RuntimeUiTextAlignV
+            {
+                sol::object v = o[k];
+                if (v.is<std::string>())
+                {
+                    const std::string s = v.as<std::string>();
+                    if (s == "top")
+                        return RuntimeUiTextAlignV::Top;
+                    if (s == "middle" || s == "center" || s == "centre")
+                        return RuntimeUiTextAlignV::Middle;
+                    if (s == "bottom")
+                        return RuntimeUiTextAlignV::Bottom;
+                    return RuntimeUiTextAlignV::Default;
+                }
+                if (v.is<double>())
+                    return static_cast<RuntimeUiTextAlignV>(static_cast<uint8_t>(v.as<double>()));
+                return cur;
+            };
+            result.desc.textAlignH = parseAlignH(options, "align_h", result.desc.textAlignH);
+            result.desc.textAlignV = parseAlignV(options, "align_v", result.desc.textAlignV);
+            result.desc.textOffsetX = ReadFloatOption(options, "offset_x", result.desc.textOffsetX);
+            result.desc.textOffsetY = ReadFloatOption(options, "offset_y", result.desc.textOffsetY);
+
             sol::object nodeObject = options["node"];
             if (nodeObject.is<SceneNodeHandle>())
             {

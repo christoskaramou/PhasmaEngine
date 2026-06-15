@@ -575,6 +575,9 @@ namespace pe
             ui.anchor = readVec2("anchor", vec2(0.0f, 0.0f));
             ui.pivot = readVec2("pivot", vec2(0.5f, 0.5f));
             ui.fontScale = readFloat("font_scale", 1.0f);
+            ui.textAlignH = static_cast<uint8_t>(readFloat("text_align_h", 0.0f));
+            ui.textAlignV = static_cast<uint8_t>(readFloat("text_align_v", 0.0f));
+            ui.textOffset = readVec2("text_offset", vec2(0.0f, 0.0f));
             ui.visible = readBool("visible", true);
             ui.draggable = readBool("draggable", false);
             ui.noInput = readBool("no_input", false);
@@ -1468,6 +1471,13 @@ namespace pe
                     uiObj.AddMember("pivot", pivotV.Move(), allocator);
 
                     uiObj.AddMember("font_scale", SafeFloat(ui.fontScale), allocator);
+                    uiObj.AddMember("text_align_h", static_cast<int>(ui.textAlignH), allocator);
+                    uiObj.AddMember("text_align_v", static_cast<int>(ui.textAlignV), allocator);
+
+                    rapidjson::Value textOffsetV(rapidjson::kArrayType);
+                    textOffsetV.PushBack(SafeFloat(ui.textOffset.x), allocator).PushBack(SafeFloat(ui.textOffset.y), allocator);
+                    uiObj.AddMember("text_offset", textOffsetV.Move(), allocator);
+
                     uiObj.AddMember("visible", ui.visible, allocator);
                     uiObj.AddMember("draggable", ui.draggable, allocator);
                     uiObj.AddMember("no_input", ui.noInput, allocator);

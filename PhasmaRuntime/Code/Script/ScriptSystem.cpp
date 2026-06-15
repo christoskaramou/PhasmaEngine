@@ -685,6 +685,15 @@ namespace pe
     {
         if (inst.initCalled)
             return;
+        // PLAY-mode only: in the editor host, scene node scripts must NOT run their
+        // init/update/destroy lifecycle while stopped (authoring). Running them would fire
+        // game logic over the static authored UI -- building the arena, navigating via
+        // button actions, etc. They initialize when Play is pressed and are torn down on
+        // Stop (ReconcileNodeInstances destroys stale instances after the snapshot restore).
+        // update_editor() still runs every frame for editor-only behavior, and the player
+        // is never an editor host, so this never gates the shipped game.
+        if (IsEditorHost() && !IsScriptPlayMode())
+            return;
 
         inst.initCalled = true;
         if (!inst.initFn.valid())
@@ -788,6 +797,11 @@ namespace pe
                                                  const std::string &widgetId)
     {
         if (!m_initialized || !node || functionName.empty())
+            return false;
+        // Authored-UI actions (button on_click etc.) are play-mode only in the editor:
+        // clicking the UI while stopped must not run game logic such as scene navigation.
+        // Always fires in the player (not an editor host).
+        if (IsEditorHost() && !IsScriptPlayMode())
             return false;
 
         Scene *scene = GetActiveScene();

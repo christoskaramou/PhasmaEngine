@@ -158,6 +158,35 @@ namespace pe
 
                     sol::object fontScale = opts["font_scale"];
                     if (fontScale.is<double>()) ui->fontScale = static_cast<float>(fontScale.as<double>());
+
+                    // Text alignment: align_h/align_v accept a string ("left"/"center"/
+                    // "right", "top"/"middle"/"bottom", "default") or a number 0..3.
+                    // offset_x/offset_y nudge the text in pixels after alignment.
+                    auto readAlign = [&](const char *key, uint8_t &dst, bool vertical) {
+                        sol::object v = opts[key];
+                        if (v.is<std::string>()) {
+                            const std::string s = v.as<std::string>();
+                            if (s == "default") dst = 0;
+                            else if (!vertical) {
+                                if (s == "left") dst = 1;
+                                else if (s == "center" || s == "centre" || s == "middle") dst = 2;
+                                else if (s == "right") dst = 3;
+                            } else {
+                                if (s == "top") dst = 1;
+                                else if (s == "middle" || s == "center" || s == "centre") dst = 2;
+                                else if (s == "bottom") dst = 3;
+                            }
+                        } else if (v.is<double>()) {
+                            dst = static_cast<uint8_t>(v.as<double>());
+                        }
+                    };
+                    readAlign("align_h", ui->textAlignH, false);
+                    readAlign("align_v", ui->textAlignV, true);
+                    sol::object offX = opts["offset_x"];
+                    if (offX.is<double>()) ui->textOffset.x = static_cast<float>(offX.as<double>());
+                    sol::object offY = opts["offset_y"];
+                    if (offY.is<double>()) ui->textOffset.y = static_cast<float>(offY.as<double>());
+
                     sol::object visible = opts["visible"];
                     if (visible.is<bool>()) ui->visible = visible.as<bool>();
                 });

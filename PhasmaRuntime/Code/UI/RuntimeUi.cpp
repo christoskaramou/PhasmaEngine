@@ -543,6 +543,10 @@ namespace pe
         widget.bringToFront = desc.bringToFront;
         widget.noInput = desc.noInput;
         widget.fontScale = desc.fontScale > 0.0f ? desc.fontScale : 1.0f;
+        widget.textAlignH = desc.textAlignH;
+        widget.textAlignV = desc.textAlignV;
+        widget.textOffsetX = desc.textOffsetX;
+        widget.textOffsetY = desc.textOffsetY;
         widget.visualStyle = desc.visualStyle;
         widget.imagePath = path;
         widget.image = path.empty() ? desc.image : LoadImageResource(path);
@@ -615,6 +619,10 @@ namespace pe
             desc.bringToFront = ui->bringToFront;
             desc.noInput = ui->noInput;
             desc.fontScale = ui->fontScale;
+            desc.textAlignH = static_cast<RuntimeUiTextAlignH>(ui->textAlignH);
+            desc.textAlignV = static_cast<RuntimeUiTextAlignV>(ui->textAlignV);
+            desc.textOffsetX = ui->textOffset.x;
+            desc.textOffsetY = ui->textOffset.y;
             desc.visualStyle = ToRuntimeUiVisualStyle(ui->widgetType);
             SetQuad(screenId, widgetId, desc, ui->imagePath);
         }
@@ -915,6 +923,10 @@ namespace pe
                         quadDesc.bringToFront = widget.bringToFront;
                         quadDesc.noInput = widget.noInput;
                         quadDesc.fontScale = widget.fontScale;
+                        quadDesc.textAlignH = widget.textAlignH;
+                        quadDesc.textAlignV = widget.textAlignV;
+                        quadDesc.textOffsetX = widget.textOffsetX;
+                        quadDesc.textOffsetY = widget.textOffsetY;
                         quadDesc.visualStyle = widget.visualStyle;
                         const RuntimeUiWidgetState previousState = widget.state;
                         widget.state = m_backend->Quad(quadDesc);

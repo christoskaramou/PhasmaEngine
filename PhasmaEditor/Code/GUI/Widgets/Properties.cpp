@@ -535,8 +535,35 @@ namespace pe
             }
             ui::ItemTooltip("Element pivot (0..1): the transform position places this point of the element. 0.5,0.5 = center.");
 
-            if (ImGui::DragFloat("Font Scale", &uiComponent->fontScale, 0.01f, 0.1f, 4.0f, "%.2f"))
+            // Uncapped: floor at a small positive value, no upper bound (FLT_MAX) so
+            // titles/HUD text can scale arbitrarily large. Ctrl+click the slider to type.
+            if (ImGui::DragFloat("Font Scale", &uiComponent->fontScale, 0.05f, 0.01f, FLT_MAX, "%.2f"))
                 markRuntimeUiChanged();
+
+            const char *hAlignItems[] = {"Default", "Left", "Center", "Right"};
+            int hAlign = uiComponent->textAlignH < 4 ? static_cast<int>(uiComponent->textAlignH) : 0;
+            if (ImGui::Combo("Text Align X", &hAlign, hAlignItems, IM_ARRAYSIZE(hAlignItems)))
+            {
+                uiComponent->textAlignH = static_cast<uint8_t>(hAlign);
+                markRuntimeUiChanged();
+            }
+            ui::ItemTooltip("Horizontal text alignment. Default = Left for text/panels, Center for buttons.");
+            const char *vAlignItems[] = {"Default", "Top", "Middle", "Bottom"};
+            int vAlign = uiComponent->textAlignV < 4 ? static_cast<int>(uiComponent->textAlignV) : 0;
+            if (ImGui::Combo("Text Align Y", &vAlign, vAlignItems, IM_ARRAYSIZE(vAlignItems)))
+            {
+                uiComponent->textAlignV = static_cast<uint8_t>(vAlign);
+                markRuntimeUiChanged();
+            }
+            ui::ItemTooltip("Vertical text alignment. Default = Top for text/panels, Middle for buttons.");
+            float textOffsetVals[2] = {uiComponent->textOffset.x, uiComponent->textOffset.y};
+            if (ImGui::DragFloat2("Text Offset", textOffsetVals, 0.5f, -4000.0f, 4000.0f, "%.0f"))
+            {
+                uiComponent->textOffset = vec2(textOffsetVals[0], textOffsetVals[1]);
+                markRuntimeUiChanged();
+            }
+            ui::ItemTooltip("Pixel nudge applied to the text after alignment (x, y).");
+
             if (ImGui::Checkbox("Visible", &uiComponent->visible))
                 markRuntimeUiChanged();
             if (ImGui::Checkbox("Draggable", &uiComponent->draggable))
