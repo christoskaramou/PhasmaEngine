@@ -298,13 +298,14 @@ namespace pe
                     return state;
 
                 ScopedImGuiContext contextScope(m_context);
-                const float width = quad.width > 0.0f ? quad.width : 180.0f;
-                const float height = quad.height > 0.0f ? quad.height : 240.0f;
-                if (width <= 0.0f || height <= 0.0f)
+                const ImVec2 size = quad.fit
+                                        ? MeasureFitSize(quad)
+                                        : ImVec2(quad.width > 0.0f ? quad.width : 180.0f,
+                                                 quad.height > 0.0f ? quad.height : 240.0f);
+                if (size.x <= 0.0f || size.y <= 0.0f)
                     return state;
 
                 const std::string id = m_currentScreenId + "." + (quad.id ? quad.id : "quad");
-                const ImVec2 size(width, height);
                 if (m_currentScreenOverlay)
                     return QuadOverlay(id, quad, size);
 
@@ -680,6 +681,42 @@ namespace pe
                     x += (alignH == RuntimeUiTextAlignH::Center) ? (wrapW - lw) * 0.5f : (wrapW - lw);
                 }
                 return x + offX;
+            }
+
+            // Tightly bound a Text-style quad to its content: max line width + pad
+            // for X, line count * line height + pad for Y. Mirrors the metrics used
+            // by DrawAlignedText so the box snaps exactly around the drawn text.
+            static ImVec2 MeasureFitSize(const RuntimeUiQuadDesc &quad)
+            {
+                const char *content = HasText(quad.body) ? quad.body
+                                                         : (HasText(quad.title) ? quad.title : quad.label);
+                const float scale = quad.fontScale > 0.0f ? quad.fontScale : 1.0f;
+                const float pad = 10.0f * scale;
+                ImFont *font = ImGui::GetFont();
+                const float fontSize = ImGui::GetFontSize() * scale;
+                const float lineHeight = fontSize + kLineGap;
+
+                float maxWidth = 0.0f;
+                int lineCount = 0;
+                if (HasText(content))
+                {
+                    const char *lineStart = content;
+                    for (const char *c = content;; ++c)
+                    {
+                        if (*c == '\n' || *c == '\0')
+                        {
+                            maxWidth = std::max(maxWidth, LineWidth(font, fontSize, std::string(lineStart, c)));
+                            ++lineCount;
+                            if (*c == '\0')
+                                break;
+                            lineStart = c + 1;
+                        }
+                    }
+                }
+                if (lineCount <= 0)
+                    lineCount = 1;
+
+                return ImVec2(maxWidth + pad * 2.0f, static_cast<float>(lineCount) * lineHeight + pad * 2.0f);
             }
 
             RuntimeUiWidgetState QuadOverlay(const std::string &id, const RuntimeUiQuadDesc &quad, ImVec2 size)

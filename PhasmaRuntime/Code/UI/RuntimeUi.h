@@ -118,6 +118,9 @@ namespace pe
         float textOffsetX = 0.0f;
         float textOffsetY = 0.0f;
         RuntimeUiQuadVisualStyle visualStyle = RuntimeUiQuadVisualStyle::Card;
+        // Auto-size the quad to tightly fit its text (Text style). When set, the
+        // backend ignores width/height and measures the content instead.
+        bool fit = false;
     };
 
     struct RuntimeUiWidgetState
@@ -282,6 +285,7 @@ namespace pe
             float textOffsetX = 0.0f;
             float textOffsetY = 0.0f;
             RuntimeUiQuadVisualStyle visualStyle = RuntimeUiQuadVisualStyle::Card;
+            bool fit = false;
         };
 
         struct Screen

@@ -548,6 +548,7 @@ namespace pe
         widget.textOffsetX = desc.textOffsetX;
         widget.textOffsetY = desc.textOffsetY;
         widget.visualStyle = desc.visualStyle;
+        widget.fit = desc.fit;
         widget.imagePath = path;
         widget.image = path.empty() ? desc.image : LoadImageResource(path);
         SortQuadWidgets(screen);
@@ -928,6 +929,7 @@ namespace pe
                         quadDesc.textOffsetX = widget.textOffsetX;
                         quadDesc.textOffsetY = widget.textOffsetY;
                         quadDesc.visualStyle = widget.visualStyle;
+                        quadDesc.fit = widget.fit;
                         const RuntimeUiWidgetState previousState = widget.state;
                         widget.state = m_backend->Quad(quadDesc);
                         DispatchRuntimeUiNodeAction(screen.id, widget.id, widget.node, widget.state, previousState);

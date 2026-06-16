@@ -533,6 +533,32 @@ namespace pe
         }
     }
 
+    static std::string NormalizeNodeScriptPath(const std::string &path)
+    {
+        if (path.empty())
+            return path;
+
+        std::filesystem::path p(path);
+        if (p.is_relative())
+            return p.generic_string(); // already relative; just normalize separators
+
+        std::filesystem::path projectRoot(Path::Root);
+        if (!Path::Assets.empty())
+        {
+            std::filesystem::path assets = std::filesystem::path(Path::Assets).lexically_normal();
+            if (assets.filename().empty()) // trailing slash leaves an empty leaf component
+                assets = assets.parent_path();
+            if (assets.has_parent_path())
+                projectRoot = assets.parent_path();
+        }
+
+        const std::string rel =
+            p.lexically_normal().lexically_relative(projectRoot.lexically_normal()).generic_string();
+        if (rel.empty() || rel.compare(0, 2, "..") == 0)
+            return p.lexically_normal().generic_string(); // outside the project: keep absolute
+        return rel;
+    }
+
     void Scene::SetNodeScript(NodeId *node, const std::string &path)
     {
         if (!node || node->index >= (int)m_nodeComponentCache.size())
@@ -546,7 +572,7 @@ namespace pe
             PE_WARN("[Scene] SetNodeScript: node %d has no script component", node->index);
             return;
         }
-        cache.script->path = path;
+        cache.script->path = NormalizeNodeScriptPath(path);
     }
 
     void Scene::SetNodePrefabPath(NodeId *node, const std::string &path, bool markDirty)

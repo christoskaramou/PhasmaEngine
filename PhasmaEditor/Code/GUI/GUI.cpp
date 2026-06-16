@@ -3047,13 +3047,24 @@ namespace pe
         }
         else if (io.Fonts && io.Fonts->Fonts.Size > 0)
         {
-            ImFont *font = io.Fonts->Fonts[0];
-            GUIState::s_fontClassic = font;
-            GUIState::s_fontUnity = font;
-            GUIState::s_fontUnreal = font;
-            GUIState::s_fontLight = font;
-            GUIState::s_fontDark = font;
-            GUIState::s_fontModern = font;
+            ImVector<ImFont *> &fonts = io.Fonts->Fonts;
+            int idx = 0;
+            auto nextFont = [&](ImFont *fallback) -> ImFont *
+            { return idx < fonts.Size ? fonts[idx++] : fallback; };
+
+            const std::string fontDir = Path::EditorAssets + "Fonts/";
+            GUIState::s_fontClassic = nextFont(fonts[0]); // AddFontDefault() is always first
+            GUIState::s_fontUnity = std::filesystem::exists(fontDir + "Inter-Regular.ttf")
+                                        ? nextFont(GUIState::s_fontClassic)
+                                        : GUIState::s_fontClassic;
+            GUIState::s_fontUnreal = std::filesystem::exists(fontDir + "Roboto-Regular.ttf")
+                                         ? nextFont(GUIState::s_fontClassic)
+                                         : GUIState::s_fontClassic;
+            GUIState::s_fontLight = std::filesystem::exists(fontDir + "OpenSans-Regular.ttf")
+                                        ? nextFont(GUIState::s_fontClassic)
+                                        : GUIState::s_fontClassic;
+            GUIState::s_fontDark = GUIState::s_fontLight;
+            GUIState::s_fontModern = GUIState::s_fontLight;
         }
 
         GUIBackend::CreateFontsTexture();

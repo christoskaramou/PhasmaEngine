@@ -178,6 +178,8 @@ namespace pe
             result.desc.bringToFront = ReadBoolOption(options, "bring_to_front", result.desc.bringToFront);
             result.desc.noInput = ReadBoolOption(options, "no_input", result.desc.noInput);
             result.desc.fontScale = ReadFloatOption(options, "font_scale", result.desc.fontScale);
+            result.desc.fit = ReadBoolOption(options, "fit", result.desc.fit);
+            result.desc.fit = ReadBoolOption(options, "auto_size", result.desc.fit);
 
             auto parseAlignH = [](const sol::table &o, const char *k, RuntimeUiTextAlignH cur) -> RuntimeUiTextAlignH
             {
@@ -219,6 +221,27 @@ namespace pe
             result.desc.textAlignV = parseAlignV(options, "align_v", result.desc.textAlignV);
             result.desc.textOffsetX = ReadFloatOption(options, "offset_x", result.desc.textOffsetX);
             result.desc.textOffsetY = ReadFloatOption(options, "offset_y", result.desc.textOffsetY);
+
+            auto parseStyle = [](const sol::table &o, const char *k, RuntimeUiQuadVisualStyle cur) -> RuntimeUiQuadVisualStyle
+            {
+                sol::object v = o[k];
+                if (v.is<std::string>())
+                {
+                    const std::string s = v.as<std::string>();
+                    if (s == "card")
+                        return RuntimeUiQuadVisualStyle::Card;
+                    if (s == "panel")
+                        return RuntimeUiQuadVisualStyle::Panel;
+                    if (s == "text")
+                        return RuntimeUiQuadVisualStyle::Text;
+                    if (s == "button")
+                        return RuntimeUiQuadVisualStyle::Button;
+                    if (s == "image")
+                        return RuntimeUiQuadVisualStyle::Image;
+                }
+                return cur;
+            };
+            result.desc.visualStyle = parseStyle(options, "style", result.desc.visualStyle);
 
             sol::object nodeObject = options["node"];
             if (nodeObject.is<SceneNodeHandle>())
