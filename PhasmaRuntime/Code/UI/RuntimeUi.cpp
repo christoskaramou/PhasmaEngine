@@ -220,11 +220,8 @@ namespace pe
         if (s_activeRuntimeUi == this)
             s_activeRuntimeUi = nullptr;
 
-        if (!m_imageCache.empty())
-        {
-            if (Queue *queue = RHII.GetMainQueue())
-                queue->WaitIdle();
-        }
+        if (m_initialized || m_backend || !m_imageCache.empty())
+            RHII.WaitDeviceIdle();
 
         if (m_backend)
             m_backend->Shutdown();

@@ -2,6 +2,8 @@
 
 ## 2026-06-16
 
+- Fixed Vulkan validation errors on editor/player exit from runtime UI backend teardown. `RuntimeUiSystem::Shutdown()` now waits for GPU idle whenever runtime UI backend resources may exist, not only when path-backed UI images are cached, so Dear ImGui's frame buffers, font descriptor set, texture descriptors, and renderer pipeline are not destroyed while the last submitted scene command buffer can still reference them.
+
 - Fixed Vulkan present-mode switching after FIFO -> immediate -> mailbox by keeping Lua `rhi.change_present_mode(...)` on the deferred resize path instead of recreating the swapchain directly from script update code. The binding now shares behavior with `rhi.set_present_mode(...)`, updates `GlobalSettings::preferred_present_mode` to the effective supported mode, waits idle, and queues `EventType::Resize` so swapchain and scene render targets rebuild together. The framebuffer cache now keys implicit attachments by their live `ImageView` and clears cached framebuffers when RTVs are recreated or the low-level present-mode path rebuilds the swapchain, preventing reuse of framebuffers that still reference destroyed image views such as `display_RTV`.
 
 - Added a global `forward_plus` setting for the raster Forward+ path. The option defaults on, is exposed in the Global widget, serializes through `.pescene`, is available to Lua as `settings.get/set("forward_plus", ...)`, and is reported by the editor renderer-status tool. Disabling it removes `ForwardPlusLightCullingPass` from the render graph, binds fallback light-list buffers to keep the lighting descriptor layout stable, and makes `LightingPS.hlsl` use the previous full point/spot light loops.
