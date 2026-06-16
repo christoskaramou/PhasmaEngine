@@ -10,6 +10,7 @@
 #include "API/Sampler.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
+#include "ForwardPlusLightCullingPass.h"
 #include "Render/SceneRendererHost.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
@@ -95,6 +96,59 @@ namespace pe
             views.assign(cascadeCount, texture->GetSRV());
         }
 
+        Buffer *CreateZeroedStorageBuffer(size_t size, const std::string &name)
+        {
+            Buffer *buffer = Buffer::Create({
+                .size = size,
+                .usage = PE_BUFFER_USAGE_STORAGE_BUFFER,
+                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                .name = name,
+            });
+            buffer->Map();
+            buffer->Zero();
+            buffer->Flush();
+            buffer->Unmap();
+            return buffer;
+        }
+
+        void DestroyForwardPlusFallbackResources(std::vector<Buffer *> &tileData,
+                                                 std::vector<Buffer *> &lightIndices)
+        {
+            for (auto *&buffer : tileData)
+                Buffer::Destroy(buffer);
+            tileData.clear();
+
+            for (auto *&buffer : lightIndices)
+                Buffer::Destroy(buffer);
+            lightIndices.clear();
+        }
+
+        void EnsureForwardPlusFallbackResources(std::vector<Buffer *> &tileData,
+                                                std::vector<Buffer *> &lightIndices,
+                                                const std::string &namePrefix)
+        {
+            const uint32_t frameCount = RHII.GetSwapchainImageCount();
+            if (tileData.size() == frameCount && lightIndices.size() == frameCount &&
+                std::all_of(tileData.begin(), tileData.end(), [](Buffer *buffer)
+                            { return buffer != nullptr; }) &&
+                std::all_of(lightIndices.begin(), lightIndices.end(), [](Buffer *buffer)
+                            { return buffer != nullptr; }))
+                return;
+
+            DestroyForwardPlusFallbackResources(tileData, lightIndices);
+            tileData.resize(frameCount);
+            lightIndices.resize(frameCount);
+            for (uint32_t i = 0; i < frameCount; ++i)
+            {
+                tileData[i] = CreateZeroedStorageBuffer(sizeof(uvec4),
+                                                        namePrefix + "_ForwardPlusFallbackTileData_" +
+                                                            std::to_string(i));
+                lightIndices[i] = CreateZeroedStorageBuffer(sizeof(uint32_t),
+                                                            namePrefix + "_ForwardPlusFallbackLightIndices_" +
+                                                                std::to_string(i));
+            }
+        }
+
         bool HasLiveShadowResources(const ShadowPass &shadows)
         {
             return shadows.HasLiveResources();
@@ -103,6 +157,71 @@ namespace pe
         std::vector<ImageView *> GetLiveShadowViews(const ShadowPass &shadows)
         {
             return shadows.GetTextureViews();
+        }
+
+        bool SetForwardPlusDescriptors(Descriptor *set,
+                                       uint32_t frame,
+                                       const std::vector<Buffer *> &fallbackTileData,
+                                       const std::vector<Buffer *> &fallbackLightIndices)
+        {
+            Buffer *tileData = frame < fallbackTileData.size() ? fallbackTileData[frame] : nullptr;
+            Buffer *pointIndices = frame < fallbackLightIndices.size() ? fallbackLightIndices[frame] : nullptr;
+            Buffer *spotIndices = pointIndices;
+            bool boundLiveForwardPlusResources = false;
+
+            if (Settings::Get<GlobalSettings>().forward_plus)
+            {
+                if (ForwardPlusLightCullingPass *forwardPlus = GetGlobalComponent<ForwardPlusLightCullingPass>())
+                {
+                    Buffer *liveTileData = forwardPlus->GetTileLightData(frame);
+                    Buffer *livePointIndices = forwardPlus->GetPointLightIndices(frame);
+                    Buffer *liveSpotIndices = forwardPlus->GetSpotLightIndices(frame);
+                    if (liveTileData && livePointIndices && liveSpotIndices)
+                    {
+                        tileData = liveTileData;
+                        pointIndices = livePointIndices;
+                        spotIndices = liveSpotIndices;
+                        boundLiveForwardPlusResources = true;
+                    }
+                }
+            }
+
+            set->SetBuffer(11, tileData);
+            set->SetBuffer(12, pointIndices);
+            set->SetBuffer(13, spotIndices);
+            return boundLiveForwardPlusResources;
+        }
+
+        void AddForwardPlusReadBarriers(CommandBuffer *cmd, uint32_t frame)
+        {
+            if (!Settings::Get<GlobalSettings>().forward_plus)
+                return;
+
+            ForwardPlusLightCullingPass *forwardPlus = GetGlobalComponent<ForwardPlusLightCullingPass>();
+            if (!forwardPlus)
+                return;
+
+            std::vector<BufferBarrierInfo> barriers;
+            barriers.reserve(3);
+            auto addBarrier = [&](Buffer *buffer)
+            {
+                if (!buffer)
+                    return;
+
+                BufferBarrierInfo barrier{};
+                barrier.buffer = buffer;
+                barrier.stageMask = PE_STAGE_FRAGMENT_SHADER;
+                barrier.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ;
+                barrier.size = PE_WHOLE_SIZE;
+                barriers.push_back(barrier);
+            };
+
+            addBarrier(forwardPlus->GetTileLightData(frame));
+            addBarrier(forwardPlus->GetPointLightIndices(frame));
+            addBarrier(forwardPlus->GetSpotLightIndices(frame));
+
+            if (!barriers.empty())
+                cmd->BufferBarriers(barriers);
         }
     } // namespace
 
@@ -131,6 +250,9 @@ namespace pe
                                            m_shadowFallbackSampler,
                                            m_shadowFallbackViews,
                                            "LightOpaque");
+        EnsureForwardPlusFallbackResources(m_forwardPlusFallbackTileData,
+                                           m_forwardPlusFallbackLightIndices,
+                                           "LightOpaque");
     }
 
     void LightOpaquePass::UpdatePassInfo()
@@ -138,7 +260,9 @@ namespace pe
         const std::vector<Define> definesFrag{
             Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<GlobalSettings>().num_cascades)},
             Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<GlobalSettings>().shadow_map_size)},
-            Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<GlobalSettings>().shadow_map_size)}};
+            Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<GlobalSettings>().shadow_map_size)},
+            Define{"FORWARD_PLUS_TILE_SIZE", std::to_string(ForwardPlusLightCullingPass::TileSize)},
+            Define{"FORWARD_PLUS_MAX_LIGHTS_PER_TILE", std::to_string(ForwardPlusLightCullingPass::MaxLightsPerTile)}};
 
         // Opaque light pass
         m_passInfo->name = "lighting_opaque_pipeline";
@@ -183,6 +307,9 @@ namespace pe
                                            m_shadowFallbackSampler,
                                            m_shadowFallbackViews,
                                            "LightOpaque");
+        EnsureForwardPlusFallbackResources(m_forwardPlusFallbackTileData,
+                                           m_forwardPlusFallbackLightIndices,
+                                           "LightOpaque");
         const std::vector<ImageView *> shadowViews = useShadowResources ? GetLiveShadowViews(shadows) : m_shadowFallbackViews;
         Sampler *shadowSampler = useShadowResources ? shadows.GetSampler() : m_shadowFallbackSampler;
 
@@ -190,6 +317,8 @@ namespace pe
         const SkyBox &skybox = renderer.GetSkyBox();
 
         Scene &scene = *GetActiveScene();
+        const bool forwardPlusEnabled = Settings::Get<GlobalSettings>().forward_plus;
+        bool boundForwardPlusResources = true;
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto *ibl_brdf_lut = renderer.GetIBL_LUT();
@@ -208,6 +337,9 @@ namespace pe
             DSet->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler());
             DSet->SetImageView(9, ibl_brdf_lut->GetSRV(), ibl_brdf_lut->GetSampler());
             DSet->SetBuffer(10, scene.GetLightStorage(i));
+            const bool frameBoundForwardPlusResources =
+                SetForwardPlusDescriptors(DSet, i, m_forwardPlusFallbackTileData, m_forwardPlusFallbackLightIndices);
+            boundForwardPlusResources = boundForwardPlusResources && frameBoundForwardPlusResources;
             DSet->Update();
 
             auto *DSetShadows = sets[1];
@@ -223,6 +355,7 @@ namespace pe
         }
 
         m_boundShadowsAvailable = useShadowResources;
+        m_boundForwardPlusEnabled = forwardPlusEnabled && boundForwardPlusResources;
     }
 
     void LightOpaquePass::Update()
@@ -231,8 +364,10 @@ namespace pe
         SceneRendererHost &renderer = RequireActiveSceneRendererHost();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
+        const bool forwardPlusEnabled = gSettings.forward_plus;
         if (Image *ssaoRT = renderer.GetRenderTarget("ssao");
-            ssaoRT != m_ssaoRT || shadowsAvailable != m_boundShadowsAvailable)
+            ssaoRT != m_ssaoRT || shadowsAvailable != m_boundShadowsAvailable ||
+            forwardPlusEnabled != m_boundForwardPlusEnabled)
         {
             m_ssaoRT = ssaoRT;
             UpdateDescriptorSets();
@@ -257,6 +392,7 @@ namespace pe
         m_ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;
         m_ubo.skyboxTanHalfFovY = tan(camera->Fovy() * 0.5f);
         m_ubo.physical_point_falloff = gSettings.physical_point_falloff ? 1.0f : 0.0f;
+        m_ubo.forward_plus = forwardPlusEnabled ? 1u : 0u;
 
         BufferRange range{};
         range.data = &m_ubo;
@@ -295,6 +431,9 @@ namespace pe
         const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
 
         Scene &scene = *GetActiveScene();
+        const uint32_t frame = RHII.GetFrameIndex();
+        AddForwardPlusReadBarriers(cmd, frame);
+
         cmd->SetConstantAt(0, (uint32_t)scene.GetPointLights().size()); // num point lights
         cmd->SetConstantAt(1, (uint32_t)scene.GetSpotLights().size());  // num spot lights
         cmd->SetConstantAt(2, (uint32_t)scene.GetAreaLights().size());  // num area lights
@@ -339,6 +478,7 @@ namespace pe
                                             m_shadowFallbackTexture,
                                             m_shadowFallbackSampler,
                                             m_shadowFallbackViews);
+        DestroyForwardPlusFallbackResources(m_forwardPlusFallbackTileData, m_forwardPlusFallbackLightIndices);
     }
 
     void LightTransparentPass::Init()
@@ -366,6 +506,9 @@ namespace pe
                                            m_shadowFallbackSampler,
                                            m_shadowFallbackViews,
                                            "LightTransparent");
+        EnsureForwardPlusFallbackResources(m_forwardPlusFallbackTileData,
+                                           m_forwardPlusFallbackLightIndices,
+                                           "LightTransparent");
     }
 
     void LightTransparentPass::UpdatePassInfo()
@@ -373,7 +516,9 @@ namespace pe
         const std::vector<Define> definesFrag{
             Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<GlobalSettings>().num_cascades)},
             Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<GlobalSettings>().shadow_map_size)},
-            Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<GlobalSettings>().shadow_map_size)}};
+            Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<GlobalSettings>().shadow_map_size)},
+            Define{"FORWARD_PLUS_TILE_SIZE", std::to_string(ForwardPlusLightCullingPass::TileSize)},
+            Define{"FORWARD_PLUS_MAX_LIGHTS_PER_TILE", std::to_string(ForwardPlusLightCullingPass::MaxLightsPerTile)}};
 
         m_passInfo->name = "lighting_transparent_pipeline";
         m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Common/Quad.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
@@ -416,12 +561,17 @@ namespace pe
                                            m_shadowFallbackSampler,
                                            m_shadowFallbackViews,
                                            "LightTransparent");
+        EnsureForwardPlusFallbackResources(m_forwardPlusFallbackTileData,
+                                           m_forwardPlusFallbackLightIndices,
+                                           "LightTransparent");
         const std::vector<ImageView *> shadowViews = useShadowResources ? GetLiveShadowViews(shadows) : m_shadowFallbackViews;
         Sampler *shadowSampler = useShadowResources ? shadows.GetSampler() : m_shadowFallbackSampler;
 
         SceneRendererHost &renderer = RequireActiveSceneRendererHost();
         const SkyBox &skybox = renderer.GetSkyBox();
 
+        const bool forwardPlusEnabled = Settings::Get<GlobalSettings>().forward_plus;
+        bool boundForwardPlusResources = true;
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto &sets = m_passInfo->GetDescriptors(i);
@@ -440,6 +590,9 @@ namespace pe
             auto *ibl_brdf_lut = renderer.GetIBL_LUT();
             DSet->SetImageView(9, ibl_brdf_lut->GetSRV(), ibl_brdf_lut->GetSampler());
             DSet->SetBuffer(10, GetActiveScene()->GetLightStorage(i));
+            const bool frameBoundForwardPlusResources =
+                SetForwardPlusDescriptors(DSet, i, m_forwardPlusFallbackTileData, m_forwardPlusFallbackLightIndices);
+            boundForwardPlusResources = boundForwardPlusResources && frameBoundForwardPlusResources;
             DSet->Update();
 
             auto *DSetShadows = sets[1];
@@ -455,6 +608,7 @@ namespace pe
         }
 
         m_boundShadowsAvailable = useShadowResources;
+        m_boundForwardPlusEnabled = forwardPlusEnabled && boundForwardPlusResources;
     }
 
     void LightTransparentPass::Update()
@@ -463,8 +617,10 @@ namespace pe
         SceneRendererHost &renderer = RequireActiveSceneRendererHost();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
+        const bool forwardPlusEnabled = gSettings.forward_plus;
         if (Image *ssaoRT = renderer.GetRenderTarget("ssao");
-            ssaoRT != m_ssaoRT || shadowsAvailable != m_boundShadowsAvailable)
+            ssaoRT != m_ssaoRT || shadowsAvailable != m_boundShadowsAvailable ||
+            forwardPlusEnabled != m_boundForwardPlusEnabled)
         {
             m_ssaoRT = ssaoRT;
             UpdateDescriptorSets();
@@ -489,6 +645,7 @@ namespace pe
         m_ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;
         m_ubo.skyboxTanHalfFovY = tan(camera->Fovy() * 0.5f);
         m_ubo.physical_point_falloff = gSettings.physical_point_falloff ? 1.0f : 0.0f;
+        m_ubo.forward_plus = forwardPlusEnabled ? 1u : 0u;
 
         BufferRange range{};
         range.data = &m_ubo;
@@ -527,6 +684,9 @@ namespace pe
         const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
 
         Scene &scene = *GetActiveScene();
+        const uint32_t frame = RHII.GetFrameIndex();
+        AddForwardPlusReadBarriers(cmd, frame);
+
         cmd->SetConstantAt(0, (uint32_t)scene.GetPointLights().size()); // num point lights
         cmd->SetConstantAt(1, (uint32_t)scene.GetSpotLights().size());  // num spot lights
         cmd->SetConstantAt(2, (uint32_t)scene.GetAreaLights().size());  // num area lights
@@ -570,5 +730,6 @@ namespace pe
                                             m_shadowFallbackTexture,
                                             m_shadowFallbackSampler,
                                             m_shadowFallbackViews);
+        DestroyForwardPlusFallbackResources(m_forwardPlusFallbackTileData, m_forwardPlusFallbackLightIndices);
     }
 } // namespace pe

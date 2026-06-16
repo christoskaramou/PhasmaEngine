@@ -8,6 +8,7 @@
 #include "RenderPasses/DOFPass.h"
 #include "RenderPasses/DepthPass.h"
 #include "RenderPasses/FXAAPass.h"
+#include "RenderPasses/ForwardPlusLightCullingPass.h"
 #include "RenderPasses/GbufferPass.h"
 #include "RenderPasses/GridPass.h"
 #include "RenderPasses/LightPass.h"
@@ -42,6 +43,8 @@ namespace pe
             {SceneRenderGraphPassId::Depth, 200, "Depth", &SceneRenderGraphPassComponents::depth},
             {SceneRenderGraphPassId::GBufferOpaque, 300, "GBufferOpaque", &SceneRenderGraphPassComponents::gbufferOpaque},
             {SceneRenderGraphPassId::SSAO, 400, "SSAO", &SceneRenderGraphPassComponents::ssao},
+            {SceneRenderGraphPassId::ForwardPlusLightCulling, 450, "ForwardPlusLightCulling",
+             &SceneRenderGraphPassComponents::forwardPlusLightCulling},
             {SceneRenderGraphPassId::LightOpaque, 500, "LightOpaque", &SceneRenderGraphPassComponents::lightOpaque},
             {SceneRenderGraphPassId::GBufferTransparent, 600, "GBufferTransparent",
              &SceneRenderGraphPassComponents::gbufferTransparent},
@@ -130,6 +133,8 @@ namespace pe
                 return isPassEnabled(SceneRenderGraphPassId::GBufferTransparent);
             if (component == components.ssao)
                 return isPassEnabled(SceneRenderGraphPassId::SSAO);
+            if (component == components.forwardPlusLightCulling)
+                return isPassEnabled(SceneRenderGraphPassId::ForwardPlusLightCulling);
             if (component == components.lightOpaque)
                 return isPassEnabled(SceneRenderGraphPassId::LightOpaque);
             if (component == components.lightTransparent)
@@ -202,6 +207,7 @@ namespace pe
         CreateSceneRenderGraphPassComponent<GbufferOpaquePass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<GbufferTransparentPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<SSAOPass>(renderPassComponents);
+        CreateSceneRenderGraphPassComponent<ForwardPlusLightCullingPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<LightOpaquePass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<LightTransparentPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<LinesPass>(renderPassComponents);
@@ -345,6 +351,7 @@ namespace pe
         scenePasses.depth = GetGlobalComponent<DepthPass>();
         scenePasses.gbufferOpaque = GetGlobalComponent<GbufferOpaquePass>();
         scenePasses.ssao = GetGlobalComponent<SSAOPass>();
+        scenePasses.forwardPlusLightCulling = GetGlobalComponent<ForwardPlusLightCullingPass>();
         scenePasses.lightOpaque = GetGlobalComponent<LightOpaquePass>();
         scenePasses.gbufferTransparent = GetGlobalComponent<GbufferTransparentPass>();
         scenePasses.lightTransparent = GetGlobalComponent<LightTransparentPass>();
@@ -400,6 +407,8 @@ namespace pe
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Depth, dx12NeedDepth);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferOpaque, dx12NeedGBuffer);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSAO, gs.ssao && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::ForwardPlusLightCulling,
+                           gs.forward_plus && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightOpaque, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferTransparent, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightTransparent, dx12RenderRaster);
@@ -433,6 +442,7 @@ namespace pe
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Depth, needDepth);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferOpaque, needGBuffer);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSAO, renderSSAO);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::ForwardPlusLightCulling, gs.forward_plus && renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightOpaque, renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferTransparent, renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightTransparent, renderRaster);

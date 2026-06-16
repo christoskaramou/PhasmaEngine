@@ -2,6 +2,20 @@
 
 The render path is split between PhasmaRuntime's shared scene renderer and PhasmaCore's backend-neutral RHI wrappers. Code remains the source of truth; use this page for cross-cutting pitfalls that are easy to miss when reading one file at a time.
 
+## Forward+ Light Culling
+
+Raster lighting uses `ForwardPlusLightCullingPass` before the opaque and transparent light passes when `GlobalSettings::forward_plus` is enabled. The compute pass bins point and spot lights into 16x16 screen-space tiles, writing per-tile counts and compact index lists that `LightingPS.hlsl` consumes instead of looping over every local light for every pixel. Directional and area lights remain on the existing full-list paths.
+
+The culler intentionally uses a conservative projected sphere overlap for each local light. If a tile reaches `FORWARD_PLUS_MAX_LIGHTS_PER_TILE`, the tile records an overflow bit and the pixel shader falls back to the original full point or spot loop for that light class. This preserves correctness for extreme scenes while keeping common scenes on the cheaper tiled path.
+
+Forward+ resources are descriptor-sensitive: scene render descriptor refresh must update the culling pass before `LightPass`, because the lighting descriptor set binds the cull buffers as extra read-only resources. When the global option is disabled or the raster path is inactive, `LightPass` binds small fallback storage buffers and the shader uses the original full point/spot loops. The pass also records explicit buffer barriers between compute writes and lighting reads on both Vulkan and DX12.
+
+## Present Mode And Framebuffer Cache
+
+Present-mode changes must be treated as resize work, not as an immediate mid-frame swapchain teardown. Editor/runtime requests should update the desired surface present mode, wait for idle, and queue `EventType::Resize` so swapchain, scene render targets, render-pass components, and frame resources rebuild together.
+
+Cached framebuffers are keyed by the actual attachment `ImageView` objects captured in the backend framebuffer. Implicit render-target views must be created before cache lookup so an RTV recreation cannot reuse a framebuffer that still holds a destroyed Vulkan image view or DX12 descriptor.
+
 ## Cached Pipelines
 
 - `CommandBuffer::GetPipeline()` caches `Pipeline` objects globally from a `PassInfo` hash. Some callers, such as skybox HDR-to-cubemap conversion, build transient `PassInfo` instances and destroy them after the command buffer finishes.

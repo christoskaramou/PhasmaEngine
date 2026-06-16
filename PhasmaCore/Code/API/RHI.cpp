@@ -2298,6 +2298,7 @@ namespace pe
         }
 
         WaitDeviceIdle();
+        CommandBuffer::ClearFramebufferCache();
         Swapchain::Destroy(m_swapchain);
         CreateSwapchain(m_surface);
         updateTitle();

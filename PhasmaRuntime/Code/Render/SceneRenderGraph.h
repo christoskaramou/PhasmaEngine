@@ -18,6 +18,7 @@ namespace pe
         Depth,
         GBufferOpaque,
         SSAO,
+        ForwardPlusLightCulling,
         LightOpaque,
         GBufferTransparent,
         LightTransparent,
@@ -51,6 +52,7 @@ namespace pe
         IRenderPassComponent *depth = nullptr;
         IRenderPassComponent *gbufferOpaque = nullptr;
         IRenderPassComponent *ssao = nullptr;
+        IRenderPassComponent *forwardPlusLightCulling = nullptr;
         IRenderPassComponent *lightOpaque = nullptr;
         IRenderPassComponent *gbufferTransparent = nullptr;
         IRenderPassComponent *lightTransparent = nullptr;

@@ -7,6 +7,14 @@
 #include "PBR.hlsl"
 #include "Material.hlsl"
 
+#ifndef FORWARD_PLUS_TILE_SIZE
+#define FORWARD_PLUS_TILE_SIZE 16
+#endif
+
+#ifndef FORWARD_PLUS_MAX_LIGHTS_PER_TILE
+#define FORWARD_PLUS_MAX_LIGHTS_PER_TILE 128
+#endif
+
 [[vk::push_constant]] PushConstants_Lighting pc;
 
 // Set 0
@@ -43,12 +51,15 @@ TexSamplerDecl(6, 0, Emission)
     uint        cb_orthographicCamera;
     float       cb_skyboxTanHalfFovY;
     float       cb_physicalPointFalloff;
-    float       cb_lightPassPad1;
+    uint        cb_forwardPlus;
     float       cb_lightPassPad2;
 };
 TexSamplerDecl(8, 0, Transparency)
 TexSamplerDecl(9, 0, LutIBL)
 [[vk::binding(10, 0)]] ByteAddressBuffer LightsBuffer;
+[[vk::binding(11, 0)]] StructuredBuffer<uint4> ForwardPlusTileLightData;
+[[vk::binding(12, 0)]] StructuredBuffer<uint> ForwardPlusPointLightIndices;
+[[vk::binding(13, 0)]] StructuredBuffer<uint> ForwardPlusSpotLightIndices;
 
 // Set 1
 [[vk::binding(0, 1)]] cbuffer shadow_buffer {float4x4 cb_cascades[SHADOWMAP_CASCADES];};
@@ -98,6 +109,32 @@ AreaLight LoadAreaLight(uint index)
     light.rotation = asfloat(LightsBuffer.Load4(offset + 32));
     light.size = asfloat(LightsBuffer.Load4(offset + 48));
     return light;
+}
+
+uint2 ForwardPlusFramebufferSize()
+{
+    return uint2(max(1.0f, pc.framebufferSize.x), max(1.0f, pc.framebufferSize.y));
+}
+
+uint2 ForwardPlusTileCounts()
+{
+    uint2 size = ForwardPlusFramebufferSize();
+    return (size + FORWARD_PLUS_TILE_SIZE - 1) / FORWARD_PLUS_TILE_SIZE;
+}
+
+uint ForwardPlusTileIndex(float2 uv)
+{
+    uint2 framebufferSize = ForwardPlusFramebufferSize();
+    uint2 pixel = min(uint2(uv * pc.framebufferSize), framebufferSize - 1);
+    uint2 tile = pixel / FORWARD_PLUS_TILE_SIZE;
+    uint2 tileCounts = ForwardPlusTileCounts();
+    tile = min(tile, tileCounts - 1);
+    return tile.y * tileCounts.x + tile.x;
+}
+
+uint ForwardPlusListBase(uint tileIndex)
+{
+    return tileIndex * FORWARD_PLUS_MAX_LIGHTS_PER_TILE;
 }
 
 static const float2 poissonDisk[8] = {

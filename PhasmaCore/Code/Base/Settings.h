@@ -90,6 +90,7 @@ namespace pe
         int shadow_debug_mode = 0;
         float render_scale = 0.75f;
         bool ssao = true;
+        bool forward_plus = true;
         bool fxaa = false;
         bool taa = true;
         bool cas_sharpening = true;

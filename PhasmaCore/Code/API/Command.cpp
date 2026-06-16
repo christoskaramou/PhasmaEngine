@@ -162,14 +162,24 @@ namespace pe
     Framebuffer *CommandBuffer::GetFramebuffer(RenderPass *renderPass, uint32_t count, Attachment *attachments)
     {
         PE_PROFILE_SCOPE("Cmd GetFramebuffer");
+        std::vector<ImageView *> views{};
+        views.reserve(count);
+
         Hash hash;
         hash.Combine(reinterpret_cast<std::intptr_t>(renderPass));
         for (uint32_t i = 0; i < count; i++)
         {
-            const std::intptr_t attachmentKey = attachments[i].view
-                                                    ? reinterpret_cast<std::intptr_t>(attachments[i].view)
-                                                    : reinterpret_cast<std::intptr_t>(attachments[i].image);
-            hash.Combine(attachmentKey);
+            Image *image = attachments[i].image;
+            ImageView *view = attachments[i].view;
+            if (!view)
+            {
+                if (!image->HasRTV())
+                    image->CreateRTV();
+                view = image->GetRTV();
+            }
+
+            views.push_back(view);
+            hash.Combine(reinterpret_cast<std::intptr_t>(view));
         }
 
         auto it = s_framebuffers.find(hash);
@@ -180,17 +190,6 @@ namespace pe
         else
         {
             PE_PROFILE_SCOPE("Cmd CreateFramebuffer");
-            std::vector<ImageView *> views{};
-            views.reserve(count);
-
-            for (uint32_t i = 0; i < count; i++)
-            {
-                Image *image = attachments[i].image;
-                if (!attachments[i].view && !image->HasRTV())
-                    image->CreateRTV();
-                views.push_back(attachments[i].view ? attachments[i].view : image->GetRTV());
-            }
-
             std::string name = "Auto_Gen_Framebuffer_" + std::to_string(s_framebuffers.size());
             Framebuffer *newFramebuffer = Framebuffer::Create(attachments[0].image->GetWidth(),
                                                               attachments[0].image->GetHeight(),

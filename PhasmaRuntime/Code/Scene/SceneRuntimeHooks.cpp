@@ -1,6 +1,7 @@
 #include "Scene/SceneRuntimeHooks.h"
 #include "Scene/Scene.h"
 #include "Render/SceneRendererHost.h"
+#include "RenderPasses/ForwardPlusLightCullingPass.h"
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/RayTracingPass.h"
 #include "Systems/AnimationSystem.h"
@@ -57,6 +58,14 @@ namespace pe
 
         void DefaultRefreshSceneRenderDescriptors()
         {
+            if (Settings::Get<GlobalSettings>().forward_plus)
+            {
+                if (auto *forwardPlus = GetGlobalComponent<ForwardPlusLightCullingPass>())
+                {
+                    if (forwardPlus->HasLiveResources())
+                        forwardPlus->UpdateDescriptorSets();
+                }
+            }
             if (auto *lightOpaque = GetGlobalComponent<LightOpaquePass>())
                 lightOpaque->UpdateDescriptorSets();
             if (auto *lightTransparent = GetGlobalComponent<LightTransparentPass>())

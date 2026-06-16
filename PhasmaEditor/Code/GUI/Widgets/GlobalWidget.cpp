@@ -130,6 +130,9 @@ namespace pe
             }
             TrackChange(ImGui::Checkbox("SSAO", &gSettings.ssao));
             ui::ItemTooltip("Enable screen-space ambient occlusion in raster modes.");
+            if (TrackChange(ImGui::Checkbox("Forward+", &gSettings.forward_plus)))
+                UpdateLightingDescriptorSets();
+            ui::ItemTooltip("Cull point and spot lights into screen-space tiles before raster lighting.");
             TrackChange(ImGui::Checkbox("SSR", &gSettings.ssr));
             ui::ItemTooltip("Enable screen-space reflections in raster modes.");
         }

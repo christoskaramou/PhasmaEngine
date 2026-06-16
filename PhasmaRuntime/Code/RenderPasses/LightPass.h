@@ -17,7 +17,7 @@ namespace pe
         uint32_t orthographicCamera = 0;
         float skyboxTanHalfFovY = 1.0f;
         float physical_point_falloff = 0.0f;
-        float pad1 = 0.0f;
+        uint32_t forward_plus = 1;
         float pad2 = 0.0f;
     };
 
@@ -53,10 +53,13 @@ namespace pe
         Image *m_ssaoRT;
         Image *m_transparencyRT;
         std::vector<Buffer *> m_shadowFallbackUniforms;
+        std::vector<Buffer *> m_forwardPlusFallbackTileData;
+        std::vector<Buffer *> m_forwardPlusFallbackLightIndices;
         Image *m_shadowFallbackTexture = nullptr;
         Sampler *m_shadowFallbackSampler = nullptr;
         std::vector<ImageView *> m_shadowFallbackViews;
         bool m_boundShadowsAvailable = false;
+        bool m_boundForwardPlusEnabled = true;
         LightPassUBO m_ubo;
     };
 
@@ -86,10 +89,13 @@ namespace pe
         Image *m_ssaoRT;
         Image *m_transparencyRT;
         std::vector<Buffer *> m_shadowFallbackUniforms;
+        std::vector<Buffer *> m_forwardPlusFallbackTileData;
+        std::vector<Buffer *> m_forwardPlusFallbackLightIndices;
         Image *m_shadowFallbackTexture = nullptr;
         Sampler *m_shadowFallbackSampler = nullptr;
         std::vector<ImageView *> m_shadowFallbackViews;
         bool m_boundShadowsAvailable = false;
+        bool m_boundForwardPlusEnabled = true;
         LightPassUBO m_ubo;
     };
 } // namespace pe

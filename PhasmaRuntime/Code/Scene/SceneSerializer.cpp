@@ -162,6 +162,7 @@ namespace pe
             settings.AddMember("shadow_debug_mode", gSettings.shadow_debug_mode, allocator);
             settings.AddMember("render_scale", gSettings.render_scale, allocator);
             settings.AddMember("ssao", gSettings.ssao, allocator);
+            settings.AddMember("forward_plus", gSettings.forward_plus, allocator);
             settings.AddMember("fxaa", gSettings.fxaa, allocator);
             settings.AddMember("taa", gSettings.taa, allocator);
             settings.AddMember("cas_sharpening", gSettings.cas_sharpening, allocator);
@@ -278,6 +279,8 @@ namespace pe
             }
             if (settings.HasMember("ssao"))
                 gSettings.ssao = settings["ssao"].GetBool();
+            if (settings.HasMember("forward_plus"))
+                gSettings.forward_plus = settings["forward_plus"].GetBool();
             if (settings.HasMember("fxaa"))
                 gSettings.fxaa = settings["fxaa"].GetBool();
             if (settings.HasMember("taa"))

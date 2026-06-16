@@ -4431,6 +4431,7 @@ namespace pe
             result["taa"] = settings.taa;
             result["fxaa"] = settings.fxaa;
             result["ssao"] = settings.ssao;
+            result["forward_plus"] = settings.forward_plus;
             result["ray_tracing_supported"] = settings.ray_tracing_support;
 
             if (r)

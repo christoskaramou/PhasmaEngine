@@ -24,6 +24,20 @@ namespace pe
         return "unknown";
     }
 
+    static std::string RequestPresentModeChange(PePresentMode mode)
+    {
+        Surface *surface = RHII.GetSurface();
+        if (!surface)
+            return "unknown";
+
+        surface->SetPresentMode(mode);
+        PePresentMode effectiveMode = surface->GetPresentMode();
+        Settings::Get<GlobalSettings>().preferred_present_mode = effectiveMode;
+        RHII.WaitDeviceIdle();
+        EventSystem::PushEvent(EventType::Resize);
+        return PresentModeToString(effectiveMode);
+    }
+
     static struct RHIBindings
     {
         RHIBindings()
@@ -146,26 +160,13 @@ namespace pe
                 // ChangePresentMode
                 rhi.set_function("change_present_mode", [](const std::string &mode) -> std::string {
                     auto it = s_presentModeMap.find(std::string_view(mode));
-                    if (it != s_presentModeMap.end())
-                    {
-                        RHII.ChangePresentMode(it->second);
-                        return RHII.GetSurface() ? PresentModeToString(RHII.GetSurface()->GetPresentMode()) : "unknown";
-                    }
-                    return "unknown";
+                    return it != s_presentModeMap.end() ? RequestPresentModeChange(it->second) : "unknown";
                 });
 
-                // SetPresentMode — deferred, player-safe variant of change_present_mode for use from a
-                // per-frame script update: set the desired surface mode (cheap), then let the swapchain be
-                // recreated at the frame boundary via the Resize event. Calling ChangePresentMode directly
-                // from a script update destroys the swapchain mid-frame and crashes.
+                // SetPresentMode - deferred, player-safe alias for change_present_mode.
                 rhi.set_function("set_present_mode", [](const std::string &mode) -> std::string {
                     auto it = s_presentModeMap.find(std::string_view(mode));
-                    if (it == s_presentModeMap.end() || !RHII.GetSurface())
-                        return "unknown";
-                    RHII.GetSurface()->SetPresentMode(it->second);
-                    RHII.WaitDeviceIdle();
-                    EventSystem::PushEvent(EventType::Resize);
-                    return PresentModeToString(RHII.GetSurface()->GetPresentMode());
+                    return it != s_presentModeMap.end() ? RequestPresentModeChange(it->second) : "unknown";
                 });
 
                 // SetRenderScale — apply like the editor Global widget "Apply" (device-idle + Resize).

@@ -32,6 +32,7 @@ namespace pe
             Depth = static_cast<uint32_t>(SceneRenderGraphPassId::Depth),
             GBufferOpaque = static_cast<uint32_t>(SceneRenderGraphPassId::GBufferOpaque),
             SSAO = static_cast<uint32_t>(SceneRenderGraphPassId::SSAO),
+            ForwardPlusLightCulling = static_cast<uint32_t>(SceneRenderGraphPassId::ForwardPlusLightCulling),
             LightOpaque = static_cast<uint32_t>(SceneRenderGraphPassId::LightOpaque),
             GBufferTransparent = static_cast<uint32_t>(SceneRenderGraphPassId::GBufferTransparent),
             LightTransparent = static_cast<uint32_t>(SceneRenderGraphPassId::LightTransparent),

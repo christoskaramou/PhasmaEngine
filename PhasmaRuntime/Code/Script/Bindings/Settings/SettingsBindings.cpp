@@ -6,6 +6,7 @@ namespace pe
     static const std::unordered_map<std::string_view, bool GlobalSettings::*> s_boolSettings = {
         {"shadows", &GlobalSettings::shadows},
         {"ssao", &GlobalSettings::ssao},
+        {"forward_plus", &GlobalSettings::forward_plus},
         {"fxaa", &GlobalSettings::fxaa},
         {"taa", &GlobalSettings::taa},
         {"ssr", &GlobalSettings::ssr},

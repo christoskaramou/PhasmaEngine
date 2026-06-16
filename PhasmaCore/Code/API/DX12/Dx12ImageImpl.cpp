@@ -531,6 +531,7 @@ namespace pe
         if (image->m_rtv)
         {
             PE_INFO("Image::CreateRTV: RTV already exists, recreating.");
+            CommandBuffer::ClearFramebufferCache();
             ImageView::Destroy(image->m_rtv);
         }
 

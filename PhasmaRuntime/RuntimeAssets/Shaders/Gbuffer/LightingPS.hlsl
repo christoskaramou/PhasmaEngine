@@ -102,11 +102,54 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
             fragColor += DirectLight(LoadDirectionalLight(i), material, wolrdPos, cb_camPos.xyz, normal, occlusion, 1.0, energyCompensation);
     }
 
-    for (uint i = 0; i < cb_numPointLights; ++i)
-        fragColor += ComputePointLight(i, material, wolrdPos, cb_camPos.xyz, normal, occlusion, energyCompensation);
+    if (cb_forwardPlus == 0u)
+    {
+        for (uint i = 0; i < cb_numPointLights; ++i)
+            fragColor += ComputePointLight(i, material, wolrdPos, cb_camPos.xyz, normal, occlusion, energyCompensation);
 
-    for (uint j = 0; j < cb_numSpotLights; ++j)
-        fragColor += ComputeSpotLight(j, material, wolrdPos, cb_camPos.xyz, normal, occlusion, energyCompensation);
+        for (uint j = 0; j < cb_numSpotLights; ++j)
+            fragColor += ComputeSpotLight(j, material, wolrdPos, cb_camPos.xyz, normal, occlusion, energyCompensation);
+    }
+    else
+    {
+        uint forwardPlusTileIndex = ForwardPlusTileIndex(input.uv);
+        uint forwardPlusListBase = ForwardPlusListBase(forwardPlusTileIndex);
+        uint4 forwardPlusTileData = ForwardPlusTileLightData[forwardPlusTileIndex];
+
+        if ((forwardPlusTileData.z & 1u) != 0u)
+        {
+            for (uint i = 0; i < cb_numPointLights; ++i)
+                fragColor += ComputePointLight(i, material, wolrdPos, cb_camPos.xyz, normal, occlusion, energyCompensation);
+        }
+        else
+        {
+            for (uint i = 0; i < forwardPlusTileData.x; ++i)
+                fragColor += ComputePointLight(ForwardPlusPointLightIndices[forwardPlusListBase + i],
+                                               material,
+                                               wolrdPos,
+                                               cb_camPos.xyz,
+                                               normal,
+                                               occlusion,
+                                               energyCompensation);
+        }
+
+        if ((forwardPlusTileData.z & 2u) != 0u)
+        {
+            for (uint j = 0; j < cb_numSpotLights; ++j)
+                fragColor += ComputeSpotLight(j, material, wolrdPos, cb_camPos.xyz, normal, occlusion, energyCompensation);
+        }
+        else
+        {
+            for (uint j = 0; j < forwardPlusTileData.y; ++j)
+                fragColor += ComputeSpotLight(ForwardPlusSpotLightIndices[forwardPlusListBase + j],
+                                              material,
+                                              wolrdPos,
+                                              cb_camPos.xyz,
+                                              normal,
+                                              occlusion,
+                                              energyCompensation);
+        }
+    }
 
     for (uint k = 0; k < cb_numAreaLights; ++k)
         fragColor += ComputeAreaLight(k, material, wolrdPos, cb_camPos.xyz, normal, occlusion, energyCompensation);
