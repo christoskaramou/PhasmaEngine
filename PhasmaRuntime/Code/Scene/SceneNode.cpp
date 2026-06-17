@@ -352,7 +352,16 @@ namespace pe
 
     void Scene::SetLocalMatrix(NodeId *node, const mat4 &m, bool markDirty)
     {
-        m_nodeComponentCache[node->index].transform->localMatrix = m;
+        mat4 &localMatrix = m_nodeComponentCache[node->index].transform->localMatrix;
+        // Transform early-out: a redundant write (same matrix) must not re-dirty the node or
+        // recurse the subtree. set_position/set_rotation/set_scale all round-trip through here,
+        // so per-frame drivers that re-assert an unchanged transform (pooled props, HUD nodes,
+        // idle units) cost nothing. Material edits dirty via their own MarkNodeDirty path, so
+        // skipping here only elides redundant transform work.
+        if (localMatrix == m)
+            return;
+
+        localMatrix = m;
         if (markDirty)
             MarkNodeDirty(node);
     }
@@ -367,11 +376,37 @@ namespace pe
             return;
 
         hierarchy->enabled = enabled;
-        m_instancesDirty = true;
-        m_tlasDirty = true;
+        // Only a node whose subtree contains renderable geometry changes the raster instance set
+        // or the RT TLAS. Toggling a geometry-less node (UI widget, empty group, light/camera) must
+        // not force UpdateRasterInstances + RebuildTLASOnly every flip — those gathers are mesh-only
+        // (SceneBuffers.cpp), and lights re-gather per frame, so m_dirty alone covers them. This is
+        // the cheap-visibility guard for frequent enable/disable; mesh-bearing pools still rebuild
+        // (see the per-instance render-active path TODO).
+        if (SubtreeHasMeshRefs(node))
+        {
+            m_instancesDirty = true;
+            m_tlasDirty = true;
+        }
         m_dirty = true;
         if (GetSkyboxNode())
             ApplySkyboxSettingsFromNode();
+    }
+
+    bool Scene::SubtreeHasMeshRefs(const NodeId *node) const
+    {
+        if (!node || node->index == UINT32_MAX)
+            return false;
+
+        const uint32_t idx = node->index;
+        if (const NodeMeshRefsComponent *refs = m_nodeComponentCache[idx].meshRefs;
+            refs && !refs->meshRefs.empty())
+            return true;
+
+        for (const NodeId *child : m_nodeComponentCache[idx].hierarchy->children)
+            if (SubtreeHasMeshRefs(child))
+                return true;
+
+        return false;
     }
 
     bool Scene::IsNodeEnabled(const NodeId *node) const

@@ -304,6 +304,7 @@ namespace pe
             bool scrollable = false;
             float maxHeight = 0.0f;
             std::vector<Widget> widgets;
+            bool needsSort = false; // quad z-order dirty; re-sorted once per frame in BuildFrame
         };
 
         Screen &GetOrCreateScreen(const std::string &screenId);

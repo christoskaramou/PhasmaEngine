@@ -404,6 +404,7 @@ namespace pe
         widget.label = widgetId;
         widget.type = type;
         screen.widgets.push_back(std::move(widget));
+        screen.needsSort = true; // new widget appended out of z-order; sort in BuildFrame
         return screen.widgets.back();
     }
 
@@ -575,7 +576,10 @@ namespace pe
         widget.fit = desc.fit;
         widget.imagePath = path;
         widget.image = path.empty() ? desc.image : LoadImageResource(path);
-        SortQuadWidgets(screen);
+        // Quad draw order (z / bringToFront) is resolved once per frame in BuildFrame, not on
+        // every SetQuad. Sorting here made each authored/script HUD update O(W log W), so a
+        // frame driving M widgets cost O(M * W log W) of redundant re-sorts.
+        screen.needsSort = true;
     }
 
     void RuntimeUiSystem::SyncSceneWidgets(Scene &scene)
@@ -585,18 +589,12 @@ namespace pe
         const float fsw = static_cast<float>(surfW);
         const float fsh = static_cast<float>(surfH);
 
-        for (const auto &[screenId, widgetIds] : m_sceneAuthoredWidgetIds)
-        {
-            for (const std::string &widgetId : widgetIds)
-                RemoveWidget(screenId, widgetId);
-
-            if (Screen *screen = FindScreen(screenId); screen && screen->widgets.empty())
-            {
-                screen->visible = false;
-                screen->overlay = true;
-            }
-        }
-        m_sceneAuthoredWidgetIds.clear();
+        // Update authored widgets in place this frame (SetQuad -> GetOrCreateWidget reuses the
+        // existing widget), then remove only the ones that vanished. The old path removed and
+        // reconstructed every authored widget every frame — M string-heavy reallocations plus a
+        // full re-sort per node — which is what made per-frame-driven scene UI (HUD pools, any
+        // moving authored node) far heavier than the in-place script set_quad path.
+        std::unordered_map<std::string, std::unordered_set<std::string>> current;
 
         for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
         {
@@ -615,7 +613,7 @@ namespace pe
 
             const std::string screenId = ui->screenId.empty() ? "__scene_ui" : ui->screenId;
             const std::string widgetId = MakeSceneWidgetId(*ui, node);
-            m_sceneAuthoredWidgetIds[screenId].insert(widgetId);
+            current[screenId].insert(widgetId);
 
             SetScreenVisible(screenId, true);
             SetScreenOverlay(screenId, true);
@@ -651,6 +649,27 @@ namespace pe
             desc.visualStyle = ToRuntimeUiVisualStyle(ui->widgetType);
             SetQuad(screenId, widgetId, desc, ui->imagePath);
         }
+
+        // Remove widgets authored last frame but absent this frame (node disabled / hidden /
+        // destroyed); everything still present was updated in place above. Hide any screen that
+        // ends up empty, matching the previous semantics.
+        for (const auto &[screenId, widgetIds] : m_sceneAuthoredWidgetIds)
+        {
+            const auto curIt = current.find(screenId);
+            for (const std::string &widgetId : widgetIds)
+            {
+                if (curIt == current.end() || curIt->second.find(widgetId) == curIt->second.end())
+                    RemoveWidget(screenId, widgetId);
+            }
+
+            if (Screen *screen = FindScreen(screenId); screen && screen->widgets.empty())
+            {
+                screen->visible = false;
+                screen->overlay = true;
+            }
+        }
+
+        m_sceneAuthoredWidgetIds = std::move(current);
     }
 
     bool RuntimeUiSystem::GetBool(const std::string &screenId,
@@ -872,6 +891,13 @@ namespace pe
         {
             if (!screen.visible)
                 continue;
+
+            // Resolve quad z-order once per frame (SetQuad / new-widget creation only flag it).
+            if (screen.needsSort)
+            {
+                SortQuadWidgets(screen);
+                screen.needsSort = false;
+            }
 
             RuntimeUiScreenDesc desc{};
             desc.id = screen.id;
