@@ -284,6 +284,16 @@ namespace pe
 #endif
     }
 
+    bool Descriptor::HasBinding(uint32_t binding) const
+    {
+        for (const DescriptorBindingInfo &bindingInfo : m_bindingInfos)
+        {
+            if (bindingInfo.binding == binding)
+                return true;
+        }
+        return false;
+    }
+
     Descriptor::Descriptor(const std::vector<DescriptorBindingInfo> &bindingInfos,
                            PeShaderStageFlags stage,
                            bool pushDescriptor,

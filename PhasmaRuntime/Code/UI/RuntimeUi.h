@@ -42,6 +42,8 @@ namespace pe
         std::string id;
         std::string title;
         bool overlay = false;
+        bool scrollable = false;
+        float maxHeight = 0.0f;
     };
 
     struct RuntimeUiImageDesc
@@ -196,8 +198,13 @@ namespace pe
         bool IsScreenVisible(const std::string &screenId) const;
         void SetScreenTitle(const std::string &screenId, const std::string &title);
         void SetScreenOverlay(const std::string &screenId, bool overlay);
+        void SetScreenScrollable(const std::string &screenId, bool scrollable);
+        void SetScreenMaxHeight(const std::string &screenId, float maxHeight);
         void ClearScreen(const std::string &screenId);
         void ClearAllScreens();
+        // Remove screens created by scripts (everything except scene-authored UI). Called on
+        // play stop so a script-built HUD overlay does not linger after the scene is restored.
+        void ClearScriptScreens();
         void RemoveWidget(const std::string &screenId, const std::string &widgetId);
 
         void SetText(const std::string &screenId,
@@ -294,6 +301,8 @@ namespace pe
             std::string title;
             bool visible = false;
             bool overlay = false;
+            bool scrollable = false;
+            float maxHeight = 0.0f;
             std::vector<Widget> widgets;
         };
 

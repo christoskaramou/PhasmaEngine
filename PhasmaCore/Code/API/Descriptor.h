@@ -213,6 +213,7 @@ namespace pe
         DescriptorPool *GetPool() const { return m_pool; }
         DescriptorLayout *GetLayout() const { return m_layout; }
         PeShaderStageFlags GetStage() const { return m_stage; }
+        bool HasBinding(uint32_t binding) const;
         const std::vector<DescriptorUpdateInfo> &GetBoundResources() const { return m_boundResources; }
         const std::vector<DescriptorBindingInfo> &GetBindingInfos() const { return m_bindingInfos; }
 

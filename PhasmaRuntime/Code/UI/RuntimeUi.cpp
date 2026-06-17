@@ -429,6 +429,16 @@ namespace pe
         GetOrCreateScreen(screenId).overlay = overlay;
     }
 
+    void RuntimeUiSystem::SetScreenScrollable(const std::string &screenId, bool scrollable)
+    {
+        GetOrCreateScreen(screenId).scrollable = scrollable;
+    }
+
+    void RuntimeUiSystem::SetScreenMaxHeight(const std::string &screenId, float maxHeight)
+    {
+        GetOrCreateScreen(screenId).maxHeight = std::max(0.0f, maxHeight);
+    }
+
     void RuntimeUiSystem::ClearScreen(const std::string &screenId)
     {
         GetOrCreateScreen(screenId).widgets.clear();
@@ -438,6 +448,23 @@ namespace pe
     {
         m_screens.clear();
         m_sceneAuthoredWidgetIds.clear();
+    }
+
+    void RuntimeUiSystem::ClearScriptScreens()
+    {
+        // Drop every screen that isn't scene-authored. Scene-authored screens (tracked in
+        // m_sceneAuthoredWidgetIds) are left alone — they are re-synced from the scene each
+        // frame anyway. This is the runtime-UI counterpart to restoring scene nodes on play
+        // stop: scene nodes (e.g. an authored FPS readout) revert via the snapshot, but a
+        // script-built overlay (minimap dots, portrait, command card) has no such restore and
+        // would otherwise stay frozen on screen after Stop.
+        m_screens.erase(std::remove_if(m_screens.begin(), m_screens.end(),
+                                       [this](const Screen &screen)
+                                       {
+                                           return m_sceneAuthoredWidgetIds.find(screen.id) ==
+                                                  m_sceneAuthoredWidgetIds.end();
+                                       }),
+                        m_screens.end());
     }
 
     void RuntimeUiSystem::RemoveWidget(const std::string &screenId, const std::string &widgetId)
@@ -830,6 +857,17 @@ namespace pe
 
     void RuntimeUiSystem::BuildFrame()
     {
+        // The authored scene-UI screen is base HUD chrome; draw it first so script-created
+        // overlay screens (dynamic HUD content) always render on top. Overlay quads are all
+        // brought to the display front in draw order, so the last screen drawn wins z-order.
+        // Screen creation order differs between the editor and player frame pumps (the player
+        // updates scripts before SyncSceneWidgets, the editor after), which otherwise lets
+        // authored panels occlude script overlays in the player only. Pinning the scene-UI
+        // screen to the back makes the layering host-independent.
+        std::stable_partition(m_screens.begin(), m_screens.end(),
+                              [](const Screen &screen)
+                              { return screen.id == "__scene_ui"; });
+
         for (Screen &screen : m_screens)
         {
             if (!screen.visible)
@@ -839,6 +877,8 @@ namespace pe
             desc.id = screen.id;
             desc.title = screen.title.empty() ? MakeDefaultTitle(screen.id) : screen.title;
             desc.overlay = screen.overlay;
+            desc.scrollable = screen.scrollable;
+            desc.maxHeight = screen.maxHeight;
 
             const bool open = m_backend->BeginScreen(desc);
             if (open)

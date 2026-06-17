@@ -5,6 +5,7 @@
 #include "Systems/AudioSystem.h"
 #include "Systems/Physics2DSystem.h"
 #include "Systems/PhysicsSystem.h"
+#include "UI/RuntimeUi.h"
 
 namespace pe
 {
@@ -64,6 +65,12 @@ namespace pe
                 physics2d->ClearWorld();
         }
 #endif
+
+        // Tear down script-created runtime UI (HUD overlays, menus). Scene-authored UI is left
+        // for the scene snapshot/sync to restore; script overlays have no restore path and
+        // would otherwise persist after the editor returns to edit mode.
+        if (RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi())
+            runtimeUi->ClearScriptScreens();
     }
 
     void SetRuntimePlaySessionPaused(bool paused)

@@ -233,6 +233,26 @@ namespace pe
                 float windowWidth = runtime_ui_imgui::kWindowWidth * uiScale;
                 if (safeWidth > padding * 2.0f)
                     windowWidth = std::min(windowWidth, safeWidth - padding * 2.0f);
+                if (screen.scrollable || screen.maxHeight > 0.0f)
+                {
+                    float maxWindowHeight = 0.0f;
+                    const float safeHeight = SafeAreaHeight();
+                    if (safeHeight > padding * 2.0f)
+                    {
+                        const float safeMaxY = SafeAreaMinY() + safeHeight - padding;
+                        maxWindowHeight = std::max(64.0f * uiScale, safeMaxY - m_nextScreenPos.y);
+                    }
+                    if (screen.maxHeight > 0.0f)
+                    {
+                        maxWindowHeight = maxWindowHeight > 0.0f ? std::min(maxWindowHeight, screen.maxHeight)
+                                                                 : screen.maxHeight;
+                    }
+                    if (maxWindowHeight > 0.0f)
+                    {
+                        ImGui::SetNextWindowSizeConstraints(ImVec2(windowWidth, 0.0f),
+                                                            ImVec2(windowWidth, maxWindowHeight));
+                    }
+                }
                 ImGui::SetNextWindowPos(m_nextScreenPos, ImGuiCond_Always);
                 ImGui::SetNextWindowSize(ImVec2(windowWidth, 0.0f), ImGuiCond_FirstUseEver);
                 const std::string windowId = screen.title + "##" + screen.id;
@@ -1106,6 +1126,13 @@ namespace pe
                 if (HasSafeArea())
                     return m_frameInfo.safeAreaWidth;
                 return m_frameInfo.width > 0 ? static_cast<float>(m_frameInfo.width) : 0.0f;
+            }
+
+            float SafeAreaHeight() const
+            {
+                if (HasSafeArea())
+                    return m_frameInfo.safeAreaHeight;
+                return m_frameInfo.height > 0 ? static_cast<float>(m_frameInfo.height) : 0.0f;
             }
 
             float MapXToSurface(float x) const

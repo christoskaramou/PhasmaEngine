@@ -186,6 +186,9 @@ namespace pe
                 }
             }
 
+            if (!set->HasBinding(11) || !set->HasBinding(12) || !set->HasBinding(13))
+                return boundLiveForwardPlusResources;
+
             set->SetBuffer(11, tileData);
             set->SetBuffer(12, pointIndices);
             set->SetBuffer(13, spotIndices);

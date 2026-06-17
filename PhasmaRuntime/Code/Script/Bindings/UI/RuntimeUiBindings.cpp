@@ -434,6 +434,14 @@ namespace pe
                                         {
                                             if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
                                                 runtimeUi->SetScreenOverlay(screenId, overlay); });
+                        ui.set_function("set_screen_scrollable", [](const std::string &screenId, bool scrollable)
+                                        {
+                                            if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
+                                                runtimeUi->SetScreenScrollable(screenId, scrollable); });
+                        ui.set_function("set_screen_max_height", [](const std::string &screenId, double maxHeight)
+                                        {
+                                            if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
+                                                runtimeUi->SetScreenMaxHeight(screenId, static_cast<float>(maxHeight)); });
                         ui.set_function("get_surface_size", [](sol::this_state ts) -> sol::table
                                         {
                                             sol::state_view lua(ts);
