@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <unordered_map>
 #include <sol/sol.hpp>
 #include "Scene/SceneNodeHandle.h"
 #include "Scene/Scene.h"
@@ -79,6 +81,7 @@ namespace pe
         std::vector<ExposedVar> exposedVars;
         ScriptLifecycle lifecycle = ScriptLifecycle::Always;
         bool initialized = false;
+        bool fromScene = false; // sourced from the active scene's script manifest (on_play), not a directory scan
     };
 
     enum class ScriptUpdateMode
@@ -167,8 +170,20 @@ namespace pe
         // Fire pending init for PlayerOnly scripts on entry, destroy on exit.
         void OnPlayModeChanged(bool nowPlay);
 
+        // Invoke a named scene action from the active scene's script manifest. Lazily loads the
+        // action's script (cached per scene), then calls the named function. Returns false and
+        // logs if the action / script / function is missing or errors. Zero lifecycle — actions
+        // are plain on-demand calls, independent of play mode.
+        bool InvokeSceneAction(const std::string &id);
+
     private:
         void LoadScripts();
+        // Re-register the active scene's on_play scripts when the scene changes (tracked by
+        // generation). on_play scripts run with PlayerOnly lifecycle through the normal loops.
+        void SyncSceneScripts();
+        // Resolve a project-root-relative script path (e.g. "Assets/Scripts/x.lua") to a normalized
+        // absolute path against the active project root. Shared by node scripts and scene scripts.
+        std::string ResolveProjectScriptPath(const std::string &path) const;
         void LoadScriptsFromDir(const std::string &dir, ScriptLifecycle lifecycle);
         void ScanForNewScripts();
         void CollectHooks(ScriptEntry &entry);
@@ -197,5 +212,10 @@ namespace pe
         std::vector<PendingSceneLoad> m_pendingSceneLoads;
         bool m_initialized = false;
         double m_scanTimer = 0.0;
+
+        // Scene script manifest tracking. m_sceneScriptGeneration is the scene generation last
+        // synced into m_scripts; m_actionEnvs caches lazily-loaded action script environments.
+        uint32_t m_sceneScriptGeneration = UINT32_MAX;
+        std::unordered_map<std::string, sol::environment> m_actionEnvs;
     };
 } // namespace pe

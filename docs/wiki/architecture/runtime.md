@@ -159,6 +159,27 @@ Scene nodes can carry a lightweight `Component_Prefab` marker through `NodePrefa
 
 The editor surface is host-owned. FileBrowser recognizes `.peprefab` files and shows the dedicated prefab icon, Hierarchy drag-drop instantiates a prefab at the root or under the hovered node, right-clicking a hierarchy node can save the whole subtree as a prefab, and dropping a hierarchy node into a FileBrowser folder prompts for a prefab file in that folder. Prefab Viewer is the asset-side editor: it opens `.peprefab` files directly, displays the prefab-internal tree, edits names/enabled state/local transforms, adds/removes/reparents items, authors generated primitive and cooked `.pemesh` mesh references, adds/removes common component payloads, saves the asset, and can instantiate the prefab into the active scene without using the scene hierarchy as the editing surface.
 
+## Scene Scripts
+
+A scene can own Lua script references directly, persisted as a top-level `scene_scripts` object in the `.pescene` and applied on load. This is the scene-scoped counterpart to the directory-scanned `Scripts/Player` auto-load: it lets one scene declare exactly which gameplay scripts run when it plays and which named action entry points it exposes, without relying on file placement or a boot-script dispatcher. The manifest is `SceneScriptManifest` (`PhasmaRuntime/Code/Scene/SceneScriptManifest.h`), held on `Scene` and serialized next to global settings in both `SaveScene` and `TakeSnapshot`, so it survives editor play→stop snapshot/restore for free.
+
+```json
+"scene_scripts": {
+    "on_play": ["Assets/Scripts/Scenes/space_gameplay.lua"],
+    "actions": {
+        "start_game": { "script": "Assets/Scripts/Scenes/space_actions.lua", "function": "start_game" }
+    }
+}
+```
+
+`on_play` scripts run with the existing `PlayerOnly` lifecycle through the normal `ScriptSystem` loops — `ScriptSystem::SyncSceneScripts` re-registers them whenever the active scene generation changes, resolving project-root-relative paths through the same `ResolveProjectScriptPath` helper node scripts use, then init at play-mode entry and destroy on stop. A scene-`on_play` path that is also picked up by the `Scripts/Player` directory scan is loaded once, not twice. Globals are intentionally **not** promoted from scene scripts (unlike directory-scanned scripts), so they stay self-contained and cannot collide across scenes.
+
+`actions` are named `id -> {script, function}` entry points with **zero lifecycle**: the action's script is compiled lazily into a cached environment the first time it is invoked, then the named function is called. Lua `scene.run_action("id")` dispatches one (callable from UI buttons, triggers, the console). The cache is cleared when the scene changes.
+
+The editor authoring surface is the **Scene Scripts** window (`PhasmaEditor/Code/GUI/Widgets/SceneScripts.cpp`, hidden by default — toggle from the window menu): it edits the live manifest (add/remove on_play paths, edit the id/script/function action table) and marks the scene dirty so Save Scene persists it. Paths are authored project-relative.
+
+Deliberately omitted for now — both introduce a non-play lifecycle the snapshot/restore machinery does not yet model: `compose` (a scene-generator phase; the established pattern is to run a builder script in the editor and **bake** its output into the saved scene, à la Warbound's `WB_BAKE`) and `on_load` (runs on scene apply regardless of play). Add `on_play`/`actions` first; revisit these once the lifetime rules are settled.
+
 ## First Implementation Slice
 
 The first code slice is intentionally boring:

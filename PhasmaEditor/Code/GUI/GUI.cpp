@@ -36,6 +36,7 @@
 #include "Widgets/Properties.h"
 #include "Widgets/PrefabViewer.h"
 #include "Widgets/RuntimeUiPalette.h"
+#include "Widgets/SceneScripts.h"
 #include "Widgets/SceneView.h"
 #include "Widgets/ScriptEditor.h"
 #include "Widgets/ShaderEditor.h"
@@ -3132,6 +3133,7 @@ namespace pe
         auto shaderEditor = std::make_shared<ShaderEditor>();
         auto spriteEditor = std::make_shared<SpriteEditor>();
         auto runtimeUiPalette = std::make_shared<RuntimeUiPalette>();
+        auto sceneScripts = std::make_shared<SceneScripts>();
         auto animTimeline = std::make_shared<AnimationTimeline>();
 #ifdef PE_PHYSICS
         auto physicsWidget = std::make_shared<PhysicsWidget>();
@@ -3163,6 +3165,7 @@ namespace pe
             shaderEditor,
             spriteEditor,
             runtimeUiPalette,
+            sceneScripts,
             animTimeline,
 #ifdef PE_PHYSICS
             physicsWidget,
@@ -3192,6 +3195,7 @@ namespace pe
                                shaderEditor,
                                spriteEditor,
                                runtimeUiPalette,
+                               sceneScripts,
                                animTimeline};
         for (auto &widget : m_widgets)
             widget->Init(this);

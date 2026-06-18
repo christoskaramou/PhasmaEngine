@@ -60,6 +60,13 @@ namespace pe
                     NewScene();
                 });
 
+                // Invoke a named action declared in the scene's script manifest (scene_scripts.actions).
+                // The action's script is loaded lazily on first call. Returns true on success.
+                scene.set_function("run_action", [](const std::string &id) -> bool {
+                    auto *ss = GetGlobalSystem<ScriptSystem>();
+                    return ss ? ss->InvokeSceneAction(id) : false;
+                });
+
                 scene.set_function("get_entities", [](sol::this_state ts) -> sol::as_table_t<std::vector<sol::table>> {
                     sol::state_view lua(ts);
                     std::vector<sol::table> result;

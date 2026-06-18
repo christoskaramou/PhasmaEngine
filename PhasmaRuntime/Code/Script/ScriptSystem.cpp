@@ -572,21 +572,15 @@ namespace pe
         }
     }
 
-    NodeScriptInstance ScriptSystem::CreateNodeInstance(NodeId *node, const std::string &path)
+    // Resolve a project-root-relative script path (e.g. "Assets/Scripts/x.lua") to a normalized
+    // absolute path against the active PROJECT root, not the process CWD and not the engine root.
+    // Resolving against the CWD only works on desktop by accident (the bin dir); Path::Root is the
+    // engine/exe dir when an external project is loaded in the editor or desktop player, so a
+    // project's scripts would not be found there. The project root is the parent of the active
+    // Assets dir; on a packaged player (Android) the bundled Assets sit directly under Path::Root,
+    // so this matches. Absolute paths pass through unchanged.
+    std::string ScriptSystem::ResolveProjectScriptPath(const std::string &path) const
     {
-        Scene *scene = GetActiveScene();
-        if (!scene)
-            return {};
-
-        NodeScriptInstance inst;
-        inst.handle = scene->MakeHandle(node);
-        inst.sourcePath = NormalizeSlashes(path);
-        // Node-script paths are stored project-root-relative (e.g. "Assets/Scripts/x.lua"). Resolve
-        // them against the active PROJECT root, not the process CWD and not the engine root. Resolving
-        // against the CWD only works on desktop by accident (the bin dir); Path::Root is the engine/exe
-        // dir when an external project is loaded in the editor or desktop player, so a project's node
-        // scripts would not be found there. The project root is the parent of the active Assets dir; on
-        // a packaged player (Android) the bundled Assets sit directly under Path::Root, so this matches.
         std::filesystem::path scriptPath(path);
         if (scriptPath.is_relative())
         {
@@ -601,7 +595,19 @@ namespace pe
             }
             scriptPath = base / scriptPath;
         }
-        inst.path = NormalizePath(scriptPath.string());
+        return NormalizePath(scriptPath.string());
+    }
+
+    NodeScriptInstance ScriptSystem::CreateNodeInstance(NodeId *node, const std::string &path)
+    {
+        Scene *scene = GetActiveScene();
+        if (!scene)
+            return {};
+
+        NodeScriptInstance inst;
+        inst.handle = scene->MakeHandle(node);
+        inst.sourcePath = NormalizeSlashes(path);
+        inst.path = ResolveProjectScriptPath(path);
 
         // Fresh environment inheriting globals (bindings, pe_log, etc.)
         inst.env = sol::environment(m_lua, sol::create, m_lua.globals());
@@ -970,6 +976,142 @@ namespace pe
                 DestroyNodeInstance(inst);
     }
 
+    void ScriptSystem::SyncSceneScripts()
+    {
+        Scene *scene = GetActiveScene();
+        const uint32_t gen = scene ? scene->GetGeneration() : UINT32_MAX;
+        if (gen == m_sceneScriptGeneration)
+            return; // active scene unchanged since the last sync
+        m_sceneScriptGeneration = gen;
+
+        // Tear down the previously-registered scene scripts (destroy if they were initialized),
+        // then drop them. Action env cache is per-scene, so clear it too.
+        for (auto &script : m_scripts)
+        {
+            if (script.fromScene && script.initialized && script.destroyFn.valid())
+            {
+                auto result = CallProtected(script.destroyFn);
+                if (!result.valid())
+                {
+                    sol::error err = result;
+                    Log::Error(PeFormat("[Lua] destroy() error in scene script '%s': %s", script.path.c_str(), err.what()));
+                }
+            }
+        }
+        m_scripts.erase(std::remove_if(m_scripts.begin(), m_scripts.end(),
+                                       [](const ScriptEntry &s)
+                                       { return s.fromScene; }),
+                        m_scripts.end());
+        m_actionEnvs.clear();
+
+        if (!scene)
+            return;
+
+        // Register the new scene's on_play scripts as PlayerOnly entries. In the player (or when
+        // already playing in the editor) they init immediately; in the editor authoring state they
+        // wait for play-mode entry (OnPlayModeChanged) like any PlayerOnly script.
+        const bool shouldInitNow = !IsEditorHost() || IsScriptPlayMode();
+        for (const std::string &relPath : scene->GetScriptManifest().onPlay)
+        {
+            if (relPath.empty())
+                continue;
+            std::string absPath = ResolveProjectScriptPath(relPath);
+            if (HasLoadedScriptPath(m_scripts, absPath))
+                continue; // also loaded from a directory scan (e.g. Scripts/Player) — don't double-run
+
+            sol::environment env(m_lua, sol::create, m_lua.globals());
+            auto result = m_lua.safe_script_file(absPath, env, sol::script_pass_on_error);
+            if (!result.valid())
+            {
+                sol::error err = result;
+                Log::Error(PeFormat("[Lua] scene on_play script error in '%s': %s", absPath.c_str(), err.what()));
+                continue;
+            }
+
+            ScriptEntry entry;
+            entry.path = absPath;
+            entry.env = std::move(env);
+            entry.lifecycle = ScriptLifecycle::PlayerOnly;
+            entry.fromScene = true;
+            CollectHooks(entry);
+            CollectExposedVars(entry);
+
+            if (shouldInitNow && entry.initFn.valid())
+            {
+                auto initResult = CallProtected(entry.initFn);
+                if (!initResult.valid())
+                {
+                    sol::error err = initResult;
+                    Log::Error(PeFormat("[Lua] init() error in scene script '%s': %s", absPath.c_str(), err.what()));
+                }
+                else
+                {
+                    entry.initialized = true;
+                }
+            }
+
+            m_scripts.push_back(std::move(entry));
+            PE_INFO("Loaded scene on_play script: %s", absPath.c_str());
+        }
+    }
+
+    bool ScriptSystem::InvokeSceneAction(const std::string &id)
+    {
+        Scene *scene = GetActiveScene();
+        if (!scene)
+        {
+            PE_WARN("[Lua] scene.run_action('%s'): no active scene", id.c_str());
+            return false;
+        }
+        const SceneScriptAction *action = scene->GetScriptManifest().FindAction(id);
+        if (!action)
+        {
+            Log::Error(PeFormat("[Lua] scene.run_action('%s'): no such action in scene manifest", id.c_str()));
+            return false;
+        }
+        if (action->script.empty() || action->function.empty())
+        {
+            Log::Error(PeFormat("[Lua] scene.run_action('%s'): action missing script or function", id.c_str()));
+            return false;
+        }
+
+        const std::string absPath = ResolveProjectScriptPath(action->script);
+        auto it = m_actionEnvs.find(absPath);
+        if (it == m_actionEnvs.end())
+        {
+            sol::environment env(m_lua, sol::create, m_lua.globals());
+            auto result = m_lua.safe_script_file(absPath, env, sol::script_pass_on_error);
+            if (!result.valid())
+            {
+                sol::error err = result;
+                Log::Error(PeFormat("[Lua] scene.run_action('%s'): script error in '%s': %s",
+                                    id.c_str(), absPath.c_str(), err.what()));
+                return false;
+            }
+            it = m_actionEnvs.emplace(absPath, std::move(env)).first;
+        }
+
+        // Look up the function in the action script's environment; fall back to a promoted global.
+        sol::object fnObj = it->second[action->function];
+        if (!fnObj.is<sol::function>())
+            fnObj = m_lua.globals()[action->function];
+        if (!fnObj.is<sol::function>())
+        {
+            Log::Error(PeFormat("[Lua] scene.run_action('%s'): function '%s' not found in '%s'",
+                                id.c_str(), action->function.c_str(), absPath.c_str()));
+            return false;
+        }
+
+        auto result = CallProtected(fnObj.as<sol::function>());
+        if (!result.valid())
+        {
+            sol::error err = result;
+            Log::Error(PeFormat("[Lua] scene.run_action('%s') error: %s", id.c_str(), err.what()));
+            return false;
+        }
+        return true;
+    }
+
     void ScriptSystem::AddPendingAsyncLoad(PendingAsyncLoad load)
     {
         m_pendingAsyncLoads.push_back(std::move(load));
@@ -1249,6 +1391,9 @@ namespace pe
 
         // Periodically scan for new .lua files
         ScanForNewScripts();
+
+        // Re-register the active scene's on_play scripts when the scene changes
+        SyncSceneScripts();
 
         // Reconcile per-node script instances with the scene
         ReconcileNodeInstances();

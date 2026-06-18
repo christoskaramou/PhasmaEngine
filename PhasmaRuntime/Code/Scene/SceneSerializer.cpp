@@ -234,6 +234,43 @@ namespace pe
             }
         }
 
+        // Parse the top-level "scene_scripts" object into a manifest. Always clears first, so a
+        // scene without the member (or with an empty one) resets any previously-loaded manifest.
+        void ParseSceneScriptManifest(const rapidjson::Value &doc, SceneScriptManifest &out)
+        {
+            out.Clear();
+            if (!doc.HasMember("scene_scripts") || !doc["scene_scripts"].IsObject())
+                return;
+            const auto &obj = doc["scene_scripts"];
+
+            if (obj.HasMember("on_play") && obj["on_play"].IsArray())
+            {
+                for (const auto &v : obj["on_play"].GetArray())
+                    if (v.IsString())
+                        out.onPlay.emplace_back(v.GetString());
+            }
+
+            if (obj.HasMember("actions") && obj["actions"].IsObject())
+            {
+                // Iterate members explicitly: GetObject() collides with the GetObjectW macro from
+                // windows.h on this platform.
+                const auto &actions = obj["actions"];
+                for (auto m = actions.MemberBegin(); m != actions.MemberEnd(); ++m)
+                {
+                    if (!m->value.IsObject())
+                        continue;
+                    SceneScriptAction a;
+                    a.id = m->name.GetString();
+                    if (m->value.HasMember("script") && m->value["script"].IsString())
+                        a.script = m->value["script"].GetString();
+                    if (m->value.HasMember("function") && m->value["function"].IsString())
+                        a.function = m->value["function"].GetString();
+                    if (!a.id.empty())
+                        out.actions.push_back(std::move(a));
+                }
+            }
+        }
+
         void ApplyGlobalSettingsMembers(const rapidjson::Value &settings)
         {
             auto &gSettings = Settings::Get<GlobalSettings>();
@@ -1120,6 +1157,42 @@ namespace pe
             document.AddMember("settings", settings.Move(), allocator);
         }
 
+        // Scene-owned script references (on_play scripts + named actions). Paths are stored
+        // verbatim (already project-relative as authored), so no source remapping is needed.
+        void AddSceneScripts()
+        {
+            const SceneScriptManifest &manifest = scene.m_scriptManifest;
+            if (manifest.Empty())
+                return;
+
+            rapidjson::Value obj(rapidjson::kObjectType);
+
+            if (!manifest.onPlay.empty())
+            {
+                rapidjson::Value arr(rapidjson::kArrayType);
+                for (const std::string &path : manifest.onPlay)
+                    arr.PushBack(MakeStringValue(path), allocator);
+                obj.AddMember("on_play", arr.Move(), allocator);
+            }
+
+            if (!manifest.actions.empty())
+            {
+                rapidjson::Value actions(rapidjson::kObjectType);
+                for (const SceneScriptAction &a : manifest.actions)
+                {
+                    if (a.id.empty())
+                        continue;
+                    rapidjson::Value entry(rapidjson::kObjectType);
+                    entry.AddMember("script", MakeStringValue(a.script), allocator);
+                    entry.AddMember("function", MakeStringValue(a.function), allocator);
+                    actions.AddMember(MakeStringValue(a.id), entry.Move(), allocator);
+                }
+                obj.AddMember("actions", actions.Move(), allocator);
+            }
+
+            document.AddMember("scene_scripts", obj.Move(), allocator);
+        }
+
         void AddSources(const std::filesystem::path *relativeToDir)
         {
             rapidjson::Value sourcesArr(rapidjson::kArrayType);
@@ -1757,6 +1830,7 @@ namespace pe
         const std::filesystem::path sceneDir = file.parent_path();
         SceneSerializationHelper serializer(*this, d);
         serializer.AddSettings();
+        serializer.AddSceneScripts();
         serializer.BuildLiveGeometryRemap();
         serializer.AddSources(&sceneDir);
         serializer.AddMeshes(&sceneDir);
@@ -1861,6 +1935,7 @@ namespace pe
         m_generation++;
         m_scenePath.clear();
         m_dirty = false;
+        m_scriptManifest.Clear();
 
         if (IsScenePhysicsSimulating())
             StopScenePhysicsSimulation();
@@ -2136,6 +2211,8 @@ namespace pe
             ApplyGlobalSettingsMembers(settings);
             MarkUniformsDirty();
         }
+
+        ParseSceneScriptManifest(d, m_scriptManifest);
 
         auto ReadVec3 = [](const rapidjson::Value &arr)
         {
@@ -3266,6 +3343,7 @@ namespace pe
         serializer.AddActiveCamera();
         serializer.AddEmitters();
         serializer.AddSettings();
+        serializer.AddSceneScripts();
 
         // Compact JSON for minimal memory usage
         rapidjson::StringBuffer sb;
@@ -4342,6 +4420,8 @@ namespace pe
             EnsureSkyboxNodeFromSettings(false);
             MarkUniformsDirty();
         }
+
+        ParseSceneScriptManifest(d, m_scriptManifest);
 
         // Update texture descriptors (needed when material texture masks change)
         UpdateTextures();

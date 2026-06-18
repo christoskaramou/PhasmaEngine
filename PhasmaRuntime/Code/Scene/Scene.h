@@ -6,6 +6,7 @@
 #include "Scene/NodeComponents.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SceneNodeHandle.h"
+#include "Scene/SceneScriptManifest.h"
 
 namespace pe
 {
@@ -254,6 +255,12 @@ namespace pe
         // --- Accessors ---
         const std::filesystem::path &GetScenePath() const { return m_scenePath; }
         void SetScenePath(const std::filesystem::path &path) { m_scenePath = path; }
+
+        // Scene-owned Lua script references (on_play scripts + named actions). Persisted as
+        // the top-level "scene_scripts" object; ScriptSystem reads this to run on_play scripts
+        // at play and to dispatch scene.run_action(id).
+        const SceneScriptManifest &GetScriptManifest() const { return m_scriptManifest; }
+        SceneScriptManifest &GetScriptManifest() { return m_scriptManifest; }
         std::string GetSceneName() const;
         bool IsDirty() const { return m_dirty; }
         void MarkDirty() { m_dirty = true; }
@@ -597,6 +604,7 @@ namespace pe
 
         std::filesystem::path m_scenePath;
         bool m_dirty = false;
+        SceneScriptManifest m_scriptManifest;
 
         // Node Graph Storage
         std::vector<NodeComponentCache> m_nodeComponentCache;
