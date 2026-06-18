@@ -13,7 +13,7 @@
 [[vk::binding(1, 0)]] StructuredBuffer<Mesh_Constants> constants;
 
 static const uint MATRIX_SIZE = 64u;
-static const uint MESH_DATA_SIZE = MATRIX_SIZE * 2u;
+static const uint MESH_DATA_SIZE = MATRIX_SIZE * 2u + 16u; // +16B: NodeGpuData render-visible/flags tail
 
 float4x4 LoadMatrix(uint offset)
 {

@@ -14,6 +14,7 @@
 #include "Scene/SceneRuntimeHooks.h"
 #include "Runtime/RuntimeHost.h"
 #include "Runtime/RuntimePlaySession.h"
+#include "Runtime/RenderDocCaptureShortcut.h"
 #include "Runtime/RuntimeStartup.h"
 #include "Script/Bindings/Input/InputState.h"
 #include "Script/ScriptRuntimeHooks.h"
@@ -478,6 +479,9 @@ namespace pe
                 InputState::BeginFrame();
                 while (SDL_PollEvent(&event))
                 {
+                    if (IsRenderDocCaptureShortcut(event))
+                        TriggerRenderDocCaptureShortcut();
+
                     const bool uiCaptured = m_runtimeUi && m_runtimeUi->ProcessEvent(event);
 
                     if (ShouldQuitFromEvent(event, uiCaptured))

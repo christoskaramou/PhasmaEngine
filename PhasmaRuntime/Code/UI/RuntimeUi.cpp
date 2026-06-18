@@ -443,12 +443,16 @@ namespace pe
     void RuntimeUiSystem::ClearScreen(const std::string &screenId)
     {
         GetOrCreateScreen(screenId).widgets.clear();
+        if (m_backend)
+            m_backend->ResetInputState();
     }
 
     void RuntimeUiSystem::ClearAllScreens()
     {
         m_screens.clear();
         m_sceneAuthoredWidgetIds.clear();
+        if (m_backend)
+            m_backend->ResetInputState();
     }
 
     void RuntimeUiSystem::ClearScriptScreens()
@@ -466,6 +470,8 @@ namespace pe
                                                   m_sceneAuthoredWidgetIds.end();
                                        }),
                         m_screens.end());
+        if (m_backend)
+            m_backend->ResetInputState();
     }
 
     void RuntimeUiSystem::RemoveWidget(const std::string &screenId, const std::string &widgetId)

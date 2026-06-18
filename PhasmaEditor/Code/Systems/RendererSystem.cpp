@@ -141,16 +141,25 @@ namespace pe
 
     void RendererSystem::LateCatchUpForScriptMutations()
     {
-        if (!m_scene.HasPendingRenderUpdate())
+        const bool hasPendingRenderUpdate = m_scene.HasPendingRenderUpdate();
+        const bool hasDirtyCameras = m_scene.HasDirtyCameras();
+        if (!hasPendingRenderUpdate && !hasDirtyCameras)
             return;
 
-        if (m_scene.IsGeometryDirty())
-            WaitAllFramesCommands();
-        m_scene.FlushPendingGpuWork();
-
+        if (hasPendingRenderUpdate)
         {
-            PE_PROFILE_SCOPE("Scene Late");
-            m_scene.Update();
+            if (m_scene.IsGeometryDirty())
+                WaitAllFramesCommands();
+            m_scene.FlushPendingGpuWork();
+
+            {
+                PE_PROFILE_SCOPE("Scene Late");
+                m_scene.Update();
+            }
+        }
+        else
+        {
+            m_scene.UpdateCameraRenderState();
         }
 
         {

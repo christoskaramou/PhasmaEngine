@@ -921,6 +921,8 @@ namespace pe
         m_gpuFeatureSupport = {};
         m_gpuLimits = {};
 
+        Debug::InitCaptureApi();
+
         if (api == PE_GRAPHICS_API_DX12)
         {
 #if defined(PE_WIN32)
@@ -1013,8 +1015,6 @@ namespace pe
         m_impl = new VulkanRhiImpl();
         auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
 
-        Debug::InitCaptureApi();
-
         ConfigureVulkanAdapterPreferenceBeforeInstance();
         CreateInstance(window);
         FindGpu();
@@ -1074,6 +1074,7 @@ namespace pe
 
             if (m_impl)
                 m_impl->Shutdown();
+            Debug::DestroyCaptureApi();
             delete m_impl;
             m_impl = nullptr;
             return;

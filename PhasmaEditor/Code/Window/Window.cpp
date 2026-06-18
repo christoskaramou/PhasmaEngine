@@ -9,12 +9,14 @@
 #include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
 #include "Scene/SelectionManager.h"
+#include "Runtime/RenderDocCaptureShortcut.h"
 #include "Script/Bindings/Input/InputState.h"
 #include "Systems/RendererSystem.h"
 #include "UI/RuntimeUi.h"
 #include "Window/WindowEvents.h"
 #include "imgui/imgui_impl_sdl2.h"
 
+#include "Script/ScriptRuntimeHooks.h"
 #include "Script/ScriptSystem.h"
 
 namespace pe
@@ -138,6 +140,10 @@ namespace pe
         RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi();
         while (SDL_PollEvent(&sdlEvent))
         {
+            const bool fullWindowViewport = rendererSystem && !rendererSystem->GetGUI().Render();
+            if ((IsScriptPlayMode() || fullWindowViewport) && IsRenderDocCaptureShortcut(sdlEvent))
+                TriggerRenderDocCaptureShortcut();
+
             if (sdlEvent.type == SDL_QUIT)
                 EventSystem::PushEvent(EventType::RequestExit);
 
@@ -147,7 +153,6 @@ namespace pe
             if (!runtimeUiCaptured && sdlEvent.type == SDL_MOUSEMOTION)
                 InputState::AddMouseMotion(sdlEvent.motion.xrel, sdlEvent.motion.yrel);
 
-            const bool fullWindowViewport = rendererSystem && !rendererSystem->GetGUI().Render();
             if (!runtimeUiCaptured && sdlEvent.type == SDL_MOUSEWHEEL &&
                 (fullWindowViewport || IsMouseOverSceneViewImage()))
                 InputState::AddMouseWheel(sdlEvent.wheel.x, sdlEvent.wheel.y);

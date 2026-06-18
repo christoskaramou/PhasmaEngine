@@ -72,6 +72,14 @@ namespace pe
     {
         mat4 worldMatrix = mat4(1.f);
         mat4 previousWorldMatrix = mat4(1.f);
+        // Per-instance render-visible flag (read by CullingCS at byte offset 128) — clearing it
+        // culls the node's draws without a RebuildRasterInstances / TLAS rebuild. Padded to 16B so
+        // the skinned-joint tail (uploaded at dataOffset + sizeof(NodeGpuData)) stays 16-byte
+        // aligned; shaders read joints at MESH_DATA_SIZE = sizeof(NodeGpuData) = 144 (keep in sync).
+        uint32_t renderVisible = 1u;
+        uint32_t pad0 = 0u;
+        uint32_t pad1 = 0u;
+        uint32_t pad2 = 0u;
     };
 
     struct NodeRuntime

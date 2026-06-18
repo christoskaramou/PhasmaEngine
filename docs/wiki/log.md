@@ -1,5 +1,17 @@
 # PhasmaEngine Wiki Log
 
+## 2026-06-18
+
+- Added RenderDoc Ctrl+T capture shortcuts for standalone PhasmaPlayer and editor-hosted play. A shared `RenderDocCaptureShortcut` runtime helper owns the key test, one-frame `Debug::TriggerMultiFrameCapture` call, and unavailable-RenderDoc logging; the two host event pumps only decide when the shortcut is allowed before runtime UI keyboard capture is applied.
+
+- Fixed clean scene loads and clean editor play/stop restores showing the Hierarchy dirty asterisk immediately. `Scene::LoadSceneApply` now performs a quiet camera-node sync after load-time reconstruction, updates node matrices, syncs legacy light structs from their node world matrices, and clears the document dirty flag after startup animation setup. `Scene::RestoreSnapshot` performs the same camera/node/light stabilization before returning, while callers still decide the final dirty state. This keeps undo idle capture from seeing load/restore finalization drift such as directional light position/rotation changing from default values to node-derived values and labeling it `Scene Change`.
+
+- Fixed editor stop/play camera restore for scenes with embedded camera nodes. Snapshots now keep each legacy camera's node index, and `Scene::RestoreSnapshot` restores the active camera from that embedded node camera instead of relying on the current `m_cameras` vector order or node index. The fast restore path also reuses the camera already attached to the node, so play-mode `SetActiveCamera` swaps do not leave the next play session using the wrong camera for culling or selection projection.
+
+## 2026-06-17
+
+- Fixed editor play/stop/play script lifetime, input-capture, and script-camera corruption for script-built scenes. `ScriptSystem::OnPlayModeChanged(false)` now destroys initialized node-script instances immediately when leaving play mode, before the editor restores its pre-play scene snapshot, and marks them uninitialized so the next play session runs their `init()` again. Runtime UI screen clears now reset the backend ImGui input/capture state so a removed overlay cannot keep Lua mouse input captured on the next play, and snapshot restore resets the transient per-node render-visible bit to its authored/default visible state. Cameras now track script/editor setter dirtiness, and the editor late script-mutation catch-up refreshes camera matrices and frame uniforms even when scripts only move the camera after the main renderer update.
+
 ## 2026-06-16
 
 - Fixed Vulkan validation errors on editor/player exit from runtime UI backend teardown. `RuntimeUiSystem::Shutdown()` now waits for GPU idle whenever runtime UI backend resources may exist, not only when path-backed UI images are cached, so Dear ImGui's frame buffers, font descriptor set, texture descriptors, and renderer pipeline are not destroyed while the last submitted scene command buffer can still reference them.

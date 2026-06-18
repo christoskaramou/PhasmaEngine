@@ -688,8 +688,8 @@ namespace pe
         // PLAY-mode only: in the editor host, scene node scripts must NOT run their
         // init/update/destroy lifecycle while stopped (authoring). Running them would fire
         // game logic over the static authored UI -- building the arena, navigating via
-        // button actions, etc. They initialize when Play is pressed and are torn down on
-        // Stop (ReconcileNodeInstances destroys stale instances after the snapshot restore).
+        // button actions, etc. They initialize when Play is pressed and are torn down before
+        // Stop restores the editor snapshot; later reconciliation only removes stale instances.
         // update_editor() still runs every frame for editor-only behavior, and the player
         // is never an editor host, so this never gates the shipped game.
         if (IsEditorHost() && !IsScriptPlayMode())
@@ -704,6 +704,24 @@ namespace pe
         {
             sol::error err = res;
             Log::Error(PeFormat("[Lua] init() error in node script '%s': %s", inst.path.c_str(), err.what()));
+            inst.lastError = err.what();
+        }
+    }
+
+    void ScriptSystem::DestroyNodeInstance(NodeScriptInstance &inst)
+    {
+        if (!inst.initCalled)
+            return;
+
+        inst.initCalled = false;
+        if (!inst.destroyFn.valid())
+            return;
+
+        auto res = CallProtected(inst.destroyFn);
+        if (!res.valid())
+        {
+            sol::error err = res;
+            Log::Error(PeFormat("[Lua] destroy() error in node script '%s': %s", inst.path.c_str(), err.what()));
             inst.lastError = err.what();
         }
     }
@@ -733,16 +751,7 @@ namespace pe
 
             if (!valid)
             {
-                if (it->initCalled && it->destroyFn.valid())
-                {
-                    auto res = CallProtected(it->destroyFn);
-                    if (!res.valid())
-                    {
-                        sol::error err = res;
-                        Log::Error(PeFormat("[Lua] destroy() error in node script '%s': %s", it->path.c_str(), err.what()));
-                        it->lastError = err.what();
-                    }
-                }
+                DestroyNodeInstance(*it);
                 PE_INFO("[ScriptSystem] Removing stale node instance '%s'", it->path.c_str());
                 if (it->exposedRef != LUA_NOREF)
                     luaL_unref(m_lua.lua_state(), LUA_REGISTRYINDEX, it->exposedRef);
@@ -955,6 +964,10 @@ namespace pe
                 script.initialized = false;
             }
         }
+
+        if (!nowPlay)
+            for (auto &inst : m_nodeInstances)
+                DestroyNodeInstance(inst);
     }
 
     void ScriptSystem::AddPendingAsyncLoad(PendingAsyncLoad load)
@@ -1340,18 +1353,7 @@ namespace pe
         }
 
         for (auto &inst : m_nodeInstances)
-        {
-            if (inst.initCalled && inst.destroyFn.valid())
-            {
-                auto result = CallProtected(inst.destroyFn);
-                if (!result.valid())
-                {
-                    sol::error err = result;
-                    Log::Error(PeFormat("[Lua] destroy() error in node script '%s': %s", inst.path.c_str(), err.what()));
-                    inst.lastError = err.what();
-                }
-            }
-        }
+            DestroyNodeInstance(inst);
         for (auto &inst : m_nodeInstances)
         {
             if (inst.exposedRef != LUA_NOREF)

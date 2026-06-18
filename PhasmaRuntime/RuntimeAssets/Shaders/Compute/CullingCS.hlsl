@@ -91,6 +91,11 @@ bool AABBInFrustum(float3 aabbMin, float3 aabbMax)
 
     Mesh_Constants constants = MeshConstants[idx];
 
+    // Per-instance render-visible flag (NodeGpuData byte offset 128, after the two matrices).
+    // Cleared by node:set_visible(false) to cull this draw cheaply — no instance/TLAS rebuild.
+    if (NodeData.Load(constants.meshDataOffset + 128u) == 0u)
+        return;
+
     float3 localMin = float3(constants.aabbMinX, constants.aabbMinY, constants.aabbMinZ);
     float3 localMax = float3(constants.aabbMaxX, constants.aabbMaxY, constants.aabbMaxZ);
 

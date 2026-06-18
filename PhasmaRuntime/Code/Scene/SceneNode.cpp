@@ -409,6 +409,30 @@ namespace pe
         return false;
     }
 
+    void Scene::SetNodeRenderVisible(NodeId *node, bool visible)
+    {
+        if (!IsNodeAlive(node))
+            return;
+
+        NodeRuntime &rt = m_nodeRuntime[node->index];
+        const uint32_t v = visible ? 1u : 0u;
+        if (rt.gpuData.renderVisible == v)
+            return;
+
+        // Flip the per-instance cull flag and re-upload this node's NodeGpuData through the
+        // existing per-frame dirtyUniforms path. CullingCS skips the draw when 0 — no
+        // RebuildRasterInstances and no TLAS rebuild, unlike SetNodeEnabled.
+        rt.gpuData.renderVisible = v;
+        rt.dirtyUniforms = 0xFF;
+    }
+
+    bool Scene::IsNodeRenderVisible(const NodeId *node) const
+    {
+        if (!IsNodeAlive(node))
+            return false;
+        return m_nodeRuntime[node->index].gpuData.renderVisible != 0u;
+    }
+
     bool Scene::IsNodeEnabled(const NodeId *node) const
     {
         if (!IsNodeAlive(node))

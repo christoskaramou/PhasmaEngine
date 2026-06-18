@@ -122,6 +122,7 @@ namespace pe
         ~Scene();
 
         void Update();
+        void UpdateCameraRenderState();
         void UpdateGeometryBuffers();
         void UpdateRasterInstances(); // creates cmd, calls RebuildRasterInstances, submits
         void UpdateTextures();
@@ -181,6 +182,12 @@ namespace pe
         bool IsNodeEnabled(const NodeId *node) const;
         bool IsNodeHierarchyEnabled(const NodeId *node) const;
         bool SubtreeHasMeshRefs(const NodeId *node) const; // node or any descendant has mesh refs
+        // Cheap per-instance render visibility (a cull-flag in NodeGpuData honored by CullingCS),
+        // distinct from hierarchy enable/disable: flips a flag re-uploaded via the per-frame
+        // dirtyUniforms path with NO RebuildRasterInstances / TLAS rebuild. Use for frequent
+        // show/hide (pooled props, LOD popping); set_enabled remains the structural path.
+        void SetNodeRenderVisible(NodeId *node, bool visible);
+        bool IsNodeRenderVisible(const NodeId *node) const;
         bool IsValidMeshIndex(int meshIndex) const;
         void SetMeshRef(NodeId *node, int meshIndex);    // single mesh (clears others)
         void AddMeshRef(NodeId *node, int meshIndex);    // append mesh ref
@@ -285,6 +292,7 @@ namespace pe
         }
         bool IsGeometryDirty() const { return m_geometryDirty; }
         void SetGeometryDirty() { m_geometryDirty = true; }
+        bool HasDirtyCameras() const;
         bool HasPendingRenderUpdate() const;
         void SetMaterialDirty() { m_materialDirty = true; }
         void SetTexturesDirty() { m_texturesDirty = true; }
@@ -476,6 +484,7 @@ namespace pe
         // --- Private functions ---
         void InitLightBuffers();
         void DestroyLightBuffers();
+        void UpdateCameras(bool markDocumentDirty = true);
         void UpdateLights();
         NodeId *CreateLightNode(const std::string &name, const mat4 &localMatrix, NodeId *parent);
         void UpdateGeometry();

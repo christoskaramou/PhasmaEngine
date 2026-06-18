@@ -401,6 +401,25 @@ namespace pe
                 return io.WantTextInput;
             }
 
+            void ResetInputState() override
+            {
+                m_activeDragWidget.clear();
+                if (!m_context)
+                    return;
+
+                ScopedImGuiContext contextScope(m_context);
+                ImGuiIO &io = ImGui::GetIO();
+                io.ClearEventsQueue();
+                io.ClearInputMouse();
+                io.ClearInputKeys();
+                io.WantCaptureMouse = false;
+                io.WantCaptureKeyboard = false;
+                io.WantTextInput = false;
+                ImGui::SetNextFrameWantCaptureMouse(false);
+                ImGui::SetNextFrameWantCaptureKeyboard(false);
+                ImGui::ClearActiveID();
+            }
+
             void Render(const RuntimeUiRenderContext &context) override
             {
                 if (!m_initialized || !context.cmd || !context.renderTarget || !HasDrawData())

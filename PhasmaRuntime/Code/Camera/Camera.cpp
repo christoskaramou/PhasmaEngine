@@ -103,6 +103,7 @@ namespace pe
         }
 
         ExtractFrustum();
+        m_dirty = false;
     }
 
     float Camera::GetAspect()
@@ -196,6 +197,8 @@ namespace pe
             m_position -= m_right * speed;
         if (direction == CameraDirection::LEFT)
             m_position += m_right * speed;
+
+        m_dirty = true;
     }
 
     void Camera::Rotate(float xoffset, float yoffset)
@@ -207,6 +210,7 @@ namespace pe
         m_euler.y += y;
 
         m_orientation = quat(m_euler);
+        m_dirty = true;
     }
 
     vec3 Camera::WorldRight() const

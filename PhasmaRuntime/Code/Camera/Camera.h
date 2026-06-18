@@ -69,22 +69,60 @@ namespace pe
         inline CameraProjectionMode GetProjectionMode() const { return m_projectionMode; }
         inline bool IsOrthographic() const { return m_projectionMode == CameraProjectionMode::Orthographic; }
         inline float GetOrthographicSize() const { return m_orthographicSize; }
-        inline void SetPosition(const vec3 &position) { m_position = position; }
+        inline bool IsDirty() const { return m_dirty; }
+        inline void SetPosition(const vec3 &position)
+        {
+            m_position = position;
+            m_dirty = true;
+        }
         inline void SetEuler(const vec3 &euler)
         {
             m_euler = euler;
             m_orientation = quat(m_euler);
+            m_dirty = true;
         }
         inline void SetRotationSpeed(float speed) { m_rotationSpeed = speed; }
         inline void SetSpeed(float speed) { m_speed = speed; }
-        inline void SetNearPlane(float nearPlane) { m_nearPlane = nearPlane; }
-        inline void SetFarPlane(float farPlane) { m_farPlane = farPlane; }
-        inline void SetFovx(float fovx) { m_fovx = fovx; }
-        inline void SetProjectionMode(CameraProjectionMode mode) { m_projectionMode = mode; }
-        inline void SetOrthographic(bool enabled) { m_projectionMode = enabled ? CameraProjectionMode::Orthographic : CameraProjectionMode::Perspective; }
-        inline void SetOrthographicSize(float size) { m_orthographicSize = std::max(0.001f, size); }
-        inline void SetProjJitter(const vec2 &jitter) { m_projJitter = jitter; }
-        inline void SetPrevProjJitter(const vec2 &prevJitter) { m_prevProjJitter = prevJitter; }
+        inline void SetNearPlane(float nearPlane)
+        {
+            m_nearPlane = nearPlane;
+            m_dirty = true;
+        }
+        inline void SetFarPlane(float farPlane)
+        {
+            m_farPlane = farPlane;
+            m_dirty = true;
+        }
+        inline void SetFovx(float fovx)
+        {
+            m_fovx = fovx;
+            m_dirty = true;
+        }
+        inline void SetProjectionMode(CameraProjectionMode mode)
+        {
+            m_projectionMode = mode;
+            m_dirty = true;
+        }
+        inline void SetOrthographic(bool enabled)
+        {
+            m_projectionMode = enabled ? CameraProjectionMode::Orthographic : CameraProjectionMode::Perspective;
+            m_dirty = true;
+        }
+        inline void SetOrthographicSize(float size)
+        {
+            m_orthographicSize = std::max(0.001f, size);
+            m_dirty = true;
+        }
+        inline void SetProjJitter(const vec2 &jitter)
+        {
+            m_projJitter = jitter;
+            m_dirty = true;
+        }
+        inline void SetPrevProjJitter(const vec2 &prevJitter)
+        {
+            m_prevProjJitter = prevJitter;
+            m_dirty = true;
+        }
 
         inline vec2 GetProjJitter() const { return m_projJitter; }
         inline vec2 GetPrevProjJitter() const { return m_prevProjJitter; }
@@ -111,5 +149,6 @@ namespace pe
         std::array<Plane, 6> m_frustum{};
         vec2 m_projJitter;
         vec2 m_prevProjJitter;
+        bool m_dirty = true;
     };
 } // namespace pe

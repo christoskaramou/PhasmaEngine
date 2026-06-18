@@ -136,7 +136,7 @@ AreaLight LoadAreaLight(uint index)
 }
 
 static const uint MATRIX_SIZE = 64u;
-static const uint MESH_DATA_SIZE = MATRIX_SIZE * 2u;
+static const uint MESH_DATA_SIZE = MATRIX_SIZE * 2u + 16u; // +16B: NodeGpuData render-visible/flags tail
 
 // Utilities
 

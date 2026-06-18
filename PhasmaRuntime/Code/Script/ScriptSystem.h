@@ -187,6 +187,7 @@ namespace pe
         NodeScriptInstance CreateNodeInstance(NodeId *node, const std::string &path);
         void RefreshNodeInstanceBindings(NodeScriptInstance &inst);
         void InitializeNodeInstance(NodeScriptInstance &inst);
+        void DestroyNodeInstance(NodeScriptInstance &inst);
 
         sol::state m_lua{};
         std::vector<ScriptEntry> m_scripts{};

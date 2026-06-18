@@ -163,6 +163,7 @@ namespace pe
         virtual bool HasDrawData() const = 0;
         virtual bool WantsMouseCapture() const { return false; }
         virtual bool WantsKeyboardCapture() const { return false; }
+        virtual void ResetInputState() {}
         virtual void Render(const RuntimeUiRenderContext &context) = 0;
     };
 

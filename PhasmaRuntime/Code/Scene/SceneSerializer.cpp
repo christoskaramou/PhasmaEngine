@@ -1671,12 +1671,9 @@ namespace pe
                 camObj.AddMember("far_plane", camera->GetFarPlane(), allocator);
                 camObj.AddMember("speed", camera->GetSpeed(), allocator);
 
-                if (mode == LegacyCameraMode::SaveFile)
-                {
-                    NodeId *camNode = camera->GetNodeId();
-                    if (camNode)
-                        camObj.AddMember("node_index", static_cast<int>(camNode->index), allocator);
-                }
+                NodeId *camNode = camera->GetNodeId();
+                if (camNode)
+                    camObj.AddMember("node_index", static_cast<int>(camNode->index), allocator);
 
                 cameras.PushBack(camObj.Move(), allocator);
             }
@@ -2774,6 +2771,11 @@ namespace pe
                 PlaySceneAnimation(*this, node, 0, true);
         }
 
+        UpdateCameras(false);
+        UpdateNodeMatrices();
+        UpdateLights();
+        ClearDirty();
+
         Log::Info("Scene loaded from: " + preload.filePath.string());
     }
 
@@ -3325,6 +3327,46 @@ namespace pe
             uint32_t snapshotNodeCount = snapshotNodes.Size();
             uint32_t snapshotMeshCount = d.HasMember("meshes") ? d["meshes"].Size() : 0;
 
+            auto restoreActiveEmbeddedCamera = [&](auto getNodeForSnapshotIndex)
+            {
+                if (!hadEmbeddedCamerasSnap || !d.HasMember("active_camera") || !d["active_camera"].IsUint() ||
+                    !d.HasMember("cameras") || !d["cameras"].IsArray())
+                    return;
+
+                const uint32_t activeIndex = d["active_camera"].GetUint();
+                const auto &cams = d["cameras"];
+                if (activeIndex >= cams.Size())
+                    return;
+
+                const auto &cv = cams[activeIndex];
+                Camera *active = nullptr;
+                if (cv.HasMember("node_index") && cv["node_index"].IsInt())
+                {
+                    const int nodeIndex = cv["node_index"].GetInt();
+                    if (nodeIndex >= 0)
+                    {
+                        if (NodeId *node = getNodeForSnapshotIndex(static_cast<uint32_t>(nodeIndex)))
+                            active = GetCameraForNode(node);
+                    }
+                }
+
+                if (!active && cv.HasMember("name") && cv["name"].IsString())
+                {
+                    const std::string name = cv["name"].GetString();
+                    for (Camera *camera : m_cameras)
+                    {
+                        if (camera && camera->GetName() == name)
+                        {
+                            active = camera;
+                            break;
+                        }
+                    }
+                }
+
+                if (active)
+                    SetActiveCamera(active);
+            };
+
             // Check if geometry is unchanged (same sources in same order, same counts)
             bool sourcesMatch = (snapshotSources.Size() == static_cast<rapidjson::SizeType>(m_sources.size()));
             if (sourcesMatch)
@@ -3412,6 +3454,7 @@ namespace pe
                     if (nv.HasMember("local_matrix"))
                         SetLocalMatrix(node, ReadMat4(nv["local_matrix"]));
                     SetNodeEnabled(node, !nv.HasMember("enabled") || !nv["enabled"].IsBool() || nv["enabled"].GetBool());
+                    SetNodeRenderVisible(node, true);
                     SetMeshRef(node, -1);
                     if (nv.HasMember("mesh_refs"))
                     {
@@ -3522,7 +3565,7 @@ namespace pe
 
                     if ((flags & Component_Camera) && nv.HasMember("camera"))
                     {
-                        Camera *cam = (ni < m_cameras.size()) ? m_cameras[ni] : nullptr;
+                        Camera *cam = GetCameraForNode(node);
                         if (!cam)
                         {
                             // Find first camera without nodeId
@@ -3535,6 +3578,8 @@ namespace pe
                         }
                         if (cam)
                         {
+                            if (nv.HasMember("name"))
+                                cam->SetName(nv["name"].GetString());
                             cam->SetNodeId(node);
                             // Ensure camera tag exists and store pointer
                             if (!m_nodeComponentCache[node->index].camera)
@@ -3615,6 +3660,9 @@ namespace pe
                         hadEmbeddedLightsSnap = true;
                     }
                 }
+
+                restoreActiveEmbeddedCamera([&](uint32_t nodeIndex) -> NodeId *
+                                            { return nodeIndex < snapshotNodeCount ? m_nodeIds[nodeIndex] : nullptr; });
 
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkyboxNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
@@ -3972,6 +4020,8 @@ namespace pe
                             cam = new Camera();
                             m_cameras.push_back(cam);
                         }
+                        if (nv.HasMember("name"))
+                            cam->SetName(nv["name"].GetString());
                         const auto &cv = nv["camera"];
                         if (cv.HasMember("projection") && cv["projection"].IsString())
                         {
@@ -4048,6 +4098,9 @@ namespace pe
                         hadEmbeddedLightsSnap = true;
                     }
                 }
+
+                restoreActiveEmbeddedCamera([&](uint32_t nodeIndex) -> NodeId *
+                                            { return nodeIndex < nodeMap.size() ? nodeMap[nodeIndex] : nullptr; });
 
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkyboxNode(*this, nodeMap[ni], snapshotNodes[ni]);
@@ -4308,6 +4361,10 @@ namespace pe
                 }
             }
         }
+
+        UpdateCameras(false);
+        UpdateNodeMatrices();
+        UpdateLights();
 
         const SkinnedAnimationStats restoredAnimationStats = GetSkinnedAnimationStats(*this);
         PE_INFO("[Scene] RestoreSnapshot end: geometryMatch=%d nodes=%u meshes=%zu skinnedNodes=%d boneRefs=%zu clipRefs=%zu replayed=%d",

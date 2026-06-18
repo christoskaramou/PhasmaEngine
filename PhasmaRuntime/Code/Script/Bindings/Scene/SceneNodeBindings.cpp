@@ -75,6 +75,19 @@ namespace pe
                     s->SetNodeEnabled(h.nodeId, enabled);
                 });
 
+                // Cheap render visibility (CullingCS cull-flag) — no instance/TLAS rebuild, unlike
+                // set_enabled. Use for frequent per-frame show/hide of mesh nodes (pools, LOD).
+                ut.set_function("set_visible", [](SceneNodeHandle &h, bool visible) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    s->SetNodeRenderVisible(h.nodeId, visible);
+                });
+
+                ut.set_function("is_visible", [](SceneNodeHandle &h) -> bool {
+                    Scene *s = GetScene();
+                    return s && h.IsValid(*s) && s->IsNodeRenderVisible(h.nodeId);
+                });
+
                 ut.set_function("get_name", [](SceneNodeHandle &h) -> std::string {
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return "";

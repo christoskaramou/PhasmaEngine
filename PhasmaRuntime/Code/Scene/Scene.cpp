@@ -263,24 +263,50 @@ namespace pe
         return tag ? tag->camera : nullptr;
     }
 
+    void Scene::UpdateCameras(bool markDocumentDirty)
+    {
+        for (auto *camera : m_cameras)
+        {
+            camera->Update();
+
+            // Sync camera transform to its scene node so gizmos and hierarchy reflect it
+            NodeId *camNode = camera->GetNodeId();
+            if (camNode)
+            {
+                const vec3 &pos = camera->GetPosition();
+                const vec3 &euler = camera->GetEuler();
+                mat4 localMat = glm::translate(mat4(1.f), pos) * mat4_cast(quat(euler));
+                const bool transformChanged = GetLocalMatrix(camNode) != localMat;
+                SetLocalMatrix(camNode, localMat, markDocumentDirty);
+                if (!markDocumentDirty && transformChanged)
+                    MarkNodeDirty(camNode);
+            }
+        }
+    }
+
+    void Scene::UpdateCameraRenderState()
+    {
+        {
+            PE_PROFILE_SCOPE("Camera Update Late");
+            UpdateCameras();
+        }
+
+        {
+            PE_PROFILE_SCOPE("Update Node Matrices Late");
+            UpdateNodeMatrices();
+        }
+
+        {
+            PE_PROFILE_SCOPE("Update Uniforms Late");
+            UpdateUniformData();
+        }
+    }
+
     void Scene::Update()
     {
         {
             PE_PROFILE_SCOPE("Camera Update");
-            for (auto *camera : m_cameras)
-            {
-                camera->Update();
-
-                // Sync camera transform to its scene node so gizmos and hierarchy reflect it
-                NodeId *camNode = camera->GetNodeId();
-                if (camNode)
-                {
-                    const vec3 &pos = camera->GetPosition();
-                    const vec3 &euler = camera->GetEuler();
-                    mat4 localMat = glm::translate(mat4(1.f), pos) * mat4_cast(quat(euler));
-                    SetLocalMatrix(camNode, localMat);
-                }
-            }
+            UpdateCameras();
         }
 
         UpdateSpriteAnimations(std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetDelta())));
@@ -295,6 +321,14 @@ namespace pe
     {
         const bool rtDirty = RHII.GetCaps().rayTracing && (m_blasDirty || m_tlasDirty);
         return m_nodesDirty || m_geometryDirty || m_instancesDirty || m_materialDirty || m_texturesDirty || rtDirty;
+    }
+
+    bool Scene::HasDirtyCameras() const
+    {
+        return std::any_of(m_cameras.begin(),
+                           m_cameras.end(),
+                           [](const Camera *camera)
+                           { return camera && camera->IsDirty(); });
     }
 
     void Scene::UpdateGeometryBuffers()
