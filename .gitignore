@@ -334,11 +334,13 @@ Phasma/log.txt
 Phasma/Assets/ShaderCache/
 imgui.ini
 PhasmaEditor/Assets/editor_windows.json
+PhasmaEditor/editor_windows.json
 .cache/
 
 # Agent runtime files
 PhasmaEditor/Assets/Temp/
 PhasmaEditor/Assets/Agent/
+PhasmaEditor/Agent/
 Projects/*/Assets/Agent/
 
 # Agent instruction and wiki files
