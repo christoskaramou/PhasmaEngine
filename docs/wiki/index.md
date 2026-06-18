@@ -11,6 +11,7 @@
 - `README.md` — purpose and maintenance rules
 - `log.md` — wiki maintenance log
 - `architecture/agent-tooling.md` — MCP, editor agent tools, and ADK sidecar boundary
+- `architecture/mini-game-authoring.md` — plan for faster MiniGameKit-driven small-game creation
 - `architecture/rendering.md` — shared renderer/RHI notes and cached pipeline pitfalls
 - `architecture/runtime.md` — PhasmaRuntime and MyProject boundary
 
