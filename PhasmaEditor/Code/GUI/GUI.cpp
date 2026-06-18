@@ -1962,7 +1962,14 @@ namespace pe
             ImGui::TextDisabled("%s", m_confirmSavePath.string().c_str());
             ImGui::Dummy(ImVec2(0, 10));
 
-            if (ImGui::Button("Save", ImVec2(100, 0)))
+            // Right-align the Save/Cancel pair within the auto-sized popup.
+            const float btnW = 100.0f;
+            const float pairW = btnW * 2.0f + ImGui::GetStyle().ItemSpacing.x;
+            const float avail = ImGui::GetContentRegionAvail().x;
+            if (avail > pairW)
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - pairW));
+
+            if (ImGui::Button("Save", ImVec2(btnW, 0)))
             {
                 auto savePath = m_confirmSavePath;
                 ThreadPool::GUI.Enqueue([savePath]()
@@ -1972,7 +1979,7 @@ namespace pe
             }
             ui::ItemTooltip("Overwrite the scene file on disk.");
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(100, 0)))
+            if (ImGui::Button("Cancel", ImVec2(btnW, 0)))
             {
                 m_confirmSavePath.clear();
                 ImGui::CloseCurrentPopup();
