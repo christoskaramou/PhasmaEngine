@@ -1303,9 +1303,21 @@ namespace pe
 
         if (IsScriptPlayMode() && !IsScriptPaused())
         {
-            // update() runs only in play mode
+            // update() runs only in play mode.
+            //
+            // A script's update() may exit play mode mid-loop (e.g. play_controls.lua maps
+            // Escape -> engine.set_play_mode(false), which synchronously runs
+            // OnPlayModeChanged(false) and tears down the PlayerOnly scripts / node instances).
+            // Re-check the flag every iteration so we stop dispatching update() the instant
+            // play mode ends: continuing would (a) call update() on a just-destroyed script,
+            // re-running its lazy init and corrupting persistent state that survives the
+            // snapshot restore (breaking the next Play), and (b) update destroyed node
+            // instances. IsScriptPlayMode() is the gate; pausing does not tear down, so we
+            // don't break on a mid-loop pause.
             for (auto &script : m_scripts)
             {
+                if (!IsScriptPlayMode())
+                    break;
                 if (script.updateFn.valid() && !isNodeScript(script))
                 {
                     auto result = CallProtected(script.updateFn, dt);
@@ -1318,6 +1330,8 @@ namespace pe
             }
             for (auto &inst : m_nodeInstances)
             {
+                if (!IsScriptPlayMode())
+                    break;
                 if (!inst.lastError.empty())
                     continue;
                 if (inst.updateFn.valid())

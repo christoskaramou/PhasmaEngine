@@ -66,6 +66,7 @@ option(PE_BUILD_PLAYER "Build the standalone player host" ON)
 option(PE_WEBGPU "Build PhasmaWebGPU WebGPU abstraction layer" ${PE_DESKTOP_TARGETS_DEFAULT})
 option(PE_ENABLE_ASSIMP "Enable Assimp-backed runtime model file loading" ${PE_ASSIMP_DEFAULT})
 option(PE_ENABLE_RUNTIME_SHADER_COMPILER "Enable runtime shader compilation from source files" ${PE_RUNTIME_SHADER_COMPILER_DEFAULT})
+option(PE_ENABLE_RENDERDOC_CAPTURE "Enable RenderDoc capture API integration" OFF)
 
 set(PE_SDL2_INCLUDE_DIR "${PE_THIRD_PARTY_DIR}/SDL2")
 if(CMAKE_SYSTEM_NAME STREQUAL "Android")

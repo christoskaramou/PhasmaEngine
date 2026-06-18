@@ -36,7 +36,9 @@
 #endif
 #include "renderdoc_app.h"
 
-#define PE_RENDER_DOC 1
+#ifndef PE_RENDER_DOC
+#define PE_RENDER_DOC 0
+#endif
 
 #if defined(WIN32) && PE_RENDER_DOC == 1
 #include <Windows.h>
@@ -256,6 +258,8 @@ namespace pe
         if (capture_module != nullptr)
             dlclose(capture_module);
 #endif
+        capture_module = nullptr;
+        capture_api = nullptr;
     }
 
     void Debug::TriggerMultiFrameCapture(uint32_t numFrames)

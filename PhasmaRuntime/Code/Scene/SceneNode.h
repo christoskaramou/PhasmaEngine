@@ -81,6 +81,7 @@ namespace pe
         uint32_t pad1 = 0u;
         uint32_t pad2 = 0u;
     };
+    static_assert(sizeof(NodeGpuData) == 144, "NodeGpuData layout must match shader storage offsets");
 
     struct NodeRuntime
     {
