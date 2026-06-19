@@ -997,14 +997,10 @@ namespace pe
             m_stagingManager = new StagingManager();
             CreateDescriptorPool(150);
 
-            int sdlW = 0, sdlH = 0;
-            SDL_GetWindowSize(window, &sdlW, &sdlH);
-            m_surface->SetActualExtent({0, 0, static_cast<uint32_t>(sdlW), static_cast<uint32_t>(sdlH)});
-            CreateSwapchain(m_surface);
-            Downsampler::Init();
-            m_deletionQueues.resize(GetSwapchainImageCount());
-            for (auto &queue : m_deletionQueues)
-                queue = new DeletionQueue();
+            // Swapchain creation is deferred to RHI::InitSwapchain (called from App after the
+            // preferred present mode is applied), so DX12 is born with the requested present mode
+            // instead of the default-FIFO surface. Mirrors the Vulkan path and removes the need
+            // for a startup present-mode recreate.
             return;
 #else
             PE_ERROR("RHI::Init: DX12 backend is Windows-only");

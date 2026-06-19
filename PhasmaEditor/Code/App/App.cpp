@@ -473,13 +473,6 @@ namespace pe
             if (auto *ss = GetGlobalSystem<ScriptSystem>())
                 ss->CallInit();
 
-        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN &&
-            !usesWslDozenVulkan &&
-            RHII.GetSurface()->GetPresentMode() == PE_PRESENT_MODE_IMMEDIATE)
-        {
-            m_startupPresentRefreshFrames = 4;
-        }
-
         if (hasHotReloadSnapshot)
         {
             std::filesystem::remove(snapPath);
@@ -633,20 +626,6 @@ namespace pe
                 if (runtimeUiFrameOpen)
                     runtimeUi->EndFrame();
                 return false;
-            }
-        }
-
-        if (m_startupPresentRefreshFrames > 0 && --m_startupPresentRefreshFrames == 0)
-        {
-            GlobalSettings &settings = Settings::Get<GlobalSettings>();
-            const PePresentMode preferredMode = settings.preferred_present_mode;
-            if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN &&
-                preferredMode == PE_PRESENT_MODE_IMMEDIATE &&
-                RHII.GetSurface()->GetPresentMode() == preferredMode)
-            {
-                PE_INFO("[Vulkan] Refreshing immediate present mode after startup");
-                RHII.ChangePresentMode(PE_PRESENT_MODE_FIFO);
-                RHII.ChangePresentMode(preferredMode);
             }
         }
 
