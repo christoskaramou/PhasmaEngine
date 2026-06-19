@@ -1848,9 +1848,26 @@ namespace
         AddUniqueScene(profile.startupScenes, profile.startupScene);
     }
 
+    // The startup scene a freshly-selected project should default to: its manifest's
+    // startup_scene (in the discovered/relative form) when that resolves to a real file,
+    // otherwise "" (the launcher's "Empty scene", which is always valid). This keeps the
+    // previous project's scene from sticking around and failing validation.
+    std::string ProjectDefaultStartupScene(const std::string &projectPath)
+    {
+        if (std::optional<pe::ProjectConfig> project = TryLoadProjectAtRoot(projectPath))
+        {
+            const std::filesystem::path scene = project->ResolveStartupScene();
+            std::error_code ec;
+            if (!scene.empty() && std::filesystem::exists(scene, ec))
+                return MakeRuntimeRelativePath(scene);
+        }
+        return "";
+    }
+
     void ApplyPickedProject(LaunchProfile &profile, const std::string &selectedPath)
     {
         profile.projectPath = NormalizeConfiguredProjectPath(selectedPath);
+        profile.startupScene = ProjectDefaultStartupScene(profile.projectPath);
         RefreshStartupScenes(profile);
     }
 
@@ -1888,7 +1905,8 @@ namespace
         ImGui::SameLine(kFieldX);
         ImGui::SetNextItemWidth(kSceneComboWidth);
         ImGui::InputText("##project_folder", folderBuffer, sizeof(folderBuffer));
-        const bool folderActive = ImGui::IsItemActive();
+        const bool folderEditing = ImGui::IsItemActive();
+        const bool folderCommitted = ImGui::IsItemDeactivatedAfterEdit();
         ImGui::SameLine();
         if (ImGui::Button("Open##project_folder", ImVec2(110.0f, 0.0f)))
         {
@@ -1979,23 +1997,21 @@ namespace
             }
         }
 
-        // Keep the folder field and the active project in sync, but only while the
-        // user is not mid-edit (so we never fight the cursor). External changes
-        // (browse completion, first load) flow profile -> buffer; settled edits flow
-        // buffer -> profile (which also refreshes the startup-scene list).
-        if (!folderActive)
+        // Keep the folder field and the active project in sync without fighting the
+        // cursor. When the user commits an edit (Enter / click-away) we switch to that
+        // project, which refreshes the startup-scene list and auto-selects the project's
+        // own startup scene. External project changes (browse completion, first load)
+        // flow profile -> buffer while the field is not being edited.
+        if (folderCommitted && folderBuffer[0] != '\0')
         {
-            if (profile.projectPath != appliedPath && profile.projectPath != std::string(folderBuffer))
-            {
-                CopyStringToArray(folderBuffer, profile.projectPath);
-                appliedPath = profile.projectPath;
-            }
-            else if (folderBuffer[0] != '\0' && std::string(folderBuffer) != appliedPath)
-            {
-                ApplyPickedProject(profile, std::string(folderBuffer));
-                appliedPath = profile.projectPath;
-                CopyStringToArray(folderBuffer, profile.projectPath);
-            }
+            ApplyPickedProject(profile, std::string(folderBuffer));
+            CopyStringToArray(folderBuffer, profile.projectPath);
+            appliedPath = profile.projectPath;
+        }
+        else if (!folderEditing && profile.projectPath != appliedPath)
+        {
+            CopyStringToArray(folderBuffer, profile.projectPath);
+            appliedPath = profile.projectPath;
         }
     }
 
