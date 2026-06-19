@@ -4,14 +4,15 @@
 # Ignore almost everything above the root folder
 /*
 /*/
-!/PhasmaCore/
-!/PhasmaEditor/
-!/PhasmaMCP/
-!/PhasmaPlayer/
-!/PhasmaCook/
-!/PhasmaLauncher/
-!/PhasmaRuntime/
-!/PhasmaWebGPU/
+!/Phasma/
+!/Phasma/Core/
+!/Phasma/Editor/
+!/Phasma/MCP/
+!/Phasma/Player/
+!/Phasma/Cook/
+!/Phasma/Launcher/
+!/Phasma/Runtime/
+!/Phasma/WebGPU/
 !/Projects/
 !/Projects/**
 !/cmake/
@@ -23,40 +24,40 @@
 !/.gitignore
 !/.gitmodules
 
-!/PhasmaCore/Code/
-!/PhasmaCore/DLLs/
-!/PhasmaCore/Libs/
-!/PhasmaCore/pch/
-!/PhasmaCore/third_party/
-!/PhasmaCore/CMakeLists.txt
+!/Phasma/Core/Code/
+!/Phasma/Core/DLLs/
+!/Phasma/Core/Libs/
+!/Phasma/Core/pch/
+!/Phasma/Core/third_party/
+!/Phasma/Core/CMakeLists.txt
 
-!/PhasmaRuntime/Code/
-!/PhasmaRuntime/CMakeLists.txt
+!/Phasma/Runtime/Code/
+!/Phasma/Runtime/CMakeLists.txt
 
-!/PhasmaPlayer/CMakeLists.txt
-!/PhasmaPlayer/*.cpp
-!/PhasmaPlayer/*.h
-!/PhasmaPlayer/Code/
-!/PhasmaPlayer/Code/**
-!/PhasmaPlayer/android/
-!/PhasmaPlayer/android/**
-/PhasmaPlayer/android/.gradle/
-/PhasmaPlayer/android/**/.cxx/
-/PhasmaPlayer/android/**/build/
-/PhasmaPlayer/android/local.properties
-/PhasmaPlayer/android/prebaked/
+!/Phasma/Player/CMakeLists.txt
+!/Phasma/Player/*.cpp
+!/Phasma/Player/*.h
+!/Phasma/Player/Code/
+!/Phasma/Player/Code/**
+!/Phasma/Player/android/
+!/Phasma/Player/android/**
+/Phasma/Player/android/.gradle/
+/Phasma/Player/android/**/.cxx/
+/Phasma/Player/android/**/build/
+/Phasma/Player/android/local.properties
+/Phasma/Player/android/prebaked/
 # Staged player assets (copied from Assets at build time, not source)
-/PhasmaPlayer/android/app/src/main/assets/Assets/editor_config.json
-/PhasmaPlayer/android/app/src/main/assets/Assets/Scenes/
+/Phasma/Player/android/app/src/main/assets/Assets/editor_config.json
+/Phasma/Player/android/app/src/main/assets/Assets/Scenes/
 
-!/PhasmaCook/CMakeLists.txt
-!/PhasmaCook/*.cpp
-!/PhasmaCook/*.h
-!/PhasmaCook/Code/
-!/PhasmaCook/Code/**
+!/Phasma/Cook/CMakeLists.txt
+!/Phasma/Cook/*.cpp
+!/Phasma/Cook/*.h
+!/Phasma/Cook/Code/
+!/Phasma/Cook/Code/**
 
-!/PhasmaLauncher/*.cpp
-!/PhasmaLauncher/*.h
+!/Phasma/Launcher/*.cpp
+!/Phasma/Launcher/*.h
 
 # User-specific files
 *.suo
@@ -80,13 +81,13 @@ bld/
 [Ll]og/
 Phasma/x64/
 
-# Allow Debug and Release folders inside Phasma/Libs subdirectories
-!Phasma/Libs/**/[Dd]ebug/
-!Phasma/Libs/**/[Rr]elease/
+# Allow Debug and Release folders inside Phasma/Core/Libs subdirectories
+!Phasma/Core/Libs/**/[Dd]ebug/
+!Phasma/Core/Libs/**/[Rr]elease/
 
-# Allow Debug and Release folders inside Phasma/DLLs subdirectories
-!Phasma/DLLs/**/[Dd]ebug/
-!Phasma/DLLs/**/[Rr]elease/
+# Allow Debug and Release folders inside Phasma/Core/DLLs subdirectories
+!Phasma/Core/DLLs/**/[Dd]ebug/
+!Phasma/Core/DLLs/**/[Rr]elease/
 
 # Visual Studio 2015 cache/options directory
 .vs/
@@ -331,16 +332,14 @@ Phasma/errors.txt
 Phasma/log.txt
 
 # Shader cache
-Phasma/Assets/ShaderCache/
+Phasma/Player/android/prebaked/ShaderCache/
 imgui.ini
-PhasmaEditor/Assets/editor_windows.json
-PhasmaEditor/editor_windows.json
+Phasma/Editor/editor_windows.json
 .cache/
 
 # Agent runtime files
-PhasmaEditor/Assets/Temp/
-PhasmaEditor/Assets/Agent/
-PhasmaEditor/Agent/
+Phasma/Editor/EditorAssets/Temp/
+Phasma/Editor/Agent/
 Projects/*/Assets/Agent/
 
 # Agent instruction and wiki files
@@ -375,13 +374,13 @@ Projects/*/Assets/Agent/
 !/tools/phasma_adk_agent/.env.example
 
 # User scenes (keep folder, ignore scene files)
-PhasmaEditor/Assets/Scenes/*.pescene
+Phasma/Editor/EditorAssets/Scenes/*.pescene
 
 #clang-format
 !.clang-format
-PhasmaEditor/Assets/Agent/agent_config.json
+Phasma/Editor/Agent/agent_config.json
 
-# Rust/Cargo target dirs (e.g. PhasmaWebGPU/WgslBridge/target)
+# Rust/Cargo target dirs (e.g. Phasma/WebGPU/WgslBridge/target)
 **/target/
 
 # Shared FetchContent caches (per-generator, populated by CMake presets)

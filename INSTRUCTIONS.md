@@ -7,12 +7,12 @@ Subdirectory `INSTRUCTIONS.md` files cascade on top of this root.
 - **Code is the source of truth.** Derive from the actual files — do not paste these into docs:
   - Build commands → `CMakeLists.txt`
   - CMake targets, options, dependencies → `CMakeLists.txt` (root + per-subdirectory)
-  - Boot sequence → `PhasmaEditor/Code/App/App.cpp`
-  - Active render passes + `AddPass` signature → `PhasmaEditor/Code/Systems/RendererSystem.cpp` (`BuildRenderGraph`)
-  - Singletons (`RHII`, `Context`, `EventSystem`) → headers under `PhasmaCore/Code/`
-  - GPU material layout → `PhasmaEditor/Assets/Shaders/Common/Structures.hlsl`
-  - Physics timestep / API → `PhasmaEditor/Code/Systems/PhysicsSystem.cpp`
-  - PE_API export sites → `grep PE_API PhasmaCore/Code/`
+  - Boot sequence → `Phasma/Editor/Code/App/App.cpp`
+  - Active render passes + `AddPass` signature → `Phasma/Editor/Code/Systems/RendererSystem.cpp` (`BuildRenderGraph`)
+  - Singletons (`RHII`, `Context`, `EventSystem`) → headers under `Phasma/Core/Code/`
+  - GPU material layout → `Phasma/Runtime/RuntimeAssets/Shaders/Common/Structures.hlsl`
+  - Physics timestep / API → `Phasma/Runtime/Code/Systems/PhysicsSystem.cpp`
+  - PE_API export sites → `grep PE_API Phasma/Core/Code/`
 
 - **Non-obvious rules and gotchas live in MemPalace.** Search with `mempalace_search` for things like: PCH `<vector>` trap, GPU resource wrappers (`Buffer`/`Image`/`Sampler`), perf regression thresholds, hot-reload safe-window / ImGui forwarding, scripting MCP caveat (`ScriptSystem*` caching), `MaterialGpuData` 80-byte layout + IOR/transmission flush rule. Use lowercase `phasmaengine` for new project memories.
 
@@ -34,7 +34,7 @@ Before finishing a session that changed code a wiki page describes, update the p
 
 ## Multi-backend RHI (Vulkan + DX12)
 
-Backend selection is resolved by `PhasmaCore/Code/API/GraphicsApiSelection.*`: explicit CLI `--api {vulkan,dx12}` wins, then `PHASMA_API`, then optional `phasma_settings.json` next to the executable (`graphics_api` or `api`), then the built-in Vulkan default. Invalid or unsupported CLI/env values hard-fail; unsupported persisted config values warn and fall back to Vulkan. DX12 is **Windows-only**; on Linux only Vulkan is supported.
+Backend selection is resolved by `Phasma/Core/Code/API/GraphicsApiSelection.*`: explicit CLI `--api {vulkan,dx12}` wins, then `PHASMA_API`, then optional `phasma_settings.json` next to the executable (`graphics_api` or `api`), then the built-in Vulkan default. Invalid or unsupported CLI/env values hard-fail; unsupported persisted config values warn and fall back to Vulkan. DX12 is **Windows-only**; on Linux only Vulkan is supported.
 
 ### DX12 validation knobs (env vars, parsed in `Dx12RhiImpl::Init`)
 
@@ -49,7 +49,7 @@ DRED auto-breadcrumbs + page-fault tracking default on for `PE_DEBUG` / `PE_RELW
 
 ### Backend-specific gaps and carve-outs
 
-- **SSAO (FFX-CACAO)** — enabled on both backends as of `809c2aa5` (2026-05-08). DX12 routes through CACAO's D3D12 path with engine-owned compatibility inputs vendored under `PhasmaRuntime/third_party/CacaoCompat/` (DirectX-Headers v1.614.0 subset + locally-built DXIL + `UserMarker` stub). `SSAOPass` transitions the AO target to `UNORDERED_ACCESS` before CACAO's external draw, invalidates the shader-visible heap cache afterwards, and resyncs the engine state for `LightPass` sampling. Landing drawer: `phasmaengine/dx12-handoff/2026-05-08-dx12-ssao-landed-cacaocompat-relocated`.
+- **SSAO (FFX-CACAO)** — enabled on both backends as of `809c2aa5` (2026-05-08). DX12 routes through CACAO's D3D12 path with engine-owned compatibility inputs vendored under `Phasma/Runtime/third_party/CacaoCompat/` (DirectX-Headers v1.614.0 subset + locally-built DXIL + `UserMarker` stub). `SSAOPass` transitions the AO target to `UNORDERED_ACCESS` before CACAO's external draw, invalidates the shader-visible heap cache afterwards, and resyncs the engine state for `LightPass` sampling. Landing drawer: `phasmaengine/dx12-handoff/2026-05-08-dx12-ssao-landed-cacaocompat-relocated`.
 - **ImGui platform windows** — enabled on DX12/Windows as of 2026-05-14. `GUIBackend::SupportsPlatformWindows()` advertises DX12 support only on `PE_WIN32`; the SDL2 + ImGui DX12 backends own secondary viewport creation and rendering.
 - **Ray tracing** — `caps.rayTracing == false` on DX12 by design; RT pass is skipped. DXR is a separate Phase.
 - **`CommandBuffer::PushDescriptor` / `SetEvent`** — `PE_ERROR` carve-outs on DX12. Audited 2026-05-06: zero callers tree-wide (PushDescriptor) / no Lua script invokes the binding (SetEvent). Implement when a real caller arrives.

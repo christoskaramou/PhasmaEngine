@@ -20,8 +20,8 @@ DEFAULT_BUILD_DIRS = (ROOT / "build-ninja-full", ROOT / "build")
 DEFAULT_CONFIG = "Release"
 DEFAULT_MCP_URL = "http://127.0.0.1:8765/mcp"
 REPORT_ROOT = ROOT / "reports" / "editor_stress"
-SCENARIO_PATH = ROOT / "PhasmaEditor" / "Assets" / "Scripts" / "stress" / "editor_stress.lua"
-NODE_SCRIPT_PATH = ROOT / "PhasmaEditor" / "Assets" / "Scripts" / "stress" / "editor_stress_node.lua"
+SCENARIO_PATH = ROOT / "Phasma" / "Editor" / "EditorAssets" / "Scripts" / "stress" / "editor_stress.lua"
+NODE_SCRIPT_PATH = ROOT / "Phasma" / "Editor" / "EditorAssets" / "Scripts" / "stress" / "editor_stress_node.lua"
 
 sys.path.insert(0, str(TOOLS))
 from phasma_adk_agent.mcp_probe import McpClient, McpProbeError  # noqa: E402

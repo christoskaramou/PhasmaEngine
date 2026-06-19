@@ -10,7 +10,7 @@ remains the source of truth.
   indexing. It is not an LLM client and does not run an agent loop.
 - `PhasmaEditor` hosts the in-process MCP server at
   `http://127.0.0.1:8765/mcp`, toggled from `Connection -> MCP Server`.
-  Editor tools live in `PhasmaEditor/Code/GUI/Agent/EditorToolCatalog.cpp`.
+  Editor tools live in `Phasma/Editor/Code/GUI/Agent/EditorToolCatalog.cpp`.
 - The editor MCP scene/visual surface includes compact scene and renderer
   readers (`get_scene_info`, `get_renderer_status`), detailed node inspection
   (`get_node_info`), deterministic camera helpers (`set_camera`, `frame_node`),

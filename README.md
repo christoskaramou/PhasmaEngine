@@ -2,7 +2,7 @@
 
 PhasmaEngine is a Vulkan and DirectX 12 3D engine for learning graphics techniques, with an experimental WebGPU C API layer. Vulkan runs on Windows and Linux; DX12 is Windows-only.
 
-![Screenshot](PhasmaEditor/EditorAssets/Images/ABeautifulGame.png)
+![Screenshot](Phasma/Editor/EditorAssets/Images/ABeautifulGame.png)
 
 ## Features
 
@@ -61,7 +61,7 @@ PhasmaEngine has no in-engine LLM. Instead, PhasmaEditor runs an in-process MCP 
 
 Toggle the server from **Connection → MCP Server** in the editor. The **Connection → RAG** submenu controls codebase indexing. Status bar shows live MCP and indexing state.
 
-**Available MCP tools:** scene/model management, camera, lights, materials, shaders, Lua execution, screenshots, mouse injection, codebase search (BM25), file read/write, and more. See [PhasmaMCP README](PhasmaMCP/README.md) for the underlying library.
+**Available MCP tools:** scene/model management, camera, lights, materials, shaders, Lua execution, screenshots, mouse injection, codebase search (BM25), file read/write, and more. See [PhasmaMCP README](Phasma/MCP/README.md) for the underlying library.
 
 ## Sample Models
 

@@ -11,7 +11,7 @@
          By default this includes temporary scene variants that cover the Android HUD's runtime
          pass toggles, plus the TAA-off/Upsample path.
       2. Harvests the resulting ShaderCache/_spv/* blobs into the APK staging dir
-         (PhasmaPlayer/android/prebaked/ShaderCache/_spv), which gradle bundles and the Activity
+         (Phasma/Player/android/prebaked/ShaderCache/_spv), which gradle bundles and the Activity
          extracts to <internalStorage>/ShaderCache/ on device.
       3. Disassembles every baked blob and FAILS if any declares a capability whose Vulkan feature
          is softened to warn-on-Android in RHI.cpp.
@@ -22,7 +22,7 @@
 
 .NOTES
     The cache key folds in the SPIR-V target version and is computed with a portable FNV-1a hash
-    (PhasmaCore/Code/Base/Hash.h). Both the desktop bake host and the Android build must be built
+    (Phasma/Core/Code/Base/Hash.h). Both the desktop bake host and the Android build must be built
     from the same engine revision for the keys to match.
 #>
 [CmdletBinding()]
@@ -43,7 +43,7 @@ $player = Join-Path $binDir "PhasmaPlayer.exe"
 $assetsDir = Join-Path $binDir "Assets"
 $cacheSpv = Join-Path $binDir "ShaderCache/_spv"
 $logFile = Join-Path $binDir "PhasmaEngine.log"
-$prebaked = Join-Path $repoRoot "PhasmaPlayer/android/prebaked/ShaderCache/_spv"
+$prebaked = Join-Path $repoRoot "Phasma/Player/android/prebaked/ShaderCache/_spv"
 $spirvDis = if ($VulkanSdkBin) { Join-Path $VulkanSdkBin "spirv-dis.exe" } else { "spirv-dis" }
 
 function Fail([string]$msg) { Write-Host "[bake] ERROR: $msg" -ForegroundColor Red; exit 1 }
@@ -120,10 +120,10 @@ if (-not (Get-Command $spirvDis -ErrorAction SilentlyContinue) -and -not (Test-P
     Fail "spirv-dis not found. Set `$env:VULKAN_SDK or pass -VulkanSdkBin."
 }
 
-# Android ships tracked local scene files under PhasmaPlayer/android/app/src/main/assets/Assets.
+# Android ships tracked local scene files under Phasma/Player/android/app/src/main/assets/Assets.
 # If the requested scene exists there, copy it into the desktop bake host so global render settings
 # (cascade count, shadow-map size, TAA/CAS defaults, etc.) match the APK instead of a local editor scene.
-$androidSceneSource = Join-Path $repoRoot ("PhasmaPlayer/android/app/src/main/assets/" + $Scene)
+$androidSceneSource = Join-Path $repoRoot ("Phasma/Player/android/app/src/main/assets/" + $Scene)
 $bakeHostScene = Join-Path $binDir $Scene
 if (Test-Path $androidSceneSource) {
     Copy-Item -Path $androidSceneSource -Destination $bakeHostScene -Force
@@ -234,4 +234,4 @@ if ($violations.Count -gt 0) {
     Fail "Baked SPIR-V uses a capability whose Vulkan feature is softened to warn-on-Android in RHI.cpp. Promote that feature back to RequireVulkanFeature (or drop the shader usage) - otherwise Android GPUs that lack it will warn then crash."
 }
 Write-Host "[bake] softened-feature capabilities (Int64/Int16/Float16/StorageBufferNonUniform): NONE -> warn-on-Android gates are SAFE." -ForegroundColor Green
-Write-Host "[bake] Next: cd PhasmaPlayer/android ; .\gradlew.bat :app:assembleDebug"
+Write-Host "[bake] Next: cd Phasma/Player/android ; .\gradlew.bat :app:assembleDebug"

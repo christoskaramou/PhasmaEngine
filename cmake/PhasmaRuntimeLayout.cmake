@@ -15,38 +15,38 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Android")
     set(PE_MODEL_RUNTIME_DEPENDENCY_FILES)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set(PE_CORE_RUNTIME_DEPENDENCY_FILES
-        "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/SDL2.dll"
+        "${CMAKE_SOURCE_DIR}/Phasma/Core/DLLs/SDL2.dll"
     )
     if(PE_ENABLE_RUNTIME_SHADER_COMPILER)
         list(APPEND PE_CORE_RUNTIME_DEPENDENCY_FILES
-            "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/shaderc_shared.dll"
+            "${CMAKE_SOURCE_DIR}/Phasma/Core/DLLs/shaderc_shared.dll"
         )
     endif()
     list(APPEND PE_CORE_RUNTIME_DEPENDENCY_FILES
-        "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/dxcompiler.dll"
+        "${CMAKE_SOURCE_DIR}/Phasma/Core/DLLs/dxcompiler.dll"
     )
     set(PE_MODEL_RUNTIME_DEPENDENCY_FILES
-        "${CMAKE_SOURCE_DIR}/PhasmaCore/DLLs/assimp-vc143-mt.dll"
+        "${CMAKE_SOURCE_DIR}/Phasma/Core/DLLs/assimp-vc143-mt.dll"
     )
 else()
     set(PE_CORE_RUNTIME_DEPENDENCY_FILES
-        "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/vulkan/libvulkan.so"
-        "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/vulkan/libvulkan.so.1"
-        "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/vulkan/libvulkan.so.1.4.328"
+        "${CMAKE_SOURCE_DIR}/Phasma/Core/Libs/vulkan/libvulkan.so"
+        "${CMAKE_SOURCE_DIR}/Phasma/Core/Libs/vulkan/libvulkan.so.1"
+        "${CMAKE_SOURCE_DIR}/Phasma/Core/Libs/vulkan/libvulkan.so.1.4.328"
     )
     if(PE_ENABLE_RUNTIME_SHADER_COMPILER)
         list(APPEND PE_CORE_RUNTIME_DEPENDENCY_FILES
-            "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/spirv/libshaderc_shared.so"
-            "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/spirv/libshaderc_shared.so.1"
+            "${CMAKE_SOURCE_DIR}/Phasma/Core/Libs/spirv/libshaderc_shared.so"
+            "${CMAKE_SOURCE_DIR}/Phasma/Core/Libs/spirv/libshaderc_shared.so.1"
         )
     endif()
     list(APPEND PE_CORE_RUNTIME_DEPENDENCY_FILES
-        "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/dx/libdxcompiler.so"
+        "${CMAKE_SOURCE_DIR}/Phasma/Core/Libs/dx/libdxcompiler.so"
     )
     set(PE_MODEL_RUNTIME_DEPENDENCY_FILES
-        "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/assimp/libassimp.so"
-        "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/assimp/libassimp.so.6"
-        "${CMAKE_SOURCE_DIR}/PhasmaCore/Libs/assimp/libassimp.so.6.0.4"
+        "${CMAKE_SOURCE_DIR}/Phasma/Core/Libs/assimp/libassimp.so"
+        "${CMAKE_SOURCE_DIR}/Phasma/Core/Libs/assimp/libassimp.so.6"
+        "${CMAKE_SOURCE_DIR}/Phasma/Core/Libs/assimp/libassimp.so.6.0.4"
     )
 endif()
 if(NOT PE_ENABLE_ASSIMP)
@@ -72,19 +72,25 @@ function(pe_set_target_output_subdir TARGET_NAME OUTPUT_SUBDIR)
 endfunction()
 
 function(pe_add_root_runtime_dependencies_target)
+    set(PHASMA_ROOT_RUNTIME_DEPENDENCIES_STAMP "${CMAKE_BINARY_DIR}/CMakeFiles/PhasmaRootRuntimeDependencies-$<CONFIG>.stamp")
     if(PE_ROOT_RUNTIME_DEPENDENCY_FILES)
-        add_custom_target(PhasmaRootRuntimeDependencies ALL
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${PHASMA_CONFIG_OUTPUT_DIR}"
+        add_custom_command(
+            OUTPUT "${PHASMA_ROOT_RUNTIME_DEPENDENCIES_STAMP}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/CMakeFiles" "${PHASMA_CONFIG_OUTPUT_DIR}"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PE_ROOT_RUNTIME_DEPENDENCY_FILES} "${PHASMA_CONFIG_OUTPUT_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E touch "${PHASMA_ROOT_RUNTIME_DEPENDENCIES_STAMP}"
             DEPENDS ${PE_ROOT_RUNTIME_DEPENDENCY_FILES}
             COMMENT "[Phasma] Copying root runtime dependencies"
         )
     else()
-        add_custom_target(PhasmaRootRuntimeDependencies ALL
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${PHASMA_CONFIG_OUTPUT_DIR}"
+        add_custom_command(
+            OUTPUT "${PHASMA_ROOT_RUNTIME_DEPENDENCIES_STAMP}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/CMakeFiles" "${PHASMA_CONFIG_OUTPUT_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E touch "${PHASMA_ROOT_RUNTIME_DEPENDENCIES_STAMP}"
             COMMENT "[Phasma] No root runtime dependencies to copy"
         )
     endif()
+    add_custom_target(PhasmaRootRuntimeDependencies ALL DEPENDS "${PHASMA_ROOT_RUNTIME_DEPENDENCIES_STAMP}")
 endfunction()
 
 function(pe_depend_on_root_runtime_dependencies TARGET_NAME)

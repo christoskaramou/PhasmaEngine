@@ -12,7 +12,7 @@ Steps:
   2. Run "PhasmaCook <source> <out.pemesh>" to import <source> via Assimp and write <name>.pemesh
      plus referenced textures in a self-contained layout.
 
-Cooked assets are build artifacts and never live under PhasmaEditor/Assets (the source tree).
+Cooked assets are build artifacts and never live under Phasma/Editor/EditorAssets (the source tree).
 
 Usage:
   python tools/cook_model.py <source> [--name NAME] [--build-dir DIR] [--config CFG]
@@ -45,9 +45,9 @@ def main() -> int:
     ap.add_argument("--build-dir", default="build-ninja-full")
     ap.add_argument("--config", default="Release")
     # Cooked models are BUILD ARTIFACTS, not source, so they live in a gitignored staging folder — never
-    # under PhasmaEditor/Assets. Default is the Android APK staging; pass e.g.
+    # under Phasma/Editor/EditorAssets. Default is the Android APK staging; pass e.g.
     # build-ninja-full/Release/Assets/Models to cook for the desktop player's config folder.
-    ap.add_argument("--out-dir", default="PhasmaPlayer/android/prebaked/Models",
+    ap.add_argument("--out-dir", default="Phasma/Player/android/prebaked/Models",
                     help="Where cooked models land (gitignored staging).")
     ap.add_argument("--build", action="store_true", help="Rebuild the desktop PhasmaCook tool first.")
     args = ap.parse_args()

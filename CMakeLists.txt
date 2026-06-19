@@ -40,12 +40,12 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/Release")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_BINARY_DIR}/MinSizeRel")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/RelWithDebInfo")
 
-set(PE_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/Libs")
-set(PE_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/third_party")
-set(PE_SHARED_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaRuntime/third_party")
+set(PE_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Core/Libs")
+set(PE_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Core/third_party")
+set(PE_SHARED_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Runtime/third_party")
 set(PE_EDITOR_THIRD_PARTY_DIR "${PE_SHARED_THIRD_PARTY_DIR}")
-set(PE_RUNTIME_ASSETS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaRuntime/RuntimeAssets")
-set(PE_EDITOR_ASSETS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/EditorAssets")
+set(PE_RUNTIME_ASSETS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Runtime/RuntimeAssets")
+set(PE_EDITOR_ASSETS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Editor/EditorAssets")
 # Default project used to pin a fresh dev build (PhasmaProjects/ is a sibling repo). Only seeds
 # the build-tree phasma_settings.json when none exists; user content is never copied into the build.
 get_filename_component(PE_SAMPLE_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaProjects/Sample" ABSOLUTE)
@@ -63,6 +63,7 @@ option(PE_BUILD_EDITOR "Build the editor host and editor module" ${PE_DESKTOP_TA
 option(PE_BUILD_LAUNCHER "Build the desktop launcher" ${PE_DESKTOP_TARGETS_DEFAULT})
 option(PE_BUILD_MCP "Build the MCP server library" ${PE_DESKTOP_TARGETS_DEFAULT})
 option(PE_BUILD_PLAYER "Build the standalone player host" ON)
+option(PE_LAUNCHER_DEPENDS_ON_CHILD_TARGETS "Make PhasmaLauncher build PhasmaEditor and PhasmaPlayer first" OFF)
 option(PE_WEBGPU "Build PhasmaWebGPU WebGPU abstraction layer" ${PE_DESKTOP_TARGETS_DEFAULT})
 option(PE_ENABLE_ASSIMP "Enable Assimp-backed runtime model file loading" ${PE_ASSIMP_DEFAULT})
 option(PE_ENABLE_RUNTIME_SHADER_COMPILER "Enable runtime shader compilation from source files" ${PE_RUNTIME_SHADER_COMPILER_DEFAULT})
@@ -238,7 +239,7 @@ if(PE_ENABLE_ASSIMP)
     if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
         set_target_properties(assimp PROPERTIES
             IMPORTED_IMPLIB "${PE_LIBS_DIR}/assimp/assimp.lib"
-            IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/DLLs/assimp-vc143-mt.dll"
+            IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Core/DLLs/assimp-vc143-mt.dll"
         )
     else()
         set_target_properties(assimp PROPERTIES
@@ -250,7 +251,7 @@ else()
 endif()
 
 # Add PhasmaCore subdirectory
-add_subdirectory(PhasmaCore)
+add_subdirectory(Phasma/Core)
 
 # --- Lua 5.4 (vendored, compiled from source) ---
 file(GLOB LUA_SOURCES "${PE_SHARED_THIRD_PARTY_DIR}/lua/*.c")
@@ -262,44 +263,44 @@ if(NOT MSVC)
 endif()
 
 # Shared project/runtime contract used by editor today and future player hosts.
-add_subdirectory(PhasmaRuntime)
+add_subdirectory(Phasma/Runtime)
 
 if(PE_BUILD_PLAYER)
     # Standalone player host over PhasmaRuntime.
-    add_subdirectory(PhasmaPlayer)
+    add_subdirectory(Phasma/Player)
 endif()
 
 if(PE_ENABLE_ASSIMP AND NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
     # Desktop mesh-cook tool: imports source models via Assimp and writes ".pemesh". The only
     # target that compiles ModelAssetAssimp / links Assimp; the editor and tools shell out to it.
-    add_subdirectory(PhasmaCook)
+    add_subdirectory(Phasma/Cook)
 endif()
 
 if(PE_BUILD_MCP)
     # Engine-agnostic MCP server library (protocol + transport + optional codebase indexer).
     # The codebase indexer (BM25 / CodebaseIndexer / CodebaseContext) is included by default
     # inside the same target; pass -DPE_PMCP_CODEBASE=OFF to strip it for minimal builds.
-    add_subdirectory(PhasmaMCP)
+    add_subdirectory(Phasma/MCP)
 endif()
 
 # Add PhasmaWebGPU subdirectory (WebGPU C API layer over PhasmaCore)
 if(PE_WEBGPU)
-    add_subdirectory(PhasmaWebGPU)
+    add_subdirectory(Phasma/WebGPU)
 endif()
 
 # === PhasmaEditorModule + host executables ===
 if(PE_BUILD_EDITOR)
-file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/*.cpp")
+file(GLOB_RECURSE CODE_SRC_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Editor/Code/*.cpp")
 file(GLOB_RECURSE IMGUI_SRC_FILES CONFIGURE_DEPENDS "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/*.cpp")
 file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${PE_RUNTIME_ASSETS_SOURCE_DIR}/*")
 list(FILTER ASSET_FILES EXCLUDE REGEX "\\.obj$")
 file(GLOB_RECURSE EDITOR_ASSET_FILES CONFIGURE_DEPENDS "${PE_EDITOR_ASSETS_SOURCE_DIR}/*")
 set(PE_SHARED_IMGUI_BACKEND_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaRuntime/Code/UI/Backends/ImGuiRuntimeUiBackend.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/ImGuiRuntimeUiBackend.cpp"
 )
 if(WIN32)
     list(APPEND PE_SHARED_IMGUI_BACKEND_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaRuntime/Code/UI/Backends/imgui_impl_dx12.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/imgui_impl_dx12.cpp"
     )
 endif()
 set_source_files_properties(${ASSET_FILES} PROPERTIES VS_TOOL_OVERRIDE "None")
@@ -309,7 +310,7 @@ add_library(PhasmaEditorModule SHARED
     ${CODE_SRC_FILES}
     ${IMGUI_SRC_FILES}
     ${PE_SHARED_IMGUI_BACKEND_SOURCES}
-    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code/App/EditorModule.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Editor/Code/App/EditorModule.cpp"
 )
 set_target_properties(PhasmaEditorModule PROPERTIES
     POSITION_INDEPENDENT_CODE ON
@@ -338,13 +339,13 @@ if(PE_PHYSICS2D AND TARGET box2d)
     target_compile_definitions(PhasmaEditorModule PRIVATE PE_PHYSICS2D)
 endif()
 
-target_precompile_headers(PhasmaEditorModule PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
+target_precompile_headers(PhasmaEditorModule PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Core/pch/PhasmaPch.h")
 
 target_include_directories(PhasmaEditorModule PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor"
-    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code"
-    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaRuntime/Code/UI/Backends"
-    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaMCP/third_party"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Editor"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Editor/Code"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/MCP/third_party"
     "${PE_THIRD_PARTY_DIR}/meshoptimizer"
     "${PE_THIRD_PARTY_DIR}/rapidjson/include"
     "${PE_THIRD_PARTY_DIR}/spirv_cross"
@@ -407,13 +408,13 @@ endif()
 pe_depend_on_root_runtime_dependencies(PhasmaEditorModule)
 
 # PhasmaEditor (editor host EXE)
-add_executable(PhasmaEditor "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/main.cpp")
+add_executable(PhasmaEditor "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Editor/main.cpp")
 
-target_precompile_headers(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
+target_precompile_headers(PhasmaEditor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Core/pch/PhasmaPch.h")
 
 set(PHASMA_EDITOR_HOST_INCLUDES
-    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor"
-    "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaEditor/Code"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Editor"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Editor/Code"
 )
 
 target_include_directories(PhasmaEditor PRIVATE ${PHASMA_EDITOR_HOST_INCLUDES})
@@ -435,9 +436,9 @@ endif()
 
 if(PE_BUILD_LAUNCHER)
 # PhasmaLauncher (pre-launch target/sample/backend selector)
-add_executable(PhasmaLauncher "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaLauncher/main.cpp")
+add_executable(PhasmaLauncher "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Launcher/main.cpp")
 
-target_precompile_headers(PhasmaLauncher PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/pch/PhasmaPch.h")
+target_precompile_headers(PhasmaLauncher PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Core/pch/PhasmaPch.h")
 target_include_directories(PhasmaLauncher PRIVATE
     "${PE_THIRD_PARTY_DIR}/rapidjson/include"
 )
@@ -462,11 +463,13 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     )
 endif()
 
-if(TARGET PhasmaEditor)
-    add_dependencies(PhasmaLauncher PhasmaEditor)
-endif()
-if(TARGET PhasmaPlayer)
-    add_dependencies(PhasmaLauncher PhasmaPlayer)
+if(PE_LAUNCHER_DEPENDS_ON_CHILD_TARGETS)
+    if(TARGET PhasmaEditor)
+        add_dependencies(PhasmaLauncher PhasmaEditor)
+    endif()
+    if(TARGET PhasmaPlayer)
+        add_dependencies(PhasmaLauncher PhasmaPlayer)
+    endif()
 endif()
 pe_depend_on_root_runtime_dependencies(PhasmaLauncher)
 endif()
@@ -545,7 +548,7 @@ endif()
 # system software ICD. The DLL + manifest land in <exe-dir>/swiftshader/, which
 # RHI::VulkanSoftwareIcdCandidates already probes.
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    set(PE_SWIFTSHADER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/PhasmaCore/Libs/swiftshader")
+    set(PE_SWIFTSHADER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Core/Libs/swiftshader")
     set(PE_SWIFTSHADER_DLL "${PE_SWIFTSHADER_DIR}/vk_swiftshader.dll")
     set(PE_SWIFTSHADER_ICD "${PE_SWIFTSHADER_DIR}/vk_swiftshader_icd.json")
     if(EXISTS "${PE_SWIFTSHADER_DLL}" AND EXISTS "${PE_SWIFTSHADER_ICD}")
