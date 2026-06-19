@@ -21,7 +21,9 @@
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
 #include "stb_image.h"
+#include <fstream>
 #include <numeric>
+#include <thread>
 
 #if defined(PE_WIN32)
 #ifndef NOMINMAX
@@ -4206,6 +4208,347 @@ namespace pe
                                 { return state->done; }))
             return R"({"error":"timeout"})";
         return state->result;
+    }
+
+    std::string EditorToolRuntime::GetSceneDigest() const
+    {
+        struct State
+        {
+            std::mutex mtx;
+            std::condition_variable cv;
+            bool done = false;
+            std::string result;
+        };
+        auto state = std::make_shared<State>();
+
+        QueueAction([state]()
+                    {
+            auto *r = GetGlobalSystem<RendererSystem>();
+            if (!r)
+            {
+                state->result = R"({"error":"renderer not available"})";
+            }
+            else
+            {
+                SceneDigest d = ComputeSceneDigest(r->GetScene());
+
+                auto aabbJson = [](const AABB &a) {
+                    return nlohmann::json{
+                        {"min", Vec3Json(a.min)}, {"max", Vec3Json(a.max)},
+                        {"center", Vec3Json(a.GetCenter())}, {"size", Vec3Json(a.GetSize())}};
+                };
+
+                nlohmann::json result;
+                result["ground_y"] = d.groundY;
+                result["total_node_count"] = d.totalNodeCount;
+                result["mesh_node_count"] = d.meshNodeCount;
+                result["overlaps_truncated"] = d.overlapsTruncated;
+                result["world_bounds"] = d.hasBounds ? aabbJson(d.worldBounds) : nlohmann::json(nullptr);
+
+                nlohmann::json nodes = nlohmann::json::array();
+                for (const SceneDigestNode &n : d.nodes)
+                {
+                    nlohmann::json jn;
+                    jn["id"] = n.id;
+                    jn["name"] = n.name;
+                    jn["enabled"] = n.enabled;
+                    jn["visible"] = n.visible;
+                    jn["in_frustum"] = n.inFrustum;
+                    jn["ground_outlier"] = n.groundOutlier;
+                    jn["aabb"] = aabbJson(n.aabb);
+                    nodes.push_back(std::move(jn));
+                }
+                result["nodes"] = std::move(nodes);
+
+                nlohmann::json overlaps = nlohmann::json::array();
+                for (const auto &pair : d.overlaps)
+                {
+                    overlaps.push_back(nlohmann::json{
+                        {"a", pair.first}, {"b", pair.second},
+                        {"a_name", d.nodes[pair.first].name}, {"b_name", d.nodes[pair.second].name}});
+                }
+                result["overlaps"] = std::move(overlaps);
+
+                state->result = result.dump();
+            }
+            {
+                std::lock_guard lock(state->mtx);
+                state->done = true;
+            }
+            state->cv.notify_one(); });
+
+        std::unique_lock lock(state->mtx);
+        if (!state->cv.wait_for(lock, std::chrono::seconds(10), [&]
+                                { return state->done; }))
+            return R"({"error":"timeout"})";
+        return state->result;
+    }
+
+    // Annotated "map shot": frame an ortho top-down camera over the scene's visible
+    // world bounds, turn on AABB-box display, capture the composited 'display' RT to
+    // PNG, and write a sidecar manifest that projects every visible node's AABB to
+    // pixel space (so labels can be drawn on the image and boxes mapped to names).
+    // Composes existing passes (GridPass + AabbsPass already draw into 'display') and
+    // the existing CaptureImageResource readback — no new render pass.
+    std::string EditorToolRuntime::GetMapShot(const std::string &argsJson) const
+    {
+        auto args = nlohmann::json::parse(argsJson.empty() ? "{}" : argsJson, nullptr, false);
+        if (args.is_discarded() || !args.is_object())
+            return R"({"error":"invalid args json"})";
+
+        const float padding = std::max(1.0f, args.value("padding", 1.1f));
+        const int maxDim = std::max(256, args.value("max_dimension", 2048));
+        // Boxes are opt-in: the sidecar manifest already carries every node's AABB in
+        // pixel space, so the default image is a clean top-down render. Drawing the
+        // engine AABB pass into the image (draw_boxes:true) is noisy on dense scenes.
+        const bool drawBoxes = args.value("draw_boxes", false);
+
+        struct Shot
+        {
+            std::mutex mtx;
+            std::condition_variable cv;
+            bool done = false;
+            bool ok = false;
+            std::string error;
+
+            // Prior camera + settings, restored after the shot.
+            vec3 camPos{};
+            vec3 camEuler{};
+            bool wasOrtho = false;
+            float orthoSize = 1.0f;
+            float nearP = 0.1f;
+            float farP = 1000.0f;
+            bool drawAabbs = false;
+            bool aabbsDepthAware = true;
+
+            SceneDigest digest;
+        };
+        auto shot = std::make_shared<Shot>();
+
+        // --- Phase A: frame the ortho top-down camera (+ optional AABB display) ------
+        QueueAction([shot, padding, drawBoxes]()
+                    {
+            auto *r = GetGlobalSystem<RendererSystem>();
+            if (!r) { shot->error = "renderer not available"; }
+            else
+            {
+                Scene &sc = r->GetScene();
+                if (sc.GetCameras().empty()) { shot->error = "no camera in scene"; }
+                else
+                {
+                    SceneDigest d = ComputeSceneDigest(sc);
+                    if (!d.hasBounds) { shot->error = "no enabled+visible geometry to frame"; }
+                    else
+                    {
+                        Camera *cam = sc.GetActiveCamera();
+                        shot->camPos = cam->GetPosition();
+                        shot->camEuler = cam->GetEuler();
+                        shot->wasOrtho = cam->IsOrthographic();
+                        shot->orthoSize = cam->GetOrthographicSize();
+                        shot->nearP = cam->GetNearPlane();
+                        shot->farP = cam->GetFarPlane();
+                        auto &gs = Settings::Get<GlobalSettings>();
+                        shot->drawAabbs = gs.draw_aabbs;
+                        shot->aabbsDepthAware = gs.aabbs_depth_aware;
+                        shot->digest = d;
+
+                        const vec3 c = d.worldBounds.GetCenter();
+                        const vec3 sz = d.worldBounds.GetSize();
+                        const float aspect = std::max(0.01f, cam->GetAspect());
+                        const float span = std::max(sz.x, sz.z);
+                        // orthographic_size is the full visible world HEIGHT; cover both the
+                        // vertical (height) and horizontal (height*aspect) screen axes.
+                        float orthoSize = std::max(std::max(span, span / aspect) * padding, 1.0f);
+
+                        cam->SetProjectionMode(CameraProjectionMode::Orthographic);
+                        cam->SetOrthographicSize(orthoSize);
+                        cam->SetPosition(vec3(c.x, d.worldBounds.max.y + std::max(10.0f, sz.y) + 10.0f, c.z));
+                        cam->SetNearPlane(0.05f);
+                        cam->SetFarPlane(sz.y + 2000.0f);
+                        ApplyCameraOrientationFromDirection(cam, vec3(0.0f, -1.0f, 0.0f));
+                        cam->Update();
+
+                        gs.draw_aabbs = drawBoxes;    // off by default → clean image
+                        if (drawBoxes)
+                            gs.aabbs_depth_aware = false; // unoccluded, full footprint
+                        sc.MarkDirty();
+                        shot->ok = true;
+                    }
+                }
+            }
+            {
+                std::lock_guard lock(shot->mtx);
+                shot->done = true;
+            }
+            shot->cv.notify_one(); });
+
+        {
+            std::unique_lock lock(shot->mtx);
+            if (!shot->cv.wait_for(lock, std::chrono::seconds(10), [&]
+                                   { return shot->done; }))
+                return R"({"error":"timeout framing camera"})";
+        }
+        if (!shot->ok)
+            return JsonObj({{"error", JsonStr(shot->error)}});
+
+        // Let frames render with the new camera/settings (TAA settles on a static shot).
+        // The render loop runs on the main thread; this sleep does not block it.
+        std::this_thread::sleep_for(std::chrono::milliseconds(400));
+
+        // --- Phase B: capture the clean scene RT (reuses the readback path) ----------
+        // 'viewport' is the scene color BEFORE the editor composites ImGui (unlike
+        // 'display', which in-editor contains the whole UI). Grid is a 'display'-only
+        // pass, so it is absent here — coordinates come from the manifest instead.
+        nlohmann::json capArgs;
+        capArgs["id"] = "rt:viewport";
+        capArgs["format"] = "png";
+        capArgs["max_dimension"] = maxDim;
+        auto cap = nlohmann::json::parse(CaptureImageResource(capArgs.dump()), nullptr, false);
+
+        // --- Phase C: project nodes → pixels, write manifest, restore camera/settings -
+        auto out = std::make_shared<std::string>();
+        auto outDone = std::make_shared<bool>(false);
+        auto outMtx = std::make_shared<std::mutex>();
+        auto outCv = std::make_shared<std::condition_variable>();
+
+        QueueAction([shot, cap, out, outDone, outMtx, outCv]()
+                    {
+            auto *r = GetGlobalSystem<RendererSystem>();
+            nlohmann::json result;
+            if (!r) { result["error"] = "renderer not available"; }
+            else
+            {
+                Scene &sc = r->GetScene();
+                Camera *cam = sc.GetCameras().empty() ? nullptr : sc.GetActiveCamera();
+
+                if (cam && !cap.contains("error"))
+                {
+                    const mat4 vp = cam->GetViewProjection();
+                    // Project to the display RT's native size, then scale into the
+                    // (possibly downscaled) encoded PNG's pixel space.
+                    const float origW = static_cast<float>(cap.value("original_width", cap.value("width", 1)));
+                    const float origH = static_cast<float>(cap.value("original_height", cap.value("height", 1)));
+                    const float encW = static_cast<float>(cap.value("width", 1));
+                    const float encH = static_cast<float>(cap.value("height", 1));
+                    const float sx = origW > 0.0f ? encW / origW : 1.0f;
+                    const float sy = origH > 0.0f ? encH / origH : 1.0f;
+
+                    auto toPx = [&](const vec3 &world) -> vec2 {
+                        vec4 clip = vp * vec4(world, 1.0f);
+                        float w = (std::abs(clip.w) < 1e-6f) ? 1.0f : clip.w;
+                        vec3 ndc = vec3(clip) / w;
+                        float px = (ndc.x * 0.5f + 0.5f) * origW;
+                        float py = (1.0f - (ndc.y * 0.5f + 0.5f)) * origH;
+                        return vec2(px * sx, py * sy);
+                    };
+
+                    nlohmann::json nodes = nlohmann::json::array();
+                    for (const SceneDigestNode &n : shot->digest.nodes)
+                    {
+                        if (!n.enabled || !n.visible || n.groundOutlier) // only what is actually in the framed shot
+                            continue;
+                        const AABB &bb = n.aabb;
+                        float minx = 1e30f, miny = 1e30f, maxx = -1e30f, maxy = -1e30f;
+                        for (int ci = 0; ci < 8; ++ci)
+                        {
+                            vec3 corner((ci & 1) ? bb.max.x : bb.min.x,
+                                        (ci & 2) ? bb.max.y : bb.min.y,
+                                        (ci & 4) ? bb.max.z : bb.min.z);
+                            vec2 p = toPx(corner);
+                            minx = std::min(minx, p.x); miny = std::min(miny, p.y);
+                            maxx = std::max(maxx, p.x); maxy = std::max(maxy, p.y);
+                        }
+                        vec2 cpx = toPx(bb.GetCenter());
+
+                        nlohmann::json jn;
+                        jn["id"] = n.id;
+                        jn["name"] = n.name;
+                        jn["in_frustum"] = n.inFrustum;
+                        jn["center_world"] = Vec3Json(bb.GetCenter());
+                        jn["center_px"] = nlohmann::json::array({cpx.x, cpx.y});
+                        jn["aabb_px"] = nlohmann::json::array({minx, miny, maxx, maxy});
+                        nodes.push_back(std::move(jn));
+                    }
+
+                    nlohmann::json manifest;
+                    manifest["image"] = {{"path", cap.value("path", "")},
+                                         {"width", cap.value("width", 0)},
+                                         {"height", cap.value("height", 0)}};
+                    manifest["pixel_mapping"] = {
+                        {"origin", "top_left"},
+                        {"note", "px=(ndc.x*0.5+0.5)*W; py=(1-(ndc.y*0.5+0.5))*H; ndc=view_projection*vec4(world,1)/w (view_projection is row-major json)"}};
+                    manifest["view_projection"] = Mat4Json(vp);
+                    manifest["camera"] = {{"projection", "orthographic"},
+                                          {"position", Vec3Json(cam->GetPosition())},
+                                          {"orthographic_size", cam->GetOrthographicSize()},
+                                          {"aspect", cam->GetAspect()},
+                                          {"direction", Vec3Json(cam->GetFront())}};
+                    manifest["world_bounds"] = {{"min", Vec3Json(shot->digest.worldBounds.min)},
+                                                {"max", Vec3Json(shot->digest.worldBounds.max)},
+                                                {"center", Vec3Json(shot->digest.worldBounds.GetCenter())},
+                                                {"size", Vec3Json(shot->digest.worldBounds.GetSize())}};
+                    manifest["ground_y"] = shot->digest.groundY;
+                    manifest["nodes"] = std::move(nodes);
+
+                    std::string pngPath = cap.value("path", "");
+                    std::string manifestPath = pngPath;
+                    size_t dot = manifestPath.find_last_of('.');
+                    if (dot != std::string::npos) manifestPath = manifestPath.substr(0, dot);
+                    manifestPath += ".map.json";
+
+                    bool wrote = false;
+                    {
+                        std::ofstream f(manifestPath, std::ios::binary);
+                        if (f) { f << manifest.dump(2); wrote = f.good(); }
+                    }
+
+                    result["status"] = "ok";
+                    result["image"] = manifest["image"];
+                    result["manifest_path"] = wrote ? manifestPath : "";
+                    result["node_count"] = manifest["nodes"].size();
+                    result["world_bounds"] = manifest["world_bounds"];
+                    result["ground_y"] = shot->digest.groundY;
+                    if (!wrote)
+                    {
+                        result["warning"] = "manifest file write failed; manifest returned inline";
+                        result["manifest"] = manifest;
+                    }
+                }
+                else
+                {
+                    result["error"] = cap.contains("error") ? cap["error"] : nlohmann::json("display RT capture failed");
+                }
+
+                // Restore camera + settings whether or not the capture succeeded.
+                if (cam)
+                {
+                    cam->SetProjectionMode(shot->wasOrtho ? CameraProjectionMode::Orthographic : CameraProjectionMode::Perspective);
+                    cam->SetOrthographicSize(shot->orthoSize);
+                    cam->SetPosition(shot->camPos);
+                    cam->SetEuler(shot->camEuler);
+                    cam->SetNearPlane(shot->nearP);
+                    cam->SetFarPlane(shot->farP);
+                    cam->Update();
+                    auto &gs = Settings::Get<GlobalSettings>();
+                    gs.draw_aabbs = shot->drawAabbs;
+                    gs.aabbs_depth_aware = shot->aabbsDepthAware;
+                    sc.MarkDirty();
+                }
+            }
+            *out = result.dump();
+            {
+                std::lock_guard lock(*outMtx);
+                *outDone = true;
+            }
+            outCv->notify_one(); });
+
+        {
+            std::unique_lock lock(*outMtx);
+            if (!outCv->wait_for(lock, std::chrono::seconds(15), [&]
+                                 { return *outDone; }))
+                return R"({"error":"timeout building manifest"})";
+        }
+        return *out;
     }
 
     std::string EditorToolRuntime::GetNodeInfo(const std::string &argsJson) const

@@ -14,8 +14,11 @@
 #include "API/RHI.h"
 #include "Camera/Camera.h"
 #include "Particles/ParticleManager.h"
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 
 namespace pe
@@ -1362,5 +1365,122 @@ namespace pe
                 m_tlasDirty = false;
             }
         }
+    }
+
+    // Build a spatial digest of the active scene: every mesh-bearing node's world
+    // AABB plus the aggregate play-area bounds and pairwise overlaps. Shared by the
+    // MCP get_scene_digest tool and the Lua scene.digest() binding so the two stay
+    // in lockstep. Cheap: reads the already-cached per-node worldAABB, no GPU work.
+    SceneDigest ComputeSceneDigest(Scene &scene)
+    {
+        // Floors / decals are flat in Y; excluding them from overlaps avoids
+        // "ground intersects everything" noise. Tuned for authoring-scale scenes.
+        constexpr float kFlatY = 0.05f;
+        constexpr size_t kOverlapNodeCap = 256;
+
+        SceneDigest digest;
+        digest.totalNodeCount = scene.GetNodeCount();
+
+        Camera *cam = scene.GetCameras().empty() ? nullptr : scene.GetActiveCamera();
+
+        // Pass 1: gather every mesh-bearing node + the enabled&visible center heights.
+        std::vector<float> liveYs;
+        for (uint32_t i = 0; i < scene.GetNodeCount(); i++)
+        {
+            NodeId *node = scene.GetNodeId(i);
+            if (!(scene.GetComponentFlags(node) & Component_Mesh))
+                continue;
+
+            SceneDigestNode dn;
+            dn.id = "node:" + std::to_string(node->index) + ":" + std::to_string(node->revision);
+            dn.name = scene.GetNodeName(node);
+            dn.aabb = scene.GetWorldAABB(node);
+            dn.enabled = scene.IsNodeHierarchyEnabled(node);
+            dn.visible = scene.IsNodeRenderVisible(node);
+            dn.inFrustum = cam ? cam->AABBInFrustum(dn.aabb) : true;
+            if (dn.enabled && dn.visible)
+                liveYs.push_back(dn.aabb.GetCenter().y);
+            digest.nodes.push_back(std::move(dn));
+        }
+        digest.meshNodeCount = static_cast<uint32_t>(digest.nodes.size());
+
+        // Robust vertical band. Pools are parked offscreen by two conventions —
+        // hierarchy-disable (enabled=false) and the render-visible cull-flag
+        // (visible=false, avoids TLAS churn, e.g. Warbound's members at y=-2080) — both
+        // already excluded above. But a scene viewed BEFORE play can still have a pool
+        // authored at y=-1000 while enabled+visible; a far vertical outlier like that
+        // would stretch world_bounds to ~1000 units tall and drag ground_y to -1000.
+        // Reject such outliers from bounds/ground/overlaps with a median+MAD band over
+        // live node centers (generous floor: anything within kBandFloor of the median
+        // Y is always kept), only when there are enough live nodes to estimate from.
+        float bandLo = -std::numeric_limits<float>::infinity();
+        float bandHi = std::numeric_limits<float>::infinity();
+        if (liveYs.size() >= 8)
+        {
+            std::vector<float> tmp = liveYs;
+            std::sort(tmp.begin(), tmp.end());
+            const float median = tmp[tmp.size() / 2];
+            for (float &v : tmp)
+                v = std::abs(v - median);
+            std::sort(tmp.begin(), tmp.end());
+            const float mad = tmp[tmp.size() / 2];
+            constexpr float kBandFloor = 50.0f; // never reject within 50 units of the median
+            const float halfWidth = std::max(kBandFloor, 6.0f * 1.4826f * mad);
+            bandLo = median - halfWidth;
+            bandHi = median + halfWidth;
+        }
+
+        // Pass 2: flag far vertical outliers; build bounds/ground from in-band live nodes.
+        for (SceneDigestNode &dn : digest.nodes)
+        {
+            if (!dn.enabled || !dn.visible)
+                continue;
+            const float cy = dn.aabb.GetCenter().y;
+            if (cy < bandLo || cy > bandHi)
+            {
+                dn.groundOutlier = true;
+                continue;
+            }
+            if (!digest.hasBounds)
+            {
+                digest.worldBounds = dn.aabb;
+                digest.hasBounds = true;
+            }
+            else
+            {
+                digest.worldBounds.min = glm::min(digest.worldBounds.min, dn.aabb.min);
+                digest.worldBounds.max = glm::max(digest.worldBounds.max, dn.aabb.max);
+            }
+        }
+        if (digest.hasBounds)
+            digest.groundY = digest.worldBounds.min.y;
+
+        // Pairwise AABB overlaps among in-band, enabled, visible, non-flat nodes. O(n^2), capped.
+        if (digest.nodes.size() > kOverlapNodeCap)
+        {
+            digest.overlapsTruncated = true;
+        }
+        else
+        {
+            for (size_t a = 0; a < digest.nodes.size(); a++)
+            {
+                const SceneDigestNode &na = digest.nodes[a];
+                if (!na.enabled || !na.visible || na.groundOutlier || na.aabb.GetSize().y < kFlatY)
+                    continue;
+                for (size_t b = a + 1; b < digest.nodes.size(); b++)
+                {
+                    const SceneDigestNode &nb = digest.nodes[b];
+                    if (!nb.enabled || !nb.visible || nb.groundOutlier || nb.aabb.GetSize().y < kFlatY)
+                        continue;
+                    const bool overlap = na.aabb.min.x <= nb.aabb.max.x && na.aabb.max.x >= nb.aabb.min.x &&
+                                         na.aabb.min.y <= nb.aabb.max.y && na.aabb.max.y >= nb.aabb.min.y &&
+                                         na.aabb.min.z <= nb.aabb.max.z && na.aabb.max.z >= nb.aabb.min.z;
+                    if (overlap)
+                        digest.overlaps.emplace_back(static_cast<int>(a), static_cast<int>(b));
+                }
+            }
+        }
+
+        return digest;
     }
 } // namespace pe

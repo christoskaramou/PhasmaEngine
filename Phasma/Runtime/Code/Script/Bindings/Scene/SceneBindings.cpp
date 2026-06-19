@@ -95,6 +95,63 @@ namespace pe
                     return sc ? static_cast<int>(sc->GetModels().size()) : 0;
                 });
 
+                // Spatial perception: world bounds + every mesh node's world AABB +
+                // overlaps, so authoring scripts can place/frame without trial-and-error.
+                // world_bounds/ground_y/overlaps consider enabled+visible nodes only
+                // (parked pools excluded); overlaps skip flat-in-Y floors. Shares
+                // ComputeSceneDigest with MCP get_scene_digest.
+                scene.set_function("digest", [](sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
+                    Scene *sc = GetActiveScene();
+                    if (!sc) return sol::make_object(lua, sol::nil);
+
+                    SceneDigest d = ComputeSceneDigest(*sc);
+                    sol::table out = lua.create_table();
+                    out["ground_y"] = d.groundY;
+                    out["total_node_count"] = d.totalNodeCount;
+                    out["mesh_node_count"] = d.meshNodeCount;
+                    out["overlaps_truncated"] = d.overlapsTruncated;
+                    if (d.hasBounds)
+                    {
+                        out["world_bounds"] = lua.create_table_with(
+                            "min", d.worldBounds.min, "max", d.worldBounds.max,
+                            "center", d.worldBounds.GetCenter(), "size", d.worldBounds.GetSize());
+                    }
+
+                    sol::table nodes = lua.create_table();
+                    for (size_t i = 0; i < d.nodes.size(); ++i)
+                    {
+                        const SceneDigestNode &n = d.nodes[i];
+                        sol::table t = lua.create_table();
+                        t["id"] = n.id;
+                        t["name"] = n.name;
+                        t["enabled"] = n.enabled;
+                        t["visible"] = n.visible;
+                        t["in_frustum"] = n.inFrustum;
+                        t["ground_outlier"] = n.groundOutlier;
+                        t["aabb"] = lua.create_table_with(
+                            "min", n.aabb.min, "max", n.aabb.max,
+                            "center", n.aabb.GetCenter(), "size", n.aabb.GetSize());
+                        nodes[i + 1] = t;
+                    }
+                    out["nodes"] = nodes;
+
+                    sol::table overlaps = lua.create_table();
+                    for (size_t i = 0; i < d.overlaps.size(); ++i)
+                    {
+                        const auto &pair = d.overlaps[i];
+                        sol::table t = lua.create_table();
+                        t["a"] = pair.first + 1; // 1-based index into nodes
+                        t["b"] = pair.second + 1;
+                        t["a_name"] = d.nodes[pair.first].name;
+                        t["b_name"] = d.nodes[pair.second].name;
+                        overlaps[i + 1] = t;
+                    }
+                    out["overlaps"] = overlaps;
+
+                    return sol::make_object(lua, out);
+                });
+
                 scene.set_function("find_model", [](const std::string &label, sol::this_state ts) -> sol::object {
                     sol::state_view lua(ts);
                     Scene *sc = GetActiveScene();

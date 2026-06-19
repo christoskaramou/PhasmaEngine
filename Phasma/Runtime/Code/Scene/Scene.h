@@ -683,4 +683,40 @@ namespace pe
             return false;
         return !(scene.GetComponentFlags(nodeId) & Component_GpuPending);
     }
+
+    // --- Scene spatial digest (perception for agent / Lua authoring) ---
+    // One mesh-bearing node's world footprint. `id` is the stable
+    // "node:<index>:<revision>" form ResolveNode() accepts, so a digest entry
+    // round-trips into frame_node / set_camera / get_node_info.
+    struct SceneDigestNode
+    {
+        std::string id;
+        std::string name;
+        AABB aabb{};
+        bool enabled = true;        // hierarchy-enabled (disabled pool members stay listed)
+        bool visible = true;        // per-instance render-visible flag
+        bool inFrustum = true;      // vs active camera (true when no camera exists)
+        bool groundOutlier = false; // far vertical outlier (e.g. authored-parked pool); excluded from bounds
+    };
+
+    // Aggregate scene perception. world_bounds / ground_y / overlaps consider
+    // ENABLED AND VISIBLE nodes only (so pool members parked by hierarchy-disable or
+    // the render-visible cull-flag don't corrupt the play area), AND additionally
+    // reject far vertical outliers via a median+MAD band (groundOutlier) — e.g. a pool
+    // the author parks at Y=-1000 in the .pescene while still enabled+visible before
+    // play. Overlaps also skip flat-in-Y nodes (floors / decals). All mesh nodes are
+    // still listed; outliers just carry groundOutlier=true.
+    struct SceneDigest
+    {
+        bool hasBounds = false;
+        AABB worldBounds{};
+        float groundY = 0.0f;                      // estimate = enabled world_bounds.min.y
+        uint32_t totalNodeCount = 0;               // every node in the scene
+        uint32_t meshNodeCount = 0;                // == nodes.size()
+        std::vector<SceneDigestNode> nodes;        // mesh-bearing nodes
+        std::vector<std::pair<int, int>> overlaps; // index pairs into nodes
+        bool overlapsTruncated = false;            // node count exceeded the O(n^2) cap
+    };
+
+    SceneDigest ComputeSceneDigest(Scene &scene);
 } // namespace pe

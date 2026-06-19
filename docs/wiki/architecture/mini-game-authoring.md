@@ -261,3 +261,103 @@ instantiates through the new binding, wave 1 spawns and (after the enemies home
 in and recycle to the pool) wave 2 starts, and a forced movement axis displaces
 the player node by the exact expected distance — confirming the
 `input → actor:move_dir → set_position` path the WASD controls drive.
+
+## Spatial Awareness — Phase 1 (Shipped 2026-06-19)
+
+A separate track from MiniGameKit: give the agent (and Lua authoring scripts)
+**scene perception** so they place objects from facts instead of guessing
+coordinates and screenshotting to check. Phase 1 ships the precise-numbers half
+(the digest); Phase 2a ships the clean top-down **map shot** + sidecar manifest.
+
+### What shipped
+
+1. **`ComputeSceneDigest(Scene&)`** — a single shared C++ aggregator in
+   `Phasma/Runtime/Code/Scene/Scene.cpp` (declared with the `SceneDigest` /
+   `SceneDigestNode` structs in `Scene.h`). It walks every mesh-bearing node,
+   reading the already-cached world AABB (no GPU work), and returns: aggregate
+   `world_bounds`, a `ground_y` estimate, per-node `{id, name, aabb, enabled,
+   visible, in_frustum, ground_outlier}`, and pairwise AABB `overlaps`. Cheap
+   enough to call per authoring step.
+2. **Lua `scene.digest()`** (`SceneBindings.cpp`) and **MCP `get_scene_digest`**
+   (`EditorToolRuntime` + `EditorToolCatalog`) both serialize that one struct —
+   the Lua path for runtime/console scripts, the MCP path for the agent. Per-node
+   `id` is the stable `node:<index>:<revision>` form, so a digest entry
+   round-trips straight into `frame_node` / `set_camera` / `get_node_info`.
+3. **`gamekit/spatial.lua`** — declarative placement helpers over `scene.digest()`:
+   `place_on_ground`, `in_front_of_camera`, `ring`, `grid`, `stack`,
+   `resolve_overlaps`, `frame_camera` (and `move_center_to` / `bounds` /
+   `ground_y`). They move nodes via `node:set_position` using a world delta —
+   exact for scene-root / identity-parent nodes (the common authoring case).
+
+### Key design decisions
+
+- **Aggregate stats gate on `enabled && visible`, not just `enabled`.** Pools are
+  parked offscreen by *two* conventions: hierarchy-disable (`enabled=false`, e.g.
+  the topdown template parks at `Y=-1000`) **and** the render-visible cull-flag
+  (`visible=false`, which avoids TLAS churn — Warbound parks 314 members at
+  `Y=-2080` this way). `world_bounds` / `ground_y` / `overlaps` therefore consider
+  only enabled-and-visible nodes; without the visible gate, Warbound's bounds
+  blew up to `size.y≈2088` / `ground_y≈-2080`. Every mesh node is still **listed**
+  with its flags, so the agent can see the parked pool.
+- **Robust vertical band rejects far outliers (`ground_outlier`).** The
+  `enabled && visible` gate handles pools hidden *at play time*, but a scene viewed
+  *before* play can still have a pool authored at `Y=-1000` while enabled+visible
+  (Warbound does exactly this). A median+MAD band over live node centres (generous
+  50-unit floor, only with ≥8 live nodes) flags those as `ground_outlier` and drops
+  them from `world_bounds` / `ground_y` / `overlaps`. Without it, the editor's
+  authored Warbound reported `ground_y=-1000`, `size.y≈1008`; with it, `ground_y=-0.5`,
+  `76×8.9×76` — matching the play-mode bounds. Outliers are still listed (flagged).
+- **Overlaps skip flat-in-Y nodes** (floors / decals, `size.y < 0.05`) so the
+  ground plane does not report as overlapping everything on it.
+- **Overlaps are capped** at 256 nodes (O(n²)); above that `overlaps_truncated`
+  is set and the pass is skipped — expected on large scenes.
+
+### Verification
+
+The topdown template smoke confirmed correct bounds, the `enabled=false`
+exclusion, flat-floor de-noising, and a working `place_on_ground` move. A second
+smoke ran `scene.digest()` against the live **918-node Warbound skirmish** in the
+Vulkan player: it surfaced the render-hidden parking gap above (bounds polluted to
+`size.y≈2088`), which the `enabled && visible` gate fixed — re-smoke produced a
+clean `76×8.9×76` map with `ground_y=-0.50`, the 314 parked members still listed
+but excluded from the aggregate. No Lua errors; player stable.
+
+## Spatial Awareness — Phase 2a: Map Shot (Shipped 2026-06-19)
+
+The agent-readable picture half. The MCP tool **`get_map_shot`**
+(`EditorToolRuntime::GetMapShot`) renders a clean top-down view of the scene and
+writes a paired manifest — the "annotated image + JSON digest" split, achieved by
+**composing existing passes**, with **no new render pass**:
+
+1. Frame an **orthographic top-down camera** over the digest's `world_bounds`
+   (`orthographic_size` covers both screen axes via the viewport aspect; look down
+   `-Y`); save the prior camera + settings.
+2. Let a few frames render, then capture the **`rt:viewport`** RT to PNG via the
+   existing `CaptureImageResource` readback. `viewport` is the scene colour *before*
+   the editor composites ImGui — `rt:display` in-editor contains the whole UI, so it
+   is the wrong target. (`GridPass` draws only to `display`, so the map has no drawn
+   grid; coordinates come from the manifest instead.)
+3. Write a sidecar **`<image>.map.json`**: for every visible, non-outlier node, its
+   AABB projected to **pixel space** (`center_px`, `aabb_px`) keyed to `name`/`id`,
+   plus `view_projection`, `camera`, `world_bounds`, `ground_y`. The agent reads the
+   picture for layout and the manifest for exact boxes/labels/coords (overlay them
+   itself if it wants them drawn).
+4. Restore the camera + settings.
+
+Design notes: the image is **clean by default**; `draw_boxes:true` opts into the
+engine `AabbsPass` wireframes (noisy on dense scenes — the manifest already carries
+the boxes). Args: `padding` (fit margin, default 1.1), `max_dimension` (PNG cap,
+default 2048), `draw_boxes` (default false).
+
+**Verified** end-to-end via the editor MCP on the live 918-node Warbound skirmish:
+clean top-down render (no UI, no clutter); `Ground` (world origin) projects to the
+exact image centre; all in-band nodes project in-frame; camera restored. The first
+smoke caught two issues now fixed — `rt:display` carried ImGui (→ `rt:viewport`) and
+AABB-in-image webbed the scene (→ opt-in).
+
+### Next (Phase 2b)
+
+A dedicated `MapShotPass` rendering to its own offscreen RT (decoupled from the live
+editor camera), worldXZ / node-ID data passes for programmatic pixel→world/node
+readback, and adaptive tiling for large maps. Deferred — 2a's compose-and-capture
+covers the common case.

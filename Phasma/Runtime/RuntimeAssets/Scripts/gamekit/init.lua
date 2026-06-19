@@ -19,7 +19,7 @@ local GAMEKIT_DIR = "Scripts/gamekit/"
 -- Modules in load order. json first (save depends on it); everything else is flat.
 local MODULES = {
     "json", "loop", "scene", "pool", "actor", "input", "camera",
-    "pick", "ui", "timer", "tween", "wave", "grid", "deck", "save", "audio",
+    "pick", "spatial", "ui", "timer", "tween", "wave", "grid", "deck", "save", "audio",
 }
 
 local function read_module(name)
@@ -45,6 +45,7 @@ local kit = {
     input = mods.input,
     camera = mods.camera, -- kit.camera.topdown(node, opts)
     pick = mods.pick,
+    spatial = mods.spatial, -- placement helpers over scene.digest()
     ui = mods.ui,
     timer = mods.timer,
     tween = mods.tween,

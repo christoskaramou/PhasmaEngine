@@ -39,6 +39,8 @@ namespace pe
         std::string SetNodeMaterial(const std::string &nodeId, int slot, const std::string &propsJson) const;
         std::string AddLight(const std::string &type) const;
         std::string GetSceneInfo(bool includeTree) const;
+        std::string GetSceneDigest() const;
+        std::string GetMapShot(const std::string &argsJson) const;
         std::string GetNodeInfo(const std::string &argsJson) const;
         std::string QueryScene() const;
         std::string GetRendererStatus() const;

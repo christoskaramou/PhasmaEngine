@@ -1406,6 +1406,50 @@ namespace pe
 
             {
                 ToolDefinition tool;
+                tool.name = "get_scene_digest";
+                tool.description = "Spatial perception for scene authoring: aggregate play-area world_bounds, ground_y estimate, "
+                                   "and every mesh-bearing node's world AABB (min/max/center/size) with enabled/visible/in_frustum flags, "
+                                   "plus pairwise AABB overlaps. world_bounds/ground_y/overlaps consider enabled AND visible nodes only "
+                                   "(parked pool members — hierarchy-disabled or render-hidden — are listed but excluded); overlaps skip "
+                                   "flat-in-Y floors. Node ids round-trip into frame_node/set_camera/get_node_info. Use this to place "
+                                   "objects without guess-and-screenshot.";
+                tool.inputSchema = schema::Object({});
+                tool.handler = [runtime](const nlohmann::json &, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->GetSceneDigest());
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
+                tool.name = "get_map_shot";
+                tool.description = "Renders a clean top-down 'map shot' of the scene for spatial authoring: frames an orthographic camera "
+                                   "over the visible world bounds, captures the scene to PNG, and writes a sidecar '<image>.map.json' "
+                                   "manifest. The manifest projects every visible node's AABB to pixel space (center_px, aabb_px) keyed to "
+                                   "name/id, plus the view_projection, camera, world_bounds and ground_y — so you read the picture for layout "
+                                   "AND get exact pixel boxes/labels and world coords (overlay them yourself if you want them drawn). The image "
+                                   "is clean by default; pass draw_boxes:true to also render the engine AABB wireframes into it (noisy on dense "
+                                   "scenes). Restores the camera afterward. Args: padding (fit margin, default 1.1), max_dimension (PNG cap, "
+                                   "default 2048), draw_boxes (default false).";
+                tool.inputSchema = schema::Object({
+                    {"padding", "Fit margin around the world bounds (default 1.1)", schema::Number()},
+                    {"max_dimension", "Max PNG width/height in px (default 2048)", schema::Integer()},
+                    {"draw_boxes", "Also draw engine AABB wireframes into the image (default false)", schema::Boolean()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->GetMapShot(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
                 tool.name = "get_node_info";
                 tool.description = "Returns detailed node data: transform matrices, world AABB, parent/children, component flags, "
                                    "camera/light/script details, mesh refs, material scalars, and texture ids.";
