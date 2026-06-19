@@ -133,6 +133,8 @@ namespace pe
         PE_ERROR_IF(size + srcOffset > src->Size(), "Buffer::CopyBuffer: Source size is too big");
         PE_ERROR_IF(size + dstOffset > m_owner->Size(), "Buffer::CopyBuffer: Destination size is too small");
 
+        VulkanCommandBufferImpl::From(cmd)->FlushBarriers();
+
         if (RHII.GetCaps().copyCommands2)
         {
             vk::BufferCopy2 region{};
@@ -222,12 +224,8 @@ namespace pe
             barrier.offset = info.offset;
             barrier.size = info.size;
 
-            vk::DependencyInfo dependencyInfo{};
-            dependencyInfo.bufferMemoryBarrierCount = 1;
-            dependencyInfo.pBufferMemoryBarriers = &barrier;
-
             PE_PROFILE_COUNTER("Vk PipelineBarrier2 Buffer Items", 1);
-            GetVulkanCommandBuffer(cmd).pipelineBarrier2(dependencyInfo);
+            VulkanCommandBufferImpl::From(cmd)->m_pendingBufferBarriers.push_back(barrier);
         }
         else
         {
@@ -337,12 +335,9 @@ namespace pe
 
         if (sync2)
         {
-            vk::DependencyInfo dependencyInfo{};
-            dependencyInfo.bufferMemoryBarrierCount = barrierIndex;
-            dependencyInfo.pBufferMemoryBarriers = barriers.data();
-
             PE_PROFILE_COUNTER("Vk PipelineBarrier2 Buffer Items", barrierIndex);
-            GetVulkanCommandBuffer(cmd).pipelineBarrier2(dependencyInfo);
+            auto &pending = VulkanCommandBufferImpl::From(cmd)->m_pendingBufferBarriers;
+            pending.insert(pending.end(), barriers.begin(), barriers.begin() + barrierIndex);
         }
         else
         {

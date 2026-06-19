@@ -61,6 +61,7 @@ namespace pe
         PE_ERROR_IF(!m_owner->m_recording, "CommandBuffer::End: CommandBuffer is not in recording state!");
         PE_ERROR_IF(m_owner->m_threadId != std::this_thread::get_id(), "CommandBuffer::End: CommandBuffer is used in a different thread!");
 
+        FlushBarriers();
         m_apiHandle.end();
         m_owner->m_recording = false;
     }
@@ -91,6 +92,10 @@ namespace pe
             m_owner->m_afterWaitCallbacks.Clear();
         }
 
+        m_pendingBufferBarriers.clear();
+        m_pendingImageBarriers.clear();
+        m_pendingMemoryBarriers.clear();
+
         PE_ERROR_IF(!(m_owner->m_commandPool->GetFlags() & PE_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER), "CommandBuffer::Reset: CommandPool does not have the reset flag!");
         m_apiHandle.reset();
 
@@ -103,6 +108,24 @@ namespace pe
             if (info.timer)
                 info.timer->ResetState();
 #endif
+    }
+
+    void VulkanCommandBufferImpl::FlushBarriers()
+    {
+        if (m_pendingBufferBarriers.empty() && m_pendingImageBarriers.empty() && m_pendingMemoryBarriers.empty())
+            return;
+        vk::DependencyInfo dep{};
+        dep.bufferMemoryBarrierCount = static_cast<uint32_t>(m_pendingBufferBarriers.size());
+        dep.pBufferMemoryBarriers = m_pendingBufferBarriers.data();
+        dep.imageMemoryBarrierCount = static_cast<uint32_t>(m_pendingImageBarriers.size());
+        dep.pImageMemoryBarriers = m_pendingImageBarriers.data();
+        dep.memoryBarrierCount = static_cast<uint32_t>(m_pendingMemoryBarriers.size());
+        dep.pMemoryBarriers = m_pendingMemoryBarriers.data();
+        PE_PROFILE_COUNTER("Vk PipelineBarrier2 Calls", 1);
+        m_apiHandle.pipelineBarrier2(dep);
+        m_pendingBufferBarriers.clear();
+        m_pendingImageBarriers.clear();
+        m_pendingMemoryBarriers.clear();
     }
 
     void VulkanCommandBufferImpl::SetDepthBias(float constantFactor, float clamp, float slopeFactor)
@@ -126,6 +149,7 @@ namespace pe
             barriers[i].accessMask = PE_ACCESS_TRANSFER_WRITE;
         }
         Image::Barriers(m_owner, barriers);
+        FlushBarriers();
 
         for (uint32_t i = 0; i < images.size(); i++)
         {
@@ -162,6 +186,7 @@ namespace pe
             barriers[i].accessMask = PE_ACCESS_TRANSFER_WRITE;
         }
         Image::Barriers(m_owner, barriers);
+        FlushBarriers();
 
         for (uint32_t i = 0; i < images.size(); i++)
         {
@@ -264,6 +289,7 @@ namespace pe
             }
 
             Image::Barriers(m_owner, attachmentBarriers);
+            FlushBarriers();
 
             vk::RenderingInfo renderingInfo{};
             renderingInfo.renderArea = {0, 0, attachments[0].image->GetWidth(), attachments[0].image->GetHeight()};
@@ -317,6 +343,7 @@ namespace pe
             }
 
             Image::Barriers(m_owner, attachmentBarriers);
+            FlushBarriers();
 
             m_owner->m_renderPass = CommandBuffer::GetRenderPass(count, attachments);
             m_owner->m_framebuffer = CommandBuffer::GetFramebuffer(m_owner->m_renderPass, count, attachments);
@@ -620,6 +647,7 @@ namespace pe
 
     void VulkanCommandBufferImpl::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
     {
+        FlushBarriers();
         m_apiHandle.dispatch(groupCountX, groupCountY, groupCountZ);
     }
 
@@ -643,26 +671,31 @@ namespace pe
 
     void VulkanCommandBufferImpl::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {
+        FlushBarriers();
         m_apiHandle.draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     void VulkanCommandBufferImpl::DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
     {
+        FlushBarriers();
         m_apiHandle.drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
     void VulkanCommandBufferImpl::DrawIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
+        FlushBarriers();
         m_apiHandle.drawIndirect(pe::GetVulkanBuffer(indirectBuffer), offset, drawCount, stride);
     }
 
     void VulkanCommandBufferImpl::DrawIndexedIndirect(Buffer *indirectBuffer, size_t offset, uint32_t drawCount, uint32_t stride)
     {
+        FlushBarriers();
         m_apiHandle.drawIndexedIndirect(pe::GetVulkanBuffer(indirectBuffer), offset, drawCount, stride);
     }
 
     void VulkanCommandBufferImpl::DrawIndexedIndirectCount(Buffer *indirectBuffer, size_t offset, Buffer *countBuffer, size_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
     {
+        FlushBarriers();
         if (RHII.GetCaps().indirectCount)
         {
             m_apiHandle.drawIndexedIndirectCount(pe::GetVulkanBuffer(indirectBuffer),
@@ -688,6 +721,7 @@ namespace pe
         fillBarrier.offset = offset;
         fillBarrier.size = size;
         Buffer::Barrier(m_owner, fillBarrier);
+        FlushBarriers();
 
         m_apiHandle.fillBuffer(pe::GetVulkanBuffer(buffer), offset, size, data);
 
@@ -703,6 +737,7 @@ namespace pe
     {
         PE_ERROR_IF(!m_owner->m_boundPipeline, "CommandBuffer::TraceRays: No bound pipeline found!");
         PE_ERROR_IF(!RHII.GetCaps().rayTracing, "CommandBuffer::TraceRays: ray tracing is not supported on this device");
+        FlushBarriers();
         m_apiHandle.traceRaysKHR(GetVulkanRgenRegion(m_owner->m_boundPipeline),
                                  GetVulkanMissRegion(m_owner->m_boundPipeline),
                                  GetVulkanHitRegion(m_owner->m_boundPipeline),
@@ -740,12 +775,8 @@ namespace pe
             barrier.dstStageMask = ToVkPipelineStageFlags(info.dstStageMask);
             barrier.dstAccessMask = ToVkAccessFlags(info.dstAccessMask);
 
-            vk::DependencyInfo dependencyInfo{};
-            dependencyInfo.memoryBarrierCount = 1;
-            dependencyInfo.pMemoryBarriers = &barrier;
-
             PE_PROFILE_COUNTER("Vk PipelineBarrier2 Memory Items", 1);
-            m_apiHandle.pipelineBarrier2(dependencyInfo);
+            m_pendingMemoryBarriers.push_back(barrier);
         }
         else
         {
@@ -770,25 +801,18 @@ namespace pe
 
         if (RHII.GetCaps().sync2)
         {
-            // Thread-local scratch avoids a heap allocation per barrier batch.
-            thread_local std::vector<vk::MemoryBarrier2> barriers;
-            barriers.clear();
-            barriers.reserve(infos.size());
+            const size_t oldSize = m_pendingMemoryBarriers.size();
+            m_pendingMemoryBarriers.reserve(oldSize + infos.size());
             for (const auto &info : infos)
             {
-                vk::MemoryBarrier2 &barrier = barriers.emplace_back();
+                vk::MemoryBarrier2 &barrier = m_pendingMemoryBarriers.emplace_back();
                 barrier.srcStageMask = ToVkPipelineStageFlags(info.srcStageMask);
                 barrier.srcAccessMask = ToVkAccessFlags(info.srcAccessMask);
                 barrier.dstStageMask = ToVkPipelineStageFlags(info.dstStageMask);
                 barrier.dstAccessMask = ToVkAccessFlags(info.dstAccessMask);
             }
 
-            vk::DependencyInfo dependencyInfo{};
-            dependencyInfo.memoryBarrierCount = static_cast<uint32_t>(barriers.size());
-            dependencyInfo.pMemoryBarriers = barriers.data();
-
-            PE_PROFILE_COUNTER("Vk PipelineBarrier2 Memory Items", barriers.size());
-            m_apiHandle.pipelineBarrier2(dependencyInfo);
+            PE_PROFILE_COUNTER("Vk PipelineBarrier2 Memory Items", infos.size());
         }
         else
         {

@@ -7,7 +7,6 @@
 #include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 
-
 namespace pe
 {
     namespace
@@ -45,6 +44,7 @@ namespace pe
             return;
         }
 
+        VulkanCommandBufferImpl::From(cmd)->FlushBarriers();
         GetVulkanCommandBuffer(cmd).buildAccelerationStructuresKHR(infoCount, pInfos, ppBuildRangeInfos);
     }
 

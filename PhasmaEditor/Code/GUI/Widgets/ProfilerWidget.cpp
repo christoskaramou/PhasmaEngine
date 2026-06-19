@@ -462,6 +462,14 @@ namespace pe
         m_data = std::move(d);
     }
 
+    void ProfilerWidget::EnableGpuTiming(bool on)
+    {
+        m_gpuTimingEnabled = on;
+        if (on)
+            m_open = true; // Update() gates GPU collection on (m_open && m_gpuTimingEnabled)
+        Debug::SetGpuTimingEnabled(on);
+    }
+
     void ProfilerWidget::Update()
     {
         // Reopen after a RenderDoc capture completes (or immediately if API unavailable)

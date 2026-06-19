@@ -14,6 +14,9 @@ namespace pe
         bool IsOpen() override { return m_open || m_waitingForCapture; }
         void Update() override;
         std::string TakeSnapshot();
+        // Programmatic GPU-timing toggle (for headless perf capture via the profiler_set_gpu_timing
+        // Lua/MCP binding). Enabling also opens the panel so Update() keeps collection live.
+        void EnableGpuTiming(bool on);
 
     private:
         // Tab draw helpers

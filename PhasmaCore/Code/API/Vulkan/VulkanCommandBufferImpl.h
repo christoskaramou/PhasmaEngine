@@ -78,8 +78,13 @@ namespace pe
         void InsertDebugLabel(const std::string &name) override;
         void EndDebugRegion() override;
 
+        void FlushBarriers();
+
         CommandBuffer *m_owner{};
         vk::CommandBuffer m_apiHandle{};
+        std::vector<vk::BufferMemoryBarrier2> m_pendingBufferBarriers;
+        std::vector<vk::ImageMemoryBarrier2> m_pendingImageBarriers;
+        std::vector<vk::MemoryBarrier2> m_pendingMemoryBarriers;
     };
 
     inline vk::CommandBuffer GetVulkanCommandBuffer(CommandBuffer *cmd)

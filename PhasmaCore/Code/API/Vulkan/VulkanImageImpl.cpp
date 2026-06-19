@@ -654,6 +654,7 @@ namespace pe
         barriers[1].accessMask = PE_ACCESS_TRANSFER_WRITE;
         barriers[1].layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         Image::Barriers(cmd, barriers);
+        VulkanCommandBufferImpl::From(cmd)->FlushBarriers();
 
         cmd->BeginDebugRegion(src->GetName() + " -> " + dst->GetName());
         if (RHII.GetCaps().copyCommands2)
@@ -735,6 +736,7 @@ namespace pe
         bufBarrier.stageMask = PE_STAGE_TRANSFER;
         bufBarrier.accessMask = PE_ACCESS_TRANSFER_WRITE;
         cmd->BufferBarrier(bufBarrier);
+        VulkanCommandBufferImpl::From(cmd)->FlushBarriers();
 
         if (RHII.GetCaps().copyCommands2)
         {
@@ -803,6 +805,7 @@ namespace pe
         barriers[1].mipLevels = 1;
 
         Image::Barriers(cmd, barriers);
+        VulkanCommandBufferImpl::From(cmd)->FlushBarriers();
 
         const vk::ImageBlit vkRegion = ToVkImageBlit(region);
         cmd->BeginDebugRegion(src->GetName() + " -> " + dst->GetName());
@@ -838,6 +841,7 @@ namespace pe
         barrier.baseMipLevel = mipLevel;
         barrier.mipLevels = mipLevel == 0 ? image->GetMipLevels() : 1;
         Image::Barrier(cmd, barrier);
+        VulkanCommandBufferImpl::From(cmd)->FlushBarriers();
 
         const uint32_t mipWidth = std::max(image->GetWidth() >> mipLevel, 1u);
         const uint32_t mipHeight = std::max(image->GetHeight() >> mipLevel, 1u);
@@ -1038,12 +1042,8 @@ namespace pe
             barrier.subresourceRange.layerCount =
                 impl->m_imageType == PE_IMAGE_TYPE_3D ? VK_REMAINING_ARRAY_LAYERS : arrayLayers;
 
-            vk::DependencyInfo depInfo{};
-            depInfo.imageMemoryBarrierCount = 1;
-            depInfo.pImageMemoryBarriers = &barrier;
-
             PE_PROFILE_COUNTER("Vk PipelineBarrier2 Image Items", 1);
-            GetVulkanCommandBuffer(cmd).pipelineBarrier2(depInfo);
+            VulkanCommandBufferImpl::From(cmd)->m_pendingImageBarriers.push_back(barrier);
         }
         else
         {
@@ -1187,12 +1187,9 @@ namespace pe
 
         if (RHII.GetCaps().sync2)
         {
-            vk::DependencyInfo depInfo{};
-            depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
-            depInfo.pImageMemoryBarriers = barriers.data();
-
             PE_PROFILE_COUNTER("Vk PipelineBarrier2 Image Items", barriers.size());
-            GetVulkanCommandBuffer(cmd).pipelineBarrier2(depInfo);
+            auto &pending = VulkanCommandBufferImpl::From(cmd)->m_pendingImageBarriers;
+            pending.insert(pending.end(), barriers.begin(), barriers.end());
         }
         else
         {

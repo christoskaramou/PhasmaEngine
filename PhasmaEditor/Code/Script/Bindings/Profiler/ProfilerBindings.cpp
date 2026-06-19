@@ -19,7 +19,14 @@ namespace pe
                         auto *profiler = renderer ? renderer->GetGUI().GetWidget<ProfilerWidget>() : nullptr;
                         if (!profiler)
                             return std::string{};
-                        return profiler->TakeSnapshot(); }); });
+                        return profiler->TakeSnapshot(); });
+                      lua.set_function("profiler_set_gpu_timing",
+                                       [](bool on)
+                                       {
+                        auto *renderer = GetGlobalSystem<RendererSystem>();
+                        auto *profiler = renderer ? renderer->GetGUI().GetWidget<ProfilerWidget>() : nullptr;
+                        if (profiler)
+                            profiler->EnableGpuTiming(on); }); });
             }
         } s_profilerBindings;
     } // namespace
