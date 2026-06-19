@@ -1,0 +1,6 @@
+{
+    "version": 1,
+    "name": "Default Project",
+    "assets": "Assets",
+    "startup_scene": "Assets/Scenes/main.pescene"
+}

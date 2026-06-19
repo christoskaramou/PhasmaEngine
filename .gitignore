@@ -363,6 +363,10 @@ Projects/*/Assets/Agent/
 !/tools/perf_cycle.sh
 !/tools/bake_android_shaders.ps1
 !/tools/cook_model.py
+!/tools/new_game.py
+!/tools/minigamekit.py
+!/tools/templates/
+!/tools/templates/**
 !/tools/phasma_adk_agent/
 !/tools/phasma_adk_agent/**
 /tools/phasma_adk_agent/.venv/

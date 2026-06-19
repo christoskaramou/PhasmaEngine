@@ -157,6 +157,29 @@ namespace pe
                         sc->DeleteNode(h.nodeId);
                 });
 
+                // Instantiate a .peprefab subtree into the active scene, optionally
+                // parented under an existing node. The path resolves against the
+                // active project's Assets first, then the engine RuntimeAssets tree
+                // (so "Prefabs/enemy.peprefab" works in any generated project), with
+                // an as-given fallback for absolute / working-dir paths. Returns the
+                // instance root node handle, or nil on failure.
+                scene.set_function("instantiate_prefab", [](const std::string &path, sol::optional<SceneNodeHandle> parent, sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
+                    Scene *sc = GetActiveScene();
+                    if (!sc) return sol::make_object(lua, sol::nil);
+
+                    std::error_code ec;
+                    std::filesystem::path resolved = path;
+                    if (!std::filesystem::exists(resolved, ec))
+                        resolved = Path::ResolveAsset(path);
+
+                    NodeId *parentNode = (parent && parent->IsValid(*sc)) ? parent->nodeId : nullptr;
+                    SceneNodeHandle handle = sc->InstantiatePrefab(resolved, parentNode);
+                    if (!handle.nodeId)
+                        return sol::make_object(lua, sol::nil);
+                    return sol::make_object(lua, handle);
+                });
+
                 scene.set_function("attach_primitive", [](SceneNodeHandle h, const std::string &type) {
                     Scene *sc = GetActiveScene();
                     if (!sc) return;

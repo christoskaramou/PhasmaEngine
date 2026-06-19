@@ -50,6 +50,10 @@ set(PE_EDITOR_ASSETS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Editor/Edito
 # the build-tree phasma_settings.json when none exists; user content is never copied into the build.
 get_filename_component(PE_SAMPLE_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../PhasmaProjects/Sample" ABSOLUTE)
 
+# Bundled super-minimal default project, copied into the build tree so the launcher always
+# has a valid, launchable project to open even when the sibling PhasmaProjects/ repo is absent.
+set(PE_DEFAULT_PROJECT_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Runtime/DefaultProject")
+
 set(PE_DESKTOP_TARGETS_DEFAULT ON)
 set(PE_RUNTIME_SHADER_COMPILER_DEFAULT ON)
 set(PE_ASSIMP_DEFAULT ON)
@@ -496,21 +500,45 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
         add_dependencies(PhasmaPlayer PhasmaRuntimeAssets)
     endif()
 
+    # Copy the bundled super-minimal default project into the build so the launcher always
+    # opens to a valid, launchable project (used as the fallback when no user project is set).
+    file(GLOB_RECURSE DEFAULT_PROJECT_FILES CONFIGURE_DEPENDS "${PE_DEFAULT_PROJECT_SOURCE_DIR}/*")
+    set(DEFAULT_PROJECT_COPY_STAMP "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/PhasmaDefaultProject-$<CONFIG>.stamp")
+    add_custom_command(
+        OUTPUT "${DEFAULT_PROJECT_COPY_STAMP}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles" "${PHASMA_CONFIG_OUTPUT_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${PE_DEFAULT_PROJECT_SOURCE_DIR}" "${PHASMA_CONFIG_OUTPUT_DIR}/DefaultProject"
+        COMMAND ${CMAKE_COMMAND} -E touch "${DEFAULT_PROJECT_COPY_STAMP}"
+        DEPENDS ${DEFAULT_PROJECT_FILES}
+        COMMENT "[Phasma] Copying bundled default project to build directory"
+    )
+    add_custom_target(PhasmaDefaultProject ALL DEPENDS "${DEFAULT_PROJECT_COPY_STAMP}")
+    if(TARGET PhasmaEditor)
+        add_dependencies(PhasmaEditor PhasmaDefaultProject)
+    endif()
+    if(TARGET PhasmaLauncher)
+        add_dependencies(PhasmaLauncher PhasmaDefaultProject)
+    endif()
+    if(TARGET PhasmaPlayer)
+        add_dependencies(PhasmaPlayer PhasmaDefaultProject)
+    endif()
+
     # Project Assets are NOT copied into the build. Provide an empty writable Assets/ as the
-    # ultimate fallback, then seed a dev project pin (-> PhasmaProjects/Sample) only if the user
-    # has not already chosen one. Editor saves land in the pinned project, never in the build tree.
+    # ultimate fallback, then seed a project pin (-> the bundled DefaultProject) only when no
+    # phasma_settings.json exists yet, so a user's chosen pin is never clobbered by a rebuild.
     set(PROJECT_SEED_STAMP "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/PhasmaProjectSeed-$<CONFIG>.stamp")
     add_custom_command(
         OUTPUT "${PROJECT_SEED_STAMP}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles" "${PHASMA_CONFIG_OUTPUT_DIR}/Assets"
         COMMAND ${CMAKE_COMMAND}
                 -DSETTINGS_FILE=${PHASMA_CONFIG_OUTPUT_DIR}/phasma_settings.json
-                -DPROJECT_PATH=${PE_SAMPLE_PROJECT_DIR}
+                -DPROJECT_PATH=${PHASMA_CONFIG_OUTPUT_DIR}/DefaultProject
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/SeedProjectSettings.cmake"
         COMMAND ${CMAKE_COMMAND} -E touch "${PROJECT_SEED_STAMP}"
-        COMMENT "[Phasma] Ensuring writable project Assets + dev project pin"
+        COMMENT "[Phasma] Ensuring writable project Assets + default project pin"
     )
     add_custom_target(PhasmaProjectSeed ALL DEPENDS "${PROJECT_SEED_STAMP}")
+    add_dependencies(PhasmaProjectSeed PhasmaDefaultProject)
     if(TARGET PhasmaEditor)
         add_dependencies(PhasmaEditor PhasmaProjectSeed)
     endif()

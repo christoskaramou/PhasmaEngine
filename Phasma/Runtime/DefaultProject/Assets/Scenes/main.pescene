@@ -1,0 +1,43 @@
+{
+    "sources": [],
+    "meshes": [],
+    "nodes": [
+        {
+            "name": "Camera_0",
+            "parent": -1,
+            "local_matrix": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 3.0, 8.0, 1.0],
+            "component_flags": 8,
+            "camera": {
+                "projection": "perspective",
+                "fovx": 1.2,
+                "near_plane": 0.1,
+                "far_plane": 1000.0,
+                "speed": 3.5,
+                "euler": [0.3, 3.14159, 0.0]
+            }
+        },
+        {
+            "name": "Sun",
+            "parent": -1,
+            "local_matrix": [1.0, 0.0, 0.0, 0.0, 0.0, -0.001745, -0.999997, 0.0, 0.0, 0.999997, -0.001745, 0.0, 0.0, 30.0, 0.0, 1.0],
+            "component_flags": 2,
+            "light": { "type": "directional", "color": [1.0, 0.97, 0.9, 2.6] }
+        }
+    ],
+    "lights": [],
+    "cameras": [
+        {
+            "name": "Camera_0",
+            "position": [0.0, 3.0, 8.0],
+            "euler": [0.3, 3.14159, 0.0],
+            "fovx": 1.2,
+            "projection": "perspective",
+            "near_plane": 0.1,
+            "far_plane": 1000.0,
+            "speed": 3.5,
+            "node_index": 0
+        }
+    ],
+    "active_camera": 0,
+    "scene_scripts": { "on_play": [] }
+}

@@ -881,19 +881,63 @@ namespace
         return LaunchesEditor(selection) ? selection.editor : selection.player;
     }
 
-    int FindPlayerLaunchTargetIndex(const std::vector<LaunchTarget> &targets, const std::string &value)
+    // Validate the selection before launching. Requires a runnable target, and for
+    // project/scene targets (editor/player): a project folder that exists and holds a
+    // phasma_project.json, plus a startup scene that resolves to a real file (an empty
+    // startup scene is allowed — the runtime falls back to the manifest's scene).
+    bool ValidateLaunchSelection(const LauncherSelection &selection,
+                                 const std::vector<LaunchTarget> &targets,
+                                 std::string &error)
     {
-        int playerIndex = -1;
-        for (size_t i = 0; i < targets.size(); ++i)
+        const int index = FindLaunchTargetIndex(targets, selection.launchTarget);
+        if (index < 0)
         {
-            if (targets[i].kind == LaunchTargetKind::Editor)
-                continue;
-            if (targets[i].kind == LaunchTargetKind::Player && playerIndex < 0)
-                playerIndex = static_cast<int>(i);
-            if (targets[i].configValue == value)
-                return static_cast<int>(i);
+            error = "Select something to run.";
+            return false;
         }
-        return playerIndex;
+
+        std::error_code ec;
+        const LaunchTarget &target = targets[index];
+        if (!std::filesystem::exists(target.executablePath, ec))
+        {
+            error = "Run target not found: " + target.executablePath.string();
+            return false;
+        }
+        if (!LaunchesProjectScene(target))
+            return true;
+
+        const LaunchProfile &profile = ActiveProfile(selection);
+        if (profile.projectPath.empty())
+        {
+            error = "Select a project folder.";
+            return false;
+        }
+        const std::filesystem::path projectRoot(profile.projectPath);
+        if (!std::filesystem::exists(projectRoot, ec))
+        {
+            error = "Project folder does not exist: " + profile.projectPath;
+            return false;
+        }
+        if (!std::filesystem::exists(projectRoot / pe::kProjectManifestFileName, ec))
+        {
+            error = "Not a project (missing " + std::string(pe::kProjectManifestFileName) + "): " + profile.projectPath;
+            return false;
+        }
+
+        if (!profile.startupScene.empty())
+        {
+            const std::filesystem::path scene(profile.startupScene);
+            const bool found = scene.is_absolute()
+                                   ? std::filesystem::exists(scene, ec)
+                                   : (std::filesystem::exists(std::filesystem::path(pe::Path::Executable) / scene, ec) ||
+                                      std::filesystem::exists(projectRoot / scene, ec));
+            if (!found)
+            {
+                error = "Startup scene not found: " + profile.startupScene;
+                return false;
+            }
+        }
+        return true;
     }
 
 #if defined(PE_WIN32)
@@ -1048,6 +1092,203 @@ namespace
         }
         return true;
 #endif
+    }
+
+    // Locate tools/new_game.py by walking up from the launcher executable. Dev
+    // builds live at <repo>/build*/<config>/PhasmaLauncher, so the engine tools/
+    // dir is a couple of levels up. Returns an empty path if not found.
+    std::filesystem::path FindNewGameScript()
+    {
+        std::error_code ec;
+        std::filesystem::path probe = std::filesystem::path(pe::Path::Root).lexically_normal();
+        for (int i = 0; i < 8 && !probe.empty(); ++i)
+        {
+            const std::filesystem::path candidate = probe / "tools" / "new_game.py";
+            if (std::filesystem::exists(candidate, ec))
+                return candidate;
+            const std::filesystem::path parent = probe.parent_path();
+            if (parent == probe)
+                break;
+            probe = parent;
+        }
+        return {};
+    }
+
+    // Run tools/new_game.py synchronously to scaffold a mini-game project. Mirrors
+    // the cross-platform launch split used by LaunchExternalTarget: CreateProcess +
+    // wait on Windows, fork/exec + waitpid on POSIX (so it works on Linux/WSL).
+    // The interpreter is taken from PATH ("python" on Windows, "python3" elsewhere).
+    bool RunNewGameGenerator(const std::string &name,
+                             const std::string &templateName,
+                             const std::string &projectsDir,
+                             std::string &error)
+    {
+        const std::filesystem::path script = FindNewGameScript();
+        if (script.empty())
+        {
+            error = "Could not locate tools/new_game.py (run the launcher from the engine tree).";
+            return false;
+        }
+
+#if defined(PE_WIN32)
+        const std::string commandLine =
+            std::string("python ") + QuoteCommandLineArg(script.string()) +
+            " --name " + QuoteCommandLineArg(name) +
+            " --template " + QuoteCommandLineArg(templateName) +
+            " --dir " + QuoteCommandLineArg(projectsDir);
+
+        STARTUPINFOA startupInfo{};
+        startupInfo.cb = sizeof(startupInfo);
+        PROCESS_INFORMATION processInfo{};
+        std::string mutableCommandLine = commandLine;
+        if (!CreateProcessA(nullptr,
+                            mutableCommandLine.data(),
+                            nullptr,
+                            nullptr,
+                            FALSE,
+                            CREATE_NO_WINDOW,
+                            nullptr,
+                            nullptr,
+                            &startupInfo,
+                            &processInfo))
+        {
+            error = "Could not run python (is it on PATH?): " + std::to_string(GetLastError());
+            return false;
+        }
+
+        WaitForSingleObject(processInfo.hProcess, 120000);
+        DWORD exitCode = 1;
+        GetExitCodeProcess(processInfo.hProcess, &exitCode);
+        CloseHandle(processInfo.hThread);
+        CloseHandle(processInfo.hProcess);
+        if (exitCode != 0)
+        {
+            error = "new_game.py failed (exit " + std::to_string(exitCode) +
+                    "); check the name/folder and that Python is installed.";
+            return false;
+        }
+        return true;
+#else
+        const pid_t pid = fork();
+        if (pid < 0)
+        {
+            error = "Could not fork generator process";
+            return false;
+        }
+        if (pid == 0)
+        {
+            execlp("python3",
+                   "python3",
+                   script.c_str(),
+                   "--name",
+                   name.c_str(),
+                   "--template",
+                   templateName.c_str(),
+                   "--dir",
+                   projectsDir.c_str(),
+                   nullptr);
+            _exit(127);
+        }
+        int status = 0;
+        if (waitpid(pid, &status, 0) < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
+        {
+            error = "new_game.py failed; check the name/folder and that python3 is installed.";
+            return false;
+        }
+        return true;
+#endif
+    }
+
+    // A minimal but valid startup scene for a blank project: one perspective
+    // camera looking toward the origin and one directional sun, no meshes. The
+    // loader treats settings/cameras/active_camera as optional, and a camera
+    // authored as a node (component_flags 8 + camera{}) is what it actually uses.
+    constexpr const char *kEmptySceneJson = R"JSON({
+    "sources": [],
+    "meshes": [],
+    "nodes": [
+        {
+            "name": "Camera_0",
+            "parent": -1,
+            "local_matrix": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 3.0, 8.0, 1.0],
+            "component_flags": 8,
+            "camera": {
+                "projection": "perspective",
+                "fovx": 1.2,
+                "near_plane": 0.1,
+                "far_plane": 1000.0,
+                "speed": 3.5,
+                "euler": [0.3, 3.14159, 0.0]
+            }
+        },
+        {
+            "name": "Sun",
+            "parent": -1,
+            "local_matrix": [1.0, 0.0, 0.0, 0.0, 0.0, -0.001745, -0.999997, 0.0, 0.0, 0.999997, -0.001745, 0.0, 0.0, 30.0, 0.0, 1.0],
+            "component_flags": 2,
+            "light": { "type": "directional", "color": [1.0, 0.97, 0.9, 2.6] }
+        }
+    ],
+    "lights": [],
+    "cameras": [
+        {
+            "name": "Camera_0",
+            "position": [0.0, 3.0, 8.0],
+            "euler": [0.3, 3.14159, 0.0],
+            "fovx": 1.2,
+            "projection": "perspective",
+            "near_plane": 0.1,
+            "far_plane": 1000.0,
+            "speed": 3.5,
+            "node_index": 0
+        }
+    ],
+    "active_camera": 0,
+    "scene_scripts": { "on_play": [] }
+}
+)JSON";
+
+    // Create a blank project natively (no Python) AT the given project root: the
+    // phasma_project.json manifest via the shared ProjectConfig writer, plus the
+    // minimal startup scene above. `name` is the manifest display name.
+    bool CreateEmptyProject(const std::string &name, const std::filesystem::path &projectRoot, std::string &error)
+    {
+        std::error_code ec;
+        if (std::filesystem::exists(projectRoot / pe::kProjectManifestFileName, ec))
+        {
+            error = "A project already exists at " + projectRoot.string();
+            return false;
+        }
+        const std::filesystem::path scenesDir = projectRoot / "Assets" / "Scenes";
+        std::filesystem::create_directories(scenesDir, ec);
+        if (ec)
+        {
+            error = "Could not create project folders: " + ec.message();
+            return false;
+        }
+
+        pe::ProjectConfig config;
+        config.name = name;
+        config.root = projectRoot;
+        config.assetsDirectory = "Assets";
+        config.startupScene = "Assets/Scenes/main.pescene";
+        if (!config.WriteManifest(pe::ProjectConfig::DefaultManifestPath(projectRoot), &error))
+            return false;
+
+        const std::filesystem::path scenePath = scenesDir / "main.pescene";
+        std::ofstream sceneFile(scenePath, std::ios::binary | std::ios::trunc);
+        if (!sceneFile.is_open())
+        {
+            error = "Could not write " + scenePath.string();
+            return false;
+        }
+        sceneFile << kEmptySceneJson;
+        if (!sceneFile.good())
+        {
+            error = "Failed writing " + scenePath.string();
+            return false;
+        }
+        return true;
     }
 
     struct DisplayOption
@@ -1620,6 +1861,144 @@ namespace
         RefreshStartupScenes(profile);
     }
 
+    // "Project" panel: the project to launch, and where new projects are created.
+    // The "Project folder" field IS the project directory (browseable, editable) and
+    // is the single source of profile.projectPath; Template + Create scaffold a new
+    // project AT that folder (its name = the folder leaf; Empty is native, no Python;
+    // others shell out to
+    // tools/new_game.py). State persists in function-local statics (the launcher is a
+    // single short-lived modal, so this is safe).
+    void RenderProjectPanel(SDL_Window *window,
+                            LaunchProfile &profile,
+                            std::string &statusText,
+                            BrowseDialogState &browseDialog)
+    {
+        if (!ImGui::CollapsingHeader("Project", ImGuiTreeNodeFlags_DefaultOpen))
+            return;
+        (void)window;
+
+        static char folderBuffer[1024] = {};
+        static std::string appliedPath;
+        static int templateIndex = 0;
+        // Index 0 is the native blank project; the rest map to new_game.py templates.
+        static const char *kTemplateLabels[] = {"Empty", "Topdown mini-game"};
+        static const char *kTemplateScripts[] = {"", "topdown"};
+
+        ImGui::TextUnformatted("Project folder");
+        ImGui::SameLine(kFieldX);
+        ImGui::SetNextItemWidth(kSceneComboWidth);
+        ImGui::InputText("##project_folder", folderBuffer, sizeof(folderBuffer));
+        const bool folderActive = ImGui::IsItemActive();
+        ImGui::SameLine();
+        if (ImGui::Button("Open##project_folder", ImVec2(110.0f, 0.0f)))
+        {
+#if defined(PE_WIN32)
+            std::string selectedPath;
+            std::string browseError;
+            if (PickProjectPath(window, profile.projectPath, selectedPath, browseError))
+            {
+                ApplyPickedProject(profile, selectedPath);
+                CopyStringToArray(folderBuffer, profile.projectPath);
+                appliedPath = profile.projectPath;
+                statusText.clear();
+            }
+            else
+            {
+                statusText = browseError;
+            }
+#else
+            OpenBrowseDialog(browseDialog, BrowseDialogKind::Project, &profile, profile.projectPath, true, nullptr);
+            statusText.clear();
+#endif
+        }
+
+        ImGui::TextUnformatted("Template");
+        ImGui::SameLine(kFieldX);
+        ImGui::SetNextItemWidth(240.0f);
+        ImGui::Combo("##project_template", &templateIndex, kTemplateLabels, IM_ARRAYSIZE(kTemplateLabels));
+
+        ImGui::SetCursorPosX(kFieldX);
+        if (ImGui::Button("Create Project", ImVec2(180.0f, 0.0f)))
+        {
+            std::filesystem::path projectRoot(folderBuffer);
+            if (projectRoot.empty())
+            {
+                statusText = "New Project: a project folder is required.";
+            }
+            else
+            {
+                std::error_code ec;
+                projectRoot = std::filesystem::absolute(projectRoot, ec).lexically_normal();
+                // The project name is the folder's leaf (no separate Name field).
+                const std::string name = projectRoot.filename().string();
+                if (std::filesystem::exists(projectRoot / pe::kProjectManifestFileName, ec))
+                {
+                    statusText = "A project already exists in that folder.";
+                }
+                else if (std::filesystem::exists(projectRoot, ec) && !std::filesystem::is_empty(projectRoot, ec))
+                {
+                    statusText = "That folder already exists and is not empty.";
+                }
+                else
+                {
+                    std::string error;
+                    bool ok = false;
+                    if (templateIndex == 0)
+                    {
+                        ok = CreateEmptyProject(name, projectRoot, error);
+                    }
+                    else
+                    {
+                        // new_game.py creates <dir>/<leaf>; target the chosen folder
+                        // by splitting it into parent + leaf.
+                        ok = RunNewGameGenerator(projectRoot.filename().string(),
+                                                 kTemplateScripts[templateIndex],
+                                                 projectRoot.parent_path().string(),
+                                                 error);
+                    }
+                    if (ok)
+                    {
+                        ApplyPickedProject(profile, projectRoot.string());
+                        CopyStringToArray(folderBuffer, profile.projectPath);
+                        appliedPath = profile.projectPath;
+                        for (const std::string &scene : profile.startupScenes)
+                        {
+                            if (scene.find("main.pescene") != std::string::npos)
+                            {
+                                profile.startupScene = scene;
+                                break;
+                            }
+                        }
+                        statusText = "Created project: " + projectRoot.string();
+                    }
+                    else
+                    {
+                        statusText = error;
+                    }
+                }
+            }
+        }
+
+        // Keep the folder field and the active project in sync, but only while the
+        // user is not mid-edit (so we never fight the cursor). External changes
+        // (browse completion, first load) flow profile -> buffer; settled edits flow
+        // buffer -> profile (which also refreshes the startup-scene list).
+        if (!folderActive)
+        {
+            if (profile.projectPath != appliedPath && profile.projectPath != std::string(folderBuffer))
+            {
+                CopyStringToArray(folderBuffer, profile.projectPath);
+                appliedPath = profile.projectPath;
+            }
+            else if (folderBuffer[0] != '\0' && std::string(folderBuffer) != appliedPath)
+            {
+                ApplyPickedProject(profile, std::string(folderBuffer));
+                appliedPath = profile.projectPath;
+                CopyStringToArray(folderBuffer, profile.projectPath);
+            }
+        }
+    }
+
     std::filesystem::path ExistingBrowseDirectory(std::filesystem::path path)
     {
         if (path.empty())
@@ -1980,7 +2359,7 @@ namespace
         ImGui::EndPopup();
     }
 
-    void RenderProjectSceneControls(const char *id,
+    void RenderStartupSceneControls(const char *id,
                                     SDL_Window *window,
                                     LaunchProfile &profile,
                                     std::string &statusText,
@@ -1988,33 +2367,6 @@ namespace
     {
         (void)window;
         ImGui::PushID(id);
-
-        ImGui::TextUnformatted("Project");
-        ImGui::SameLine(kFieldX);
-        char projectBuffer[2048] = {};
-        CopyStringToArray(projectBuffer, profile.projectPath);
-        ImGui::SetNextItemWidth(kSceneComboWidth);
-        ImGui::InputText("##project_path", projectBuffer, sizeof(projectBuffer), ImGuiInputTextFlags_ReadOnly);
-        ImGui::SameLine();
-        if (ImGui::Button("Open##project", ImVec2(110.0f, 0.0f)))
-        {
-#if defined(PE_WIN32)
-            std::string selectedPath;
-            std::string browseError;
-            if (PickProjectPath(window, profile.projectPath, selectedPath, browseError))
-            {
-                ApplyPickedProject(profile, selectedPath);
-                statusText.clear();
-            }
-            else
-            {
-                statusText = browseError;
-            }
-#else
-            OpenBrowseDialog(browseDialog, BrowseDialogKind::Project, &profile, profile.projectPath, true, nullptr);
-            statusText.clear();
-#endif
-        }
 
         ImGui::TextUnformatted("Startup scene");
         ImGui::SameLine(kFieldX);
@@ -2062,37 +2414,6 @@ namespace
         }
 
         ImGui::PopID();
-    }
-
-    void RenderPlayerTargetControls(const std::vector<LaunchTarget> &targets, LauncherSelection &selection)
-    {
-        int playerTargetIndex = FindPlayerLaunchTargetIndex(targets, selection.launchTarget);
-        if (playerTargetIndex < 0)
-            return;
-
-        selection.launchTarget = targets[playerTargetIndex].configValue;
-
-        ImGui::TextUnformatted("Run");
-        ImGui::SameLine(kFieldX);
-        ImGui::SetNextItemWidth(kFieldWidth);
-        if (ImGui::BeginCombo("##player_target", targets[playerTargetIndex].label.c_str()))
-        {
-            for (int i = 0; i < static_cast<int>(targets.size()); ++i)
-            {
-                if (targets[i].kind == LaunchTargetKind::Editor)
-                    continue;
-
-                const bool selected = i == playerTargetIndex;
-                if (ImGui::Selectable(targets[i].label.c_str(), selected))
-                {
-                    playerTargetIndex = i;
-                    selection.launchTarget = targets[playerTargetIndex].configValue;
-                }
-                if (selected)
-                    ImGui::SetItemDefaultFocus();
-            }
-            ImGui::EndCombo();
-        }
     }
 
     void RenderValidationControls(const char *id, bool &coreValidation)
@@ -2186,7 +2507,6 @@ namespace
         bool settingsEditorOpen = false;
         bool settingsDirty = false;
         BrowseDialogState browseDialog;
-        bool applyInitialTabSelection = true;
         const std::vector<DisplayOption> displays = EnumerateDisplays();
         if (!displays.empty() &&
             (selection.displayIndex < 0 || selection.displayIndex >= static_cast<int>(displays.size())))
@@ -2221,222 +2541,143 @@ namespace
                          nullptr,
                          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
 
-            ImGui::TextUnformatted("Backend");
-            ImGui::SameLine(kFieldX);
-            ImGui::BeginDisabled(selection.apiLocked);
-            bool vulkan = selection.api == PE_GRAPHICS_API_VULKAN;
-            if (ImGui::RadioButton("Vulkan", vulkan))
-                selection.api = PE_GRAPHICS_API_VULKAN;
-            ImGui::SameLine();
-            bool dx12 = selection.api == PE_GRAPHICS_API_DX12;
-#if defined(PE_WIN32)
-            if (ImGui::RadioButton("DX12", dx12))
-                selection.api = PE_GRAPHICS_API_DX12;
-#else
-            ImGui::BeginDisabled(true);
-            ImGui::RadioButton("DX12", dx12);
-            ImGui::EndDisabled();
-#endif
-            ImGui::EndDisabled();
+            // Project: the project to launch (and where new projects are created).
+            RenderProjectPanel(window, selection.editor, statusText, browseDialog);
 
-            if (selection.api == PE_GRAPHICS_API_VULKAN)
-                RenderValidationControls("vulkan_validation", selection.validation.vulkanCoreValidation);
-#if defined(PE_WIN32)
-            if (selection.api == PE_GRAPHICS_API_DX12)
-                RenderValidationControls("dx12_validation", selection.validation.dx12CoreValidation);
-#endif
-
-            const std::array<GpuAdapterPreferenceOption, 4> gpuOptions = GpuAdapterPreferenceOptions();
-            const int gpuIndex = FindGpuAdapterPreferenceOptionIndex(selection.gpuAdapterPreference);
-            ImGui::TextUnformatted("GPU");
-            ImGui::SameLine(kFieldX);
-            ImGui::SetNextItemWidth(kFieldWidth);
-            if (ImGui::BeginCombo("##gpu_adapter_preference", gpuOptions[gpuIndex].label))
+            // Launch Options: what to run, against the project above + its startup
+            // scene. The Run dropdown (over every launch target) replaces the old
+            // Editor/Player tabs; one project selection feeds whichever is launched.
+            if (ImGui::CollapsingHeader("Launch Options", ImGuiTreeNodeFlags_DefaultOpen))
             {
-                for (int i = 0; i < static_cast<int>(gpuOptions.size()); ++i)
-                {
-                    const bool selected = (i == gpuIndex);
-                    if (ImGui::Selectable(gpuOptions[i].label, selected))
-                        selection.gpuAdapterPreference = gpuOptions[i].preference;
-                    if (selected)
-                        ImGui::SetItemDefaultFocus();
-                }
-                ImGui::EndCombo();
-            }
-
-            if (!displays.empty())
-            {
-                ImGui::TextUnformatted("Display");
+                int runIndex = FindLaunchTargetIndex(targets, selection.launchTarget);
+                if (runIndex < 0)
+                    runIndex = 0;
+                ImGui::TextUnformatted("Run");
                 ImGui::SameLine(kFieldX);
                 ImGui::SetNextItemWidth(kFieldWidth);
-                const char *displayPreview = displays.front().label.c_str();
-                for (const DisplayOption &option : displays)
+                if (!targets.empty() && ImGui::BeginCombo("##run_target", targets[runIndex].label.c_str()))
                 {
-                    if (option.index == selection.displayIndex)
+                    for (int i = 0; i < static_cast<int>(targets.size()); ++i)
                     {
-                        displayPreview = option.label.c_str();
-                        break;
-                    }
-                }
-                if (ImGui::BeginCombo("##display", displayPreview))
-                {
-                    for (const DisplayOption &option : displays)
-                    {
-                        const bool selected = option.index == selection.displayIndex;
-                        if (ImGui::Selectable(option.label.c_str(), selected))
-                            selection.displayIndex = option.index;
+                        const bool selected = i == runIndex;
+                        if (ImGui::Selectable(targets[i].label.c_str(), selected))
+                            selection.launchTarget = targets[i].configValue;
                         if (selected)
                             ImGui::SetItemDefaultFocus();
                     }
                     ImGui::EndCombo();
                 }
+
+                const int activeIndex = FindLaunchTargetIndex(targets, selection.launchTarget);
+                const bool projectSceneTarget = activeIndex >= 0 && LaunchesProjectScene(targets[activeIndex]);
+                ImGui::BeginDisabled(!projectSceneTarget);
+                RenderStartupSceneControls("scene", window, selection.editor, statusText, browseDialog);
+                ImGui::EndDisabled();
             }
 
-            const std::array<PresentModeOption, 5> presentOptions = PresentModeOptions();
-            const int presentIndex = FindPresentModeOptionIndex(selection.presentModeOverride);
-            ImGui::TextUnformatted("Present mode");
-            ImGui::SameLine(kFieldX);
-            ImGui::SetNextItemWidth(kFieldWidth);
-            if (ImGui::BeginCombo("##present_mode", presentOptions[presentIndex].label))
+            // Target-derived state, kept current whether or not Launch Options is
+            // expanded: the active tab follows the Run target, and one project
+            // selection drives every target.
             {
-                for (int i = 0; i < static_cast<int>(presentOptions.size()); ++i)
-                {
-                    const bool selected = (i == presentIndex);
-                    if (ImGui::Selectable(presentOptions[i].label, selected))
-                        selection.presentModeOverride = presentOptions[i].mode;
-                    if (selected)
-                        ImGui::SetItemDefaultFocus();
-                }
-                ImGui::EndCombo();
-            }
-
-            ImGui::TextUnformatted("Settings");
-            ImGui::SameLine(kFieldX);
-            char settingsPathBuffer[2048] = {};
-            const std::string settingsPath = RuntimeSettingsPath().generic_string();
-            CopyStringToArray(settingsPathBuffer, settingsPath);
-            ImGui::SetNextItemWidth(kSettingsPathWidth);
-            ImGui::InputText("##settings_path", settingsPathBuffer, sizeof(settingsPathBuffer), ImGuiInputTextFlags_ReadOnly);
-            ImGui::SameLine();
-            if (ImGui::Button(settingsEditorOpen ? "Hide" : "Edit", ImVec2(110.0f, 0.0f)))
-                settingsEditorOpen = !settingsEditorOpen;
-            ImGui::SameLine();
-            if (ImGui::Button("Open", ImVec2(100.0f, 0.0f)))
-            {
-#if defined(PE_WIN32)
-                std::string selectedPath;
-                std::string browseError;
-                if (PickSettingsFile(window, selectedPath, browseError))
-                {
-                    std::string pickedText;
-                    std::string readError;
-                    if (ReadTextFile(selectedPath, pickedText, readError))
-                    {
-                        if (!CopyTextToBuffer(settingsBuffer, pickedText))
-                            statusText = "Picked settings file is too large; showing a truncated copy.";
-                        else
-                            statusText = "Picked settings loaded into the editor.";
-                        settingsEditorOpen = true;
-                        settingsDirty = true;
-                    }
-                    else
-                    {
-                        statusText = readError;
-                    }
-                }
-                else
-                {
-                    statusText = browseError;
-                }
-#else
-                OpenBrowseDialog(browseDialog,
-                                 BrowseDialogKind::SettingsFile,
-                                 nullptr,
-                                 RuntimeSettingsPath().parent_path(),
-                                 false,
-                                 ".json");
-                statusText.clear();
-#endif
-            }
-
-            if (settingsEditorOpen)
-            {
-                ImGui::SetNextItemWidth(kFieldWidth);
-                if (ImGui::InputTextMultiline("##settings_json",
-                                              settingsBuffer.data(),
-                                              settingsBuffer.size(),
-                                              ImVec2(kFieldWidth, 170.0f),
-                                              ImGuiInputTextFlags_AllowTabInput))
-                {
-                    settingsDirty = true;
-                }
-
-                ImGui::SameLine();
-                ImGui::BeginGroup();
-                if (ImGui::Button("Save", ImVec2(96.0f, 0.0f)))
-                {
-                    std::string saveError;
-                    if (SaveSettingsBuffer(settingsBuffer, saveError))
-                    {
-                        settingsDirty = false;
-                        statusText = "Settings saved.";
-                    }
-                    else
-                    {
-                        statusText = saveError;
-                    }
-                }
-                if (ImGui::Button("Reload", ImVec2(96.0f, 0.0f)))
-                {
-                    std::string reloadText;
-                    std::string reloadError;
-                    if (ReadTextFile(RuntimeSettingsPath(), reloadText, reloadError))
-                    {
-                        CopyTextToBuffer(settingsBuffer, reloadText);
-                        settingsDirty = false;
-                        statusText = "Settings reloaded.";
-                    }
-                    else
-                    {
-                        statusText = reloadError;
-                    }
-                }
-                ImGui::EndGroup();
+                const int activeIndex = FindLaunchTargetIndex(targets, selection.launchTarget);
+                selection.activeTab = (activeIndex >= 0 && targets[activeIndex].kind == LaunchTargetKind::Editor)
+                                          ? LauncherTab::Editor
+                                          : LauncherTab::Player;
+                selection.player = selection.editor;
             }
 
             ImGui::Separator();
 
-            if (ImGui::BeginTabBar("##launcher_tabs"))
+            if (ImGui::CollapsingHeader("Rendering", ImGuiTreeNodeFlags_DefaultOpen))
             {
-                const ImGuiTabItemFlags editorTabFlags =
-                    applyInitialTabSelection && selection.activeTab == LauncherTab::Editor ? ImGuiTabItemFlags_SetSelected : 0;
-                if (ImGui::BeginTabItem("Editor", nullptr, editorTabFlags))
+                ImGui::TextUnformatted("Backend");
+                ImGui::SameLine(kFieldX);
+                ImGui::BeginDisabled(selection.apiLocked);
+                bool vulkan = selection.api == PE_GRAPHICS_API_VULKAN;
+                if (ImGui::RadioButton("Vulkan", vulkan))
+                    selection.api = PE_GRAPHICS_API_VULKAN;
+                ImGui::SameLine();
+                bool dx12 = selection.api == PE_GRAPHICS_API_DX12;
+#if defined(PE_WIN32)
+                if (ImGui::RadioButton("DX12", dx12))
+                    selection.api = PE_GRAPHICS_API_DX12;
+#else
+                ImGui::BeginDisabled(true);
+                ImGui::RadioButton("DX12", dx12);
+                ImGui::EndDisabled();
+#endif
+                ImGui::EndDisabled();
+
+                if (selection.api == PE_GRAPHICS_API_VULKAN)
+                    RenderValidationControls("vulkan_validation", selection.validation.vulkanCoreValidation);
+#if defined(PE_WIN32)
+                if (selection.api == PE_GRAPHICS_API_DX12)
+                    RenderValidationControls("dx12_validation", selection.validation.dx12CoreValidation);
+#endif
+
+                const std::array<GpuAdapterPreferenceOption, 4> gpuOptions = GpuAdapterPreferenceOptions();
+                const int gpuIndex = FindGpuAdapterPreferenceOptionIndex(selection.gpuAdapterPreference);
+                ImGui::TextUnformatted("GPU");
+                ImGui::SameLine(kFieldX);
+                ImGui::SetNextItemWidth(kFieldWidth);
+                if (ImGui::BeginCombo("##gpu_adapter_preference", gpuOptions[gpuIndex].label))
                 {
-                    selection.activeTab = LauncherTab::Editor;
-                    selection.launchTarget = k_editorLaunchTarget;
-                    RenderProjectSceneControls("editor", window, selection.editor, statusText, browseDialog);
-                    ImGui::EndTabItem();
+                    for (int i = 0; i < static_cast<int>(gpuOptions.size()); ++i)
+                    {
+                        const bool selected = (i == gpuIndex);
+                        if (ImGui::Selectable(gpuOptions[i].label, selected))
+                            selection.gpuAdapterPreference = gpuOptions[i].preference;
+                        if (selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
                 }
 
-                const ImGuiTabItemFlags playerTabFlags =
-                    applyInitialTabSelection && selection.activeTab == LauncherTab::Player ? ImGuiTabItemFlags_SetSelected : 0;
-                if (ImGui::BeginTabItem("Player", nullptr, playerTabFlags))
+                if (!displays.empty())
                 {
-                    selection.activeTab = LauncherTab::Player;
-                    if (selection.launchTarget.empty() || selection.launchTarget == k_editorLaunchTarget)
-                        selection.launchTarget = k_playerLaunchTarget;
-                    RenderPlayerTargetControls(targets, selection);
-
-                    const int playerTargetIndex = FindLaunchTargetIndex(targets, selection.launchTarget);
-                    const bool projectSceneTarget =
-                        playerTargetIndex >= 0 && LaunchesProjectScene(targets[playerTargetIndex]);
-                    ImGui::BeginDisabled(!projectSceneTarget);
-                    RenderProjectSceneControls("player", window, selection.player, statusText, browseDialog);
-                    ImGui::EndDisabled();
-                    ImGui::EndTabItem();
+                    ImGui::TextUnformatted("Display");
+                    ImGui::SameLine(kFieldX);
+                    ImGui::SetNextItemWidth(kFieldWidth);
+                    const char *displayPreview = displays.front().label.c_str();
+                    for (const DisplayOption &option : displays)
+                    {
+                        if (option.index == selection.displayIndex)
+                        {
+                            displayPreview = option.label.c_str();
+                            break;
+                        }
+                    }
+                    if (ImGui::BeginCombo("##display", displayPreview))
+                    {
+                        for (const DisplayOption &option : displays)
+                        {
+                            const bool selected = option.index == selection.displayIndex;
+                            if (ImGui::Selectable(option.label.c_str(), selected))
+                                selection.displayIndex = option.index;
+                            if (selected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
                 }
-                ImGui::EndTabBar();
-                applyInitialTabSelection = false;
+
+                const std::array<PresentModeOption, 5> presentOptions = PresentModeOptions();
+                const int presentIndex = FindPresentModeOptionIndex(selection.presentModeOverride);
+                ImGui::TextUnformatted("Present mode");
+                ImGui::SameLine(kFieldX);
+                ImGui::SetNextItemWidth(kFieldWidth);
+                if (ImGui::BeginCombo("##present_mode", presentOptions[presentIndex].label))
+                {
+                    for (int i = 0; i < static_cast<int>(presentOptions.size()); ++i)
+                    {
+                        const bool selected = (i == presentIndex);
+                        if (ImGui::Selectable(presentOptions[i].label, selected))
+                            selection.presentModeOverride = presentOptions[i].mode;
+                        if (selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
             }
 
             RenderBrowseDialog(browseDialog, settingsBuffer, settingsEditorOpen, settingsDirty, statusText);
@@ -2450,21 +2691,18 @@ namespace
             ImGui::SetCursorPos(ImVec2(kLaunchButtonX, kLauncherHeight - 54.0f));
             if (ImGui::Button("Launch", ImVec2(90.0f, 28.0f)))
             {
-                if (settingsDirty)
+                std::string error;
+                if (settingsDirty && !SaveSettingsBuffer(settingsBuffer, error))
                 {
-                    std::string saveError;
-                    if (!SaveSettingsBuffer(settingsBuffer, saveError))
-                    {
-                        statusText = saveError;
-                    }
-                    else
-                    {
-                        settingsDirty = false;
-                    }
+                    statusText = error;
                 }
-
-                if (!settingsDirty)
+                else if (!ValidateLaunchSelection(selection, targets, error))
                 {
+                    statusText = error;
+                }
+                else
+                {
+                    settingsDirty = false;
                     selection.accepted = true;
                     result = LauncherDialogResult::Launch;
                     running = false;
@@ -2548,10 +2786,21 @@ namespace
             currentScene = ReadEditorConfigStartupScene();
 
         std::string currentProjectPath = ReadJsonStringField(RuntimeSettingsPath(), pe::kProjectPathSettingsKey);
-        if (currentProjectPath.empty() || !std::filesystem::exists(currentProjectPath))
-            currentProjectPath = NormalizeProjectPath(std::filesystem::path(pe::Path::Assets));
-        else
+        if (!currentProjectPath.empty() && std::filesystem::exists(currentProjectPath))
+        {
             currentProjectPath = NormalizeConfiguredProjectPath(currentProjectPath);
+        }
+        else
+        {
+            // No (valid) user project selected: default to the bundled minimal default
+            // project copied next to the exe, falling back to the built-in assets root.
+            std::error_code ec;
+            const std::filesystem::path defaultProject = std::filesystem::path(pe::Path::Root) / "DefaultProject";
+            if (std::filesystem::exists(defaultProject / pe::kProjectManifestFileName, ec))
+                currentProjectPath = NormalizeProjectPath(defaultProject);
+            else
+                currentProjectPath = NormalizeProjectPath(std::filesystem::path(pe::Path::Assets));
+        }
         std::string currentLaunchTarget = ReadJsonStringField(RuntimeSettingsPath(), k_launchTargetKey);
         if (currentLaunchTarget.empty())
             currentLaunchTarget = k_editorLaunchTarget;

@@ -183,3 +183,81 @@ The fastest useful slice is:
 Expected result: simple mini-games should move from idea to playable loop in
 under an hour, because the session starts from a working player project rather
 than from raw engine setup.
+
+## Slice 1 — Shipped (2026-06-19)
+
+The first slice landed and was verified by playtest. It refines the proposal
+above in a few places (noted inline); the rest of this page is still the
+forward roadmap.
+
+### What shipped
+
+1. **`scene.instantiate_prefab(path, parent?)` Lua binding.** Wraps the existing
+   `Scene::InstantiatePrefab` (registered in
+   `Phasma/Runtime/Code/Script/Bindings/Scene/SceneBindings.cpp`). The path
+   resolves against the active project's `Assets/` first, then the engine
+   `RuntimeAssets/` tree, with an as-given fallback for absolute paths. Returns
+   the instance-root node handle, or `nil` on failure. This is what makes
+   `.peprefab` assets reusable from Lua — before slice 1 they were loadable from
+   C++/editor only.
+2. **Full `gamekit` Lua library.** Canonical source under
+   `Phasma/Runtime/RuntimeAssets/Scripts/gamekit/`: `init` (loader + assembly),
+   `json`, `loop`, `scene`, `pool`, `actor`, `input`, `camera`, `pick`, `ui`,
+   `timer`, `tween`, `wave`, `grid`, `deck`, `save`, `audio`. PhasmaEngine's Lua
+   does not wire `require` to the project tree, so `gamekit/init.lua` reads and
+   compiles its sibling modules via `fs.read` + `load` (mirroring the
+   Warbound/ATH project convention), and a game's entry script bootstraps it the
+   same way. `loop` owns the single `script.on_update(..., "play")` tick and fans
+   systems out in a stable phase order (`pre` → timer/input, `main` →
+   waves/actors, `post` → camera/tween).
+3. **`topdown_arena` scene template.** Built programmatically by
+   `tools/minigamekit.py` (the single source of truth for the `.pescene` /
+   `.peprefab` JSON schema); a reference copy lives at
+   `tools/templates/topdown_arena.pescene`. It carries an angled orthographic
+   camera, a directional sun, a flat floor, a player sphere, an authored disabled
+   pool of 32 `Enemy_NNN` + 64 `Shot_NNN` cubes parked offscreen at `Y=-1000`,
+   and a top-left HUD (HP bar + wave label) on the `__scene_ui` screen.
+4. **Prefab pack** under `Phasma/Runtime/RuntimeAssets/Prefabs/`: `actor`,
+   `projectile`, `pickup`, `trigger`, `health_bar`, `selection_ring`, `card`.
+5. **`tools/new_game.py`.** `--name <Name> [--template topdown] [--dir ...]
+   [--api vulkan]` emits a self-contained project: `phasma_project.json`,
+   `Assets/Scenes/main.pescene`, the entry script `Assets/Scripts/<name>.lua`,
+   a pinned copy of `gamekit/` and the prefab pack into `Assets/`, and
+   `run_smoke.ps1` (writes `phasma_settings.json` next to the player exe, launches
+   `PhasmaPlayer --api vulkan`, and checks the log). `--update-gamekit` refreshes
+   the copied snapshot in place.
+6. **Launcher integration.** The PhasmaLauncher Editor tab has a **New Project**
+   panel (name + template + folder) that creates a project and selects it for the
+   editor (project creation is an authoring activity). The
+   default **Empty** template is created natively in C++ — the `phasma_project.json`
+   manifest via `ProjectConfig::WriteManifest`, plus a minimal camera + sun startup
+   scene — with no external dependency. Other templates (currently **Topdown
+   mini-game**) shell out to `new_game.py`; that shell-out is cross-platform
+   (CreateProcess on Windows, `fork`/`exec` on Linux/WSL, mirroring the launcher's
+   existing process-launch split) and finds `tools/new_game.py` by walking up from
+   the launcher executable, so it needs Python on `PATH` and the engine tree
+   reachable.
+
+### Deltas from the proposal above
+
+- **Templates:** slice 1 ships **topdown only**. `isometric` and `card` (§1, §2)
+  are a fast-follow; `gamekit/grid` and `gamekit/deck` already ship for them but
+  are not exercised by the topdown smoke.
+- **Script layout:** the entry point is the scene's
+  `scene_scripts.on_play` manifest → `Assets/Scripts/<game>.lua`, **not** the
+  `Scripts/global/<game>.lua` + `Scripts/game/` skeleton sketched in §1.
+- **Targeted bindings (§5):** only the prefab-instantiate binding was added in
+  C++. Find-by-tag, input action maps, mouse-to-world, and save/load JSON are
+  implemented in **pure Lua inside `gamekit`** (`scene.find_all`, `input`,
+  `pick`, `save` + `json`) rather than as new engine surfaces.
+- **Still deferred:** the Runtime UI Designer (§6), iso/card templates, and the
+  procedural human-like rig (§3).
+
+### Verification
+
+Playtested via `new_game.py --name TestTopdown` → `run_smoke.ps1` against the
+Vulkan player: scene loads at ~170 FPS with zero Lua errors, the pickup prefab
+instantiates through the new binding, wave 1 spawns and (after the enemies home
+in and recycle to the pool) wave 2 starts, and a forced movement axis displaces
+the player node by the exact expected distance — confirming the
+`input → actor:move_dir → set_position` path the WASD controls drive.

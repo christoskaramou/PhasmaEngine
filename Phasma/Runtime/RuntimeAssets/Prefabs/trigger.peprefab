@@ -1,0 +1,45 @@
+{
+    "asset_type": "prefab",
+    "version": 1,
+    "root": 0,
+    "sources": [
+        {
+            "primitive_type": "cube",
+            "primitive_params": [
+                1.0
+            ]
+        }
+    ],
+    "meshes": [
+        {
+            "source": 0,
+            "source_mesh": 0
+        }
+    ],
+    "nodes": [
+        {
+            "name": "Trigger",
+            "parent": -1,
+            "local_matrix": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "component_flags": 1,
+            "mesh": 0
+        }
+    ]
+}
