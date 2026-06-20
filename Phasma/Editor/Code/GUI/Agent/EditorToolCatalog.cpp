@@ -1427,18 +1427,20 @@ namespace pe
             {
                 ToolDefinition tool;
                 tool.name = "get_map_shot";
-                tool.description = "Renders a clean top-down 'map shot' of the scene for spatial authoring: frames an orthographic camera "
-                                   "over the visible world bounds, captures the scene to PNG, and writes a sidecar '<image>.map.json' "
-                                   "manifest. The manifest projects every visible node's AABB to pixel space (center_px, aabb_px) keyed to "
-                                   "name/id, plus the view_projection, camera, world_bounds and ground_y — so you read the picture for layout "
-                                   "AND get exact pixel boxes/labels and world coords (overlay them yourself if you want them drawn). The image "
-                                   "is clean by default; pass draw_boxes:true to also render the engine AABB wireframes into it (noisy on dense "
+                tool.description = "Renders a top-down 'map shot' of the scene for spatial authoring: frames an orthographic camera over the "
+                                   "visible world bounds, captures the scene to PNG, and writes a sidecar '<image>.map.json' manifest that "
+                                   "projects every visible node's AABB to pixel space (center_px, aabb_px) keyed to name/id, plus the "
+                                   "view_projection, camera, world_bounds and ground_y. By DEFAULT it also writes '<image>.annotated.png' "
+                                   "(annotated_image_path) with a world-coordinate grid, coordinate labels, per-node AABB boxes and the "
+                                   "world-bounds frame drawn in — read THAT image for layout. Pass annotate:false for the clean render only. "
+                                   "draw_boxes:true additionally renders the engine AABB wireframes into the base capture (noisy on dense "
                                    "scenes). Restores the camera afterward. Args: padding (fit margin, default 1.1), max_dimension (PNG cap, "
-                                   "default 2048), draw_boxes (default false).";
+                                   "default 2048), annotate (default true), draw_boxes (default false).";
                 tool.inputSchema = schema::Object({
                     {"padding", "Fit margin around the world bounds (default 1.1)", schema::Number()},
                     {"max_dimension", "Max PNG width/height in px (default 2048)", schema::Integer()},
-                    {"draw_boxes", "Also draw engine AABB wireframes into the image (default false)", schema::Boolean()},
+                    {"annotate", "Draw a coordinate grid + labels + node AABB boxes onto a *.annotated.png (default true)", schema::Boolean()},
+                    {"draw_boxes", "Also draw engine AABB wireframes into the base capture (default false)", schema::Boolean()},
                 });
                 tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
                 {

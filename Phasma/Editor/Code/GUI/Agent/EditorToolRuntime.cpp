@@ -17,13 +17,11 @@
 #include "Script/ScriptRuntimeHooks.h"
 #include "Script/ScriptSystem.h"
 #include "Systems/RendererSystem.h"
+#include "Render/ScreenshotWriter.h"
 #include "Phasma/MCP/Utils.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
 #include "stb_image.h"
-#include <fstream>
-#include <numeric>
-#include <thread>
 
 #if defined(PE_WIN32)
 #ifndef NOMINMAX
@@ -45,6 +43,116 @@ namespace pe
 {
     namespace
     {
+        // --- get_map_shot annotated overlay (Phase 2b.1): tiny CPU rasteriser ----------
+        // Draws onto the captured RGBA8 map image: a world-coordinate grid, 7-segment
+        // coordinate labels, per-node AABB boxes, and the world-bounds frame. Reuses the
+        // pixel projection get_map_shot already computes — no render pass / shader work.
+        namespace mapoverlay
+        {
+            struct Col
+            {
+                uint8_t r, g, b, a;
+            };
+
+            inline void Blend(uint8_t *img, int W, int H, int x, int y, Col c)
+            {
+                if (x < 0 || y < 0 || x >= W || y >= H)
+                    return;
+                uint8_t *p = img + (static_cast<size_t>(y) * W + x) * 4;
+                const float a = c.a / 255.0f;
+                p[0] = static_cast<uint8_t>(p[0] * (1.0f - a) + c.r * a);
+                p[1] = static_cast<uint8_t>(p[1] * (1.0f - a) + c.g * a);
+                p[2] = static_cast<uint8_t>(p[2] * (1.0f - a) + c.b * a);
+                p[3] = 255;
+            }
+
+            inline void FillRect(uint8_t *img, int W, int H, int x0, int y0, int x1, int y1, Col c)
+            {
+                if (x1 < x0)
+                    std::swap(x0, x1);
+                if (y1 < y0)
+                    std::swap(y0, y1);
+                for (int y = y0; y <= y1; ++y)
+                    for (int x = x0; x <= x1; ++x)
+                        Blend(img, W, H, x, y, c);
+            }
+
+            inline void Line(uint8_t *img, int W, int H, int x0, int y0, int x1, int y1, Col c)
+            {
+                int dx = std::abs(x1 - x0), dy = -std::abs(y1 - y0);
+                int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+                int err = dx + dy;
+                for (int guard = 0; guard < W + H + 4; ++guard)
+                {
+                    Blend(img, W, H, x0, y0, c);
+                    if (x0 == x1 && y0 == y1)
+                        break;
+                    int e2 = 2 * err;
+                    if (e2 >= dy)
+                    {
+                        err += dy;
+                        x0 += sx;
+                    }
+                    if (e2 <= dx)
+                    {
+                        err += dx;
+                        y0 += sy;
+                    }
+                }
+            }
+
+            inline void Box(uint8_t *img, int W, int H, int x0, int y0, int x1, int y1, Col c)
+            {
+                Line(img, W, H, x0, y0, x1, y0, c);
+                Line(img, W, H, x1, y0, x1, y1, c);
+                Line(img, W, H, x1, y1, x0, y1, c);
+                Line(img, W, H, x0, y1, x0, y0, c);
+            }
+
+            // One 7-segment glyph at (x,y) in a w x h cell, stroke t. Supports 0-9, '-', '.'.
+            // Returns the advance in pixels. Bit order a b c d e f g (a=0x40 .. g=0x01).
+            inline int Glyph(uint8_t *img, int W, int H, int x, int y, char ch, int w, int h, int t, Col c)
+            {
+                if (ch == '.')
+                {
+                    FillRect(img, W, H, x, y + h - t, x + t, y + h, c);
+                    return t * 2;
+                }
+                if (ch == '-')
+                {
+                    FillRect(img, W, H, x, y + h / 2 - t / 2, x + w, y + h / 2 + t / 2, c);
+                    return w + t;
+                }
+                if (ch < '0' || ch > '9')
+                    return w + t;
+                static const uint8_t seg[10] = {0x7E, 0x30, 0x6D, 0x79, 0x33, 0x5B, 0x5F, 0x70, 0x7F, 0x7B};
+                const uint8_t s = seg[ch - '0'];
+                const int xr = x + w, ym = y + h / 2, yb = y + h;
+                if (s & 0x40)
+                    FillRect(img, W, H, x, y, xr, y + t, c); // a top
+                if (s & 0x20)
+                    FillRect(img, W, H, xr - t, y, xr, ym, c); // b top-right
+                if (s & 0x10)
+                    FillRect(img, W, H, xr - t, ym, xr, yb, c); // c bottom-right
+                if (s & 0x08)
+                    FillRect(img, W, H, x, yb - t, xr, yb, c); // d bottom
+                if (s & 0x04)
+                    FillRect(img, W, H, x, ym, x + t, yb, c); // e bottom-left
+                if (s & 0x02)
+                    FillRect(img, W, H, x, y, x + t, ym, c); // f top-left
+                if (s & 0x01)
+                    FillRect(img, W, H, x, ym - t / 2, xr, ym + t / 2, c); // g middle
+                return w + t;
+            }
+
+            inline void Number(uint8_t *img, int W, int H, int x, int y, const std::string &str, int w, int h, int t,
+                               Col c)
+            {
+                for (char ch : str)
+                    x += Glyph(img, W, H, x, y, ch, w, h, t, c);
+            }
+        } // namespace mapoverlay
+
         static std::string ToLower(std::string s)
         {
             for (auto &c : s)
@@ -4303,6 +4411,10 @@ namespace pe
         // pixel space, so the default image is a clean top-down render. Drawing the
         // engine AABB pass into the image (draw_boxes:true) is noisy on dense scenes.
         const bool drawBoxes = args.value("draw_boxes", false);
+        // Annotated overlay (Phase 2b.1): draw a world coordinate grid + 7-segment coord
+        // labels + per-node AABB boxes + the bounds frame onto a *.annotated.png copy. On
+        // by default — that annotated image is what the agent reads.
+        const bool annotate = args.value("annotate", true);
 
         struct Shot
         {
@@ -4412,7 +4524,7 @@ namespace pe
         auto outMtx = std::make_shared<std::mutex>();
         auto outCv = std::make_shared<std::condition_variable>();
 
-        QueueAction([shot, cap, out, outDone, outMtx, outCv]()
+        QueueAction([shot, cap, out, outDone, outMtx, outCv, annotate]()
                     {
             auto *r = GetGlobalSystem<RendererSystem>();
             nlohmann::json result;
@@ -4503,8 +4615,91 @@ namespace pe
                         if (f) { f << manifest.dump(2); wrote = f.good(); }
                     }
 
+                    // --- Phase 2b.1: annotated overlay (grid + coord labels + node boxes) ---
+                    std::string annotatedPath;
+                    if (annotate && !pngPath.empty())
+                    {
+                        int iw = 0, ih = 0, ich = 0;
+                        uint8_t *img = stbi_load(pngPath.c_str(), &iw, &ih, &ich, 4);
+                        if (img && iw > 0 && ih > 0)
+                        {
+                            using mapoverlay::Col;
+                            const Col gridC{90, 200, 255, 85};    // grid lines
+                            const Col axisC{255, 220, 80, 170};   // world-bounds frame
+                            const Col boxC{255, 120, 120, 150};   // node AABB boxes
+                            const Col labelC{215, 245, 255, 235}; // coordinate labels
+
+                            const vec3 wmin = shot->digest.worldBounds.min;
+                            const vec3 wmax = shot->digest.worldBounds.max;
+                            const float gy = shot->digest.groundY;
+                            const float spanW = std::max(wmax.x - wmin.x, wmax.z - wmin.z);
+                            auto niceStep = [](float raw) -> float {
+                                if (raw <= 0.0f) return 1.0f;
+                                const float mag = std::pow(10.0f, std::floor(std::log10(raw)));
+                                const float n = raw / mag;
+                                const float s = (n < 1.5f) ? 1.0f : (n < 3.5f) ? 2.0f : (n < 7.5f) ? 5.0f : 10.0f;
+                                return s * mag;
+                            };
+                            const float step = niceStep(spanW / 8.0f);
+                            auto fmt = [](float v) -> std::string {
+                                char b[32];
+                                if (std::abs(v - std::round(v)) < 0.05f)
+                                    std::snprintf(b, sizeof(b), "%d", static_cast<int>(std::lround(v)));
+                                else
+                                    std::snprintf(b, sizeof(b), "%.1f", v);
+                                return std::string(b);
+                            };
+                            const int gw = std::max(3, iw / 240), gh = gw * 2, gt = std::max(1, gw / 3);
+
+                            for (float wx = std::ceil(wmin.x / step) * step; wx <= wmax.x + 1e-3f; wx += step)
+                            {
+                                vec2 a = toPx(vec3(wx, gy, wmin.z)), b = toPx(vec3(wx, gy, wmax.z));
+                                mapoverlay::Line(img, iw, ih, (int)a.x, (int)a.y, (int)b.x, (int)b.y, gridC);
+                                mapoverlay::Number(img, iw, ih, (int)a.x + 2, (int)a.y + 2, fmt(wx), gw, gh, gt, labelC);
+                            }
+                            for (float wz = std::ceil(wmin.z / step) * step; wz <= wmax.z + 1e-3f; wz += step)
+                            {
+                                vec2 a = toPx(vec3(wmin.x, gy, wz)), b = toPx(vec3(wmax.x, gy, wz));
+                                mapoverlay::Line(img, iw, ih, (int)a.x, (int)a.y, (int)b.x, (int)b.y, gridC);
+                                mapoverlay::Number(img, iw, ih, (int)a.x + 2, (int)a.y + 2, fmt(wz), gw, gh, gt, labelC);
+                            }
+                            {
+                                vec2 c00 = toPx(vec3(wmin.x, gy, wmin.z)), c10 = toPx(vec3(wmax.x, gy, wmin.z));
+                                vec2 c11 = toPx(vec3(wmax.x, gy, wmax.z)), c01 = toPx(vec3(wmin.x, gy, wmax.z));
+                                mapoverlay::Line(img, iw, ih, (int)c00.x, (int)c00.y, (int)c10.x, (int)c10.y, axisC);
+                                mapoverlay::Line(img, iw, ih, (int)c10.x, (int)c10.y, (int)c11.x, (int)c11.y, axisC);
+                                mapoverlay::Line(img, iw, ih, (int)c11.x, (int)c11.y, (int)c01.x, (int)c01.y, axisC);
+                                mapoverlay::Line(img, iw, ih, (int)c01.x, (int)c01.y, (int)c00.x, (int)c00.y, axisC);
+                            }
+                            for (const auto &jn : manifest["nodes"])
+                            {
+                                const auto &px = jn["aabb_px"];
+                                if (px.is_array() && px.size() == 4)
+                                    mapoverlay::Box(img, iw, ih, (int)px[0].get<float>(), (int)px[1].get<float>(),
+                                                    (int)px[2].get<float>(), (int)px[3].get<float>(), boxC);
+                            }
+
+                            std::string ap = pngPath;
+                            size_t adot = ap.find_last_of('.');
+                            ap = (adot != std::string::npos ? ap.substr(0, adot) : ap) + ".annotated.png";
+                            ScreenshotWriteDesc desc;
+                            desc.path = ap;
+                            desc.pixels = img;
+                            desc.width = static_cast<uint32_t>(iw);
+                            desc.height = static_cast<uint32_t>(ih);
+                            desc.rowPitch = static_cast<size_t>(iw) * 4;
+                            desc.format = PE_FORMAT_R8G8B8A8_UNORM;
+                            std::string resolved;
+                            if (WriteScreenshotPng(desc, &resolved))
+                                annotatedPath = resolved.empty() ? ap : resolved;
+                        }
+                        if (img)
+                            stbi_image_free(img);
+                    }
+
                     result["status"] = "ok";
                     result["image"] = manifest["image"];
+                    if (!annotatedPath.empty()) result["annotated_image_path"] = annotatedPath;
                     result["manifest_path"] = wrote ? manifestPath : "";
                     result["node_count"] = manifest["nodes"].size();
                     result["world_bounds"] = manifest["world_bounds"];

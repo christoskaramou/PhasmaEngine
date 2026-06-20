@@ -241,8 +241,11 @@ forward roadmap.
 ### Deltas from the proposal above
 
 - **Templates:** slice 1 ships **topdown only**. `isometric` and `card` (§1, §2)
-  are a fast-follow; `gamekit/grid` and `gamekit/deck` already ship for them but
-  are not exercised by the topdown smoke.
+  are a fast-follow; `gamekit/grid` and `gamekit/deck` already ship for them. The
+  topdown smoke does not exercise them, but `grid`, `deck`, `save`, and `audio` were
+  separately **runtime-smoke-verified** (2026-06-20): grid cell↔world round-trip +
+  neighbours, deck shuffle/draw/discard/auto-reshuffle, the `save` `json`+`fs`
+  round-trip under `Assets/Save/`, and `audio` no-error calls — all PASS.
 - **Script layout:** the entry point is the scene's
   `scene_scripts.on_play` manifest → `Assets/Scripts/<game>.lua`, **not** the
   `Scripts/global/<game>.lua` + `Scripts/game/` skeleton sketched in §1.
@@ -386,9 +389,23 @@ exact image centre; all in-band nodes project in-frame; camera restored. The fir
 smoke caught two issues now fixed — `rt:display` carried ImGui (→ `rt:viewport`) and
 AABB-in-image webbed the scene (→ opt-in).
 
-### Next (Phase 2b)
+### Phase 2b.1 — Annotated overlay (Shipped 2026-06-20)
 
-A dedicated `MapShotPass` rendering to its own offscreen RT (decoupled from the live
-editor camera), worldXZ / node-ID data passes for programmatic pixel→world/node
-readback, and adaptive tiling for large maps. Deferred — 2a's compose-and-capture
-covers the common case.
+`get_map_shot` now also writes **`<image>.annotated.png`** (`annotate:true` by default)
+with a world-coordinate grid, **7-segment coordinate labels**, per-node AABB boxes, and
+the world-bounds frame drawn **onto** the captured PNG — the agent reads that image
+directly instead of mentally overlaying the JSON. It is a pure CPU post-process: load
+the capture with `stbi_load`, rasterise with a tiny self-contained overlay (`Blend` /
+`Line` / `Box` / 7-segment `Number` in `EditorToolRuntime.cpp`) reusing the same `toPx`
+projection 2a already computes, then write via `WriteScreenshotPng`. No render pass,
+shader, or RT work. Verified end-to-end over MCP on the 444-node Warbound skirmish: grid,
+readable `-30..30` axis labels, and object boxes all land correctly. Per-node *name*
+labels are deferred (the manifest already maps boxes→names; names clutter a dense scene).
+
+### Next (Phase 2b.2 / 2b.3)
+
+Deferred, heavier engine work: worldXZ / node-ID **data passes** for exact programmatic
+pixel→world/node readback (the manifest already *approximates* this — ortho-inverse for
+world XZ, box hit-test for node), and **adaptive tiling** (recursive 1→4→16 subdivision +
+manifest) for maps too large for one shot. Only worth it once a real big-map / exact-pick
+need appears.
