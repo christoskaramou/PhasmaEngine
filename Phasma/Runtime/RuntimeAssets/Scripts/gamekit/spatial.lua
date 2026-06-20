@@ -239,4 +239,76 @@ function spatial.frame_camera(opts)
     return true
 end
 
+-- ── Eye-level perception (over scene.decode_view / scene.pick_view_pixel) ──────────────────────
+-- The engine's decode/pick bindings re-rasterize an object-id pass from the ACTIVE camera, so
+-- these answer "what does the camera actually SEE" with exact occlusion — the perspective
+-- complement to the top-down digest/map (which a roof or wall hides interiors from). They run a
+-- one-off GPU pass + readback, so use them as authoring/verification calls, not per-frame logic.
+
+-- Pass-through: occlusion-exact decode of the active camera view. Returns the engine table
+-- { width, height, nodes = { { node, name, visible_pixels, distance, nearest_ndc_depth,
+-- screen_box = { min_x, min_y, max_x, max_y } }, ... } } sorted by visible_pixels desc, or nil.
+function spatial.decode_view(min_pixels)
+    if not (scene and scene.decode_view) then return nil end
+    return scene.decode_view(min_pixels)
+end
+
+-- Frame the active camera on `aabb` (default scene world_bounds) from `dir`, then decode what it
+-- sees. opts = frame_camera opts { aabb, dir, padding } plus optional min_pixels. One call for
+-- "point the camera at this area and tell me what's actually visible there", e.g. peeking a
+-- camera through a doorway to perceive an interior the top-down map cannot.
+function spatial.frame_and_decode(opts)
+    opts = opts or {}
+    if not spatial.frame_camera(opts) then return nil end
+    return spatial.decode_view(opts.min_pixels)
+end
+
+-- Is `target` (a node handle OR a name string) actually visible to the active camera right now —
+-- on-screen AND unoccluded? Returns { visible, pixels, coverage, distance, screen_box, name }:
+--   coverage = visible pixels / total image pixels (a rough on-screen size, 0..1).
+-- opts.frame = true first frames the camera on the node (opts.dir / opts.padding forwarded) so
+-- "can the camera see this from a sensible angle?" is a single call. opts.min_pixels (default 1)
+-- gates noise; opts.min_coverage (default 0) lets callers reject a barely-visible sliver.
+--
+-- Matches the decoded entry by name, so (like resolve_overlaps) it assumes the node's name is
+-- unique; with duplicate names the first matching visible entry wins.
+function spatial.verify_visible(target, opts)
+    opts = opts or {}
+    local result = { visible = false, pixels = 0, coverage = 0.0 }
+
+    local node = target
+    if type(target) == "string" then
+        node = scene and scene.find_model and scene.find_model(target)
+    end
+    local name = (type(target) == "string") and target
+        or (node and node.get_name and node:get_name()) or nil
+    result.name = name
+    if not name then return result end
+
+    if opts.frame and node then
+        spatial.frame_camera({
+            aabb = node.get_bounding_box and node:get_bounding_box() or nil,
+            dir = opts.dir,
+            padding = opts.padding or 1.4,
+        })
+    end
+
+    local view = spatial.decode_view(opts.min_pixels or 1)
+    if not (view and view.nodes) then return result end
+
+    local total = (view.width or 1) * (view.height or 1)
+    for _, e in ipairs(view.nodes) do
+        if e.name == name then
+            result.pixels = e.visible_pixels or 0
+            result.coverage = (total > 0) and (result.pixels / total) or 0.0
+            result.distance = e.distance
+            result.screen_box = e.screen_box
+            result.visible = result.pixels >= (opts.min_pixels or 1)
+                and result.coverage >= (opts.min_coverage or 0.0)
+            break
+        end
+    end
+    return result
+end
+
 return spatial

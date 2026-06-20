@@ -1471,6 +1471,31 @@ namespace pe
 
             {
                 ToolDefinition tool;
+                tool.name = "pick_camera_point";
+                tool.description =
+                    "Exact pixel -> world/node readback for the active perspective camera (the eye-level analogue of "
+                    "pick_map_point). Re-runs the occlusion-exact object-id pass and reads the single pixel (x,y) in the "
+                    "decode_camera_view image: returns hit=true with the node at that pixel (node_id round-trips into "
+                    "frame_node/get_node_info, plus node_name), the exact occlusion-correct world_hit (the unprojected "
+                    "surface point) and its distance from the camera. On a miss (sky/empty) hit=false and ground_point is "
+                    "the camera ray intersected with Y=ground_y (default 0). Aim first with set_camera/frame_node, decode "
+                    "to read the view, then pick a pixel to get its precise world coords / node.";
+                tool.inputSchema = schema::Object({
+                    {"x", "Pixel X in the decode_camera_view image (0..width-1)", schema::Number(), true},
+                    {"y", "Pixel Y in the decode_camera_view image (0..height-1)", schema::Number(), true},
+                    {"ground_y", "World Y of the ground plane used for the miss-ray intersection (default 0)", schema::Number()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->PickCameraPoint(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
                 tool.name = "pick_map_point";
                 tool.description =
                     "Exact pixel -> world/node readback for a get_map_shot image. Given a pixel (x,y) in the map image and the "

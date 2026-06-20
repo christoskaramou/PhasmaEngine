@@ -7,6 +7,8 @@
 #include "Scene/Primitives.h"
 #include "Camera/Camera.h"
 #include "Script/ScriptRuntimeHooks.h"
+#include "Render/SceneRendererHost.h"
+#include "Render/ScenePerception.h"
 
 namespace pe
 {
@@ -154,6 +156,86 @@ namespace pe
                     return sol::make_object(lua, out);
                 });
 
+                // Eye-level spatial perception: occlusion-exact set of nodes the ACTIVE camera sees,
+                // each with a node handle, exact visible pixel count, screen bbox, nearest NDC depth
+                // and camera-space distance (nil when infinitely far). Aim the camera first (move the
+                // camera node / set_active_camera). Shares pe::DecodeCameraView with the MCP
+                // decode_camera_view tool. Runs a one-off GPU pass + readback — an authoring/debug
+                // call, not a per-frame one. Returns nil if no renderer/camera. Optional min_pixels.
+                scene.set_function("decode_view", [](sol::optional<int> minPixelsOpt, sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
+                    Scene *sc = GetActiveScene();
+                    SceneRendererHost *host = GetActiveSceneRendererHost();
+                    if (!sc || !host) return sol::make_object(lua, sol::nil);
+
+                    const uint32_t minPixels = static_cast<uint32_t>(std::max(0, minPixelsOpt.value_or(1)));
+                    Image *depth = host->GetDepthStencilTarget("depthStencil");
+                    CameraViewResult r = DecodeCameraView(*sc, depth, minPixels);
+                    if (!r.valid) return sol::make_object(lua, sol::nil);
+
+                    sol::table out = lua.create_table();
+                    out["width"] = r.width;
+                    out["height"] = r.height;
+                    sol::table nodes = lua.create_table();
+                    int idx = 1;
+                    for (const CameraViewNodeVis &n : r.nodes)
+                    {
+                        NodeId *node = (n.nodeIndex >= 0 && n.nodeIndex < static_cast<int>(sc->GetNodeCount()))
+                                           ? sc->GetNodeId(static_cast<uint32_t>(n.nodeIndex)) : nullptr;
+                        if (!node) continue;
+                        sol::table t = lua.create_table();
+                        t["node"] = sc->MakeHandle(node);
+                        t["name"] = sc->GetNodeName(node);
+                        t["visible_pixels"] = static_cast<double>(n.visiblePixels);
+                        t["nearest_ndc_depth"] = n.nearestNdcDepth;
+                        if (std::isfinite(n.distance)) t["distance"] = n.distance;
+                        t["screen_box"] = lua.create_table_with("min_x", n.minX, "min_y", n.minY, "max_x", n.maxX, "max_y", n.maxY);
+                        nodes[idx++] = t;
+                    }
+                    out["nodes"] = nodes;
+                    return sol::make_object(lua, out);
+                });
+
+                // Perspective pixel pick (the eye-level analogue of the top-down map pick): the exact
+                // node + world point under pixel (x,y) of the decode_view image. hit=true -> node handle
+                // + world_hit (exact unprojected surface point) + distance; hit=false -> ground_point
+                // (camera ray intersected with Y=ground_y, default 0) when it crosses the plane. Shares
+                // pe::PickCameraPixel with the MCP pick_camera_point tool. Returns nil if no renderer/camera.
+                scene.set_function("pick_view_pixel", [](int x, int y, sol::optional<float> groundYOpt, sol::this_state ts) -> sol::object {
+                    sol::state_view lua(ts);
+                    Scene *sc = GetActiveScene();
+                    SceneRendererHost *host = GetActiveSceneRendererHost();
+                    if (!sc || !host) return sol::make_object(lua, sol::nil);
+
+                    Image *depth = host->GetDepthStencilTarget("depthStencil");
+                    CameraPickResult r = PickCameraPixel(*sc, depth, x, y, groundYOpt.value_or(0.0f));
+                    if (!r.valid) return sol::make_object(lua, sol::nil);
+
+                    sol::table out = lua.create_table();
+                    out["hit"] = r.hit;
+                    out["width"] = r.width;
+                    out["height"] = r.height;
+                    if (r.hit)
+                    {
+                        out["world_hit"] = r.worldHit;
+                        out["nearest_ndc_depth"] = r.ndcDepth;
+                        if (std::isfinite(r.distance)) out["distance"] = r.distance;
+                        if (r.nodeIndex >= 0 && r.nodeIndex < static_cast<int>(sc->GetNodeCount()))
+                        {
+                            if (NodeId *node = sc->GetNodeId(static_cast<uint32_t>(r.nodeIndex)))
+                            {
+                                out["node"] = sc->MakeHandle(node);
+                                out["name"] = sc->GetNodeName(node);
+                            }
+                        }
+                    }
+                    else if (r.hasGroundPoint)
+                    {
+                        out["ground_point"] = r.groundPoint;
+                    }
+                    return sol::make_object(lua, out);
+                });
+
                 scene.set_function("find_model", [](const std::string &label, sol::this_state ts) -> sol::object {
                     sol::state_view lua(ts);
                     Scene *sc = GetActiveScene();
@@ -237,6 +319,22 @@ namespace pe
                     if (!handle.nodeId)
                         return sol::make_object(lua, sol::nil);
                     return sol::make_object(lua, handle);
+                });
+
+                // Save a node's subtree as a reusable .peprefab. A relative path resolves against
+                // the active project's Assets/ (so "Prefabs/turret.peprefab" lands in the project,
+                // ready for scene.instantiate_prefab); absolute paths pass through. The ".peprefab"
+                // extension is added if omitted. Returns true on success. This closes the authoring
+                // loop: build a subtree with gamekit/build, save_prefab it, then stamp copies with
+                // instantiate_prefab.
+                scene.set_function("save_prefab", [](SceneNodeHandle root, const std::string &path) -> bool {
+                    Scene *sc = GetActiveScene();
+                    if (!sc || !root.IsValid(*sc))
+                        return false;
+                    std::filesystem::path out = path;
+                    if (!out.is_absolute())
+                        out = std::filesystem::path(Path::Assets) / out;
+                    return sc->SavePrefab(root.nodeId, out);
                 });
 
                 scene.set_function("attach_primitive", [](SceneNodeHandle h, const std::string &type) {

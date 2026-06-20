@@ -199,17 +199,38 @@ forward roadmap.
    `RuntimeAssets/` tree, with an as-given fallback for absolute paths. Returns
    the instance-root node handle, or `nil` on failure. This is what makes
    `.peprefab` assets reusable from Lua — before slice 1 they were loadable from
-   C++/editor only.
+   C++/editor only. Its inverse, **`scene.save_prefab(node, path)`** (wrapping
+   `Scene::SavePrefab`), serializes a node's subtree to a `.peprefab` (relative
+   paths resolve under the project `Assets/`, absolute paths pass through),
+   closing the **build → judge → save → reuse** loop: construct something for the
+   first time, decide it's good, save it as a new (or overwritten) prefab, then
+   stamp copies with `instantiate_prefab`. Overwriting updates the template for
+   future instantiations, not copies already placed (no live prefab-linking).
 2. **Full `gamekit` Lua library.** Canonical source under
    `Phasma/Runtime/RuntimeAssets/Scripts/gamekit/`: `init` (loader + assembly),
-   `json`, `loop`, `scene`, `pool`, `actor`, `input`, `camera`, `pick`, `ui`,
-   `timer`, `tween`, `wave`, `grid`, `deck`, `save`, `audio`. PhasmaEngine's Lua
-   does not wire `require` to the project tree, so `gamekit/init.lua` reads and
-   compiles its sibling modules via `fs.read` + `load` (mirroring the
-   Warbound/ATH project convention), and a game's entry script bootstraps it the
-   same way. `loop` owns the single `script.on_update(..., "play")` tick and fans
-   systems out in a stable phase order (`pre` → timer/input, `main` →
-   waves/actors, `post` → camera/tween).
+   `json`, `loop`, `scene`, `pool`, `actor`, `input`, `camera`, `pick`, `spatial`,
+   `build`, `ui`, `timer`, `tween`, `wave`, `grid`, `deck`, `save`, `audio`.
+   PhasmaEngine's Lua does not wire `require` to the project tree, so
+   `gamekit/init.lua` reads and compiles its sibling modules via `fs.read` +
+   `load` (mirroring the Warbound/ATH project convention), and a game's entry
+   script bootstraps it the same way. `loop` owns the single
+   `script.on_update(..., "play")` tick and fans systems out in a stable phase
+   order (`pre` → timer/input, `main` → waves/actors, `post` → camera/tween).
+
+   The **authoring** pair is `build` + `spatial`: `build` CONSTRUCTS geometry —
+   `box`/`row`/`ring`/`grid`/`wall`/`room`/`stairs`/`fence`/`building`/`scatter`
+   over `scene.add_empty_node` + `scene.attach_primitive`, so one call (e.g.
+   `build.room{center, size, roof=true, doorway={side='+z', width=1.8}}` or
+   `build.building{center, size, floors=2, doorway=...}`) spawns a whole roofed
+   structure in a single `execute_lua`, returning the node handles. Pass `parent`
+   (a node handle) and every created node is grouped under it — build into a
+   container, then `scene.save_prefab(container, ...)` to bank the whole thing as a
+   reusable prefab. `spatial` then ARRANGES and PERCEIVES them
+   (`ring`/`grid`/`place_on_ground`/`resolve_overlaps`, plus
+   `decode_view`/`pick_view_pixel`/`verify_visible` over the Phase 2c perception
+   core). Together they collapse "place 24 primitives one at a time" into
+   "describe the layout, build it, verify it, save reusable pieces" — a handful of
+   turns for a scene.
 3. **`topdown_arena` scene template.** Built programmatically by
    `tools/minigamekit.py` (the single source of truth for the `.pescene` /
    `.peprefab` JSON schema); a reference copy lives at
@@ -417,19 +438,51 @@ units** of the node centre (≈ one pixel at 1600px). This supersedes the origin
 worldXZ/node-ID GPU data passes (the depth capture only returns 8-bit visualised values,
 and the editor's CPU pick is exact and cheaper).
 
-### Phase 2c - Current-camera visible-node decode (Added 2026-06-20)
+### Phase 2c - Current-camera visible-node perception (Added 2026-06-20)
 
-The MCP tool **`decode_camera_view(min_pixels?)`** reads what the current active camera can
-actually see. It records an editor-only immediate object-ID graphics pass into an
-`R32G32_UINT` target while loading the existing depth buffer, so visibility is depth-tested
-against the renderer's current scene depth. A tiny compute clear/reduce pair collapses the
-target to per-draw `NodeVis` records (`visible_pixels`, screen-space box, nearest depth);
-the editor readback maps draw indices back through `Scene::BuildDrawIndexToNodeIndex()` and
-returns stable node ids, names, pixel boxes, raw nearest NDC depth, and camera-space distance.
+Eye-level perception answers "what does the camera I am looking through *actually* see?" with
+exact occlusion — the perspective complement to the top-down map, which a roof or wall hides
+interiors from. It records an on-demand object-ID graphics pass into an `R32G32_UINT` target
+while **loading** the existing depth buffer (depth-test GEQUAL under reverse-Z, depth-write
+off), so only the frontmost surface writes its draw id — visibility is depth-tested against
+the renderer's current scene depth, no re-depth. The id pass reuses the live GPU-culled
+indirect draws and is paired with the unchanged depth-prepass VS, so its silhouette matches
+the depth buffer texel-for-texel.
+
+**Shared core (`Phasma/Runtime/Code/Render/ScenePerception.{h,cpp}`).** The GPU work lives in
+two Runtime free functions — `DecodeCameraView(scene, depth, min_pixels)` and
+`PickCameraPixel(scene, depth, x, y, ground_y)` — mirroring how `ComputeSceneDigest` is shared
+between the MCP tools and the Lua bindings. They issue a one-off command submission (id raster
++ clear/reduce compute + readback) after `RHII.WaitDeviceIdle()`; a static-camera query can
+only under-report on a frame mismatch (GEQUAL drops stale draws), never corrupt. Draw indices
+map back to nodes through `Scene::BuildDrawIndexToNodeIndex()`.
+
+Surfaced four ways:
+
+- **MCP `decode_camera_view(min_pixels?)`** — visible nodes with `{id, name, screen_box_px,
+  visible_pixels, nearest_ndc_depth, distance}`, sorted by pixel coverage.
+- **MCP `pick_camera_point(x, y, ground_y?)`** — the perspective analogue of `pick_map_point`:
+  the exact node + unprojected world surface point under one pixel of the decoded view. A
+  single-pixel `CopyImageToBuffer` readback of the id target gives `(draw id, ndc depth)`; the
+  pixel unprojects through the camera inverse-VP (NDC convention matches
+  `SceneView::BuildViewportRay`, no Y flip). On a miss (sky) it returns the camera ray ∩
+  `Y=ground_y` so a click on empty floor still yields a placement point.
+- **Lua `scene.decode_view(min_pixels?)` / `scene.pick_view_pixel(x, y, ground_y?)`**
+  (`SceneBindings.cpp`) — the same core for in-engine scripts (works in PhasmaPlayer, not just
+  the editor); each visible entry carries a node **handle** so scripts can act on it directly.
+- **gamekit `spatial.decode_view` / `frame_and_decode(area)` / `verify_visible(node)`**
+  (`gamekit/spatial.lua`) — authoring conveniences: `frame_and_decode` aims the camera at an
+  area then decodes; `verify_visible` answers "is this node actually on-screen and unoccluded?"
+  with pixel coverage in one call.
 
 This complements `get_map_shot` / `pick_map_point`: map shots are exact authoring maps from a
-synthetic top-down ortho camera, while `decode_camera_view` answers "what is visible from the
-camera I am looking through now?" without changing or restoring camera state.
+synthetic top-down ortho camera, while the decode/pick pair answers "what is visible from the
+camera I am looking through now?" without changing or restoring camera state. Validated live
+over MCP on `las_vegas_neon_showcase` (decode 95–150 visible nodes with depth-ordered
+distances; `pick_camera_point` returned the asphalt surface at `y≈0.002`) and on a built
+roof-over-hidden-cube demo: a straight-down decode saw **only the roof** (interior occluded,
+exactly the map's blind spot) while a side-angle decode revealed the hidden cube — pick on a
+floor 300 units from origin returned `world_hit.y = 300.10`, its exact top surface.
 
 ### Next (Phase 2b.3)
 
