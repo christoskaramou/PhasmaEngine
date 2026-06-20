@@ -736,6 +736,15 @@ namespace
         bool isDirectory = false;
     };
 
+    // Defined further down; forward-declared so the non-Windows browse buttons
+    // (RenderProjectPanel/RenderStartupSceneControls) can open the dialog.
+    void OpenBrowseDialog(BrowseDialogState &dialog,
+                          BrowseDialogKind kind,
+                          LaunchProfile *profile,
+                          const std::filesystem::path &initialDirectory,
+                          bool directoriesOnly,
+                          const char *extensionFilter);
+
     std::string SceneDisplayName(const LaunchProfile &profile, const std::string &scene)
     {
         if (scene.empty())
