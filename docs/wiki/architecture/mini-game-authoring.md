@@ -402,10 +402,23 @@ shader, or RT work. Verified end-to-end over MCP on the 444-node Warbound skirmi
 readable `-30..30` axis labels, and object boxes all land correctly. Per-node *name*
 labels are deferred (the manifest already maps boxes→names; names clutter a dense scene).
 
-### Next (Phase 2b.2 / 2b.3)
+### Phase 2b.2 — Exact pixel→world/node readback (Shipped 2026-06-20)
 
-Deferred, heavier engine work: worldXZ / node-ID **data passes** for exact programmatic
-pixel→world/node readback (the manifest already *approximates* this — ortho-inverse for
-world XZ, box hit-test for node), and **adaptive tiling** (recursive 1→4→16 subdivision +
-manifest) for maps too large for one shot. Only worth it once a real big-map / exact-pick
-need appears.
+The MCP tool **`pick_map_point(x, y, manifest)`** turns any pixel of a `get_map_shot`
+image into exact world coordinates and the node there. The recon shortcut: a map shot is
+always a **straight-down ortho**, so pixel→world is a linear XZ map from the manifest's
+camera scalars (no VP inversion), and the downward ray reduces to *"which enabled+visible
+node's XZ footprint holds the point — highest top (`max.y`) wins"* — occlusion-correct and
+exact, reusing `ComputeSceneDigest`, with **no new render pass, shader, or RT**. Returns
+`{hit, node_id (round-trips into frame_node/get_node_info), node_name, world_hit (incl.
+the hit object's top y), ground_point (y=ground_y)}`. Verified over MCP on Warbound: a
+pick at `Ground`'s centre pixel returned `node:5:1`/`Ground` with world XZ within **0.057
+units** of the node centre (≈ one pixel at 1600px). This supersedes the originally-planned
+worldXZ/node-ID GPU data passes (the depth capture only returns 8-bit visualised values,
+and the editor's CPU pick is exact and cheaper).
+
+### Next (Phase 2b.3)
+
+Only **adaptive tiling** remains: recursive 1→4→16 subdivision of occupied regions + a
+tile→world-rect manifest, for maps too large to resolve in one shot. Deferred until a real
+big-map need appears — the single-shot map + `pick_map_point` cover the common case.

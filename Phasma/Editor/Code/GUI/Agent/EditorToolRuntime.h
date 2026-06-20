@@ -41,6 +41,7 @@ namespace pe
         std::string GetSceneInfo(bool includeTree) const;
         std::string GetSceneDigest() const;
         std::string GetMapShot(const std::string &argsJson) const;
+        std::string PickMapPoint(const std::string &argsJson) const;
         std::string GetNodeInfo(const std::string &argsJson) const;
         std::string QueryScene() const;
         std::string GetRendererStatus() const;

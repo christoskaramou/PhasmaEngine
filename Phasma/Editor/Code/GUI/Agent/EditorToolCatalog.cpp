@@ -1453,6 +1453,29 @@ namespace pe
 
             {
                 ToolDefinition tool;
+                tool.name = "pick_map_point";
+                tool.description =
+                    "Exact pixel -> world/node readback for a get_map_shot image. Given a pixel (x,y) in the map image and the "
+                    "get_map_shot '<image>.map.json' manifest, returns the visible node at that pixel (node_id round-trips into "
+                    "frame_node/get_node_info, plus node_name), the exact occlusion-correct world hit (world_hit = the highest "
+                    "object whose footprint covers the point), and ground_point (the world position at y=ground_y). Pair with "
+                    "get_map_shot: read the annotated image, then pick any pixel to get its precise world coords / node.";
+                tool.inputSchema = schema::Object({
+                    {"x", "Pixel X in the map image", schema::Number(), true},
+                    {"y", "Pixel Y in the map image", schema::Number(), true},
+                    {"manifest", "Path to the get_map_shot '<image>.map.json' manifest", schema::String(), true},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->PickMapPoint(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
                 tool.name = "get_node_info";
                 tool.description = "Returns detailed node data: transform matrices, world AABB, parent/children, component flags, "
                                    "camera/light/script details, mesh refs, material scalars, and texture ids.";

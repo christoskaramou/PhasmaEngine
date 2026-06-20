@@ -4747,6 +4747,110 @@ namespace pe
         return *out;
     }
 
+    // Exact pixel -> world/node readback for a get_map_shot image (Phase 2b.2). The map is
+    // always a straight-down ortho, so pixel->world is a linear XZ map from the manifest's
+    // camera scalars; the downward ray reduces to "which visible node's XZ footprint holds
+    // the point, highest top wins" — occlusion-correct and exact, no GPU work.
+    std::string EditorToolRuntime::PickMapPoint(const std::string &argsJson) const
+    {
+        auto args = nlohmann::json::parse(argsJson.empty() ? "{}" : argsJson, nullptr, false);
+        if (args.is_discarded() || !args.is_object())
+            return R"({"error":"invalid args json"})";
+        if (!args.contains("x") || !args.contains("y"))
+            return R"({"error":"x and y (pixel coords in the map image) are required"})";
+        if (!args.contains("manifest") || !args["manifest"].is_string())
+            return R"({"error":"manifest (path to the get_map_shot .map.json) is required"})";
+
+        const float px = args["x"].get<float>();
+        const float py = args["y"].get<float>();
+
+        nlohmann::json mf;
+        {
+            std::ifstream f(args["manifest"].get<std::string>(), std::ios::binary);
+            if (!f)
+                return JsonObj({{"error", JsonStr("cannot open manifest: " + args["manifest"].get<std::string>())}});
+            mf = nlohmann::json::parse(f, nullptr, false);
+        }
+        if (mf.is_discarded() || !mf.contains("camera") || !mf.contains("image"))
+            return R"({"error":"manifest missing camera/image"})";
+
+        const float W = mf["image"].value("width", 0.0f);
+        const float H = mf["image"].value("height", 0.0f);
+        const auto &camj = mf["camera"];
+        const auto &posj = camj["position"];
+        const float cx = (posj.is_array() && posj.size() == 3) ? posj[0].get<float>() : 0.0f;
+        const float cz = (posj.is_array() && posj.size() == 3) ? posj[2].get<float>() : 0.0f;
+        const float orthoSize = camj.value("orthographic_size", 0.0f); // full visible world HEIGHT
+        const float aspect = camj.value("aspect", 1.0f);
+        const float groundY = mf.value("ground_y", 0.0f);
+        if (W <= 0.0f || H <= 0.0f || orthoSize <= 0.0f)
+            return R"({"error":"manifest has degenerate image/ortho size"})";
+
+        // Linear pixel -> world, matching get_map_shot's verified toPx: X grows left->right,
+        // Z grows bottom->top (+Z at the image top).
+        const float halfH = orthoSize * 0.5f;
+        const float halfW = halfH * aspect;
+        const float worldX = cx + ((px + 0.5f) / W - 0.5f) * 2.0f * halfW;
+        const float worldZ = cz + (0.5f - (py + 0.5f) / H) * 2.0f * halfH;
+
+        struct State
+        {
+            std::mutex mtx;
+            std::condition_variable cv;
+            bool done = false;
+            std::string result;
+        };
+        auto st = std::make_shared<State>();
+        QueueAction([st, worldX, worldZ, groundY, px, py]()
+                    {
+            auto *r = GetGlobalSystem<RendererSystem>();
+            nlohmann::json res;
+            if (!r) { res["error"] = "renderer not available"; }
+            else
+            {
+                SceneDigest d = ComputeSceneDigest(r->GetScene());
+                const SceneDigestNode *best = nullptr;
+                for (const SceneDigestNode &n : d.nodes)
+                {
+                    if (!n.enabled || !n.visible || n.groundOutlier)
+                        continue;
+                    if (worldX < n.aabb.min.x || worldX > n.aabb.max.x || worldZ < n.aabb.min.z ||
+                        worldZ > n.aabb.max.z)
+                        continue;
+                    if (!best || n.aabb.max.y > best->aabb.max.y)
+                        best = &n;
+                }
+                res["pixel"] = nlohmann::json::array({px, py});
+                res["ground_point"] = nlohmann::json::array({worldX, groundY, worldZ});
+                if (best)
+                {
+                    res["hit"] = true;
+                    res["node_id"] = best->id;
+                    res["node_name"] = best->name;
+                    res["world_hit"] = nlohmann::json::array({worldX, best->aabb.max.y, worldZ});
+                }
+                else
+                {
+                    res["hit"] = false;
+                    res["note"] = "no node at that pixel; ground_point is the y=ground_y position";
+                }
+            }
+            {
+                std::lock_guard lock(st->mtx);
+                st->result = res.dump();
+                st->done = true;
+            }
+            st->cv.notify_one(); });
+
+        {
+            std::unique_lock lock(st->mtx);
+            if (!st->cv.wait_for(lock, std::chrono::seconds(5), [&]
+                                 { return st->done; }))
+                return R"({"error":"timeout picking map point"})";
+        }
+        return st->result;
+    }
+
     std::string EditorToolRuntime::GetNodeInfo(const std::string &argsJson) const
     {
         struct State
