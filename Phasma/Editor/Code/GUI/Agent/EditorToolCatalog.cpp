@@ -1411,7 +1411,8 @@ namespace pe
                                    "and every mesh-bearing node's world AABB (min/max/center/size) with enabled/visible/in_frustum flags, "
                                    "plus pairwise AABB overlaps. world_bounds/ground_y/overlaps consider enabled AND visible nodes only "
                                    "(parked pool members — hierarchy-disabled or render-hidden — are listed but excluded); overlaps skip "
-                                   "flat-in-Y floors. Node ids round-trip into frame_node/set_camera/get_node_info. Use this to place "
+                                   "flat-in-Y floors and props resting on a larger footprint (embedded/co-located pairs still report). "
+                                   "Node ids round-trip into frame_node/set_camera/get_node_info. Use this to place "
                                    "objects without guess-and-screenshot.";
                 tool.inputSchema = schema::Object({});
                 tool.handler = [runtime](const nlohmann::json &, Context &) -> CallToolResult

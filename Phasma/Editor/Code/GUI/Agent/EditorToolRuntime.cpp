@@ -4255,6 +4255,7 @@ namespace pe
                     jn["visible"] = n.visible;
                     jn["in_frustum"] = n.inFrustum;
                     jn["ground_outlier"] = n.groundOutlier;
+                    jn["parent_name"] = n.parentName;
                     jn["aabb"] = aabbJson(n.aabb);
                     nodes.push_back(std::move(jn));
                 }

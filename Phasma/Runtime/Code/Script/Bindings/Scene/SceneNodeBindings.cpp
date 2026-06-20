@@ -244,6 +244,27 @@ namespace pe
                     s->SetLocalMatrix(h.nodeId, m);
                 });
 
+                // Inverse of get_world_position: place the node so its WORLD translation
+                // lands on worldPos, keeping its own local rotation/scale. Under a parent
+                // we map worldPos back through the parent's world matrix, so this is exact
+                // for any parent transform (rotated/scaled included) — unlike set_position,
+                // which sets the local translation directly.
+                ut.set_function("set_world_position", [](SceneNodeHandle &h, const vec3 &worldPos) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    NodeId *parent = s->GetParent(h.nodeId);
+                    vec3 localPos =
+                        parent ? vec3(glm::inverse(ComputeNodeWorldMatrix(*s, parent)) * vec4(worldPos, 1.0f)) : worldPos;
+                    // A singular parent world matrix (e.g. a zero/degenerate scale axis) makes the
+                    // inverse non-finite; storing that would poison the node transform with NaN/inf,
+                    // so leave the node untouched rather than corrupt it.
+                    if (glm::any(glm::isnan(localPos)) || glm::any(glm::isinf(localPos)))
+                        return;
+                    mat4 local = s->GetLocalMatrix(h.nodeId);
+                    local[3] = vec4(localPos, 1.0f);
+                    s->SetLocalMatrix(h.nodeId, local);
+                });
+
                 ut.set_function("get_rotation", [](SceneNodeHandle &h) -> vec3 {
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return vec3(0.f);

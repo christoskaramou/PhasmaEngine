@@ -7,10 +7,10 @@
 -- the spatial-awareness track (the annotated map-shot render pass is the other),
 -- so authoring scripts stop guessing coordinates and screenshotting to check.
 --
--- COORDINATE NOTE: helpers move nodes via node:set_position (LOCAL) using a world
--- delta. That is exact for scene-root nodes and any node whose parent chain is
--- unrotated/unscaled (the common authoring case). Under a rotated/scaled parent the
--- world delta is only approximate — parent the node to root, or set it directly.
+-- COORDINATE NOTE: helpers move nodes via node:set_world_position, computing the
+-- shift entirely in world space (the digest's AABBs are world-space too). The engine
+-- maps the world target back through the parent's world matrix, so placement is exact
+-- under ANY parent transform — rotated/scaled parents included, not just scene-root.
 
 local spatial = {}
 
@@ -20,11 +20,13 @@ local function node_aabb(node)
 end
 
 -- Move `node` so its world-AABB center lands on `target` (vec3). See COORDINATE NOTE.
+-- bb.center and the node's world position are both world-space, so their difference is
+-- the geometry's world offset; shifting world position by (target - center) is exact.
 local function move_center_to(node, target)
     local bb = node_aabb(node)
     if not bb then return false end
-    local c, p = bb.center, node:get_position()
-    node:set_position(vec3(p.x + (target.x - c.x), p.y + (target.y - c.y), p.z + (target.z - c.z)))
+    local c, w = bb.center, node:get_world_position()
+    node:set_world_position(vec3(w.x + (target.x - c.x), w.y + (target.y - c.y), w.z + (target.z - c.z)))
     return true
 end
 spatial.move_center_to = move_center_to
@@ -46,8 +48,8 @@ function spatial.place_on_ground(node, ground_y)
     local bb = node_aabb(node)
     if not bb then return false end
     ground_y = ground_y or spatial.ground_y()
-    local p = node:get_position()
-    node:set_position(vec3(p.x, p.y + (ground_y - bb.min.y), p.z))
+    local w = node:get_world_position()
+    node:set_world_position(vec3(w.x, w.y + (ground_y - bb.min.y), w.z))
     return true
 end
 
@@ -120,40 +122,79 @@ end
 --
 -- Re-acquires nodes from the digest by name, so it assumes authored nodes have
 -- unique names (disabled pool members are excluded from digest overlaps anyway).
--- opts: { iterations=4, padding=0.1 }
+--
+-- Digests ONCE, not once per pass. scene.digest() reads the engine's CACHED world
+-- AABBs, and set_world_position only marks a node dirty — the cache is not refreshed
+-- until the next frame's matrix update. Re-digesting each iteration would therefore
+-- read STALE centres and re-nudge an already-separated pair every pass (compounding
+-- the push 4x). Instead we snapshot the pair list + XZ half-extents + the constant
+-- origin→AABB-centre offset once, then drive every pass off the FRESH
+-- get_world_position (offset and half-extents are invariant under the pure
+-- translation we apply, so a live centre = get_world_position + offset).
+--
+-- The push is inverse-size weighted (a large object barely moves, the smaller node takes
+-- most of the nudge), and a pair where one footprint dwarfs the other (ratio >
+-- max_size_ratio) is skipped: its separation distance is the big node's half-extent, so a
+-- nudge would eject the small node clear off it — you cannot slide a prop off the
+-- ground/terrain it sits in. Those are left for the author.
+-- opts: { iterations=4, padding=0.1, max_size_ratio=8 }
 function spatial.resolve_overlaps(opts)
     opts = opts or {}
     local iterations = opts.iterations or 4
     local padding = opts.padding or 0.1
+    local max_ratio = opts.max_size_ratio or 8.0
     if not (scene and scene.digest and scene.find_model) then return 0 end
+
+    local d = scene.digest()
+    if not d or not d.overlaps or #d.overlaps == 0 then return 0 end
+
+    local pair_list = {}
+    for _, ov in ipairs(d.overlaps) do
+        local na, nb = d.nodes[ov.a], d.nodes[ov.b]
+        local node_a = na and scene.find_model(na.name)
+        local node_b = nb and scene.find_model(nb.name)
+        if node_a and node_b then
+            local hax, haz = na.aabb.size.x * 0.5, na.aabb.size.z * 0.5
+            local hbx, hbz = nb.aabb.size.x * 0.5, nb.aabb.size.z * 0.5
+            local sa, sb = math.max(hax, haz), math.max(hbx, hbz) -- footprint size of each
+            local lo, hi = math.min(sa, sb), math.max(sa, sb)
+            -- Skip world/terrain-scale mismatches (see header): a nudge would eject the
+            -- small node off the big one rather than resolve a real prop-vs-prop overlap.
+            if lo > 1e-4 and hi / lo <= max_ratio then
+                local wa, wb = node_a:get_world_position(), node_b:get_world_position()
+                pair_list[#pair_list + 1] = {
+                    a = node_a, b = node_b,
+                    hax = hax, haz = haz, hbx = hbx, hbz = hbz, sa = sa, sb = sb,
+                    oax = na.aabb.center.x - wa.x, oaz = na.aabb.center.z - wa.z,
+                    obx = nb.aabb.center.x - wb.x, obz = nb.aabb.center.z - wb.z,
+                }
+            end
+        end
+    end
+
     local moved = 0
     for _ = 1, iterations do
-        local d = scene.digest()
-        if not d or not d.overlaps or #d.overlaps == 0 then
-            moved = 0
-            break
-        end
         moved = 0
-        for _, ov in ipairs(d.overlaps) do
-            local na, nb = d.nodes[ov.a], d.nodes[ov.b]
-            local node_a = na and scene.find_model(na.name)
-            local node_b = nb and scene.find_model(nb.name)
-            if node_a and node_b then
-                local ca, cb = na.aabb.center, nb.aabb.center
-                local dx, dz = cb.x - ca.x, cb.z - ca.z
-                local len = math.sqrt(dx * dx + dz * dz)
-                if len < 1e-4 then dx, dz, len = 1.0, 0.0, 1.0 end -- coincident: split along +X
-                local ux, uz = dx / len, dz / len
-                local ra = math.abs(ux) * na.aabb.size.x * 0.5 + math.abs(uz) * na.aabb.size.z * 0.5
-                local rb = math.abs(ux) * nb.aabb.size.x * 0.5 + math.abs(uz) * nb.aabb.size.z * 0.5
-                local needed = ra + rb + padding
-                if len < needed then
-                    local half = (needed - len) * 0.5
-                    local pa, pb = node_a:get_position(), node_b:get_position()
-                    node_a:set_position(vec3(pa.x - ux * half, pa.y, pa.z - uz * half))
-                    node_b:set_position(vec3(pb.x + ux * half, pb.y, pb.z + uz * half))
-                    moved = moved + 1
-                end
+        for _, p in ipairs(pair_list) do
+            local wa, wb = p.a:get_world_position(), p.b:get_world_position()
+            -- live centres from fresh world position + the constant origin→centre offset
+            local dx = (wb.x + p.obx) - (wa.x + p.oax)
+            local dz = (wb.z + p.obz) - (wa.z + p.oaz)
+            local len = math.sqrt(dx * dx + dz * dz)
+            if len < 1e-4 then dx, dz, len = 1.0, 0.0, 1.0 end -- coincident: split along +X
+            local ux, uz = dx / len, dz / len
+            local ra = math.abs(ux) * p.hax + math.abs(uz) * p.haz
+            local rb = math.abs(ux) * p.hbx + math.abs(uz) * p.hbz
+            local needed = ra + rb + padding
+            if len < needed then
+                local total = needed - len
+                -- inverse-size weighting: larger footprint anchors, smaller node moves more
+                local denom = p.sa + p.sb
+                local move_a = (denom > 1e-4) and (total * p.sb / denom) or (total * 0.5)
+                local move_b = total - move_a
+                p.a:set_world_position(vec3(wa.x - ux * move_a, wa.y, wa.z - uz * move_a))
+                p.b:set_world_position(vec3(wb.x + ux * move_b, wb.y, wb.z + uz * move_b))
+                moved = moved + 1
             end
         end
         if moved == 0 then break end

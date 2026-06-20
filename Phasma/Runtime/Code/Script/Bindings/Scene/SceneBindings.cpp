@@ -98,7 +98,8 @@ namespace pe
                 // Spatial perception: world bounds + every mesh node's world AABB +
                 // overlaps, so authoring scripts can place/frame without trial-and-error.
                 // world_bounds/ground_y/overlaps consider enabled+visible nodes only
-                // (parked pools excluded); overlaps skip flat-in-Y floors. Shares
+                // (parked pools excluded); overlaps skip flat-in-Y floors and props resting on a
+                // larger footprint (embedded/co-located pairs still report). Shares
                 // ComputeSceneDigest with MCP get_scene_digest.
                 scene.set_function("digest", [](sol::this_state ts) -> sol::object {
                     sol::state_view lua(ts);
@@ -129,6 +130,7 @@ namespace pe
                         t["visible"] = n.visible;
                         t["in_frustum"] = n.inFrustum;
                         t["ground_outlier"] = n.groundOutlier;
+                        t["parent_name"] = n.parentName;
                         t["aabb"] = lua.create_table_with(
                             "min", n.aabb.min, "max", n.aabb.max,
                             "center", n.aabb.GetCenter(), "size", n.aabb.GetSize());

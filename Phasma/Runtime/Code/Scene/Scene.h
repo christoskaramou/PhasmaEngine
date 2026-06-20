@@ -697,6 +697,8 @@ namespace pe
         bool visible = true;        // per-instance render-visible flag
         bool inFrustum = true;      // vs active camera (true when no camera exists)
         bool groundOutlier = false; // far vertical outlier (e.g. authored-parked pool); excluded from bounds
+        int parentIndex = -1;       // immediate parent node index (-1 = scene root); siblings = parts of one object
+        std::string parentName;     // immediate parent's name ("" at root) — lets consumers see object grouping
     };
 
     // Aggregate scene perception. world_bounds / ground_y / overlaps consider
@@ -704,7 +706,9 @@ namespace pe
     // the render-visible cull-flag don't corrupt the play area), AND additionally
     // reject far vertical outliers via a median+MAD band (groundOutlier) — e.g. a pool
     // the author parks at Y=-1000 in the .pescene while still enabled+visible before
-    // play. Overlaps also skip flat-in-Y nodes (floors / decals). All mesh nodes are
+    // play. Overlaps also skip flat-in-Y nodes (floors / decals), props resting on a
+    // larger footprint, and siblings of one composite object (nodes sharing an immediate
+    // parent — a creature's Body/Head/Legs, a tree's Trunk/Canopy). All mesh nodes are
     // still listed; outliers just carry groundOutlier=true.
     struct SceneDigest
     {
@@ -715,7 +719,7 @@ namespace pe
         uint32_t meshNodeCount = 0;                // == nodes.size()
         std::vector<SceneDigestNode> nodes;        // mesh-bearing nodes
         std::vector<std::pair<int, int>> overlaps; // index pairs into nodes
-        bool overlapsTruncated = false;            // node count exceeded the O(n^2) cap
+        bool overlapsTruncated = false;            // sweep-and-prune hit the max-pair cap (pathological scene)
     };
 
     SceneDigest ComputeSceneDigest(Scene &scene);

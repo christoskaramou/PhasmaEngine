@@ -1376,7 +1376,6 @@ namespace pe
         // Floors / decals are flat in Y; excluding them from overlaps avoids
         // "ground intersects everything" noise. Tuned for authoring-scale scenes.
         constexpr float kFlatY = 0.05f;
-        constexpr size_t kOverlapNodeCap = 256;
 
         SceneDigest digest;
         digest.totalNodeCount = scene.GetNodeCount();
@@ -1398,6 +1397,11 @@ namespace pe
             dn.enabled = scene.IsNodeHierarchyEnabled(node);
             dn.visible = scene.IsNodeRenderVisible(node);
             dn.inFrustum = cam ? cam->AABBInFrustum(dn.aabb) : true;
+            if (NodeId *parent = scene.GetParent(node))
+            {
+                dn.parentIndex = static_cast<int>(parent->index);
+                dn.parentName = scene.GetNodeName(parent);
+            }
             if (dn.enabled && dn.visible)
                 liveYs.push_back(dn.aabb.GetCenter().y);
             digest.nodes.push_back(std::move(dn));
@@ -1455,28 +1459,74 @@ namespace pe
         if (digest.hasBounds)
             digest.groundY = digest.worldBounds.min.y;
 
-        // Pairwise AABB overlaps among in-band, enabled, visible, non-flat nodes. O(n^2), capped.
-        if (digest.nodes.size() > kOverlapNodeCap)
+        // Pairwise AABB overlaps among in-band, enabled, visible, non-flat nodes.
+        // Sweep-and-prune on X: collect the participating nodes, sort by aabb.min.x, then
+        // for each only test the window of later nodes whose min.x still falls inside its
+        // [min.x, max.x] span (sorted order lets us break as soon as it doesn't). That
+        // window already overlaps on X, so only Y/Z need testing. Near-linear for the
+        // scattered AABBs of a real authoring scene — the old plain O(n^2) had to bail out
+        // entirely above kOverlapNodeCap mesh nodes, which silently returned zero overlaps
+        // (and so neutered spatial.lua resolve_overlaps) on every scene that mattered.
+        // A high *pair* cap, not a low *node* cap, guards the pathological all-overlapping case.
+        constexpr size_t kMaxOverlapPairs = 4096;
+        std::vector<size_t> cand;
+        cand.reserve(digest.nodes.size());
+        for (size_t i = 0; i < digest.nodes.size(); i++)
         {
-            digest.overlapsTruncated = true;
+            const SceneDigestNode &n = digest.nodes[i];
+            if (n.enabled && n.visible && !n.groundOutlier && n.aabb.GetSize().y >= kFlatY)
+                cand.push_back(i);
         }
-        else
+        std::sort(cand.begin(), cand.end(),
+                  [&](size_t l, size_t r)
+                  { return digest.nodes[l].aabb.min.x < digest.nodes[r].aabb.min.x; });
+        // True when i RESTS ON / is supported by o: o's XZ footprint contains i's AND i sits at
+        // or just above o's top surface. That is genuine support (a prop on a thick ground slab,
+        // a cup on a table) — not a collision to resolve, and it floods a real scene, so such
+        // pairs are dropped below. A footprint-contained prop that is EMBEDDED (its bottom well
+        // below o's top) is a real interpenetration and is kept; two co-located props (neither
+        // sits atop the other) likewise still report.
+        auto restsOn = [](const AABB &o, const AABB &i)
         {
-            for (size_t a = 0; a < digest.nodes.size(); a++)
+            constexpr float kXzEps = 1e-3f;   // footprint containment slack
+            constexpr float kRestEps = 1e-2f; // vertical contact slack — tolerates authoring snap penetration
+            const bool xzContained = o.min.x <= i.min.x + kXzEps && o.max.x >= i.max.x - kXzEps &&
+                                     o.min.z <= i.min.z + kXzEps && o.max.z >= i.max.z - kXzEps;
+            return xzContained && i.min.y >= o.max.y - kRestEps;
+        };
+        for (size_t ai = 0; ai < cand.size() && !digest.overlapsTruncated; ai++)
+        {
+            const SceneDigestNode &na = digest.nodes[cand[ai]];
+            for (size_t bi = ai + 1; bi < cand.size(); bi++)
             {
-                const SceneDigestNode &na = digest.nodes[a];
-                if (!na.enabled || !na.visible || na.groundOutlier || na.aabb.GetSize().y < kFlatY)
-                    continue;
-                for (size_t b = a + 1; b < digest.nodes.size(); b++)
+                const SceneDigestNode &nb = digest.nodes[cand[bi]];
+                if (nb.aabb.min.x > na.aabb.max.x)
+                    break; // sorted by min.x: no later candidate can reach back to overlap na on X
+                const bool overlapYZ = na.aabb.min.y <= nb.aabb.max.y && na.aabb.max.y >= nb.aabb.min.y &&
+                                       na.aabb.min.z <= nb.aabb.max.z && na.aabb.max.z >= nb.aabb.min.z;
+                if (overlapYZ)
                 {
-                    const SceneDigestNode &nb = digest.nodes[b];
-                    if (!nb.enabled || !nb.visible || nb.groundOutlier || nb.aabb.GetSize().y < kFlatY)
+                    // Drop siblings of one composite object: nodes sharing an immediate parent
+                    // are parts of the same authored assembly (a creature's Body/Head/Legs, a
+                    // tree's Trunk/Canopy) that are MEANT to interpenetrate — not a collision to
+                    // resolve. Two distinct objects each live under their own parent node, so a
+                    // genuine inter-object overlap has differing parents and still reports.
+                    if (na.parentIndex >= 0 && na.parentIndex == nb.parentIndex)
                         continue;
-                    const bool overlap = na.aabb.min.x <= nb.aabb.max.x && na.aabb.max.x >= nb.aabb.min.x &&
-                                         na.aabb.min.y <= nb.aabb.max.y && na.aabb.max.y >= nb.aabb.min.y &&
-                                         na.aabb.min.z <= nb.aabb.max.z && na.aabb.max.z >= nb.aabb.min.z;
-                    if (overlap)
-                        digest.overlaps.emplace_back(static_cast<int>(a), static_cast<int>(b));
+                    // Drop resting/supported pairs (prop-on-ground floods the list and can't
+                    // be separated by a horizontal nudge). The flat-Y skip only catches THIN
+                    // floors; a thick ground/terrain slab is caught here by the footprint+rest
+                    // test. Embedded or co-located pairs fall through and are reported.
+                    if (restsOn(na.aabb, nb.aabb) || restsOn(nb.aabb, na.aabb))
+                        continue;
+                    const size_t ia = cand[ai], ib = cand[bi];
+                    digest.overlaps.emplace_back(static_cast<int>(std::min(ia, ib)),
+                                                 static_cast<int>(std::max(ia, ib)));
+                    if (digest.overlaps.size() >= kMaxOverlapPairs)
+                    {
+                        digest.overlapsTruncated = true;
+                        break;
+                    }
                 }
             }
         }

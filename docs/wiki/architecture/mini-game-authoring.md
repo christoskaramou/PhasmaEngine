@@ -286,8 +286,13 @@ coordinates and screenshotting to check. Phase 1 ships the precise-numbers half
 3. **`gamekit/spatial.lua`** — declarative placement helpers over `scene.digest()`:
    `place_on_ground`, `in_front_of_camera`, `ring`, `grid`, `stack`,
    `resolve_overlaps`, `frame_camera` (and `move_center_to` / `bounds` /
-   `ground_y`). They move nodes via `node:set_position` using a world delta —
-   exact for scene-root / identity-parent nodes (the common authoring case).
+   `ground_y`). They move nodes via `node:set_world_position` and compute the shift
+   entirely in world space (matching the digest's world-space AABBs), so placement is
+   exact under **any** parent transform — rotated/scaled parents included. The engine
+   maps the world target back through the parent's world matrix; `set_world_position`
+   is the inverse of `get_world_position` (added in `SceneNodeBindings.cpp`). (The
+   original cut used `node:set_position` with a world delta, exact only for
+   scene-root / identity-parent nodes.)
 
 ### Key design decisions
 
@@ -309,8 +314,34 @@ coordinates and screenshotting to check. Phase 1 ships the precise-numbers half
   `76×8.9×76` — matching the play-mode bounds. Outliers are still listed (flagged).
 - **Overlaps skip flat-in-Y nodes** (floors / decals, `size.y < 0.05`) so the
   ground plane does not report as overlapping everything on it.
-- **Overlaps are capped** at 256 nodes (O(n²)); above that `overlaps_truncated`
-  is set and the pass is skipped — expected on large scenes.
+- **Overlaps skip footprint-nested *resting* pairs**: when one node's XZ footprint fully
+  contains the other's *and* the inner node sits at or just above the outer's top surface,
+  the inner is resting on the larger (a prop on a *thick* ground slab, a cup on a table).
+  The flat-Y test only catches thin floors; a thick ground/terrain slab is caught here. Such
+  pairs flood a real scene (Warbound: 539 → 114 overlaps once the ground slab stops pairing
+  with all 425 props on it, `ground_pairs=0`) and can't be separated by a horizontal nudge
+  anyway, so `resolve_overlaps` must not act on them. A footprint-contained prop that is
+  *embedded* (bottom well below the outer's top) or two *co-located* props are **not** skipped
+  — those are real interpenetrations a horizontal nudge can fix.
+- **Overlaps skip siblings of one composite object**: each digest node carries its immediate
+  `parent_name` (and the engine tracks the parent *index*), and pairs sharing an immediate
+  parent are dropped — they are parts of one authored assembly (a creature's `Body`/`Head`/
+  `Legs` under a `Hero` node, a tree's `Trunk`/`Canopy` under a `Tree` node) that are *meant*
+  to interpenetrate, not a collision to resolve. Without this, `resolve_overlaps` would shove a
+  creature's head off its body. Suppression keys on the parent **index**, not the name, so two
+  *distinct* same-named objects (`Tree` #1 vs `Tree` #2) still report their inter-object
+  foliage overlap. On Warbound this took 114 → 78 overlaps: every `Body↔Head` / `Roof↔Tower`
+  self-overlap dropped, while adjacent-tree `Canopy↔Canopy` pairs (different `Tree` nodes) stayed.
+- **Overlaps use sweep-and-prune** over the participating nodes: sort by `aabb.min.x`,
+  then for each node only test the window of later nodes whose `min.x` still falls
+  inside its `[min.x, max.x]` span (sorted order lets the inner loop break early), so
+  only Y/Z need testing in-window. Near-linear on the scattered AABBs of a real scene,
+  which is what makes `resolve_overlaps` usable past a few hundred nodes. (The original
+  cut was a plain O(n²) that *skipped overlaps entirely above 256 mesh nodes* — so on
+  every scene that mattered, e.g. Warbound's 758, overlaps came back empty and
+  `resolve_overlaps` silently did nothing.) `overlaps_truncated` now only trips when the
+  emitted *pair* count hits a high cap (4096), guarding the pathological all-overlapping
+  case rather than ordinary scene size.
 
 ### Verification
 
