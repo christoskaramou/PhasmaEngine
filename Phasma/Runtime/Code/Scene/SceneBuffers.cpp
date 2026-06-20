@@ -336,6 +336,51 @@ namespace pe
         };
         m_sortKeysAlphaBlend = createSortKeyBuffer("sortKeys_AlphaBlend_");
         m_sortKeysTransmission = createSortKeyBuffer("sortKeys_Transmission_");
+
+        // --- Two-phase Hi-Z occlusion (opaque-only A/B indirect sets + per-set counters + a
+        // persistent per-draw visibility flag). Recreated on every geometry/draw-index rebuild,
+        // which re-seeds visibility (draw indices are reassigned here, so stale bits are invalid).
+        auto createOccCounters = [&](const std::string &name)
+        {
+            std::vector<Buffer *> vec(RHII.GetSwapchainImageCount());
+            for (uint32_t i = 0; i < vec.size(); ++i)
+                vec[i] = Buffer::Create({
+                    .size = 7 * sizeof(uint32_t),
+                    .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+                    .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
+                    .name = name + std::to_string(i),
+                });
+            return vec;
+        };
+        m_occCountersA = createOccCounters("occ_countersA_");
+        m_occCountersB = createOccCounters("occ_countersB_");
+        m_occOpaqueSSA = createFilteredIndirect("occ_OpaqueSSA_");
+        m_occAlphaCutSSA = createFilteredIndirect("occ_AlphaCutSSA_");
+        m_occOpaqueDSA = createFilteredIndirect("occ_OpaqueDSA_");
+        m_occAlphaCutDSA = createFilteredIndirect("occ_AlphaCutDSA_");
+        m_occOpaqueSSB = createFilteredIndirect("occ_OpaqueSSB_");
+        m_occAlphaCutSSB = createFilteredIndirect("occ_AlphaCutSSB_");
+        m_occOpaqueDSB = createFilteredIndirect("occ_OpaqueDSB_");
+        m_occAlphaCutDSB = createFilteredIndirect("occ_AlphaCutDSB_");
+
+        // Persistent per-draw visibility (1 = visible last frame). Seed to 1 so the first frame
+        // after a rebuild draws everything in phase 1 (full pyramid) and phase 2 finds nothing new.
+        m_visibility = Buffer::Create({
+            .size = m_indirectCapacity * sizeof(uint32_t),
+            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+            .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
+            .name = "occ_visibility",
+        });
+        cmd->FillBuffer(m_visibility, 0, m_indirectCapacity * sizeof(uint32_t), 1u);
+        {
+            BufferBarrierInfo vb{};
+            vb.buffer = m_visibility;
+            vb.stageMask = PE_STAGE_COMPUTE_SHADER;
+            vb.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE;
+            vb.size = m_indirectCapacity * sizeof(uint32_t);
+            vb.offset = 0;
+            cmd->BufferBarrier(vb);
+        }
     }
 
     void Scene::UpdateImageViews()
@@ -1003,6 +1048,24 @@ namespace pe
         destroyBufferVec(m_sortKeysAlphaBlend);
         destroyBufferVec(m_sortKeysTransmission);
 
+        // Two-phase Hi-Z occlusion A/B sets + counters + persistent visibility.
+        destroyBufferVec(m_occCountersA);
+        destroyBufferVec(m_occCountersB);
+        destroyBufferVec(m_occOpaqueSSA);
+        destroyBufferVec(m_occAlphaCutSSA);
+        destroyBufferVec(m_occOpaqueDSA);
+        destroyBufferVec(m_occAlphaCutDSA);
+        destroyBufferVec(m_occOpaqueSSB);
+        destroyBufferVec(m_occAlphaCutSSB);
+        destroyBufferVec(m_occOpaqueDSB);
+        destroyBufferVec(m_occAlphaCutDSB);
+        if (m_visibility)
+        {
+            RHII.AddToDeletionQueue([b = m_visibility]()
+                                    { Buffer *buf = b; Buffer::Destroy(buf); });
+            m_visibility = nullptr;
+        }
+
         if (m_indirectAll)
         {
             RHII.AddToDeletionQueue([b = m_indirectAll]()
@@ -1059,6 +1122,25 @@ namespace pe
         destroyBufferVecEager(m_indirectSelected);
         destroyBufferVecEager(m_sortKeysAlphaBlend);
         destroyBufferVecEager(m_sortKeysTransmission);
+        // Two-phase occlusion A/B sets + the persistent visibility flag are recreated by
+        // CreateIndirectBuffers below; destroy the previous generation here or they leak on every
+        // instance-only rebuild (mirrors the DestroyBuffers teardown).
+        destroyBufferVecEager(m_occCountersA);
+        destroyBufferVecEager(m_occCountersB);
+        destroyBufferVecEager(m_occOpaqueSSA);
+        destroyBufferVecEager(m_occAlphaCutSSA);
+        destroyBufferVecEager(m_occOpaqueDSA);
+        destroyBufferVecEager(m_occAlphaCutDSA);
+        destroyBufferVecEager(m_occOpaqueSSB);
+        destroyBufferVecEager(m_occAlphaCutSSB);
+        destroyBufferVecEager(m_occOpaqueDSB);
+        destroyBufferVecEager(m_occAlphaCutDSB);
+        if (m_visibility)
+        {
+            RHII.AddToDeletionQueue([b = m_visibility]()
+                                    { Buffer *buf = b; Buffer::Destroy(buf); });
+            m_visibility = nullptr;
+        }
         if (m_indirectAll)
         {
             RHII.AddToDeletionQueue([b = m_indirectAll]()

@@ -79,6 +79,9 @@ namespace pe
         bool right_handed = false;
         bool reverse_depth = true;
         bool frustum_culling = true;
+        bool occlusion_culling = false;        // GPU Hi-Z occlusion culling (Phase 2; opt-in)
+        float occlusion_culling_bias = 0.002f; // Hi-Z slack as a FRACTION of occluder depth (~0.2%);
+                                               // only protects coplanar/touching surfaces from false cull
         bool shadows = true;
         uint32_t shadow_map_size = 2048;
         uint32_t num_cascades = 4;

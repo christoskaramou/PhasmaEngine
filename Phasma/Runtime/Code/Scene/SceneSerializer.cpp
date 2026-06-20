@@ -151,6 +151,8 @@ namespace pe
             settings.AddMember("right_handed", gSettings.right_handed, allocator);
             settings.AddMember("reverse_depth", gSettings.reverse_depth, allocator);
             settings.AddMember("frustum_culling", gSettings.frustum_culling, allocator);
+            settings.AddMember("occlusion_culling", gSettings.occlusion_culling, allocator);
+            settings.AddMember("occlusion_culling_bias", gSettings.occlusion_culling_bias, allocator);
             settings.AddMember("shadows", gSettings.shadows, allocator);
             settings.AddMember("shadow_map_size", gSettings.shadow_map_size, allocator);
             settings.AddMember("num_cascades", gSettings.num_cascades, allocator);
@@ -287,6 +289,10 @@ namespace pe
             }
             if (settings.HasMember("frustum_culling"))
                 gSettings.frustum_culling = settings["frustum_culling"].GetBool();
+            if (settings.HasMember("occlusion_culling"))
+                gSettings.occlusion_culling = settings["occlusion_culling"].GetBool();
+            if (settings.HasMember("occlusion_culling_bias"))
+                gSettings.occlusion_culling_bias = settings["occlusion_culling_bias"].GetFloat();
             if (settings.HasMember("shadows"))
                 gSettings.shadows = settings["shadows"].GetBool();
             if (settings.HasMember("shadow_map_size"))

@@ -3,10 +3,13 @@
 #include "API/RHI.h"
 #include "RenderPasses/AabbsPass.h"
 #include "RenderPasses/BloomPass.h"
+#include "RenderPasses/CullPhase1Pass.h"
 #include "RenderPasses/CullingPass.h"
 #include "RenderPasses/ColorGradingPass.h"
 #include "RenderPasses/DOFPass.h"
+#include "RenderPasses/DepthLatePass.h"
 #include "RenderPasses/DepthPass.h"
+#include "RenderPasses/DepthPyramidPass.h"
 #include "RenderPasses/FXAAPass.h"
 #include "RenderPasses/ForwardPlusLightCullingPass.h"
 #include "RenderPasses/GbufferPass.h"
@@ -14,6 +17,7 @@
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/LinesPass.h"
 #include "RenderPasses/MotionBlurPass.h"
+#include "RenderPasses/OcclusionCullingPass.h"
 #include "RenderPasses/ParticleComputePass.h"
 #include "RenderPasses/ParticlePass.h"
 #include "RenderPasses/RayTracingPass.h"
@@ -40,7 +44,11 @@ namespace pe
         constexpr SceneRenderGraphPassDesc kSceneRenderGraphPasses[] = {
             {SceneRenderGraphPassId::Culling, 50, "Culling", &SceneRenderGraphPassComponents::culling},
             {SceneRenderGraphPassId::Shadow, 100, "Shadow", &SceneRenderGraphPassComponents::shadow},
+            {SceneRenderGraphPassId::CullPhase1, 180, "CullPhase1", &SceneRenderGraphPassComponents::cullPhase1},
             {SceneRenderGraphPassId::Depth, 200, "Depth", &SceneRenderGraphPassComponents::depth},
+            {SceneRenderGraphPassId::DepthPyramid, 250, "DepthPyramid", &SceneRenderGraphPassComponents::depthPyramid},
+            {SceneRenderGraphPassId::OcclusionCulling, 260, "CullPhase2", &SceneRenderGraphPassComponents::occlusionCulling},
+            {SceneRenderGraphPassId::DepthLate, 270, "DepthLate", &SceneRenderGraphPassComponents::depthLate},
             {SceneRenderGraphPassId::GBufferOpaque, 300, "GBufferOpaque", &SceneRenderGraphPassComponents::gbufferOpaque},
             {SceneRenderGraphPassId::SSAO, 400, "SSAO", &SceneRenderGraphPassComponents::ssao},
             {SceneRenderGraphPassId::ForwardPlusLightCulling, 450, "ForwardPlusLightCulling",
@@ -125,8 +133,16 @@ namespace pe
                 return isPassEnabled(SceneRenderGraphPassId::Culling);
             if (component == components.shadow)
                 return isPassEnabled(SceneRenderGraphPassId::Shadow);
+            if (component == components.cullPhase1)
+                return isPassEnabled(SceneRenderGraphPassId::CullPhase1);
             if (component == components.depth)
                 return isPassEnabled(SceneRenderGraphPassId::Depth);
+            if (component == components.depthPyramid)
+                return isPassEnabled(SceneRenderGraphPassId::DepthPyramid);
+            if (component == components.occlusionCulling)
+                return isPassEnabled(SceneRenderGraphPassId::OcclusionCulling);
+            if (component == components.depthLate)
+                return isPassEnabled(SceneRenderGraphPassId::DepthLate);
             if (component == components.gbufferOpaque)
                 return isPassEnabled(SceneRenderGraphPassId::GBufferOpaque);
             if (component == components.gbufferTransparent)
@@ -203,7 +219,11 @@ namespace pe
     {
         CreateSceneRenderGraphPassComponent<CullingPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<ShadowPass>(renderPassComponents);
+        CreateSceneRenderGraphPassComponent<CullPhase1Pass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<DepthPass>(renderPassComponents);
+        CreateSceneRenderGraphPassComponent<DepthPyramidPass>(renderPassComponents);
+        CreateSceneRenderGraphPassComponent<OcclusionCullingPass>(renderPassComponents);
+        CreateSceneRenderGraphPassComponent<DepthLatePass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<GbufferOpaquePass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<GbufferTransparentPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<SSAOPass>(renderPassComponents);
@@ -348,7 +368,11 @@ namespace pe
         SceneRenderGraphPassComponents scenePasses{};
         scenePasses.culling = GetGlobalComponent<CullingPass>();
         scenePasses.shadow = GetGlobalComponent<ShadowPass>();
+        scenePasses.cullPhase1 = GetGlobalComponent<CullPhase1Pass>();
         scenePasses.depth = GetGlobalComponent<DepthPass>();
+        scenePasses.depthPyramid = GetGlobalComponent<DepthPyramidPass>();
+        scenePasses.occlusionCulling = GetGlobalComponent<OcclusionCullingPass>();
+        scenePasses.depthLate = GetGlobalComponent<DepthLatePass>();
         scenePasses.gbufferOpaque = GetGlobalComponent<GbufferOpaquePass>();
         scenePasses.ssao = GetGlobalComponent<SSAOPass>();
         scenePasses.forwardPlusLightCulling = GetGlobalComponent<ForwardPlusLightCullingPass>();
@@ -404,7 +428,14 @@ namespace pe
 
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Culling, true);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Shadow, gs.shadows && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::CullPhase1, gs.occlusion_culling && dx12NeedDepth);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Depth, dx12NeedDepth);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::DepthPyramid, gs.occlusion_culling && dx12NeedDepth);
+            // Phase 2 + late depth gate on needDepth (not needGBuffer): whenever the depth prepass
+            // draws set A only, set B must be added back so depth-only consumers (DOF/motion/etc) see
+            // a complete depth buffer. needGBuffer is a subset of needDepth, so this never under-runs.
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::OcclusionCulling, gs.occlusion_culling && dx12NeedDepth);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::DepthLate, gs.occlusion_culling && dx12NeedDepth);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferOpaque, dx12NeedGBuffer);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSAO, gs.ssao && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::ForwardPlusLightCulling,
@@ -439,7 +470,13 @@ namespace pe
 
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Culling, true);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Shadow, gs.shadows && renderRaster);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::CullPhase1, gs.occlusion_culling && needDepth);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Depth, needDepth);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::DepthPyramid, gs.occlusion_culling && needDepth);
+        // Phase 2 + late depth gate on needDepth (not needGBuffer): whenever the depth prepass draws
+        // set A only, set B must be added back so depth-only consumers see a complete depth buffer.
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::OcclusionCulling, gs.occlusion_culling && needDepth);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::DepthLate, gs.occlusion_culling && needDepth);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferOpaque, needGBuffer);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSAO, renderSSAO);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::ForwardPlusLightCulling, gs.forward_plus && renderRaster);
@@ -489,7 +526,10 @@ namespace pe
     {
         SetPassScene<CullingPass>(components.culling, scene);
         SetPassScene<ShadowPass>(components.shadow, scene);
+        SetPassScene<CullPhase1Pass>(components.cullPhase1, scene);
         SetPassScene<DepthPass>(components.depth, scene);
+        SetPassScene<OcclusionCullingPass>(components.occlusionCulling, scene);
+        SetPassScene<DepthLatePass>(components.depthLate, scene);
         SetPassScene<GbufferOpaquePass>(components.gbufferOpaque, scene);
         SetPassScene<GbufferTransparentPass>(components.gbufferTransparent, scene);
         SetPassScene<RayTracingPass>(components.rayTracing, scene);

@@ -894,7 +894,8 @@ namespace pe
             m_storages[frame]->Copy(static_cast<uint32_t>(jointRanges.size()), jointRanges.data(), true);
     }
 
-    void Scene::DispatchCulling(CommandBuffer *cmd, PassInfo *passInfo, PassInfo *sortPassInfo)
+    void Scene::DispatchCulling(CommandBuffer *cmd, PassInfo *passInfo, PassInfo *sortPassInfo,
+                                Image *hiZPyramid, Buffer *occlusionData)
     {
         uint32_t frame = RHII.GetFrameIndex();
         const bool hasAlphaBlendMeshes = m_hasAlphaBlendMeshes;
@@ -1038,6 +1039,13 @@ namespace pe
             set->SetBuffer(10, m_sortKeysAlphaBlend[frame]);
             set->SetBuffer(11, m_sortKeysTransmission[frame]);
             set->SetBuffer(12, m_storages[frame]);
+            // Occlusion variant (OcclusionCullingPass) binds the Hi-Z pyramid + params.
+            // The frustum-only variant's shader has no such bindings, so this is skipped.
+            if (hiZPyramid && occlusionData)
+            {
+                set->SetImageView(13, hiZPyramid->GetSRV());
+                set->SetBuffer(14, occlusionData);
+            }
             set->Update();
         }
 
@@ -1260,6 +1268,182 @@ namespace pe
                                                          PE_ACCESS_INDIRECT_COMMAND_READ,
                                                          countersSize));
             cmd->BufferBarriers(indirectBarriers);
+        }
+    }
+
+    void Scene::DispatchCullingPhase(CommandBuffer *cmd, PassInfo *passInfo, CullPhase phase,
+                                     Image *hiZPyramid, Buffer *occlusionData)
+    {
+        const uint32_t frame = RHII.GetFrameIndex();
+        const bool phase1 = (phase == CullPhase::Phase1);
+        const bool needsIndirectCountFallback = !RHII.GetCaps().indirectCount;
+        const uint64_t indirectSize = static_cast<uint64_t>(m_indirectCapacity) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
+        const uint64_t countersSize = 7 * sizeof(uint32_t);
+        const uint64_t visibilitySize = static_cast<uint64_t>(m_indirectCapacity) * sizeof(uint32_t);
+
+        // Output set: phase 1 -> A (last-frame-visible), phase 2 -> B (newly-disoccluded). Opaque only.
+        Buffer *counters = phase1 ? m_occCountersA[frame] : m_occCountersB[frame];
+        Buffer *opaqueSS = phase1 ? m_occOpaqueSSA[frame] : m_occOpaqueSSB[frame];
+        Buffer *alphaCutSS = phase1 ? m_occAlphaCutSSA[frame] : m_occAlphaCutSSB[frame];
+        Buffer *opaqueDS = phase1 ? m_occOpaqueDSA[frame] : m_occOpaqueDSB[frame];
+        Buffer *alphaCutDS = phase1 ? m_occAlphaCutDSA[frame] : m_occAlphaCutDSB[frame];
+
+        auto makeBufferBarrier = [](Buffer *buffer, PeBarrierSync stageMask, PeBarrierAccess accessMask, uint64_t size)
+        {
+            BufferBarrierInfo b{};
+            b.buffer = buffer;
+            b.stageMask = stageMask;
+            b.accessMask = accessMask;
+            b.size = size;
+            b.offset = 0;
+            return b;
+        };
+
+        {
+            PE_PROFILE_SCOPE("OccCull Fill Buffers");
+            cmd->FillBuffer(counters, 0, countersSize, 0);
+            if (needsIndirectCountFallback)
+            {
+                cmd->FillBuffer(opaqueSS, 0, indirectSize, 0);
+                cmd->FillBuffer(alphaCutSS, 0, indirectSize, 0);
+                cmd->FillBuffer(opaqueDS, 0, indirectSize, 0);
+                cmd->FillBuffer(alphaCutDS, 0, indirectSize, 0);
+            }
+        }
+
+        {
+            PE_PROFILE_SCOPE("OccCull Compute Access Barriers");
+            const PeBarrierAccess rw = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE;
+            std::vector<BufferBarrierInfo> barriers;
+            barriers.reserve(6);
+            barriers.push_back(makeBufferBarrier(counters, PE_STAGE_COMPUTE_SHADER, rw, countersSize));
+            barriers.push_back(makeBufferBarrier(opaqueSS, PE_STAGE_COMPUTE_SHADER, rw, indirectSize));
+            barriers.push_back(makeBufferBarrier(alphaCutSS, PE_STAGE_COMPUTE_SHADER, rw, indirectSize));
+            barriers.push_back(makeBufferBarrier(opaqueDS, PE_STAGE_COMPUTE_SHADER, rw, indirectSize));
+            barriers.push_back(makeBufferBarrier(alphaCutDS, PE_STAGE_COMPUTE_SHADER, rw, indirectSize));
+            barriers.push_back(makeBufferBarrier(m_visibility, PE_STAGE_COMPUTE_SHADER, rw, visibilitySize));
+            cmd->BufferBarriers(barriers);
+        }
+
+        {
+            PE_PROFILE_SCOPE("OccCull Bind Pipeline");
+            cmd->BindPipeline(*passInfo);
+        }
+
+        Descriptor *set = nullptr;
+        {
+            PE_PROFILE_SCOPE("OccCull Descriptor Update");
+            const auto &sets = passInfo->GetDescriptors(frame);
+            set = sets[0];
+            // The PHASE1/PHASE2 cull variants never touch the transparent/selected/sort-key buffers,
+            // so reflection strips those bindings from the variant's layout (DXIL does on DX12; SPIR-V
+            // may keep them). Bind only declared slots: SetBuffer on a missing binding logs a per-frame
+            // "[Descriptor] Binding N not found" warning (GetBindingIndex), which on DX12 spammed the log
+            // and made the frame CPU-bound. HasBinding does not warn.
+            auto bind = [&](uint32_t b, Buffer *buf)
+            {
+                if (set->HasBinding(b))
+                    set->SetBuffer(b, buf);
+            };
+            bind(0, m_indirectAll);
+            bind(1, m_meshConstants);
+            bind(2, counters);
+            bind(3, opaqueSS);
+            bind(4, alphaCutSS);
+            bind(5, m_indirectAlphaBlend[frame]);
+            bind(6, m_indirectTransmission[frame]);
+            bind(7, m_indirectSelected[frame]);
+            bind(8, opaqueDS);
+            bind(9, alphaCutDS);
+            bind(10, m_sortKeysAlphaBlend[frame]);
+            bind(11, m_sortKeysTransmission[frame]);
+            bind(12, m_storages[frame]);
+            if (hiZPyramid && occlusionData) // phase 2 (HIZ_OCCLUSION variant)
+            {
+                if (set->HasBinding(13))
+                    set->SetImageView(13, hiZPyramid->GetSRV());
+                bind(14, occlusionData);
+            }
+            bind(15, m_visibility);
+            set->Update();
+        }
+
+        {
+            PE_PROFILE_SCOPE("OccCull Bind Descriptors");
+            cmd->BindDescriptors(1, &set);
+        }
+
+        struct PushConstants
+        {
+            uint32_t maxDrawCount;
+            uint32_t enableFrustumCulling;
+            float cameraPositionX;
+            float cameraPositionY;
+            float cameraPositionZ;
+            float pad0;
+            alignas(16) vec4 frustumPlanes[6];
+        } constants{};
+        static_assert(sizeof(PushConstants) == 128, "PushConstants must match CullingCS.hlsl");
+        {
+            PE_PROFILE_SCOPE("OccCull Build Constants");
+            constants.maxDrawCount = m_meshCount;
+            Camera *camera = m_cameras.empty() ? nullptr : m_cameras[0];
+            bool frustumCulling = Settings::Get<GlobalSettings>().frustum_culling && camera;
+            constants.enableFrustumCulling = frustumCulling ? 1u : 0u;
+            if (camera)
+            {
+                vec3 camPos = camera->GetPosition();
+                constants.cameraPositionX = camPos.x;
+                constants.cameraPositionY = camPos.y;
+                constants.cameraPositionZ = camPos.z;
+                const auto &planes = camera->GetFrustumPlanes();
+                for (int i = 0; i < 6; i++)
+                    constants.frustumPlanes[i] = vec4(planes[i].normal[0], planes[i].normal[1], planes[i].normal[2], planes[i].d);
+            }
+        }
+
+        {
+            PE_PROFILE_SCOPE("OccCull Push Constants");
+            cmd->SetConstants(constants);
+            cmd->PushConstants();
+        }
+
+        {
+            PE_PROFILE_SCOPE("OccCull Dispatch");
+            cmd->Dispatch((m_meshCount + 63) / 64, 1, 1);
+        }
+
+        {
+            PE_PROFILE_SCOPE("OccCull Record Compute Writes");
+            auto recordComputeWrite = [](Buffer *buffer)
+            {
+                BufferTrackInfo &ti = buffer->GetTrackInfo();
+                ti.stageMask = PE_STAGE_COMPUTE_SHADER;
+                ti.accessMask = PE_ACCESS_SHADER_WRITE;
+            };
+            recordComputeWrite(counters);
+            recordComputeWrite(opaqueSS);
+            recordComputeWrite(alphaCutSS);
+            recordComputeWrite(opaqueDS);
+            recordComputeWrite(alphaCutDS);
+            if (!phase1) // phase 2 rewrote the visibility flags for next frame's phase 1
+                recordComputeWrite(m_visibility);
+        }
+
+        {
+            PE_PROFILE_SCOPE("OccCull Final Indirect Barriers");
+            std::vector<BufferBarrierInfo> barriers;
+            barriers.reserve(5);
+            auto addDrawBarrier = [&](Buffer *b)
+            {
+                barriers.push_back(makeBufferBarrier(b, PE_STAGE_DRAW_INDIRECT, PE_ACCESS_INDIRECT_COMMAND_READ, indirectSize));
+            };
+            addDrawBarrier(opaqueSS);
+            addDrawBarrier(alphaCutSS);
+            addDrawBarrier(opaqueDS);
+            addDrawBarrier(alphaCutDS);
+            barriers.push_back(makeBufferBarrier(counters, PE_STAGE_DRAW_INDIRECT, PE_ACCESS_INDIRECT_COMMAND_READ, countersSize));
+            cmd->BufferBarriers(barriers);
         }
     }
 

@@ -226,6 +226,72 @@ Update the relevant `docs/wiki/` page and run `bash docs/wiki/tools/lint.sh`.
 
 ---
 
+## Phase 3 — Two-phase temporal Hi-Z (cull the depth prepass too)
+
+**Why:** Measured 2026-06-20 on a 20,387-sphere fully-occluded scene (raster, immediate, RTX 4080): OFF 15.5 ms, single-phase ON 13.7 ms, ceiling (objects gone) 1.0 ms. Single-phase reclaims only ~1.8 ms (the G-buffer vertex) because the **depth prepass still draws every frustum-visible object** to build the Hi-Z. ~12.7 ms is left on the table — almost all of it the prepass. Two-phase culls the prepass itself, targeting ≈ ceiling + Hi-Z overhead (~2 ms): a ~6× win on heavily-occluded content. (Shadows are the *other* big staller — deferred to a separate cascaded-shadow effort; disable `settings.shadows` while measuring Hi-Z so it doesn't mask the win.)
+
+**Algorithm (niagara/Aaltonen two-phase, visibility-flag variant):**
+- Persistent `m_visibility[draw]` (uint, 1 = visible last frame), one buffer, survives across frames.
+- **Phase 1 cull** (`PHASE1`): emit `frustum(i) && (firstFrame || m_visibility[i])` → **set A** (opaque types only) + phase1 counters.
+- **Depth-phase1**: draw set A → partial depth (last-frame occluders, which are ~the real occluders).
+- **DepthPyramid**: build Hi-Z from current depth (unchanged from Phase 2a).
+- **Phase 2 cull** (`PHASE2`): for every draw `vis = frustum(i) && hiz(i)`; write `m_visibility[i] = vis`; emit the **late** set `vis && !(frustum(i) && wasVisible)` → **set B** + late counters.
+- **Depth-late**: draw set B → completes this-frame depth (disoccluded objects).
+- **GBuffer**: draw **set A then set B** (two indirect draws per opaque type), EQUAL-tested against the now-complete depth.
+
+Steady state: occluded object → not in A (flag cleared) and not in B (fails hiz) → drawn **0×**. Disocclusion → caught in B same frame (no holes). Becomes-occluded → drawn 1 extra frame in A, flag clears, gone next frame. No persistent popping (every frame phase 2 re-tests ALL against *this* frame's Hi-Z).
+
+**Buffer plan (opaque-only; transparents + shadows + selected stay on the existing frustum set):**
+- Reuse `CullingCS.hlsl` with `#ifdef PHASE1` / `#ifdef PHASE2` (PHASE2 implies the existing `HIZ_OCCLUSION` test). Non-phase compile (frustum Culling@50) stays byte-identical.
+- New `m_visibility` buffer (uint × `m_indirectCapacity`), persistent, COMPUTE r/w barriered around each phase.
+- **Two new opaque indirect sets A + B** (`opaqueSS/alphaCutSS/opaqueDS/alphaCutDS` each) + their own counter buffers. *Separate* A/B buffers (not one buffer split by offset) because `DrawIndexedIndirectCount`'s buffer offset is a fixed CPU param — a GPU-computed phase1 offset is impossible, so depth-late needs its own buffer. GBuffer issues 2 draws per type. Keep the existing 7-slot frustum counter untouched (shadows/transparents/selected/perception contract).
+- Whole feature gated on `occlusion_culling`; OFF → none of these passes/buffers run, frustum path unchanged.
+
+**Render-graph (insert/replace around the current 250/275):**
+```
+Culling@50 (frustum, set for shadows+transparents)  →  Shadow@100  →
+  CullPhase1@180  →  Depth@200 (draw set A)  →  DepthPyramid@250  →
+  CullPhase2@260  →  DepthLate@270  →  GBufferOpaque@300 (draw A then B)  →  …
+```
+DepthPass must be parameterized to draw a given indirect set + counter (A in @200, B in @270). GBuffer draws A then B. Per "Adding/Editing a Pass": component type + cached ptr on `RendererSystem` (and the parallel `SceneRenderGraph` enum/table/SetPassEnabled both branches), Init, CacheGlobalComponents, UpdateRenderGraphPassStates, BuildRenderGraph order, RecordPasses scene injection.
+
+**Risks specific to Phase 3:** depth-late offset (use separate B buffers); cross-frame `m_visibility` hazard (one queue + barriers → ok); `firstFrame`/scene-reload must seed visibility=1 (else frame-1 draws nothing → all disoccluded in phase 2, self-corrects but flashes — seed to 1 on (re)build); object add/remove must keep `m_visibility` indexed by draw index (clear/realloc on geometry rebuild); DX12 whole-resource state on the new buffers; the perception/object-id path keeps reading the frustum set (unchanged). Validate on the 20k demo: expect ~13.7 → ~2 ms, both backends, screenshot identical with shadows off.
+
+### Design-review resolutions (Codex gpt-5.5, 2026-06-20 — algorithm validated, no redesign)
+
+- **New `DepthLatePass` component + pass id** (not a reused `DepthPass`). Global components are keyed by type and `DepthPass::ExecutePass` nulls `m_scene` (`SceneRenderGraph.cpp:90-94`, `DepthPass.cpp:105-137`), so it cannot run twice. `DepthLatePass::Init` must use `PE_LOAD_OP_LOAD` for depth (DepthPass hardcodes `CLEAR` at `DepthPass.cpp:19-23`), draw set B, leave the now-complete depth for GBuffer.
+- **Parameterized cull output.** `Scene::DispatchCulling` always clears the shared 7-slot counter + binds/barriers the fixed frustum buffers (`Scene.cpp:928-949/1029-1041/1113-1128/1242-1270`). Add a cull-output target (which opaque buffers + which counter to clear/bind/barrier/record) so Phase1→A and Phase2→B without touching the frustum set. Frustum `Culling@50` stays for transparents/selected/perception.
+- **Explicit A/B getters; do NOT repoint the existing opaque getters.** Perception reads `GetIndirectOpaqueSS/AlphaCutSS/OpaqueDS/AlphaCutDS` + shared counter (`ScenePerception.cpp:283-295`); shadows use `m_indirectAll` (`ShadowPass.cpp:340-341`); AABB debug is per-node (`AabbsPass.cpp:95-115`). Only `DepthPass`/`DepthLate`/`GBuffer` switch to A/B (runtime branch on `occlusion_culling`); when OFF they draw the frustum set exactly as today.
+- **Late predicate** = `vis && !wasInPhase1`, `wasInPhase1 = frustum(i) && (firstFrame || m_visibility[i])` (the literal Phase 1 emission predicate) — avoids first/reset-frame A+B double-emit.
+- **Seed `m_visibility = 1` on every draw-index rebuild**, not only capacity changes — draw indices are reassigned by node/mesh traversal (`SceneBuffers.cpp:230-258`) so same-capacity add/remove/reorder invalidates bits.
+- **Manual buffer barriers for all new buffers** (A/B counters, A/B indirect, visibility). The render graph only models image barriers (`RenderGraph.cpp:224-249`); culling correctness already relies on manual `BufferBarriers` (`Scene.cpp:951-1017/1100-1128/1242-1270`) — mirror that, incl. DX12 whole-resource transitions before indirect draws.
+- **Watch the depth image transitions** across `Depth@200 → DepthPyramid@250 → DepthLate@270` (pyramid reads depth as compute SRV, then DepthLate writes it again as attachment).
+
+### Implementation + validation outcome (2026-06-21, UNCOMMITTED)
+
+Implemented exactly as designed. New: `CullPhase1Pass`@180, `DepthLatePass`@270 (LOAD); repurposed `OcclusionCullingPass`→`CullPhase2`@260 (`{HIZ_OCCLUSION,PHASE2}`, sort dropped); `Scene::DispatchCullingPhase` + 10 `m_occ*A/B` vectors + `m_visibility`; `CullingCS.hlsl` `PHASE1`/`PHASE2` + `EmitOpaque` + visibility binding 15; DepthPass/GBuffer runtime-branch on `occlusion_culling`; full `SceneRenderGraph` registration (both DX12 + Vulkan branches).
+
+**Validated** on `occlusion_demo.pescene` (20,391 shared spheres behind one wall, shadows off, immediate present, GPU timers via `profiler_set_gpu_timing(true)`):
+
+| | Vulkan OFF | Vulkan ON | DX12 OFF | DX12 ON |
+|---|---|---|---|---|
+| DepthPass | 2.66 | **0.033** | 2.98 | **0.036** |
+| GbufferOpaque | 4.19 | **0.111** | 4.19 | **0.115** |
+| GPU total | 7.54 | **0.84** | 8.55 | **1.61** |
+| frame | 8.08 | **0.85 (9×)** | 9.16 | **2.01 (4.5×)** |
+
+Pixel-identical (no holes), no validation errors, occlusion passes backend-equal (~0.08ms total). Codex-reviewed; all findings fixed.
+
+**Codex review fixes applied:** (1) Hi-Z mip `floor`→`ceil` so the 4 corner taps always cover the footprint; (2) `CullPhase2`+`DepthLate` gated on `needDepth` (not `needGBuffer`) so depth is complete for depth-only consumers; (3) `RebuildRasterInstances` frees the occ A/B + visibility buffers before recreate (was a per-rebuild leak).
+
+**Two extra fixes from validation:** (4) **Hi-Z bias made relative** — `nearestZ <= tileDepth * (1 - occBias)`, default `0.002`. Absolute slack is catastrophic under reverse-Z infinite-far (depths ~1e-4); the old `0.0001` default spared ~half the cloud. Bias only guards coplanar/touching surfaces. (5) **DX12 binding-warning spam** — PHASE1/PHASE2 strip unused bindings 5/6/7/10/11 (DXIL), and `SetBuffer` on a missing slot logs a per-frame `PE_WARN` (`GetBindingIndex`) → made DX12 CPU-bound; `DispatchCullingPhase` now guards every bind with `HasBinding`.
+
+**Out of scope / follow-up:** the frustum `CullingPass`@50 (`Scene::DispatchCulling`) is ~29× slower on DX12 than Vulkan at 20k objects (0.637 vs 0.022ms; 0.699ms even occlusion-OFF) — the entire residual DX12↔Vulkan gap, pre-existing and unrelated to occlusion. Also a cosmetic deletion-queue-drain quirk leaks the 21 occ/visibility buffers at process exit (teardown code is correct).
+
+**Test gotchas:** drive settings via `settings.set("name", v)` (assignment `settings.x=v` is a no-op); set them AFTER `scene.load` (load restores serialized settings); turn off `draw_aabbs`/`draw_grid` before measuring (per-object, not occlusion-culled).
+
+---
+
 ## Provenance
 
 Investigated by Claude (Opus 4.8, in-editor) and Codex (gpt-5.5, `--sandbox read-only`, xhigh reasoning) independently; both converged on Hi-Z compute culling as the renderer path with a neutral hardware-query surface as the cross-API layer. Codex's full unabridged write-up was captured during the session (background task `ba85n5dsl`).

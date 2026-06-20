@@ -307,7 +307,19 @@ namespace pe
 
         Buffer *GetUniforms(uint32_t frame) { return m_storages[frame]; }
 
-        void DispatchCulling(CommandBuffer *cmd, PassInfo *passInfo, PassInfo *sortPassInfo);
+        void DispatchCulling(CommandBuffer *cmd, PassInfo *passInfo, PassInfo *sortPassInfo,
+                             Image *hiZPyramid = nullptr, Buffer *occlusionData = nullptr);
+
+        // Two-phase temporal Hi-Z occlusion cull (opaque-only). Phase1: emit last-frame-visible
+        // opaque draws -> set A. Phase2: test all vs this-frame Hi-Z, rewrite m_visibility, emit
+        // newly-disoccluded opaque -> set B. Leaves the frustum DispatchCulling outputs untouched.
+        enum class CullPhase
+        {
+            Phase1,
+            Phase2
+        };
+        void DispatchCullingPhase(CommandBuffer *cmd, PassInfo *passInfo, CullPhase phase,
+                                  Image *hiZPyramid = nullptr, Buffer *occlusionData = nullptr);
         Buffer *GetBuffer() { return m_buffer; }
         Buffer *GetLightUniform(uint32_t frame) { return m_lightUniforms[frame]; }
         Buffer *GetLightStorage(uint32_t frame) { return m_lightStorageBuffers[frame]; }
@@ -331,6 +343,20 @@ namespace pe
         Buffer *GetIndirectAlphaBlend(uint32_t frame) const { return m_indirectAlphaBlend[frame]; }
         Buffer *GetIndirectTransmission(uint32_t frame) const { return m_indirectTransmission[frame]; }
         Buffer *GetIndirectSelected(uint32_t frame) const { return m_indirectSelected[frame]; }
+        // Two-phase Hi-Z occlusion sets (opaque-only). A = last-frame-visible (phase 1),
+        // B = newly-disoccluded (phase 2). Consumed by DepthPass/DepthLatePass/GBuffer only when
+        // occlusion_culling is on; the frustum getters above stay for shadows/transparents/perception.
+        Buffer *GetOccCountersA(uint32_t frame) const { return m_occCountersA[frame]; }
+        Buffer *GetOccCountersB(uint32_t frame) const { return m_occCountersB[frame]; }
+        Buffer *GetOccOpaqueSSA(uint32_t frame) const { return m_occOpaqueSSA[frame]; }
+        Buffer *GetOccAlphaCutSSA(uint32_t frame) const { return m_occAlphaCutSSA[frame]; }
+        Buffer *GetOccOpaqueDSA(uint32_t frame) const { return m_occOpaqueDSA[frame]; }
+        Buffer *GetOccAlphaCutDSA(uint32_t frame) const { return m_occAlphaCutDSA[frame]; }
+        Buffer *GetOccOpaqueSSB(uint32_t frame) const { return m_occOpaqueSSB[frame]; }
+        Buffer *GetOccAlphaCutSSB(uint32_t frame) const { return m_occAlphaCutSSB[frame]; }
+        Buffer *GetOccOpaqueDSB(uint32_t frame) const { return m_occOpaqueDSB[frame]; }
+        Buffer *GetOccAlphaCutDSB(uint32_t frame) const { return m_occAlphaCutDSB[frame]; }
+        Buffer *GetVisibilityBuffer() const { return m_visibility; }
         bool HasTransparentMeshes() const { return m_hasTransparentMeshes; }
         bool HasAlphaBlendMeshes() const { return m_hasAlphaBlendMeshes; }
         bool HasTransmissionMeshes() const { return m_hasTransmissionMeshes; }
@@ -553,6 +579,21 @@ namespace pe
         std::vector<Buffer *> m_sortKeysAlphaBlend;
         std::vector<Buffer *> m_sortKeysTransmission;
         Buffer *m_indirectAll = nullptr;
+
+        // Two-phase Hi-Z occlusion (opaque-only). Per-frame A/B indirect sets + per-set counters
+        // (7-slot layout, only opaque slots 0/1/5/6 used); m_visibility is one persistent buffer
+        // (uint per draw, 1 = visible last frame) seeded to 1 on every draw-index rebuild.
+        std::vector<Buffer *> m_occCountersA;
+        std::vector<Buffer *> m_occCountersB;
+        std::vector<Buffer *> m_occOpaqueSSA;
+        std::vector<Buffer *> m_occAlphaCutSSA;
+        std::vector<Buffer *> m_occOpaqueDSA;
+        std::vector<Buffer *> m_occAlphaCutDSA;
+        std::vector<Buffer *> m_occOpaqueSSB;
+        std::vector<Buffer *> m_occAlphaCutSSB;
+        std::vector<Buffer *> m_occOpaqueDSB;
+        std::vector<Buffer *> m_occAlphaCutDSB;
+        Buffer *m_visibility = nullptr;
 
         size_t m_verticesOffset = 0;
         size_t m_positionsOffset = 0;

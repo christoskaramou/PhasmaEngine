@@ -258,6 +258,18 @@ namespace pe
         ui::ItemTooltip("Point lights attenuate by windowed inverse-square (raster path). Intensity is interpreted as luminance * distance^2, so expect to raise it massively.");
         TrackChange(ImGui::Checkbox("Frustum Culling", &gSettings.frustum_culling));
         ui::ItemTooltip("Cull renderables outside the active camera frustum.");
+        TrackChange(ImGui::Checkbox("Occlusion Culling (Hi-Z)", &gSettings.occlusion_culling));
+        ui::ItemTooltip("GPU Hi-Z occlusion culling: skip opaque draws hidden behind this frame's depth.");
+        if (gSettings.occlusion_culling)
+        {
+            ImGui::Indent(16.0f);
+            ImGui::SetNextItemWidth(120.0f);
+            TrackChange(ImGui::DragFloat("Occlusion Bias", &gSettings.occlusion_culling_bias, 0.0005f, 0.0f, 0.05f, "%.4f"));
+            ui::ItemTooltip("Hi-Z slack as a FRACTION of occluder depth (0.002 = 0.2%). Only protects "
+                            "coplanar/touching surfaces from false culling; higher = more conservative "
+                            "(cull less). Raise it only if flush surfaces pop out at silhouette edges.");
+            ImGui::Unindent(16.0f);
+        }
         ImGui::Checkbox("FreezeCamCull", &gSettings.freeze_frustum_culling);
         ui::ItemTooltip("Freeze the culling camera to inspect culling behavior.");
         ImGui::Checkbox("Draw AABBs", &gSettings.draw_aabbs);

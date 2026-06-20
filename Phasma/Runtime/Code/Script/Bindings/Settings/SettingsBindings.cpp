@@ -20,6 +20,7 @@ namespace pe
         {"draw_grid", &GlobalSettings::draw_grid},
         {"draw_aabbs", &GlobalSettings::draw_aabbs},
         {"frustum_culling", &GlobalSettings::frustum_culling},
+        {"occlusion_culling", &GlobalSettings::occlusion_culling},
         {"randomize_lights", &GlobalSettings::randomize_lights},
         {"physical_point_falloff", &GlobalSettings::physical_point_falloff},
         {"use_Disney_PBR", &GlobalSettings::use_Disney_PBR},
@@ -30,6 +31,7 @@ namespace pe
 
     static const std::unordered_map<std::string_view, float GlobalSettings::*> s_floatSettings = {
         {"render_scale", &GlobalSettings::render_scale},
+        {"occlusion_culling_bias", &GlobalSettings::occlusion_culling_bias},
         {"cas_sharpness", &GlobalSettings::cas_sharpness},
         {"dof_focus_scale", &GlobalSettings::dof_focus_scale},
         {"dof_blur_range", &GlobalSettings::dof_blur_range},

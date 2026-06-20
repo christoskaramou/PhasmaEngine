@@ -163,6 +163,14 @@ namespace pe
             pushConstants.passType = 0u;
 
             uint32_t frame = RHII.GetFrameIndex();
+            const uint32_t mesh = m_scene->GetMeshCount();
+
+            // Two-phase Hi-Z: when occlusion culling is on, draw set A (CullPhase1@180) then set B
+            // (CullPhase2@260). Their depth was written by DepthPass@200 (A) and DepthLatePass@270
+            // (B), so the reverse-Z EQUAL test selects the nearest surface per pixel for both sets.
+            // Occluded objects are in neither set, so they are never drawn. Otherwise draw the
+            // frustum-culled set from CullingPass@50.
+            const bool occlusion = Settings::Get<GlobalSettings>().occlusion_culling;
 
             cmd->BeginPass(7, m_attachments.data(), "GbufferOpaquePass");
             cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
@@ -173,12 +181,28 @@ namespace pe
             cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
             cmd->SetConstants(pushConstants);
             cmd->PushConstants();
-            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 0 * sizeof(uint32_t), m_scene->GetMeshCount());
-            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 1 * sizeof(uint32_t), m_scene->GetMeshCount());
+            if (occlusion)
+            {
+                cmd->DrawIndexedIndirectCount(m_scene->GetOccOpaqueSSA(frame), 0, m_scene->GetOccCountersA(frame), 0 * sizeof(uint32_t), mesh);
+                cmd->DrawIndexedIndirectCount(m_scene->GetOccAlphaCutSSA(frame), 0, m_scene->GetOccCountersA(frame), 1 * sizeof(uint32_t), mesh);
+                cmd->DrawIndexedIndirectCount(m_scene->GetOccOpaqueSSB(frame), 0, m_scene->GetOccCountersB(frame), 0 * sizeof(uint32_t), mesh);
+                cmd->DrawIndexedIndirectCount(m_scene->GetOccAlphaCutSSB(frame), 0, m_scene->GetOccCountersB(frame), 1 * sizeof(uint32_t), mesh);
 
-            cmd->BindPipeline(*m_passInfoDS);
-            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 5 * sizeof(uint32_t), m_scene->GetMeshCount());
-            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 6 * sizeof(uint32_t), m_scene->GetMeshCount());
+                cmd->BindPipeline(*m_passInfoDS);
+                cmd->DrawIndexedIndirectCount(m_scene->GetOccOpaqueDSA(frame), 0, m_scene->GetOccCountersA(frame), 5 * sizeof(uint32_t), mesh);
+                cmd->DrawIndexedIndirectCount(m_scene->GetOccAlphaCutDSA(frame), 0, m_scene->GetOccCountersA(frame), 6 * sizeof(uint32_t), mesh);
+                cmd->DrawIndexedIndirectCount(m_scene->GetOccOpaqueDSB(frame), 0, m_scene->GetOccCountersB(frame), 5 * sizeof(uint32_t), mesh);
+                cmd->DrawIndexedIndirectCount(m_scene->GetOccAlphaCutDSB(frame), 0, m_scene->GetOccCountersB(frame), 6 * sizeof(uint32_t), mesh);
+            }
+            else
+            {
+                cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 0 * sizeof(uint32_t), mesh);
+                cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 1 * sizeof(uint32_t), mesh);
+
+                cmd->BindPipeline(*m_passInfoDS);
+                cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 5 * sizeof(uint32_t), mesh);
+                cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 6 * sizeof(uint32_t), mesh);
+            }
 
             cmd->EndPass();
         }

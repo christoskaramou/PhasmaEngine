@@ -15,7 +15,11 @@ namespace pe
     {
         Culling = 0,
         Shadow,
+        CullPhase1,
         Depth,
+        DepthPyramid,
+        OcclusionCulling, // two-phase Hi-Z: phase-2 cull (CullPhase2)
+        DepthLate,
         GBufferOpaque,
         SSAO,
         ForwardPlusLightCulling,
@@ -49,7 +53,11 @@ namespace pe
     {
         IRenderPassComponent *culling = nullptr;
         IRenderPassComponent *shadow = nullptr;
+        IRenderPassComponent *cullPhase1 = nullptr;
         IRenderPassComponent *depth = nullptr;
+        IRenderPassComponent *depthPyramid = nullptr;
+        IRenderPassComponent *occlusionCulling = nullptr; // two-phase Hi-Z: phase-2 cull
+        IRenderPassComponent *depthLate = nullptr;
         IRenderPassComponent *gbufferOpaque = nullptr;
         IRenderPassComponent *ssao = nullptr;
         IRenderPassComponent *forwardPlusLightCulling = nullptr;
