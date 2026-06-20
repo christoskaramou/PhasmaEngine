@@ -474,6 +474,18 @@ Surfaced four ways:
   (`gamekit/spatial.lua`) — authoring conveniences: `frame_and_decode` aims the camera at an
   area then decodes; `verify_visible` answers "is this node actually on-screen and unoccluded?"
   with pixel coverage in one call.
+- **gamekit loop-closers `spatial.find_view_of(node)` / `place_and_verify(node, pos)`** — one call
+  that *decides and acts*, collapsing the manual aim→decode→read→re-aim loop. `find_view_of`
+  frames the target from a ring of candidate angles (current camera + N azimuths at a downward
+  pitch + a tilted top-down), decodes each, and leaves the camera at the angle with the most
+  visible coverage — so it routes *around* an occluder (an azimuth peeks through a doorway the
+  straight-down view cannot) instead of trusting one guessed pose. `place_and_verify` moves the
+  node (optional ground-snap / overlap-resolve), finds a view, and on a still-hidden result
+  reports `occluders` — the decoded nodes nearer than the target whose screen box overlaps it.
+  These compose the native bindings, so they add no engine surface and run in PhasmaPlayer too.
+  Caveat: decode re-rasterizes the existing GPU-culled draws, so a node created in the *same*
+  script call is not yet in the draw set and reads as 0 px — build in one call, verify in a later
+  one (one rendered frame suffices). The digest has no such lag (CPU-side AABBs).
 
 This complements `get_map_shot` / `pick_map_point`: map shots are exact authoring maps from a
 synthetic top-down ortho camera, while the decode/pick pair answers "what is visible from the

@@ -1456,7 +1456,8 @@ namespace pe
                 tool.name = "decode_camera_view";
                 tool.description = "Renders an occlusion-exact object-id pass from the current active camera; returns visible nodes with "
                                    "screen bounding boxes, pixel counts, and distances. Use set_camera or frame_node to aim first. "
-                                   "Optional min_pixels (default 1) filters tiny slivers.";
+                                   "Optional min_pixels (default 1) filters tiny slivers. "
+                                   "Note: a node created/added THIS call isn't drawn yet (reuses culled draws) - build it, then decode on a LATER call.";
                 tool.inputSchema = schema::Object({
                     {"min_pixels", "Minimum visible pixels required for a node to be returned (default 1)", schema::Number()},
                 });
@@ -1479,7 +1480,8 @@ namespace pe
                     "frame_node/get_node_info, plus node_name), the exact occlusion-correct world_hit (the unprojected "
                     "surface point) and its distance from the camera. On a miss (sky/empty) hit=false and ground_point is "
                     "the camera ray intersected with Y=ground_y (default 0). Aim first with set_camera/frame_node, decode "
-                    "to read the view, then pick a pixel to get its precise world coords / node.";
+                    "to read the view, then pick a pixel to get its precise world coords / node. "
+                    "Note: a node created/added THIS call isn't drawn yet (reuses culled draws) - build it, then pick on a LATER call.";
                 tool.inputSchema = schema::Object({
                     {"x", "Pixel X in the decode_camera_view image (0..width-1)", schema::Number(), true},
                     {"y", "Pixel Y in the decode_camera_view image (0..height-1)", schema::Number(), true},

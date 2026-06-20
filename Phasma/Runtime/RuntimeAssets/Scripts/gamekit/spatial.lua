@@ -311,4 +311,154 @@ function spatial.verify_visible(target, opts)
     return result
 end
 
+-- ── Loop-closers: one call that decides AND acts ──────────────────────────────────────────────
+-- verify_visible answers "is X visible from where the camera happens to point". These two close
+-- the authoring loop the agent otherwise drives by hand (aim -> decode -> read -> re-aim): they
+-- SEARCH for a working camera angle and REPORT what blocks the shot, in a single execute_lua call.
+--
+-- FRESHLY-BUILT NODES: decode re-rasterizes the EXISTING GPU-culled indirect draws, so a node
+-- created THIS call is not in the draw set yet and reads as 0 pixels (false "invisible"). Build in
+-- one call, then verify in a LATER call (one rendered frame is enough); moving an already-drawn
+-- node is fine. The scene digest has no such lag — it reads CPU-side AABBs immediately.
+
+-- Do two screen-space boxes (each { min_x, min_y, max_x, max_y }) overlap?
+local function boxes_overlap(a, b)
+    return a and b
+        and a.min_x <= b.max_x and a.max_x >= b.min_x
+        and a.min_y <= b.max_y and a.max_y >= b.min_y
+end
+
+-- Decoded nodes that sit IN FRONT of a target's screen region — the likely occluders. A node
+-- qualifies when its screen_box overlaps `screen_box` and it is nearer than `distance`. Sorted by
+-- visible pixels (biggest blocker first). Returns {} when screen_box is nil (target fully hidden,
+-- so decode never reported its box) — find_view_of has already exhausted the angles by then.
+-- Pass `view` to reuse an existing decode_view result instead of issuing another GPU pass.
+function spatial._occluders_of(screen_box, distance, view)
+    local occ = {}
+    if not screen_box then return occ end
+    view = view or spatial.decode_view(1)
+    if not (view and view.nodes) then return occ end
+    local td = distance or math.huge
+    for _, e in ipairs(view.nodes) do
+        if e.distance and e.distance < td and boxes_overlap(e.screen_box, screen_box) then
+            occ[#occ + 1] = { name = e.name, distance = e.distance, pixels = e.visible_pixels }
+        end
+    end
+    table.sort(occ, function(x, y) return (x.pixels or 0) > (y.pixels or 0) end)
+    return occ
+end
+
+-- Candidate look-directions (camera forward vectors) to try when hunting for a clear view.
+-- opts: { dir (force a single direction), azimuths=6, pitch_deg=35, azimuth_offset=0,
+--         include_current=true, include_top=true }. Each azimuth orbits the target on the XZ
+-- plane at a fixed downward pitch, so the camera ends up above and to the side looking in — one
+-- of them peeks through a doorway/window the straight-down view cannot.
+local function candidate_dirs(opts)
+    if opts.dir then return { opts.dir } end
+    local dirs = {}
+    if opts.include_current ~= false then
+        local cam = get_camera and get_camera()
+        if cam and cam.get_front then dirs[#dirs + 1] = cam:get_front() end
+    end
+    local pitch = math.rad(opts.pitch_deg or 35.0)
+    local cp, sp = math.cos(pitch), math.sin(pitch)
+    local n = math.max(1, opts.azimuths or 6)
+    local off = math.rad(opts.azimuth_offset or 0)
+    for i = 0, n - 1 do
+        local a = off + (i / n) * 2 * math.pi
+        dirs[#dirs + 1] = vec3(cp * math.sin(a), -sp, cp * math.cos(a))
+    end
+    -- Slight tilt avoids the degenerate up-vector of a dead-vertical look_at.
+    if opts.include_top ~= false then dirs[#dirs + 1] = vec3(0.05, -1.0, 0.05) end
+    return dirs
+end
+
+-- Find a camera angle that actually SEES `target` (node handle or name) and leave the camera
+-- there. Frames the target from each candidate direction, decodes, and keeps the one with the most
+-- visible coverage — so it routes around occluders instead of trusting a single guessed angle.
+-- opts: candidate_dirs opts (dir/azimuths/pitch_deg/...) + { aabb (override target box),
+--   padding=1.4, min_pixels=1, min_coverage=0 (found requires >= this), good_enough=0.04
+--   (stop early once a candidate clears this coverage) }.
+-- Returns { found, name, coverage, pixels, distance, screen_box, dir, candidates = {
+--   { dir, coverage, pixels }, ... } }. `found=false` with a non-empty candidates list means it
+--   was tried from every angle and stayed hidden/too small.
+function spatial.find_view_of(target, opts)
+    opts = opts or {}
+    local node = target
+    if type(target) == "string" then
+        node = scene and scene.find_model and scene.find_model(target)
+    end
+    local name = (type(target) == "string") and target
+        or (node and node.get_name and node:get_name()) or nil
+    local box = opts.aabb or (node and node.get_bounding_box and node:get_bounding_box()) or nil
+    local out = { found = false, name = name, coverage = 0.0, pixels = 0, candidates = {} }
+    if not (name and box) then return out end
+
+    local padding = opts.padding or 1.4
+    local good_enough = opts.good_enough or 0.04
+    local best
+    for _, dir in ipairs(candidate_dirs(opts)) do
+        if spatial.frame_camera({ aabb = box, dir = dir, padding = padding }) then
+            local v = spatial.verify_visible(name, { min_pixels = opts.min_pixels or 1 })
+            out.candidates[#out.candidates + 1] = { dir = dir, coverage = v.coverage, pixels = v.pixels }
+            if v.visible and (not best or v.coverage > best.coverage) then
+                best = { dir = dir, coverage = v.coverage, pixels = v.pixels,
+                    distance = v.distance, screen_box = v.screen_box }
+                if v.coverage >= good_enough then break end -- clear enough; stop searching
+            end
+        end
+    end
+
+    if best then
+        -- Re-apply the winning pose (the loop may have ended on a worse candidate).
+        spatial.frame_camera({ aabb = box, dir = best.dir, padding = padding })
+        out.coverage, out.pixels = best.coverage, best.pixels
+        out.distance, out.screen_box, out.dir = best.distance, best.screen_box, best.dir
+        out.found = best.coverage >= (opts.min_coverage or 0.0)
+    end
+    return out
+end
+
+-- Place `node` (handle or name) and confirm it can be seen — the build/edit loop in one call.
+-- Moves the node's AABB center to `pos` (vec3; nil = leave where it is), optionally settles it onto
+-- the ground and pushes it out of overlaps, then finds a viewing angle and reports the result.
+-- opts: { on_ground=false, ground_y, resolve=false (true or a resolve_overlaps opts table),
+--   find_view=true (false = just verify from the current camera, don't move it),
+--   plus all find_view_of opts (padding/azimuths/min_coverage/...) }.
+-- Returns { node, name, placed, visible, coverage, pixels, distance, screen_box, occluders }.
+-- When the node ends up not (well) visible, `occluders` lists what stands in front of it.
+function spatial.place_and_verify(node, pos, opts)
+    opts = opts or {}
+    if type(node) == "string" then
+        node = scene and scene.find_model and scene.find_model(node)
+    end
+    local out = { node = node, placed = false, visible = false, coverage = 0.0, pixels = 0, occluders = {} }
+    if not node then return out end
+    out.name = node.get_name and node:get_name() or nil
+
+    if pos then out.placed = move_center_to(node, pos) else out.placed = true end
+    if opts.on_ground then spatial.place_on_ground(node, opts.ground_y) end
+    if opts.resolve then
+        spatial.resolve_overlaps(type(opts.resolve) == "table" and opts.resolve or {})
+    end
+
+    if opts.find_view ~= false then
+        local v = spatial.find_view_of(node, opts)
+        out.coverage, out.pixels = v.coverage, v.pixels
+        out.distance, out.screen_box, out.visible = v.distance, v.screen_box, v.found
+    else
+        local v = spatial.verify_visible(node, {
+            min_pixels = opts.min_pixels or 1,
+            min_coverage = opts.min_coverage or 0.0,
+        })
+        out.coverage, out.pixels = v.coverage, v.pixels
+        out.distance, out.screen_box, out.visible = v.distance, v.screen_box, v.visible
+    end
+
+    if (not out.visible) or out.coverage < (opts.min_coverage or 0.0) then
+        out.occluders = spatial._occluders_of(out.screen_box, out.distance)
+    end
+    return out
+end
+
 return spatial
