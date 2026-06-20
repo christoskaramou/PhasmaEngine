@@ -417,7 +417,23 @@ units** of the node centre (≈ one pixel at 1600px). This supersedes the origin
 worldXZ/node-ID GPU data passes (the depth capture only returns 8-bit visualised values,
 and the editor's CPU pick is exact and cheaper).
 
+### Phase 2c - Current-camera visible-node decode (Added 2026-06-20)
+
+The MCP tool **`decode_camera_view(min_pixels?)`** reads what the current active camera can
+actually see. It records an editor-only immediate object-ID graphics pass into an
+`R32G32_UINT` target while loading the existing depth buffer, so visibility is depth-tested
+against the renderer's current scene depth. A tiny compute clear/reduce pair collapses the
+target to per-draw `NodeVis` records (`visible_pixels`, screen-space box, nearest depth);
+the editor readback maps draw indices back through `Scene::BuildDrawIndexToNodeIndex()` and
+returns stable node ids, names, pixel boxes, raw nearest NDC depth, and camera-space distance.
+
+This complements `get_map_shot` / `pick_map_point`: map shots are exact authoring maps from a
+synthetic top-down ortho camera, while `decode_camera_view` answers "what is visible from the
+camera I am looking through now?" without changing or restoring camera state.
+
 ### Next (Phase 2b.3)
+
+For the map-shot track:
 
 Only **adaptive tiling** remains: recursive 1→4→16 subdivision of occupied regions + a
 tile→world-rect manifest, for maps too large to resolve in one shot. Deferred until a real

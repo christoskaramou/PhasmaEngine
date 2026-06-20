@@ -166,6 +166,22 @@ namespace pe
         return false;
     }
 
+    std::vector<int> Scene::BuildDrawIndexToNodeIndex() const
+    {
+        std::vector<int> result(m_meshCount, -1);
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
+        {
+            const auto &drawSlots = m_nodeRuntime[i].meshRefIndirect;
+            for (uint32_t slot = 0; slot < static_cast<uint32_t>(drawSlots.size()); slot++)
+            {
+                const uint32_t drawIndex = drawSlots[slot];
+                if (drawIndex != std::numeric_limits<uint32_t>::max() && drawIndex < static_cast<uint32_t>(m_meshCount))
+                    result[drawIndex] = static_cast<int>(i);
+            }
+        }
+        return result;
+    }
+
     bool Scene::NodeUsesSkinnedStrip2D(const NodeId *node) const
     {
         ModelAsset *model = GetModelForNode(node);

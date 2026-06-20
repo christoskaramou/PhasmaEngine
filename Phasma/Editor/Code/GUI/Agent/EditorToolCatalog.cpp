@@ -1453,6 +1453,24 @@ namespace pe
 
             {
                 ToolDefinition tool;
+                tool.name = "decode_camera_view";
+                tool.description = "Renders an occlusion-exact object-id pass from the current active camera; returns visible nodes with "
+                                   "screen bounding boxes, pixel counts, and distances. Use set_camera or frame_node to aim first. "
+                                   "Optional min_pixels (default 1) filters tiny slivers.";
+                tool.inputSchema = schema::Object({
+                    {"min_pixels", "Minimum visible pixels required for a node to be returned (default 1)", schema::Number()},
+                });
+                tool.handler = [runtime](const nlohmann::json &args, Context &) -> CallToolResult
+                {
+                    if (!runtime)
+                        return RuntimeUnavailable();
+                    return RuntimeJsonResult(runtime->DecodeCameraView(args.dump()));
+                };
+                tools.push_back(std::move(tool));
+            }
+
+            {
+                ToolDefinition tool;
                 tool.name = "pick_map_point";
                 tool.description =
                     "Exact pixel -> world/node readback for a get_map_shot image. Given a pixel (x,y) in the map image and the "

@@ -420,6 +420,7 @@ namespace pe
         uint32_t GetNodeCount() const { return static_cast<uint32_t>(m_nodeIds.size()); }
         NodeId *GetNodeId(uint32_t index) { return m_nodeIds[index]; }
         const NodeId *GetNodeId(uint32_t index) const { return m_nodeIds[index]; }
+        std::vector<int> BuildDrawIndexToNodeIndex() const;
 
         // Mesh store
         const std::vector<Mesh> &GetMeshes() const { return m_meshes; }

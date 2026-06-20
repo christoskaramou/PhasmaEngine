@@ -2,12 +2,16 @@
 #include "GUI/Widgets/ProfilerWidget.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
+#include "API/Descriptor.h"
 #include "API/Image.h"
+#include "API/Pipeline.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "API/Shader.h"
 #include "API/Surface.h"
 #include "Camera/Camera.h"
 #include "GUI/SpriteAuthoring.h"
+#include "Render/SceneRendererHost.h"
 #include "Scene/Scene.h"
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
@@ -16,6 +20,7 @@
 #include "Scene/SceneNodeHandle.h"
 #include "Script/ScriptRuntimeHooks.h"
 #include "Script/ScriptSystem.h"
+#include "RenderPasses/DepthPass.h"
 #include "Systems/RendererSystem.h"
 #include "Render/ScreenshotWriter.h"
 #include "Phasma/MCP/Utils.h"
@@ -205,6 +210,231 @@ namespace pe
                 rows.push_back(std::move(row));
             }
             return rows;
+        }
+
+        static nlohmann::json Mat4FlatJson(const mat4 &m)
+        {
+            nlohmann::json values = nlohmann::json::array();
+            for (int r = 0; r < 4; ++r)
+                for (int c = 0; c < 4; ++c)
+                    values.push_back(m[c][r]);
+            return values;
+        }
+
+        struct ObjectIdNodeVis
+        {
+            uint32_t pixelCount;
+            uint32_t minX;
+            uint32_t minY;
+            uint32_t maxX;
+            uint32_t maxY;
+            uint32_t nearestDepthBits;
+        };
+        static_assert(sizeof(ObjectIdNodeVis) == 24, "ObjectIdNodeVis must match Perception NodeVis");
+
+        struct PushConstants_ObjReduce
+        {
+            uint32_t width;
+            uint32_t height;
+            uint32_t drawCount;
+            uint32_t pad0;
+        };
+
+        struct ObjectIdDecodeCache
+        {
+            Image *idTarget = nullptr;
+            Buffer *nodeVis = nullptr;
+            uint32_t width = 0;
+            uint32_t height = 0;
+            uint32_t nodeVisCapacity = 0;
+            ::PeFormat depthFormat = PE_FORMAT_UNDEFINED;
+            bool reverseDepth = false;
+            std::unique_ptr<PassInfo> idPI;
+            std::unique_ptr<PassInfo> clearPI;
+            std::unique_ptr<PassInfo> reducePI;
+        };
+
+        static ObjectIdDecodeCache &GetObjectIdDecodeCache()
+        {
+            static ObjectIdDecodeCache cache;
+            return cache;
+        }
+
+        static uint32_t NextPow2(uint32_t value)
+        {
+            if (value <= 1)
+                return 1;
+            value--;
+            value |= value >> 1;
+            value |= value >> 2;
+            value |= value >> 4;
+            value |= value >> 8;
+            value |= value >> 16;
+            return value + 1;
+        }
+
+        static float FloatFromBits(uint32_t bits)
+        {
+            float value = 0.0f;
+            std::memcpy(&value, &bits, sizeof(value));
+            return value;
+        }
+
+        static float DecodeCameraDepthDistance(float ndcDepth, const Camera &camera)
+        {
+            if (!std::isfinite(ndcDepth))
+                return std::numeric_limits<float>::infinity();
+
+            const float nearPlane = std::max(camera.GetNearPlane(), 1e-6f);
+            const float farPlane = camera.GetFarPlane();
+            const float depth = std::clamp(ndcDepth, 0.0f, 1.0f);
+
+            if (camera.IsOrthographic())
+            {
+                if (std::isfinite(farPlane) && farPlane > nearPlane)
+                {
+                    const bool reverseDepth = Settings::Get<GlobalSettings>().reverse_depth;
+                    return reverseDepth ? nearPlane + (1.0f - depth) * (farPlane - nearPlane)
+                                        : nearPlane + depth * (farPlane - nearPlane);
+                }
+                return 0.0f;
+            }
+
+            if (depth <= 1e-8f)
+                return std::numeric_limits<float>::infinity();
+
+            if (!std::isfinite(farPlane) || farPlane > std::numeric_limits<float>::max() * 0.5f)
+                return nearPlane / depth;
+
+            return (nearPlane * farPlane) / std::max(nearPlane + depth * (farPlane - nearPlane), 1e-8f);
+        }
+
+        static BufferBarrierInfo MakeBufferBarrier(Buffer *buffer, PeBarrierSync stage, PeBarrierAccess access, size_t size)
+        {
+            BufferBarrierInfo barrier{};
+            barrier.buffer = buffer;
+            barrier.stageMask = stage;
+            barrier.accessMask = access;
+            barrier.offset = 0;
+            barrier.size = size;
+            return barrier;
+        }
+
+        static void RecordBufferState(Buffer *buffer, PeBarrierSync stage, PeBarrierAccess access, size_t size)
+        {
+            BufferTrackInfo &track = buffer->GetTrackInfo();
+            track.buffer = buffer;
+            track.stageMask = stage;
+            track.accessMask = access;
+            track.offset = 0;
+            track.size = size;
+        }
+
+        static std::unique_ptr<PassInfo> CreateObjectIdPassInfo(::PeFormat depthFormat, bool reverseDepth)
+        {
+            auto passInfo = std::make_unique<PassInfo>();
+            passInfo->name = "ObjectIdDecode_pipeline";
+            passInfo->pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Depth/DepthVS.hlsl",
+                                                    .entryPoint = "mainVS",
+                                                    .stage = PE_SHADER_STAGE_VERTEX,
+                                                    .defines = std::vector<Define>{}});
+            passInfo->pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Perception/ObjectIdPS.hlsl",
+                                                    .entryPoint = "mainPS",
+                                                    .stage = PE_SHADER_STAGE_FRAGMENT,
+                                                    .defines = std::vector<Define>{}});
+            passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
+            passInfo->cullMode = PE_CULL_MODE_NONE;
+            passInfo->colorBlendAttachments = {BlendState::Default};
+            passInfo->colorFormats = {PE_FORMAT_R32G32_UINT};
+            passInfo->depthFormat = depthFormat;
+            passInfo->depthTestEnable = true;
+            passInfo->depthWriteEnable = false;
+            passInfo->depthCompareOp = reverseDepth ? PE_COMPARE_OP_GREATER_OR_EQUAL : PE_COMPARE_OP_LESS_OR_EQUAL;
+            passInfo->Update();
+            return passInfo;
+        }
+
+        static std::unique_ptr<PassInfo> CreateObjectIdComputePassInfo(const std::string &name,
+                                                                       const std::string &shaderPath,
+                                                                       const std::string &entryPoint)
+        {
+            auto passInfo = std::make_unique<PassInfo>();
+            passInfo->name = name;
+            passInfo->pCompShader = Shader::Create({.sourcePath = shaderPath,
+                                                    .entryPoint = entryPoint,
+                                                    .stage = PE_SHADER_STAGE_COMPUTE,
+                                                    .defines = std::vector<Define>{}});
+            passInfo->Update();
+            return passInfo;
+        }
+
+        static bool EnsureObjectIdDecodeResources(ObjectIdDecodeCache &cache,
+                                                  Image *depth,
+                                                  uint32_t meshCount,
+                                                  std::string &outError)
+        {
+            if (!depth)
+            {
+                outError = "depth target not available";
+                return false;
+            }
+
+            const uint32_t width = depth->GetWidth();
+            const uint32_t height = depth->GetHeight();
+            if (width == 0 || height == 0)
+            {
+                outError = "depth target has zero extent";
+                return false;
+            }
+
+            if (!cache.idTarget || cache.width != width || cache.height != height)
+            {
+                Image::Destroy(cache.idTarget);
+                cache.width = width;
+                cache.height = height;
+
+                cache.idTarget = Image::Create({
+                    .width = width,
+                    .height = height,
+                    .format = PE_FORMAT_R32G32_UINT,
+                    .usage = PE_IMAGE_USAGE_COLOR_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_TRANSFER_SRC,
+                    .name = "ObjectIdDecodeTarget",
+                });
+                cache.idTarget->CreateRTV();
+                cache.idTarget->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
+            }
+
+            const uint32_t requiredCapacity = NextPow2(meshCount);
+            if (!cache.nodeVis || cache.nodeVisCapacity < requiredCapacity)
+            {
+                Buffer::Destroy(cache.nodeVis);
+                cache.nodeVisCapacity = requiredCapacity;
+                cache.nodeVis = Buffer::Create({
+                    .size = static_cast<size_t>(cache.nodeVisCapacity) * sizeof(ObjectIdNodeVis),
+                    .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_SRC,
+                    .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
+                    .name = "ObjectIdNodeVis",
+                });
+            }
+
+            const ::PeFormat depthFormat = RHII.GetDepthFormat();
+            const bool reverseDepth = Settings::Get<GlobalSettings>().reverse_depth;
+            if (!cache.idPI || cache.depthFormat != depthFormat || cache.reverseDepth != reverseDepth)
+            {
+                cache.idPI = CreateObjectIdPassInfo(depthFormat, reverseDepth);
+                cache.depthFormat = depthFormat;
+                cache.reverseDepth = reverseDepth;
+            }
+            if (!cache.clearPI)
+                cache.clearPI = CreateObjectIdComputePassInfo("ObjectIdClear_pipeline",
+                                                              Path::RuntimeAssets + "Shaders/Perception/ObjectIdClearCS.hlsl",
+                                                              "clearCS");
+            if (!cache.reducePI)
+                cache.reducePI = CreateObjectIdComputePassInfo("ObjectIdReduce_pipeline",
+                                                               Path::RuntimeAssets + "Shaders/Perception/ObjectIdReduceCS.hlsl",
+                                                               "reduceCS");
+
+            return true;
         }
 
         static nlohmann::json AabbJson(const AABB &aabb)
@@ -4745,6 +4975,310 @@ namespace pe
                 return R"({"error":"timeout building manifest"})";
         }
         return *out;
+    }
+
+    std::string EditorToolRuntime::DecodeCameraView(const std::string &argsJson) const
+    {
+        auto args = nlohmann::json::parse(argsJson.empty() ? "{}" : argsJson, nullptr, false);
+        if (args.is_discarded() || !args.is_object())
+            return R"({"error":"invalid args json"})";
+
+        int minPixels = 1;
+        if (args.contains("min_pixels"))
+        {
+            if (!args["min_pixels"].is_number())
+                return R"({"error":"min_pixels must be a number"})";
+            minPixels = std::max(0, args["min_pixels"].get<int>());
+        }
+
+        struct State
+        {
+            std::mutex mtx;
+            std::condition_variable cv;
+            bool done = false;
+            std::string result;
+        };
+        auto state = std::make_shared<State>();
+
+        QueueAction([state, minPixels]()
+                    {
+            auto finish = [&]()
+            {
+                {
+                    std::lock_guard lock(state->mtx);
+                    state->done = true;
+                }
+                state->cv.notify_one();
+            };
+
+            try
+            {
+                auto *renderer = GetGlobalSystem<RendererSystem>();
+                if (!renderer)
+                {
+                    state->result = R"({"error":"renderer not available"})";
+                    finish();
+                    return;
+                }
+
+                Scene &scene = renderer->GetScene();
+                Camera *camera = scene.GetActiveCamera();
+                if (!camera)
+                {
+                    state->result = R"({"error":"active camera not available"})";
+                    finish();
+                    return;
+                }
+
+                const uint32_t meshCount = scene.GetMeshCount();
+                if (meshCount == 0)
+                {
+                    state->result = nlohmann::json{{"hit", false}}.dump();
+                    finish();
+                    return;
+                }
+
+                Queue *queue = RHII.GetMainQueue();
+                if (!queue)
+                {
+                    state->result = R"({"error":"main queue not available"})";
+                    finish();
+                    return;
+                }
+
+                renderer->WaitAllFramesCommands();
+
+                Image *depth = renderer->GetDepthStencilTarget("depthStencil");
+                ObjectIdDecodeCache &cache = GetObjectIdDecodeCache();
+                std::string error;
+                if (!EnsureObjectIdDecodeResources(cache, depth, meshCount, error))
+                {
+                    state->result = JsonObj({{"error", JsonStr(error)}});
+                    finish();
+                    return;
+                }
+
+                const uint32_t frame = RHII.GetFrameIndex();
+                if (!scene.GetBuffer() || !scene.GetUniforms(frame) || !scene.GetMeshConstants() ||
+                    !scene.GetCullingCountersBuffer(frame) || !scene.GetIndirectOpaqueSS(frame) ||
+                    !scene.GetIndirectAlphaCutSS(frame) || !scene.GetIndirectOpaqueDS(frame) ||
+                    !scene.GetIndirectAlphaCutDS(frame))
+                {
+                    state->result = R"({"error":"scene draw buffers not available"})";
+                    finish();
+                    return;
+                }
+
+                const auto &idSets = cache.idPI->GetDescriptors(frame);
+                const auto &clearSets = cache.clearPI->GetDescriptors(frame);
+                const auto &reduceSets = cache.reducePI->GetDescriptors(frame);
+                if (idSets.size() < 2 || clearSets.empty() || reduceSets.empty())
+                {
+                    state->result = R"({"error":"object-id descriptor layout missing expected sets"})";
+                    finish();
+                    return;
+                }
+
+                Descriptor *idSetUniforms = idSets[0];
+                Descriptor *idSetTextures = idSets[1];
+                idSetUniforms->SetBuffer(0, scene.GetUniforms(frame));
+                idSetUniforms->SetBuffer(1, scene.GetMeshConstants());
+                idSetUniforms->Update();
+                idSetTextures->SetBuffer(0, scene.GetMeshConstants());
+                idSetTextures->SetSampler(1, scene.GetDefaultSampler());
+                idSetTextures->SetImageViews(2, scene.GetImageViews());
+                idSetTextures->Update();
+
+                Descriptor *clearSet = clearSets[0];
+                clearSet->SetBuffer(0, cache.nodeVis);
+                clearSet->Update();
+
+                Descriptor *reduceSet = reduceSets[0];
+                reduceSet->SetImageView(0, cache.idTarget->GetSRV());
+                reduceSet->SetBuffer(1, cache.nodeVis);
+                reduceSet->Update();
+
+                const size_t readbackSize = static_cast<size_t>(meshCount) * sizeof(ObjectIdNodeVis);
+                Buffer *staging = Buffer::Create({
+                    .size = readbackSize,
+                    .usage = PE_BUFFER_USAGE_TRANSFER_DST,
+                    .memoryUsage = PE_MEMORY_USAGE_GPU_TO_CPU,
+                    .name = "ObjectIdReadback",
+                });
+
+                CommandBuffer *cmd = queue->AcquireCommandBuffer();
+                cmd->Begin();
+
+                Attachment attachments[2]{};
+                attachments[0].image = cache.idTarget;
+                attachments[0].loadOp = PE_LOAD_OP_CLEAR;
+                attachments[0].storeOp = PE_STORE_OP_STORE;
+                attachments[1].image = depth;
+                attachments[1].loadOp = PE_LOAD_OP_LOAD;
+                attachments[1].storeOp = PE_STORE_OP_STORE;
+                cache.idTarget->SetClearColor(vec4(0.0f));
+
+                PushConstants_DepthPass idConstants{};
+                idConstants.jointsCount = static_cast<uint32_t>(scene.GetMaxJointCount());
+
+                cmd->BeginPass(2, attachments, "ObjectIdPass");
+                cmd->SetViewport(0.0f, 0.0f, depth->GetWidth_f(), depth->GetHeight_f());
+                cmd->SetScissor(0, 0, depth->GetWidth(), depth->GetHeight());
+                cmd->BindPipeline(*cache.idPI);
+                cmd->BindIndexBuffer(scene.GetBuffer(), 0);
+                cmd->BindVertexBuffer(scene.GetBuffer(), scene.GetPositionsOffset());
+                cmd->SetConstants(idConstants);
+                cmd->PushConstants();
+                cmd->DrawIndexedIndirectCount(scene.GetIndirectOpaqueSS(frame), 0, scene.GetCullingCountersBuffer(frame), 0 * sizeof(uint32_t), meshCount);
+                cmd->DrawIndexedIndirectCount(scene.GetIndirectAlphaCutSS(frame), 0, scene.GetCullingCountersBuffer(frame), 1 * sizeof(uint32_t), meshCount);
+                cmd->DrawIndexedIndirectCount(scene.GetIndirectOpaqueDS(frame), 0, scene.GetCullingCountersBuffer(frame), 5 * sizeof(uint32_t), meshCount);
+                cmd->DrawIndexedIndirectCount(scene.GetIndirectAlphaCutDS(frame), 0, scene.GetCullingCountersBuffer(frame), 6 * sizeof(uint32_t), meshCount);
+                cmd->EndPass();
+
+                ImageBarrierInfo idReadBarrier{};
+                idReadBarrier.image = cache.idTarget;
+                idReadBarrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                idReadBarrier.stageFlags = PE_STAGE_COMPUTE_SHADER;
+                idReadBarrier.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_SAMPLED_READ;
+                cmd->ImageBarrier(idReadBarrier);
+
+                const size_t nodeVisSize = static_cast<size_t>(cache.nodeVisCapacity) * sizeof(ObjectIdNodeVis);
+                cmd->BufferBarrier(MakeBufferBarrier(cache.nodeVis,
+                                                     PE_STAGE_COMPUTE_SHADER,
+                                                     PE_ACCESS_SHADER_WRITE | PE_ACCESS_SHADER_STORAGE_WRITE,
+                                                     nodeVisSize));
+
+                PushConstants_ObjReduce reduceConstants{};
+                reduceConstants.width = depth->GetWidth();
+                reduceConstants.height = depth->GetHeight();
+                reduceConstants.drawCount = meshCount;
+                reduceConstants.pad0 = 0;
+
+                cmd->BindPipeline(*cache.clearPI);
+                cmd->SetConstants(reduceConstants);
+                cmd->PushConstants();
+                cmd->Dispatch((meshCount + 63) / 64, 1, 1);
+
+                RecordBufferState(cache.nodeVis,
+                                  PE_STAGE_COMPUTE_SHADER,
+                                  PE_ACCESS_SHADER_WRITE | PE_ACCESS_SHADER_STORAGE_WRITE,
+                                  nodeVisSize);
+                cmd->BufferBarrier(MakeBufferBarrier(cache.nodeVis,
+                                                     PE_STAGE_COMPUTE_SHADER,
+                                                     PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE |
+                                                         PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE,
+                                                     nodeVisSize));
+
+                cmd->BindPipeline(*cache.reducePI);
+                cmd->SetConstants(reduceConstants);
+                cmd->PushConstants();
+                cmd->Dispatch((depth->GetWidth() + 7) / 8, (depth->GetHeight() + 7) / 8, 1);
+
+                RecordBufferState(cache.nodeVis,
+                                  PE_STAGE_COMPUTE_SHADER,
+                                  PE_ACCESS_SHADER_WRITE | PE_ACCESS_SHADER_STORAGE_WRITE,
+                                  nodeVisSize);
+                cmd->BufferBarrier(MakeBufferBarrier(cache.nodeVis, PE_STAGE_TRANSFER, PE_ACCESS_TRANSFER_READ, readbackSize));
+                cmd->CopyBuffer(cache.nodeVis, staging, readbackSize, 0, 0);
+
+                cmd->End();
+                queue->Submit(1, &cmd, nullptr, nullptr);
+                cmd->Wait();
+                queue->ReturnCommandBuffer(cmd);
+
+                std::vector<ObjectIdNodeVis> vis(meshCount);
+                staging->Map();
+                if (const auto *src = static_cast<const ObjectIdNodeVis *>(staging->Data()))
+                    std::memcpy(vis.data(), src, readbackSize);
+                staging->Unmap();
+                Buffer::Destroy(staging);
+
+                const std::vector<int> drawToNode = scene.BuildDrawIndexToNodeIndex();
+
+                struct NodeAccum
+                {
+                    uint64_t visiblePixels = 0;
+                    uint32_t minX = std::numeric_limits<uint32_t>::max();
+                    uint32_t minY = std::numeric_limits<uint32_t>::max();
+                    uint32_t maxX = 0;
+                    uint32_t maxY = 0;
+                    uint32_t nearestDepthBits = 0;
+                };
+
+                std::unordered_map<int, NodeAccum> byNode;
+                for (uint32_t draw = 0; draw < meshCount; draw++)
+                {
+                    if (draw >= drawToNode.size())
+                        break;
+                    const ObjectIdNodeVis &v = vis[draw];
+                    if (v.pixelCount == 0 || drawToNode[draw] < 0)
+                        continue;
+
+                    NodeAccum &acc = byNode[drawToNode[draw]];
+                    acc.visiblePixels += v.pixelCount;
+                    acc.minX = std::min(acc.minX, v.minX);
+                    acc.minY = std::min(acc.minY, v.minY);
+                    acc.maxX = std::max(acc.maxX, v.maxX);
+                    acc.maxY = std::max(acc.maxY, v.maxY);
+                    acc.nearestDepthBits = std::max(acc.nearestDepthBits, v.nearestDepthBits);
+                }
+
+                nlohmann::json nodes = nlohmann::json::array();
+                for (const auto &[nodeIndex, acc] : byNode)
+                {
+                    if (acc.visiblePixels < static_cast<uint64_t>(minPixels) ||
+                        nodeIndex < 0 || nodeIndex >= static_cast<int>(scene.GetNodeCount()))
+                    {
+                        continue;
+                    }
+
+                    NodeId *node = scene.GetNodeId(static_cast<uint32_t>(nodeIndex));
+                    if (!node)
+                        continue;
+
+                    const float ndcDepth = FloatFromBits(acc.nearestDepthBits);
+                    const float distance = DecodeCameraDepthDistance(ndcDepth, *camera);
+
+                    nlohmann::json item;
+                    item["id"] = MakeNodeId(node);
+                    item["name"] = scene.GetNodeName(node);
+                    item["screen_box_px"] = nlohmann::json::array({acc.minX, acc.minY, acc.maxX, acc.maxY});
+                    item["visible_pixels"] = acc.visiblePixels;
+                    item["nearest_ndc_depth"] = ndcDepth;
+                    item["distance"] = std::isfinite(distance) ? nlohmann::json(distance) : nlohmann::json(nullptr);
+                    nodes.push_back(std::move(item));
+                }
+
+                std::sort(nodes.begin(), nodes.end(), [](const nlohmann::json &a, const nlohmann::json &b)
+                          { return a.value("visible_pixels", uint64_t{0}) > b.value("visible_pixels", uint64_t{0}); });
+
+                nlohmann::json result;
+                result["hit"] = !nodes.empty();
+                result["image"] = {{"width", depth->GetWidth()}, {"height", depth->GetHeight()}};
+                result["camera"] = {
+                    {"position", Vec3Json(camera->GetPosition())},
+                    {"view_projection", Mat4FlatJson(camera->GetViewProjection())},
+                };
+                result["node_count"] = nodes.size();
+                result["nodes"] = std::move(nodes);
+                state->result = result.dump();
+            }
+            catch (const std::exception &e)
+            {
+                state->result = JsonObj({{"error", JsonStr(e.what())}});
+            }
+            catch (...)
+            {
+                state->result = R"({"error":"unknown decode_camera_view failure"})";
+            }
+
+            finish(); });
+
+        std::unique_lock lock(state->mtx);
+        if (!state->cv.wait_for(lock, std::chrono::seconds(30), [&]
+                                { return state->done; }))
+            return R"({"error":"timeout decoding camera view"})";
+        return state->result;
     }
 
     // Exact pixel -> world/node readback for a get_map_shot image (Phase 2b.2). The map is
