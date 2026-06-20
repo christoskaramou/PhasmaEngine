@@ -816,5 +816,28 @@ enum PeMemoryUsage : uint32_t
     PE_MEMORY_USAGE_COUNT
 };
 
+enum PeQueryType : uint32_t
+{
+    PE_QUERY_TYPE_OCCLUSION = 0,
+    PE_QUERY_TYPE_TIMESTAMP,
+    PE_QUERY_TYPE_COUNT
+};
+
+// Flags controlling how an occlusion query counts. Vulkan honors PRECISE only when
+// the occlusionQueryPrecise feature is present; DX12 occlusion queries are always
+// precise (sample counts) so the flag is informational there.
+using PeQueryControlFlags = uint32_t;
+constexpr PeQueryControlFlags PE_QUERY_CONTROL_NONE = 0u;
+constexpr PeQueryControlFlags PE_QUERY_CONTROL_PRECISE = 1u << 0;
+
+// Flags for copying query results into a buffer. WAIT blocks the copy until results
+// are available; WITH_AVAILABILITY appends an availability word per query.
+// DX12 ResolveQueryData ignores these (it always writes 64-bit results, waiting implicitly).
+using PeQueryResultFlags = uint32_t;
+constexpr PeQueryResultFlags PE_QUERY_RESULT_NONE = 0u;
+constexpr PeQueryResultFlags PE_QUERY_RESULT_64_BIT = 1u << 0;
+constexpr PeQueryResultFlags PE_QUERY_RESULT_WAIT = 1u << 1;
+constexpr PeQueryResultFlags PE_QUERY_RESULT_WITH_AVAILABILITY = 1u << 2;
+
 constexpr uint32_t PE_QUEUE_FAMILY_IGNORED = ~0u;
 constexpr size_t PE_WHOLE_SIZE = ~static_cast<size_t>(0);

@@ -101,6 +101,11 @@ namespace pe
         bool textureCompressionASTC = false;
         bool drawIndirectFirstInstance = false;
         bool timestampQuery = false;
+        bool occlusionQuery = false;        // boolean/sample-count occlusion queries supported
+        bool preciseOcclusionQuery = false; // exact sample counts (VK occlusionQueryPrecise; always true on DX12)
+        bool binaryOcclusionQuery = false;  // distinct 0/1 occlusion query type (DX12 only; VK has none)
+        bool queryPoolHostReset = false;    // query pools can be reset on the host (VK hostQueryReset; DX12 n/a)
+        bool conditionalRendering = false;  // GPU predication available (reserved for a later predication phase)
         bool dualSourceBlending = false;
         bool shaderClipDistance = false;
         bool shaderFloat16 = false;

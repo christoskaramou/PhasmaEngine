@@ -62,6 +62,14 @@ namespace pe
         virtual void CopyImageToBuffer(Image *src, Buffer *dst, uint32_t mipLevel, uint32_t baseArrayLayer, uint32_t layerCount) = 0;
         virtual void GenerateMipMaps(Image *image) = 0;
 
+        // GPU queries
+        virtual void ResetQueryPool(QueryPool *pool, uint32_t firstQuery, uint32_t queryCount) = 0;
+        virtual void BeginQuery(QueryPool *pool, uint32_t queryIndex, PeQueryControlFlags flags) = 0;
+        virtual void EndQuery(QueryPool *pool, uint32_t queryIndex) = 0;
+        virtual void WriteTimestamp(QueryPool *pool, uint32_t queryIndex) = 0;
+        virtual void ResolveQueryPool(QueryPool *pool, uint32_t firstQuery, uint32_t queryCount,
+                                      Buffer *dst, uint64_t dstOffset, uint64_t stride, PeQueryResultFlags flags) = 0;
+
         // Ray tracing
         virtual void TraceRays(uint32_t width, uint32_t height, uint32_t depth) = 0;
         // BuildAccelerationStructures is Vulkan-private; declared in Vulkan/AccelerationStructure.h

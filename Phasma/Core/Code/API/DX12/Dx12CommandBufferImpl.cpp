@@ -9,6 +9,7 @@
 #include "API/DX12/Dx12ImageImpl.h"
 #include "API/DX12/Dx12ImageViewImpl.h"
 #include "API/DX12/Dx12PipelineImpl.h"
+#include "API/DX12/Dx12QueryPool.h"
 #include "API/DX12/Dx12RhiImpl.h"
 #include "API/DX12/Dx12RootSignature.h"
 #include "API/DX12/Dx12Translate.h"
@@ -1234,6 +1235,52 @@ namespace pe
     {
         PE_ERROR_IF(!image, "Dx12CommandBufferImpl::GenerateMipMaps: null image");
         image->GenerateMipMaps(m_owner);
+    }
+
+    void Dx12CommandBufferImpl::ResetQueryPool(QueryPool *pool, uint32_t firstQuery, uint32_t queryCount)
+    {
+        // D3D12 query heaps have no explicit reset; a slot is reused on the next Begin/EndQuery.
+        (void)pool;
+        (void)firstQuery;
+        (void)queryCount;
+    }
+
+    void Dx12CommandBufferImpl::BeginQuery(QueryPool *pool, uint32_t queryIndex, PeQueryControlFlags flags)
+    {
+        PE_ERROR_IF(pool->GetType() != PE_QUERY_TYPE_OCCLUSION, "BeginQuery: pool is not an occlusion query pool");
+        (void)flags; // DX12 occlusion queries are always precise; no per-begin control flags
+        Dx12QueryPool *qp = Dx12QueryPool::From(pool);
+        m_cmdList->BeginQuery(qp->Heap(), qp->QueryType(), queryIndex);
+    }
+
+    void Dx12CommandBufferImpl::EndQuery(QueryPool *pool, uint32_t queryIndex)
+    {
+        PE_ERROR_IF(pool->GetType() != PE_QUERY_TYPE_OCCLUSION, "EndQuery: pool is not an occlusion query pool");
+        Dx12QueryPool *qp = Dx12QueryPool::From(pool);
+        m_cmdList->EndQuery(qp->Heap(), qp->QueryType(), queryIndex);
+    }
+
+    void Dx12CommandBufferImpl::WriteTimestamp(QueryPool *pool, uint32_t queryIndex)
+    {
+        // A timestamp is recorded via EndQuery on a TIMESTAMP heap (no Begin).
+        PE_ERROR_IF(pool->GetType() != PE_QUERY_TYPE_TIMESTAMP, "WriteTimestamp: pool is not a timestamp query pool");
+        Dx12QueryPool *qp = Dx12QueryPool::From(pool);
+        m_cmdList->EndQuery(qp->Heap(), D3D12_QUERY_TYPE_TIMESTAMP, queryIndex);
+    }
+
+    void Dx12CommandBufferImpl::ResolveQueryPool(QueryPool *pool, uint32_t firstQuery, uint32_t queryCount,
+                                                 Buffer *dst, uint64_t dstOffset, uint64_t stride, PeQueryResultFlags flags)
+    {
+        // DX12 ResolveQueryData always writes fixed 64-bit (8-byte) results with no availability
+        // word; a non-64-bit/non-default stride or WITH_AVAILABILITY would silently diverge from
+        // the requested layout, so reject them rather than ignore (WAIT is implicit, safe to drop).
+        PE_ERROR_IF(!(flags & PE_QUERY_RESULT_64_BIT) || stride != sizeof(uint64_t) ||
+                        (flags & PE_QUERY_RESULT_WITH_AVAILABILITY),
+                    "Dx12CommandBufferImpl::ResolveQueryPool: DX12 supports only 64-bit 8-byte results without availability");
+        FlushBarriers(); // apply any batched dst (COPY_DEST) transition before resolving
+        Dx12QueryPool *qp = Dx12QueryPool::From(pool);
+        ID3D12Resource *dstResource = GetDx12BufferResource(dst);
+        m_cmdList->ResolveQueryData(qp->Heap(), qp->QueryType(), firstQuery, queryCount, dstResource, dstOffset);
     }
 
     void Dx12CommandBufferImpl::TraceRays(uint32_t width, uint32_t height, uint32_t depth)

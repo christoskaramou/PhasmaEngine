@@ -6,6 +6,7 @@
 namespace pe
 {
     class CommandBuffer;
+    class QueryPool;
 } // namespace pe
 
 struct WGPUBufferImpl;
@@ -16,11 +17,11 @@ namespace pwgpu
 {
     struct QueryBackendResult
     {
-        PeBackendHandle backendQueryPool = 0;
+        pe::QueryPool *backendQueryPool = nullptr;
         WGPUErrorType errorType = WGPUErrorType_Internal;
         std::string message;
 
-        bool Succeeded() const { return backendQueryPool != 0; }
+        bool Succeeded() const { return backendQueryPool != nullptr; }
     };
 
     QueryBackendResult CreateWebGPUQuerySetBackend(WGPUDeviceImpl *device,

@@ -1373,8 +1373,8 @@ extern "C"
         rpe->activeOcclusionIndex = queryIndex;
         rpe->usedOcclusionIndices.insert(queryIndex);
 
-        // Pool is host-reset at createQuerySet, but slots written by prior submits
-        // are left "available" and re-begin violates VUID-vkCmdBeginQuery-None-00807.
+        // Pool is host-reset at createQuerySet (when hostQueryReset is available), but slots
+        // written by prior submits are left "available" and re-begin violates VUID-vkCmdBeginQuery-None-00807.
         // Reset the full pool range once per pass on the first beginQuery, before
         // vkCmdBeginRendering opens (vkCmdResetQueryPool is forbidden inside a pass).
         // A pass that binds occlusionQuerySet but never calls beginQuery emits no

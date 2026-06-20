@@ -995,8 +995,8 @@ extern "C"
         {
             rpe->occlusionQuerySet = descriptor->occlusionQuerySet;
             wgpuQuerySetAddRef(descriptor->occlusionQuerySet);
-            // Do not reset here: createQuerySet host-resets the pool, and §23.6
-            // requires unmodified slots to retain values across submissions.
+            // Do not reset here: createQuerySet host-resets the pool when hostQueryReset
+            // is available, and §23.6 requires unmodified slots to retain values across submissions.
         }
 
         if (descriptor->timestampWrites)
@@ -1006,8 +1006,8 @@ extern "C"
             wgpuQuerySetAddRef(tw->querySet);
 
             // Per VUID-vkCmdWriteTimestamp2-None-03864, each query must be unavailable
-            // before a write. Host-reset at createQuerySet only covers first-frame;
-            // subsequent frames reuse the same slots and must reset between uses.
+            // before a write. Host-reset at createQuerySet (when hostQueryReset is available)
+            // only covers first-frame; subsequent frames reuse the same slots and must reset between uses.
             // Reset both slots here (outside any render pass) before the begin-write.
             if (tw->beginningOfPassWriteIndex != WGPU_QUERY_SET_INDEX_UNDEFINED &&
                 tw->beginningOfPassWriteIndex < tw->querySet->count &&

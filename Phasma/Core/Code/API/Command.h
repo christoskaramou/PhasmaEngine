@@ -20,6 +20,7 @@ namespace pe
     class PassInfo;
     class Event;
     class CommandPool;
+    class QueryPool;
     struct ImageBarrierInfo;
     struct BufferBarrierInfo;
 
@@ -150,6 +151,20 @@ namespace pe
         void CopyImage(Image *src, Image *dst);
         void CopyImageToBuffer(Image *src, Buffer *dst, uint32_t mipLevel = 0, uint32_t baseArrayLayer = 0, uint32_t layerCount = 1);
         void GenerateMipMaps(Image *image);
+
+        // GPU queries (occlusion / timestamp). A pool must be reset before first use and
+        // before reuse on Vulkan (ResetQueryPool is a no-op on DX12; VulkanQueryPool host-resets
+        // at creation when supported). Bracket draws with Begin/EndQuery; record a timestamp with
+        // WriteTimestamp; copy results with ResolveQueryPool — the destination buffer must already
+        // be in a transfer-write state (caller-managed). DX12 resolves fixed 8-byte results only.
+        void ResetQueryPool(QueryPool *pool, uint32_t firstQuery, uint32_t queryCount);
+        void BeginQuery(QueryPool *pool, uint32_t queryIndex, PeQueryControlFlags flags = PE_QUERY_CONTROL_NONE);
+        void EndQuery(QueryPool *pool, uint32_t queryIndex);
+        void WriteTimestamp(QueryPool *pool, uint32_t queryIndex);
+        void ResolveQueryPool(QueryPool *pool, uint32_t firstQuery, uint32_t queryCount,
+                              Buffer *dst, uint64_t dstOffset,
+                              uint64_t stride = sizeof(uint64_t),
+                              PeQueryResultFlags flags = PE_QUERY_RESULT_64_BIT);
         void SetEvent(Image *image,
                       PeImageLayout srcLayout, PeImageLayout dstLayout,
                       PeBarrierSync srcStage, PeBarrierSync dstStage,

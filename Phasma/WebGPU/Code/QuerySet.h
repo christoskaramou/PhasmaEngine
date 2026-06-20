@@ -3,6 +3,11 @@
 #include <webgpu/webgpu.h>
 #include "API/RHITypes.h"
 
+namespace pe
+{
+    class QueryPool;
+}
+
 struct WGPUDeviceImpl;
 
 struct WGPUQuerySetImpl
@@ -10,7 +15,8 @@ struct WGPUQuerySetImpl
     std::atomic<uint32_t> refCount{1};
     std::string label;
     WGPUDeviceImpl *device = nullptr;
-    PeBackendHandle backendQueryPool = 0;
+    // Neutral RHI query pool; owns the native VkQueryPool / ID3D12QueryHeap. Null until created.
+    pe::QueryPool *backendQueryPool = nullptr;
     WGPUQueryType type = WGPUQueryType_Occlusion;
     uint32_t count = 0;
     bool destroyed = false;

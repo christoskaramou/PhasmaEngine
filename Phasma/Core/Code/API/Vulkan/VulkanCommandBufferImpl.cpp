@@ -19,6 +19,7 @@
 #include "API/Vulkan/VulkanImageViewImpl.h"
 #include "API/Vulkan/VulkanPipelineImpl.h"
 #include "API/Vulkan/VulkanRenderPassImpl.h"
+#include "API/Vulkan/VulkanQueryPool.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 #include "API/Vulkan/VulkanSamplerImpl.h"
 
@@ -863,6 +864,54 @@ namespace pe
     void VulkanCommandBufferImpl::GenerateMipMaps(Image *image)
     {
         image->GenerateMipMaps(m_owner);
+    }
+
+    void VulkanCommandBufferImpl::ResetQueryPool(QueryPool *pool, uint32_t firstQuery, uint32_t queryCount)
+    {
+        m_apiHandle.resetQueryPool(VulkanQueryPool::From(pool)->Handle(), firstQuery, queryCount);
+    }
+
+    void VulkanCommandBufferImpl::BeginQuery(QueryPool *pool, uint32_t queryIndex, PeQueryControlFlags flags)
+    {
+        PE_ERROR_IF(pool->GetType() != PE_QUERY_TYPE_OCCLUSION, "BeginQuery: pool is not an occlusion query pool");
+        vk::QueryControlFlags vkFlags{};
+        // PRECISE is only legal when the device advertises occlusionQueryPrecise.
+        if ((flags & PE_QUERY_CONTROL_PRECISE) && RHII.GetGpuFeatureSupport().preciseOcclusionQuery)
+            vkFlags |= vk::QueryControlFlagBits::ePrecise;
+        m_apiHandle.beginQuery(VulkanQueryPool::From(pool)->Handle(), queryIndex, vkFlags);
+    }
+
+    void VulkanCommandBufferImpl::EndQuery(QueryPool *pool, uint32_t queryIndex)
+    {
+        PE_ERROR_IF(pool->GetType() != PE_QUERY_TYPE_OCCLUSION, "EndQuery: pool is not an occlusion query pool");
+        m_apiHandle.endQuery(VulkanQueryPool::From(pool)->Handle(), queryIndex);
+    }
+
+    void VulkanCommandBufferImpl::WriteTimestamp(QueryPool *pool, uint32_t queryIndex)
+    {
+        PE_ERROR_IF(pool->GetType() != PE_QUERY_TYPE_TIMESTAMP, "WriteTimestamp: pool is not a timestamp query pool");
+        const vk::QueryPool vkPool = VulkanQueryPool::From(pool)->Handle();
+        // writeTimestamp2 is a synchronization2 entry point; the RHI only hard-requires
+        // Vulkan 1.2, so fall back to the legacy writeTimestamp when sync2 is unavailable.
+        if (RHII.GetCaps().sync2)
+            m_apiHandle.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, vkPool, queryIndex);
+        else
+            m_apiHandle.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, vkPool, queryIndex);
+    }
+
+    void VulkanCommandBufferImpl::ResolveQueryPool(QueryPool *pool, uint32_t firstQuery, uint32_t queryCount,
+                                                   Buffer *dst, uint64_t dstOffset, uint64_t stride, PeQueryResultFlags flags)
+    {
+        FlushBarriers(); // apply any batched dst transition before the copy
+        vk::QueryResultFlags vkFlags{};
+        if (flags & PE_QUERY_RESULT_64_BIT)
+            vkFlags |= vk::QueryResultFlagBits::e64;
+        if (flags & PE_QUERY_RESULT_WAIT)
+            vkFlags |= vk::QueryResultFlagBits::eWait;
+        if (flags & PE_QUERY_RESULT_WITH_AVAILABILITY)
+            vkFlags |= vk::QueryResultFlagBits::eWithAvailability;
+        m_apiHandle.copyQueryPoolResults(VulkanQueryPool::From(pool)->Handle(), firstQuery, queryCount,
+                                         GetVulkanBuffer(dst), dstOffset, stride, vkFlags);
     }
 
     void VulkanCommandBufferImpl::SetEvent(Event *event, Image *image,

@@ -4876,7 +4876,7 @@ extern "C"
             return makeInvalid("createQuerySet: unsupported query type");
         }
 
-        PeBackendHandle backendQueryPool = 0;
+        pe::QueryPool *backendQueryPool = nullptr;
         if (descriptor->count > 0)
         {
             pwgpu::QueryBackendResult backend =

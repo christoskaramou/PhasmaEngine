@@ -958,6 +958,10 @@ namespace pe
                 Dx12SupportsAllBcTextureSamples(dx->GetDevice());
             m_gpuFeatureSupport.drawIndirectFirstInstance = true;
             m_gpuFeatureSupport.timestampQuery = true;
+            m_gpuFeatureSupport.occlusionQuery = true;        // D3D12_QUERY_TYPE_OCCLUSION
+            m_gpuFeatureSupport.preciseOcclusionQuery = true; // OCCLUSION returns exact sample counts
+            m_gpuFeatureSupport.binaryOcclusionQuery = true;  // D3D12_QUERY_TYPE_BINARY_OCCLUSION
+            m_gpuFeatureSupport.queryPoolHostReset = false;   // DX12 query heaps have no host/explicit reset
             m_maxUniformBufferSize = D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16u;
             m_maxStorageBufferSize = std::numeric_limits<uint32_t>::max();
             m_minUniformBufferOffsetAlignment = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
@@ -1458,6 +1462,10 @@ namespace pe
         m_gpuFeatureSupport.textureCompressionASTC = gpuFeatures.textureCompressionASTC_LDR != 0;
         m_gpuFeatureSupport.drawIndirectFirstInstance = gpuFeatures.drawIndirectFirstInstance != 0;
         m_gpuFeatureSupport.timestampQuery = gpuPropertiesVK.properties.limits.timestampComputeAndGraphics != 0;
+        m_gpuFeatureSupport.occlusionQuery = true; // Vulkan core always supports occlusion queries
+        m_gpuFeatureSupport.preciseOcclusionQuery = gpuFeatures.occlusionQueryPrecise != 0;
+        m_gpuFeatureSupport.binaryOcclusionQuery = false; // Vulkan has no distinct binary occlusion type
+        m_gpuFeatureSupport.queryPoolHostReset = vk12Features.hostQueryReset != 0;
         m_gpuFeatureSupport.dualSourceBlending = gpuFeatures.dualSrcBlend != 0;
         m_gpuFeatureSupport.shaderClipDistance = gpuFeatures.shaderClipDistance != 0;
         m_gpuFeatureSupport.shaderFloat16 = vk12Features.shaderFloat16 != 0;

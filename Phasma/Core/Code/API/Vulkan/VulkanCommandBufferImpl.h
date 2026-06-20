@@ -60,6 +60,13 @@ namespace pe
         void CopyImageToBuffer(Image *src, Buffer *dst, uint32_t mipLevel, uint32_t baseArrayLayer, uint32_t layerCount) override;
         void GenerateMipMaps(Image *image) override;
 
+        void ResetQueryPool(QueryPool *pool, uint32_t firstQuery, uint32_t queryCount) override;
+        void BeginQuery(QueryPool *pool, uint32_t queryIndex, PeQueryControlFlags flags) override;
+        void EndQuery(QueryPool *pool, uint32_t queryIndex) override;
+        void WriteTimestamp(QueryPool *pool, uint32_t queryIndex) override;
+        void ResolveQueryPool(QueryPool *pool, uint32_t firstQuery, uint32_t queryCount,
+                              Buffer *dst, uint64_t dstOffset, uint64_t stride, PeQueryResultFlags flags) override;
+
         void TraceRays(uint32_t width, uint32_t height, uint32_t depth) override;
 
         void BufferBarrier(const BufferBarrierInfo &info) override;

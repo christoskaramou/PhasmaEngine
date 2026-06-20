@@ -399,6 +399,37 @@ namespace pe
         m_impl->FillBuffer(buffer, offset, size, data);
     }
 
+    void CommandBuffer::ResetQueryPool(QueryPool *pool, uint32_t firstQuery, uint32_t queryCount)
+    {
+        PE_PROFILE_SCOPE("Cmd ResetQueryPool");
+        m_impl->ResetQueryPool(pool, firstQuery, queryCount);
+    }
+
+    void CommandBuffer::BeginQuery(QueryPool *pool, uint32_t queryIndex, PeQueryControlFlags flags)
+    {
+        PE_PROFILE_SCOPE("Cmd BeginQuery");
+        m_impl->BeginQuery(pool, queryIndex, flags);
+    }
+
+    void CommandBuffer::EndQuery(QueryPool *pool, uint32_t queryIndex)
+    {
+        PE_PROFILE_SCOPE("Cmd EndQuery");
+        m_impl->EndQuery(pool, queryIndex);
+    }
+
+    void CommandBuffer::WriteTimestamp(QueryPool *pool, uint32_t queryIndex)
+    {
+        PE_PROFILE_SCOPE("Cmd WriteTimestamp");
+        m_impl->WriteTimestamp(pool, queryIndex);
+    }
+
+    void CommandBuffer::ResolveQueryPool(QueryPool *pool, uint32_t firstQuery, uint32_t queryCount,
+                                         Buffer *dst, uint64_t dstOffset, uint64_t stride, PeQueryResultFlags flags)
+    {
+        PE_PROFILE_SCOPE("Cmd ResolveQueryPool");
+        m_impl->ResolveQueryPool(pool, firstQuery, queryCount, dst, dstOffset, stride, flags);
+    }
+
     void CommandBuffer::TraceRays(uint32_t width, uint32_t height, uint32_t depth)
     {
         PE_PROFILE_SCOPE("Cmd TraceRays");
