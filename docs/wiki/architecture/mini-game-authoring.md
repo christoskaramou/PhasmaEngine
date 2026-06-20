@@ -238,8 +238,16 @@ forward roadmap.
    camera, a directional sun, a flat floor, a player sphere, an authored disabled
    pool of 32 `Enemy_NNN` + 64 `Shot_NNN` cubes parked offscreen at `Y=-1000`,
    and a top-left HUD (HP bar + wave label) on the `__scene_ui` screen.
-4. **Prefab pack** under `Phasma/Runtime/RuntimeAssets/Prefabs/`: `actor`,
-   `projectile`, `pickup`, `trigger`, `health_bar`, `selection_ring`, `card`.
+4. **Prefab pack** under `Phasma/Runtime/RuntimeAssets/Prefabs/`. Single-primitive
+   pieces: `actor`, `projectile`, `pickup`, `trigger`, `health_bar`,
+   `selection_ring`, `card`. Composed greybox structures (each several `build.*`
+   calls banked as one prefab — `watchtower` = building + roof railings + pole,
+   `gateway` = two pillars + lintel, `market_stall` = platform + posts + canopy),
+   authored live via the `gamekit/build` → `scene.save_prefab` → `instantiate_prefab`
+   loop and round-trip-verified (the saved subtree restamps node-for-node). These
+   live in the engine tree, so `instantiate_prefab("Prefabs/watchtower.peprefab")`
+   resolves via `ResolveAsset` only after a build copies `RuntimeAssets` into the
+   run tree; before that, instantiate by absolute path.
 5. **`tools/new_game.py`.** `--name <Name> [--template topdown] [--dir ...]
    [--api vulkan]` emits a self-contained project: `phasma_project.json`,
    `Assets/Scenes/main.pescene`, the entry script `Assets/Scripts/<name>.lua`,
