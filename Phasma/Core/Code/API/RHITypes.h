@@ -807,12 +807,18 @@ constexpr uint32_t PE_BUFFER_USAGE_BIT_COUNT = 13;
 
 enum PeMemoryUsage : uint32_t
 {
-    PE_MEMORY_USAGE_GPU_ONLY = 0,          // device-local, never host-visible
-    PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,    // device-local, dedicated allocation (AS / RT buffers)
-    PE_MEMORY_USAGE_CPU_TO_GPU,            // host-visible, sequential write, mapped on demand
-    PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT, // host-visible, sequential write, persistently mapped
-    PE_MEMORY_USAGE_GPU_TO_CPU,            // host-visible, random read (readback)
-    PE_MEMORY_USAGE_GPU_TO_CPU_PERSISTENT, // host-visible, random read, persistently mapped (WebGPU MapRead)
+    PE_MEMORY_USAGE_GPU_ONLY = 0,                 // device-local, never host-visible
+    PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,           // device-local, dedicated allocation (AS / RT buffers)
+    PE_MEMORY_USAGE_CPU_TO_GPU,                   // host-visible, sequential write, mapped on demand
+    PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT,        // host-visible, sequential write, persistently mapped
+    PE_MEMORY_USAGE_GPU_TO_CPU,                   // host-visible, random read (readback)
+    PE_MEMORY_USAGE_GPU_TO_CPU_PERSISTENT,        // host-visible, random read, persistently mapped (WebGPU MapRead)
+    PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT_DEVICE, // device-local AND host-visible, sequential write, persistently
+                                                  // mapped. Lands in ReBAR/BAR (Vulkan) or D3D12_HEAP_TYPE_GPU_UPLOAD
+                                                  // (DX12) so the GPU reads it from VRAM rather than paying a cold
+                                                  // PCIe read every frame. For CPU-written, GPU-hot buffers (e.g. the
+                                                  // per-node matrix table the culling pass reads). Falls back to the
+                                                  // plain UPLOAD/system-memory path when GPU upload heaps are absent.
     PE_MEMORY_USAGE_COUNT
 };
 

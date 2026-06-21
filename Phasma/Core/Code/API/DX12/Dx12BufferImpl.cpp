@@ -8,7 +8,7 @@ namespace pe
 {
     namespace
     {
-        D3D12_HEAP_TYPE ToD3D12HeapType(PeMemoryUsage usage)
+        D3D12_HEAP_TYPE ToD3D12HeapType(PeMemoryUsage usage, bool gpuUploadHeapSupported)
         {
             switch (usage)
             {
@@ -18,6 +18,11 @@ namespace pe
             case PE_MEMORY_USAGE_CPU_TO_GPU:
             case PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT:
                 return D3D12_HEAP_TYPE_UPLOAD;
+            case PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT_DEVICE:
+                // CPU-writable VRAM (ReBAR) so GPU reads come from device-local memory. Requires
+                // the GPU upload heap feature; gracefully fall back to a system-memory upload heap
+                // (identical semantics, just the slow cross-PCIe read) when it is unavailable.
+                return gpuUploadHeapSupported ? D3D12_HEAP_TYPE_GPU_UPLOAD : D3D12_HEAP_TYPE_UPLOAD;
             case PE_MEMORY_USAGE_GPU_TO_CPU:
             case PE_MEMORY_USAGE_GPU_TO_CPU_PERSISTENT:
                 return D3D12_HEAP_TYPE_READBACK;
@@ -42,6 +47,10 @@ namespace pe
                 return D3D12_RESOURCE_STATE_GENERIC_READ;
             case D3D12_HEAP_TYPE_READBACK:
                 return D3D12_RESOURCE_STATE_COPY_DEST;
+            case D3D12_HEAP_TYPE_GPU_UPLOAD:
+                // GPU upload heaps must be created in COMMON (not GENERIC_READ); the buffer
+                // implicitly promotes to the read state the GPU needs on first access.
+                return D3D12_RESOURCE_STATE_COMMON;
             default:
                 return D3D12_RESOURCE_STATE_COMMON;
             }
@@ -57,7 +66,11 @@ namespace pe
         D3D12_RESOURCE_FLAGS ToD3D12ResourceFlags(PeBufferUsageFlags usage, D3D12_HEAP_TYPE heapType)
         {
             D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE;
-            if (NeedsUnorderedAccess(usage) && heapType == D3D12_HEAP_TYPE_DEFAULT)
+            // UAV is legal on DEFAULT and GPU_UPLOAD (both device-local), but NOT on the
+            // system-memory UPLOAD/READBACK heaps. A storage buffer that lands on GPU_UPLOAD
+            // must still carry the flag if it can ever be bound as a UAV.
+            if (NeedsUnorderedAccess(usage) &&
+                (heapType == D3D12_HEAP_TYPE_DEFAULT || heapType == D3D12_HEAP_TYPE_GPU_UPLOAD))
             {
                 flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
             }
@@ -83,11 +96,12 @@ namespace pe
     } // namespace
 
     Dx12BufferImpl::Dx12BufferImpl(Buffer *owner, const BufferDesc &desc)
-        : m_owner{owner},
-          m_heapType{ToD3D12HeapType(desc.memoryUsage)}
+        : m_owner{owner}
     {
         auto *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
         PE_ERROR_IF(!rhi || !rhi->GetAllocator(), "Dx12BufferImpl requires an initialized DX12 allocator");
+
+        m_heapType = ToD3D12HeapType(desc.memoryUsage, rhi->GetAllocator()->IsGPUUploadHeapSupported());
 
         D3D12MA::ALLOCATION_DESC allocationDesc{};
         allocationDesc.HeapType = m_heapType;
@@ -137,7 +151,10 @@ namespace pe
             return m_mapped;
 
         D3D12_RANGE readRange{};
-        D3D12_RANGE *range = (m_heapType == D3D12_HEAP_TYPE_UPLOAD) ? &readRange : nullptr;
+        // Upload heaps (system-memory UPLOAD and VRAM GPU_UPLOAD) are write-only from the CPU;
+        // pass an empty read range so the runtime never assumes a (slow, uncached) CPU read-back.
+        D3D12_RANGE *range =
+            (m_heapType == D3D12_HEAP_TYPE_UPLOAD || m_heapType == D3D12_HEAP_TYPE_GPU_UPLOAD) ? &readRange : nullptr;
         HRESULT hr = m_resource->Map(0, range, &m_mapped);
         PE_ERROR_IF(FAILED(hr), "Dx12BufferImpl: Map failed (0x%08X)", static_cast<unsigned>(hr));
         return m_mapped;

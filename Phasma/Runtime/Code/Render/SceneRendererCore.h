@@ -100,6 +100,7 @@ namespace pe
         size_t m_screenshotRowPitch = 0;
         std::string m_screenshotPath;
         Buffer *m_screenshotBuffer = nullptr;
+        Scene *m_scene = nullptr;
         OrderedMap<size_t, IRenderPassComponent *> m_renderPassComponents{};
         SceneRenderTargetMap m_renderTargets{};
         SceneRenderTargetMap m_depthStencilTargets{};

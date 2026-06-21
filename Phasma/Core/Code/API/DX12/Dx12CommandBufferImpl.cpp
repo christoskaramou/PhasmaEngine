@@ -278,11 +278,13 @@ namespace pe
 
             Dx12BufferImpl *buf = Dx12BufferImpl::From(info.buffer);
             const BufferTrackInfo previous = info.buffer->GetTrackInfo();
+            const D3D12_RESOURCE_STATES requested = ToD3D12BufferState(info);
             const bool previousUavWrite = (previous.accessMask & (PE_ACCESS_SHADER_WRITE | PE_ACCESS_SHADER_STORAGE_WRITE)) != 0;
-            if (previousUavWrite && (buf->m_state & D3D12_RESOURCE_STATE_UNORDERED_ACCESS))
+            if (previousUavWrite && (buf->m_state & D3D12_RESOURCE_STATE_UNORDERED_ACCESS) &&
+                requested == D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
                 PushBufferUAV(batch, buf);
 
-            PushBufferTransition(batch, buf, ToD3D12BufferState(info));
+            PushBufferTransition(batch, buf, requested);
 
             BufferTrackInfo &trackInfo = info.buffer->GetTrackInfo();
             trackInfo.stageMask = info.stageMask;

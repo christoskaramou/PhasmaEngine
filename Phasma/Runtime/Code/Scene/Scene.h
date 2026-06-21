@@ -305,7 +305,8 @@ namespace pe
         void SetTexturesDirty() { m_texturesDirty = true; }
         void FlushPendingGpuWork();
 
-        Buffer *GetUniforms(uint32_t frame) { return m_storages[frame]; }
+        Buffer *GetUniforms(uint32_t frame);
+        void UploadDynamicUniforms(CommandBuffer *cmd);
 
         void DispatchCulling(CommandBuffer *cmd, PassInfo *passInfo, PassInfo *sortPassInfo,
                              Image *hiZPyramid = nullptr, Buffer *occlusionData = nullptr);
@@ -364,7 +365,7 @@ namespace pe
 
         const std::vector<ImageView *> &GetImageViews() const { return m_imageViews; }
         uint32_t GetMeshCount() const { return m_meshCount; }
-        Buffer *GetMeshConstants() { return m_meshConstants; }
+        Buffer *GetMeshConstants();
         Buffer *GetMaterialTable() { return m_materialTable; }
         Buffer *GetMaterialByteBuffer() { return m_materialByteBuffer; }
         Sampler *GetDefaultSampler() const;
@@ -568,6 +569,7 @@ namespace pe
         // GPU buffers
         Buffer *m_buffer = nullptr;
         std::vector<Buffer *> m_storages;
+        std::vector<Buffer *> m_storagesDevice;
         std::vector<Buffer *> m_cullingCountersBuffers;
         std::vector<Buffer *> m_indirectOpaqueSS;
         std::vector<Buffer *> m_indirectAlphaCutSS;
@@ -627,6 +629,7 @@ namespace pe
         uint32_t m_rtInstanceCount = 0;
         std::vector<RtInstanceRecord> m_rtInstances;
         Buffer *m_meshConstants = nullptr;
+        Buffer *m_meshConstantsDevice = nullptr; // DX12: GPU-cached DEFAULT mirror (see GetMeshConstants)
         Buffer *m_materialTable = nullptr;
         Buffer *m_materialByteBuffer = nullptr; // ByteAddressBuffer for shader-driven materials
         uint32_t m_materialByteBufferUsed = 0;  // current byte offset (append-only)

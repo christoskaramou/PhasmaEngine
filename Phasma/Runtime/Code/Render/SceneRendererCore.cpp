@@ -8,6 +8,7 @@
 #include "Render/SceneScreenshot.h"
 #include "Render/SceneSky.h"
 #include "Render/ScriptRenderPasses.h"
+#include "Scene/Scene.h"
 
 namespace pe
 {
@@ -222,11 +223,15 @@ namespace pe
 
     void SceneRendererCore::SetRenderPassScene(Scene &scene)
     {
+        m_scene = &scene;
         SetSceneRenderGraphPassScene(m_scenePasses, scene);
     }
 
     void SceneRendererCore::ExecuteRenderGraph(CommandBuffer *cmd)
     {
+        if (m_scene)
+            m_scene->UploadDynamicUniforms(cmd);
+
         m_renderGraph.Execute(cmd);
     }
 

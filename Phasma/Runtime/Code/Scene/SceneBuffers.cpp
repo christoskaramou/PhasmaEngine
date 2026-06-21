@@ -203,15 +203,52 @@ namespace pe
             storageSize += nodeDataSize;
         }
 
-        uint32_t i = 0;
-        for (auto &storage : m_storages)
+        if (m_storagesDevice.size() != m_storages.size())
+            m_storagesDevice.resize(m_storages.size(), nullptr);
+
+        const PeBufferUsageFlags storageUsage =
+            PE_BUFFER_USAGE_STORAGE_BUFFER |
+            (RHII.GetApi() == PE_GRAPHICS_API_DX12 ? PE_BUFFER_USAGE_TRANSFER_SRC : PE_BUFFER_USAGE_NONE);
+        const bool useStorageDeviceMirror = RHII.GetApi() == PE_GRAPHICS_API_DX12;
+
+        for (uint32_t i = 0; i < m_storages.size(); i++)
         {
+            auto &storage = m_storages[i];
+            if (storage)
+            {
+                RHII.AddToDeletionQueue([b = storage]()
+                                        { Buffer* buf = b; Buffer::Destroy(buf); });
+                storage = nullptr;
+            }
+
+            auto &storageDevice = m_storagesDevice[i];
+            if (storageDevice)
+            {
+                RHII.AddToDeletionQueue([b = storageDevice]()
+                                        { Buffer* buf = b; Buffer::Destroy(buf); });
+                storageDevice = nullptr;
+            }
+
             storage = Buffer::Create({
                 .size = storageSize,
-                .usage = PE_BUFFER_USAGE_STORAGE_BUFFER,
-                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT,
-                .name = "storage_Geometry_buffer_" + std::to_string(i++),
+                .usage = storageUsage,
+                // Per-node matrix table is CPU-written every frame and read by the GPU culling/depth/
+                // GBuffer passes. Keep it device-local (ReBAR / DX12 GPU upload heap) so the culling
+                // pass reads matrices from VRAM instead of paying a cold per-frame PCIe read of all N
+                // matrices (the DX12 CullingPass cost driver vs Vulkan, which already lands it in BAR).
+                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT_DEVICE,
+                .name = "storage_Geometry_buffer_" + std::to_string(i),
             });
+
+            if (useStorageDeviceMirror)
+            {
+                storageDevice = Buffer::Create({
+                    .size = storageSize,
+                    .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+                    .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY,
+                    .name = "storageDevice_Geometry_buffer_" + std::to_string(i),
+                });
+            }
         }
     }
 
@@ -895,13 +932,31 @@ namespace pe
     void Scene::CreateMeshConstants(CommandBuffer *cmd)
     {
         Buffer::Destroy(m_meshConstants);
+        Buffer::Destroy(m_meshConstantsDevice);
         const size_t meshConstantsCapacity = std::max<size_t>(1, m_meshCount);
+        const size_t meshConstantsSize = meshConstantsCapacity * sizeof(Mesh_Constants);
+        const bool useMeshConstantsMirror = RHII.GetApi() == PE_GRAPHICS_API_DX12;
         m_meshConstants = Buffer::Create({
-            .size = meshConstantsCapacity * sizeof(Mesh_Constants),
-            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
-            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+            .size = meshConstantsSize,
+            // TRANSFER_SRC (DX12) lets this buffer be the copy source for the device mirror below.
+            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST |
+                     (useMeshConstantsMirror ? PE_BUFFER_USAGE_TRANSFER_SRC : PE_BUFFER_USAGE_NONE),
+            // CPU-written on geometry rebuild, read by the GPU culling/depth/GBuffer passes. On DX12
+            // this is only the staging source — the GPU reads the cached DEFAULT m_meshConstantsDevice
+            // mirror instead, because uncached GPU_UPLOAD reads dominate the cull pass (~0.6 ms @ 50k).
+            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT_DEVICE,
             .name = "Scene_meshConstants",
         });
+
+        if (useMeshConstantsMirror)
+        {
+            m_meshConstantsDevice = Buffer::Create({
+                .size = meshConstantsSize,
+                .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+                .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY,
+                .name = "Scene_meshConstantsDevice",
+            });
+        }
 
         size_t offset = 0;
         m_hasTransparentMeshes = false;
@@ -1003,6 +1058,23 @@ namespace pe
         }
         m_meshConstants->Flush(offset, 0);
         m_meshConstants->Unmap();
+
+        // DX12: publish the CPU-written constants into the GPU-cached DEFAULT mirror. Geometry rebuilds
+        // run with frames idle (WaitAllFramesCommands), and the buffer is read-only afterwards, so a
+        // single (unringed) device buffer copied once here is safe; the cull/depth/GBuffer passes then
+        // read cached VRAM instead of the slow GPU_UPLOAD heap.
+        if (m_meshConstantsDevice)
+        {
+            cmd->CopyBuffer(m_meshConstants, m_meshConstantsDevice, m_meshConstants->Size(), 0, 0);
+            BufferBarrierInfo barrier{};
+            barrier.buffer = m_meshConstantsDevice;
+            barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
+            barrier.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ;
+            barrier.offset = 0;
+            barrier.size = m_meshConstants->Size();
+            cmd->BufferBarrier(barrier);
+            m_meshConstantsDevice->GetTrackInfo() = barrier;
+        }
     }
 
     void Scene::DestroyBuffers()
@@ -1021,6 +1093,16 @@ namespace pe
                 RHII.AddToDeletionQueue([b = storage]()
                                         { Buffer* buf = b; Buffer::Destroy(buf); });
                 storage = nullptr;
+            }
+        }
+
+        for (auto &storageDevice : m_storagesDevice)
+        {
+            if (storageDevice)
+            {
+                RHII.AddToDeletionQueue([b = storageDevice]()
+                                        { Buffer* buf = b; Buffer::Destroy(buf); });
+                storageDevice = nullptr;
             }
         }
 
@@ -1097,6 +1179,15 @@ namespace pe
                 RHII.AddToDeletionQueue([b = storage]()
                                         { Buffer *buf = b; Buffer::Destroy(buf); });
                 storage = nullptr;
+            }
+        }
+        for (auto &storageDevice : m_storagesDevice)
+        {
+            if (storageDevice)
+            {
+                RHII.AddToDeletionQueue([b = storageDevice]()
+                                        { Buffer *buf = b; Buffer::Destroy(buf); });
+                storageDevice = nullptr;
             }
         }
         auto destroyBufferVecEager = [](std::vector<Buffer *> &vec)

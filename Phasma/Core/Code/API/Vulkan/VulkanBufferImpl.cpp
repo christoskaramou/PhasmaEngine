@@ -57,6 +57,10 @@ namespace pe
             case PE_MEMORY_USAGE_CPU_TO_GPU:
                 return VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
             case PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT:
+            // BAR/ReBAR equivalent of GPU_UPLOAD: same host-visible sequential-write mapping. With
+            // VMA_MEMORY_USAGE_AUTO this resolves to a DEVICE_LOCAL | HOST_VISIBLE memory type when the
+            // platform exposes one (ReBAR), so GPU reads hit VRAM instead of paying a cross-PCIe read.
+            case PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT_DEVICE:
                 return VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
             case PE_MEMORY_USAGE_GPU_TO_CPU:
                 return VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;

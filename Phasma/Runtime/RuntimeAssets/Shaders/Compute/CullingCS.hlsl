@@ -186,6 +186,26 @@ void EmitOpaque(DrawIndexedIndirectCommand cmd, uint type, bool doubleSided)
 }
 #endif
 
+#if !defined(PHASE1) && !defined(PHASE2)
+// Wave-coalesced append into a counter-addressed buffer. The lanes of this wave with `emit==true`
+// reserve a contiguous slot range with a SINGLE InterlockedAdd issued by the first active lane
+// (waveCount==0 skips the atomic entirely); every lane then returns its own slot = base + (number
+// of earlier active emit-lanes in the wave). Replaces the per-lane InterlockedAdd on the hot opaque
+// buckets: same-address atomics are warp-coalesced on NVIDIA SPIR-V but serialize on DXIL/DX12, the
+// sole cause of the ~55x CullingPass GPU-time gap at 50k draws. All active lanes must call this
+// uniformly so the wave ballot sees the full set; `emit` selects which of them actually reserve.
+uint WaveAppend(uint counterIndex, bool emit)
+{
+    uint laneSlot = WavePrefixCountBits(emit);
+    uint waveCount = WaveActiveCountBits(emit);
+    uint base = 0;
+    if (waveCount > 0 && WaveIsFirstLane())
+        InterlockedAdd(Counters[counterIndex], waveCount, base);
+    base = WaveReadLaneFirst(base);
+    return base + laneSlot;
+}
+#endif
+
 [numthreads(64, 1, 1)] void mainCS(uint3 DTid : SV_DispatchThreadID)
 {
     uint idx = DTid.x;
@@ -254,57 +274,57 @@ void EmitOpaque(DrawIndexedIndirectCommand cmd, uint type, bool doubleSided)
 
     uint type = constants.renderType;
     bool doubleSided = (constants.editorFlags & 2) != 0;
-    uint offset = 0;
 
-    if (type == 1)
-    {
-        if (doubleSided)
-        {
-            InterlockedAdd(Counters[5], 1, offset);
-            IndirectOpaqueDS[offset] = cmd;
-        }
-        else
-        {
-            InterlockedAdd(Counters[0], 1, offset);
-            IndirectOpaqueSS[offset] = cmd;
-        }
-    }
-    else if (type == 2)
-    {
-        if (doubleSided)
-        {
-            InterlockedAdd(Counters[6], 1, offset);
-            IndirectAlphaCutDS[offset] = cmd;
-        }
-        else
-        {
-            InterlockedAdd(Counters[1], 1, offset);
-            IndirectAlphaCutSS[offset] = cmd;
-        }
-    }
-    else if (type == 3)
+    // Per-bucket emit predicates. Render types are mutually exclusive; "selected" is independent and
+    // can fire alongside any type. Evaluated for every active lane (no early branch) so the
+    // wave-coalesced appends below see the full ballot for each bucket.
+    bool emitOpaqueSS = (type == 1) && !doubleSided;
+    bool emitOpaqueDS = (type == 1) && doubleSided;
+    bool emitAlphaCutSS = (type == 2) && !doubleSided;
+    bool emitAlphaCutDS = (type == 2) && doubleSided;
+    bool emitAlphaBlend = (type == 3);
+    bool emitTransmission = (type == 4);
+    bool emitSelected = (constants.editorFlags & 1) != 0;
+
+    // One atomic per wave per non-empty bucket instead of one per visible lane (see WaveAppend).
+    uint slot;
+
+    slot = WaveAppend(0, emitOpaqueSS);
+    if (emitOpaqueSS)
+        IndirectOpaqueSS[slot] = cmd;
+
+    slot = WaveAppend(5, emitOpaqueDS);
+    if (emitOpaqueDS)
+        IndirectOpaqueDS[slot] = cmd;
+
+    slot = WaveAppend(1, emitAlphaCutSS);
+    if (emitAlphaCutSS)
+        IndirectAlphaCutSS[slot] = cmd;
+
+    slot = WaveAppend(6, emitAlphaCutDS);
+    if (emitAlphaCutDS)
+        IndirectAlphaCutDS[slot] = cmd;
+
+    slot = WaveAppend(2, emitAlphaBlend);
+    if (emitAlphaBlend)
     {
         float3 center = (aabbMin + aabbMax) * 0.5;
         float3 camPos = float3(pc.cameraPositionX, pc.cameraPositionY, pc.cameraPositionZ);
-        float dist = distance(camPos, center);
-        InterlockedAdd(Counters[2], 1, offset);
-        IndirectAlphaBlendOut[offset] = cmd;
-        SortKeysAlphaBlend[offset] = -dist; // negative: ascending sort gives back-to-front
+        IndirectAlphaBlendOut[slot] = cmd;
+        SortKeysAlphaBlend[slot] = -distance(camPos, center); // negative: ascending sort gives back-to-front
     }
-    else if (type == 4)
+
+    slot = WaveAppend(3, emitTransmission);
+    if (emitTransmission)
     {
         float3 center = (aabbMin + aabbMax) * 0.5;
         float3 camPos = float3(pc.cameraPositionX, pc.cameraPositionY, pc.cameraPositionZ);
-        float dist = distance(camPos, center);
-        InterlockedAdd(Counters[3], 1, offset);
-        IndirectTransmissionOut[offset] = cmd;
-        SortKeysTransmission[offset] = -dist; // negative: ascending sort gives back-to-front
+        IndirectTransmissionOut[slot] = cmd;
+        SortKeysTransmission[slot] = -distance(camPos, center); // negative: ascending sort gives back-to-front
     }
 
-    if (constants.editorFlags & 1)
-    {
-        InterlockedAdd(Counters[4], 1, offset);
-        IndirectSelectedOut[offset] = cmd;
-    }
+    slot = WaveAppend(4, emitSelected);
+    if (emitSelected)
+        IndirectSelectedOut[slot] = cmd;
 #endif
 }

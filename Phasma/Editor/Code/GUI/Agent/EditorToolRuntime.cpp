@@ -778,6 +778,8 @@ namespace pe
                 return "cpu_to_gpu";
             case PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT:
                 return "cpu_to_gpu_persistent";
+            case PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT_DEVICE:
+                return "cpu_to_gpu_persistent_device";
             case PE_MEMORY_USAGE_GPU_TO_CPU:
                 return "gpu_to_cpu";
             case PE_MEMORY_USAGE_GPU_TO_CPU_PERSISTENT:

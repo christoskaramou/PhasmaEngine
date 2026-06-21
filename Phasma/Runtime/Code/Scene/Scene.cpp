@@ -203,6 +203,7 @@ namespace pe
 
         uint32_t swapchainImageCount = RHII.GetSwapchainImageCount();
         m_storages.resize(swapchainImageCount, nullptr);
+        m_storagesDevice.resize(swapchainImageCount, nullptr);
 
         m_particleManager = new ParticleManager();
         m_particleManager->Init(); // disable until it is done
@@ -213,6 +214,20 @@ namespace pe
     Sampler *Scene::GetDefaultSampler() const
     {
         return m_defaultSampler;
+    }
+
+    Buffer *Scene::GetUniforms(uint32_t frame)
+    {
+        return RHII.GetApi() == PE_GRAPHICS_API_DX12 ? m_storagesDevice[frame] : m_storages[frame];
+    }
+
+    Buffer *Scene::GetMeshConstants()
+    {
+        // DX12: read from the GPU-cached DEFAULT mirror (populated once per geometry rebuild) instead
+        // of the CPU-written GPU_UPLOAD buffer — uncached GPU_UPLOAD reads dominate the cull pass.
+        // Falls back to m_meshConstants on Vulkan (BAR is already cached) or before the mirror exists.
+        return (RHII.GetApi() == PE_GRAPHICS_API_DX12 && m_meshConstantsDevice) ? m_meshConstantsDevice
+                                                                                : m_meshConstants;
     }
 
     Scene::~Scene()
@@ -272,6 +287,8 @@ namespace pe
                                 { Buffer* buf = b; Buffer::Destroy(buf); });
         RHII.AddToDeletionQueue([b = m_meshConstants]()
                                 { Buffer* buf = b; Buffer::Destroy(buf); });
+        RHII.AddToDeletionQueue([b = m_meshConstantsDevice]()
+                                { Buffer *buf = b; Buffer::Destroy(buf); });
     }
 
     Camera *Scene::GetCameraForNode(const NodeId *node) const
@@ -894,6 +911,41 @@ namespace pe
             m_storages[frame]->Copy(static_cast<uint32_t>(jointRanges.size()), jointRanges.data(), true);
     }
 
+    void Scene::UploadDynamicUniforms(CommandBuffer *cmd)
+    {
+        if (RHII.GetApi() != PE_GRAPHICS_API_DX12)
+            return;
+
+        if (!cmd || m_storages.empty() || m_storagesDevice.empty())
+            return;
+
+        const uint32_t frame = RHII.GetFrameIndex();
+        if (frame >= m_storages.size() || frame >= m_storagesDevice.size())
+            return;
+
+        Buffer *src = m_storages[frame];
+        Buffer *dst = m_storagesDevice[frame];
+        if (!src || !dst)
+            return;
+
+        PE_ERROR_IF(src->Size() != dst->Size(), "Scene::UploadDynamicUniforms: storage mirror size mismatch");
+        const size_t copySize = src->Size();
+        if (!copySize)
+            return;
+
+        cmd->CopyBuffer(src, dst, copySize, 0, 0);
+
+        BufferBarrierInfo barrier{};
+        barrier.buffer = dst;
+        barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
+        barrier.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ;
+        barrier.offset = 0;
+        barrier.size = copySize;
+        cmd->BufferBarrier(barrier);
+
+        dst->GetTrackInfo() = barrier;
+    }
+
     void Scene::DispatchCulling(CommandBuffer *cmd, PassInfo *passInfo, PassInfo *sortPassInfo,
                                 Image *hiZPyramid, Buffer *occlusionData)
     {
@@ -1027,7 +1079,7 @@ namespace pe
             const auto &sets = passInfo->GetDescriptors(frame);
             set = sets[0];
             set->SetBuffer(0, m_indirectAll);
-            set->SetBuffer(1, m_meshConstants);
+            set->SetBuffer(1, GetMeshConstants());
             set->SetBuffer(2, m_cullingCountersBuffers[frame]);
             set->SetBuffer(3, m_indirectOpaqueSS[frame]);
             set->SetBuffer(4, m_indirectAlphaCutSS[frame]);
@@ -1038,7 +1090,7 @@ namespace pe
             set->SetBuffer(9, m_indirectAlphaCutDS[frame]);
             set->SetBuffer(10, m_sortKeysAlphaBlend[frame]);
             set->SetBuffer(11, m_sortKeysTransmission[frame]);
-            set->SetBuffer(12, m_storages[frame]);
+            set->SetBuffer(12, GetUniforms(frame));
             // Occlusion variant (OcclusionCullingPass) binds the Hi-Z pyramid + params.
             // The frustum-only variant's shader has no such bindings, so this is skipped.
             if (hiZPyramid && occlusionData)
@@ -1346,7 +1398,7 @@ namespace pe
                     set->SetBuffer(b, buf);
             };
             bind(0, m_indirectAll);
-            bind(1, m_meshConstants);
+            bind(1, GetMeshConstants());
             bind(2, counters);
             bind(3, opaqueSS);
             bind(4, alphaCutSS);
@@ -1357,7 +1409,7 @@ namespace pe
             bind(9, alphaCutDS);
             bind(10, m_sortKeysAlphaBlend[frame]);
             bind(11, m_sortKeysTransmission[frame]);
-            bind(12, m_storages[frame]);
+            bind(12, GetUniforms(frame));
             if (hiZPyramid && occlusionData) // phase 2 (HIZ_OCCLUSION variant)
             {
                 if (set->HasBinding(13))
