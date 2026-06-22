@@ -1292,15 +1292,18 @@ namespace pe
         Queue *q = RHII.GetMainQueue();
         q->WaitIdle();
 
+        const uint32_t sharedVertexBase = std::max(m_verticesCount, m_positionsCount);
         const size_t origVerticesBytes = static_cast<size_t>(m_verticesCount) * vtxStride;
         const size_t origPositionsBytes = static_cast<size_t>(m_positionsCount) * posUvStride;
+        const size_t sharedVertexSpanBytes = static_cast<size_t>(sharedVertexBase) * vtxStride;
+        const size_t sharedPositionSpanBytes = static_cast<size_t>(sharedVertexBase) * posUvStride;
         const size_t origAabbVertBytes = static_cast<size_t>(m_aabbVerticesCount) * sizeof(AabbVertex);
 
         // New region offsets (indices/aabbIndices unchanged; arena index headroom is a tail).
         const size_t newVerticesOffset = m_verticesOffset; // unchanged
-        const size_t vtxRegionBytes = origVerticesBytes + static_cast<size_t>(arenaVertCap) * vtxStride;
+        const size_t vtxRegionBytes = sharedVertexSpanBytes + static_cast<size_t>(arenaVertCap) * vtxStride;
         const size_t newPositionsOffset = newVerticesOffset + vtxRegionBytes;
-        const size_t posRegionBytes = origPositionsBytes + static_cast<size_t>(arenaVertCap) * posUvStride;
+        const size_t posRegionBytes = sharedPositionSpanBytes + static_cast<size_t>(arenaVertCap) * posUvStride;
         const size_t newAabbVerticesOffset = newPositionsOffset + posRegionBytes;
         const size_t arenaIdxByteBase = newAabbVerticesOffset + origAabbVertBytes; // index headroom tail
         const size_t newSize = arenaIdxByteBase + static_cast<size_t>(arenaIdxCap) * idxStride;
@@ -1348,7 +1351,7 @@ namespace pe
         m_aabbVerticesOffset = newAabbVerticesOffset;
 
         // Arena bookkeeping: shared vertex index base + per-stream byte bases derived from it.
-        m_arenaVertexBase = m_verticesCount;  // first arena vertex index (both streams)
+        m_arenaVertexBase = sharedVertexBase; // first arena vertex index (both streams)
         m_arenaVertexCapacity = arenaVertCap; // in vertices
         m_arenaVertexUsed = 0;
         m_arenaIdxByteBase = arenaIdxByteBase; // arena index tail (bytes)

@@ -6,6 +6,7 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "Base/Path.h"
+#include "Base/ThreadPool.h"
 #include "Scene/Material.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
@@ -20,6 +21,56 @@ namespace pe::voxel
         constexpr size_t kInvalidNodeDataOffset = static_cast<size_t>(-1);
         constexpr size_t kMaxHostDataOffset = 0xFFFFFFFFull;
         constexpr size_t kMaxPendingUpdateCommands = 4;
+
+        template <typename T>
+        bool FutureReady(const std::shared_future<T> &future)
+        {
+            return future.valid() && future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+        }
+
+        int ClampInt(int v, int lo, int hi)
+        {
+            return std::max(lo, std::min(v, hi));
+        }
+
+        ChunkColumn GenerateColumnCpu(ColumnCoord coord, int groundY)
+        {
+            ChunkColumn column(coord);
+            const int fillY = ClampInt(groundY, 0, kWorldHeight);
+            const int topY = fillY - 1;
+
+            for (int lz = 0; lz < kSectionDim; ++lz)
+            {
+                for (int lx = 0; lx < kSectionDim; ++lx)
+                {
+                    for (int wy = 0; wy < fillY; ++wy)
+                    {
+                        BlockId b = kStoneBlock;
+                        if (wy == topY)
+                            b = kGrassBlock;
+                        else if (wy >= topY - 3)
+                            b = kDirtBlock;
+                        column.SetLocal(lx, wy, lz, b);
+                    }
+                }
+            }
+
+            return column;
+        }
+
+        MeshData MeshSectionCpu(const ChunkColumn &column, const BlockRegistry &registry, int si)
+        {
+            const int sectionWorldY = si * kSectionDim;
+            GreedyMesher mesher;
+            BlockSampler sampler = [&column, sectionWorldY](int lx, int ly, int lz) -> BlockId
+            {
+                if (lx < 0 || lx >= kSectionDim || ly < 0 || ly >= kSectionDim || lz < 0 || lz >= kSectionDim)
+                    return kAir;
+                return column.GetLocal(lx, sectionWorldY + ly, lz);
+            };
+
+            return mesher.Mesh(sampler, registry, 0);
+        }
 
         Vertex MakeHostVertex()
         {
@@ -54,16 +105,43 @@ namespace pe::voxel
                static_cast<uint32_t>(coord.cz);
     }
 
-    ChunkColumn *VoxelWorld::FindColumn(ColumnCoord coord)
+    ColumnCoord VoxelWorld::AnchorToColumn(const vec3 &worldPos)
+    {
+        return WorldToColumn(static_cast<int>(std::floor(worldPos.x)),
+                             static_cast<int>(std::floor(worldPos.z)));
+    }
+
+    int VoxelWorld::ColumnDistance(ColumnCoord a, ColumnCoord b)
+    {
+        return std::max(std::abs(a.cx - b.cx), std::abs(a.cz - b.cz));
+    }
+
+    VoxelWorld::ColumnState *VoxelWorld::FindColumnState(ColumnCoord coord)
     {
         auto it = m_columns.find(ColumnKey(coord));
         return it == m_columns.end() ? nullptr : &it->second;
     }
 
-    const ChunkColumn *VoxelWorld::FindColumn(ColumnCoord coord) const
+    const VoxelWorld::ColumnState *VoxelWorld::FindColumnState(ColumnCoord coord) const
     {
         auto it = m_columns.find(ColumnKey(coord));
         return it == m_columns.end() ? nullptr : &it->second;
+    }
+
+    ChunkColumn *VoxelWorld::FindColumn(ColumnCoord coord)
+    {
+        ColumnState *state = FindColumnState(coord);
+        if (!state || state->state == ColumnLoadState::Generating || state->state == ColumnLoadState::Unloading)
+            return nullptr;
+        return state->column.get();
+    }
+
+    const ChunkColumn *VoxelWorld::FindColumn(ColumnCoord coord) const
+    {
+        const ColumnState *state = FindColumnState(coord);
+        if (!state || state->state == ColumnLoadState::Generating || state->state == ColumnLoadState::Unloading)
+            return nullptr;
+        return state->column.get();
     }
 
     void VoxelWorld::Create(Scene *scene, const VoxelConfig &cfg)
@@ -76,8 +154,10 @@ namespace pe::voxel
 
         m_scene = scene;
         m_cfg = cfg;
-        if (m_cfg.loadRadius < 0)
-            m_cfg.loadRadius = 0;
+        m_cfg.loadRadius = std::max(0, m_cfg.loadRadius);
+        m_cfg.unloadMargin = std::max(0, m_cfg.unloadMargin);
+        m_cfg.uploadBudgetPerFrame = std::max(1, m_cfg.uploadBudgetPerFrame);
+        m_cfg.groundY = ClampInt(m_cfg.groundY, 0, kWorldHeight);
         m_anchor = vec3(0.0f);
 
         RegisterDefaultBlocks();
@@ -89,7 +169,7 @@ namespace pe::voxel
         // capacity. UpdateTextures rebuilds m_meshConstants/materialTable to the NON-arena size; if it
         // ran after arena.Init it would shrink the arena's reservation and overflow the per-section
         // mesh-constants write (Buffer::CopyDataRaw range overflow). Arena reservation must be the LAST
-        // buffer-sizing op before UploadInitialGrid.
+        // buffer-sizing op before streaming starts.
         m_voxelMaterial = std::make_unique<VoxelMaterial>();
         m_voxelMaterial->Build(m_scene, {Path::RuntimeAssets + "Textures/Voxel/grass.png",
                                          Path::RuntimeAssets + "Textures/Voxel/dirt.png",
@@ -105,11 +185,12 @@ namespace pe::voxel
         m_materialGpuIndex = m_hostMaterial ? m_hostMaterial->gpuIndex : 0xFFFFFFFF;
         PE_ERROR_IF(m_materialGpuIndex == 0xFFFFFFFF, "VoxelWorld host material was not assigned a GPU index");
 
-        const int gridDim = m_cfg.loadRadius * 2 + 1;
+        const int capacityRadius = m_cfg.loadRadius + m_cfg.unloadMargin;
+        const int gridDim = capacityRadius * 2 + 1;
         const uint32_t gridSections = static_cast<uint32_t>(gridDim * gridDim * kSectionCount);
         // Greedy-meshed sections are small: a flat-ground section is ~24 verts / 36 indices, and even
-        // busy terrain stays in the low hundreds. Reserve a generous-but-sane per-section budget — NOT
-        // the theoretical per-block max (4096) — so the shared geometry buffer is not pre-grown by
+        // busy terrain stays in the low hundreds. Reserve a generous-but-sane per-section budget - NOT
+        // the theoretical per-block max (4096) - so the shared geometry buffer is not pre-grown by
         // hundreds of MB for a sparsely-populated grid (Vertex+PositionUvVertex ~= 148 B/vert). A
         // section that exceeds this budget simply fails to upload (logged); raise it for dense terrain.
         const uint32_t kVertsPerSection = 256u;
@@ -118,8 +199,7 @@ namespace pe::voxel
         const uint32_t idxCapBytes = gridSections * kIndicesPerSection * static_cast<uint32_t>(sizeof(uint32_t));
 
         m_arena.Init(m_scene, vtxCapVertices, idxCapBytes, gridSections);
-
-        UploadInitialGrid();
+        SetAnchor(m_anchor);
     }
 
     void VoxelWorld::Destroy()
@@ -130,15 +210,15 @@ namespace pe::voxel
             m_scene->SetVoxelAtlasView(nullptr);
         m_voxelMaterial.reset();
 
-        if (m_scene && m_arena.IsInitialized() && !m_sections.empty())
+        if (m_scene && m_arena.IsInitialized())
         {
             Queue *queue = RHII.GetMainQueue();
             if (queue)
             {
                 CommandBuffer *cmd = queue->AcquireCommandBuffer();
                 cmd->Begin();
-                for (const SectionHandle &section : m_sections)
-                    m_arena.Release(section.handle);
+                for (auto &entry : m_columns)
+                    ReleaseColumn(entry.second);
                 m_arena.Update(cmd);
                 cmd->End();
                 queue->Submit(1, &cmd, nullptr, nullptr);
@@ -148,7 +228,8 @@ namespace pe::voxel
         }
 
         m_arena.Destroy();
-        m_sections.clear();
+        m_dirtySections.clear();
+        m_pendingEdits.clear();
         m_columns.clear();
 
         if (m_scene && m_hostMeshIndex >= 0 && m_scene->IsValidMeshIndex(m_hostMeshIndex))
@@ -168,6 +249,8 @@ namespace pe::voxel
     void VoxelWorld::SetAnchor(const vec3 &worldPos)
     {
         m_anchor = worldPos;
+        if (m_scene && m_arena.IsInitialized())
+            RequestColumnsForAnchor();
     }
 
     BlockId VoxelWorld::GetBlock(int x, int y, int z) const
@@ -182,14 +265,28 @@ namespace pe::voxel
 
     void VoxelWorld::SetBlock(int x, int y, int z, BlockId id)
     {
-        const ColumnCoord coord = WorldToColumn(x, z);
-        ChunkColumn *column = FindColumn(coord);
-        if (!column || y < 0 || y >= kWorldHeight)
+        if (y < 0 || y >= kWorldHeight)
             return;
-        if (column->GetLocal(LocalX(x), y, LocalZ(z)) == id)
+
+        const ColumnCoord coord = WorldToColumn(x, z);
+        const uint64_t key = ColumnKey(coord);
+        auto colIt = m_columns.find(key);
+        if (colIt == m_columns.end())
+            return;
+
+        ColumnState &state = colIt->second;
+        if (state.state == ColumnLoadState::Generating)
+        {
+            m_pendingEdits[key].push_back({x, y, z, id});
+            return;
+        }
+        if (state.state == ColumnLoadState::Unloading || !state.column)
+            return;
+
+        if (state.column->GetLocal(LocalX(x), y, LocalZ(z)) == id)
             return; // no change
 
-        column->SetLocal(LocalX(x), y, LocalZ(z), id);
+        state.column->SetLocal(LocalX(x), y, LocalZ(z), id);
         MarkSectionDirty(coord, SectionIndex(y));
     }
 
@@ -213,6 +310,7 @@ namespace pe::voxel
             return;
 
         RetireSubmittedUpdateCommands(false);
+        ProcessGenerationResults();
 
         Queue *queue = RHII.GetMainQueue();
         if (!queue)
@@ -221,6 +319,7 @@ namespace pe::voxel
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
         m_arena.Update(cmd);
+        ProcessReadyMeshUploads(cmd, m_cfg.uploadBudgetPerFrame);
         RemeshDirtySections(cmd);
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
@@ -298,78 +397,260 @@ namespace pe::voxel
         m_scene->SetGeometryDirty();
     }
 
-    void VoxelWorld::UploadInitialGrid()
+    void VoxelWorld::RequestColumnsForAnchor()
     {
-        Queue *queue = RHII.GetMainQueue();
-        PE_ERROR_IF(!queue, "VoxelWorld::UploadInitialGrid requires the main queue");
-        if (!queue)
-            return;
-
-        CommandBuffer *cmd = queue->AcquireCommandBuffer();
-        cmd->Begin();
-        m_arena.Update(cmd);
-
+        const ColumnCoord anchorCoord = AnchorToColumn(m_anchor);
         const int radius = m_cfg.loadRadius;
-        for (int cz = -radius; cz <= radius; ++cz)
-        {
-            for (int cx = -radius; cx <= radius; ++cx)
-            {
-                const ColumnCoord coord{cx, cz};
-                auto inserted = m_columns.emplace(ColumnKey(coord), ChunkColumn(coord));
-                ChunkColumn &column = inserted.first->second;
-                // Layered surface: grass on the top block, a few dirt below, stone underneath.
-                const int topY = m_cfg.groundY - 1;
-                for (int lz = 0; lz < kSectionDim; ++lz)
-                    for (int lx = 0; lx < kSectionDim; ++lx)
-                        for (int wy = 0; wy < m_cfg.groundY; ++wy)
-                        {
-                            BlockId b = kStoneBlock;
-                            if (wy == topY)
-                                b = kGrassBlock;
-                            else if (wy >= topY - 3)
-                                b = kDirtBlock;
-                            column.SetLocal(lx, wy, lz, b);
-                        }
+        std::vector<ColumnCoord> desired;
+        desired.reserve(static_cast<size_t>((radius * 2 + 1) * (radius * 2 + 1)));
 
-                for (int si = 0; si < kSectionCount; ++si)
-                {
-                    ArenaHandle handle = MeshAndUploadSection(cmd, coord, column, si);
-                    if (handle.valid)
-                        m_sections.push_back({coord, si, handle});
-                }
-            }
+        for (int dz = -radius; dz <= radius; ++dz)
+            for (int dx = -radius; dx <= radius; ++dx)
+                desired.push_back({anchorCoord.cx + dx, anchorCoord.cz + dz});
+
+        std::sort(desired.begin(), desired.end(), [anchorCoord](ColumnCoord a, ColumnCoord b)
+                  {
+                      const int da = ColumnDistance(a, anchorCoord);
+                      const int db = ColumnDistance(b, anchorCoord);
+                      if (da != db)
+                          return da < db;
+                      if (a.cz != b.cz)
+                          return a.cz < b.cz;
+                      return a.cx < b.cx; });
+
+        for (ColumnCoord coord : desired)
+        {
+            const uint64_t key = ColumnKey(coord);
+            if (m_columns.find(key) == m_columns.end())
+                EnqueueColumnGeneration(coord);
         }
 
-        cmd->End();
-        queue->Submit(1, &cmd, nullptr, nullptr);
-        cmd->Wait();
-        cmd->Return();
+        const int unloadRadius = m_cfg.loadRadius + m_cfg.unloadMargin;
+        for (auto it = m_columns.begin(); it != m_columns.end();)
+        {
+            if (ColumnDistance(it->second.coord, anchorCoord) > unloadRadius)
+            {
+                const uint64_t key = it->first;
+                ReleaseColumn(it->second);
+                m_pendingEdits.erase(key);
+                m_dirtySections.erase(std::remove_if(m_dirtySections.begin(), m_dirtySections.end(),
+                                                     [key](const std::pair<uint64_t, int> &dirty)
+                                                     { return dirty.first == key; }),
+                                      m_dirtySections.end());
+                it = m_columns.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
     }
 
-    ArenaHandle VoxelWorld::MeshAndUploadSection(CommandBuffer *cmd, ColumnCoord coord, const ChunkColumn &column, int si)
+    void VoxelWorld::EnqueueColumnGeneration(ColumnCoord coord)
     {
-        const int sectionWorldY = si * kSectionDim;
-        // Each section is meshed self-contained: out-of-section samples return air, so a section's mesh
-        // never depends on neighbors (over-generates boundary faces, but makes an edit a 1-section remesh).
-        GreedyMesher mesher;
-        BlockSampler sampler = [&column, sectionWorldY](int lx, int ly, int lz) -> BlockId
-        {
-            if (lx < 0 || lx >= kSectionDim || ly < 0 || ly >= kSectionDim || lz < 0 || lz >= kSectionDim)
-                return kAir;
-            return column.GetLocal(lx, sectionWorldY + ly, lz);
-        };
+        ColumnState state{};
+        state.coord = coord;
+        state.state = ColumnLoadState::Generating;
+        const int groundY = m_cfg.groundY;
+        state.generationFuture = ThreadPool::General.Enqueue([coord, groundY]() -> ChunkColumn
+                                                             { return GenerateColumnCpu(coord, groundY); });
+        m_columns.emplace(ColumnKey(coord), std::move(state));
+    }
 
-        MeshData mesh = mesher.Mesh(sampler, m_registry, 0);
+    void VoxelWorld::ProcessGenerationResults()
+    {
+        std::vector<uint64_t> readyColumns;
+        for (auto &entry : m_columns)
+        {
+            ColumnState &state = entry.second;
+            if (state.state == ColumnLoadState::Generating && FutureReady(state.generationFuture))
+                readyColumns.push_back(entry.first);
+        }
+
+        for (uint64_t key : readyColumns)
+        {
+            auto it = m_columns.find(key);
+            if (it == m_columns.end())
+                continue;
+
+            ColumnState &state = it->second;
+            if (state.state != ColumnLoadState::Generating || !state.generationFuture.valid())
+                continue;
+
+            state.column = std::make_unique<ChunkColumn>(state.generationFuture.get());
+            state.generationFuture = std::shared_future<ChunkColumn>();
+            ApplyPendingEdits(key, *state.column);
+            state.state = ColumnLoadState::Generated;
+            EnqueueColumnMeshing(state);
+        }
+    }
+
+    void VoxelWorld::ApplyPendingEdits(uint64_t key, ChunkColumn &column)
+    {
+        auto editsIt = m_pendingEdits.find(key);
+        if (editsIt == m_pendingEdits.end())
+            return;
+
+        for (const PendingEdit &edit : editsIt->second)
+        {
+            if (edit.y >= 0 && edit.y < kWorldHeight)
+                column.SetLocal(LocalX(edit.x), edit.y, LocalZ(edit.z), edit.id);
+        }
+        m_pendingEdits.erase(editsIt);
+    }
+
+    void VoxelWorld::EnqueueColumnMeshing(ColumnState &state)
+    {
+        if (!state.column)
+            return;
+
+        auto columnSnapshot = std::make_shared<ChunkColumn>(*state.column);
+        auto registrySnapshot = std::make_shared<BlockRegistry>(m_registry);
+        for (int si = 0; si < kSectionCount; ++si)
+        {
+            state.sectionUploaded[si] = false;
+            state.meshFutures[si] = ThreadPool::General.Enqueue([columnSnapshot, registrySnapshot, si]() -> MeshData
+                                                                { return MeshSectionCpu(*columnSnapshot, *registrySnapshot, si); });
+        }
+        state.state = ColumnLoadState::Meshing;
+    }
+
+    int VoxelWorld::ProcessReadyMeshUploads(CommandBuffer *cmd, int budget)
+    {
+        int uploads = 0;
+        const ColumnCoord anchorCoord = AnchorToColumn(m_anchor);
+        std::vector<uint64_t> keys;
+        keys.reserve(m_columns.size());
+        for (const auto &entry : m_columns)
+            if (entry.second.state == ColumnLoadState::Meshing)
+                keys.push_back(entry.first);
+
+        std::sort(keys.begin(), keys.end(), [this, anchorCoord](uint64_t a, uint64_t b)
+                  {
+                      const ColumnState &ca = m_columns.at(a);
+                      const ColumnState &cb = m_columns.at(b);
+                      const int da = ColumnDistance(ca.coord, anchorCoord);
+                      const int db = ColumnDistance(cb.coord, anchorCoord);
+                      if (da != db)
+                          return da < db;
+                      if (ca.coord.cz != cb.coord.cz)
+                          return ca.coord.cz < cb.coord.cz;
+                      return ca.coord.cx < cb.coord.cx; });
+
+        for (uint64_t key : keys)
+        {
+            auto it = m_columns.find(key);
+            if (it == m_columns.end())
+                continue;
+
+            ColumnState &state = it->second;
+            if (state.state != ColumnLoadState::Meshing)
+                continue;
+
+            for (int si = 0; si < kSectionCount; ++si)
+            {
+                if (state.sectionUploaded[si] || !FutureReady(state.meshFutures[si]))
+                    continue;
+                if (uploads >= budget)
+                    return uploads;
+
+                const MeshData &mesh = state.meshFutures[si].get();
+                if (!mesh.vertices.empty())
+                {
+                    state.handles[si] = UploadSectionMesh(cmd, state.coord, si, mesh);
+                    ++uploads;
+                }
+                state.sectionUploaded[si] = true;
+                state.meshFutures[si] = std::shared_future<MeshData>();
+            }
+
+            bool allUploaded = true;
+            for (int si = 0; si < kSectionCount; ++si)
+                allUploaded = allUploaded && state.sectionUploaded[si];
+            if (allUploaded)
+                state.state = ColumnLoadState::Ready;
+        }
+
+        return uploads;
+    }
+
+    ArenaHandle VoxelWorld::UploadSectionMesh(CommandBuffer *cmd, ColumnCoord coord, int si, const MeshData &mesh)
+    {
         if (mesh.vertices.empty())
             return ArenaHandle{};
 
         MeshRuntime runtime{};
         runtime.materialGpuIndex = m_materialGpuIndex;
 
+        const int sectionWorldY = si * kSectionDim;
         const vec3 sectionOrigin(static_cast<float>(coord.cx * kSectionDim),
                                  static_cast<float>(sectionWorldY),
                                  static_cast<float>(coord.cz * kSectionDim));
         return m_arena.Upload(cmd, mesh, sectionOrigin, m_hostDataOffset, runtime);
+    }
+
+    void VoxelWorld::ReleaseColumn(ColumnState &state)
+    {
+        state.state = ColumnLoadState::Unloading;
+        for (ArenaHandle &handle : state.handles)
+        {
+            if (handle.valid)
+            {
+                m_arena.Release(handle);
+                handle = ArenaHandle{};
+            }
+        }
+    }
+
+    void VoxelWorld::StartDirtySectionRemesh(ColumnState &state, int si)
+    {
+        if (!state.column || si < 0 || si >= kSectionCount)
+            return;
+        if (state.remeshPending[si])
+        {
+            state.dirtyAfterRemesh[si] = true;
+            return;
+        }
+
+        auto columnSnapshot = std::make_shared<ChunkColumn>(*state.column);
+        auto registrySnapshot = std::make_shared<BlockRegistry>(m_registry);
+        state.remeshFutures[si] = ThreadPool::General.Enqueue([columnSnapshot, registrySnapshot, si]() -> MeshData
+                                                              { return MeshSectionCpu(*columnSnapshot, *registrySnapshot, si); });
+        state.remeshPending[si] = true;
+    }
+
+    void VoxelWorld::ProcessDirtyRemeshResults(CommandBuffer *cmd)
+    {
+        for (auto &entry : m_columns)
+        {
+            ColumnState &state = entry.second;
+            if (state.state != ColumnLoadState::Ready)
+                continue;
+
+            for (int si = 0; si < kSectionCount; ++si)
+            {
+                if (!state.remeshPending[si] || !FutureReady(state.remeshFutures[si]))
+                    continue;
+
+                const MeshData &mesh = state.remeshFutures[si].get();
+                if (state.handles[si].valid)
+                {
+                    m_arena.Release(state.handles[si]);
+                    state.handles[si] = ArenaHandle{};
+                }
+                if (!mesh.vertices.empty())
+                    state.handles[si] = UploadSectionMesh(cmd, state.coord, si, mesh);
+
+                state.remeshFutures[si] = std::shared_future<MeshData>();
+                state.remeshPending[si] = false;
+
+                if (state.dirtyAfterRemesh[si])
+                {
+                    state.dirtyAfterRemesh[si] = false;
+                    MarkSectionDirty(state.coord, si);
+                }
+            }
+        }
     }
 
     void VoxelWorld::MarkSectionDirty(ColumnCoord coord, int si)
@@ -385,33 +666,34 @@ namespace pe::voxel
 
     void VoxelWorld::RemeshDirtySections(CommandBuffer *cmd)
     {
+        std::vector<std::pair<uint64_t, int>> remaining;
+        remaining.reserve(m_dirtySections.size());
+
         for (const auto &dirty : m_dirtySections)
         {
             auto colIt = m_columns.find(dirty.first);
             if (colIt == m_columns.end())
                 continue;
-            ChunkColumn &column = colIt->second;
-            const ColumnCoord coord = column.Coord();
-            const int si = dirty.second;
 
-            // Release the existing section mesh (if any) and re-upload from the edited blocks. Release is
-            // deferred + range-retired by the arena, so re-uploading in the same frame is safe.
-            for (auto it = m_sections.begin(); it != m_sections.end();)
+            ColumnState &state = colIt->second;
+            const int si = dirty.second;
+            if (state.state != ColumnLoadState::Ready || !state.column)
             {
-                if (ColumnKey(it->coord) == dirty.first && it->sectionIndex == si)
-                {
-                    m_arena.Release(it->handle);
-                    it = m_sections.erase(it);
-                }
-                else
-                    ++it;
+                remaining.push_back(dirty);
+                continue;
             }
 
-            ArenaHandle handle = MeshAndUploadSection(cmd, coord, column, si);
-            if (handle.valid)
-                m_sections.push_back({coord, si, handle});
+            if (state.remeshPending[si])
+            {
+                state.dirtyAfterRemesh[si] = true;
+                continue;
+            }
+
+            StartDirtySectionRemesh(state, si);
         }
-        m_dirtySections.clear();
+
+        m_dirtySections.swap(remaining);
+        ProcessDirtyRemeshResults(cmd);
     }
 
     void VoxelWorld::RetireSubmittedUpdateCommands(bool all)

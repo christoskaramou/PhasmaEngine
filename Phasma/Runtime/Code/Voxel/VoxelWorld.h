@@ -20,8 +20,9 @@ namespace pe::voxel
 
     struct VoxelConfig
     {
-        int loadRadius = 4;
-        int uploadBudgetPerFrame = 8;
+        int loadRadius = 8;
+        int unloadMargin = 2;
+        int uploadBudgetPerFrame = 4;
         int groundY = 64;
     };
 
@@ -42,20 +43,57 @@ namespace pe::voxel
         BlockRegistry &Registry();
 
     private:
-        struct SectionHandle
+        enum class ColumnLoadState
+        {
+            Empty,
+            Generating,
+            Generated,
+            Meshing,
+            Ready,
+            Unloading,
+        };
+
+        struct PendingEdit
+        {
+            int x = 0;
+            int y = 0;
+            int z = 0;
+            BlockId id = kAir;
+        };
+
+        struct ColumnState
         {
             ColumnCoord coord{};
-            int sectionIndex = 0;
-            ArenaHandle handle{};
+            ColumnLoadState state = ColumnLoadState::Empty;
+            std::shared_future<ChunkColumn> generationFuture;
+            std::unique_ptr<ChunkColumn> column;
+            std::array<std::shared_future<MeshData>, kSectionCount> meshFutures;
+            std::array<std::shared_future<MeshData>, kSectionCount> remeshFutures;
+            std::array<ArenaHandle, kSectionCount> handles{};
+            std::array<bool, kSectionCount> sectionUploaded{};
+            std::array<bool, kSectionCount> remeshPending{};
+            std::array<bool, kSectionCount> dirtyAfterRemesh{};
         };
 
         static uint64_t ColumnKey(ColumnCoord coord);
+        static ColumnCoord AnchorToColumn(const vec3 &worldPos);
+        static int ColumnDistance(ColumnCoord a, ColumnCoord b);
+        ColumnState *FindColumnState(ColumnCoord coord);
+        const ColumnState *FindColumnState(ColumnCoord coord) const;
         ChunkColumn *FindColumn(ColumnCoord coord);
         const ChunkColumn *FindColumn(ColumnCoord coord) const;
         void RegisterDefaultBlocks();
         void CreateHostMesh();
-        void UploadInitialGrid();
-        ArenaHandle MeshAndUploadSection(CommandBuffer *cmd, ColumnCoord coord, const ChunkColumn &column, int si);
+        void RequestColumnsForAnchor();
+        void EnqueueColumnGeneration(ColumnCoord coord);
+        void ProcessGenerationResults();
+        void ApplyPendingEdits(uint64_t key, ChunkColumn &column);
+        void EnqueueColumnMeshing(ColumnState &state);
+        int ProcessReadyMeshUploads(CommandBuffer *cmd, int budget);
+        ArenaHandle UploadSectionMesh(CommandBuffer *cmd, ColumnCoord coord, int si, const MeshData &mesh);
+        void ReleaseColumn(ColumnState &state);
+        void StartDirtySectionRemesh(ColumnState &state, int si);
+        void ProcessDirtyRemeshResults(CommandBuffer *cmd);
         void RemeshDirtySections(CommandBuffer *cmd);
         void MarkSectionDirty(ColumnCoord coord, int si);
         void RetireSubmittedUpdateCommands(bool all);
@@ -65,8 +103,8 @@ namespace pe::voxel
         vec3 m_anchor = vec3(0.0f);
         BlockRegistry m_registry;
         GeometryArena m_arena;
-        std::unordered_map<uint64_t, ChunkColumn> m_columns;
-        std::vector<SectionHandle> m_sections;
+        std::unordered_map<uint64_t, ColumnState> m_columns;
+        std::unordered_map<uint64_t, std::vector<PendingEdit>> m_pendingEdits;
         std::vector<std::pair<uint64_t, int>> m_dirtySections; // (ColumnKey, sectionIndex) pending remesh
         std::vector<CommandBuffer *> m_submittedUpdateCmds;
         std::unique_ptr<Material> m_hostMaterial;

@@ -32,6 +32,7 @@
 #include "Systems/AudioSystem.h"
 #endif
 #include "Systems/AnimationSystem.h"
+#include "Voxel/VoxelSystem.h"
 #include "Window/Window.h"
 #include "imgui/ImGuizmo.h"
 #ifdef NDEBUG
@@ -411,6 +412,7 @@ namespace pe
         CreateGlobalSystem<AudioSystem>()->Init(nullptr);
 #endif
         CreateGlobalSystem<AnimationSystem>()->Init(nullptr);
+        CreateGlobalSystem<voxel::VoxelSystem>()->Init(nullptr);
 
         // ScriptSystem is initialized last because it can call other systems in Init()
         CreateGlobalSystem<ScriptSystem>()->Init(nullptr);

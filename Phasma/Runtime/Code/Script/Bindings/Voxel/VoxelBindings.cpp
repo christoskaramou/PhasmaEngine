@@ -27,6 +27,8 @@ namespace pe
                         sol::table p = *params;
                         if (p["load_radius"].valid())
                             cfg.loadRadius = p["load_radius"];
+                        if (p["unload_margin"].valid())
+                            cfg.unloadMargin = p["unload_margin"];
                         if (p["ground_y"].valid())
                             cfg.groundY = p["ground_y"];
                         if (p["upload_budget"].valid())

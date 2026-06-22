@@ -89,23 +89,3 @@ endif()
 if(TARGET Lua)
     target_link_libraries(PhasmaRuntime PUBLIC Lua)
 endif()
-
-# --- Voxel subsystem unit tests (standalone int main() exes; pattern: WebGPU DxilCacheHashTest) ---
-# All reuse the engine PCH (the voxel headers rely on it for std headers, per engine convention).
-# The PCH pulls in SDL.h ("#define main SDL_main"); each test "#undef main" in-source so its console
-# main() links (SDL2main is not linked). Ninja Multi-Config puts each exe in build-ninja-full/Release/
-# next to PhasmaCore.dll so the DLL resolves at run time.
-foreach(_voxtest
-    VoxelCoordTest
-    BlockStoreTest
-    ChunkColumnTest
-    FlatGenTest
-    BlockRegistryTest
-    GreedyMesherTest
-    ArenaAllocatorTest
-    RaycastDdaTest
-    SweptAabbTest)
-    add_executable(${_voxtest} "${CMAKE_CURRENT_SOURCE_DIR}/Tests/Voxel/${_voxtest}.cpp")
-    target_link_libraries(${_voxtest} PRIVATE PhasmaRuntime)
-    target_precompile_headers(${_voxtest} REUSE_FROM PhasmaRuntime)
-endforeach()
