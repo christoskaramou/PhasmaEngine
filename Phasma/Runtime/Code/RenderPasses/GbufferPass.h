@@ -9,6 +9,7 @@ namespace pe
     class CommandBuffer;
     class PassInfo;
     class PassInfoAsset;
+    class ImageView;
     class Scene;
 
     struct PushConstants_GBuffer
@@ -37,6 +38,8 @@ namespace pe
             std::vector<PassInfo *> passInfos{m_passInfo.get()};
             if (m_passInfoDS)
                 passInfos.push_back(m_passInfoDS.get());
+            if (m_voxelPassInfo)
+                passInfos.push_back(m_voxelPassInfo.get());
             return passInfos;
         }
 
@@ -48,8 +51,10 @@ namespace pe
         void PassBarriers(CommandBuffer *cmd);
 
         std::shared_ptr<PassInfo> m_passInfoDS; // double-sided variant (cullMode=eNone)
+        std::shared_ptr<PassInfo> m_voxelPassInfo;
 
         ResourceHandle<PassInfoAsset> m_passAsset;
+        ResourceHandle<PassInfoAsset> m_voxelPassAsset;
         Image *m_ibl_brdf_lut;
         Image *m_normalRT;
         Image *m_albedoRT;
@@ -62,6 +67,9 @@ namespace pe
 
         Scene *m_scene = nullptr;
         uint64_t m_lastGeometryVersion = 0;
+        ImageView *m_lastVoxelAtlasView = nullptr;
+        bool m_loggedVoxelPipelineState = false;
+        bool m_loggedVoxelDrawGate = false;
     };
 
     class GbufferTransparentPass : public IRenderPassComponent

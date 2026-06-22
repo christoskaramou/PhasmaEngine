@@ -23,6 +23,7 @@
 #include "Systems/AudioSystem.h"
 #include "Systems/Physics2DSystem.h"
 #include "Systems/PhysicsSystem.h"
+#include "Voxel/VoxelSystem.h"
 #include "UI/RuntimeUi.h"
 #include "Window/WindowEvents.h"
 
@@ -671,6 +672,9 @@ namespace pe
 #ifdef PE_AUDIO
                 CreateGlobalSystem<AudioSystem>()->Init(nullptr);
 #endif
+                // Voxel subsystem: created idle; stays a no-op until a world is created via API
+                // (voxel.create / VoxelSystem::CreateWorld). Permanent subsystem, no feature guard.
+                CreateGlobalSystem<voxel::VoxelSystem>()->Init(nullptr);
 
                 if (!startupScene.IsExplicitEmpty() && !startupScene.scenePath.empty())
                 {

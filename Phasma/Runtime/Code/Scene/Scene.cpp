@@ -966,6 +966,7 @@ namespace pe
         uint64_t indirectSize = static_cast<uint64_t>(m_indirectCapacity) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
         uint32_t alphaBlendSortCapacity = nextPow2(m_alphaBlendMeshCount ? m_alphaBlendMeshCount : 1u);
         uint32_t transmissionSortCapacity = nextPow2(m_transmissionMeshCount ? m_transmissionMeshCount : 1u);
+        uint64_t indirectAllSize = m_indirectAll ? static_cast<uint64_t>(m_indirectAll->Size()) : 0ull;
         uint64_t alphaBlendIndirectSize = static_cast<uint64_t>(alphaBlendSortCapacity) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
         uint64_t alphaBlendSortKeySize = static_cast<uint64_t>(alphaBlendSortCapacity) * sizeof(float);
         uint64_t transmissionIndirectSize = static_cast<uint64_t>(transmissionSortCapacity) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
@@ -1018,7 +1019,14 @@ namespace pe
         {
             PE_PROFILE_SCOPE("Culling Compute Access Barriers");
             std::vector<BufferBarrierInfo> computeAccessBarriers;
-            computeAccessBarriers.reserve(hasTransparentMeshes ? 10 : 6);
+            computeAccessBarriers.reserve(hasTransparentMeshes ? 11 : 7);
+            if (m_indirectAll && indirectAllSize > 0)
+            {
+                computeAccessBarriers.push_back(makeBufferBarrier(m_indirectAll,
+                                                                  PE_STAGE_COMPUTE_SHADER,
+                                                                  PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ,
+                                                                  indirectAllSize));
+            }
             computeAccessBarriers.push_back(makeBufferBarrier(m_cullingCountersBuffers[frame],
                                                               PE_STAGE_COMPUTE_SHADER,
                                                               PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE,
@@ -1330,6 +1338,7 @@ namespace pe
         const bool phase1 = (phase == CullPhase::Phase1);
         const bool needsIndirectCountFallback = !RHII.GetCaps().indirectCount;
         const uint64_t indirectSize = static_cast<uint64_t>(m_indirectCapacity) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
+        const uint64_t indirectAllSize = m_indirectAll ? static_cast<uint64_t>(m_indirectAll->Size()) : 0ull;
         const uint64_t countersSize = 7 * sizeof(uint32_t);
         const uint64_t visibilitySize = static_cast<uint64_t>(m_indirectCapacity) * sizeof(uint32_t);
 
@@ -1367,7 +1376,14 @@ namespace pe
             PE_PROFILE_SCOPE("OccCull Compute Access Barriers");
             const PeBarrierAccess rw = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE;
             std::vector<BufferBarrierInfo> barriers;
-            barriers.reserve(6);
+            barriers.reserve(7);
+            if (m_indirectAll && indirectAllSize > 0)
+            {
+                barriers.push_back(makeBufferBarrier(m_indirectAll,
+                                                     PE_STAGE_COMPUTE_SHADER,
+                                                     PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ,
+                                                     indirectAllSize));
+            }
             barriers.push_back(makeBufferBarrier(counters, PE_STAGE_COMPUTE_SHADER, rw, countersSize));
             barriers.push_back(makeBufferBarrier(opaqueSS, PE_STAGE_COMPUTE_SHADER, rw, indirectSize));
             barriers.push_back(makeBufferBarrier(alphaCutSS, PE_STAGE_COMPUTE_SHADER, rw, indirectSize));
@@ -1531,6 +1547,13 @@ namespace pe
             PE_PROFILE_SCOPE("Update Uniforms");
             UpdateUniformData();
         }
+    }
+
+    size_t Scene::GetNodeDataOffset(const NodeId *node) const
+    {
+        if (!IsNodeAlive(node))
+            return static_cast<size_t>(-1);
+        return m_nodeRuntime[node->index].dataOffset;
     }
 
     void Scene::FlushPendingGpuWork()

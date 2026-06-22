@@ -219,6 +219,9 @@ uint WaveAppend(uint counterIndex, bool emit)
 
     Mesh_Constants constants = MeshConstants[idx];
 
+    if ((constants.editorFlags & 4u) != 0u)
+        return; // voxels are drawn by the dedicated voxel pass
+
     // Per-instance render-visible flag (NodeGpuData byte offset 128, after the two matrices).
     // Cleared by node:set_visible(false) to cull this draw cheaply — no instance/TLAS rebuild.
     if (NodeData.Load(constants.meshDataOffset + 128u) == 0u)

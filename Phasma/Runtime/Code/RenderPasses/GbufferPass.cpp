@@ -1,4 +1,5 @@
 #include "GbufferPass.h"
+#include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
 #include "API/Image.h"
@@ -43,6 +44,9 @@ namespace pe
 
         if (!m_passInfoDS)
             m_passInfoDS = std::make_shared<PassInfo>();
+        if (!m_voxelPassInfo)
+            m_voxelPassInfo = std::make_shared<PassInfo>();
+        m_lastVoxelAtlasView = nullptr;
         m_scene = nullptr;
     }
 
@@ -91,12 +95,90 @@ namespace pe
             m_passInfoDS->pFragShader = oldDSFrag;
             throw;
         }
+
+        Shader *oldVoxelVert = m_voxelPassInfo->pVertShader;
+        Shader *oldVoxelFrag = m_voxelPassInfo->pFragShader;
+        auto restoreVoxelShaders = [&]()
+        {
+            if (m_voxelPassInfo->pVertShader != oldVoxelVert)
+                Shader::Destroy(m_voxelPassInfo->pVertShader);
+            if (m_voxelPassInfo->pFragShader != oldVoxelFrag)
+                Shader::Destroy(m_voxelPassInfo->pFragShader);
+            m_voxelPassInfo->pVertShader = oldVoxelVert;
+            m_voxelPassInfo->pFragShader = oldVoxelFrag;
+        };
+
+        try
+        {
+            if (!m_voxelPassAsset)
+                m_voxelPassAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::RuntimeAssets + "Shaders/Voxel/voxel_gbuffer.passinfo");
+
+            const PassVariant *voxelSurface = m_voxelPassAsset ? m_voxelPassAsset->GetVariant("surface") : nullptr;
+            if (!voxelSurface)
+            {
+                PE_WARN("voxel_gbuffer.passinfo missing 'surface' variant");
+            }
+            else
+            {
+                m_voxelPassInfo->name = "gbuffer_voxel_pipeline";
+                m_voxelPassInfo->Apply(*voxelSurface);
+                m_voxelPassInfo->colorFormats = colorformats;
+                m_voxelPassInfo->depthFormat = depthFormat;
+                m_voxelPassInfo->Update();
+            }
+        }
+        catch (const std::exception &e)
+        {
+            restoreVoxelShaders();
+            PE_WARN("GbufferOpaquePass voxel pipeline update failed: %s", e.what());
+        }
+        catch (...)
+        {
+            restoreVoxelShaders();
+            PE_WARN("GbufferOpaquePass voxel pipeline update failed");
+        }
+
+        if (!m_loggedVoxelPipelineState)
+        {
+            m_loggedVoxelPipelineState = true;
+            const bool hasVoxelVert = m_voxelPassInfo && m_voxelPassInfo->pVertShader;
+            const bool hasVoxelFrag = m_voxelPassInfo && m_voxelPassInfo->pFragShader;
+            PE_INFO("GbufferOpaquePass voxel pipeline state: vertShader=%u fragShader=%u",
+                    hasVoxelVert ? 1u : 0u,
+                    hasVoxelFrag ? 1u : 0u);
+        }
     }
 
     void GbufferOpaquePass::Update()
     {
         Scene &scene = *GetActiveScene();
         uint32_t frame = RHII.GetFrameIndex();
+        const bool voxelPipelineReady = m_voxelPassInfo && m_voxelPassInfo->pFragShader;
+
+        auto updateVoxelAtlasDescriptors = [&](ImageView *atlasView)
+        {
+            if (!atlasView)
+            {
+                m_lastVoxelAtlasView = nullptr;
+                return;
+            }
+            if (!voxelPipelineReady)
+                return;
+
+            for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
+            {
+                const auto &sets = m_voxelPassInfo->GetDescriptors(i);
+                if (sets.size() <= 1)
+                    continue;
+
+                Descriptor *setAtlas = sets[1];
+                setAtlas->SetSampler(0, scene.GetDefaultSampler());
+                setAtlas->SetImageView(1, atlasView);
+                setAtlas->Update();
+            }
+
+            m_lastVoxelAtlasView = atlasView;
+        };
 
         uint64_t geoVersion = scene.GetGeometryVersion();
         if (geoVersion != m_lastGeometryVersion)
@@ -121,7 +203,12 @@ namespace pe
                     setTextures->Update();
                 }
             }
+
+            updateVoxelAtlasDescriptors(scene.GetVoxelAtlasView());
         }
+
+        if (scene.HasArenaVoxels() && scene.GetVoxelAtlasView() != m_lastVoxelAtlasView)
+            updateVoxelAtlasDescriptors(scene.GetVoxelAtlasView());
 
         if (scene.GetMeshCount() > 0)
         {
@@ -135,6 +222,18 @@ namespace pe
                 setUniforms->SetBuffer(0, scene.GetUniforms(frame));
                 setUniforms->SetBuffer(1, scene.GetMeshConstants());
                 setUniforms->Update();
+            }
+
+            if (voxelPipelineReady)
+            {
+                const auto &sets = m_voxelPassInfo->GetDescriptors(frame);
+                if (!sets.empty())
+                {
+                    Descriptor *setUniforms = sets[0];
+                    setUniforms->SetBuffer(0, scene.GetUniforms(frame));
+                    setUniforms->SetBuffer(1, scene.GetMeshConstants());
+                    setUniforms->Update();
+                }
             }
         }
     }
@@ -171,6 +270,38 @@ namespace pe
             // Occluded objects are in neither set, so they are never drawn. Otherwise draw the
             // frustum-culled set from CullingPass@50.
             const bool occlusion = Settings::Get<GlobalSettings>().occlusion_culling;
+            const bool hasArenaVoxels = m_scene->HasArenaVoxels();
+            const bool hasVoxelAtlas = m_scene->GetVoxelAtlasView() != nullptr;
+            const bool hasVoxelFrag = m_voxelPassInfo && m_voxelPassInfo->pFragShader;
+            Buffer *voxelIndirect = m_scene->GetIndirectAll();
+            const bool hasVoxelIndirect = voxelIndirect != nullptr;
+            const bool voxelDrawReady = hasArenaVoxels && hasVoxelAtlas && hasVoxelFrag && hasVoxelIndirect;
+            const uint32_t voxelBase = hasArenaVoxels ? m_scene->GetArenaSlotBase() : 0u;
+            const uint32_t voxelCount = hasArenaVoxels ? (m_scene->GetMeshCount() - voxelBase) : 0u;
+
+            if (hasArenaVoxels && !m_loggedVoxelDrawGate)
+            {
+                m_loggedVoxelDrawGate = true;
+                PE_INFO("GbufferOpaquePass voxel draw gate: entered=%u hasArenaVoxels=%u hasAtlas=%u fragShader=%u indirectAll=%u base=%u count=%u",
+                        voxelDrawReady ? 1u : 0u,
+                        hasArenaVoxels ? 1u : 0u,
+                        hasVoxelAtlas ? 1u : 0u,
+                        hasVoxelFrag ? 1u : 0u,
+                        hasVoxelIndirect ? 1u : 0u,
+                        voxelBase,
+                        voxelCount);
+            }
+
+            if (voxelDrawReady)
+            {
+                BufferBarrierInfo indirectBarrier{};
+                indirectBarrier.buffer = voxelIndirect;
+                indirectBarrier.stageMask = PE_STAGE_DRAW_INDIRECT;
+                indirectBarrier.accessMask = PE_ACCESS_INDIRECT_COMMAND_READ;
+                indirectBarrier.offset = static_cast<size_t>(voxelBase) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
+                indirectBarrier.size = static_cast<size_t>(voxelCount) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
+                cmd->BufferBarrier(indirectBarrier);
+            }
 
             cmd->BeginPass(7, m_attachments.data(), "GbufferOpaquePass");
             cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
@@ -204,6 +335,20 @@ namespace pe
                 cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 6 * sizeof(uint32_t), mesh);
             }
 
+            if (voxelDrawReady)
+            {
+                cmd->BindPipeline(*m_voxelPassInfo);
+                cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+                cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
+                cmd->SetConstants(pushConstants);
+                cmd->PushConstants();
+
+                cmd->DrawIndexedIndirect(voxelIndirect,
+                                         static_cast<size_t>(voxelBase) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
+                                         voxelCount,
+                                         PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
+            }
+
             cmd->EndPass();
         }
 
@@ -228,12 +373,20 @@ namespace pe
 
     void GbufferOpaquePass::Destroy()
     {
-        if (!m_passInfoDS)
-            return;
+        if (m_passInfoDS)
+        {
+            Shader::Destroy(m_passInfoDS->pVertShader);
+            Shader::Destroy(m_passInfoDS->pFragShader);
+            m_passInfoDS.reset();
+        }
 
-        Shader::Destroy(m_passInfoDS->pVertShader);
-        Shader::Destroy(m_passInfoDS->pFragShader);
-        m_passInfoDS.reset();
+        if (m_voxelPassInfo)
+        {
+            Shader::Destroy(m_voxelPassInfo->pVertShader);
+            Shader::Destroy(m_voxelPassInfo->pFragShader);
+            m_voxelPassInfo.reset();
+        }
+        m_lastVoxelAtlasView = nullptr;
     }
 
     void GbufferTransparentPass::Init()

@@ -234,6 +234,44 @@ namespace pe
         void MarkNodeDirty(NodeId *node);
         int AddMesh(Mesh &&mesh);
 
+        // Incremental geometry arena (Task 7, productized from Spike 0A). Lets a voxel world stream
+        // meshes into the SHARED geometry buffer with no UploadBuffers rebuild, so chunks inherit the
+        // existing GBuffer/indirect/frustum/Hi-Z/shadow path. Allocation is owned by the caller's
+        // free list; Scene only places/registers/frees at explicit locations.
+        int ReserveArenaCapacity(uint32_t vtxHeadroomBytes, uint32_t idxHeadroomBytes,
+                                 uint32_t posUvHeadroomBytes, uint32_t extraDrawCapacity);
+        // Place one mesh at an arena-allocated location: vertexIndex is shared by BOTH vertex streams
+        // (GBuffer Vertex + depth/shadow PositionUvVertex — the per-draw vertexOffset indexes both);
+        // idxByteOffset is into the index tail. If cmd != nullptr the GPU copies/barriers are RECORDED
+        // into it (no stall — caller submits before the cull dispatch); if nullptr a transient cmd is
+        // acquired/submitted/waited (one-shot). Returns the scene mesh slot, or -1 on failure.
+        int AddArenaMesh(uint32_t vertexIndex, size_t idxByteOffset,
+                         const std::vector<Vertex> &verts,
+                         const std::vector<PositionUvVertex> &posUv,
+                         const std::vector<uint32_t> &indices, const AABB &localBox,
+                         uint32_t reuseDataOffset, const MeshRuntime &runtimeForImages,
+                         CommandBuffer *cmd = nullptr);
+        // Free an arena slot via swap-remove: relocates the last arena slot into `idx` (patching its
+        // firstInstance, which IS the storage index the culling/GBuffer shaders read) and neuters the
+        // removed mesh's index bytes (degenerates any stale two-phase-occlusion filtered draw).
+        // Returns the slot that was relocated into `idx` (so the caller can fix its handle->slot map),
+        // or -1 if `idx` was already the last slot (no relocation). cmd semantics as AddArenaMesh.
+        int RemoveArenaMesh(int idx, CommandBuffer *cmd = nullptr);
+
+        // Arena layout, published by ReserveArenaCapacity for the GeometryArena's free lists (vertices
+        // are a shared index across both vertex streams; index space is bytes into the tail).
+        uint32_t GetArenaVertexBase() const { return m_arenaVertexBase; }
+        uint32_t GetArenaVertexCapacity() const { return m_arenaVertexCapacity; }
+        size_t GetArenaIdxByteBase() const { return m_arenaIdxByteBase; }
+        size_t GetArenaIdxCapacity() const { return m_arenaIdxCapacity; }
+        uint32_t GetArenaSlotBase() const { return m_arenaSlotBase; }
+        bool HasArenaVoxels() const { return m_meshCount > m_arenaSlotBase && !m_arenaSlots.empty(); }
+        // Transform-storage offset of a node (its NodeGpuData / world matrix). Only valid for nodes
+        // with a drawable mesh ref (others are SIZE_MAX). Arena meshes point their meshDataOffset at a
+        // persistent identity host node so the VS applies an identity transform to already-world-baked
+        // section vertices.
+        size_t GetNodeDataOffset(const NodeId *node) const;
+
 #ifdef PE_DEBUG
         void ValidateNodeId(const NodeId *node) const
         {
@@ -364,6 +402,8 @@ namespace pe
         bool HasLinesMeshes() const { return m_hasLinesMeshes; }
 
         const std::vector<ImageView *> &GetImageViews() const { return m_imageViews; }
+        void SetVoxelAtlasView(ImageView *v) { m_voxelAtlasView = v; }
+        ImageView *GetVoxelAtlasView() const { return m_voxelAtlasView; }
         uint32_t GetMeshCount() const { return m_meshCount; }
         Buffer *GetMeshConstants();
         Buffer *GetMaterialTable() { return m_materialTable; }
@@ -614,7 +654,30 @@ namespace pe
         uint32_t m_positionsCount = 0;
         uint32_t m_aabbVerticesCount = 0;
 
+        // Arena bookkeeping (Spike 0A). Vertices use a SHARED index across the Vertex and
+        // PositionUvVertex streams (the per-draw vertexOffset must index both identically — the
+        // GBuffer reads Vertex, the depth prepass reads PositionUvVertex). Indices live in a tail.
+        uint32_t m_arenaVertexBase = 0;                                            // first arena vertex index (== orig m_verticesCount)
+        uint32_t m_arenaVertexUsed = 0;                                            // live arena vertices (informational; allocation owned by GeometryArena)
+        uint32_t m_arenaVertexCapacity = 0;                                        // headroom in vertices
+        size_t m_arenaIdxByteBase = 0, m_arenaIdxUsed = 0, m_arenaIdxCapacity = 0; // index tail (bytes); m_arenaIdxUsed is informational
+        // Per-arena-slot CPU shadow, dense and parallel to scene slots [m_arenaSlotBase, m_meshCount).
+        // Holds exactly what swap-remove needs without a GPU readback: the draw fields to rebuild a
+        // relocated entry, and the index byte-range to neuter the freed geometry.
+        struct ArenaSlot
+        {
+            uint32_t indexCount = 0;
+            uint32_t firstIndex = 0;
+            int32_t vertexOffset = 0;
+            size_t idxByteOffset = 0;
+            size_t idxBytes = 0;
+            uint32_t vertexCount = 0;
+        };
+        std::vector<ArenaSlot> m_arenaSlots;
+        uint32_t m_arenaSlotBase = 0; // first arena scene-slot (== m_meshCount when capacity reserved)
+
         std::vector<ImageView *> m_imageViews;
+        ImageView *m_voxelAtlasView = nullptr;
         uint64_t m_geometryVersion = 0;
 
         // Ray tracing
