@@ -210,6 +210,14 @@ namespace pwgpu
                                       dst->peBuffer, slotOffset, sizeof(uint64_t),
                                       PE_QUERY_RESULT_64_BIT | PE_QUERY_RESULT_WAIT);
             }
+
+            // The fill + copyQueryPoolResults leave the buffer in a transfer-write
+            // state. Mirror it into the tracker so a later GPU-timeline consumer's
+            // neutral Buffer::Barrier derives the correct src and emits the
+            // write->read dependency (matches the DX12 branch below).
+            pe::BufferTrackInfo &trackInfo = dst->peBuffer->GetTrackInfo();
+            trackInfo.stageMask = PE_STAGE_TRANSFER;
+            trackInfo.accessMask = PE_ACCESS_TRANSFER_WRITE;
             return true;
         }
 #if defined(PE_WIN32)
