@@ -55,6 +55,9 @@ namespace pe::voxel
         void RegisterDefaultBlocks();
         void CreateHostMesh();
         void UploadInitialGrid();
+        ArenaHandle MeshAndUploadSection(CommandBuffer *cmd, ColumnCoord coord, const ChunkColumn &column, int si);
+        void RemeshDirtySections(CommandBuffer *cmd);
+        void MarkSectionDirty(ColumnCoord coord, int si);
         void RetireSubmittedUpdateCommands(bool all);
 
         Scene *m_scene = nullptr;
@@ -64,6 +67,7 @@ namespace pe::voxel
         GeometryArena m_arena;
         std::unordered_map<uint64_t, ChunkColumn> m_columns;
         std::vector<SectionHandle> m_sections;
+        std::vector<std::pair<uint64_t, int>> m_dirtySections; // (ColumnKey, sectionIndex) pending remesh
         std::vector<CommandBuffer *> m_submittedUpdateCmds;
         std::unique_ptr<Material> m_hostMaterial;
         std::unique_ptr<VoxelMaterial> m_voxelMaterial;

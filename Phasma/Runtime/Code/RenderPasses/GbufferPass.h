@@ -68,8 +68,6 @@ namespace pe
         Scene *m_scene = nullptr;
         uint64_t m_lastGeometryVersion = 0;
         ImageView *m_lastVoxelAtlasView = nullptr;
-        bool m_loggedVoxelPipelineState = false;
-        bool m_loggedVoxelDrawGate = false;
     };
 
     class GbufferTransparentPass : public IRenderPassComponent

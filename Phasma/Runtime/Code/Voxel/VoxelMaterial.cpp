@@ -35,6 +35,54 @@ namespace pe::voxel
             pixels.clear();
         }
 
+        uint32_t MipExtent(uint32_t extent, uint32_t mipLevel)
+        {
+            return std::max(extent >> mipLevel, 1u);
+        }
+
+        size_t Rgba8Size(uint32_t width, uint32_t height)
+        {
+            return static_cast<size_t>(width) * static_cast<size_t>(height) * STBI_rgb_alpha;
+        }
+
+        std::vector<stbi_uc> DownsampleRgba8Box(const stbi_uc *src,
+                                                uint32_t srcWidth,
+                                                uint32_t srcHeight,
+                                                uint32_t dstWidth,
+                                                uint32_t dstHeight)
+        {
+            // Straight RGBA8 averaging is enough for the Phase-1 placeholder atlas tiles.
+            std::vector<stbi_uc> dst(Rgba8Size(dstWidth, dstHeight));
+
+            for (uint32_t y = 0; y < dstHeight; ++y)
+            {
+                const uint32_t y0 = std::min(y * 2u, srcHeight - 1u);
+                const uint32_t y1 = std::min(y0 + 1u, srcHeight - 1u);
+
+                for (uint32_t x = 0; x < dstWidth; ++x)
+                {
+                    const uint32_t x0 = std::min(x * 2u, srcWidth - 1u);
+                    const uint32_t x1 = std::min(x0 + 1u, srcWidth - 1u);
+                    const size_t dstIndex = (static_cast<size_t>(y) * dstWidth + x) * STBI_rgb_alpha;
+                    const size_t src00 = (static_cast<size_t>(y0) * srcWidth + x0) * STBI_rgb_alpha;
+                    const size_t src10 = (static_cast<size_t>(y0) * srcWidth + x1) * STBI_rgb_alpha;
+                    const size_t src01 = (static_cast<size_t>(y1) * srcWidth + x0) * STBI_rgb_alpha;
+                    const size_t src11 = (static_cast<size_t>(y1) * srcWidth + x1) * STBI_rgb_alpha;
+
+                    for (uint32_t channel = 0; channel < STBI_rgb_alpha; ++channel)
+                    {
+                        const uint32_t sum = static_cast<uint32_t>(src[src00 + channel]) +
+                                             static_cast<uint32_t>(src[src10 + channel]) +
+                                             static_cast<uint32_t>(src[src01 + channel]) +
+                                             static_cast<uint32_t>(src[src11 + channel]);
+                        dst[dstIndex + channel] = static_cast<stbi_uc>((sum + 2u) / 4u);
+                    }
+                }
+            }
+
+            return dst;
+        }
+
         void TransitionAtlasToShaderRead(CommandBuffer *cmd, Image *image)
         {
             ImageBarrierInfo barrier{};
@@ -134,18 +182,17 @@ namespace pe::voxel
                 return {};
             }
 
-            // Single mip (Phase 1): the engine's runtime mip-gen uses a compute UAV, but DX12 forbids
-            // a UAV on an SRGB format. Proper mips later via a UNORM resource + SRGB sample view.
-            const uint32_t mipLevels = 1u;
+            const uint32_t atlasWidthU = static_cast<uint32_t>(atlasWidth);
+            const uint32_t atlasHeightU = static_cast<uint32_t>(atlasHeight);
+            const uint32_t mipLevels = Image::CalculateMips(atlasWidthU, atlasHeightU);
 
             ImageDesc desc{};
             desc.format = PE_FORMAT_R8G8B8A8_SRGB;
-            desc.width = static_cast<uint32_t>(atlasWidth);
-            desc.height = static_cast<uint32_t>(atlasHeight);
+            desc.width = atlasWidthU;
+            desc.height = atlasHeightU;
             desc.mipLevels = mipLevels;
             desc.arrayLayers = static_cast<uint32_t>(tilePngPaths.size());
-            // No STORAGE/UAV: the atlas is sampled-only (single mip), and DX12 forbids UAV on an SRGB
-            // format (CreateResource fails -> device removed).
+            // No STORAGE/UAV: CPU-generated mips keep the SRGB atlas DX12-safe.
             desc.usage = PE_IMAGE_USAGE_TRANSFER_SRC |
                          PE_IMAGE_USAGE_TRANSFER_DST |
                          PE_IMAGE_USAGE_SAMPLED;
@@ -164,15 +211,38 @@ namespace pe::voxel
             rawAtlas->SetSampler(Sampler::Create(samplerInfo, "VoxelMaterial_AtlasSampler"));
 
             CommandBuffer *cmd = queue->AcquireCommandBuffer();
+            std::vector<std::vector<stbi_uc>> mipPixels;
+            mipPixels.reserve(static_cast<size_t>(rawAtlas->GetArrayLayers()) * static_cast<size_t>(mipLevels - 1u));
             cmd->Begin();
             for (uint32_t layer = 0; layer < rawAtlas->GetArrayLayers(); ++layer)
             {
-                size_t size = static_cast<size_t>(atlasWidth) * static_cast<size_t>(atlasHeight) * STBI_rgb_alpha;
-                cmd->CopyDataToImageStaged(rawAtlas, pixels[layer], size, layer, 1);
+                const stbi_uc *srcMip = pixels[layer];
+                uint32_t srcWidth = atlasWidthU;
+                uint32_t srcHeight = atlasHeightU;
+
+                for (uint32_t mipLevel = 0; mipLevel < mipLevels; ++mipLevel)
+                {
+                    const uint32_t mipWidth = MipExtent(atlasWidthU, mipLevel);
+                    const uint32_t mipHeight = MipExtent(atlasHeightU, mipLevel);
+                    stbi_uc *mipData = pixels[layer];
+
+                    if (mipLevel > 0)
+                    {
+                        mipPixels.emplace_back(DownsampleRgba8Box(srcMip, srcWidth, srcHeight, mipWidth, mipHeight));
+                        mipData = mipPixels.back().data();
+                    }
+
+                    cmd->CopyDataToImageStaged(rawAtlas, mipData, Rgba8Size(mipWidth, mipHeight), layer, 1, mipLevel);
+                    srcMip = mipData;
+                    srcWidth = mipWidth;
+                    srcHeight = mipHeight;
+                }
             }
             TransitionAtlasToShaderRead(cmd, rawAtlas);
-            cmd->AddAfterWaitCallback([pixels = std::move(pixels)]() mutable
-                                      { FreePixels(pixels); });
+            cmd->AddAfterWaitCallback([pixels = std::move(pixels), mipPixels = std::move(mipPixels)]() mutable
+                                      {
+                                          mipPixels.clear();
+                                          FreePixels(pixels); });
             cmd->End();
 
             queue->Submit(1, &cmd, nullptr, nullptr);

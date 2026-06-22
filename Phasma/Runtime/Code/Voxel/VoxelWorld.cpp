@@ -1,5 +1,4 @@
 #include "Voxel/VoxelWorld.h"
-#include "Voxel/FlatGen.h"
 #include "Voxel/GreedyMesher.h"
 #include "Voxel/VoxelCollider.h"
 #include "Voxel/VoxelMaterial.h"
@@ -185,10 +184,13 @@ namespace pe::voxel
     {
         const ColumnCoord coord = WorldToColumn(x, z);
         ChunkColumn *column = FindColumn(coord);
-        if (!column)
+        if (!column || y < 0 || y >= kWorldHeight)
             return;
+        if (column->GetLocal(LocalX(x), y, LocalZ(z)) == id)
+            return; // no change
 
         column->SetLocal(LocalX(x), y, LocalZ(z), id);
+        MarkSectionDirty(coord, SectionIndex(y));
     }
 
     bool VoxelWorld::Raycast(const vec3 &o, const vec3 &d, float maxDist,
@@ -219,6 +221,7 @@ namespace pe::voxel
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
         m_arena.Update(cmd);
+        RemeshDirtySections(cmd);
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
         m_submittedUpdateCmds.push_back(cmd);
@@ -232,9 +235,11 @@ namespace pe::voxel
     void VoxelWorld::RegisterDefaultBlocks()
     {
         m_registry = BlockRegistry();
-        m_registry.Register({kStoneBlock, "stone", true, true, VoxelRenderClass::Opaque, {0, 0, 0, 0, 0, 0}});
-        m_registry.Register({kDirtBlock, "dirt", true, true, VoxelRenderClass::Opaque, {0, 0, 0, 0, 0, 0}});
-        m_registry.Register({kGrassBlock, "grass", true, true, VoxelRenderClass::Opaque, {0, 0, 0, 0, 0, 0}});
+        // faceTiles order: +X,-X,+Y,-Y,+Z,-Z. Atlas layers (VoxelMaterial::Build order): 0=grass, 1=dirt, 2=stone.
+        m_registry.Register({kStoneBlock, "stone", true, true, VoxelRenderClass::Opaque, {2, 2, 2, 2, 2, 2}});
+        m_registry.Register({kDirtBlock, "dirt", true, true, VoxelRenderClass::Opaque, {1, 1, 1, 1, 1, 1}});
+        // grass: green top (+Y -> layer 0), dirt on the 4 sides + bottom.
+        m_registry.Register({kGrassBlock, "grass", true, true, VoxelRenderClass::Opaque, {1, 1, 0, 1, 1, 1}});
     }
 
     void VoxelWorld::CreateHostMesh()
@@ -300,9 +305,6 @@ namespace pe::voxel
         if (!queue)
             return;
 
-        GreedyMesher mesher;
-        FlatGen generator(m_cfg.groundY, kStoneBlock);
-
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
         m_arena.Update(cmd);
@@ -315,35 +317,23 @@ namespace pe::voxel
                 const ColumnCoord coord{cx, cz};
                 auto inserted = m_columns.emplace(ColumnKey(coord), ChunkColumn(coord));
                 ChunkColumn &column = inserted.first->second;
-                generator.Generate(column);
+                // Layered surface: grass on the top block, a few dirt below, stone underneath.
+                const int topY = m_cfg.groundY - 1;
+                for (int lz = 0; lz < kSectionDim; ++lz)
+                    for (int lx = 0; lx < kSectionDim; ++lx)
+                        for (int wy = 0; wy < m_cfg.groundY; ++wy)
+                        {
+                            BlockId b = kStoneBlock;
+                            if (wy == topY)
+                                b = kGrassBlock;
+                            else if (wy >= topY - 3)
+                                b = kDirtBlock;
+                            column.SetLocal(lx, wy, lz, b);
+                        }
 
                 for (int si = 0; si < kSectionCount; ++si)
                 {
-                    const int sectionWorldY = si * kSectionDim;
-                    // Milestone B samples all cross-section and cross-column neighbors as air, which
-                    // over-generates boundary faces but keeps the first arena-streaming slice simple.
-                    BlockSampler sampler = [&column, sectionWorldY](int lx, int ly, int lz) -> BlockId
-                    {
-                        if (lx < 0 || lx >= kSectionDim ||
-                            ly < 0 || ly >= kSectionDim ||
-                            lz < 0 || lz >= kSectionDim)
-                        {
-                            return kAir;
-                        }
-                        return column.GetLocal(lx, sectionWorldY + ly, lz);
-                    };
-
-                    MeshData mesh = mesher.Mesh(sampler, m_registry, 0);
-                    if (mesh.vertices.empty())
-                        continue;
-
-                    MeshRuntime runtime{};
-                    runtime.materialGpuIndex = m_materialGpuIndex;
-
-                    const vec3 sectionOrigin(static_cast<float>(cx * kSectionDim),
-                                             static_cast<float>(sectionWorldY),
-                                             static_cast<float>(cz * kSectionDim));
-                    ArenaHandle handle = m_arena.Upload(cmd, mesh, sectionOrigin, m_hostDataOffset, runtime);
+                    ArenaHandle handle = MeshAndUploadSection(cmd, coord, column, si);
                     if (handle.valid)
                         m_sections.push_back({coord, si, handle});
                 }
@@ -354,6 +344,74 @@ namespace pe::voxel
         queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
         cmd->Return();
+    }
+
+    ArenaHandle VoxelWorld::MeshAndUploadSection(CommandBuffer *cmd, ColumnCoord coord, const ChunkColumn &column, int si)
+    {
+        const int sectionWorldY = si * kSectionDim;
+        // Each section is meshed self-contained: out-of-section samples return air, so a section's mesh
+        // never depends on neighbors (over-generates boundary faces, but makes an edit a 1-section remesh).
+        GreedyMesher mesher;
+        BlockSampler sampler = [&column, sectionWorldY](int lx, int ly, int lz) -> BlockId
+        {
+            if (lx < 0 || lx >= kSectionDim || ly < 0 || ly >= kSectionDim || lz < 0 || lz >= kSectionDim)
+                return kAir;
+            return column.GetLocal(lx, sectionWorldY + ly, lz);
+        };
+
+        MeshData mesh = mesher.Mesh(sampler, m_registry, 0);
+        if (mesh.vertices.empty())
+            return ArenaHandle{};
+
+        MeshRuntime runtime{};
+        runtime.materialGpuIndex = m_materialGpuIndex;
+
+        const vec3 sectionOrigin(static_cast<float>(coord.cx * kSectionDim),
+                                 static_cast<float>(sectionWorldY),
+                                 static_cast<float>(coord.cz * kSectionDim));
+        return m_arena.Upload(cmd, mesh, sectionOrigin, m_hostDataOffset, runtime);
+    }
+
+    void VoxelWorld::MarkSectionDirty(ColumnCoord coord, int si)
+    {
+        if (si < 0 || si >= kSectionCount)
+            return;
+        const uint64_t key = ColumnKey(coord);
+        for (const auto &d : m_dirtySections)
+            if (d.first == key && d.second == si)
+                return; // already pending
+        m_dirtySections.emplace_back(key, si);
+    }
+
+    void VoxelWorld::RemeshDirtySections(CommandBuffer *cmd)
+    {
+        for (const auto &dirty : m_dirtySections)
+        {
+            auto colIt = m_columns.find(dirty.first);
+            if (colIt == m_columns.end())
+                continue;
+            ChunkColumn &column = colIt->second;
+            const ColumnCoord coord = column.Coord();
+            const int si = dirty.second;
+
+            // Release the existing section mesh (if any) and re-upload from the edited blocks. Release is
+            // deferred + range-retired by the arena, so re-uploading in the same frame is safe.
+            for (auto it = m_sections.begin(); it != m_sections.end();)
+            {
+                if (ColumnKey(it->coord) == dirty.first && it->sectionIndex == si)
+                {
+                    m_arena.Release(it->handle);
+                    it = m_sections.erase(it);
+                }
+                else
+                    ++it;
+            }
+
+            ArenaHandle handle = MeshAndUploadSection(cmd, coord, column, si);
+            if (handle.valid)
+                m_sections.push_back({coord, si, handle});
+        }
+        m_dirtySections.clear();
     }
 
     void VoxelWorld::RetireSubmittedUpdateCommands(bool all)

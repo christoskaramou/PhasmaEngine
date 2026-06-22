@@ -137,16 +137,6 @@ namespace pe
             restoreVoxelShaders();
             PE_WARN("GbufferOpaquePass voxel pipeline update failed");
         }
-
-        if (!m_loggedVoxelPipelineState)
-        {
-            m_loggedVoxelPipelineState = true;
-            const bool hasVoxelVert = m_voxelPassInfo && m_voxelPassInfo->pVertShader;
-            const bool hasVoxelFrag = m_voxelPassInfo && m_voxelPassInfo->pFragShader;
-            PE_INFO("GbufferOpaquePass voxel pipeline state: vertShader=%u fragShader=%u",
-                    hasVoxelVert ? 1u : 0u,
-                    hasVoxelFrag ? 1u : 0u);
-        }
     }
 
     void GbufferOpaquePass::Update()
@@ -278,19 +268,6 @@ namespace pe
             const bool voxelDrawReady = hasArenaVoxels && hasVoxelAtlas && hasVoxelFrag && hasVoxelIndirect;
             const uint32_t voxelBase = hasArenaVoxels ? m_scene->GetArenaSlotBase() : 0u;
             const uint32_t voxelCount = hasArenaVoxels ? (m_scene->GetMeshCount() - voxelBase) : 0u;
-
-            if (hasArenaVoxels && !m_loggedVoxelDrawGate)
-            {
-                m_loggedVoxelDrawGate = true;
-                PE_INFO("GbufferOpaquePass voxel draw gate: entered=%u hasArenaVoxels=%u hasAtlas=%u fragShader=%u indirectAll=%u base=%u count=%u",
-                        voxelDrawReady ? 1u : 0u,
-                        hasArenaVoxels ? 1u : 0u,
-                        hasVoxelAtlas ? 1u : 0u,
-                        hasVoxelFrag ? 1u : 0u,
-                        hasVoxelIndirect ? 1u : 0u,
-                        voxelBase,
-                        voxelCount);
-            }
 
             if (voxelDrawReady)
             {
