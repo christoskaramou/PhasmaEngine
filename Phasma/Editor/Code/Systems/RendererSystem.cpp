@@ -28,6 +28,31 @@ namespace pe
             RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi();
             return runtimeUi && runtimeUi->IsInitialized();
         }
+
+        void DispatchWindowTitle()
+        {
+            const Swapchain *swapchain = RHII.GetSwapchain();
+            const Surface *surface = RHII.GetSurface();
+            const PePresentMode presentMode = swapchain ? swapchain->GetPresentMode()
+                                              : surface ? surface->GetPresentMode()
+                                                        : PE_PRESENT_MODE_FIFO;
+
+            std::string title = "PhasmaEngine";
+            title += " - Device: " + RHII.GetGpuName();
+            title += " - API: " + std::string(PeGraphicsApiName(RHII.GetApi()));
+            title += " - Present Mode: " + std::string(RHII.PresentModeToString(presentMode));
+#if PE_DEBUG
+            title += " - Debug";
+#elif PE_RELEASE
+            title += " - Release";
+#elif PE_MINSIZEREL
+            title += " - MinSizeRel";
+#elif PE_RELWITHDEBINFO
+            title += " - RelWithDebInfo";
+#endif
+
+            EventSystem::DispatchEvent(EventType::SetWindowTitle, title);
+        }
     } // namespace
 
     void RendererSystem::Init(CommandBuffer *cmd)
@@ -36,22 +61,7 @@ namespace pe
 
         const bool isDx12 = UsesDx12RenderOrchestration();
 
-        // Set Window Title
-        std::string title = "PhasmaEngine";
-        title += " - Device: " + RHII.GetGpuName();
-        title += " - API: " + std::string(PeGraphicsApiName(RHII.GetApi()));
-        title += " - Present Mode: " + std::string(RHII.PresentModeToString(RHII.GetSwapchain()->GetPresentMode()));
-#if PE_DEBUG
-        title += " - Debug";
-#elif PE_RELEASE
-        title += " - Release";
-#elif PE_MINSIZEREL
-        title += " - MinSizeRel";
-#elif PE_RELWITHDEBINFO
-        title += " - RelWithDebInfo";
-#endif
-
-        EventSystem::DispatchEvent(EventType::SetWindowTitle, title);
+        DispatchWindowTitle();
 
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *initCmd = cmd;
@@ -440,6 +450,7 @@ namespace pe
 
         Surface *surface = RHII.GetSurface();
         RHII.CreateSwapchain(surface);
+        DispatchWindowTitle();
 
         m_sceneRenderer.CreateRenderTargets();
 

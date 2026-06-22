@@ -12,7 +12,7 @@ Forward+ resources are descriptor-sensitive: scene render descriptor refresh mus
 
 ## Present Mode And Framebuffer Cache
 
-Present-mode changes must be treated as resize work, not as an immediate mid-frame swapchain teardown. Editor/runtime requests should update the desired surface present mode, wait for idle, and queue `EventType::Resize` so swapchain, scene render targets, render-pass components, and frame resources rebuild together.
+Present-mode changes must be treated as resize work, not as an immediate mid-frame swapchain teardown. Editor/runtime requests should update the desired surface present mode, sync the stored preference to the effective supported mode, wait for idle, and queue `EventType::Resize` so swapchain, scene render targets, render-pass components, and frame resources rebuild together. Host window titles should be refreshed after the deferred swapchain recreation and should report the recreated swapchain's actual present mode.
 
 Cached framebuffers are keyed by the actual attachment `ImageView` objects captured in the backend framebuffer. Implicit render-target views must be created before cache lookup so an RTV recreation cannot reuse a framebuffer that still holds a destroyed Vulkan image view or DX12 descriptor.
 

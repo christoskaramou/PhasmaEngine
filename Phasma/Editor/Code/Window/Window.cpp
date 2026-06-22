@@ -262,7 +262,9 @@ namespace pe
                     GlobalSettings &gSettings = Settings::Get<GlobalSettings>();
                     const PePresentMode previousMode = RHII.GetSurface()->GetPresentMode();
                     RHII.GetSurface()->SetPresentMode(gSettings.preferred_present_mode);
-                    if (RHII.GetSurface()->GetPresentMode() != previousMode)
+                    const PePresentMode effectiveMode = RHII.GetSurface()->GetPresentMode();
+                    gSettings.preferred_present_mode = effectiveMode;
+                    if (effectiveMode != previousMode)
                         EventSystem::PushEvent(EventType::Resize);
                     break;
                 }
