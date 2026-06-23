@@ -382,7 +382,7 @@ namespace pe
         m_ubo.camPos = vec4(camera->GetPosition(), 1.0f);
         m_ubo.camForward = vec4(camera->GetFront(), 0.0f);
 #if defined(PE_ANDROID)
-        m_ubo.ssao = 0u; // FidelityFX CACAO produces incorrect AO on Mali GPUs; disable SSAO on Android.
+        m_ubo.ssao = 0u; // SSAO stays disabled on Android until the native pass is validated there.
 #else
         m_ubo.ssao = gSettings.ssao && m_ssaoRT ? 1u : 0u;
 #endif
@@ -635,7 +635,7 @@ namespace pe
         m_ubo.camPos = vec4(camera->GetPosition(), 1.0f);
         m_ubo.camForward = vec4(camera->GetFront(), 0.0f);
 #if defined(PE_ANDROID)
-        m_ubo.ssao = 0u; // FidelityFX CACAO produces incorrect AO on Mali GPUs; disable SSAO on Android.
+        m_ubo.ssao = 0u; // SSAO stays disabled on Android until the native pass is validated there.
 #else
         m_ubo.ssao = gSettings.ssao && m_ssaoRT ? 1u : 0u;
 #endif
