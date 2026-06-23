@@ -225,7 +225,7 @@ namespace pe
         ImageBarrierInfo barrier{};
         barrier.image = swapchainImage;
         barrier.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
-        barrier.stageFlags = PE_STAGE_NONE;
+        barrier.stageFlags = PE_STAGE_ALL_COMMANDS;
         barrier.accessMask = PE_ACCESS_NONE;
 
         const PeFilter filter = src->GetWidth() == swapchainImage->GetWidth() && src->GetHeight() == swapchainImage->GetHeight()
