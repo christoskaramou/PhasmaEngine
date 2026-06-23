@@ -29,6 +29,12 @@ namespace pe
         void ExecutePass(CommandBuffer *cmd);
         void *RegisterImageTexture(Image *image);
         void ReleaseImageTexture(void *&textureID);
+        // Queue a live render-target to be transitioned to SHADER_READ_ONLY before the GUI pass
+        // samples it (e.g. profiler render-target thumbnails). Drained in ExecutePass.
+        void QueuePreviewImageTransition(Image *image);
+        // Descriptor of the SHADER_READ scene-view copy of the display RT; lets previews show the
+        // display target without sampling the GUI pass's own color attachment (a feedback loop).
+        void *GetSceneViewPreviewTextureId() const;
         void DrawPlatformWindows();
         bool Render() const { return m_initialized && m_render; }
         bool IsInitialized() const { return m_initialized; }
@@ -161,6 +167,7 @@ namespace pe
         int m_idleFramesAfterEdit = 0;
         std::vector<GpuTimerSample> m_gpuTimerInfos;
         std::mutex m_timerMutex;
+        std::vector<Image *> m_previewImageTransitions;
 
         std::vector<std::shared_ptr<Widget>> m_widgets;
         std::vector<std::shared_ptr<Widget>> m_menuWindowWidgets;

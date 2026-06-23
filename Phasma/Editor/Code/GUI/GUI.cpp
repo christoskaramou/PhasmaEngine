@@ -670,6 +670,21 @@ namespace pe
         GUIBackend::ReleaseImageTexture(textureID);
     }
 
+    void GUI::QueuePreviewImageTransition(Image *image)
+    {
+        if (!image)
+            return;
+        for (Image *queued : m_previewImageTransitions)
+            if (queued == image)
+                return;
+        m_previewImageTransitions.push_back(image);
+    }
+
+    void *GUI::GetSceneViewPreviewTextureId() const
+    {
+        return GUIState::s_viewportTextureId;
+    }
+
     std::string GUI::TakeUISnapshot() const
     {
         nlohmann::json ui;
@@ -3273,6 +3288,21 @@ namespace pe
             sceneViewBarrier.accessMask = PE_ACCESS_SHADER_READ;
             cmd->ImageBarrier(sceneViewBarrier);
         }
+
+        // Live render targets that widgets (e.g. profiler thumbnails) sample this frame must be in
+        // SHADER_READ_ONLY before the GUI pass draws them. The render graph re-transitions them next
+        // frame when their producing pass runs. (displayRT is never queued here -- it is the GUI
+        // pass's own color attachment, so its preview goes through the scene-view copy instead.)
+        for (Image *preview : m_previewImageTransitions)
+        {
+            ImageBarrierInfo previewBarrier{};
+            previewBarrier.image = preview;
+            previewBarrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            previewBarrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
+            previewBarrier.accessMask = PE_ACCESS_SHADER_READ;
+            cmd->ImageBarrier(previewBarrier);
+        }
+        m_previewImageTransitions.clear();
 
         cmd->BeginPass(1, m_attachment.get(), "GUI", true);
         GUIBackend::RenderDrawData(cmd);

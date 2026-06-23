@@ -227,12 +227,26 @@ namespace pe
         };
         std::vector<ThumbEntry> thumbs;
 
+        Image *displayRT = rs->GetDisplayRT();
         for (int k = 0; k < 8 && match->colorRTs[k]; ++k)
         {
             Image *image = rs->GetRenderTarget(match->colorRTs[k]);
             if (!image)
                 continue;
-            void *ds = GetRTDescriptor(image);
+            void *ds = nullptr;
+            if (image == displayRT)
+            {
+                // displayRT is the GUI pass's own color attachment; sampling it live would be a
+                // feedback loop and it sits in COLOR_ATTACHMENT layout. Preview the SHADER_READ
+                // scene-view copy instead.
+                ds = m_gui ? m_gui->GetSceneViewPreviewTextureId() : nullptr;
+            }
+            else
+            {
+                ds = GetRTDescriptor(image);
+                if (ds && m_gui)
+                    m_gui->QueuePreviewImageTransition(image); // SHADER_READ before the GUI pass samples it
+            }
             if (!ds)
                 continue;
             float aspect = image->GetHeight() > 0 ? image->GetWidth_f() / image->GetHeight_f() : 1.f;
