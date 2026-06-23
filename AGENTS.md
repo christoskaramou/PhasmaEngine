@@ -21,6 +21,7 @@ Primary memory and history (when MCP is configured). Use lowercase `phasmaengine
 
 - **Never commit autonomously.** Stage when asked, but do not run `git commit` unless the user explicitly says "commit" (or equivalent) in that message.
 - **Never add `Co-Authored-By` lines** to commits.
+- **Every commit message is a single line** — subject only, no body.
 - **Work on `master` uncommitted by default** — no worktrees, all changes left as unstaged diffs for the user to review. Exception: long-running carve work on the `DX12` branch may commit; check the active branch.
 - **Run `clang-format -i`** on every modified `.cpp` / `.h` after editing.
 - **Before writing a commit message, run `git diff --staged`** (or `git diff`). Never write commit text from memory.
