@@ -73,7 +73,7 @@ namespace pe
 
     void ColorGradingPass::ExecutePass(CommandBuffer *cmd)
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = ActivePostProcessProfile();
 
         ImageBarrierInfo barrier{};
         barrier.image = m_frameImage;

@@ -1544,6 +1544,7 @@ namespace pe
         if (GUIState::s_useLightGizmos)
             DrawLightGizmos(imageMin, imageSize);
 
+        DrawPostProcessVolumeGizmos(imageMin, imageSize);
         DrawCameraGizmos(imageMin, imageSize);
         if (GUIState::s_useOrientationGizmo)
             DrawOrientationGizmo(imageMin, imageSize);
@@ -1839,6 +1840,52 @@ namespace pe
                 continue;
             if (checkGizmoIcon(vec3(scene.GetAreaLights()[i].position), ICON_FA_LIGHTBULB, LightType::Area, i))
                 drawLightVisuals(vec3(scene.GetAreaLights()[i].position), LightType::Area, i);
+        }
+    }
+
+    void SceneView::DrawPostProcessVolumeGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    {
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        if (!renderer)
+            return;
+        Scene &scene = renderer->GetScene();
+        Camera *camera = scene.GetActiveCamera();
+        if (!camera)
+            return;
+
+        const mat4 viewProj = camera->GetProjectionNoJitter() * camera->GetView();
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        auto &sel = SelectionManager::Instance();
+
+        // Unit-cube corners (bit0=x, bit1=y, bit2=z) and the 12 edges between adjacent corners.
+        static const int kEdges[12][2] = {
+            {0, 1}, {0, 2}, {0, 4}, {1, 3}, {1, 5}, {2, 3}, {2, 6}, {3, 7}, {4, 5}, {4, 6}, {5, 7}, {6, 7}};
+
+        for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
+        {
+            NodeId *node = scene.GetNodeId(i);
+            NodePostProcessVolumeTag *vol = scene.GetPostProcessVolumeForNode(node);
+            if (!vol || vol->global) // global volumes are unbounded — no box to draw
+                continue;
+            if (!scene.IsNodeHierarchyEnabled(node))
+                continue;
+
+            const mat4 &world = scene.GetWorldMatrix(node);
+            const bool selected = sel.GetSelectionType() == SelectionType::Node && sel.GetSelectedNode() == node;
+            const ImU32 color = selected ? IM_COL32(130, 225, 255, 255) : IM_COL32(110, 195, 235, 205);
+            const float thickness = selected ? 3.0f : 2.0f;
+
+            ImVec2 screen[8];
+            bool ok[8];
+            for (int c = 0; c < 8; ++c)
+            {
+                const vec3 local((c & 1) ? 0.5f : -0.5f, (c & 2) ? 0.5f : -0.5f, (c & 4) ? 0.5f : -0.5f);
+                const vec4 wp = world * vec4(local, 1.0f);
+                ok[c] = ProjectWorldToViewport(vec3(wp.x, wp.y, wp.z), viewProj, imageMin, imageSize, screen[c]);
+            }
+            for (const auto &e : kEdges)
+                if (ok[e[0]] && ok[e[1]])
+                    drawList->AddLine(screen[e[0]], screen[e[1]], color, thickness);
         }
     }
 

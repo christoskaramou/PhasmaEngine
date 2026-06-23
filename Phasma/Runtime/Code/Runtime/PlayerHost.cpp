@@ -541,7 +541,7 @@ namespace pe
                     case EventType::PresentMode:
                     {
                         const PePresentMode previous = RHII.GetSurface()->GetPresentMode();
-                        RHII.GetSurface()->SetPresentMode(Settings::Get<GlobalSettings>().preferred_present_mode);
+                        RHII.GetSurface()->SetPresentMode(Settings::Get<SceneSettings>().preferred_present_mode);
                         if (RHII.GetSurface()->GetPresentMode() != previous)
                             m_resizePending = true;
                         break;
@@ -641,7 +641,7 @@ namespace pe
             const std::optional<PePresentMode> forcedPresentMode = ReadStartupPresentModeOverride();
             PePresentMode effectiveStartupMode = PE_PRESENT_MODE_FIFO;
             {
-                GlobalSettings &settings = Settings::Get<GlobalSettings>();
+                SceneSettings &settings = Settings::Get<SceneSettings>();
                 const RuntimeStartupSceneSettings startupSceneSettings =
                     ReadRuntimeStartupSceneSettings(startupScene);
                 const PePresentMode startupMode = forcedPresentMode.value_or(
@@ -691,11 +691,11 @@ namespace pe
                     }
                 }
 
-                // LoadScene() copies the scene's saved present_mode into GlobalSettings and queues a
+                // LoadScene() copies the scene's saved present_mode into SceneSettings and queues a
                 // PresentMode event. An explicit env/config preference outranks the scene, so re-assert it
                 // before the frame pump applies the queued event.
                 if (forcedPresentMode)
-                    Settings::Get<GlobalSettings>().preferred_present_mode = effectiveStartupMode;
+                    Settings::Get<SceneSettings>().preferred_present_mode = effectiveStartupMode;
 
                 RuntimeSceneRenderer renderer(scene);
                 renderer.Init(nullptr);

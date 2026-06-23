@@ -15,7 +15,7 @@ namespace pe
     {
         float GetRenderTargetScale(bool useRenderTargetScale)
         {
-            const auto &gSettings = Settings::Get<GlobalSettings>();
+            const auto &gSettings = Settings::Get<SceneSettings>();
             return useRenderTargetScale ? gSettings.render_scale : 1.f;
         }
 
@@ -53,7 +53,7 @@ namespace pe
         if (Image *existing = GetSceneRenderTarget(renderTargets, name))
             return existing;
 
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = Settings::Get<SceneSettings>();
 
         const uint32_t width = GetScaledRenderWidth(useRenderTargetScale);
         const uint32_t height = GetScaledRenderHeight(useRenderTargetScale);
@@ -97,7 +97,7 @@ namespace pe
         if (Image *existing = GetSceneRenderTarget(depthStencilTargets, name))
             return existing;
 
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = Settings::Get<SceneSettings>();
 
         ImageDesc desc{};
         desc.width = GetScaledRenderWidth(useRenderTargetScale);
@@ -146,7 +146,7 @@ namespace pe
             return false;
 
         Image *image = it->second;
-        auto &renderingImages = Settings::Get<GlobalSettings>().rendering_images;
+        auto &renderingImages = Settings::Get<SceneSettings>().rendering_images;
         renderingImages.erase(std::remove(renderingImages.begin(), renderingImages.end(), image), renderingImages.end());
         CommandBuffer::ClearFramebufferCache();
         Image::Destroy(image);
@@ -181,7 +181,7 @@ namespace pe
         CommandBuffer::GetFramebuffers().clear();
 
         DestroySceneRenderTargets(renderTargets, depthStencilTargets);
-        Settings::Get<GlobalSettings>().rendering_images.clear();
+        Settings::Get<SceneSettings>().rendering_images.clear();
 
         const ::PeFormat surfaceFormat = RHII.GetSwapchainFormat();
 

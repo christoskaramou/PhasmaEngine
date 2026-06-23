@@ -61,7 +61,7 @@ namespace pe
 
     static void SyncRayTracingSettingsToCaps(const RHI::Caps &caps)
     {
-        auto &settings = Settings::Get<GlobalSettings>();
+        auto &settings = Settings::Get<SceneSettings>();
         settings.ray_tracing_support = caps.rayTracing;
         settings.render_mode = ClampRenderModeToRayTracingSupport(settings.render_mode, caps.rayTracing);
     }
@@ -1766,7 +1766,7 @@ namespace pe
             static_cast<bool>(deviceFeatures12.descriptorBindingStorageBufferUpdateAfterBind) &&
             static_cast<bool>(deviceFeatures12.descriptorBindingUniformTexelBufferUpdateAfterBind) &&
             static_cast<bool>(deviceFeatures12.descriptorBindingStorageTexelBufferUpdateAfterBind);
-        Settings::Get<GlobalSettings>().dynamic_rendering &= m_caps.dynamicRendering;
+        Settings::Get<SceneSettings>().dynamic_rendering &= m_caps.dynamicRendering;
 
         // --- Device feature contract (portable across all Vulkan-1.2 Android GPUs, not Mali-specific) ---
         // RequireVulkanFeature: consumed unconditionally with no runtime fallback, so a missing one is
@@ -2267,7 +2267,7 @@ namespace pe
         const PePresentMode requestedMode = mode;
         m_surface->SetPresentMode(mode);
         const PePresentMode effectiveMode = m_surface->GetPresentMode();
-        Settings::Get<GlobalSettings>().preferred_present_mode = effectiveMode;
+        Settings::Get<SceneSettings>().preferred_present_mode = effectiveMode;
 
         if (effectiveMode != requestedMode)
         {

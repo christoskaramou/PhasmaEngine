@@ -26,7 +26,6 @@
 #include "Widgets/Console.h"
 #include "Widgets/FileBrowser.h"
 #include "Widgets/FileSelector.h"
-#include "Widgets/GlobalWidget.h"
 #include "Widgets/Hierarchy.h"
 #include "Widgets/LightWidget.h"
 #include "Widgets/Loading.h"
@@ -332,7 +331,7 @@ namespace pe
 
         void SetSceneViewAspectMode(SceneViewAspectMode mode)
         {
-            auto &settings = Settings::Get<GlobalSettings>();
+            auto &settings = Settings::Get<SceneSettings>();
             if (settings.scene_view_aspect_mode == mode)
                 return;
 
@@ -737,7 +736,7 @@ namespace pe
 
     std::string GUI::QueryEditorActions()
     {
-        auto &globalSettings = Settings::Get<GlobalSettings>();
+        auto &globalSettings = Settings::Get<SceneSettings>();
         nlohmann::json result;
         result["windows"] = nlohmann::json::array();
         result["actions"] = nlohmann::json::array();
@@ -1150,7 +1149,7 @@ namespace pe
             if (auto mode = SceneViewAspectFromId(value))
             {
                 SetSceneViewAspectMode(*mode);
-                return ok({{"aspect", SceneViewAspectId(Settings::Get<GlobalSettings>().scene_view_aspect_mode)}});
+                return ok({{"aspect", SceneViewAspectId(Settings::Get<SceneSettings>().scene_view_aspect_mode)}});
             }
             return nlohmann::json{{"error", "unknown viewport aspect: " + value}}.dump();
         }
@@ -1174,7 +1173,7 @@ namespace pe
         if (action == "gizmo.orientation")
             return toggleBool(GUIState::s_useOrientationGizmo);
         if (action == "gizmo.grid")
-            return toggleBool(Settings::Get<GlobalSettings>().draw_grid);
+            return toggleBool(Settings::Get<SceneSettings>().draw_grid);
 
         if (action.rfind("layout.style.", 0) == 0 || action == "layout.style")
         {
@@ -1530,7 +1529,7 @@ namespace pe
 
         // Drive the real progress bar (replacing the stale "Uploading to GPU"): a helper thread blocks
         // on PhasmaCook while this worker polls how many output files have appeared.
-        auto &loading = Settings::Get<GlobalSettings>().loading;
+        auto &loading = Settings::Get<SceneSettings>().loading;
         loading.SetName("Cooking models");
         loading.total = static_cast<uint32_t>(jobs.size());
         loading.current = 0;
@@ -1665,7 +1664,7 @@ namespace pe
             {
                 // Show a sensible progress title from the start so the long scan/copy phase doesn't
                 // sit under a stale "Uploading to GPU" bar (CookModelsToPemesh drives it after).
-                auto &loading = Settings::Get<GlobalSettings>().loading;
+                auto &loading = Settings::Get<SceneSettings>().loading;
                 loading.SetName("Importing folder");
                 loading.total = 0;
                 loading.current = 0;
@@ -2509,8 +2508,7 @@ namespace pe
         // Left - Hierarchy (Profiler is floating)
         ImGui::DockBuilderDockWindow("Hierarchy", dockLeft);
 
-        // Right - Global Properties and Properties
-        ImGui::DockBuilderDockWindow("Global", dockRight);
+        // Right - Properties
         ImGui::DockBuilderDockWindow("Properties", dockRight);
         ImGui::DockBuilderDockWindow("Camera", dockRight);
 
@@ -2671,7 +2669,7 @@ namespace pe
                 ui::ItemTooltip("Configure viewport visibility and aspect behavior.");
                 if (viewportMenuOpen)
                 {
-                    auto &gSettings = Settings::Get<GlobalSettings>();
+                    auto &gSettings = Settings::Get<SceneSettings>();
                     if (auto *sv = GetWidget<SceneView>())
                     {
                         ImGui::MenuItem("Enabled", nullptr, sv->GetOpen());
@@ -2727,7 +2725,7 @@ namespace pe
             ui::ItemTooltip("Toggle viewport helper gizmos.");
             if (gizmosMenuOpen)
             {
-                auto &gSettings = Settings::Get<GlobalSettings>();
+                auto &gSettings = Settings::Get<SceneSettings>();
                 ImGui::MenuItem("Transform", nullptr, &GUIState::s_useTransformGizmo);
                 ui::ItemTooltip("Show the transform gizmo for selected nodes.");
                 ImGui::MenuItem("Lights", nullptr, &GUIState::s_useLightGizmos);
@@ -3143,7 +3141,6 @@ namespace pe
         auto transformWidget = std::make_shared<TransformWidget>();
         auto meshWidget = std::make_shared<MeshWidget>();
         auto lightWidget = std::make_shared<LightWidget>();
-        auto globalWidget = std::make_shared<GlobalWidget>();
         auto scriptEditor = std::make_shared<ScriptEditor>();
         auto shaderEditor = std::make_shared<ShaderEditor>();
         auto spriteEditor = std::make_shared<SpriteEditor>();
@@ -3175,7 +3172,6 @@ namespace pe
             transformWidget,
             meshWidget,
             lightWidget,
-            globalWidget,
             scriptEditor,
             shaderEditor,
             spriteEditor,
@@ -3205,7 +3201,6 @@ namespace pe
                                fileBrowser,
                                hierarchy,
                                particles,
-                               globalWidget,
                                scriptEditor,
                                shaderEditor,
                                spriteEditor,

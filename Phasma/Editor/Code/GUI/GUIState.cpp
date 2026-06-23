@@ -123,7 +123,7 @@ namespace pe
         if (!std::isfinite(fallbackAspect) || fallbackAspect <= 0.0f)
             fallbackAspect = 16.0f / 9.0f;
 
-        switch (Settings::Get<GlobalSettings>().scene_view_aspect_mode)
+        switch (Settings::Get<SceneSettings>().scene_view_aspect_mode)
         {
         case SceneViewAspectMode::Landscape16x9:
             return 16.0f / 9.0f;

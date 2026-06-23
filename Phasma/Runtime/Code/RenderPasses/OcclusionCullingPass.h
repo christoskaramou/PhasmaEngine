@@ -19,7 +19,7 @@ namespace pe
     //
     // Compiles CullingCS with {HIZ_OCCLUSION, PHASE2}: needs the pyramid + OcclusionUBO (binding
     // 13/14) and the visibility buffer (binding 15). No transparents/selected, no sort. The
-    // component is always registered; only enabled when GlobalSettings::occlusion_culling is on
+    // component is always registered; only enabled when SceneSettings::occlusion_culling is on
     // (default off), so the shipping path is unchanged when the feature is disabled.
     class OcclusionCullingPass : public IRenderPassComponent
     {

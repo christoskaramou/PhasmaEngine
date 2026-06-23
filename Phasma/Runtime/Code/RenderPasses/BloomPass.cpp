@@ -134,7 +134,7 @@ namespace pe
 
     void BloomGaussianBlurHorizontalPass::ExecutePass(CommandBuffer *cmd)
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = ActivePostProcessProfile();
 
         cmd->BeginPass(1, m_attachments.data(), "Bloom_GaussianBlurHorizontal");
         cmd->BindPipeline(*m_passInfo);
@@ -211,7 +211,7 @@ namespace pe
 
     void BloomGaussianBlurVerticalPass::ExecutePass(CommandBuffer *cmd)
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = ActivePostProcessProfile();
 
         cmd->BeginPass(1, m_attachments.data(), "Bloom_GaussianBlurVertical");
         cmd->BindPipeline(*m_passInfo);

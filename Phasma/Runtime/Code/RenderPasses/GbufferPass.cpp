@@ -259,7 +259,7 @@ namespace pe
             // (B), so the reverse-Z EQUAL test selects the nearest surface per pixel for both sets.
             // Occluded objects are in neither set, so they are never drawn. Otherwise draw the
             // frustum-culled set from CullingPass@50.
-            const bool occlusion = Settings::Get<GlobalSettings>().occlusion_culling;
+            const bool occlusion = Settings::Get<SceneSettings>().occlusion_culling;
             const bool hasArenaVoxels = m_scene->HasArenaVoxels();
             const bool hasVoxelAtlas = m_scene->GetVoxelAtlasView() != nullptr;
             const bool hasVoxelFrag = m_voxelPassInfo && m_voxelPassInfo->pFragShader;
@@ -418,7 +418,7 @@ namespace pe
         m_passInfo->Apply(*transparent);
         m_passInfo->colorFormats = colorformats;
         m_passInfo->depthFormat = depthFormat;
-        if (Settings::Get<GlobalSettings>().reverse_depth)
+        if (Settings::Get<SceneSettings>().reverse_depth)
             m_passInfo->depthCompareOp = PE_COMPARE_OP_GREATER_OR_EQUAL;
         m_passInfo->Update();
     }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Base/Settings.h" // PostProcessProfile (value member of NodePostProcessVolumeTag)
+
 namespace pe
 {
     struct NodeId;
@@ -77,6 +79,23 @@ namespace pe
     {
     public:
         std::string path;
+    };
+
+    // A post-process volume. Carries its own PostProcessProfile; the renderer makes it the active
+    // profile when the camera is inside it (highest priority wins). global = unbounded (whole
+    // scene); otherwise the node transform defines an axis-aligned box.
+    class NodePostProcessVolumeTag : public IComponent
+    {
+    public:
+        PostProcessProfile profile;
+        bool global = true;
+        float priority = 0.0f;
+    };
+
+    // Marker for the singleton "Scene Settings" anchor node. Carries no data — its inspector edits
+    // the global SceneSettings singleton (which is what gets serialized in the scene settings block).
+    class NodeSceneSettingsTag : public IComponent
+    {
     };
 
     enum class NodeRuntimeUiWidgetType : uint8_t
@@ -197,6 +216,8 @@ namespace pe
         NodePhysics2DTag *physics2d = nullptr;
         NodeAudioTag *audio = nullptr;
         NodeSkyboxTag *skybox = nullptr;
+        NodePostProcessVolumeTag *postProcessVolume = nullptr;
+        NodeSceneSettingsTag *sceneSettings = nullptr;
         NodeRuntimeUiTag *runtimeUi = nullptr;
         NodePrefabComponent *prefab = nullptr;
         NodeSpriteComponent *sprite = nullptr;

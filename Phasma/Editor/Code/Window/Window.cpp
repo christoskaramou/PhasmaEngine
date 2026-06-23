@@ -259,7 +259,7 @@ namespace pe
                 }
                 case EventType::PresentMode:
                 {
-                    GlobalSettings &gSettings = Settings::Get<GlobalSettings>();
+                    SceneSettings &gSettings = Settings::Get<SceneSettings>();
                     const PePresentMode previousMode = RHII.GetSurface()->GetPresentMode();
                     RHII.GetSurface()->SetPresentMode(gSettings.preferred_present_mode);
                     const PePresentMode effectiveMode = RHII.GetSurface()->GetPresentMode();
@@ -285,7 +285,7 @@ namespace pe
                 {
                     bool enable = std::any_cast<bool>(event.payload);
                     rendererSystem->WaitAllFramesCommands();
-                    Settings::Get<GlobalSettings>().dynamic_rendering = enable;
+                    Settings::Get<SceneSettings>().dynamic_rendering = enable;
                     break;
                 }
                 case EventType::ModelLoaded:
@@ -359,7 +359,7 @@ namespace pe
                 {
                     rendererSystem->WaitAllFramesCommands();
                     auto mode = std::any_cast<RenderMode>(event.payload);
-                    Settings::Get<GlobalSettings>().render_mode =
+                    Settings::Get<SceneSettings>().render_mode =
                         ClampRenderModeToRayTracingSupport(mode, RHII.GetCaps().rayTracing);
                     rendererSystem->ResetTAAHistory();
                     break;

@@ -299,8 +299,20 @@ namespace pe
         return tag ? tag->camera : nullptr;
     }
 
+    void Scene::UpdateActiveSceneSettings()
+    {
+        // Resolve BEFORE cameras update their projection: Camera::UpdateProjection() reads
+        // ActivePostProcessProfile().taa to decide jitter. Volume containment uses the camera's
+        // pre-update position; one frame of lag there is sub-pixel and invisible.
+        NodeId *settingsNode = GetSceneSettingsNode();
+        SetSceneSettingsActive(settingsNode && IsNodeHierarchyEnabled(settingsNode));
+        Camera *cam = GetActiveCamera();
+        SetActivePostProcessProfile(cam ? ResolvePostProcessProfile(cam->GetPosition()) : nullptr);
+    }
+
     void Scene::UpdateCameras(bool markDocumentDirty)
     {
+        UpdateActiveSceneSettings();
         for (auto *camera : m_cameras)
         {
             camera->Update();
@@ -1131,7 +1143,7 @@ namespace pe
             constants.maxDrawCount = m_meshCount;
 
             Camera *camera = m_cameras.empty() ? nullptr : m_cameras[0];
-            bool frustumCulling = Settings::Get<GlobalSettings>().frustum_culling && camera;
+            bool frustumCulling = Settings::Get<SceneSettings>().frustum_culling && camera;
             constants.enableFrustumCulling = frustumCulling ? 1u : 0u;
             if (camera)
             {
@@ -1456,7 +1468,7 @@ namespace pe
             PE_PROFILE_SCOPE("OccCull Build Constants");
             constants.maxDrawCount = m_meshCount;
             Camera *camera = m_cameras.empty() ? nullptr : m_cameras[0];
-            bool frustumCulling = Settings::Get<GlobalSettings>().frustum_culling && camera;
+            bool frustumCulling = Settings::Get<SceneSettings>().frustum_culling && camera;
             constants.enableFrustumCulling = frustumCulling ? 1u : 0u;
             if (camera)
             {

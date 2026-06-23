@@ -414,7 +414,7 @@ namespace pe
         // Render Pass
         vk::PipelineRenderingCreateInfo prci{};
         std::vector<vk::Format> vkColorFormats;
-        if (RHII.GetCaps().dynamicRendering && Settings::Get<GlobalSettings>().dynamic_rendering)
+        if (RHII.GetCaps().dynamicRendering && Settings::Get<SceneSettings>().dynamic_rendering)
         {
             vkColorFormats.reserve(m_info.colorFormats.size());
             for (::PeFormat f : m_info.colorFormats)

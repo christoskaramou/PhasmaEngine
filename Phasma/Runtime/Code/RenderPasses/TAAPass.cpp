@@ -74,7 +74,7 @@ namespace pe
 
         m_jitterIndex = 0;
         m_jitterPhaseCount = 16;
-        m_casSharpeningEnabled = Settings::Get<GlobalSettings>().cas_sharpening;
+        m_casSharpeningEnabled = ActivePostProcessProfile().cas_sharpening;
     }
 
     void TAAPass::UpdatePassInfo()
@@ -91,7 +91,7 @@ namespace pe
 
     void TAAPass::UpdateDescriptorSets()
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = ActivePostProcessProfile();
         Image *taaOutput = gSettings.cas_sharpening ? m_taaResolved : m_displayRT;
 
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
@@ -113,7 +113,7 @@ namespace pe
 
     void TAAPass::Update()
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = ActivePostProcessProfile();
         if (gSettings.cas_sharpening != m_casSharpeningEnabled)
         {
             m_casSharpeningEnabled = gSettings.cas_sharpening;

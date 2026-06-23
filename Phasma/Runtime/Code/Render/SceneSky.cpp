@@ -50,7 +50,7 @@ namespace pe
 
         const std::string &ConfiguredSceneSkyPath()
         {
-            const auto &settings = Settings::Get<GlobalSettings>();
+            const auto &settings = Settings::Get<SceneSettings>();
             return settings.skybox_path;
         }
     } // namespace

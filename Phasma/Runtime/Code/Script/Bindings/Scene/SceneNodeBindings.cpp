@@ -114,6 +114,85 @@ namespace pe
                         s->RemoveComponentFlag(h.nodeId, Component_RuntimeUi);
                 });
 
+                ut.set_function("set_scene_settings", [](SceneNodeHandle &h, bool enabled) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s))
+                        return;
+                    if (enabled)
+                    {
+                        // Singleton, same as the hierarchy UI: ignore if another node already holds it,
+                        // else GetSceneSettingsNode() (first match) would be order-dependent.
+                        NodeId *existing = s->GetSceneSettingsNode();
+                        if (existing && existing != h.nodeId)
+                            return;
+                        s->AddComponentFlag(h.nodeId, Component_SceneSettings);
+                    }
+                    else
+                        s->RemoveComponentFlag(h.nodeId, Component_SceneSettings);
+                    s->MarkDirty();
+                });
+
+                ut.set_function("set_post_process_volume", [](SceneNodeHandle &h, bool enabled) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    if (enabled)
+                        s->AddComponentFlag(h.nodeId, Component_PostProcessVolume);
+                    else
+                        s->RemoveComponentFlag(h.nodeId, Component_PostProcessVolume);
+                    s->MarkDirty();
+                });
+
+                // Set a PostProcessVolume field by name: "global"(bool)/"priority"(float) or any
+                // PostProcessProfile field (same key names as the Lua settings.* API).
+                ut.set_function("set_pp", [](SceneNodeHandle &h, const std::string &key, sol::object value) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    NodePostProcessVolumeTag *v = s->GetPostProcessVolumeForNode(h.nodeId);
+                    if (!v) return;
+                    PostProcessProfile &p = v->profile;
+                    if (key == "global") { v->global = value.as<bool>(); s->MarkDirty(); return; }
+                    if (key == "priority") { v->priority = static_cast<float>(value.as<double>()); s->MarkDirty(); return; }
+                    static const std::unordered_map<std::string_view, bool PostProcessProfile::*> B = {
+                        {"ssao", &PostProcessProfile::ssao}, {"fxaa", &PostProcessProfile::fxaa},
+                        {"taa", &PostProcessProfile::taa}, {"cas_sharpening", &PostProcessProfile::cas_sharpening},
+                        {"ssr", &PostProcessProfile::ssr}, {"tonemapping", &PostProcessProfile::tonemapping},
+                        {"color_grading", &PostProcessProfile::color_grading}, {"dof", &PostProcessProfile::dof},
+                        {"bloom", &PostProcessProfile::bloom}, {"motion_blur", &PostProcessProfile::motion_blur},
+                        {"IBL", &PostProcessProfile::IBL}};
+                    static const std::unordered_map<std::string_view, float PostProcessProfile::*> F = {
+                        {"ssao_radius", &PostProcessProfile::ssao_radius}, {"ssao_bias", &PostProcessProfile::ssao_bias},
+                        {"ssao_intensity", &PostProcessProfile::ssao_intensity}, {"ssao_power", &PostProcessProfile::ssao_power},
+                        {"cas_sharpness", &PostProcessProfile::cas_sharpness},
+                        {"color_grading_lift_r", &PostProcessProfile::color_grading_lift_r},
+                        {"color_grading_lift_g", &PostProcessProfile::color_grading_lift_g},
+                        {"color_grading_lift_b", &PostProcessProfile::color_grading_lift_b},
+                        {"color_grading_gamma_r", &PostProcessProfile::color_grading_gamma_r},
+                        {"color_grading_gamma_g", &PostProcessProfile::color_grading_gamma_g},
+                        {"color_grading_gamma_b", &PostProcessProfile::color_grading_gamma_b},
+                        {"color_grading_gain_r", &PostProcessProfile::color_grading_gain_r},
+                        {"color_grading_gain_g", &PostProcessProfile::color_grading_gain_g},
+                        {"color_grading_gain_b", &PostProcessProfile::color_grading_gain_b},
+                        {"color_grading_saturation", &PostProcessProfile::color_grading_saturation},
+                        {"color_grading_contrast", &PostProcessProfile::color_grading_contrast},
+                        {"color_grading_intensity", &PostProcessProfile::color_grading_intensity},
+                        {"dof_focus_scale", &PostProcessProfile::dof_focus_scale},
+                        {"dof_blur_range", &PostProcessProfile::dof_blur_range},
+                        {"bloom_strength", &PostProcessProfile::bloom_strength},
+                        {"bloom_range", &PostProcessProfile::bloom_range},
+                        {"motion_blur_strength", &PostProcessProfile::motion_blur_strength},
+                        {"IBL_intensity", &PostProcessProfile::IBL_intensity}};
+                    static const std::unordered_map<std::string_view, int PostProcessProfile::*> I = {
+                        {"ssao_samples", &PostProcessProfile::ssao_samples},
+                        {"motion_blur_samples", &PostProcessProfile::motion_blur_samples}};
+                    if (auto it = B.find(key); it != B.end())
+                        p.*(it->second) = value.as<bool>();
+                    else if (auto it = F.find(key); it != F.end())
+                        p.*(it->second) = static_cast<float>(value.as<double>());
+                    else if (auto it = I.find(key); it != I.end())
+                        p.*(it->second) = static_cast<int>(value.as<double>());
+                    s->MarkDirty();
+                });
+
                 ut.set_function("set_name", [](SceneNodeHandle &h, const std::string &name) {
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return;

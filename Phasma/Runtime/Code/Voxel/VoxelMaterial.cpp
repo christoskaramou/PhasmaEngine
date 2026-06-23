@@ -205,7 +205,7 @@ namespace pe::voxel
             rawAtlas->CreateSRV(PE_IMAGE_VIEW_TYPE_2D_ARRAY);
 
             SamplerDesc samplerInfo = Sampler::CreateInfoInit();
-            samplerInfo.mipLodBias = log2(Settings::Get<GlobalSettings>().render_scale) - 1.0f;
+            samplerInfo.mipLodBias = log2(Settings::Get<SceneSettings>().render_scale) - 1.0f;
             samplerInfo.maxLod = static_cast<float>(mipLevels);
             samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
             rawAtlas->SetSampler(Sampler::Create(samplerInfo, "VoxelMaterial_AtlasSampler"));

@@ -11,7 +11,7 @@
 local hud_shown = false
 local menu_open = false
 
--- { display label, GlobalSettings bool key } — all runtime/pass-skip flags (no shader define).
+-- { display label, SceneSettings bool key } — all runtime/pass-skip flags (no shader define).
 local toggles = {
     { "Cast Shadows",   "shadows" },
     { "IBL",            "IBL" },

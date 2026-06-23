@@ -217,7 +217,7 @@ namespace pe
     {
         BeginDebugRegion(name + "_pass");
         m_owner->m_dynamicPass = RHII.GetCaps().dynamicRendering &&
-                                 Settings::Get<GlobalSettings>().dynamic_rendering &&
+                                 Settings::Get<SceneSettings>().dynamic_rendering &&
                                  !skipDynamicPass;
         m_owner->m_attachmentCount = count;
         m_owner->m_attachments = attachments;

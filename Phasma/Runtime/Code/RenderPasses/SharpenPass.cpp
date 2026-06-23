@@ -79,7 +79,7 @@ namespace pe
 
     void SharpenPass::ExecutePass(CommandBuffer *cmd)
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = ActivePostProcessProfile();
 
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
         Image *output = rs->GetDisplayRT();

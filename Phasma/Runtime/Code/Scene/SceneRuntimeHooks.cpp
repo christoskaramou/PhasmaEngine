@@ -58,7 +58,7 @@ namespace pe
 
         void DefaultRefreshSceneRenderDescriptors()
         {
-            if (Settings::Get<GlobalSettings>().forward_plus)
+            if (Settings::Get<SceneSettings>().forward_plus)
             {
                 if (auto *forwardPlus = GetGlobalComponent<ForwardPlusLightCullingPass>())
                 {

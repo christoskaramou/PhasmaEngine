@@ -17,14 +17,14 @@ namespace pe
 {
     void ShadowPass::Init()
     {
-        m_textures.resize(Settings::Get<GlobalSettings>().num_cascades);
+        m_textures.resize(Settings::Get<SceneSettings>().num_cascades);
         int i = 0;
         for (auto *&texture : m_textures)
         {
             ImageDesc desc{};
             desc.format = RHII.GetDepthFormat();
-            desc.width = Settings::Get<GlobalSettings>().shadow_map_size;
-            desc.height = Settings::Get<GlobalSettings>().shadow_map_size;
+            desc.width = Settings::Get<SceneSettings>().shadow_map_size;
+            desc.height = Settings::Get<SceneSettings>().shadow_map_size;
             desc.usage = PE_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_TRANSFER_DST;
             desc.clearColor = vec4(Color::Depth, Color::Stencil, 0.0f, 1.0f);
             desc.name = "ShadowMap_" + std::to_string(i++);
@@ -61,9 +61,9 @@ namespace pe
         m_passInfo->cullMode = PE_CULL_MODE_NONE;
         m_passInfo->depthFormat = RHII.GetDepthFormat();
         m_passInfo->depthBiasEnable = true;
-        m_passInfo->depthBiasConstantFactor = Settings::Get<GlobalSettings>().depth_bias[0];
-        m_passInfo->depthBiasClamp = Settings::Get<GlobalSettings>().depth_bias[1];
-        m_passInfo->depthBiasSlopeFactor = Settings::Get<GlobalSettings>().depth_bias[2];
+        m_passInfo->depthBiasConstantFactor = Settings::Get<SceneSettings>().depth_bias[0];
+        m_passInfo->depthBiasClamp = Settings::Get<SceneSettings>().depth_bias[1];
+        m_passInfo->depthBiasSlopeFactor = Settings::Get<SceneSettings>().depth_bias[2];
         m_passInfo->Update();
     }
 
@@ -72,7 +72,7 @@ namespace pe
         for (auto &uniform : m_uniforms)
         {
             uniform = Buffer::Create({
-                .size = RHII.AlignUniform(Settings::Get<GlobalSettings>().num_cascades * sizeof(mat4)),
+                .size = RHII.AlignUniform(Settings::Get<SceneSettings>().num_cascades * sizeof(mat4)),
                 .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER,
                 .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
                 .name = "Shadows_uniform_buffer",
@@ -89,7 +89,7 @@ namespace pe
 
     bool ShadowPass::HasLiveResources() const
     {
-        const uint32_t cascadeCount = Settings::Get<GlobalSettings>().num_cascades;
+        const uint32_t cascadeCount = Settings::Get<SceneSettings>().num_cascades;
         if (cascadeCount == 0 || !m_sampler || m_textures.size() < cascadeCount ||
             m_uniforms.size() < RHII.GetSwapchainImageCount())
         {
@@ -107,7 +107,7 @@ namespace pe
 
     std::vector<ImageView *> ShadowPass::GetTextureViews() const
     {
-        const uint32_t cascadeCount = Settings::Get<GlobalSettings>().num_cascades;
+        const uint32_t cascadeCount = Settings::Get<SceneSettings>().num_cascades;
         std::vector<ImageView *> views(cascadeCount);
         for (uint32_t i = 0; i < cascadeCount; i++)
             views[i] = m_textures[i]->GetSRV();
@@ -131,7 +131,7 @@ namespace pe
 
     void ShadowPass::Update()
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = Settings::Get<SceneSettings>();
         if (gSettings.shadows)
         {
             Camera *camera_main = GetActiveScene()->GetActiveCamera();
@@ -169,7 +169,7 @@ namespace pe
 
     void ShadowPass::CalculateCascades(Camera *camera)
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = Settings::Get<SceneSettings>();
         uint32_t cascades = gSettings.num_cascades;
         m_cascades.resize(cascades);
         m_cascadePlanes.resize(cascades);
@@ -318,7 +318,7 @@ namespace pe
             PushConstants_Shadows pushConstants{};
             pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetMaxJointCount());
 
-            uint32_t cascades = Settings::Get<GlobalSettings>().num_cascades;
+            uint32_t cascades = Settings::Get<SceneSettings>().num_cascades;
             for (uint32_t i = 0; i < cascades; i++)
             {
                 pushConstants.vp = m_cascades[i];
@@ -331,7 +331,7 @@ namespace pe
                 cmd->SetViewport(0.f, 0.f, attachment.image->GetWidth_f(), attachment.image->GetHeight_f());
                 cmd->SetScissor(0, 0, attachment.image->GetWidth(), attachment.image->GetHeight());
                 cmd->BindPipeline(passInfo);
-                const auto &gSettings = Settings::Get<GlobalSettings>();
+                const auto &gSettings = Settings::Get<SceneSettings>();
                 cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
                 cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
                 cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());

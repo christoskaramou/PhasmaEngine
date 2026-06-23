@@ -68,7 +68,7 @@ namespace pe
 
     void MotionBlurPass::ExecutePass(CommandBuffer *cmd)
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = ActivePostProcessProfile();
         Camera *camera = GetActiveScene()->GetActiveCamera();
 
         ImageBarrierInfo frameBarrier{};

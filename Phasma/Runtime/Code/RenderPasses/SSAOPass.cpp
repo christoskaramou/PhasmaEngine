@@ -203,7 +203,7 @@ namespace pe
 
     void SSAOPass::Update()
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = ActivePostProcessProfile();
         if (!gSettings.ssao || m_uniforms.empty() || !m_ssaoRT || !m_ssaoRawRT)
             return;
 

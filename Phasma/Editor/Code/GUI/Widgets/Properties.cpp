@@ -11,6 +11,8 @@
 #include "LightWidget.h"
 #include "MeshWidget.h"
 #include "Particles.h"
+#include "PostProcessControls.h"
+#include "SceneSettingsControls.h"
 #include "Particles/ParticleManager.h"
 #include "Render/SceneSky.h"
 #include "Scene/ModelAsset.h"
@@ -1302,7 +1304,7 @@ namespace pe
 
                 ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
                 if (DrawCenteredIconButton("##Default", ICON_FA_ROTATE_LEFT, ImVec2(buttonSize, buttonSize)))
-                    applyPath(GlobalSettings::DefaultSkyboxPath);
+                    applyPath(SceneSettings::DefaultSkyboxPath);
                 ui::ItemTooltip("Restore the engine's default skybox path.");
                 ImGui::PopStyleVar();
                 ImGui::PopID();
@@ -1347,8 +1349,56 @@ namespace pe
                 break;
             }
 
+            if (flags & Component_SceneSettings)
+            {
+                if (ImGui::CollapsingHeader("Scene Settings", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    ImGui::Indent(8.f);
+                    bool changed = DrawSceneSettingsControls();
+                    ImGui::SeparatorText("Post Processing (scene default)");
+                    ui::ItemTooltip("Default post-process profile, used when the camera is in no PostProcessVolume.");
+                    changed |= DrawPostProcessControls(static_cast<PostProcessProfile &>(Settings::Get<SceneSettings>()));
+                    if (changed)
+                        scene.MarkDirty();
+                    ImGui::Unindent(8.f);
+                }
+                break;
+            }
+
             // Transform is always shown for scene objects with spatial meaning
             drawTransform();
+
+            if (flags & Component_PostProcessVolume)
+            {
+                ImGui::Separator();
+                const bool ppvOpen = ImGui::CollapsingHeader("Post Process Volume", ImGuiTreeNodeFlags_DefaultOpen);
+                ui::ItemTooltip("Post-process settings applied while the camera is inside this volume.");
+                if (ppvOpen)
+                {
+                    ImGui::Indent(8.f);
+                    if (NodePostProcessVolumeTag *vol = scene.GetPostProcessVolumeForNode(node))
+                    {
+                        bool changed = false;
+                        changed |= ImGui::Checkbox("Global (whole scene)", &vol->global);
+                        ui::ItemTooltip("On: applies everywhere. Off: only inside the node's box bounds (from its transform scale).");
+                        changed |= ImGui::DragFloat("Priority", &vol->priority, 0.1f);
+                        ui::ItemTooltip("Highest priority among volumes containing the camera wins.");
+                        if (!vol->global)
+                        {
+                            const mat4 &w = scene.GetWorldMatrix(node);
+                            const vec3 size(glm::length(vec3(w[0])), glm::length(vec3(w[1])), glm::length(vec3(w[2])));
+                            ImGui::TextDisabled("Bounds: %.2f x %.2f x %.2f", size.x, size.y, size.z);
+                            ui::ItemTooltip("Box size in world units, taken from this node's transform scale. Move/scale "
+                                            "the node (cyan box in the viewport) to position the region.");
+                        }
+                        ImGui::Separator();
+                        changed |= DrawPostProcessControls(vol->profile);
+                        if (changed)
+                            scene.MarkDirty();
+                    }
+                    ImGui::Unindent(8.f);
+                }
+            }
 
             if (flags & Component_Sprite)
             {

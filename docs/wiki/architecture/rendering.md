@@ -4,7 +4,7 @@ The render path is split between PhasmaRuntime's shared scene renderer and Phasm
 
 ## Forward+ Light Culling
 
-Raster lighting uses `ForwardPlusLightCullingPass` before the opaque and transparent light passes when `GlobalSettings::forward_plus` is enabled. The compute pass bins point and spot lights into 16x16 screen-space tiles, writing per-tile counts and compact index lists that `LightingPS.hlsl` consumes instead of looping over every local light for every pixel. Directional and area lights remain on the existing full-list paths.
+Raster lighting uses `ForwardPlusLightCullingPass` before the opaque and transparent light passes when `SceneSettings::forward_plus` is enabled. The compute pass bins point and spot lights into 16x16 screen-space tiles, writing per-tile counts and compact index lists that `LightingPS.hlsl` consumes instead of looping over every local light for every pixel. Directional and area lights remain on the existing full-list paths.
 
 The culler intentionally uses a conservative projected sphere overlap for each local light. If a tile reaches `FORWARD_PLUS_MAX_LIGHTS_PER_TILE`, the tile records an overflow bit and the pixel shader falls back to the original full point or spot loop for that light class. This preserves correctness for extreme scenes while keeping common scenes on the cheaper tiled path.
 
@@ -40,14 +40,6 @@ Per-texel jitter was tried and removed — once the mip bias converges the integ
 
 - `RenderType::Lines` is reserved for hardware line-strip meshes from `Primitives::CreatePolyline(...)` / Lua `scene.attach_lines(node, {vec3...}, closed)`. These meshes are skipped by the indirect raster buckets, shadow all-mesh draw, mesh-constants culling path, and ray-tracing BLAS/TLAS triangle path. `LinesPass` draws them directly from the position stream after `LightTransparent` and before TAA, using node uniform data for transforms and material emissive (or base color) for color.
 - Lua can register frame-graph callbacks with `render_graph.add_pass(name, order, fn)` and remove them with `render_graph.remove_pass(name)`. Editor and player renderers watch the script-pass registry revision and rebuild the graph before command recording when scripts add/remove passes. The callback receives the frame `CommandBuffer`; `render_graph.get_target(name)` resolves current render targets such as `viewport`, `display`, and `depthStencil` for passes that need to record their own barriers/blits/attachments. Lua `cmd:begin_pass(...)` copies its attachment table into thread-local storage that remains valid until `cmd:end_pass()`, so scripts can safely record manual render passes without owning C++ attachment vectors.
-
-## Editor Selection Outline
-
-`SelectionOutlinePass` is an editor raster overlay after particles. It renders the GPU `IndirectSelected` bucket into an R8 mask with depth testing, then composites a full-screen outline into the display target. The selected bucket is driven by `Mesh_Constants::editorFlags`, which is refreshed each scene update through `SceneRuntimeHooks::IsSceneNodeSelected`; editor multi-selection therefore reaches the pass without adding editor-only state to runtime scene data. The pass no-ops when no selected renderable mesh exists, so an enabled outline cannot become the only display-affecting pass for an empty selection.
-
-The pass is gated by `GlobalSettings::selection_outline` on raster paths and is disabled by `RuntimeSceneRenderer` so player hosts do not inherit editor overlays from serialized scene settings. The user-facing controls live in the Global widget and serialize through `.pescene`: outline color, solid outer thickness, inward fade, and outward fade. HLSL/C++ push constants stay packed as three float4 lanes (`PushConstants_SelectionOutline`) for Vulkan/DX12 alignment.
-
-Editor Lua can drive the same overlay without touching C++ state directly. `selection.set_outline_pass(...)` / `selection.set_pass(...)` update enabled/color/thickness/inner-fade/outer-fade fields, while `selection.select(...)`, `selection.find(...)`, `selection.select_by_name(...)`, `selection.select_by_path(...)`, and `selection.select_matching(...)` resolve nodes indirectly from names, hierarchy paths, `SceneNode` handles, node indices, or tables. This is the preferred AI/user scripting surface for selecting highlight targets.
 
 ## Ray Tracing Cameras And Geometry
 

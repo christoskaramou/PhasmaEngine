@@ -133,7 +133,7 @@ namespace pe
             // perspective path below and the GREATER_OR_EQUAL depth compare op. Not
             // gated on PE_USE_GLM — ortho() itself is GLM-only, so the swap can never
             // be skipped against a live ortho() call (the prior #if was dead/misleading).
-            if (Settings::Get<GlobalSettings>().reverse_depth)
+            if (Settings::Get<SceneSettings>().reverse_depth)
                 std::swap(nearPlane, farPlane);
             m_projection = ortho(-halfWidth, halfWidth, -halfHeight, halfHeight, nearPlane, farPlane);
         }
@@ -165,7 +165,7 @@ namespace pe
         {
             m_projJitter = vec2(0.0f);
         }
-        else if (Settings::Get<GlobalSettings>().taa && s_cameraRuntimeCallbacks.updateProjectionJitter)
+        else if (ActivePostProcessProfile().taa && s_cameraRuntimeCallbacks.updateProjectionJitter)
         {
             vec2 jitter;
             if (s_cameraRuntimeCallbacks.updateProjectionJitter(jitter))
@@ -230,7 +230,7 @@ namespace pe
 
     void Camera::ExtractFrustum()
     {
-        if (Settings::Get<GlobalSettings>().freeze_frustum_culling)
+        if (Settings::Get<SceneSettings>().freeze_frustum_culling)
             return;
 
         mat4 cullViewProjection = m_projectionNoJitter * m_view;

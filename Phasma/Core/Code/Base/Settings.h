@@ -73,32 +73,19 @@ namespace pe
         std::string name = "Loading";
     };
 
-    // TODO: Move settings to their classes (instead of having them all here in GlobalSettings)
-    struct GlobalSettings : public Settings
+    // Per-frame image-effect settings. Owned by the scene's SceneSettings (the default/global
+    // profile, via the base slice below) and by each PostProcessVolume node; the render passes
+    // read whichever profile the renderer resolves as active for the current frame through
+    // ActivePostProcessProfile(). Field names/defaults are unchanged from the old flat
+    // SceneSettings so .pescene keys and the Lua settings.* API keep working verbatim.
+    struct PostProcessProfile
     {
-        bool right_handed = false;
-        bool reverse_depth = true;
-        bool frustum_culling = true;
-        bool occlusion_culling = false;        // GPU Hi-Z occlusion culling (Phase 2; opt-in)
-        float occlusion_culling_bias = 0.002f; // Hi-Z slack as a FRACTION of occluder depth (~0.2%);
-                                               // only protects coplanar/touching surfaces from false cull
-        bool shadows = true;
-        uint32_t shadow_map_size = 2048;
-        uint32_t num_cascades = 4;
-        float shadow_distance = 250.0f;
-        float shadow_cascade_lambda = 0.85f;
-        float shadow_normal_bias = 1.5f;
-        float shadow_fade_fraction = 0.15f;
-        float shadow_filter_radius = 0.75f;
-        int shadow_debug_mode = 0;
-        float render_scale = 0.75f;
         bool ssao = true;
         float ssao_radius = 0.5f;
         float ssao_bias = 0.025f;
         float ssao_intensity = 0.5f;
         float ssao_power = 1.0f;
         int ssao_samples = 16;
-        bool forward_plus = true;
         bool fxaa = false;
         bool taa = true;
         bool cas_sharpening = true;
@@ -106,7 +93,7 @@ namespace pe
         bool ssr = false;
         bool tonemapping = false;
         bool color_grading = false;
-        // Keep each r/g/b triplet adjacent; GlobalWidget edits them with ImGui::DragFloat3.
+        // Keep each r/g/b triplet adjacent; the editor edits them with ImGui::DragFloat3.
         float color_grading_lift_r = 0.0f;
         float color_grading_lift_g = 0.0f;
         float color_grading_lift_b = 0.0f;
@@ -130,6 +117,31 @@ namespace pe
         int motion_blur_samples = 16;
         bool IBL = true;
         float IBL_intensity = 1.0f;
+    };
+
+    // TODO: continue moving settings to their owning classes/components. Post-process now lives in
+    // PostProcessProfile (inherited below so existing &SceneSettings::field member pointers and
+    // settings.field access keep compiling); shading model (use_Disney_PBR) is next to move into
+    // Material/PassInfo.
+    struct SceneSettings : public Settings, public PostProcessProfile
+    {
+        bool right_handed = false;
+        bool reverse_depth = true;
+        bool frustum_culling = true;
+        bool occlusion_culling = false;        // GPU Hi-Z occlusion culling (Phase 2; opt-in)
+        float occlusion_culling_bias = 0.002f; // Hi-Z slack as a FRACTION of occluder depth (~0.2%);
+                                               // only protects coplanar/touching surfaces from false cull
+        bool shadows = true;
+        uint32_t shadow_map_size = 2048;
+        uint32_t num_cascades = 4;
+        float shadow_distance = 250.0f;
+        float shadow_cascade_lambda = 0.85f;
+        float shadow_normal_bias = 1.5f;
+        float shadow_fade_fraction = 0.15f;
+        float shadow_filter_radius = 0.75f;
+        int shadow_debug_mode = 0;
+        float render_scale = 0.75f;
+        bool forward_plus = true;
         float lights_intensity = 1.0f;
         bool randomize_lights = false;
         // Point lights attenuate by windowed inverse-square (intensity in units of
@@ -158,5 +170,19 @@ namespace pe
     };
 
     // Suppress per-TU instantiation — PhasmaCore.dll provides the one canonical instance.
-    extern template PE_API GlobalSettings &Settings::Get<GlobalSettings>();
+    extern template PE_API SceneSettings &Settings::Get<SceneSettings>();
+
+    // The post-process profile the render passes read for the current frame. Defaults to the
+    // active scene's SceneSettings (its PostProcessProfile base slice); the renderer retargets it
+    // to the active PostProcessVolume during frame setup, then resets it. The active pointer is
+    // pinned in PhasmaCore.dll alongside the Settings singleton so all modules agree.
+    PostProcessProfile &ActivePostProcessProfile();
+    void SetActivePostProcessProfile(PostProcessProfile *profile); // nullptr -> scene default
+
+    // Master switch driven by the Scene Settings node. When inactive (node disabled / deleted /
+    // absent) ActivePostProcessProfile() returns an all-off profile and the renderer also drops
+    // shadows, so the scene's look (post-process + shadows) turns off. Performance/debug toggles
+    // (culling, Forward+, grid, AABBs) are independent and stay on. Resolved each frame.
+    bool SceneSettingsActive();
+    void SetSceneSettingsActive(bool active);
 } // namespace pe

@@ -35,7 +35,7 @@ namespace pe
 
     void RuntimeSceneRenderer::ApplyRuntimeRenderSettings()
     {
-        auto &settings = Settings::Get<GlobalSettings>();
+        auto &settings = Settings::Get<SceneSettings>();
 
         // These are editor overlays, not standalone player output.
         settings.draw_grid = false;

@@ -223,6 +223,17 @@ namespace pe
         void SetSkyboxPath(NodeId *node, std::string path, bool markDirty = true);
         void ApplySkyboxSettingsFromNode(NodeId *node = nullptr);
         void EnsureSkyboxNodeFromSettings(bool markDirty = false);
+        NodeId *CreatePostProcessVolumeNode(NodeId *parent = nullptr, bool markDirty = true);
+        NodePostProcessVolumeTag *GetPostProcessVolumeForNode(const NodeId *node) const;
+        // Highest-priority enabled volume whose bounds contain cameraPos (global volumes always
+        // qualify). Returns null when none apply, so the caller falls back to the scene default.
+        PostProcessProfile *ResolvePostProcessProfile(const vec3 &cameraPos);
+        NodeId *GetSceneSettingsNode() const;
+        // Resolve the Scene Settings master switch + active post-process profile for this frame.
+        // Called at the top of UpdateCameras() so cameras read the fresh profile when they jitter.
+        void UpdateActiveSceneSettings();
+        // Ensures the scene has exactly one Scene Settings anchor node (created if missing).
+        void EnsureSceneSettingsNodeFromSettings(bool markDirty = false);
         bool SetMeshUvRect(int meshIndex, const vec4 &uvRect);
         bool SetMeshUvRectTransient(int meshIndex, const vec4 &uvRect);
         void SetNodeName(NodeId *node, const std::string &name)
@@ -462,6 +473,10 @@ namespace pe
                 flags |= Component_Audio;
             if (c.skybox)
                 flags |= Component_Skybox;
+            if (c.postProcessVolume)
+                flags |= Component_PostProcessVolume;
+            if (c.sceneSettings)
+                flags |= Component_SceneSettings;
             if (c.runtimeUi)
                 flags |= Component_RuntimeUi;
             if (c.prefab)

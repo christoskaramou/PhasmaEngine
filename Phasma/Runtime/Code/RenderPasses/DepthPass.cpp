@@ -123,7 +123,7 @@ namespace pe
             // is added later by DepthLatePass@270. Otherwise it draws the frustum-culled set from
             // CullingPass@50. Both layouts share the 7-slot counter convention (0/1 = opaque/alpha-cut
             // single-sided, 5/6 = double-sided).
-            const bool occlusion = Settings::Get<GlobalSettings>().occlusion_culling;
+            const bool occlusion = Settings::Get<SceneSettings>().occlusion_culling;
             Buffer *counters = occlusion ? m_scene->GetOccCountersA(frame) : m_scene->GetCullingCountersBuffer(frame);
             Buffer *opaqueSS = occlusion ? m_scene->GetOccOpaqueSSA(frame) : m_scene->GetIndirectOpaqueSS(frame);
             Buffer *alphaCutSS = occlusion ? m_scene->GetOccAlphaCutSSA(frame) : m_scene->GetIndirectAlphaCutSS(frame);

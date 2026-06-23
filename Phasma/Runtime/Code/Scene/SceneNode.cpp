@@ -31,7 +31,7 @@ namespace pe
         if ((flag & Component_Skybox) && !c.skybox)
         {
             c.skybox = entity->CreateComponent<NodeSkyboxTag>();
-            const auto &settings = Settings::Get<GlobalSettings>();
+            const auto &settings = Settings::Get<SceneSettings>();
             c.skybox->path = settings.skybox_path;
         }
         if ((flag & Component_RuntimeUi) && !c.runtimeUi)
@@ -40,6 +40,10 @@ namespace pe
             c.prefab = entity->CreateComponent<NodePrefabComponent>();
         if ((flag & Component_Sprite) && !c.sprite)
             c.sprite = entity->CreateComponent<NodeSpriteComponent>();
+        if ((flag & Component_PostProcessVolume) && !c.postProcessVolume)
+            c.postProcessVolume = entity->CreateComponent<NodePostProcessVolumeTag>();
+        if ((flag & Component_SceneSettings) && !c.sceneSettings)
+            c.sceneSettings = entity->CreateComponent<NodeSceneSettingsTag>();
     }
 
     void Scene::RemoveComponentFlag(NodeId *node, uint32_t flag)
@@ -95,6 +99,16 @@ namespace pe
         {
             entity->RemoveComponent<NodeSpriteComponent>();
             c.sprite = nullptr;
+        }
+        if ((flag & Component_PostProcessVolume) && c.postProcessVolume)
+        {
+            entity->RemoveComponent<NodePostProcessVolumeTag>();
+            c.postProcessVolume = nullptr;
+        }
+        if ((flag & Component_SceneSettings) && c.sceneSettings)
+        {
+            entity->RemoveComponent<NodeSceneSettingsTag>();
+            c.sceneSettings = nullptr;
         }
     }
 
@@ -241,7 +255,7 @@ namespace pe
             RemoveSceneAudioSource(node);
         if (cache.skybox)
         {
-            auto &settings = Settings::Get<GlobalSettings>();
+            auto &settings = Settings::Get<SceneSettings>();
             settings.skybox_path.clear();
             RefreshSceneSky();
         }
@@ -470,7 +484,7 @@ namespace pe
         NodeId *node = CreateNode("Skybox", parent);
         AddComponentFlag(node, Component_Skybox);
 
-        const auto &settings = Settings::Get<GlobalSettings>();
+        const auto &settings = Settings::Get<SceneSettings>();
         SetSkyboxPath(node, settings.skybox_path, markDirty);
         return node;
     }
@@ -521,7 +535,7 @@ namespace pe
                 path = skybox->path;
         }
 
-        auto &settings = Settings::Get<GlobalSettings>();
+        auto &settings = Settings::Get<SceneSettings>();
         if (settings.skybox_path == path)
             return;
 
@@ -534,11 +548,81 @@ namespace pe
         if (GetSkyboxNode())
             return;
 
-        const auto &settings = Settings::Get<GlobalSettings>();
+        const auto &settings = Settings::Get<SceneSettings>();
         if (settings.skybox_path.empty())
             return;
 
         CreateSkyboxNode(nullptr, markDirty);
+    }
+
+    NodeId *Scene::CreatePostProcessVolumeNode(NodeId *parent, bool markDirty)
+    {
+        NodeId *node = CreateNode("Post Process Volume", parent);
+        AddComponentFlag(node, Component_PostProcessVolume);
+        if (markDirty)
+            MarkDirty();
+        return node;
+    }
+
+    NodePostProcessVolumeTag *Scene::GetPostProcessVolumeForNode(const NodeId *node) const
+    {
+        if (!IsNodeAlive(node))
+            return nullptr;
+        return m_nodeComponentCache[node->index].postProcessVolume;
+    }
+
+    PostProcessProfile *Scene::ResolvePostProcessProfile(const vec3 &cameraPos)
+    {
+        PostProcessProfile *best = nullptr;
+        float bestPriority = -std::numeric_limits<float>::max();
+        for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
+        {
+            NodePostProcessVolumeTag *v = m_nodeComponentCache[i].postProcessVolume;
+            if (!v)
+                continue;
+            NodeId *node = m_nodeIds[i];
+            if (!IsNodeAlive(node) || !IsNodeHierarchyEnabled(node))
+                continue;
+            if (!v->global)
+            {
+                // AABB from world translation +/- (world basis length * 0.5).
+                // ponytail: ignores rotation; upgrade to OBB (inverse-world transform) if rotated
+                // volumes are needed.
+                const mat4 &w = GetWorldMatrix(node);
+                const vec3 center(w[3].x, w[3].y, w[3].z);
+                const vec3 d = abs(cameraPos - center);
+                const vec3 he(length(vec3(w[0].x, w[0].y, w[0].z)) * 0.5f,
+                              length(vec3(w[1].x, w[1].y, w[1].z)) * 0.5f,
+                              length(vec3(w[2].x, w[2].y, w[2].z)) * 0.5f);
+                if (d.x > he.x || d.y > he.y || d.z > he.z)
+                    continue;
+            }
+            if (v->priority >= bestPriority)
+            {
+                bestPriority = v->priority;
+                best = &v->profile;
+            }
+        }
+        return best;
+    }
+
+    NodeId *Scene::GetSceneSettingsNode() const
+    {
+        for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
+            if (m_nodeComponentCache[i].sceneSettings)
+                return m_nodeIds[i];
+        return nullptr;
+    }
+
+    void Scene::EnsureSceneSettingsNodeFromSettings(bool markDirty)
+    {
+        if (GetSceneSettingsNode())
+            return;
+
+        NodeId *node = CreateNode("Scene Settings");
+        AddComponentFlag(node, Component_SceneSettings);
+        if (markDirty)
+            MarkDirty();
     }
 
     void Scene::SetMeshRef(NodeId *node, int meshIndex)

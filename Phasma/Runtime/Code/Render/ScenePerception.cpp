@@ -94,7 +94,7 @@ namespace pe
             {
                 if (std::isfinite(farPlane) && farPlane > nearPlane)
                 {
-                    const bool reverseDepth = Settings::Get<GlobalSettings>().reverse_depth;
+                    const bool reverseDepth = Settings::Get<SceneSettings>().reverse_depth;
                     return reverseDepth ? nearPlane + (1.0f - depth) * (farPlane - nearPlane)
                                         : nearPlane + depth * (farPlane - nearPlane);
                 }
@@ -216,7 +216,7 @@ namespace pe
             }
 
             const ::PeFormat depthFormat = RHII.GetDepthFormat();
-            const bool reverseDepth = Settings::Get<GlobalSettings>().reverse_depth;
+            const bool reverseDepth = Settings::Get<SceneSettings>().reverse_depth;
             if (!cache.idPI || cache.depthFormat != depthFormat || cache.reverseDepth != reverseDepth)
             {
                 cache.idPI = CreateObjectIdPassInfo(depthFormat, reverseDepth);
@@ -612,7 +612,7 @@ namespace pe
         else
         {
             // Miss (sky/empty): intersect the camera ray through the pixel with Y = groundY.
-            const bool reverseDepth = Settings::Get<GlobalSettings>().reverse_depth;
+            const bool reverseDepth = Settings::Get<SceneSettings>().reverse_depth;
             const float farNdc = reverseDepth ? 0.0f : 1.0f;
             const vec3 camPos = camera->GetPosition();
             vec3 dir = unproject(ndcX, ndcY, farNdc) - camPos;

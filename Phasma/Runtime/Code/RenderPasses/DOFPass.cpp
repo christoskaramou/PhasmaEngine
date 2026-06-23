@@ -62,7 +62,7 @@ namespace pe
 
     void DOFPass::ExecutePass(CommandBuffer *cmd)
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = ActivePostProcessProfile();
 
         ImageBarrierInfo frameBarrier{};
         frameBarrier.image = m_frameImage;

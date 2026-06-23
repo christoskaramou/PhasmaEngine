@@ -261,7 +261,7 @@ namespace pe
             image->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
 
             SamplerDesc samplerInfo = Sampler::CreateInfoInit();
-            samplerInfo.mipLodBias = log2(Settings::Get<GlobalSettings>().render_scale) - 1.0f;
+            samplerInfo.mipLodBias = log2(Settings::Get<SceneSettings>().render_scale) - 1.0f;
             samplerInfo.maxLod = static_cast<float>(dds.mipLevels);
             samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
             image->SetSampler(Sampler::Create(samplerInfo));
@@ -562,7 +562,7 @@ namespace pe
                                   PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE;
 
         SamplerDesc samplerInfo = Sampler::CreateInfoInit();
-        samplerInfo.mipLodBias = log2(Settings::Get<GlobalSettings>().render_scale) - 1.0f;
+        samplerInfo.mipLodBias = log2(Settings::Get<SceneSettings>().render_scale) - 1.0f;
         samplerInfo.maxLod = static_cast<float>(mipLevels);
         samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
 
@@ -599,7 +599,7 @@ namespace pe
         std::string name = "Embedded_Texture_" + std::to_string(embeddedCount++);
 
         SamplerDesc samplerInfo = Sampler::CreateInfoInit();
-        samplerInfo.mipLodBias = log2(Settings::Get<GlobalSettings>().render_scale) - 1.0f;
+        samplerInfo.mipLodBias = log2(Settings::Get<SceneSettings>().render_scale) - 1.0f;
         samplerInfo.maxLod = static_cast<float>(mipLevels);
         samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
 
@@ -627,7 +627,7 @@ namespace pe
         std::string n = name.empty() ? "Embedded_Raw_" + std::to_string(embeddedCount++) : name;
 
         SamplerDesc samplerInfo = Sampler::CreateInfoInit();
-        samplerInfo.mipLodBias = log2(Settings::Get<GlobalSettings>().render_scale) - 1.0f;
+        samplerInfo.mipLodBias = log2(Settings::Get<SceneSettings>().render_scale) - 1.0f;
         samplerInfo.maxLod = static_cast<float>(mipLevels);
         samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
 

@@ -82,7 +82,7 @@ namespace pe
 
     void SSRPass::Update()
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = ActivePostProcessProfile();
         if (gSettings.ssr)
         {
             Camera *camera = GetActiveScene()->GetActiveCamera();

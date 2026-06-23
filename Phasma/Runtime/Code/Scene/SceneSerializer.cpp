@@ -145,9 +145,98 @@ namespace pe
                     out.emplace_back(value.GetString());
         }
 
-        void AddGlobalSettingsMembers(rapidjson::Value &settings, rapidjson::Document::AllocatorType &allocator)
+        // Post-process subset, reused by SceneSettings (the scene default profile) and by each
+        // PostProcessVolume node. Keys match the flat SceneSettings keys so old scenes still load.
+        void AddPostProcessProfileMembers(rapidjson::Value &v, rapidjson::Document::AllocatorType &alloc,
+                                          const PostProcessProfile &p)
         {
-            auto &gSettings = Settings::Get<GlobalSettings>();
+            v.AddMember("ssao", p.ssao, alloc);
+            v.AddMember("ssao_radius", p.ssao_radius, alloc);
+            v.AddMember("ssao_bias", p.ssao_bias, alloc);
+            v.AddMember("ssao_intensity", p.ssao_intensity, alloc);
+            v.AddMember("ssao_power", p.ssao_power, alloc);
+            v.AddMember("ssao_samples", p.ssao_samples, alloc);
+            v.AddMember("fxaa", p.fxaa, alloc);
+            v.AddMember("taa", p.taa, alloc);
+            v.AddMember("cas_sharpening", p.cas_sharpening, alloc);
+            v.AddMember("cas_sharpness", p.cas_sharpness, alloc);
+            v.AddMember("ssr", p.ssr, alloc);
+            v.AddMember("tonemapping", p.tonemapping, alloc);
+            v.AddMember("color_grading", p.color_grading, alloc);
+            v.AddMember("color_grading_lift_r", p.color_grading_lift_r, alloc);
+            v.AddMember("color_grading_lift_g", p.color_grading_lift_g, alloc);
+            v.AddMember("color_grading_lift_b", p.color_grading_lift_b, alloc);
+            v.AddMember("color_grading_gamma_r", p.color_grading_gamma_r, alloc);
+            v.AddMember("color_grading_gamma_g", p.color_grading_gamma_g, alloc);
+            v.AddMember("color_grading_gamma_b", p.color_grading_gamma_b, alloc);
+            v.AddMember("color_grading_gain_r", p.color_grading_gain_r, alloc);
+            v.AddMember("color_grading_gain_g", p.color_grading_gain_g, alloc);
+            v.AddMember("color_grading_gain_b", p.color_grading_gain_b, alloc);
+            v.AddMember("color_grading_saturation", p.color_grading_saturation, alloc);
+            v.AddMember("color_grading_contrast", p.color_grading_contrast, alloc);
+            v.AddMember("color_grading_intensity", p.color_grading_intensity, alloc);
+            v.AddMember("dof", p.dof, alloc);
+            v.AddMember("dof_focus_scale", p.dof_focus_scale, alloc);
+            v.AddMember("dof_blur_range", p.dof_blur_range, alloc);
+            v.AddMember("bloom", p.bloom, alloc);
+            v.AddMember("bloom_strength", p.bloom_strength, alloc);
+            v.AddMember("bloom_range", p.bloom_range, alloc);
+            v.AddMember("motion_blur", p.motion_blur, alloc);
+            v.AddMember("motion_blur_strength", p.motion_blur_strength, alloc);
+            v.AddMember("motion_blur_samples", p.motion_blur_samples, alloc);
+            v.AddMember("IBL", p.IBL, alloc);
+            v.AddMember("IBL_intensity", p.IBL_intensity, alloc);
+        }
+
+        void ApplyPostProcessProfileMembers(const rapidjson::Value &v, PostProcessProfile &p)
+        {
+            auto B = [&](const char *k, bool &f)
+            { if (v.HasMember(k)) f = v[k].GetBool(); };
+            auto F = [&](const char *k, float &f)
+            { if (v.HasMember(k)) f = v[k].GetFloat(); };
+            auto I = [&](const char *k, int &f)
+            { if (v.HasMember(k)) f = v[k].GetInt(); };
+            B("ssao", p.ssao);
+            F("ssao_radius", p.ssao_radius);
+            F("ssao_bias", p.ssao_bias);
+            F("ssao_intensity", p.ssao_intensity);
+            F("ssao_power", p.ssao_power);
+            I("ssao_samples", p.ssao_samples);
+            B("fxaa", p.fxaa);
+            B("taa", p.taa);
+            B("cas_sharpening", p.cas_sharpening);
+            F("cas_sharpness", p.cas_sharpness);
+            B("ssr", p.ssr);
+            B("tonemapping", p.tonemapping);
+            B("color_grading", p.color_grading);
+            F("color_grading_lift_r", p.color_grading_lift_r);
+            F("color_grading_lift_g", p.color_grading_lift_g);
+            F("color_grading_lift_b", p.color_grading_lift_b);
+            F("color_grading_gamma_r", p.color_grading_gamma_r);
+            F("color_grading_gamma_g", p.color_grading_gamma_g);
+            F("color_grading_gamma_b", p.color_grading_gamma_b);
+            F("color_grading_gain_r", p.color_grading_gain_r);
+            F("color_grading_gain_g", p.color_grading_gain_g);
+            F("color_grading_gain_b", p.color_grading_gain_b);
+            F("color_grading_saturation", p.color_grading_saturation);
+            F("color_grading_contrast", p.color_grading_contrast);
+            F("color_grading_intensity", p.color_grading_intensity);
+            B("dof", p.dof);
+            F("dof_focus_scale", p.dof_focus_scale);
+            F("dof_blur_range", p.dof_blur_range);
+            B("bloom", p.bloom);
+            F("bloom_strength", p.bloom_strength);
+            F("bloom_range", p.bloom_range);
+            B("motion_blur", p.motion_blur);
+            F("motion_blur_strength", p.motion_blur_strength);
+            I("motion_blur_samples", p.motion_blur_samples);
+            B("IBL", p.IBL);
+            F("IBL_intensity", p.IBL_intensity);
+        }
+
+        void AddSceneSettingsMembers(rapidjson::Value &settings, rapidjson::Document::AllocatorType &allocator)
+        {
+            auto &gSettings = Settings::Get<SceneSettings>();
             settings.AddMember("right_handed", gSettings.right_handed, allocator);
             settings.AddMember("reverse_depth", gSettings.reverse_depth, allocator);
             settings.AddMember("frustum_culling", gSettings.frustum_culling, allocator);
@@ -278,9 +367,9 @@ namespace pe
             }
         }
 
-        void ApplyGlobalSettingsMembers(const rapidjson::Value &settings)
+        void ApplySceneSettingsMembers(const rapidjson::Value &settings)
         {
-            auto &gSettings = Settings::Get<GlobalSettings>();
+            auto &gSettings = Settings::Get<SceneSettings>();
             const std::string previousSkyboxPath = gSettings.skybox_path;
             if (settings.HasMember("right_handed") && settings["right_handed"].GetBool() != gSettings.right_handed)
             {
@@ -405,7 +494,7 @@ namespace pe
                 gSettings.randomize_lights = settings["randomize_lights"].GetBool();
             gSettings.skybox_path = settings.HasMember("skybox_path") && settings["skybox_path"].IsString()
                                         ? settings["skybox_path"].GetString()
-                                        : GlobalSettings::DefaultSkyboxPath;
+                                        : SceneSettings::DefaultSkyboxPath;
             if (gSettings.skybox_path != previousSkyboxPath)
                 RefreshSceneSky();
             if (settings.HasMember("depth_bias") && settings["depth_bias"].IsArray() && settings["depth_bias"].Size() == 3)
@@ -491,13 +580,32 @@ namespace pe
                 return;
 
             const auto &sv = nodeValue["skybox"];
-            auto &settings = Settings::Get<GlobalSettings>();
+            auto &settings = Settings::Get<SceneSettings>();
             const std::string path = sv.HasMember("path") && sv["path"].IsString()
                                          ? sv["path"].GetString()
                                          : settings.skybox_path;
 
             scene.AddComponentFlag(node, Component_Skybox);
             scene.SetSkyboxPath(node, path, false);
+        }
+
+        void RestorePostProcessVolumeNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
+        {
+            if (!node || !nodeValue.HasMember("postProcessVolume") || !nodeValue["postProcessVolume"].IsObject())
+                return;
+
+            const auto &vv = nodeValue["postProcessVolume"];
+            scene.AddComponentFlag(node, Component_PostProcessVolume);
+            NodePostProcessVolumeTag *vol = scene.GetPostProcessVolumeForNode(node);
+            if (!vol)
+                return;
+
+            if (vv.HasMember("global"))
+                vol->global = vv["global"].GetBool();
+            if (vv.HasMember("priority"))
+                vol->priority = vv["priority"].GetFloat();
+            if (vv.HasMember("profile") && vv["profile"].IsObject())
+                ApplyPostProcessProfileMembers(vv["profile"], vol->profile);
         }
 
         void RestorePrefabNode(Scene &scene,
@@ -1173,7 +1281,7 @@ namespace pe
         void AddSettings()
         {
             rapidjson::Value settings(rapidjson::kObjectType);
-            AddGlobalSettingsMembers(settings, allocator);
+            AddSceneSettingsMembers(settings, allocator);
 
             document.AddMember("settings", settings.Move(), allocator);
         }
@@ -1511,6 +1619,18 @@ namespace pe
                     rapidjson::Value skyboxObj(rapidjson::kObjectType);
                     skyboxObj.AddMember("path", MakeStringValue(skybox.path), allocator);
                     nodeObj.AddMember("skybox", skyboxObj.Move(), allocator);
+                }
+
+                if ((flags & Component_PostProcessVolume) && cache.postProcessVolume)
+                {
+                    const NodePostProcessVolumeTag &vol = *cache.postProcessVolume;
+                    rapidjson::Value volObj(rapidjson::kObjectType);
+                    volObj.AddMember("global", vol.global, allocator);
+                    volObj.AddMember("priority", vol.priority, allocator);
+                    rapidjson::Value profileObj(rapidjson::kObjectType);
+                    AddPostProcessProfileMembers(profileObj, allocator, vol.profile);
+                    volObj.AddMember("profile", profileObj.Move(), allocator);
+                    nodeObj.AddMember("postProcessVolume", volObj.Move(), allocator);
                 }
 
                 if ((flags & Component_RuntimeUi) && cache.runtimeUi && cache.runtimeUi->authored)
@@ -2032,6 +2152,10 @@ namespace pe
             m_cameras[0]->SetNodeId(camNode);
         }
         EnsureSkyboxNodeFromSettings(false);
+        // New (empty) scenes get a Scene Settings node by default so rendering is on out of the box.
+        // Loaded scenes are NOT force-given one (opt-in: a deleted/absent node means post-process +
+        // shadows off; culling/grid/debug toggles are unaffected).
+        EnsureSceneSettingsNodeFromSettings(false);
 
         UpdateGeometryBuffers();
 
@@ -2067,7 +2191,7 @@ namespace pe
         }
 
         // Set progress for Loading widget
-        auto &loading = Settings::Get<GlobalSettings>().loading;
+        auto &loading = Settings::Get<SceneSettings>().loading;
         uint32_t modelCount = 0;
         if (d.HasMember("sources"))
             modelCount = d["sources"].Size();
@@ -2229,7 +2353,7 @@ namespace pe
         if (d.HasMember("settings"))
         {
             const auto &settings = d["settings"];
-            ApplyGlobalSettingsMembers(settings);
+            ApplySceneSettingsMembers(settings);
             MarkUniformsDirty();
         }
 
@@ -2561,6 +2685,8 @@ namespace pe
 
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreSkyboxNode(*this, nodeMap[ni], nodesVal[ni]);
+                for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+                    RestorePostProcessVolumeNode(*this, nodeMap[ni], nodesVal[ni]);
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreRuntimeUiNode(*this, nodeMap[ni], nodesVal[ni], &sceneDir);
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
@@ -3249,6 +3375,8 @@ namespace pe
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreSkyboxNode(*this, nodeMap[ni], nodesVal[ni]);
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+            RestorePostProcessVolumeNode(*this, nodeMap[ni], nodesVal[ni]);
+        for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreRuntimeUiNode(*this, nodeMap[ni], nodesVal[ni], &prefabDir);
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreSpriteNode(*this, nodeMap[ni], nodesVal[ni], &prefabDir);
@@ -3578,7 +3706,7 @@ namespace pe
 
                     uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
                     // Clear subsystem tags before restoring — Mesh/Script are already set by SetMeshRef/SetNodeScript above
-                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Physics2D | Component_Audio | Component_Skybox | Component_RuntimeUi | Component_Prefab | Component_Sprite);
+                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Physics2D | Component_Audio | Component_Skybox | Component_RuntimeUi | Component_Prefab | Component_Sprite | Component_PostProcessVolume | Component_SceneSettings);
                     uint32_t restoreFlags = flags & ~(Component_Mesh | Component_Script | Component_GpuPending);
                     if (restoreFlags)
                         AddComponentFlag(node, restoreFlags);
@@ -3765,6 +3893,8 @@ namespace pe
 
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkyboxNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestorePostProcessVolumeNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreRuntimeUiNode(*this, m_nodeIds[ni], snapshotNodes[ni], nullptr);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
@@ -4204,6 +4334,8 @@ namespace pe
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkyboxNode(*this, nodeMap[ni], snapshotNodes[ni]);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestorePostProcessVolumeNode(*this, nodeMap[ni], snapshotNodes[ni]);
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreRuntimeUiNode(*this, nodeMap[ni], snapshotNodes[ni], nullptr);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSpriteNode(*this, nodeMap[ni], snapshotNodes[ni], nullptr);
@@ -4437,7 +4569,7 @@ namespace pe
         if (d.HasMember("settings"))
         {
             const auto &settings = d["settings"];
-            ApplyGlobalSettingsMembers(settings);
+            ApplySceneSettingsMembers(settings);
             EnsureSkyboxNodeFromSettings(false);
             MarkUniformsDirty();
         }

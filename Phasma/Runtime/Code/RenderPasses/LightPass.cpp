@@ -43,7 +43,7 @@ namespace pe
                                                 std::vector<ImageView *> &views,
                                                 const std::string &namePrefix)
         {
-            const uint32_t cascadeCount = std::max(1u, Settings::Get<GlobalSettings>().num_cascades);
+            const uint32_t cascadeCount = std::max(1u, Settings::Get<SceneSettings>().num_cascades);
             const uint32_t frameCount = RHII.GetSwapchainImageCount();
 
             if (!texture)
@@ -169,7 +169,7 @@ namespace pe
             Buffer *spotIndices = pointIndices;
             bool boundLiveForwardPlusResources = false;
 
-            if (Settings::Get<GlobalSettings>().forward_plus)
+            if (Settings::Get<SceneSettings>().forward_plus)
             {
                 if (ForwardPlusLightCullingPass *forwardPlus = GetGlobalComponent<ForwardPlusLightCullingPass>())
                 {
@@ -197,7 +197,7 @@ namespace pe
 
         void AddForwardPlusReadBarriers(CommandBuffer *cmd, uint32_t frame)
         {
-            if (!Settings::Get<GlobalSettings>().forward_plus)
+            if (!Settings::Get<SceneSettings>().forward_plus)
                 return;
 
             ForwardPlusLightCullingPass *forwardPlus = GetGlobalComponent<ForwardPlusLightCullingPass>();
@@ -261,9 +261,9 @@ namespace pe
     void LightOpaquePass::UpdatePassInfo()
     {
         const std::vector<Define> definesFrag{
-            Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<GlobalSettings>().num_cascades)},
-            Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<GlobalSettings>().shadow_map_size)},
-            Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<GlobalSettings>().shadow_map_size)},
+            Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<SceneSettings>().num_cascades)},
+            Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<SceneSettings>().shadow_map_size)},
+            Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<SceneSettings>().shadow_map_size)},
             Define{"FORWARD_PLUS_TILE_SIZE", std::to_string(ForwardPlusLightCullingPass::TileSize)},
             Define{"FORWARD_PLUS_MAX_LIGHTS_PER_TILE", std::to_string(ForwardPlusLightCullingPass::MaxLightsPerTile)}};
 
@@ -304,7 +304,7 @@ namespace pe
     void LightOpaquePass::UpdateDescriptorSets()
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        const bool useShadowResources = Settings::Get<GlobalSettings>().shadows && HasLiveShadowResources(shadows);
+        const bool useShadowResources = Settings::Get<SceneSettings>().shadows && HasLiveShadowResources(shadows);
         EnsureLightShadowFallbackResources(m_shadowFallbackUniforms,
                                            m_shadowFallbackTexture,
                                            m_shadowFallbackSampler,
@@ -320,7 +320,7 @@ namespace pe
         const SkyBox &skybox = renderer.GetSkyBox();
 
         Scene &scene = *GetActiveScene();
-        const bool forwardPlusEnabled = Settings::Get<GlobalSettings>().forward_plus;
+        const bool forwardPlusEnabled = Settings::Get<SceneSettings>().forward_plus;
         bool boundForwardPlusResources = true;
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
@@ -363,7 +363,8 @@ namespace pe
 
     void LightOpaquePass::Update()
     {
-        const auto &gSettings = Settings::Get<GlobalSettings>();
+        const auto &gSettings = Settings::Get<SceneSettings>();
+        const auto &pp = ActivePostProcessProfile();
         SceneRendererHost &renderer = RequireActiveSceneRendererHost();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
@@ -384,11 +385,11 @@ namespace pe
 #if defined(PE_ANDROID)
         m_ubo.ssao = 0u; // SSAO stays disabled on Android until the native pass is validated there.
 #else
-        m_ubo.ssao = gSettings.ssao && m_ssaoRT ? 1u : 0u;
+        m_ubo.ssao = pp.ssao && m_ssaoRT ? 1u : 0u;
 #endif
-        m_ubo.ssr = gSettings.ssr;
-        m_ubo.IBL = gSettings.IBL;
-        m_ubo.IBL_intensity = gSettings.IBL_intensity;
+        m_ubo.ssr = pp.ssr;
+        m_ubo.IBL = pp.IBL;
+        m_ubo.IBL_intensity = pp.IBL_intensity;
         m_ubo.lights_intensity = gSettings.lights_intensity;
         m_ubo.shadows = shadowsAvailable ? 1u : 0u;
         m_ubo.use_Disney_PBR = gSettings.use_Disney_PBR;
@@ -407,7 +408,7 @@ namespace pe
     void LightOpaquePass::DeclareInputs(RGBuilder &builder)
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        const bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows && HasLiveShadowResources(shadows);
+        const bool shadowsEnabled = Settings::Get<SceneSettings>().shadows && HasLiveShadowResources(shadows);
 
         builder.Read(m_depthStencilRT);
         builder.Read(m_normalRT);
@@ -415,7 +416,7 @@ namespace pe
         builder.Read(m_srmRT);
         builder.Read(m_velocityRT);
         builder.Read(m_emissiveRT);
-        if (Settings::Get<GlobalSettings>().ssao && m_ssaoRT)
+        if (ActivePostProcessProfile().ssao && m_ssaoRT)
             builder.Read(m_ssaoRT);
         builder.Read(m_transparencyRT);
 
@@ -428,8 +429,8 @@ namespace pe
 
     void LightOpaquePass::ExecutePass(CommandBuffer *cmd)
     {
-        uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().num_cascades;
-        const auto &gSettings = Settings::Get<GlobalSettings>();
+        uint32_t shadowmapCascades = Settings::Get<SceneSettings>().num_cascades;
+        const auto &gSettings = Settings::Get<SceneSettings>();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
 
@@ -517,9 +518,9 @@ namespace pe
     void LightTransparentPass::UpdatePassInfo()
     {
         const std::vector<Define> definesFrag{
-            Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<GlobalSettings>().num_cascades)},
-            Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<GlobalSettings>().shadow_map_size)},
-            Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<GlobalSettings>().shadow_map_size)},
+            Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<SceneSettings>().num_cascades)},
+            Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<SceneSettings>().shadow_map_size)},
+            Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<SceneSettings>().shadow_map_size)},
             Define{"FORWARD_PLUS_TILE_SIZE", std::to_string(ForwardPlusLightCullingPass::TileSize)},
             Define{"FORWARD_PLUS_MAX_LIGHTS_PER_TILE", std::to_string(ForwardPlusLightCullingPass::MaxLightsPerTile)}};
 
@@ -558,7 +559,7 @@ namespace pe
     void LightTransparentPass::UpdateDescriptorSets()
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        const bool useShadowResources = Settings::Get<GlobalSettings>().shadows && HasLiveShadowResources(shadows);
+        const bool useShadowResources = Settings::Get<SceneSettings>().shadows && HasLiveShadowResources(shadows);
         EnsureLightShadowFallbackResources(m_shadowFallbackUniforms,
                                            m_shadowFallbackTexture,
                                            m_shadowFallbackSampler,
@@ -573,7 +574,7 @@ namespace pe
         SceneRendererHost &renderer = RequireActiveSceneRendererHost();
         const SkyBox &skybox = renderer.GetSkyBox();
 
-        const bool forwardPlusEnabled = Settings::Get<GlobalSettings>().forward_plus;
+        const bool forwardPlusEnabled = Settings::Get<SceneSettings>().forward_plus;
         bool boundForwardPlusResources = true;
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
@@ -616,7 +617,8 @@ namespace pe
 
     void LightTransparentPass::Update()
     {
-        const auto &gSettings = Settings::Get<GlobalSettings>();
+        const auto &gSettings = Settings::Get<SceneSettings>();
+        const auto &pp = ActivePostProcessProfile();
         SceneRendererHost &renderer = RequireActiveSceneRendererHost();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
@@ -637,11 +639,11 @@ namespace pe
 #if defined(PE_ANDROID)
         m_ubo.ssao = 0u; // SSAO stays disabled on Android until the native pass is validated there.
 #else
-        m_ubo.ssao = gSettings.ssao && m_ssaoRT ? 1u : 0u;
+        m_ubo.ssao = pp.ssao && m_ssaoRT ? 1u : 0u;
 #endif
-        m_ubo.ssr = gSettings.ssr;
-        m_ubo.IBL = gSettings.IBL;
-        m_ubo.IBL_intensity = gSettings.IBL_intensity;
+        m_ubo.ssr = pp.ssr;
+        m_ubo.IBL = pp.IBL;
+        m_ubo.IBL_intensity = pp.IBL_intensity;
         m_ubo.lights_intensity = gSettings.lights_intensity;
         m_ubo.shadows = shadowsAvailable ? 1u : 0u;
         m_ubo.use_Disney_PBR = gSettings.use_Disney_PBR;
@@ -660,7 +662,7 @@ namespace pe
     void LightTransparentPass::DeclareInputs(RGBuilder &builder)
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        const bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows && HasLiveShadowResources(shadows);
+        const bool shadowsEnabled = Settings::Get<SceneSettings>().shadows && HasLiveShadowResources(shadows);
 
         builder.Read(m_depthStencilRT);
         builder.Read(m_normalRT);
@@ -668,7 +670,7 @@ namespace pe
         builder.Read(m_srmRT);
         builder.Read(m_velocityRT);
         builder.Read(m_emissiveRT);
-        if (Settings::Get<GlobalSettings>().ssao && m_ssaoRT)
+        if (ActivePostProcessProfile().ssao && m_ssaoRT)
             builder.Read(m_ssaoRT);
         builder.Read(m_transparencyRT);
 
@@ -681,8 +683,8 @@ namespace pe
 
     void LightTransparentPass::ExecutePass(CommandBuffer *cmd)
     {
-        uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().num_cascades;
-        const auto &gSettings = Settings::Get<GlobalSettings>();
+        uint32_t shadowmapCascades = Settings::Get<SceneSettings>().num_cascades;
+        const auto &gSettings = Settings::Get<SceneSettings>();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
 

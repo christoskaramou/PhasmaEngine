@@ -32,7 +32,7 @@ namespace pe
 
         surface->SetPresentMode(mode);
         PePresentMode effectiveMode = surface->GetPresentMode();
-        Settings::Get<GlobalSettings>().preferred_present_mode = effectiveMode;
+        Settings::Get<SceneSettings>().preferred_present_mode = effectiveMode;
         RHII.WaitDeviceIdle();
         EventSystem::PushEvent(EventType::Resize);
         return PresentModeToString(effectiveMode);
@@ -172,7 +172,7 @@ namespace pe
                 // SetRenderScale — apply like the editor Global widget "Apply" (device-idle + Resize).
                 // Returns the clamped value so callers can sync their UI.
                 rhi.set_function("set_render_scale", [](double scale) -> float {
-                    auto &gs = Settings::Get<GlobalSettings>();
+                    auto &gs = Settings::Get<SceneSettings>();
                     gs.render_scale = std::clamp(static_cast<float>(scale), 0.1f, 2.0f);
                     RHII.WaitDeviceIdle();
                     EventSystem::PushEvent(EventType::Resize);
@@ -181,7 +181,7 @@ namespace pe
 
                 // GetRenderScale
                 rhi.set_function("get_render_scale", []() -> float {
-                    return Settings::Get<GlobalSettings>().render_scale;
+                    return Settings::Get<SceneSettings>().render_scale;
                 });
 
                 // GetPresentMode

@@ -14,7 +14,7 @@ namespace pe
                                  ImGuiWindowFlags_NoCollapse |
                                  ImGuiWindowFlags_NoDocking;
 
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = Settings::Get<SceneSettings>();
         if (GUIState::s_modelLoading)
         {
             const ImGuiViewport *viewport = ImGui::GetMainViewport();

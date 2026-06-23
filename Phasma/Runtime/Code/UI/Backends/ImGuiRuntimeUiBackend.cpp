@@ -529,7 +529,7 @@ namespace pe
                     const bool isSelected = (mode == currentMode);
                     if (ImGui::Selectable(RHII.PresentModeToString(mode), isSelected) && mode != currentMode)
                     {
-                        Settings::Get<GlobalSettings>().preferred_present_mode = mode;
+                        Settings::Get<SceneSettings>().preferred_present_mode = mode;
                         std::string writeError;
                         if (!WriteEditorPresentMode({}, mode, &writeError))
                             PE_WARN("[RuntimeUI] Could not persist present mode: %s", writeError.c_str());

@@ -26,7 +26,7 @@ namespace pe
                     }
 
                     const std::string normalizedPath = MakeSceneSkyPathSetting(fullPath);
-                    auto &settings = Settings::Get<GlobalSettings>();
+                    auto &settings = Settings::Get<SceneSettings>();
 
                     if (Scene *scene = GetActiveScene())
                     {

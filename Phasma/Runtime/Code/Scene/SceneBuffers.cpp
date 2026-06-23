@@ -118,7 +118,7 @@ namespace pe
 
     void Scene::CopyVertices(CommandBuffer *cmd)
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = Settings::Get<SceneSettings>();
         auto &progress = gSettings.loading.current;
         auto &total = gSettings.loading.total;
 

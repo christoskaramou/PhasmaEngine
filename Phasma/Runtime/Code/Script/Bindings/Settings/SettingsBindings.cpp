@@ -3,76 +3,76 @@
 
 namespace pe
 {
-    static const std::unordered_map<std::string_view, bool GlobalSettings::*> s_boolSettings = {
-        {"shadows", &GlobalSettings::shadows},
-        {"ssao", &GlobalSettings::ssao},
-        {"forward_plus", &GlobalSettings::forward_plus},
-        {"fxaa", &GlobalSettings::fxaa},
-        {"taa", &GlobalSettings::taa},
-        {"ssr", &GlobalSettings::ssr},
-        {"dof", &GlobalSettings::dof},
-        {"bloom", &GlobalSettings::bloom},
-        {"motion_blur", &GlobalSettings::motion_blur},
-        {"tonemapping", &GlobalSettings::tonemapping},
-        {"color_grading", &GlobalSettings::color_grading},
-        {"IBL", &GlobalSettings::IBL},
-        {"cas_sharpening", &GlobalSettings::cas_sharpening},
-        {"draw_grid", &GlobalSettings::draw_grid},
-        {"draw_aabbs", &GlobalSettings::draw_aabbs},
-        {"frustum_culling", &GlobalSettings::frustum_culling},
-        {"occlusion_culling", &GlobalSettings::occlusion_culling},
-        {"randomize_lights", &GlobalSettings::randomize_lights},
-        {"physical_point_falloff", &GlobalSettings::physical_point_falloff},
-        {"use_Disney_PBR", &GlobalSettings::use_Disney_PBR},
-        {"freeze_frustum_culling", &GlobalSettings::freeze_frustum_culling},
-        {"aabbs_depth_aware", &GlobalSettings::aabbs_depth_aware},
-        {"dynamic_rendering", &GlobalSettings::dynamic_rendering},
+    static const std::unordered_map<std::string_view, bool SceneSettings::*> s_boolSettings = {
+        {"shadows", &SceneSettings::shadows},
+        {"ssao", &SceneSettings::ssao},
+        {"forward_plus", &SceneSettings::forward_plus},
+        {"fxaa", &SceneSettings::fxaa},
+        {"taa", &SceneSettings::taa},
+        {"ssr", &SceneSettings::ssr},
+        {"dof", &SceneSettings::dof},
+        {"bloom", &SceneSettings::bloom},
+        {"motion_blur", &SceneSettings::motion_blur},
+        {"tonemapping", &SceneSettings::tonemapping},
+        {"color_grading", &SceneSettings::color_grading},
+        {"IBL", &SceneSettings::IBL},
+        {"cas_sharpening", &SceneSettings::cas_sharpening},
+        {"draw_grid", &SceneSettings::draw_grid},
+        {"draw_aabbs", &SceneSettings::draw_aabbs},
+        {"frustum_culling", &SceneSettings::frustum_culling},
+        {"occlusion_culling", &SceneSettings::occlusion_culling},
+        {"randomize_lights", &SceneSettings::randomize_lights},
+        {"physical_point_falloff", &SceneSettings::physical_point_falloff},
+        {"use_Disney_PBR", &SceneSettings::use_Disney_PBR},
+        {"freeze_frustum_culling", &SceneSettings::freeze_frustum_culling},
+        {"aabbs_depth_aware", &SceneSettings::aabbs_depth_aware},
+        {"dynamic_rendering", &SceneSettings::dynamic_rendering},
     };
 
-    static const std::unordered_map<std::string_view, float GlobalSettings::*> s_floatSettings = {
-        {"render_scale", &GlobalSettings::render_scale},
-        {"ssao_radius", &GlobalSettings::ssao_radius},
-        {"ssao_bias", &GlobalSettings::ssao_bias},
-        {"ssao_intensity", &GlobalSettings::ssao_intensity},
-        {"ssao_power", &GlobalSettings::ssao_power},
-        {"occlusion_culling_bias", &GlobalSettings::occlusion_culling_bias},
-        {"cas_sharpness", &GlobalSettings::cas_sharpness},
-        {"dof_focus_scale", &GlobalSettings::dof_focus_scale},
-        {"dof_blur_range", &GlobalSettings::dof_blur_range},
-        {"bloom_strength", &GlobalSettings::bloom_strength},
-        {"bloom_range", &GlobalSettings::bloom_range},
-        {"motion_blur_strength", &GlobalSettings::motion_blur_strength},
-        {"color_grading_lift_r", &GlobalSettings::color_grading_lift_r},
-        {"color_grading_lift_g", &GlobalSettings::color_grading_lift_g},
-        {"color_grading_lift_b", &GlobalSettings::color_grading_lift_b},
-        {"color_grading_gamma_r", &GlobalSettings::color_grading_gamma_r},
-        {"color_grading_gamma_g", &GlobalSettings::color_grading_gamma_g},
-        {"color_grading_gamma_b", &GlobalSettings::color_grading_gamma_b},
-        {"color_grading_gain_r", &GlobalSettings::color_grading_gain_r},
-        {"color_grading_gain_g", &GlobalSettings::color_grading_gain_g},
-        {"color_grading_gain_b", &GlobalSettings::color_grading_gain_b},
-        {"color_grading_saturation", &GlobalSettings::color_grading_saturation},
-        {"color_grading_contrast", &GlobalSettings::color_grading_contrast},
-        {"color_grading_intensity", &GlobalSettings::color_grading_intensity},
-        {"IBL_intensity", &GlobalSettings::IBL_intensity},
-        {"lights_intensity", &GlobalSettings::lights_intensity},
-        {"time_scale", &GlobalSettings::time_scale},
-        {"shadow_distance", &GlobalSettings::shadow_distance},
-        {"shadow_cascade_lambda", &GlobalSettings::shadow_cascade_lambda},
-        {"shadow_normal_bias", &GlobalSettings::shadow_normal_bias},
-        {"shadow_fade_fraction", &GlobalSettings::shadow_fade_fraction},
-        {"shadow_filter_radius", &GlobalSettings::shadow_filter_radius},
+    static const std::unordered_map<std::string_view, float SceneSettings::*> s_floatSettings = {
+        {"render_scale", &SceneSettings::render_scale},
+        {"ssao_radius", &SceneSettings::ssao_radius},
+        {"ssao_bias", &SceneSettings::ssao_bias},
+        {"ssao_intensity", &SceneSettings::ssao_intensity},
+        {"ssao_power", &SceneSettings::ssao_power},
+        {"occlusion_culling_bias", &SceneSettings::occlusion_culling_bias},
+        {"cas_sharpness", &SceneSettings::cas_sharpness},
+        {"dof_focus_scale", &SceneSettings::dof_focus_scale},
+        {"dof_blur_range", &SceneSettings::dof_blur_range},
+        {"bloom_strength", &SceneSettings::bloom_strength},
+        {"bloom_range", &SceneSettings::bloom_range},
+        {"motion_blur_strength", &SceneSettings::motion_blur_strength},
+        {"color_grading_lift_r", &SceneSettings::color_grading_lift_r},
+        {"color_grading_lift_g", &SceneSettings::color_grading_lift_g},
+        {"color_grading_lift_b", &SceneSettings::color_grading_lift_b},
+        {"color_grading_gamma_r", &SceneSettings::color_grading_gamma_r},
+        {"color_grading_gamma_g", &SceneSettings::color_grading_gamma_g},
+        {"color_grading_gamma_b", &SceneSettings::color_grading_gamma_b},
+        {"color_grading_gain_r", &SceneSettings::color_grading_gain_r},
+        {"color_grading_gain_g", &SceneSettings::color_grading_gain_g},
+        {"color_grading_gain_b", &SceneSettings::color_grading_gain_b},
+        {"color_grading_saturation", &SceneSettings::color_grading_saturation},
+        {"color_grading_contrast", &SceneSettings::color_grading_contrast},
+        {"color_grading_intensity", &SceneSettings::color_grading_intensity},
+        {"IBL_intensity", &SceneSettings::IBL_intensity},
+        {"lights_intensity", &SceneSettings::lights_intensity},
+        {"time_scale", &SceneSettings::time_scale},
+        {"shadow_distance", &SceneSettings::shadow_distance},
+        {"shadow_cascade_lambda", &SceneSettings::shadow_cascade_lambda},
+        {"shadow_normal_bias", &SceneSettings::shadow_normal_bias},
+        {"shadow_fade_fraction", &SceneSettings::shadow_fade_fraction},
+        {"shadow_filter_radius", &SceneSettings::shadow_filter_radius},
     };
 
-    static const std::unordered_map<std::string_view, int GlobalSettings::*> s_intSettings = {
-        {"motion_blur_samples", &GlobalSettings::motion_blur_samples},
-        {"ssao_samples", &GlobalSettings::ssao_samples},
-        {"shadow_debug_mode", &GlobalSettings::shadow_debug_mode},
+    static const std::unordered_map<std::string_view, int SceneSettings::*> s_intSettings = {
+        {"motion_blur_samples", &SceneSettings::motion_blur_samples},
+        {"ssao_samples", &SceneSettings::ssao_samples},
+        {"shadow_debug_mode", &SceneSettings::shadow_debug_mode},
     };
 
-    static const std::unordered_map<std::string_view, uint32_t GlobalSettings::*> s_uint32Settings = {
-        {"shadow_map_size", &GlobalSettings::shadow_map_size},
-        {"num_cascades", &GlobalSettings::num_cascades},
+    static const std::unordered_map<std::string_view, uint32_t SceneSettings::*> s_uint32Settings = {
+        {"shadow_map_size", &SceneSettings::shadow_map_size},
+        {"num_cascades", &SceneSettings::num_cascades},
     };
 
     static const std::unordered_map<std::string_view, RenderMode> s_renderModeMap = {
@@ -91,7 +91,7 @@ namespace pe
 
                 settings_table.set_function("get", [](const std::string &name, sol::this_state ts) -> sol::object {
                     sol::state_view lua(ts);
-                    auto &gs = Settings::Get<GlobalSettings>();
+                    auto &gs = Settings::Get<SceneSettings>();
                     auto bIt = s_boolSettings.find(std::string_view(name));
                     if (bIt != s_boolSettings.end())
                         return sol::make_object(lua, gs.*(bIt->second));
@@ -109,7 +109,7 @@ namespace pe
                 });
 
                 settings_table.set_function("set", [](const std::string &name, sol::object value) {
-                    auto &gs = Settings::Get<GlobalSettings>();
+                    auto &gs = Settings::Get<SceneSettings>();
                     if (value.is<bool>())
                     {
                         auto it = s_boolSettings.find(std::string_view(name));
@@ -139,7 +139,7 @@ namespace pe
                 });
 
                 settings_table.set_function("get_render_mode", [](void) -> std::string {
-                    auto &gs = Settings::Get<GlobalSettings>();
+                    auto &gs = Settings::Get<SceneSettings>();
                     switch (gs.render_mode)
                     {
                     case RenderMode::Raster: return "raster";
@@ -152,7 +152,7 @@ namespace pe
                 settings_table.set_function("set_render_mode", [](const std::string &mode) {
                     auto it = s_renderModeMap.find(std::string_view(mode));
                     if (it != s_renderModeMap.end())
-                        Settings::Get<GlobalSettings>().render_mode =
+                        Settings::Get<SceneSettings>().render_mode =
                             ClampRenderModeToRayTracingSupport(it->second, RHII.GetCaps().rayTracing);
                 });
 
@@ -162,7 +162,7 @@ namespace pe
 
                 settings_table.set_function("get_depth_bias", [](sol::this_state ts) -> sol::table {
                     sol::state_view lua(ts);
-                    auto &gs = Settings::Get<GlobalSettings>();
+                    auto &gs = Settings::Get<SceneSettings>();
                     sol::table t = lua.create_table();
                     t[1] = gs.depth_bias[0];
                     t[2] = gs.depth_bias[1];
@@ -171,7 +171,7 @@ namespace pe
                 });
 
                 settings_table.set_function("set_depth_bias", [](float a, float b, float c) {
-                    auto &gs = Settings::Get<GlobalSettings>();
+                    auto &gs = Settings::Get<SceneSettings>();
                     gs.depth_bias = {a, b, c};
                 }); });
         }

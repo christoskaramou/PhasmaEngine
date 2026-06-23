@@ -107,7 +107,8 @@ namespace pe
     void RayTracingPass::Update()
     {
         Camera *camera = GetActiveScene()->GetActiveCamera();
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = Settings::Get<SceneSettings>();
+        auto &pp = ActivePostProcessProfile();
 
         RayTracingPassUBO ubo{};
         ubo.invViewProj = camera->GetInvViewProjection();
@@ -117,8 +118,8 @@ namespace pe
         ubo.lights_intensity = gSettings.lights_intensity;
         ubo.shadows = gSettings.shadows ? 1 : 0;
         ubo.use_Disney_PBR = gSettings.use_Disney_PBR ? 1 : 0;
-        ubo.ibl_intensity = gSettings.IBL_intensity;
-        ubo.IBL = gSettings.IBL ? 1 : 0;
+        ubo.ibl_intensity = pp.IBL_intensity;
+        ubo.IBL = pp.IBL ? 1 : 0;
         ubo.renderMode = static_cast<uint32_t>(gSettings.render_mode);
         ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;
 

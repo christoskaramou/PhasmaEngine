@@ -266,7 +266,7 @@ namespace
         if (!rb || !rb->vulkanNativeEligible || rb->nativeOps.empty() ||
             !rb->device || !rb->device->peQueue ||
             pe::GetRHI().GetApi() != PE_GRAPHICS_API_VULKAN ||
-            !pe::Settings::Get<pe::GlobalSettings>().dynamic_rendering ||
+            !pe::Settings::Get<pe::SceneSettings>().dynamic_rendering ||
             renderWidth == 0 || renderHeight == 0)
             return false;
 

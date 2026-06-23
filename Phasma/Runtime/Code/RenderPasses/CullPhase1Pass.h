@@ -11,7 +11,7 @@ namespace pe
     // prepass@200). A frustum cull restricted to objects that were visible last frame (the persistent
     // per-draw visibility flag) — its opaque output is "set A", which the depth prepass draws to seed
     // this frame's depth buffer, and thus the Hi-Z pyramid the phase-2 cull tests against. Always
-    // registered; only enabled when GlobalSettings::occlusion_culling is on (see SceneRenderGraph),
+    // registered; only enabled when SceneSettings::occlusion_culling is on (see SceneRenderGraph),
     // so the shipping path is byte-identical when the feature is off.
     //
     // Compiles CullingCS with PHASE1 (no HIZ_OCCLUSION): no pyramid, no transparents/selected, no

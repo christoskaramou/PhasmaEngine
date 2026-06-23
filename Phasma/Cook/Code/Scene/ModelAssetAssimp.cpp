@@ -40,7 +40,7 @@ namespace pe
         public:
             bool Update(float percentage) override
             {
-                auto &gSettings = Settings::Get<GlobalSettings>();
+                auto &gSettings = Settings::Get<SceneSettings>();
                 gSettings.loading.total = 100;
                 gSettings.loading.current = static_cast<uint32_t>(percentage * 100.f);
                 gSettings.loading.SetName("Reading file");
@@ -223,7 +223,7 @@ namespace pe
         auto labelU8 = file.filename().u8string();
         model.SetLabel(std::string(reinterpret_cast<const char *>(labelU8.c_str())));
 
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = Settings::Get<SceneSettings>();
         gSettings.loading.SetName("Reading from file");
 
         if (!model.LoadFile(file))
@@ -314,7 +314,7 @@ namespace pe
 
     void ModelAssetAssimp::UploadImages(CommandBuffer *cmd)
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = Settings::Get<SceneSettings>();
         auto &progress = gSettings.loading.current;
         auto &total = gSettings.loading.total;
 
@@ -408,7 +408,7 @@ namespace pe
     {
         const auto &defaults = GetDefaultResources();
 
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = Settings::Get<SceneSettings>();
         auto &progress = gSettings.loading.current;
         auto &total = gSettings.loading.total;
 
@@ -702,7 +702,7 @@ namespace pe
 
     void ModelAssetAssimp::SetupNodes()
     {
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = Settings::Get<SceneSettings>();
         auto &progress = gSettings.loading.current;
         auto &total = gSettings.loading.total;
 

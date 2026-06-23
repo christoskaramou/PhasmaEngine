@@ -460,7 +460,7 @@ namespace pe
         inline static vec3 Magenta3{1.0f, 0.0f, 1.0f};
         inline static vec3 Cyan3{0.0f, 1.0f, 1.0f};
 
-        inline static float Depth{Settings::Get<GlobalSettings>().reverse_depth ? 0.0f : 1.0f};
+        inline static float Depth{Settings::Get<SceneSettings>().reverse_depth ? 0.0f : 1.0f};
         inline static uint32_t Stencil{0};
     } // namespace Color
 } // namespace pe

@@ -35,6 +35,8 @@ namespace pe
         Component_Physics2D = 1 << 10,
         Component_Prefab = 1 << 11,
         Component_Sprite = 1 << 12,
+        Component_PostProcessVolume = 1 << 13,
+        Component_SceneSettings = 1 << 14, // Singleton anchor node; its inspector edits SceneSettings
     };
 
     // Lightweight mesh descriptor — references into Scene's data stores

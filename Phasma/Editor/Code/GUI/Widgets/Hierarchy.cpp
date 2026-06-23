@@ -143,6 +143,26 @@ namespace pe
             selection.Select(node, SelectionType::Node);
         };
 
+        auto createPostProcessVolume = [&scene, &selection, &recordSnapshot]()
+        {
+            recordSnapshot("Added Post Process Volume");
+            NodeId *node = scene.CreatePostProcessVolumeNode();
+            selection.Select(node, SelectionType::Node);
+        };
+
+        auto createSceneSettings = [&scene, &selection, &recordSnapshot]()
+        {
+            if (NodeId *existing = scene.GetSceneSettingsNode())
+            {
+                selection.Select(existing, SelectionType::Node);
+                return;
+            }
+            recordSnapshot("Added Scene Settings");
+            scene.EnsureSceneSettingsNodeFromSettings(true);
+            if (NodeId *node = scene.GetSceneSettingsNode())
+                selection.Select(node, SelectionType::Node);
+        };
+
         auto selectedSpriteAsset = []() -> std::filesystem::path
         {
             const AssetPreviewState &preview = GUIState::s_assetPreview;
@@ -377,6 +397,13 @@ namespace pe
                 createSkybox();
             if (!scene.GetSkyboxNode())
                 ui::ItemTooltip("Create the scene skybox node.");
+            if (ImGui::MenuItem("Post Process Volume"))
+                createPostProcessVolume();
+            ui::ItemTooltip("Create a post-process volume node.");
+            if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
+                createSceneSettings();
+            if (!scene.GetSceneSettingsNode())
+                ui::ItemTooltip("Add the scene settings node (global render + default post-process). One per scene.");
 
             const bool meshMenuOpen = ImGui::BeginMenu("Mesh");
             ui::ItemTooltip("Create a built-in primitive mesh.");
@@ -563,6 +590,13 @@ namespace pe
                 createSkybox();
             if (!scene.GetSkyboxNode())
                 ui::ItemTooltip("Create the scene skybox node.");
+            if (ImGui::MenuItem("Post Process Volume"))
+                createPostProcessVolume();
+            ui::ItemTooltip("Create a post-process volume node.");
+            if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
+                createSceneSettings();
+            if (!scene.GetSceneSettingsNode())
+                ui::ItemTooltip("Add the scene settings node (global render + default post-process). One per scene.");
             const bool meshMenuOpen = ImGui::BeginMenu("Mesh");
             ui::ItemTooltip("Create a built-in primitive mesh at the scene root.");
             if (meshMenuOpen)
@@ -796,6 +830,10 @@ namespace pe
                     icon = ICON_FA_LIGHTBULB;
                 else if (nodeCompFlags & Component_Skybox)
                     icon = ICON_FA_SUN;
+                else if (nodeCompFlags & Component_PostProcessVolume)
+                    icon = ICON_FA_PALETTE;
+                else if (nodeCompFlags & Component_SceneSettings)
+                    icon = ICON_FA_GEAR;
                 else if (nodeCompFlags & Component_RuntimeUi)
                     icon = ICON_FA_WINDOW_MAXIMIZE;
                 else if (spriteHierarchyNode)
@@ -1422,6 +1460,13 @@ namespace pe
                     createSkybox();
                 if (!scene.GetSkyboxNode())
                     ui::ItemTooltip("Create the scene skybox node.");
+                if (ImGui::MenuItem("Post Process Volume"))
+                    createPostProcessVolume();
+                ui::ItemTooltip("Create a post-process volume node.");
+                if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
+                    createSceneSettings();
+                if (!scene.GetSceneSettingsNode())
+                    ui::ItemTooltip("Add the scene settings node (global render + default post-process). One per scene.");
 
                 const bool meshMenuOpen = ImGui::BeginMenu("Mesh");
                 ui::ItemTooltip("Create a built-in primitive mesh at the scene root.");

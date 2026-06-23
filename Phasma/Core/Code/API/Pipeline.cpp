@@ -98,7 +98,7 @@ namespace pe
           depthBiasSlopeFactor{0.0f},
           depthWriteEnable{true},
           depthTestEnable{true},
-          depthCompareOp{Settings::Get<GlobalSettings>().reverse_depth ? PE_COMPARE_OP_GREATER_OR_EQUAL : PE_COMPARE_OP_LESS_OR_EQUAL},
+          depthCompareOp{Settings::Get<SceneSettings>().reverse_depth ? PE_COMPARE_OP_GREATER_OR_EQUAL : PE_COMPARE_OP_LESS_OR_EQUAL},
           stencilTestEnable{false},
           stencilFailOp{PE_STENCIL_OP_KEEP},
           stencilPassOp{PE_STENCIL_OP_REPLACE},

@@ -14,7 +14,7 @@ namespace pe
     // "set B" = the newly-disoccluded opaque objects). Draws set B into the depth buffer with LOAD,
     // so the set-A depth written by DepthPass@200 is preserved and the buffer ends up holding the
     // nearest surface of A ∪ B. The G-buffer@300 then reverse-Z EQUAL-tests both sets against this
-    // complete depth. Only enabled when GlobalSettings::occlusion_culling is on; pipelines mirror
+    // complete depth. Only enabled when SceneSettings::occlusion_culling is on; pipelines mirror
     // DepthPass (same DepthVS/DepthPS, depth write on).
     class DepthLatePass : public IRenderPassComponent
     {

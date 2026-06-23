@@ -42,14 +42,14 @@ namespace pe
         m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
         m_passInfo->depthFormat = m_depthRT->GetFormat();
-        m_passInfo->depthTestEnable = Settings::Get<GlobalSettings>().aabbs_depth_aware;
+        m_passInfo->depthTestEnable = Settings::Get<SceneSettings>().aabbs_depth_aware;
         m_passInfo->depthWriteEnable = false;
         m_passInfo->Update();
     }
 
     void AabbsPass::Update()
     {
-        if (Settings::Get<GlobalSettings>().draw_aabbs)
+        if (Settings::Get<SceneSettings>().draw_aabbs)
         {
             Scene &scene = *GetActiveScene();
             if (scene.GetMeshCount() > 0)
@@ -69,7 +69,7 @@ namespace pe
         if (m_scene->GetMeshCount() == 0)
             return;
 
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = Settings::Get<SceneSettings>();
         Camera &camera = *GetActiveScene()->GetActiveCamera();
 
         struct PushConstants_AABB

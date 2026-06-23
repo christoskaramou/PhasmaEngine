@@ -28,6 +28,7 @@
 #include "RenderPasses/TAAPass.h"
 #include "RenderPasses/TonemapPass.h"
 #include "RenderPasses/UpsamplePass.h"
+#include "Scene/Scene.h"
 
 namespace pe
 {
@@ -406,14 +407,24 @@ namespace pe
 
         std::fill(passEnabled.begin(), passEnabled.end(), false);
 
-        const auto &gs = Settings::Get<GlobalSettings>();
+        // The master switch + active post-process profile were resolved at the top of
+        // Scene::UpdateCameras() THIS frame, before cameras computed projection jitter from
+        // ActivePostProcessProfile().taa. Read the already-resolved state here (re-resolving would
+        // let the camera and this gating disagree on the frame a volume is crossed / the node toggled).
+        // Master-switch scope: when inactive (node disabled / deleted / absent) the active profile is
+        // all-off (kills post-process) and shadows are dropped below. Performance/debug toggles
+        // (culling, Forward+, grid, AABBs) are independent of it and keep reading gs.
+        const bool settingsActive = SceneSettingsActive();
+
+        const auto &gs = Settings::Get<SceneSettings>();
+        const auto &pp = ActivePostProcessProfile();
 
         const bool renderRaster = (gs.render_mode != RenderMode::RayTracing) || !hasRayTracingGeometry;
         const bool renderRayTracing = (gs.render_mode != RenderMode::Raster) && hasRayTracingGeometry;
-        const bool needVelocity = gs.taa || gs.motion_blur;
-        const bool renderSSR = gs.ssr && renderRaster;
-        const bool renderSSAO = gs.ssao && renderRaster;
-        const bool needDepth = renderRaster || needVelocity || gs.dof || gs.motion_blur || gs.draw_aabbs || gs.draw_grid;
+        const bool needVelocity = pp.taa || pp.motion_blur;
+        const bool renderSSR = pp.ssr && renderRaster;
+        const bool renderSSAO = pp.ssao && renderRaster;
+        const bool needDepth = renderRaster || needVelocity || pp.dof || pp.motion_blur || gs.draw_aabbs || gs.draw_grid;
         const bool needGBuffer = renderRaster || needVelocity || renderSSR || renderSSAO;
 
         if (UsesDx12RenderOrchestration())
@@ -421,13 +432,13 @@ namespace pe
             const bool dx12RayTracing = renderRayTracing;
             const bool dx12RenderRaster = renderRaster || !dx12RayTracing;
             const bool dx12RtOnly = dx12RayTracing && !dx12RenderRaster;
-            const bool dx12RenderTAA = gs.taa && (dx12RenderRaster || dx12RtOnly);
-            const bool dx12NeedVelocity = dx12RenderTAA || (gs.motion_blur && dx12RenderRaster);
+            const bool dx12RenderTAA = pp.taa && (dx12RenderRaster || dx12RtOnly);
+            const bool dx12NeedVelocity = dx12RenderTAA || (pp.motion_blur && dx12RenderRaster);
             const bool dx12NeedDepth = dx12RenderRaster || dx12NeedVelocity || gs.draw_aabbs || gs.draw_grid;
             const bool dx12NeedGBuffer = dx12RenderRaster || dx12NeedVelocity;
 
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Culling, true);
-            SetPassEnabled(passEnabled, SceneRenderGraphPassId::Shadow, gs.shadows && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::Shadow, settingsActive && gs.shadows && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::CullPhase1, gs.occlusion_culling && dx12NeedDepth);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Depth, dx12NeedDepth);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::DepthPyramid, gs.occlusion_culling && dx12NeedDepth);
@@ -437,7 +448,7 @@ namespace pe
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::OcclusionCulling, gs.occlusion_culling && dx12NeedDepth);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::DepthLate, gs.occlusion_culling && dx12NeedDepth);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferOpaque, dx12NeedGBuffer);
-            SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSAO, gs.ssao && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSAO, pp.ssao && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::ForwardPlusLightCulling,
                            gs.forward_plus && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightOpaque, dx12RenderRaster);
@@ -447,29 +458,29 @@ namespace pe
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::RayTracing, dx12RayTracing);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::ParticleCompute, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Particle, dx12RenderRaster);
-            SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSR, gs.ssr && dx12RenderRaster);
-            SetPassEnabled(passEnabled, SceneRenderGraphPassId::FXAA, gs.fxaa && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSR, pp.ssr && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::FXAA, pp.fxaa && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Aabbs, gs.draw_aabbs);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::TAA, dx12RenderTAA);
-            SetPassEnabled(passEnabled, SceneRenderGraphPassId::Sharpen, dx12RenderTAA && gs.cas_sharpening);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::Sharpen, dx12RenderTAA && pp.cas_sharpening);
             SetPassEnabled(passEnabled,
                            SceneRenderGraphPassId::Upsample,
-                           (!gs.taa && dx12RenderRaster) || (dx12RtOnly && !dx12RenderTAA));
-            SetPassEnabled(passEnabled, SceneRenderGraphPassId::Tonemap, gs.tonemapping && dx12RenderRaster);
+                           (!pp.taa && dx12RenderRaster) || (dx12RtOnly && !dx12RenderTAA));
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::Tonemap, pp.tonemapping && dx12RenderRaster);
             SetPassEnabled(passEnabled,
                            SceneRenderGraphPassId::ColorGrading,
-                           gs.color_grading && dx12RenderRaster);
-            SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomBF, gs.bloom && dx12RenderRaster);
-            SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomH, gs.bloom && dx12RenderRaster);
-            SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomV, gs.bloom && dx12RenderRaster);
-            SetPassEnabled(passEnabled, SceneRenderGraphPassId::DOF, gs.dof && dx12RenderRaster);
-            SetPassEnabled(passEnabled, SceneRenderGraphPassId::MotionBlur, gs.motion_blur && dx12RenderRaster);
+                           pp.color_grading && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomBF, pp.bloom && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomH, pp.bloom && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomV, pp.bloom && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::DOF, pp.dof && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::MotionBlur, pp.motion_blur && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Grid, gs.draw_grid);
             return;
         }
 
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Culling, true);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::Shadow, gs.shadows && renderRaster);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::Shadow, settingsActive && gs.shadows && renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::CullPhase1, gs.occlusion_culling && needDepth);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Depth, needDepth);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::DepthPyramid, gs.occlusion_culling && needDepth);
@@ -488,18 +499,18 @@ namespace pe
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::ParticleCompute, true);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Particle, true);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSR, renderSSR);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::FXAA, gs.fxaa);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::FXAA, pp.fxaa);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Aabbs, gs.draw_aabbs);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::TAA, gs.taa);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::Sharpen, gs.taa && gs.cas_sharpening);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::Upsample, !gs.taa);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::Tonemap, gs.tonemapping);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::ColorGrading, gs.color_grading);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomBF, gs.bloom);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomH, gs.bloom);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomV, gs.bloom);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::DOF, gs.dof);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::MotionBlur, gs.motion_blur);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::TAA, pp.taa);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::Sharpen, pp.taa && pp.cas_sharpening);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::Upsample, !pp.taa);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::Tonemap, pp.tonemapping);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::ColorGrading, pp.color_grading);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomBF, pp.bloom);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomH, pp.bloom);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomV, pp.bloom);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::DOF, pp.dof);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::MotionBlur, pp.motion_blur);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Grid, gs.draw_grid);
     }
 

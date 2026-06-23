@@ -72,7 +72,7 @@ namespace pe
     void Scene::UpdateLights()
     {
         PE_PROFILE_SCOPE("Light Update");
-        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &gSettings = Settings::Get<SceneSettings>();
 
         if (gSettings.randomize_lights)
         {

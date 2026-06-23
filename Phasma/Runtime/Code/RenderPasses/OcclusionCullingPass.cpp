@@ -81,7 +81,7 @@ namespace pe
         ubo.pyrWidth = m_pyramid->GetWidth();
         ubo.pyrHeight = m_pyramid->GetHeight();
         ubo.mipCount = m_pyramid->GetMipLevels();
-        ubo.bias = Settings::Get<GlobalSettings>().occlusion_culling_bias;
+        ubo.bias = Settings::Get<SceneSettings>().occlusion_culling_bias;
 
         const uint32_t frame = RHII.GetFrameIndex();
         BufferRange range{};

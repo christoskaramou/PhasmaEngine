@@ -4241,7 +4241,7 @@ namespace pe
             else
             {
                 Scene &sc = r->GetScene();
-                const auto &settings = Settings::Get<GlobalSettings>();
+                const auto &settings = Settings::Get<SceneSettings>();
                 nlohmann::json result;
                 result["scene_path"] = sc.GetScenePath().empty() ? "" : sc.GetScenePath().string();
                 result["scene_name"] = sc.GetSceneName();
@@ -4477,7 +4477,7 @@ namespace pe
                         shot->orthoSize = cam->GetOrthographicSize();
                         shot->nearP = cam->GetNearPlane();
                         shot->farP = cam->GetFarPlane();
-                        auto &gs = Settings::Get<GlobalSettings>();
+                        auto &gs = Settings::Get<SceneSettings>();
                         shot->drawAabbs = gs.draw_aabbs;
                         shot->aabbsDepthAware = gs.aabbs_depth_aware;
                         shot->digest = d;
@@ -4742,7 +4742,7 @@ namespace pe
                     cam->SetNearPlane(shot->nearP);
                     cam->SetFarPlane(shot->farP);
                     cam->Update();
-                    auto &gs = Settings::Get<GlobalSettings>();
+                    auto &gs = Settings::Get<SceneSettings>();
                     gs.draw_aabbs = shot->drawAabbs;
                     gs.aabbs_depth_aware = shot->aabbsDepthAware;
                     sc.MarkDirty();
@@ -5284,7 +5284,7 @@ namespace pe
         QueueAction([state]()
                     {
             auto *r = GetGlobalSystem<RendererSystem>();
-            const auto &settings = Settings::Get<GlobalSettings>();
+            const auto &settings = Settings::Get<SceneSettings>();
             nlohmann::json result;
             result["api"] = PeGraphicsApiName(RHII.GetApi());
             result["gpu_name"] = RHII.GetGpuName();
