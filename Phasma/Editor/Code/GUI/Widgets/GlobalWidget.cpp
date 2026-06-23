@@ -130,6 +130,22 @@ namespace pe
             }
             TrackChange(ImGui::Checkbox("SSAO", &gSettings.ssao));
             ui::ItemTooltip("Enable screen-space ambient occlusion in raster modes.");
+            if (gSettings.ssao)
+            {
+                ImGui::Indent(16.0f);
+                TrackChange(ImGui::SliderFloat("Radius##SSAO", &gSettings.ssao_radius, 0.05f, 3.0f));
+                ui::ItemTooltip("World-space sampling radius. Larger = wider occlusion reach.");
+                TrackChange(ImGui::SliderFloat("Intensity##SSAO", &gSettings.ssao_intensity, 0.0f, 2.0f));
+                ui::ItemTooltip("Strength of the occlusion darkening.");
+                TrackChange(ImGui::SliderFloat("Bias##SSAO", &gSettings.ssao_bias, 0.0f, 0.2f));
+                ui::ItemTooltip("Depth bias that rejects self-occlusion (raise to remove acne).");
+                TrackChange(ImGui::SliderFloat("Power##SSAO", &gSettings.ssao_power, 0.25f, 4.0f));
+                ui::ItemTooltip("Contrast curve applied to the AO term (>1 deepens contacts).");
+                TrackChange(ImGui::SliderInt("Samples##SSAO", &gSettings.ssao_samples, 4, 64));
+                ui::ItemTooltip("Kernel taps per pixel. Lower = faster, more reliant on the blur.");
+                ImGui::Unindent(16.0f);
+                ImGui::Separator();
+            }
             if (TrackChange(ImGui::Checkbox("Forward+", &gSettings.forward_plus)))
                 UpdateLightingDescriptorSets();
             ui::ItemTooltip("Cull point and spot lights into screen-space tiles before raster lighting.");

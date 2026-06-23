@@ -93,6 +93,11 @@ namespace pe
         int shadow_debug_mode = 0;
         float render_scale = 0.75f;
         bool ssao = true;
+        float ssao_radius = 0.5f;
+        float ssao_bias = 0.025f;
+        float ssao_intensity = 0.5f;
+        float ssao_power = 1.0f;
+        int ssao_samples = 16;
         bool forward_plus = true;
         bool fxaa = false;
         bool taa = true;

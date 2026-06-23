@@ -31,6 +31,10 @@ namespace pe
 
     static const std::unordered_map<std::string_view, float GlobalSettings::*> s_floatSettings = {
         {"render_scale", &GlobalSettings::render_scale},
+        {"ssao_radius", &GlobalSettings::ssao_radius},
+        {"ssao_bias", &GlobalSettings::ssao_bias},
+        {"ssao_intensity", &GlobalSettings::ssao_intensity},
+        {"ssao_power", &GlobalSettings::ssao_power},
         {"occlusion_culling_bias", &GlobalSettings::occlusion_culling_bias},
         {"cas_sharpness", &GlobalSettings::cas_sharpness},
         {"dof_focus_scale", &GlobalSettings::dof_focus_scale},
@@ -62,6 +66,7 @@ namespace pe
 
     static const std::unordered_map<std::string_view, int GlobalSettings::*> s_intSettings = {
         {"motion_blur_samples", &GlobalSettings::motion_blur_samples},
+        {"ssao_samples", &GlobalSettings::ssao_samples},
         {"shadow_debug_mode", &GlobalSettings::shadow_debug_mode},
     };
 

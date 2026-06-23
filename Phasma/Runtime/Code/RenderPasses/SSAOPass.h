@@ -24,6 +24,7 @@ namespace pe
 
     private:
         void AcquireTargets();
+        void CreateRawTarget(); // (re)create the pass-owned half-res ssaoRaw image
 
         Image *m_ssaoRT = nullptr;
         Image *m_ssaoRawRT = nullptr;

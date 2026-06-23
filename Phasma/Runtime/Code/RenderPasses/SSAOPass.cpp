@@ -21,15 +21,13 @@ namespace pe
             mat4 projection;
             mat4 invProjection;
             mat4 normalsToView;
-            vec4 framebuffer;
-            vec4 params;
+            vec4 framebuffer;     // AO working (half) res: xy size, zw 1/size
+            vec4 fullFramebuffer; // full res (depth/normal/output): xy size, zw 1/size
+            vec4 params;          // radius, bias, intensity, power
+            vec4 misc;            // sampleCount, _, _, _
         };
 
         constexpr uint32_t kGroupSize = 8;
-        constexpr float kSsaoRadius = 0.5f;
-        constexpr float kSsaoBias = 0.025f;
-        constexpr float kSsaoIntensity = 0.5f;
-        constexpr float kSsaoPower = 1.0f;
 
         uint32_t DivideRoundUp(uint32_t value, uint32_t divisor)
         {
@@ -53,12 +51,37 @@ namespace pe
         if (!m_ssaoRT)
             m_ssaoRT = rs->CreateRenderTarget("ssao", PE_FORMAT_R8_UNORM);
 
-        m_ssaoRawRT = rs->GetRenderTarget("ssaoRaw");
-        if (!m_ssaoRawRT)
-            m_ssaoRawRT = rs->CreateRenderTarget("ssaoRaw", PE_FORMAT_R16_SFLOAT);
-
         m_normalRT = rs->GetRenderTarget("normal");
         m_depth = rs->GetDepthStencilTarget("depthStencil");
+
+        // ssaoRaw is internal to this pass and lives at HALF the ssao resolution: the heavy
+        // occlusion pass runs there (a quarter of the invocations), then ExecutePass bilaterally
+        // upsamples it into the full-res ssao target. It is owned here (not registered) so it
+        // never shows up as a profiler thumbnail and so we control its size directly.
+        CreateRawTarget();
+    }
+
+    void SSAOPass::CreateRawTarget()
+    {
+        if (!m_ssaoRT)
+            return;
+
+        const uint32_t halfW = std::max(1u, (m_ssaoRT->GetWidth() + 1u) / 2u);
+        const uint32_t halfH = std::max(1u, (m_ssaoRT->GetHeight() + 1u) / 2u);
+        if (m_ssaoRawRT && m_ssaoRawRT->GetWidth() == halfW && m_ssaoRawRT->GetHeight() == halfH)
+            return;
+
+        Image::Destroy(m_ssaoRawRT);
+
+        ImageDesc desc{};
+        desc.format = PE_FORMAT_R16_SFLOAT;
+        desc.width = halfW;
+        desc.height = halfH;
+        desc.usage = PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE | PE_IMAGE_USAGE_TRANSFER_DST;
+        desc.name = "ssaoRaw";
+        m_ssaoRawRT = Image::Create(desc);
+        m_ssaoRawRT->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
+        m_ssaoRawRT->CreateUAV(PE_IMAGE_VIEW_TYPE_2D, 0);
     }
 
     void SSAOPass::UpdatePassInfo()
@@ -143,7 +166,7 @@ namespace pe
     void SSAOPass::Update()
     {
         auto &gSettings = Settings::Get<GlobalSettings>();
-        if (!gSettings.ssao || m_uniforms.empty() || !m_ssaoRT)
+        if (!gSettings.ssao || m_uniforms.empty() || !m_ssaoRT || !m_ssaoRawRT)
             return;
 
         Camera *camera = GetActiveScene()->GetActiveCamera();
@@ -156,15 +179,20 @@ namespace pe
         if (frame >= m_uniforms.size() || !m_uniforms[frame])
             return;
 
-        const float width = std::max(m_ssaoRT->GetWidth_f(), 1.0f);
-        const float height = std::max(m_ssaoRT->GetHeight_f(), 1.0f);
+        const float halfW = std::max(m_ssaoRawRT->GetWidth_f(), 1.0f);
+        const float halfH = std::max(m_ssaoRawRT->GetHeight_f(), 1.0f);
+        const float fullW = std::max(m_ssaoRT->GetWidth_f(), 1.0f);
+        const float fullH = std::max(m_ssaoRT->GetHeight_f(), 1.0f);
 
         SSAOUniformData data{};
         data.projection = m_proj;
         data.invProjection = m_invProj;
         data.normalsToView = m_normalsToView;
-        data.framebuffer = vec4(width, height, 1.0f / width, 1.0f / height);
-        data.params = vec4(kSsaoRadius, kSsaoBias, kSsaoIntensity, kSsaoPower);
+        data.framebuffer = vec4(halfW, halfH, 1.0f / halfW, 1.0f / halfH);
+        data.fullFramebuffer = vec4(fullW, fullH, 1.0f / fullW, 1.0f / fullH);
+        data.params = vec4(gSettings.ssao_radius, gSettings.ssao_bias, gSettings.ssao_intensity, gSettings.ssao_power);
+        const float sampleCount = static_cast<float>(std::clamp(gSettings.ssao_samples, 1, 64));
+        data.misc = vec4(sampleCount, 0.0f, 0.0f, 0.0f);
 
         BufferRange range{};
         range.data = &data;
@@ -194,8 +222,11 @@ namespace pe
         if (!m_ssaoRT || !m_ssaoRawRT || !m_depth || !m_normalRT || !m_blurPassInfo)
             return;
 
-        const uint32_t groupX = DivideRoundUp(m_ssaoRT->GetWidth(), kGroupSize);
-        const uint32_t groupY = DivideRoundUp(m_ssaoRT->GetHeight(), kGroupSize);
+        // AO runs at half resolution (ssaoRaw); the bilateral upsample writes full-res ssao.
+        const uint32_t aoGroupX = DivideRoundUp(m_ssaoRawRT->GetWidth(), kGroupSize);
+        const uint32_t aoGroupY = DivideRoundUp(m_ssaoRawRT->GetHeight(), kGroupSize);
+        const uint32_t fullGroupX = DivideRoundUp(m_ssaoRT->GetWidth(), kGroupSize);
+        const uint32_t fullGroupY = DivideRoundUp(m_ssaoRT->GetHeight(), kGroupSize);
 
         MemoryBarrierInfo uavBarrier{};
         uavBarrier.srcAccessMask = PE_ACCESS_SHADER_WRITE;
@@ -205,12 +236,12 @@ namespace pe
 
         cmd->BeginDebugRegion("SSAOPass");
         cmd->BindPipeline(*m_passInfo);
-        cmd->Dispatch(groupX, groupY, 1);
+        cmd->Dispatch(aoGroupX, aoGroupY, 1);
 
         cmd->MemoryBarrier(uavBarrier);
 
         cmd->BindPipeline(*m_blurPassInfo);
-        cmd->Dispatch(groupX, groupY, 1);
+        cmd->Dispatch(fullGroupX, fullGroupY, 1);
         cmd->EndDebugRegion();
     }
 
@@ -237,11 +268,10 @@ namespace pe
             m_blurPassInfo.reset();
         }
 
+        Image::Destroy(m_ssaoRawRT); // pass-owned half-res target
+
         if (SceneRendererHost *rs = GetActiveSceneRendererHost())
-        {
-            rs->DestroyRenderTarget("ssaoRaw");
             rs->DestroyRenderTarget("ssao");
-        }
 
         m_ssaoRT = nullptr;
         m_ssaoRawRT = nullptr;
