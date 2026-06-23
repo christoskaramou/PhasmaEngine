@@ -5,10 +5,15 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "Base/Settings.h"
 #include "Render/SceneRendererHost.h"
 
 namespace pe
 {
+    struct TonemapBlendPC
+    {
+        float blend;
+    };
     void TonemapPass::Init()
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
@@ -63,10 +68,15 @@ namespace pe
         cmd->CopyImage(m_displayRT, m_frameImage); // Copy RT to image
         cmd->ImageBarrier(barrier);
 
+        TonemapBlendPC pc{};
+        pc.blend = ActivePostProcessBlend().tonemapping;
+
         cmd->BeginPass(1, m_attachments.data(), "Tonemap");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_displayRT->GetWidth_f(), m_displayRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_displayRT->GetWidth(), m_displayRT->GetHeight());
+        cmd->SetConstants(pc);
+        cmd->PushConstants();
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
 

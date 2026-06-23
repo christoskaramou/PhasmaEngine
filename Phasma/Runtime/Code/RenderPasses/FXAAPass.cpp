@@ -5,10 +5,15 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "Base/Settings.h"
 #include "Render/SceneRendererHost.h"
 
 namespace pe
 {
+    struct FXAABlendPC
+    {
+        float blend;
+    };
     void FXAAPass::Init()
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
@@ -63,10 +68,15 @@ namespace pe
         cmd->CopyImage(m_viewportRT, m_frameImage);
         cmd->ImageBarrier(barrier);
 
+        FXAABlendPC pc{};
+        pc.blend = ActivePostProcessBlend().fxaa;
+
         cmd->BeginPass(1, m_attachments.data(), "FXAA");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_viewportRT->GetWidth(), m_viewportRT->GetHeight());
+        cmd->SetConstants(pc);
+        cmd->PushConstants();
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
         cmd->EndDebugRegion();

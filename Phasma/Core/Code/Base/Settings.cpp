@@ -19,7 +19,7 @@ namespace pe
     // The "everything off" profile returned while the Scene Settings node is inactive. Built once
     // with every effect toggle cleared (the SceneSettings values are left untouched so re-enabling
     // restores the previous set).
-    static const PostProcessProfile &DisabledPostProcessProfile()
+    const PostProcessProfile &DisabledPostProcessProfile()
     {
         static const PostProcessProfile disabled = []
         {
@@ -33,16 +33,33 @@ namespace pe
 
     PostProcessProfile &ActivePostProcessProfile()
     {
-        if (!s_sceneSettingsActive)
-            return const_cast<PostProcessProfile &>(DisabledPostProcessProfile());
+        // An active PostProcessVolume wins over the master switch: the resolver already blended it over
+        // the correct base (scene default when the Scene Settings node is active, else all-off), so a
+        // volume turns its own effects on when entered even with no / disabled Scene Settings node.
         if (s_activePostProcessProfile)
             return *s_activePostProcessProfile;
+        if (!s_sceneSettingsActive)
+            return const_cast<PostProcessProfile &>(DisabledPostProcessProfile());
         return static_cast<PostProcessProfile &>(Settings::Get<SceneSettings>());
     }
 
     void SetActivePostProcessProfile(PostProcessProfile *profile)
     {
         s_activePostProcessProfile = profile;
+    }
+
+    // Per-effect blend factors for the current frame (pinned here like the profile so every module
+    // agrees). Defaults to all-1 = running passes show full effect; the volume resolver overwrites it.
+    static PostProcessBlend s_activePostProcessBlend{};
+
+    PostProcessBlend &ActivePostProcessBlend()
+    {
+        return s_activePostProcessBlend;
+    }
+
+    void SetActivePostProcessBlend(const PostProcessBlend &blend)
+    {
+        s_activePostProcessBlend = blend;
     }
 
     bool SceneSettingsActive()

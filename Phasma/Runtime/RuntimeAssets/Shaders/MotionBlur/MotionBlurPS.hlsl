@@ -61,7 +61,8 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
 
     if (totalWeight > 0.0f)
     {
-        output.color.rgb = accumColor / totalWeight;
+        float3 sharp     = frameTex.Sample(sampler_frameTex, input.uv).rgb;
+        output.color.rgb = lerp(sharp, accumColor / totalWeight, saturate(pc.blend));
         output.color.a   = frameTex.Sample(sampler_frameTex, input.uv).a; // Maintain original alpha
     }
     else

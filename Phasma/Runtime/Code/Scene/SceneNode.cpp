@@ -571,10 +571,96 @@ namespace pe
         return m_nodeComponentCache[node->index].postProcessVolume;
     }
 
+    // Blend src into dst by weight t (0..1): floats lerp, ints round, bools snap at t>=0.5. Field
+    // lists mirror PostProcessProfile (keep in sync with the struct / serializer / set_pp binding).
+    static void BlendPostProcessInto(PostProcessProfile &dst, const PostProcessProfile &src, float t)
+    {
+        if (t <= 0.0f)
+            return;
+        if (t >= 1.0f)
+        {
+            dst = src;
+            return;
+        }
+        static constexpr float PostProcessProfile::*kF[] = {
+            &PostProcessProfile::ssao_radius, &PostProcessProfile::ssao_bias,
+            &PostProcessProfile::ssao_intensity, &PostProcessProfile::ssao_power,
+            &PostProcessProfile::cas_sharpness, &PostProcessProfile::color_grading_lift_r,
+            &PostProcessProfile::color_grading_lift_g, &PostProcessProfile::color_grading_lift_b,
+            &PostProcessProfile::color_grading_gamma_r, &PostProcessProfile::color_grading_gamma_g,
+            &PostProcessProfile::color_grading_gamma_b, &PostProcessProfile::color_grading_gain_r,
+            &PostProcessProfile::color_grading_gain_g, &PostProcessProfile::color_grading_gain_b,
+            &PostProcessProfile::color_grading_saturation, &PostProcessProfile::color_grading_contrast,
+            &PostProcessProfile::color_grading_intensity, &PostProcessProfile::dof_focus_scale,
+            &PostProcessProfile::dof_blur_range, &PostProcessProfile::bloom_strength,
+            &PostProcessProfile::bloom_range, &PostProcessProfile::motion_blur_strength,
+            &PostProcessProfile::IBL_intensity};
+        for (auto m : kF)
+            dst.*m = dst.*m + (src.*m - dst.*m) * t;
+        static constexpr int PostProcessProfile::*kI[] = {&PostProcessProfile::ssao_samples,
+                                                          &PostProcessProfile::motion_blur_samples};
+        for (auto m : kI)
+            dst.*m = static_cast<int>(std::lround(dst.*m + (src.*m - dst.*m) * t));
+        // Bools mid-blend: ON if EITHER side wants it (the t>=1 early-return already snapped to the
+        // target). So an effect off->on turns on at the START of the blend (and its params ramp in),
+        // while on->off stays on through the blend and only cuts off once fully blended (at the end).
+        static constexpr bool PostProcessProfile::*kB[] = {
+            &PostProcessProfile::ssao, &PostProcessProfile::fxaa,
+            &PostProcessProfile::taa, &PostProcessProfile::cas_sharpening,
+            &PostProcessProfile::ssr, &PostProcessProfile::tonemapping,
+            &PostProcessProfile::color_grading, &PostProcessProfile::dof,
+            &PostProcessProfile::bloom, &PostProcessProfile::motion_blur,
+            &PostProcessProfile::IBL};
+        for (auto m : kB)
+            dst.*m = dst.*m || src.*m;
+    }
+
+    // Per-effect blend factor (0..1): how visible each effect is this frame. Seeded from the base
+    // profile's on/off, then lerped toward each volume's on/off by its weight — so off->on fades in
+    // from 0 and on->off fades out to 0 (passes pass this to their shaders to avoid the on/off snap).
+    static void SeedBlendFactors(PostProcessBlend &b, const PostProcessProfile &p)
+    {
+        b.ssao = p.ssao ? 1.0f : 0.0f;
+        b.fxaa = p.fxaa ? 1.0f : 0.0f;
+        b.taa = p.taa ? 1.0f : 0.0f;
+        b.cas_sharpening = p.cas_sharpening ? 1.0f : 0.0f;
+        b.ssr = p.ssr ? 1.0f : 0.0f;
+        b.tonemapping = p.tonemapping ? 1.0f : 0.0f;
+        b.color_grading = p.color_grading ? 1.0f : 0.0f;
+        b.dof = p.dof ? 1.0f : 0.0f;
+        b.bloom = p.bloom ? 1.0f : 0.0f;
+        b.motion_blur = p.motion_blur ? 1.0f : 0.0f;
+        b.IBL = p.IBL ? 1.0f : 0.0f;
+    }
+
+    static void BlendFactorsToward(PostProcessBlend &b, const PostProcessProfile &target, float t)
+    {
+        auto L = [t](float &f, bool on)
+        { f += ((on ? 1.0f : 0.0f) - f) * t; };
+        L(b.ssao, target.ssao);
+        L(b.fxaa, target.fxaa);
+        L(b.taa, target.taa);
+        L(b.cas_sharpening, target.cas_sharpening);
+        L(b.ssr, target.ssr);
+        L(b.tonemapping, target.tonemapping);
+        L(b.color_grading, target.color_grading);
+        L(b.dof, target.dof);
+        L(b.bloom, target.bloom);
+        L(b.motion_blur, target.motion_blur);
+        L(b.IBL, target.IBL);
+    }
+
     PostProcessProfile *Scene::ResolvePostProcessProfile(const vec3 &cameraPos)
     {
-        PostProcessProfile *best = nullptr;
-        float bestPriority = -std::numeric_limits<float>::max();
+        // Gather applicable volumes with a blend weight, then composite low->high priority over the
+        // scene default. Returns null when nothing applies (caller falls back to the scene default).
+        struct Layer
+        {
+            float priority;
+            float weight;
+            const PostProcessProfile *profile;
+        };
+        std::vector<Layer> layers; // ponytail: a handful of volumes per scene; plain vector is fine
         for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
         {
             NodePostProcessVolumeTag *v = m_nodeComponentCache[i].postProcessVolume;
@@ -583,6 +669,7 @@ namespace pe
             NodeId *node = m_nodeIds[i];
             if (!IsNodeAlive(node) || !IsNodeHierarchyEnabled(node))
                 continue;
+            float weight = std::clamp(v->blend, 0.0f, 1.0f);
             if (!v->global)
             {
                 // AABB from world translation +/- (world basis length * 0.5).
@@ -590,20 +677,54 @@ namespace pe
                 // volumes are needed.
                 const mat4 &w = GetWorldMatrix(node);
                 const vec3 center(w[3].x, w[3].y, w[3].z);
-                const vec3 d = abs(cameraPos - center);
                 const vec3 he(length(vec3(w[0].x, w[0].y, w[0].z)) * 0.5f,
                               length(vec3(w[1].x, w[1].y, w[1].z)) * 0.5f,
                               length(vec3(w[2].x, w[2].y, w[2].z)) * 0.5f);
-                if (d.x > he.x || d.y > he.y || d.z > he.z)
-                    continue;
+                // Real world-unit distance from the camera to the box surface: 0 inside, >0 outside.
+                const vec3 q = abs(cameraPos - center) - he;
+                const float distOutside = length(glm::max(q, vec3(0.0f)));
+                if (v->blend_distance > 0.0f)
+                {
+                    // Full effect everywhere inside the box; fade to 0 over blend_distance WORLD UNITS
+                    // outside the surface — so blend_distance is a real metres-from-the-volume distance
+                    // and the effect reaches full exactly at the box wall.
+                    if (distOutside >= v->blend_distance)
+                        continue; // beyond the fade band
+                    weight *= 1.0f - distOutside / v->blend_distance;
+                }
+                else if (distOutside > 0.0f)
+                {
+                    continue; // hard edge: only inside the box
+                }
             }
-            if (v->priority >= bestPriority)
-            {
-                bestPriority = v->priority;
-                best = &v->profile;
-            }
+            if (weight <= 0.0f)
+                continue;
+            layers.push_back({v->priority, weight, &v->profile});
         }
-        return best;
+        if (layers.empty())
+        {
+            // No volume in effect: passes run per their own bools and show full strength.
+            SetActivePostProcessBlend(PostProcessBlend{});
+            return nullptr;
+        }
+
+        std::stable_sort(layers.begin(), layers.end(),
+                         [](const Layer &a, const Layer &b)
+                         { return a.priority < b.priority; });
+        // Base to blend over: the scene default when the Scene Settings node is active, otherwise the
+        // all-off profile — so a volume turns its own effects ON even with no/disabled Scene Settings.
+        m_resolvedPostProcessProfile = SceneSettingsActive()
+                                           ? static_cast<const PostProcessProfile &>(Settings::Get<SceneSettings>())
+                                           : DisabledPostProcessProfile();
+        PostProcessBlend blend;
+        SeedBlendFactors(blend, m_resolvedPostProcessProfile);
+        for (const Layer &l : layers)
+        {
+            BlendFactorsToward(blend, *l.profile, l.weight);
+            BlendPostProcessInto(m_resolvedPostProcessProfile, *l.profile, l.weight);
+        }
+        SetActivePostProcessBlend(blend);
+        return &m_resolvedPostProcessProfile;
     }
 
     NodeId *Scene::GetSceneSettingsNode() const

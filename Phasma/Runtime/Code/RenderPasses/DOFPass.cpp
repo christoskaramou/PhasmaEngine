@@ -7,6 +7,7 @@
 #include "API/RHI.h"
 #include "API/RenderGraph.h"
 #include "API/Shader.h"
+#include "Base/Settings.h"
 #include "Render/SceneRendererHost.h"
 
 namespace pe
@@ -74,12 +75,22 @@ namespace pe
         cmd->CopyImage(m_displayRT, m_frameImage); // Copy RT to image
         cmd->ImageBarrier(frameBarrier);
 
+        struct DOFPushConstants
+        {
+            float focusScale;
+            float blurRange;
+            float blend;
+        };
+        DOFPushConstants pc{};
+        pc.focusScale = gSettings.dof_focus_scale;
+        pc.blurRange = gSettings.dof_blur_range;
+        pc.blend = ActivePostProcessBlend().dof;
+
         cmd->BeginPass(1, m_attachments.data(), "DOF");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_displayRT->GetWidth_f(), m_displayRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_displayRT->GetWidth(), m_displayRT->GetHeight());
-        cmd->SetConstantAt(0, gSettings.dof_focus_scale);
-        cmd->SetConstantAt(1, gSettings.dof_blur_range);
+        cmd->SetConstants(pc);
         cmd->PushConstants();
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();

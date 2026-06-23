@@ -6,6 +6,7 @@
 #include "API/RHI.h"
 #include "API/RenderGraph.h"
 #include "API/Shader.h"
+#include "Base/Settings.h"
 #include "Render/SceneRendererHost.h"
 
 namespace pe
@@ -212,13 +213,14 @@ namespace pe
     void BloomGaussianBlurVerticalPass::ExecutePass(CommandBuffer *cmd)
     {
         auto &gSettings = ActivePostProcessProfile();
+        const float blendedStrength = gSettings.bloom_strength * std::clamp(ActivePostProcessBlend().bloom, 0.0f, 1.0f);
 
         cmd->BeginPass(1, m_attachments.data(), "Bloom_GaussianBlurVertical");
         cmd->BindPipeline(*m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_displayRT->GetWidth_f(), m_displayRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_displayRT->GetWidth(), m_displayRT->GetHeight());
         cmd->SetConstantAt(0, gSettings.bloom_range);
-        cmd->SetConstantAt(1, gSettings.bloom_strength);
+        cmd->SetConstantAt(1, blendedStrength);
         cmd->PushConstants();
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();

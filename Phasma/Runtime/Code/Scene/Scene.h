@@ -766,6 +766,10 @@ namespace pe
         bool m_nodesDirty = false;
         std::vector<NodeId *> m_nodesMoved;
 
+        // Scratch for ResolvePostProcessProfile() when volumes are blended: holds the composited
+        // profile so the renderer's active-profile pointer can target it for the frame.
+        PostProcessProfile m_resolvedPostProcessProfile{};
+
         uint32_t m_generation = 0;     // Incremented on full scene identity changes
         bool m_geometryDirty = false;  // Pending full geometry GPU upload (new mesh data)
         bool m_instancesDirty = false; // Pending raster instance data rebuild (mesh refs changed, no new geometry)

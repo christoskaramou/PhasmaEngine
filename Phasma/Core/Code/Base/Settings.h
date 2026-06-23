@@ -178,6 +178,31 @@ namespace pe
     // pinned in PhasmaCore.dll alongside the Settings singleton so all modules agree.
     PostProcessProfile &ActivePostProcessProfile();
     void SetActivePostProcessProfile(PostProcessProfile *profile); // nullptr -> scene default
+    // The "everything off" profile. Exposed so the volume resolver can blend over it as the base
+    // when the Scene Settings node is inactive (a volume still enables its own effects on entry).
+    const PostProcessProfile &DisabledPostProcessProfile();
+
+    // Per-effect blend factor (0..1) for the current frame: how much of each post-process effect to
+    // show. The render passes pass this into their shaders so an effect fades in/out smoothly across a
+    // volume boundary instead of snapping when its on/off bool flips. 1 = full effect, 0 = none.
+    // Computed by the volume resolver as lerp(baseEnabled, volumeEnabled, volumeWeight); defaults to 1
+    // (no volume blend in progress -> running passes show their effect at full strength).
+    struct PostProcessBlend
+    {
+        float ssao = 1.0f;
+        float fxaa = 1.0f;
+        float taa = 1.0f;
+        float cas_sharpening = 1.0f;
+        float ssr = 1.0f;
+        float tonemapping = 1.0f;
+        float color_grading = 1.0f;
+        float dof = 1.0f;
+        float bloom = 1.0f;
+        float motion_blur = 1.0f;
+        float IBL = 1.0f;
+    };
+    PostProcessBlend &ActivePostProcessBlend();
+    void SetActivePostProcessBlend(const PostProcessBlend &blend);
 
     // Master switch driven by the Scene Settings node. When inactive (node disabled / deleted /
     // absent) ActivePostProcessProfile() returns an all-off profile and the renderer also drops

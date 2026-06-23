@@ -389,7 +389,8 @@ namespace pe
 #endif
         m_ubo.ssr = pp.ssr;
         m_ubo.IBL = pp.IBL;
-        m_ubo.IBL_intensity = pp.IBL_intensity;
+        // Volume blend: scale IBL by the per-effect factor (0 -> no IBL contribution) so it fades.
+        m_ubo.IBL_intensity = pp.IBL_intensity * std::clamp(ActivePostProcessBlend().IBL, 0.0f, 1.0f);
         m_ubo.lights_intensity = gSettings.lights_intensity;
         m_ubo.shadows = shadowsAvailable ? 1u : 0u;
         m_ubo.use_Disney_PBR = gSettings.use_Disney_PBR;
@@ -643,7 +644,8 @@ namespace pe
 #endif
         m_ubo.ssr = pp.ssr;
         m_ubo.IBL = pp.IBL;
-        m_ubo.IBL_intensity = pp.IBL_intensity;
+        // Volume blend: scale IBL by the per-effect factor (0 -> no IBL contribution) so it fades.
+        m_ubo.IBL_intensity = pp.IBL_intensity * std::clamp(ActivePostProcessBlend().IBL, 0.0f, 1.0f);
         m_ubo.lights_intensity = gSettings.lights_intensity;
         m_ubo.shadows = shadowsAvailable ? 1u : 0u;
         m_ubo.use_Disney_PBR = gSettings.use_Disney_PBR;

@@ -28,6 +28,9 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
 
     float3 finalColor = lerp(color, graded, saturate(pc.intensity));
 
+    // Volume blend: fade the whole effect back toward the unprocessed input.
+    finalColor = lerp(color, finalColor, saturate(pc.blend));
+
     output.color = float4(finalColor, 1.0);
     return output;
 }

@@ -19,7 +19,7 @@ namespace pe
         float saturation;
         float contrast;
         float intensity;
-        float pad0;
+        float blend;
     };
     static_assert(sizeof(ColorGradingPushConstants) == 64, "ColorGradingPushConstants must match HLSL PushConstants_ColorGrading");
 
@@ -101,7 +101,7 @@ namespace pe
         pc.saturation = gSettings.color_grading_saturation;
         pc.contrast = gSettings.color_grading_contrast;
         pc.intensity = gSettings.color_grading_intensity;
-        pc.pad0 = 0.0f;
+        pc.blend = ActivePostProcessBlend().color_grading;
 
         cmd->BeginPass(1, m_attachments.data(), "ColorGrading");
         cmd->BindPipeline(*m_passInfo);

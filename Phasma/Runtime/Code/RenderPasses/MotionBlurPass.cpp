@@ -6,6 +6,7 @@
 #include "API/RHI.h"
 #include "API/RenderGraph.h"
 #include "API/Shader.h"
+#include "Base/Settings.h"
 #include "Camera/Camera.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
@@ -89,6 +90,7 @@ namespace pe
         cmd->SetConstantAt(1, gSettings.motion_blur_strength);
         cmd->SetConstantAt(2, camera->GetProjJitter());
         cmd->SetConstantAt(4, gSettings.motion_blur_samples);
+        cmd->SetConstantAt(5, ActivePostProcessBlend().motion_blur);
         cmd->PushConstants();
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();

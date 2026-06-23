@@ -13,7 +13,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     float4 sceneColor = Frame.Sample(sampler_Frame, input.uv);
     float4 bloom = float4(GaussianVertical.Sample(sampler_GaussianVertical, input.uv).xyz, 0.0);
 
-    output.color = sceneColor + bloom * pc.strength;
+    output.color = sceneColor + bloom * pc.strength * saturate(pc.blend);
 
     return output;
 }

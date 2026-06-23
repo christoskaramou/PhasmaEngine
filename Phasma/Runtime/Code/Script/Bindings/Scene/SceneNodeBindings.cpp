@@ -152,6 +152,8 @@ namespace pe
                     PostProcessProfile &p = v->profile;
                     if (key == "global") { v->global = value.as<bool>(); s->MarkDirty(); return; }
                     if (key == "priority") { v->priority = static_cast<float>(value.as<double>()); s->MarkDirty(); return; }
+                    if (key == "blend") { v->blend = static_cast<float>(value.as<double>()); s->MarkDirty(); return; }
+                    if (key == "blend_distance") { v->blend_distance = static_cast<float>(value.as<double>()); s->MarkDirty(); return; }
                     static const std::unordered_map<std::string_view, bool PostProcessProfile::*> B = {
                         {"ssao", &PostProcessProfile::ssao}, {"fxaa", &PostProcessProfile::fxaa},
                         {"taa", &PostProcessProfile::taa}, {"cas_sharpening", &PostProcessProfile::cas_sharpening},

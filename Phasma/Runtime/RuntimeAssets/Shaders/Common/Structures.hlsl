@@ -18,6 +18,7 @@ struct PushConstants_MotionBlur
     float strength;
     float2 projJitter;
     int samples;
+    float blend; // volume blend factor (0..1): lerp the blurred result back toward the sharp input
 };
 
 struct PushConstants_Shadows
@@ -48,6 +49,7 @@ struct PushConstants_Bloom
 struct PushConstants_Bloom_Combine
 {
     float strength;
+    float blend; // volume blend factor (0..1): scales the bloom contribution added to the scene
 };
 
 struct PushConstants_ColorGrading
@@ -58,7 +60,7 @@ struct PushConstants_ColorGrading
     float saturation;
     float contrast;
     float intensity;
-    float pad0;
+    float blend; // volume blend factor (0..1): lerp the graded result back toward the input
 };
 
 #ifdef SHADOWMAP_CASCADES

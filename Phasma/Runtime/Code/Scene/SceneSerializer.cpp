@@ -604,6 +604,10 @@ namespace pe
                 vol->global = vv["global"].GetBool();
             if (vv.HasMember("priority"))
                 vol->priority = vv["priority"].GetFloat();
+            if (vv.HasMember("blend"))
+                vol->blend = vv["blend"].GetFloat();
+            if (vv.HasMember("blend_distance"))
+                vol->blend_distance = vv["blend_distance"].GetFloat();
             if (vv.HasMember("profile") && vv["profile"].IsObject())
                 ApplyPostProcessProfileMembers(vv["profile"], vol->profile);
         }
@@ -1627,6 +1631,8 @@ namespace pe
                     rapidjson::Value volObj(rapidjson::kObjectType);
                     volObj.AddMember("global", vol.global, allocator);
                     volObj.AddMember("priority", vol.priority, allocator);
+                    volObj.AddMember("blend", vol.blend, allocator);
+                    volObj.AddMember("blend_distance", vol.blend_distance, allocator);
                     rapidjson::Value profileObj(rapidjson::kObjectType);
                     AddPostProcessProfileMembers(profileObj, allocator, vol.profile);
                     volObj.AddMember("profile", profileObj.Move(), allocator);

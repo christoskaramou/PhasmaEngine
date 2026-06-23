@@ -8,6 +8,12 @@ TexSamplerDecl(2, 0, Normal)
 TexSamplerDecl(3, 0, MetallicRoughness)
 TexSamplerDecl(4, 0, Albedo)
 
+struct PushConstants_SSRBlend
+{
+    float blend;
+};
+[[vk::push_constant]] ConstantBuffer<PushConstants_SSRBlend> pc;
+
 // Camera Buffer
 [[vk::binding(5, 0)]] cbuffer Camera : register(b5, space0)
 {
@@ -120,7 +126,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     float roughness          = metallicRoughness.b;
 
     float3 ssr = ScreenSpaceReflections(position, normal, metallic, roughness, albedo);
-    output.color = float4(color.rgb + ssr, color.a);
+    output.color = float4(color.rgb + ssr * saturate(pc.blend), color.a);
 
     return output;
 }

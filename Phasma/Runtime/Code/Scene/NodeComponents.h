@@ -90,6 +90,8 @@ namespace pe
         PostProcessProfile profile;
         bool global = true;
         float priority = 0.0f;
+        float blend = 1.0f;          // 0..1 blend factor for ALL post-process effects; 1 = full, 0 = none
+        float blend_distance = 0.0f; // bounded only: real world-unit fade OUTSIDE the box (full at the wall, 0 this far away); 0 = hard edge
     };
 
     // Marker for the singleton "Scene Settings" anchor node. Carries no data — its inspector edits

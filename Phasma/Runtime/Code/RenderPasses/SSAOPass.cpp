@@ -228,7 +228,11 @@ namespace pe
         data.normalsToView = m_normalsToView;
         data.framebuffer = vec4(halfW, halfH, 1.0f / halfW, 1.0f / halfH);
         data.fullFramebuffer = vec4(fullW, fullH, 1.0f / fullW, 1.0f / fullH);
-        data.params = vec4(gSettings.ssao_radius, gSettings.ssao_bias, gSettings.ssao_intensity, gSettings.ssao_power);
+        // Volume blend: scale AO intensity by the per-effect factor. At factor 0 the intensity is 0,
+        // so ao -> 1 everywhere (no occlusion) — SSAO fades out smoothly instead of snapping off.
+        const float ssaoBlend = std::clamp(ActivePostProcessBlend().ssao, 0.0f, 1.0f);
+        data.params =
+            vec4(gSettings.ssao_radius, gSettings.ssao_bias, gSettings.ssao_intensity * ssaoBlend, gSettings.ssao_power);
         const float sampleCount = static_cast<float>(std::clamp(gSettings.ssao_samples, 1, 64));
         data.misc = vec4(sampleCount, 0.0f, 0.0f, 0.0f);
 

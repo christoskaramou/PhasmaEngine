@@ -7,6 +7,7 @@
 #include "API/RHI.h"
 #include "API/RenderGraph.h"
 #include "API/Shader.h"
+#include "Base/Settings.h"
 #include "Camera/Camera.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
@@ -122,8 +123,17 @@ namespace pe
         cmd->CopyImage(m_viewportRT, m_frameImage);
         cmd->ImageBarrier(frameBarrier);
 
+        struct SSRBlendPC
+        {
+            float blend;
+        };
+        SSRBlendPC pc{};
+        pc.blend = ActivePostProcessBlend().ssr;
+
         cmd->BeginPass(1, m_attachments.data(), "SSR");
         cmd->BindPipeline(*m_passInfo);
+        cmd->SetConstants(pc);
+        cmd->PushConstants();
         cmd->SetViewport(0.f, 0.f, m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_viewportRT->GetWidth(), m_viewportRT->GetHeight());
         cmd->Draw(3, 1, 0, 0);

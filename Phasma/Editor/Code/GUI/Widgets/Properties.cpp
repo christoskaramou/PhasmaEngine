@@ -1382,9 +1382,15 @@ namespace pe
                         changed |= ImGui::Checkbox("Global (whole scene)", &vol->global);
                         ui::ItemTooltip("On: applies everywhere. Off: only inside the node's box bounds (from its transform scale).");
                         changed |= ImGui::DragFloat("Priority", &vol->priority, 0.1f);
-                        ui::ItemTooltip("Highest priority among volumes containing the camera wins.");
+                        ui::ItemTooltip("Volumes composite low to high priority; higher is applied on top.");
+                        changed |= ImGui::SliderFloat("Blend", &vol->blend, 0.0f, 1.0f);
+                        ui::ItemTooltip("Single blend factor for ALL post-process effects: lerps this volume's values "
+                                        "over the underlying profile. 1 = full, 0 = none.");
                         if (!vol->global)
                         {
+                            changed |= ImGui::DragFloat("Blend Distance", &vol->blend_distance, 0.05f, 0.0f, 1e6f);
+                            ui::ItemTooltip("Real world-unit fade OUTSIDE the box: full effect at the wall, fading to "
+                                            "none this many metres away. 0 = hard edge.");
                             const mat4 &w = scene.GetWorldMatrix(node);
                             const vec3 size(glm::length(vec3(w[0])), glm::length(vec3(w[1])), glm::length(vec3(w[2])));
                             ImGui::TextDisabled("Bounds: %.2f x %.2f x %.2f", size.x, size.y, size.z);
