@@ -39,6 +39,8 @@ namespace pe
     {
         if (!m_blurPassInfo)
             m_blurPassInfo = std::make_shared<PassInfo>();
+        if (!m_upsamplePassInfo)
+            m_upsamplePassInfo = std::make_shared<PassInfo>();
 
         AcquireTargets();
         m_uniforms.resize(RHII.GetSwapchainImageCount(), nullptr);
@@ -54,34 +56,45 @@ namespace pe
         m_normalRT = rs->GetRenderTarget("normal");
         m_depth = rs->GetDepthStencilTarget("depthStencil");
 
-        // ssaoRaw is internal to this pass and lives at HALF the ssao resolution: the heavy
-        // occlusion pass runs there (a quarter of the invocations), then ExecutePass bilaterally
-        // upsamples it into the full-res ssao target. It is owned here (not registered) so it
-        // never shows up as a profiler thumbnail and so we control its size directly.
-        CreateRawTarget();
+        // ssaoRaw/ssaoBlur are internal to this pass and live at HALF the ssao resolution: the
+        // heavy occlusion pass and the bilateral denoise both run there (a quarter of the
+        // invocations), then a cheap full-res apply writes the registered ssao target. They are
+        // owned here (not registered) so they never show as profiler thumbnails and so we control
+        // their size directly.
+        CreateInternalTargets();
     }
 
-    void SSAOPass::CreateRawTarget()
+    void SSAOPass::CreateInternalTargets()
     {
         if (!m_ssaoRT)
             return;
 
         const uint32_t halfW = std::max(1u, (m_ssaoRT->GetWidth() + 1u) / 2u);
         const uint32_t halfH = std::max(1u, (m_ssaoRT->GetHeight() + 1u) / 2u);
-        if (m_ssaoRawRT && m_ssaoRawRT->GetWidth() == halfW && m_ssaoRawRT->GetHeight() == halfH)
+        const bool rawOk = m_ssaoRawRT && m_ssaoRawRT->GetWidth() == halfW && m_ssaoRawRT->GetHeight() == halfH;
+        const bool blurOk = m_ssaoBlurRT && m_ssaoBlurRT->GetWidth() == halfW && m_ssaoBlurRT->GetHeight() == halfH;
+        if (rawOk && blurOk)
             return;
 
         Image::Destroy(m_ssaoRawRT);
+        Image::Destroy(m_ssaoBlurRT);
 
-        ImageDesc desc{};
-        desc.format = PE_FORMAT_R16_SFLOAT;
-        desc.width = halfW;
-        desc.height = halfH;
-        desc.usage = PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE | PE_IMAGE_USAGE_TRANSFER_DST;
-        desc.name = "ssaoRaw";
-        m_ssaoRawRT = Image::Create(desc);
-        m_ssaoRawRT->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
-        m_ssaoRawRT->CreateUAV(PE_IMAGE_VIEW_TYPE_2D, 0);
+        auto createHalf = [&](const char *name) -> Image *
+        {
+            ImageDesc desc{};
+            desc.format = PE_FORMAT_R16_SFLOAT;
+            desc.width = halfW;
+            desc.height = halfH;
+            desc.usage = PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE | PE_IMAGE_USAGE_TRANSFER_DST;
+            desc.name = name;
+            Image *img = Image::Create(desc);
+            img->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
+            img->CreateUAV(PE_IMAGE_VIEW_TYPE_2D, 0);
+            return img;
+        };
+
+        m_ssaoRawRT = createHalf("ssaoRaw");
+        m_ssaoBlurRT = createHalf("ssaoBlur");
     }
 
     void SSAOPass::UpdatePassInfo()
@@ -99,6 +112,14 @@ namespace pe
                                                       .stage = PE_SHADER_STAGE_COMPUTE,
                                                       .defines = std::vector<Define>{Define{"SSAO_BLUR_PASS", "1"}}});
         m_blurPassInfo->Update();
+
+        m_upsamplePassInfo->name = "SSAOUpsample_pipeline";
+        m_upsamplePassInfo->pCompShader =
+            Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Compute/SSAOCS.hlsl",
+                            .entryPoint = "mainCS",
+                            .stage = PE_SHADER_STAGE_COMPUTE,
+                            .defines = std::vector<Define>{Define{"SSAO_UPSAMPLE_PASS", "1"}}});
+        m_upsamplePassInfo->Update();
     }
 
     void SSAOPass::CreateUniforms(CommandBuffer *cmd)
@@ -128,7 +149,8 @@ namespace pe
 
     void SSAOPass::UpdateDescriptorSets()
     {
-        if (!m_depth || !m_normalRT || !m_ssaoRawRT || !m_ssaoRT || m_uniforms.size() != RHII.GetSwapchainImageCount())
+        if (!m_depth || !m_normalRT || !m_ssaoRawRT || !m_ssaoBlurRT || !m_ssaoRT ||
+            m_uniforms.size() != RHII.GetSwapchainImageCount())
             return;
 
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); ++i)
@@ -147,6 +169,7 @@ namespace pe
                 dset->Update();
             }
 
+            // Denoise: half-res raw AO -> half-res blurred AO.
             if (m_blurPassInfo)
             {
                 auto &blurDescriptors = m_blurPassInfo->GetDescriptors(i);
@@ -154,6 +177,21 @@ namespace pe
                 {
                     Descriptor *dset = blurDescriptors[0];
                     dset->SetImageView(0, m_ssaoRawRT->GetUAV(0));
+                    dset->SetImageView(1, m_depth->GetSRV());
+                    dset->SetImageView(2, m_ssaoBlurRT->GetUAV(0));
+                    dset->SetBuffer(3, m_uniforms[i]);
+                    dset->Update();
+                }
+            }
+
+            // Apply: half-res blurred AO -> full-res ssao (joint bilateral upsample).
+            if (m_upsamplePassInfo)
+            {
+                auto &upsampleDescriptors = m_upsamplePassInfo->GetDescriptors(i);
+                if (!upsampleDescriptors.empty())
+                {
+                    Descriptor *dset = upsampleDescriptors[0];
+                    dset->SetImageView(0, m_ssaoBlurRT->GetUAV(0));
                     dset->SetImageView(1, m_depth->GetSRV());
                     dset->SetImageView(2, m_ssaoRT->GetUAV(0));
                     dset->SetBuffer(3, m_uniforms[i]);
@@ -206,6 +244,7 @@ namespace pe
         builder.ReadCompute(m_normalRT);
         builder.ReadCompute(m_depth);
         builder.WriteCompute(m_ssaoRawRT);
+        builder.WriteCompute(m_ssaoBlurRT);
         builder.WriteCompute(m_ssaoRT);
     }
 
@@ -219,12 +258,13 @@ namespace pe
 
     void SSAOPass::ExecutePass(CommandBuffer *cmd)
     {
-        if (!m_ssaoRT || !m_ssaoRawRT || !m_depth || !m_normalRT || !m_blurPassInfo)
+        if (!m_ssaoRT || !m_ssaoRawRT || !m_ssaoBlurRT || !m_depth || !m_normalRT || !m_blurPassInfo ||
+            !m_upsamplePassInfo)
             return;
 
-        // AO runs at half resolution (ssaoRaw); the bilateral upsample writes full-res ssao.
-        const uint32_t aoGroupX = DivideRoundUp(m_ssaoRawRT->GetWidth(), kGroupSize);
-        const uint32_t aoGroupY = DivideRoundUp(m_ssaoRawRT->GetHeight(), kGroupSize);
+        // Occlusion + denoise run at half resolution (ssaoRaw/ssaoBlur); only the apply is full-res.
+        const uint32_t halfGroupX = DivideRoundUp(m_ssaoRawRT->GetWidth(), kGroupSize);
+        const uint32_t halfGroupY = DivideRoundUp(m_ssaoRawRT->GetHeight(), kGroupSize);
         const uint32_t fullGroupX = DivideRoundUp(m_ssaoRT->GetWidth(), kGroupSize);
         const uint32_t fullGroupY = DivideRoundUp(m_ssaoRT->GetHeight(), kGroupSize);
 
@@ -236,11 +276,16 @@ namespace pe
 
         cmd->BeginDebugRegion("SSAOPass");
         cmd->BindPipeline(*m_passInfo);
-        cmd->Dispatch(aoGroupX, aoGroupY, 1);
+        cmd->Dispatch(halfGroupX, halfGroupY, 1);
 
         cmd->MemoryBarrier(uavBarrier);
 
         cmd->BindPipeline(*m_blurPassInfo);
+        cmd->Dispatch(halfGroupX, halfGroupY, 1);
+
+        cmd->MemoryBarrier(uavBarrier);
+
+        cmd->BindPipeline(*m_upsamplePassInfo);
         cmd->Dispatch(fullGroupX, fullGroupY, 1);
         cmd->EndDebugRegion();
     }
@@ -267,20 +312,27 @@ namespace pe
             Shader::Destroy(m_blurPassInfo->pCompShader);
             m_blurPassInfo.reset();
         }
+        if (m_upsamplePassInfo)
+        {
+            Shader::Destroy(m_upsamplePassInfo->pCompShader);
+            m_upsamplePassInfo.reset();
+        }
 
-        Image::Destroy(m_ssaoRawRT); // pass-owned half-res target
+        Image::Destroy(m_ssaoRawRT); // pass-owned half-res targets
+        Image::Destroy(m_ssaoBlurRT);
 
         if (SceneRendererHost *rs = GetActiveSceneRendererHost())
             rs->DestroyRenderTarget("ssao");
 
         m_ssaoRT = nullptr;
         m_ssaoRawRT = nullptr;
+        m_ssaoBlurRT = nullptr;
         m_normalRT = nullptr;
         m_depth = nullptr;
     }
 
     std::vector<PassInfo *> SSAOPass::GetPassInfos() noexcept
     {
-        return {m_passInfo.get(), m_blurPassInfo.get()};
+        return {m_passInfo.get(), m_blurPassInfo.get(), m_upsamplePassInfo.get()};
     }
 } // namespace pe

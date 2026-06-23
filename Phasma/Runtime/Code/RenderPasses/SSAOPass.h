@@ -24,16 +24,18 @@ namespace pe
 
     private:
         void AcquireTargets();
-        void CreateRawTarget(); // (re)create the pass-owned half-res ssaoRaw image
+        void CreateInternalTargets(); // (re)create the pass-owned half-res ssaoRaw / ssaoBlur images
 
-        Image *m_ssaoRT = nullptr;
-        Image *m_ssaoRawRT = nullptr;
+        Image *m_ssaoRT = nullptr;     // full-res final AO (registered; consumed by lighting)
+        Image *m_ssaoRawRT = nullptr;  // half-res raw occlusion (pass-owned)
+        Image *m_ssaoBlurRT = nullptr; // half-res denoised occlusion (pass-owned)
         Image *m_normalRT = nullptr;
         Image *m_depth = nullptr;
         mat4 m_proj;
         mat4 m_invProj;
         mat4 m_normalsToView;
-        std::shared_ptr<PassInfo> m_blurPassInfo;
+        std::shared_ptr<PassInfo> m_blurPassInfo;     // half-res bilateral denoise
+        std::shared_ptr<PassInfo> m_upsamplePassInfo; // full-res joint bilateral upsample
         std::vector<Buffer *> m_uniforms;
     };
 } // namespace pe

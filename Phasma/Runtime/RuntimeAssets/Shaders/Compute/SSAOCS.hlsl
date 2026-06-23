@@ -7,12 +7,14 @@
 // The kernel is generated deterministically per sample index here instead of being
 // uploaded from the CPU, and a procedural rotation replaces the 4x4 noise texture.
 //
-// Perf: the heavy occlusion pass runs at HALF resolution (writes ssaoRaw at half the
-// framebuffer size -> a quarter of the invocations), then a depth-aware joint bilateral
-// pass upsamples it back to full resolution into ssao. Depth/normal are still sampled
-// at full resolution so occlusion stays accurate; the upsample's depth weighting keeps
-// silhouettes sharp (no bleed across edges) while denoising the per-pixel rotation.
-// Within a sample, the occluder only needs its view-space Z (distance from camera), so
+// Perf: three compute passes, structured like FidelityFX CACAO's medium path so the only
+// full-resolution work is a cheap apply.
+//   1. Occlusion (this file, no define)   -> ssaoRaw   at HALF res (the heavy 16-tap pass)
+//   2. SSAO_BLUR_PASS (bilateral denoise) -> ssaoBlur  at HALF res (smooths kernel rotation)
+//   3. SSAO_UPSAMPLE_PASS (joint bilateral upsample) -> ssao at FULL res (4-tap apply)
+// Depth/normal are sampled at full resolution throughout so occlusion stays accurate; the
+// depth weighting in passes 2 and 3 keeps silhouettes sharp (no bleed across edges).
+// Within a sample the occluder only needs its view-space Z (distance from camera), so
 // ViewZAbs() recovers it with two dot products instead of a full inverse-projection
 // matrix-vector reconstruct. Sample count is a uniform so the editor can trade quality
 // for speed live.
@@ -28,7 +30,8 @@ struct SSAOUniforms
     float4 misc;            // x = sample count
 };
 
-#ifndef SSAO_BLUR_PASS
+#if !defined(SSAO_BLUR_PASS) && !defined(SSAO_UPSAMPLE_PASS)
+// Pass 1: occlusion. Depth/Normal at full res, write half-res raw AO.
 [[vk::binding(0, 0)]] Texture2D<float> Depth : register(t0, space0);
 [[vk::binding(1, 0)]] Texture2D<float4> Normal : register(t1, space0);
 [[vk::binding(2, 0)]] RWTexture2D<float> RawAO : register(u2, space0);
@@ -37,10 +40,11 @@ struct SSAOUniforms
     SSAOUniforms cb;
 };
 #else
-[[vk::binding(0, 0)]] RWTexture2D<float> BlurInput : register(u0, space0); // half-res ssaoRaw
-[[vk::binding(1, 0)]] Texture2D<float> BlurDepth : register(t1, space0);   // full-res depth
-[[vk::binding(2, 0)]] RWTexture2D<float> OutputAO : register(u2, space0);  // full-res ssao
-[[vk::binding(3, 0)]] cbuffer SSAOBlurConstants : register(b3, space0)
+// Passes 2/3 share a layout: half-res AO in (u0), full-res depth (t1), AO out (u2).
+[[vk::binding(0, 0)]] RWTexture2D<float> FilterInput : register(u0, space0);
+[[vk::binding(1, 0)]] Texture2D<float> FilterDepth : register(t1, space0);
+[[vk::binding(2, 0)]] RWTexture2D<float> FilterOutput : register(u2, space0);
+[[vk::binding(3, 0)]] cbuffer SSAOFilterConstants : register(b3, space0)
 {
     SSAOUniforms cb;
 };
@@ -72,9 +76,16 @@ float ViewZAbs(float2 uv, float depth, SSAOUniforms constants)
     return abs(z / w);
 }
 
-#ifndef SSAO_BLUR_PASS
+float BlurDepthWeight(float centerDistance, float sampleDistance)
+{
+    float sigma = max(centerDistance * 0.015f, 0.025f);
+    float diff = abs(centerDistance - sampleDistance);
+    return exp(-(diff * diff) / max(2.0f * sigma * sigma, 1e-5f));
+}
+
+#if !defined(SSAO_BLUR_PASS) && !defined(SSAO_UPSAMPLE_PASS)
 // Deterministic per-index hash -> [0,1)^3. Same kernel for every pixel (a FIXED kernel),
-// which is what lets the bilateral upsample resolve the per-pixel rotation into smooth AO.
+// which is what lets the bilateral denoise resolve the per-pixel rotation into smooth AO.
 float3 HashKernel(uint i)
 {
     float n = float(i) + 1.0f;
@@ -145,7 +156,8 @@ float ComputeAO(uint2 halfPixel)
         if (clip.w <= FLT_EPSILON)
             continue;
         float2 sampleUv = NdcToUv(clip.xy / clip.w);
-        if (any(sampleUv < 0.0f) || any(sampleUv > 1.0f))
+        // Reject >= 1 as well as < 0: uv == 1 would map to fullFramebuffer.xy (one past the edge).
+        if (any(sampleUv < 0.0f) || any(sampleUv >= 1.0f))
             continue;
 
         int2 samplePixel = int2(sampleUv * cb.fullFramebuffer.xy);
@@ -178,62 +190,106 @@ void mainCS(uint3 id : SV_DispatchThreadID)
     RawAO[id.xy] = ComputeAO(id.xy);
 }
 
-#else
+#elif defined(SSAO_BLUR_PASS)
 
-float BlurDepthWeight(float centerDistance, float sampleDistance)
+// Pass 2: depth-aware denoise at HALF res. Smooths the fixed-kernel rotation while
+// preserving depth edges, so the full-res apply (pass 3) can be a cheap few taps. The 5x5
+// half-res footprint runs at a quarter of the pixels -- this is the work CACAO did sparsely
+// at its downsampled SSAO size rather than at full output resolution.
+float BilateralDenoiseHalf(uint2 halfPixel)
 {
-    float sigma = max(centerDistance * 0.015f, 0.025f);
-    float diff = abs(centerDistance - sampleDistance);
-    return exp(-(diff * diff) / max(2.0f * sigma * sigma, 1e-5f));
-}
-
-// Joint bilateral upsample: each full-res output pixel gathers a 5x5 footprint of the
-// half-res ssaoRaw and weights each tap by how close its surface is (in view-space Z) to
-// the full-res pixel's surface. Depth-mismatched half-res taps (across a silhouette) get
-// near-zero weight, so the upsample stays edge-sharp instead of bleeding AO over edges.
-// The 5x5 half-res footprint (~10x10 full-res) keeps enough same-surface taps near a
-// contact edge -- where depth weighting rejects the cross-edge half -- to denoise the
-// fixed-kernel rotation cleanly, replacing the old full-res blur in one pass.
-#define SSAO_UPSAMPLE_RADIUS 2
-float BilateralUpsample(uint2 fullPixel)
-{
-    float centerDepth = BlurDepth.Load(int3(fullPixel, 0));
+    float2 uv = PixelToUv(halfPixel, cb.framebuffer.zw);
+    int2 fullPixel = int2(uv * cb.fullFramebuffer.xy);
+    float centerDepth = FilterDepth.Load(int3(fullPixel, 0));
     if (centerDepth <= 0.0f)
         return 1.0f;
 
-    float2 centerUv = PixelToUv(fullPixel, cb.fullFramebuffer.zw);
-    float centerDistance = ViewZAbs(centerUv, centerDepth, cb);
-
+    float centerDistance = ViewZAbs(uv, centerDepth, cb);
     int2 halfDimsMax = int2(int(cb.framebuffer.x) - 1, int(cb.framebuffer.y) - 1);
-    int2 centerHalf = int2(centerUv * cb.framebuffer.xy);
 
     float weightedAO = 0.0f;
     float weightSum = 0.0f;
 
     [unroll]
-    for (int y = -SSAO_UPSAMPLE_RADIUS; y <= SSAO_UPSAMPLE_RADIUS; ++y)
+    for (int y = -2; y <= 2; ++y)
     {
         [unroll]
-        for (int x = -SSAO_UPSAMPLE_RADIUS; x <= SSAO_UPSAMPLE_RADIUS; ++x)
+        for (int x = -2; x <= 2; ++x)
         {
-            int2 q = clamp(centerHalf + int2(x, y), int2(0, 0), halfDimsMax);
+            int2 q = clamp(int2(halfPixel) + int2(x, y), int2(0, 0), halfDimsMax);
             float2 sampleUv = PixelToUv(uint2(q), cb.framebuffer.zw);
             int2 sampleFull = int2(sampleUv * cb.fullFramebuffer.xy);
-            float sampleDepth = BlurDepth.Load(int3(sampleFull, 0));
+            float sampleDepth = FilterDepth.Load(int3(sampleFull, 0));
             if (sampleDepth <= 0.0f)
                 continue;
 
             float sampleDistance = ViewZAbs(sampleUv, sampleDepth, cb);
-            // Spatial Gaussian wide enough to actually use the outer ring of the 5x5
-            // (the depth term carries the edge-awareness so cross-edge taps still vanish).
             float spatial = exp(-float(x * x + y * y) * 0.25f);
             float weight = spatial * BlurDepthWeight(centerDistance, sampleDistance);
-            weightedAO += BlurInput[uint2(q)] * weight;
+            weightedAO += FilterInput[uint2(q)] * weight;
             weightSum += weight;
         }
     }
 
-    return weightSum > 0.0f ? saturate(weightedAO / weightSum) : BlurInput[uint2(centerHalf)];
+    return weightSum > 0.0f ? saturate(weightedAO / weightSum) : FilterInput[halfPixel];
+}
+
+[numthreads(8, 8, 1)]
+void mainCS(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= uint(cb.framebuffer.x) || id.y >= uint(cb.framebuffer.y))
+        return;
+
+    FilterOutput[id.xy] = BilateralDenoiseHalf(id.xy);
+}
+
+#else // SSAO_UPSAMPLE_PASS
+
+// Pass 3: joint bilateral upsample of the denoised half-res AO to full res. Only a 2x2
+// bilinear footprint is needed because the half-res buffer is already smooth; the depth
+// weight against full-res depth rejects the cross-edge corners so silhouettes stay sharp.
+float JointBilateralUpsample(uint2 fullPixel)
+{
+    float centerDepth = FilterDepth.Load(int3(fullPixel, 0));
+    if (centerDepth <= 0.0f)
+        return 1.0f;
+
+    float2 uv = PixelToUv(fullPixel, cb.fullFramebuffer.zw);
+    float centerDistance = ViewZAbs(uv, centerDepth, cb);
+
+    int2 halfDimsMax = int2(int(cb.framebuffer.x) - 1, int(cb.framebuffer.y) - 1);
+    float2 f = uv * cb.framebuffer.xy - 0.5f;
+    int2 base = int2(floor(f));
+    float2 frac2 = f - float2(base);
+
+    float weightedAO = 0.0f;
+    float weightSum = 0.0f;
+
+    [unroll]
+    for (int y = 0; y <= 1; ++y)
+    {
+        [unroll]
+        for (int x = 0; x <= 1; ++x)
+        {
+            int2 q = clamp(base + int2(x, y), int2(0, 0), halfDimsMax);
+            float bilinear = (x == 0 ? 1.0f - frac2.x : frac2.x) * (y == 0 ? 1.0f - frac2.y : frac2.y);
+            float2 sampleUv = PixelToUv(uint2(q), cb.framebuffer.zw);
+            int2 sampleFull = int2(sampleUv * cb.fullFramebuffer.xy);
+            float sampleDepth = FilterDepth.Load(int3(sampleFull, 0));
+            if (sampleDepth <= 0.0f)
+                continue;
+
+            float sampleDistance = ViewZAbs(sampleUv, sampleDepth, cb);
+            float weight = bilinear * BlurDepthWeight(centerDistance, sampleDistance);
+            weightedAO += FilterInput[uint2(q)] * weight;
+            weightSum += weight;
+        }
+    }
+
+    // All four corners rejected (a thin sliver whose half-res footprint is all other-surface):
+    // fall back to the nearest half-res texel rather than leaking a wrong-surface average.
+    int2 nearest = clamp(int2(uv * cb.framebuffer.xy), int2(0, 0), halfDimsMax);
+    return weightSum > 0.0f ? saturate(weightedAO / weightSum) : FilterInput[uint2(nearest)];
 }
 
 [numthreads(8, 8, 1)]
@@ -242,6 +298,6 @@ void mainCS(uint3 id : SV_DispatchThreadID)
     if (id.x >= uint(cb.fullFramebuffer.x) || id.y >= uint(cb.fullFramebuffer.y))
         return;
 
-    OutputAO[id.xy] = BilateralUpsample(id.xy);
+    FilterOutput[id.xy] = JointBilateralUpsample(id.xy);
 }
 #endif

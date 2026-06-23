@@ -164,6 +164,11 @@ namespace pe
             settings.AddMember("shadow_debug_mode", gSettings.shadow_debug_mode, allocator);
             settings.AddMember("render_scale", gSettings.render_scale, allocator);
             settings.AddMember("ssao", gSettings.ssao, allocator);
+            settings.AddMember("ssao_radius", gSettings.ssao_radius, allocator);
+            settings.AddMember("ssao_bias", gSettings.ssao_bias, allocator);
+            settings.AddMember("ssao_intensity", gSettings.ssao_intensity, allocator);
+            settings.AddMember("ssao_power", gSettings.ssao_power, allocator);
+            settings.AddMember("ssao_samples", gSettings.ssao_samples, allocator);
             settings.AddMember("forward_plus", gSettings.forward_plus, allocator);
             settings.AddMember("fxaa", gSettings.fxaa, allocator);
             settings.AddMember("taa", gSettings.taa, allocator);
@@ -322,6 +327,16 @@ namespace pe
             }
             if (settings.HasMember("ssao"))
                 gSettings.ssao = settings["ssao"].GetBool();
+            if (settings.HasMember("ssao_radius"))
+                gSettings.ssao_radius = settings["ssao_radius"].GetFloat();
+            if (settings.HasMember("ssao_bias"))
+                gSettings.ssao_bias = settings["ssao_bias"].GetFloat();
+            if (settings.HasMember("ssao_intensity"))
+                gSettings.ssao_intensity = settings["ssao_intensity"].GetFloat();
+            if (settings.HasMember("ssao_power"))
+                gSettings.ssao_power = settings["ssao_power"].GetFloat();
+            if (settings.HasMember("ssao_samples"))
+                gSettings.ssao_samples = settings["ssao_samples"].GetInt();
             if (settings.HasMember("forward_plus"))
                 gSettings.forward_plus = settings["forward_plus"].GetBool();
             if (settings.HasMember("fxaa"))
