@@ -135,7 +135,9 @@ namespace pe
         // Point lights attenuate by windowed inverse-square (intensity in units of
         // luminance * distance^2) instead of the range-relative artistic falloff.
         bool physical_point_falloff = false;
-        static constexpr const char *DefaultSkyboxPath = "Skyboxes/golden_gate_hills/golden_gate_hills_4k.hdr";
+        // No default skybox shipped; it is up to the user/scene to set one. An empty path takes the
+        // silent solid-color fallback (no missing-file warnings); a non-empty bad path still warns.
+        static constexpr const char *DefaultSkyboxPath = "";
         std::string skybox_path = DefaultSkyboxPath;
         std::array<float, 3> depth_bias{0.0f, 0.0f, -6.2f};
         float time_scale = 1.f;
