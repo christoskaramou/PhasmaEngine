@@ -149,7 +149,11 @@ namespace pe
                 //  script:   "fire_for_camera"(bool), "on_enter"/"on_exit"(string)
                 //  physics:  "physics_engine"(3d|2d), "physics_mode"(sensor|solid), "physics_body_type"(static|kinematic|dynamic),
                 //            "physics_mass"/"physics_friction"/"physics_restitution"(float),
-                //            "physics_filter"/"physics_script"/"physics_on_enter"/"physics_on_exit"(string)
+                //            "physics_filter"/"physics_script"/"physics_on_enter"/"physics_on_exit"(string),
+                //            "physics_force_field"(bool), "physics_force"(vec3) — Sensor pushes bodies inside each frame
+                //  spawn:    "spawn_enabled"(bool), "spawn_prefab"(string), "spawn_despawn_on_exit"(bool)
+                //  stream:   "stream_enabled"(bool), "stream_target"(node name string)
+                //  camera:   "camera_enabled"(bool), "camera_target"(camera node name), "camera_fov"(deg float, 0=no override)
                 //  any PostProcessProfile field name writes into the zone's post-process profile (settings.* keys).
                 ut.set_function("set_zone", [](SceneNodeHandle &h, const std::string &key, sol::object value) {
                     Scene *s = GetScene();
@@ -200,6 +204,16 @@ namespace pe
                     if (key == "physics_script") { z->physicsScriptPath = value.as<std::string>(); s->MarkDirty(); return; }
                     if (key == "physics_on_enter") { z->physicsOnEnter = value.as<std::string>(); s->MarkDirty(); return; }
                     if (key == "physics_on_exit") { z->physicsOnExit = value.as<std::string>(); s->MarkDirty(); return; }
+                    if (key == "physics_force_field") { z->physicsForceField = value.as<bool>(); s->MarkDirty(); return; }
+                    if (key == "physics_force") { z->physicsForce = value.as<vec3>(); s->MarkDirty(); return; }
+                    if (key == "spawn_enabled") { z->spawnEnabled = value.as<bool>(); s->MarkDirty(); return; }
+                    if (key == "spawn_prefab") { z->spawnPrefabPath = value.as<std::string>(); s->MarkDirty(); return; }
+                    if (key == "spawn_despawn_on_exit") { z->spawnDespawnOnExit = value.as<bool>(); s->MarkDirty(); return; }
+                    if (key == "stream_enabled") { z->streamEnabled = value.as<bool>(); s->MarkDirty(); return; }
+                    if (key == "stream_target") { z->streamTargetName = value.as<std::string>(); s->MarkDirty(); return; }
+                    if (key == "camera_enabled") { z->cameraEnabled = value.as<bool>(); s->MarkDirty(); return; }
+                    if (key == "camera_target") { z->cameraTargetName = value.as<std::string>(); s->MarkDirty(); return; }
+                    if (key == "camera_fov") { z->cameraFovDeg = f(); s->MarkDirty(); return; }
                     if (key == "fire_for_camera") { z->fireForCamera = value.as<bool>(); s->MarkDirty(); return; }
                     if (key == "on_enter") { z->onEnter = value.as<std::string>(); s->MarkDirty(); return; }
                     if (key == "on_exit") { z->onExit = value.as<std::string>(); s->MarkDirty(); return; }

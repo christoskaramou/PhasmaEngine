@@ -38,6 +38,8 @@ namespace pe
         bool (*hasPhysicsBody)(const NodeId *node) = nullptr;
         PhysicsBodyDesc *(*getPhysicsBodyDesc)(NodeId *node) = nullptr;
         const PhysicsBodyDesc *(*getPhysicsBodyDescConst)(const NodeId *node) = nullptr;
+        // Force field: apply a continuous world-space force to a body this frame (3D). 2D analogue below.
+        void (*applyPhysicsForce)(NodeId *node, const vec3 &force) = nullptr;
 #ifdef PE_PHYSICS2D
         void (*clearPhysics2DBodies)() = nullptr;
         void (*removePhysics2DBody)(NodeId *node) = nullptr;
@@ -45,6 +47,7 @@ namespace pe
         bool (*hasPhysics2DBody)(const NodeId *node) = nullptr;
         Physics2DBodyDesc *(*getPhysics2DBodyDesc)(NodeId *node) = nullptr;
         const Physics2DBodyDesc *(*getPhysics2DBodyDescConst)(const NodeId *node) = nullptr;
+        void (*applyPhysics2DForce)(NodeId *node, const vec3 &force) = nullptr;
         // 2D analogue of setZonePhysicsScriptTrigger (Box2D sensor enter/exit -> Physics-section script).
         void (*setZonePhysics2DScriptTrigger)(NodeId *node, const char *scriptPath, const char *onEnter,
                                               const char *onExit, const char *filterTag) = nullptr;
@@ -79,6 +82,7 @@ namespace pe
     [[nodiscard]] bool HasScenePhysicsBody(const NodeId *node);
     [[nodiscard]] PhysicsBodyDesc *GetScenePhysicsBodyDesc(NodeId *node);
     [[nodiscard]] const PhysicsBodyDesc *GetScenePhysicsBodyDesc(const NodeId *node);
+    void ApplyScenePhysicsForce(NodeId *node, const vec3 &force);
 #ifdef PE_PHYSICS2D
     void ClearScenePhysics2DBodies();
     void RemoveScenePhysics2DBody(NodeId *node);
@@ -86,6 +90,7 @@ namespace pe
     [[nodiscard]] bool HasScenePhysics2DBody(const NodeId *node);
     [[nodiscard]] Physics2DBodyDesc *GetScenePhysics2DBodyDesc(NodeId *node);
     [[nodiscard]] const Physics2DBodyDesc *GetScenePhysics2DBodyDesc(const NodeId *node);
+    void ApplyScenePhysics2DForce(NodeId *node, const vec3 &force);
     void SetSceneZonePhysics2DScriptTrigger(NodeId *node, const char *scriptPath, const char *onEnter,
                                             const char *onExit, const char *filterTag);
 #endif

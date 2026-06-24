@@ -1,4 +1,5 @@
 #include "Scene/Scene.h"
+#include "Base/Path.h" // Path::ResolveAsset for zone Spawn prefab paths
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/SceneRuntimeHooks.h"
@@ -361,24 +362,114 @@ namespace pe
         for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
         {
             NodeTriggerZoneTag *z = m_nodeComponentCache[i].triggerZone;
-            if (!z || !z->scriptEnabled)
+            // Every camera-triggered section (Script / Spawn / Streaming / Camera) shares one enter/exit
+            // edge; skip the zone only if none of them are on.
+            if (!z || !(z->scriptEnabled || z->spawnEnabled || z->streamEnabled || z->cameraEnabled))
                 continue;
             NodeId *node = m_nodeIds[i];
-            if (!IsNodeAlive(node) || !IsNodeHierarchyEnabled(node))
+            const bool alive = IsNodeAlive(node);
+            bool inside;
+            if (!alive || !IsNodeHierarchyEnabled(node))
             {
-                z->wasInside = false; // disabled/destroyed -> reset so re-enabling re-fires on_enter
-                continue;
+                inside = false; // disabled/destroyed -> treat as outside so exit cleanup runs once
             }
-            const bool runHere = z->runMode == TriggerRunMode::Both ||
-                                 (z->runMode == TriggerRunMode::Player && playing) ||
-                                 (z->runMode == TriggerRunMode::Editor && !playing);
-            if (!runHere)
-                continue; // not the active context for this zone; leave wasInside so it re-fires on switch
-            const bool inside = z->fireForCamera && VolumeDistanceOutside(node, camPos, false) <= 0.0f;
+            else
+            {
+                const bool runHere = z->runMode == TriggerRunMode::Both ||
+                                     (z->runMode == TriggerRunMode::Player && playing) ||
+                                     (z->runMode == TriggerRunMode::Editor && !playing);
+                if (!runHere)
+                    continue; // not the active context for this zone; leave wasInside so it re-fires on switch
+                inside = z->fireForCamera && VolumeDistanceOutside(node, camPos, false) <= 0.0f;
+            }
             if (inside == z->wasInside)
                 continue;
             z->wasInside = inside;
-            InvokeSceneNodeScriptFunction(node, inside ? z->onEnter.c_str() : z->onExit.c_str());
+            if (z->scriptEnabled && alive)
+                InvokeSceneNodeScriptFunction(node, inside ? z->onEnter.c_str() : z->onExit.c_str());
+            if (z->spawnEnabled)
+                ApplyZoneSpawn(node, *z, inside);
+            if (z->streamEnabled)
+                ApplyZoneStream(*z, inside);
+            if (z->cameraEnabled)
+                ApplyZoneCamera(*z, inside);
+        }
+    }
+
+    NodeId *Scene::FindNodeByName(const std::string &name) const
+    {
+        if (name.empty())
+            return nullptr;
+        for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
+        {
+            NodeId *n = m_nodeIds[i];
+            if (n && IsNodeAlive(n) && GetNodeName(n) == name)
+                return n;
+        }
+        return nullptr;
+    }
+
+    void Scene::ApplyZoneSpawn(NodeId *zoneNode, NodeTriggerZoneTag &z, bool inside)
+    {
+        if (inside)
+        {
+            if (z.spawnPrefabPath.empty() || (z.spawnedNode && IsNodeAlive(z.spawnedNode)))
+                return; // nothing to spawn, or a previous instance is still live (no duplicates)
+            std::error_code ec;
+            std::filesystem::path resolved = z.spawnPrefabPath;
+            if (!std::filesystem::exists(resolved, ec))
+                resolved = Path::ResolveAsset(z.spawnPrefabPath);
+            // Spawn at the world root (not parented under the zone, whose box scale would distort it),
+            // then place it at the zone's world position.
+            SceneNodeHandle h = InstantiatePrefab(resolved, nullptr);
+            if (h.nodeId)
+            {
+                const vec3 pos(GetWorldMatrix(zoneNode)[3]);
+                SetLocalMatrix(h.nodeId, glm::translate(mat4(1.0f), pos));
+            }
+            z.spawnedNode = h.nodeId;
+        }
+        else
+        {
+            if (z.spawnDespawnOnExit && z.spawnedNode && IsNodeAlive(z.spawnedNode))
+                DeleteNode(z.spawnedNode);
+            z.spawnedNode = nullptr;
+        }
+    }
+
+    void Scene::ApplyZoneStream(NodeTriggerZoneTag &z, bool inside)
+    {
+        if (NodeId *target = FindNodeByName(z.streamTargetName))
+            SetNodeEnabled(target, inside);
+    }
+
+    void Scene::ApplyZoneCamera(NodeTriggerZoneTag &z, bool inside)
+    {
+        if (inside)
+        {
+            Camera *active = GetActiveCamera();
+            z.cameraPrev = active;
+            z.cameraPrevFovDeg = active ? glm::degrees(active->Fovx()) : 0.0f;
+            if (NodeId *camNode = FindNodeByName(z.cameraTargetName))
+            {
+                if (Camera *target = GetCameraForNode(camNode))
+                    SetActiveCamera(target);
+            }
+            if (z.cameraFovDeg > 0.0f)
+            {
+                if (Camera *now = GetActiveCamera())
+                    now->SetFovx(glm::radians(z.cameraFovDeg));
+            }
+        }
+        else
+        {
+            if (z.cameraPrev)
+            {
+                SetActiveCamera(z.cameraPrev);
+                if (z.cameraPrevFovDeg > 0.0f)
+                    z.cameraPrev->SetFovx(glm::radians(z.cameraPrevFovDeg));
+                z.cameraPrev = nullptr;
+            }
         }
     }
 
@@ -501,6 +592,31 @@ namespace pe
 #endif
                     RemoveScenePhysicsBody(node);
                 z->physicsBodyActive = false;
+                z->physicsBodiesInside.clear();
+            }
+
+            // Force field: push every body currently overlapping the sensor by physicsForce each frame.
+            // The inside-set is maintained by the sensor enter/exit callbacks (SetSceneZonePhysics*Trigger).
+            if (z->physicsBodyActive && z->physicsForceField && z->physicsMode == ZonePhysicsMode::Sensor)
+            {
+                auto &inside = z->physicsBodiesInside;
+                for (size_t k = 0; k < inside.size();)
+                {
+                    NodeId *b = inside[k];
+                    if (!b || !IsNodeAlive(b))
+                    {
+                        inside[k] = inside.back();
+                        inside.pop_back();
+                        continue;
+                    }
+#ifdef PE_PHYSICS2D
+                    if (is2D)
+                        ApplyScenePhysics2DForce(b, z->physicsForce);
+                    else
+#endif
+                        ApplyScenePhysicsForce(b, z->physicsForce);
+                    ++k;
+                }
             }
         }
     }

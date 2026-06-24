@@ -27,6 +27,31 @@ namespace pe
         // PhasmaRuntime stops being linked as a static library.
         SceneRuntimeHooks s_sceneRuntimeHooks;
 
+#if defined(PE_PHYSICS) || defined(PE_PHYSICS2D)
+        // Maintain a zone's force-field inside-set as bodies enter/leave its sensor. Scene::UpdatePhysicsZones
+        // reads this set each frame to push the bodies. Deduped on enter; erased on exit; dead nodes pruned
+        // at apply time. trigger = the zone node, other = the body that crossed.
+        void TrackZoneBodyInside(NodeId *trigger, NodeId *other, bool entering)
+        {
+            Scene *s = GetActiveScene();
+            if (!s || !other)
+                return;
+            NodeTriggerZoneTag *z = s->GetTriggerZoneForNode(trigger);
+            if (!z)
+                return;
+            auto &v = z->physicsBodiesInside;
+            if (entering)
+            {
+                if (std::find(v.begin(), v.end(), other) == v.end())
+                    v.push_back(other);
+            }
+            else
+            {
+                v.erase(std::remove(v.begin(), v.end(), other), v.end());
+            }
+        }
+#endif
+
         void DefaultClearSceneAnimations()
         {
             if (auto *animation = GetGlobalSystem<AnimationSystem>())
@@ -144,6 +169,12 @@ namespace pe
             return nullptr;
         }
 
+        void DefaultApplyScenePhysicsForce(NodeId *node, const vec3 &force)
+        {
+            if (auto *physics = GetGlobalSystem<PhysicsSystem>())
+                physics->ApplyForce(node, force);
+        }
+
         void DefaultSetSceneZonePhysicsScriptTrigger(NodeId *node, const char *scriptPath, const char *onEnter,
                                                      const char *onExit, const char *filterTag)
         {
@@ -167,9 +198,11 @@ namespace pe
             physics->SetTriggerEnterCallback(node, [path, enterFn, passesFilter](NodeId *trigger, NodeId *other)
                                              {
                 if (!passesFilter(other)) return;
+                TrackZoneBodyInside(trigger, other, true);
                 if (auto *sc = GetGlobalSystem<ScriptSystem>()) sc->InvokeNodeFunctionForScript(trigger, path, enterFn, other); });
             physics->SetTriggerExitCallback(node, [path, exitFn, passesFilter](NodeId *trigger, NodeId *other)
                                             {
+                TrackZoneBodyInside(trigger, other, false);
                 if (!passesFilter(other)) return;
                 if (auto *sc = GetGlobalSystem<ScriptSystem>()) sc->InvokeNodeFunctionForScript(trigger, path, exitFn, other); });
         }
@@ -215,6 +248,12 @@ namespace pe
             return nullptr;
         }
 
+        void DefaultApplyScenePhysics2DForce(NodeId *node, const vec3 &force)
+        {
+            if (auto *physics = GetGlobalSystem<Physics2DSystem>())
+                physics->ApplyForce(physics->GetBodyId(node), vec2(force.x, force.y));
+        }
+
         void DefaultSetSceneZonePhysics2DScriptTrigger(NodeId *node, const char *scriptPath, const char *onEnter,
                                                        const char *onExit, const char *filterTag)
         {
@@ -235,9 +274,11 @@ namespace pe
             physics->SetTriggerEnterCallback(node, [path, enterFn, passesFilter](NodeId *trigger, NodeId *other)
                                              {
                 if (!passesFilter(other)) return;
+                TrackZoneBodyInside(trigger, other, true);
                 if (auto *sc = GetGlobalSystem<ScriptSystem>()) sc->InvokeNodeFunctionForScript(trigger, path, enterFn, other); });
             physics->SetTriggerExitCallback(node, [path, exitFn, passesFilter](NodeId *trigger, NodeId *other)
                                             {
+                TrackZoneBodyInside(trigger, other, false);
                 if (!passesFilter(other)) return;
                 if (auto *sc = GetGlobalSystem<ScriptSystem>()) sc->InvokeNodeFunctionForScript(trigger, path, exitFn, other); });
         }
@@ -310,6 +351,7 @@ namespace pe
         hooks.hasPhysicsBody = DefaultHasScenePhysicsBody;
         hooks.getPhysicsBodyDesc = DefaultGetScenePhysicsBodyDesc;
         hooks.getPhysicsBodyDescConst = DefaultGetScenePhysicsBodyDescConst;
+        hooks.applyPhysicsForce = DefaultApplyScenePhysicsForce;
         hooks.setZonePhysicsScriptTrigger = DefaultSetSceneZonePhysicsScriptTrigger;
 #endif
 #ifdef PE_PHYSICS2D
@@ -319,6 +361,7 @@ namespace pe
         hooks.hasPhysics2DBody = DefaultHasScenePhysics2DBody;
         hooks.getPhysics2DBodyDesc = DefaultGetScenePhysics2DBodyDesc;
         hooks.getPhysics2DBodyDescConst = DefaultGetScenePhysics2DBodyDescConst;
+        hooks.applyPhysics2DForce = DefaultApplyScenePhysics2DForce;
         hooks.setZonePhysics2DScriptTrigger = DefaultSetSceneZonePhysics2DScriptTrigger;
 #endif
 #ifdef PE_AUDIO
@@ -448,6 +491,12 @@ namespace pe
         return s_sceneRuntimeHooks.getPhysicsBodyDescConst ? s_sceneRuntimeHooks.getPhysicsBodyDescConst(node) : nullptr;
     }
 
+    void ApplyScenePhysicsForce(NodeId *node, const vec3 &force)
+    {
+        if (s_sceneRuntimeHooks.applyPhysicsForce)
+            s_sceneRuntimeHooks.applyPhysicsForce(node, force);
+    }
+
 #ifdef PE_PHYSICS2D
     void ClearScenePhysics2DBodies()
     {
@@ -480,6 +529,12 @@ namespace pe
     const Physics2DBodyDesc *GetScenePhysics2DBodyDesc(const NodeId *node)
     {
         return s_sceneRuntimeHooks.getPhysics2DBodyDescConst ? s_sceneRuntimeHooks.getPhysics2DBodyDescConst(node) : nullptr;
+    }
+
+    void ApplyScenePhysics2DForce(NodeId *node, const vec3 &force)
+    {
+        if (s_sceneRuntimeHooks.applyPhysics2DForce)
+            s_sceneRuntimeHooks.applyPhysics2DForce(node, force);
     }
 
     void SetSceneZonePhysics2DScriptTrigger(NodeId *node, const char *scriptPath, const char *onEnter,

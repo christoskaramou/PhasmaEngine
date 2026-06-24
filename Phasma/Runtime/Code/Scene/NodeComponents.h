@@ -178,6 +178,35 @@ namespace pe
         std::string physicsOnEnter = "on_enter";
         std::string physicsOnExit = "on_exit";
         bool physicsBodyActive = false; // runtime-only: this zone created+owns the body right now
+        // Force field (Sensor only): while a body overlaps the sensor, push it every frame by `physicsForce`
+        // (world-space). Layered on the sensor as an option — no new mode. Bodies tracked live by the
+        // sensor enter/exit callbacks; pushed in Scene::UpdatePhysicsZones.
+        bool physicsForceField = false;
+        vec3 physicsForce = vec3(0.0f, 20.0f, 0.0f);
+        std::vector<NodeId *> physicsBodiesInside; // runtime-only: bodies currently overlapping the sensor
+
+        // --- Spawn section ---
+        // Instantiate a prefab at the zone when the camera enters; remove it on exit (toggle). Re-entry
+        // only re-spawns once the previous instance is gone, so despawnOnExit=false keeps a single copy.
+        bool spawnEnabled = false;
+        std::string spawnPrefabPath; // .peprefab (project-relative or absolute)
+        bool spawnDespawnOnExit = true;
+        NodeId *spawnedNode = nullptr; // runtime-only: last spawned instance (nullptr/dead = none)
+
+        // --- Streaming section ---
+        // Enable a named target subtree while inside; disable it outside. Author heavy region content
+        // disabled, then light it up only when the camera is near (LOD / region streaming toggle).
+        bool streamEnabled = false;
+        std::string streamTargetName;
+
+        // --- Camera section ---
+        // While inside: activate a named camera node and/or override the active camera's horizontal FOV;
+        // restores the previous camera + FOV on exit.
+        bool cameraEnabled = false;
+        std::string cameraTargetName;  // camera node to activate (empty = keep current camera)
+        float cameraFovDeg = 0.0f;     // >0: override horizontal FOV (degrees) while inside; 0 = no change
+        Camera *cameraPrev = nullptr;  // runtime-only: camera active before we switched (restore target)
+        float cameraPrevFovDeg = 0.0f; // runtime-only: FOV before our override
     };
 
     enum class NodeRuntimeUiWidgetType : uint8_t

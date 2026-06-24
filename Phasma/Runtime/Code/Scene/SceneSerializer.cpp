@@ -671,6 +671,33 @@ namespace pe
                 z->physicsOnEnter = zv["physicsOnEnter"].GetString();
             if (zv.HasMember("physicsOnExit") && zv["physicsOnExit"].IsString())
                 z->physicsOnExit = zv["physicsOnExit"].GetString();
+            if (zv.HasMember("physicsForceField"))
+                z->physicsForceField = zv["physicsForceField"].GetBool();
+            if (zv.HasMember("physicsForceX"))
+                z->physicsForce.x = zv["physicsForceX"].GetFloat();
+            if (zv.HasMember("physicsForceY"))
+                z->physicsForce.y = zv["physicsForceY"].GetFloat();
+            if (zv.HasMember("physicsForceZ"))
+                z->physicsForce.z = zv["physicsForceZ"].GetFloat();
+            // spawn section
+            if (zv.HasMember("spawnEnabled"))
+                z->spawnEnabled = zv["spawnEnabled"].GetBool();
+            if (zv.HasMember("spawnPrefabPath") && zv["spawnPrefabPath"].IsString())
+                z->spawnPrefabPath = zv["spawnPrefabPath"].GetString();
+            if (zv.HasMember("spawnDespawnOnExit"))
+                z->spawnDespawnOnExit = zv["spawnDespawnOnExit"].GetBool();
+            // streaming section
+            if (zv.HasMember("streamEnabled"))
+                z->streamEnabled = zv["streamEnabled"].GetBool();
+            if (zv.HasMember("streamTargetName") && zv["streamTargetName"].IsString())
+                z->streamTargetName = zv["streamTargetName"].GetString();
+            // camera section
+            if (zv.HasMember("cameraEnabled"))
+                z->cameraEnabled = zv["cameraEnabled"].GetBool();
+            if (zv.HasMember("cameraTargetName") && zv["cameraTargetName"].IsString())
+                z->cameraTargetName = zv["cameraTargetName"].GetString();
+            if (zv.HasMember("cameraFovDeg"))
+                z->cameraFovDeg = zv["cameraFovDeg"].GetFloat();
         }
 
         void RestorePrefabNode(Scene &scene,
@@ -1732,6 +1759,21 @@ namespace pe
                     zObj.AddMember("physicsScriptPath", MakeStringValue(z.physicsScriptPath), allocator);
                     zObj.AddMember("physicsOnEnter", rapidjson::Value(z.physicsOnEnter.c_str(), allocator), allocator);
                     zObj.AddMember("physicsOnExit", rapidjson::Value(z.physicsOnExit.c_str(), allocator), allocator);
+                    zObj.AddMember("physicsForceField", z.physicsForceField, allocator);
+                    zObj.AddMember("physicsForceX", z.physicsForce.x, allocator);
+                    zObj.AddMember("physicsForceY", z.physicsForce.y, allocator);
+                    zObj.AddMember("physicsForceZ", z.physicsForce.z, allocator);
+                    // spawn section
+                    zObj.AddMember("spawnEnabled", z.spawnEnabled, allocator);
+                    zObj.AddMember("spawnPrefabPath", MakeStringValue(z.spawnPrefabPath), allocator);
+                    zObj.AddMember("spawnDespawnOnExit", z.spawnDespawnOnExit, allocator);
+                    // streaming section
+                    zObj.AddMember("streamEnabled", z.streamEnabled, allocator);
+                    zObj.AddMember("streamTargetName", MakeStringValue(z.streamTargetName), allocator);
+                    // camera section
+                    zObj.AddMember("cameraEnabled", z.cameraEnabled, allocator);
+                    zObj.AddMember("cameraTargetName", MakeStringValue(z.cameraTargetName), allocator);
+                    zObj.AddMember("cameraFovDeg", z.cameraFovDeg, allocator);
                     nodeObj.AddMember("triggerZone", zObj.Move(), allocator);
                 }
 

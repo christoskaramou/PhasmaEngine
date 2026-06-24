@@ -1663,6 +1663,16 @@ namespace pe
                                     }
                                     ui::ItemTooltip("Functions called in the Physics script on overlap enter/exit.");
 
+                                    // Force field: push bodies inside the sensor every frame (layered on the sensor).
+                                    changed |= ImGui::Checkbox("Force Field##zoneff", &z->physicsForceField);
+                                    ui::ItemTooltip("While a body overlaps this sensor, push it every frame by the force "
+                                                    "below (world units). E.g. (0, 20, 0) = an anti-gravity updraft.");
+                                    if (z->physicsForceField)
+                                    {
+                                        changed |= ImGui::DragFloat3("Force##zoneff", &z->physicsForce.x, 0.5f);
+                                        ui::ItemTooltip("World-space force applied per frame to bodies inside. 2D ignores Z.");
+                                    }
+
                                     // The Physics section's OWN script — separate from the Script section's.
                                     ImGui::Spacing();
                                     ImGui::SeparatorText("Physics Script");
@@ -1719,6 +1729,81 @@ namespace pe
                                         }
                                     }
                                 }
+                            }
+                        }
+
+                        // --- Spawn section (instantiate a prefab when the camera enters; despawn on exit) ---
+                        if (ImGui::CollapsingHeader("Spawn##zone"))
+                        {
+                            changed |= ImGui::Checkbox("Enabled##zonespawn", &z->spawnEnabled);
+                            ui::ItemTooltip("Instantiate a prefab at the zone when the camera enters; remove it on exit. "
+                                            "Re-entry only re-spawns once the previous copy is gone (no duplicates).");
+                            if (z->spawnEnabled)
+                            {
+                                std::string disp = z->spawnPrefabPath.empty() ? "(none)" : z->spawnPrefabPath;
+                                if (auto sl = disp.find_last_of("/\\"); sl != std::string::npos)
+                                    disp = disp.substr(sl + 1);
+                                ImGui::Text("Prefab: %s", disp.c_str());
+                                ImGui::SameLine();
+                                if (ImGui::SmallButton("Browse##zonespawn"))
+                                {
+                                    if (auto *fs = m_gui->GetWidget<FileSelector>())
+                                        fs->OpenSelection(
+                                            [node](const std::string &path) -> bool
+                                            {
+                                                if (auto *r = GetGlobalSystem<RendererSystem>())
+                                                {
+                                                    if (auto *zz = r->GetScene().GetTriggerZoneForNode(node))
+                                                        zz->spawnPrefabPath = path;
+                                                    r->GetScene().MarkDirty();
+                                                }
+                                                return true;
+                                            },
+                                            {".peprefab"});
+                                }
+                                ui::ItemTooltip("Choose the .peprefab to spawn at this zone.");
+                                changed |= ImGui::Checkbox("Despawn On Exit##zonespawn", &z->spawnDespawnOnExit);
+                                ui::ItemTooltip("Remove the spawned instance when the camera leaves. Off = it stays (one copy).");
+                            }
+                        }
+
+                        // --- Streaming section (enable a named subtree while inside; disable outside) ---
+                        if (ImGui::CollapsingHeader("Streaming##zone"))
+                        {
+                            changed |= ImGui::Checkbox("Enabled##zonestream", &z->streamEnabled);
+                            ui::ItemTooltip("Enable a target node (by name) while the camera is inside, disable it outside. "
+                                            "Author heavy region content disabled, then light it up only when near.");
+                            if (z->streamEnabled)
+                            {
+                                char tgtBuf[128];
+                                std::snprintf(tgtBuf, sizeof(tgtBuf), "%s", z->streamTargetName.c_str());
+                                if (ImGui::InputText("Target Node##zonestream", tgtBuf, sizeof(tgtBuf)))
+                                {
+                                    z->streamTargetName = tgtBuf;
+                                    changed = true;
+                                }
+                                ui::ItemTooltip("Exact name of the node (subtree) to enable while inside / disable outside.");
+                            }
+                        }
+
+                        // --- Camera section (activate a camera node and/or override FOV while inside) ---
+                        if (ImGui::CollapsingHeader("Camera##zone"))
+                        {
+                            changed |= ImGui::Checkbox("Enabled##zonecam", &z->cameraEnabled);
+                            ui::ItemTooltip("While inside: switch to a named camera node and/or override the active camera's "
+                                            "FOV. Restores the previous camera + FOV on exit.");
+                            if (z->cameraEnabled)
+                            {
+                                char camBuf[128];
+                                std::snprintf(camBuf, sizeof(camBuf), "%s", z->cameraTargetName.c_str());
+                                if (ImGui::InputText("Camera Node##zonecam", camBuf, sizeof(camBuf)))
+                                {
+                                    z->cameraTargetName = camBuf;
+                                    changed = true;
+                                }
+                                ui::ItemTooltip("Exact name of a camera node to activate (leave empty to only override FOV).");
+                                changed |= ImGui::DragFloat("FOV (deg)##zonecam", &z->cameraFovDeg, 0.5f, 0.0f, 179.0f);
+                                ui::ItemTooltip("Override the active camera's horizontal FOV in degrees while inside (0 = no change).");
                             }
                         }
 
