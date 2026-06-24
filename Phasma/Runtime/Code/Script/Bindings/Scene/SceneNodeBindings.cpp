@@ -143,9 +143,13 @@ namespace pe
                 });
 
                 // Set a Trigger Zone field by name.
-                //  common:   "priority"/"blend"/"blend_distance"(float), "run_mode"(string editor|player|both or int)
-                //  sections: "script_enabled"/"post_process_enabled"/"audio_enabled"(bool)
+                //  common:   "priority"/"blend"/"blend_distance"(float), "run_mode"(editor|player|both or int),
+                //            "shape"(box|sphere or int)
+                //  sections: "script_enabled"/"post_process_enabled"/"audio_enabled"/"physics_enabled"(bool)
                 //  script:   "fire_for_camera"(bool), "on_enter"/"on_exit"(string)
+                //  physics:  "physics_engine"(3d|2d), "physics_mode"(sensor|solid), "physics_body_type"(static|kinematic|dynamic),
+                //            "physics_mass"/"physics_friction"/"physics_restitution"(float),
+                //            "physics_filter"/"physics_script"/"physics_on_enter"/"physics_on_exit"(string)
                 //  any PostProcessProfile field name writes into the zone's post-process profile (settings.* keys).
                 ut.set_function("set_zone", [](SceneNodeHandle &h, const std::string &key, sol::object value) {
                     Scene *s = GetScene();
@@ -166,6 +170,36 @@ namespace pe
                     if (key == "script_enabled") { z->scriptEnabled = value.as<bool>(); s->MarkDirty(); return; }
                     if (key == "post_process_enabled") { z->postProcessEnabled = value.as<bool>(); s->MarkDirty(); return; }
                     if (key == "audio_enabled") { z->audioEnabled = value.as<bool>(); s->MarkDirty(); return; }
+                    if (key == "shape") {
+                        if (value.is<std::string>()) z->shape = value.as<std::string>() == "sphere" ? ZoneShape::Sphere : ZoneShape::Box;
+                        else z->shape = static_cast<ZoneShape>(value.as<int>());
+                        s->MarkDirty(); return;
+                    }
+                    if (key == "physics_enabled") { z->physicsEnabled = value.as<bool>(); s->MarkDirty(); return; }
+                    if (key == "physics_engine") {
+                        if (value.is<std::string>()) z->physicsEngine = (value.as<std::string>() == "2d" || value.as<std::string>() == "physics2d") ? ZonePhysicsEngine::Physics2D : ZonePhysicsEngine::Physics3D;
+                        else z->physicsEngine = static_cast<ZonePhysicsEngine>(value.as<int>());
+                        s->MarkDirty(); return;
+                    }
+                    if (key == "physics_mode") {
+                        if (value.is<std::string>()) z->physicsMode = value.as<std::string>() == "solid" ? ZonePhysicsMode::Solid : ZonePhysicsMode::Sensor;
+                        else z->physicsMode = static_cast<ZonePhysicsMode>(value.as<int>());
+                        s->MarkDirty(); return;
+                    }
+                    if (key == "physics_body_type") {
+                        if (value.is<std::string>()) {
+                            const std::string b = value.as<std::string>();
+                            z->physicsBodyType = b == "dynamic" ? PhysicsBodyType::Dynamic : b == "kinematic" ? PhysicsBodyType::Kinematic : PhysicsBodyType::Static;
+                        } else z->physicsBodyType = static_cast<PhysicsBodyType>(value.as<int>());
+                        s->MarkDirty(); return;
+                    }
+                    if (key == "physics_mass") { z->physicsMass = f(); s->MarkDirty(); return; }
+                    if (key == "physics_friction") { z->physicsFriction = f(); s->MarkDirty(); return; }
+                    if (key == "physics_restitution") { z->physicsRestitution = f(); s->MarkDirty(); return; }
+                    if (key == "physics_filter") { z->physicsFilterTag = value.as<std::string>(); s->MarkDirty(); return; }
+                    if (key == "physics_script") { z->physicsScriptPath = value.as<std::string>(); s->MarkDirty(); return; }
+                    if (key == "physics_on_enter") { z->physicsOnEnter = value.as<std::string>(); s->MarkDirty(); return; }
+                    if (key == "physics_on_exit") { z->physicsOnExit = value.as<std::string>(); s->MarkDirty(); return; }
                     if (key == "fire_for_camera") { z->fireForCamera = value.as<bool>(); s->MarkDirty(); return; }
                     if (key == "on_enter") { z->onEnter = value.as<std::string>(); s->MarkDirty(); return; }
                     if (key == "on_exit") { z->onExit = value.as<std::string>(); s->MarkDirty(); return; }

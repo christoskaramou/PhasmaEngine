@@ -1,5 +1,6 @@
 #include "Scene/SceneRuntimeHooks.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneAccess.h" // GetActiveScene (zone physics filter name lookup)
 #include "Script/ScriptSystem.h"
 #include "Render/SceneRendererHost.h"
 #include "RenderPasses/ForwardPlusLightCullingPass.h"
@@ -142,6 +143,36 @@ namespace pe
                 return physics->GetBodyDesc(node);
             return nullptr;
         }
+
+        void DefaultSetSceneZonePhysicsScriptTrigger(NodeId *node, const char *scriptPath, const char *onEnter,
+                                                     const char *onExit, const char *filterTag)
+        {
+            auto *physics = GetGlobalSystem<PhysicsSystem>();
+            if (!physics)
+                return;
+            // Captured by value; callbacks run on the main thread after the physics step. The Physics
+            // section's own script (path) is fired via the separate physics instance store, so it never
+            // shares state with the Script-section script.
+            std::string path = scriptPath ? scriptPath : "";
+            std::string enterFn = onEnter ? onEnter : "";
+            std::string exitFn = onExit ? onExit : "";
+            std::string filter = filterTag ? filterTag : "";
+            auto passesFilter = [filter](NodeId *other) -> bool
+            {
+                if (filter.empty() || !other)
+                    return true;
+                Scene *s = GetActiveScene();
+                return s && s->IsNodeAlive(other) && s->GetNodeName(other).find(filter) != std::string::npos;
+            };
+            physics->SetTriggerEnterCallback(node, [path, enterFn, passesFilter](NodeId *trigger, NodeId *other)
+                                             {
+                if (!passesFilter(other)) return;
+                if (auto *sc = GetGlobalSystem<ScriptSystem>()) sc->InvokeNodeFunctionForScript(trigger, path, enterFn, other); });
+            physics->SetTriggerExitCallback(node, [path, exitFn, passesFilter](NodeId *trigger, NodeId *other)
+                                            {
+                if (!passesFilter(other)) return;
+                if (auto *sc = GetGlobalSystem<ScriptSystem>()) sc->InvokeNodeFunctionForScript(trigger, path, exitFn, other); });
+        }
 #endif
 
 #ifdef PE_PHYSICS2D
@@ -182,6 +213,33 @@ namespace pe
             if (auto *physics = GetGlobalSystem<Physics2DSystem>())
                 return physics->GetBodyDesc(node);
             return nullptr;
+        }
+
+        void DefaultSetSceneZonePhysics2DScriptTrigger(NodeId *node, const char *scriptPath, const char *onEnter,
+                                                       const char *onExit, const char *filterTag)
+        {
+            auto *physics = GetGlobalSystem<Physics2DSystem>();
+            if (!physics)
+                return;
+            std::string path = scriptPath ? scriptPath : "";
+            std::string enterFn = onEnter ? onEnter : "";
+            std::string exitFn = onExit ? onExit : "";
+            std::string filter = filterTag ? filterTag : "";
+            auto passesFilter = [filter](NodeId *other) -> bool
+            {
+                if (filter.empty() || !other)
+                    return true;
+                Scene *s = GetActiveScene();
+                return s && s->IsNodeAlive(other) && s->GetNodeName(other).find(filter) != std::string::npos;
+            };
+            physics->SetTriggerEnterCallback(node, [path, enterFn, passesFilter](NodeId *trigger, NodeId *other)
+                                             {
+                if (!passesFilter(other)) return;
+                if (auto *sc = GetGlobalSystem<ScriptSystem>()) sc->InvokeNodeFunctionForScript(trigger, path, enterFn, other); });
+            physics->SetTriggerExitCallback(node, [path, exitFn, passesFilter](NodeId *trigger, NodeId *other)
+                                            {
+                if (!passesFilter(other)) return;
+                if (auto *sc = GetGlobalSystem<ScriptSystem>()) sc->InvokeNodeFunctionForScript(trigger, path, exitFn, other); });
         }
 #endif
 
@@ -252,6 +310,7 @@ namespace pe
         hooks.hasPhysicsBody = DefaultHasScenePhysicsBody;
         hooks.getPhysicsBodyDesc = DefaultGetScenePhysicsBodyDesc;
         hooks.getPhysicsBodyDescConst = DefaultGetScenePhysicsBodyDescConst;
+        hooks.setZonePhysicsScriptTrigger = DefaultSetSceneZonePhysicsScriptTrigger;
 #endif
 #ifdef PE_PHYSICS2D
         hooks.clearPhysics2DBodies = DefaultClearScenePhysics2DBodies;
@@ -260,6 +319,7 @@ namespace pe
         hooks.hasPhysics2DBody = DefaultHasScenePhysics2DBody;
         hooks.getPhysics2DBodyDesc = DefaultGetScenePhysics2DBodyDesc;
         hooks.getPhysics2DBodyDescConst = DefaultGetScenePhysics2DBodyDescConst;
+        hooks.setZonePhysics2DScriptTrigger = DefaultSetSceneZonePhysics2DScriptTrigger;
 #endif
 #ifdef PE_AUDIO
         hooks.clearAudioSources = DefaultClearSceneAudioSources;
@@ -342,6 +402,13 @@ namespace pe
         return s_sceneRuntimeHooks.isPhysicsSimulating ? s_sceneRuntimeHooks.isPhysicsSimulating() : false;
     }
 
+    void SetSceneZonePhysicsScriptTrigger(NodeId *node, const char *scriptPath, const char *onEnter,
+                                          const char *onExit, const char *filterTag)
+    {
+        if (s_sceneRuntimeHooks.setZonePhysicsScriptTrigger)
+            s_sceneRuntimeHooks.setZonePhysicsScriptTrigger(node, scriptPath, onEnter, onExit, filterTag);
+    }
+
     void StopScenePhysicsSimulation()
     {
         if (s_sceneRuntimeHooks.stopPhysicsSimulation)
@@ -413,6 +480,13 @@ namespace pe
     const Physics2DBodyDesc *GetScenePhysics2DBodyDesc(const NodeId *node)
     {
         return s_sceneRuntimeHooks.getPhysics2DBodyDescConst ? s_sceneRuntimeHooks.getPhysics2DBodyDescConst(node) : nullptr;
+    }
+
+    void SetSceneZonePhysics2DScriptTrigger(NodeId *node, const char *scriptPath, const char *onEnter,
+                                            const char *onExit, const char *filterTag)
+    {
+        if (s_sceneRuntimeHooks.setZonePhysics2DScriptTrigger)
+            s_sceneRuntimeHooks.setZonePhysics2DScriptTrigger(node, scriptPath, onEnter, onExit, filterTag);
     }
 #endif
 

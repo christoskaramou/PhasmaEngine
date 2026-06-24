@@ -46,6 +46,35 @@ namespace pe
 {
     namespace
     {
+        // Starter templates for the zone's "Create Script" buttons. The Script-section one is a minimal
+        // working example; the Physics one (triggers are less obvious) carries extra commented examples.
+        constexpr const char *kZoneScriptTemplate =
+            "-- Trigger Zone - Script section. Fires when the active camera crosses this zone.\n"
+            "-- `self` is the zone node.\n\n"
+            "function on_enter(self)\n"
+            "    pe_log(\"[zone] enter \" .. self:get_name())\n"
+            "end\n\n"
+            "function on_exit(self)\n"
+            "    pe_log(\"[zone] exit \" .. self:get_name())\n"
+            "end\n";
+
+        constexpr const char *kZonePhysicsScriptTemplate =
+            "-- Trigger Zone - Physics section (Sensor mode).\n"
+            "-- Fires when a PHYSICS BODY overlaps this zone during play.\n"
+            "-- `self` = the zone node; `other` = the body that entered/exited (a node handle).\n"
+            "-- Set the panel's Filter to limit which bodies fire it (matches the body's node name).\n"
+            "-- Tip: click \"Show Functions\" in this editor to see every Lua call available.\n\n"
+            "function on_enter(self, other)\n"
+            "    pe_log(\"[zone physics] entered: \" .. (other and other:get_name() or \"?\"))\n"
+            "    -- Examples (uncomment one) - `other` is the entering body:\n"
+            "    -- physics.set_velocity(other, 0, 18, 0)  -- fling it up (reverse its fall)\n"
+            "    -- other:set_enabled(false)               -- despawn it\n"
+            "    -- physics.apply_impulse(other, 0, 10, 0) -- nudge it upward\n"
+            "end\n\n"
+            "function on_exit(self, other)\n"
+            "    pe_log(\"[zone physics] exited: \" .. (other and other:get_name() or \"?\"))\n"
+            "end\n";
+
         std::vector<std::string> SkyboxExtensions()
         {
             return {".hdr", ".png", ".jpg", ".jpeg", ".tga", ".bmp"};
@@ -1398,12 +1427,24 @@ namespace pe
                         }
                         ui::ItemTooltip("Where the Script section fires: Editor (while editing), Player (play mode / "
                                         "built game), or Both.");
+                        const char *shapes[] = {"Box", "Sphere"};
+                        int shapeIdx = static_cast<int>(z->shape);
+                        if (ImGui::Combo("Shape", &shapeIdx, shapes, IM_ARRAYSIZE(shapes)))
+                        {
+                            z->shape = static_cast<ZoneShape>(shapeIdx);
+                            changed = true;
+                        }
+                        ui::ItemTooltip("Bounds shape, shared by every section: the distance falloff, the viewport "
+                                        "gizmo, and the Physics collider all use it.");
                         {
                             const mat4 &w = scene.GetWorldMatrix(node);
                             const vec3 size(glm::length(vec3(w[0])), glm::length(vec3(w[1])), glm::length(vec3(w[2])));
-                            ImGui::TextDisabled("Bounds: %.2f x %.2f x %.2f", size.x, size.y, size.z);
-                            ui::ItemTooltip("Box size in world units from the node's transform scale. Move/scale the "
-                                            "node (yellow box in the viewport) to position the zone.");
+                            if (z->shape == ZoneShape::Sphere)
+                                ImGui::TextDisabled("Bounds: radius %.2f", std::max({size.x, size.y, size.z}) * 0.5f);
+                            else
+                                ImGui::TextDisabled("Bounds: %.2f x %.2f x %.2f", size.x, size.y, size.z);
+                            ui::ItemTooltip("Size in world units from the node's transform scale. Move/scale the node "
+                                            "(yellow gizmo in the viewport) to position the zone.");
                         }
 
                         // --- Script section (trigger behavior only; the Lua Script is a separate node component) ---
@@ -1457,7 +1498,25 @@ namespace pe
                                             {".lua"});
                                 }
                                 ui::ItemTooltip("Choose the .lua this zone runs (its on_enter/on_exit).");
-                                if (!z->scriptPath.empty())
+                                if (z->scriptPath.empty())
+                                {
+                                    ImGui::SameLine();
+                                    if (ImGui::SmallButton("Create Script##zonescript"))
+                                        if (auto *se = m_gui->GetWidget<ScriptEditor>())
+                                            se->OpenNewScriptForPath(
+                                                "zone_script", kZoneScriptTemplate,
+                                                [node](const std::string &path)
+                                                {
+                                                    if (auto *r = GetGlobalSystem<RendererSystem>())
+                                                    {
+                                                        if (auto *zz = r->GetScene().GetTriggerZoneForNode(node))
+                                                            zz->scriptPath = path;
+                                                        r->GetScene().MarkDirty();
+                                                    }
+                                                });
+                                    ui::ItemTooltip("Create a new .lua pre-filled with an on_enter/on_exit example.");
+                                }
+                                else
                                 {
                                     ImGui::SameLine();
                                     if (ImGui::SmallButton("Edit##zonescript"))
@@ -1523,6 +1582,144 @@ namespace pe
                             changed |= ImGui::Checkbox("Loop##zoneaudio", &a.loop);
                             changed |= ImGui::Checkbox("Spatial##zoneaudio", &a.spatial);
                             ui::ItemTooltip("Attenuate by listener distance (left exactly as you set it).");
+                        }
+
+                        // --- Physics section (zone becomes a Jolt sensor/collider during play; OWN script) ---
+                        if (ImGui::CollapsingHeader("Physics##zone"))
+                        {
+                            changed |= ImGui::Checkbox("Enabled##zonephysics", &z->physicsEnabled);
+                            ui::ItemTooltip("During play, register the zone (using the common Shape) as a physics body. "
+                                            "Sensor = pass-through trigger that fires this section's own script; Solid = "
+                                            "collider that blocks bodies. Uses the node's physics body — don't add a separate one.");
+                            if (z->physicsEnabled)
+                            {
+                                bool zone2D = false;
+#ifdef PE_PHYSICS2D
+                                const char *engines[] = {"Physics (3D / Jolt)", "Physics2D (Box2D)"};
+                                int engIdx = static_cast<int>(z->physicsEngine);
+                                if (ImGui::Combo("Engine##zonephysics", &engIdx, engines, IM_ARRAYSIZE(engines)))
+                                {
+                                    z->physicsEngine = static_cast<ZonePhysicsEngine>(engIdx);
+                                    changed = true;
+                                }
+                                ui::ItemTooltip("Which physics world this zone uses. 3D = Jolt, 2D = Box2D (XY plane). "
+                                                "They don't mix — pick the one your scene uses. Sphere shape -> a 2D circle.");
+                                zone2D = z->physicsEngine == ZonePhysicsEngine::Physics2D;
+#endif
+                                const char *modes[] = {"Sensor (trigger)", "Solid (collider)"};
+                                int modeIdx = static_cast<int>(z->physicsMode);
+                                if (ImGui::Combo("Physics Mode", &modeIdx, modes, IM_ARRAYSIZE(modes)))
+                                {
+                                    z->physicsMode = static_cast<ZonePhysicsMode>(modeIdx);
+                                    changed = true;
+                                }
+                                ui::ItemTooltip("Sensor: bodies pass through and fire the Physics script. Solid: bodies collide.");
+
+                                const char *bodyTypes[] = {"Static", "Dynamic", "Kinematic"};
+                                int btIdx = static_cast<int>(z->physicsBodyType);
+                                if (ImGui::Combo("Body Type", &btIdx, bodyTypes, IM_ARRAYSIZE(bodyTypes)))
+                                {
+                                    z->physicsBodyType = static_cast<PhysicsBodyType>(btIdx);
+                                    changed = true;
+                                }
+                                ui::ItemTooltip("Static (doesn't move), Dynamic (falls/reacts to forces), or Kinematic "
+                                                "(moved by script/animation).");
+
+                                if (z->physicsMode == ZonePhysicsMode::Solid ||
+                                    z->physicsBodyType == PhysicsBodyType::Dynamic)
+                                {
+                                    // 2D bodies are sized by area density rather than absolute mass.
+                                    changed |= ImGui::DragFloat(zone2D ? "Density##zonephysics" : "Mass##zonephysics",
+                                                                &z->physicsMass, 0.05f, 0.0f, 1e6f);
+                                    changed |= ImGui::DragFloat("Friction##zonephysics", &z->physicsFriction, 0.01f, 0.0f, 1.0f);
+                                    changed |= ImGui::DragFloat("Restitution##zonephysics", &z->physicsRestitution, 0.01f, 0.0f, 1.0f);
+                                    ui::ItemTooltip("Restitution = bounciness (0 = none, 1 = full).");
+                                }
+
+                                if (z->physicsMode == ZonePhysicsMode::Sensor)
+                                {
+                                    char filterBuf[128];
+                                    std::snprintf(filterBuf, sizeof(filterBuf), "%s", z->physicsFilterTag.c_str());
+                                    if (ImGui::InputText("Filter##zonephysics", filterBuf, sizeof(filterBuf)))
+                                    {
+                                        z->physicsFilterTag = filterBuf;
+                                        changed = true;
+                                    }
+                                    ui::ItemTooltip("Only bodies whose node name contains this fire the trigger (empty = any).");
+
+                                    char enterBuf[128];
+                                    char exitBuf[128];
+                                    std::snprintf(enterBuf, sizeof(enterBuf), "%s", z->physicsOnEnter.c_str());
+                                    std::snprintf(exitBuf, sizeof(exitBuf), "%s", z->physicsOnExit.c_str());
+                                    if (ImGui::InputText("On Enter##zonephysics", enterBuf, sizeof(enterBuf)))
+                                    {
+                                        z->physicsOnEnter = enterBuf;
+                                        changed = true;
+                                    }
+                                    if (ImGui::InputText("On Exit##zonephysics", exitBuf, sizeof(exitBuf)))
+                                    {
+                                        z->physicsOnExit = exitBuf;
+                                        changed = true;
+                                    }
+                                    ui::ItemTooltip("Functions called in the Physics script on overlap enter/exit.");
+
+                                    // The Physics section's OWN script — separate from the Script section's.
+                                    ImGui::Spacing();
+                                    ImGui::SeparatorText("Physics Script");
+                                    if (z->physicsScriptPath.empty())
+                                        ImGui::TextDisabled("(no script)");
+                                    else
+                                        ImGui::TextWrapped("%s", z->physicsScriptPath.c_str());
+                                    if (ImGui::SmallButton("Select Script##zonephysicsscript"))
+                                    {
+                                        if (auto *fs = m_gui->GetWidget<FileSelector>())
+                                            fs->OpenSelection(
+                                                [node](const std::string &path) -> bool
+                                                {
+                                                    if (auto *r = GetGlobalSystem<RendererSystem>())
+                                                    {
+                                                        if (auto *zz = r->GetScene().GetTriggerZoneForNode(node))
+                                                            zz->physicsScriptPath = path;
+                                                        r->GetScene().MarkDirty();
+                                                    }
+                                                    return true;
+                                                },
+                                                {".lua"});
+                                    }
+                                    ui::ItemTooltip("Choose the .lua this zone's physics trigger runs (separate from the Script section).");
+                                    if (z->physicsScriptPath.empty())
+                                    {
+                                        ImGui::SameLine();
+                                        if (ImGui::SmallButton("Create Script##zonephysicsscript"))
+                                            if (auto *se = m_gui->GetWidget<ScriptEditor>())
+                                                se->OpenNewScriptForPath(
+                                                    "zone_physics", kZonePhysicsScriptTemplate,
+                                                    [node](const std::string &path)
+                                                    {
+                                                        if (auto *r = GetGlobalSystem<RendererSystem>())
+                                                        {
+                                                            if (auto *zz = r->GetScene().GetTriggerZoneForNode(node))
+                                                                zz->physicsScriptPath = path;
+                                                            r->GetScene().MarkDirty();
+                                                        }
+                                                    });
+                                        ui::ItemTooltip("Create a new .lua pre-filled with a physics-trigger example (commented).");
+                                    }
+                                    else
+                                    {
+                                        ImGui::SameLine();
+                                        if (ImGui::SmallButton("Edit##zonephysicsscript"))
+                                            if (auto *se = m_gui->GetWidget<ScriptEditor>())
+                                                se->OpenScriptFile(z->physicsScriptPath);
+                                        ImGui::SameLine();
+                                        if (ImGui::SmallButton("Remove##zonephysicsscript"))
+                                        {
+                                            z->physicsScriptPath.clear();
+                                            changed = true;
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         if (changed)

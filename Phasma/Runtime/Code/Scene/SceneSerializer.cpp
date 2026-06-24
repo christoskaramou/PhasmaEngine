@@ -609,6 +609,8 @@ namespace pe
                 z->blend_distance = zv["blend_distance"].GetFloat();
             if (zv.HasMember("runMode"))
                 z->runMode = static_cast<TriggerRunMode>(zv["runMode"].GetInt());
+            if (zv.HasMember("shape"))
+                z->shape = static_cast<ZoneShape>(zv["shape"].GetInt());
             // script section
             if (zv.HasMember("scriptEnabled"))
                 z->scriptEnabled = zv["scriptEnabled"].GetBool();
@@ -646,6 +648,29 @@ namespace pe
                 if (a.HasMember("spatial"))
                     z->audioSource.spatial = a["spatial"].GetBool();
             }
+            // physics section
+            if (zv.HasMember("physicsEnabled"))
+                z->physicsEnabled = zv["physicsEnabled"].GetBool();
+            if (zv.HasMember("physicsEngine"))
+                z->physicsEngine = static_cast<ZonePhysicsEngine>(zv["physicsEngine"].GetInt());
+            if (zv.HasMember("physicsMode"))
+                z->physicsMode = static_cast<ZonePhysicsMode>(zv["physicsMode"].GetInt());
+            if (zv.HasMember("physicsBodyType"))
+                z->physicsBodyType = static_cast<PhysicsBodyType>(zv["physicsBodyType"].GetInt());
+            if (zv.HasMember("physicsMass"))
+                z->physicsMass = zv["physicsMass"].GetFloat();
+            if (zv.HasMember("physicsFriction"))
+                z->physicsFriction = zv["physicsFriction"].GetFloat();
+            if (zv.HasMember("physicsRestitution"))
+                z->physicsRestitution = zv["physicsRestitution"].GetFloat();
+            if (zv.HasMember("physicsFilterTag") && zv["physicsFilterTag"].IsString())
+                z->physicsFilterTag = zv["physicsFilterTag"].GetString();
+            if (zv.HasMember("physicsScriptPath") && zv["physicsScriptPath"].IsString())
+                z->physicsScriptPath = zv["physicsScriptPath"].GetString();
+            if (zv.HasMember("physicsOnEnter") && zv["physicsOnEnter"].IsString())
+                z->physicsOnEnter = zv["physicsOnEnter"].GetString();
+            if (zv.HasMember("physicsOnExit") && zv["physicsOnExit"].IsString())
+                z->physicsOnExit = zv["physicsOnExit"].GetString();
         }
 
         void RestorePrefabNode(Scene &scene,
@@ -1670,6 +1695,7 @@ namespace pe
                     zObj.AddMember("blend", z.blend, allocator);
                     zObj.AddMember("blend_distance", z.blend_distance, allocator);
                     zObj.AddMember("runMode", static_cast<int>(z.runMode), allocator);
+                    zObj.AddMember("shape", static_cast<int>(z.shape), allocator);
                     // script section
                     zObj.AddMember("scriptEnabled", z.scriptEnabled, allocator);
                     zObj.AddMember("scriptPath", rapidjson::Value(z.scriptPath.c_str(), allocator), allocator);
@@ -1694,6 +1720,18 @@ namespace pe
                         a.AddMember("spatial", z.audioSource.spatial, allocator);
                         zObj.AddMember("audioSource", a.Move(), allocator);
                     }
+                    // physics section
+                    zObj.AddMember("physicsEnabled", z.physicsEnabled, allocator);
+                    zObj.AddMember("physicsEngine", static_cast<int>(z.physicsEngine), allocator);
+                    zObj.AddMember("physicsMode", static_cast<int>(z.physicsMode), allocator);
+                    zObj.AddMember("physicsBodyType", static_cast<int>(z.physicsBodyType), allocator);
+                    zObj.AddMember("physicsMass", z.physicsMass, allocator);
+                    zObj.AddMember("physicsFriction", z.physicsFriction, allocator);
+                    zObj.AddMember("physicsRestitution", z.physicsRestitution, allocator);
+                    zObj.AddMember("physicsFilterTag", MakeStringValue(z.physicsFilterTag), allocator);
+                    zObj.AddMember("physicsScriptPath", MakeStringValue(z.physicsScriptPath), allocator);
+                    zObj.AddMember("physicsOnEnter", rapidjson::Value(z.physicsOnEnter.c_str(), allocator), allocator);
+                    zObj.AddMember("physicsOnExit", rapidjson::Value(z.physicsOnExit.c_str(), allocator), allocator);
                     nodeObj.AddMember("triggerZone", zObj.Move(), allocator);
                 }
 

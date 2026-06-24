@@ -160,7 +160,14 @@ namespace pe
         NodeScriptInstance *FindNodeInstance(const NodeId *node);
         // Call a named global function in a node's own script environment (trigger on_enter/on_exit).
         // No-op if the node has no script instance or the function is undefined.
+        // InvokeNodeFunction uses the zone's Script-section script (NodeTriggerZoneTag::scriptPath);
+        // InvokeNodeFunctionForScript runs an explicit path in a SEPARATE store (the Physics section's
+        // own script), so the two never share an environment.
         void InvokeNodeFunction(NodeId *node, const std::string &functionName);
+        // `other` (optional) is the entering/exiting body for physics triggers; passed to the Lua
+        // function as a second argument (on_enter(self, other)). nullptr -> second arg is nil.
+        void InvokeNodeFunctionForScript(NodeId *node, const std::string &scriptPath,
+                                         const std::string &functionName, NodeId *other = nullptr);
         bool InvokeNodeRuntimeUiAction(NodeId *node,
                                        const std::string &functionName,
                                        const std::string &actionName,
@@ -204,8 +211,12 @@ namespace pe
         void ReconcileNodeInstances();
         NodeScriptInstance CreateNodeInstance(NodeId *node, const std::string &path);
         // Trigger-zone script instance (separate from the node's plain Component_Script instance):
-        // found/created lazily from the zone's scriptPath. Used only by InvokeNodeFunction (triggers).
-        NodeScriptInstance *GetOrCreateZoneInstance(NodeId *node, const std::string &path);
+        // found/created lazily in `store`, keyed by node, rebuilt in place on path change. Each store is
+        // a distinct slot (Script-section vs Physics-section) so one node can run both without clashing.
+        NodeScriptInstance *GetOrCreateZoneInstance(std::vector<NodeScriptInstance> &store, NodeId *node, const std::string &path);
+        // Shared body of InvokeNodeFunction / InvokeNodeFunctionForScript. `other` -> optional 2nd Lua arg.
+        void InvokeZoneScript(std::vector<NodeScriptInstance> &store, NodeId *node, const std::string &path,
+                              const std::string &functionName, NodeId *other = nullptr);
         void RefreshNodeInstanceBindings(NodeScriptInstance &inst);
         void InitializeNodeInstance(NodeScriptInstance &inst);
         void DestroyNodeInstance(NodeScriptInstance &inst);
@@ -213,7 +224,8 @@ namespace pe
         sol::state m_lua{};
         std::vector<ScriptEntry> m_scripts{};
         std::vector<NodeScriptInstance> m_nodeInstances{};
-        std::vector<NodeScriptInstance> m_zoneScriptInstances{}; // trigger-zone scripts (separate from above)
+        std::vector<NodeScriptInstance> m_zoneScriptInstances{};        // zone Script-section scripts
+        std::vector<NodeScriptInstance> m_zonePhysicsScriptInstances{}; // zone Physics-section scripts
         std::vector<RegisteredScriptUpdate> m_registeredUpdates{};
         std::vector<PendingAsyncLoad> m_pendingAsyncLoads;
         std::vector<PendingSceneLoad> m_pendingSceneLoads;

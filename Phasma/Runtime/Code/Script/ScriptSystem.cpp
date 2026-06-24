@@ -898,9 +898,9 @@ namespace pe
         return true;
     }
 
-    NodeScriptInstance *ScriptSystem::GetOrCreateZoneInstance(NodeId *node, const std::string &path)
+    NodeScriptInstance *ScriptSystem::GetOrCreateZoneInstance(std::vector<NodeScriptInstance> &store, NodeId *node, const std::string &path)
     {
-        for (auto &inst : m_zoneScriptInstances)
+        for (auto &inst : store)
         {
             if (inst.handle.nodeId == node && node && inst.handle.nodeRevision == node->revision)
             {
@@ -914,26 +914,38 @@ namespace pe
                 return &inst;
             }
         }
-        m_zoneScriptInstances.push_back(CreateNodeInstance(node, path));
-        return &m_zoneScriptInstances.back();
+        store.push_back(CreateNodeInstance(node, path));
+        return &store.back();
     }
 
     void ScriptSystem::InvokeNodeFunction(NodeId *node, const std::string &functionName)
     {
-        // Triggers fire on the ZONE's own script (NodeTriggerZoneTag::scriptPath), which is separate
-        // from the node's plain Component_Script instance.
-        if (!m_initialized || !node || functionName.empty())
+        // Script section: fire the zone's Script-section script (NodeTriggerZoneTag::scriptPath).
+        Scene *scene = GetActiveScene();
+        NodeTriggerZoneTag *z = (scene && scene->IsNodeAlive(node)) ? scene->GetTriggerZoneForNode(node) : nullptr;
+        if (z)
+            InvokeZoneScript(m_zoneScriptInstances, node, z->scriptPath, functionName);
+    }
+
+    void ScriptSystem::InvokeNodeFunctionForScript(NodeId *node, const std::string &scriptPath,
+                                                   const std::string &functionName, NodeId *other)
+    {
+        // Physics section: fire an explicit script in the separate physics store so it never shares an
+        // environment with the Script-section script.
+        InvokeZoneScript(m_zonePhysicsScriptInstances, node, scriptPath, functionName, other);
+    }
+
+    void ScriptSystem::InvokeZoneScript(std::vector<NodeScriptInstance> &store, NodeId *node, const std::string &path,
+                                        const std::string &functionName, NodeId *other)
+    {
+        if (!m_initialized || !node || functionName.empty() || path.empty())
             return;
 
         Scene *scene = GetActiveScene();
         if (!scene || !scene->IsNodeAlive(node))
             return;
 
-        NodeTriggerZoneTag *z = scene->GetTriggerZoneForNode(node);
-        if (!z || z->scriptPath.empty())
-            return;
-
-        NodeScriptInstance *inst = GetOrCreateZoneInstance(node, z->scriptPath);
+        NodeScriptInstance *inst = GetOrCreateZoneInstance(store, node, path);
         if (!inst)
             return;
 
@@ -946,7 +958,11 @@ namespace pe
         if (!fn.is<sol::function>())
             return; // optional hook — silently skip when the zone script doesn't define it
 
-        auto result = CallProtected(fn.as<sol::function>(), inst->handle);
+        // Second arg = the entering/exiting body handle for physics triggers (nil otherwise).
+        sol::object otherObj = (other && scene->IsNodeAlive(other))
+                                   ? sol::make_object(m_lua, scene->MakeHandle(other))
+                                   : sol::object(sol::lua_nil);
+        auto result = CallProtected(fn.as<sol::function>(), inst->handle, otherObj);
         if (!result.valid())
         {
             sol::error err = result;
@@ -1587,6 +1603,14 @@ namespace pe
                 luaL_unref(m_lua.lua_state(), LUA_REGISTRYINDEX, inst.exposedRef);
         }
         m_zoneScriptInstances.clear();
+
+        for (auto &inst : m_zonePhysicsScriptInstances)
+        {
+            DestroyNodeInstance(inst);
+            if (inst.exposedRef != LUA_NOREF)
+                luaL_unref(m_lua.lua_state(), LUA_REGISTRYINDEX, inst.exposedRef);
+        }
+        m_zonePhysicsScriptInstances.clear();
 
         // Wait for any pending async loads before destroying Lua state
         for (auto &load : m_pendingAsyncLoads)

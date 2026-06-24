@@ -1,7 +1,8 @@
 #pragma once
 
-#include "Base/Settings.h"    // PostProcessProfile (value member of NodeTriggerZoneTag)
-#include "Audio/AudioTypes.h" // AudioSourceDesc (value member of NodeTriggerZoneTag)
+#include "Base/Settings.h"        // PostProcessProfile (value member of NodeTriggerZoneTag)
+#include "Audio/AudioTypes.h"     // AudioSourceDesc (value member of NodeTriggerZoneTag)
+#include "Physics/PhysicsTypes.h" // PhysicsBodyType (zone physics section)
 
 namespace pe
 {
@@ -97,13 +98,38 @@ namespace pe
         Both = 2
     };
 
+    // Zone bounding shape, shared by every section: drives the distance falloff (Scene::VolumeDistanceOutside),
+    // the viewport gizmo, and the shape the Physics section's collider inherits.
+    enum class ZoneShape : uint8_t
+    {
+        Box = 0,
+        Sphere = 1
+    };
+
+    // Physics section role: Sensor = pass-through trigger that fires the zone's physics script; Solid =
+    // a real collider that blocks bodies (no script).
+    enum class ZonePhysicsMode : uint8_t
+    {
+        Sensor = 0,
+        Solid = 1
+    };
+
+    // Which physics world the Physics section uses (they don't mix): Physics3D = Jolt, Physics2D = Box2D.
+    enum class ZonePhysicsEngine : uint8_t
+    {
+        Physics3D = 0,
+        Physics2D = 1
+    };
+
     // Unified "Trigger Zone": one bounded box (the node transform) that drives several scene systems.
     // The common fields feed the shared box-distance falloff (Scene::VolumeDistanceOutside); each
     // feature is an opt-in section toggled on per zone:
     //   - Script:       call Lua on_enter/on_exit on the node's own script when the camera crosses in/out.
     //   - Post Process: make `postProcess` the active profile (blended over the scene default) while inside.
     //   - Audio:        scale AudioSystem master/music/sfx while inside.
-    // More sections (physics, etc.) land later. wasInside is per-frame transition state (runtime-only).
+    //   - Physics:      register the box/sphere as a Jolt sensor or solid collider (during play); a body
+    //                   overlapping a sensor fires the Physics section's OWN script (separate from Script).
+    // More sections land later. wasInside is per-frame transition state (runtime-only).
     class NodeTriggerZoneTag : public IComponent
     {
     public:
@@ -112,6 +138,7 @@ namespace pe
         float blend = 1.0f;          // 0..1 master weight for this zone's blended effects
         float blend_distance = 0.0f; // world-unit fade OUTSIDE the box (full at the wall); 0 = hard edge
         TriggerRunMode runMode = TriggerRunMode::Both;
+        ZoneShape shape = ZoneShape::Box; // bounds shape: feeds falloff + gizmo + physics collider
 
         // --- Script section ---
         // The zone owns its OWN script (scriptPath, separate from the node's plain Component_Script).
@@ -133,6 +160,24 @@ namespace pe
         // band -> blend fully inside); stops it outside. pitch/loop/spatial are honored as authored.
         bool audioEnabled = false;
         AudioSourceDesc audioSource;
+
+        // --- Physics section ---
+        // While simulating, the zone registers a Jolt body (the node's physics body) shaped to the common
+        // `shape`. Sensor mode = pass-through trigger that fires this section's OWN script (separate from
+        // the Script section, never mixed); Solid mode = a collider that blocks bodies. ponytail: a
+        // Physics-enabled zone owns the node's single physics body — don't also add a separate one.
+        bool physicsEnabled = false;
+        ZonePhysicsEngine physicsEngine = ZonePhysicsEngine::Physics3D; // Jolt (3D) or Box2D (2D)
+        ZonePhysicsMode physicsMode = ZonePhysicsMode::Sensor;
+        PhysicsBodyType physicsBodyType = PhysicsBodyType::Static; // mapped to the 2D enum when engine == 2D
+        float physicsMass = 1.0f;                                  // Solid/Dynamic only
+        float physicsFriction = 0.5f;                              // Solid only
+        float physicsRestitution = 0.3f;                           // Solid only (bounciness)
+        std::string physicsFilterTag;                              // Sensor: only fire for bodies whose node name contains this (empty = any)
+        std::string physicsScriptPath;                             // the Physics section's OWN .lua (separate from scriptPath)
+        std::string physicsOnEnter = "on_enter";
+        std::string physicsOnExit = "on_exit";
+        bool physicsBodyActive = false; // runtime-only: this zone created+owns the body right now
     };
 
     enum class NodeRuntimeUiWidgetType : uint8_t

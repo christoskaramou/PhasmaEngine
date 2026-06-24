@@ -27,6 +27,10 @@ namespace pe
         // from its distance blend; gain > 0 plays + scales, gain == 0 stops.
         void (*applyAudioZoneSource)(NodeId *node, const AudioSourceDesc &desc, float gain) = nullptr;
         bool (*isPhysicsSimulating)() = nullptr;
+        // Wire a trigger-zone sensor body's enter/exit so overlap fires the Physics-section script
+        // (scriptPath) onEnter/onExit, optionally filtered to bodies whose node name contains filterTag.
+        void (*setZonePhysicsScriptTrigger)(NodeId *node, const char *scriptPath, const char *onEnter,
+                                            const char *onExit, const char *filterTag) = nullptr;
         void (*stopPhysicsSimulation)() = nullptr;
         void (*clearPhysicsBodies)() = nullptr;
         void (*removePhysicsBody)(NodeId *node) = nullptr;
@@ -41,6 +45,9 @@ namespace pe
         bool (*hasPhysics2DBody)(const NodeId *node) = nullptr;
         Physics2DBodyDesc *(*getPhysics2DBodyDesc)(NodeId *node) = nullptr;
         const Physics2DBodyDesc *(*getPhysics2DBodyDescConst)(const NodeId *node) = nullptr;
+        // 2D analogue of setZonePhysicsScriptTrigger (Box2D sensor enter/exit -> Physics-section script).
+        void (*setZonePhysics2DScriptTrigger)(NodeId *node, const char *scriptPath, const char *onEnter,
+                                              const char *onExit, const char *filterTag) = nullptr;
 #endif
         void (*clearAudioSources)() = nullptr;
         void (*removeAudioSource)(NodeId *node) = nullptr;
@@ -63,6 +70,8 @@ namespace pe
     void InvokeSceneNodeScriptFunction(NodeId *node, const char *functionName);
     void ApplySceneAudioZoneSource(NodeId *node, const AudioSourceDesc &desc, float gain);
     [[nodiscard]] bool IsScenePhysicsSimulating();
+    void SetSceneZonePhysicsScriptTrigger(NodeId *node, const char *scriptPath, const char *onEnter,
+                                          const char *onExit, const char *filterTag);
     void StopScenePhysicsSimulation();
     void ClearScenePhysicsBodies();
     void RemoveScenePhysicsBody(NodeId *node);
@@ -77,6 +86,8 @@ namespace pe
     [[nodiscard]] bool HasScenePhysics2DBody(const NodeId *node);
     [[nodiscard]] Physics2DBodyDesc *GetScenePhysics2DBodyDesc(NodeId *node);
     [[nodiscard]] const Physics2DBodyDesc *GetScenePhysics2DBodyDesc(const NodeId *node);
+    void SetSceneZonePhysics2DScriptTrigger(NodeId *node, const char *scriptPath, const char *onEnter,
+                                            const char *onExit, const char *filterTag);
 #endif
     void ClearSceneAudioSources();
     void RemoveSceneAudioSource(NodeId *node);

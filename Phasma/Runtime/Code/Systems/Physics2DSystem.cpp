@@ -90,6 +90,8 @@ namespace pe
         b2ShapeId shapeId = b2_nullShapeId;
         Physics2DBodyDesc desc;
         bool syncNode = true;
+        Physics2DTriggerCallback triggerEnterCallback;
+        Physics2DTriggerCallback triggerExitCallback;
     };
 
     Physics2DSystem::Physics2DSystem() = default;
@@ -137,6 +139,23 @@ namespace pe
 
         if (steps > 0 && scene)
             SyncTransformsToNodes(*scene);
+
+        // Fire deferred sensor enter/exit callbacks AFTER the step (so a script may safely touch physics).
+        if (!m_pendingZoneTriggers.empty())
+        {
+            std::vector<PendingZoneTrigger> pending;
+            pending.swap(m_pendingZoneTriggers);
+            for (PendingZoneTrigger &p : pending)
+            {
+                if (!p.callback || !scene || !scene->IsNodeAlive(p.trigger) ||
+                    p.trigger->revision != p.triggerRevision)
+                    continue;
+                NodeId *other = (p.other && scene->IsNodeAlive(p.other) && p.other->revision == p.otherRevision)
+                                    ? p.other
+                                    : nullptr;
+                p.callback(p.trigger, other);
+            }
+        }
     }
 
     void Physics2DSystem::Destroy()
@@ -493,6 +512,7 @@ namespace pe
         m_bodies.clear();
         m_nodeToBody.clear();
         m_contactEvents.clear();
+        m_pendingZoneTriggers.clear();
         m_accumulator = 0.0f;
     }
 
@@ -544,6 +564,36 @@ namespace pe
             }
 
             scene.SetLocalMatrix(state->nodeId, Build2DNodeMatrix(transform.p.x, transform.p.y, z, angle, scale));
+        }
+    }
+
+    void Physics2DSystem::SetTriggerEnterCallback(NodeId *node, Physics2DTriggerCallback callback)
+    {
+        auto it = m_nodeToBody.find(node);
+        if (it == m_nodeToBody.end())
+            return;
+        if (BodyState *s = FindBody(it->second))
+            s->triggerEnterCallback = std::move(callback);
+    }
+
+    void Physics2DSystem::SetTriggerExitCallback(NodeId *node, Physics2DTriggerCallback callback)
+    {
+        auto it = m_nodeToBody.find(node);
+        if (it == m_nodeToBody.end())
+            return;
+        if (BodyState *s = FindBody(it->second))
+            s->triggerExitCallback = std::move(callback);
+    }
+
+    void Physics2DSystem::ClearTriggerCallbacks(NodeId *node)
+    {
+        auto it = m_nodeToBody.find(node);
+        if (it == m_nodeToBody.end())
+            return;
+        if (BodyState *s = FindBody(it->second))
+        {
+            s->triggerEnterCallback = nullptr;
+            s->triggerExitCallback = nullptr;
         }
     }
 
@@ -600,16 +650,33 @@ namespace pe
             m_contactEvents.push_back(event);
         }
 
+        // Queue zone-sensor enter/exit callbacks (the sensor body is the zone). Box2D already dedupes
+        // begin/end per shape pair, so no active-pair tracking is needed here.
+        auto queueZoneTrigger = [&](b2ShapeId sensorShape, b2ShapeId visitorShape, bool began)
+        {
+            BodyState *s = stateFromShape(sensorShape);
+            const Physics2DTriggerCallback &cb = !s      ? Physics2DTriggerCallback{}
+                                                 : began ? s->triggerEnterCallback
+                                                         : s->triggerExitCallback;
+            if (!s || !cb)
+                return;
+            BodyState *v = stateFromShape(visitorShape);
+            m_pendingZoneTriggers.push_back({cb, s->nodeId, s->nodeRevision,
+                                             v ? v->nodeId : nullptr, v ? v->nodeRevision : 0u});
+        };
+
         const b2SensorEvents sensors = b2World_GetSensorEvents(m_impl->worldId);
         for (int i = 0; i < sensors.beginCount; ++i)
         {
             const b2SensorBeginTouchEvent &event = sensors.beginEvents[i];
             pushPair(event.sensorShapeId, event.visitorShapeId, true, true);
+            queueZoneTrigger(event.sensorShapeId, event.visitorShapeId, true);
         }
         for (int i = 0; i < sensors.endCount; ++i)
         {
             const b2SensorEndTouchEvent &event = sensors.endEvents[i];
             pushPair(event.sensorShapeId, event.visitorShapeId, false, true);
+            queueZoneTrigger(event.sensorShapeId, event.visitorShapeId, false);
         }
     }
 } // namespace pe

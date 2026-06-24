@@ -14,6 +14,9 @@
 #include "API/RHI.h"
 #include "Camera/Camera.h"
 #include "Particles/ParticleManager.h"
+#ifdef PE_PHYSICS2D
+#include "Systems/Physics2DSystem.h" // Physics2DBodyDesc/enums for the zone 2D physics path
+#endif
 
 namespace pe
 {
@@ -412,6 +415,96 @@ namespace pe
         }
     }
 
+    void Scene::UpdatePhysicsZones()
+    {
+        // Physics section: only meaningful while simulating (Jolt bodies are live in play). Each enabled
+        // zone registers one body shaped to the common `shape` — half-extents/radius = 0.5 local, which
+        // CreateJoltBody multiplies by world scale, exactly matching VolumeDistanceOutside. Sensor mode is
+        // a pass-through trigger that fires the Physics-section script; Solid mode is a collider. We only
+        // ever add/remove the body WE created (physicsBodyActive) and never touch a node that already has
+        // its own physics body.
+        const bool simulating = IsScenePhysicsSimulating();
+        const bool playing = IsScriptPlayMode();
+        for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
+        {
+            NodeTriggerZoneTag *z = m_nodeComponentCache[i].triggerZone;
+            if (!z)
+                continue;
+            NodeId *node = m_nodeIds[i];
+            const bool runHere = z->runMode == TriggerRunMode::Both ||
+                                 (z->runMode == TriggerRunMode::Player && playing) ||
+                                 (z->runMode == TriggerRunMode::Editor && !playing);
+#ifdef PE_PHYSICS2D
+            const bool is2D = z->physicsEngine == ZonePhysicsEngine::Physics2D;
+#else
+            const bool is2D = false;
+#endif
+            // 3D physics is live only while the Jolt sim runs (StartSimulation); 2D (Box2D) steps whenever
+            // playing, so gate it on play mode.
+            const bool worldActive = is2D ? playing : simulating;
+            const bool want = z->physicsEnabled && worldActive && runHere && IsNodeAlive(node) &&
+                              IsNodeHierarchyEnabled(node);
+            if (want && !z->physicsBodyActive)
+            {
+#ifdef PE_PHYSICS2D
+                if (is2D)
+                {
+                    if (HasScenePhysics2DBody(node))
+                        continue; // node already owns a 2D body; leave it to the plain physics2d path
+                    // 2D applies no world scale to shapes, so pass the actual world dimensions (XY).
+                    const mat4 &w = GetWorldMatrix(node);
+                    const vec3 size(length(vec3(w[0])), length(vec3(w[1])), length(vec3(w[2])));
+                    Physics2DBodyDesc d;
+                    d.bodyType = z->physicsBodyType == PhysicsBodyType::Dynamic     ? Physics2DBodyType::Dynamic
+                                 : z->physicsBodyType == PhysicsBodyType::Kinematic ? Physics2DBodyType::Kinematic
+                                                                                    : Physics2DBodyType::Static;
+                    d.shapeType = (z->shape == ZoneShape::Sphere) ? Physics2DShapeType::Circle : Physics2DShapeType::Box;
+                    d.isSensor = z->physicsMode == ZonePhysicsMode::Sensor;
+                    d.width = size.x;
+                    d.height = size.y;
+                    d.radius = std::max(size.x, size.y) * 0.5f;
+                    d.density = z->physicsMass; // "Mass" field reused as density for 2D
+                    d.friction = z->physicsFriction;
+                    d.restitution = z->physicsRestitution;
+                    AddScenePhysics2DBody(*this, node, d);
+                    if (d.isSensor)
+                        SetSceneZonePhysics2DScriptTrigger(node, z->physicsScriptPath.c_str(), z->physicsOnEnter.c_str(),
+                                                           z->physicsOnExit.c_str(), z->physicsFilterTag.c_str());
+                    z->physicsBodyActive = true;
+                    continue;
+                }
+#endif
+                if (HasScenePhysicsBody(node))
+                    continue; // node already owns a physics body; leave it to the plain physics path
+                PhysicsBodyDesc d;
+                d.bodyType = z->physicsBodyType;
+                d.shapeType = (z->shape == ZoneShape::Sphere) ? PhysicsShapeType::Sphere : PhysicsShapeType::Box;
+                d.isTrigger = z->physicsMode == ZonePhysicsMode::Sensor;
+                d.autoFitShape = false; // zones have no mesh; size from the transform, not mesh AABBs
+                d.boxHalfExtents = vec3(0.5f);
+                d.sphereRadius = 0.5f;
+                d.mass = z->physicsMass;
+                d.friction = z->physicsFriction;
+                d.restitution = z->physicsRestitution;
+                AddScenePhysicsBody(*this, node, d);
+                if (d.isTrigger)
+                    SetSceneZonePhysicsScriptTrigger(node, z->physicsScriptPath.c_str(), z->physicsOnEnter.c_str(),
+                                                     z->physicsOnExit.c_str(), z->physicsFilterTag.c_str());
+                z->physicsBodyActive = true;
+            }
+            else if (!want && z->physicsBodyActive)
+            {
+#ifdef PE_PHYSICS2D
+                if (is2D)
+                    RemoveScenePhysics2DBody(node);
+                else
+#endif
+                    RemoveScenePhysicsBody(node);
+                z->physicsBodyActive = false;
+            }
+        }
+    }
+
     void Scene::Update()
     {
         {
@@ -421,6 +514,7 @@ namespace pe
 
         UpdateTriggerZones();
         UpdateAudioZones();
+        UpdatePhysicsZones();
 
         UpdateSpriteAnimations(std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetDelta())));
 

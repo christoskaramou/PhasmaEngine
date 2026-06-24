@@ -2,6 +2,7 @@
 #include "GUI/Widget.h"
 #include "TextEditor.h"
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,12 @@ namespace pe
         // under Assets/Scripts and attaches it to the node.
         void OpenNewScriptWithContent(NodeId *node, const std::string &nameHint, const std::string &content);
 
+        // Create a new script pre-filled with content, NOT attached to any node's Component_Script.
+        // On each Save, `onSaved` is called with the written absolute path so the caller can point a
+        // trigger-zone script slot at it. Used for the zone's Script / Physics section scripts.
+        void OpenNewScriptForPath(const std::string &nameHint, const std::string &content,
+                                  std::function<void(const std::string &)> onSaved);
+
     private:
         void SaveScript();
         void LoadScriptFile(const std::string &path);
@@ -39,6 +46,7 @@ namespace pe
         void RebuildFunctionListText();
 
         NodeId *m_targetNode = nullptr;
+        std::function<void(const std::string &)> m_onSavedPath; // set by OpenNewScriptForPath; fired in SaveScript
         char m_scriptNameBuf[256] = "Undefined";
         char m_functionFilterBuf[128] = "";
         std::string m_loadedPath; // absolute path of file on disk; empty = new/unsaved

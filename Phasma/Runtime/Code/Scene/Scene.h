@@ -237,6 +237,9 @@ namespace pe
         void UpdateTriggerZones();
         // Per-frame: apply the highest-priority audio-enabled zone the camera is inside (volumes).
         void UpdateAudioZones();
+        // Per-frame (during play): keep each physics-enabled zone's box registered as a Jolt sensor so a
+        // physics body overlapping it fires the zone script's onEnter/onExit. Adds/removes the body.
+        void UpdatePhysicsZones();
         NodeId *GetSceneSettingsNode() const;
         // Resolve the Scene Settings master switch + active post-process profile for this frame.
         // Called at the top of UpdateCameras() so cameras read the fresh profile when they jitter.

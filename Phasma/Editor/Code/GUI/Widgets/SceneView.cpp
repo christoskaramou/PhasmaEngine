@@ -1876,18 +1876,52 @@ namespace pe
                     drawList->AddLine(screen[e[0]], screen[e[1]], color, thickness);
         };
 
-        // Trigger Zones draw a yellow box gizmo (brighter/thicker when selected).
+        // Sphere gizmo: 3 great circles in the world XY/XZ/YZ planes (radius = largest world half-extent,
+        // matching Scene::VolumeDistanceOutside's sphere). Drawn in world space so non-uniform scale still
+        // reads as a sphere, not an ellipsoid.
+        auto drawSphere = [&](const mat4 &world, ImU32 color, float thickness)
+        {
+            const vec3 center(world[3].x, world[3].y, world[3].z);
+            const float radius = std::max({glm::length(vec3(world[0])), glm::length(vec3(world[1])),
+                                           glm::length(vec3(world[2]))}) *
+                                 0.5f;
+            constexpr int kSeg = 32;
+            const vec3 axes[3][2] = {
+                {vec3(1, 0, 0), vec3(0, 1, 0)}, {vec3(1, 0, 0), vec3(0, 0, 1)}, {vec3(0, 1, 0), vec3(0, 0, 1)}};
+            for (const auto &pl : axes)
+            {
+                ImVec2 prev{};
+                bool prevOk = false;
+                for (int s = 0; s <= kSeg; ++s)
+                {
+                    const float a = (static_cast<float>(s) / kSeg) * 6.2831853f;
+                    const vec3 wp = center + radius * (std::cos(a) * pl[0] + std::sin(a) * pl[1]);
+                    ImVec2 sp;
+                    const bool ok = ProjectWorldToViewport(wp, viewProj, imageMin, imageSize, sp);
+                    if (ok && prevOk)
+                        drawList->AddLine(prev, sp, color, thickness);
+                    prev = sp;
+                    prevOk = ok;
+                }
+            }
+        };
+
+        // Trigger Zones draw a yellow box/sphere gizmo (brighter/thicker when selected).
         for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
         {
             NodeId *node = scene.GetNodeId(i);
             if (!scene.IsNodeHierarchyEnabled(node))
                 continue;
-            if (!scene.GetTriggerZoneForNode(node))
+            NodeTriggerZoneTag *zone = scene.GetTriggerZoneForNode(node);
+            if (!zone)
                 continue;
             const bool selected = sel.GetSelectionType() == SelectionType::Node && sel.GetSelectedNode() == node;
             const float thickness = selected ? 3.0f : 2.0f;
-            drawBox(scene.GetWorldMatrix(node),
-                    selected ? IM_COL32(255, 225, 120, 255) : IM_COL32(235, 195, 90, 205), thickness);
+            const ImU32 color = selected ? IM_COL32(255, 225, 120, 255) : IM_COL32(235, 195, 90, 205);
+            if (zone->shape == ZoneShape::Sphere)
+                drawSphere(scene.GetWorldMatrix(node), color, thickness);
+            else
+                drawBox(scene.GetWorldMatrix(node), color, thickness);
         }
     }
 

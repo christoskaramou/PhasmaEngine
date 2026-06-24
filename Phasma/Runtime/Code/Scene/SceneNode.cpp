@@ -566,6 +566,14 @@ namespace pe
         const vec3 he(length(vec3(w[0].x, w[0].y, w[0].z)) * 0.5f,
                       length(vec3(w[1].x, w[1].y, w[1].z)) * 0.5f,
                       length(vec3(w[2].x, w[2].y, w[2].z)) * 0.5f);
+        const NodeTriggerZoneTag *z = GetTriggerZoneForNode(node);
+        if (z && z->shape == ZoneShape::Sphere)
+        {
+            // Sphere radius = largest half-extent so it encloses the same scale (matches the physics
+            // sphere, whose radius = 0.5 local * max world scale).
+            const float radius = std::max({he.x, he.y, he.z});
+            return std::max(0.0f, length(p - center) - radius);
+        }
         const vec3 q = abs(p - center) - he;
         return length(glm::max(q, vec3(0.0f))); // 0 inside, world-unit distance to surface outside
     }

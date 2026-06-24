@@ -69,6 +69,7 @@ namespace pe
     void ScriptEditor::OpenScript(NodeId *node, const std::string &path)
     {
         m_targetNode = node;
+        m_onSavedPath = nullptr;
         m_isNewScript = false;
 
         // The stored path is project-relative (e.g. "Assets/Scripts/x.lua"); a raw file open against it
@@ -92,6 +93,7 @@ namespace pe
     void ScriptEditor::OpenScriptFile(const std::string &path)
     {
         m_targetNode = nullptr; // in-place edit: Save must NOT attach this to a node's Component_Script
+        m_onSavedPath = nullptr;
         m_isNewScript = false;
         std::string resolved = path;
         if (!std::filesystem::exists(resolved) && resolved.rfind("Assets/", 0) == 0)
@@ -106,6 +108,7 @@ namespace pe
     void ScriptEditor::OpenNewScript(NodeId *node)
     {
         m_targetNode = node;
+        m_onSavedPath = nullptr;
         m_isNewScript = true;
         m_loadedPath = "";
         snprintf(m_scriptNameBuf, sizeof(m_scriptNameBuf), "Undefined");
@@ -119,9 +122,25 @@ namespace pe
     void ScriptEditor::OpenNewScriptWithContent(NodeId *node, const std::string &nameHint, const std::string &content)
     {
         m_targetNode = node;
+        m_onSavedPath = nullptr;
         m_isNewScript = true;
         m_loadedPath = "";
         snprintf(m_scriptNameBuf, sizeof(m_scriptNameBuf), "%s", nameHint.empty() ? "trigger" : nameHint.c_str());
+        m_editor.SetText(content);
+        m_originalSource = ""; // differs from content -> shows as modified/unsaved
+        m_modified = true;
+        m_pendingFocusName = true;
+        m_open = true;
+    }
+
+    void ScriptEditor::OpenNewScriptForPath(const std::string &nameHint, const std::string &content,
+                                            std::function<void(const std::string &)> onSaved)
+    {
+        m_targetNode = nullptr; // zone scripts are owned by the zone, never a node's Component_Script
+        m_onSavedPath = std::move(onSaved);
+        m_isNewScript = true;
+        m_loadedPath = "";
+        snprintf(m_scriptNameBuf, sizeof(m_scriptNameBuf), "%s", nameHint.empty() ? "zone_script" : nameHint.c_str());
         m_editor.SetText(content);
         m_originalSource = ""; // differs from content -> shows as modified/unsaved
         m_modified = true;
@@ -179,6 +198,11 @@ namespace pe
                     m_targetNode = nullptr;
             }
         }
+
+        // Zone script slot (Script / Physics section): point it at the saved file. Fires on every save so
+        // a rename keeps the slot in sync; the callback re-validates the node/zone itself.
+        if (m_onSavedPath)
+            m_onSavedPath(outPath.string());
 
         m_loadedPath = outPath.string();
         m_originalSource = content;
