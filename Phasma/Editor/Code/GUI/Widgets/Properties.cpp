@@ -4,6 +4,7 @@
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
 #include "GUI/IconsFontAwesome.h"
+#include "imgui/imgui_internal.h" // dock-tab hover flags for the right-click Pin menu
 #include "GUI/RuntimeUiAuthoring.h"
 #include "GUI/SpriteAuthoring.h"
 #include "GUI/SkinnedStrip2DEditor.h"
@@ -153,18 +154,75 @@ namespace pe
         }
 
         auto &sel = SelectionManager::Instance();
-        if (!sel.HasSelection())
+        Scene &scene = *GetActiveScene();
+
+        // Drop a stale pin (the pinned node was deleted) before anything reads it.
+        if (m_pin.active && (m_pin.type == SelectionType::Node || m_pin.type == SelectionType::Mesh) &&
+            !scene.IsNodeAlive(m_pin.node))
+            m_pin.active = false;
+
+        // Pin (Inspector lock) via right-click on the Properties dock tab. Pinned = the panel keeps showing
+        // the captured object while the global selection changes; right-click again to unpin.
+        {
+            ImGuiWindow *win = ImGui::GetCurrentWindow();
+            if (win && win->DockIsActive)
+            {
+                const ImGuiItemStatusFlags tf = win->DC.DockTabItemStatusFlags;
+                if ((tf & ImGuiItemStatusFlags_HoveredRect) && (tf & ImGuiItemStatusFlags_HoveredWindow) &&
+                    ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+                    ImGui::OpenPopup("##props_pin_ctx");
+
+                // Visible "pinned" cue: amber wash + underline over our own dock tab. The tab bar draws
+                // before this widget runs, so style pushes can't reach it — paint the tab rect directly.
+                if (m_pin.active && win->DC.DockTabItemRect.GetWidth() > 0.0f)
+                {
+                    const ImRect r = win->DC.DockTabItemRect;
+                    ImDrawList *dl = ImGui::GetForegroundDrawList();
+                    dl->AddRectFilled(r.Min, r.Max, IM_COL32(255, 170, 40, 55));
+                    dl->AddLine(ImVec2(r.Min.x, r.Max.y - 1.0f), ImVec2(r.Max.x, r.Max.y - 1.0f),
+                                IM_COL32(255, 170, 40, 255), 2.0f);
+                }
+            }
+            if (ImGui::BeginPopup("##props_pin_ctx"))
+            {
+                if (ImGui::MenuItem(m_pin.active ? "Unpin Properties" : "Pin Properties"))
+                {
+                    if (m_pin.active)
+                        m_pin.active = false;
+                    else if (sel.HasSelection())
+                    {
+                        m_pin.active = true;
+                        m_pin.type = sel.GetSelectionType();
+                        m_pin.node = sel.GetSelectedNode();
+                        m_pin.lightType = sel.GetSelectedLightType();
+                        m_pin.lightIndex = sel.GetSelectedLightIndex();
+                        m_pin.emitterIndex = sel.GetSelectedEmitterIndex();
+                        m_pin.cameraIndex = sel.GetSelectedCameraIndex();
+                    }
+                }
+                ImGui::EndPopup();
+            }
+        }
+
+        // Effective selection the panel shows: the pinned snapshot when locked, otherwise the live selection.
+        const bool usePin = m_pin.active;
+        if (!usePin && !sel.HasSelection())
         {
             ImGui::TextDisabled("No object selected");
             ImGui::End();
             return;
         }
+        const SelectionType viewType = usePin ? m_pin.type : sel.GetSelectionType();
+        NodeId *viewNode = usePin ? m_pin.node : sel.GetSelectedNode();
+        const LightType viewLightType = usePin ? m_pin.lightType : sel.GetSelectedLightType();
+        const int viewLightIndex = usePin ? m_pin.lightIndex : sel.GetSelectedLightIndex();
+        const int viewEmitterIndex = usePin ? m_pin.emitterIndex : sel.GetSelectedEmitterIndex();
+        const int viewCameraIndex = usePin ? m_pin.cameraIndex : sel.GetSelectedCameraIndex();
 
-        Scene &scene = *GetActiveScene();
-        if ((sel.GetSelectionType() == SelectionType::Node || sel.GetSelectionType() == SelectionType::Mesh) &&
-            !scene.IsNodeAlive(sel.GetSelectedNode()))
+        if ((viewType == SelectionType::Node || viewType == SelectionType::Mesh) && !scene.IsNodeAlive(viewNode))
         {
-            sel.ClearSelection();
+            if (!usePin)
+                sel.ClearSelection();
             ImGui::TextDisabled("No object selected");
             ImGui::End();
             return;
@@ -173,7 +231,7 @@ namespace pe
         auto drawTransform = [&]()
         {
             if (auto *w = m_gui->GetWidget<TransformWidget>())
-                w->DrawEmbed(sel.GetSelectedNode());
+                w->DrawEmbed(viewNode);
         };
 
         auto attachPrimitive = [&](NodeId *node, ModelAsset *model)
@@ -380,7 +438,7 @@ namespace pe
             if (!w)
                 return;
 
-            const int index = sel.GetSelectedCameraIndex();
+            const int index = viewCameraIndex;
             auto &cameras = scene.GetCameras();
             if (index < 0 || index >= (int)cameras.size())
                 return;
@@ -394,7 +452,7 @@ namespace pe
             if (!w)
                 return;
 
-            w->DrawEmbed(&scene, sel.GetSelectedLightType(), sel.GetSelectedLightIndex());
+            w->DrawEmbed(&scene, viewLightType, viewLightIndex);
         };
 
         auto drawEmitter = [&]()
@@ -411,7 +469,7 @@ namespace pe
             if (!pm)
                 return;
 
-            w->DrawEmbed(pm, sel.GetSelectedEmitterIndex());
+            w->DrawEmbed(pm, viewEmitterIndex);
         };
 
         auto drawRuntimeUiComponent = [&](NodeId *node)
@@ -1349,11 +1407,11 @@ namespace pe
         NodeId *audioDropNode = nullptr;
 #endif
 
-        switch (sel.GetSelectionType())
+        switch (viewType)
         {
         case SelectionType::Node:
         {
-            NodeId *node = sel.GetSelectedNode();
+            NodeId *node = viewNode;
             if (!node)
                 break;
 
@@ -1995,7 +2053,7 @@ namespace pe
         case SelectionType::Mesh:
         {
             // Kept for backward compatibility — mesh selection can still come from code paths
-            NodeId *node = sel.GetSelectedNode();
+            NodeId *node = viewNode;
             if (!node)
                 break;
             int meshIndex = scene.GetMeshRef(node);
