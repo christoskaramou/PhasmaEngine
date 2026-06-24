@@ -4,7 +4,6 @@
 #include "GUI/Helpers.h"
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/RayTracingPass.h"
-#include "Base/Settings.h"
 
 namespace pe
 {

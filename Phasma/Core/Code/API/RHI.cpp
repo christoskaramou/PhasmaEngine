@@ -26,18 +26,10 @@
 #include "API/StagingManager.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
-#include "Base/Path.h"
 
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
 #include "SDL_vulkan.h"
-
-#include <algorithm>
-#include <cctype>
-#include <cstdlib>
-#include <fstream>
-#include <sstream>
-#include <vector>
 
 // System + Process RAM (Windows)
 #if defined(PE_WIN32)

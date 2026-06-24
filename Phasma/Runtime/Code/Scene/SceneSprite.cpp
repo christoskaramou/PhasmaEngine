@@ -1,5 +1,4 @@
 #include "Scene/Scene.h"
-#include "Base/Path.h"
 #include "rapidjson/document.h"
 #include "rapidjson/istreamwrapper.h"
 

@@ -3,7 +3,6 @@
 #include "Scene/Scene.h"
 #include "Camera/Camera.h"
 #include "RenderPasses/DepthPass.h" // PushConstants_DepthPass
-#include "Base/Settings.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"

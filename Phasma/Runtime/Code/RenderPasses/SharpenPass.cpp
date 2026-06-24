@@ -6,7 +6,6 @@
 #include "API/RHI.h"
 #include "API/RenderGraph.h"
 #include "API/Shader.h"
-#include "Base/Settings.h"
 #include "Render/SceneRendererHost.h"
 #include "TAAPass.h"
 

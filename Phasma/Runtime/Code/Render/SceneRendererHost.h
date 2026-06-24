@@ -1,7 +1,6 @@
 #pragma once
 
 #include "API/RHITypes.h"
-#include "Base/Math.h"
 
 namespace pe
 {

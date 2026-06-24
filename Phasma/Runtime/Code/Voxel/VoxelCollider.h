@@ -1,6 +1,5 @@
 #pragma once
 #include "Voxel/VoxelTypes.h"
-#include "Base/Math.h"
 
 // CPU collision + ray-pick against the voxel grid. Free functions, no Scene/World deps
 // (the isSolid predicate abstracts the world) so they are unit-testable.

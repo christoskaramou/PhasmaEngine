@@ -86,7 +86,7 @@ First useful prefabs:
 - enemy
 - projectile
 - pickup
-- trigger volume
+- trigger zone
 - door/gate
 - spawner
 - health bar

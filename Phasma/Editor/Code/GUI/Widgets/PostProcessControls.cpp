@@ -1,6 +1,5 @@
 #include "PostProcessControls.h"
 #include "GUI/Helpers.h"
-#include "Base/Settings.h"
 
 namespace pe
 {

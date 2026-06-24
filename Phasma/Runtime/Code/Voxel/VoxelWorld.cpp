@@ -5,8 +5,6 @@
 #include "API/Command.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
-#include "Base/Path.h"
-#include "Base/ThreadPool.h"
 #include "Scene/Material.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"

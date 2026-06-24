@@ -4,8 +4,6 @@
 #include "API/RHI.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
-#include "Base/EventSystem.h"
-#include "Base/Settings.h"
 
 namespace pe
 {

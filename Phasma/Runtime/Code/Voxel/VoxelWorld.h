@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Base/Math.h"
 #include "Voxel/BlockRegistry.h"
 #include "Voxel/ChunkColumn.h"
 #include "Voxel/GeometryArena.h"

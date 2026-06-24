@@ -1,7 +1,6 @@
 #pragma once
 #include "Voxel/FreeListAllocator.h"
 #include "Voxel/IChunkMesher.h" // MeshData, Vertex
-#include "Base/Math.h"          // vec3
 
 namespace pe
 {

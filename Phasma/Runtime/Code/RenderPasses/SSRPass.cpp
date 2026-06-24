@@ -7,7 +7,6 @@
 #include "API/RHI.h"
 #include "API/RenderGraph.h"
 #include "API/Shader.h"
-#include "Base/Settings.h"
 #include "Camera/Camera.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
