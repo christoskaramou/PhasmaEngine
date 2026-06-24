@@ -21,8 +21,11 @@ namespace pe
         void (*applySkinnedStrip2DPose)(Scene &scene, NodeId *node) = nullptr;
         void (*refreshRenderDescriptors)() = nullptr;
         void (*refreshSceneSky)() = nullptr;
-        // Call a named function in a node's own script environment (trigger volume on_enter/on_exit).
+        // Call a named function in a node's own script environment (trigger zone on_enter/on_exit).
         void (*invokeNodeScriptFunction)(NodeId *node, const char *functionName) = nullptr;
+        // Drive a trigger zone's own audio source (its NodeTriggerZoneTag::audioSource) by a 0..1 gain
+        // from its distance blend; gain > 0 plays + scales, gain == 0 stops.
+        void (*applyAudioZoneSource)(NodeId *node, const AudioSourceDesc &desc, float gain) = nullptr;
         bool (*isPhysicsSimulating)() = nullptr;
         void (*stopPhysicsSimulation)() = nullptr;
         void (*clearPhysicsBodies)() = nullptr;
@@ -58,6 +61,7 @@ namespace pe
     void RefreshSceneRenderDescriptors();
     void RefreshSceneSky();
     void InvokeSceneNodeScriptFunction(NodeId *node, const char *functionName);
+    void ApplySceneAudioZoneSource(NodeId *node, const AudioSourceDesc &desc, float gain);
     [[nodiscard]] bool IsScenePhysicsSimulating();
     void StopScenePhysicsSimulation();
     void ClearScenePhysicsBodies();

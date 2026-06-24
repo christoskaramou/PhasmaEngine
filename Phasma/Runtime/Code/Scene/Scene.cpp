@@ -1,5 +1,4 @@
 #include "Scene/Scene.h"
-#include "Base/Timer.h"
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/SceneRuntimeHooks.h"
@@ -15,12 +14,6 @@
 #include "API/RHI.h"
 #include "Camera/Camera.h"
 #include "Particles/ParticleManager.h"
-#include <algorithm>
-#include <cmath>
-#include <cstddef>
-#include <iomanip>
-#include <limits>
-#include <sstream>
 
 namespace pe
 {
@@ -351,12 +344,12 @@ namespace pe
         }
     }
 
-    void Scene::UpdateTriggerVolumes()
+    void Scene::UpdateTriggerZones()
     {
-        // Per-trigger run mode decides where On Enter/On Exit fn fire: Editor (while editing), Player
+        // Script section: runMode decides where On Enter/On Exit fire: Editor (while editing), Player
         // (play mode / standalone player), or Both. Node script instances exist in edit mode — the
         // chunk runs on creation, defining the functions; only init() is deferred to play. Disable a
-        // trigger node (uncheck it) to stop it firing.
+        // zone node (uncheck it) to stop it firing.
         Camera *cam = GetActiveCamera();
         if (!cam)
             return;
@@ -364,25 +357,58 @@ namespace pe
         const vec3 camPos = cam->GetPosition();
         for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
         {
-            NodeTriggerVolumeTag *t = m_nodeComponentCache[i].triggerVolume;
-            if (!t)
+            NodeTriggerZoneTag *z = m_nodeComponentCache[i].triggerZone;
+            if (!z || !z->scriptEnabled)
                 continue;
             NodeId *node = m_nodeIds[i];
             if (!IsNodeAlive(node) || !IsNodeHierarchyEnabled(node))
             {
-                t->wasInside = false; // disabled/destroyed -> reset so re-enabling re-fires on_enter
+                z->wasInside = false; // disabled/destroyed -> reset so re-enabling re-fires on_enter
                 continue;
             }
-            const bool runHere = t->runMode == TriggerRunMode::Both ||
-                                 (t->runMode == TriggerRunMode::Player && playing) ||
-                                 (t->runMode == TriggerRunMode::Editor && !playing);
+            const bool runHere = z->runMode == TriggerRunMode::Both ||
+                                 (z->runMode == TriggerRunMode::Player && playing) ||
+                                 (z->runMode == TriggerRunMode::Editor && !playing);
             if (!runHere)
-                continue; // not the active context for this trigger; leave wasInside so it re-fires on switch
-            const bool inside = t->fireForCamera && VolumeDistanceOutside(node, camPos, false) <= 0.0f;
-            if (inside == t->wasInside)
+                continue; // not the active context for this zone; leave wasInside so it re-fires on switch
+            const bool inside = z->fireForCamera && VolumeDistanceOutside(node, camPos, false) <= 0.0f;
+            if (inside == z->wasInside)
                 continue;
-            t->wasInside = inside;
-            InvokeSceneNodeScriptFunction(node, inside ? t->onEnter.c_str() : t->onExit.c_str());
+            z->wasInside = inside;
+            InvokeSceneNodeScriptFunction(node, inside ? z->onEnter.c_str() : z->onExit.c_str());
+        }
+    }
+
+    void Scene::UpdateAudioZones()
+    {
+        // Audio section: each audio-enabled zone drives its OWN node audio source. Outside the band the
+        // source is stopped; entering it plays and blends volume 0 -> blend over blend_distance world
+        // units (full blend inside the box). Source pitch/loop/spatial stay exactly as authored.
+        Camera *cam = GetActiveCamera();
+        const vec3 camPos = cam ? cam->GetPosition() : vec3(0.0f);
+        for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
+        {
+            NodeTriggerZoneTag *z = m_nodeComponentCache[i].triggerZone;
+            if (!z || (!z->audioEnabled && z->audioSource.filePath.empty()))
+                continue; // no zone, or one that has never used audio
+            NodeId *node = m_nodeIds[i];
+            float gain = 0.0f;
+            if (z->audioEnabled && cam && IsNodeAlive(node) && IsNodeHierarchyEnabled(node))
+            {
+                const float distOutside = VolumeDistanceOutside(node, camPos, false);
+                const float full = std::clamp(z->blend, 0.0f, 1.0f);
+                if (z->blend_distance > 0.0f)
+                {
+                    if (distOutside < z->blend_distance)
+                        gain = full * (1.0f - distOutside / z->blend_distance);
+                }
+                else if (distOutside <= 0.0f)
+                {
+                    gain = full;
+                }
+            }
+            // gain == 0 (outside, or audio disabled) stops the zone sound.
+            ApplySceneAudioZoneSource(node, z->audioSource, gain);
         }
     }
 
@@ -393,7 +419,8 @@ namespace pe
             UpdateCameras();
         }
 
-        UpdateTriggerVolumes();
+        UpdateTriggerZones();
+        UpdateAudioZones();
 
         UpdateSpriteAnimations(std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetDelta())));
 

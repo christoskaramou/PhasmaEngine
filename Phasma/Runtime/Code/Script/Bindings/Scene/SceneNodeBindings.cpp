@@ -132,28 +132,44 @@ namespace pe
                     s->MarkDirty();
                 });
 
-                ut.set_function("set_post_process_volume", [](SceneNodeHandle &h, bool enabled) {
+                ut.set_function("set_trigger_zone", [](SceneNodeHandle &h, bool enabled) {
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return;
                     if (enabled)
-                        s->AddComponentFlag(h.nodeId, Component_PostProcessVolume);
+                        s->AddComponentFlag(h.nodeId, Component_TriggerZone);
                     else
-                        s->RemoveComponentFlag(h.nodeId, Component_PostProcessVolume);
+                        s->RemoveComponentFlag(h.nodeId, Component_TriggerZone);
                     s->MarkDirty();
                 });
 
-                // Set a PostProcessVolume field by name: "global"(bool)/"priority"(float) or any
-                // PostProcessProfile field (same key names as the Lua settings.* API).
-                ut.set_function("set_pp", [](SceneNodeHandle &h, const std::string &key, sol::object value) {
+                // Set a Trigger Zone field by name.
+                //  common:   "priority"/"blend"/"blend_distance"(float), "run_mode"(string editor|player|both or int)
+                //  sections: "script_enabled"/"post_process_enabled"/"audio_enabled"(bool)
+                //  script:   "fire_for_camera"(bool), "on_enter"/"on_exit"(string)
+                //  any PostProcessProfile field name writes into the zone's post-process profile (settings.* keys).
+                ut.set_function("set_zone", [](SceneNodeHandle &h, const std::string &key, sol::object value) {
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return;
-                    NodePostProcessVolumeTag *v = s->GetPostProcessVolumeForNode(h.nodeId);
-                    if (!v) return;
-                    PostProcessProfile &p = v->profile;
-                    if (key == "global") { v->global = value.as<bool>(); s->MarkDirty(); return; }
-                    if (key == "priority") { v->priority = static_cast<float>(value.as<double>()); s->MarkDirty(); return; }
-                    if (key == "blend") { v->blend = static_cast<float>(value.as<double>()); s->MarkDirty(); return; }
-                    if (key == "blend_distance") { v->blend_distance = static_cast<float>(value.as<double>()); s->MarkDirty(); return; }
+                    NodeTriggerZoneTag *z = s->GetTriggerZoneForNode(h.nodeId);
+                    if (!z) return;
+                    auto f = [&] { return static_cast<float>(value.as<double>()); };
+                    if (key == "priority") { z->priority = f(); s->MarkDirty(); return; }
+                    if (key == "blend") { z->blend = f(); s->MarkDirty(); return; }
+                    if (key == "blend_distance") { z->blend_distance = f(); s->MarkDirty(); return; }
+                    if (key == "run_mode") {
+                        if (value.is<std::string>()) {
+                            const std::string m = value.as<std::string>();
+                            z->runMode = m == "editor" ? TriggerRunMode::Editor : m == "player" ? TriggerRunMode::Player : TriggerRunMode::Both;
+                        } else z->runMode = static_cast<TriggerRunMode>(value.as<int>());
+                        s->MarkDirty(); return;
+                    }
+                    if (key == "script_enabled") { z->scriptEnabled = value.as<bool>(); s->MarkDirty(); return; }
+                    if (key == "post_process_enabled") { z->postProcessEnabled = value.as<bool>(); s->MarkDirty(); return; }
+                    if (key == "audio_enabled") { z->audioEnabled = value.as<bool>(); s->MarkDirty(); return; }
+                    if (key == "fire_for_camera") { z->fireForCamera = value.as<bool>(); s->MarkDirty(); return; }
+                    if (key == "on_enter") { z->onEnter = value.as<std::string>(); s->MarkDirty(); return; }
+                    if (key == "on_exit") { z->onExit = value.as<std::string>(); s->MarkDirty(); return; }
+                    PostProcessProfile &p = z->postProcess;
                     static const std::unordered_map<std::string_view, bool PostProcessProfile::*> B = {
                         {"ssao", &PostProcessProfile::ssao}, {"fxaa", &PostProcessProfile::fxaa},
                         {"taa", &PostProcessProfile::taa}, {"cas_sharpening", &PostProcessProfile::cas_sharpening},
@@ -192,41 +208,6 @@ namespace pe
                         p.*(it->second) = static_cast<float>(value.as<double>());
                     else if (auto it = I.find(key); it != I.end())
                         p.*(it->second) = static_cast<int>(value.as<double>());
-                    s->MarkDirty();
-                });
-
-                ut.set_function("set_trigger_volume", [](SceneNodeHandle &h, bool enabled) {
-                    Scene *s = GetScene();
-                    if (!s || !h.IsValid(*s)) return;
-                    if (enabled)
-                        s->AddComponentFlag(h.nodeId, Component_TriggerVolume);
-                    else
-                        s->RemoveComponentFlag(h.nodeId, Component_TriggerVolume);
-                    s->MarkDirty();
-                });
-
-                // Set a TriggerVolume field: "fire_for_camera"(bool) or "on_enter"/"on_exit"(string,
-                // the function name called on this node's script when the camera enters/leaves the box).
-                ut.set_function("set_trigger", [](SceneNodeHandle &h, const std::string &key, sol::object value) {
-                    Scene *s = GetScene();
-                    if (!s || !h.IsValid(*s)) return;
-                    NodeTriggerVolumeTag *t = s->GetTriggerVolumeForNode(h.nodeId);
-                    if (!t) return;
-                    if (key == "fire_for_camera") t->fireForCamera = value.as<bool>();
-                    else if (key == "on_enter") t->onEnter = value.as<std::string>();
-                    else if (key == "on_exit") t->onExit = value.as<std::string>();
-                    else if (key == "run_mode")
-                    {
-                        if (value.is<std::string>())
-                        {
-                            const std::string m = value.as<std::string>();
-                            t->runMode = m == "editor"   ? TriggerRunMode::Editor
-                                         : m == "player" ? TriggerRunMode::Player
-                                                         : TriggerRunMode::Both;
-                        }
-                        else
-                            t->runMode = static_cast<TriggerRunMode>(value.as<int>());
-                    }
                     s->MarkDirty();
                 });
 

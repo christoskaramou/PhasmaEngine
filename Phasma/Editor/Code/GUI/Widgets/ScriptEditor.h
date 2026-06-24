@@ -18,6 +18,10 @@ namespace pe
         // Open an existing .lua file attached to a node
         void OpenScript(NodeId *node, const std::string &path);
 
+        // Open a .lua file for in-place editing with NO node attach (used for trigger-zone scripts,
+        // which are owned by the zone, not a node's Component_Script). Save overwrites the file only.
+        void OpenScriptFile(const std::string &path);
+
         // Create a new empty script for a node (name defaults to "Undefined")
         void OpenNewScript(NodeId *node);
 

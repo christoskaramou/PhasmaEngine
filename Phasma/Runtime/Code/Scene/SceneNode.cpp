@@ -40,12 +40,10 @@ namespace pe
             c.prefab = entity->CreateComponent<NodePrefabComponent>();
         if ((flag & Component_Sprite) && !c.sprite)
             c.sprite = entity->CreateComponent<NodeSpriteComponent>();
-        if ((flag & Component_PostProcessVolume) && !c.postProcessVolume)
-            c.postProcessVolume = entity->CreateComponent<NodePostProcessVolumeTag>();
         if ((flag & Component_SceneSettings) && !c.sceneSettings)
             c.sceneSettings = entity->CreateComponent<NodeSceneSettingsTag>();
-        if ((flag & Component_TriggerVolume) && !c.triggerVolume)
-            c.triggerVolume = entity->CreateComponent<NodeTriggerVolumeTag>();
+        if ((flag & Component_TriggerZone) && !c.triggerZone)
+            c.triggerZone = entity->CreateComponent<NodeTriggerZoneTag>();
     }
 
     void Scene::RemoveComponentFlag(NodeId *node, uint32_t flag)
@@ -102,20 +100,15 @@ namespace pe
             entity->RemoveComponent<NodeSpriteComponent>();
             c.sprite = nullptr;
         }
-        if ((flag & Component_PostProcessVolume) && c.postProcessVolume)
-        {
-            entity->RemoveComponent<NodePostProcessVolumeTag>();
-            c.postProcessVolume = nullptr;
-        }
         if ((flag & Component_SceneSettings) && c.sceneSettings)
         {
             entity->RemoveComponent<NodeSceneSettingsTag>();
             c.sceneSettings = nullptr;
         }
-        if ((flag & Component_TriggerVolume) && c.triggerVolume)
+        if ((flag & Component_TriggerZone) && c.triggerZone)
         {
-            entity->RemoveComponent<NodeTriggerVolumeTag>();
-            c.triggerVolume = nullptr;
+            entity->RemoveComponent<NodeTriggerZoneTag>();
+            c.triggerZone = nullptr;
         }
     }
 
@@ -562,22 +555,6 @@ namespace pe
         CreateSkyboxNode(nullptr, markDirty);
     }
 
-    NodeId *Scene::CreatePostProcessVolumeNode(NodeId *parent, bool markDirty)
-    {
-        NodeId *node = CreateNode("Post Process Volume", parent);
-        AddComponentFlag(node, Component_PostProcessVolume);
-        if (markDirty)
-            MarkDirty();
-        return node;
-    }
-
-    NodePostProcessVolumeTag *Scene::GetPostProcessVolumeForNode(const NodeId *node) const
-    {
-        if (!IsNodeAlive(node))
-            return nullptr;
-        return m_nodeComponentCache[node->index].postProcessVolume;
-    }
-
     float Scene::VolumeDistanceOutside(const NodeId *node, const vec3 &p, bool global) const
     {
         if (global)
@@ -593,20 +570,20 @@ namespace pe
         return length(glm::max(q, vec3(0.0f))); // 0 inside, world-unit distance to surface outside
     }
 
-    NodeId *Scene::CreateTriggerVolumeNode(NodeId *parent, bool markDirty)
+    NodeId *Scene::CreateTriggerZoneNode(NodeId *parent, bool markDirty)
     {
-        NodeId *node = CreateNode("Trigger Volume", parent);
-        AddComponentFlag(node, Component_TriggerVolume);
+        NodeId *node = CreateNode("Trigger Zone", parent);
+        AddComponentFlag(node, Component_TriggerZone);
         if (markDirty)
             MarkDirty();
         return node;
     }
 
-    NodeTriggerVolumeTag *Scene::GetTriggerVolumeForNode(const NodeId *node) const
+    NodeTriggerZoneTag *Scene::GetTriggerZoneForNode(const NodeId *node) const
     {
         if (!IsNodeAlive(node))
             return nullptr;
-        return m_nodeComponentCache[node->index].triggerVolume;
+        return m_nodeComponentCache[node->index].triggerZone;
     }
 
     // Blend src into dst by weight t (0..1): floats lerp, ints round, bools snap at t>=0.5. Field
@@ -698,37 +675,34 @@ namespace pe
             float weight;
             const PostProcessProfile *profile;
         };
-        std::vector<Layer> layers; // ponytail: a handful of volumes per scene; plain vector is fine
+        std::vector<Layer> layers; // ponytail: a handful of zones per scene; plain vector is fine
         for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
         {
-            NodePostProcessVolumeTag *v = m_nodeComponentCache[i].postProcessVolume;
-            if (!v)
+            NodeTriggerZoneTag *z = m_nodeComponentCache[i].triggerZone;
+            if (!z || !z->postProcessEnabled)
                 continue;
             NodeId *node = m_nodeIds[i];
             if (!IsNodeAlive(node) || !IsNodeHierarchyEnabled(node))
                 continue;
-            float weight = std::clamp(v->blend, 0.0f, 1.0f);
-            if (!v->global)
+            float weight = std::clamp(z->blend, 0.0f, 1.0f);
+            // Real world-unit distance from the camera to the box surface: 0 inside, >0 outside.
+            const float distOutside = VolumeDistanceOutside(node, cameraPos, false);
+            if (z->blend_distance > 0.0f)
             {
-                // Real world-unit distance from the camera to the box surface: 0 inside, >0 outside.
-                const float distOutside = VolumeDistanceOutside(node, cameraPos, false);
-                if (v->blend_distance > 0.0f)
-                {
-                    // Full effect everywhere inside the box; fade to 0 over blend_distance WORLD UNITS
-                    // outside the surface — so blend_distance is a real metres-from-the-volume distance
-                    // and the effect reaches full exactly at the box wall.
-                    if (distOutside >= v->blend_distance)
-                        continue; // beyond the fade band
-                    weight *= 1.0f - distOutside / v->blend_distance;
-                }
-                else if (distOutside > 0.0f)
-                {
-                    continue; // hard edge: only inside the box
-                }
+                // Full effect everywhere inside the box; fade to 0 over blend_distance WORLD UNITS
+                // outside the surface — so blend_distance is a real metres-from-the-zone distance
+                // and the effect reaches full exactly at the box wall.
+                if (distOutside >= z->blend_distance)
+                    continue; // beyond the fade band
+                weight *= 1.0f - distOutside / z->blend_distance;
+            }
+            else if (distOutside > 0.0f)
+            {
+                continue; // hard edge: only inside the box
             }
             if (weight <= 0.0f)
                 continue;
-            layers.push_back({v->priority, weight, &v->profile});
+            layers.push_back({z->priority, weight, &z->postProcess});
         }
         if (layers.empty())
         {

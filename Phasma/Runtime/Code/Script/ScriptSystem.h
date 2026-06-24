@@ -203,6 +203,9 @@ namespace pe
         // Per-node script instance management
         void ReconcileNodeInstances();
         NodeScriptInstance CreateNodeInstance(NodeId *node, const std::string &path);
+        // Trigger-zone script instance (separate from the node's plain Component_Script instance):
+        // found/created lazily from the zone's scriptPath. Used only by InvokeNodeFunction (triggers).
+        NodeScriptInstance *GetOrCreateZoneInstance(NodeId *node, const std::string &path);
         void RefreshNodeInstanceBindings(NodeScriptInstance &inst);
         void InitializeNodeInstance(NodeScriptInstance &inst);
         void DestroyNodeInstance(NodeScriptInstance &inst);
@@ -210,6 +213,7 @@ namespace pe
         sol::state m_lua{};
         std::vector<ScriptEntry> m_scripts{};
         std::vector<NodeScriptInstance> m_nodeInstances{};
+        std::vector<NodeScriptInstance> m_zoneScriptInstances{}; // trigger-zone scripts (separate from above)
         std::vector<RegisteredScriptUpdate> m_registeredUpdates{};
         std::vector<PendingAsyncLoad> m_pendingAsyncLoads;
         std::vector<PendingSceneLoad> m_pendingSceneLoads;

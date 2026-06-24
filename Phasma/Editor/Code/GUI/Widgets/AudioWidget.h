@@ -13,7 +13,9 @@ namespace pe
     {
     public:
         AudioWidget() : Widget("AudioWidget") {}
-        void DrawEmbed(NodeId *node, Scene *scene);
+        // showAutoplay: false inside a Trigger Zone (the zone starts/stops the source on enter/exit,
+        // so Autoplay is meaningless there); true for a plain node audio source.
+        void DrawEmbed(NodeId *node, Scene *scene, bool showAutoplay = true);
     };
 } // namespace pe
 

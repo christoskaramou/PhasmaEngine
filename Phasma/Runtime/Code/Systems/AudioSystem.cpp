@@ -43,6 +43,15 @@ namespace pe
         CleanupFinishedSounds();
         SyncListenerToCamera();
 
+        // Re-apply per-node source volume/pitch each frame so editing them in the inspector is live
+        // (PlaySource only applies at start). Zone sounds are handled separately in SetZoneAudio.
+        for (auto &st : m_states)
+            if (st.sound)
+            {
+                ma_sound_set_volume(st.sound, st.desc.volume * m_sfxVolume);
+                ma_sound_set_pitch(st.sound, st.desc.pitch);
+            }
+
         if (Scene *scene = GetActiveScene())
             SyncSourcePositions(*scene);
     }
@@ -68,6 +77,16 @@ namespace pe
             delete s;
         }
         m_fireAndForget.clear();
+
+        for (auto &[node, zs] : m_zoneSounds)
+        {
+            if (zs.sound)
+            {
+                ma_sound_uninit(zs.sound);
+                delete zs.sound;
+            }
+        }
+        m_zoneSounds.clear();
 
         ma_engine_uninit(m_engine);
         delete m_engine;
@@ -174,6 +193,50 @@ namespace pe
     void AudioSystem::SetSFXVolume(float v)
     {
         m_sfxVolume = v;
+    }
+
+    void AudioSystem::SetZoneAudio(NodeId *node, const AudioSourceDesc &desc, float gain)
+    {
+        // Drive the zone's OWN sound (separate registry from per-node Component_Audio). gain > 0 ->
+        // ensure loaded + playing + scaled; gain == 0 -> stop. Reloads when the file path changes.
+        // pitch/loop/spatial honored exactly as authored.
+        if (!m_engine)
+            return;
+        ZoneSound &zs = m_zoneSounds[node];
+        if (gain > 0.0f && !desc.filePath.empty())
+        {
+            if (!zs.sound || zs.path != desc.filePath)
+            {
+                if (zs.sound)
+                {
+                    ma_sound_uninit(zs.sound);
+                    delete zs.sound;
+                    zs.sound = nullptr;
+                }
+                std::string fullPath = ResolvePath(desc.filePath);
+                zs.sound = new ma_sound();
+                if (ma_sound_init_from_file(m_engine, fullPath.c_str(), 0, nullptr, nullptr, zs.sound) != MA_SUCCESS)
+                {
+                    PE_WARN("[Audio] Failed to load zone audio: %s", fullPath.c_str());
+                    delete zs.sound;
+                    zs.sound = nullptr;
+                    zs.path.clear();
+                    return;
+                }
+                zs.path = desc.filePath;
+            }
+            ma_sound_set_pitch(zs.sound, desc.pitch);
+            ma_sound_set_looping(zs.sound, desc.loop ? MA_TRUE : MA_FALSE);
+            ma_sound_set_spatialization_enabled(zs.sound, desc.spatial ? MA_TRUE : MA_FALSE);
+            ma_sound_set_volume(zs.sound, desc.volume * m_sfxVolume * gain);
+            if (!ma_sound_is_playing(zs.sound))
+                ma_sound_start(zs.sound);
+        }
+        else if (zs.sound && ma_sound_is_playing(zs.sound))
+        {
+            ma_sound_stop(zs.sound);
+            ma_sound_seek_to_pcm_frame(zs.sound, 0);
+        }
     }
 
     // --- Per-node audio sources ---

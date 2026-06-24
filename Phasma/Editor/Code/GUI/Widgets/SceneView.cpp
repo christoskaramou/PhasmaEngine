@@ -1544,7 +1544,7 @@ namespace pe
         if (GUIState::s_useLightGizmos)
             DrawLightGizmos(imageMin, imageSize);
 
-        DrawPostProcessVolumeGizmos(imageMin, imageSize);
+        DrawTriggerZoneGizmos(imageMin, imageSize);
         DrawCameraGizmos(imageMin, imageSize);
         if (GUIState::s_useOrientationGizmo)
             DrawOrientationGizmo(imageMin, imageSize);
@@ -1843,7 +1843,7 @@ namespace pe
         }
     }
 
-    void SceneView::DrawPostProcessVolumeGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    void SceneView::DrawTriggerZoneGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)
     {
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
         if (!renderer)
@@ -1876,23 +1876,18 @@ namespace pe
                     drawList->AddLine(screen[e[0]], screen[e[1]], color, thickness);
         };
 
-        // All bounded volume types share the box gizmo (global volumes are unbounded -> no box):
-        // post-process = cyan, trigger = yellow.
+        // Trigger Zones draw a yellow box gizmo (brighter/thicker when selected).
         for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
         {
             NodeId *node = scene.GetNodeId(i);
             if (!scene.IsNodeHierarchyEnabled(node))
                 continue;
+            if (!scene.GetTriggerZoneForNode(node))
+                continue;
             const bool selected = sel.GetSelectionType() == SelectionType::Node && sel.GetSelectedNode() == node;
             const float thickness = selected ? 3.0f : 2.0f;
-
-            if (NodePostProcessVolumeTag *vol = scene.GetPostProcessVolumeForNode(node); vol && !vol->global)
-                drawBox(scene.GetWorldMatrix(node),
-                        selected ? IM_COL32(130, 225, 255, 255) : IM_COL32(110, 195, 235, 205), thickness);
-
-            if (scene.GetTriggerVolumeForNode(node))
-                drawBox(scene.GetWorldMatrix(node),
-                        selected ? IM_COL32(255, 225, 120, 255) : IM_COL32(235, 195, 90, 205), thickness);
+            drawBox(scene.GetWorldMatrix(node),
+                    selected ? IM_COL32(255, 225, 120, 255) : IM_COL32(235, 195, 90, 205), thickness);
         }
     }
 

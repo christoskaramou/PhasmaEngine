@@ -589,48 +589,63 @@ namespace pe
             scene.SetSkyboxPath(node, path, false);
         }
 
-        void RestorePostProcessVolumeNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
+        void RestoreTriggerZoneNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
         {
-            if (!node || !nodeValue.HasMember("postProcessVolume") || !nodeValue["postProcessVolume"].IsObject())
+            if (!node || !nodeValue.HasMember("triggerZone") || !nodeValue["triggerZone"].IsObject())
                 return;
 
-            const auto &vv = nodeValue["postProcessVolume"];
-            scene.AddComponentFlag(node, Component_PostProcessVolume);
-            NodePostProcessVolumeTag *vol = scene.GetPostProcessVolumeForNode(node);
-            if (!vol)
+            const auto &zv = nodeValue["triggerZone"];
+            scene.AddComponentFlag(node, Component_TriggerZone);
+            NodeTriggerZoneTag *z = scene.GetTriggerZoneForNode(node);
+            if (!z)
                 return;
 
-            if (vv.HasMember("global"))
-                vol->global = vv["global"].GetBool();
-            if (vv.HasMember("priority"))
-                vol->priority = vv["priority"].GetFloat();
-            if (vv.HasMember("blend"))
-                vol->blend = vv["blend"].GetFloat();
-            if (vv.HasMember("blend_distance"))
-                vol->blend_distance = vv["blend_distance"].GetFloat();
-            if (vv.HasMember("profile") && vv["profile"].IsObject())
-                ApplyPostProcessProfileMembers(vv["profile"], vol->profile);
-        }
-
-        void RestoreTriggerVolumeNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
-        {
-            if (!node || !nodeValue.HasMember("triggerVolume") || !nodeValue["triggerVolume"].IsObject())
-                return;
-
-            const auto &tv = nodeValue["triggerVolume"];
-            scene.AddComponentFlag(node, Component_TriggerVolume);
-            NodeTriggerVolumeTag *trig = scene.GetTriggerVolumeForNode(node);
-            if (!trig)
-                return;
-
-            if (tv.HasMember("fireForCamera"))
-                trig->fireForCamera = tv["fireForCamera"].GetBool();
-            if (tv.HasMember("runMode"))
-                trig->runMode = static_cast<TriggerRunMode>(tv["runMode"].GetInt());
-            if (tv.HasMember("onEnter") && tv["onEnter"].IsString())
-                trig->onEnter = tv["onEnter"].GetString();
-            if (tv.HasMember("onExit") && tv["onExit"].IsString())
-                trig->onExit = tv["onExit"].GetString();
+            // common
+            if (zv.HasMember("priority"))
+                z->priority = zv["priority"].GetFloat();
+            if (zv.HasMember("blend"))
+                z->blend = zv["blend"].GetFloat();
+            if (zv.HasMember("blend_distance"))
+                z->blend_distance = zv["blend_distance"].GetFloat();
+            if (zv.HasMember("runMode"))
+                z->runMode = static_cast<TriggerRunMode>(zv["runMode"].GetInt());
+            // script section
+            if (zv.HasMember("scriptEnabled"))
+                z->scriptEnabled = zv["scriptEnabled"].GetBool();
+            if (zv.HasMember("scriptPath") && zv["scriptPath"].IsString())
+                z->scriptPath = zv["scriptPath"].GetString();
+            if (zv.HasMember("fireForCamera"))
+                z->fireForCamera = zv["fireForCamera"].GetBool();
+            if (zv.HasMember("onEnter") && zv["onEnter"].IsString())
+                z->onEnter = zv["onEnter"].GetString();
+            if (zv.HasMember("onExit") && zv["onExit"].IsString())
+                z->onExit = zv["onExit"].GetString();
+            // post-process section
+            if (zv.HasMember("postProcessEnabled"))
+                z->postProcessEnabled = zv["postProcessEnabled"].GetBool();
+            if (zv.HasMember("postProcess") && zv["postProcess"].IsObject())
+                ApplyPostProcessProfileMembers(zv["postProcess"], z->postProcess);
+            // audio section (zone-owned source)
+            if (zv.HasMember("audioEnabled"))
+                z->audioEnabled = zv["audioEnabled"].GetBool();
+            if (zv.HasMember("audioSource") && zv["audioSource"].IsObject())
+            {
+                const auto &a = zv["audioSource"];
+                if (a.HasMember("file") && a["file"].IsString())
+                    z->audioSource.filePath = a["file"].GetString();
+                if (a.HasMember("volume"))
+                    z->audioSource.volume = a["volume"].GetFloat();
+                if (a.HasMember("pitch"))
+                    z->audioSource.pitch = a["pitch"].GetFloat();
+                if (a.HasMember("min_distance"))
+                    z->audioSource.minDistance = a["min_distance"].GetFloat();
+                if (a.HasMember("max_distance"))
+                    z->audioSource.maxDistance = a["max_distance"].GetFloat();
+                if (a.HasMember("loop"))
+                    z->audioSource.loop = a["loop"].GetBool();
+                if (a.HasMember("spatial"))
+                    z->audioSource.spatial = a["spatial"].GetBool();
+            }
         }
 
         void RestorePrefabNode(Scene &scene,
@@ -1646,29 +1661,40 @@ namespace pe
                     nodeObj.AddMember("skybox", skyboxObj.Move(), allocator);
                 }
 
-                if ((flags & Component_PostProcessVolume) && cache.postProcessVolume)
+                if ((flags & Component_TriggerZone) && cache.triggerZone)
                 {
-                    const NodePostProcessVolumeTag &vol = *cache.postProcessVolume;
-                    rapidjson::Value volObj(rapidjson::kObjectType);
-                    volObj.AddMember("global", vol.global, allocator);
-                    volObj.AddMember("priority", vol.priority, allocator);
-                    volObj.AddMember("blend", vol.blend, allocator);
-                    volObj.AddMember("blend_distance", vol.blend_distance, allocator);
+                    const NodeTriggerZoneTag &z = *cache.triggerZone;
+                    rapidjson::Value zObj(rapidjson::kObjectType);
+                    // common
+                    zObj.AddMember("priority", z.priority, allocator);
+                    zObj.AddMember("blend", z.blend, allocator);
+                    zObj.AddMember("blend_distance", z.blend_distance, allocator);
+                    zObj.AddMember("runMode", static_cast<int>(z.runMode), allocator);
+                    // script section
+                    zObj.AddMember("scriptEnabled", z.scriptEnabled, allocator);
+                    zObj.AddMember("scriptPath", rapidjson::Value(z.scriptPath.c_str(), allocator), allocator);
+                    zObj.AddMember("fireForCamera", z.fireForCamera, allocator);
+                    zObj.AddMember("onEnter", rapidjson::Value(z.onEnter.c_str(), allocator), allocator);
+                    zObj.AddMember("onExit", rapidjson::Value(z.onExit.c_str(), allocator), allocator);
+                    // post-process section
+                    zObj.AddMember("postProcessEnabled", z.postProcessEnabled, allocator);
                     rapidjson::Value profileObj(rapidjson::kObjectType);
-                    AddPostProcessProfileMembers(profileObj, allocator, vol.profile);
-                    volObj.AddMember("profile", profileObj.Move(), allocator);
-                    nodeObj.AddMember("postProcessVolume", volObj.Move(), allocator);
-                }
-
-                if ((flags & Component_TriggerVolume) && cache.triggerVolume)
-                {
-                    const NodeTriggerVolumeTag &trig = *cache.triggerVolume;
-                    rapidjson::Value trigObj(rapidjson::kObjectType);
-                    trigObj.AddMember("fireForCamera", trig.fireForCamera, allocator);
-                    trigObj.AddMember("runMode", static_cast<int>(trig.runMode), allocator);
-                    trigObj.AddMember("onEnter", rapidjson::Value(trig.onEnter.c_str(), allocator), allocator);
-                    trigObj.AddMember("onExit", rapidjson::Value(trig.onExit.c_str(), allocator), allocator);
-                    nodeObj.AddMember("triggerVolume", trigObj.Move(), allocator);
+                    AddPostProcessProfileMembers(profileObj, allocator, z.postProcess);
+                    zObj.AddMember("postProcess", profileObj.Move(), allocator);
+                    // audio section (zone-owned source)
+                    zObj.AddMember("audioEnabled", z.audioEnabled, allocator);
+                    {
+                        rapidjson::Value a(rapidjson::kObjectType);
+                        a.AddMember("file", MakeStringValue(z.audioSource.filePath), allocator);
+                        a.AddMember("volume", z.audioSource.volume, allocator);
+                        a.AddMember("pitch", z.audioSource.pitch, allocator);
+                        a.AddMember("min_distance", z.audioSource.minDistance, allocator);
+                        a.AddMember("max_distance", z.audioSource.maxDistance, allocator);
+                        a.AddMember("loop", z.audioSource.loop, allocator);
+                        a.AddMember("spatial", z.audioSource.spatial, allocator);
+                        zObj.AddMember("audioSource", a.Move(), allocator);
+                    }
+                    nodeObj.AddMember("triggerZone", zObj.Move(), allocator);
                 }
 
                 if ((flags & Component_RuntimeUi) && cache.runtimeUi && cache.runtimeUi->authored)
@@ -2725,8 +2751,7 @@ namespace pe
                     RestoreSkyboxNode(*this, nodeMap[ni], nodesVal[ni]);
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                 {
-                    RestorePostProcessVolumeNode(*this, nodeMap[ni], nodesVal[ni]);
-                    RestoreTriggerVolumeNode(*this, nodeMap[ni], nodesVal[ni]);
+                    RestoreTriggerZoneNode(*this, nodeMap[ni], nodesVal[ni]);
                 }
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreRuntimeUiNode(*this, nodeMap[ni], nodesVal[ni], &sceneDir);
@@ -3417,8 +3442,7 @@ namespace pe
             RestoreSkyboxNode(*this, nodeMap[ni], nodesVal[ni]);
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
         {
-            RestorePostProcessVolumeNode(*this, nodeMap[ni], nodesVal[ni]);
-            RestoreTriggerVolumeNode(*this, nodeMap[ni], nodesVal[ni]);
+            RestoreTriggerZoneNode(*this, nodeMap[ni], nodesVal[ni]);
         }
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreRuntimeUiNode(*this, nodeMap[ni], nodesVal[ni], &prefabDir);
@@ -3750,7 +3774,7 @@ namespace pe
 
                     uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
                     // Clear subsystem tags before restoring — Mesh/Script are already set by SetMeshRef/SetNodeScript above
-                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Physics2D | Component_Audio | Component_Skybox | Component_RuntimeUi | Component_Prefab | Component_Sprite | Component_PostProcessVolume | Component_SceneSettings | Component_TriggerVolume);
+                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Physics2D | Component_Audio | Component_Skybox | Component_RuntimeUi | Component_Prefab | Component_Sprite | Component_SceneSettings | Component_TriggerZone);
                     uint32_t restoreFlags = flags & ~(Component_Mesh | Component_Script | Component_GpuPending);
                     if (restoreFlags)
                         AddComponentFlag(node, restoreFlags);
@@ -3939,8 +3963,7 @@ namespace pe
                     RestoreSkyboxNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                 {
-                    RestorePostProcessVolumeNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
-                    RestoreTriggerVolumeNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
+                    RestoreTriggerZoneNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
                 }
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreRuntimeUiNode(*this, m_nodeIds[ni], snapshotNodes[ni], nullptr);
@@ -4382,8 +4405,7 @@ namespace pe
                     RestoreSkyboxNode(*this, nodeMap[ni], snapshotNodes[ni]);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                 {
-                    RestorePostProcessVolumeNode(*this, nodeMap[ni], snapshotNodes[ni]);
-                    RestoreTriggerVolumeNode(*this, nodeMap[ni], snapshotNodes[ni]);
+                    RestoreTriggerZoneNode(*this, nodeMap[ni], snapshotNodes[ni]);
                 }
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreRuntimeUiNode(*this, nodeMap[ni], snapshotNodes[ni], nullptr);

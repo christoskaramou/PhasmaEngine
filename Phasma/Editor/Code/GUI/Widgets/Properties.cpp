@@ -1356,7 +1356,7 @@ namespace pe
                     ImGui::Indent(8.f);
                     bool changed = DrawSceneSettingsControls();
                     ImGui::SeparatorText("Post Processing (scene default)");
-                    ui::ItemTooltip("Default post-process profile, used when the camera is in no PostProcessVolume.");
+                    ui::ItemTooltip("Default post-process profile, used when the camera is in no post-process zone.");
                     changed |= DrawPostProcessControls(static_cast<PostProcessProfile &>(Settings::Get<SceneSettings>()));
                     if (changed)
                         scene.MarkDirty();
@@ -1368,116 +1368,138 @@ namespace pe
             // Transform is always shown for scene objects with spatial meaning
             drawTransform();
 
-            if (flags & Component_PostProcessVolume)
+            if (flags & Component_TriggerZone)
             {
                 ImGui::Separator();
-                const bool ppvOpen = ImGui::CollapsingHeader("Post Process Volume", ImGuiTreeNodeFlags_DefaultOpen);
-                ui::ItemTooltip("Post-process settings applied while the camera is inside this volume.");
-                if (ppvOpen)
+                const bool zoneOpen = ImGui::CollapsingHeader("Trigger Zone", ImGuiTreeNodeFlags_DefaultOpen);
+                ui::ItemTooltip("A bounded box (yellow in the viewport) that drives a script (on_enter/on_exit), "
+                                "post-process, and/or audio while the camera is inside. Toggle each section on.");
+                if (zoneOpen)
                 {
                     ImGui::Indent(8.f);
-                    if (NodePostProcessVolumeTag *vol = scene.GetPostProcessVolumeForNode(node))
+                    if (NodeTriggerZoneTag *z = scene.GetTriggerZoneForNode(node))
                     {
                         bool changed = false;
-                        changed |= ImGui::Checkbox("Global (whole scene)", &vol->global);
-                        ui::ItemTooltip("On: applies everywhere. Off: only inside the node's box bounds (from its transform scale).");
-                        changed |= ImGui::DragFloat("Priority", &vol->priority, 0.1f);
-                        ui::ItemTooltip("Volumes composite low to high priority; higher is applied on top.");
-                        changed |= ImGui::SliderFloat("Blend", &vol->blend, 0.0f, 1.0f);
-                        ui::ItemTooltip("Single blend factor for ALL post-process effects: lerps this volume's values "
-                                        "over the underlying profile. 1 = full, 0 = none.");
-                        if (!vol->global)
+
+                        // --- common ---
+                        changed |= ImGui::DragFloat("Priority", &z->priority, 0.1f);
+                        ui::ItemTooltip("When zones overlap, higher priority wins (post-process / audio).");
+                        changed |= ImGui::SliderFloat("Blend", &z->blend, 0.0f, 1.0f);
+                        ui::ItemTooltip("Master weight (0..1) for this zone's blended effects (post-process / audio).");
+                        changed |= ImGui::DragFloat("Blend Distance", &z->blend_distance, 0.05f, 0.0f, 1e6f);
+                        ui::ItemTooltip("World-unit fade OUTSIDE the box: full at the wall, fading to none this many "
+                                        "metres away. 0 = hard edge.");
+                        const char *runModes[] = {"Editor", "Player", "Both"};
+                        int runModeIdx = static_cast<int>(z->runMode);
+                        if (ImGui::Combo("Mode", &runModeIdx, runModes, IM_ARRAYSIZE(runModes)))
                         {
-                            changed |= ImGui::DragFloat("Blend Distance", &vol->blend_distance, 0.05f, 0.0f, 1e6f);
-                            ui::ItemTooltip("Real world-unit fade OUTSIDE the box: full effect at the wall, fading to "
-                                            "none this many metres away. 0 = hard edge.");
+                            z->runMode = static_cast<TriggerRunMode>(runModeIdx);
+                            changed = true;
+                        }
+                        ui::ItemTooltip("Where the Script section fires: Editor (while editing), Player (play mode / "
+                                        "built game), or Both.");
+                        {
                             const mat4 &w = scene.GetWorldMatrix(node);
                             const vec3 size(glm::length(vec3(w[0])), glm::length(vec3(w[1])), glm::length(vec3(w[2])));
                             ImGui::TextDisabled("Bounds: %.2f x %.2f x %.2f", size.x, size.y, size.z);
-                            ui::ItemTooltip("Box size in world units, taken from this node's transform scale. Move/scale "
-                                            "the node (cyan box in the viewport) to position the region.");
+                            ui::ItemTooltip("Box size in world units from the node's transform scale. Move/scale the "
+                                            "node (yellow box in the viewport) to position the zone.");
                         }
-                        ImGui::Separator();
-                        changed |= DrawPostProcessControls(vol->profile);
-                        if (changed)
-                            scene.MarkDirty();
-                    }
-                    ImGui::Unindent(8.f);
-                }
-            }
 
-            if (flags & Component_TriggerVolume)
-            {
-                ImGui::Separator();
-                const bool tvOpen = ImGui::CollapsingHeader("Trigger Volume", ImGuiTreeNodeFlags_DefaultOpen);
-                ui::ItemTooltip("Fires Lua functions on this node's script when the camera enters/leaves the box. "
-                                "Attach a script with on_enter()/on_exit(); use Mode to pick where it runs.");
-                if (tvOpen)
-                {
-                    ImGui::Indent(8.f);
-                    if (NodeTriggerVolumeTag *trig = scene.GetTriggerVolumeForNode(node))
-                    {
-                        bool changed = false;
-                        changed |= ImGui::Checkbox("Fire for camera", &trig->fireForCamera);
-                        ui::ItemTooltip("Fire when the active camera crosses the box.");
-
-                        const char *triggerRunModes[] = {"Editor", "Player", "Both"};
-                        int runModeIdx = static_cast<int>(trig->runMode);
-                        if (ImGui::Combo("Mode", &runModeIdx, triggerRunModes, IM_ARRAYSIZE(triggerRunModes)))
+                        // --- Script section (trigger behavior only; the Lua Script is a separate node component) ---
+                        if (ImGui::CollapsingHeader("Script##zone"))
                         {
-                            trig->runMode = static_cast<TriggerRunMode>(runModeIdx);
-                            changed = true;
-                        }
-                        ui::ItemTooltip("Where On Enter/On Exit run: Editor (while editing), Player (play mode / "
-                                        "built game), or Both.");
-
-                        char enterBuf[128];
-                        char exitBuf[128];
-                        std::snprintf(enterBuf, sizeof(enterBuf), "%s", trig->onEnter.c_str());
-                        std::snprintf(exitBuf, sizeof(exitBuf), "%s", trig->onExit.c_str());
-                        if (ImGui::InputText("On Enter", enterBuf, sizeof(enterBuf)))
-                        {
-                            trig->onEnter = enterBuf;
-                            changed = true;
-                        }
-                        ui::ItemTooltip("Script function called on enter (default on_enter).");
-                        if (ImGui::InputText("On Exit", exitBuf, sizeof(exitBuf)))
-                        {
-                            trig->onExit = exitBuf;
-                            changed = true;
-                        }
-                        ui::ItemTooltip("Script function called on exit (default on_exit).");
-
-                        // Script: the on_enter/on_exit functions live on THIS node's own script.
-                        ImGui::Spacing();
-                        ImGui::SeparatorText("Script");
-                        if (flags & Component_Script)
-                        {
-                            // Draw the real script widget here (path/edit/remove + exposed vars); the
-                            // standalone "Script Component" header is suppressed for trigger nodes below.
-                            drawScriptComponent(node);
-                        }
-                        else
-                        {
-                            if (ImGui::Button("Create Script##trig"))
+                            changed |= ImGui::Checkbox("Enabled##zonescript", &z->scriptEnabled);
+                            ui::ItemTooltip("On enter/exit, call the named functions in the zone's OWN Lua script "
+                                            "(separate from any plain Script Component on this node).");
+                            if (z->scriptEnabled)
                             {
-                                if (auto *se = m_gui->GetWidget<ScriptEditor>())
+                                changed |= ImGui::Checkbox("Fire for camera", &z->fireForCamera);
+                                ui::ItemTooltip("Fire when the active camera crosses the box.");
+                                char enterBuf[128];
+                                char exitBuf[128];
+                                std::snprintf(enterBuf, sizeof(enterBuf), "%s", z->onEnter.c_str());
+                                std::snprintf(exitBuf, sizeof(exitBuf), "%s", z->onExit.c_str());
+                                if (ImGui::InputText("On Enter", enterBuf, sizeof(enterBuf)))
                                 {
-                                    const std::string enterFn = trig->onEnter.empty() ? "on_enter" : trig->onEnter;
-                                    const std::string exitFn = trig->onExit.empty() ? "on_exit" : trig->onExit;
-                                    const std::string content =
-                                        "-- Trigger volume script: called when the active camera enters/leaves "
-                                        "the box. pe_log prints to the editor console (Lua print goes to stdout).\n"
-                                        "function " +
-                                        enterFn + "(self)\n    pe_log(\"entered!\")\nend\n\nfunction " + exitFn +
-                                        "(self)\n    pe_log(\"left!\")\nend\n";
-                                    se->OpenNewScriptWithContent(node, "trigger", content);
+                                    z->onEnter = enterBuf;
+                                    changed = true;
+                                }
+                                ui::ItemTooltip("Script function called on enter (default on_enter).");
+                                if (ImGui::InputText("On Exit", exitBuf, sizeof(exitBuf)))
+                                {
+                                    z->onExit = exitBuf;
+                                    changed = true;
+                                }
+                                ui::ItemTooltip("Script function called on exit (default on_exit).");
+
+                                // The zone's own script (separate from the node's plain Component_Script).
+                                ImGui::Spacing();
+                                ImGui::SeparatorText("Zone Script");
+                                if (z->scriptPath.empty())
+                                    ImGui::TextDisabled("(no script)");
+                                else
+                                    ImGui::TextWrapped("%s", z->scriptPath.c_str());
+                                if (ImGui::SmallButton("Select Script##zonescript"))
+                                {
+                                    if (auto *fs = m_gui->GetWidget<FileSelector>())
+                                        fs->OpenSelection(
+                                            [node](const std::string &path) -> bool
+                                            {
+                                                if (auto *r = GetGlobalSystem<RendererSystem>())
+                                                {
+                                                    if (auto *zz = r->GetScene().GetTriggerZoneForNode(node))
+                                                        zz->scriptPath = path;
+                                                    r->GetScene().MarkDirty();
+                                                }
+                                                return true;
+                                            },
+                                            {".lua"});
+                                }
+                                ui::ItemTooltip("Choose the .lua this zone runs (its on_enter/on_exit).");
+                                if (!z->scriptPath.empty())
+                                {
+                                    ImGui::SameLine();
+                                    if (ImGui::SmallButton("Edit##zonescript"))
+                                        if (auto *se = m_gui->GetWidget<ScriptEditor>())
+                                            se->OpenScriptFile(z->scriptPath);
+                                    ImGui::SameLine();
+                                    if (ImGui::SmallButton("Remove##zonescript"))
+                                    {
+                                        z->scriptPath.clear();
+                                        changed = true;
+                                    }
                                 }
                             }
-                            ui::ItemTooltip("Create a new script pre-filled with your On Enter / On Exit functions, "
-                                            "then Save in the editor to attach it.");
+                        }
+
+                        // --- Post Process section ---
+                        if (ImGui::CollapsingHeader("Post Process##zone"))
+                        {
+                            changed |= ImGui::Checkbox("Enabled##zonepp", &z->postProcessEnabled);
+                            ui::ItemTooltip("Make these post-process settings the active profile (blended over the scene "
+                                            "default) while the camera is inside the zone.");
+                            if (z->postProcessEnabled)
+                            {
+                                ImGui::Separator();
+                                changed |= DrawPostProcessControls(z->postProcess);
+                            }
+                        }
+
+                        // --- Audio section (the zone owns its OWN source, separate from any plain Audio Source) ---
+                        if (ImGui::CollapsingHeader("Audio##zone"))
+                        {
+                            changed |= ImGui::Checkbox("Enabled##zoneaudio", &z->audioEnabled);
+                            ui::ItemTooltip("Play this zone's own audio source while the camera is inside, blending its "
+                                            "volume in over Blend Distance (0 outside the band -> Blend inside); stops "
+                                            "outside. This source is the zone's; a plain Audio Source component is separate.");
+                            AudioSourceDesc &a = z->audioSource;
+                            std::string disp = a.filePath.empty() ? "(none)" : a.filePath;
+                            if (auto sl = disp.find_last_of("/\\"); sl != std::string::npos)
+                                disp = disp.substr(sl + 1);
+                            ImGui::Text("File: %s", disp.c_str());
                             ImGui::SameLine();
-                            if (ImGui::Button("Select Script##trig"))
+                            if (ImGui::SmallButton("Browse##zoneaudio"))
                             {
                                 if (auto *fs = m_gui->GetWidget<FileSelector>())
                                 {
@@ -1485,22 +1507,24 @@ namespace pe
                                         [node](const std::string &path) -> bool
                                         {
                                             if (auto *r = GetGlobalSystem<RendererSystem>())
-                                                r->GetScene().SetNodeScript(node, path);
+                                            {
+                                                if (auto *zz = r->GetScene().GetTriggerZoneForNode(node))
+                                                    zz->audioSource.filePath = path;
+                                                r->GetScene().MarkDirty();
+                                            }
                                             return true;
                                         },
-                                        {".lua"});
+                                        {".wav", ".mp3", ".flac", ".ogg"});
                                 }
                             }
-                            ui::ItemTooltip("Attach an existing .lua script to this trigger.");
+                            ui::ItemTooltip("Choose the audio file this zone plays.");
+                            changed |= ImGui::DragFloat("Volume##zoneaudio", &a.volume, 0.01f, 0.0f, 2.0f);
+                            changed |= ImGui::DragFloat("Pitch##zoneaudio", &a.pitch, 0.01f, 0.1f, 3.0f);
+                            changed |= ImGui::Checkbox("Loop##zoneaudio", &a.loop);
+                            changed |= ImGui::Checkbox("Spatial##zoneaudio", &a.spatial);
+                            ui::ItemTooltip("Attenuate by listener distance (left exactly as you set it).");
                         }
 
-                        {
-                            const mat4 &w = scene.GetWorldMatrix(node);
-                            const vec3 size(glm::length(vec3(w[0])), glm::length(vec3(w[1])), glm::length(vec3(w[2])));
-                            ImGui::TextDisabled("Bounds: %.2f x %.2f x %.2f", size.x, size.y, size.z);
-                            ui::ItemTooltip("Box size in world units from the node's transform scale (yellow box in "
-                                            "the viewport). Move/scale the node to position the trigger.");
-                        }
                         if (changed)
                             scene.MarkDirty();
                     }
@@ -1539,8 +1563,8 @@ namespace pe
                 }
             }
 
-            // Script component (suppressed for trigger nodes — drawn inside the Trigger Volume section)
-            if ((flags & Component_Script) && !(flags & Component_TriggerVolume))
+            // Script component (separate node component; a Trigger Zone fires its on_enter/on_exit)
+            if (flags & Component_Script)
             {
                 ImGui::Separator();
                 bool open = ImGui::CollapsingHeader("Script Component", ImGuiTreeNodeFlags_DefaultOpen);
@@ -1653,6 +1677,7 @@ namespace pe
 
 #ifdef PE_AUDIO
             // Audio component
+            // Audio Source (separate node component; a Trigger Zone plays it on enter and blends it)
             if (flags & Component_Audio)
             {
                 ImGui::Separator();

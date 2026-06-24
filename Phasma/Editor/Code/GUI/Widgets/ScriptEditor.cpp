@@ -89,6 +89,20 @@ namespace pe
         m_open = true;
     }
 
+    void ScriptEditor::OpenScriptFile(const std::string &path)
+    {
+        m_targetNode = nullptr; // in-place edit: Save must NOT attach this to a node's Component_Script
+        m_isNewScript = false;
+        std::string resolved = path;
+        if (!std::filesystem::exists(resolved) && resolved.rfind("Assets/", 0) == 0)
+            resolved = Path::Assets + resolved.substr(7);
+        m_loadedPath = resolved;
+        std::filesystem::path p(resolved);
+        snprintf(m_scriptNameBuf, sizeof(m_scriptNameBuf), "%s", p.stem().string().c_str());
+        LoadScriptFile(resolved);
+        m_open = true;
+    }
+
     void ScriptEditor::OpenNewScript(NodeId *node)
     {
         m_targetNode = node;

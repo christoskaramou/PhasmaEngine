@@ -223,21 +223,20 @@ namespace pe
         void SetSkyboxPath(NodeId *node, std::string path, bool markDirty = true);
         void ApplySkyboxSettingsFromNode(NodeId *node = nullptr);
         void EnsureSkyboxNodeFromSettings(bool markDirty = false);
-        NodeId *CreatePostProcessVolumeNode(NodeId *parent = nullptr, bool markDirty = true);
-        NodePostProcessVolumeTag *GetPostProcessVolumeForNode(const NodeId *node) const;
-        // Highest-priority enabled volume whose bounds contain cameraPos (global volumes always
-        // qualify). Returns null when none apply, so the caller falls back to the scene default.
+        // --- Trigger Zone: one bounded box driving script / post-process / audio sections ---
+        NodeId *CreateTriggerZoneNode(NodeId *parent = nullptr, bool markDirty = true);
+        NodeTriggerZoneTag *GetTriggerZoneForNode(const NodeId *node) const;
+        // Highest-priority post-process-enabled zone whose bounds contain cameraPos, blended over the
+        // scene default. Returns null when none apply, so the caller falls back to the scene default.
         PostProcessProfile *ResolvePostProcessProfile(const vec3 &cameraPos);
-        // Shared volume-region core: world-unit distance from p to the node's box surface (0 inside,
-        // >0 outside). global -> 0 (unbounded, always inside). Used by every volume type.
+        // Shared zone-region core: world-unit distance from p to the node's box surface (0 inside,
+        // >0 outside). global -> 0 (unbounded, always inside).
         float VolumeDistanceOutside(const NodeId *node, const vec3 &p, bool global) const;
-
-        // --- Trigger volumes: bounded region fires Lua on_enter/on_exit on the node's script ---
-        NodeId *CreateTriggerVolumeNode(NodeId *parent = nullptr, bool markDirty = true);
-        NodeTriggerVolumeTag *GetTriggerVolumeForNode(const NodeId *node) const;
-        // Per-frame enter/exit detection for the active camera (play mode only). Fires the node's
-        // onEnter/onExit Lua functions on transitions. Called from Update() after the camera updates.
-        void UpdateTriggerVolumes();
+        // Per-frame enter/exit detection for the active camera; fires the zone's script section
+        // onEnter/onExit on transitions (gated by runMode). Called from Update() after cameras update.
+        void UpdateTriggerZones();
+        // Per-frame: apply the highest-priority audio-enabled zone the camera is inside (volumes).
+        void UpdateAudioZones();
         NodeId *GetSceneSettingsNode() const;
         // Resolve the Scene Settings master switch + active post-process profile for this frame.
         // Called at the top of UpdateCameras() so cameras read the fresh profile when they jitter.
@@ -483,12 +482,10 @@ namespace pe
                 flags |= Component_Audio;
             if (c.skybox)
                 flags |= Component_Skybox;
-            if (c.postProcessVolume)
-                flags |= Component_PostProcessVolume;
             if (c.sceneSettings)
                 flags |= Component_SceneSettings;
-            if (c.triggerVolume)
-                flags |= Component_TriggerVolume;
+            if (c.triggerZone)
+                flags |= Component_TriggerZone;
             if (c.runtimeUi)
                 flags |= Component_RuntimeUi;
             if (c.prefab)

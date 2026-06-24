@@ -898,8 +898,30 @@ namespace pe
         return true;
     }
 
+    NodeScriptInstance *ScriptSystem::GetOrCreateZoneInstance(NodeId *node, const std::string &path)
+    {
+        for (auto &inst : m_zoneScriptInstances)
+        {
+            if (inst.handle.nodeId == node && node && inst.handle.nodeRevision == node->revision)
+            {
+                if (MatchesNodeScriptPath(path, inst))
+                    return &inst;
+                // Zone's script path changed -> rebuild this instance in place.
+                DestroyNodeInstance(inst);
+                if (inst.exposedRef != LUA_NOREF)
+                    luaL_unref(m_lua.lua_state(), LUA_REGISTRYINDEX, inst.exposedRef);
+                inst = CreateNodeInstance(node, path);
+                return &inst;
+            }
+        }
+        m_zoneScriptInstances.push_back(CreateNodeInstance(node, path));
+        return &m_zoneScriptInstances.back();
+    }
+
     void ScriptSystem::InvokeNodeFunction(NodeId *node, const std::string &functionName)
     {
+        // Triggers fire on the ZONE's own script (NodeTriggerZoneTag::scriptPath), which is separate
+        // from the node's plain Component_Script instance.
         if (!m_initialized || !node || functionName.empty())
             return;
 
@@ -907,8 +929,11 @@ namespace pe
         if (!scene || !scene->IsNodeAlive(node))
             return;
 
-        ReconcileNodeInstances();
-        NodeScriptInstance *inst = FindNodeInstance(node);
+        NodeTriggerZoneTag *z = scene->GetTriggerZoneForNode(node);
+        if (!z || z->scriptPath.empty())
+            return;
+
+        NodeScriptInstance *inst = GetOrCreateZoneInstance(node, z->scriptPath);
         if (!inst)
             return;
 
@@ -919,13 +944,13 @@ namespace pe
 
         sol::object fn = inst->env[functionName];
         if (!fn.is<sol::function>())
-            return; // optional hook — silently skip when the node's script doesn't define it
+            return; // optional hook — silently skip when the zone script doesn't define it
 
         auto result = CallProtected(fn.as<sol::function>(), inst->handle);
         if (!result.valid())
         {
             sol::error err = result;
-            Log::Error(PeFormat("[Lua] Trigger function '%s' error in node script '%s': %s",
+            Log::Error(PeFormat("[Lua] Trigger function '%s' error in zone script '%s': %s",
                                 functionName.c_str(),
                                 inst->path.c_str(),
                                 err.what()));
@@ -1554,6 +1579,14 @@ namespace pe
                 luaL_unref(m_lua.lua_state(), LUA_REGISTRYINDEX, inst.exposedRef);
         }
         m_nodeInstances.clear();
+
+        for (auto &inst : m_zoneScriptInstances)
+        {
+            DestroyNodeInstance(inst);
+            if (inst.exposedRef != LUA_NOREF)
+                luaL_unref(m_lua.lua_state(), LUA_REGISTRYINDEX, inst.exposedRef);
+        }
+        m_zoneScriptInstances.clear();
 
         // Wait for any pending async loads before destroying Lua state
         for (auto &load : m_pendingAsyncLoads)

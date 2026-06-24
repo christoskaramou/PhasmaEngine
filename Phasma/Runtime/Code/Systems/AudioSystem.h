@@ -45,6 +45,10 @@ namespace pe
         float GetMasterVolume() const { return m_masterVolume; }
         float GetMusicVolume() const { return m_musicVolume; }
         float GetSFXVolume() const { return m_sfxVolume; }
+        // Trigger-zone audio: drive a zone's OWN source (its NodeTriggerZoneTag::audioSource, separate
+        // from the node's Component_Audio) by a 0..1 gain from the zone's distance blend. gain > 0 ->
+        // ensure loaded + playing + scale volume; gain == 0 -> stop. Reloads if the file path changes.
+        void SetZoneAudio(NodeId *node, const AudioSourceDesc &desc, float gain);
 
         // Per-node audio sources
         void AddSource(Scene &scene, NodeId *node, const AudioSourceDesc &desc);
@@ -74,6 +78,15 @@ namespace pe
 
         std::unordered_map<const NodeId *, size_t> m_nodeToIndex;
         std::vector<AudioNodeState> m_states;
+
+        // Trigger-zone owned sounds (separate from per-node Component_Audio sources above), keyed by
+        // the zone node. path tracks the loaded file so we reload when the zone's audioSource changes.
+        struct ZoneSound
+        {
+            ma_sound *sound = nullptr;
+            std::string path;
+        };
+        std::unordered_map<const NodeId *, ZoneSound> m_zoneSounds;
 
         // Fire-and-forget sounds (cleaned up when finished)
         std::vector<ma_sound *> m_fireAndForget;

@@ -165,17 +165,10 @@ namespace pe
             selection.Select(node, SelectionType::Node);
         };
 
-        auto createPostProcessVolume = [&scene, &selection, &recordSnapshot]()
+        auto createTriggerZone = [&scene, &selection, &recordSnapshot]()
         {
-            recordSnapshot("Added Post Process Volume");
-            NodeId *node = scene.CreatePostProcessVolumeNode();
-            selection.Select(node, SelectionType::Node);
-        };
-
-        auto createTriggerVolume = [&scene, &selection, &recordSnapshot]()
-        {
-            recordSnapshot("Added Trigger Volume");
-            NodeId *node = scene.CreateTriggerVolumeNode();
+            recordSnapshot("Added Trigger Zone");
+            NodeId *node = scene.CreateTriggerZoneNode();
             selection.Select(node, SelectionType::Node);
         };
 
@@ -438,12 +431,9 @@ namespace pe
                 createSkybox();
             if (!scene.GetSkyboxNode())
                 ui::ItemTooltip("Create the scene skybox node.");
-            if (ImGui::MenuItem("Post Process Volume"))
-                createPostProcessVolume();
-            ui::ItemTooltip("Create a post-process volume node.");
-            if (ImGui::MenuItem("Trigger Volume"))
-                createTriggerVolume();
-            ui::ItemTooltip("Create a trigger volume node (Lua on_enter/on_exit when the camera enters).");
+            if (ImGui::MenuItem("Trigger Zone"))
+                createTriggerZone();
+            ui::ItemTooltip("Create a Trigger Zone (script on_enter/on_exit + post-process + audio sections).");
             if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
                 createSceneSettings();
             if (!scene.GetSceneSettingsNode())
@@ -634,12 +624,9 @@ namespace pe
                 createSkybox();
             if (!scene.GetSkyboxNode())
                 ui::ItemTooltip("Create the scene skybox node.");
-            if (ImGui::MenuItem("Post Process Volume"))
-                createPostProcessVolume();
-            ui::ItemTooltip("Create a post-process volume node.");
-            if (ImGui::MenuItem("Trigger Volume"))
-                createTriggerVolume();
-            ui::ItemTooltip("Create a trigger volume node (Lua on_enter/on_exit when the camera enters).");
+            if (ImGui::MenuItem("Trigger Zone"))
+                createTriggerZone();
+            ui::ItemTooltip("Create a Trigger Zone (script on_enter/on_exit + post-process + audio sections).");
             if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
                 createSceneSettings();
             if (!scene.GetSceneSettingsNode())
@@ -877,9 +864,7 @@ namespace pe
                     icon = ICON_FA_LIGHTBULB;
                 else if (nodeCompFlags & Component_Skybox)
                     icon = ICON_FA_SUN;
-                else if (nodeCompFlags & Component_PostProcessVolume)
-                    icon = ICON_FA_PALETTE;
-                else if (nodeCompFlags & Component_TriggerVolume)
+                else if (nodeCompFlags & Component_TriggerZone)
                     icon = ICON_FA_BELL;
                 else if (nodeCompFlags & Component_SceneSettings)
                     icon = ICON_FA_GEAR;
@@ -1509,12 +1494,9 @@ namespace pe
                     createSkybox();
                 if (!scene.GetSkyboxNode())
                     ui::ItemTooltip("Create the scene skybox node.");
-                if (ImGui::MenuItem("Post Process Volume"))
-                    createPostProcessVolume();
-                ui::ItemTooltip("Create a post-process volume node.");
-                if (ImGui::MenuItem("Trigger Volume"))
-                    createTriggerVolume();
-                ui::ItemTooltip("Create a trigger volume node (Lua on_enter/on_exit when the camera enters).");
+                if (ImGui::MenuItem("Trigger Zone"))
+                    createTriggerZone();
+                ui::ItemTooltip("Create a Trigger Zone (script on_enter/on_exit + post-process + audio sections).");
                 if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
                     createSceneSettings();
                 if (!scene.GetSceneSettingsNode())

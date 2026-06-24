@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Base/Settings.h" // PostProcessProfile (value member of NodePostProcessVolumeTag)
+#include "Base/Settings.h"    // PostProcessProfile (value member of NodeTriggerZoneTag)
+#include "Audio/AudioTypes.h" // AudioSourceDesc (value member of NodeTriggerZoneTag)
 
 namespace pe
 {
@@ -81,27 +82,14 @@ namespace pe
         std::string path;
     };
 
-    // A post-process volume. Carries its own PostProcessProfile; the renderer makes it the active
-    // profile when the camera is inside it (highest priority wins). global = unbounded (whole
-    // scene); otherwise the node transform defines an axis-aligned box.
-    class NodePostProcessVolumeTag : public IComponent
-    {
-    public:
-        PostProcessProfile profile;
-        bool global = true;
-        float priority = 0.0f;
-        float blend = 1.0f;          // 0..1 blend factor for ALL post-process effects; 1 = full, 0 = none
-        float blend_distance = 0.0f; // bounded only: real world-unit fade OUTSIDE the box (full at the wall, 0 this far away); 0 = hard edge
-    };
-
     // Marker for the singleton "Scene Settings" anchor node. Carries no data — its inspector edits
     // the global SceneSettings singleton (which is what gets serialized in the scene settings block).
     class NodeSceneSettingsTag : public IComponent
     {
     };
 
-    // Where a trigger volume fires. Editor = only while editing (not in play / not the standalone
-    // player); Player = only in play mode or the standalone player; Both = everywhere.
+    // Where a trigger zone's effects/script apply. Editor = only while editing (not in play / not the
+    // standalone player); Player = only in play mode or the standalone player; Both = everywhere.
     enum class TriggerRunMode : uint8_t
     {
         Editor = 0,
@@ -109,18 +97,42 @@ namespace pe
         Both = 2
     };
 
-    // Box region (from the node transform) that calls Lua functions on the node's own script when the
-    // active camera enters/leaves it. Reuses the shared volume box math (Scene::VolumeDistanceOutside).
-    // onEnter/onExit name the functions to call; wasInside is per-frame transition state (runtime-only,
-    // not serialized).
-    class NodeTriggerVolumeTag : public IComponent
+    // Unified "Trigger Zone": one bounded box (the node transform) that drives several scene systems.
+    // The common fields feed the shared box-distance falloff (Scene::VolumeDistanceOutside); each
+    // feature is an opt-in section toggled on per zone:
+    //   - Script:       call Lua on_enter/on_exit on the node's own script when the camera crosses in/out.
+    //   - Post Process: make `postProcess` the active profile (blended over the scene default) while inside.
+    //   - Audio:        scale AudioSystem master/music/sfx while inside.
+    // More sections (physics, etc.) land later. wasInside is per-frame transition state (runtime-only).
+    class NodeTriggerZoneTag : public IComponent
     {
     public:
-        std::string onEnter = "on_enter"; // function name in this node's script env
+        // --- common (always present) ---
+        float priority = 0.0f;       // higher wins when zones overlap (post-process / audio)
+        float blend = 1.0f;          // 0..1 master weight for this zone's blended effects
+        float blend_distance = 0.0f; // world-unit fade OUTSIDE the box (full at the wall); 0 = hard edge
+        TriggerRunMode runMode = TriggerRunMode::Both;
+
+        // --- Script section ---
+        // The zone owns its OWN script (scriptPath, separate from the node's plain Component_Script).
+        // On enter/exit it calls onEnter/onExit in that script's isolated environment.
+        bool scriptEnabled = false;
+        std::string scriptPath;           // the zone's own .lua (project-relative or absolute)
+        std::string onEnter = "on_enter"; // function name in the zone script env
         std::string onExit = "on_exit";
-        bool fireForCamera = true;                     // ponytail: camera-only for now; add tracked-node targets if needed
-        TriggerRunMode runMode = TriggerRunMode::Both; // where it fires (editor / player / both)
-        bool wasInside = false;                        // runtime transition state
+        bool fireForCamera = true; // ponytail: camera-only for now; add tracked-node targets if needed
+        bool wasInside = false;    // runtime transition state
+
+        // --- Post Process section ---
+        bool postProcessEnabled = false;
+        PostProcessProfile postProcess;
+
+        // --- Audio section ---
+        // The zone owns its OWN audio source (separate from the node's plain Component_Audio): plays it
+        // while the camera is inside, blending volume in over blend_distance (0 at the outer edge of the
+        // band -> blend fully inside); stops it outside. pitch/loop/spatial are honored as authored.
+        bool audioEnabled = false;
+        AudioSourceDesc audioSource;
     };
 
     enum class NodeRuntimeUiWidgetType : uint8_t
@@ -241,11 +253,10 @@ namespace pe
         NodePhysics2DTag *physics2d = nullptr;
         NodeAudioTag *audio = nullptr;
         NodeSkyboxTag *skybox = nullptr;
-        NodePostProcessVolumeTag *postProcessVolume = nullptr;
         NodeSceneSettingsTag *sceneSettings = nullptr;
         NodeRuntimeUiTag *runtimeUi = nullptr;
         NodePrefabComponent *prefab = nullptr;
         NodeSpriteComponent *sprite = nullptr;
-        NodeTriggerVolumeTag *triggerVolume = nullptr;
+        NodeTriggerZoneTag *triggerZone = nullptr;
     };
 } // namespace pe

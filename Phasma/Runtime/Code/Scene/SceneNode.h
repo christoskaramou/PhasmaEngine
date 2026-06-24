@@ -35,9 +35,9 @@ namespace pe
         Component_Physics2D = 1 << 10,
         Component_Prefab = 1 << 11,
         Component_Sprite = 1 << 12,
-        Component_PostProcessVolume = 1 << 13,
+        // 1 << 13 retired (was Component_PostProcessVolume; folded into Component_TriggerZone)
         Component_SceneSettings = 1 << 14, // Singleton anchor node; its inspector edits SceneSettings
-        Component_TriggerVolume = 1 << 15, // Bounded region that fires Lua on_enter/on_exit on the node's script
+        Component_TriggerZone = 1 << 15,   // Bounded box: script on_enter/on_exit + post-process + audio sections
     };
 
     // Lightweight mesh descriptor — references into Scene's data stores

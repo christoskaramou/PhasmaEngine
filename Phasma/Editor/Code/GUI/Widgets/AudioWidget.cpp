@@ -13,7 +13,7 @@
 
 namespace pe
 {
-    void AudioWidget::DrawEmbed(NodeId *node, Scene *scene)
+    void AudioWidget::DrawEmbed(NodeId *node, Scene *scene, bool showAutoplay)
     {
         auto *as = GetGlobalSystem<AudioSystem>();
         if (!as)
@@ -59,8 +59,11 @@ namespace pe
         ui::ItemTooltip("Restart playback automatically when the clip ends.");
         ImGui::Checkbox("Spatial", &desc->spatial);
         ui::ItemTooltip("Attenuate the sound by listener distance.");
-        ImGui::Checkbox("Autoplay", &desc->autoplay);
-        ui::ItemTooltip("Start this source automatically when play mode begins.");
+        if (showAutoplay)
+        {
+            ImGui::Checkbox("Autoplay", &desc->autoplay);
+            ui::ItemTooltip("Start this source automatically when play mode begins.");
+        }
 
         if (desc->spatial)
         {

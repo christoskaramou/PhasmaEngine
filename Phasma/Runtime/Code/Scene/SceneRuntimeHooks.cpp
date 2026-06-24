@@ -224,6 +224,12 @@ namespace pe
                 return audio->GetSourceDesc(node);
             return nullptr;
         }
+
+        void DefaultApplySceneAudioZoneSource(NodeId *node, const AudioSourceDesc &desc, float gain)
+        {
+            if (auto *audio = GetGlobalSystem<AudioSystem>())
+                audio->SetZoneAudio(node, desc, gain);
+        }
 #endif
     } // namespace
 
@@ -262,6 +268,7 @@ namespace pe
         hooks.hasAudioSource = DefaultHasSceneAudioSource;
         hooks.getAudioSourceDesc = DefaultGetSceneAudioSourceDesc;
         hooks.getAudioSourceDescConst = DefaultGetSceneAudioSourceDescConst;
+        hooks.applyAudioZoneSource = DefaultApplySceneAudioZoneSource;
 #endif
         return hooks;
     }
@@ -322,6 +329,12 @@ namespace pe
     {
         if (s_sceneRuntimeHooks.invokeNodeScriptFunction)
             s_sceneRuntimeHooks.invokeNodeScriptFunction(node, functionName);
+    }
+
+    void ApplySceneAudioZoneSource(NodeId *node, const AudioSourceDesc &desc, float gain)
+    {
+        if (s_sceneRuntimeHooks.applyAudioZoneSource)
+            s_sceneRuntimeHooks.applyAudioZoneSource(node, desc, gain);
     }
 
     bool IsScenePhysicsSimulating()
