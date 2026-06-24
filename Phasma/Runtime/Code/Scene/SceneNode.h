@@ -61,6 +61,22 @@ namespace pe
 
         bool skinned = false;
         bool live = true;
+
+        // Discrete LODs: index ranges into the shared index buffer (all share this mesh's vertexOffset,
+        // since meshopt produces a subset of the same vertices). lods[0] = full detail; lodCount==1 means
+        // no simplified levels. Built at load in AddModelGeometry via meshopt_simplify. The GPU cull shader
+        // picks a level by camera distance and overrides the draw's firstIndex/indexCount.
+        static constexpr uint32_t kMaxLods = 4;
+        uint32_t lodIndexOffset[kMaxLods] = {0, 0, 0, 0};
+        uint32_t lodIndexCount[kMaxLods] = {0, 0, 0, 0};
+        uint32_t lodCount = 1;
+        // Per-mesh LOD controls (authored in the Mesh Component panel; gated by the global Scene Settings
+        // Mesh LOD master switch). lodEnabled=false makes this mesh always full detail. lodShift is added to
+        // the distance-picked level (0 = automatic, 1+ forces that many levels coarser, clamped to lodCount-1).
+        // lodBias multiplies the camera distance for this mesh (>1 = drop detail sooner, <1 = keep longer).
+        bool lodEnabled = true;
+        uint32_t lodShift = 0;
+        float lodBias = 1.0f;
     };
 
     // Utility: bit mask for texture slots

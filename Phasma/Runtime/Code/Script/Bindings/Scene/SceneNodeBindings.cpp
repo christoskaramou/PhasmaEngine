@@ -628,6 +628,51 @@ namespace pe
                     s->RemoveMeshRef(h.nodeId, meshIndex);
                 });
 
+                // Per-mesh LOD shift: bias every mesh of this node toward coarser LODs (0 = automatic,
+                // distance-only; 1+ forces that many levels coarser, clamped to the mesh's last LOD).
+                ut.set_function("set_lod_shift", [](SceneNodeHandle &h, int shift) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    uint32_t v = static_cast<uint32_t>(std::clamp(shift, 0, static_cast<int>(Mesh::kMaxLods) - 1));
+                    for (int mi : s->GetNodeCache(h.nodeId).meshRefs->meshRefs)
+                        if (s->IsValidMeshIndex(mi))
+                            s->GetMesh(mi).lodShift = v;
+                    s->SetGeometryDirty();
+                    s->MarkNodeDirty(h.nodeId);
+                });
+
+                ut.set_function("get_lod_shift", [](SceneNodeHandle &h) -> int {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return 0;
+                    for (int mi : s->GetNodeCache(h.nodeId).meshRefs->meshRefs)
+                        if (s->IsValidMeshIndex(mi))
+                            return static_cast<int>(s->GetMesh(mi).lodShift);
+                    return 0;
+                });
+
+                // Per-mesh LOD enable: false makes every mesh of this node ignore LOD (always full detail).
+                ut.set_function("set_lod_enabled", [](SceneNodeHandle &h, bool enabled) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    for (int mi : s->GetNodeCache(h.nodeId).meshRefs->meshRefs)
+                        if (s->IsValidMeshIndex(mi))
+                            s->GetMesh(mi).lodEnabled = enabled;
+                    s->SetGeometryDirty();
+                    s->MarkNodeDirty(h.nodeId);
+                });
+
+                // Per-mesh LOD distance bias: multiplies camera distance for this node's meshes
+                // (>1 = drop detail sooner, <1 = keep detail longer).
+                ut.set_function("set_lod_bias", [](SceneNodeHandle &h, float bias) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    for (int mi : s->GetNodeCache(h.nodeId).meshRefs->meshRefs)
+                        if (s->IsValidMeshIndex(mi))
+                            s->GetMesh(mi).lodBias = bias;
+                    s->SetGeometryDirty();
+                    s->MarkNodeDirty(h.nodeId);
+                });
+
                 ut.set_function("get_exposed", [](SceneNodeHandle &h, sol::this_state ts) -> std::optional<sol::table> {
                     lua_State *L = ts;
                     Scene *s = GetScene();

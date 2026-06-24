@@ -350,6 +350,22 @@ namespace pe
             });
         }
 
+        // LOD params UBO (CullingCS binding 16): refilled each frame from SceneSettings in UpdateLodUniforms.
+        m_lodUniforms.resize(RHII.GetSwapchainImageCount());
+        for (uint32_t i = 0; i < m_lodUniforms.size(); ++i)
+        {
+            m_lodUniforms[i] = Buffer::Create({
+                .size = RHII.AlignUniform(sizeof(LodUBOData)),
+                .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER,
+                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                .name = "lod_params_uniform_" + std::to_string(i),
+            });
+            m_lodUniforms[i]->Map();
+            m_lodUniforms[i]->Zero();
+            m_lodUniforms[i]->Flush();
+            m_lodUniforms[i]->Unmap();
+        }
+
         m_indirectOpaqueSS = createFilteredIndirect("indirect_OpaqueSS_");
         m_indirectAlphaCutSS = createFilteredIndirect("indirect_AlphaCutSS_");
         m_indirectOpaqueDS = createFilteredIndirect("indirect_OpaqueDS_");
@@ -1048,6 +1064,16 @@ namespace pe
                 constants.aabbMaxY = mesh.boundingBox.max.y;
                 constants.aabbMaxZ = mesh.boundingBox.max.z;
 
+                constants.lodCount = mesh.lodCount;
+                for (uint32_t l = 0; l < Mesh::kMaxLods; ++l)
+                {
+                    constants.lodIndexOffset[l] = mesh.lodIndexOffset[l];
+                    constants.lodIndexCount[l] = mesh.lodIndexCount[l];
+                }
+                constants.lodShift = mesh.lodShift;
+                constants.lodMeshEnabled = mesh.lodEnabled ? 1u : 0u;
+                constants.lodMeshBias = mesh.lodBias;
+
                 BufferRange range{};
                 range.data = &constants;
                 range.offset = offset;
@@ -1121,6 +1147,7 @@ namespace pe
         };
 
         destroyBufferVec(m_cullingCountersBuffers);
+        destroyBufferVec(m_lodUniforms);
         destroyBufferVec(m_indirectOpaqueSS);
         destroyBufferVec(m_indirectAlphaCutSS);
         destroyBufferVec(m_indirectOpaqueDS);
@@ -1205,6 +1232,7 @@ namespace pe
         };
 
         destroyBufferVecEager(m_cullingCountersBuffers);
+        destroyBufferVecEager(m_lodUniforms);
         destroyBufferVecEager(m_indirectOpaqueSS);
         destroyBufferVecEager(m_indirectAlphaCutSS);
         destroyBufferVecEager(m_indirectOpaqueDS);

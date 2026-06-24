@@ -35,6 +35,17 @@ struct PushConstants
 };
 [[vk::push_constant]] PushConstants pc;
 
+// LOD params (Scene::UpdateLodUniforms). Present in every cull variant (push constants are full at 128B,
+// so the global LOD knobs live here). lodDistances.x/y/z are the world-unit switch points LOD0->1/1->2/2->3.
+[[vk::binding(16, 0)]] cbuffer LodUBO
+{
+    uint lodEnabled;
+    uint lodPad0;
+    float lodBias;
+    float lodPad1;
+    float4 lodDistances;
+};
+
 float4x4 LoadMatrix(uint byteOffset)
 {
     float4x4 result;
@@ -233,6 +244,22 @@ uint WaveAppend(uint counterIndex, bool emit)
     float4x4 worldMatrix = LoadMatrix(constants.meshDataOffset);
     float3 aabbMin, aabbMax;
     TransformAABB(localMin, localMax, worldMatrix, aabbMin, aabbMax);
+
+    // Discrete LOD: pick a level by camera distance to the world AABB center and override this draw's
+    // index range. Applies to every variant (frustum, occlusion, phase1/2) since they all emit `cmd`.
+    if (lodEnabled != 0u && constants.lodMeshEnabled != 0u && constants.lodCount > 1u)
+    {
+        float3 lodCenter = (aabbMin + aabbMax) * 0.5;
+        float3 lodCam = float3(pc.cameraPositionX, pc.cameraPositionY, pc.cameraPositionZ);
+        float lodDist = distance(lodCam, lodCenter) * lodBias * constants.lodMeshBias;
+        uint lod = 0u;
+        if (lodDist > lodDistances.x) lod = 1u;
+        if (lodDist > lodDistances.y) lod = 2u;
+        if (lodDist > lodDistances.z) lod = 3u;
+        lod = min(lod + constants.lodShift, constants.lodCount - 1u); // per-mesh shift toward coarser
+        cmd.firstIndex = constants.lodIndexOffset[lod];
+        cmd.indexCount = constants.lodIndexCount[lod];
+    }
 
 #if defined(PHASE1)
     // Two-phase Hi-Z, phase 1: draw last-frame-visible opaque objects only (set A).

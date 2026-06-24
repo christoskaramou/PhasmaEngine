@@ -2739,6 +2739,17 @@ namespace pe
                 ImGui::EndMenu();
             }
 
+            const bool renderMenuOpen = ImGui::BeginMenu("Render");
+            ui::ItemTooltip("Global rendering toggles.");
+            if (renderMenuOpen)
+            {
+                auto &gSettings = Settings::Get<SceneSettings>();
+                ImGui::MenuItem("Mesh LOD", nullptr, &gSettings.lod_enabled);
+                ui::ItemTooltip("Master switch for discrete mesh level-of-detail. Per-mesh LOD settings live "
+                                "in the Mesh Component; the distance/levels live in Scene Settings.");
+                ImGui::EndMenu();
+            }
+
             const bool layoutMenuOpen = ImGui::BeginMenu("Layout");
             ui::ItemTooltip("Adjust editor appearance, scale, and layout.");
             if (layoutMenuOpen)

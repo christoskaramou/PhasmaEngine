@@ -158,6 +158,25 @@ namespace pe
             ui::ItemTooltip("Hi-Z slack as a FRACTION of occluder depth (0.002 = 0.2%). Higher = more conservative.");
             ImGui::Unindent(16.0f);
         }
+        Track(ImGui::Checkbox("Mesh LOD", &gSettings.lod_enabled));
+        ui::ItemTooltip("Discrete mesh level-of-detail: the GPU cull pass swaps each mesh to a simpler index "
+                        "set chosen by camera distance. Levels are generated at load via meshopt.");
+        if (gSettings.lod_enabled)
+        {
+            ImGui::Indent(16.0f);
+            int lodCount = static_cast<int>(gSettings.lod_count);
+            ImGui::SetNextItemWidth(120.0f);
+            if (Track(ImGui::SliderInt("Levels (on load)", &lodCount, 1, 4))) // 4 == Mesh::kMaxLods
+                gSettings.lod_count = static_cast<uint32_t>(lodCount);
+            ui::ItemTooltip("LODs generated per mesh. Applies to newly loaded meshes — reload the scene to regenerate.");
+            ImGui::SetNextItemWidth(200.0f);
+            Track(ImGui::DragFloat3("Switch Distances", gSettings.lod_distances.data(), 1.0f, 0.0f, 100000.0f));
+            ui::ItemTooltip("World-unit camera distances to switch LOD0->1, 1->2, 2->3 (live).");
+            ImGui::SetNextItemWidth(120.0f);
+            Track(ImGui::DragFloat("Distance Bias", &gSettings.lod_bias, 0.01f, 0.1f, 10.0f));
+            ui::ItemTooltip("Multiplies measured distance before the switch test (>1 = drop detail sooner). Live.");
+            ImGui::Unindent(16.0f);
+        }
         Track(ImGui::Checkbox("FreezeCamCull", &gSettings.freeze_frustum_culling));
         ui::ItemTooltip("Freeze the culling camera to inspect culling behavior.");
         Track(ImGui::Checkbox("Draw AABBs", &gSettings.draw_aabbs));

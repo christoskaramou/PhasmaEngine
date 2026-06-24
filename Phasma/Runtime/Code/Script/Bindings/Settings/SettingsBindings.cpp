@@ -21,6 +21,7 @@ namespace pe
         {"draw_aabbs", &SceneSettings::draw_aabbs},
         {"frustum_culling", &SceneSettings::frustum_culling},
         {"occlusion_culling", &SceneSettings::occlusion_culling},
+        {"lod_enabled", &SceneSettings::lod_enabled},
         {"randomize_lights", &SceneSettings::randomize_lights},
         {"physical_point_falloff", &SceneSettings::physical_point_falloff},
         {"use_Disney_PBR", &SceneSettings::use_Disney_PBR},
@@ -36,6 +37,7 @@ namespace pe
         {"ssao_intensity", &SceneSettings::ssao_intensity},
         {"ssao_power", &SceneSettings::ssao_power},
         {"occlusion_culling_bias", &SceneSettings::occlusion_culling_bias},
+        {"lod_bias", &SceneSettings::lod_bias},
         {"cas_sharpness", &SceneSettings::cas_sharpness},
         {"dof_focus_scale", &SceneSettings::dof_focus_scale},
         {"dof_blur_range", &SceneSettings::dof_blur_range},
@@ -73,6 +75,7 @@ namespace pe
     static const std::unordered_map<std::string_view, uint32_t SceneSettings::*> s_uint32Settings = {
         {"shadow_map_size", &SceneSettings::shadow_map_size},
         {"num_cascades", &SceneSettings::num_cascades},
+        {"lod_count", &SceneSettings::lod_count},
     };
 
     static const std::unordered_map<std::string_view, RenderMode> s_renderModeMap = {
@@ -173,6 +176,21 @@ namespace pe
                 settings_table.set_function("set_depth_bias", [](float a, float b, float c) {
                     auto &gs = Settings::Get<SceneSettings>();
                     gs.depth_bias = {a, b, c};
+                });
+
+                settings_table.set_function("get_lod_distances", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
+                    auto &gs = Settings::Get<SceneSettings>();
+                    sol::table t = lua.create_table();
+                    t[1] = gs.lod_distances[0];
+                    t[2] = gs.lod_distances[1];
+                    t[3] = gs.lod_distances[2];
+                    return t;
+                });
+
+                settings_table.set_function("set_lod_distances", [](float a, float b, float c) {
+                    auto &gs = Settings::Get<SceneSettings>();
+                    gs.lod_distances = {a, b, c};
                 }); });
         }
     } s_settingsBindings;

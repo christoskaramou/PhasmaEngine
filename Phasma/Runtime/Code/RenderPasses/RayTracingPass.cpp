@@ -118,7 +118,9 @@ namespace pe
         ubo.lights_intensity = gSettings.lights_intensity;
         ubo.shadows = gSettings.shadows ? 1 : 0;
         ubo.use_Disney_PBR = gSettings.use_Disney_PBR ? 1 : 0;
-        ubo.ibl_intensity = pp.IBL_intensity;
+        // Scale by the per-effect volume blend factor (matches LightPass) so a trigger zone fades IBL
+        // in/out smoothly instead of snapping when its IBL toggle flips.
+        ubo.ibl_intensity = pp.IBL_intensity * std::clamp(ActivePostProcessBlend().IBL, 0.0f, 1.0f);
         ubo.IBL = pp.IBL ? 1 : 0;
         ubo.renderMode = static_cast<uint32_t>(gSettings.render_mode);
         ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;

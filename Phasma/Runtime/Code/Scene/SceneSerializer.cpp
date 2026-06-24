@@ -242,6 +242,16 @@ namespace pe
             settings.AddMember("frustum_culling", gSettings.frustum_culling, allocator);
             settings.AddMember("occlusion_culling", gSettings.occlusion_culling, allocator);
             settings.AddMember("occlusion_culling_bias", gSettings.occlusion_culling_bias, allocator);
+            settings.AddMember("lod_enabled", gSettings.lod_enabled, allocator);
+            settings.AddMember("lod_count", gSettings.lod_count, allocator);
+            settings.AddMember("lod_bias", gSettings.lod_bias, allocator);
+            {
+                rapidjson::Value lodDist(rapidjson::kArrayType);
+                lodDist.PushBack(gSettings.lod_distances[0], allocator);
+                lodDist.PushBack(gSettings.lod_distances[1], allocator);
+                lodDist.PushBack(gSettings.lod_distances[2], allocator);
+                settings.AddMember("lod_distances", lodDist.Move(), allocator);
+            }
             settings.AddMember("shadows", gSettings.shadows, allocator);
             settings.AddMember("shadow_map_size", gSettings.shadow_map_size, allocator);
             settings.AddMember("num_cascades", gSettings.num_cascades, allocator);
@@ -387,6 +397,19 @@ namespace pe
                 gSettings.occlusion_culling = settings["occlusion_culling"].GetBool();
             if (settings.HasMember("occlusion_culling_bias"))
                 gSettings.occlusion_culling_bias = settings["occlusion_culling_bias"].GetFloat();
+            if (settings.HasMember("lod_enabled"))
+                gSettings.lod_enabled = settings["lod_enabled"].GetBool();
+            if (settings.HasMember("lod_count"))
+                gSettings.lod_count = settings["lod_count"].GetUint();
+            if (settings.HasMember("lod_bias"))
+                gSettings.lod_bias = settings["lod_bias"].GetFloat();
+            if (settings.HasMember("lod_distances") && settings["lod_distances"].IsArray() &&
+                settings["lod_distances"].Size() == 3)
+            {
+                gSettings.lod_distances[0] = settings["lod_distances"][0].GetFloat();
+                gSettings.lod_distances[1] = settings["lod_distances"][1].GetFloat();
+                gSettings.lod_distances[2] = settings["lod_distances"][2].GetFloat();
+            }
             if (settings.HasMember("shadows"))
                 gSettings.shadows = settings["shadows"].GetBool();
             if (settings.HasMember("shadow_map_size"))
@@ -1462,6 +1485,12 @@ namespace pe
                 }
 
                 meshObj.AddMember("render_type", static_cast<int>(mesh.renderType), allocator);
+                if (mesh.lodShift != 0)
+                    meshObj.AddMember("lod_shift", mesh.lodShift, allocator);
+                if (!mesh.lodEnabled)
+                    meshObj.AddMember("lod_enabled", mesh.lodEnabled, allocator);
+                if (mesh.lodBias != 1.0f)
+                    meshObj.AddMember("lod_bias", mesh.lodBias, allocator);
 
                 Material resolvedMat;
                 const Material *saveMat = nullptr;
@@ -2590,6 +2619,12 @@ namespace pe
                     Mesh &mesh = m_meshes[sceneMeshIdx];
                     if (mVal.HasMember("render_type"))
                         mesh.renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
+                    if (mVal.HasMember("lod_shift"))
+                        mesh.lodShift = mVal["lod_shift"].GetUint();
+                    if (mVal.HasMember("lod_enabled"))
+                        mesh.lodEnabled = mVal["lod_enabled"].GetBool();
+                    if (mVal.HasMember("lod_bias"))
+                        mesh.lodBias = mVal["lod_bias"].GetFloat();
 
                     bool isInstanced = mVal.HasMember("instanced") && mVal["instanced"].GetBool();
 
@@ -3297,6 +3332,12 @@ namespace pe
                 Mesh &mesh = m_meshes[sceneMeshIdx];
                 if (mVal.HasMember("render_type"))
                     mesh.renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
+                if (mVal.HasMember("lod_shift"))
+                    mesh.lodShift = mVal["lod_shift"].GetUint();
+                if (mVal.HasMember("lod_enabled"))
+                    mesh.lodEnabled = mVal["lod_enabled"].GetBool();
+                if (mVal.HasMember("lod_bias"))
+                    mesh.lodBias = mVal["lod_bias"].GetFloat();
 
                 const bool isInstanced = mVal.HasMember("instanced") && mVal["instanced"].GetBool();
                 Material *target = mesh.material;
@@ -3883,6 +3924,12 @@ namespace pe
 
                         if (mVal.HasMember("render_type"))
                             mesh.renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
+                        if (mVal.HasMember("lod_shift"))
+                            mesh.lodShift = mVal["lod_shift"].GetUint();
+                        if (mVal.HasMember("lod_enabled"))
+                            mesh.lodEnabled = mVal["lod_enabled"].GetBool();
+                        if (mVal.HasMember("lod_bias"))
+                            mesh.lodBias = mVal["lod_bias"].GetFloat();
 
                         bool isInstanced = mVal.HasMember("instanced") && mVal["instanced"].GetBool();
                         Material *target = mesh.material;
@@ -4274,6 +4321,12 @@ namespace pe
                         Mesh &mesh = m_meshes[sceneMeshIdx];
                         if (mVal.HasMember("render_type"))
                             mesh.renderType = static_cast<RenderType>(mVal["render_type"].GetInt());
+                        if (mVal.HasMember("lod_shift"))
+                            mesh.lodShift = mVal["lod_shift"].GetUint();
+                        if (mVal.HasMember("lod_enabled"))
+                            mesh.lodEnabled = mVal["lod_enabled"].GetBool();
+                        if (mVal.HasMember("lod_bias"))
+                            mesh.lodBias = mVal["lod_bias"].GetFloat();
 
                         bool isInstanced = mVal.HasMember("instanced") && mVal["instanced"].GetBool();
                         Material *target = mesh.material;

@@ -116,6 +116,13 @@ struct Mesh_Constants
     float aabbMaxX;
     float aabbMaxY;
     float aabbMaxZ;
+    // Discrete LOD index ranges (byte-identical to the CPU Mesh_Constants in MeshConstants.h).
+    uint lodCount;
+    uint lodIndexOffset[4];
+    uint lodIndexCount[4];
+    uint lodShift;       // per-mesh additive LOD level offset (see Mesh::lodShift)
+    uint lodMeshEnabled; // 0 = this mesh ignores LOD (always full detail)
+    float lodMeshBias;   // per-mesh camera-distance multiplier (see Mesh::lodBias)
 };
 
 struct MaterialGpuData

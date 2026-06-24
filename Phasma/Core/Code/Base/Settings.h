@@ -131,6 +131,14 @@ namespace pe
         bool occlusion_culling = false;        // GPU Hi-Z occlusion culling (Phase 2; opt-in)
         float occlusion_culling_bias = 0.002f; // Hi-Z slack as a FRACTION of occluder depth (~0.2%);
                                                // only protects coplanar/touching surfaces from false cull
+        // Discrete mesh LOD. lod_count = levels generated per mesh at load (1..4; meshopt_simplify); changing
+        // it only affects newly loaded meshes. enabled/bias/distances are live (consumed by the cull shader):
+        // the GPU picks a level by camera distance and swaps the draw's index range. distances are the world-
+        // unit switch points LOD0->1, 1->2, 2->3; bias multiplies measured distance (>1 = switch sooner).
+        bool lod_enabled = true;
+        uint32_t lod_count = 4;
+        float lod_bias = 1.0f;
+        std::array<float, 3> lod_distances{30.0f, 90.0f, 250.0f};
         bool shadows = true;
         uint32_t shadow_map_size = 2048;
         uint32_t num_cascades = 4;

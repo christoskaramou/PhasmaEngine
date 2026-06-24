@@ -656,6 +656,28 @@ namespace pe
         if (m_nodesMoved.empty())
             return;
 
+        // A camera or light move (no ray-traced geometry) lands in m_nodesMoved too, but must NOT trigger a
+        // full instance-buffer rewrite + TLAS refit every frame. Only refit when a node that actually owns
+        // RT instances moved — otherwise camera navigation pays an O(instances) CPU cost per frame for nothing.
+        bool anyRtNodeMoved = false;
+        for (NodeId *node : m_nodesMoved)
+        {
+            if (!node || node->index >= m_nodeIds.size() || m_nodeIds[node->index] != node)
+                continue;
+            for (int rtIdx : m_nodeRuntime[node->index].rtInstanceIndices)
+            {
+                if (rtIdx >= 0)
+                {
+                    anyRtNodeMoved = true;
+                    break;
+                }
+            }
+            if (anyRtNodeMoved)
+                break;
+        }
+        if (!anyRtNodeMoved)
+            return;
+
         const uint32_t frameCount = RHII.GetSwapchainImageCount();
         if (frameCount == 0)
             return;

@@ -116,6 +116,51 @@ namespace pe
             ui::ItemTooltip("Color used when drawing this mesh's debug AABB.");
         }
 
+        {
+            const bool lodOpen = ImGui::CollapsingHeader("LOD");
+            ui::ItemTooltip("Per-mesh level-of-detail. The GPU cull pass swaps this mesh to a simpler index "
+                            "set by camera distance. Needs the scene Mesh LOD master switch enabled.");
+            if (lodOpen)
+            {
+                if (mesh->lodCount <= 1)
+                {
+                    ImGui::TextDisabled("No LODs - mesh has too few indices (%u) to simplify.", mesh->indexCount);
+                    ui::ItemTooltip("LODs are generated at load only for meshes with >= 256 indices; meshopt "
+                                    "cannot meaningfully simplify smaller meshes.");
+                }
+                else
+                {
+                    ImGui::Text("Levels: %u (generated at load)", mesh->lodCount);
+                    bool lodDirty = ImGui::Checkbox("Enable", &mesh->lodEnabled);
+                    ui::ItemTooltip("Let this mesh use LOD. Off = always full detail regardless of distance.");
+                    if (mesh->lodEnabled)
+                    {
+                        int shift = static_cast<int>(mesh->lodShift);
+                        ImGui::SetNextItemWidth(120.0f);
+                        if (ImGui::DragInt("Shift LOD", &shift, 0.1f, 0, static_cast<int>(mesh->lodCount) - 1))
+                        {
+                            mesh->lodShift =
+                                static_cast<uint32_t>(std::clamp(shift, 0, static_cast<int>(mesh->lodCount) - 1));
+                            lodDirty = true;
+                        }
+                        ui::ItemTooltip("LOD level offset added to the distance pick (0 = automatic, 1+ forces that "
+                                        "many levels coarser, clamped to the last level).");
+                        ImGui::SetNextItemWidth(120.0f);
+                        lodDirty |= ImGui::DragFloat("Distance Bias", &mesh->lodBias, 0.01f, 0.05f, 20.0f);
+                        ui::ItemTooltip("Per-mesh multiplier on camera distance (>1 = drop detail sooner, "
+                                        "<1 = keep detail longer).");
+                    }
+                    if (lodDirty)
+                    {
+                        Scene &sc = *GetActiveScene();
+                        sc.SetGeometryDirty(); // rebuild Mesh_Constants so the change reaches the GPU
+                        sc.MarkNodeDirty(node);
+                        m_gui->NotifyChange();
+                    }
+                }
+            }
+        }
+
         DrawMaterialInfo(mesh, node);
     }
 

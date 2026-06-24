@@ -389,6 +389,8 @@ namespace pe
         };
         void DispatchCullingPhase(CommandBuffer *cmd, PassInfo *passInfo, CullPhase phase,
                                   Image *hiZPyramid = nullptr, Buffer *occlusionData = nullptr);
+        // Refill this frame's LOD params UBO from SceneSettings and return it (bound at CullingCS binding 16).
+        Buffer *UpdateLodUniforms(uint32_t frame);
         Buffer *GetBuffer() { return m_buffer; }
         Buffer *GetLightUniform(uint32_t frame) { return m_lightUniforms[frame]; }
         Buffer *GetLightStorage(uint32_t frame) { return m_lightStorageBuffers[frame]; }
@@ -655,6 +657,19 @@ namespace pe
         std::vector<Buffer *> m_sortKeysAlphaBlend;
         std::vector<Buffer *> m_sortKeysTransmission;
         Buffer *m_indirectAll = nullptr;
+
+        // LOD params UBO (one per swapchain image), bound at CullingCS binding 16. Byte-identical to the
+        // cbuffer LodUBO: enabled/bias + three world-unit switch distances; refilled each frame from
+        // SceneSettings in UpdateLodUniforms.
+        struct LodUBOData
+        {
+            uint32_t enabled = 0;
+            uint32_t pad0 = 0;
+            float bias = 1.0f;
+            float pad1 = 0.0f;
+            float distances[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        };
+        std::vector<Buffer *> m_lodUniforms;
 
         // Two-phase Hi-Z occlusion (opaque-only). Per-frame A/B indirect sets + per-set counters
         // (7-slot layout, only opaque slots 0/1/5/6 used); m_visibility is one persistent buffer

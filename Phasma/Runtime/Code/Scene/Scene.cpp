@@ -1,5 +1,6 @@
 #include "Scene/Scene.h"
-#include "Base/Path.h" // Path::ResolveAsset for zone Spawn prefab paths
+#include "Base/Path.h"     // Path::ResolveAsset for zone Spawn prefab paths
+#include <meshoptimizer.h> // meshopt_simplify for mesh LOD generation
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/SceneRuntimeHooks.h"
@@ -771,6 +772,43 @@ namespace pe
             mesh.material = mi->material;
             mesh.skinned = mi->skinned;
 
+            // Build discrete LODs: meshopt_simplify yields reduced index sets that index the SAME
+            // vertices (subset), so every level shares mesh.vertexOffset; we append each to the shared
+            // index store and record its range. lods[0] is the full-detail range. Skinned meshes are
+            // skipped (joint-weighted simplification would need attribute-aware collapse). Distance-based
+            // level pick + index-range swap happens on the GPU in CullingCS.
+            mesh.lodIndexOffset[0] = mesh.indexOffset;
+            mesh.lodIndexCount[0] = mesh.indexCount;
+            mesh.lodCount = 1;
+            const uint32_t wantLods = std::clamp(Settings::Get<SceneSettings>().lod_count, 1u, Mesh::kMaxLods);
+            const uint32_t baseIdxCount = mesh.indexCount;
+            if (wantLods > 1 && baseIdxCount >= 256 && !mesh.skinned && mi->verticesCount > 0)
+            {
+                const uint32_t *baseIndices = srcIndices.data() + mi->indexOffset; // 0-based within this mesh
+                const float *positions = reinterpret_cast<const float *>(srcVerts.data() + mi->vertexOffset);
+                const size_t vtxCount = mi->verticesCount;
+                static constexpr float kRatios[Mesh::kMaxLods] = {1.0f, 0.5f, 0.25f, 0.12f};
+                std::vector<uint32_t> simplified(baseIdxCount);
+                uint32_t prevCount = baseIdxCount;
+                for (uint32_t lod = 1; lod < wantLods; ++lod)
+                {
+                    size_t target = (static_cast<size_t>(baseIdxCount * kRatios[lod]) / 3) * 3; // whole tris
+                    if (target < 12)
+                        break;
+                    float err = 0.0f;
+                    size_t resCount = meshopt_simplify(simplified.data(), baseIndices, baseIdxCount, positions,
+                                                       vtxCount, sizeof(Vertex), target, 0.1f, 0, &err);
+                    if (resCount == 0 || resCount >= static_cast<size_t>(prevCount * 0.95f))
+                        break; // no meaningful reduction past this level
+                    uint32_t off = static_cast<uint32_t>(m_indexStore.size());
+                    m_indexStore.insert(m_indexStore.end(), simplified.begin(), simplified.begin() + resCount);
+                    mesh.lodIndexOffset[lod] = off;
+                    mesh.lodIndexCount[lod] = static_cast<uint32_t>(resCount);
+                    mesh.lodCount = lod + 1;
+                    prevCount = static_cast<uint32_t>(resCount);
+                }
+            }
+
             int sceneMeshIdx = AddMesh(std::move(mesh));
             meshMap[i] = sceneMeshIdx;
 
@@ -1233,6 +1271,25 @@ namespace pe
         dst->GetTrackInfo() = barrier;
     }
 
+    Buffer *Scene::UpdateLodUniforms(uint32_t frame)
+    {
+        if (m_lodUniforms.empty() || frame >= m_lodUniforms.size())
+            return nullptr;
+        const auto &s = Settings::Get<SceneSettings>();
+        LodUBOData ubo{};
+        ubo.enabled = s.lod_enabled ? 1u : 0u;
+        ubo.bias = s.lod_bias > 0.0f ? s.lod_bias : 1.0f;
+        ubo.distances[0] = s.lod_distances[0];
+        ubo.distances[1] = s.lod_distances[1];
+        ubo.distances[2] = s.lod_distances[2];
+        BufferRange range{};
+        range.data = &ubo;
+        range.size = sizeof(ubo);
+        range.offset = 0;
+        m_lodUniforms[frame]->Copy(1, &range, false);
+        return m_lodUniforms[frame];
+    }
+
     void Scene::DispatchCulling(CommandBuffer *cmd, PassInfo *passInfo, PassInfo *sortPassInfo,
                                 Image *hiZPyramid, Buffer *occlusionData)
     {
@@ -1393,6 +1450,9 @@ namespace pe
                 set->SetImageView(13, hiZPyramid->GetSRV());
                 set->SetBuffer(14, occlusionData);
             }
+            // LOD params (binding 16, present in every cull variant). Picks per-mesh LOD by camera distance.
+            if (Buffer *lodUbo = UpdateLodUniforms(frame); lodUbo && set->HasBinding(16))
+                set->SetBuffer(16, lodUbo);
             set->Update();
         }
 
@@ -1720,6 +1780,7 @@ namespace pe
                 bind(14, occlusionData);
             }
             bind(15, m_visibility);
+            bind(16, UpdateLodUniforms(frame)); // LOD params (present in every cull variant)
             set->Update();
         }
 
