@@ -100,6 +100,29 @@ namespace pe
     {
     };
 
+    // Where a trigger volume fires. Editor = only while editing (not in play / not the standalone
+    // player); Player = only in play mode or the standalone player; Both = everywhere.
+    enum class TriggerRunMode : uint8_t
+    {
+        Editor = 0,
+        Player = 1,
+        Both = 2
+    };
+
+    // Box region (from the node transform) that calls Lua functions on the node's own script when the
+    // active camera enters/leaves it. Reuses the shared volume box math (Scene::VolumeDistanceOutside).
+    // onEnter/onExit name the functions to call; wasInside is per-frame transition state (runtime-only,
+    // not serialized).
+    class NodeTriggerVolumeTag : public IComponent
+    {
+    public:
+        std::string onEnter = "on_enter"; // function name in this node's script env
+        std::string onExit = "on_exit";
+        bool fireForCamera = true;                     // ponytail: camera-only for now; add tracked-node targets if needed
+        TriggerRunMode runMode = TriggerRunMode::Both; // where it fires (editor / player / both)
+        bool wasInside = false;                        // runtime transition state
+    };
+
     enum class NodeRuntimeUiWidgetType : uint8_t
     {
         Panel,
@@ -223,5 +246,6 @@ namespace pe
         NodeRuntimeUiTag *runtimeUi = nullptr;
         NodePrefabComponent *prefab = nullptr;
         NodeSpriteComponent *sprite = nullptr;
+        NodeTriggerVolumeTag *triggerVolume = nullptr;
     };
 } // namespace pe

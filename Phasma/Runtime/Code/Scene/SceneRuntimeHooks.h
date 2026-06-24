@@ -21,6 +21,8 @@ namespace pe
         void (*applySkinnedStrip2DPose)(Scene &scene, NodeId *node) = nullptr;
         void (*refreshRenderDescriptors)() = nullptr;
         void (*refreshSceneSky)() = nullptr;
+        // Call a named function in a node's own script environment (trigger volume on_enter/on_exit).
+        void (*invokeNodeScriptFunction)(NodeId *node, const char *functionName) = nullptr;
         bool (*isPhysicsSimulating)() = nullptr;
         void (*stopPhysicsSimulation)() = nullptr;
         void (*clearPhysicsBodies)() = nullptr;
@@ -55,6 +57,7 @@ namespace pe
     void ApplySceneSkinnedStrip2DPose(Scene &scene, NodeId *node);
     void RefreshSceneRenderDescriptors();
     void RefreshSceneSky();
+    void InvokeSceneNodeScriptFunction(NodeId *node, const char *functionName);
     [[nodiscard]] bool IsScenePhysicsSimulating();
     void StopScenePhysicsSimulation();
     void ClearScenePhysicsBodies();

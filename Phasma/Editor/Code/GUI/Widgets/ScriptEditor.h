@@ -21,6 +21,11 @@ namespace pe
         // Create a new empty script for a node (name defaults to "Undefined")
         void OpenNewScript(NodeId *node);
 
+        // Create a new script for a node pre-filled with content (e.g. a trigger template) and a
+        // suggested filename. The editor opens so the user can rename/review, then Save writes it
+        // under Assets/Scripts and attaches it to the node.
+        void OpenNewScriptWithContent(NodeId *node, const std::string &nameHint, const std::string &content);
+
     private:
         void SaveScript();
         void LoadScriptFile(const std::string &path);

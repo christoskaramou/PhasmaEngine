@@ -3,6 +3,7 @@
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/SceneRuntimeHooks.h"
+#include "Script/ScriptRuntimeHooks.h"
 #include "Camera/Camera.h"
 #include "API/AccelerationStructure.h"
 #include "API/Buffer.h"
@@ -350,12 +351,49 @@ namespace pe
         }
     }
 
+    void Scene::UpdateTriggerVolumes()
+    {
+        // Per-trigger run mode decides where On Enter/On Exit fn fire: Editor (while editing), Player
+        // (play mode / standalone player), or Both. Node script instances exist in edit mode — the
+        // chunk runs on creation, defining the functions; only init() is deferred to play. Disable a
+        // trigger node (uncheck it) to stop it firing.
+        Camera *cam = GetActiveCamera();
+        if (!cam)
+            return;
+        const bool playing = IsScriptPlayMode();
+        const vec3 camPos = cam->GetPosition();
+        for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
+        {
+            NodeTriggerVolumeTag *t = m_nodeComponentCache[i].triggerVolume;
+            if (!t)
+                continue;
+            NodeId *node = m_nodeIds[i];
+            if (!IsNodeAlive(node) || !IsNodeHierarchyEnabled(node))
+            {
+                t->wasInside = false; // disabled/destroyed -> reset so re-enabling re-fires on_enter
+                continue;
+            }
+            const bool runHere = t->runMode == TriggerRunMode::Both ||
+                                 (t->runMode == TriggerRunMode::Player && playing) ||
+                                 (t->runMode == TriggerRunMode::Editor && !playing);
+            if (!runHere)
+                continue; // not the active context for this trigger; leave wasInside so it re-fires on switch
+            const bool inside = t->fireForCamera && VolumeDistanceOutside(node, camPos, false) <= 0.0f;
+            if (inside == t->wasInside)
+                continue;
+            t->wasInside = inside;
+            InvokeSceneNodeScriptFunction(node, inside ? t->onEnter.c_str() : t->onExit.c_str());
+        }
+    }
+
     void Scene::Update()
     {
         {
             PE_PROFILE_SCOPE("Camera Update");
             UpdateCameras();
         }
+
+        UpdateTriggerVolumes();
 
         UpdateSpriteAnimations(std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetDelta())));
 

@@ -158,6 +158,9 @@ namespace pe
 
         // Per-node instance lookup — returns the instance for a specific node, or nullptr
         NodeScriptInstance *FindNodeInstance(const NodeId *node);
+        // Call a named global function in a node's own script environment (trigger on_enter/on_exit).
+        // No-op if the node has no script instance or the function is undefined.
+        void InvokeNodeFunction(NodeId *node, const std::string &functionName);
         bool InvokeNodeRuntimeUiAction(NodeId *node,
                                        const std::string &functionName,
                                        const std::string &actionName,

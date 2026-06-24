@@ -50,3 +50,4 @@
 #define ICON_FA_PLUS "\xef\x81\xa7"                 // f067 - plus (new scene)
 #define ICON_FA_TRIANGLE_EXCLAMATION "\xef\x81\xb1" // f071 - triangle-exclamation (warning)
 #define ICON_FA_GEAR "\xef\x80\x93"                 // f013 - gear/cog (for scene settings)
+#define ICON_FA_BELL "\xef\x83\xb3"                 // f0f3 - bell (for trigger volume)

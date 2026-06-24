@@ -37,6 +37,7 @@ namespace pe
         Component_Sprite = 1 << 12,
         Component_PostProcessVolume = 1 << 13,
         Component_SceneSettings = 1 << 14, // Singleton anchor node; its inspector edits SceneSettings
+        Component_TriggerVolume = 1 << 15, // Bounded region that fires Lua on_enter/on_exit on the node's script
     };
 
     // Lightweight mesh descriptor — references into Scene's data stores

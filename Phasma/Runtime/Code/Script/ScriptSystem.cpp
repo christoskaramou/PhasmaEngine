@@ -898,6 +898,41 @@ namespace pe
         return true;
     }
 
+    void ScriptSystem::InvokeNodeFunction(NodeId *node, const std::string &functionName)
+    {
+        if (!m_initialized || !node || functionName.empty())
+            return;
+
+        Scene *scene = GetActiveScene();
+        if (!scene || !scene->IsNodeAlive(node))
+            return;
+
+        ReconcileNodeInstances();
+        NodeScriptInstance *inst = FindNodeInstance(node);
+        if (!inst)
+            return;
+
+        RefreshNodeInstanceBindings(*inst);
+        InitializeNodeInstance(*inst);
+        if (!inst->lastError.empty())
+            return;
+
+        sol::object fn = inst->env[functionName];
+        if (!fn.is<sol::function>())
+            return; // optional hook — silently skip when the node's script doesn't define it
+
+        auto result = CallProtected(fn.as<sol::function>(), inst->handle);
+        if (!result.valid())
+        {
+            sol::error err = result;
+            Log::Error(PeFormat("[Lua] Trigger function '%s' error in node script '%s': %s",
+                                functionName.c_str(),
+                                inst->path.c_str(),
+                                err.what()));
+            inst->lastError = err.what();
+        }
+    }
+
     void ScriptSystem::CallInit(InitScope scope)
     {
         ReconcileNodeInstances();

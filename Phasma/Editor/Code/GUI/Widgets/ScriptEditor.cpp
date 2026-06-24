@@ -70,12 +70,22 @@ namespace pe
     {
         m_targetNode = node;
         m_isNewScript = false;
-        m_loadedPath = path;
 
-        std::filesystem::path p(path);
+        // The stored path is project-relative (e.g. "Assets/Scripts/x.lua"); a raw file open against it
+        // fails because the CWD isn't the project root. The node's script instance already resolved it
+        // to an absolute path — prefer that. Fall back to resolving "Assets/..." against the assets root.
+        std::string resolved = path;
+        if (auto *ss = GetGlobalSystem<ScriptSystem>())
+            if (NodeScriptInstance *inst = ss->FindNodeInstance(node); inst && !inst->path.empty())
+                resolved = inst->path;
+        if (!std::filesystem::exists(resolved) && resolved.rfind("Assets/", 0) == 0)
+            resolved = Path::Assets + resolved.substr(7); // strip leading "Assets/" (7 chars)
+
+        m_loadedPath = resolved;
+        std::filesystem::path p(resolved);
         snprintf(m_scriptNameBuf, sizeof(m_scriptNameBuf), "%s", p.stem().string().c_str());
 
-        LoadScriptFile(path);
+        LoadScriptFile(resolved);
         m_open = true;
     }
 
@@ -88,6 +98,19 @@ namespace pe
         m_editor.SetText("");
         m_originalSource = "";
         m_modified = false;
+        m_pendingFocusName = true;
+        m_open = true;
+    }
+
+    void ScriptEditor::OpenNewScriptWithContent(NodeId *node, const std::string &nameHint, const std::string &content)
+    {
+        m_targetNode = node;
+        m_isNewScript = true;
+        m_loadedPath = "";
+        snprintf(m_scriptNameBuf, sizeof(m_scriptNameBuf), "%s", nameHint.empty() ? "trigger" : nameHint.c_str());
+        m_editor.SetText(content);
+        m_originalSource = ""; // differs from content -> shows as modified/unsaved
+        m_modified = true;
         m_pendingFocusName = true;
         m_open = true;
     }

@@ -44,6 +44,8 @@ namespace pe
             c.postProcessVolume = entity->CreateComponent<NodePostProcessVolumeTag>();
         if ((flag & Component_SceneSettings) && !c.sceneSettings)
             c.sceneSettings = entity->CreateComponent<NodeSceneSettingsTag>();
+        if ((flag & Component_TriggerVolume) && !c.triggerVolume)
+            c.triggerVolume = entity->CreateComponent<NodeTriggerVolumeTag>();
     }
 
     void Scene::RemoveComponentFlag(NodeId *node, uint32_t flag)
@@ -109,6 +111,11 @@ namespace pe
         {
             entity->RemoveComponent<NodeSceneSettingsTag>();
             c.sceneSettings = nullptr;
+        }
+        if ((flag & Component_TriggerVolume) && c.triggerVolume)
+        {
+            entity->RemoveComponent<NodeTriggerVolumeTag>();
+            c.triggerVolume = nullptr;
         }
     }
 
@@ -571,6 +578,37 @@ namespace pe
         return m_nodeComponentCache[node->index].postProcessVolume;
     }
 
+    float Scene::VolumeDistanceOutside(const NodeId *node, const vec3 &p, bool global) const
+    {
+        if (global)
+            return 0.0f; // unbounded -> always inside
+        // AABB from world translation +/- (world basis length * 0.5).
+        // ponytail: ignores rotation; upgrade to OBB (inverse-world transform) if rotated volumes are needed.
+        const mat4 &w = GetWorldMatrix(node);
+        const vec3 center(w[3].x, w[3].y, w[3].z);
+        const vec3 he(length(vec3(w[0].x, w[0].y, w[0].z)) * 0.5f,
+                      length(vec3(w[1].x, w[1].y, w[1].z)) * 0.5f,
+                      length(vec3(w[2].x, w[2].y, w[2].z)) * 0.5f);
+        const vec3 q = abs(p - center) - he;
+        return length(glm::max(q, vec3(0.0f))); // 0 inside, world-unit distance to surface outside
+    }
+
+    NodeId *Scene::CreateTriggerVolumeNode(NodeId *parent, bool markDirty)
+    {
+        NodeId *node = CreateNode("Trigger Volume", parent);
+        AddComponentFlag(node, Component_TriggerVolume);
+        if (markDirty)
+            MarkDirty();
+        return node;
+    }
+
+    NodeTriggerVolumeTag *Scene::GetTriggerVolumeForNode(const NodeId *node) const
+    {
+        if (!IsNodeAlive(node))
+            return nullptr;
+        return m_nodeComponentCache[node->index].triggerVolume;
+    }
+
     // Blend src into dst by weight t (0..1): floats lerp, ints round, bools snap at t>=0.5. Field
     // lists mirror PostProcessProfile (keep in sync with the struct / serializer / set_pp binding).
     static void BlendPostProcessInto(PostProcessProfile &dst, const PostProcessProfile &src, float t)
@@ -672,17 +710,8 @@ namespace pe
             float weight = std::clamp(v->blend, 0.0f, 1.0f);
             if (!v->global)
             {
-                // AABB from world translation +/- (world basis length * 0.5).
-                // ponytail: ignores rotation; upgrade to OBB (inverse-world transform) if rotated
-                // volumes are needed.
-                const mat4 &w = GetWorldMatrix(node);
-                const vec3 center(w[3].x, w[3].y, w[3].z);
-                const vec3 he(length(vec3(w[0].x, w[0].y, w[0].z)) * 0.5f,
-                              length(vec3(w[1].x, w[1].y, w[1].z)) * 0.5f,
-                              length(vec3(w[2].x, w[2].y, w[2].z)) * 0.5f);
                 // Real world-unit distance from the camera to the box surface: 0 inside, >0 outside.
-                const vec3 q = abs(cameraPos - center) - he;
-                const float distOutside = length(glm::max(q, vec3(0.0f)));
+                const float distOutside = VolumeDistanceOutside(node, cameraPos, false);
                 if (v->blend_distance > 0.0f)
                 {
                     // Full effect everywhere inside the box; fade to 0 over blend_distance WORLD UNITS

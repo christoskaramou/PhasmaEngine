@@ -1406,6 +1406,108 @@ namespace pe
                 }
             }
 
+            if (flags & Component_TriggerVolume)
+            {
+                ImGui::Separator();
+                const bool tvOpen = ImGui::CollapsingHeader("Trigger Volume", ImGuiTreeNodeFlags_DefaultOpen);
+                ui::ItemTooltip("Fires Lua functions on this node's script when the camera enters/leaves the box. "
+                                "Attach a script with on_enter()/on_exit(); use Mode to pick where it runs.");
+                if (tvOpen)
+                {
+                    ImGui::Indent(8.f);
+                    if (NodeTriggerVolumeTag *trig = scene.GetTriggerVolumeForNode(node))
+                    {
+                        bool changed = false;
+                        changed |= ImGui::Checkbox("Fire for camera", &trig->fireForCamera);
+                        ui::ItemTooltip("Fire when the active camera crosses the box.");
+
+                        const char *triggerRunModes[] = {"Editor", "Player", "Both"};
+                        int runModeIdx = static_cast<int>(trig->runMode);
+                        if (ImGui::Combo("Mode", &runModeIdx, triggerRunModes, IM_ARRAYSIZE(triggerRunModes)))
+                        {
+                            trig->runMode = static_cast<TriggerRunMode>(runModeIdx);
+                            changed = true;
+                        }
+                        ui::ItemTooltip("Where On Enter/On Exit run: Editor (while editing), Player (play mode / "
+                                        "built game), or Both.");
+
+                        char enterBuf[128];
+                        char exitBuf[128];
+                        std::snprintf(enterBuf, sizeof(enterBuf), "%s", trig->onEnter.c_str());
+                        std::snprintf(exitBuf, sizeof(exitBuf), "%s", trig->onExit.c_str());
+                        if (ImGui::InputText("On Enter", enterBuf, sizeof(enterBuf)))
+                        {
+                            trig->onEnter = enterBuf;
+                            changed = true;
+                        }
+                        ui::ItemTooltip("Script function called on enter (default on_enter).");
+                        if (ImGui::InputText("On Exit", exitBuf, sizeof(exitBuf)))
+                        {
+                            trig->onExit = exitBuf;
+                            changed = true;
+                        }
+                        ui::ItemTooltip("Script function called on exit (default on_exit).");
+
+                        // Script: the on_enter/on_exit functions live on THIS node's own script.
+                        ImGui::Spacing();
+                        ImGui::SeparatorText("Script");
+                        if (flags & Component_Script)
+                        {
+                            // Draw the real script widget here (path/edit/remove + exposed vars); the
+                            // standalone "Script Component" header is suppressed for trigger nodes below.
+                            drawScriptComponent(node);
+                        }
+                        else
+                        {
+                            if (ImGui::Button("Create Script##trig"))
+                            {
+                                if (auto *se = m_gui->GetWidget<ScriptEditor>())
+                                {
+                                    const std::string enterFn = trig->onEnter.empty() ? "on_enter" : trig->onEnter;
+                                    const std::string exitFn = trig->onExit.empty() ? "on_exit" : trig->onExit;
+                                    const std::string content =
+                                        "-- Trigger volume script: called when the active camera enters/leaves "
+                                        "the box. pe_log prints to the editor console (Lua print goes to stdout).\n"
+                                        "function " +
+                                        enterFn + "(self)\n    pe_log(\"entered!\")\nend\n\nfunction " + exitFn +
+                                        "(self)\n    pe_log(\"left!\")\nend\n";
+                                    se->OpenNewScriptWithContent(node, "trigger", content);
+                                }
+                            }
+                            ui::ItemTooltip("Create a new script pre-filled with your On Enter / On Exit functions, "
+                                            "then Save in the editor to attach it.");
+                            ImGui::SameLine();
+                            if (ImGui::Button("Select Script##trig"))
+                            {
+                                if (auto *fs = m_gui->GetWidget<FileSelector>())
+                                {
+                                    fs->OpenSelection(
+                                        [node](const std::string &path) -> bool
+                                        {
+                                            if (auto *r = GetGlobalSystem<RendererSystem>())
+                                                r->GetScene().SetNodeScript(node, path);
+                                            return true;
+                                        },
+                                        {".lua"});
+                                }
+                            }
+                            ui::ItemTooltip("Attach an existing .lua script to this trigger.");
+                        }
+
+                        {
+                            const mat4 &w = scene.GetWorldMatrix(node);
+                            const vec3 size(glm::length(vec3(w[0])), glm::length(vec3(w[1])), glm::length(vec3(w[2])));
+                            ImGui::TextDisabled("Bounds: %.2f x %.2f x %.2f", size.x, size.y, size.z);
+                            ui::ItemTooltip("Box size in world units from the node's transform scale (yellow box in "
+                                            "the viewport). Move/scale the node to position the trigger.");
+                        }
+                        if (changed)
+                            scene.MarkDirty();
+                    }
+                    ImGui::Unindent(8.f);
+                }
+            }
+
             if (flags & Component_Sprite)
             {
                 ImGui::Separator();
@@ -1437,8 +1539,8 @@ namespace pe
                 }
             }
 
-            // Script component
-            if (flags & Component_Script)
+            // Script component (suppressed for trigger nodes — drawn inside the Trigger Volume section)
+            if ((flags & Component_Script) && !(flags & Component_TriggerVolume))
             {
                 ImGui::Separator();
                 bool open = ImGui::CollapsingHeader("Script Component", ImGuiTreeNodeFlags_DefaultOpen);

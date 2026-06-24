@@ -195,6 +195,41 @@ namespace pe
                     s->MarkDirty();
                 });
 
+                ut.set_function("set_trigger_volume", [](SceneNodeHandle &h, bool enabled) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    if (enabled)
+                        s->AddComponentFlag(h.nodeId, Component_TriggerVolume);
+                    else
+                        s->RemoveComponentFlag(h.nodeId, Component_TriggerVolume);
+                    s->MarkDirty();
+                });
+
+                // Set a TriggerVolume field: "fire_for_camera"(bool) or "on_enter"/"on_exit"(string,
+                // the function name called on this node's script when the camera enters/leaves the box).
+                ut.set_function("set_trigger", [](SceneNodeHandle &h, const std::string &key, sol::object value) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    NodeTriggerVolumeTag *t = s->GetTriggerVolumeForNode(h.nodeId);
+                    if (!t) return;
+                    if (key == "fire_for_camera") t->fireForCamera = value.as<bool>();
+                    else if (key == "on_enter") t->onEnter = value.as<std::string>();
+                    else if (key == "on_exit") t->onExit = value.as<std::string>();
+                    else if (key == "run_mode")
+                    {
+                        if (value.is<std::string>())
+                        {
+                            const std::string m = value.as<std::string>();
+                            t->runMode = m == "editor"   ? TriggerRunMode::Editor
+                                         : m == "player" ? TriggerRunMode::Player
+                                                         : TriggerRunMode::Both;
+                        }
+                        else
+                            t->runMode = static_cast<TriggerRunMode>(value.as<int>());
+                    }
+                    s->MarkDirty();
+                });
+
                 ut.set_function("set_name", [](SceneNodeHandle &h, const std::string &name) {
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return;

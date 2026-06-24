@@ -1,5 +1,6 @@
 #include "Scene/SceneRuntimeHooks.h"
 #include "Scene/Scene.h"
+#include "Script/ScriptSystem.h"
 #include "Render/SceneRendererHost.h"
 #include "RenderPasses/ForwardPlusLightCullingPass.h"
 #include "RenderPasses/LightPass.h"
@@ -35,6 +36,12 @@ namespace pe
         {
             if (auto *animation = GetGlobalSystem<AnimationSystem>())
                 animation->RemoveAnimation(node);
+        }
+
+        void DefaultInvokeSceneNodeScriptFunction(NodeId *node, const char *functionName)
+        {
+            if (auto *scripts = GetGlobalSystem<ScriptSystem>())
+                scripts->InvokeNodeFunction(node, functionName ? functionName : "");
         }
 
         void DefaultPlaySceneAnimation(Scene &scene, NodeId *node, int clipIndex, bool loop)
@@ -229,6 +236,7 @@ namespace pe
         hooks.applySkinnedStrip2DPose = DefaultApplySkinnedStrip2DPose;
         hooks.refreshRenderDescriptors = DefaultRefreshSceneRenderDescriptors;
         hooks.refreshSceneSky = DefaultRefreshSceneSky;
+        hooks.invokeNodeScriptFunction = DefaultInvokeSceneNodeScriptFunction;
 #ifdef PE_PHYSICS
         hooks.isPhysicsSimulating = DefaultIsScenePhysicsSimulating;
         hooks.stopPhysicsSimulation = DefaultStopScenePhysicsSimulation;
@@ -308,6 +316,12 @@ namespace pe
     {
         if (s_sceneRuntimeHooks.refreshSceneSky)
             s_sceneRuntimeHooks.refreshSceneSky();
+    }
+
+    void InvokeSceneNodeScriptFunction(NodeId *node, const char *functionName)
+    {
+        if (s_sceneRuntimeHooks.invokeNodeScriptFunction)
+            s_sceneRuntimeHooks.invokeNodeScriptFunction(node, functionName);
     }
 
     bool IsScenePhysicsSimulating()

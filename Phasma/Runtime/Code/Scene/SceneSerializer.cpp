@@ -612,6 +612,27 @@ namespace pe
                 ApplyPostProcessProfileMembers(vv["profile"], vol->profile);
         }
 
+        void RestoreTriggerVolumeNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
+        {
+            if (!node || !nodeValue.HasMember("triggerVolume") || !nodeValue["triggerVolume"].IsObject())
+                return;
+
+            const auto &tv = nodeValue["triggerVolume"];
+            scene.AddComponentFlag(node, Component_TriggerVolume);
+            NodeTriggerVolumeTag *trig = scene.GetTriggerVolumeForNode(node);
+            if (!trig)
+                return;
+
+            if (tv.HasMember("fireForCamera"))
+                trig->fireForCamera = tv["fireForCamera"].GetBool();
+            if (tv.HasMember("runMode"))
+                trig->runMode = static_cast<TriggerRunMode>(tv["runMode"].GetInt());
+            if (tv.HasMember("onEnter") && tv["onEnter"].IsString())
+                trig->onEnter = tv["onEnter"].GetString();
+            if (tv.HasMember("onExit") && tv["onExit"].IsString())
+                trig->onExit = tv["onExit"].GetString();
+        }
+
         void RestorePrefabNode(Scene &scene,
                                NodeId *node,
                                const rapidjson::Value &nodeValue,
@@ -1637,6 +1658,17 @@ namespace pe
                     AddPostProcessProfileMembers(profileObj, allocator, vol.profile);
                     volObj.AddMember("profile", profileObj.Move(), allocator);
                     nodeObj.AddMember("postProcessVolume", volObj.Move(), allocator);
+                }
+
+                if ((flags & Component_TriggerVolume) && cache.triggerVolume)
+                {
+                    const NodeTriggerVolumeTag &trig = *cache.triggerVolume;
+                    rapidjson::Value trigObj(rapidjson::kObjectType);
+                    trigObj.AddMember("fireForCamera", trig.fireForCamera, allocator);
+                    trigObj.AddMember("runMode", static_cast<int>(trig.runMode), allocator);
+                    trigObj.AddMember("onEnter", rapidjson::Value(trig.onEnter.c_str(), allocator), allocator);
+                    trigObj.AddMember("onExit", rapidjson::Value(trig.onExit.c_str(), allocator), allocator);
+                    nodeObj.AddMember("triggerVolume", trigObj.Move(), allocator);
                 }
 
                 if ((flags & Component_RuntimeUi) && cache.runtimeUi && cache.runtimeUi->authored)
@@ -2692,7 +2724,10 @@ namespace pe
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreSkyboxNode(*this, nodeMap[ni], nodesVal[ni]);
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+                {
                     RestorePostProcessVolumeNode(*this, nodeMap[ni], nodesVal[ni]);
+                    RestoreTriggerVolumeNode(*this, nodeMap[ni], nodesVal[ni]);
+                }
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreRuntimeUiNode(*this, nodeMap[ni], nodesVal[ni], &sceneDir);
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
@@ -3381,7 +3416,10 @@ namespace pe
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreSkyboxNode(*this, nodeMap[ni], nodesVal[ni]);
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+        {
             RestorePostProcessVolumeNode(*this, nodeMap[ni], nodesVal[ni]);
+            RestoreTriggerVolumeNode(*this, nodeMap[ni], nodesVal[ni]);
+        }
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreRuntimeUiNode(*this, nodeMap[ni], nodesVal[ni], &prefabDir);
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
@@ -3712,7 +3750,7 @@ namespace pe
 
                     uint32_t flags = nv.HasMember("component_flags") ? nv["component_flags"].GetUint() : 0;
                     // Clear subsystem tags before restoring — Mesh/Script are already set by SetMeshRef/SetNodeScript above
-                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Physics2D | Component_Audio | Component_Skybox | Component_RuntimeUi | Component_Prefab | Component_Sprite | Component_PostProcessVolume | Component_SceneSettings);
+                    RemoveComponentFlag(node, Component_Camera | Component_Light | Component_Physics | Component_Physics2D | Component_Audio | Component_Skybox | Component_RuntimeUi | Component_Prefab | Component_Sprite | Component_PostProcessVolume | Component_SceneSettings | Component_TriggerVolume);
                     uint32_t restoreFlags = flags & ~(Component_Mesh | Component_Script | Component_GpuPending);
                     if (restoreFlags)
                         AddComponentFlag(node, restoreFlags);
@@ -3900,7 +3938,10 @@ namespace pe
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkyboxNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                {
                     RestorePostProcessVolumeNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
+                    RestoreTriggerVolumeNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
+                }
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreRuntimeUiNode(*this, m_nodeIds[ni], snapshotNodes[ni], nullptr);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
@@ -4340,7 +4381,10 @@ namespace pe
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSkyboxNode(*this, nodeMap[ni], snapshotNodes[ni]);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                {
                     RestorePostProcessVolumeNode(*this, nodeMap[ni], snapshotNodes[ni]);
+                    RestoreTriggerVolumeNode(*this, nodeMap[ni], snapshotNodes[ni]);
+                }
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreRuntimeUiNode(*this, nodeMap[ni], snapshotNodes[ni], nullptr);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)

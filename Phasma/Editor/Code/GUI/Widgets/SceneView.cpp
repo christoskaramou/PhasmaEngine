@@ -1861,20 +1861,8 @@ namespace pe
         static const int kEdges[12][2] = {
             {0, 1}, {0, 2}, {0, 4}, {1, 3}, {1, 5}, {2, 3}, {2, 6}, {3, 7}, {4, 5}, {4, 6}, {5, 7}, {6, 7}};
 
-        for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
+        auto drawBox = [&](const mat4 &world, ImU32 color, float thickness)
         {
-            NodeId *node = scene.GetNodeId(i);
-            NodePostProcessVolumeTag *vol = scene.GetPostProcessVolumeForNode(node);
-            if (!vol || vol->global) // global volumes are unbounded — no box to draw
-                continue;
-            if (!scene.IsNodeHierarchyEnabled(node))
-                continue;
-
-            const mat4 &world = scene.GetWorldMatrix(node);
-            const bool selected = sel.GetSelectionType() == SelectionType::Node && sel.GetSelectedNode() == node;
-            const ImU32 color = selected ? IM_COL32(130, 225, 255, 255) : IM_COL32(110, 195, 235, 205);
-            const float thickness = selected ? 3.0f : 2.0f;
-
             ImVec2 screen[8];
             bool ok[8];
             for (int c = 0; c < 8; ++c)
@@ -1886,6 +1874,25 @@ namespace pe
             for (const auto &e : kEdges)
                 if (ok[e[0]] && ok[e[1]])
                     drawList->AddLine(screen[e[0]], screen[e[1]], color, thickness);
+        };
+
+        // All bounded volume types share the box gizmo (global volumes are unbounded -> no box):
+        // post-process = cyan, trigger = yellow.
+        for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
+        {
+            NodeId *node = scene.GetNodeId(i);
+            if (!scene.IsNodeHierarchyEnabled(node))
+                continue;
+            const bool selected = sel.GetSelectionType() == SelectionType::Node && sel.GetSelectedNode() == node;
+            const float thickness = selected ? 3.0f : 2.0f;
+
+            if (NodePostProcessVolumeTag *vol = scene.GetPostProcessVolumeForNode(node); vol && !vol->global)
+                drawBox(scene.GetWorldMatrix(node),
+                        selected ? IM_COL32(130, 225, 255, 255) : IM_COL32(110, 195, 235, 205), thickness);
+
+            if (scene.GetTriggerVolumeForNode(node))
+                drawBox(scene.GetWorldMatrix(node),
+                        selected ? IM_COL32(255, 225, 120, 255) : IM_COL32(235, 195, 90, 205), thickness);
         }
     }
 

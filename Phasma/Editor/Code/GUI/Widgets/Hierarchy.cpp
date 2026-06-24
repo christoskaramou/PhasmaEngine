@@ -67,6 +67,28 @@ namespace pe
         return scene.NodeUsesSkinnedStrip2D(node);
     }
 
+    static bool DrawCenteredIconButton(const char *id, const char *icon, const ImVec2 &size)
+    {
+        const bool clicked = ImGui::InvisibleButton(id, size);
+        const bool hovered = ImGui::IsItemHovered();
+        const bool active = ImGui::IsItemActive();
+        const ImVec2 min = ImGui::GetItemRectMin();
+        const ImVec2 max = ImGui::GetItemRectMax();
+        const ImGuiStyle &style = ImGui::GetStyle();
+
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        const ImU32 buttonColor = ImGui::GetColorU32(active    ? ImGuiCol_ButtonActive
+                                                     : hovered ? ImGuiCol_ButtonHovered
+                                                               : ImGuiCol_Button);
+        drawList->AddRectFilled(min, max, buttonColor, style.FrameRounding);
+
+        const ImVec2 iconSize = ImGui::CalcTextSize(icon);
+        const ImVec2 iconPos(min.x + (size.x - iconSize.x) * 0.5f,
+                             min.y + (size.y - iconSize.y) * 0.5f - 1.0f);
+        drawList->AddText(iconPos, ImGui::GetColorU32(ImGuiCol_Text), icon);
+        return clicked;
+    }
+
     Hierarchy::Hierarchy() : Widget("Hierarchy")
     {
     }
@@ -147,6 +169,13 @@ namespace pe
         {
             recordSnapshot("Added Post Process Volume");
             NodeId *node = scene.CreatePostProcessVolumeNode();
+            selection.Select(node, SelectionType::Node);
+        };
+
+        auto createTriggerVolume = [&scene, &selection, &recordSnapshot]()
+        {
+            recordSnapshot("Added Trigger Volume");
+            NodeId *node = scene.CreateTriggerVolumeNode();
             selection.Select(node, SelectionType::Node);
         };
 
@@ -313,27 +342,39 @@ namespace pe
             ImGui::OpenPopup("AddEntityPopup");
         ui::ItemTooltip("Open the scene-object creation menu.");
 
-        // Scene name with new scene button
+        // Scene name with new scene/settings buttons
         {
             std::string sceneName = scene.GetSceneName();
             if (scene.IsDirty())
                 sceneName += " *";
 
             std::string label = std::string(ICON_FA_SITEMAP) + "  " + sceneName;
-            float btnSize = ImGui::GetFrameHeight();
-            float textWidth = ImGui::CalcTextSize(label.c_str()).x;
-            float availWidth = ImGui::GetContentRegionAvail().x;
-            float totalWidth = btnSize + ImGui::GetStyle().ItemSpacing.x + textWidth;
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (availWidth - totalWidth) * 0.5f);
+            const float btnSize = ImGui::GetFrameHeight();
+            if (ImGui::BeginTable("##SceneHeader", 3, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
+            {
+                ImGui::TableSetupColumn("new", ImGuiTableColumnFlags_WidthFixed, btnSize);
+                ImGui::TableSetupColumn("name", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("settings", ImGuiTableColumnFlags_WidthFixed, btnSize);
+                ImGui::TableNextRow();
 
-            if (ImGui::Button(ICON_FA_PLUS, ImVec2(btnSize, btnSize)))
-                m_gui->NewScene();
-            ui::ItemTooltip("Create a new empty scene.");
+                ImGui::TableNextColumn();
+                if (ImGui::Button(ICON_FA_PLUS, ImVec2(btnSize, btnSize)))
+                    m_gui->NewScene();
+                ui::ItemTooltip("Create a new empty scene.");
 
-            ImGui::SameLine();
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.7f, 0.8f, 1.0f));
-            ImGui::TextUnformatted(label.c_str());
-            ImGui::PopStyleColor();
+                ImGui::TableNextColumn();
+                ImGui::AlignTextToFramePadding();
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.7f, 0.8f, 1.0f));
+                ImGui::TextUnformatted(label.c_str());
+                ImGui::PopStyleColor();
+
+                ImGui::TableNextColumn();
+                if (DrawCenteredIconButton("##SceneSettings", ICON_FA_GEAR, ImVec2(btnSize, btnSize)))
+                    createSceneSettings();
+                ui::ItemTooltip("Open scene settings.");
+
+                ImGui::EndTable();
+            }
         }
 
         ImGui::Separator();
@@ -400,6 +441,9 @@ namespace pe
             if (ImGui::MenuItem("Post Process Volume"))
                 createPostProcessVolume();
             ui::ItemTooltip("Create a post-process volume node.");
+            if (ImGui::MenuItem("Trigger Volume"))
+                createTriggerVolume();
+            ui::ItemTooltip("Create a trigger volume node (Lua on_enter/on_exit when the camera enters).");
             if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
                 createSceneSettings();
             if (!scene.GetSceneSettingsNode())
@@ -593,6 +637,9 @@ namespace pe
             if (ImGui::MenuItem("Post Process Volume"))
                 createPostProcessVolume();
             ui::ItemTooltip("Create a post-process volume node.");
+            if (ImGui::MenuItem("Trigger Volume"))
+                createTriggerVolume();
+            ui::ItemTooltip("Create a trigger volume node (Lua on_enter/on_exit when the camera enters).");
             if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
                 createSceneSettings();
             if (!scene.GetSceneSettingsNode())
@@ -832,6 +879,8 @@ namespace pe
                     icon = ICON_FA_SUN;
                 else if (nodeCompFlags & Component_PostProcessVolume)
                     icon = ICON_FA_PALETTE;
+                else if (nodeCompFlags & Component_TriggerVolume)
+                    icon = ICON_FA_BELL;
                 else if (nodeCompFlags & Component_SceneSettings)
                     icon = ICON_FA_GEAR;
                 else if (nodeCompFlags & Component_RuntimeUi)
@@ -1463,6 +1512,9 @@ namespace pe
                 if (ImGui::MenuItem("Post Process Volume"))
                     createPostProcessVolume();
                 ui::ItemTooltip("Create a post-process volume node.");
+                if (ImGui::MenuItem("Trigger Volume"))
+                    createTriggerVolume();
+                ui::ItemTooltip("Create a trigger volume node (Lua on_enter/on_exit when the camera enters).");
                 if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
                     createSceneSettings();
                 if (!scene.GetSceneSettingsNode())

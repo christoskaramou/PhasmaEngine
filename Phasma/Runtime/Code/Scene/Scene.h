@@ -228,6 +228,16 @@ namespace pe
         // Highest-priority enabled volume whose bounds contain cameraPos (global volumes always
         // qualify). Returns null when none apply, so the caller falls back to the scene default.
         PostProcessProfile *ResolvePostProcessProfile(const vec3 &cameraPos);
+        // Shared volume-region core: world-unit distance from p to the node's box surface (0 inside,
+        // >0 outside). global -> 0 (unbounded, always inside). Used by every volume type.
+        float VolumeDistanceOutside(const NodeId *node, const vec3 &p, bool global) const;
+
+        // --- Trigger volumes: bounded region fires Lua on_enter/on_exit on the node's script ---
+        NodeId *CreateTriggerVolumeNode(NodeId *parent = nullptr, bool markDirty = true);
+        NodeTriggerVolumeTag *GetTriggerVolumeForNode(const NodeId *node) const;
+        // Per-frame enter/exit detection for the active camera (play mode only). Fires the node's
+        // onEnter/onExit Lua functions on transitions. Called from Update() after the camera updates.
+        void UpdateTriggerVolumes();
         NodeId *GetSceneSettingsNode() const;
         // Resolve the Scene Settings master switch + active post-process profile for this frame.
         // Called at the top of UpdateCameras() so cameras read the fresh profile when they jitter.
@@ -477,6 +487,8 @@ namespace pe
                 flags |= Component_PostProcessVolume;
             if (c.sceneSettings)
                 flags |= Component_SceneSettings;
+            if (c.triggerVolume)
+                flags |= Component_TriggerVolume;
             if (c.runtimeUi)
                 flags |= Component_RuntimeUi;
             if (c.prefab)
