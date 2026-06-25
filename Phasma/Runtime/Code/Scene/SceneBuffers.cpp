@@ -73,9 +73,11 @@ namespace pe
         m_positionsOffset = m_verticesOffset + m_verticesCount * sizeof(Vertex);
         m_aabbVerticesOffset = m_positionsOffset + m_positionsCount * sizeof(PositionUvVertex);
 
-        PeBufferUsageFlags geometryUsage = PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_INDEX_BUFFER |
-                                           PE_BUFFER_USAGE_VERTEX_BUFFER | PE_BUFFER_USAGE_STORAGE_BUFFER |
-                                           PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS;
+        // TRANSFER_SRC: GeometryArena::ReserveArenaCapacity copies the existing geometry out of this
+        // buffer into a larger one when it reserves arena headroom (SceneBuffers.cpp ReserveArenaCapacity).
+        PeBufferUsageFlags geometryUsage = PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_TRANSFER_SRC |
+                                           PE_BUFFER_USAGE_INDEX_BUFFER | PE_BUFFER_USAGE_VERTEX_BUFFER |
+                                           PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS;
         if (RHII.GetCaps().rayTracing)
             geometryUsage |= PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR;
 
@@ -306,7 +308,10 @@ namespace pe
         const uint32_t indirectBufferCount = std::max(1u, indirectCount);
         m_indirectAll = Buffer::Create({
             .size = indirectBufferCount * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
-            .usage = PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+            // TRANSFER_SRC: ReserveArenaCapacity copies the existing draws out of this buffer when it
+            // regrows for arena headroom (Vulkan validates copy-source usage; DX12 does not).
+            .usage = PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_STORAGE_BUFFER |
+                     PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_TRANSFER_SRC,
             .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
             .name = "indirect_Geometry_buffer_all",
         });
@@ -421,7 +426,8 @@ namespace pe
         // after a rebuild draws everything in phase 1 (full pyramid) and phase 2 finds nothing new.
         m_visibility = Buffer::Create({
             .size = m_indirectCapacity * sizeof(uint32_t),
-            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+            // TRANSFER_SRC: ReserveArenaCapacity copies the live visibility bits out when it regrows.
+            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_TRANSFER_SRC,
             .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
             .name = "occ_visibility",
         });
@@ -955,9 +961,9 @@ namespace pe
         const bool useMeshConstantsMirror = RHII.GetApi() == PE_GRAPHICS_API_DX12;
         m_meshConstants = Buffer::Create({
             .size = meshConstantsSize,
-            // TRANSFER_SRC (DX12) lets this buffer be the copy source for the device mirror below.
-            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST |
-                     (useMeshConstantsMirror ? PE_BUFFER_USAGE_TRANSFER_SRC : PE_BUFFER_USAGE_NONE),
+            // TRANSFER_SRC: copy source for the DX12 device mirror below AND for ReserveArenaCapacity's
+            // regrow copy (Vulkan validates copy-source usage, so it must be set on both backends).
+            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_TRANSFER_SRC,
             // CPU-written on geometry rebuild, read by the GPU culling/depth/GBuffer passes. On DX12
             // this is only the staging source — the GPU reads the cached DEFAULT m_meshConstantsDevice
             // mirror instead, because uncached GPU_UPLOAD reads dominate the cull pass (~0.6 ms @ 50k).
