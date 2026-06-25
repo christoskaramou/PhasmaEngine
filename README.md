@@ -22,6 +22,8 @@ PhasmaEngine is a Vulkan and DirectX 12 3D engine for learning graphics techniqu
 * FXAA
 * Temporal Anti-Aliasing with RCAS Upscale
 * Frustum Culling
+* GPU Occlusion Culling (two-phase temporal Hi-Z)
+* Mesh Level of Detail (LOD)
 * Render Graph
 * Day/Night Skybox with HDR environment maps
 
@@ -36,13 +38,18 @@ PhasmaEngine is a Vulkan and DirectX 12 3D engine for learning graphics techniqu
 * Directional, Point, Spot, and Area lights
 * Scene save/load (.pescene)
 * Particle system
+* Voxel terrain (streamed, textured chunks; Vulkan + DX12)
+* Trigger Zones — box regions with opt-in Script (on_enter/on_exit), Post-Process, Audio, Physics force-field, and spawn/streaming/camera sections
+* Post-Process Volumes & Scene Settings node (per-effect spatial blending)
 * Per-axis transforms and material editing
 
 ### Editor (PhasmaEditor)
 * ImGui-based editor
+* Pinnable Properties panel
+* Script editor with live function browser ("Show Functions")
 * CPU/GPU metrics
 * Debug console
-* Lua scripting
+* Lua scripting (incl. `tween.to` helpers for smooth animation/camera focus)
 * Event system
 
 ### MCP Integration
