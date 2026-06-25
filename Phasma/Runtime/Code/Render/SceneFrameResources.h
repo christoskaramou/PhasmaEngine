@@ -2,7 +2,6 @@
 
 #include "API/RHITypes.h"
 
-
 namespace pe
 {
     class CommandBuffer;
@@ -23,7 +22,6 @@ namespace pe
     void WaitPreviousSceneFrameCommand(std::vector<CommandBuffer *> &cmds);
     void WaitSceneFrameCommands(std::vector<CommandBuffer *> &cmds);
     void WaitSceneFrameCommandsAndCleanup(std::vector<CommandBuffer *> &cmds);
-    void TransitionSceneSwapchainImagesToPresent(CommandBuffer *cmd);
 
     void SubmitAndPresentSceneFrame(std::vector<CommandBuffer *> &cmds,
                                     const std::vector<Semaphore *> &acquireSemaphores,

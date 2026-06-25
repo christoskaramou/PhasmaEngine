@@ -75,7 +75,6 @@ namespace pe
                                                  "RuntimeSubmitSemaphore_",
                                                  semaphoreStageFlags,
                                                  semaphoreStageFlags);
-            m_sceneRenderer.TransitionSwapchainImagesToPresent(initCmd);
 
             m_scene.UploadBuffers(initCmd);
             m_sceneRenderer.CacheGlobalComponents();
@@ -298,15 +297,6 @@ namespace pe
                                              "RuntimeSubmitSemaphore_",
                                              semaphoreStageFlags,
                                              semaphoreStageFlags);
-
-        Queue *queue = RHII.GetMainQueue();
-        CommandBuffer *resizeCmd = queue->AcquireCommandBuffer();
-        resizeCmd->Begin();
-        m_sceneRenderer.TransitionSwapchainImagesToPresent(resizeCmd);
-        resizeCmd->End();
-        queue->Submit(1, &resizeCmd, nullptr, nullptr);
-        resizeCmd->Wait();
-        resizeCmd->Return();
 
         m_sceneRenderer.ResizeRenderPassComponents(width, height, hasRTGeom);
 

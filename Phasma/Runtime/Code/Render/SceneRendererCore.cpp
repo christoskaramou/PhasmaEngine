@@ -275,11 +275,6 @@ namespace pe
         WaitSceneFrameCommandsAndCleanup(m_cmds);
     }
 
-    void SceneRendererCore::TransitionSwapchainImagesToPresent(CommandBuffer *cmd)
-    {
-        TransitionSceneSwapchainImagesToPresent(cmd);
-    }
-
     void SceneRendererCore::SubmitAndPresent(const SceneFrameRecordCallback &recordFrame,
                                              const SceneFrameScreenshotCallback &saveScreenshot,
                                              const SceneFrameSubmitLabels &labels)

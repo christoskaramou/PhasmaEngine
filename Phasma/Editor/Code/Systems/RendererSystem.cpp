@@ -92,7 +92,6 @@ namespace pe
                                              "SubmitSemaphore_",
                                              acquireStageFlags,
                                              submitStageFlags);
-        m_sceneRenderer.TransitionSwapchainImagesToPresent(initCmd);
 
         m_scene.UploadBuffers(initCmd);
         m_sceneRenderer.CacheGlobalComponents();

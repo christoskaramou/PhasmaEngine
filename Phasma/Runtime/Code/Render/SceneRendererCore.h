@@ -76,7 +76,6 @@ namespace pe
         void DestroyFrameResources();
         void WaitPreviousFrameCommands();
         void WaitAllFrameCommands();
-        void TransitionSwapchainImagesToPresent(CommandBuffer *cmd);
         void SubmitAndPresent(const SceneFrameRecordCallback &recordFrame,
                               const SceneFrameScreenshotCallback &saveScreenshot,
                               const SceneFrameSubmitLabels &labels = {});
