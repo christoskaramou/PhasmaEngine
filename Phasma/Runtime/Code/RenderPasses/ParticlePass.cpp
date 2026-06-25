@@ -138,7 +138,7 @@ namespace pe
         // 1. Barrier: Wait for Compute Write to finish before Vertex Read
         BufferBarrierInfo barrier{};
         barrier.stageMask = PE_STAGE_VERTEX_SHADER;
-        barrier.accessMask = PE_ACCESS_SHADER_READ;
+        barrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
         barrier.buffer = particleBuffer;
         barrier.size = PE_WHOLE_SIZE;
         cmd->BufferBarrier(barrier);

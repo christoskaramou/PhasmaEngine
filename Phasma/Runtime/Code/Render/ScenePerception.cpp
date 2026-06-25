@@ -386,7 +386,7 @@ namespace pe
         idReadBarrier.image = cache.idTarget;
         idReadBarrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         idReadBarrier.stageFlags = PE_STAGE_COMPUTE_SHADER;
-        idReadBarrier.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_SAMPLED_READ;
+        idReadBarrier.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
         cmd->ImageBarrier(idReadBarrier);
 
         const size_t nodeVisSize = static_cast<size_t>(cache.nodeVisCapacity) * sizeof(ObjectIdNodeVis);

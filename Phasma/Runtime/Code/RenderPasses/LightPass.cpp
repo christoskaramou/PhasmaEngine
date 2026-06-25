@@ -214,7 +214,7 @@ namespace pe
                 BufferBarrierInfo barrier{};
                 barrier.buffer = buffer;
                 barrier.stageMask = PE_STAGE_FRAGMENT_SHADER;
-                barrier.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ;
+                barrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
                 barrier.size = PE_WHOLE_SIZE;
                 barriers.push_back(barrier);
             };

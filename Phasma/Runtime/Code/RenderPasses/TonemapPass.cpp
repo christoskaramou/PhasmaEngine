@@ -61,7 +61,7 @@ namespace pe
         barrier.image = m_frameImage;
         barrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         barrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
-        barrier.accessMask = PE_ACCESS_SHADER_READ;
+        barrier.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
 
         cmd->BeginDebugRegion("TonemapPass");
         cmd->CopyImage(m_displayRT, m_frameImage); // Copy RT to image

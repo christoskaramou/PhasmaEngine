@@ -3291,7 +3291,7 @@ namespace pe
             sceneViewBarrier.image = GUIState::s_sceneViewImage;
             sceneViewBarrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             sceneViewBarrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
-            sceneViewBarrier.accessMask = PE_ACCESS_SHADER_READ;
+            sceneViewBarrier.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
             cmd->ImageBarrier(sceneViewBarrier);
         }
 
@@ -3305,7 +3305,7 @@ namespace pe
             previewBarrier.image = preview;
             previewBarrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             previewBarrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
-            previewBarrier.accessMask = PE_ACCESS_SHADER_READ;
+            previewBarrier.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
             cmd->ImageBarrier(previewBarrier);
         }
         m_previewImageTransitions.clear();

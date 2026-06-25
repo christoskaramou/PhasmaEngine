@@ -35,7 +35,7 @@ namespace pe
         barrier.image = s_image;
         barrier.layout = PE_IMAGE_LAYOUT_GENERAL;
         barrier.stageFlags = PE_STAGE_COMPUTE_SHADER;
-        barrier.accessMask = PE_ACCESS_SHADER_WRITE;
+        barrier.accessMask = PE_ACCESS_SHADER_STORAGE_WRITE;
 
         cmd->BeginDebugRegion("Downsampler::Dispatch Command_" + std::to_string(s_currentIndex));
         cmd->FillBuffer(s_atomicCounter[s_currentIndex], 0, sizeof(s_counter), 0);

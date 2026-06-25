@@ -436,7 +436,7 @@ namespace pe
             BufferBarrierInfo vb{};
             vb.buffer = m_visibility;
             vb.stageMask = PE_STAGE_COMPUTE_SHADER;
-            vb.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE;
+            vb.accessMask = PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE;
             vb.size = m_indirectCapacity * sizeof(uint32_t);
             vb.offset = 0;
             cmd->BufferBarrier(vb);
@@ -1102,7 +1102,7 @@ namespace pe
             BufferBarrierInfo barrier{};
             barrier.buffer = m_meshConstantsDevice;
             barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
-            barrier.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ;
+            barrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
             barrier.offset = 0;
             barrier.size = m_meshConstants->Size();
             cmd->BufferBarrier(barrier);
@@ -1722,7 +1722,7 @@ namespace pe
                 BufferBarrierInfo b{};
                 b.buffer = m_visibility;
                 b.stageMask = PE_STAGE_COMPUTE_SHADER;
-                b.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE;
+                b.accessMask = PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE;
                 b.offset = static_cast<size_t>(idx) * sizeof(uint32_t);
                 b.size = sizeof(uint32_t);
                 cmd->BufferBarrier(b);
@@ -1787,7 +1787,7 @@ namespace pe
                 BufferBarrierInfo barrier{};
                 barrier.buffer = m_meshConstantsDevice;
                 barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
-                barrier.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ;
+                barrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
                 barrier.offset = mcOffset;
                 barrier.size = sizeof(Mesh_Constants);
                 cmd->BufferBarrier(barrier);
@@ -1907,7 +1907,7 @@ namespace pe
                     BufferBarrierInfo b{};
                     b.buffer = m_visibility;
                     b.stageMask = PE_STAGE_COMPUTE_SHADER;
-                    b.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE;
+                    b.accessMask = PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE;
                     b.offset = static_cast<size_t>(idx) * sizeof(uint32_t);
                     b.size = sizeof(uint32_t);
                     cmd->BufferBarrier(b);
@@ -1924,7 +1924,7 @@ namespace pe
                     BufferBarrierInfo b{};
                     b.buffer = m_meshConstantsDevice;
                     b.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
-                    b.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ;
+                    b.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
                     b.offset = static_cast<size_t>(idx) * mcStride;
                     b.size = mcStride;
                     cmd->BufferBarrier(b);

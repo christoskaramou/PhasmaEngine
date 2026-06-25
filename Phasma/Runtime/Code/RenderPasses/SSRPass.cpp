@@ -116,7 +116,7 @@ namespace pe
         frameBarrier.image = m_frameImage;
         frameBarrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         frameBarrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
-        frameBarrier.accessMask = PE_ACCESS_SHADER_READ;
+        frameBarrier.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
 
         cmd->BeginDebugRegion("SSRPass");
         cmd->CopyImage(m_viewportRT, m_frameImage);

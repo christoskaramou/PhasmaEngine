@@ -88,7 +88,7 @@ namespace pe::voxel
             barrier.stageFlags = PE_STAGE_FRAGMENT_SHADER |
                                  PE_STAGE_COMPUTE_SHADER |
                                  PE_STAGE_RAY_TRACING_SHADER_KHR;
-            barrier.accessMask = PE_ACCESS_SHADER_READ;
+            barrier.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
             barrier.arrayLayers = image->GetArrayLayers();
             barrier.mipLevels = image->GetMipLevels();
             cmd->ImageBarrier(barrier);

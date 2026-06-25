@@ -27,7 +27,7 @@ namespace pe
             barrier.image = image;
             barrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             barrier.stageFlags = PE_STAGE_FRAGMENT_SHADER | PE_STAGE_RAY_TRACING_SHADER_KHR;
-            barrier.accessMask = PE_ACCESS_SHADER_READ;
+            barrier.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
             barrier.mipLevels = image->GetMipLevels();
             cmd->ImageBarrier(barrier);
         }
@@ -217,13 +217,13 @@ namespace pe
         barrier.image = m_cubeMap;
         barrier.layout = PE_IMAGE_LAYOUT_GENERAL;
         barrier.stageFlags = PE_STAGE_COMPUTE_SHADER;
-        barrier.accessMask = PE_ACCESS_SHADER_WRITE;
+        barrier.accessMask = PE_ACCESS_SHADER_STORAGE_WRITE;
         cmd->ImageBarrier(barrier);
         ImageBarrierInfo barrierInput{};
         barrierInput.image = equiImage;
         barrierInput.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         barrierInput.stageFlags = PE_STAGE_COMPUTE_SHADER;
-        barrierInput.accessMask = PE_ACCESS_SHADER_READ;
+        barrierInput.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
         cmd->ImageBarrier(barrierInput);
 
         // 5. Update Descriptors

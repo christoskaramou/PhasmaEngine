@@ -291,7 +291,7 @@ namespace pe
             toRead.stageFlags = PE_STAGE_FRAGMENT_SHADER |
                                 PE_STAGE_COMPUTE_SHADER |
                                 PE_STAGE_RAY_TRACING_SHADER_KHR;
-            toRead.accessMask = PE_ACCESS_SHADER_READ;
+            toRead.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
             toRead.baseMipLevel = 0;
             toRead.mipLevels = dds.mipLevels;
             cmd->ImageBarrier(toRead);
@@ -333,7 +333,7 @@ namespace pe
             barrier.stageFlags = PE_STAGE_FRAGMENT_SHADER |
                                  PE_STAGE_COMPUTE_SHADER |
                                  PE_STAGE_RAY_TRACING_SHADER_KHR;
-            barrier.accessMask = PE_ACCESS_SHADER_READ;
+            barrier.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
             cmd->ImageBarrier(barrier);
 
             return image;

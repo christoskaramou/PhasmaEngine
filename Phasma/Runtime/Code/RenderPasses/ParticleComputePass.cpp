@@ -120,7 +120,7 @@ namespace pe
 
         BufferBarrierInfo barrier{};
         barrier.stageMask = PE_STAGE_COMPUTE_SHADER;
-        barrier.accessMask = PE_ACCESS_SHADER_WRITE;
+        barrier.accessMask = PE_ACCESS_SHADER_STORAGE_WRITE;
         barrier.buffer = particleBuffer;
         barrier.size = PE_WHOLE_SIZE;
         cmd->BufferBarrier(barrier);

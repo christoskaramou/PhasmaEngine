@@ -1263,7 +1263,7 @@ namespace pe
         BufferBarrierInfo barrier{};
         barrier.buffer = dst;
         barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
-        barrier.accessMask = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ;
+        barrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
         barrier.offset = 0;
         barrier.size = copySize;
         cmd->BufferBarrier(barrier);
@@ -1515,7 +1515,7 @@ namespace pe
             {
                 BufferTrackInfo &ti = buffer->GetTrackInfo();
                 ti.stageMask = PE_STAGE_COMPUTE_SHADER;
-                ti.accessMask = PE_ACCESS_SHADER_WRITE;
+                ti.accessMask = PE_ACCESS_SHADER_STORAGE_WRITE;
             };
             recordComputeWrite(m_cullingCountersBuffers[frame]);
             recordComputeWrite(m_indirectOpaqueSS[frame]);
@@ -1835,7 +1835,7 @@ namespace pe
             {
                 BufferTrackInfo &ti = buffer->GetTrackInfo();
                 ti.stageMask = PE_STAGE_COMPUTE_SHADER;
-                ti.accessMask = PE_ACCESS_SHADER_WRITE;
+                ti.accessMask = PE_ACCESS_SHADER_STORAGE_WRITE;
             };
             recordComputeWrite(counters);
             recordComputeWrite(opaqueSS);
