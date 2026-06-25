@@ -32,7 +32,7 @@ else()
     set(PE_CORE_RUNTIME_DEPENDENCY_FILES
         "${CMAKE_SOURCE_DIR}/Phasma/Core/Libs/vulkan/libvulkan.so"
         "${CMAKE_SOURCE_DIR}/Phasma/Core/Libs/vulkan/libvulkan.so.1"
-        "${CMAKE_SOURCE_DIR}/Phasma/Core/Libs/vulkan/libvulkan.so.1.4.328"
+        "${CMAKE_SOURCE_DIR}/Phasma/Core/Libs/vulkan/libvulkan.so.1.4.350"
     )
     if(PE_ENABLE_RUNTIME_SHADER_COMPILER)
         list(APPEND PE_CORE_RUNTIME_DEPENDENCY_FILES

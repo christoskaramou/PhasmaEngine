@@ -131,6 +131,7 @@ typedef struct VkuInstanceDispatchTable_ {
     PFN_vkCreateDebugUtilsMessengerEXT CreateDebugUtilsMessengerEXT;
     PFN_vkDestroyDebugUtilsMessengerEXT DestroyDebugUtilsMessengerEXT;
     PFN_vkSubmitDebugUtilsMessageEXT SubmitDebugUtilsMessageEXT;
+    PFN_vkGetPhysicalDeviceDescriptorSizeEXT GetPhysicalDeviceDescriptorSizeEXT;
     PFN_vkGetPhysicalDeviceMultisamplePropertiesEXT GetPhysicalDeviceMultisamplePropertiesEXT;
     PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT GetPhysicalDeviceCalibrateableTimeDomainsEXT;
 #ifdef VK_USE_PLATFORM_FUCHSIA
@@ -165,11 +166,18 @@ typedef struct VkuInstanceDispatchTable_ {
     PFN_vkGetPhysicalDeviceCooperativeVectorPropertiesNV GetPhysicalDeviceCooperativeVectorPropertiesNV;
     PFN_vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM GetPhysicalDeviceQueueFamilyDataGraphPropertiesARM;
     PFN_vkGetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM GetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM;
+    PFN_vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM GetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM;
 #ifdef VK_USE_PLATFORM_OHOS
     PFN_vkCreateSurfaceOHOS CreateSurfaceOHOS;
 #endif  // VK_USE_PLATFORM_OHOS
     PFN_vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV;
     PFN_vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM EnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM;
+    PFN_vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM EnumeratePhysicalDeviceShaderInstrumentationMetricsARM;
+    PFN_vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM GetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM;
+#ifdef VK_USE_PLATFORM_UBM_SEC
+    PFN_vkCreateUbmSurfaceSEC CreateUbmSurfaceSEC;
+    PFN_vkGetPhysicalDeviceUbmPresentationSupportSEC GetPhysicalDeviceUbmPresentationSupportSEC;
+#endif  // VK_USE_PLATFORM_UBM_SEC
 } VkuInstanceDispatchTable;
 
 // Device function pointer dispatch table
@@ -473,6 +481,28 @@ typedef struct VkuDeviceDispatchTable_ {
     PFN_vkCmdPipelineBarrier2KHR CmdPipelineBarrier2KHR;
     PFN_vkCmdWriteTimestamp2KHR CmdWriteTimestamp2KHR;
     PFN_vkQueueSubmit2KHR QueueSubmit2KHR;
+    PFN_vkCmdBindIndexBuffer3KHR CmdBindIndexBuffer3KHR;
+    PFN_vkCmdBindVertexBuffers3KHR CmdBindVertexBuffers3KHR;
+    PFN_vkCmdDrawIndirect2KHR CmdDrawIndirect2KHR;
+    PFN_vkCmdDrawIndexedIndirect2KHR CmdDrawIndexedIndirect2KHR;
+    PFN_vkCmdDispatchIndirect2KHR CmdDispatchIndirect2KHR;
+    PFN_vkCmdCopyMemoryKHR CmdCopyMemoryKHR;
+    PFN_vkCmdCopyMemoryToImageKHR CmdCopyMemoryToImageKHR;
+    PFN_vkCmdCopyImageToMemoryKHR CmdCopyImageToMemoryKHR;
+    PFN_vkCmdUpdateMemoryKHR CmdUpdateMemoryKHR;
+    PFN_vkCmdFillMemoryKHR CmdFillMemoryKHR;
+    PFN_vkCmdCopyQueryPoolResultsToMemoryKHR CmdCopyQueryPoolResultsToMemoryKHR;
+    PFN_vkCmdDrawIndirectCount2KHR CmdDrawIndirectCount2KHR;
+    PFN_vkCmdDrawIndexedIndirectCount2KHR CmdDrawIndexedIndirectCount2KHR;
+    PFN_vkCmdBeginConditionalRendering2EXT CmdBeginConditionalRendering2EXT;
+    PFN_vkCmdBindTransformFeedbackBuffers2EXT CmdBindTransformFeedbackBuffers2EXT;
+    PFN_vkCmdBeginTransformFeedback2EXT CmdBeginTransformFeedback2EXT;
+    PFN_vkCmdEndTransformFeedback2EXT CmdEndTransformFeedback2EXT;
+    PFN_vkCmdDrawIndirectByteCount2EXT CmdDrawIndirectByteCount2EXT;
+    PFN_vkCmdDrawMeshTasksIndirect2EXT CmdDrawMeshTasksIndirect2EXT;
+    PFN_vkCmdDrawMeshTasksIndirectCount2EXT CmdDrawMeshTasksIndirectCount2EXT;
+    PFN_vkCmdWriteMarkerToMemoryAMD CmdWriteMarkerToMemoryAMD;
+    PFN_vkCreateAccelerationStructure2KHR CreateAccelerationStructure2KHR;
     PFN_vkCmdCopyBuffer2KHR CmdCopyBuffer2KHR;
     PFN_vkCmdCopyImage2KHR CmdCopyImage2KHR;
     PFN_vkCmdCopyBufferToImage2KHR CmdCopyBufferToImage2KHR;
@@ -504,6 +534,8 @@ typedef struct VkuDeviceDispatchTable_ {
     PFN_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT CmdBindDescriptorBufferEmbeddedSamplers2EXT;
     PFN_vkCmdCopyMemoryIndirectKHR CmdCopyMemoryIndirectKHR;
     PFN_vkCmdCopyMemoryToImageIndirectKHR CmdCopyMemoryToImageIndirectKHR;
+    PFN_vkGetDeviceFaultReportsKHR GetDeviceFaultReportsKHR;
+    PFN_vkGetDeviceFaultDebugInfoKHR GetDeviceFaultDebugInfoKHR;
     PFN_vkCmdEndRendering2KHR CmdEndRendering2KHR;
     PFN_vkDebugMarkerSetObjectTagEXT DebugMarkerSetObjectTagEXT;
     PFN_vkDebugMarkerSetObjectNameEXT DebugMarkerSetObjectNameEXT;
@@ -524,6 +556,7 @@ typedef struct VkuDeviceDispatchTable_ {
     PFN_vkGetImageViewHandleNVX GetImageViewHandleNVX;
     PFN_vkGetImageViewHandle64NVX GetImageViewHandle64NVX;
     PFN_vkGetImageViewAddressNVX GetImageViewAddressNVX;
+    PFN_vkGetDeviceCombinedImageSamplerIndexNVX GetDeviceCombinedImageSamplerIndexNVX;
     PFN_vkCmdDrawIndirectCountAMD CmdDrawIndirectCountAMD;
     PFN_vkCmdDrawIndexedIndirectCountAMD CmdDrawIndexedIndirectCountAMD;
     PFN_vkGetShaderInfoAMD GetShaderInfoAMD;
@@ -564,6 +597,15 @@ typedef struct VkuDeviceDispatchTable_ {
     PFN_vkCmdDispatchGraphIndirectAMDX CmdDispatchGraphIndirectAMDX;
     PFN_vkCmdDispatchGraphIndirectCountAMDX CmdDispatchGraphIndirectCountAMDX;
 #endif  // VK_ENABLE_BETA_EXTENSIONS
+    PFN_vkWriteSamplerDescriptorsEXT WriteSamplerDescriptorsEXT;
+    PFN_vkWriteResourceDescriptorsEXT WriteResourceDescriptorsEXT;
+    PFN_vkCmdBindSamplerHeapEXT CmdBindSamplerHeapEXT;
+    PFN_vkCmdBindResourceHeapEXT CmdBindResourceHeapEXT;
+    PFN_vkCmdPushDataEXT CmdPushDataEXT;
+    PFN_vkGetImageOpaqueCaptureDataEXT GetImageOpaqueCaptureDataEXT;
+    PFN_vkRegisterCustomBorderColorEXT RegisterCustomBorderColorEXT;
+    PFN_vkUnregisterCustomBorderColorEXT UnregisterCustomBorderColorEXT;
+    PFN_vkGetTensorOpaqueCaptureDataARM GetTensorOpaqueCaptureDataARM;
     PFN_vkCmdSetSampleLocationsEXT CmdSetSampleLocationsEXT;
     PFN_vkGetImageDrmFormatModifierPropertiesEXT GetImageDrmFormatModifierPropertiesEXT;
     PFN_vkCreateValidationCacheEXT CreateValidationCacheEXT;
@@ -649,6 +691,7 @@ typedef struct VkuDeviceDispatchTable_ {
     PFN_vkDestroyPrivateDataSlotEXT DestroyPrivateDataSlotEXT;
     PFN_vkSetPrivateDataEXT SetPrivateDataEXT;
     PFN_vkGetPrivateDataEXT GetPrivateDataEXT;
+    PFN_vkQueueSetPerfHintQCOM QueueSetPerfHintQCOM;
 #ifdef VK_ENABLE_BETA_EXTENSIONS
     PFN_vkCreateCudaModuleNV CreateCudaModuleNV;
     PFN_vkGetCudaModuleCacheNV GetCudaModuleCacheNV;
@@ -718,6 +761,7 @@ typedef struct VkuDeviceDispatchTable_ {
     PFN_vkCmdDrawClusterHUAWEI CmdDrawClusterHUAWEI;
     PFN_vkCmdDrawClusterIndirectHUAWEI CmdDrawClusterIndirectHUAWEI;
     PFN_vkSetDeviceMemoryPriorityEXT SetDeviceMemoryPriorityEXT;
+    PFN_vkCmdSetDispatchParametersARM CmdSetDispatchParametersARM;
     PFN_vkGetDescriptorSetLayoutHostMappingInfoVALVE GetDescriptorSetLayoutHostMappingInfoVALVE;
     PFN_vkGetDescriptorSetHostMappingVALVE GetDescriptorSetHostMappingVALVE;
     PFN_vkCmdCopyMemoryIndirectNV CmdCopyMemoryIndirectNV;
@@ -825,17 +869,20 @@ typedef struct VkuDeviceDispatchTable_ {
     PFN_vkDestroyIndirectExecutionSetEXT DestroyIndirectExecutionSetEXT;
     PFN_vkUpdateIndirectExecutionSetPipelineEXT UpdateIndirectExecutionSetPipelineEXT;
     PFN_vkUpdateIndirectExecutionSetShaderEXT UpdateIndirectExecutionSetShaderEXT;
-#ifdef VK_USE_PLATFORM_OHOS
-    PFN_vkGetSwapchainGrallocUsageOHOS GetSwapchainGrallocUsageOHOS;
-    PFN_vkAcquireImageOHOS AcquireImageOHOS;
-    PFN_vkQueueSignalReleaseImageOHOS QueueSignalReleaseImageOHOS;
-#endif  // VK_USE_PLATFORM_OHOS
 #ifdef VK_USE_PLATFORM_METAL_EXT
     PFN_vkGetMemoryMetalHandleEXT GetMemoryMetalHandleEXT;
     PFN_vkGetMemoryMetalHandlePropertiesEXT GetMemoryMetalHandlePropertiesEXT;
 #endif  // VK_USE_PLATFORM_METAL_EXT
+    PFN_vkCreateShaderInstrumentationARM CreateShaderInstrumentationARM;
+    PFN_vkDestroyShaderInstrumentationARM DestroyShaderInstrumentationARM;
+    PFN_vkCmdBeginShaderInstrumentationARM CmdBeginShaderInstrumentationARM;
+    PFN_vkCmdEndShaderInstrumentationARM CmdEndShaderInstrumentationARM;
+    PFN_vkGetShaderInstrumentationValuesARM GetShaderInstrumentationValuesARM;
+    PFN_vkClearShaderInstrumentationMetricsARM ClearShaderInstrumentationMetricsARM;
     PFN_vkCmdEndRendering2EXT CmdEndRendering2EXT;
     PFN_vkCmdBeginCustomResolveEXT CmdBeginCustomResolveEXT;
+    PFN_vkCmdSetComputeOccupancyPriorityNV CmdSetComputeOccupancyPriorityNV;
+    PFN_vkCmdSetPrimitiveRestartIndexEXT CmdSetPrimitiveRestartIndexEXT;
     PFN_vkCreateAccelerationStructureKHR CreateAccelerationStructureKHR;
     PFN_vkDestroyAccelerationStructureKHR DestroyAccelerationStructureKHR;
     PFN_vkCmdBuildAccelerationStructuresKHR CmdBuildAccelerationStructuresKHR;
@@ -1165,6 +1212,28 @@ static inline void vkuInitDeviceDispatchTable(VkDevice device, VkuDeviceDispatch
     table->CmdPipelineBarrier2KHR = (PFN_vkCmdPipelineBarrier2KHR)gdpa(device, "vkCmdPipelineBarrier2KHR");
     table->CmdWriteTimestamp2KHR = (PFN_vkCmdWriteTimestamp2KHR)gdpa(device, "vkCmdWriteTimestamp2KHR");
     table->QueueSubmit2KHR = (PFN_vkQueueSubmit2KHR)gdpa(device, "vkQueueSubmit2KHR");
+    table->CmdBindIndexBuffer3KHR = (PFN_vkCmdBindIndexBuffer3KHR)gdpa(device, "vkCmdBindIndexBuffer3KHR");
+    table->CmdBindVertexBuffers3KHR = (PFN_vkCmdBindVertexBuffers3KHR)gdpa(device, "vkCmdBindVertexBuffers3KHR");
+    table->CmdDrawIndirect2KHR = (PFN_vkCmdDrawIndirect2KHR)gdpa(device, "vkCmdDrawIndirect2KHR");
+    table->CmdDrawIndexedIndirect2KHR = (PFN_vkCmdDrawIndexedIndirect2KHR)gdpa(device, "vkCmdDrawIndexedIndirect2KHR");
+    table->CmdDispatchIndirect2KHR = (PFN_vkCmdDispatchIndirect2KHR)gdpa(device, "vkCmdDispatchIndirect2KHR");
+    table->CmdCopyMemoryKHR = (PFN_vkCmdCopyMemoryKHR)gdpa(device, "vkCmdCopyMemoryKHR");
+    table->CmdCopyMemoryToImageKHR = (PFN_vkCmdCopyMemoryToImageKHR)gdpa(device, "vkCmdCopyMemoryToImageKHR");
+    table->CmdCopyImageToMemoryKHR = (PFN_vkCmdCopyImageToMemoryKHR)gdpa(device, "vkCmdCopyImageToMemoryKHR");
+    table->CmdUpdateMemoryKHR = (PFN_vkCmdUpdateMemoryKHR)gdpa(device, "vkCmdUpdateMemoryKHR");
+    table->CmdFillMemoryKHR = (PFN_vkCmdFillMemoryKHR)gdpa(device, "vkCmdFillMemoryKHR");
+    table->CmdCopyQueryPoolResultsToMemoryKHR = (PFN_vkCmdCopyQueryPoolResultsToMemoryKHR)gdpa(device, "vkCmdCopyQueryPoolResultsToMemoryKHR");
+    table->CmdDrawIndirectCount2KHR = (PFN_vkCmdDrawIndirectCount2KHR)gdpa(device, "vkCmdDrawIndirectCount2KHR");
+    table->CmdDrawIndexedIndirectCount2KHR = (PFN_vkCmdDrawIndexedIndirectCount2KHR)gdpa(device, "vkCmdDrawIndexedIndirectCount2KHR");
+    table->CmdBeginConditionalRendering2EXT = (PFN_vkCmdBeginConditionalRendering2EXT)gdpa(device, "vkCmdBeginConditionalRendering2EXT");
+    table->CmdBindTransformFeedbackBuffers2EXT = (PFN_vkCmdBindTransformFeedbackBuffers2EXT)gdpa(device, "vkCmdBindTransformFeedbackBuffers2EXT");
+    table->CmdBeginTransformFeedback2EXT = (PFN_vkCmdBeginTransformFeedback2EXT)gdpa(device, "vkCmdBeginTransformFeedback2EXT");
+    table->CmdEndTransformFeedback2EXT = (PFN_vkCmdEndTransformFeedback2EXT)gdpa(device, "vkCmdEndTransformFeedback2EXT");
+    table->CmdDrawIndirectByteCount2EXT = (PFN_vkCmdDrawIndirectByteCount2EXT)gdpa(device, "vkCmdDrawIndirectByteCount2EXT");
+    table->CmdDrawMeshTasksIndirect2EXT = (PFN_vkCmdDrawMeshTasksIndirect2EXT)gdpa(device, "vkCmdDrawMeshTasksIndirect2EXT");
+    table->CmdDrawMeshTasksIndirectCount2EXT = (PFN_vkCmdDrawMeshTasksIndirectCount2EXT)gdpa(device, "vkCmdDrawMeshTasksIndirectCount2EXT");
+    table->CmdWriteMarkerToMemoryAMD = (PFN_vkCmdWriteMarkerToMemoryAMD)gdpa(device, "vkCmdWriteMarkerToMemoryAMD");
+    table->CreateAccelerationStructure2KHR = (PFN_vkCreateAccelerationStructure2KHR)gdpa(device, "vkCreateAccelerationStructure2KHR");
     table->CmdCopyBuffer2KHR = (PFN_vkCmdCopyBuffer2KHR)gdpa(device, "vkCmdCopyBuffer2KHR");
     table->CmdCopyImage2KHR = (PFN_vkCmdCopyImage2KHR)gdpa(device, "vkCmdCopyImage2KHR");
     table->CmdCopyBufferToImage2KHR = (PFN_vkCmdCopyBufferToImage2KHR)gdpa(device, "vkCmdCopyBufferToImage2KHR");
@@ -1196,6 +1265,8 @@ static inline void vkuInitDeviceDispatchTable(VkDevice device, VkuDeviceDispatch
     table->CmdBindDescriptorBufferEmbeddedSamplers2EXT = (PFN_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT)gdpa(device, "vkCmdBindDescriptorBufferEmbeddedSamplers2EXT");
     table->CmdCopyMemoryIndirectKHR = (PFN_vkCmdCopyMemoryIndirectKHR)gdpa(device, "vkCmdCopyMemoryIndirectKHR");
     table->CmdCopyMemoryToImageIndirectKHR = (PFN_vkCmdCopyMemoryToImageIndirectKHR)gdpa(device, "vkCmdCopyMemoryToImageIndirectKHR");
+    table->GetDeviceFaultReportsKHR = (PFN_vkGetDeviceFaultReportsKHR)gdpa(device, "vkGetDeviceFaultReportsKHR");
+    table->GetDeviceFaultDebugInfoKHR = (PFN_vkGetDeviceFaultDebugInfoKHR)gdpa(device, "vkGetDeviceFaultDebugInfoKHR");
     table->CmdEndRendering2KHR = (PFN_vkCmdEndRendering2KHR)gdpa(device, "vkCmdEndRendering2KHR");
     table->DebugMarkerSetObjectTagEXT = (PFN_vkDebugMarkerSetObjectTagEXT)gdpa(device, "vkDebugMarkerSetObjectTagEXT");
     table->DebugMarkerSetObjectNameEXT = (PFN_vkDebugMarkerSetObjectNameEXT)gdpa(device, "vkDebugMarkerSetObjectNameEXT");
@@ -1216,6 +1287,7 @@ static inline void vkuInitDeviceDispatchTable(VkDevice device, VkuDeviceDispatch
     table->GetImageViewHandleNVX = (PFN_vkGetImageViewHandleNVX)gdpa(device, "vkGetImageViewHandleNVX");
     table->GetImageViewHandle64NVX = (PFN_vkGetImageViewHandle64NVX)gdpa(device, "vkGetImageViewHandle64NVX");
     table->GetImageViewAddressNVX = (PFN_vkGetImageViewAddressNVX)gdpa(device, "vkGetImageViewAddressNVX");
+    table->GetDeviceCombinedImageSamplerIndexNVX = (PFN_vkGetDeviceCombinedImageSamplerIndexNVX)gdpa(device, "vkGetDeviceCombinedImageSamplerIndexNVX");
     table->CmdDrawIndirectCountAMD = (PFN_vkCmdDrawIndirectCountAMD)gdpa(device, "vkCmdDrawIndirectCountAMD");
     table->CmdDrawIndexedIndirectCountAMD = (PFN_vkCmdDrawIndexedIndirectCountAMD)gdpa(device, "vkCmdDrawIndexedIndirectCountAMD");
     table->GetShaderInfoAMD = (PFN_vkGetShaderInfoAMD)gdpa(device, "vkGetShaderInfoAMD");
@@ -1256,6 +1328,15 @@ static inline void vkuInitDeviceDispatchTable(VkDevice device, VkuDeviceDispatch
     table->CmdDispatchGraphIndirectAMDX = (PFN_vkCmdDispatchGraphIndirectAMDX)gdpa(device, "vkCmdDispatchGraphIndirectAMDX");
     table->CmdDispatchGraphIndirectCountAMDX = (PFN_vkCmdDispatchGraphIndirectCountAMDX)gdpa(device, "vkCmdDispatchGraphIndirectCountAMDX");
 #endif  // VK_ENABLE_BETA_EXTENSIONS
+    table->WriteSamplerDescriptorsEXT = (PFN_vkWriteSamplerDescriptorsEXT)gdpa(device, "vkWriteSamplerDescriptorsEXT");
+    table->WriteResourceDescriptorsEXT = (PFN_vkWriteResourceDescriptorsEXT)gdpa(device, "vkWriteResourceDescriptorsEXT");
+    table->CmdBindSamplerHeapEXT = (PFN_vkCmdBindSamplerHeapEXT)gdpa(device, "vkCmdBindSamplerHeapEXT");
+    table->CmdBindResourceHeapEXT = (PFN_vkCmdBindResourceHeapEXT)gdpa(device, "vkCmdBindResourceHeapEXT");
+    table->CmdPushDataEXT = (PFN_vkCmdPushDataEXT)gdpa(device, "vkCmdPushDataEXT");
+    table->GetImageOpaqueCaptureDataEXT = (PFN_vkGetImageOpaqueCaptureDataEXT)gdpa(device, "vkGetImageOpaqueCaptureDataEXT");
+    table->RegisterCustomBorderColorEXT = (PFN_vkRegisterCustomBorderColorEXT)gdpa(device, "vkRegisterCustomBorderColorEXT");
+    table->UnregisterCustomBorderColorEXT = (PFN_vkUnregisterCustomBorderColorEXT)gdpa(device, "vkUnregisterCustomBorderColorEXT");
+    table->GetTensorOpaqueCaptureDataARM = (PFN_vkGetTensorOpaqueCaptureDataARM)gdpa(device, "vkGetTensorOpaqueCaptureDataARM");
     table->CmdSetSampleLocationsEXT = (PFN_vkCmdSetSampleLocationsEXT)gdpa(device, "vkCmdSetSampleLocationsEXT");
     table->GetImageDrmFormatModifierPropertiesEXT = (PFN_vkGetImageDrmFormatModifierPropertiesEXT)gdpa(device, "vkGetImageDrmFormatModifierPropertiesEXT");
     table->CreateValidationCacheEXT = (PFN_vkCreateValidationCacheEXT)gdpa(device, "vkCreateValidationCacheEXT");
@@ -1341,6 +1422,7 @@ static inline void vkuInitDeviceDispatchTable(VkDevice device, VkuDeviceDispatch
     table->DestroyPrivateDataSlotEXT = (PFN_vkDestroyPrivateDataSlotEXT)gdpa(device, "vkDestroyPrivateDataSlotEXT");
     table->SetPrivateDataEXT = (PFN_vkSetPrivateDataEXT)gdpa(device, "vkSetPrivateDataEXT");
     table->GetPrivateDataEXT = (PFN_vkGetPrivateDataEXT)gdpa(device, "vkGetPrivateDataEXT");
+    table->QueueSetPerfHintQCOM = (PFN_vkQueueSetPerfHintQCOM)gdpa(device, "vkQueueSetPerfHintQCOM");
 #ifdef VK_ENABLE_BETA_EXTENSIONS
     table->CreateCudaModuleNV = (PFN_vkCreateCudaModuleNV)gdpa(device, "vkCreateCudaModuleNV");
     table->GetCudaModuleCacheNV = (PFN_vkGetCudaModuleCacheNV)gdpa(device, "vkGetCudaModuleCacheNV");
@@ -1410,6 +1492,7 @@ static inline void vkuInitDeviceDispatchTable(VkDevice device, VkuDeviceDispatch
     table->CmdDrawClusterHUAWEI = (PFN_vkCmdDrawClusterHUAWEI)gdpa(device, "vkCmdDrawClusterHUAWEI");
     table->CmdDrawClusterIndirectHUAWEI = (PFN_vkCmdDrawClusterIndirectHUAWEI)gdpa(device, "vkCmdDrawClusterIndirectHUAWEI");
     table->SetDeviceMemoryPriorityEXT = (PFN_vkSetDeviceMemoryPriorityEXT)gdpa(device, "vkSetDeviceMemoryPriorityEXT");
+    table->CmdSetDispatchParametersARM = (PFN_vkCmdSetDispatchParametersARM)gdpa(device, "vkCmdSetDispatchParametersARM");
     table->GetDescriptorSetLayoutHostMappingInfoVALVE = (PFN_vkGetDescriptorSetLayoutHostMappingInfoVALVE)gdpa(device, "vkGetDescriptorSetLayoutHostMappingInfoVALVE");
     table->GetDescriptorSetHostMappingVALVE = (PFN_vkGetDescriptorSetHostMappingVALVE)gdpa(device, "vkGetDescriptorSetHostMappingVALVE");
     table->CmdCopyMemoryIndirectNV = (PFN_vkCmdCopyMemoryIndirectNV)gdpa(device, "vkCmdCopyMemoryIndirectNV");
@@ -1517,17 +1600,20 @@ static inline void vkuInitDeviceDispatchTable(VkDevice device, VkuDeviceDispatch
     table->DestroyIndirectExecutionSetEXT = (PFN_vkDestroyIndirectExecutionSetEXT)gdpa(device, "vkDestroyIndirectExecutionSetEXT");
     table->UpdateIndirectExecutionSetPipelineEXT = (PFN_vkUpdateIndirectExecutionSetPipelineEXT)gdpa(device, "vkUpdateIndirectExecutionSetPipelineEXT");
     table->UpdateIndirectExecutionSetShaderEXT = (PFN_vkUpdateIndirectExecutionSetShaderEXT)gdpa(device, "vkUpdateIndirectExecutionSetShaderEXT");
-#ifdef VK_USE_PLATFORM_OHOS
-    table->GetSwapchainGrallocUsageOHOS = (PFN_vkGetSwapchainGrallocUsageOHOS)gdpa(device, "vkGetSwapchainGrallocUsageOHOS");
-    table->AcquireImageOHOS = (PFN_vkAcquireImageOHOS)gdpa(device, "vkAcquireImageOHOS");
-    table->QueueSignalReleaseImageOHOS = (PFN_vkQueueSignalReleaseImageOHOS)gdpa(device, "vkQueueSignalReleaseImageOHOS");
-#endif  // VK_USE_PLATFORM_OHOS
 #ifdef VK_USE_PLATFORM_METAL_EXT
     table->GetMemoryMetalHandleEXT = (PFN_vkGetMemoryMetalHandleEXT)gdpa(device, "vkGetMemoryMetalHandleEXT");
     table->GetMemoryMetalHandlePropertiesEXT = (PFN_vkGetMemoryMetalHandlePropertiesEXT)gdpa(device, "vkGetMemoryMetalHandlePropertiesEXT");
 #endif  // VK_USE_PLATFORM_METAL_EXT
+    table->CreateShaderInstrumentationARM = (PFN_vkCreateShaderInstrumentationARM)gdpa(device, "vkCreateShaderInstrumentationARM");
+    table->DestroyShaderInstrumentationARM = (PFN_vkDestroyShaderInstrumentationARM)gdpa(device, "vkDestroyShaderInstrumentationARM");
+    table->CmdBeginShaderInstrumentationARM = (PFN_vkCmdBeginShaderInstrumentationARM)gdpa(device, "vkCmdBeginShaderInstrumentationARM");
+    table->CmdEndShaderInstrumentationARM = (PFN_vkCmdEndShaderInstrumentationARM)gdpa(device, "vkCmdEndShaderInstrumentationARM");
+    table->GetShaderInstrumentationValuesARM = (PFN_vkGetShaderInstrumentationValuesARM)gdpa(device, "vkGetShaderInstrumentationValuesARM");
+    table->ClearShaderInstrumentationMetricsARM = (PFN_vkClearShaderInstrumentationMetricsARM)gdpa(device, "vkClearShaderInstrumentationMetricsARM");
     table->CmdEndRendering2EXT = (PFN_vkCmdEndRendering2EXT)gdpa(device, "vkCmdEndRendering2EXT");
     table->CmdBeginCustomResolveEXT = (PFN_vkCmdBeginCustomResolveEXT)gdpa(device, "vkCmdBeginCustomResolveEXT");
+    table->CmdSetComputeOccupancyPriorityNV = (PFN_vkCmdSetComputeOccupancyPriorityNV)gdpa(device, "vkCmdSetComputeOccupancyPriorityNV");
+    table->CmdSetPrimitiveRestartIndexEXT = (PFN_vkCmdSetPrimitiveRestartIndexEXT)gdpa(device, "vkCmdSetPrimitiveRestartIndexEXT");
     table->CreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)gdpa(device, "vkCreateAccelerationStructureKHR");
     table->DestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)gdpa(device, "vkDestroyAccelerationStructureKHR");
     table->CmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)gdpa(device, "vkCmdBuildAccelerationStructuresKHR");
@@ -1665,6 +1751,7 @@ static inline void vkuInitInstanceDispatchTable(VkInstance instance, VkuInstance
     table->CreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)gipa(instance, "vkCreateDebugUtilsMessengerEXT");
     table->DestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)gipa(instance, "vkDestroyDebugUtilsMessengerEXT");
     table->SubmitDebugUtilsMessageEXT = (PFN_vkSubmitDebugUtilsMessageEXT)gipa(instance, "vkSubmitDebugUtilsMessageEXT");
+    table->GetPhysicalDeviceDescriptorSizeEXT = (PFN_vkGetPhysicalDeviceDescriptorSizeEXT)gipa(instance, "vkGetPhysicalDeviceDescriptorSizeEXT");
     table->GetPhysicalDeviceMultisamplePropertiesEXT = (PFN_vkGetPhysicalDeviceMultisamplePropertiesEXT)gipa(instance, "vkGetPhysicalDeviceMultisamplePropertiesEXT");
     table->GetPhysicalDeviceCalibrateableTimeDomainsEXT = (PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT)gipa(instance, "vkGetPhysicalDeviceCalibrateableTimeDomainsEXT");
 #ifdef VK_USE_PLATFORM_FUCHSIA
@@ -1699,10 +1786,17 @@ static inline void vkuInitInstanceDispatchTable(VkInstance instance, VkuInstance
     table->GetPhysicalDeviceCooperativeVectorPropertiesNV = (PFN_vkGetPhysicalDeviceCooperativeVectorPropertiesNV)gipa(instance, "vkGetPhysicalDeviceCooperativeVectorPropertiesNV");
     table->GetPhysicalDeviceQueueFamilyDataGraphPropertiesARM = (PFN_vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM)gipa(instance, "vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM");
     table->GetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM = (PFN_vkGetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM)gipa(instance, "vkGetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM");
+    table->GetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM = (PFN_vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM)gipa(instance, "vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM");
 #ifdef VK_USE_PLATFORM_OHOS
     table->CreateSurfaceOHOS = (PFN_vkCreateSurfaceOHOS)gipa(instance, "vkCreateSurfaceOHOS");
 #endif  // VK_USE_PLATFORM_OHOS
     table->GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV = (PFN_vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV)gipa(instance, "vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV");
     table->EnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM = (PFN_vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM)gipa(instance, "vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM");
+    table->EnumeratePhysicalDeviceShaderInstrumentationMetricsARM = (PFN_vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM)gipa(instance, "vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM");
+    table->GetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM = (PFN_vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM)gipa(instance, "vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM");
+#ifdef VK_USE_PLATFORM_UBM_SEC
+    table->CreateUbmSurfaceSEC = (PFN_vkCreateUbmSurfaceSEC)gipa(instance, "vkCreateUbmSurfaceSEC");
+    table->GetPhysicalDeviceUbmPresentationSupportSEC = (PFN_vkGetPhysicalDeviceUbmPresentationSupportSEC)gipa(instance, "vkGetPhysicalDeviceUbmPresentationSupportSEC");
+#endif  // VK_USE_PLATFORM_UBM_SEC
 }
 // clang-format on
