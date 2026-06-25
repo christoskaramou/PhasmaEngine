@@ -341,6 +341,12 @@ namespace pe
 
     void CommandBuffer::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
     {
+        // A dispatch with any zero dimension launches no thread groups — a guaranteed no-op.
+        // Skip it so the DX12 debug layer (id=1254) doesn't warn when a pass has nothing to do
+        // (e.g. 0 particles / 0 visible draws).
+        if (groupCountX == 0 || groupCountY == 0 || groupCountZ == 0)
+            return;
+
         PE_PROFILE_COUNTER("Cmd Dispatch Calls", 1);
         PE_PROFILE_SCOPE("Cmd Dispatch");
         m_impl->Dispatch(groupCountX, groupCountY, groupCountZ);
