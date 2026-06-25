@@ -147,7 +147,26 @@ namespace pe
         ui::SetInitialWindowSizeFraction(1.0f / 7.0f, 0.35f, sizedOnce ? ImGuiCond_Appearing : ImGuiCond_Always);
         sizedOnce = true;
 
-        if (!ImGui::Begin("Properties", &m_open))
+        const bool visible = ImGui::Begin("Properties", &m_open);
+
+        // Pinned-tab cue: amber wash + underline over our own dock tab. Paint it before the early-out so it
+        // survives when another tab in the node is selected and Begin() hides our body — the tab bar already
+        // stored DockTabItemRect for every docked window this frame. Dim it when we're not the active tab.
+        if (m_pin.active)
+        {
+            ImGuiWindow *win = ImGui::GetCurrentWindow();
+            if (win && win->DockIsActive && win->DC.DockTabItemRect.GetWidth() > 0.0f)
+            {
+                const ImRect r = win->DC.DockTabItemRect;
+                const float dim = visible ? 1.0f : 0.4f;
+                ImDrawList *dl = ImGui::GetForegroundDrawList();
+                dl->AddRectFilled(r.Min, r.Max, IM_COL32(255, 170, 40, (int)(55 * dim)));
+                dl->AddLine(ImVec2(r.Min.x, r.Max.y - 1.0f), ImVec2(r.Max.x, r.Max.y - 1.0f),
+                            IM_COL32(255, 170, 40, (int)(255 * dim)), 2.0f);
+            }
+        }
+
+        if (!visible)
         {
             ImGui::End();
             return;
@@ -171,17 +190,6 @@ namespace pe
                 if ((tf & ImGuiItemStatusFlags_HoveredRect) && (tf & ImGuiItemStatusFlags_HoveredWindow) &&
                     ImGui::IsMouseClicked(ImGuiMouseButton_Right))
                     ImGui::OpenPopup("##props_pin_ctx");
-
-                // Visible "pinned" cue: amber wash + underline over our own dock tab. The tab bar draws
-                // before this widget runs, so style pushes can't reach it — paint the tab rect directly.
-                if (m_pin.active && win->DC.DockTabItemRect.GetWidth() > 0.0f)
-                {
-                    const ImRect r = win->DC.DockTabItemRect;
-                    ImDrawList *dl = ImGui::GetForegroundDrawList();
-                    dl->AddRectFilled(r.Min, r.Max, IM_COL32(255, 170, 40, 55));
-                    dl->AddLine(ImVec2(r.Min.x, r.Max.y - 1.0f), ImVec2(r.Max.x, r.Max.y - 1.0f),
-                                IM_COL32(255, 170, 40, 255), 2.0f);
-                }
             }
             if (ImGui::BeginPopup("##props_pin_ctx"))
             {
