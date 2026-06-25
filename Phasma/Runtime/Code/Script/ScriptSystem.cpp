@@ -688,6 +688,24 @@ namespace pe
         inst.bindingsValid = true;
     }
 
+    bool ScriptSystem::NodeInstanceRunsInEditor(const NodeScriptInstance &inst) const
+    {
+        Scene *scene = GetActiveScene();
+        if (!scene || !inst.handle.IsValid(*scene))
+            return false;
+        ScriptRunMode mode = scene->GetNodeScriptRunMode(inst.handle.nodeId);
+        return mode == ScriptRunMode::Editor || mode == ScriptRunMode::Both;
+    }
+
+    bool ScriptSystem::NodeInstanceRunsInPlayer(const NodeScriptInstance &inst) const
+    {
+        Scene *scene = GetActiveScene();
+        if (!scene || !inst.handle.IsValid(*scene))
+            return false;
+        ScriptRunMode mode = scene->GetNodeScriptRunMode(inst.handle.nodeId);
+        return mode == ScriptRunMode::Player || mode == ScriptRunMode::Both;
+    }
+
     void ScriptSystem::InitializeNodeInstance(NodeScriptInstance &inst)
     {
         if (inst.initCalled)
@@ -699,7 +717,8 @@ namespace pe
         // Stop restores the editor snapshot; later reconciliation only removes stale instances.
         // update_editor() still runs every frame for editor-only behavior, and the player
         // is never an editor host, so this never gates the shipped game.
-        if (IsEditorHost() && !IsScriptPlayMode())
+        // Component_Script run mode Editor/Both lets the node run its lifecycle while editing.
+        if (IsEditorHost() && !IsScriptPlayMode() && !NodeInstanceRunsInEditor(inst))
             return;
 
         inst.initCalled = true;
@@ -1048,9 +1067,11 @@ namespace pe
             }
         }
 
+        // On Stop, tear down play-only node scripts; Editor/Both keep running while editing.
         if (!nowPlay)
             for (auto &inst : m_nodeInstances)
-                DestroyNodeInstance(inst);
+                if (!NodeInstanceRunsInEditor(inst))
+                    DestroyNodeInstance(inst);
     }
 
     void ScriptSystem::SyncSceneScripts()
@@ -1524,6 +1545,17 @@ namespace pe
                         inst.lastError = err.what();
                     }
                 }
+                // Component_Script run mode Editor/Both also runs the regular update() while editing.
+                if (inst.lastError.empty() && inst.updateFn.valid() && NodeInstanceRunsInEditor(inst))
+                {
+                    auto result = CallProtected(inst.updateFn, dt);
+                    if (!result.valid())
+                    {
+                        sol::error err = result;
+                        Log::Error(PeFormat("[Lua] update() error in node script '%s': %s", inst.path.c_str(), err.what()));
+                        inst.lastError = err.what();
+                    }
+                }
             }
         }
 
@@ -1560,7 +1592,7 @@ namespace pe
                     break;
                 if (!inst.lastError.empty())
                     continue;
-                if (inst.updateFn.valid())
+                if (inst.updateFn.valid() && NodeInstanceRunsInPlayer(inst))
                 {
                     auto result = CallProtected(inst.updateFn, dt);
                     if (!result.valid())

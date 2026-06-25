@@ -220,6 +220,10 @@ namespace pe
         void RefreshNodeInstanceBindings(NodeScriptInstance &inst);
         void InitializeNodeInstance(NodeScriptInstance &inst);
         void DestroyNodeInstance(NodeScriptInstance &inst);
+        // The node's Component_Script run mode (Player/Editor/Both) decides whether its
+        // init/update/destroy lifecycle runs in the editor (edit mode) and/or in play/player.
+        bool NodeInstanceRunsInEditor(const NodeScriptInstance &inst) const;
+        bool NodeInstanceRunsInPlayer(const NodeScriptInstance &inst) const;
 
         sol::state m_lua{};
         std::vector<ScriptEntry> m_scripts{};

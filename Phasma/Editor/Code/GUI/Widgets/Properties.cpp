@@ -372,6 +372,15 @@ namespace pe
                 scene.SetNodeScript(node, "");
             ui::ItemTooltip("Detach the Lua script from this node.");
 
+            ImGui::Spacing();
+            int runMode = static_cast<int>(scene.GetNodeScriptRunMode(node));
+            const char *runModeNames[] = {"Player", "Editor", "Both"};
+            ImGui::SetNextItemWidth(140.f);
+            if (ImGui::Combo("Run In", &runMode, runModeNames, 3))
+                scene.SetNodeScriptRunMode(node, static_cast<ScriptRunMode>(runMode));
+            ui::ItemTooltip("When this script's init/update/destroy run: Player (play mode + the "
+                            "player), Editor (while editing, not in play), or Both.");
+
             // Show exposed variables from the per-node script instance
             if (!ss)
                 return;

@@ -35,10 +35,21 @@ namespace pe
         std::vector<int> meshRefs;
     };
 
+    // Where a plain Component_Script runs its init/update/destroy lifecycle:
+    // Player (default) = play mode + the player; Editor = the editor while editing
+    // (not in play); Both = everywhere. Independent of the legacy update_editor() hook.
+    enum class ScriptRunMode : uint8_t
+    {
+        Player = 0,
+        Editor = 1,
+        Both = 2,
+    };
+
     class NodeScriptComponent : public IComponent
     {
     public:
         std::string path;
+        ScriptRunMode runMode = ScriptRunMode::Player;
     };
 
     class NodeSkinnedStrip2DComponent : public IComponent

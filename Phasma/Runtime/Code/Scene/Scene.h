@@ -518,6 +518,19 @@ namespace pe
             return m_nodeComponentCache[node->index].meshRefs->meshRefs;
         }
         const std::string &GetNodeScriptPath(const NodeId *node) const { return m_nodeComponentCache[node->index].script->path; }
+        ScriptRunMode GetNodeScriptRunMode(const NodeId *node) const
+        {
+            const auto *s = m_nodeComponentCache[node->index].script;
+            return s ? s->runMode : ScriptRunMode::Player;
+        }
+        void SetNodeScriptRunMode(const NodeId *node, ScriptRunMode mode)
+        {
+            if (auto *s = m_nodeComponentCache[node->index].script)
+            {
+                s->runMode = mode;
+                MarkDirty();
+            }
+        }
         NodeRuntime &GetNodeRuntime(const NodeId *node) { return m_nodeRuntime[node->index]; }
         const NodeRuntime &GetNodeRuntime(const NodeId *node) const { return m_nodeRuntime[node->index]; }
         uint32_t GetNodeCount() const { return static_cast<uint32_t>(m_nodeIds.size()); }

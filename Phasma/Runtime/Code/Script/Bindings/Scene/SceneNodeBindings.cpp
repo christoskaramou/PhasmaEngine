@@ -566,16 +566,44 @@ namespace pe
                     return sol::make_object(lua, t);
                 });
 
-                ut.set_function("set_script", [](SceneNodeHandle &h, const std::string &path) {
+                // mode (optional): "player" (default), "editor", or "both" — where the script's
+                // init/update/destroy lifecycle runs.
+                ut.set_function("set_script", [](SceneNodeHandle &h, const std::string &path, sol::optional<std::string> mode) {
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return;
                     s->SetNodeScript(h.nodeId, path);
+                    if (mode)
+                    {
+                        const std::string &m = *mode;
+                        s->SetNodeScriptRunMode(h.nodeId, m == "editor" ? ScriptRunMode::Editor
+                                                          : m == "both" ? ScriptRunMode::Both
+                                                                        : ScriptRunMode::Player);
+                    }
                 });
 
                 ut.set_function("get_script", [](SceneNodeHandle &h) -> std::string {
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return "";
                     return s->GetNodeScriptPath(h.nodeId);
+                });
+
+                ut.set_function("set_script_run_mode", [](SceneNodeHandle &h, const std::string &mode) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    s->SetNodeScriptRunMode(h.nodeId, mode == "editor" ? ScriptRunMode::Editor
+                                                      : mode == "both" ? ScriptRunMode::Both
+                                                                       : ScriptRunMode::Player);
+                });
+
+                ut.set_function("get_script_run_mode", [](SceneNodeHandle &h) -> std::string {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return "player";
+                    switch (s->GetNodeScriptRunMode(h.nodeId))
+                    {
+                    case ScriptRunMode::Editor: return "editor";
+                    case ScriptRunMode::Both: return "both";
+                    default: return "player";
+                    }
                 });
 
                 ut.set_function("remove", [](SceneNodeHandle &h) {

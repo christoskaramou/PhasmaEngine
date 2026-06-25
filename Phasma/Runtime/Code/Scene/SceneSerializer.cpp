@@ -1601,7 +1601,10 @@ namespace pe
                 }
 
                 if (!cache.script->path.empty())
+                {
                     nodeObj.AddMember("script", MakeStringValue(cache.script->path), allocator);
+                    nodeObj.AddMember("scriptRunMode", static_cast<int>(cache.script->runMode), allocator);
+                }
 
                 if (node != skipPrefabPathNode && cache.prefab && !cache.prefab->path.empty())
                     nodeObj.AddMember("prefab", MakeStringValue(SerializePath(cache.prefab->path, relativeToDir)), allocator);
@@ -2740,7 +2743,11 @@ namespace pe
                             SetMeshRef(node, sceneMeshIdx);
                     }
                     if (nv.HasMember("script"))
+                    {
                         SetNodeScript(node, nv["script"].GetString());
+                        if (nv.HasMember("scriptRunMode") && nv["scriptRunMode"].IsInt())
+                            SetNodeScriptRunMode(node, static_cast<ScriptRunMode>(nv["scriptRunMode"].GetInt()));
+                    }
 
                     nodeMap[ni] = node;
                 }
@@ -3424,7 +3431,11 @@ namespace pe
             }
 
             if (nv.HasMember("script") && nv["script"].IsString())
+            {
                 SetNodeScript(node, nv["script"].GetString());
+                if (nv.HasMember("scriptRunMode") && nv["scriptRunMode"].IsInt())
+                    SetNodeScriptRunMode(node, static_cast<ScriptRunMode>(nv["scriptRunMode"].GetInt()));
+            }
 
             nodeMap[ni] = node;
         }
@@ -3889,7 +3900,11 @@ namespace pe
                             SetMeshRef(node, meshIdx);
                     }
                     if (nv.HasMember("script"))
+                    {
                         SetNodeScript(node, nv["script"].GetString());
+                        if (nv.HasMember("scriptRunMode") && nv["scriptRunMode"].IsInt())
+                            SetNodeScriptRunMode(node, static_cast<ScriptRunMode>(nv["scriptRunMode"].GetInt()));
+                    }
                     else
                         SetNodeScript(node, "");
 
@@ -4401,7 +4416,11 @@ namespace pe
                             SetMeshRef(node, sceneMeshIdx);
                     }
                     if (nv.HasMember("script"))
+                    {
                         SetNodeScript(node, nv["script"].GetString());
+                        if (nv.HasMember("scriptRunMode") && nv["scriptRunMode"].IsInt())
+                            SetNodeScriptRunMode(node, static_cast<ScriptRunMode>(nv["scriptRunMode"].GetInt()));
+                    }
                     nodeMap[ni] = node;
                 }
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
