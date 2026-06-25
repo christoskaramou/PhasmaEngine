@@ -19,6 +19,7 @@
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
 #include "Script/ScriptSystem.h"
+#include "Script/Bindings/Lerp/Tween.h"
 #include "ScriptEditor.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui.h"
@@ -770,7 +771,7 @@ namespace pe
                                 {
                                     Camera *camera = scene.GetActiveCamera();
                                     vec3 emitterPos = vec3(emitters[i].position);
-                                    camera->SetPosition(emitterPos - camera->GetFront() * 5.0f);
+                                    TweenCameraTo(emitterPos - camera->GetFront() * 5.0f, 0.3f);
                                 }
 
                                 if (ImGui::BeginPopupContextItem())
@@ -780,7 +781,7 @@ namespace pe
                                         selection.SelectEmitter(i);
                                         Camera *camera = scene.GetActiveCamera();
                                         vec3 emitterPos = vec3(emitters[i].position);
-                                        camera->SetPosition(emitterPos - camera->GetFront() * 5.0f);
+                                        TweenCameraTo(emitterPos - camera->GetFront() * 5.0f, 0.3f);
                                         ImGui::SetWindowFocus("Properties");
                                     }
                                     ui::ItemTooltip("Move the active camera to frame this emitter.");
@@ -1024,7 +1025,7 @@ namespace pe
                     vec3 center = (bounds.min + bounds.max) * 0.5f;
                     float dist = glm::length(bounds.max - bounds.min);
                     vec3 dir = camera->GetFront();
-                    camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
+                    TweenCameraTo(center - dir * glm::max(dist, camera->GetNearPlane()), 0.3f);
                 }
 
                 if (ImGui::BeginPopupContextItem())
@@ -1037,7 +1038,7 @@ namespace pe
                         vec3 center = (bounds.min + bounds.max) * 0.5f;
                         float dist = glm::length(bounds.max - bounds.min);
                         vec3 dir = camera->GetFront();
-                        camera->SetPosition(center - dir * glm::max(dist, camera->GetNearPlane()));
+                        TweenCameraTo(center - dir * glm::max(dist, camera->GetNearPlane()), 0.3f);
                         ImGui::SetWindowFocus("Properties");
                     }
                     if (!(nodeCompFlags & Component_Skybox))

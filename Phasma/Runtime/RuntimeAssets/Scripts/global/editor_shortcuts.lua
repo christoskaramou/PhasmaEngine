@@ -69,7 +69,7 @@ local function update_editor()
             engine.toggle_gui()
         end
 
-        -- F: focus camera on selected object (only when not typing in UI)
+        -- F: focus camera on selected object (glides smoothly; only when not typing in UI)
         if f_down and not f_was_down and not engine.want_capture_keyboard() then
             selection.focus()
         end

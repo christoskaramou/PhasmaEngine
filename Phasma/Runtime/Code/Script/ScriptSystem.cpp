@@ -10,6 +10,7 @@
 #include "Scene/SceneNodeHandle.h"
 #include "Scene/SceneHost.h"
 #include "Script/ScriptRuntimeHooks.h"
+#include "Script/Bindings/Lerp/Tween.h"
 #include "UI/RuntimeUi.h"
 
 #include <algorithm>
@@ -1459,6 +1460,10 @@ namespace pe
         // scripts' `function update(dt)` received nil and any `dt` arithmetic threw every
         // frame. Passing it here makes dt reliable engine-wide (no per-script workaround).
         const double dt = FrameTimer::Instance().GetDelta();
+
+        // Advance active tweens (tween.to + native camera focus) every frame,
+        // in edit and play mode.
+        TickTweens(dt);
 
         // Process completed async model loads
         ProcessAsyncLoads();

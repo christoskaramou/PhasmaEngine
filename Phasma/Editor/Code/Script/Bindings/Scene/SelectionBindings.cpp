@@ -1,4 +1,5 @@
 #include "Script/ScriptSystem.h"
+#include "Script/Bindings/Lerp/Tween.h"
 #include "Camera/Camera.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
@@ -6,6 +7,59 @@
 
 namespace pe
 {
+    // Camera position that frames the current selection (pulled back along the camera
+    // front by twice the selection radius). Returns nullopt when nothing focusable is
+    // selected. Used by selection.focus() to glide the camera there via TweenCameraTo.
+    static std::optional<vec3> ComputeFocusTarget()
+    {
+        Scene *scene = GetActiveScene();
+        if (!scene)
+            return std::nullopt;
+        Camera *cam = scene->GetActiveCamera();
+        if (!cam)
+            return std::nullopt;
+
+        auto &sel = SelectionManager::Instance();
+        vec3 center;
+        float radius = 1.0f;
+
+        if (sel.GetSelectionType() == SelectionType::Node ||
+            sel.GetSelectionType() == SelectionType::Mesh)
+        {
+            NodeId *node = sel.GetSelectedNode();
+            if (!node)
+                return std::nullopt;
+            const AABB &bb = scene->GetWorldAABB(node);
+            center = bb.GetCenter();
+            radius = glm::length(bb.GetSize()) * 0.5f;
+        }
+        else if (sel.GetSelectionType() == SelectionType::Light)
+        {
+            int idx = sel.GetSelectedLightIndex();
+            if (sel.GetSelectedLightType() == LightType::Point)
+            {
+                auto &lights = scene->GetPointLights();
+                if (idx < 0 || idx >= static_cast<int>(lights.size()))
+                    return std::nullopt;
+                center = vec3(lights[idx].position);
+            }
+            else
+            {
+                auto &lights = scene->GetDirectionalLights();
+                if (idx < 0 || idx >= static_cast<int>(lights.size()))
+                    return std::nullopt;
+                center = vec3(lights[idx].position);
+            }
+        }
+        else
+        {
+            return std::nullopt;
+        }
+
+        vec3 dir = glm::normalize(cam->GetFront());
+        return center - dir * (radius * 2.0f);
+    }
+
     static struct SelectionBindings
     {
         SelectionBindings()
@@ -55,48 +109,11 @@ namespace pe
                     SelectionManager::Instance().ClearSelection();
                 });
 
+                // Glide the active camera to frame the selection (smooth focus, via the
+                // shared tween system). Bound to the editor F key.
                 selection.set_function("focus", []() {
-                    Scene *scene = GetActiveScene();
-                    if (!scene) return;
-                    Camera *cam = scene->GetActiveCamera();
-                    if (!cam) return;
-
-                    auto &sel = SelectionManager::Instance();
-                    vec3 center;
-                    float radius = 1.0f;
-
-                    if (sel.GetSelectionType() == SelectionType::Node ||
-                        sel.GetSelectionType() == SelectionType::Mesh)
-                    {
-                        NodeId *node = sel.GetSelectedNode();
-                        if (!node) return;
-                        const AABB &bb = scene->GetWorldAABB(node);
-                        center = bb.GetCenter();
-                        radius = glm::length(bb.GetSize()) * 0.5f;
-                    }
-                    else if (sel.GetSelectionType() == SelectionType::Light)
-                    {
-                        int idx = sel.GetSelectedLightIndex();
-                        if (sel.GetSelectedLightType() == LightType::Point)
-                        {
-                            auto &lights = scene->GetPointLights();
-                            if (idx < 0 || idx >= static_cast<int>(lights.size())) return;
-                            center = vec3(lights[idx].position);
-                        }
-                        else
-                        {
-                            auto &lights = scene->GetDirectionalLights();
-                            if (idx < 0 || idx >= static_cast<int>(lights.size())) return;
-                            center = vec3(lights[idx].position);
-                        }
-                    }
-                    else
-                    {
-                        return;
-                    }
-
-                    vec3 dir = glm::normalize(cam->GetFront());
-                    cam->SetPosition(center - dir * (radius * 2.0f));
+                    if (auto target = ComputeFocusTarget())
+                        TweenCameraTo(*target, 0.3f);
                 });
 
                 selection.set_function("get_gizmo", []() -> std::string {
