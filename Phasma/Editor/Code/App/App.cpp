@@ -80,6 +80,16 @@ namespace pe
             return fallbackHz;
         }
 
+        int GetMainWindowDisplayIndex()
+        {
+            SDL_Window *window = RHII.GetWindow();
+            if (!window)
+                return 0;
+
+            const int display = SDL_GetWindowDisplayIndex(window);
+            return display >= 0 ? display : 0;
+        }
+
         void PaceWslDozenFifo(Window *window)
         {
             using Clock = std::chrono::steady_clock;
@@ -337,7 +347,7 @@ namespace pe
         const bool usesWslDozenVulkan = UsesWslDozenVulkan();
 #ifdef NDEBUG
         if (!isHotReload && !usesDx12StartupOrchestration && !usesWslDozenVulkan)
-            m_splashScreen = SplashScreen::Create(SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS);
+            m_splashScreen = SplashScreen::Create(SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS, GetMainWindowDisplayIndex());
 #endif
 
         // Adopt the SDL window that was created by the launcher.

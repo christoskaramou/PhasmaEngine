@@ -5,7 +5,7 @@ namespace pe
     class SplashScreen : public PeHandle<SplashScreen, SDL_Window *>
     {
     public:
-        SplashScreen(uint32_t flags);
+        SplashScreen(uint32_t flags, int displayIndex);
         ~SplashScreen();
 
     private:

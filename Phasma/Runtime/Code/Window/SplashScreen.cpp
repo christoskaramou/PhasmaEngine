@@ -3,7 +3,7 @@
 
 namespace pe
 {
-    SplashScreen::SplashScreen(uint32_t flags)
+    SplashScreen::SplashScreen(uint32_t flags, int displayIndex)
     {
         if (!SDL_WasInit(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
         {
@@ -29,17 +29,17 @@ namespace pe
             return;
         }
 
-        SDL_DisplayMode dm;
-        if (SDL_GetDesktopDisplayMode(0, &dm) != 0)
+        SDL_Rect displayBounds{};
+        if (SDL_GetDisplayBounds(displayIndex, &displayBounds) != 0)
         {
-            SDL_Log("SDL_GetDesktopDisplayMode failed: %s", SDL_GetError());
+            SDL_Log("SDL_GetDisplayBounds(%d) failed: %s", displayIndex, SDL_GetError());
             return;
         }
 
-        int x = dm.w / 4;
-        int y = dm.h / 4;
-        int w = dm.w / 2;
-        int h = dm.h / 2;
+        int x = displayBounds.x + displayBounds.w / 4;
+        int y = displayBounds.y + displayBounds.h / 4;
+        int w = displayBounds.w / 2;
+        int h = displayBounds.h / 2;
 
         m_apiHandle = SDL_CreateWindow("", x, y, w, h, flags);
         m_renderer = SDL_CreateRenderer(m_apiHandle, -1, 0);
