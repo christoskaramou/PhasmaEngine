@@ -414,6 +414,10 @@ namespace pe
         Buffer *GetIndirectAlphaBlend(uint32_t frame) const { return m_indirectAlphaBlend[frame]; }
         Buffer *GetIndirectTransmission(uint32_t frame) const { return m_indirectTransmission[frame]; }
         Buffer *GetIndirectSelected(uint32_t frame) const { return m_indirectSelected[frame]; }
+        bool HasSelectedRenderableMeshes() const;
+        // Push the per-mesh "selected" editorFlags bit into meshConstants in place, so selection
+        // changes reach the GPU selected-indirect bucket without a full geometry rebuild.
+        void UpdateMeshSelectionFlags();
         Buffer *GetIndirectVoxels(uint32_t frame) const { return m_indirectVoxels[frame]; }
         // Two-phase Hi-Z occlusion sets (opaque-only). A = last-frame-visible (phase 1),
         // B = newly-disoccluded (phase 2). Consumed by DepthPass/DepthLatePass/GBuffer only when

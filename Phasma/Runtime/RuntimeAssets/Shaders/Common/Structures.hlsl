@@ -40,6 +40,15 @@ struct PushConstants_Grid
     float2 padding;
 };
 
+struct PushConstants_SelectionOutline
+{
+    float4 color;
+    // x/y = mask texel size, z = solid thickness px, w = inner fade px.
+    float4 params0;
+    // x = outer fade px, y/z/w unused.
+    float4 params1;
+};
+
 struct PushConstants_Bloom
 {
     float range;

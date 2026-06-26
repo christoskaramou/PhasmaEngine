@@ -1,0 +1,73 @@
+#include "../Common/Structures.hlsl"
+#include "../Common/Common.hlsl"
+
+TexSamplerDecl(0, 0, Mask)
+[[vk::push_constant]] PushConstants_SelectionOutline pc;
+
+// X-ray selection outline from an R8 coverage mask. A bounded ring search estimates the signed
+// pixel distance to the silhouette edge; the line is solid out to `thickness` and smoothsteps off
+// over `outerFade` outward / `innerFade` inward.
+// ponytail: 16 dirs x reach px, early-rejected for the empty majority. Editor overlay over selected
+// meshes only. Upgrade to a jump-flood SDF if very thick outlines ever get costly.
+PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
+{
+    PS_OUTPUT_Color output;
+
+    float2 texel = pc.params0.xy;
+    float thickness = pc.params0.z;
+    float innerFade = pc.params0.w;
+    float outerFade = pc.params1.x;
+
+    float reach = thickness + max(innerFade, outerFade) + 1.0;
+    float center = Mask.Sample(sampler_Mask, input.uv).r;
+
+    // Cheap reject: pixel is neither inside a selected silhouette nor within `reach` of one.
+    float coarse = center;
+    [unroll] for (int k = 0; k < 8; ++k)
+    {
+        float a = 0.78539816 * k; // 45 deg steps
+        float2 d = float2(cos(a), sin(a)) * texel;
+        coarse = max(coarse, Mask.Sample(sampler_Mask, input.uv + d * reach).r);
+        coarse = max(coarse, Mask.Sample(sampler_Mask, input.uv + d * (reach * 0.5)).r);
+    }
+    if (coarse < 0.5)
+    {
+        // No selected silhouette in reach: leave the frame untouched (do NOT write a
+        // transparent texel — that would replace display if blend is disabled).
+        discard;
+        output.color = float4(0.0, 0.0, 0.0, 0.0);
+        return output;
+    }
+
+    // Distance (px) to the nearest silhouette edge.
+    bool inside = center > 0.5;
+    float dist = reach;
+    [loop] for (int dir = 0; dir < 16; ++dir)
+    {
+        float a = 0.39269908 * dir; // 22.5 deg steps
+        float2 dirStep = float2(cos(a), sin(a)) * texel;
+        [loop] for (float r = 1.0; r <= reach; r += 1.0)
+        {
+            float s = Mask.Sample(sampler_Mask, input.uv + dirStep * r).r;
+            if ((s > 0.5) != inside)
+            {
+                dist = min(dist, r);
+                break;
+            }
+        }
+    }
+
+    float sd = inside ? -dist : dist; // <0 inside the object, >0 outside
+    float alpha;
+    if (sd >= 0.0)
+        alpha = 1.0 - smoothstep(thickness, thickness + max(outerFade, 1e-3), sd);
+    else
+        alpha = 1.0 - smoothstep(0.0, max(innerFade, 1e-3), -sd);
+
+    float finalAlpha = saturate(alpha) * pc.color.a;
+    if (finalAlpha <= 0.0)
+        discard;
+
+    output.color = float4(pc.color.rgb, finalAlpha);
+    return output;
+}

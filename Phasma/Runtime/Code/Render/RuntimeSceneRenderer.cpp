@@ -40,6 +40,7 @@ namespace pe
         // These are editor overlays, not standalone player output.
         settings.draw_grid = false;
         settings.draw_aabbs = false;
+        settings.selection_outline = false;
     }
 
     void RuntimeSceneRenderer::Init(CommandBuffer *cmd)

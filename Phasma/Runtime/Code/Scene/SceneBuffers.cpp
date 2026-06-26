@@ -19,6 +19,76 @@ namespace pe
         return mesh.renderType != RenderType::Lines;
     }
 
+    bool Scene::HasSelectedRenderableMeshes() const
+    {
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
+        {
+            NodeId *node = m_nodeIds[i];
+            if (!node || m_nodeRuntime[i].gpuPending || !IsNodeHierarchyEnabled(node) || !IsSceneNodeSelected(node))
+                continue;
+
+            for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
+            {
+                if (!IsValidMeshIndex(meshIdx))
+                    continue;
+
+                const Mesh &mesh = m_meshes[meshIdx];
+                if (mesh.indexCount != 0 && mesh.renderType != RenderType::Lines)
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    void Scene::UpdateMeshSelectionFlags()
+    {
+        if (!m_meshConstants || m_meshCount == 0)
+            return;
+
+        // In-place rewrite of the editorFlags field for every mesh, in the SAME iteration order
+        // CreateMeshConstants uses (so per-mesh offsets line up). Lets selection changes reach the
+        // GPU selected bucket each frame without a full geometry rebuild.
+        // Vulkan: the GPU reads m_meshConstants directly, so this takes effect next frame.
+        // DX12 caveat: the cull pass reads the m_meshConstantsDevice mirror, which only refreshes on
+        // a geometry rebuild — selection highlight there updates lazily until that path is added.
+        size_t offset = 0;
+        m_meshConstants->Map();
+
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
+        {
+            if (m_nodeRuntime[i].gpuPending || !IsNodeHierarchyEnabled(m_nodeIds[i]))
+                continue;
+
+            for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
+            {
+                if (!IsValidMeshIndex(meshIdx))
+                    continue;
+
+                const Mesh &mesh = m_meshes[meshIdx];
+                if (!IsRasterIndirectMesh(mesh) || mesh.indexCount == 0)
+                    continue;
+
+                uint32_t flags = 0;
+                if (IsSceneNodeSelected(m_nodeIds[i]))
+                    flags |= 1u;
+                if (mesh.material && mesh.material->doubleSided)
+                    flags |= 2u;
+
+                BufferRange range{};
+                range.data = &flags;
+                range.offset = offset + offsetof(Mesh_Constants, editorFlags);
+                range.size = sizeof(flags);
+                m_meshConstants->Copy(1, &range, true);
+
+                offset += sizeof(Mesh_Constants);
+            }
+        }
+
+        m_meshConstants->Flush(offset, 0);
+        m_meshConstants->Unmap();
+    }
+
     void Scene::UploadBuffers(CommandBuffer *cmd)
     {
         DestroyBuffers();

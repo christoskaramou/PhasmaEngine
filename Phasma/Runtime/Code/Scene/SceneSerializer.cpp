@@ -315,6 +315,14 @@ namespace pe
             settings.AddMember("draw_aabbs", gSettings.draw_aabbs, allocator);
             settings.AddMember("draw_grid", gSettings.draw_grid, allocator);
             settings.AddMember("aabbs_depth_aware", gSettings.aabbs_depth_aware, allocator);
+            settings.AddMember("selection_outline", gSettings.selection_outline, allocator);
+            settings.AddMember("selection_outline_color_r", gSettings.selection_outline_color_r, allocator);
+            settings.AddMember("selection_outline_color_g", gSettings.selection_outline_color_g, allocator);
+            settings.AddMember("selection_outline_color_b", gSettings.selection_outline_color_b, allocator);
+            settings.AddMember("selection_outline_color_a", gSettings.selection_outline_color_a, allocator);
+            settings.AddMember("selection_outline_thickness", gSettings.selection_outline_thickness, allocator);
+            settings.AddMember("selection_outline_inner_fade", gSettings.selection_outline_inner_fade, allocator);
+            settings.AddMember("selection_outline_outer_fade", gSettings.selection_outline_outer_fade, allocator);
             settings.AddMember("dynamic_rendering", gSettings.dynamic_rendering, allocator);
             settings.AddMember("ray_tracing_support", gSettings.ray_tracing_support, allocator);
             settings.AddMember("render_mode", static_cast<int>(gSettings.render_mode), allocator);
@@ -537,6 +545,22 @@ namespace pe
                 gSettings.draw_aabbs = settings["draw_aabbs"].GetBool();
             if (settings.HasMember("aabbs_depth_aware"))
                 gSettings.aabbs_depth_aware = settings["aabbs_depth_aware"].GetBool();
+            if (settings.HasMember("selection_outline"))
+                gSettings.selection_outline = settings["selection_outline"].GetBool();
+            if (settings.HasMember("selection_outline_color_r"))
+                gSettings.selection_outline_color_r = settings["selection_outline_color_r"].GetFloat();
+            if (settings.HasMember("selection_outline_color_g"))
+                gSettings.selection_outline_color_g = settings["selection_outline_color_g"].GetFloat();
+            if (settings.HasMember("selection_outline_color_b"))
+                gSettings.selection_outline_color_b = settings["selection_outline_color_b"].GetFloat();
+            if (settings.HasMember("selection_outline_color_a"))
+                gSettings.selection_outline_color_a = settings["selection_outline_color_a"].GetFloat();
+            if (settings.HasMember("selection_outline_thickness"))
+                gSettings.selection_outline_thickness = settings["selection_outline_thickness"].GetFloat();
+            if (settings.HasMember("selection_outline_inner_fade"))
+                gSettings.selection_outline_inner_fade = settings["selection_outline_inner_fade"].GetFloat();
+            if (settings.HasMember("selection_outline_outer_fade"))
+                gSettings.selection_outline_outer_fade = settings["selection_outline_outer_fade"].GetFloat();
             if (settings.HasMember("dynamic_rendering"))
                 gSettings.dynamic_rendering = settings["dynamic_rendering"].GetBool() && RHII.GetCaps().dynamicRendering;
             if (settings.HasMember("ray_tracing_support"))

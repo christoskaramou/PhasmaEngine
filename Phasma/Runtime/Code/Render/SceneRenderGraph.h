@@ -44,6 +44,7 @@ namespace pe
         DOF,
         MotionBlur,
         Grid,
+        SelectionOutline,
         Count
     };
 
@@ -82,6 +83,7 @@ namespace pe
         IRenderPassComponent *dof = nullptr;
         IRenderPassComponent *motionBlur = nullptr;
         IRenderPassComponent *grid = nullptr;
+        IRenderPassComponent *selectionOutline = nullptr;
     };
 
     using SceneRenderGraphPassCondition = std::function<bool(SceneRenderGraphPassId)>;

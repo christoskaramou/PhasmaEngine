@@ -188,6 +188,31 @@ namespace pe
             ui::ItemTooltip("Depth-test debug AABBs against the scene.");
             ImGui::Unindent(16.0f);
         }
+        Track(ImGui::Checkbox("Selection Outline", &gSettings.selection_outline));
+        ui::ItemTooltip("Draw a screen-space outline around selected scene nodes.");
+        if (gSettings.selection_outline)
+        {
+            ImGui::Indent(16.0f);
+            float outlineColor[4] = {
+                gSettings.selection_outline_color_r,
+                gSettings.selection_outline_color_g,
+                gSettings.selection_outline_color_b,
+                gSettings.selection_outline_color_a,
+            };
+            Track(ImGui::ColorEdit4("Color##SelectionOutline", outlineColor));
+            gSettings.selection_outline_color_r = outlineColor[0];
+            gSettings.selection_outline_color_g = outlineColor[1];
+            gSettings.selection_outline_color_b = outlineColor[2];
+            gSettings.selection_outline_color_a = outlineColor[3];
+            ui::ItemTooltip("Tint and opacity for selected-object outlines.");
+            Track(ImGui::SliderFloat("Thickness##SelectionOutline", &gSettings.selection_outline_thickness, 0.0f, 32.0f, "%.1f px"));
+            ui::ItemTooltip("Solid outer outline width in pixels.");
+            Track(ImGui::SliderFloat("Inner Fade##SelectionOutline", &gSettings.selection_outline_inner_fade, 0.0f, 32.0f, "%.1f px"));
+            ui::ItemTooltip("Distance the outline fades inward over the selected object.");
+            Track(ImGui::SliderFloat("Outer Fade##SelectionOutline", &gSettings.selection_outline_outer_fade, 0.0f, 32.0f, "%.1f px"));
+            ui::ItemTooltip("Distance the outline fades outward from the selected object.");
+            ImGui::Unindent(16.0f);
+        }
         ImGui::Separator();
 
         Track(ImGui::DragFloat("TimeScale", &gSettings.time_scale, 0.05f, 0.2f));
