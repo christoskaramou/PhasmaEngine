@@ -6,6 +6,7 @@
 #include "Systems/Physics2DSystem.h"
 #include "Systems/PhysicsSystem.h"
 #include "UI/RuntimeUi.h"
+#include "Voxel/VoxelSystem.h"
 
 namespace pe
 {
@@ -71,6 +72,13 @@ namespace pe
         // would otherwise persist after the editor returns to edit mode.
         if (RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi())
             runtimeUi->ClearScriptScreens();
+
+        // Tear down the play-scoped voxel world (built by the play script via voxel.create) while its
+        // geometry arena is still valid. The editor Stop path runs this BEFORE RestoreSnapshot rebuilds
+        // the scene buffers; without it the world's VoxelSystem keeps streaming AddArenaMesh into the
+        // arena that RestoreSnapshot just wiped (warn spam, and pre-fix a CopyBufferStaged overflow).
+        if (auto *voxels = GetGlobalSystem<voxel::VoxelSystem>())
+            voxels->Destroy();
     }
 
     void SetRuntimePlaySessionPaused(bool paused)
