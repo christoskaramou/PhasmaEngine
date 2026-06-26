@@ -208,7 +208,7 @@ namespace pe::voxel
             m_scene->SetVoxelAtlasView(nullptr);
         m_voxelMaterial.reset();
 
-        if (m_scene && m_arena.IsInitialized())
+        if (m_scene && m_arena.IsInitialized() && m_scene->HasArenaVoxels())
         {
             Queue *queue = RHII.GetMainQueue();
             if (queue)

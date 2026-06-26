@@ -414,6 +414,7 @@ namespace pe
         Buffer *GetIndirectAlphaBlend(uint32_t frame) const { return m_indirectAlphaBlend[frame]; }
         Buffer *GetIndirectTransmission(uint32_t frame) const { return m_indirectTransmission[frame]; }
         Buffer *GetIndirectSelected(uint32_t frame) const { return m_indirectSelected[frame]; }
+        Buffer *GetIndirectVoxels(uint32_t frame) const { return m_indirectVoxels[frame]; }
         // Two-phase Hi-Z occlusion sets (opaque-only). A = last-frame-visible (phase 1),
         // B = newly-disoccluded (phase 2). Consumed by DepthPass/DepthLatePass/GBuffer only when
         // occlusion_culling is on; the frustum getters above stay for shadows/transparents/perception.
@@ -667,6 +668,7 @@ namespace pe
         std::vector<Buffer *> m_indirectAlphaBlend;
         std::vector<Buffer *> m_indirectTransmission;
         std::vector<Buffer *> m_indirectSelected;
+        std::vector<Buffer *> m_indirectVoxels;
         std::vector<Buffer *> m_sortKeysAlphaBlend;
         std::vector<Buffer *> m_sortKeysTransmission;
         Buffer *m_indirectAll = nullptr;

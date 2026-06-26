@@ -263,22 +263,9 @@ namespace pe
             const bool hasArenaVoxels = m_scene->HasArenaVoxels();
             const bool hasVoxelAtlas = m_scene->GetVoxelAtlasView() != nullptr;
             const bool hasVoxelFrag = m_voxelPassInfo && m_voxelPassInfo->pFragShader;
-            Buffer *voxelIndirect = m_scene->GetIndirectAll();
+            Buffer *voxelIndirect = m_scene->GetIndirectVoxels(frame);
             const bool hasVoxelIndirect = voxelIndirect != nullptr;
             const bool voxelDrawReady = hasArenaVoxels && hasVoxelAtlas && hasVoxelFrag && hasVoxelIndirect;
-            const uint32_t voxelBase = hasArenaVoxels ? m_scene->GetArenaSlotBase() : 0u;
-            const uint32_t voxelCount = hasArenaVoxels ? (m_scene->GetMeshCount() - voxelBase) : 0u;
-
-            if (voxelDrawReady)
-            {
-                BufferBarrierInfo indirectBarrier{};
-                indirectBarrier.buffer = voxelIndirect;
-                indirectBarrier.stageMask = PE_STAGE_DRAW_INDIRECT;
-                indirectBarrier.accessMask = PE_ACCESS_INDIRECT_COMMAND_READ;
-                indirectBarrier.offset = static_cast<size_t>(voxelBase) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
-                indirectBarrier.size = static_cast<size_t>(voxelCount) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
-                cmd->BufferBarrier(indirectBarrier);
-            }
 
             cmd->BeginPass(7, m_attachments.data(), "GbufferOpaquePass");
             cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
@@ -320,10 +307,11 @@ namespace pe
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
 
-                cmd->DrawIndexedIndirect(voxelIndirect,
-                                         static_cast<size_t>(voxelBase) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
-                                         voxelCount,
-                                         PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
+                cmd->DrawIndexedIndirectCount(voxelIndirect,
+                                              0,
+                                              m_scene->GetCullingCountersBuffer(frame),
+                                              7 * sizeof(uint32_t),
+                                              mesh);
             }
 
             cmd->EndPass();

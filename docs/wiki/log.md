@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-06-26
+
+- Added a frustum-culled voxel indirect bucket. `CullingCS` now lets voxel arena meshes pass through the normal frustum test and appends visible draws into a voxel-only filtered indirect buffer/counter, while `GbufferPass` still binds the dedicated voxel pipeline and atlas instead of routing those draws through standard PBR. Hi-Z voxel occlusion, shadows, and editor viewport authoring remain separate follow-ups.
+
 ## 2026-06-23
 
 - Replaced the FFX-CACAO SSAO integration with a native compute-shader SSAO pass. `SSAOPass` now owns a two-stage compute pipeline that samples the depth and normal targets, reconstructs view-space positions, writes raw AO into a pass-owned R16 scratch target, and depth-aware blurs into the existing R8 `ssao` target consumed by lighting. The PhasmaRuntime build no longer compiles the engine-side CACAO wrapper or Vulkan shader-module patch, leaving third-party CACAO sources untouched but unused by the runtime target.

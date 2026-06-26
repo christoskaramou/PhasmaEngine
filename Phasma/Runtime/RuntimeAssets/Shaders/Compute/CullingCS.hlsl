@@ -11,7 +11,7 @@ struct DrawIndexedIndirectCommand
 
 [[vk::binding(0, 0)]] StructuredBuffer<DrawIndexedIndirectCommand> IndirectCommandsIn;
 [[vk::binding(1, 0)]] StructuredBuffer<Mesh_Constants> MeshConstants;
-[[vk::binding(2, 0)]] RWStructuredBuffer<uint> Counters; // [opaqueSS, alphaCutSS, alphaBlend, transmission, selected, opaqueDS, alphaCutDS]
+[[vk::binding(2, 0)]] RWStructuredBuffer<uint> Counters; // [opaqueSS, alphaCutSS, alphaBlend, transmission, selected, opaqueDS, alphaCutDS, voxels]
 [[vk::binding(3, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectOpaqueSS;
 [[vk::binding(4, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectAlphaCutSS;
 [[vk::binding(5, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectAlphaBlendOut;
@@ -22,6 +22,9 @@ struct DrawIndexedIndirectCommand
 [[vk::binding(10, 0)]] RWStructuredBuffer<float> SortKeysAlphaBlend;
 [[vk::binding(11, 0)]] RWStructuredBuffer<float> SortKeysTransmission;
 [[vk::binding(12, 0)]] ByteAddressBuffer NodeData;
+#if !defined(PHASE1) && !defined(PHASE2)
+[[vk::binding(17, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectVoxelsOut;
+#endif
 
 struct PushConstants
 {
@@ -230,8 +233,7 @@ uint WaveAppend(uint counterIndex, bool emit)
 
     Mesh_Constants constants = MeshConstants[idx];
 
-    if ((constants.editorFlags & 4u) != 0u)
-        return; // voxels are drawn by the dedicated voxel pass
+    bool isVoxel = (constants.editorFlags & 4u) != 0u;
 
     // Per-instance render-visible flag (NodeGpuData byte offset 128, after the two matrices).
     // Cleared by node:set_visible(false) to cull this draw cheaply — no instance/TLAS rebuild.
@@ -262,6 +264,8 @@ uint WaveAppend(uint counterIndex, bool emit)
     }
 
 #if defined(PHASE1)
+    if (isVoxel)
+        return; // voxels use the frustum-only voxel bucket, not the standard-pbr Hi-Z buckets.
     // Two-phase Hi-Z, phase 1: draw last-frame-visible opaque objects only (set A).
     if (pc.enableFrustumCulling)
     {
@@ -273,6 +277,8 @@ uint WaveAppend(uint counterIndex, bool emit)
     cmd.firstInstance = idx;
     EmitOpaque(cmd, constants.renderType, (constants.editorFlags & 2) != 0);
 #elif defined(PHASE2)
+    if (isVoxel)
+        return; // voxels use the frustum-only voxel bucket, not the standard-pbr Hi-Z buckets.
     // Two-phase Hi-Z, phase 2: test every frustum-visible object against THIS frame's Hi-Z,
     // rewrite its visibility flag, and emit only the newly-disoccluded opaque objects (set B).
     if (pc.enableFrustumCulling)
@@ -308,13 +314,14 @@ uint WaveAppend(uint counterIndex, bool emit)
     // Per-bucket emit predicates. Render types are mutually exclusive; "selected" is independent and
     // can fire alongside any type. Evaluated for every active lane (no early branch) so the
     // wave-coalesced appends below see the full ballot for each bucket.
-    bool emitOpaqueSS = (type == 1) && !doubleSided;
-    bool emitOpaqueDS = (type == 1) && doubleSided;
-    bool emitAlphaCutSS = (type == 2) && !doubleSided;
-    bool emitAlphaCutDS = (type == 2) && doubleSided;
-    bool emitAlphaBlend = (type == 3);
-    bool emitTransmission = (type == 4);
-    bool emitSelected = (constants.editorFlags & 1) != 0;
+    bool emitVoxel = isVoxel;
+    bool emitOpaqueSS = !isVoxel && (type == 1) && !doubleSided;
+    bool emitOpaqueDS = !isVoxel && (type == 1) && doubleSided;
+    bool emitAlphaCutSS = !isVoxel && (type == 2) && !doubleSided;
+    bool emitAlphaCutDS = !isVoxel && (type == 2) && doubleSided;
+    bool emitAlphaBlend = !isVoxel && (type == 3);
+    bool emitTransmission = !isVoxel && (type == 4);
+    bool emitSelected = !isVoxel && ((constants.editorFlags & 1) != 0);
 
     // One atomic per wave per non-empty bucket instead of one per visible lane (see WaveAppend).
     uint slot;
@@ -356,5 +363,9 @@ uint WaveAppend(uint counterIndex, bool emit)
     slot = WaveAppend(4, emitSelected);
     if (emitSelected)
         IndirectSelectedOut[slot] = cmd;
+
+    slot = WaveAppend(7, emitVoxel);
+    if (emitVoxel)
+        IndirectVoxelsOut[slot] = cmd;
 #endif
 }
