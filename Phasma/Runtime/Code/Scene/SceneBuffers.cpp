@@ -348,7 +348,7 @@ namespace pe
         for (uint32_t i = 0; i < m_cullingCountersBuffers.size(); ++i)
         {
             m_cullingCountersBuffers[i] = Buffer::Create({
-                .size = 7 * sizeof(uint32_t),
+                .size = 8 * sizeof(uint32_t),
                 .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
                 .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
                 .name = "culling_counters_" + std::to_string(i),
@@ -378,6 +378,7 @@ namespace pe
         m_indirectAlphaBlend = createFilteredIndirect("indirect_AlphaBlend_");
         m_indirectTransmission = createFilteredIndirect("indirect_Transmission_");
         m_indirectSelected = createFilteredIndirect("indirect_Selected_");
+        m_indirectVoxels = createFilteredIndirect("indirect_Voxels_");
 
         auto createSortKeyBuffer = [&](const std::string &name)
         {
@@ -1161,6 +1162,7 @@ namespace pe
         destroyBufferVec(m_indirectAlphaBlend);
         destroyBufferVec(m_indirectTransmission);
         destroyBufferVec(m_indirectSelected);
+        destroyBufferVec(m_indirectVoxels);
         destroyBufferVec(m_sortKeysAlphaBlend);
         destroyBufferVec(m_sortKeysTransmission);
 
@@ -1246,6 +1248,7 @@ namespace pe
         destroyBufferVecEager(m_indirectAlphaBlend);
         destroyBufferVecEager(m_indirectTransmission);
         destroyBufferVecEager(m_indirectSelected);
+        destroyBufferVecEager(m_indirectVoxels);
         destroyBufferVecEager(m_sortKeysAlphaBlend);
         destroyBufferVecEager(m_sortKeysTransmission);
         // Two-phase occlusion A/B sets + the persistent visibility flag are recreated by
@@ -1480,6 +1483,8 @@ namespace pe
                 growIndirectVec(m_indirectTransmission, "indirect_Transmission_", indFlags,
                                 PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
                 growIndirectVec(m_indirectSelected, "indirect_Selected_", indFlags,
+                                PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
+                growIndirectVec(m_indirectVoxels, "indirect_Voxels_", indFlags,
                                 PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
                 growIndirectVec(m_sortKeysAlphaBlend, "sortKeys_AlphaBlend_", sortFlags,
                                 sizeof(float));

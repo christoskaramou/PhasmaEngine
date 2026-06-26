@@ -1324,7 +1324,7 @@ namespace pe
 
         {
             PE_PROFILE_SCOPE("Culling Fill Buffers");
-            cmd->FillBuffer(m_cullingCountersBuffers[frame], 0, 7 * sizeof(uint32_t), 0);
+            cmd->FillBuffer(m_cullingCountersBuffers[frame], 0, 8 * sizeof(uint32_t), 0);
             if (needsIndirectCountFallback)
             {
                 cmd->FillBuffer(m_indirectOpaqueSS[frame], 0, indirectSize, 0);
@@ -1332,6 +1332,7 @@ namespace pe
                 cmd->FillBuffer(m_indirectOpaqueDS[frame], 0, indirectSize, 0);
                 cmd->FillBuffer(m_indirectAlphaCutDS[frame], 0, indirectSize, 0);
                 cmd->FillBuffer(m_indirectSelected[frame], 0, indirectSize, 0);
+                cmd->FillBuffer(m_indirectVoxels[frame], 0, indirectSize, 0);
             }
             if (hasAlphaBlendMeshes)
             {
@@ -1359,11 +1360,11 @@ namespace pe
             return barrier;
         };
 
-        const uint64_t countersSize = 7 * sizeof(uint32_t);
+        const uint64_t countersSize = 8 * sizeof(uint32_t);
         {
             PE_PROFILE_SCOPE("Culling Compute Access Barriers");
             std::vector<BufferBarrierInfo> computeAccessBarriers;
-            computeAccessBarriers.reserve(hasTransparentMeshes ? 11 : 7);
+            computeAccessBarriers.reserve(hasTransparentMeshes ? 12 : 8);
             if (m_indirectAll && indirectAllSize > 0)
             {
                 computeAccessBarriers.push_back(makeBufferBarrier(m_indirectAll,
@@ -1392,6 +1393,10 @@ namespace pe
                                                               PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE,
                                                               indirectSize));
             computeAccessBarriers.push_back(makeBufferBarrier(m_indirectSelected[frame],
+                                                              PE_STAGE_COMPUTE_SHADER,
+                                                              PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE,
+                                                              indirectSize));
+            computeAccessBarriers.push_back(makeBufferBarrier(m_indirectVoxels[frame],
                                                               PE_STAGE_COMPUTE_SHADER,
                                                               PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE,
                                                               indirectSize));
@@ -1443,6 +1448,8 @@ namespace pe
             set->SetBuffer(10, m_sortKeysAlphaBlend[frame]);
             set->SetBuffer(11, m_sortKeysTransmission[frame]);
             set->SetBuffer(12, GetUniforms(frame));
+            if (set->HasBinding(17))
+                set->SetBuffer(17, m_indirectVoxels[frame]);
             // Occlusion variant (OcclusionCullingPass) binds the Hi-Z pyramid + params.
             // The frustum-only variant's shader has no such bindings, so this is skipped.
             if (hiZPyramid && occlusionData)
@@ -1523,6 +1530,7 @@ namespace pe
             recordComputeWrite(m_indirectOpaqueDS[frame]);
             recordComputeWrite(m_indirectAlphaCutDS[frame]);
             recordComputeWrite(m_indirectSelected[frame]);
+            recordComputeWrite(m_indirectVoxels[frame]);
             if (hasAlphaBlendMeshes)
             {
                 recordComputeWrite(m_indirectAlphaBlend[frame]);
@@ -1649,7 +1657,7 @@ namespace pe
         {
             PE_PROFILE_SCOPE("Culling Final Indirect Barriers");
             std::vector<BufferBarrierInfo> indirectBarriers;
-            indirectBarriers.reserve(hasTransparentMeshes ? 8 : 6);
+            indirectBarriers.reserve(hasTransparentMeshes ? 9 : 7);
             auto addIndirectBarrier = [&](Buffer *buffer)
             {
                 indirectBarriers.push_back(makeBufferBarrier(buffer,
@@ -1670,6 +1678,7 @@ namespace pe
                 addIndirectBarrier(m_indirectTransmission[frame]);
             }
             addIndirectBarrier(m_indirectSelected[frame]);
+            addIndirectBarrier(m_indirectVoxels[frame]);
             indirectBarriers.push_back(makeBufferBarrier(m_cullingCountersBuffers[frame],
                                                          PE_STAGE_DRAW_INDIRECT,
                                                          PE_ACCESS_INDIRECT_COMMAND_READ,
