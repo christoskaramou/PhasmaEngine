@@ -21,6 +21,7 @@
 #include "RenderPasses/ParticleComputePass.h"
 #include "RenderPasses/ParticlePass.h"
 #include "RenderPasses/RayTracingPass.h"
+#include "RenderPasses/SelectionOutlinePass.h"
 #include "RenderPasses/SSAOPass.h"
 #include "RenderPasses/SSRPass.h"
 #include "RenderPasses/ShadowPass.h"
@@ -78,8 +79,11 @@ namespace pe
             {SceneRenderGraphPassId::ColorGrading, 1950, "ColorGrading", &SceneRenderGraphPassComponents::colorGrading},
             {SceneRenderGraphPassId::DOF, 2000, "DOF", &SceneRenderGraphPassComponents::dof},
             {SceneRenderGraphPassId::MotionBlur, 2100, "MotionBlur", &SceneRenderGraphPassComponents::motionBlur},
-            {SceneRenderGraphPassId::Grid, 2200, "Grid", &SceneRenderGraphPassComponents::grid},
+            {SceneRenderGraphPassId::Grid, 1240, "Grid", &SceneRenderGraphPassComponents::grid},
             {SceneRenderGraphPassId::Particle, 2300, "Particle", &SceneRenderGraphPassComponents::particle},
+            // Before TAA (1300): the temporal resolve de-jitters the outline with the scene.
+            {SceneRenderGraphPassId::SelectionOutline, 1250, "SelectionOutline",
+             &SceneRenderGraphPassComponents::selectionOutline},
         };
 
         bool UsesDx12RenderOrchestration()
@@ -192,6 +196,8 @@ namespace pe
                 return isPassEnabled(SceneRenderGraphPassId::MotionBlur);
             if (component == components.grid)
                 return isPassEnabled(SceneRenderGraphPassId::Grid);
+            if (component == components.selectionOutline)
+                return isPassEnabled(SceneRenderGraphPassId::SelectionOutline);
 
             return true;
         }
@@ -248,6 +254,7 @@ namespace pe
         CreateSceneRenderGraphPassComponent<DOFPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<MotionBlurPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<GridPass>(renderPassComponents);
+        CreateSceneRenderGraphPassComponent<SelectionOutlinePass>(renderPassComponents);
         if (includeRayTracingPass)
             CreateSceneRenderGraphPassComponent<RayTracingPass>(renderPassComponents);
     }
@@ -398,6 +405,7 @@ namespace pe
         scenePasses.dof = GetGlobalComponent<DOFPass>();
         scenePasses.motionBlur = GetGlobalComponent<MotionBlurPass>();
         scenePasses.grid = GetGlobalComponent<GridPass>();
+        scenePasses.selectionOutline = GetGlobalComponent<SelectionOutlinePass>();
         return scenePasses;
     }
 
@@ -476,6 +484,8 @@ namespace pe
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::DOF, pp.dof && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::MotionBlur, pp.motion_blur && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Grid, gs.draw_grid);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::SelectionOutline,
+                           gs.selection_outline && dx12RenderRaster);
             return;
         }
 
@@ -512,6 +522,7 @@ namespace pe
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::DOF, pp.dof);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::MotionBlur, pp.motion_blur);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Grid, gs.draw_grid);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::SelectionOutline, gs.selection_outline && renderRaster);
     }
 
     void UpdateSceneRenderGraphPassComponents(const OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,
@@ -549,5 +560,6 @@ namespace pe
         SetPassScene<GridPass>(components.grid, scene);
         SetPassScene<AabbsPass>(components.aabbs, scene);
         SetPassScene<LinesPass>(components.lines, scene);
+        SetPassScene<SelectionOutlinePass>(components.selectionOutline, scene);
     }
 } // namespace pe

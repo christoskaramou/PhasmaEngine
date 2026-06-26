@@ -169,6 +169,14 @@ namespace pe
         bool draw_aabbs = false;
         bool draw_grid = true;
         bool aabbs_depth_aware = true;
+        bool selection_outline = true;
+        float selection_outline_color_r = 0.05f;
+        float selection_outline_color_g = 0.62f;
+        float selection_outline_color_b = 1.0f;
+        float selection_outline_color_a = 0.95f;
+        float selection_outline_thickness = 3.0f;
+        float selection_outline_inner_fade = 2.0f;
+        float selection_outline_outer_fade = 6.0f;
         bool dynamic_rendering = true;
         bool ray_tracing_support = false;
         RenderMode render_mode = RenderMode::Hybrid;

@@ -27,11 +27,19 @@ namespace pe
         {"use_Disney_PBR", &SceneSettings::use_Disney_PBR},
         {"freeze_frustum_culling", &SceneSettings::freeze_frustum_culling},
         {"aabbs_depth_aware", &SceneSettings::aabbs_depth_aware},
+        {"selection_outline", &SceneSettings::selection_outline},
         {"dynamic_rendering", &SceneSettings::dynamic_rendering},
     };
 
     static const std::unordered_map<std::string_view, float SceneSettings::*> s_floatSettings = {
         {"render_scale", &SceneSettings::render_scale},
+        {"selection_outline_color_r", &SceneSettings::selection_outline_color_r},
+        {"selection_outline_color_g", &SceneSettings::selection_outline_color_g},
+        {"selection_outline_color_b", &SceneSettings::selection_outline_color_b},
+        {"selection_outline_color_a", &SceneSettings::selection_outline_color_a},
+        {"selection_outline_thickness", &SceneSettings::selection_outline_thickness},
+        {"selection_outline_inner_fade", &SceneSettings::selection_outline_inner_fade},
+        {"selection_outline_outer_fade", &SceneSettings::selection_outline_outer_fade},
         {"ssao_radius", &SceneSettings::ssao_radius},
         {"ssao_bias", &SceneSettings::ssao_bias},
         {"ssao_intensity", &SceneSettings::ssao_intensity},

@@ -17,7 +17,9 @@ namespace pe
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
 
-        m_viewportRT = rs->GetRenderTarget("display");
+        // Pre-TAA color target (render-scale), so the grid sits under the selection outline and
+        // matches the render-scale depth it samples (was "display": full-res over render-scale depth).
+        m_viewportRT = rs->GetRenderTarget("viewport");
         m_depthRT = rs->GetDepthStencilTarget("depthStencil");
         m_scene = nullptr;
 

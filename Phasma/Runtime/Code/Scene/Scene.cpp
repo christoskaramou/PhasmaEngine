@@ -636,6 +636,8 @@ namespace pe
         UpdateSpriteAnimations(std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetDelta())));
 
         UpdateGeometry();
+        if (Settings::Get<SceneSettings>().selection_outline)
+            UpdateMeshSelectionFlags();
         UpdateLights();
         if (m_particleManager)
             m_particleManager->Update();

@@ -52,6 +52,7 @@ namespace pe
             DOF = static_cast<uint32_t>(SceneRenderGraphPassId::DOF),
             MotionBlur = static_cast<uint32_t>(SceneRenderGraphPassId::MotionBlur),
             Grid = static_cast<uint32_t>(SceneRenderGraphPassId::Grid),
+            SelectionOutline = static_cast<uint32_t>(SceneRenderGraphPassId::SelectionOutline),
             GUI = static_cast<uint32_t>(SceneRenderGraphPassId::Count),
             Count
         };
