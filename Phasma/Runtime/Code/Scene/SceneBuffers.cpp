@@ -1025,8 +1025,17 @@ namespace pe
 
     void Scene::CreateMeshConstants(CommandBuffer *cmd)
     {
-        Buffer::Destroy(m_meshConstants);
-        Buffer::Destroy(m_meshConstantsDevice);
+        // Defer the old buffers' destruction: UploadBuffers can be driven OUTSIDE the render loop's
+        // WaitAllFramesCommands guard (e.g. VoxelWorld::Create -> FlushPendingGpuWork), so an immediate
+        // Buffer::Destroy here would free meshConstants while a prior frame's command buffer (GBuffer /
+        // Depth / SelectionOutline bind it) is still in flight -> VUID-vkDestroyBuffer-buffer-00922. The
+        // deletion queue frees only after the owning frame's fence signals (matches ReserveArenaCapacity).
+        if (m_meshConstants)
+            RHII.AddToDeletionQueue([b = m_meshConstants]()
+                                    { Buffer *buf = b; Buffer::Destroy(buf); });
+        if (m_meshConstantsDevice)
+            RHII.AddToDeletionQueue([b = m_meshConstantsDevice]()
+                                    { Buffer *buf = b; Buffer::Destroy(buf); });
         const size_t meshConstantsCapacity = std::max<size_t>(1, m_meshCount);
         const size_t meshConstantsSize = meshConstantsCapacity * sizeof(Mesh_Constants);
         const bool useMeshConstantsMirror = RHII.GetApi() == PE_GRAPHICS_API_DX12;
@@ -1275,6 +1284,21 @@ namespace pe
             m_materialByteBuffer = nullptr;
             m_materialByteBufferUsed = 0;
         }
+
+        // The combined geometry buffer (and the voxel-arena tail living inside it) was just destroyed.
+        // Clear the arena bookkeeping so nothing writes into the dead region before the voxel world
+        // re-reserves it: AddArenaMesh's capacity guard now bails, and HasArenaVoxels() goes false so
+        // the voxel teardown skips its arena flush. Fixes "CopyBufferStaged: dst range overflow" on a
+        // geometry reload (e.g. play-stop / snapshot restore) while voxels were live. ReserveArenaCapacity
+        // re-publishes these after its own regrow, so the grow-and-preserve path is unaffected.
+        m_arenaSlots.clear();
+        m_arenaSlotBase = 0;
+        m_arenaVertexBase = 0;
+        m_arenaVertexCapacity = 0;
+        m_arenaVertexUsed = 0;
+        m_arenaIdxByteBase = 0;
+        m_arenaIdxCapacity = 0;
+        m_arenaIdxUsed = 0;
     }
     void Scene::RebuildRasterInstances(CommandBuffer *cmd)
     {
