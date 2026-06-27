@@ -304,7 +304,7 @@ namespace pe
             if (voxelDrawReady)
             {
                 cmd->BindPipeline(*m_voxelPassInfo);
-                cmd->BindIndexBuffer(m_scene->GetVoxelIndexBuffer(), 0);
+                cmd->BindIndexBuffer(m_scene->GetVoxelIndexBuffer(), 0, PE_INDEX_TYPE_UINT16);
                 cmd->BindVertexBuffer(m_scene->GetVoxelVertexBuffer(), 0);
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();

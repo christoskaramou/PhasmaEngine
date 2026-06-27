@@ -39,6 +39,10 @@ namespace pe::voxel
     {
         int stride = 1 << lod;
         MeshData result;
+        // Tight local position bounds, tracked as verts are emitted; used to re-base packed positions
+        // and set a tight AABB after meshing (see the re-base block before `return`).
+        int mn[3] = {255, 255, 255};
+        int mx[3] = {0, 0, 0};
         MaskCell mask[kSectionDim * kSectionDim];
         for (int d = 0; d < 3; d++)
         {
@@ -218,54 +222,66 @@ namespace pe::voxel
                                 uvCoords[3][0] = fh;
                                 uvCoords[3][1] = 0;
                             }
+                            // Face id 0..5: axis d in 0..2, +dir even / -dir odd. The VS rebuilds the
+                            // face normal + a perpendicular tangent from this. tang[]/norm[] above stay
+                            // for readability but the packed vert encodes only the id.
+                            const uint32_t normalId = (uint32_t)(d * 2 + (dir == 1 ? 0 : 1));
+                            (void)norm;
+                            (void)tang;
                             uint32_t base = (uint32_t)result.vertices.size();
                             for (int ci = 0; ci < 4; ci++)
                             {
-                                float ao = kAoLevel[seed.ao[ci]];
-                                Vertex vt = {};
-                                vt.position[0] = pos[ci][0] * (float)stride;
-                                vt.position[1] = pos[ci][1] * (float)stride;
-                                vt.position[2] = pos[ci][2] * (float)stride;
-                                vt.normals[0] = norm[0];
-                                vt.normals[1] = norm[1];
-                                vt.normals[2] = norm[2];
-                                vt.tangent[0] = tang[0];
-                                vt.tangent[1] = tang[1];
-                                vt.tangent[2] = tang[2];
-                                vt.tangent[3] = 1.0f;
-                                vt.color[0] = ao;
-                                vt.color[1] = ao;
-                                vt.color[2] = ao;
-                                vt.color[3] = 1.0f;
-                                vt.joints[0] = (uint32_t)tile;
-                                vt.joints[1] = 0;
-                                vt.joints[2] = 0;
-                                vt.joints[3] = 0;
-                                vt.uv[0] = uvCoords[ci][0];
-                                vt.uv[1] = uvCoords[ci][1];
+                                // Section-local pos (0..16, lod 0 => stride 1); world pos = aabbMin + this.
+                                // All values are exact non-negative integers, so +0.5 cast just guards fp fuzz.
+                                const uint32_t px = (uint32_t)(pos[ci][0] * (float)stride + 0.5f);
+                                const uint32_t py = (uint32_t)(pos[ci][1] * (float)stride + 0.5f);
+                                const uint32_t pz = (uint32_t)(pos[ci][2] * (float)stride + 0.5f);
+                                const uint32_t ao = seed.ao[ci];
+                                const uint32_t uu = (uint32_t)(uvCoords[ci][0] + 0.5f);
+                                const uint32_t vv = (uint32_t)(uvCoords[ci][1] + 0.5f);
+                                if ((int)px < mn[0])
+                                    mn[0] = (int)px;
+                                if ((int)px > mx[0])
+                                    mx[0] = (int)px;
+                                if ((int)py < mn[1])
+                                    mn[1] = (int)py;
+                                if ((int)py > mx[1])
+                                    mx[1] = (int)py;
+                                if ((int)pz < mn[2])
+                                    mn[2] = (int)pz;
+                                if ((int)pz > mx[2])
+                                    mx[2] = (int)pz;
+                                VoxelVertex vt;
+                                vt.w0 = (px & 31u) | ((py & 31u) << 5) | ((pz & 31u) << 10) |
+                                        ((normalId & 7u) << 15) | ((ao & 3u) << 18);
+                                vt.w1 = ((uint32_t)tile & 0xFFFFu) | ((uu & 0xFFu) << 16) | ((vv & 0xFFu) << 24);
                                 result.vertices.push_back(vt);
                             }
                             // Anti-artifact: split the quad along the diagonal between the two
                             // brighter corners so the dark AO gradient doesn't interpolate across
                             // the bright pair (the classic flipped-quad fix). Both choices keep
                             // the CCW winding.
+                            // uint16 indices: base (section-local vert count) stays < 65536 (a 16^3
+                            // section maxes at ~49k verts even checkerboard, fewer after greedy merge).
+                            auto idx = [&](uint32_t v)
+                            { result.indices.push_back(static_cast<uint16_t>(v)); };
                             if (seed.ao[0] + seed.ao[2] > seed.ao[1] + seed.ao[3])
                             {
-                                result.indices.push_back(base + 0);
-                                result.indices.push_back(base + 1);
-                                result.indices.push_back(base + 3);
-                                result.indices.push_back(base + 1);
-                                result.indices.push_back(base + 2);
-                                result.indices.push_back(base + 3);
+                                idx(base + 0);
+                                idx(base + 1);
+                                idx(base + 3);
+                                idx(base + 1);
+                                idx(base + 2);
+                                idx(base + 3);
                             }
                             else
                             {
-                                result.indices.push_back(base + 0);
-                                result.indices.push_back(base + 1);
-                                result.indices.push_back(base + 2);
-                                result.indices.push_back(base + 0);
-                                result.indices.push_back(base + 2);
-                                result.indices.push_back(base + 3);
+                                idx(base + 0);
+                                idx(base + 1);
+                                idx(base + 2);
+                                idx(base + 0);
+                                idx(base + 2);
+                                idx(base + 3);
                             }
                             for (int du = 0; du < h; du++)
                                 for (int dv = 0; dv < w; dv++)
@@ -274,6 +290,26 @@ namespace pe::voxel
                         }
                     }
                 }
+            }
+        }
+        // Re-base packed positions to the tight local min so the AABB (set in GeometryArena from
+        // localMin/localMax) hugs the actual surfaces instead of the full 16^3 cube. aabbMin
+        // (= sectionOrigin + localMin) stays the VS origin: world = aabbMin + (pos - localMin) ==
+        // sectionOrigin + pos, unchanged — but the tighter box lets Hi-Z occlusion cull sparse
+        // (cave/overhang) sections whose loose-cube nearest corner used to sit in empty air.
+        if (!result.vertices.empty())
+        {
+            for (VoxelVertex &vt : result.vertices)
+            {
+                uint32_t px = (vt.w0 & 31u) - (uint32_t)mn[0];
+                uint32_t py = ((vt.w0 >> 5) & 31u) - (uint32_t)mn[1];
+                uint32_t pz = ((vt.w0 >> 10) & 31u) - (uint32_t)mn[2];
+                vt.w0 = (vt.w0 & ~0x7FFFu) | (px & 31u) | ((py & 31u) << 5) | ((pz & 31u) << 10);
+            }
+            for (int k = 0; k < 3; ++k)
+            {
+                result.localMin[k] = (uint32_t)mn[k];
+                result.localMax[k] = (uint32_t)mx[k];
             }
         }
         return result;

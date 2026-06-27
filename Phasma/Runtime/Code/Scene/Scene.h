@@ -270,15 +270,20 @@ namespace pe
         // free list; Scene only places/registers/frees at explicit locations.
         int ReserveArenaCapacity(uint32_t vtxHeadroomBytes, uint32_t idxHeadroomBytes,
                                  uint32_t posUvHeadroomBytes, uint32_t extraDrawCapacity);
-        // Place one mesh at an arena-allocated location: vertexIndex is shared by BOTH vertex streams
-        // (GBuffer Vertex + depth/shadow PositionUvVertex — the per-draw vertexOffset indexes both);
-        // idxByteOffset is into the index tail. If cmd != nullptr the GPU copies/barriers are RECORDED
-        // into it (no stall — caller submits before the cull dispatch); if nullptr a transient cmd is
-        // acquired/submitted/waited (one-shot). Returns the scene mesh slot, or -1 on failure.
+        // Grow the dedicated voxel buffers in place, preserving live geometry (drains via WaitIdle, so
+        // call only at a safe point with no voxel/render cmd recording in flight — e.g. top of the voxel
+        // streaming update). Each buffer is recreated only if its cap actually grew. Returns true if any
+        // buffer grew; the GeometryArena's free lists must be Grow()n to match.
+        bool GrowArenaVoxelCapacity(uint32_t newVtxCapVertices, size_t newIdxCapBytes);
+        // Place one packed voxel mesh at an arena-allocated location: vertexIndex indexes the dedicated
+        // voxel vertex buffer (8 B/vert), shared by the voxel GBuffer draw and the voxel shadow draw (the
+        // shadow VS unpacks position from the same packed verts — no separate position stream);
+        // idxByteOffset is into the voxel index buffer. If cmd != nullptr the GPU copies/barriers are
+        // RECORDED into it (no stall — caller submits before the cull dispatch); if nullptr a transient
+        // cmd is acquired/submitted/waited (one-shot). Returns the scene mesh slot, or -1 on failure.
         int AddArenaMesh(uint32_t vertexIndex, size_t idxByteOffset,
-                         const std::vector<Vertex> &verts,
-                         const std::vector<PositionUvVertex> &posUv,
-                         const std::vector<uint32_t> &indices, const AABB &localBox,
+                         const std::vector<VoxelVertex> &verts,
+                         const std::vector<uint16_t> &indices, const AABB &localBox,
                          uint32_t reuseDataOffset, const MeshRuntime &runtimeForImages,
                          CommandBuffer *cmd = nullptr);
         // Free an arena slot via swap-remove: relocates the last arena slot into `idx` (patching its
@@ -393,11 +398,10 @@ namespace pe
         Buffer *UpdateLodUniforms(uint32_t frame);
         Buffer *GetBuffer() { return m_buffer; }
         // Voxel arena geometry lives in dedicated voxel-owned buffers (NOT the shared m_buffer), so
-        // it can be packed/grown independently. Vertex feeds the voxel GBuffer draw, Position feeds the
-        // voxel shadow draw, Index is shared by both. vertexOffset/firstIndex in the arena's indirect
-        // commands are base-0 relative to these buffers.
+        // it can be packed/grown independently. The packed 8 B Vertex buffer feeds BOTH the voxel
+        // GBuffer draw and the voxel shadow draw (each VS unpacks what it needs); Index is shared.
+        // vertexOffset/firstIndex in the arena's indirect commands are base-0 relative to these buffers.
         Buffer *GetVoxelVertexBuffer() { return m_voxelVertexBuf; }
-        Buffer *GetVoxelPositionBuffer() { return m_voxelPositionBuf; }
         Buffer *GetVoxelIndexBuffer() { return m_voxelIndexBuf; }
         Buffer *GetLightUniform(uint32_t frame) { return m_lightUniforms[frame]; }
         Buffer *GetLightStorage(uint32_t frame) { return m_lightStorageBuffers[frame]; }
@@ -669,9 +673,8 @@ namespace pe
 
         // GPU buffers
         Buffer *m_buffer = nullptr;
-        Buffer *m_voxelVertexBuf = nullptr;   // dedicated voxel GBuffer vertex stream (Vertex)
-        Buffer *m_voxelPositionBuf = nullptr; // dedicated voxel shadow position stream (PositionUvVertex)
-        Buffer *m_voxelIndexBuf = nullptr;    // dedicated voxel index buffer (uint32)
+        Buffer *m_voxelVertexBuf = nullptr; // dedicated packed voxel vertex stream (VoxelVertex, 8 B)
+        Buffer *m_voxelIndexBuf = nullptr;  // dedicated voxel index buffer (uint32)
         std::vector<Buffer *> m_storages;
         std::vector<Buffer *> m_storagesDevice;
         std::vector<Buffer *> m_cullingCountersBuffers;

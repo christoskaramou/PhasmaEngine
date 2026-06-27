@@ -14,6 +14,10 @@ namespace pe::voxel
         uint32_t Alloc(uint32_t bytes); // returns byte offset, or kInvalid on OOM
         void Free(uint32_t offset, uint32_t bytes);
         uint32_t Used() const;
+        uint32_t Capacity() const { return m_capacity; }
+        // Extend the arena to newCapacityBytes (no-op if not larger). The added tail becomes free,
+        // coalescing with a trailing free span. The backing GPU buffer must be grown in lockstep.
+        void Grow(uint32_t newCapacityBytes);
 
     private:
         struct Span

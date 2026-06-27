@@ -1296,14 +1296,10 @@ namespace pe
         if (m_voxelVertexBuf)
             RHII.AddToDeletionQueue([b = m_voxelVertexBuf]()
                                     { Buffer *buf = b; Buffer::Destroy(buf); });
-        if (m_voxelPositionBuf)
-            RHII.AddToDeletionQueue([b = m_voxelPositionBuf]()
-                                    { Buffer *buf = b; Buffer::Destroy(buf); });
         if (m_voxelIndexBuf)
             RHII.AddToDeletionQueue([b = m_voxelIndexBuf]()
                                     { Buffer *buf = b; Buffer::Destroy(buf); });
         m_voxelVertexBuf = nullptr;
-        m_voxelPositionBuf = nullptr;
         m_voxelIndexBuf = nullptr;
 
         m_arenaSlots.clear();
@@ -1415,18 +1411,17 @@ namespace pe
     {
         if (!m_buffer)
             return -1;
+        (void)posUvHeadroomBytes; // voxel verts are packed (single 8 B stream) — no separate posUv stream
 
         // Voxel arena geometry lives in DEDICATED voxel-owned buffers, NOT the shared m_buffer. This
         // leaves m_buffer + the regular-mesh dual-stream layout untouched, removes the fragile re-lay-out
         // path (the home of the spike's "invisible voxel" bugs), and lets voxel geometry be packed/grown
-        // independently. The dual-stream invariant (Vertex index == Position index) now holds trivially
-        // WITHIN the voxel buffers: AddArenaMesh writes both at the same base-0 vertex index. Indices get
-        // their own voxel buffer too, so the arena never reshapes m_buffer.
-        const size_t vtxStride = sizeof(Vertex);
-        const size_t posUvStride = sizeof(PositionUvVertex);
-        const size_t idxStride = sizeof(uint32_t);
-        const uint32_t arenaVertCap = static_cast<uint32_t>(
-            std::max<size_t>(vtxHeadroomBytes / vtxStride, posUvHeadroomBytes / posUvStride));
+        // independently. Verts are packed (8 B); the same buffer feeds the voxel GBuffer draw and the
+        // voxel shadow draw (each VS unpacks what it needs). Indices get their own voxel buffer too, so
+        // the arena never reshapes m_buffer.
+        const size_t vtxStride = sizeof(VoxelVertex);
+        const size_t idxStride = sizeof(uint16_t);
+        const uint32_t arenaVertCap = static_cast<uint32_t>(vtxHeadroomBytes / vtxStride);
         const uint32_t arenaIdxCap = static_cast<uint32_t>((idxHeadroomBytes + idxStride - 1) / idxStride);
 
         Queue *q = RHII.GetMainQueue();
@@ -1436,34 +1431,26 @@ namespace pe
         if (m_voxelVertexBuf)
             RHII.AddToDeletionQueue([b = m_voxelVertexBuf]()
                                     { Buffer *buf = b; Buffer::Destroy(buf); });
-        if (m_voxelPositionBuf)
-            RHII.AddToDeletionQueue([b = m_voxelPositionBuf]()
-                                    { Buffer *buf = b; Buffer::Destroy(buf); });
         if (m_voxelIndexBuf)
             RHII.AddToDeletionQueue([b = m_voxelIndexBuf]()
                                     { Buffer *buf = b; Buffer::Destroy(buf); });
 
+        // TRANSFER_SRC so GrowArenaVoxelCapacity can copy the live geometry into a larger buffer.
         m_voxelVertexBuf = Buffer::Create({
             .size = std::max<size_t>(vtxStride, static_cast<size_t>(arenaVertCap) * vtxStride),
-            .usage = PE_BUFFER_USAGE_VERTEX_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+            .usage = PE_BUFFER_USAGE_VERTEX_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_TRANSFER_SRC,
             .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
             .name = "voxel_vertex_buffer",
         });
-        m_voxelPositionBuf = Buffer::Create({
-            .size = std::max<size_t>(posUvStride, static_cast<size_t>(arenaVertCap) * posUvStride),
-            .usage = PE_BUFFER_USAGE_VERTEX_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
-            .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
-            .name = "voxel_position_buffer",
-        });
         m_voxelIndexBuf = Buffer::Create({
             .size = std::max<size_t>(idxStride, static_cast<size_t>(arenaIdxCap) * idxStride),
-            .usage = PE_BUFFER_USAGE_INDEX_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+            .usage = PE_BUFFER_USAGE_INDEX_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_TRANSFER_SRC,
             .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
             .name = "voxel_index_buffer",
         });
 
         // Arena bookkeeping: offsets are base-0 into the dedicated voxel buffers.
-        m_arenaVertexBase = 0;                // first arena vertex index (both voxel streams)
+        m_arenaVertexBase = 0;                // first arena vertex index (packed voxel stream)
         m_arenaVertexCapacity = arenaVertCap; // in vertices
         m_arenaVertexUsed = 0;
         m_arenaIdxByteBase = 0; // base-0 into the voxel index buffer
@@ -1681,28 +1668,79 @@ namespace pe
         return 0;
     }
 
+    bool Scene::GrowArenaVoxelCapacity(uint32_t newVtxCapVertices, size_t newIdxCapBytes)
+    {
+        if (!m_voxelVertexBuf || !m_voxelIndexBuf)
+            return false;
+
+        const size_t vtxStride = sizeof(VoxelVertex);
+        const bool growVtx = newVtxCapVertices > m_arenaVertexCapacity;
+        const bool growIdx = newIdxCapBytes > m_arenaIdxCapacity;
+        if (!growVtx && !growIdx)
+            return false;
+
+        // Drain everything so no in-flight voxel/render draw reads the buffers we are about to swap.
+        Queue *q = RHII.GetMainQueue();
+        q->WaitIdle();
+
+        CommandBuffer *cmd = q->AcquireCommandBuffer();
+        cmd->Begin();
+
+        if (growVtx)
+        {
+            const size_t oldBytes = static_cast<size_t>(m_arenaVertexCapacity) * vtxStride;
+            Buffer *nb = Buffer::Create({
+                .size = static_cast<size_t>(newVtxCapVertices) * vtxStride,
+                .usage = PE_BUFFER_USAGE_VERTEX_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_TRANSFER_SRC,
+                .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
+                .name = "voxel_vertex_buffer",
+            });
+            if (oldBytes > 0)
+                cmd->CopyBuffer(m_voxelVertexBuf, nb, oldBytes, 0, 0);
+            RHII.AddToDeletionQueue([b = m_voxelVertexBuf]()
+                                    { Buffer *buf = b; Buffer::Destroy(buf); });
+            m_voxelVertexBuf = nb;
+            m_arenaVertexCapacity = newVtxCapVertices;
+        }
+        if (growIdx)
+        {
+            const size_t oldBytes = m_arenaIdxCapacity;
+            Buffer *nb = Buffer::Create({
+                .size = newIdxCapBytes,
+                .usage = PE_BUFFER_USAGE_INDEX_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_TRANSFER_SRC,
+                .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
+                .name = "voxel_index_buffer",
+            });
+            if (oldBytes > 0)
+                cmd->CopyBuffer(m_voxelIndexBuf, nb, oldBytes, 0, 0);
+            RHII.AddToDeletionQueue([b = m_voxelIndexBuf]()
+                                    { Buffer *buf = b; Buffer::Destroy(buf); });
+            m_voxelIndexBuf = nb;
+            m_arenaIdxCapacity = newIdxCapBytes;
+        }
+
+        cmd->End();
+        q->Submit(1, &cmd, nullptr, nullptr);
+        cmd->Wait();
+        cmd->Return();
+        return true;
+    }
+
     int Scene::AddArenaMesh(uint32_t vertexIndex, size_t idxByteOffset,
-                            const std::vector<Vertex> &verts,
-                            const std::vector<PositionUvVertex> &posUv,
-                            const std::vector<uint32_t> &indices, const AABB &localBox,
+                            const std::vector<VoxelVertex> &verts,
+                            const std::vector<uint16_t> &indices, const AABB &localBox,
                             uint32_t reuseDataOffset, const MeshRuntime &runtimeForImages,
                             CommandBuffer *externalCmd)
     {
         if (!m_buffer || !m_indirectAll || !m_meshConstants || !m_visibility)
             return -1;
-        if (!m_voxelVertexBuf || !m_voxelPositionBuf || !m_voxelIndexBuf)
+        if (!m_voxelVertexBuf || !m_voxelIndexBuf)
             return -1;
 
         const uint32_t vertCount = static_cast<uint32_t>(verts.size());
-        if (posUv.size() != verts.size())
-        {
-            PE_WARN("Scene::AddArenaMesh: verts/posUv count mismatch (%zu vs %zu)", verts.size(), posUv.size());
-            return -1;
-        }
 
-        const size_t vtxBytes = verts.size() * sizeof(Vertex);
-        const size_t idxBytes = indices.size() * sizeof(uint32_t);
-        const size_t posUvBytes = posUv.size() * sizeof(PositionUvVertex);
+        const size_t vtxBytes = verts.size() * sizeof(VoxelVertex);
+        const size_t idxBytes = indices.size() * sizeof(uint16_t);
 
         // Placement is supplied by the GeometryArena's free lists (NOT a bump pointer — ranges are
         // reused after Release). Validate it lands inside the reserved arena region.
@@ -1734,12 +1772,11 @@ namespace pe
         // Vertex stream and the shadow PositionUvVertex stream aligned: arena vertex k lives at index k in
         // BOTH voxel buffers, so one vertexOffset is valid for the voxel GBuffer draw and the voxel
         // shadow draw alike.
-        const size_t vtxByteOff = static_cast<size_t>(vertexIndex) * sizeof(Vertex);
-        const size_t posUvByteOff = static_cast<size_t>(vertexIndex) * sizeof(PositionUvVertex);
+        const size_t vtxByteOff = static_cast<size_t>(vertexIndex) * sizeof(VoxelVertex);
 
-        // Voxel index buffer is bound at byte 0 -> firstIndex = byteOff/4. vertexOffset = the shared
-        // voxel vertex index (valid for both voxel vertex streams).
-        const uint32_t firstIndex = static_cast<uint32_t>(idxByteOffset / sizeof(uint32_t));
+        // Voxel index buffer is bound at byte 0 as UINT16 -> firstIndex = byteOff/2. vertexOffset = the
+        // packed voxel vertex index (the same vertexOffset drives the GBuffer and shadow voxel draws).
+        const uint32_t firstIndex = static_cast<uint32_t>(idxByteOffset / sizeof(uint16_t));
         const int32_t vertexOffset = static_cast<int32_t>(vertexIndex);
 
         PeDrawIndexedIndirectCommand drawCmd{};
@@ -1754,7 +1791,7 @@ namespace pe
         // so no CPU stall); otherwise a transient command buffer is acquired/submitted/waited.
         auto recordGeometry = [&](CommandBuffer *cmd)
         {
-            cmd->CopyBufferStaged(m_voxelVertexBuf, const_cast<Vertex *>(verts.data()), vtxBytes, vtxByteOff);
+            cmd->CopyBufferStaged(m_voxelVertexBuf, const_cast<VoxelVertex *>(verts.data()), vtxBytes, vtxByteOff);
             {
                 BufferBarrierInfo b{};
                 b.buffer = m_voxelVertexBuf;
@@ -1765,18 +1802,7 @@ namespace pe
                 cmd->BufferBarrier(b);
             }
 
-            cmd->CopyBufferStaged(m_voxelPositionBuf, const_cast<PositionUvVertex *>(posUv.data()), posUvBytes, posUvByteOff);
-            {
-                BufferBarrierInfo b{};
-                b.buffer = m_voxelPositionBuf;
-                b.stageMask = PE_STAGE_VERTEX_INPUT;
-                b.accessMask = PE_ACCESS_VERTEX_ATTRIBUTE_READ;
-                b.offset = posUvByteOff;
-                b.size = posUvBytes;
-                cmd->BufferBarrier(b);
-            }
-
-            cmd->CopyBufferStaged(m_voxelIndexBuf, const_cast<uint32_t *>(indices.data()), idxBytes, idxByteOffset);
+            cmd->CopyBufferStaged(m_voxelIndexBuf, const_cast<uint16_t *>(indices.data()), idxBytes, idxByteOffset);
             {
                 BufferBarrierInfo b{};
                 b.buffer = m_voxelIndexBuf;
