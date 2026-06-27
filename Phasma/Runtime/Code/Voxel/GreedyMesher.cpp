@@ -2,18 +2,70 @@
 
 namespace pe::voxel
 {
+    namespace
+    {
+        // Classic 3-sample per-vertex ambient occlusion (Mikola Lysenko / "0fps" scheme).
+        // Each face corner is darkened by the air-side neighbours that touch it: the two
+        // edge neighbours (side1/side2) and the diagonal corner. Two touching sides fully
+        // occlude (level 0); otherwise level = 3 - (side1+side2+corner). Higher = brighter.
+        int VertexAO(bool side1, bool side2, bool corner)
+        {
+            if (side1 && side2)
+                return 0;
+            return 3 - ((int)side1 + (int)side2 + (int)corner);
+        }
+
+        // AO level 0..3 -> vertex brightness multiplier (baked into Vertex.color, which the
+        // voxel PS multiplies into albedo). 0.45..1.0 reads clearly without crushing to black.
+        constexpr float kAoLevel[4] = {0.45f, 0.65f, 0.82f, 1.0f};
+
+        // A merged-quad candidate cell: the tile to draw plus the 4 corner AO levels in
+        // pos[]-emit order. Greedy merge requires BOTH tile and all 4 AO to match, so AO
+        // never bleeds across a merged quad (conservative — never merges across an AO change).
+        struct MaskCell
+        {
+            int tile; // -1 = no visible face here
+            uint8_t ao[4];
+        };
+
+        bool CellEq(const MaskCell &a, const MaskCell &b)
+        {
+            return a.tile == b.tile && a.ao[0] == b.ao[0] && a.ao[1] == b.ao[1] && a.ao[2] == b.ao[2] &&
+                   a.ao[3] == b.ao[3];
+        }
+    } // namespace
+
     MeshData GreedyMesher::Mesh(const BlockSampler &sample, const BlockRegistry &reg, int lod)
     {
         int stride = 1 << lod;
         MeshData result;
-        int32_t mask[kSectionDim * kSectionDim];
+        MaskCell mask[kSectionDim * kSectionDim];
         for (int d = 0; d < 3; d++)
         {
             int u = (d + 1) % 3, v = (d + 2) % 3;
+
+            // Air-side occupancy at axis-d layer `dd`, in-plane (u,v) = (uu,vv). Used for AO.
+            // The live sampler returns air outside [0,16), so faces at a section boundary read
+            // no occluders and stay full-bright (a known boundary seam — neighbour-aware
+            // sampling is a later cross-section improvement). ponytail: section-local AO; add a
+            // neighbour-column sampler when the boundary brightness reads wrong.
+            auto occ = [&](int dd, int uu, int vv) -> bool
+            {
+                int c[3];
+                c[d] = dd;
+                c[u] = uu;
+                c[v] = vv;
+                return reg.IsOpaque(sample(c[0], c[1], c[2]));
+            };
+
             for (int dir = 1; dir >= -1; dir -= 2)
             {
                 for (int p = 0; p <= kSectionDim; p++)
                 {
+                    // Air-side layer along d for AO occluder sampling: +d face sits between solid
+                    // at p-1 and air at p; -d face between solid at p and air at p-1.
+                    int airD = (dir == 1) ? p : p - 1;
+
                     // Build mask: check face between block at p-1 and block at p along axis d
                     for (int pu = 0; pu < kSectionDim; pu++)
                     {
@@ -28,15 +80,51 @@ namespace pe::voxel
                             cB[v] = pv;
                             BlockId bA = sample(cA[0], cA[1], cA[2]);
                             BlockId bB = sample(cB[0], cB[1], cB[2]);
+
+                            MaskCell &cell = mask[pu * kSectionDim + pv];
+                            bool vis;
                             if (dir == 1)
                             {
-                                bool vis = reg.IsOpaque(bA) && !reg.IsOpaque(bB);
-                                mask[pu * kSectionDim + pv] = vis ? (int)reg.FaceTile(bA, d * 2) : -1;
+                                vis = reg.IsOpaque(bA) && !reg.IsOpaque(bB);
+                                cell.tile = vis ? (int)reg.FaceTile(bA, d * 2) : -1;
                             }
                             else
                             {
-                                bool vis = reg.IsOpaque(bB) && !reg.IsOpaque(bA);
-                                mask[pu * kSectionDim + pv] = vis ? (int)reg.FaceTile(bB, d * 2 + 1) : -1;
+                                vis = reg.IsOpaque(bB) && !reg.IsOpaque(bA);
+                                cell.tile = vis ? (int)reg.FaceTile(bB, d * 2 + 1) : -1;
+                            }
+                            if (!vis)
+                                continue;
+
+                            // AO for the cell's 4 grid corners. Canonical (du,dv) corners
+                            // (0,0),(1,0),(1,1),(0,1); each samples its two in-plane neighbours +
+                            // the diagonal on the air side. Store in pos[]-emit order per dir.
+                            int aoCanon[4];
+                            const int duv[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+                            for (int k = 0; k < 4; k++)
+                            {
+                                int ou = duv[k][0] ? +1 : -1;
+                                int ov = duv[k][1] ? +1 : -1;
+                                bool s1 = occ(airD, pu + ou, pv);
+                                bool s2 = occ(airD, pu, pv + ov);
+                                bool cr = occ(airD, pu + ou, pv + ov);
+                                aoCanon[k] = VertexAO(s1, s2, cr);
+                            }
+                            if (dir == 1)
+                            {
+                                // pos = c0,c1,c2,c3
+                                cell.ao[0] = (uint8_t)aoCanon[0];
+                                cell.ao[1] = (uint8_t)aoCanon[1];
+                                cell.ao[2] = (uint8_t)aoCanon[2];
+                                cell.ao[3] = (uint8_t)aoCanon[3];
+                            }
+                            else
+                            {
+                                // reversed winding: pos = c0,c3,c2,c1
+                                cell.ao[0] = (uint8_t)aoCanon[0];
+                                cell.ao[1] = (uint8_t)aoCanon[3];
+                                cell.ao[2] = (uint8_t)aoCanon[2];
+                                cell.ao[3] = (uint8_t)aoCanon[1];
                             }
                         }
                     }
@@ -45,21 +133,21 @@ namespace pe::voxel
                     {
                         for (int qv = 0; qv < kSectionDim;)
                         {
-                            int tile = mask[qu * kSectionDim + qv];
-                            if (tile < 0)
+                            MaskCell seed = mask[qu * kSectionDim + qv];
+                            if (seed.tile < 0)
                             {
                                 qv++;
                                 continue;
                             }
                             int w = 1;
-                            while (qv + w < kSectionDim && mask[qu * kSectionDim + qv + w] == tile)
+                            while (qv + w < kSectionDim && CellEq(mask[qu * kSectionDim + qv + w], seed))
                                 w++;
                             int h = 1;
                             while (qu + h < kSectionDim)
                             {
                                 bool ok = true;
                                 for (int i = 0; i < w; i++)
-                                    if (mask[(qu + h) * kSectionDim + qv + i] != tile)
+                                    if (!CellEq(mask[(qu + h) * kSectionDim + qv + i], seed))
                                     {
                                         ok = false;
                                         break;
@@ -68,6 +156,7 @@ namespace pe::voxel
                                     break;
                                 h++;
                             }
+                            int tile = seed.tile;
                             float fd = (float)p, fqu = (float)qu, fqv = (float)qv, fh = (float)h, fw = (float)w;
                             float pos[4][3] = {};
                             if (dir == 1)
@@ -132,6 +221,7 @@ namespace pe::voxel
                             uint32_t base = (uint32_t)result.vertices.size();
                             for (int ci = 0; ci < 4; ci++)
                             {
+                                float ao = kAoLevel[seed.ao[ci]];
                                 Vertex vt = {};
                                 vt.position[0] = pos[ci][0] * (float)stride;
                                 vt.position[1] = pos[ci][1] * (float)stride;
@@ -143,9 +233,9 @@ namespace pe::voxel
                                 vt.tangent[1] = tang[1];
                                 vt.tangent[2] = tang[2];
                                 vt.tangent[3] = 1.0f;
-                                vt.color[0] = 1.0f;
-                                vt.color[1] = 1.0f;
-                                vt.color[2] = 1.0f;
+                                vt.color[0] = ao;
+                                vt.color[1] = ao;
+                                vt.color[2] = ao;
                                 vt.color[3] = 1.0f;
                                 vt.joints[0] = (uint32_t)tile;
                                 vt.joints[1] = 0;
@@ -155,15 +245,31 @@ namespace pe::voxel
                                 vt.uv[1] = uvCoords[ci][1];
                                 result.vertices.push_back(vt);
                             }
-                            result.indices.push_back(base + 0);
-                            result.indices.push_back(base + 1);
-                            result.indices.push_back(base + 2);
-                            result.indices.push_back(base + 0);
-                            result.indices.push_back(base + 2);
-                            result.indices.push_back(base + 3);
+                            // Anti-artifact: split the quad along the diagonal between the two
+                            // brighter corners so the dark AO gradient doesn't interpolate across
+                            // the bright pair (the classic flipped-quad fix). Both choices keep
+                            // the CCW winding.
+                            if (seed.ao[0] + seed.ao[2] > seed.ao[1] + seed.ao[3])
+                            {
+                                result.indices.push_back(base + 0);
+                                result.indices.push_back(base + 1);
+                                result.indices.push_back(base + 3);
+                                result.indices.push_back(base + 1);
+                                result.indices.push_back(base + 2);
+                                result.indices.push_back(base + 3);
+                            }
+                            else
+                            {
+                                result.indices.push_back(base + 0);
+                                result.indices.push_back(base + 1);
+                                result.indices.push_back(base + 2);
+                                result.indices.push_back(base + 0);
+                                result.indices.push_back(base + 2);
+                                result.indices.push_back(base + 3);
+                            }
                             for (int du = 0; du < h; du++)
                                 for (int dv = 0; dv < w; dv++)
-                                    mask[(qu + du) * kSectionDim + qv + dv] = -1;
+                                    mask[(qu + du) * kSectionDim + qv + dv].tile = -1;
                             qv += w;
                         }
                     }
