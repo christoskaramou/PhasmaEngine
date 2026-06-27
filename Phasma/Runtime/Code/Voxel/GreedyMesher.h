@@ -9,6 +9,6 @@ namespace pe::voxel
     class GreedyMesher : public IChunkMesher
     {
     public:
-        MeshData Mesh(const BlockSampler &, const BlockRegistry &, int lod) override;
+        MeshData Mesh(BlockSampleFn, void *sampleCtx, const BlockRegistry &, int lod) override;
     };
 } // namespace pe::voxel

@@ -35,7 +35,7 @@ namespace pe::voxel
         }
     } // namespace
 
-    MeshData GreedyMesher::Mesh(const BlockSampler &sample, const BlockRegistry &reg, int lod)
+    MeshData GreedyMesher::Mesh(BlockSampleFn sample, void *sampleCtx, const BlockRegistry &reg, int lod)
     {
         int stride = 1 << lod;
         MeshData result;
@@ -49,17 +49,13 @@ namespace pe::voxel
             int u = (d + 1) % 3, v = (d + 2) % 3;
 
             // Air-side occupancy at axis-d layer `dd`, in-plane (u,v) = (uu,vv). Used for AO.
-            // The live sampler returns air outside [0,16), so faces at a section boundary read
-            // no occluders and stay full-bright (a known boundary seam — neighbour-aware
-            // sampling is a later cross-section improvement). ponytail: section-local AO; add a
-            // neighbour-column sampler when the boundary brightness reads wrong.
             auto occ = [&](int dd, int uu, int vv) -> bool
             {
                 int c[3];
                 c[d] = dd;
                 c[u] = uu;
                 c[v] = vv;
-                return reg.IsOpaque(sample(c[0], c[1], c[2]));
+                return reg.IsOpaque(sample(sampleCtx, c[0], c[1], c[2]));
             };
 
             for (int dir = 1; dir >= -1; dir -= 2)
@@ -82,8 +78,8 @@ namespace pe::voxel
                             cB[d] = p;
                             cB[u] = pu;
                             cB[v] = pv;
-                            BlockId bA = sample(cA[0], cA[1], cA[2]);
-                            BlockId bB = sample(cB[0], cB[1], cB[2]);
+                            BlockId bA = sample(sampleCtx, cA[0], cA[1], cA[2]);
+                            BlockId bB = sample(sampleCtx, cB[0], cB[1], cB[2]);
 
                             MaskCell &cell = mask[pu * kSectionDim + pv];
                             bool vis;

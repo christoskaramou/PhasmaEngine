@@ -394,6 +394,9 @@ namespace pe
         };
         void DispatchCullingPhase(CommandBuffer *cmd, PassInfo *passInfo, CullPhase phase,
                                   Image *hiZPyramid = nullptr, Buffer *occlusionData = nullptr);
+        // Per-cascade light-frustum cull for ShadowPass: compacts m_indirectAll into shadow-only
+        // regular + voxel indirect buffers (not the camera frustum / Hi-Z buckets).
+        void DispatchShadowCull(CommandBuffer *cmd, PassInfo *passInfo, const vec4 frustumPlanes[6]);
         // Refill this frame's LOD params UBO from SceneSettings and return it (bound at CullingCS binding 16).
         Buffer *UpdateLodUniforms(uint32_t frame);
         Buffer *GetBuffer() { return m_buffer; }
@@ -430,6 +433,9 @@ namespace pe
         // changes reach the GPU selected-indirect bucket without a full geometry rebuild.
         void UpdateMeshSelectionFlags();
         Buffer *GetIndirectVoxels(uint32_t frame) const { return m_indirectVoxels[frame]; }
+        Buffer *GetShadowIndirectRegular(uint32_t frame) const { return m_shadowIndirectRegular[frame]; }
+        Buffer *GetShadowIndirectVoxels(uint32_t frame) const { return m_shadowIndirectVoxels[frame]; }
+        Buffer *GetShadowCullCounters(uint32_t frame) const { return m_shadowCullCounters[frame]; }
         // Two-phase Hi-Z occlusion sets (opaque-only). A = last-frame-visible (phase 1),
         // B = newly-disoccluded (phase 2). Consumed by DepthPass/DepthLatePass/GBuffer only when
         // occlusion_culling is on; the frustum getters above stay for shadows/transparents/perception.
@@ -686,6 +692,10 @@ namespace pe
         std::vector<Buffer *> m_indirectTransmission;
         std::vector<Buffer *> m_indirectSelected;
         std::vector<Buffer *> m_indirectVoxels;
+        // ShadowPass per-cascade light-frustum cull (reused each cascade; counters reset per dispatch).
+        std::vector<Buffer *> m_shadowIndirectRegular;
+        std::vector<Buffer *> m_shadowIndirectVoxels;
+        std::vector<Buffer *> m_shadowCullCounters;
         std::vector<Buffer *> m_sortKeysAlphaBlend;
         std::vector<Buffer *> m_sortKeysTransmission;
         Buffer *m_indirectAll = nullptr;

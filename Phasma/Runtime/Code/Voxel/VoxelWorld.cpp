@@ -32,18 +32,151 @@ namespace pe::voxel
             return std::max(lo, std::min(v, hi));
         }
 
-        MeshData MeshSectionCpu(const ChunkColumn &column, const BlockRegistry &registry, int si)
+        // Horizontal neighbor snapshots for seam-aware meshing (thread-safe copies).
+        BlockId SampleSectionBlock(const ChunkColumn &center, const ColumnNeighbors &neighbors, ColumnCoord coord,
+                                   int si, int lx, int ly, int lz)
         {
-            const int sectionWorldY = si * kSectionDim;
+            const int worldY = si * kSectionDim + ly;
+            if (worldY < 0 || worldY >= kWorldHeight)
+                return kAir;
+
+            int cxOff = 0;
+            int czOff = 0;
+            if (lx < 0)
+                cxOff = -1;
+            else if (lx >= kSectionDim)
+                cxOff = 1;
+            if (lz < 0)
+                czOff = -1;
+            else if (lz >= kSectionDim)
+                czOff = 1;
+
+            int sampleLx = lx;
+            int sampleLz = lz;
+            if (cxOff == -1)
+                sampleLx = lx + kSectionDim;
+            else if (cxOff == 1)
+                sampleLx = lx - kSectionDim;
+            if (czOff == -1)
+                sampleLz = lz + kSectionDim;
+            else if (czOff == 1)
+                sampleLz = lz - kSectionDim;
+
+            const ChunkColumn *col = nullptr;
+            if (cxOff == 0 && czOff == 0)
+                col = &center;
+            else if (cxOff == -1 && czOff == 0)
+                col = neighbors.negX ? neighbors.negX.get() : nullptr;
+            else if (cxOff == 1 && czOff == 0)
+                col = neighbors.posX ? neighbors.posX.get() : nullptr;
+            else if (cxOff == 0 && czOff == -1)
+                col = neighbors.negZ ? neighbors.negZ.get() : nullptr;
+            else if (cxOff == 0 && czOff == 1)
+                col = neighbors.posZ ? neighbors.posZ.get() : nullptr;
+            else if (cxOff == -1 && czOff == -1)
+                col = neighbors.negXnegZ ? neighbors.negXnegZ.get() : nullptr;
+            else if (cxOff == -1 && czOff == 1)
+                col = neighbors.negXposZ ? neighbors.negXposZ.get() : nullptr;
+            else if (cxOff == 1 && czOff == -1)
+                col = neighbors.posXnegZ ? neighbors.posXnegZ.get() : nullptr;
+            else if (cxOff == 1 && czOff == 1)
+                col = neighbors.posXposZ ? neighbors.posXposZ.get() : nullptr;
+
+            if (!col || sampleLx < 0 || sampleLx >= kSectionDim || sampleLz < 0 || sampleLz >= kSectionDim)
+                return kAir;
+
+            (void)coord;
+            return col->GetLocal(sampleLx, worldY, sampleLz);
+        }
+
+        struct SectionSampleCtx
+        {
+            const ChunkColumn *column = nullptr;
+            const ColumnNeighbors *neighbors = nullptr;
+            ColumnCoord coord{};
+            int si = 0;
+        };
+
+        BlockId SectionSampleThunk(void *ctx, int lx, int ly, int lz)
+        {
+            const SectionSampleCtx *c = static_cast<const SectionSampleCtx *>(ctx);
+            return SampleSectionBlock(*c->column, *c->neighbors, c->coord, c->si, lx, ly, lz);
+        }
+
+        MeshData MeshSectionCpu(const ChunkColumn &column, const BlockRegistry &registry, int si,
+                                ColumnCoord coord, const ColumnNeighbors &neighbors)
+        {
             GreedyMesher mesher;
-            BlockSampler sampler = [&column, sectionWorldY](int lx, int ly, int lz) -> BlockId
+            SectionSampleCtx ctx{&column, &neighbors, coord, si};
+            return mesher.Mesh(SectionSampleThunk, &ctx, registry, 0);
+        }
+
+        // True when section si has opaque blocks within two voxels of the horizontal face that
+        // borders the neighbor at (dcx, dcz) — covers emitted faces and AO samples at the seam.
+        bool SectionNeedsCardinalSeam(const ChunkColumn &col, int si, int dcx, int dcz,
+                                      const BlockRegistry &reg)
+        {
+            const ChunkSection &sec = col.Section(si);
+            auto opaqueAt = [&](int lx, int ly, int lz) -> bool
             {
-                if (lx < 0 || lx >= kSectionDim || ly < 0 || ly >= kSectionDim || lz < 0 || lz >= kSectionDim)
-                    return kAir;
-                return column.GetLocal(lx, sectionWorldY + ly, lz);
+                const BlockId id = sec.Get(lx, ly, lz);
+                return id != kAir && reg.IsOpaque(id);
             };
 
-            return mesher.Mesh(sampler, registry, 0);
+            if (dcx == -1)
+            {
+                for (int ly = 0; ly < kSectionDim; ++ly)
+                    for (int lz = 0; lz < kSectionDim; ++lz)
+                        if (opaqueAt(14, ly, lz) || opaqueAt(15, ly, lz))
+                            return true;
+            }
+            else if (dcx == 1)
+            {
+                for (int ly = 0; ly < kSectionDim; ++ly)
+                    for (int lz = 0; lz < kSectionDim; ++lz)
+                        if (opaqueAt(0, ly, lz) || opaqueAt(1, ly, lz))
+                            return true;
+            }
+            else if (dcz == -1)
+            {
+                for (int ly = 0; ly < kSectionDim; ++ly)
+                    for (int lx = 0; lx < kSectionDim; ++lx)
+                        if (opaqueAt(lx, ly, 14) || opaqueAt(lx, ly, 15))
+                            return true;
+            }
+            else if (dcz == 1)
+            {
+                for (int ly = 0; ly < kSectionDim; ++ly)
+                    for (int lx = 0; lx < kSectionDim; ++lx)
+                        if (opaqueAt(lx, ly, 0) || opaqueAt(lx, ly, 1))
+                            return true;
+            }
+            return false;
+        }
+
+        // True when section si has opaque blocks in the 2×2 corner patch that meets the diagonal
+        // neighbor at (dcx, dcz).
+        bool SectionNeedsDiagonalSeam(const ChunkColumn &col, int si, int dcx, int dcz,
+                                      const BlockRegistry &reg)
+        {
+            const int lx0 = (dcx == -1) ? 14 : 0;
+            const int lx1 = (dcx == -1) ? 15 : 1;
+            const int lz0 = (dcz == -1) ? 14 : 0;
+            const int lz1 = (dcz == -1) ? 15 : 1;
+            const ChunkSection &sec = col.Section(si);
+            for (int ly = 0; ly < kSectionDim; ++ly)
+            {
+                for (int lx = lx0; lx <= lx1; ++lx)
+                {
+                    for (int lz = lz0; lz <= lz1; ++lz)
+                    {
+                        const BlockId id = sec.Get(lx, ly, lz);
+                        if (id != kAir && reg.IsOpaque(id))
+                            return true;
+                    }
+                }
+            }
+            return false;
         }
 
         Vertex MakeHostVertex()
@@ -132,6 +265,17 @@ namespace pe::voxel
         m_cfg.unloadMargin = std::max(0, m_cfg.unloadMargin);
         m_cfg.uploadBudgetPerFrame = std::max(1, m_cfg.uploadBudgetPerFrame);
         m_cfg.groundY = ClampInt(m_cfg.groundY, 0, kWorldHeight);
+#if defined(PE_DEBUG)
+        // Greedy mesh + noise worldgen are unoptimized enough in Debug that huge radii stall for
+        // tens of seconds. Release is unaffected; scripts can still request any radius there.
+        constexpr int kDebugMaxLoadRadius = 12;
+        if (m_cfg.loadRadius > kDebugMaxLoadRadius)
+        {
+            PE_INFO("VoxelWorld: clamping load_radius %d -> %d (Debug build)", m_cfg.loadRadius,
+                    kDebugMaxLoadRadius);
+            m_cfg.loadRadius = kDebugMaxLoadRadius;
+        }
+#endif
         m_anchor = vec3(0.0f);
 
         // Engine ships a default noise generator; a game keeps its own by calling
@@ -266,7 +410,7 @@ namespace pe::voxel
             return; // no change
 
         state.column->SetLocal(LocalX(x), y, LocalZ(z), id);
-        MarkSectionDirty(coord, SectionIndex(y));
+        MarkEditDirtySections(coord, x, y, z);
     }
 
     bool VoxelWorld::Raycast(const vec3 &o, const vec3 &d, float maxDist,
@@ -290,6 +434,7 @@ namespace pe::voxel
 
         RetireSubmittedUpdateCommands(false);
         ProcessGenerationResults();
+        ProcessPendingMeshing();
 
         // Grow the voxel pool before recording this frame's uploads (safe WaitIdle point — no voxel/
         // render cmd recording in flight here). Keeps dense cave/AO sections from OOMing into holes.
@@ -480,7 +625,37 @@ namespace pe::voxel
             state.generationFuture = std::shared_future<ChunkColumn>();
             ApplyPendingEdits(key, *state.column);
             state.state = ColumnLoadState::Generated;
-            EnqueueColumnMeshing(state);
+            TryStartColumnMeshing(state);
+        }
+    }
+
+    bool VoxelWorld::NeighborGenerationInProgress(ColumnCoord coord) const
+    {
+        static constexpr int kDirs[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+        for (const auto &d : kDirs)
+        {
+            const ColumnState *st = FindColumnState({coord.cx + d[0], coord.cz + d[1]});
+            if (st && st->state == ColumnLoadState::Generating)
+                return true;
+        }
+        return false;
+    }
+
+    void VoxelWorld::TryStartColumnMeshing(ColumnState &state)
+    {
+        if (state.state != ColumnLoadState::Generated || !state.column)
+            return;
+        if (NeighborGenerationInProgress(state.coord))
+            return;
+        EnqueueColumnMeshing(state);
+    }
+
+    void VoxelWorld::ProcessPendingMeshing()
+    {
+        for (auto &entry : m_columns)
+        {
+            if (entry.second.state == ColumnLoadState::Generated)
+                TryStartColumnMeshing(entry.second);
         }
     }
 
@@ -503,15 +678,76 @@ namespace pe::voxel
         if (!state.column)
             return;
 
+        const ColumnCoord coord = state.coord;
         auto columnSnapshot = std::make_shared<ChunkColumn>(*state.column);
+        auto neighbors = std::make_shared<ColumnNeighbors>(GatherNeighborSnapshots(coord));
         auto registrySnapshot = std::make_shared<BlockRegistry>(m_registry);
         for (int si = 0; si < kSectionCount; ++si)
         {
             state.sectionUploaded[si] = false;
-            state.meshFutures[si] = ThreadPool::General.Enqueue([columnSnapshot, registrySnapshot, si]() -> MeshData
-                                                                { return MeshSectionCpu(*columnSnapshot, *registrySnapshot, si); });
+            state.meshFutures[si] = ThreadPool::General.Enqueue(
+                [columnSnapshot, neighbors, registrySnapshot, coord, si]() -> MeshData
+                { return MeshSectionCpu(*columnSnapshot, *registrySnapshot, si, coord, *neighbors); });
         }
         state.state = ColumnLoadState::Meshing;
+    }
+
+    ColumnNeighbors VoxelWorld::GatherNeighborSnapshots(ColumnCoord coord) const
+    {
+        ColumnNeighbors neighbors;
+        auto trySnap = [&](int dcx, int dcz, std::shared_ptr<const ChunkColumn> &out)
+        {
+            const ColumnState *st = FindColumnState({coord.cx + dcx, coord.cz + dcz});
+            if (!st || !st->column)
+                return;
+            if (st->state == ColumnLoadState::Generating || st->state == ColumnLoadState::Unloading ||
+                st->state == ColumnLoadState::Empty)
+                return;
+            out = std::make_shared<ChunkColumn>(*st->column);
+        };
+        trySnap(-1, 0, neighbors.negX);
+        trySnap(1, 0, neighbors.posX);
+        trySnap(0, -1, neighbors.negZ);
+        trySnap(0, 1, neighbors.posZ);
+        trySnap(-1, -1, neighbors.negXnegZ);
+        trySnap(-1, 1, neighbors.negXposZ);
+        trySnap(1, -1, neighbors.posXnegZ);
+        trySnap(1, 1, neighbors.posXposZ);
+        return neighbors;
+    }
+
+    void VoxelWorld::RemeshNeighborSeams(ColumnCoord coord)
+    {
+        auto remeshCardinal = [&](int dcx, int dcz)
+        {
+            ColumnState *st = FindColumnState({coord.cx + dcx, coord.cz + dcz});
+            if (!st || st->state != ColumnLoadState::Ready || !st->column)
+                return;
+            for (int si = 0; si < kSectionCount; ++si)
+            {
+                if (SectionNeedsCardinalSeam(*st->column, si, dcx, dcz, m_registry))
+                    StartDirtySectionRemesh(*st, si);
+            }
+        };
+        auto remeshDiagonal = [&](int dcx, int dcz)
+        {
+            ColumnState *st = FindColumnState({coord.cx + dcx, coord.cz + dcz});
+            if (!st || st->state != ColumnLoadState::Ready || !st->column)
+                return;
+            for (int si = 0; si < kSectionCount; ++si)
+            {
+                if (SectionNeedsDiagonalSeam(*st->column, si, dcx, dcz, m_registry))
+                    StartDirtySectionRemesh(*st, si);
+            }
+        };
+        remeshCardinal(-1, 0);
+        remeshCardinal(1, 0);
+        remeshCardinal(0, -1);
+        remeshCardinal(0, 1);
+        remeshDiagonal(-1, -1);
+        remeshDiagonal(-1, 1);
+        remeshDiagonal(1, -1);
+        remeshDiagonal(1, 1);
     }
 
     int VoxelWorld::ProcessReadyMeshUploads(CommandBuffer *cmd, int budget)
@@ -567,7 +803,10 @@ namespace pe::voxel
             for (int si = 0; si < kSectionCount; ++si)
                 allUploaded = allUploaded && state.sectionUploaded[si];
             if (allUploaded)
+            {
                 state.state = ColumnLoadState::Ready;
+                RemeshNeighborSeams(state.coord);
+            }
         }
 
         return uploads;
@@ -612,9 +851,12 @@ namespace pe::voxel
         }
 
         auto columnSnapshot = std::make_shared<ChunkColumn>(*state.column);
+        const ColumnCoord coord = state.coord;
+        auto neighbors = std::make_shared<ColumnNeighbors>(GatherNeighborSnapshots(coord));
         auto registrySnapshot = std::make_shared<BlockRegistry>(m_registry);
-        state.remeshFutures[si] = ThreadPool::General.Enqueue([columnSnapshot, registrySnapshot, si]() -> MeshData
-                                                              { return MeshSectionCpu(*columnSnapshot, *registrySnapshot, si); });
+        state.remeshFutures[si] = ThreadPool::General.Enqueue(
+            [columnSnapshot, neighbors, registrySnapshot, coord, si]() -> MeshData
+            { return MeshSectionCpu(*columnSnapshot, *registrySnapshot, si, coord, *neighbors); });
         state.remeshPending[si] = true;
     }
 
@@ -661,6 +903,48 @@ namespace pe::voxel
             if (d.first == key && d.second == si)
                 return; // already pending
         m_dirtySections.emplace_back(key, si);
+    }
+
+    void VoxelWorld::MarkEditDirtySections(ColumnCoord coord, int wx, int y, int wz)
+    {
+        const int si = SectionIndex(y);
+        const int ly = LocalY(y);
+        const int lx = LocalX(wx);
+        const int lz = LocalZ(wz);
+
+        MarkSectionDirty(coord, si);
+
+        if (ly == 0 && si > 0)
+            MarkSectionDirty(coord, si - 1);
+        else if (ly == kSectionDim - 1 && si + 1 < kSectionCount)
+            MarkSectionDirty(coord, si + 1);
+
+        auto markNeighbor = [&](int dcx, int dcz)
+        {
+            const ColumnCoord neighbor{coord.cx + dcx, coord.cz + dcz};
+            MarkSectionDirty(neighbor, si);
+            if (ly == 0 && si > 0)
+                MarkSectionDirty(neighbor, si - 1);
+            else if (ly == kSectionDim - 1 && si + 1 < kSectionCount)
+                MarkSectionDirty(neighbor, si + 1);
+        };
+
+        if (lx == 0)
+            markNeighbor(-1, 0);
+        if (lx == kSectionDim - 1)
+            markNeighbor(1, 0);
+        if (lz == 0)
+            markNeighbor(0, -1);
+        if (lz == kSectionDim - 1)
+            markNeighbor(0, 1);
+        if (lx == 0 && lz == 0)
+            markNeighbor(-1, -1);
+        if (lx == 0 && lz == kSectionDim - 1)
+            markNeighbor(-1, 1);
+        if (lx == kSectionDim - 1 && lz == 0)
+            markNeighbor(1, -1);
+        if (lx == kSectionDim - 1 && lz == kSectionDim - 1)
+            markNeighbor(1, 1);
     }
 
     void VoxelWorld::RemeshDirtySections(CommandBuffer *cmd)

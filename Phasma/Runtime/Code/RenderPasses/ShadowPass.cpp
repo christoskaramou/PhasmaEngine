@@ -80,6 +80,16 @@ namespace pe
         m_voxelPassInfo->depthBiasClamp = Settings::Get<SceneSettings>().depth_bias[1];
         m_voxelPassInfo->depthBiasSlopeFactor = Settings::Get<SceneSettings>().depth_bias[2];
         m_voxelPassInfo->Update();
+
+        if (!m_cullPassInfo)
+            m_cullPassInfo = std::make_shared<PassInfo>();
+        m_cullPassInfo->name = "shadow_cull_pipeline";
+        m_cullPassInfo->pCompShader =
+            Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Compute/ShadowCullCS.hlsl",
+                            .entryPoint = "mainCS",
+                            .stage = PE_SHADER_STAGE_COMPUTE,
+                            .defines = std::vector<Define>{}});
+        m_cullPassInfo->Update();
     }
 
     void ShadowPass::CreateUniforms(CommandBuffer *cmd)
@@ -347,9 +357,23 @@ namespace pe
             PushConstants_Shadows pushConstants{};
             pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetMaxJointCount());
 
+            const uint32_t frame = RHII.GetFrameIndex();
+            const auto &gSettings = Settings::Get<SceneSettings>();
+            const bool shadowCull = gSettings.frustum_culling && m_cullPassInfo && m_cullPassInfo->pCompShader;
+            const uint32_t arenaBase = m_scene->GetArenaSlotBase();
+            const bool hasVoxels = m_scene->HasArenaVoxels() && m_scene->GetVoxelVertexBuffer() &&
+                                   m_scene->GetVoxelIndexBuffer() && m_voxelPassInfo &&
+                                   m_voxelPassInfo->pVertShader;
+            const uint32_t meshCount = m_scene->GetMeshCount();
+            const uint32_t regularCount = hasVoxels ? arenaBase : meshCount;
+            const uint32_t voxelCount = hasVoxels ? meshCount - arenaBase : 0u;
+
             uint32_t cascades = Settings::Get<SceneSettings>().num_cascades;
             for (uint32_t i = 0; i < cascades; i++)
             {
+                if (shadowCull)
+                    m_scene->DispatchShadowCull(cmd, m_cullPassInfo.get(), m_cascadePlanes[i].data());
+
                 pushConstants.vp = m_cascades[i];
 
                 PassInfo &passInfo = *m_passInfo;
@@ -360,36 +384,55 @@ namespace pe
                 cmd->SetViewport(0.f, 0.f, attachment.image->GetWidth_f(), attachment.image->GetHeight_f());
                 cmd->SetScissor(0, 0, attachment.image->GetWidth(), attachment.image->GetHeight());
                 cmd->BindPipeline(passInfo);
-                const auto &gSettings = Settings::Get<SceneSettings>();
                 cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
-                // TODO: per-cascade light-frustum culling
-                // Regular meshes draw from the shared buffer's position stream; voxel arena meshes (tail
-                // slots [arenaSlotBase, meshCount)) live in the dedicated PACKED voxel buffer, so they
-                // cast shadows via a second draw on a packed-aware shadow pipeline (its VS unpacks pos).
-                const uint32_t arenaBase = m_scene->GetArenaSlotBase();
-                const bool hasVoxels = m_scene->HasArenaVoxels() && m_scene->GetVoxelVertexBuffer() &&
-                                       m_scene->GetVoxelIndexBuffer() && m_voxelPassInfo &&
-                                       m_voxelPassInfo->pVertShader;
-                const uint32_t regularCount = hasVoxels ? arenaBase : m_scene->GetMeshCount();
 
-                cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
-                cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
-                if (regularCount > 0)
-                    cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(), 0, regularCount);
-
-                if (hasVoxels)
+                if (shadowCull)
                 {
-                    cmd->BindPipeline(*m_voxelPassInfo);
-                    cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
-                    cmd->SetConstants(pushConstants);
-                    cmd->PushConstants();
-                    cmd->BindIndexBuffer(m_scene->GetVoxelIndexBuffer(), 0, PE_INDEX_TYPE_UINT16);
-                    cmd->BindVertexBuffer(m_scene->GetVoxelVertexBuffer(), 0);
-                    cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(),
-                                             static_cast<size_t>(arenaBase) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
-                                             m_scene->GetMeshCount() - arenaBase);
+                    Buffer *regularIndirect = m_scene->GetShadowIndirectRegular(frame);
+                    Buffer *voxelIndirect = m_scene->GetShadowIndirectVoxels(frame);
+                    Buffer *counters = m_scene->GetShadowCullCounters(frame);
+
+                    cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+                    cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
+                    if (regularCount > 0)
+                        cmd->DrawIndexedIndirectCount(regularIndirect, 0, counters, 0, regularCount);
+
+                    if (hasVoxels && voxelCount > 0)
+                    {
+                        cmd->BindPipeline(*m_voxelPassInfo);
+                        cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
+                        cmd->SetConstants(pushConstants);
+                        cmd->PushConstants();
+                        cmd->BindIndexBuffer(m_scene->GetVoxelIndexBuffer(), 0, PE_INDEX_TYPE_UINT16);
+                        cmd->BindVertexBuffer(m_scene->GetVoxelVertexBuffer(), 0);
+                        cmd->DrawIndexedIndirectCount(voxelIndirect, 0, counters, sizeof(uint32_t), voxelCount);
+                        cmd->BindPipeline(passInfo);
+                        cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
+                    }
+                }
+                else
+                {
+                    cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+                    cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
+                    if (regularCount > 0)
+                        cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(), 0, regularCount);
+
+                    if (hasVoxels && voxelCount > 0)
+                    {
+                        cmd->BindPipeline(*m_voxelPassInfo);
+                        cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
+                        cmd->SetConstants(pushConstants);
+                        cmd->PushConstants();
+                        cmd->BindIndexBuffer(m_scene->GetVoxelIndexBuffer(), 0, PE_INDEX_TYPE_UINT16);
+                        cmd->BindVertexBuffer(m_scene->GetVoxelVertexBuffer(), 0);
+                        cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(),
+                                                 static_cast<size_t>(arenaBase) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
+                                                 voxelCount);
+                        cmd->BindPipeline(passInfo);
+                        cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
+                    }
                 }
                 cmd->EndPass();
             }

@@ -18,6 +18,19 @@ namespace pe::voxel
     class VoxelMaterial;
     class ITerrainGenerator;
 
+    // Horizontal neighbor column snapshots for seam-aware greedy meshing.
+    struct ColumnNeighbors
+    {
+        std::shared_ptr<const ChunkColumn> negX;
+        std::shared_ptr<const ChunkColumn> posX;
+        std::shared_ptr<const ChunkColumn> negZ;
+        std::shared_ptr<const ChunkColumn> posZ;
+        std::shared_ptr<const ChunkColumn> negXnegZ;
+        std::shared_ptr<const ChunkColumn> negXposZ;
+        std::shared_ptr<const ChunkColumn> posXnegZ;
+        std::shared_ptr<const ChunkColumn> posXposZ;
+    };
+
     struct VoxelConfig
     {
         int loadRadius = 8;
@@ -93,6 +106,9 @@ namespace pe::voxel
         void ProcessGenerationResults();
         void ApplyPendingEdits(uint64_t key, ChunkColumn &column);
         void EnqueueColumnMeshing(ColumnState &state);
+        bool NeighborGenerationInProgress(ColumnCoord coord) const;
+        void TryStartColumnMeshing(ColumnState &state);
+        void ProcessPendingMeshing();
         int ProcessReadyMeshUploads(CommandBuffer *cmd, int budget);
         ArenaHandle UploadSectionMesh(CommandBuffer *cmd, ColumnCoord coord, int si, const MeshData &mesh);
         void ReleaseColumn(ColumnState &state);
@@ -100,7 +116,11 @@ namespace pe::voxel
         void ProcessDirtyRemeshResults(CommandBuffer *cmd);
         void RemeshDirtySections(CommandBuffer *cmd);
         void MarkSectionDirty(ColumnCoord coord, int si);
+        void MarkEditDirtySections(ColumnCoord coord, int wx, int y, int wz);
         void RetireSubmittedUpdateCommands(bool all);
+
+        ColumnNeighbors GatherNeighborSnapshots(ColumnCoord coord) const;
+        void RemeshNeighborSeams(ColumnCoord coord);
 
         Scene *m_scene = nullptr;
         VoxelConfig m_cfg{};
