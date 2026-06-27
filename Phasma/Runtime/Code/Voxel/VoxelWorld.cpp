@@ -8,6 +8,7 @@
 #include "Scene/Material.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
+#include "Voxel/NoiseGen.h"
 
 namespace pe::voxel
 {
@@ -29,31 +30,6 @@ namespace pe::voxel
         int ClampInt(int v, int lo, int hi)
         {
             return std::max(lo, std::min(v, hi));
-        }
-
-        ChunkColumn GenerateColumnCpu(ColumnCoord coord, int groundY)
-        {
-            ChunkColumn column(coord);
-            const int fillY = ClampInt(groundY, 0, kWorldHeight);
-            const int topY = fillY - 1;
-
-            for (int lz = 0; lz < kSectionDim; ++lz)
-            {
-                for (int lx = 0; lx < kSectionDim; ++lx)
-                {
-                    for (int wy = 0; wy < fillY; ++wy)
-                    {
-                        BlockId b = kStoneBlock;
-                        if (wy == topY)
-                            b = kGrassBlock;
-                        else if (wy >= topY - 3)
-                            b = kDirtBlock;
-                        column.SetLocal(lx, wy, lz, b);
-                    }
-                }
-            }
-
-            return column;
         }
 
         MeshData MeshSectionCpu(const ChunkColumn &column, const BlockRegistry &registry, int si)
@@ -158,6 +134,11 @@ namespace pe::voxel
         m_cfg.groundY = ClampInt(m_cfg.groundY, 0, kWorldHeight);
         m_anchor = vec3(0.0f);
 
+        // Engine ships a default noise generator; a game keeps its own by calling
+        // SetTerrainGenerator before Create (m_generatorOverridden guards it from this default).
+        if (!m_generatorOverridden)
+            m_generator = std::make_shared<NoiseGen>(m_cfg.groundY);
+
         RegisterDefaultBlocks();
         CreateHostMesh();
 
@@ -186,13 +167,17 @@ namespace pe::voxel
         const int capacityRadius = m_cfg.loadRadius + m_cfg.unloadMargin;
         const int gridDim = capacityRadius * 2 + 1;
         const uint32_t gridSections = static_cast<uint32_t>(gridDim * gridDim * kSectionCount);
-        // Greedy-meshed sections are small: a flat-ground section is ~24 verts / 36 indices, and even
-        // busy terrain stays in the low hundreds. Reserve a generous-but-sane per-section budget - NOT
-        // the theoretical per-block max (4096) - so the shared geometry buffer is not pre-grown by
-        // hundreds of MB for a sparsely-populated grid (Vertex+PositionUvVertex ~= 148 B/vert). A
-        // section that exceeds this budget simply fails to upload (logged); raise it for dense terrain.
-        const uint32_t kVertsPerSection = 256u;
-        const uint32_t kIndicesPerSection = 384u;
+        // Per-section budget for the shared, pre-reserved arena pool (total = gridSections * budget;
+        // cannot grow live without destroying the arena). A flat greedy section is ~24 verts, but
+        // AO-aware merging (fewer merges near edges) + carved cave interiors (lots of new wall faces)
+        // push feature/cave sections to ~1-4k verts, so the pool is sized for that, not the flat case.
+        // Raising this pre-grows the Scene geometry buffer (Vertex+PositionUvVertex ~= 148 B/vert), so
+        // a loadRadius-6 grid reserves ~700 MB at 1024. ponytail: a uniform per-slot reservation
+        // over-provisions the always-empty sky/solid sections; size by expected non-empty fraction (or
+        // grow on unload-pressure) if VRAM matters. A section over budget fails to upload (logged) and
+        // leaves a hole, so lower cave density / loadRadius before dropping this.
+        const uint32_t kVertsPerSection = 1024u;
+        const uint32_t kIndicesPerSection = 1536u;
         const uint32_t vtxCapVertices = gridSections * kVertsPerSection;
         const uint32_t idxCapBytes = gridSections * kIndicesPerSection * static_cast<uint32_t>(sizeof(uint32_t));
 
@@ -444,14 +429,30 @@ namespace pe::voxel
         }
     }
 
+    void VoxelWorld::SetTerrainGenerator(std::shared_ptr<ITerrainGenerator> generator)
+    {
+        m_generator = std::move(generator);
+        m_generatorOverridden = (m_generator != nullptr);
+    }
+
     void VoxelWorld::EnqueueColumnGeneration(ColumnCoord coord)
     {
         ColumnState state{};
         state.coord = coord;
         state.state = ColumnLoadState::Generating;
-        const int groundY = m_cfg.groundY;
-        state.generationFuture = ThreadPool::General.Enqueue([coord, groundY]() -> ChunkColumn
-                                                             { return GenerateColumnCpu(coord, groundY); });
+        // Capture the generator by shared_ptr (not a raw VoxelWorld pointer): Destroy() drops the
+        // generationFuture without waiting, so an in-flight job may outlive Destroy — the shared_ptr
+        // keeps the generator alive until that last job returns. Generators must be thread-safe
+        // (NoiseGen is stateless); workers run Generate() concurrently on distinct columns.
+        std::shared_ptr<ITerrainGenerator> gen = m_generator;
+        state.generationFuture = ThreadPool::General.Enqueue(
+            [coord, gen]() -> ChunkColumn
+            {
+                ChunkColumn column(coord);
+                if (gen)
+                    gen->Generate(column);
+                return column;
+            });
         m_columns.emplace(ColumnKey(coord), std::move(state));
     }
 

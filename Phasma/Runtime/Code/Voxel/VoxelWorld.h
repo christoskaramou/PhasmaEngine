@@ -16,6 +16,7 @@ namespace pe
 namespace pe::voxel
 {
     class VoxelMaterial;
+    class ITerrainGenerator;
 
     struct VoxelConfig
     {
@@ -40,6 +41,10 @@ namespace pe::voxel
                      BlockPos &hit, BlockPos &adjacent, vec3 &normal) const;
         void Update();
         BlockRegistry &Registry();
+        // Override the world's terrain generator. Call before Create(); the engine otherwise
+        // installs a default NoiseGen. Pass nullptr to revert to the default. Generators run on
+        // worker threads, so the implementation must be thread-safe.
+        void SetTerrainGenerator(std::shared_ptr<ITerrainGenerator> generator);
 
     private:
         enum class ColumnLoadState
@@ -99,6 +104,8 @@ namespace pe::voxel
 
         Scene *m_scene = nullptr;
         VoxelConfig m_cfg{};
+        std::shared_ptr<ITerrainGenerator> m_generator; // default NoiseGen, or a game-supplied override
+        bool m_generatorOverridden = false;             // true once SetTerrainGenerator set a non-null gen
         vec3 m_anchor = vec3(0.0f);
         BlockRegistry m_registry;
         GeometryArena m_arena;

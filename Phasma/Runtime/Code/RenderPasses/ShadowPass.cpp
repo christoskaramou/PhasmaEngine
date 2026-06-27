@@ -333,12 +333,30 @@ namespace pe
                 cmd->BindPipeline(passInfo);
                 const auto &gSettings = Settings::Get<SceneSettings>();
                 cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
-                cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
-                cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
                 // TODO: per-cascade light-frustum culling
-                cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(), 0, m_scene->GetMeshCount());
+                // Regular meshes draw from the shared buffer's position stream; voxel arena meshes (tail
+                // slots [arenaSlotBase, meshCount)) live in dedicated voxel buffers, so they cast shadows
+                // via a second draw bound to the voxel position+index buffers (same depth-only pipeline).
+                const uint32_t arenaBase = m_scene->GetArenaSlotBase();
+                const bool hasVoxels = m_scene->HasArenaVoxels() && m_scene->GetVoxelPositionBuffer() &&
+                                       m_scene->GetVoxelIndexBuffer();
+                const uint32_t regularCount = hasVoxels ? arenaBase : m_scene->GetMeshCount();
+
+                cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+                cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
+                if (regularCount > 0)
+                    cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(), 0, regularCount);
+
+                if (hasVoxels)
+                {
+                    cmd->BindIndexBuffer(m_scene->GetVoxelIndexBuffer(), 0);
+                    cmd->BindVertexBuffer(m_scene->GetVoxelPositionBuffer(), 0);
+                    cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(),
+                                             static_cast<size_t>(arenaBase) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
+                                             m_scene->GetMeshCount() - arenaBase);
+                }
                 cmd->EndPass();
             }
         }

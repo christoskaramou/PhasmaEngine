@@ -392,6 +392,13 @@ namespace pe
         // Refill this frame's LOD params UBO from SceneSettings and return it (bound at CullingCS binding 16).
         Buffer *UpdateLodUniforms(uint32_t frame);
         Buffer *GetBuffer() { return m_buffer; }
+        // Voxel arena geometry lives in dedicated voxel-owned buffers (NOT the shared m_buffer), so
+        // it can be packed/grown independently. Vertex feeds the voxel GBuffer draw, Position feeds the
+        // voxel shadow draw, Index is shared by both. vertexOffset/firstIndex in the arena's indirect
+        // commands are base-0 relative to these buffers.
+        Buffer *GetVoxelVertexBuffer() { return m_voxelVertexBuf; }
+        Buffer *GetVoxelPositionBuffer() { return m_voxelPositionBuf; }
+        Buffer *GetVoxelIndexBuffer() { return m_voxelIndexBuf; }
         Buffer *GetLightUniform(uint32_t frame) { return m_lightUniforms[frame]; }
         Buffer *GetLightStorage(uint32_t frame) { return m_lightStorageBuffers[frame]; }
         std::vector<SceneDirectionalLight> &GetDirectionalLights() { return m_directionalLights; }
@@ -662,6 +669,9 @@ namespace pe
 
         // GPU buffers
         Buffer *m_buffer = nullptr;
+        Buffer *m_voxelVertexBuf = nullptr;   // dedicated voxel GBuffer vertex stream (Vertex)
+        Buffer *m_voxelPositionBuf = nullptr; // dedicated voxel shadow position stream (PositionUvVertex)
+        Buffer *m_voxelIndexBuf = nullptr;    // dedicated voxel index buffer (uint32)
         std::vector<Buffer *> m_storages;
         std::vector<Buffer *> m_storagesDevice;
         std::vector<Buffer *> m_cullingCountersBuffers;

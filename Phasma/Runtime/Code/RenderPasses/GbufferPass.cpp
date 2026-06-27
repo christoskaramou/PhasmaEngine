@@ -265,7 +265,9 @@ namespace pe
             const bool hasVoxelFrag = m_voxelPassInfo && m_voxelPassInfo->pFragShader;
             Buffer *voxelIndirect = m_scene->GetIndirectVoxels(frame);
             const bool hasVoxelIndirect = voxelIndirect != nullptr;
-            const bool voxelDrawReady = hasArenaVoxels && hasVoxelAtlas && hasVoxelFrag && hasVoxelIndirect;
+            const bool hasVoxelGeometry = m_scene->GetVoxelVertexBuffer() && m_scene->GetVoxelIndexBuffer();
+            const bool voxelDrawReady =
+                hasArenaVoxels && hasVoxelAtlas && hasVoxelFrag && hasVoxelIndirect && hasVoxelGeometry;
 
             cmd->BeginPass(7, m_attachments.data(), "GbufferOpaquePass");
             cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
@@ -302,8 +304,8 @@ namespace pe
             if (voxelDrawReady)
             {
                 cmd->BindPipeline(*m_voxelPassInfo);
-                cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
-                cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
+                cmd->BindIndexBuffer(m_scene->GetVoxelIndexBuffer(), 0);
+                cmd->BindVertexBuffer(m_scene->GetVoxelVertexBuffer(), 0);
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
 
