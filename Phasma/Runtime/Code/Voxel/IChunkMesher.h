@@ -20,14 +20,15 @@ namespace pe::voxel
     };
 
     // Section-local coords 0..15; MAY be queried at -1..16 to reach neighbor sections;
-    // returns the neighbor block or air.
-    using BlockSampler = std::function<BlockId(int x, int y, int z)>;
+    // returns the neighbor block or air. Function pointer + ctx avoids std::function heap
+    // traffic on the meshing hot path (each section job calls this millions of times).
+    using BlockSampleFn = BlockId (*)(void *ctx, int x, int y, int z);
 
     class IChunkMesher
     {
     public:
         virtual ~IChunkMesher() = default;
         // lod 0 = full; lod N samples stride 2^N and merges (Phase 1 ships lod 0).
-        virtual MeshData Mesh(const BlockSampler &sample, const BlockRegistry &reg, int lod) = 0;
+        virtual MeshData Mesh(BlockSampleFn sample, void *sampleCtx, const BlockRegistry &reg, int lod) = 0;
     };
 } // namespace pe::voxel

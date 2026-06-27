@@ -45,6 +45,8 @@ namespace pe
             std::vector<PassInfo *> passInfos{m_passInfo.get()};
             if (m_voxelPassInfo)
                 passInfos.push_back(m_voxelPassInfo.get());
+            if (m_cullPassInfo)
+                passInfos.push_back(m_cullPassInfo.get());
             return passInfos;
         }
 
@@ -65,6 +67,7 @@ namespace pe
         Sampler *m_sampler = nullptr;
         Scene *m_scene = nullptr;
         std::shared_ptr<PassInfo> m_voxelPassInfo; // packed-voxel shadow caster pipeline
+        std::shared_ptr<PassInfo> m_cullPassInfo;  // per-cascade light-frustum compact
 
         std::vector<std::array<vec4, 6>> m_cascadePlanes; // [cascade]
     };

@@ -1882,6 +1882,125 @@ namespace pe
         }
     }
 
+    void Scene::DispatchShadowCull(CommandBuffer *cmd, PassInfo *passInfo, const vec4 frustumPlanes[6])
+    {
+        if (!passInfo || !m_indirectAll || m_meshCount == 0)
+            return;
+
+        const uint32_t frame = RHII.GetFrameIndex();
+        const bool needsIndirectCountFallback = !RHII.GetCaps().indirectCount;
+        const uint64_t indirectSize = static_cast<uint64_t>(m_indirectCapacity) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
+        const uint64_t indirectAllSize = static_cast<uint64_t>(m_indirectAll->Size());
+        const uint64_t countersSize = 2 * sizeof(uint32_t);
+
+        auto makeBufferBarrier = [](Buffer *buffer, PeBarrierSync stageMask, PeBarrierAccess accessMask, uint64_t size)
+        {
+            BufferBarrierInfo barrier{};
+            barrier.buffer = buffer;
+            barrier.stageMask = stageMask;
+            barrier.accessMask = accessMask;
+            barrier.size = size;
+            barrier.offset = 0;
+            return barrier;
+        };
+
+        {
+            PE_PROFILE_SCOPE("ShadowCull Fill Buffers");
+            cmd->FillBuffer(m_shadowCullCounters[frame], 0, countersSize, 0);
+            if (needsIndirectCountFallback)
+            {
+                cmd->FillBuffer(m_shadowIndirectRegular[frame], 0, indirectSize, 0);
+                cmd->FillBuffer(m_shadowIndirectVoxels[frame], 0, indirectSize, 0);
+            }
+        }
+
+        {
+            PE_PROFILE_SCOPE("ShadowCull Compute Access Barriers");
+            std::vector<BufferBarrierInfo> barriers;
+            barriers.reserve(5);
+            if (indirectAllSize > 0)
+            {
+                barriers.push_back(makeBufferBarrier(m_indirectAll,
+                                                     PE_STAGE_COMPUTE_SHADER,
+                                                     PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ,
+                                                     indirectAllSize));
+            }
+            const PeBarrierAccess rw = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE;
+            barriers.push_back(makeBufferBarrier(m_shadowCullCounters[frame], PE_STAGE_COMPUTE_SHADER, rw, countersSize));
+            barriers.push_back(makeBufferBarrier(m_shadowIndirectRegular[frame], PE_STAGE_COMPUTE_SHADER, rw, indirectSize));
+            barriers.push_back(makeBufferBarrier(m_shadowIndirectVoxels[frame], PE_STAGE_COMPUTE_SHADER, rw, indirectSize));
+            cmd->BufferBarriers(barriers);
+        }
+
+        cmd->BindPipeline(*passInfo);
+
+        Descriptor *set = nullptr;
+        {
+            PE_PROFILE_SCOPE("ShadowCull Descriptor Update");
+            const auto &sets = passInfo->GetDescriptors(frame);
+            set = sets[0];
+            set->SetBuffer(0, m_indirectAll);
+            set->SetBuffer(1, GetMeshConstants());
+            set->SetBuffer(2, m_shadowCullCounters[frame]);
+            set->SetBuffer(3, m_shadowIndirectRegular[frame]);
+            set->SetBuffer(4, m_shadowIndirectVoxels[frame]);
+            set->SetBuffer(12, GetUniforms(frame));
+            set->Update();
+        }
+
+        cmd->BindDescriptors(1, &set);
+
+        struct PushConstants
+        {
+            uint32_t maxDrawCount;
+            uint32_t arenaSlotBase;
+            uint32_t pad0[2];
+            alignas(16) vec4 planes[6];
+        } constants{};
+        static_assert(sizeof(PushConstants) == 112, "ShadowCull push constants must match ShadowCullCS.hlsl");
+        constants.maxDrawCount = m_meshCount;
+        // No arena: m_arenaSlotBase stays 0 — treat all draws as regular (idx >= meshCount is never true).
+        constants.arenaSlotBase = HasArenaVoxels() ? m_arenaSlotBase : m_meshCount;
+        for (int i = 0; i < 6; ++i)
+            constants.planes[i] = frustumPlanes[i];
+
+        cmd->SetConstants(constants);
+        cmd->PushConstants();
+        cmd->Dispatch((m_meshCount + 63) / 64, 1, 1);
+
+        {
+            PE_PROFILE_SCOPE("ShadowCull Record Compute Writes");
+            auto recordComputeWrite = [](Buffer *buffer)
+            {
+                BufferTrackInfo &ti = buffer->GetTrackInfo();
+                ti.stageMask = PE_STAGE_COMPUTE_SHADER;
+                ti.accessMask = PE_ACCESS_SHADER_STORAGE_WRITE;
+            };
+            recordComputeWrite(m_shadowCullCounters[frame]);
+            recordComputeWrite(m_shadowIndirectRegular[frame]);
+            recordComputeWrite(m_shadowIndirectVoxels[frame]);
+        }
+
+        {
+            PE_PROFILE_SCOPE("ShadowCull Final Indirect Barriers");
+            std::vector<BufferBarrierInfo> barriers;
+            barriers.reserve(3);
+            barriers.push_back(makeBufferBarrier(m_shadowIndirectRegular[frame],
+                                                 PE_STAGE_DRAW_INDIRECT,
+                                                 PE_ACCESS_INDIRECT_COMMAND_READ,
+                                                 indirectSize));
+            barriers.push_back(makeBufferBarrier(m_shadowIndirectVoxels[frame],
+                                                 PE_STAGE_DRAW_INDIRECT,
+                                                 PE_ACCESS_INDIRECT_COMMAND_READ,
+                                                 indirectSize));
+            barriers.push_back(makeBufferBarrier(m_shadowCullCounters[frame],
+                                                 PE_STAGE_DRAW_INDIRECT,
+                                                 PE_ACCESS_INDIRECT_COMMAND_READ,
+                                                 countersSize));
+            cmd->BufferBarriers(barriers);
+        }
+    }
+
     void Scene::UpdateGeometry()
     {
         // Catch up previousWorldMatrix for motion vectors (runs every frame,

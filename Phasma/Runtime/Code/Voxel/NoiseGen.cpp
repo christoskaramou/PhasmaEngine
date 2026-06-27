@@ -34,11 +34,13 @@ namespace pe::voxel
         bool CarveCave(int wx, int wy, int wz)
         {
             constexpr float kCaveFreq = 1.0f / 22.0f;
-            // Normalized 2-octave Perlin rarely exceeds ~0.6, so this threshold sets cave density:
-            // ~0.25 carves the upper ~10-15% of the field = findable connected caverns; raise it
-            // toward 0.4 for sparser caves, lower toward 0.15 for a more hollowed world.
             constexpr float kCaveThreshold = 0.25f;
-            return Fbm3D(vec3((float)wx, (float)wy, (float)wz), 2, kCaveFreq) > kCaveThreshold;
+#if defined(PE_DEBUG)
+            constexpr int kCaveOctaves = 1;
+#else
+            constexpr int kCaveOctaves = 2;
+#endif
+            return Fbm3D(vec3((float)wx, (float)wy, (float)wz), kCaveOctaves, kCaveFreq) > kCaveThreshold;
         }
     } // namespace
 
