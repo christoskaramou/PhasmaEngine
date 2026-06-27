@@ -8,8 +8,15 @@ namespace pe::voxel
 {
     struct MeshData
     {
-        std::vector<Vertex> vertices;
-        std::vector<uint32_t> indices;
+        std::vector<VoxelVertex> vertices; // packed 8 B/vert (see VoxelVertex bit layout)
+        std::vector<uint16_t> indices;     // uint16: a 16^3 section maxes at ~49k verts (< 65536)
+        // Tight section-local bounds (0..kSectionDim) of the geometry. The mesher re-bases packed
+        // positions to localMin so aabbMin (= sectionOrigin + localMin) doubles as the VS origin while
+        // the stored AABB hugs the real surfaces — without this a sparse cave section keeps the full
+        // 16^3 cube and its nearest corner sits in air, so Hi-Z occlusion never culls it. Full-cube
+        // default keeps any non-greedy mesher conservative.
+        uint32_t localMin[3] = {0, 0, 0};
+        uint32_t localMax[3] = {(uint32_t)kSectionDim, (uint32_t)kSectionDim, (uint32_t)kSectionDim};
     };
 
     // Section-local coords 0..15; MAY be queried at -1..16 to reach neighbor sections;

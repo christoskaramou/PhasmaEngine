@@ -38,6 +38,15 @@ namespace pe
         [[nodiscard]] float GetCascadeTexelSizeWorld(uint32_t cascade) const;
         void SetScene(Scene *scene) { m_scene = scene; }
         void ClearDepths(CommandBuffer *cmd);
+        // m_voxelPassInfo is the packed-voxel shadow caster (own VS); the framework must see it for
+        // shader-reload / pipeline lifecycle alongside the base m_passInfo.
+        std::vector<PassInfo *> GetPassInfos() noexcept override
+        {
+            std::vector<PassInfo *> passInfos{m_passInfo.get()};
+            if (m_voxelPassInfo)
+                passInfos.push_back(m_voxelPassInfo.get());
+            return passInfos;
+        }
 
     private:
         friend class LightOpaquePass;
@@ -55,6 +64,7 @@ namespace pe
         std::vector<Image *> m_textures{};
         Sampler *m_sampler = nullptr;
         Scene *m_scene = nullptr;
+        std::shared_ptr<PassInfo> m_voxelPassInfo; // packed-voxel shadow caster pipeline
 
         std::vector<std::array<vec4, 6>> m_cascadePlanes; // [cascade]
     };

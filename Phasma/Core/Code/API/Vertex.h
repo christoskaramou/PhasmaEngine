@@ -29,6 +29,19 @@ namespace pe
         float weights[4];
     };
 
+    // Packed voxel vertex (8 B). Reflection derives the input layout (2x R32_UINT, stride 8) from the
+    // voxel VS input struct, so both the voxel GBuffer VS and the voxel shadow VS bind this directly.
+    // Bit layout — MUST match VoxelGBufferVS.hlsl / VoxelShadowVS.hlsl unpack:
+    //   w0: posX[0:5] posY[5:10] posZ[10:15] normalId[15:18] ao[18:20]   (pos is section-local 0..16)
+    //   w1: tile[0:16] u[16:24] v[24:32]
+    // World position = constants[id].aabbMin (== section origin) + section-local pos. Section-local
+    // positions fit 5 bits because kSectionDim==16 and voxel meshing is lod 0 (stride 1).
+    struct VoxelVertex
+    {
+        uint32_t w0;
+        uint32_t w1;
+    };
+
     inline void FillVertexPosition(Vertex &vertex, float x, float y, float z)
     {
         vertex.position[0] = x;

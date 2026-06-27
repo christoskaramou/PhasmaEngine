@@ -21,6 +21,7 @@ namespace pe
         OcclusionCulling, // two-phase Hi-Z: phase-2 cull (CullPhase2)
         DepthLate,
         GBufferOpaque,
+        VoxelHiZ, // temporal voxel occlusion: build voxel-inclusive Hi-Z from post-G-buffer depth
         SSAO,
         ForwardPlusLightCulling,
         LightOpaque,
@@ -60,6 +61,7 @@ namespace pe
         IRenderPassComponent *occlusionCulling = nullptr; // two-phase Hi-Z: phase-2 cull
         IRenderPassComponent *depthLate = nullptr;
         IRenderPassComponent *gbufferOpaque = nullptr;
+        IRenderPassComponent *voxelHiZPyramid = nullptr; // temporal voxel occlusion pyramid
         IRenderPassComponent *ssao = nullptr;
         IRenderPassComponent *forwardPlusLightCulling = nullptr;
         IRenderPassComponent *lightOpaque = nullptr;

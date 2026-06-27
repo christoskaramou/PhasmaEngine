@@ -33,7 +33,7 @@ struct PushConstants
     float cameraPositionX;
     float cameraPositionY;
     float cameraPositionZ;
-    float pad0;
+    uint enableVoxelOcclusion; // VOXEL_HIZ: 1 when a voxel Hi-Z pyramid (binding 13/14) is bound
     float4 frustumPlanes[6];
 };
 [[vk::push_constant]] PushConstants pc;
@@ -92,9 +92,10 @@ bool AABBInFrustum(float3 aabbMin, float3 aabbMax)
     return true;
 }
 
-#ifdef HIZ_OCCLUSION
-// Hi-Z occlusion test (Phase 2c). Compiled only into the OcclusionCullingPass variant;
-// the frustum-only CullingPass shader is unchanged. Reverse-Z: device z near = 1, far = 0,
+#if defined(HIZ_OCCLUSION) || defined(VOXEL_HIZ)
+// Hi-Z occlusion test. Used by the OcclusionCullingPass (HIZ_OCCLUSION, regular opaque phase 2) and
+// the frustum CullingPass voxel emit (VOXEL_HIZ, tests voxel chunks against last frame's voxel-
+// inclusive Hi-Z). Reverse-Z: device z near = 1, far = 0,
 // so the pyramid stores the per-tile MINIMUM (farthest of the nearest surfaces) and an
 // object is occluded when even its nearest corner is behind that minimum.
 [[vk::binding(13, 0)]] Texture2D<float> HiZPyramid;
@@ -315,6 +316,12 @@ uint WaveAppend(uint counterIndex, bool emit)
     // can fire alongside any type. Evaluated for every active lane (no early branch) so the
     // wave-coalesced appends below see the full ballot for each bucket.
     bool emitVoxel = isVoxel;
+#ifdef VOXEL_HIZ
+    // Temporal Hi-Z: cull voxel chunks occluded in last frame's voxel-inclusive depth pyramid.
+    // Only voxels are tested here (regular opaque occlusion is owned by the two-phase passes).
+    if (emitVoxel && pc.enableVoxelOcclusion != 0u && AABBOccluded(aabbMin, aabbMax))
+        emitVoxel = false;
+#endif
     bool emitOpaqueSS = !isVoxel && (type == 1) && !doubleSided;
     bool emitOpaqueDS = !isVoxel && (type == 1) && doubleSided;
     bool emitAlphaCutSS = !isVoxel && (type == 2) && !doubleSided;

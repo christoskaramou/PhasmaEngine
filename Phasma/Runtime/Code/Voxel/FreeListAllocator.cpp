@@ -84,4 +84,24 @@ namespace pe::voxel
     {
         return m_used;
     }
+
+    void FreeListAllocator::Grow(uint32_t newCapacityBytes)
+    {
+        if (newCapacityBytes <= m_capacity)
+            return;
+        const uint32_t added = newCapacityBytes - m_capacity;
+        // Coalesce with a trailing free span [.., m_capacity); otherwise append a fresh tail span.
+        if (!m_free.empty())
+        {
+            Span &last = m_free.back();
+            if (last.offset + last.size == m_capacity)
+            {
+                last.size += added;
+                m_capacity = newCapacityBytes;
+                return;
+            }
+        }
+        m_free.push_back({m_capacity, added});
+        m_capacity = newCapacityBytes;
+    }
 } // namespace pe::voxel

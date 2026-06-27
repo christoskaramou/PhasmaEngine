@@ -10,11 +10,10 @@ namespace pe::voxel
         if (!m_scene)
             return;
 
-        // ReserveArenaCapacity derives the shared vertex capacity from max(vtx/sizeof(Vertex),
-        // posUv/sizeof(PositionUvVertex)); pass both headrooms as vtxCapVertices so they agree.
-        const uint32_t vtxHeadroomBytes = vtxCapVertices * static_cast<uint32_t>(sizeof(Vertex));
-        const uint32_t posUvHeadroomBytes = vtxCapVertices * static_cast<uint32_t>(sizeof(PositionUvVertex));
-        m_scene->ReserveArenaCapacity(vtxHeadroomBytes, idxCapBytes, posUvHeadroomBytes, maxSections);
+        // Single packed vertex stream now (8 B/vert). ReserveArenaCapacity sizes the dedicated voxel
+        // vertex buffer from vtxHeadroomBytes / sizeof(VoxelVertex); the posUv headroom is unused.
+        const uint32_t vtxHeadroomBytes = vtxCapVertices * static_cast<uint32_t>(sizeof(VoxelVertex));
+        m_scene->ReserveArenaCapacity(vtxHeadroomBytes, idxCapBytes, 0u, maxSections);
 
         m_vertexBase = m_scene->GetArenaVertexBase();
         m_idxByteBase = m_scene->GetArenaIdxByteBase();
@@ -50,7 +49,7 @@ namespace pe::voxel
             PE_WARN("GeometryArena::Upload: vertex arena OOM (need %u, used %u)", vertCount, m_vtxAlloc->Used());
             return invalid;
         }
-        const uint32_t idxBytes = idxCount * static_cast<uint32_t>(sizeof(uint32_t));
+        const uint32_t idxBytes = idxCount * static_cast<uint32_t>(sizeof(uint16_t));
         const uint32_t idxOff = m_idxAlloc->Alloc(idxBytes);
         if (idxOff == FreeListAllocator::kInvalid)
         {
@@ -62,40 +61,19 @@ namespace pe::voxel
         const uint32_t vertexIndex = m_vertexBase + vtxOff;
         const size_t idxByteOffset = m_idxByteBase + idxOff;
 
-        // Bake the section origin into vertex positions (all sections share one identity host node) and
-        // derive the depth/shadow PositionUvVertex stream + a world-space AABB for culling.
-        std::vector<Vertex> baked = mesh.vertices;
-        std::vector<PositionUvVertex> posUv(vertCount); // value-initialized -> joints/weights zeroed
-
-        vec3 mn(baked[0].position[0] + sectionOrigin.x,
-                baked[0].position[1] + sectionOrigin.y,
-                baked[0].position[2] + sectionOrigin.z);
-        vec3 mx = mn;
-        for (uint32_t i = 0; i < vertCount; ++i)
-        {
-            Vertex &v = baked[i];
-            v.position[0] += sectionOrigin.x;
-            v.position[1] += sectionOrigin.y;
-            v.position[2] += sectionOrigin.z;
-
-            posUv[i].position[0] = v.position[0];
-            posUv[i].position[1] = v.position[1];
-            posUv[i].position[2] = v.position[2];
-            posUv[i].uv[0] = v.uv[0];
-            posUv[i].uv[1] = v.uv[1];
-
-            mn.x = v.position[0] < mn.x ? v.position[0] : mn.x;
-            mn.y = v.position[1] < mn.y ? v.position[1] : mn.y;
-            mn.z = v.position[2] < mn.z ? v.position[2] : mn.z;
-            mx.x = v.position[0] > mx.x ? v.position[0] : mx.x;
-            mx.y = v.position[1] > mx.y ? v.position[1] : mx.y;
-            mx.z = v.position[2] > mx.z ? v.position[2] : mx.z;
-        }
+        // Tight section bounds: the mesher re-bases packed positions to localMin, so aabbMin
+        // (= sectionOrigin + localMin) still serves as the VS origin (world = aabbMin + local), while
+        // the box hugs the real surfaces. This is what lets Hi-Z occlusion cull sparse cave/overhang
+        // sections — the old full 16^3 cube's nearest corner sat in empty air and never tested occluded.
         AABB box;
-        box.min = mn;
-        box.max = mx;
+        box.min = vec3(sectionOrigin.x + static_cast<float>(mesh.localMin[0]),
+                       sectionOrigin.y + static_cast<float>(mesh.localMin[1]),
+                       sectionOrigin.z + static_cast<float>(mesh.localMin[2]));
+        box.max = vec3(sectionOrigin.x + static_cast<float>(mesh.localMax[0]),
+                       sectionOrigin.y + static_cast<float>(mesh.localMax[1]),
+                       sectionOrigin.z + static_cast<float>(mesh.localMax[2]));
 
-        const int slot = m_scene->AddArenaMesh(vertexIndex, idxByteOffset, baked, posUv, mesh.indices,
+        const int slot = m_scene->AddArenaMesh(vertexIndex, idxByteOffset, mesh.vertices, mesh.indices,
                                                box, hostDataOffset, runtime, cmd);
         if (slot < 0)
         {
@@ -191,6 +169,37 @@ namespace pe::voxel
             m_entries.erase(id);
         }
         m_pendingRelease.clear();
+    }
+
+    void GeometryArena::GrowIfNeeded()
+    {
+        if (!m_scene || !m_vtxAlloc || !m_idxAlloc)
+            return;
+
+        const uint32_t vtxCap = m_vtxAlloc->Capacity(); // vertices
+        const uint32_t idxCap = m_idxAlloc->Capacity(); // bytes
+        // Grow at 80% used so one frame's worth of uploads can't spill past capacity before the next
+        // check (uploadBudgetPerFrame * worst-section-verts << 20% of the pool at any sane radius).
+        // ponytail: 80% + 1.5x is a fixed heuristic; tune if a frame can ever exceed the 20% headroom.
+        const bool vtxPressure =
+            vtxCap > 0 && static_cast<uint64_t>(m_vtxAlloc->Used()) * 100u >= static_cast<uint64_t>(vtxCap) * 80u;
+        const bool idxPressure =
+            idxCap > 0 && static_cast<uint64_t>(m_idxAlloc->Used()) * 100u >= static_cast<uint64_t>(idxCap) * 80u;
+        if (!vtxPressure && !idxPressure)
+            return;
+
+        const uint32_t newVtxCap = vtxPressure ? vtxCap + vtxCap / 2u + 1u : vtxCap;
+        const uint32_t newIdxCap = idxPressure ? idxCap + idxCap / 2u + 1u : idxCap;
+
+        if (m_scene->GrowArenaVoxelCapacity(newVtxCap, static_cast<size_t>(newIdxCap)))
+        {
+            if (vtxPressure)
+                m_vtxAlloc->Grow(newVtxCap);
+            if (idxPressure)
+                m_idxAlloc->Grow(newIdxCap);
+            PE_INFO("GeometryArena: grew voxel pool (vtx cap %u->%u verts, idx cap %u->%u bytes)", vtxCap,
+                    m_vtxAlloc->Capacity(), idxCap, m_idxAlloc->Capacity());
+        }
     }
 
     void GeometryArena::Destroy()

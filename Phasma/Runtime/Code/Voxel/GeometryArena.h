@@ -31,8 +31,9 @@ namespace pe::voxel
         void Init(Scene *scene, uint32_t vtxCapVertices, uint32_t idxCapBytes, uint32_t maxSections);
 
         // Record an upload into `cmd` (no CPU stall — caller submits before the cull dispatch).
-        // sectionOrigin is baked into vertex positions so every section shares one identity host node
-        // (hostDataOffset = that node's transform-storage offset). Returns an invalid handle on OOM.
+        // Verts are packed section-local; sectionOrigin becomes the slot's AABB min, which the voxel VS
+        // adds back as the world origin. Every section shares one identity host node (hostDataOffset =
+        // that node's transform-storage offset). Returns an invalid handle on OOM.
         ArenaHandle Upload(CommandBuffer *cmd, const MeshData &mesh, const vec3 &sectionOrigin,
                            uint32_t hostDataOffset, const MeshRuntime &runtime);
 
@@ -43,6 +44,11 @@ namespace pe::voxel
         // Per-frame, with the frame command buffer: retire matured ranges, then process queued
         // removals (records the swap-removes into `cmd`).
         void Update(CommandBuffer *cmd);
+
+        // Grow the dedicated voxel buffers when a free list crosses its high-water mark, so dense
+        // sections (caves/AO) never OOM into terrain holes. Drains the GPU (WaitIdle) — call only at a
+        // safe point with no voxel/render cmd recording in flight (top of VoxelWorld::Update).
+        void GrowIfNeeded();
 
         void Destroy();
 

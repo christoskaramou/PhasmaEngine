@@ -1477,7 +1477,7 @@ namespace pe
             float cameraPositionX;
             float cameraPositionY;
             float cameraPositionZ;
-            float pad0;
+            uint32_t enableVoxelOcclusion; // VOXEL_HIZ: 1 when a voxel Hi-Z pyramid is bound (13/14)
             alignas(16) vec4 frustumPlanes[6];
         } constants{};
         static_assert(offsetof(PushConstants, frustumPlanes) == 32, "PushConstants frustum planes must match std430 layout");
@@ -1489,6 +1489,10 @@ namespace pe
             Camera *camera = m_cameras.empty() ? nullptr : m_cameras[0];
             bool frustumCulling = Settings::Get<SceneSettings>().frustum_culling && camera;
             constants.enableFrustumCulling = frustumCulling ? 1u : 0u;
+            // VOXEL_HIZ (frustum CullingPass only): occlusion-test the voxel emit when a voxel-inclusive
+            // Hi-Z pyramid + its matching (previous-frame) view-proj UBO were supplied. Ignored by the
+            // PHASE1/2 shader variants (the field is just a renamed pad there).
+            constants.enableVoxelOcclusion = (hiZPyramid && occlusionData) ? 1u : 0u;
             if (camera)
             {
                 vec3 camPos = camera->GetPosition();
@@ -1807,7 +1811,7 @@ namespace pe
             float cameraPositionX;
             float cameraPositionY;
             float cameraPositionZ;
-            float pad0;
+            uint32_t enableVoxelOcclusion; // VOXEL_HIZ: 1 when a voxel Hi-Z pyramid is bound (13/14)
             alignas(16) vec4 frustumPlanes[6];
         } constants{};
         static_assert(sizeof(PushConstants) == 128, "PushConstants must match CullingCS.hlsl");
@@ -1817,6 +1821,10 @@ namespace pe
             Camera *camera = m_cameras.empty() ? nullptr : m_cameras[0];
             bool frustumCulling = Settings::Get<SceneSettings>().frustum_culling && camera;
             constants.enableFrustumCulling = frustumCulling ? 1u : 0u;
+            // VOXEL_HIZ (frustum CullingPass only): occlusion-test the voxel emit when a voxel-inclusive
+            // Hi-Z pyramid + its matching (previous-frame) view-proj UBO were supplied. Ignored by the
+            // PHASE1/2 shader variants (the field is just a renamed pad there).
+            constants.enableVoxelOcclusion = (hiZPyramid && occlusionData) ? 1u : 0u;
             if (camera)
             {
                 vec3 camPos = camera->GetPosition();

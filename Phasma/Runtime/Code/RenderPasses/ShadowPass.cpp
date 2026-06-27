@@ -65,6 +65,21 @@ namespace pe
         m_passInfo->depthBiasClamp = Settings::Get<SceneSettings>().depth_bias[1];
         m_passInfo->depthBiasSlopeFactor = Settings::Get<SceneSettings>().depth_bias[2];
         m_passInfo->Update();
+
+        // Packed-voxel shadow caster: same depth-only state, but its VS unpacks position from the
+        // packed voxel vertex stream (the stock ShadowsVS expects PositionUvVertex and cannot read it).
+        if (!m_voxelPassInfo)
+            m_voxelPassInfo = std::make_shared<PassInfo>();
+        m_voxelPassInfo->name = "shadows_voxel_pipeline";
+        m_voxelPassInfo->pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Voxel/VoxelShadowVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
+        m_voxelPassInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR, PE_DYNAMIC_STATE_DEPTH_BIAS};
+        m_voxelPassInfo->cullMode = PE_CULL_MODE_NONE;
+        m_voxelPassInfo->depthFormat = RHII.GetDepthFormat();
+        m_voxelPassInfo->depthBiasEnable = true;
+        m_voxelPassInfo->depthBiasConstantFactor = Settings::Get<SceneSettings>().depth_bias[0];
+        m_voxelPassInfo->depthBiasClamp = Settings::Get<SceneSettings>().depth_bias[1];
+        m_voxelPassInfo->depthBiasSlopeFactor = Settings::Get<SceneSettings>().depth_bias[2];
+        m_voxelPassInfo->Update();
     }
 
     void ShadowPass::CreateUniforms(CommandBuffer *cmd)
@@ -152,6 +167,20 @@ namespace pe
                 setUniforms->SetBuffer(0, scene.GetUniforms(frame));
                 setUniforms->SetBuffer(1, scene.GetMeshConstants());
                 setUniforms->Update();
+
+                // Same data/constants for the packed-voxel shadow pipeline (its VS reads the node
+                // matrices from `data` and the section origin from Mesh_Constants).
+                if (m_voxelPassInfo)
+                {
+                    const auto &vsets = m_voxelPassInfo->GetDescriptors(frame);
+                    if (!vsets.empty() && vsets[0])
+                    {
+                        Descriptor *voxelUniforms = vsets[0];
+                        voxelUniforms->SetBuffer(0, scene.GetUniforms(frame));
+                        voxelUniforms->SetBuffer(1, scene.GetMeshConstants());
+                        voxelUniforms->Update();
+                    }
+                }
             }
         }
     }
@@ -337,11 +366,12 @@ namespace pe
                 cmd->PushConstants();
                 // TODO: per-cascade light-frustum culling
                 // Regular meshes draw from the shared buffer's position stream; voxel arena meshes (tail
-                // slots [arenaSlotBase, meshCount)) live in dedicated voxel buffers, so they cast shadows
-                // via a second draw bound to the voxel position+index buffers (same depth-only pipeline).
+                // slots [arenaSlotBase, meshCount)) live in the dedicated PACKED voxel buffer, so they
+                // cast shadows via a second draw on a packed-aware shadow pipeline (its VS unpacks pos).
                 const uint32_t arenaBase = m_scene->GetArenaSlotBase();
-                const bool hasVoxels = m_scene->HasArenaVoxels() && m_scene->GetVoxelPositionBuffer() &&
-                                       m_scene->GetVoxelIndexBuffer();
+                const bool hasVoxels = m_scene->HasArenaVoxels() && m_scene->GetVoxelVertexBuffer() &&
+                                       m_scene->GetVoxelIndexBuffer() && m_voxelPassInfo &&
+                                       m_voxelPassInfo->pVertShader;
                 const uint32_t regularCount = hasVoxels ? arenaBase : m_scene->GetMeshCount();
 
                 cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
@@ -351,8 +381,12 @@ namespace pe
 
                 if (hasVoxels)
                 {
-                    cmd->BindIndexBuffer(m_scene->GetVoxelIndexBuffer(), 0);
-                    cmd->BindVertexBuffer(m_scene->GetVoxelPositionBuffer(), 0);
+                    cmd->BindPipeline(*m_voxelPassInfo);
+                    cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
+                    cmd->SetConstants(pushConstants);
+                    cmd->PushConstants();
+                    cmd->BindIndexBuffer(m_scene->GetVoxelIndexBuffer(), 0, PE_INDEX_TYPE_UINT16);
+                    cmd->BindVertexBuffer(m_scene->GetVoxelVertexBuffer(), 0);
                     cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(),
                                              static_cast<size_t>(arenaBase) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
                                              m_scene->GetMeshCount() - arenaBase);

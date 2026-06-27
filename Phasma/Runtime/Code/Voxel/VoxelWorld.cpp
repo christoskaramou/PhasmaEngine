@@ -167,19 +167,15 @@ namespace pe::voxel
         const int capacityRadius = m_cfg.loadRadius + m_cfg.unloadMargin;
         const int gridDim = capacityRadius * 2 + 1;
         const uint32_t gridSections = static_cast<uint32_t>(gridDim * gridDim * kSectionCount);
-        // Per-section budget for the shared, pre-reserved arena pool (total = gridSections * budget;
-        // cannot grow live without destroying the arena). A flat greedy section is ~24 verts, but
-        // AO-aware merging (fewer merges near edges) + carved cave interiors (lots of new wall faces)
-        // push feature/cave sections to ~1-4k verts, so the pool is sized for that, not the flat case.
-        // Raising this pre-grows the Scene geometry buffer (Vertex+PositionUvVertex ~= 148 B/vert), so
-        // a loadRadius-6 grid reserves ~700 MB at 1024. ponytail: a uniform per-slot reservation
-        // over-provisions the always-empty sky/solid sections; size by expected non-empty fraction (or
-        // grow on unload-pressure) if VRAM matters. A section over budget fails to upload (logged) and
-        // leaves a hole, so lower cave density / loadRadius before dropping this.
-        const uint32_t kVertsPerSection = 1024u;
-        const uint32_t kIndicesPerSection = 1536u;
+        // MODEST initial per-section budget for the dedicated voxel pool. The arena now GROWS on
+        // pressure (GeometryArena::GrowIfNeeded, 80% -> 1.5x), so this only sizes the initial
+        // reservation, not the worst case: dense cave/AO sections no longer OOM into holes, they trigger
+        // a grow. Packed verts are 8 B (VoxelVertex), so a loadRadius-6 grid starts at ~tens of MB.
+        // A flat greedy section is ~24 verts; 256 covers light features before the first grow kicks in.
+        const uint32_t kVertsPerSection = 256u;
+        const uint32_t kIndicesPerSection = 384u;
         const uint32_t vtxCapVertices = gridSections * kVertsPerSection;
-        const uint32_t idxCapBytes = gridSections * kIndicesPerSection * static_cast<uint32_t>(sizeof(uint32_t));
+        const uint32_t idxCapBytes = gridSections * kIndicesPerSection * static_cast<uint32_t>(sizeof(uint16_t));
 
         m_arena.Init(m_scene, vtxCapVertices, idxCapBytes, gridSections);
         SetAnchor(m_anchor);
@@ -294,6 +290,10 @@ namespace pe::voxel
 
         RetireSubmittedUpdateCommands(false);
         ProcessGenerationResults();
+
+        // Grow the voxel pool before recording this frame's uploads (safe WaitIdle point — no voxel/
+        // render cmd recording in flight here). Keeps dense cave/AO sections from OOMing into holes.
+        m_arena.GrowIfNeeded();
 
         Queue *queue = RHII.GetMainQueue();
         if (!queue)
