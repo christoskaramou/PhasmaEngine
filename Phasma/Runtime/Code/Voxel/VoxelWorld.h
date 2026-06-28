@@ -37,6 +37,7 @@ namespace pe::voxel
         int unloadMargin = 2;
         int uploadBudgetPerFrame = 4;
         int groundY = 64;
+        std::string saveDir; // relative to Assets or absolute; empty disables persistence
     };
 
     class VoxelWorld
@@ -54,6 +55,7 @@ namespace pe::voxel
                      BlockPos &hit, BlockPos &adjacent, vec3 &normal) const;
         void Update();
         BlockRegistry &Registry();
+        bool SaveAllModified();
         // Override the world's terrain generator. Call before Create(); the engine otherwise
         // installs a default NoiseGen. Pass nullptr to revert to the default. Generators run on
         // worker threads, so the implementation must be thread-safe.
@@ -90,6 +92,7 @@ namespace pe::voxel
             std::array<bool, kSectionCount> sectionUploaded{};
             std::array<bool, kSectionCount> remeshPending{};
             std::array<bool, kSectionCount> dirtyAfterRemesh{};
+            uint16_t touchedSectionMask = 0; // sections edited or loaded from disk; drives save
         };
 
         static uint64_t ColumnKey(ColumnCoord coord);
@@ -121,9 +124,13 @@ namespace pe::voxel
 
         ColumnNeighbors GatherNeighborSnapshots(ColumnCoord coord) const;
         void RemeshNeighborSeams(ColumnCoord coord);
+        void TouchSection(ColumnCoord coord, int si);
+        void PersistColumnIfTouched(ColumnState &state);
+        void PersistAllTouchedColumns();
 
         Scene *m_scene = nullptr;
         VoxelConfig m_cfg{};
+        std::filesystem::path m_saveRoot;
         std::shared_ptr<ITerrainGenerator> m_generator; // default NoiseGen, or a game-supplied override
         bool m_generatorOverridden = false;             // true once SetTerrainGenerator set a non-null gen
         vec3 m_anchor = vec3(0.0f);

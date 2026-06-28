@@ -191,10 +191,6 @@ namespace pe::voxel
                                 pos[3][u] = fqu + fh;
                                 pos[3][v] = fqv;
                             }
-                            float norm[3] = {};
-                            norm[d] = (float)dir;
-                            float tang[3] = {};
-                            tang[u] = 1.0f;
                             float uvCoords[4][2];
                             if (dir == 1)
                             {
@@ -219,11 +215,8 @@ namespace pe::voxel
                                 uvCoords[3][1] = 0;
                             }
                             // Face id 0..5: axis d in 0..2, +dir even / -dir odd. The VS rebuilds the
-                            // face normal + a perpendicular tangent from this. tang[]/norm[] above stay
-                            // for readability but the packed vert encodes only the id.
+                            // face normal + a perpendicular tangent from this; the packed vert encodes only the id.
                             const uint32_t normalId = (uint32_t)(d * 2 + (dir == 1 ? 0 : 1));
-                            (void)norm;
-                            (void)tang;
                             uint32_t base = (uint32_t)result.vertices.size();
                             for (int ci = 0; ci < 4; ci++)
                             {

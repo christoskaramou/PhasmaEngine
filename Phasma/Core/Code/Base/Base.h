@@ -135,6 +135,13 @@ namespace pe
 #endif
     }
 
+    inline std::string ToLower(std::string value)
+    {
+        for (auto &c : value)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return value;
+    }
+
     template <uint32_t N>
     struct Placeholder
     {

@@ -123,6 +123,20 @@ namespace pe
         return Defaults();
     }
 
+    ResourceHandle<Image> ModelAsset::DefaultTextureForSlot(TextureType slot)
+    {
+        const auto &defaults = GetDefaultResources();
+        switch (slot)
+        {
+        case TextureType::Normal:
+            return ResourceHandle<Image>::FromRaw(defaults.normal);
+        case TextureType::Emissive:
+            return ResourceHandle<Image>::FromRaw(defaults.black);
+        default:
+            return ResourceHandle<Image>::FromRaw(defaults.white);
+        }
+    }
+
     ModelAsset::DefaultResources &ModelAsset::Defaults()
     {
         static DefaultResources defaults;

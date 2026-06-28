@@ -1,7 +1,6 @@
 #pragma once
 
 #include "API/Image.h"
-#include "Scene/Material.h"
 
 namespace pe
 {
@@ -10,15 +9,16 @@ namespace pe
 
 namespace pe::voxel
 {
+    // Builds the voxel tile atlas (array texture) and registers it with the Scene. The atlas SRV is
+    // bound directly via Scene::SetVoxelAtlasView / the GBuffer voxel descriptor — there is no
+    // Material object; voxel sections render through VoxelWorld's host material.
     class VoxelMaterial
     {
     public:
         void Build(Scene *scene, const std::vector<std::string> &tilePngPaths);
-        Material *Get() const;
         ResourceHandle<Image> Atlas() const;
 
     private:
-        std::unique_ptr<Material> m_material;
         ResourceHandle<Image> m_atlas;
     };
 } // namespace pe::voxel

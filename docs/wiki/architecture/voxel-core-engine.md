@@ -58,12 +58,14 @@ meshing/noise does not stall for tens of seconds. `PhasmaRuntime` compiles with 
   diagonal neighbor-column AO at horizontal seams (`BlockSampleFn` hot path, no `std::function`).
 - `NoiseGen` (`ITerrainGenerator`) — rolling hills + sparse 3D-noise caves (default terrain).
 - `FreeListAllocator` / `GeometryArena` — coalescing suballocator + Scene arena; `GrowIfNeeded`.
-- `VoxelMaterial` — `Texture2DArray` atlas + custom-shader material.
+- `VoxelMaterial` — builds the `Texture2DArray` tile atlas; bound via `Scene::SetVoxelAtlasView` (no Material object).
 - `VoxelCollider` — DDA raycast + swept-AABB (`voxel.move_aabb`).
 - `VoxelWorld` / `VoxelSystem` — chunk map, streaming, edits; idle until `voxel.create`.
   Cardinal-neighbor gen→mesh gate (no mesh until adjacent columns finish generating). Edits mark
   seam-adjacent sections dirty (vertical + horizontal + diagonal). `RemeshNeighborSeams` remeshes only
   seam-touching sections (cardinal: 2-voxel face slice; diagonal: 2×2 corner patch).
+  `ColumnChunkStore` persists touched sections as sparse `.pevcol` overlays (procedural baseline +
+  saved edits on load).
 - Shaders: `VoxelGBuffer{VS,PS}.hlsl`, `VoxelShadowVS.hlsl`, `voxel_gbuffer.passinfo`.
 - Render: `VoxelHiZPyramidPass` (temporal Hi-Z from post-G-buffer depth), `ShadowCullCS.hlsl`.
 
@@ -71,8 +73,10 @@ meshing/noise does not stall for tens of seconds. `PhasmaRuntime` compiles with 
 
 Blocks are registered C++-side — there is no Lua `register_block`.
 
-- `voxel.create{load_radius=, unload_margin=, ground_y=, upload_budget=}` — build the world.
-- `voxel.destroy()`
+- `voxel.create{load_radius=, unload_margin=, ground_y=, upload_budget=, save_dir=}` — build the world.
+  `save_dir` is relative to the project Assets root (or absolute); enables column `.pevcol` persistence.
+- `voxel.destroy()` (auto-saves touched columns when `save_dir` is set)
+- `voxel.save_all()` — flush edited column sections to disk immediately
 - `voxel.set_anchor(x, y, z)` — stream columns around this point.
 - `voxel.get_block(x, y, z) -> id` / `voxel.set_block(x, y, z, id)`.
 - `voxel.raycast(ox,oy,oz, dx,dy,dz, maxDist) -> {hit, cell, adjacent, normal}`
@@ -86,4 +90,4 @@ to check for popping (tune `occlusion_culling_bias` if needed).
 
 ## Follow-ups
 
-Transparency (water/glass), chunk save/load, mesh LOD (mesher has `lod` stride param).
+Transparency (water/glass), mesh LOD (mesher has `lod` stride param).

@@ -353,32 +353,32 @@ namespace pe
             if (style == "classic")
             {
                 GUIState::s_guiStyle = GUIStyle::Classic;
-                ui::ApplyClassicTheme();
+                ui::ApplyTheme(GUIState::s_guiStyle);
             }
             else if (style == "dark")
             {
                 GUIState::s_guiStyle = GUIStyle::Dark;
-                ui::ApplyDarkTheme();
+                ui::ApplyTheme(GUIState::s_guiStyle);
             }
             else if (style == "light")
             {
                 GUIState::s_guiStyle = GUIStyle::Light;
-                ui::ApplyLightTheme();
+                ui::ApplyTheme(GUIState::s_guiStyle);
             }
             else if (style == "modern")
             {
                 GUIState::s_guiStyle = GUIStyle::Modern;
-                ui::ApplyModernTheme();
+                ui::ApplyTheme(GUIState::s_guiStyle);
             }
             else if (style == "unity")
             {
                 GUIState::s_guiStyle = GUIStyle::Unity;
-                ui::ApplyUnityTheme();
+                ui::ApplyTheme(GUIState::s_guiStyle);
             }
             else if (style == "unreal")
             {
                 GUIState::s_guiStyle = GUIStyle::Unreal;
-                ui::ApplyUnrealTheme();
+                ui::ApplyTheme(GUIState::s_guiStyle);
             }
             else
             {
@@ -2768,36 +2768,37 @@ namespace pe
                     if (ImGui::MenuItem("Classic", nullptr, isClassic))
                     {
                         GUIState::s_guiStyle = GUIStyle::Classic;
-                        ui::ApplyClassicTheme();
+                        ui::ApplyTheme(GUIState::s_guiStyle);
                     }
                     ui::ItemTooltip("Use the classic editor color theme.");
                     if (ImGui::MenuItem("Dark", nullptr, isDark))
                     {
                         GUIState::s_guiStyle = GUIStyle::Dark;
-                        ui::ApplyDarkTheme();
+                        ui::ApplyTheme(GUIState::s_guiStyle);
                     }
                     ui::ItemTooltip("Use the dark editor color theme.");
                     if (ImGui::MenuItem("Light", nullptr, isLight))
                     {
                         GUIState::s_guiStyle = GUIStyle::Light;
-                        ui::ApplyLightTheme();
+                        ui::ApplyTheme(GUIState::s_guiStyle);
                     }
                     ui::ItemTooltip("Use the light editor color theme.");
                     if (ImGui::MenuItem("Modern", nullptr, isModern))
                     {
                         GUIState::s_guiStyle = GUIStyle::Modern;
-                        ui::ApplyModernTheme();
+                        ui::ApplyTheme(GUIState::s_guiStyle);
                     }
                     ui::ItemTooltip("Use the modern editor color theme.");
                     if (ImGui::MenuItem("Unity", nullptr, isUnity))
                     {
                         GUIState::s_guiStyle = GUIStyle::Unity;
-                        ui::ApplyUnityTheme();
+                        ui::ApplyTheme(GUIState::s_guiStyle);
                     }
                     ui::ItemTooltip("Use the Unity-inspired editor theme.");
                     if (ImGui::MenuItem("Unreal", nullptr, isUnreal))
                     {
-                        ui::ApplyUnrealTheme();
+                        GUIState::s_guiStyle = GUIStyle::Unreal;
+                        ui::ApplyTheme(GUIState::s_guiStyle);
                     }
                     ui::ItemTooltip("Use the Unreal-inspired editor theme.");
                     ImGui::EndMenu();
@@ -3101,20 +3102,7 @@ namespace pe
 
         GUIBackend::CreateFontsTexture();
 
-        if (GUIState::s_guiStyle == GUIStyle::Classic)
-            ui::ApplyClassicTheme();
-        else if (GUIState::s_guiStyle == GUIStyle::Dark)
-            ui::ApplyDarkTheme();
-        else if (GUIState::s_guiStyle == GUIStyle::Light)
-            ui::ApplyLightTheme();
-        else if (GUIState::s_guiStyle == GUIStyle::Modern)
-            ui::ApplyModernTheme();
-        else if (GUIState::s_guiStyle == GUIStyle::Unity)
-            ui::ApplyUnityTheme();
-        else if (GUIState::s_guiStyle == GUIStyle::Unreal)
-            ui::ApplyUnrealTheme();
-        else
-            ui::ApplyUnityTheme();
+        ui::ApplyTheme(GUIState::s_guiStyle);
 
         auto AddGpuTimerInfo = [this](const std::any &data)
         {

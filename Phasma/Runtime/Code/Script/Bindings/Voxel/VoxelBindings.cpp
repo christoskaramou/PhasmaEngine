@@ -34,8 +34,17 @@ namespace pe
                             cfg.groundY = p["ground_y"];
                         if (p["upload_budget"].valid())
                             cfg.uploadBudgetPerFrame = p["upload_budget"];
+                        if (p["save_dir"].valid())
+                            cfg.saveDir = p["save_dir"].get<std::string>();
                     }
                     vs->CreateWorld(scene, cfg);
+                });
+
+                voxel.set_function("save_all", []() -> bool {
+                    auto *vs = CreateGlobalSystem<pe::voxel::VoxelSystem>();
+                    if (!vs || !vs->World())
+                        return false;
+                    return vs->World()->SaveAllModified();
                 });
 
                 voxel.set_function("destroy", []() {

@@ -1,9 +1,12 @@
 #pragma once
 
+#include <nlohmann/json.hpp>
+
 namespace pe
 {
     class Scene;
     struct NodeId;
+    class NodeSpriteComponent;
 
     namespace SpriteAuthoring
     {
@@ -40,5 +43,41 @@ namespace pe
         Result CreateNode(Scene &scene, const Options &options, NodeId *parent = nullptr);
         Result ApplyToNode(Scene &scene, NodeId *node, const Options &options, int meshSlot = 0);
         bool ApplyUvRect(Scene &scene, NodeId *node, const vec4 &uvRect, int meshSlot, std::string &outError);
+
+        // --- JSON / MCP metadata helpers ------------------------------------
+
+        void ReadSpriteOptions(const nlohmann::json &args, Options &options);
+        bool ApplySpriteJsonTransform(Scene &scene, NodeId *node, const nlohmann::json &args, int meshSlot,
+                                      std::string &outError);
+        nlohmann::json SpriteComponentJson(const NodeSpriteComponent &sprite);
+        nlohmann::json SpriteResultJson(Scene &scene, const Result &result);
+
+        std::filesystem::path ResolveSpriteMetadataPath(const std::string &path);
+        std::filesystem::path ResolveSpriteSheetPath(const std::string &path);
+        std::string AssetRelativePathForTool(const std::filesystem::path &path);
+
+        bool LoadSpriteMetadataForEdit(const std::string &pathArg, std::filesystem::path &path,
+                                       nlohmann::json &root, std::string &error);
+        bool SaveJsonAsset(const std::filesystem::path &path, const nlohmann::json &root,
+                           std::string &error);
+        nlohmann::json SpriteMetadataEditResult(const std::filesystem::path &path,
+                                                const nlohmann::json &root);
+        nlohmann::json ValidateSpriteMetadataAsset(const std::string &pathArg);
+
+        nlohmann::json GenerateSpriteFramesJson(const nlohmann::json &grid, int imageW, int imageH);
+        bool ReadSpriteSheetImageEntry(const nlohmann::json &entry, nlohmann::json &outEntry,
+                                       std::string &outError);
+        bool ReadSpriteSheetImageAt(const nlohmann::json &sheet, const std::filesystem::path &sheetPath,
+                                    int index, std::filesystem::path &outImage, std::string &outLabel,
+                                    std::string &error);
+
+        bool ApplySpriteFrameFields(nlohmann::json &frame, const nlohmann::json &source, bool requireRect,
+                                    std::string &error);
+        bool ApplySpriteClipFields(nlohmann::json &clip, const nlohmann::json &source, bool requireRange,
+                                   std::string &error);
+        void ClampSpriteClips(nlohmann::json &root);
+        int FindNamedOrIndexedItem(const nlohmann::json &items, const nlohmann::json &args,
+                                   std::initializer_list<const char *> indexKeys,
+                                   std::initializer_list<const char *> nameKeys, std::string &error);
     } // namespace SpriteAuthoring
 } // namespace pe

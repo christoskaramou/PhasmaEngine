@@ -97,25 +97,6 @@ namespace pe
             m_resources[typeIdx][id] = resource;
         }
 
-        void GarbageCollect()
-        {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            for (auto &typePair : m_resources)
-            {
-                for (auto it = typePair.second.begin(); it != typePair.second.end();)
-                {
-                    if (it->second.expired())
-                    {
-                        it = typePair.second.erase(it);
-                    }
-                    else
-                    {
-                        ++it;
-                    }
-                }
-            }
-        }
-
     private:
         ResourceManager() = default;
         ~ResourceManager() = default;
