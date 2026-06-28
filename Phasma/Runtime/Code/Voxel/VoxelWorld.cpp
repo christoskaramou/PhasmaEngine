@@ -749,22 +749,22 @@ namespace pe::voxel
             ColumnState *st = FindColumnState({coord.cx + dcx, coord.cz + dcz});
             if (!st || st->state != ColumnLoadState::Ready || !st->column)
                 return;
+            std::vector<int> sections;
             for (int si = 0; si < kSectionCount; ++si)
-            {
                 if (SectionNeedsCardinalSeam(*st->column, si, dcx, dcz, m_registry))
-                    StartDirtySectionRemesh(*st, si);
-            }
+                    sections.push_back(si);
+            EnqueueSectionRemeshBatch(*st, sections);
         };
         auto remeshDiagonal = [&](int dcx, int dcz)
         {
             ColumnState *st = FindColumnState({coord.cx + dcx, coord.cz + dcz});
             if (!st || st->state != ColumnLoadState::Ready || !st->column)
                 return;
+            std::vector<int> sections;
             for (int si = 0; si < kSectionCount; ++si)
-            {
                 if (SectionNeedsDiagonalSeam(*st->column, si, dcx, dcz, m_registry))
-                    StartDirtySectionRemesh(*st, si);
-            }
+                    sections.push_back(si);
+            EnqueueSectionRemeshBatch(*st, sections);
         };
         remeshCardinal(-1, 0);
         remeshCardinal(1, 0);
@@ -887,24 +887,38 @@ namespace pe::voxel
         }
     }
 
-    void VoxelWorld::StartDirtySectionRemesh(ColumnState &state, int si)
+    void VoxelWorld::EnqueueSectionRemeshBatch(ColumnState &state, const std::vector<int> &sections)
     {
-        if (!state.column || si < 0 || si >= kSectionCount)
+        if (!state.column || sections.empty())
             return;
-        if (state.remeshPending[si])
+
+        // Sections already remeshing coalesce (dirtyAfterRemesh); the rest share ONE snapshot — taking it
+        // per section deep-copied the column + 8 neighbors (~18 MB) each, the dominant stream/edit spike.
+        std::vector<int> toMesh;
+        toMesh.reserve(sections.size());
+        for (int si : sections)
         {
-            state.dirtyAfterRemesh[si] = true;
-            return;
+            if (si < 0 || si >= kSectionCount)
+                continue;
+            if (state.remeshPending[si])
+                state.dirtyAfterRemesh[si] = true;
+            else
+                toMesh.push_back(si);
         }
+        if (toMesh.empty())
+            return;
 
         auto columnSnapshot = std::make_shared<ChunkColumn>(*state.column);
-        const ColumnCoord coord = state.coord;
-        auto neighbors = std::make_shared<ColumnNeighbors>(GatherNeighborSnapshots(coord));
+        auto neighbors = std::make_shared<ColumnNeighbors>(GatherNeighborSnapshots(state.coord));
         auto registrySnapshot = std::make_shared<BlockRegistry>(m_registry);
-        state.remeshFutures[si] = ThreadPool::General.Enqueue(
-            [columnSnapshot, neighbors, registrySnapshot, coord, si]() -> MeshData
-            { return MeshSectionCpu(*columnSnapshot, *registrySnapshot, si, coord, *neighbors); });
-        state.remeshPending[si] = true;
+        const ColumnCoord coord = state.coord;
+        for (int si : toMesh)
+        {
+            state.remeshFutures[si] = ThreadPool::General.Enqueue(
+                [columnSnapshot, neighbors, registrySnapshot, coord, si]() -> MeshData
+                { return MeshSectionCpu(*columnSnapshot, *registrySnapshot, si, coord, *neighbors); });
+            state.remeshPending[si] = true;
+        }
     }
 
     void VoxelWorld::ProcessDirtyRemeshResults(CommandBuffer *cmd)
@@ -1033,30 +1047,26 @@ namespace pe::voxel
 
     void VoxelWorld::RemeshDirtySections(CommandBuffer *cmd)
     {
-        std::vector<std::pair<uint64_t, int>> remaining;
-        remaining.reserve(m_dirtySections.size());
-
+        std::unordered_map<uint64_t, std::vector<int>> byColumn;
         for (const auto &dirty : m_dirtySections)
+            byColumn[dirty.first].push_back(dirty.second);
+
+        std::vector<std::pair<uint64_t, int>> remaining;
+        for (auto &group : byColumn)
         {
-            auto colIt = m_columns.find(dirty.first);
+            auto colIt = m_columns.find(group.first);
             if (colIt == m_columns.end())
                 continue;
 
             ColumnState &state = colIt->second;
-            const int si = dirty.second;
             if (state.state != ColumnLoadState::Ready || !state.column)
             {
-                remaining.push_back(dirty);
+                for (int si : group.second)
+                    remaining.emplace_back(group.first, si);
                 continue;
             }
 
-            if (state.remeshPending[si])
-            {
-                state.dirtyAfterRemesh[si] = true;
-                continue;
-            }
-
-            StartDirtySectionRemesh(state, si);
+            EnqueueSectionRemeshBatch(state, group.second);
         }
 
         m_dirtySections.swap(remaining);
