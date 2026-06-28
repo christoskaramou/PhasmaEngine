@@ -1319,6 +1319,7 @@ namespace pe
         m_voxelIndexBuf = nullptr;
 
         m_arenaSlots.clear();
+        m_arenaFreeSlots.clear();
         m_arenaSlotBase = 0;
         m_arenaVertexBase = 0;
         m_arenaVertexCapacity = 0;
@@ -1480,6 +1481,7 @@ namespace pe
         // arena). The CPU shadow grows/shrinks with AddArenaMesh/RemoveArenaMesh.
         m_arenaSlotBase = m_meshCount;
         m_arenaSlots.clear();
+        m_arenaFreeSlots.clear();
 
         if (extraDrawCapacity > 0)
         {
@@ -1781,14 +1783,36 @@ namespace pe
                     idxByteOffset, idxBytes, m_arenaIdxByteBase, m_arenaIdxCapacity);
             return -1;
         }
-        if (m_meshCount >= m_indirectCapacity)
+        // Reuse a tombstoned slot (returned to the pool only after the retire delay, so no in-flight
+        // frame still reads its Mesh_Constants) before growing into a fresh slot. Fresh slots are bounded
+        // by the indirect capacity; reused slots are already within it.
+        const bool reuseSlot = !m_arenaFreeSlots.empty();
+        if (!reuseSlot && m_meshCount >= m_indirectCapacity)
         {
             PE_WARN("Scene::AddArenaMesh: indirect capacity exceeded (meshCount=%u cap=%u)",
                     m_meshCount, m_indirectCapacity);
             return -1;
         }
 
-        const int idx = static_cast<int>(m_meshCount);
+        int idx;
+        if (reuseSlot)
+        {
+            // Reuse the LOWEST free slot so live slots stay packed at the bottom and freed slots collect
+            // at the top, where FreeArenaSlot trims them off m_meshCount — keeping GetMeshCount() (which
+            // sizes the per-frame cull + indirect draw recording, a DX12 hot path) at the live working set
+            // instead of the all-time streaming peak.
+            size_t minI = 0;
+            for (size_t i = 1; i < m_arenaFreeSlots.size(); ++i)
+                if (m_arenaFreeSlots[i] < m_arenaFreeSlots[minI])
+                    minI = i;
+            idx = static_cast<int>(m_arenaFreeSlots[minI]);
+            m_arenaFreeSlots[minI] = m_arenaFreeSlots.back();
+            m_arenaFreeSlots.pop_back();
+        }
+        else
+        {
+            idx = static_cast<int>(m_meshCount);
+        }
         Queue *q = RHII.GetMainQueue();
 
         // Base-0 byte offsets into the dedicated voxel buffers. The shared vertex index keeps the GBuffer
@@ -1810,11 +1834,20 @@ namespace pe
         drawCmd.firstInstance = static_cast<uint32_t>(idx);
 
         // Record the geometry/indirect/visibility GPU work. When externalCmd is supplied these copies
-        // ride the caller's frame upload buffer (submitted on the main queue BEFORE the cull dispatch,
-        // so no CPU stall); otherwise a transient command buffer is acquired/submitted/waited.
+        // ride the caller's frame upload buffer (submitted on the main queue BEFORE the cull dispatch),
+        // and per-section barriers are skipped in favour of one coarse whole-buffer barrier per frame
+        // (FlushArenaBarriers): the reads all happen later in the render passes, so a few whole-buffer
+        // barriers are equivalent to N per-copy ones and avoid the per-section barrier churn. The
+        // standalone path Submit+Waits each section, so it barriers inline.
+        const bool inlineBarriers = (externalCmd == nullptr);
         auto recordGeometry = [&](CommandBuffer *cmd)
         {
             cmd->CopyBufferStaged(m_voxelVertexBuf, const_cast<VoxelVertex *>(verts.data()), vtxBytes, vtxByteOff);
+            cmd->CopyBufferStaged(m_voxelIndexBuf, const_cast<uint16_t *>(indices.data()), idxBytes, idxByteOffset);
+            cmd->CopyBufferStaged(m_indirectAll, &drawCmd, PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
+                                  static_cast<size_t>(idx) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
+            cmd->FillBuffer(m_visibility, static_cast<size_t>(idx) * sizeof(uint32_t), sizeof(uint32_t), 1u);
+            if (inlineBarriers)
             {
                 BufferBarrierInfo b{};
                 b.buffer = m_voxelVertexBuf;
@@ -1823,35 +1856,17 @@ namespace pe
                 b.offset = vtxByteOff;
                 b.size = vtxBytes;
                 cmd->BufferBarrier(b);
-            }
-
-            cmd->CopyBufferStaged(m_voxelIndexBuf, const_cast<uint16_t *>(indices.data()), idxBytes, idxByteOffset);
-            {
-                BufferBarrierInfo b{};
                 b.buffer = m_voxelIndexBuf;
-                b.stageMask = PE_STAGE_VERTEX_INPUT;
                 b.accessMask = PE_ACCESS_INDEX_READ;
                 b.offset = idxByteOffset;
                 b.size = idxBytes;
                 cmd->BufferBarrier(b);
-            }
-
-            cmd->CopyBufferStaged(m_indirectAll, &drawCmd, PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
-                                  static_cast<size_t>(idx) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
-            {
-                BufferBarrierInfo b{};
                 b.buffer = m_indirectAll;
                 b.stageMask = PE_STAGE_DRAW_INDIRECT | PE_STAGE_COMPUTE_SHADER;
                 b.accessMask = PE_ACCESS_INDIRECT_COMMAND_READ | PE_ACCESS_SHADER_READ;
                 b.offset = static_cast<size_t>(idx) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
                 b.size = PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
                 cmd->BufferBarrier(b);
-            }
-
-            cmd->FillBuffer(m_visibility, static_cast<size_t>(idx) * sizeof(uint32_t),
-                            sizeof(uint32_t), 1u);
-            {
-                BufferBarrierInfo b{};
                 b.buffer = m_visibility;
                 b.stageMask = PE_STAGE_COMPUTE_SHADER;
                 b.accessMask = PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE;
@@ -1916,14 +1931,17 @@ namespace pe
             {
                 cmd->CopyBuffer(m_meshConstants, m_meshConstantsDevice, sizeof(Mesh_Constants),
                                 mcOffset, mcOffset);
-                BufferBarrierInfo barrier{};
-                barrier.buffer = m_meshConstantsDevice;
-                barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
-                barrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
-                barrier.offset = mcOffset;
-                barrier.size = sizeof(Mesh_Constants);
-                cmd->BufferBarrier(barrier);
-                m_meshConstantsDevice->GetTrackInfo() = barrier;
+                if (inlineBarriers)
+                {
+                    BufferBarrierInfo barrier{};
+                    barrier.buffer = m_meshConstantsDevice;
+                    barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
+                    barrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
+                    barrier.offset = mcOffset;
+                    barrier.size = sizeof(Mesh_Constants);
+                    cmd->BufferBarrier(barrier);
+                    m_meshConstantsDevice->GetTrackInfo() = barrier;
+                }
             };
 
             if (externalCmd)
@@ -1942,7 +1960,8 @@ namespace pe
             }
         }
 
-        // CPU shadow (parallel to slots [m_arenaSlotBase, m_meshCount); relIdx == m_arenaSlots.size()).
+        // CPU shadow (parallel to slots [m_arenaSlotBase, m_meshCount)). A reused slot writes in place;
+        // a fresh slot appends (relIdx == m_arenaSlots.size()) and bumps the high-water m_meshCount.
         ArenaSlot slot{};
         slot.indexCount = drawCmd.indexCount;
         slot.firstIndex = firstIndex;
@@ -1950,11 +1969,18 @@ namespace pe
         slot.idxByteOffset = idxByteOffset;
         slot.idxBytes = idxBytes;
         slot.vertexCount = vertCount;
-        m_arenaSlots.push_back(slot);
+        if (reuseSlot)
+        {
+            m_arenaSlots[static_cast<uint32_t>(idx) - m_arenaSlotBase] = slot;
+        }
+        else
+        {
+            m_arenaSlots.push_back(slot);
+            ++m_meshCount;
+        }
 
         m_arenaVertexUsed += vertCount;
         m_arenaIdxUsed += idxBytes;
-        ++m_meshCount;
         // New mesh-constants entry published — re-point geoVersion-gated descriptor sets.
         m_geometryVersion++;
         return idx;
@@ -1970,119 +1996,57 @@ namespace pe
             return -1;
         }
 
-        const uint32_t lastSlot = m_meshCount - 1;
         const uint32_t relIdx = static_cast<uint32_t>(idx) - m_arenaSlotBase;
-        const uint32_t relLast = lastSlot - m_arenaSlotBase;
-        const bool doMove = (static_cast<uint32_t>(idx) != lastSlot);
-        const size_t mcStride = sizeof(Mesh_Constants);
+        const ArenaSlot removed = m_arenaSlots[relIdx]; // copy: cleared below
 
-        const ArenaSlot removed = m_arenaSlots[relIdx]; // copy: m_arenaSlots[relIdx] is overwritten below
-
-        // Rebuild the relocated draw on the CPU (no GPU readback). firstInstance MUST become `idx`
-        // because the culling and GBuffer shaders use firstInstance as the storage index into
-        // mesh-constants / visibility.
-        PeDrawIndexedIndirectCommand movedDraw{};
-        if (doMove)
-        {
-            const ArenaSlot &moved = m_arenaSlots[relLast];
-            movedDraw.indexCount = moved.indexCount;
-            movedDraw.instanceCount = 1;
-            movedDraw.firstIndex = moved.firstIndex;
-            movedDraw.vertexOffset = moved.vertexOffset;
-            movedDraw.firstInstance = static_cast<uint32_t>(idx);
-        }
-
+        // Streaming (externalCmd) batches barriers per frame via FlushArenaBarriers; the standalone path
+        // Submit+Waits and barriers inline. See AddArenaMesh for the coarse-barrier rationale.
+        const bool inlineBarriers = (externalCmd == nullptr);
         Queue *q = RHII.GetMainQueue();
         auto record = [&](CommandBuffer *cmd)
         {
-            // 1. Neuter the REMOVED mesh's index bytes. Decrementing m_meshCount and (for a move)
-            // overwriting slot `idx` is NOT sufficient: the two-phase Hi-Z occlusion path copies each
-            // emitted draw into a persistent filtered buffer that is NOT cleared per-frame, so a draw
-            // captured while the removed mesh was live can keep drawing for a few frames. Zeroing its
-            // index bytes makes any such stale copy a degenerate (no-op) draw. (The relocated mesh keeps
-            // its own valid geometry, so a stale copy of IT renders a harmless 1-frame duplicate.)
+            // Tombstone the slot in place: zero its indirect draw + visibility so the cull and GBuffer
+            // emit nothing, and neuter its index bytes so any stale two-phase-occlusion filtered draw
+            // (the filtered buffer is NOT cleared per-frame) degenerates to a no-op. We deliberately do
+            // NOT swap-remove/relocate: relocation CPU-rewrites the slot's Mesh_Constants — including the
+            // AABB origin the voxel VS adds to every vertex for world position — while in-flight frames
+            // still read it (Vulkan reads the host-mapped buffer directly; there is no device mirror),
+            // which flung garbage triangles at the streaming front. The slot is reused later via the free
+            // pool (FreeArenaSlot, after the GeometryArena retire delay), so its constants are overwritten
+            // only once no in-flight frame can still reference it.
+            PeDrawIndexedIndirectCommand deadDraw{}; // all-zero: indexCount/instanceCount = 0
+            cmd->CopyBufferStaged(m_indirectAll, &deadDraw, PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
+                                  static_cast<size_t>(idx) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
+            cmd->FillBuffer(m_visibility, static_cast<size_t>(idx) * sizeof(uint32_t), sizeof(uint32_t), 0u);
             if (removed.idxBytes > 0)
-            {
                 cmd->FillBuffer(m_voxelIndexBuf, removed.idxByteOffset, removed.idxBytes, 0u);
-                BufferBarrierInfo gb{};
-                gb.buffer = m_voxelIndexBuf;
-                gb.stageMask = PE_STAGE_VERTEX_INPUT;
-                gb.accessMask = PE_ACCESS_INDEX_READ;
-                gb.offset = removed.idxByteOffset;
-                gb.size = removed.idxBytes;
-                cmd->BufferBarrier(gb);
-            }
 
-            if (doMove)
+            if (inlineBarriers)
             {
-                // 2. Relocate the last slot's indirect entry into `idx` (firstInstance re-patched).
-                cmd->CopyBufferStaged(m_indirectAll, &movedDraw, PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
-                                      static_cast<size_t>(idx) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
+                BufferBarrierInfo b{};
+                b.buffer = m_indirectAll;
+                b.stageMask = PE_STAGE_DRAW_INDIRECT | PE_STAGE_COMPUTE_SHADER;
+                b.accessMask = PE_ACCESS_INDIRECT_COMMAND_READ | PE_ACCESS_SHADER_READ;
+                b.offset = static_cast<size_t>(idx) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
+                b.size = PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
+                cmd->BufferBarrier(b);
+                b.buffer = m_visibility;
+                b.stageMask = PE_STAGE_COMPUTE_SHADER;
+                b.accessMask = PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE;
+                b.offset = static_cast<size_t>(idx) * sizeof(uint32_t);
+                b.size = sizeof(uint32_t);
+                cmd->BufferBarrier(b);
+                if (removed.idxBytes > 0)
                 {
-                    BufferBarrierInfo b{};
-                    b.buffer = m_indirectAll;
-                    b.stageMask = PE_STAGE_DRAW_INDIRECT | PE_STAGE_COMPUTE_SHADER;
-                    b.accessMask = PE_ACCESS_INDIRECT_COMMAND_READ | PE_ACCESS_SHADER_READ;
-                    b.offset = static_cast<size_t>(idx) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
-                    b.size = PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
+                    b.buffer = m_voxelIndexBuf;
+                    b.stageMask = PE_STAGE_VERTEX_INPUT;
+                    b.accessMask = PE_ACCESS_INDEX_READ;
+                    b.offset = removed.idxByteOffset;
+                    b.size = removed.idxBytes;
                     cmd->BufferBarrier(b);
-                }
-
-                // 3. Re-seed the relocated slot's visibility to 1 (visible-last-frame). This is NOT a
-                // same-buffer copy from lastSlot: D3D12 forbids a subresource being COPY_SOURCE and
-                // COPY_DEST at once, and a Vulkan self-copy would lack a source barrier against the
-                // phase-2 cull write to Visibility[lastSlot]. Losing the exact temporal-occlusion bit for
-                // one frame is cosmetic (it self-corrects, identical to a freshly-added mesh's seed).
-                cmd->FillBuffer(m_visibility, static_cast<size_t>(idx) * sizeof(uint32_t),
-                                sizeof(uint32_t), 1u);
-                {
-                    BufferBarrierInfo b{};
-                    b.buffer = m_visibility;
-                    b.stageMask = PE_STAGE_COMPUTE_SHADER;
-                    b.accessMask = PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE;
-                    b.offset = static_cast<size_t>(idx) * sizeof(uint32_t);
-                    b.size = sizeof(uint32_t);
-                    cmd->BufferBarrier(b);
-                }
-
-                // 4. DX12 mesh-constants mirror: publish the relocated slot from the (already CPU-relocated
-                // + flushed) host m_meshConstants[idx] into device[idx]. A host->device copy (NOT a device
-                // self-copy) mirrors the AddArenaMesh publish and avoids the COPY_SOURCE/COPY_DEST clash.
-                if (m_meshConstantsDevice)
-                {
-                    cmd->CopyBuffer(m_meshConstants, m_meshConstantsDevice, mcStride,
-                                    static_cast<size_t>(idx) * mcStride,
-                                    static_cast<size_t>(idx) * mcStride);
-                    BufferBarrierInfo b{};
-                    b.buffer = m_meshConstantsDevice;
-                    b.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
-                    b.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
-                    b.offset = static_cast<size_t>(idx) * mcStride;
-                    b.size = mcStride;
-                    cmd->BufferBarrier(b);
-                    m_meshConstantsDevice->GetTrackInfo() = b;
                 }
             }
         };
-
-        // The vacated last slot needs no zeroing: m_meshCount is decremented so it is no longer
-        // dispatched, and it still references the relocated mesh's VALID geometry (harmless).
-        if (doMove)
-        {
-            // Relocate the host-side mesh constants (Vulkan reads these directly). Map+copy the moved
-            // slot down into `idx` BEFORE record() runs, so step 4's host->device mirror publish reads
-            // the updated host[idx].
-            m_meshConstants->Map();
-            uint8_t *base = static_cast<uint8_t *>(m_meshConstants->Data());
-            if (base)
-            {
-                // Typed POD assignment (avoids a <cstring> dependency for memcpy).
-                *reinterpret_cast<Mesh_Constants *>(base + static_cast<size_t>(idx) * mcStride) =
-                    *reinterpret_cast<const Mesh_Constants *>(base + static_cast<size_t>(lastSlot) * mcStride);
-                m_meshConstants->Flush(mcStride, static_cast<size_t>(idx) * mcStride);
-            }
-            m_meshConstants->Unmap();
-        }
 
         if (externalCmd)
         {
@@ -2099,16 +2063,83 @@ namespace pe
             cmd->Return();
         }
 
-        // Update the CPU shadow (swap-remove) + counters.
-        if (doMove)
-            m_arenaSlots[relIdx] = m_arenaSlots[relLast];
-        m_arenaSlots.pop_back();
+        // CPU shadow: mark the slot dead in place. m_meshCount stays as the high-water dispatch count
+        // (dead slots dispatch a degenerate draw); the slot returns to the reuse pool via FreeArenaSlot.
+        m_arenaSlots[relIdx] = ArenaSlot{};
         m_arenaVertexUsed -= removed.vertexCount;
         m_arenaIdxUsed -= removed.idxBytes;
-        --m_meshCount;
         m_geometryVersion++;
+        return -1;
+    }
 
-        // The relocated mesh moved from slot `lastSlot` to `idx`: the caller fixes its handle->slot map.
-        return doMove ? static_cast<int>(lastSlot) : -1;
+    void Scene::FreeArenaSlot(int idx)
+    {
+        if (idx < static_cast<int>(m_arenaSlotBase) || static_cast<uint32_t>(idx) >= m_meshCount)
+            return;
+        m_arenaFreeSlots.push_back(static_cast<uint32_t>(idx));
+
+        // Trim the trailing run of free slots so GetMeshCount() (the per-frame cull + indirect draw count,
+        // which dominates DX12 streaming cost) tracks the live working set, not the all-time peak. Only
+        // FREE slots (dead + past the retire delay) are trimmed, so the count never drops below a slot an
+        // in-flight frame still references.
+        bool trimmed = true;
+        while (trimmed && m_meshCount > m_arenaSlotBase)
+        {
+            trimmed = false;
+            const uint32_t top = m_meshCount - 1;
+            for (size_t i = 0; i < m_arenaFreeSlots.size(); ++i)
+            {
+                if (m_arenaFreeSlots[i] == top)
+                {
+                    m_arenaFreeSlots[i] = m_arenaFreeSlots.back();
+                    m_arenaFreeSlots.pop_back();
+                    m_arenaSlots.pop_back();
+                    --m_meshCount;
+                    trimmed = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    void Scene::FlushArenaBarriers(CommandBuffer *cmd)
+    {
+        // One coarse whole-buffer barrier per arena buffer, emitted once per frame after all of the
+        // frame's AddArenaMesh/RemoveArenaMesh copies (which skip their own per-section barriers on the
+        // streamed path). A few whole-buffer barriers are equivalent for correctness to N per-section
+        // ones — the reads all happen later, in the render frame's passes — and avoid the per-section
+        // barrier churn on a heavily-streamed frame.
+        if (!cmd)
+            return;
+        auto whole = [&](Buffer *b, uint32_t stage, uint32_t access)
+        {
+            if (!b)
+                return;
+            BufferBarrierInfo bi{};
+            bi.buffer = b;
+            bi.stageMask = stage;
+            bi.accessMask = access;
+            bi.offset = 0;
+            bi.size = b->Size();
+            cmd->BufferBarrier(bi);
+        };
+        whole(m_voxelVertexBuf, PE_STAGE_VERTEX_INPUT, PE_ACCESS_VERTEX_ATTRIBUTE_READ);
+        whole(m_voxelIndexBuf, PE_STAGE_VERTEX_INPUT, PE_ACCESS_INDEX_READ);
+        whole(m_indirectAll, PE_STAGE_DRAW_INDIRECT | PE_STAGE_COMPUTE_SHADER,
+              PE_ACCESS_INDIRECT_COMMAND_READ | PE_ACCESS_SHADER_READ);
+        whole(m_visibility, PE_STAGE_COMPUTE_SHADER,
+              PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE);
+        if (m_meshConstantsDevice)
+        {
+            whole(m_meshConstantsDevice, PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER,
+                  PE_ACCESS_SHADER_STORAGE_READ);
+            BufferBarrierInfo bi{};
+            bi.buffer = m_meshConstantsDevice;
+            bi.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
+            bi.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
+            bi.offset = 0;
+            bi.size = m_meshConstantsDevice->Size();
+            m_meshConstantsDevice->GetTrackInfo() = bi;
+        }
     }
 } // namespace pe

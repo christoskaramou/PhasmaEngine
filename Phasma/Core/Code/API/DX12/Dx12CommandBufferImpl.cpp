@@ -1180,6 +1180,25 @@ namespace pe
         if (!size)
             return;
 
+        // GPU-native fill: copy `size` bytes from a persistent buffer pre-filled with `data` — no CPU
+        // staging round-trip (alloc + memcpy + deferred free) per call. D3D12 has no vkCmdFillBuffer
+        // equivalent, and the arena/cull fire many small fills per frame, so a copy from a persistent
+        // source is cheaper than the legacy staging path below. Falls back to staging for unsupported
+        // values or fills larger than the source. Byte-for-byte identical to the staging fill (same uint32 pattern).
+        Buffer *fillSrc = RHII.GetDx12FillSource(data);
+        if (fillSrc && size <= fillSrc->Size())
+        {
+            PushBufferTransition(m_barrierBatch, Dx12BufferImpl::From(fillSrc), D3D12_RESOURCE_STATE_COPY_SOURCE);
+            PushBufferTransition(m_barrierBatch, Dx12BufferImpl::From(buffer), D3D12_RESOURCE_STATE_COPY_DEST);
+            FlushBarriers();
+            m_cmdList->CopyBufferRegion(Dx12BufferImpl::From(buffer)->GetResource(), static_cast<UINT64>(offset),
+                                        Dx12BufferImpl::From(fillSrc)->GetResource(), 0, static_cast<UINT64>(size));
+            BufferTrackInfo &trackInfo = buffer->GetTrackInfo();
+            trackInfo.stageMask = PE_STAGE_CLEAR;
+            trackInfo.accessMask = PE_ACCESS_TRANSFER_WRITE;
+            return;
+        }
+
         std::vector<uint32_t> words((size + sizeof(uint32_t) - 1) / sizeof(uint32_t), data);
         CopyBufferStaged(buffer, words.data(), size, offset);
 

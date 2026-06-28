@@ -356,7 +356,7 @@ namespace pe
                     return;
 
                 ScopedImGuiContext contextScope(m_context);
-                if (ImGui::IsKeyPressed(ImGuiKey_P, false))
+                if (ImGui::IsKeyPressed(ImGuiKey_G, false))
                     m_showFrameGraph = !m_showFrameGraph;
                 DrawFrameTimeOverlay();
                 ImGui::Render();
@@ -500,7 +500,7 @@ namespace pe
                 const ImGuiWindowFlags flags = ImGuiWindowFlags_NoNav |
                                                ImGuiWindowFlags_NoFocusOnAppearing |
                                                ImGuiWindowFlags_AlwaysAutoResize;
-                if (ImGui::Begin("Frame Time (P)", nullptr, flags))
+                if (ImGui::Begin("Frame Time (G)", nullptr, flags))
                 {
                     ImGui::Text("avg %.2f ms   %.0f FPS", dispMs, fps);
                     ImGui::Text("max %.2f ms (spikes)", maxMs);

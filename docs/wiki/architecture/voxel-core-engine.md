@@ -56,7 +56,7 @@ meshing/noise does not stall for tens of seconds. `PhasmaRuntime` compiles with 
 - `BlockType` / `BlockRegistry` — block defs + lookup; air auto-registered at id 0.
 - `GreedyMesher` (`IChunkMesher`) — sweep-and-merge; packed `VoxelVertex` + tight bounds; cardinal +
   diagonal neighbor-column AO at horizontal seams (`BlockSampleFn` hot path, no `std::function`).
-- `NoiseGen` (`ITerrainGenerator`) — rolling hills + sparse 3D-noise caves (default terrain).
+- `NoiseGen` (`ITerrainGenerator`) — domain-warped FBM + ridged hills, worm-tunnel caves (default terrain).
 - `FreeListAllocator` / `GeometryArena` — coalescing suballocator + Scene arena; `GrowIfNeeded`.
 - `VoxelMaterial` — builds the `Texture2DArray` tile atlas; bound via `Scene::SetVoxelAtlasView` (no Material object).
 - `VoxelCollider` — DDA raycast + swept-AABB (`voxel.move_aabb`).

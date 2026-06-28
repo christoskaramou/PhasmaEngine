@@ -1,8 +1,8 @@
 #pragma once
 #include "Voxel/ITerrainGenerator.h"
 
-// Default engine terrain generator: 3-octave Perlin fbm heightmap with stone/dirt/grass
-// layering and bare-stone "rocky peaks". This is just the out-of-the-box default — a game
+// Default engine terrain generator: domain-warped FBM + ridged hills, worm-tunnel caves,
+// stone/dirt/grass layering and bare-stone "rocky peaks". This is just the out-of-the-box default — a game
 // supplies its own world shape by implementing ITerrainGenerator and passing it to
 // VoxelWorld::SetTerrainGenerator (the engine ships a sensible default, the game owns policy).
 namespace pe::voxel

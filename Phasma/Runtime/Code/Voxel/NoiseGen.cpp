@@ -12,35 +12,36 @@ namespace pe::voxel
         constexpr BlockId kDirtBlock = 2;
         constexpr BlockId kGrassBlock = 3;
 
-        // FBM heightmap: groundY is the mean level, terrain rolls +/- kAmplitude around it.
-        // Noise math lives in the general pe::Fbm2D (Base/Noise.h); only the terrain policy
-        // (frequency, amplitude, block layering) is voxel-specific.
-        // ponytail: 3 octaves of perlin = rolling hills; raise octaves or add ridged/domain-warp
-        // noise only if it reads too smooth. ponytail: wx*freq is float32 — fine to ~tens-of-
-        // thousands of blocks from origin; for a truly far-roaming world sample in doubles first.
         int TerrainHeight(int wx, int wz, int groundY)
         {
-            constexpr float kBaseFreq = 1.0f / 96.0f; // ~96-block wavelength for the broad hills
+            constexpr float kBaseFreq = 1.0f / 96.0f;
             constexpr float kAmplitude = 28.0f;
-            float n = Fbm2D(vec2((float)wx, (float)wz), 3, kBaseFreq); // default lacunarity 2 / gain 0.5
+            constexpr float kWarpFreq = 1.0f / 180.0f;
+            constexpr float kWarpAmp = 14.0f;
+
+            const vec2 p((float)wx, (float)wz);
+            const float warp = Fbm2D(p, 2, kWarpFreq) * kWarpAmp;
+            const vec2 wp = p + vec2(warp, warp * 0.65f);
+
+            const float hills = Fbm2D(wp, 3, kBaseFreq);
+            float ridged = 1.0f - std::fabs(hills);
+            ridged *= ridged;
+            const float n = hills * 0.55f + ridged * 0.45f;
             return groundY + static_cast<int>(n * kAmplitude);
         }
 
-        // Carve underground air pockets from a 3D-noise threshold. Sparse enough (high threshold)
-        // that the surface mostly stays the rolling hills, with the occasional cave mouth/overhang.
-        // ponytail: single-field threshold = blobby caverns; for winding tunnels switch to ridged
-        // "worm" noise (an abs(noise) band) later. ponytail: 2 octaves of perlin3 per solid block
-        // is the worldgen hot path — drop to 1 octave or gate by depth if streaming hitches.
         bool CarveCave(int wx, int wy, int wz)
         {
             constexpr float kCaveFreq = 1.0f / 22.0f;
-            constexpr float kCaveThreshold = 0.25f;
+            constexpr float kWormBand = 0.07f;
 #if defined(PE_DEBUG)
             constexpr int kCaveOctaves = 1;
 #else
             constexpr int kCaveOctaves = 2;
 #endif
-            return Fbm3D(vec3((float)wx, (float)wy, (float)wz), kCaveOctaves, kCaveFreq) > kCaveThreshold;
+            const vec3 p((float)wx, (float)wy, (float)wz);
+            const float worm = Fbm3D(p, kCaveOctaves, kCaveFreq);
+            return std::fabs(worm) < kWormBand;
         }
     } // namespace
 
@@ -63,15 +64,9 @@ namespace pe::voxel
                 int h = TerrainHeight(wx, wz, m_groundY);
                 h = std::max(1, std::min(kWorldHeight, h));
                 const int topY = h - 1;
-                // Rocky peaks are a second "biome" from the existing 3 blocks only: above the
-                // stone line the surface is bare stone (mountains), below it grass over dirt.
                 const bool rocky = topY > m_groundY + 18;
                 for (int wy = 0; wy < h; ++wy)
                 {
-                    // Carve caves strictly underground: above a 2-block bedrock floor and below a
-                    // 2-block surface crust (keeps the rolling-hill surface intact). Carved cells are
-                    // left as air. A shallow world (topY <= 3) has an empty [2, topY-2] range, so the
-                    // mechanics smoke's surface column is never touched.
                     if (wy >= 2 && wy <= topY - 2 && CarveCave(wx, wy, wz))
                         continue;
                     BlockId b = kStoneBlock;

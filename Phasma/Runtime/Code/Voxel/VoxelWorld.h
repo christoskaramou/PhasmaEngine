@@ -95,6 +95,9 @@ namespace pe::voxel
             uint16_t touchedSectionMask = 0; // sections edited or loaded from disk; drives save
         };
 
+        ColumnCoord m_streamAnchorColumn{};
+        bool m_streamAnchorValid = false;
+
         static uint64_t ColumnKey(ColumnCoord coord);
         static ColumnCoord AnchorToColumn(const vec3 &worldPos);
         static int ColumnDistance(ColumnCoord a, ColumnCoord b);

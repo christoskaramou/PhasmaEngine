@@ -67,7 +67,8 @@ namespace pe::voxel
         struct Retire
         {
             uint32_t vtxOffset = 0, vtxCount = 0, idxOffset = 0, idxBytes = 0;
-            uint64_t retireTick = 0; // tick at which the ranges return to the free lists
+            int sceneSlot = -1;      // tombstoned scene slot returned to the reuse pool at retireTick
+            uint64_t retireTick = 0; // tick at which the ranges + slot become reusable
         };
 
         Scene *m_scene = nullptr;

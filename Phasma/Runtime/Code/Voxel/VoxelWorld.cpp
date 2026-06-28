@@ -315,13 +315,13 @@ namespace pe::voxel
         const int capacityRadius = m_cfg.loadRadius + m_cfg.unloadMargin;
         const int gridDim = capacityRadius * 2 + 1;
         const uint32_t gridSections = static_cast<uint32_t>(gridDim * gridDim * kSectionCount);
-        // MODEST initial per-section budget for the dedicated voxel pool. The arena now GROWS on
-        // pressure (GeometryArena::GrowIfNeeded, 80% -> 1.5x), so this only sizes the initial
-        // reservation, not the worst case: dense cave/AO sections no longer OOM into holes, they trigger
-        // a grow. Packed verts are 8 B (VoxelVertex), so a loadRadius-6 grid starts at ~tens of MB.
-        // A flat greedy section is ~24 verts; 256 covers light features before the first grow kicks in.
-        const uint32_t kVertsPerSection = 256u;
-        const uint32_t kIndicesPerSection = 384u;
+        // Initial per-section budget for the dedicated voxel pool. The arena GROWS on pressure
+        // (GeometryArena::GrowIfNeeded, 80% -> 1.5x) and OOM'd sections retry after the grow instead of
+        // dropping geometry, so this only sizes the initial reservation. Full-detail surface+AO sections
+        // (no LOD) run ~1k verts; 1024 fits a normal streaming front without grow churn on first fill.
+        // Packed verts are 8 B (VoxelVertex), so a loadRadius-8 grid starts at ~tens of MB.
+        const uint32_t kVertsPerSection = 1024u;
+        const uint32_t kIndicesPerSection = 1536u;
         const uint32_t vtxCapVertices = gridSections * kVertsPerSection;
         const uint32_t idxCapBytes = gridSections * kIndicesPerSection * static_cast<uint32_t>(sizeof(uint16_t));
 
@@ -373,13 +373,22 @@ namespace pe::voxel
         m_materialGpuIndex = 0xFFFFFFFF;
         m_saveRoot.clear();
         m_scene = nullptr;
+        m_streamAnchorValid = false;
     }
 
     void VoxelWorld::SetAnchor(const vec3 &worldPos)
     {
         m_anchor = worldPos;
-        if (m_scene && m_arena.IsInitialized())
-            RequestColumnsForAnchor();
+        if (!m_scene || !m_arena.IsInitialized())
+            return;
+
+        const ColumnCoord anchorCol = AnchorToColumn(worldPos);
+        if (m_streamAnchorValid && anchorCol.cx == m_streamAnchorColumn.cx && anchorCol.cz == m_streamAnchorColumn.cz)
+            return;
+
+        m_streamAnchorColumn = anchorCol;
+        m_streamAnchorValid = true;
+        RequestColumnsForAnchor();
     }
 
     BlockId VoxelWorld::GetBlock(int x, int y, int z) const
@@ -456,6 +465,7 @@ namespace pe::voxel
         m_arena.Update(cmd);
         ProcessReadyMeshUploads(cmd, m_cfg.uploadBudgetPerFrame);
         RemeshDirtySections(cmd);
+        m_scene->FlushArenaBarriers(cmd);
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
         m_submittedUpdateCmds.push_back(cmd);
@@ -770,6 +780,21 @@ namespace pe::voxel
     {
         int uploads = 0;
         const ColumnCoord anchorCoord = AnchorToColumn(m_anchor);
+        const int anchorSi =
+            ClampInt(SectionIndex(static_cast<int>(std::floor(m_anchor.y))), 0, kSectionCount - 1);
+        int sectionOrder[kSectionCount];
+        for (int i = 0; i < kSectionCount; ++i)
+            sectionOrder[i] = i;
+        std::sort(sectionOrder, sectionOrder + kSectionCount,
+                  [anchorSi](int a, int b)
+                  {
+                      const int da = std::abs(a - anchorSi);
+                      const int db = std::abs(b - anchorSi);
+                      if (da != db)
+                          return da < db;
+                      return a < b;
+                  });
+
         std::vector<uint64_t> keys;
         keys.reserve(m_columns.size());
         for (const auto &entry : m_columns)
@@ -798,8 +823,9 @@ namespace pe::voxel
             if (state.state != ColumnLoadState::Meshing)
                 continue;
 
-            for (int si = 0; si < kSectionCount; ++si)
+            for (int oi = 0; oi < kSectionCount; ++oi)
             {
+                const int si = sectionOrder[oi];
                 if (state.sectionUploaded[si] || !FutureReady(state.meshFutures[si]))
                     continue;
                 if (uploads >= budget)
@@ -808,7 +834,11 @@ namespace pe::voxel
                 const MeshData &mesh = state.meshFutures[si].get();
                 if (!mesh.vertices.empty())
                 {
-                    state.handles[si] = UploadSectionMesh(cmd, state.coord, si, mesh);
+                    const ArenaHandle h = UploadSectionMesh(cmd, state.coord, si, mesh);
+                    if (!h.valid)
+                        return uploads; // arena OOM — stop this frame so GrowIfNeeded can grow before we retry,
+                                        // instead of hammering every remaining ready section with doomed uploads
+                    state.handles[si] = h;
                     ++uploads;
                 }
                 state.sectionUploaded[si] = true;
@@ -891,13 +921,36 @@ namespace pe::voxel
                     continue;
 
                 const MeshData &mesh = state.remeshFutures[si].get();
-                if (state.handles[si].valid)
+                const bool sectionHasBlocks = state.column && !state.column->Section(si).IsEmpty();
+                if (mesh.vertices.empty() && sectionHasBlocks && state.handles[si].valid)
+                {
+                    state.remeshFutures[si] = std::shared_future<MeshData>();
+                    state.remeshPending[si] = false;
+                    if (state.dirtyAfterRemesh[si])
+                    {
+                        state.dirtyAfterRemesh[si] = false;
+                        MarkSectionDirty(state.coord, si);
+                    }
+                    continue;
+                }
+
+                if (!mesh.vertices.empty())
+                {
+                    // Upload the replacement BEFORE releasing the old mesh. On arena OOM keep the old
+                    // handle (stays visible) and retry next frame after GrowIfNeeded — releasing first
+                    // would drop the section to invisible until its next edit (remeshPending is cleared below).
+                    const ArenaHandle h = UploadSectionMesh(cmd, state.coord, si, mesh);
+                    if (!h.valid)
+                        continue;
+                    if (state.handles[si].valid)
+                        m_arena.Release(state.handles[si]);
+                    state.handles[si] = h;
+                }
+                else if (state.handles[si].valid)
                 {
                     m_arena.Release(state.handles[si]);
                     state.handles[si] = ArenaHandle{};
                 }
-                if (!mesh.vertices.empty())
-                    state.handles[si] = UploadSectionMesh(cmd, state.coord, si, mesh);
 
                 state.remeshFutures[si] = std::shared_future<MeshData>();
                 state.remeshPending[si] = false;

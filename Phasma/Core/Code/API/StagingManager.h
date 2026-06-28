@@ -5,7 +5,6 @@ namespace pe
     class Buffer;
 
     constexpr uint8_t kDeleteDelay = 5;
-    constexpr uint8_t kOversizeCapMultiplier = 2;
 
     struct StagingAllocation
     {

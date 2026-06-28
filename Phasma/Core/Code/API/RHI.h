@@ -245,6 +245,10 @@ namespace pe
         void ChangePresentMode(PePresentMode mode);
         const char *PresentModeToString(PePresentMode presentMode);
         StagingManager *GetStagingManager() { return m_stagingManager; }
+        // Persistent GPU-resident buffer pre-filled with `value`, for a GPU-native DX12 FillBuffer
+        // (CopyBufferRegion from it, no CPU staging round-trip). Lazily created. Only value 0/1 and DX12
+        // are supported; returns nullptr otherwise so the caller keeps the staging fallback.
+        Buffer *GetDx12FillSource(uint32_t value);
         void AddToDeletionQueue(std::function<void()> &&deletor);
         void FlushDeletionQueue(uint32_t frameIndex);
 
@@ -267,6 +271,8 @@ namespace pe
         Swapchain *m_swapchain;
         uint32_t m_frameCounter;
         StagingManager *m_stagingManager;
+        Buffer *m_dx12FillZero = nullptr; // GPU-native DX12 FillBuffer sources (see GetDx12FillSource)
+        Buffer *m_dx12FillOne = nullptr;
         std::vector<DeletionQueue *> m_deletionQueues;
 
         // Limits

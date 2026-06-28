@@ -1058,6 +1058,16 @@ namespace pe
             Downsampler::Destroy();
             DescriptorLayout::ClearCache();
             Swapchain::Destroy(m_swapchain);
+            if (m_dx12FillZero)
+            {
+                Buffer::Destroy(m_dx12FillZero);
+                m_dx12FillZero = nullptr;
+            }
+            if (m_dx12FillOne)
+            {
+                Buffer::Destroy(m_dx12FillOne);
+                m_dx12FillOne = nullptr;
+            }
             Queue::Destroy(m_mainQueue);
             CommandBuffer::ClearCache();
             delete m_stagingManager;
@@ -2347,6 +2357,36 @@ namespace pe
         for (auto &deletor : deletors)
             deletor();
         deletors.clear();
+    }
+
+    Buffer *RHI::GetDx12FillSource(uint32_t value)
+    {
+        // Only DX12 (Vulkan has inline vkCmdFillBuffer) and only the values the arena/cull fill with (0/1).
+        if (GetApi() != PE_GRAPHICS_API_DX12 || value > 1u)
+            return nullptr;
+        Buffer *&src = (value == 0u) ? m_dx12FillZero : m_dx12FillOne;
+        if (src)
+            return src;
+
+        // 256 KB covers any single arena/cull fill (visibility 4 B, a section's index bytes); larger fills
+        // fall back to the caller's staging path. GPU-resident, filled once here (one-shot submit+wait).
+        constexpr size_t kSize = 256u * 1024u;
+        src = Buffer::Create({
+            .size = kSize,
+            .usage = PE_BUFFER_USAGE_TRANSFER_SRC | PE_BUFFER_USAGE_TRANSFER_DST,
+            .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY,
+            .name = (value == 0u) ? "Dx12FillZeroSrc" : "Dx12FillOneSrc",
+        });
+
+        std::vector<uint32_t> pattern(kSize / sizeof(uint32_t), value);
+        CommandBuffer *cmd = m_mainQueue->AcquireCommandBuffer();
+        cmd->Begin();
+        cmd->CopyBufferStaged(src, pattern.data(), kSize, 0);
+        cmd->End();
+        m_mainQueue->Submit(1, &cmd, nullptr, nullptr);
+        cmd->Wait();
+        cmd->Return();
+        return src;
     }
 
     void RHI::AddToDeletionQueue(std::function<void()> &&deletor)
