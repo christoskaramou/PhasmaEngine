@@ -91,7 +91,6 @@ namespace pe::voxel
         e.idxBytes = idxBytes;
         e.sceneSlot = slot;
         m_entries[id] = e;
-        m_slotToId[slot] = id;
 
         ArenaHandle h{};
         h.id = id;
@@ -115,8 +114,10 @@ namespace pe::voxel
 
         ++m_tick;
 
-        // Retire matured ranges back to the free lists (delayed so no in-flight occlusion draw can
-        // index reused geometry).
+        // Retire matured ranges back to the free lists AND return the tombstoned scene slot to the
+        // reuse pool. Delayed so no in-flight draw (nor a stale two-phase-occlusion filtered draw) can
+        // index the reused geometry, and — critically — so a slot's Mesh_Constants are overwritten by a
+        // reusing AddArenaMesh only once no in-flight frame still reads them.
         if (!m_retire.empty())
         {
             std::vector<Retire> stillPending;
@@ -127,6 +128,8 @@ namespace pe::voxel
                 {
                     m_vtxAlloc->Free(r.vtxOffset, r.vtxCount);
                     m_idxAlloc->Free(r.idxOffset, r.idxBytes);
+                    if (r.sceneSlot >= 0)
+                        m_scene->FreeArenaSlot(r.sceneSlot);
                 }
                 else
                 {
@@ -136,8 +139,9 @@ namespace pe::voxel
             m_retire.swap(stillPending);
         }
 
-        // Process queued removals. Each swap-remove may relocate the last arena slot into the freed
-        // one; the arena's id<->slot maps are fixed using the relocated slot the Scene returns.
+        // Tombstone queued removals now (zeroes the slot's draw/visibility so it stops rendering this
+        // frame); its slot + ranges become reusable only after kRetireDelay. No swap-remove relocation,
+        // so no slot's constants are CPU-rewritten while an in-flight frame still reads them.
         for (uint32_t id : m_pendingRelease)
         {
             auto it = m_entries.find(id);
@@ -145,27 +149,9 @@ namespace pe::voxel
                 continue;
             const Entry e = it->second; // copy before erasing
 
-            const int relocated = m_scene->RemoveArenaMesh(e.sceneSlot, cmd);
-            if (relocated >= 0)
-            {
-                // The mesh at slot `relocated` (old last slot) now lives at e.sceneSlot.
-                auto movedIt = m_slotToId.find(relocated);
-                if (movedIt != m_slotToId.end())
-                {
-                    const uint32_t movedId = movedIt->second;
-                    auto movedEntry = m_entries.find(movedId);
-                    if (movedEntry != m_entries.end())
-                        movedEntry->second.sceneSlot = e.sceneSlot;
-                    m_slotToId[e.sceneSlot] = movedId;
-                    m_slotToId.erase(relocated);
-                }
-            }
-            else
-            {
-                m_slotToId.erase(e.sceneSlot);
-            }
-
-            m_retire.push_back({e.vtxOffset, e.vtxCount, e.idxOffset, e.idxBytes, m_tick + kRetireDelay});
+            m_scene->RemoveArenaMesh(e.sceneSlot, cmd);
+            m_retire.push_back(
+                {e.vtxOffset, e.vtxCount, e.idxOffset, e.idxBytes, e.sceneSlot, m_tick + kRetireDelay});
             m_entries.erase(id);
         }
         m_pendingRelease.clear();

@@ -286,12 +286,19 @@ namespace pe
                          const std::vector<uint16_t> &indices, const AABB &localBox,
                          uint32_t reuseDataOffset, const MeshRuntime &runtimeForImages,
                          CommandBuffer *cmd = nullptr);
-        // Free an arena slot via swap-remove: relocates the last arena slot into `idx` (patching its
-        // firstInstance, which IS the storage index the culling/GBuffer shaders read) and neuters the
-        // removed mesh's index bytes (degenerates any stale two-phase-occlusion filtered draw).
-        // Returns the slot that was relocated into `idx` (so the caller can fix its handle->slot map),
-        // or -1 if `idx` was already the last slot (no relocation). cmd semantics as AddArenaMesh.
+        // Tombstone an arena slot: zero its indirect draw + visibility and neuter its index bytes so the
+        // cull/GBuffer emit nothing and any stale two-phase-occlusion filtered draw degenerates. The slot
+        // is NOT reused or relocated here — relocation would CPU-rewrite a slot's Mesh_Constants (incl the
+        // AABB origin the voxel VS reads for world position) while in-flight frames still read it on
+        // Vulkan (host-mapped, no device mirror) → garbage. The caller returns the slot via FreeArenaSlot
+        // after the retire delay, once no in-flight frame can reference it. Always returns -1.
         int RemoveArenaMesh(int idx, CommandBuffer *cmd = nullptr);
+        // Return a tombstoned slot to the free pool for reuse (called after the GeometryArena retire delay,
+        // so the slot's Mesh_Constants are only overwritten once no in-flight frame still reads them).
+        void FreeArenaSlot(int idx);
+        // Emit one coarse whole-buffer barrier per arena buffer. Add/RemoveArenaMesh skip their per-section
+        // barriers on the streamed (externalCmd) path; the caller flushes once per frame after all uploads.
+        void FlushArenaBarriers(CommandBuffer *cmd);
 
         // Arena layout, published by ReserveArenaCapacity for the GeometryArena's free lists (vertices
         // are a shared index across both vertex streams; index space is bytes into the tail).
@@ -765,7 +772,8 @@ namespace pe
             uint32_t vertexCount = 0;
         };
         std::vector<ArenaSlot> m_arenaSlots;
-        uint32_t m_arenaSlotBase = 0; // first arena scene-slot (== m_meshCount when capacity reserved)
+        uint32_t m_arenaSlotBase = 0;           // first arena scene-slot (== m_meshCount when capacity reserved)
+        std::vector<uint32_t> m_arenaFreeSlots; // tombstoned slots awaiting reuse (refilled after retire delay)
 
         std::vector<ImageView *> m_imageViews;
         ImageView *m_voxelAtlasView = nullptr;
