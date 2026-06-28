@@ -65,7 +65,9 @@ meshing/noise does not stall for tens of seconds. `PhasmaRuntime` compiles with 
   seam-adjacent sections dirty (vertical + horizontal + diagonal). `RemeshNeighborSeams` remeshes only
   seam-touching sections (cardinal: 2-voxel face slice; diagonal: 2×2 corner patch).
   `ColumnChunkStore` persists touched sections as sparse `.pevcol` overlays (procedural baseline +
-  saved edits on load).
+  saved edits on load). Columns flush on unload (`ReleaseColumn`) and on `voxel.destroy()` /
+  `voxel.save_all()`. All-air sections that were not edited this session are pruned on save; an
+  emptied column file is deleted when no sections remain.
 - Shaders: `VoxelGBuffer{VS,PS}.hlsl`, `VoxelShadowVS.hlsl`, `voxel_gbuffer.passinfo`.
 - Render: `VoxelHiZPyramidPass` (temporal Hi-Z from post-G-buffer depth), `ShadowCullCS.hlsl`.
 
