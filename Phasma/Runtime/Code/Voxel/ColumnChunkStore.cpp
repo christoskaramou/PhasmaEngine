@@ -127,10 +127,27 @@ namespace pe::voxel
             return false;
 
         const std::filesystem::path path = ColumnPath(root, column.Coord());
-        uint16_t sectionMask = touchedMask | PersistedSectionMask(root, column.Coord());
+        const uint16_t persistedMask = PersistedSectionMask(root, column.Coord());
+        uint16_t sectionMask = touchedMask | persistedMask;
         sectionMask &= static_cast<uint16_t>((1u << kSectionCount) - 1u);
-        if (sectionMask == 0)
-            return false;
+
+        uint16_t writeMask = 0;
+        for (int si = 0; si < kSectionCount; ++si)
+        {
+            if ((sectionMask & (1u << si)) == 0)
+                continue;
+            if (column.Section(si).IsEmpty() && (touchedMask & (1u << si)) == 0)
+                continue;
+            writeMask |= static_cast<uint16_t>(1u << si);
+        }
+        if (writeMask == 0)
+        {
+            std::error_code ec;
+            if (persistedMask != 0)
+                std::filesystem::remove(path, ec);
+            return persistedMask != 0;
+        }
+
         std::error_code ec;
         std::filesystem::create_directories(path.parent_path(), ec);
 
@@ -144,7 +161,7 @@ namespace pe::voxel
         ColumnHeader hdr{};
         std::memcpy(hdr.magic, kMagic, 4);
         hdr.version = kVersion;
-        hdr.sectionMask = sectionMask;
+        hdr.sectionMask = writeMask;
         hdr.cx = column.Coord().cx;
         hdr.cz = column.Coord().cz;
         out.write(reinterpret_cast<const char *>(&hdr), sizeof(hdr));
@@ -153,7 +170,7 @@ namespace pe::voxel
 
         for (int si = 0; si < kSectionCount; ++si)
         {
-            if ((sectionMask & (1u << si)) == 0)
+            if ((writeMask & (1u << si)) == 0)
                 continue;
             if (!WriteSection(out, column.Section(si)))
             {
