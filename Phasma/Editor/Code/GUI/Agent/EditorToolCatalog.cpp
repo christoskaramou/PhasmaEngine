@@ -5,6 +5,13 @@
 #include "Phasma/MCP/Utils.h"
 #include "Phasma/MCP/Codebase/BM25Index.h"
 
+#include <optional>
+#include <sstream>
+
+#if defined(PE_WIN32)
+#include <windows.h>
+#endif
+
 namespace pe
 {
     namespace
@@ -13,13 +20,6 @@ namespace pe
         using pmcp::Context;
         using pmcp::ToolDefinition;
         namespace schema = pmcp::schema;
-
-        std::string ToLower(std::string value)
-        {
-            for (auto &c : value)
-                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-            return value;
-        }
 
         std::string NormalizeRelativePath(const std::filesystem::path &path, const std::filesystem::path &root)
         {
@@ -43,6 +43,165 @@ namespace pe
             if (dirName.size() >= 6 && dirName.compare(0, 6, "build-") == 0)
                 return true;
             return false;
+        }
+
+        std::string ShellQuoteWindows(const std::string &arg)
+        {
+            std::string out = "\"";
+            for (char c : arg)
+            {
+                if (c == '"')
+                    out += "\\\"";
+                else
+                    out += c;
+            }
+            if (!arg.empty() && arg.back() == '\\')
+                out += '\\';
+            out += "\"";
+            return out;
+        }
+
+        std::string ShellQuotePosix(const std::string &arg)
+        {
+            std::string out = "'";
+            for (char c : arg)
+            {
+                if (c == '\'')
+                    out += "'\\''";
+                else
+                    out += c;
+            }
+            out += "'";
+            return out;
+        }
+
+        std::optional<std::string> RunProcessCapture(const std::string &commandLine)
+        {
+#if defined(PE_WIN32)
+            SECURITY_ATTRIBUTES sa{};
+            sa.nLength = sizeof(sa);
+            sa.bInheritHandle = TRUE;
+
+            HANDLE readPipe = nullptr;
+            HANDLE writePipe = nullptr;
+            if (!CreatePipe(&readPipe, &writePipe, &sa, 0))
+                return std::nullopt;
+            SetHandleInformation(readPipe, HANDLE_FLAG_INHERIT, 0);
+
+            STARTUPINFOA si{};
+            si.cb = sizeof(si);
+            si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+            si.hStdOutput = writePipe;
+            si.hStdError = writePipe;
+            si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+            si.wShowWindow = SW_HIDE;
+
+            PROCESS_INFORMATION pi{};
+            std::vector<char> cmd(commandLine.begin(), commandLine.end());
+            cmd.push_back('\0');
+            if (!CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr, nullptr, &si,
+                                &pi))
+            {
+                CloseHandle(readPipe);
+                CloseHandle(writePipe);
+                return std::nullopt;
+            }
+
+            CloseHandle(writePipe);
+            std::string output;
+            char buffer[4096];
+            DWORD read = 0;
+            while (ReadFile(readPipe, buffer, sizeof(buffer), &read, nullptr) && read > 0)
+                output.append(buffer, buffer + read);
+
+            WaitForSingleObject(pi.hProcess, INFINITE);
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+            CloseHandle(readPipe);
+            return output;
+#else
+            FILE *pipe = popen(commandLine.c_str(), "r");
+            if (!pipe)
+                return std::nullopt;
+            std::string output;
+            char buffer[4096];
+            while (fgets(buffer, sizeof(buffer), pipe))
+                output += buffer;
+            pclose(pipe);
+            return output;
+#endif
+        }
+
+        CallToolResult GrepProjectWithRg(const std::filesystem::path &searchPath, const std::string &projectRoot,
+                                         const std::string &pattern, const std::string &globFilter, bool useRegex,
+                                         bool caseSensitive, int maxResults)
+        {
+            std::vector<std::string> args = {"rg", "--json", "--max-count", std::to_string(maxResults),
+                                             "--glob", "!.git", "--glob", "!build", "--glob", "!build-*"};
+            if (!caseSensitive)
+                args.push_back("-i");
+            if (!globFilter.empty())
+            {
+                args.push_back("--glob");
+                args.push_back(globFilter);
+            }
+            if (!useRegex)
+                args.push_back("-F");
+            args.push_back("-e");
+            args.push_back(pattern);
+            args.push_back(searchPath.string());
+
+            std::string commandLine;
+            for (size_t i = 0; i < args.size(); ++i)
+            {
+                if (i > 0)
+                    commandLine += ' ';
+#if defined(PE_WIN32)
+                commandLine += ShellQuoteWindows(args[i]);
+#else
+                commandLine += ShellQuotePosix(args[i]);
+#endif
+            }
+
+            const std::optional<std::string> captured = RunProcessCapture(commandLine);
+            if (!captured)
+                return CallToolResult::Error("rg not available or failed to run");
+
+            nlohmann::json matches = nlohmann::json::array();
+            int count = 0;
+            std::istringstream stream(*captured);
+            std::string line;
+            while (std::getline(stream, line))
+            {
+                if (line.empty())
+                    continue;
+                nlohmann::json event = nlohmann::json::parse(line, nullptr, false);
+                if (!event.is_object() || event.value("type", "") != "match" || !event.contains("data"))
+                    continue;
+
+                const auto &data = event["data"];
+                if (!data.contains("path") || !data.contains("line_number") || !data.contains("lines"))
+                    continue;
+
+                std::string fileText = data["path"].value("text", "");
+                std::string text = data["lines"].value("text", "");
+                if (!text.empty() && text.back() == '\n')
+                    text.pop_back();
+                if (!text.empty() && text.back() == '\r')
+                    text.pop_back();
+
+                auto ws = text.find_first_not_of(" \t");
+                if (ws != std::string::npos)
+                    text = text.substr(ws);
+
+                matches.push_back({{"file", NormalizeRelativePath(std::filesystem::path(fileText), projectRoot)},
+                                   {"line", data["line_number"].get<int>()},
+                                   {"text", text}});
+                if (++count >= maxResults)
+                    break;
+            }
+
+            return CallToolResult::Json(nlohmann::json{{"count", count}, {"matches", std::move(matches)}});
         }
 
         // Tools whose handlers delegate to EditorToolRuntime parse the runtime's JSON-string return
@@ -341,123 +500,8 @@ namespace pe
                     if (!std::filesystem::exists(searchPath))
                         return CallToolResult::Error("directory not found: " + searchPath.string());
 
-                    std::string extFilter;
-                    if (!globFilter.empty())
-                    {
-                        auto star = globFilter.find('*');
-                        extFilter = (star != std::string::npos) ? globFilter.substr(star + 1) : globFilter;
-                        if (!caseSensitive)
-                            extFilter = ToLower(extFilter);
-                    }
-
-                    std::regex regex;
-                    bool regexValid = false;
-                    if (useRegex)
-                    {
-                        try
-                        {
-                            auto flags = std::regex::ECMAScript | std::regex::optimize;
-                            if (!caseSensitive)
-                                flags |= std::regex::icase;
-                            regex = std::regex(pattern, flags);
-                            regexValid = true;
-                        }
-                        catch (const std::regex_error &error)
-                        {
-                            return CallToolResult::Error(std::string("invalid regex: ") + error.what());
-                        }
-                    }
-
-                    const std::string literalLower = caseSensitive ? pattern : ToLower(pattern);
-                    nlohmann::json matches = nlohmann::json::array();
-                    int count = 0;
-
-                    auto processFile = [&](const std::filesystem::path &filePath) -> bool
-                    {
-                        std::ifstream file(filePath, std::ios::binary);
-                        if (!file.is_open())
-                            return true;
-
-                        char buffer[1024];
-                        const std::streamsize bytesRead = (file.read(buffer, sizeof(buffer)), file.gcount());
-                        if (std::find(buffer, buffer + bytesRead, '\0') != buffer + bytesRead)
-                            return true;
-                        file.clear();
-                        file.seekg(0);
-
-                        std::string line;
-                        int lineNum = 0;
-                        bool firstLine = true;
-                        while (std::getline(file, line))
-                        {
-                            ++lineNum;
-                            if (firstLine)
-                            {
-                                if (line.size() >= 3 &&
-                                    static_cast<unsigned char>(line[0]) == 0xEF &&
-                                    static_cast<unsigned char>(line[1]) == 0xBB &&
-                                    static_cast<unsigned char>(line[2]) == 0xBF)
-                                    line.erase(0, 3);
-                                firstLine = false;
-                            }
-
-                            if (!line.empty() && line.back() == '\r')
-                                line.pop_back();
-
-                            bool matched = false;
-                            if (useRegex && regexValid)
-                                matched = std::regex_search(line, regex);
-                            else
-                                matched = (caseSensitive ? line : ToLower(line)).find(literalLower) != std::string::npos;
-
-                            if (!matched)
-                                continue;
-
-                            std::string trimmed = line;
-                            auto ws = trimmed.find_first_not_of(" \t");
-                            if (ws != std::string::npos)
-                                trimmed = trimmed.substr(ws);
-
-                            matches.push_back({{"file", NormalizeRelativePath(filePath, projectRoot)},
-                                               {"line", lineNum},
-                                               {"text", trimmed}});
-                            if (++count >= maxResults)
-                                return false;
-                        }
-                        return true;
-                    };
-
-                    auto matchesExtension = [&](const std::filesystem::path &path) -> bool
-                    {
-                        if (extFilter.empty())
-                            return true;
-                        std::string ext = path.extension().string();
-                        if (!caseSensitive)
-                            ext = ToLower(ext);
-                        if (extFilter[0] == '.')
-                            return ext == extFilter;
-                        return ext == ("." + extFilter);
-                    };
-
-                    bool keepGoing = true;
-                    auto iter = std::filesystem::recursive_directory_iterator(
-                        searchPath, std::filesystem::directory_options::skip_permission_denied);
-                    const auto end = std::filesystem::recursive_directory_iterator();
-                    for (; iter != end && keepGoing; ++iter)
-                    {
-                        if (iter->is_directory())
-                        {
-                            const std::string dirName = iter->path().filename().string();
-                            if (IsBuildOrHiddenDir(dirName))
-                                iter.disable_recursion_pending();
-                            continue;
-                        }
-                        if (!iter->is_regular_file() || !matchesExtension(iter->path()))
-                            continue;
-                        keepGoing = processFile(iter->path());
-                    }
-
-                    return CallToolResult::Json(nlohmann::json{{"count", count}, {"matches", std::move(matches)}});
+                    return GrepProjectWithRg(searchPath, projectRoot, pattern, globFilter, useRegex, caseSensitive,
+                                             maxResults);
                 };
                 tools.push_back(std::move(tool));
             }
@@ -1877,6 +1921,61 @@ namespace pe
             return end != std::string::npos ? header.substr(pos, end - pos) : header.substr(pos);
         }
 
+        int SymbolDefinitionPriority(const std::string &file, const std::string &header, const std::string &nameLower)
+        {
+            const std::string fileLower = ToLower(file);
+            const std::string headerLower = ToLower(header);
+            auto slash = fileLower.rfind('/');
+            if (slash == std::string::npos)
+                slash = fileLower.rfind('\\');
+            std::string stem = (slash != std::string::npos) ? fileLower.substr(slash + 1) : fileLower;
+            auto dot = stem.rfind('.');
+            if (dot != std::string::npos)
+                stem = stem.substr(0, dot);
+            if (stem == nameLower)
+                return 3;
+            for (const char *tag : {"class: ", "method: ", "struct: "})
+            {
+                auto pos = headerLower.find(tag);
+                if (pos != std::string::npos &&
+                    headerLower.substr(pos + strlen(tag), nameLower.size()) == nameLower)
+                    return 2;
+            }
+            if (fileLower.find(nameLower) != std::string::npos)
+                return 1;
+            return 0;
+        }
+
+        int SymbolDefinitionPriorityMulti(const std::string &file,
+                                          const std::string &header,
+                                          const std::vector<std::string> &queriesLower)
+        {
+            const std::string fileLower = ToLower(file);
+            const std::string headerLower = ToLower(header);
+            auto slash = fileLower.rfind('/');
+            if (slash == std::string::npos)
+                slash = fileLower.rfind('\\');
+            std::string stem = (slash != std::string::npos) ? fileLower.substr(slash + 1) : fileLower;
+            auto dot = stem.rfind('.');
+            if (dot != std::string::npos)
+                stem = stem.substr(0, dot);
+            for (const auto &queryLower : queriesLower)
+            {
+                if (stem == queryLower)
+                    return 3;
+                for (const char *tag : {"class: ", "method: ", "struct: "})
+                {
+                    auto pos = headerLower.find(tag);
+                    if (pos != std::string::npos &&
+                        headerLower.substr(pos + strlen(tag), queryLower.size()) == queryLower)
+                        return 2;
+                }
+                if (fileLower.find(queryLower) != std::string::npos)
+                    return 1;
+            }
+            return 0;
+        }
+
         nlohmann::json BuildSymbolMatch(const std::string &content, const std::string &file, const std::string &lines)
         {
             const auto [startLine, endLine] = ParseLineRange(lines);
@@ -1931,30 +2030,6 @@ namespace pe
                         return CallToolResult::Error("no symbols found matching: " + symbolName);
 
                     const std::string nameLower = ToLower(symbolName);
-                    auto definitionPriority = [&](const std::string &file, const std::string &header) -> int
-                    {
-                        const std::string fileLower = ToLower(file);
-                        const std::string headerLower = ToLower(header);
-                        auto slash = fileLower.rfind('/');
-                        if (slash == std::string::npos)
-                            slash = fileLower.rfind('\\');
-                        std::string stem = (slash != std::string::npos) ? fileLower.substr(slash + 1) : fileLower;
-                        auto dot = stem.rfind('.');
-                        if (dot != std::string::npos)
-                            stem = stem.substr(0, dot);
-                        if (stem == nameLower)
-                            return 3;
-                        for (const char *tag : {"class: ", "method: ", "struct: "})
-                        {
-                            auto pos = headerLower.find(tag);
-                            if (pos != std::string::npos &&
-                                headerLower.substr(pos + strlen(tag), nameLower.size()) == nameLower)
-                                return 2;
-                        }
-                        if (fileLower.find(nameLower) != std::string::npos)
-                            return 1;
-                        return 0;
-                    };
 
                     struct Candidate
                     {
@@ -1976,7 +2051,7 @@ namespace pe
                             header = result.content.substr(0, nl);
                         else
                             header = result.content.substr(0, std::min(result.content.size(), static_cast<size_t>(200)));
-                        candidates.push_back({result.content, file, lines, definitionPriority(file, header)});
+                        candidates.push_back({result.content, file, lines, SymbolDefinitionPriority(file, header, nameLower)});
                     }
 
                     std::stable_sort(candidates.begin(), candidates.end(),
@@ -2043,34 +2118,6 @@ namespace pe
                     for (const auto &q : queries)
                         queriesLower.push_back(ToLower(q));
 
-                    auto definitionPriority = [&](const std::string &file, const std::string &header) -> int
-                    {
-                        std::string fileLower = ToLower(file);
-                        std::string headerLower = ToLower(header);
-                        auto slash = fileLower.rfind('/');
-                        if (slash == std::string::npos)
-                            slash = fileLower.rfind('\\');
-                        std::string stem = (slash != std::string::npos) ? fileLower.substr(slash + 1) : fileLower;
-                        auto dot = stem.rfind('.');
-                        if (dot != std::string::npos)
-                            stem = stem.substr(0, dot);
-                        for (const auto &queryLower : queriesLower)
-                        {
-                            if (stem == queryLower)
-                                return 3;
-                            for (const char *tag : {"class: ", "method: ", "struct: "})
-                            {
-                                auto pos = headerLower.find(tag);
-                                if (pos != std::string::npos &&
-                                    headerLower.substr(pos + strlen(tag), queryLower.size()) == queryLower)
-                                    return 2;
-                            }
-                            if (fileLower.find(queryLower) != std::string::npos)
-                                return 1;
-                        }
-                        return 0;
-                    };
-
                     struct ScoredEntry
                     {
                         std::string content;
@@ -2092,7 +2139,8 @@ namespace pe
                             header = result.content.substr(0, nl);
                         else
                             header = result.content.substr(0, std::min(result.content.size(), static_cast<size_t>(200)));
-                        candidates.push_back({result.content, file, lines, result.score, definitionPriority(file, header)});
+                        candidates.push_back({result.content, file, lines, result.score,
+                                              SymbolDefinitionPriorityMulti(file, header, queriesLower)});
                     }
 
                     std::stable_sort(candidates.begin(), candidates.end(),

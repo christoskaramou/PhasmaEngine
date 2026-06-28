@@ -66,14 +66,6 @@ namespace pe
             return std::filesystem::path(reinterpret_cast<const char8_t *>(value.c_str()));
         }
 
-        std::string ToLower(std::string value)
-        {
-            std::transform(value.begin(), value.end(), value.begin(),
-                           [](unsigned char c)
-                           { return static_cast<char>(std::tolower(c)); });
-            return value;
-        }
-
         std::filesystem::path PayloadPath(const ImGuiPayload *payload)
         {
             if (!payload || !payload->Data || payload->DataSize <= 1)

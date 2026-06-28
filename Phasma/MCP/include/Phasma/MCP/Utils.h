@@ -44,16 +44,10 @@ namespace pmcp
     // build a flat JSON object from key/value pairs (values are already JSON-encoded)
     inline std::string JsonObj(const std::vector<std::pair<std::string, std::string>> &kv)
     {
-        std::string out = "{";
-        bool first = true;
+        nlohmann::json out = nlohmann::json::object();
         for (const auto &[k, v] : kv)
-        {
-            if (!first)
-                out += ",";
-            out += JsonStr(k) + ":" + v;
-            first = false;
-        }
-        return out + "}";
+            out[k] = nlohmann::json::parse(v);
+        return out.dump();
     }
 
     // initializer_list overload for convenience
@@ -172,106 +166,8 @@ namespace pmcp
         return out;
     }
 
-    // Encode RGBA pixels as an uncompressed PNG.
-    // Uses deflate stored blocks (no compression) - simple but valid PNG.
-    inline std::vector<uint8_t> EncodeRGBA_PNG(const uint8_t *rgba, int w, int h)
-    {
-        auto crc32 = [](const uint8_t *data, size_t len) -> uint32_t
-        {
-            uint32_t c = 0xFFFFFFFF;
-            for (size_t i = 0; i < len; i++)
-            {
-                c ^= data[i];
-                for (int j = 0; j < 8; j++)
-                    c = (c >> 1) ^ (0xEDB88320 & (-(c & 1)));
-            }
-            return c ^ 0xFFFFFFFF;
-        };
-
-        auto put32be = [](std::vector<uint8_t> &v, uint32_t val)
-        {
-            v.push_back((val >> 24) & 0xFF);
-            v.push_back((val >> 16) & 0xFF);
-            v.push_back((val >> 8) & 0xFF);
-            v.push_back(val & 0xFF);
-        };
-
-        auto writeChunk = [&](std::vector<uint8_t> &out, const char *type, const uint8_t *data, size_t len)
-        {
-            put32be(out, static_cast<uint32_t>(len));
-            size_t typeStart = out.size();
-            for (int i = 0; i < 4; i++)
-                out.push_back(static_cast<uint8_t>(type[i]));
-            out.insert(out.end(), data, data + len);
-            uint32_t c = crc32(&out[typeStart], 4 + len);
-            put32be(out, c);
-        };
-
-        std::vector<uint8_t> png;
-        // PNG signature
-        const uint8_t sig[] = {137, 80, 78, 71, 13, 10, 26, 10};
-        png.insert(png.end(), sig, sig + 8);
-
-        // IHDR
-        std::vector<uint8_t> ihdr;
-        put32be(ihdr, w);
-        put32be(ihdr, h);
-        ihdr.push_back(8); // bit depth
-        ihdr.push_back(6); // color type: RGBA
-        ihdr.push_back(0); // compression
-        ihdr.push_back(0); // filter
-        ihdr.push_back(0); // interlace
-        writeChunk(png, "IHDR", ihdr.data(), ihdr.size());
-
-        // IDAT: build raw filtered data (filter byte 0 = None per row)
-        size_t rowBytes = w * 4;
-        size_t rawSize = h * (1 + rowBytes); // filter byte + pixel data per row
-        std::vector<uint8_t> raw(rawSize);
-        for (int y = 0; y < h; y++)
-        {
-            raw[y * (1 + rowBytes)] = 0; // filter: None
-            std::memcpy(&raw[y * (1 + rowBytes) + 1], rgba + y * rowBytes, rowBytes);
-        }
-
-        // Wrap in zlib: CMF + FLG + stored deflate blocks + Adler32
-        // Adler32
-        uint32_t a = 1, b = 0;
-        for (size_t i = 0; i < raw.size(); i++)
-        {
-            a = (a + raw[i]) % 65521;
-            b = (b + a) % 65521;
-        }
-        uint32_t adler = (b << 16) | a;
-
-        std::vector<uint8_t> zlib;
-        zlib.push_back(0x78); // CMF
-        zlib.push_back(0x01); // FLG (no dict, check bits)
-
-        // Split into 65535-byte stored blocks
-        size_t offset = 0;
-        while (offset < raw.size())
-        {
-            size_t blockLen = std::min<size_t>(raw.size() - offset, 65535);
-            bool last = (offset + blockLen >= raw.size());
-            zlib.push_back(last ? 0x01 : 0x00); // BFINAL + BTYPE=00 (stored)
-            uint16_t len16 = static_cast<uint16_t>(blockLen);
-            uint16_t nlen16 = ~len16;
-            zlib.push_back(len16 & 0xFF);
-            zlib.push_back((len16 >> 8) & 0xFF);
-            zlib.push_back(nlen16 & 0xFF);
-            zlib.push_back((nlen16 >> 8) & 0xFF);
-            zlib.insert(zlib.end(), raw.begin() + offset, raw.begin() + offset + blockLen);
-            offset += blockLen;
-        }
-        put32be(zlib, adler);
-
-        writeChunk(png, "IDAT", zlib.data(), zlib.size());
-
-        // IEND
-        writeChunk(png, "IEND", nullptr, 0);
-
-        return png;
-    }
+    // Encode RGBA pixels as PNG via stb_image_write.
+    std::vector<uint8_t> EncodeRGBA_PNG(const uint8_t *rgba, int w, int h);
 
     // Strip non-UTF-8 bytes to avoid JSON serialization errors (nlohmann type_error.316).
     // Invalid/truncated multi-byte sequences are dropped silently.

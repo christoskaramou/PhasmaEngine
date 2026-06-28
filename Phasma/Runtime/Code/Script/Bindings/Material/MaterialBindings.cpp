@@ -82,20 +82,6 @@ namespace pe
         return image;
     }
 
-    static ResourceHandle<Image> DefaultTextureForSlot(TextureType slot)
-    {
-        const auto &defaults = ModelAsset::GetDefaultResources();
-        switch (slot)
-        {
-        case TextureType::Normal:
-            return ResourceHandle<Image>::FromRaw(defaults.normal);
-        case TextureType::Emissive:
-            return ResourceHandle<Image>::FromRaw(defaults.black);
-        default:
-            return ResourceHandle<Image>::FromRaw(defaults.white);
-        }
-    }
-
     static MaterialInstance *EnsureInstance(Scene *s, Mesh &mesh)
     {
         if (mesh.materialInstance)
@@ -137,7 +123,7 @@ namespace pe
         if (!inst)
             return false;
 
-        inst->SetTexture(slot, DefaultTextureForSlot(slot));
+        inst->SetTexture(slot, ModelAsset::DefaultTextureForSlot(slot));
         inst->SetTextureMask(inst->GetTextureMask() & ~TextureBit(slot));
         s->SetTexturesDirty();
         s->SetMaterialDirty();

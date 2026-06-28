@@ -21,11 +21,14 @@ namespace pe
         static void StopAndJoin();
         inline static bool IsRunning() { return s_running; }
 
+        static std::shared_ptr<FileWatcher> Create(const std::string &file, Func &&callback);
+
         void Watch();
         std::time_t GetFileTime();
         inline std::string GetFile() const { return m_file; }
         inline Func GetCallback() const { return m_callback; }
         inline size_t GetHash() const { return m_hash; }
+        ~FileWatcher();
 
     private:
         FileWatcher() = default;
@@ -38,10 +41,11 @@ namespace pe
         std::string m_file;
         std::time_t m_time;
         Func m_callback;
+        uintptr_t m_dirNotify = 0;
 
         inline static std::vector<std::string> s_files{};
         inline static std::vector<std::string> s_folders{};
-        inline static std::unordered_map<size_t, FileWatcher *> s_watchers{};
+        inline static std::unordered_map<size_t, std::shared_ptr<FileWatcher>> s_watchers{};
         inline static std::atomic_bool s_enabled{true};
         inline static std::atomic_bool s_running{false};
         inline static std::mutex s_mutex{};

@@ -12,6 +12,8 @@ namespace pe::voxel
         void Set(int idx, BlockId);
         void Fill(BlockId);
         bool IsAllAir() const;
+        const BlockId *Data() const { return m_data.data(); }
+        void ReplaceAll(const BlockId *src, size_t count);
 
     private:
         std::array<BlockId, kBlocksPerSection> m_data{};

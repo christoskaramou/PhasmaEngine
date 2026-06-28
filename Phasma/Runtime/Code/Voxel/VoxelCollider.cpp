@@ -12,25 +12,6 @@ namespace pe::voxel
             return static_cast<int>(std::floor(v));
         }
 
-        float Component(const vec3 &v, int axis)
-        {
-            if (axis == 0)
-                return v.x;
-            if (axis == 1)
-                return v.y;
-            return v.z;
-        }
-
-        void SetComponent(vec3 &v, int axis, float value)
-        {
-            if (axis == 0)
-                v.x = value;
-            else if (axis == 1)
-                v.y = value;
-            else
-                v.z = value;
-        }
-
         int CellComponent(const BlockPos &cell, int axis)
         {
             if (axis == 0)
@@ -98,8 +79,8 @@ namespace pe::voxel
 
         CellRange OverlapRange(const vec3 &pos, const vec3 &halfExtents, int axis)
         {
-            const float minFace = Component(pos, axis) - Component(halfExtents, axis);
-            const float maxFace = Component(pos, axis) + Component(halfExtents, axis);
+            const float minFace = pos[axis] - halfExtents[axis];
+            const float maxFace = pos[axis] + halfExtents[axis];
             return {FloorToInt(minFace), FloorToInt(maxFace - kCellEpsilon)};
         }
 
@@ -160,13 +141,13 @@ namespace pe::voxel
             if (amount == 0.0f)
                 return;
 
-            const float oldCenter = Component(pos, axis);
-            const float half = Component(halfExtents, axis);
+            const float oldCenter = pos[axis];
+            const float half = halfExtents[axis];
             const float oldFace = oldCenter + (amount > 0.0f ? half : -half);
 
-            SetComponent(pos, axis, oldCenter + amount);
+            pos[axis] = oldCenter + amount;
 
-            const float newCenter = Component(pos, axis);
+            const float newCenter = pos[axis];
             const float newFace = newCenter + (amount > 0.0f ? half : -half);
             const int startCell = FloorToInt(oldFace);
             const int endCell = FloorToInt(newFace);
@@ -181,7 +162,7 @@ namespace pe::voxel
                 {
                     if (HasSolidOnFace(axis, cell, firstRange, secondRange, isSolid))
                     {
-                        SetComponent(pos, axis, static_cast<float>(cell) - half);
+                        pos[axis] = static_cast<float>(cell) - half;
                         return;
                     }
                 }
@@ -192,7 +173,7 @@ namespace pe::voxel
                 {
                     if (HasSolidOnFace(axis, cell, firstRange, secondRange, isSolid))
                     {
-                        SetComponent(pos, axis, static_cast<float>(cell + 1) + half);
+                        pos[axis] = static_cast<float>(cell + 1) + half;
                         return;
                     }
                 }

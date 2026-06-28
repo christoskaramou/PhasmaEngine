@@ -3,7 +3,6 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/Sampler.h"
-#include "Scene/PassInfoAsset.h"
 #include "Scene/Scene.h"
 #include "stb_image.h"
 
@@ -11,9 +10,6 @@ namespace pe::voxel
 {
     namespace
     {
-        constexpr const char *kVoxelPassInfo = "Shaders/Voxel/voxel_gbuffer.passinfo";
-        constexpr const char *kAtlasTextureName = "gVoxelAtlas";
-
         std::string MakeAtlasResourceId(const std::vector<std::string> &tilePngPaths)
         {
             std::string id = "VoxelMaterial.Atlas";
@@ -110,23 +106,6 @@ namespace pe::voxel
                 return;
 
             scene->GetImageStore().push_back(atlas);
-        }
-
-        void UpdateAtlasNamedTextureIndex(Scene *scene, Material *material, const ResourceHandle<Image> &atlas)
-        {
-            material->namedTextureIndices[kAtlasTextureName] = 0xFFFFFFFF;
-            if (!atlas || !atlas->GetSRV())
-                return;
-
-            const std::vector<ImageView *> &imageViews = scene->GetImageViews();
-            for (uint32_t index = 0; index < static_cast<uint32_t>(imageViews.size()); ++index)
-            {
-                if (imageViews[index] == atlas->GetSRV())
-                {
-                    material->namedTextureIndices[kAtlasTextureName] = index;
-                    return;
-                }
-            }
         }
 
         ResourceHandle<Image> CreateAtlas(const std::string &atlasId, const std::vector<std::string> &tilePngPaths)
@@ -255,7 +234,6 @@ namespace pe::voxel
 
     void VoxelMaterial::Build(Scene *scene, const std::vector<std::string> &tilePngPaths)
     {
-        m_material.reset();
         m_atlas = {};
 
         if (!scene)
@@ -277,24 +255,13 @@ namespace pe::voxel
 
         StoreAtlas(scene, m_atlas);
 
-        m_material = std::make_unique<Material>();
-        m_material->name = "VoxelMaterial";
-        m_material->passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::RuntimeAssets + kVoxelPassInfo);
-        m_material->namedTextures[kAtlasTextureName] = m_atlas;
-        m_material->dirty = true;
-
+        // Rebuild material/mesh-constant tables so the host material + atlas image are registered
+        // before VoxelWorld reserves arena capacity. The atlas SRV itself is bound via
+        // Scene::SetVoxelAtlasView, not through this table.
         if (RHII.GetMainQueue())
-        {
             scene->UpdateTextures();
-            UpdateAtlasNamedTextureIndex(scene, m_material.get(), m_atlas);
-        }
         else
             PE_WARN("[VoxelMaterial] Cannot refresh scene texture bindings without a main queue.");
-    }
-
-    Material *VoxelMaterial::Get() const
-    {
-        return m_material.get();
     }
 
     ResourceHandle<Image> VoxelMaterial::Atlas() const

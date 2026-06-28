@@ -41,14 +41,6 @@ namespace pe
         const ImVec4 TreeLineBg = ImVec4(0.35f, 0.35f, 0.35f, 0.5f);
     } // namespace HierarchyStyle
 
-    static std::string ToLower(std::string value)
-    {
-        std::transform(value.begin(), value.end(), value.begin(),
-                       [](unsigned char c)
-                       { return static_cast<char>(std::tolower(c)); });
-        return value;
-    }
-
     static bool ContainsSpriteMarker(const std::string &value)
     {
         return value.find("sprite") != std::string::npos || value.find("atlas") != std::string::npos;

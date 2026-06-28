@@ -19,6 +19,7 @@ option(PE_PMCP_CODEBASE "Build the BM25 + line-chunked codebase indexer alongsid
 set(PMCP_CORE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Server.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/HttpTransport.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/PngWrite.cpp"
 )
 
 set(PMCP_CODEBASE_SOURCES

@@ -1,5 +1,6 @@
 #include "Voxel/VoxelWorld.h"
 #include "Voxel/GreedyMesher.h"
+#include "Voxel/ColumnChunkStore.h"
 #include "Voxel/VoxelCollider.h"
 #include "Voxel/VoxelMaterial.h"
 #include "API/Command.h"
@@ -265,6 +266,9 @@ namespace pe::voxel
         m_cfg.unloadMargin = std::max(0, m_cfg.unloadMargin);
         m_cfg.uploadBudgetPerFrame = std::max(1, m_cfg.uploadBudgetPerFrame);
         m_cfg.groundY = ClampInt(m_cfg.groundY, 0, kWorldHeight);
+        m_saveRoot = ColumnChunkStore::ResolveRoot(m_cfg.saveDir);
+        if (!m_saveRoot.empty())
+            PE_INFO("VoxelWorld: column persistence root %s", m_saveRoot.generic_string().c_str());
 #if defined(PE_DEBUG)
         // Greedy mesh + noise worldgen are unoptimized enough in Debug that huge radii stall for
         // tens of seconds. Release is unaffected; scripts can still request any radius there.
@@ -288,7 +292,7 @@ namespace pe::voxel
 
         m_scene->FlushPendingGpuWork();
 
-        // Build the voxel material (atlas upload + Scene::UpdateTextures) BEFORE reserving arena
+        // Build the voxel atlas (upload + Scene::UpdateTextures) BEFORE reserving arena
         // capacity. UpdateTextures rebuilds m_meshConstants/materialTable to the NON-arena size; if it
         // ran after arena.Init it would shrink the arena's reservation and overflow the per-section
         // mesh-constants write (Buffer::CopyDataRaw range overflow). Arena reservation must be the LAST
@@ -328,6 +332,7 @@ namespace pe::voxel
     void VoxelWorld::Destroy()
     {
         RetireSubmittedUpdateCommands(true);
+        PersistAllTouchedColumns();
 
         if (m_scene)
             m_scene->SetVoxelAtlasView(nullptr);
@@ -366,6 +371,7 @@ namespace pe::voxel
         m_hostMeshIndex = -1;
         m_hostDataOffset = 0xFFFFFFFF;
         m_materialGpuIndex = 0xFFFFFFFF;
+        m_saveRoot.clear();
         m_scene = nullptr;
     }
 
@@ -410,6 +416,7 @@ namespace pe::voxel
             return; // no change
 
         state.column->SetLocal(LocalX(x), y, LocalZ(z), id);
+        TouchSection(coord, SectionIndex(y));
         MarkEditDirtySections(coord, x, y, z);
     }
 
@@ -590,12 +597,15 @@ namespace pe::voxel
         // keeps the generator alive until that last job returns. Generators must be thread-safe
         // (NoiseGen is stateless); workers run Generate() concurrently on distinct columns.
         std::shared_ptr<ITerrainGenerator> gen = m_generator;
+        const std::filesystem::path saveRoot = m_saveRoot;
         state.generationFuture = ThreadPool::General.Enqueue(
-            [coord, gen]() -> ChunkColumn
+            [coord, gen, saveRoot]() -> ChunkColumn
             {
                 ChunkColumn column(coord);
                 if (gen)
                     gen->Generate(column);
+                if (!saveRoot.empty())
+                    ColumnChunkStore::TryOverlay(saveRoot, column);
                 return column;
             });
         m_columns.emplace(ColumnKey(coord), std::move(state));
@@ -623,6 +633,8 @@ namespace pe::voxel
 
             state.column = std::make_unique<ChunkColumn>(state.generationFuture.get());
             state.generationFuture = std::shared_future<ChunkColumn>();
+            if (!m_saveRoot.empty())
+                state.touchedSectionMask |= ColumnChunkStore::PersistedSectionMask(m_saveRoot, state.coord);
             ApplyPendingEdits(key, *state.column);
             state.state = ColumnLoadState::Generated;
             TryStartColumnMeshing(state);
@@ -665,10 +677,14 @@ namespace pe::voxel
         if (editsIt == m_pendingEdits.end())
             return;
 
+        const ColumnCoord coord = column.Coord();
         for (const PendingEdit &edit : editsIt->second)
         {
             if (edit.y >= 0 && edit.y < kWorldHeight)
+            {
                 column.SetLocal(LocalX(edit.x), edit.y, LocalZ(edit.z), edit.id);
+                TouchSection(coord, SectionIndex(edit.y));
+            }
         }
         m_pendingEdits.erase(editsIt);
     }
@@ -829,6 +845,7 @@ namespace pe::voxel
 
     void VoxelWorld::ReleaseColumn(ColumnState &state)
     {
+        PersistColumnIfTouched(state);
         state.state = ColumnLoadState::Unloading;
         for (ArenaHandle &handle : state.handles)
         {
@@ -912,21 +929,35 @@ namespace pe::voxel
         const int lx = LocalX(wx);
         const int lz = LocalZ(wz);
 
+        TouchSection(coord, si);
         MarkSectionDirty(coord, si);
 
         if (ly == 0 && si > 0)
+        {
+            TouchSection(coord, si - 1);
             MarkSectionDirty(coord, si - 1);
+        }
         else if (ly == kSectionDim - 1 && si + 1 < kSectionCount)
+        {
+            TouchSection(coord, si + 1);
             MarkSectionDirty(coord, si + 1);
+        }
 
         auto markNeighbor = [&](int dcx, int dcz)
         {
             const ColumnCoord neighbor{coord.cx + dcx, coord.cz + dcz};
+            TouchSection(neighbor, si);
             MarkSectionDirty(neighbor, si);
             if (ly == 0 && si > 0)
+            {
+                TouchSection(neighbor, si - 1);
                 MarkSectionDirty(neighbor, si - 1);
+            }
             else if (ly == kSectionDim - 1 && si + 1 < kSectionCount)
+            {
+                TouchSection(neighbor, si + 1);
                 MarkSectionDirty(neighbor, si + 1);
+            }
         };
 
         if (lx == 0)
@@ -989,5 +1020,41 @@ namespace pe::voxel
             cmd->Return();
             m_submittedUpdateCmds.erase(m_submittedUpdateCmds.begin());
         }
+    }
+
+    void VoxelWorld::TouchSection(ColumnCoord coord, int si)
+    {
+        if (si < 0 || si >= kSectionCount)
+            return;
+        ColumnState *state = FindColumnState(coord);
+        if (!state)
+            return;
+        state->touchedSectionMask |= static_cast<uint16_t>(1u << si);
+    }
+
+    void VoxelWorld::PersistColumnIfTouched(ColumnState &state)
+    {
+        if (m_saveRoot.empty() || state.touchedSectionMask == 0 || !state.column)
+            return;
+        if (ColumnChunkStore::Save(m_saveRoot, *state.column, state.touchedSectionMask))
+        {
+            PE_INFO("VoxelWorld: saved column (%d, %d)", state.coord.cx, state.coord.cz);
+        }
+    }
+
+    void VoxelWorld::PersistAllTouchedColumns()
+    {
+        if (m_saveRoot.empty())
+            return;
+        for (auto &entry : m_columns)
+            PersistColumnIfTouched(entry.second);
+    }
+
+    bool VoxelWorld::SaveAllModified()
+    {
+        if (m_saveRoot.empty())
+            return false;
+        PersistAllTouchedColumns();
+        return true;
     }
 } // namespace pe::voxel

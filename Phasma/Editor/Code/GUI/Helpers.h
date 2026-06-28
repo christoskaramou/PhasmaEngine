@@ -1,5 +1,6 @@
 #pragma once
 
+#include "GUI/GUIState.h"
 #include "imgui/imgui_internal.h"
 
 // ========================= UI Utils =========================
@@ -44,18 +45,6 @@ namespace pe::ui
     {
         if (ImGui::IsItemHovered(flags))
             TooltipText(text);
-    }
-
-    inline ImVec4 UsageColor(float frac)
-    {
-        // 0..1 -> green->yellow->red
-        frac = Clamp01(frac);
-        ImVec4 g(0.20f, 0.80f, 0.25f, 0.95f);
-        ImVec4 y(0.95f, 0.80f, 0.25f, 0.95f);
-        ImVec4 r(0.85f, 0.25f, 0.25f, 0.95f);
-        return (frac < 0.5f)
-                   ? ImVec4(g.x + (y.x - g.x) * (frac / 0.5f), g.y + (y.y - g.y) * (frac / 0.5f), g.z + (y.z - g.z) * (frac / 0.5f), 0.95f)
-                   : ImVec4(y.x + (r.x - y.x) * ((frac - 0.5f) / 0.5f), y.y + (r.y - y.y) * ((frac - 0.5f) / 0.5f), y.z + (r.z - y.z) * ((frac - 0.5f) / 0.5f), 0.95f);
     }
 
     inline ImVec4 Heat(float f) // 0..1 -> green->yellow->red
@@ -281,7 +270,7 @@ namespace pe::ui
         const float fApp = (float)std::min<uint64_t>(appUsed, (uint64_t)std::max<int64_t>((int64_t)totalBudget - (int64_t)otherUsed, 0)) / (float)totalBudget;
 
         const ImVec4 colOther = ImVec4(0.60f, 0.60f, 0.60f, 0.90f);
-        const ImVec4 colApp = UsageColor((float)(appUsed / tot));
+        const ImVec4 colApp = Heat((float)(appUsed / tot));
 
         ImGui::TextUnformatted(label);
         ImVec2 p0 = ImGui::GetCursorScreenPos();
@@ -360,11 +349,9 @@ namespace pe::ui
         }
     }
 
-    // Classic PhasmaEngine/ImGui theme
-    inline void ApplyClassicTheme()
+    // Classic / Dark / Light share the same rounding and padding.
+    inline void ApplyStandardStyleMetrics(ImGuiStyle &s)
     {
-        ImGui::StyleColorsClassic();
-        ImGuiStyle &s = ImGui::GetStyle();
         s.WindowRounding = 4.0f;
         s.ChildRounding = 4.0f;
         s.FrameRounding = 2.0f;
@@ -378,47 +365,8 @@ namespace pe::ui
         s.SeparatorTextPadding = ImVec2(10, 4);
     }
 
-    // ImGui Dark theme
-    inline void ApplyDarkTheme()
+    inline void ApplyModernThemePalette(ImGuiStyle &s)
     {
-        ImGui::StyleColorsDark();
-        ImGuiStyle &s = ImGui::GetStyle();
-        s.WindowRounding = 4.0f;
-        s.ChildRounding = 4.0f;
-        s.FrameRounding = 2.0f;
-        s.GrabRounding = 2.0f;
-        s.PopupRounding = 2.0f;
-        s.ScrollbarRounding = 2.0f;
-        s.TabRounding = 2.0f;
-        s.FramePadding = ImVec2(8, 4);
-        s.ItemSpacing = ImVec2(8, 6);
-        s.WindowPadding = ImVec2(10, 8);
-        s.SeparatorTextPadding = ImVec2(10, 4);
-    }
-
-    // ImGui Light theme
-    inline void ApplyLightTheme()
-    {
-        ImGui::StyleColorsLight();
-        ImGuiStyle &s = ImGui::GetStyle();
-        s.WindowRounding = 4.0f;
-        s.ChildRounding = 4.0f;
-        s.FrameRounding = 2.0f;
-        s.GrabRounding = 2.0f;
-        s.PopupRounding = 2.0f;
-        s.ScrollbarRounding = 2.0f;
-        s.TabRounding = 2.0f;
-        s.FramePadding = ImVec2(8, 4);
-        s.ItemSpacing = ImVec2(8, 6);
-        s.WindowPadding = ImVec2(10, 8);
-        s.SeparatorTextPadding = ImVec2(10, 4);
-    }
-
-    // Modern Dark theme (VS Code Dark Modern inspired)
-    inline void ApplyModernTheme()
-    {
-        ImGui::StyleColorsDark();
-        ImGuiStyle &s = ImGui::GetStyle();
         s.WindowRounding = 6.0f;
         s.ChildRounding = 6.0f;
         s.FrameRounding = 4.0f;
@@ -509,11 +457,8 @@ namespace pe::ui
         c[ImGuiCol_SliderGrabActive] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
     }
 
-    // Unity-like dark theme
-    inline void ApplyUnityTheme()
+    inline void ApplyUnityThemePalette(ImGuiStyle &s)
     {
-        ImGui::StyleColorsDark(); // Reset ALL colors to dark theme base first
-        ImGuiStyle &s = ImGui::GetStyle();
         s.WindowRounding = 8.0f;
         s.ChildRounding = 8.0f;
         s.FrameRounding = 6.0f;
@@ -615,11 +560,8 @@ namespace pe::ui
         c[ImGuiCol_NavHighlight] = ImVec4(0.26f, 0.59f, 0.98f, 1.0f);
     }
 
-    // UnrealEngine-like dark theme
-    inline void ApplyUnrealTheme()
+    inline void ApplyUnrealThemePalette(ImGuiStyle &s)
     {
-        ImGui::StyleColorsDark(); // Reset ALL colors to dark theme base first
-        ImGuiStyle &s = ImGui::GetStyle();
         s.WindowRounding = 0.0f; // Unreal uses sharp corners
         s.ChildRounding = 0.0f;
         s.FrameRounding = 0.0f;
@@ -721,6 +663,38 @@ namespace pe::ui
 
         // Nav highlight
         c[ImGuiCol_NavHighlight] = ImVec4(0.90f, 0.60f, 0.10f, 1.0f);
+    }
+
+    inline void ApplyTheme(GUIStyle theme)
+    {
+        ImGuiStyle &s = ImGui::GetStyle();
+        switch (theme)
+        {
+        case GUIStyle::Classic:
+            ImGui::StyleColorsClassic();
+            ApplyStandardStyleMetrics(s);
+            break;
+        case GUIStyle::Dark:
+            ImGui::StyleColorsDark();
+            ApplyStandardStyleMetrics(s);
+            break;
+        case GUIStyle::Light:
+            ImGui::StyleColorsLight();
+            ApplyStandardStyleMetrics(s);
+            break;
+        case GUIStyle::Modern:
+            ImGui::StyleColorsDark();
+            ApplyModernThemePalette(s);
+            break;
+        case GUIStyle::Unity:
+            ImGui::StyleColorsDark();
+            ApplyUnityThemePalette(s);
+            break;
+        case GUIStyle::Unreal:
+            ImGui::StyleColorsDark();
+            ApplyUnrealThemePalette(s);
+            break;
+        }
     }
 
     inline void ShowCpuGpuSummary(float cpuTotal, float cpuUpdates, float cpuDraw, float gpuTotal)

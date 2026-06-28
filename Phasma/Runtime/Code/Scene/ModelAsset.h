@@ -145,6 +145,7 @@ namespace pe
 
         static DefaultResources &GetDefaultResources(CommandBuffer *cmd);
         static const DefaultResources &GetDefaultResources();
+        static ResourceHandle<Image> DefaultTextureForSlot(TextureType slot);
         static DefaultResources &Defaults();
 
     protected:

@@ -29,4 +29,19 @@ namespace pe::voxel
         return m_nonAir == 0;
     }
 
+    void BlockStore::ReplaceAll(const BlockId *src, size_t count)
+    {
+        const size_t n = std::min(count, m_data.size());
+        for (size_t i = 0; i < n; ++i)
+            m_data[i] = src[i];
+        for (size_t i = n; i < m_data.size(); ++i)
+            m_data[i] = kAir;
+        m_nonAir = 0;
+        for (BlockId id : m_data)
+        {
+            if (id != kAir)
+                ++m_nonAir;
+        }
+    }
+
 } // namespace pe::voxel

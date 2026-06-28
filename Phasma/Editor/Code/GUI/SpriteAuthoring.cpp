@@ -38,14 +38,6 @@ namespace pe
                 std::string error;
             };
 
-            std::string ToLower(std::string value)
-            {
-                std::transform(value.begin(), value.end(), value.begin(),
-                               [](unsigned char c)
-                               { return static_cast<char>(std::tolower(c)); });
-                return value;
-            }
-
             std::string PathUtf8(const std::filesystem::path &path)
             {
                 const auto u8 = path.u8string();
