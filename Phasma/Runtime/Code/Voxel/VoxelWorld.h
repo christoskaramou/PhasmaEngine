@@ -118,7 +118,7 @@ namespace pe::voxel
         int ProcessReadyMeshUploads(CommandBuffer *cmd, int budget);
         ArenaHandle UploadSectionMesh(CommandBuffer *cmd, ColumnCoord coord, int si, const MeshData &mesh);
         void ReleaseColumn(ColumnState &state);
-        void StartDirtySectionRemesh(ColumnState &state, int si);
+        void EnqueueSectionRemeshBatch(ColumnState &state, const std::vector<int> &sections);
         void ProcessDirtyRemeshResults(CommandBuffer *cmd);
         void RemeshDirtySections(CommandBuffer *cmd);
         void MarkSectionDirty(ColumnCoord coord, int si);
