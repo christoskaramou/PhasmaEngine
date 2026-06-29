@@ -270,11 +270,12 @@ namespace pe
         // free list; Scene only places/registers/frees at explicit locations.
         int ReserveArenaCapacity(uint32_t vtxHeadroomBytes, uint32_t idxHeadroomBytes,
                                  uint32_t posUvHeadroomBytes, uint32_t extraDrawCapacity);
-        // Grow the dedicated voxel buffers in place, preserving live geometry (drains via WaitIdle, so
-        // call only at a safe point with no voxel/render cmd recording in flight — e.g. top of the voxel
-        // streaming update). Each buffer is recreated only if its cap actually grew. Returns true if any
-        // buffer grew; the GeometryArena's free lists must be Grow()n to match.
-        bool GrowArenaVoxelCapacity(uint32_t newVtxCapVertices, size_t newIdxCapBytes);
+        // Grow the dedicated voxel buffers, preserving live geometry. Records the live-geometry copy into
+        // `cmd` (the frame voxel cmd) and frees the old buffers fence-deferred via the deletion queue — no
+        // GPU drain. Must run before the same frame's section uploads (it barriers the copy ahead of them).
+        // Each buffer is recreated only if its cap actually grew. Returns true if any buffer grew; the
+        // GeometryArena's free lists must be Grow()n to match.
+        bool GrowArenaVoxelCapacity(CommandBuffer *cmd, uint32_t newVtxCapVertices, size_t newIdxCapBytes);
         // Place one packed voxel mesh at an arena-allocated location: vertexIndex indexes the dedicated
         // voxel vertex buffer (8 B/vert), shared by the voxel GBuffer draw and the voxel shadow draw (the
         // shadow VS unpacks position from the same packed verts — no separate position stream);
