@@ -119,8 +119,10 @@ namespace pe::voxel
         ArenaHandle UploadSectionMesh(CommandBuffer *cmd, ColumnCoord coord, int si, const MeshData &mesh);
         void ReleaseColumn(ColumnState &state);
         void EnqueueSectionRemeshBatch(ColumnState &state, const std::vector<int> &sections);
-        void ProcessDirtyRemeshResults(CommandBuffer *cmd);
-        void RemeshDirtySections(CommandBuffer *cmd);
+        // applyBudget caps section uploads applied per frame so a burst of completed remeshes spreads
+        // over frames instead of spiking; remaining ready futures stay pending for the next frame.
+        void ProcessDirtyRemeshResults(CommandBuffer *cmd, int applyBudget);
+        void RemeshDirtySections(CommandBuffer *cmd, int applyBudget);
         void MarkSectionDirty(ColumnCoord coord, int si);
         void MarkEditDirtySections(ColumnCoord coord, int wx, int y, int wz);
         void RetireSubmittedUpdateCommands(bool all);

@@ -452,19 +452,21 @@ namespace pe::voxel
         ProcessGenerationResults();
         ProcessPendingMeshing();
 
-        // Grow the voxel pool before recording this frame's uploads (safe WaitIdle point — no voxel/
-        // render cmd recording in flight here). Keeps dense cave/AO sections from OOMing into holes.
-        m_arena.GrowIfNeeded();
-
         Queue *queue = RHII.GetMainQueue();
         if (!queue)
             return;
 
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
+        // Grow the voxel pool before this frame's removals/uploads so the grown buffer is live for them.
+        // Records the live-geometry copy into cmd (no GPU drain); barriers it ahead of the uploads, which
+        // may reuse holes inside the copied region. Keeps dense cave/AO sections from OOMing into holes.
+        m_arena.GrowIfNeeded(cmd);
         m_arena.Update(cmd);
         ProcessReadyMeshUploads(cmd, m_cfg.uploadBudgetPerFrame);
-        RemeshDirtySections(cmd);
+        // Remesh applies get their own equal per-frame allowance (separate from streaming uploads so
+        // edits never starve while new terrain streams in). Bounds the previously-unbounded remesh burst.
+        RemeshDirtySections(cmd, m_cfg.uploadBudgetPerFrame);
         m_scene->FlushArenaBarriers(cmd);
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
@@ -921,8 +923,9 @@ namespace pe::voxel
         }
     }
 
-    void VoxelWorld::ProcessDirtyRemeshResults(CommandBuffer *cmd)
+    void VoxelWorld::ProcessDirtyRemeshResults(CommandBuffer *cmd, int applyBudget)
     {
+        int applied = 0; // section uploads applied this frame; caps the per-frame remesh burst
         for (auto &entry : m_columns)
         {
             ColumnState &state = entry.second;
@@ -931,6 +934,8 @@ namespace pe::voxel
 
             for (int si = 0; si < kSectionCount; ++si)
             {
+                if (applied >= applyBudget)
+                    return; // budget spent — ready futures stay pending and apply next frame
                 if (!state.remeshPending[si] || !FutureReady(state.remeshFutures[si]))
                     continue;
 
@@ -959,6 +964,7 @@ namespace pe::voxel
                     if (state.handles[si].valid)
                         m_arena.Release(state.handles[si]);
                     state.handles[si] = h;
+                    ++applied; // count only the expensive staging upload toward the per-frame budget
                 }
                 else if (state.handles[si].valid)
                 {
@@ -1045,7 +1051,7 @@ namespace pe::voxel
             markNeighbor(1, 1);
     }
 
-    void VoxelWorld::RemeshDirtySections(CommandBuffer *cmd)
+    void VoxelWorld::RemeshDirtySections(CommandBuffer *cmd, int applyBudget)
     {
         std::unordered_map<uint64_t, std::vector<int>> byColumn;
         for (const auto &dirty : m_dirtySections)
@@ -1070,7 +1076,7 @@ namespace pe::voxel
         }
 
         m_dirtySections.swap(remaining);
-        ProcessDirtyRemeshResults(cmd);
+        ProcessDirtyRemeshResults(cmd, applyBudget);
     }
 
     void VoxelWorld::RetireSubmittedUpdateCommands(bool all)

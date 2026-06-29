@@ -1693,9 +1693,9 @@ namespace pe
         return 0;
     }
 
-    bool Scene::GrowArenaVoxelCapacity(uint32_t newVtxCapVertices, size_t newIdxCapBytes)
+    bool Scene::GrowArenaVoxelCapacity(CommandBuffer *cmd, uint32_t newVtxCapVertices, size_t newIdxCapBytes)
     {
-        if (!m_voxelVertexBuf || !m_voxelIndexBuf)
+        if (!cmd || !m_voxelVertexBuf || !m_voxelIndexBuf)
             return false;
 
         const size_t vtxStride = sizeof(VoxelVertex);
@@ -1704,12 +1704,22 @@ namespace pe
         if (!growVtx && !growIdx)
             return false;
 
-        // Drain everything so no in-flight voxel/render draw reads the buffers we are about to swap.
-        Queue *q = RHII.GetMainQueue();
-        q->WaitIdle();
-
-        CommandBuffer *cmd = q->AcquireCommandBuffer();
-        cmd->Begin();
+        // Grow without a GPU drain: the live-geometry copy is recorded into the caller's frame voxel cmd
+        // (submitted on the main queue before the cull dispatch, like the streamed AddArenaMesh copies).
+        // In-flight frames keep reading the OLD buffers — those stay alive and are freed fence-deferred via
+        // the deletion queue. The transfer->transfer barrier orders this copy before the same frame's
+        // section uploads, which may target reused holes inside the copied region; FlushArenaBarriers then
+        // makes the whole buffer visible to the vertex-input stage.
+        auto orderCopyBeforeUploads = [&](Buffer *nb, size_t bytes)
+        {
+            BufferBarrierInfo b{};
+            b.buffer = nb;
+            b.stageMask = PE_STAGE_TRANSFER;
+            b.accessMask = PE_ACCESS_TRANSFER_WRITE;
+            b.offset = 0;
+            b.size = bytes;
+            cmd->BufferBarrier(b);
+        };
 
         if (growVtx)
         {
@@ -1721,7 +1731,10 @@ namespace pe
                 .name = "voxel_vertex_buffer",
             });
             if (oldBytes > 0)
+            {
                 cmd->CopyBuffer(m_voxelVertexBuf, nb, oldBytes, 0, 0);
+                orderCopyBeforeUploads(nb, oldBytes);
+            }
             RHII.AddToDeletionQueue([b = m_voxelVertexBuf]()
                                     { Buffer *buf = b; Buffer::Destroy(buf); });
             m_voxelVertexBuf = nb;
@@ -1737,17 +1750,16 @@ namespace pe
                 .name = "voxel_index_buffer",
             });
             if (oldBytes > 0)
+            {
                 cmd->CopyBuffer(m_voxelIndexBuf, nb, oldBytes, 0, 0);
+                orderCopyBeforeUploads(nb, oldBytes);
+            }
             RHII.AddToDeletionQueue([b = m_voxelIndexBuf]()
                                     { Buffer *buf = b; Buffer::Destroy(buf); });
             m_voxelIndexBuf = nb;
             m_arenaIdxCapacity = newIdxCapBytes;
         }
 
-        cmd->End();
-        q->Submit(1, &cmd, nullptr, nullptr);
-        cmd->Wait();
-        cmd->Return();
         return true;
     }
 

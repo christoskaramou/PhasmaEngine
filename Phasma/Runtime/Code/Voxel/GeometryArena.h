@@ -46,9 +46,9 @@ namespace pe::voxel
         void Update(CommandBuffer *cmd);
 
         // Grow the dedicated voxel buffers when a free list crosses its high-water mark, so dense
-        // sections (caves/AO) never OOM into terrain holes. Drains the GPU (WaitIdle) — call only at a
-        // safe point with no voxel/render cmd recording in flight (top of VoxelWorld::Update).
-        void GrowIfNeeded();
+        // sections (caves/AO) never OOM into terrain holes. Records the copy into `cmd` (no GPU drain);
+        // call before this frame's arena Update/uploads so the grown buffer is live for them.
+        void GrowIfNeeded(CommandBuffer *cmd);
 
         void Destroy();
 

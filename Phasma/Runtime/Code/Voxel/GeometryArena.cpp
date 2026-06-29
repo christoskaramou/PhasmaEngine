@@ -157,9 +157,9 @@ namespace pe::voxel
         m_pendingRelease.clear();
     }
 
-    void GeometryArena::GrowIfNeeded()
+    void GeometryArena::GrowIfNeeded(CommandBuffer *cmd)
     {
-        if (!m_scene || !m_vtxAlloc || !m_idxAlloc)
+        if (!m_scene || !m_vtxAlloc || !m_idxAlloc || !cmd)
             return;
 
         const uint32_t vtxCap = m_vtxAlloc->Capacity(); // vertices
@@ -177,7 +177,7 @@ namespace pe::voxel
         const uint32_t newVtxCap = vtxPressure ? vtxCap + vtxCap / 2u + 1u : vtxCap;
         const uint32_t newIdxCap = idxPressure ? idxCap + idxCap / 2u + 1u : idxCap;
 
-        if (m_scene->GrowArenaVoxelCapacity(newVtxCap, static_cast<size_t>(newIdxCap)))
+        if (m_scene->GrowArenaVoxelCapacity(cmd, newVtxCap, static_cast<size_t>(newIdxCap)))
         {
             if (vtxPressure)
                 m_vtxAlloc->Grow(newVtxCap);
