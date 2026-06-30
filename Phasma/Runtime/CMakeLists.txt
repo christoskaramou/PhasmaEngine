@@ -17,6 +17,14 @@ file(GLOB_RECURSE PHASMARUNTIME_SOURCES CONFIGURE_DEPENDS
 )
 list(FILTER PHASMARUNTIME_SOURCES EXCLUDE REGEX "/UI/Backends/")
 
+# The opt-in player MCP server (Code/Agent/, Code/Script/Bindings/Agent/) depends on PhasmaMCP. When
+# MCP is not built (e.g. minimal / shipped player), drop those sources so the runtime still compiles and
+# the server cannot exist in the binary at all.
+if(NOT (PE_BUILD_MCP AND TARGET PhasmaMCP))
+    list(FILTER PHASMARUNTIME_SOURCES EXCLUDE REGEX "/Code/Agent/")
+    list(FILTER PHASMARUNTIME_SOURCES EXCLUDE REGEX "/Bindings/Agent/")
+endif()
+
 add_library(PhasmaRuntime STATIC ${PHASMARUNTIME_SOURCES})
 set_target_properties(PhasmaRuntime PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
@@ -66,6 +74,13 @@ if(TARGET meshoptimizer)
 endif()
 if(TARGET Lua)
     target_link_libraries(PhasmaRuntime PUBLIC Lua)
+endif()
+
+# Opt-in player MCP server. PUBLIC so PhasmaMCP's include dirs (nlohmann, the pmcp headers) reach the
+# runtime's Agent sources; PE_PLAYER_MCP gates the player-host wiring in always-compiled files.
+if(PE_BUILD_MCP AND TARGET PhasmaMCP)
+    target_link_libraries(PhasmaRuntime PUBLIC PhasmaMCP)
+    target_compile_definitions(PhasmaRuntime PRIVATE PE_PLAYER_MCP)
 endif()
 
 if(MSVC)

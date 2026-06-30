@@ -43,6 +43,13 @@ ADK_READ_ONLY_TOOLS = {"query_scene", "take_screenshot", "get_console_log"}
 MUTATING_TOOLS = {"write_project_file", "patch_project_file", "execute_lua", "inject_mouse_input"}
 MODEL_API_KEY_ENV_VARS = ("OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY")
 
+# Committed, per-machine record of the last measured average FPS (keyed by scene@api). Each commit
+# profile run compares the current average against this and fails on a >5% AND >1 fps drop (the
+# repo's FPS regression threshold), then ratchets the baseline to the new measurement.
+FPS_BASELINE_PATH = TOOLS / "perf_fps_baseline.json"
+FPS_REGRESSION_PCT = 0.05
+FPS_REGRESSION_MIN_DROP = 1.0
+
 FAIL_PATTERNS = [
     re.compile(pattern, re.IGNORECASE)
     for pattern in [
@@ -1513,6 +1520,123 @@ def compare_perf(v: Validator, current_dir: Path | None) -> None:
     )
 
 
+def load_fps_baseline() -> dict:
+    if not FPS_BASELINE_PATH.exists():
+        return {}
+    try:
+        data = json.loads(FPS_BASELINE_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_fps_baseline(data: dict) -> None:
+    FPS_BASELINE_PATH.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def sample_average_fps(v: Validator, count: int, interval: float) -> list[float]:
+    # get_metrics().fps is the instantaneous 1/dt, so sample across frames and average. Re-apply
+    # immediate present every sample because the first toggle does not always stick (per CLAUDE.md).
+    code = (
+        'rhi.change_present_mode("immediate")\n'
+        'local m = engine.get_metrics()\n'
+        'pe_log(string.format("[precommit:fps] sample=%.4f", m.fps))\n'
+        'return m.fps'
+    )
+    samples: list[float] = []
+    for _ in range(count):
+        result = call_tool_with_timeout(v, "execute_lua", {"code": code}, v.args.mcp_tool_timeout)
+        if result.get("isError"):
+            raise RuntimeError(json.dumps(result))
+        match = re.search(r"sample=([0-9.]+)", json.dumps(result))
+        if match:
+            value = float(match.group(1))
+            if value > 0.0:
+                samples.append(value)
+        time.sleep(interval)
+    return samples
+
+
+def fps_regression_step(v: Validator) -> None:
+    if not v.args.fps_regression:
+        v.add("fps regression", "SKIP", "disabled")
+        return
+    if not v.mcp_client:
+        v.add("fps regression", "SKIP", "MCP client unavailable")
+        return
+    start = time.monotonic()
+    lua_scene = scene_lua_path(v.args.scene)
+    setup = f'scene.load({json.dumps(lua_scene)})\nrhi.change_present_mode("immediate")\nreturn "ok"'
+    try:
+        result = call_tool_with_timeout(v, "execute_lua", {"code": setup}, v.args.mcp_tool_timeout)
+    except Exception as exc:
+        v.add("fps regression", "FAIL", f"scene setup failed: {exc}", time.monotonic() - start)
+        raise RuntimeError("fps regression") from exc
+    if result.get("isError"):
+        v.add("fps regression", "FAIL", json.dumps(result, indent=2), time.monotonic() - start)
+        raise RuntimeError("fps regression")
+    time.sleep(v.args.perf_warmup)
+
+    try:
+        samples = sample_average_fps(v, v.args.fps_sample_count, v.args.fps_sample_interval)
+    except Exception as exc:
+        v.add("fps regression", "FAIL", str(exc), time.monotonic() - start)
+        raise RuntimeError("fps regression") from exc
+    if not samples:
+        v.add("fps regression", "FAIL", "No FPS samples captured", time.monotonic() - start)
+        raise RuntimeError("fps regression")
+
+    avg = sum(samples) / len(samples)
+    key = f"{normalize_log_path(v.args.scene)}@{v.args.editor_api}"
+    baseline_data = load_fps_baseline()
+    previous = (baseline_data.get(key) or {}).get("fps")
+
+    detail = [
+        f"scene={lua_scene} api={v.args.editor_api}",
+        f"avg={avg:.2f} fps over {len(samples)} samples (min={min(samples):.2f} max={max(samples):.2f})",
+    ]
+    if avg <= 65.0:
+        detail.append("avg <= 65 fps (possibly still vsync-limited)")
+    (v.report_dir / "fps_regression.json").write_text(
+        json.dumps({"key": key, "average": avg, "samples": samples, "baseline": previous}, indent=2),
+        encoding="utf-8",
+    )
+
+    regressed = False
+    if previous is None:
+        detail.append("no prior baseline; recording last measured average")
+    else:
+        drop = previous - avg
+        drop_pct = (drop / previous) if previous else 0.0
+        detail.append(f"baseline(last measured)={previous:.2f} delta={avg - previous:+.2f} ({-drop_pct * 100:+.1f}%)")
+        if drop > FPS_REGRESSION_MIN_DROP and drop_pct > FPS_REGRESSION_PCT:
+            regressed = True
+            detail.append(
+                f"REGRESSION: -{drop:.2f} fps (-{drop_pct * 100:.1f}%); "
+                f"thresholds >{FPS_REGRESSION_MIN_DROP:.0f} fps AND >{FPS_REGRESSION_PCT * 100:.0f}%"
+            )
+
+    # Ratchet the stored "last measured average" on any non-regressing run; on a regression leave the
+    # bar where it is so the check keeps firing until fixed (or --update-fps-baseline force-accepts it).
+    if not regressed or v.args.update_fps_baseline:
+        baseline_data[key] = {
+            "fps": round(avg, 2),
+            "samples": len(samples),
+            "config": v.args.config,
+            "updated": datetime.now().isoformat(timespec="seconds"),
+        }
+        save_fps_baseline(baseline_data)
+        detail.append(f"baseline -> {avg:.2f} fps ({rel(FPS_BASELINE_PATH)})")
+    else:
+        detail.append(f"baseline left at {previous:.2f} fps (use --update-fps-baseline to accept)")
+
+    if regressed and not v.args.update_fps_baseline:
+        v.add("fps regression", "FAIL", "\n".join(detail), time.monotonic() - start)
+        raise RuntimeError("fps regression")
+    status = "WARN" if regressed else "PASS"
+    v.add("fps regression", status, "\n".join(detail), time.monotonic() - start)
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", choices=["quick", "commit", "full"], default="commit")
@@ -1589,6 +1713,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--min-screenshot-nonblack-ratio", type=float, default=0.01)
     parser.add_argument("--visual-baseline", type=Path, help="PNG file or directory for optional visual parity check")
     parser.add_argument("--visual-rms-threshold", type=float, default=4.0)
+    fps_group = parser.add_mutually_exclusive_group()
+    fps_group.add_argument("--fps-regression", dest="fps_regression", action="store_true", help="Measure average FPS and compare to the last measured baseline")
+    fps_group.add_argument("--no-fps-regression", dest="fps_regression", action="store_false")
+    parser.set_defaults(fps_regression=None)
+    parser.add_argument("--fps-sample-count", type=int, default=10)
+    parser.add_argument("--fps-sample-interval", type=float, default=1.0)
+    parser.add_argument("--update-fps-baseline", action="store_true", help="Accept the current average FPS as the new baseline even if it regressed")
     parser.add_argument("--perf-baseline", type=Path, help="Snapshot JSON file or directory for performance comparison")
     parser.add_argument("--snapshot-count", type=int, default=10)
     parser.add_argument("--snapshot-interval", type=float, default=1.0)
@@ -1621,6 +1752,8 @@ def apply_profile_defaults(args: argparse.Namespace) -> None:
             args.script_tests = False
         if args.screenshot_sanity is None:
             args.screenshot_sanity = False
+        if args.fps_regression is None:
+            args.fps_regression = False
     elif args.profile == "full":
         args.validation = True
         args.screenshot = True
@@ -1643,6 +1776,8 @@ def apply_profile_defaults(args: argparse.Namespace) -> None:
             args.script_tests = False
         if args.screenshot_sanity is None:
             args.screenshot_sanity = True
+        if args.fps_regression is None:
+            args.fps_regression = True
     elif args.profile == "commit":
         args.screenshot = True
         if args.launcher_smoke is None:
@@ -1663,6 +1798,8 @@ def apply_profile_defaults(args: argparse.Namespace) -> None:
             args.script_tests = False
         if args.screenshot_sanity is None:
             args.screenshot_sanity = True
+        if args.fps_regression is None:
+            args.fps_regression = True
     if args.launcher_smoke is None:
         args.launcher_smoke = False
     if args.player_smoke is None:
@@ -1681,6 +1818,8 @@ def apply_profile_defaults(args: argparse.Namespace) -> None:
         args.script_tests = False
     if args.screenshot_sanity is None:
         args.screenshot_sanity = False
+    if args.fps_regression is None:
+        args.fps_regression = False
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1716,6 +1855,7 @@ def main(argv: list[str] | None = None) -> int:
         console_log_scan_step(validator, "hot_reload")
         current_perf = collect_perf_snapshots(validator)
         compare_perf(validator, current_perf)
+        fps_regression_step(validator)
         if args.apis:
             validator.cleanup_processes("editor-mcp")
             backend_smokes(validator, build_dir)

@@ -1,4 +1,7 @@
 #include "ScriptSystem.h"
+#if defined(PE_PLAYER_MCP)
+#include "Agent/AgentToolRegistry.h"
+#endif
 #include "Camera/Camera.h"
 #include "Render/ScriptRenderPasses.h"
 #include "Scene/ModelAsset.h"
@@ -1610,6 +1613,12 @@ namespace pe
     {
         if (!m_initialized)
             return;
+
+#if defined(PE_PLAYER_MCP)
+        // Drop script-registered MCP tools before the Lua state dies so their sol handles never dangle
+        // (on Reload, scripts re-register from init()).
+        AgentToolRegistry::Instance().Clear();
+#endif
 
         for (auto &script : m_scripts)
         {
