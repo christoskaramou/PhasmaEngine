@@ -1767,7 +1767,7 @@ namespace pe
                             const std::vector<VoxelVertex> &verts,
                             const std::vector<uint16_t> &indices, const AABB &localBox,
                             uint32_t reuseDataOffset, const MeshRuntime &runtimeForImages,
-                            CommandBuffer *externalCmd)
+                            bool transparent, CommandBuffer *externalCmd)
     {
         if (!m_buffer || !m_indirectAll || !m_meshConstants || !m_visibility)
             return -1;
@@ -1915,7 +1915,9 @@ namespace pe
             for (int k = 0; k < 5; ++k)
                 mc.meshImageIndex[k] = runtimeForImages.imageViewIndices[k];
             mc.materialByteOffset = 0xFFFFFFFF;
-            mc.editorFlags = 0x4u;
+            // bit2 (0x4) = voxel (cull routes to the voxel bucket / skips standard buckets); bit3 (0x8) =
+            // transparent voxel (cull keeps it OUT of the opaque voxel bucket — drawn by the transparent pass).
+            mc.editorFlags = transparent ? 0xCu : 0x4u;
             mc.renderType = static_cast<uint32_t>(RenderType::Opaque);
             mc.aabbMinX = localBox.min.x;
             mc.aabbMinY = localBox.min.y;
@@ -1981,6 +1983,7 @@ namespace pe
         slot.idxByteOffset = idxByteOffset;
         slot.idxBytes = idxBytes;
         slot.vertexCount = vertCount;
+        slot.transparent = transparent;
         if (reuseSlot)
         {
             m_arenaSlots[static_cast<uint32_t>(idx) - m_arenaSlotBase] = slot;
@@ -2112,6 +2115,23 @@ namespace pe
                 }
             }
         }
+    }
+
+    std::vector<Scene::VoxelTransparentDraw> Scene::GetVoxelTransparentDraws() const
+    {
+        // Transparent (water) arena slots are tombstoned to indexCount=0 on release and never relocate
+        // while live, so the CPU shadow is the authoritative draw list — no GPU readback. slot index =
+        // m_arenaSlotBase + i is the firstInstance the voxel VS reads for its origin/transform.
+        std::vector<VoxelTransparentDraw> draws;
+        for (size_t i = 0; i < m_arenaSlots.size(); ++i)
+        {
+            const ArenaSlot &s = m_arenaSlots[i];
+            if (!s.transparent || s.indexCount == 0)
+                continue;
+            draws.push_back({s.indexCount, s.firstIndex, s.vertexOffset,
+                             m_arenaSlotBase + static_cast<uint32_t>(i)});
+        }
+        return draws;
     }
 
     void Scene::FlushArenaBarriers(CommandBuffer *cmd)

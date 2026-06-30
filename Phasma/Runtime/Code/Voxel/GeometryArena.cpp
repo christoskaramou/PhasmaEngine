@@ -32,7 +32,7 @@ namespace pe::voxel
     }
 
     ArenaHandle GeometryArena::Upload(CommandBuffer *cmd, const MeshData &mesh, const vec3 &sectionOrigin,
-                                      uint32_t hostDataOffset, const MeshRuntime &runtime)
+                                      uint32_t hostDataOffset, const MeshRuntime &runtime, bool transparent)
     {
         ArenaHandle invalid{};
         if (!m_scene || !m_vtxAlloc || !m_idxAlloc)
@@ -74,7 +74,7 @@ namespace pe::voxel
                        sectionOrigin.z + static_cast<float>(mesh.localMax[2]));
 
         const int slot = m_scene->AddArenaMesh(vertexIndex, idxByteOffset, mesh.vertices, mesh.indices,
-                                               box, hostDataOffset, runtime, cmd);
+                                               box, hostDataOffset, runtime, transparent, cmd);
         if (slot < 0)
         {
             m_vtxAlloc->Free(vtxOff, vertCount);

@@ -11,6 +11,7 @@ namespace pe::voxel
         constexpr BlockId kStoneBlock = 1;
         constexpr BlockId kDirtBlock = 2;
         constexpr BlockId kGrassBlock = 3;
+        constexpr BlockId kWaterBlock = 4;
 
         int TerrainHeight(int wx, int wz, int groundY)
         {
@@ -79,6 +80,12 @@ namespace pe::voxel
                     }
                     col.SetLocal(lx, wy, lz, b);
                 }
+
+                // Flood air above the terrain surface up to sea level — fills valleys/oceans, not caves
+                // (those are below the surface, wy < h). seaLevel is a knob: raise for more water.
+                const int seaLevel = m_groundY - 2;
+                for (int wy = h; wy <= seaLevel && wy < kWorldHeight; ++wy)
+                    col.SetLocal(lx, wy, lz, kWaterBlock);
             }
         }
     }

@@ -81,6 +81,13 @@ namespace pe
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
+        std::vector<PassInfo *> GetPassInfos() noexcept override
+        {
+            std::vector<PassInfo *> passInfos{m_passInfo.get()};
+            if (m_voxelPassInfo)
+                passInfos.push_back(m_voxelPassInfo.get());
+            return passInfos;
+        }
 
         void SetScene(Scene *scene) { m_scene = scene; }
         void ClearRenderTargets(CommandBuffer *cmd);
@@ -89,7 +96,10 @@ namespace pe
     private:
         void PassBarriers(CommandBuffer *cmd);
 
+        std::shared_ptr<PassInfo> m_voxelPassInfo; // voxel water (transparent variant of voxel_gbuffer)
         ResourceHandle<PassInfoAsset> m_passAsset;
+        ResourceHandle<PassInfoAsset> m_voxelPassAsset;
+        ImageView *m_lastVoxelAtlasView = nullptr;
         Image *m_ibl_brdf_lut;
         Image *m_normalRT;
         Image *m_albedoRT;

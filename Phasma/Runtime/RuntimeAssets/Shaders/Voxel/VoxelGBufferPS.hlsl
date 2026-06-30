@@ -53,7 +53,10 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Voxel input)
     // Opaque voxels: full occlusion, max roughness, no metal, no transmission.
     output.metRough = float4(1.0f, 1.0f, 0.0f, 0.0f);
     output.emissive = float4(0.0f, 0.0f, 0.0f, combinedColor.a);
-    output.transparency = 0.0f;
+    // Transparency MRT is a mask the lighting passes read (1 = alpha-blended surface). passType is 0 for
+    // the opaque voxel draw (unchanged) and non-zero for the transparent (water) draw, matching the stock
+    // GBuffer PS so LightTransparent composites voxel water exactly like standard transparent meshes.
+    output.transparency = pc.passType ? 1.0f : 0.0f;
 
     // Velocity (matches stock GBuffer PS).
     float2 currentNDC = input.positionCS.xy / input.positionCS.w;

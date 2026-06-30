@@ -17,6 +17,14 @@ namespace pe::voxel
         // default keeps any non-greedy mesher conservative.
         uint32_t localMin[3] = {0, 0, 0};
         uint32_t localMax[3] = {(uint32_t)kSectionDim, (uint32_t)kSectionDim, (uint32_t)kSectionDim};
+
+        // Alpha-blended (Transparent render class, e.g. water) faces meshed into a parallel stream.
+        // Uploaded as a SECOND, independent arena mesh tagged transparent so it draws in the transparent
+        // GBuffer pass. Empty when the section has no transparent blocks (the common case).
+        std::vector<VoxelVertex> transparentVertices;
+        std::vector<uint16_t> transparentIndices;
+        uint32_t transparentLocalMin[3] = {0, 0, 0};
+        uint32_t transparentLocalMax[3] = {(uint32_t)kSectionDim, (uint32_t)kSectionDim, (uint32_t)kSectionDim};
     };
 
     // Section-local coords 0..15; MAY be queried at -1..16 to reach neighbor sections;
