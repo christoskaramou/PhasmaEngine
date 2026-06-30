@@ -235,6 +235,9 @@ uint WaveAppend(uint counterIndex, bool emit)
     Mesh_Constants constants = MeshConstants[idx];
 
     bool isVoxel = (constants.editorFlags & 4u) != 0u;
+    // bit3 = transparent (water) voxel: still a voxel (skips the standard-pbr two-phase buckets) but kept
+    // OUT of the opaque voxel bucket below — the transparent GBuffer pass draws it unculled by slot list.
+    bool isVoxelTransparent = (constants.editorFlags & 8u) != 0u;
 
     // Per-instance render-visible flag (NodeGpuData byte offset 128, after the two matrices).
     // Cleared by node:set_visible(false) to cull this draw cheaply — no instance/TLAS rebuild.
@@ -315,7 +318,7 @@ uint WaveAppend(uint counterIndex, bool emit)
     // Per-bucket emit predicates. Render types are mutually exclusive; "selected" is independent and
     // can fire alongside any type. Evaluated for every active lane (no early branch) so the
     // wave-coalesced appends below see the full ballot for each bucket.
-    bool emitVoxel = isVoxel;
+    bool emitVoxel = isVoxel && !isVoxelTransparent;
 #ifdef VOXEL_HIZ
     // Temporal Hi-Z: cull voxel chunks occluded in last frame's voxel-inclusive depth pyramid.
     // Only voxels are tested here (regular opaque occlusion is owned by the two-phase passes).

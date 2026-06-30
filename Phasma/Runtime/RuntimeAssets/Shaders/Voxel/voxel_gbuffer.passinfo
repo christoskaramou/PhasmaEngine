@@ -11,6 +11,16 @@
     "dynamicStates": ["viewport", "scissor"],
     "colorBlendAttachments": ["default", "default", "default", "default", "default", "default"]
   },
+  "transparent": {
+    "vertexShader": "Shaders/Voxel/VoxelGBufferVS.hlsl",
+    "fragmentShader": "Shaders/Voxel/VoxelGBufferPS.hlsl",
+    "cullMode": "none",
+    "depthWriteEnable": true,
+    "depthTestEnable": true,
+    "blendEnable": true,
+    "dynamicStates": ["viewport", "scissor"],
+    "colorBlendAttachments": ["default", "default", "default", "default", "default", "transparency"]
+  },
   "depthOnly": {
     "vertexShader": "Shaders/Depth/DepthVS.hlsl",
     "fragmentShader": "Shaders/Depth/DepthPS.hlsl",

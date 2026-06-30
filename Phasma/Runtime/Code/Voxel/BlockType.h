@@ -7,7 +7,9 @@ namespace pe::voxel
     enum class VoxelRenderClass : uint8_t
     {
         Air,
-        Opaque /* Cutout, Transparent later */
+        Opaque,
+        Cutout,     // alpha-tested (not yet drawn distinctly; reserved)
+        Transparent // alpha-blended (water): meshed into a second stream, drawn in the transparent pass
     };
 
     struct BlockType

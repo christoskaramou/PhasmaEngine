@@ -24,6 +24,10 @@ namespace pe::voxel
     {
         return m_types[id].opaque;
     }
+    bool BlockRegistry::IsTransparent(BlockId id) const
+    {
+        return m_types[id].renderClass == VoxelRenderClass::Transparent;
+    }
     uint16_t BlockRegistry::FaceTile(BlockId id, int face) const
     {
         return m_types[id].faceTiles[face];

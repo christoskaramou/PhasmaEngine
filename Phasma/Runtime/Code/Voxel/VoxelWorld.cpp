@@ -18,6 +18,7 @@ namespace pe::voxel
         constexpr BlockId kStoneBlock = 1;
         constexpr BlockId kDirtBlock = 2;
         constexpr BlockId kGrassBlock = 3;
+        constexpr BlockId kWaterBlock = 4;
         constexpr size_t kInvalidNodeDataOffset = static_cast<size_t>(-1);
         constexpr size_t kMaxHostDataOffset = 0xFFFFFFFFull;
         constexpr size_t kMaxPendingUpdateCommands = 4;
@@ -300,7 +301,8 @@ namespace pe::voxel
         m_voxelMaterial = std::make_unique<VoxelMaterial>();
         m_voxelMaterial->Build(m_scene, {Path::RuntimeAssets + "Textures/Voxel/grass.png",
                                          Path::RuntimeAssets + "Textures/Voxel/dirt.png",
-                                         Path::RuntimeAssets + "Textures/Voxel/stone.png"});
+                                         Path::RuntimeAssets + "Textures/Voxel/stone.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/water.png"});
         if (m_voxelMaterial->Atlas() && m_voxelMaterial->Atlas()->GetSRV())
             m_scene->SetVoxelAtlasView(m_voxelMaterial->Atlas()->GetSRV());
 
@@ -486,6 +488,8 @@ namespace pe::voxel
         m_registry.Register({kDirtBlock, "dirt", true, true, VoxelRenderClass::Opaque, {1, 1, 1, 1, 1, 1}});
         // grass: green top (+Y -> layer 0), dirt on the 4 sides + bottom.
         m_registry.Register({kGrassBlock, "grass", true, true, VoxelRenderClass::Opaque, {1, 1, 0, 1, 1, 1}});
+        // water: alpha-blended, non-solid (walk/fall through for now), atlas layer 3 on every face.
+        m_registry.Register({kWaterBlock, "water", false, false, VoxelRenderClass::Transparent, {3, 3, 3, 3, 3, 3}});
     }
 
     void VoxelWorld::CreateHostMesh()
@@ -834,13 +838,14 @@ namespace pe::voxel
                     return uploads;
 
                 const MeshData &mesh = state.meshFutures[si].get();
-                if (!mesh.vertices.empty())
+                if (!mesh.vertices.empty() || !mesh.transparentVertices.empty())
                 {
-                    const ArenaHandle h = UploadSectionMesh(cmd, state.coord, si, mesh);
-                    if (!h.valid)
+                    ArenaHandle opaqueH, transH;
+                    if (!UploadSectionMesh(cmd, state.coord, si, mesh, opaqueH, transH))
                         return uploads; // arena OOM — stop this frame so GrowIfNeeded can grow before we retry,
                                         // instead of hammering every remaining ready section with doomed uploads
-                    state.handles[si] = h;
+                    state.handles[si] = opaqueH;
+                    state.transparentHandles[si] = transH;
                     ++uploads;
                 }
                 state.sectionUploaded[si] = true;
@@ -860,10 +865,11 @@ namespace pe::voxel
         return uploads;
     }
 
-    ArenaHandle VoxelWorld::UploadSectionMesh(CommandBuffer *cmd, ColumnCoord coord, int si, const MeshData &mesh)
+    bool VoxelWorld::UploadSectionMesh(CommandBuffer *cmd, ColumnCoord coord, int si, const MeshData &mesh,
+                                       ArenaHandle &opaqueOut, ArenaHandle &transparentOut)
     {
-        if (mesh.vertices.empty())
-            return ArenaHandle{};
+        opaqueOut = ArenaHandle{};
+        transparentOut = ArenaHandle{};
 
         MeshRuntime runtime{};
         runtime.materialGpuIndex = m_materialGpuIndex;
@@ -872,7 +878,29 @@ namespace pe::voxel
         const vec3 sectionOrigin(static_cast<float>(coord.cx * kSectionDim),
                                  static_cast<float>(sectionWorldY),
                                  static_cast<float>(coord.cz * kSectionDim));
-        return m_arena.Upload(cmd, mesh, sectionOrigin, m_hostDataOffset, runtime);
+
+        if (!mesh.vertices.empty())
+        {
+            opaqueOut = m_arena.Upload(cmd, mesh, sectionOrigin, m_hostDataOffset, runtime);
+            if (!opaqueOut.valid)
+                return false; // opaque OOM — caller stops the frame so GrowIfNeeded can grow before retry
+        }
+
+        if (!mesh.transparentVertices.empty())
+        {
+            // Independent second arena mesh tagged transparent (own slot + identity-host transform).
+            MeshData water;
+            water.vertices = mesh.transparentVertices;
+            water.indices = mesh.transparentIndices;
+            for (int k = 0; k < 3; ++k)
+            {
+                water.localMin[k] = mesh.transparentLocalMin[k];
+                water.localMax[k] = mesh.transparentLocalMax[k];
+            }
+            transparentOut = m_arena.Upload(cmd, water, sectionOrigin, m_hostDataOffset, runtime, true);
+            // transparent OOM is non-fatal: keep the opaque upload, water for this section retries on remesh.
+        }
+        return true;
     }
 
     void VoxelWorld::ReleaseColumn(ColumnState &state)
@@ -880,6 +908,14 @@ namespace pe::voxel
         PersistColumnIfTouched(state);
         state.state = ColumnLoadState::Unloading;
         for (ArenaHandle &handle : state.handles)
+        {
+            if (handle.valid)
+            {
+                m_arena.Release(handle);
+                handle = ArenaHandle{};
+            }
+        }
+        for (ArenaHandle &handle : state.transparentHandles)
         {
             if (handle.valid)
             {
@@ -941,7 +977,9 @@ namespace pe::voxel
 
                 const MeshData &mesh = state.remeshFutures[si].get();
                 const bool sectionHasBlocks = state.column && !state.column->Section(si).IsEmpty();
-                if (mesh.vertices.empty() && sectionHasBlocks && state.handles[si].valid)
+                const bool meshEmpty = mesh.vertices.empty() && mesh.transparentVertices.empty();
+                const bool hasAnyHandle = state.handles[si].valid || state.transparentHandles[si].valid;
+                if (meshEmpty && sectionHasBlocks && hasAnyHandle)
                 {
                     state.remeshFutures[si] = std::shared_future<MeshData>();
                     state.remeshPending[si] = false;
@@ -953,23 +991,34 @@ namespace pe::voxel
                     continue;
                 }
 
-                if (!mesh.vertices.empty())
+                if (!meshEmpty)
                 {
-                    // Upload the replacement BEFORE releasing the old mesh. On arena OOM keep the old
-                    // handle (stays visible) and retry next frame after GrowIfNeeded — releasing first
-                    // would drop the section to invisible until its next edit (remeshPending is cleared below).
-                    const ArenaHandle h = UploadSectionMesh(cmd, state.coord, si, mesh);
-                    if (!h.valid)
+                    // Upload the replacement BEFORE releasing the old mesh. On opaque arena OOM keep the old
+                    // handles (stay visible) and retry next frame after GrowIfNeeded — releasing first would
+                    // drop the section to invisible until its next edit (remeshPending is cleared below).
+                    ArenaHandle opaqueH, transH;
+                    if (!UploadSectionMesh(cmd, state.coord, si, mesh, opaqueH, transH))
                         continue;
                     if (state.handles[si].valid)
                         m_arena.Release(state.handles[si]);
-                    state.handles[si] = h;
+                    if (state.transparentHandles[si].valid)
+                        m_arena.Release(state.transparentHandles[si]);
+                    state.handles[si] = opaqueH;
+                    state.transparentHandles[si] = transH;
                     ++applied; // count only the expensive staging upload toward the per-frame budget
                 }
-                else if (state.handles[si].valid)
+                else
                 {
-                    m_arena.Release(state.handles[si]);
-                    state.handles[si] = ArenaHandle{};
+                    if (state.handles[si].valid)
+                    {
+                        m_arena.Release(state.handles[si]);
+                        state.handles[si] = ArenaHandle{};
+                    }
+                    if (state.transparentHandles[si].valid)
+                    {
+                        m_arena.Release(state.transparentHandles[si]);
+                        state.transparentHandles[si] = ArenaHandle{};
+                    }
                 }
 
                 state.remeshFutures[si] = std::shared_future<MeshData>();

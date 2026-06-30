@@ -89,6 +89,7 @@ namespace pe::voxel
             std::array<std::shared_future<MeshData>, kSectionCount> meshFutures;
             std::array<std::shared_future<MeshData>, kSectionCount> remeshFutures;
             std::array<ArenaHandle, kSectionCount> handles{};
+            std::array<ArenaHandle, kSectionCount> transparentHandles{}; // water sub-mesh per section
             std::array<bool, kSectionCount> sectionUploaded{};
             std::array<bool, kSectionCount> remeshPending{};
             std::array<bool, kSectionCount> dirtyAfterRemesh{};
@@ -116,7 +117,12 @@ namespace pe::voxel
         void TryStartColumnMeshing(ColumnState &state);
         void ProcessPendingMeshing();
         int ProcessReadyMeshUploads(CommandBuffer *cmd, int budget);
-        ArenaHandle UploadSectionMesh(CommandBuffer *cmd, ColumnCoord coord, int si, const MeshData &mesh);
+        // Uploads the section's opaque AND transparent (water) streams as two independent arena meshes.
+        // Returns false only on OPAQUE OOM (caller stops/retries the frame); transparent OOM is non-fatal
+        // (water for that section is skipped until a later pool grow). Out-handles are invalid when a
+        // stream is empty.
+        bool UploadSectionMesh(CommandBuffer *cmd, ColumnCoord coord, int si, const MeshData &mesh,
+                               ArenaHandle &opaqueOut, ArenaHandle &transparentOut);
         void ReleaseColumn(ColumnState &state);
         void EnqueueSectionRemeshBatch(ColumnState &state, const std::vector<int> &sections);
         // applyBudget caps section uploads applied per frame so a burst of completed remeshes spreads

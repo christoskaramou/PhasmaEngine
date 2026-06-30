@@ -282,11 +282,13 @@ namespace pe
         // idxByteOffset is into the voxel index buffer. If cmd != nullptr the GPU copies/barriers are
         // RECORDED into it (no stall — caller submits before the cull dispatch); if nullptr a transient
         // cmd is acquired/submitted/waited (one-shot). Returns the scene mesh slot, or -1 on failure.
+        // transparent=true tags the slot editorFlags bit3 (0x8) so the cull keeps it out of the opaque
+        // voxel bucket (bit2 still set); the transparent GBuffer pass draws it via GetVoxelTransparentDraws.
         int AddArenaMesh(uint32_t vertexIndex, size_t idxByteOffset,
                          const std::vector<VoxelVertex> &verts,
                          const std::vector<uint16_t> &indices, const AABB &localBox,
                          uint32_t reuseDataOffset, const MeshRuntime &runtimeForImages,
-                         CommandBuffer *cmd = nullptr);
+                         bool transparent = false, CommandBuffer *cmd = nullptr);
         // Tombstone an arena slot: zero its indirect draw + visibility and neuter its index bytes so the
         // cull/GBuffer emit nothing and any stale two-phase-occlusion filtered draw degenerates. The slot
         // is NOT reused or relocated here — relocation would CPU-rewrite a slot's Mesh_Constants (incl the
@@ -309,6 +311,16 @@ namespace pe
         size_t GetArenaIdxCapacity() const { return m_arenaIdxCapacity; }
         uint32_t GetArenaSlotBase() const { return m_arenaSlotBase; }
         bool HasArenaVoxels() const { return m_meshCount > m_arenaSlotBase && !m_arenaSlots.empty(); }
+        // One per live transparent (water) arena slot. firstInstance = slot (the voxel VS reads it for the
+        // identity-host transform + section-origin AABB), drawn UNCULLED in the transparent GBuffer pass.
+        struct VoxelTransparentDraw
+        {
+            uint32_t indexCount;
+            uint32_t firstIndex;
+            int32_t vertexOffset;
+            uint32_t slot;
+        };
+        std::vector<VoxelTransparentDraw> GetVoxelTransparentDraws() const;
         // Transform-storage offset of a node (its NodeGpuData / world matrix). Only valid for nodes
         // with a drawable mesh ref (others are SIZE_MAX). Arena meshes point their meshDataOffset at a
         // persistent identity host node so the VS applies an identity transform to already-world-baked
@@ -771,6 +783,7 @@ namespace pe
             size_t idxByteOffset = 0;
             size_t idxBytes = 0;
             uint32_t vertexCount = 0;
+            bool transparent = false; // alpha-blended (water): drawn by the transparent GBuffer pass
         };
         std::vector<ArenaSlot> m_arenaSlots;
         uint32_t m_arenaSlotBase = 0;           // first arena scene-slot (== m_meshCount when capacity reserved)

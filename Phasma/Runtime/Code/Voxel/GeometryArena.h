@@ -34,8 +34,11 @@ namespace pe::voxel
         // Verts are packed section-local; sectionOrigin becomes the slot's AABB min, which the voxel VS
         // adds back as the world origin. Every section shares one identity host node (hostDataOffset =
         // that node's transform-storage offset). Returns an invalid handle on OOM.
+        // transparent=true tags the scene slot as alpha-blended (water): the cull excludes it from the
+        // opaque voxel bucket and the transparent GBuffer pass draws it. Each call is an independent
+        // arena entry/handle (a section uploads its opaque + transparent streams as two Uploads).
         ArenaHandle Upload(CommandBuffer *cmd, const MeshData &mesh, const vec3 &sectionOrigin,
-                           uint32_t hostDataOffset, const MeshRuntime &runtime);
+                           uint32_t hostDataOffset, const MeshRuntime &runtime, bool transparent = false);
 
         // Queue a handle for removal. The GPU swap-remove + range free happen in Update(); freed
         // ranges are retired a few frames later so no stale two-phase-occlusion draw reuses them.

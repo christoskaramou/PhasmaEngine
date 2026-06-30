@@ -14,6 +14,7 @@ namespace pe::voxel
         const BlockType &Get(BlockId) const;
         bool IsSolid(BlockId) const;
         bool IsOpaque(BlockId) const;
+        bool IsTransparent(BlockId) const; // render class == Transparent (water)
         uint16_t FaceTile(BlockId, int face) const;
         size_t Count() const;
 
