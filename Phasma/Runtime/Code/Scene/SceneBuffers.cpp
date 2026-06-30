@@ -1690,6 +1690,15 @@ namespace pe
         // keep reading the freed old m_meshConstants/m_materialTable.
         m_geometryVersion++;
 
+        // This reservation REALLOCATED m_buffer. The BLASes hold raw device addresses into m_buffer
+        // (SceneRayTracing.cpp), so after the realloc they point at the freed old buffer: latent UB
+        // where RT traversal reads stale memory and can page-fault once that buffer is fence-freed.
+        // Mark BLAS dirty so the RT-flush rebuilds them against the relaid-out buffer before the next
+        // RT dispatch. Safe under the arena invariant above: that rebuild only reads m_meshes geometry,
+        // it never recreates m_buffer. (m_blasDirty already drives a full BLAS+TLAS rebuild.)
+        if (RHII.GetCaps().rayTracing)
+            m_blasDirty = true;
+
         return 0;
     }
 
