@@ -26,6 +26,11 @@
 #include "Voxel/VoxelSystem.h"
 #include "UI/RuntimeUi.h"
 #include "Window/WindowEvents.h"
+#if defined(PE_PLAYER_MCP)
+#include "Agent/PlayerMcp.h"
+#include <nlohmann/json.hpp>
+#include <fstream>
+#endif
 
 #if defined(PE_ANDROID)
 #include <SDL_system.h>
@@ -371,11 +376,64 @@ namespace pe
             bool m_cleaned = false;
         };
 
+        // Thread-safe queue of callables to run on the main thread. The player MCP server (PlayerMcp)
+        // posts onto it from its httplib worker threads; the frame pump drains it once per frame so
+        // execute_lua / get_state / script-tool handlers touch engine state only on the main thread.
+        class MainThreadActionQueue
+        {
+        public:
+            void Post(std::function<void()> fn)
+            {
+                std::lock_guard lock(m_mtx);
+                m_actions.push_back(std::move(fn));
+            }
+
+            void Drain()
+            {
+                std::vector<std::function<void()>> local;
+                {
+                    std::lock_guard lock(m_mtx);
+                    local.swap(m_actions);
+                }
+                for (auto &fn : local)
+                    fn();
+            }
+
+        private:
+            std::mutex m_mtx;
+            std::vector<std::function<void()>> m_actions;
+        };
+
+#if defined(PE_PLAYER_MCP)
+        // Opt-in gate for the player MCP server: read the project's Assets/Agent/agent_config.json "mcp"
+        // flag (same mechanism the editor uses). Default false — the server (which exposes execute_lua =
+        // arbitrary code execution) starts only when a project explicitly enables it.
+        bool ReadPlayerMcpEnabled()
+        {
+            const std::string configPath = Path::Assets + "Agent/agent_config.json";
+            std::ifstream f(configPath);
+            if (!f.is_open())
+                return false;
+            try
+            {
+                nlohmann::json j;
+                f >> j;
+                return j.value("mcp", false);
+            }
+            catch (...)
+            {
+                PE_WARN("[MCP] Failed to parse %s — player MCP disabled this run", configPath.c_str());
+                return false;
+            }
+        }
+#endif
+
         class PlayerFramePump : public NoCopy, public NoMove
         {
         public:
-            PlayerFramePump(SDL_Window *window, RuntimeSceneRenderer &renderer, RuntimeUiSystem *runtimeUi)
-                : m_window(window), m_renderer(renderer), m_runtimeUi(runtimeUi)
+            PlayerFramePump(SDL_Window *window, RuntimeSceneRenderer &renderer, RuntimeUiSystem *runtimeUi,
+                            MainThreadActionQueue *mcpActions)
+                : m_window(window), m_renderer(renderer), m_runtimeUi(runtimeUi), m_mcpActions(mcpActions)
             {
             }
 
@@ -415,6 +473,11 @@ namespace pe
                     }
                     m_runtimeUi->BeginFrame();
                 }
+
+                // Run agent (MCP) actions queued from worker threads on the main thread, before the
+                // frame's systems update — keeps execute_lua / script-tool handlers on the main thread.
+                if (m_mcpActions)
+                    m_mcpActions->Drain();
 
                 UpdateGlobalSystems();
                 const bool keepRunning = ProcessRuntimeEvents();
@@ -584,6 +647,7 @@ namespace pe
             SDL_Window *m_window = nullptr;
             RuntimeSceneRenderer &m_renderer;
             RuntimeUiSystem *m_runtimeUi = nullptr;
+            MainThreadActionQueue *m_mcpActions = nullptr;
             bool m_resizePending = false;
             double m_fpsAccumSeconds = 0.0;
             uint32_t m_fpsAccumFrames = 0;
@@ -720,11 +784,39 @@ namespace pe
                 playStart.callScriptInit = true;
                 StartRuntimePlaySession(scene, playStart);
 
+                MainThreadActionQueue mcpActions;
+#if defined(PE_PLAYER_MCP)
+                // Player MCP server (opt-in, loopback-only). Started after the ScriptSystem + play session
+                // are live so execute_lua / get_state have a valid VM and scene to act on.
+                std::unique_ptr<PlayerMcp> playerMcp;
+                if (ReadPlayerMcpEnabled())
                 {
-                    PlayerFramePump framePump(window.Get(), renderer, runtimeUiPtr);
+                    playerMcp = std::make_unique<PlayerMcp>(
+                        [&mcpActions](std::function<void()> fn)
+                        { mcpActions.Post(std::move(fn)); });
+                    playerMcp->Start();
+                    if (playerMcp->IsRunning())
+                        PE_INFO("[MCP] Player MCP server listening on 127.0.0.1:%d", playerMcp->GetPort());
+                    else
+                        PE_WARN("[MCP] Player MCP server failed to start");
+                }
+#endif
+
+                {
+                    PlayerFramePump framePump(window.Get(), renderer, runtimeUiPtr, &mcpActions);
                     PE_INFO("[Runtime] Player frame pump running (startup scene render)");
                     framePump.Run();
                 }
+
+#if defined(PE_PLAYER_MCP)
+                // Stop the server before tearing down systems so no worker thread touches a half-destroyed
+                // ScriptSystem/renderer. (Script-registered tools are dropped by ScriptSystem::Destroy.)
+                if (playerMcp)
+                {
+                    playerMcp->Stop();
+                    playerMcp.reset();
+                }
+#endif
 
                 StopRuntimePlaySession();
                 FileWatcher::StopAndJoin();

@@ -266,6 +266,14 @@ if(NOT MSVC)
     target_compile_options(Lua PRIVATE -w)
 endif()
 
+if(PE_BUILD_MCP)
+    # Engine-agnostic MCP server library (protocol + transport + optional codebase indexer). Added
+    # BEFORE PhasmaRuntime so the runtime can link it for the opt-in player MCP server (PlayerMcp).
+    # The codebase indexer (BM25 / CodebaseIndexer / CodebaseContext) is included by default inside
+    # the same target; pass -DPE_PMCP_CODEBASE=OFF to strip it for minimal builds.
+    add_subdirectory(Phasma/MCP)
+endif()
+
 # Shared project/runtime contract used by editor today and future player hosts.
 add_subdirectory(Phasma/Runtime)
 
@@ -280,12 +288,7 @@ if(PE_ENABLE_ASSIMP AND NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
     add_subdirectory(Phasma/Cook)
 endif()
 
-if(PE_BUILD_MCP)
-    # Engine-agnostic MCP server library (protocol + transport + optional codebase indexer).
-    # The codebase indexer (BM25 / CodebaseIndexer / CodebaseContext) is included by default
-    # inside the same target; pass -DPE_PMCP_CODEBASE=OFF to strip it for minimal builds.
-    add_subdirectory(Phasma/MCP)
-endif()
+# (Phasma/MCP is added above, before PhasmaRuntime, so the runtime can link it.)
 
 # Add PhasmaWebGPU subdirectory (WebGPU C API layer over PhasmaCore)
 if(PE_WEBGPU)
