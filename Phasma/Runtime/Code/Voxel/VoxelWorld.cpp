@@ -105,12 +105,16 @@ namespace pe::voxel
             return SampleSectionBlock(*c->column, *c->neighbors, c->coord, c->si, lx, ly, lz);
         }
 
+        // Highest lod the streamer requests: 4-block cells. Coarser reads badly even at the horizon,
+        // and the mesher's 5-bit packed positions allow it without format changes.
+        constexpr int kMaxVoxelLod = 2;
+
         MeshData MeshSectionCpu(const ChunkColumn &column, const BlockRegistry &registry, int si,
-                                ColumnCoord coord, const ColumnNeighbors &neighbors)
+                                ColumnCoord coord, const ColumnNeighbors &neighbors, int lod)
         {
             GreedyMesher mesher;
             SectionSampleCtx ctx{&column, &neighbors, coord, si};
-            return mesher.Mesh(SectionSampleThunk, &ctx, registry, 0);
+            return mesher.Mesh(SectionSampleThunk, &ctx, registry, lod);
         }
 
         // True when section si has opaque blocks within two voxels of the horizontal face that
@@ -225,6 +229,22 @@ namespace pe::voxel
         return std::max(std::abs(a.cx - b.cx), std::abs(a.cz - b.cz));
     }
 
+    int VoxelWorld::DesiredLod(ColumnCoord coord) const
+    {
+        if (m_cfg.lod0Radius <= 0 || !m_streamAnchorValid)
+            return 0;
+        return std::min(kMaxVoxelLod, ColumnDistance(coord, m_streamAnchorColumn) / m_cfg.lod0Radius);
+    }
+
+    void VoxelWorld::RemeshColumnAtLod(ColumnState &state, int lod)
+    {
+        state.lod = lod;
+        std::vector<int> allSections(kSectionCount);
+        for (int si = 0; si < kSectionCount; ++si)
+            allSections[si] = si;
+        EnqueueSectionRemeshBatch(state, allSections);
+    }
+
     VoxelWorld::ColumnState *VoxelWorld::FindColumnState(ColumnCoord coord)
     {
         auto it = m_columns.find(ColumnKey(coord));
@@ -267,6 +287,7 @@ namespace pe::voxel
         m_cfg.unloadMargin = std::max(0, m_cfg.unloadMargin);
         m_cfg.uploadBudgetPerFrame = std::max(1, m_cfg.uploadBudgetPerFrame);
         m_cfg.groundY = ClampInt(m_cfg.groundY, 0, kWorldHeight);
+        m_cfg.lod0Radius = std::max(0, m_cfg.lod0Radius);
         m_saveRoot = ColumnChunkStore::ResolveRoot(m_cfg.saveDir);
         if (!m_saveRoot.empty())
             PE_INFO("VoxelWorld: column persistence root %s", m_saveRoot.generic_string().c_str());
@@ -324,8 +345,20 @@ namespace pe::voxel
         // Packed verts are 8 B (VoxelVertex), so a loadRadius-8 grid starts at ~tens of MB.
         const uint32_t kVertsPerSection = 1024u;
         const uint32_t kIndicesPerSection = 1536u;
-        const uint32_t vtxCapVertices = gridSections * kVertsPerSection;
-        const uint32_t idxCapBytes = gridSections * kIndicesPerSection * static_cast<uint32_t>(sizeof(uint16_t));
+        // With LOD on, only the lod-0 core needs the full per-section budget; coarse rings mesh at
+        // 1/4 or less. Estimating them at 1/4 keeps big-radius worlds from reserving hundreds of MB
+        // up front — GrowIfNeeded absorbs any underestimate.
+        uint32_t fullSections = gridSections;
+        uint32_t coarseSections = 0;
+        if (m_cfg.lod0Radius > 0 && m_cfg.lod0Radius < capacityRadius)
+        {
+            const int lod0Dim = m_cfg.lod0Radius * 2 + 1;
+            fullSections = static_cast<uint32_t>(lod0Dim * lod0Dim * kSectionCount);
+            coarseSections = gridSections - fullSections;
+        }
+        const uint32_t vtxCapVertices = fullSections * kVertsPerSection + coarseSections * (kVertsPerSection / 4);
+        const uint32_t idxCapBytes = (fullSections * kIndicesPerSection + coarseSections * (kIndicesPerSection / 4)) *
+                                     static_cast<uint32_t>(sizeof(uint16_t));
 
         m_arena.Init(m_scene, vtxCapVertices, idxCapBytes, gridSections);
         SetAnchor(m_anchor);
@@ -595,6 +628,21 @@ namespace pe::voxel
                 ++it;
             }
         }
+
+        // LOD transitions: Ready columns whose distance band changed remesh at the new lod through
+        // the budgeted remesh path (columns still meshing re-check when they become Ready).
+        if (m_cfg.lod0Radius > 0)
+        {
+            for (auto &entry : m_columns)
+            {
+                ColumnState &state = entry.second;
+                if (state.state != ColumnLoadState::Ready || !state.column)
+                    continue;
+                const int lod = DesiredLod(state.coord);
+                if (lod != state.lod)
+                    RemeshColumnAtLod(state, lod);
+            }
+        }
     }
 
     void VoxelWorld::SetTerrainGenerator(std::shared_ptr<ITerrainGenerator> generator)
@@ -673,8 +721,12 @@ namespace pe::voxel
     {
         if (state.state != ColumnLoadState::Generated || !state.column)
             return;
-        if (NeighborGenerationInProgress(state.coord))
+        // Coarse columns never read neighbor blocks (the mesher caps their walls), so they skip both
+        // the neighbor-generation wait and the 9-column snapshot copy — distant rings fill faster.
+        const int lod = DesiredLod(state.coord);
+        if (lod == 0 && NeighborGenerationInProgress(state.coord))
             return;
+        state.lod = lod;
         EnqueueColumnMeshing(state);
     }
 
@@ -711,15 +763,19 @@ namespace pe::voxel
             return;
 
         const ColumnCoord coord = state.coord;
+        const int lod = state.lod;
         auto columnSnapshot = std::make_shared<ChunkColumn>(*state.column);
-        auto neighbors = std::make_shared<ColumnNeighbors>(GatherNeighborSnapshots(coord));
+        // lod > 0 caps section walls instead of reading across columns, so the (expensive, ~9-column
+        // deep-copy) neighbor snapshot is only taken for full-detail meshing.
+        auto neighbors = std::make_shared<ColumnNeighbors>(lod == 0 ? GatherNeighborSnapshots(coord)
+                                                                    : ColumnNeighbors{});
         auto registrySnapshot = std::make_shared<BlockRegistry>(m_registry);
         for (int si = 0; si < kSectionCount; ++si)
         {
             state.sectionUploaded[si] = false;
             state.meshFutures[si] = ThreadPool::General.Enqueue(
-                [columnSnapshot, neighbors, registrySnapshot, coord, si]() -> MeshData
-                { return MeshSectionCpu(*columnSnapshot, *registrySnapshot, si, coord, *neighbors); });
+                [columnSnapshot, neighbors, registrySnapshot, coord, si, lod]() -> MeshData
+                { return MeshSectionCpu(*columnSnapshot, *registrySnapshot, si, coord, *neighbors, lod); });
         }
         state.state = ColumnLoadState::Meshing;
     }
@@ -750,10 +806,11 @@ namespace pe::voxel
 
     void VoxelWorld::RemeshNeighborSeams(ColumnCoord coord)
     {
+        // Coarse neighbors don't sample across columns, so a fresh column can't change their meshes.
         auto remeshCardinal = [&](int dcx, int dcz)
         {
             ColumnState *st = FindColumnState({coord.cx + dcx, coord.cz + dcz});
-            if (!st || st->state != ColumnLoadState::Ready || !st->column)
+            if (!st || st->state != ColumnLoadState::Ready || !st->column || st->lod > 0)
                 return;
             std::vector<int> sections;
             for (int si = 0; si < kSectionCount; ++si)
@@ -764,7 +821,7 @@ namespace pe::voxel
         auto remeshDiagonal = [&](int dcx, int dcz)
         {
             ColumnState *st = FindColumnState({coord.cx + dcx, coord.cz + dcz});
-            if (!st || st->state != ColumnLoadState::Ready || !st->column)
+            if (!st || st->state != ColumnLoadState::Ready || !st->column || st->lod > 0)
                 return;
             std::vector<int> sections;
             for (int si = 0; si < kSectionCount; ++si)
@@ -849,6 +906,7 @@ namespace pe::voxel
                     ++uploads;
                 }
                 state.sectionUploaded[si] = true;
+                state.sectionLod[si] = static_cast<uint8_t>(state.lod);
                 state.meshFutures[si] = std::shared_future<MeshData>();
             }
 
@@ -858,6 +916,11 @@ namespace pe::voxel
             if (allUploaded)
             {
                 state.state = ColumnLoadState::Ready;
+                // The anchor may have crossed a lod band while this column was meshing — the
+                // transition sweep in RequestColumnsForAnchor only sees Ready columns, so re-check here.
+                const int lod = DesiredLod(state.coord);
+                if (lod != state.lod)
+                    RemeshColumnAtLod(state, lod);
                 RemeshNeighborSeams(state.coord);
             }
         }
@@ -947,15 +1010,18 @@ namespace pe::voxel
             return;
 
         auto columnSnapshot = std::make_shared<ChunkColumn>(*state.column);
-        auto neighbors = std::make_shared<ColumnNeighbors>(GatherNeighborSnapshots(state.coord));
+        auto neighbors = std::make_shared<ColumnNeighbors>(state.lod == 0 ? GatherNeighborSnapshots(state.coord)
+                                                                          : ColumnNeighbors{});
         auto registrySnapshot = std::make_shared<BlockRegistry>(m_registry);
         const ColumnCoord coord = state.coord;
+        const int lod = state.lod;
         for (int si : toMesh)
         {
             state.remeshFutures[si] = ThreadPool::General.Enqueue(
-                [columnSnapshot, neighbors, registrySnapshot, coord, si]() -> MeshData
-                { return MeshSectionCpu(*columnSnapshot, *registrySnapshot, si, coord, *neighbors); });
+                [columnSnapshot, neighbors, registrySnapshot, coord, si, lod]() -> MeshData
+                { return MeshSectionCpu(*columnSnapshot, *registrySnapshot, si, coord, *neighbors, lod); });
             state.remeshPending[si] = true;
+            state.remeshLod[si] = static_cast<uint8_t>(lod);
         }
     }
 
@@ -979,7 +1045,9 @@ namespace pe::voxel
                 const bool sectionHasBlocks = state.column && !state.column->Section(si).IsEmpty();
                 const bool meshEmpty = mesh.vertices.empty() && mesh.transparentVertices.empty();
                 const bool hasAnyHandle = state.handles[si].valid || state.transparentHandles[si].valid;
-                if (meshEmpty && sectionHasBlocks && hasAnyHandle)
+                // Keep-old only applies same-lod: across a lod change an empty result is legitimate
+                // (e.g. coarse wall caps mesh to nothing at lod 0) and the old mesh must release below.
+                if (meshEmpty && sectionHasBlocks && hasAnyHandle && state.remeshLod[si] == state.sectionLod[si])
                 {
                     state.remeshFutures[si] = std::shared_future<MeshData>();
                     state.remeshPending[si] = false;
@@ -1021,6 +1089,7 @@ namespace pe::voxel
                     }
                 }
 
+                state.sectionLod[si] = state.remeshLod[si];
                 state.remeshFutures[si] = std::shared_future<MeshData>();
                 state.remeshPending[si] = false;
 

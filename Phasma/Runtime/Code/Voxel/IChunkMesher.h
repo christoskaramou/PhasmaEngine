@@ -36,7 +36,10 @@ namespace pe::voxel
     {
     public:
         virtual ~IChunkMesher() = default;
-        // lod 0 = full; lod N samples stride 2^N and merges (Phase 1 ships lod 0).
+        // lod 0 = full detail. lod N meshes (kSectionDim >> N)^3 cells of 2^N blocks each: a cell is
+        // solid when ANY block in it is opaque (conservative silhouette), AO is skipped, and section
+        // walls are always capped so mixed-lod neighbors can't open cracks. Positions stay in block
+        // units, so the packed vertex format and shaders are lod-agnostic.
         virtual MeshData Mesh(BlockSampleFn sample, void *sampleCtx, const BlockRegistry &reg, int lod) = 0;
     };
 } // namespace pe::voxel
