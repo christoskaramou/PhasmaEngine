@@ -102,19 +102,14 @@ namespace pe
                                                    std::span<bool> passInitialized,
                                                    CommandBuffer *cmd);
 
+    // Resizes every initialized component, enabled or not: once a pass component is initialized it is
+    // kept alive until scene teardown (disabled passes just stop being recorded). Destroying components
+    // on render-mode toggles and re-initializing them later caused intermittent VK_ERROR_DEVICE_LOST
+    // and per-swapchain-image descriptor staleness (alternating-frame flicker).
     void ResizeInitializedSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
-                                                         SceneRenderGraphPassCondition isPassEnabled,
                                                          std::span<bool> passInitialized,
                                                          uint32_t width,
                                                          uint32_t height);
-
-    bool HasDisabledInitializedSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
-                                                              SceneRenderGraphPassCondition isPassEnabled,
-                                                              std::span<const bool> passInitialized);
-
-    void DestroyDisabledSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
-                                                       SceneRenderGraphPassCondition isPassEnabled,
-                                                       std::span<bool> passInitialized);
 
     void DestroyInitializedSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
                                                           std::span<bool> passInitialized);

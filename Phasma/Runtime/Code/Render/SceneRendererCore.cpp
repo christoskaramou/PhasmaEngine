@@ -133,17 +133,10 @@ namespace pe
         DestroyInitializedSceneRenderGraphPassComponents(m_scenePasses, m_renderGraphPassInitialized);
     }
 
-    void SceneRendererCore::PrepareRenderTargetResize(bool hasRayTracingGeometry)
-    {
-        pe::UpdateSceneRenderGraphPassStates(m_renderGraphPassEnabled, hasRayTracingGeometry);
-        DestroyDisabledRenderPassComponents();
-    }
-
     void SceneRendererCore::ResizeRenderPassComponents(uint32_t width, uint32_t height, bool hasRayTracingGeometry)
     {
         pe::UpdateSceneRenderGraphPassStates(m_renderGraphPassEnabled, hasRayTracingGeometry);
-        ResizeInitializedSceneRenderGraphPassComponents(m_scenePasses, [this](SceneRenderGraphPassId passId)
-                                                        { return IsPassEnabled(passId); }, m_renderGraphPassInitialized, width, height);
+        ResizeInitializedSceneRenderGraphPassComponents(m_scenePasses, m_renderGraphPassInitialized, width, height);
         InitEnabledRenderPassComponents(nullptr);
     }
 
@@ -155,12 +148,10 @@ namespace pe
     void SceneRendererCore::UpdateRenderGraphPassStates(bool hasRayTracingGeometry, CommandBuffer *cmd)
     {
         pe::UpdateSceneRenderGraphPassStates(m_renderGraphPassEnabled, hasRayTracingGeometry);
-        if (HasDisabledRenderPassComponents())
-        {
-            RHII.WaitDeviceIdle();
-            DestroyDisabledRenderPassComponents();
-        }
 
+        // Disabled passes are kept initialized and simply skipped when recording; destroying them here
+        // and re-initializing on re-enable caused intermittent device loss and stale per-swapchain-image
+        // descriptors (alternating-frame flicker) on render-mode toggles.
         // Per-frame setting toggles call this with no command buffer; lazily initable passes must tolerate nullptr here.
         InitEnabledRenderPassComponents(cmd);
     }
@@ -207,18 +198,6 @@ namespace pe
     {
         InitEnabledSceneRenderGraphPassComponents(m_scenePasses, [this](SceneRenderGraphPassId passId)
                                                   { return IsPassEnabled(passId); }, m_renderGraphPassInitialized, cmd);
-    }
-
-    bool SceneRendererCore::HasDisabledRenderPassComponents() const
-    {
-        return HasDisabledInitializedSceneRenderGraphPassComponents(m_scenePasses, [this](SceneRenderGraphPassId passId)
-                                                                    { return IsPassEnabled(passId); }, m_renderGraphPassInitialized);
-    }
-
-    void SceneRendererCore::DestroyDisabledRenderPassComponents()
-    {
-        DestroyDisabledSceneRenderGraphPassComponents(m_scenePasses, [this](SceneRenderGraphPassId passId)
-                                                      { return IsPassEnabled(passId); }, m_renderGraphPassInitialized);
     }
 
     void SceneRendererCore::SetRenderPassScene(Scene &scene)

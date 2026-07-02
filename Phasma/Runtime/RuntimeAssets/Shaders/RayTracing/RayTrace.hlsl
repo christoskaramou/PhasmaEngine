@@ -630,8 +630,14 @@ void raygeneration()
     // 0 = Raster
     // 1 = Hybrid
     // 2 = RayTracing
-    uint mask = 0x80;                  // Default: Transparent only
-    float tMax = opaqueDist - 0.00001; // Default: Limited by depth
+    uint mask = 0x80; // Default: Transparent only
+    // Limited by raster depth — but GbufferTransparent WRITES transparent surfaces into this depth
+    // buffer (standard_pbr.pass "transparent" variant, depthWriteEnable), so at a glass pixel the
+    // nearest depth IS the glass itself. Clamping to opaqueDist - epsilon made reaching the glass a
+    // per-pixel float-noise lottery between the rasterized depth and the RT intersection t of the
+    // same triangle (facet-shaped hit/miss patches). Inflate slightly instead: the mask is
+    // transparent-only, so the sliver past the depth value cannot expose opaque geometry.
+    float tMax = opaqueDist * 1.001 + 0.001;
 
     if (cb_renderMode == 2)
     {
@@ -699,7 +705,13 @@ void anyhit(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes a
     float4 baseColor = color * mat.baseColorFactor;
     if (HasTexture(textureMask, TEX_BASE_COLOR_BIT))
         baseColor *= GetBaseColor(constantsId, uv);
-    if (baseColor.a < constants[constantsId].alphaCut)
+    // Alpha-cut discard applies to AlphaCut materials ONLY. Transmission materials get their
+    // transparency from refraction (transmissionFactor) and AlphaBlend from ray continuation in
+    // closesthit — both author baseColor.a < 1 for the raster path, and discarding them here made
+    // glass and alpha-blend surfaces invisible to every RT ray wherever interpolated alpha fell
+    // below alphaCut (facet-shaped see-through patches, camera-dependent).
+    uint renderType = meshInfos[instanceId].renderType;
+    if (renderType == 2 && baseColor.a < constants[constantsId].alphaCut)
     {
         IgnoreHit();
     }
@@ -936,8 +948,14 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
 
         float3 transColor = transPayload.radiance;
 
-        // volume attenuation (Beer's Law)
-        if (isTransmissive)
+        // Base-color tint + volume attenuation (Beer's law): applied once per medium traversal, at
+        // the ENTRY (front-face) hit, where transPayload.t is the interior chord length. Exit
+        // (backface) hits pass the escaped radiance through untouched — tinting at every hit
+        // double-tinted proper refracted paths while leak/TIR paths tinted once, and that two-tone
+        // difference showed as facet-shaped mottling. (Beer at the exit hit was also measuring the
+        // escape ray's distance OUTSIDE the medium.)
+        bool exitingSurface = isTransmissive && dot(WorldRayDirection(), normalWorld) > 0.0;
+        if (isTransmissive && !exitingSurface)
         {
              transColor *= combinedColor.rgb;
              float dist = transPayload.t;
@@ -954,9 +972,26 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         }
 
         if (isTransmissive)
-             lighting = lerp(lighting, transColor, transmissionFactor);
+        {
+            // Front faces: Fresnel-weighted mix — plain lerp(lighting, transColor, tf) erased all
+            // surface reflection at transmissionFactor=1. Interior (backface) exit hits: pure
+            // transmission — NdV is clamped to 0.001 there, which drives Fresnel to ~1 and would
+            // replace the refracted color with the backface's near-black surface lighting; TIR at
+            // the exit face is already handled by the refract/reflect branch above.
+            float3 glass = exitingSurface ? transColor : lerp(transColor, lighting, Fresnel(F0, NdV));
+            lighting = lerp(lighting, glass, transmissionFactor);
+        }
         else
              lighting = lerp(transColor, lighting, combinedColor.a);
+    }
+    else if (isTransmissive)
+    {
+        // Bounce budget exhausted inside the glass (TIR chains burn depth fast): sample the
+        // environment along the current direction instead of returning this interior face's
+        // surface lighting, which is near-black and shows as jagged camera-shifting patches.
+        // Untinted: the entry-face hit applies the medium tint once. Do NOT raise the bounce cap
+        // instead: depth-2 hits already put their shadow rays at maxRecursionDepth (4).
+        lighting = skybox.SampleLevel(material_sampler, WorldRayDirection(), 0).rgb * cb_iblIntensity;
     }
 
     payload.radiance = lighting;
