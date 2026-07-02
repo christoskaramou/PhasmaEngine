@@ -21,6 +21,7 @@
 #include "RenderPasses/OcclusionCullingPass.h"
 #include "RenderPasses/ParticleComputePass.h"
 #include "RenderPasses/ParticlePass.h"
+#include "RenderPasses/RTDepthResolvePass.h"
 #include "RenderPasses/RayTracingPass.h"
 #include "RenderPasses/SelectionOutlinePass.h"
 #include "RenderPasses/SSAOPass.h"
@@ -64,6 +65,7 @@ namespace pe
              &SceneRenderGraphPassComponents::lightTransparent},
             {SceneRenderGraphPassId::Lines, 720, "Lines", &SceneRenderGraphPassComponents::lines},
             {SceneRenderGraphPassId::RayTracing, 800, "RayTracing", &SceneRenderGraphPassComponents::rayTracing},
+            {SceneRenderGraphPassId::RTDepthResolve, 810, "RTDepthResolve", &SceneRenderGraphPassComponents::rtDepthResolve},
             {SceneRenderGraphPassId::ParticleCompute, 900, "ParticleCompute",
              &SceneRenderGraphPassComponents::particleCompute},
             {SceneRenderGraphPassId::SSR, 1000, "SSR", &SceneRenderGraphPassComponents::ssr},
@@ -162,6 +164,8 @@ namespace pe
                 return isPassEnabled(SceneRenderGraphPassId::Lines);
             if (component == components.rayTracing)
                 return isPassEnabled(SceneRenderGraphPassId::RayTracing);
+            if (component == components.rtDepthResolve)
+                return isPassEnabled(SceneRenderGraphPassId::RTDepthResolve);
             if (component == components.particleCompute || component == components.particle)
                 return isPassEnabled(SceneRenderGraphPassId::ParticleCompute) ||
                        isPassEnabled(SceneRenderGraphPassId::Particle);
@@ -255,7 +259,10 @@ namespace pe
         CreateSceneRenderGraphPassComponent<GridPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<SelectionOutlinePass>(renderPassComponents);
         if (includeRayTracingPass)
+        {
             CreateSceneRenderGraphPassComponent<RayTracingPass>(renderPassComponents);
+            CreateSceneRenderGraphPassComponent<RTDepthResolvePass>(renderPassComponents);
+        }
     }
 
     void InitEnabledSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
@@ -343,6 +350,7 @@ namespace pe
         scenePasses.lightTransparent = GetGlobalComponent<LightTransparentPass>();
         scenePasses.lines = GetGlobalComponent<LinesPass>();
         scenePasses.rayTracing = GetGlobalComponent<RayTracingPass>();
+        scenePasses.rtDepthResolve = GetGlobalComponent<RTDepthResolvePass>();
         scenePasses.particleCompute = GetGlobalComponent<ParticleComputePass>();
         scenePasses.particle = GetGlobalComponent<ParticlePass>();
         scenePasses.ssr = GetGlobalComponent<SSRPass>();
@@ -419,6 +427,7 @@ namespace pe
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightTransparent, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Lines, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::RayTracing, dx12RayTracing);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::RTDepthResolve, dx12RtOnly);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::ParticleCompute, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Particle, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSR, pp.ssr && dx12RenderRaster);
@@ -462,6 +471,9 @@ namespace pe
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightTransparent, renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Lines, renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::RayTracing, renderRayTracing);
+        // Full RT only: raster never writes depth that frame, so the ray-traced primary-hit depth
+        // must be stamped in for the depth-testing overlays (grid, lines, selection outline).
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::RTDepthResolve, renderRayTracing && !renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::ParticleCompute, true);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Particle, true);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSR, renderSSR);
@@ -512,6 +524,7 @@ namespace pe
         SetPassScene<VoxelHiZPyramidPass>(components.voxelHiZPyramid, scene);
         SetPassScene<GbufferTransparentPass>(components.gbufferTransparent, scene);
         SetPassScene<RayTracingPass>(components.rayTracing, scene);
+        SetPassScene<RTDepthResolvePass>(components.rtDepthResolve, scene);
         SetPassScene<ParticleComputePass>(components.particleCompute, scene);
         SetPassScene<ParticlePass>(components.particle, scene);
         SetPassScene<GridPass>(components.grid, scene);

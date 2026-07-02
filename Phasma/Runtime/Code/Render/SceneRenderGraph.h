@@ -29,6 +29,7 @@ namespace pe
         LightTransparent,
         Lines,
         RayTracing,
+        RTDepthResolve, // full RT only: stamp ray-traced primary-hit depth into the depth buffer
         ParticleCompute,
         Particle,
         SSR,
@@ -69,6 +70,7 @@ namespace pe
         IRenderPassComponent *lightTransparent = nullptr;
         IRenderPassComponent *lines = nullptr;
         IRenderPassComponent *rayTracing = nullptr;
+        IRenderPassComponent *rtDepthResolve = nullptr; // full RT depth stamp for overlay depth tests
         IRenderPassComponent *particleCompute = nullptr;
         IRenderPassComponent *particle = nullptr;
         IRenderPassComponent *ssr = nullptr;
@@ -102,10 +104,8 @@ namespace pe
                                                    std::span<bool> passInitialized,
                                                    CommandBuffer *cmd);
 
-    // Resizes every initialized component, enabled or not: once a pass component is initialized it is
-    // kept alive until scene teardown (disabled passes just stop being recorded). Destroying components
-    // on render-mode toggles and re-initializing them later caused intermittent VK_ERROR_DEVICE_LOST
-    // and per-swapchain-image descriptor staleness (alternating-frame flicker).
+    // Resizes every initialized component, enabled or not: once initialized, components stay alive
+    // until scene teardown (destroy/re-init on render-mode toggles caused device loss).
     void ResizeInitializedSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
                                                          std::span<bool> passInitialized,
                                                          uint32_t width,

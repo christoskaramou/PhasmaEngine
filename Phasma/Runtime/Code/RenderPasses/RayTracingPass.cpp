@@ -19,7 +19,11 @@ namespace pe
     void RayTracingPass::Init()
     {
         m_scene = nullptr;
-        m_display = RequireActiveSceneRendererHost().GetViewportRT();
+        auto *rs = &RequireActiveSceneRendererHost();
+        m_display = rs->GetViewportRT();
+        // Primary-hit depth for RTDepthResolvePass. Registry targets are destroyed wholesale on
+        // resize, so create-by-name here is always fresh-sized.
+        m_rtDepth = rs->CreateRenderTarget("rtDepth", PE_FORMAT_R32_SFLOAT);
         m_uniforms.resize(RHII.GetSwapchainImageCount());
     }
 
@@ -99,6 +103,7 @@ namespace pe
                 desc->SetBuffer(0, scene.GetLightUniform(i));
                 desc->SetBuffer(1, m_uniforms[i]);
                 desc->SetBuffer(2, scene.GetLightStorage(i));
+                desc->SetImageView(3, m_rtDepth->GetUAV(0));
                 desc->Update();
             }
         }
@@ -179,6 +184,7 @@ namespace pe
 
         Image *depth = RequireActiveSceneRendererHost().GetDepthStencilRT();
         builder.WriteRayTracing(m_display);
+        builder.WriteRayTracing(m_rtDepth);
         builder.ReadRayTracing(depth);
     }
 
@@ -188,6 +194,9 @@ namespace pe
             return;
 
         builder.OutputCustom(m_display, PE_IMAGE_LAYOUT_GENERAL,
+                             PE_STAGE_RAY_TRACING_SHADER_KHR,
+                             PE_ACCESS_SHADER_WRITE);
+        builder.OutputCustom(m_rtDepth, PE_IMAGE_LAYOUT_GENERAL,
                              PE_STAGE_RAY_TRACING_SHADER_KHR,
                              PE_ACCESS_SHADER_WRITE);
     }

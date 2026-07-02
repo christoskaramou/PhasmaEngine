@@ -149,10 +149,9 @@ namespace pe
     {
         pe::UpdateSceneRenderGraphPassStates(m_renderGraphPassEnabled, hasRayTracingGeometry);
 
-        // Disabled passes are kept initialized and simply skipped when recording; destroying them here
-        // and re-initializing on re-enable caused intermittent device loss and stale per-swapchain-image
-        // descriptors (alternating-frame flicker) on render-mode toggles.
-        // Per-frame setting toggles call this with no command buffer; lazily initable passes must tolerate nullptr here.
+        // Disabled passes stay initialized and are skipped when recording (destroy/re-init on mode
+        // toggles caused device loss). Setting toggles pass no command buffer; lazily initable
+        // passes must tolerate nullptr here.
         InitEnabledRenderPassComponents(cmd);
     }
 

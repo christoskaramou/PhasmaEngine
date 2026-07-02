@@ -93,6 +93,10 @@ struct Vertex
 // Set 2
 [[vk::binding(2, 1)]] ByteAddressBuffer LightsBuffer;
 
+// Primary-hit device depth for RTDepthResolvePass (full RT). Set 1 because set 0 ends with the
+// unbounded texture array (binding 12), which must stay the last binding of its set.
+[[vk::binding(3, 1)]] RWTexture2D<float> rtDepth;
+
 // Helper functions for loading lights
 DirectionalLight LoadDirectionalLight(uint index)
 {
@@ -631,12 +635,9 @@ void raygeneration()
     // 1 = Hybrid
     // 2 = RayTracing
     uint mask = 0x80; // Default: Transparent only
-    // Limited by raster depth — but GbufferTransparent WRITES transparent surfaces into this depth
-    // buffer (standard_pbr.pass "transparent" variant, depthWriteEnable), so at a glass pixel the
-    // nearest depth IS the glass itself. Clamping to opaqueDist - epsilon made reaching the glass a
-    // per-pixel float-noise lottery between the rasterized depth and the RT intersection t of the
-    // same triangle (facet-shaped hit/miss patches). Inflate slightly instead: the mask is
-    // transparent-only, so the sliver past the depth value cannot expose opaque geometry.
+    // Clamped by raster depth — which includes transparent surfaces (the "transparent" pass variant
+    // writes depth), so at a glass pixel the nearest depth IS the glass. Overshoot slightly so the
+    // ray reliably reaches it; the transparent-only mask keeps opaque geometry unexposed.
     float tMax = opaqueDist * 1.001 + 0.001;
 
     if (cb_renderMode == 2)
@@ -682,6 +683,20 @@ void raygeneration()
         float3 direction = normalize(dirWorld);
         output[launchIndex.xy] = float4(skybox.SampleLevel(material_sampler, direction, 0).rgb, 1.0);
     }
+
+    // Full RT: store the primary hit's device depth for RTDepthResolvePass, which stamps it into
+    // the depth buffer so depth-testing overlays (grid, lines, selection outline) keep working.
+    if (cb_renderMode == 2)
+    {
+        float deviceZ = 0.0; // reverse-Z far
+        if (payload.t > 0.0)
+        {
+            float3 hitWorld = originWorld + dirWorld * payload.t;
+            float4 clip = mul(float4(hitWorld, 1.0), GetViewProjection());
+            deviceZ = clip.w > 0.0 ? saturate(clip.z / clip.w) : 0.0;
+        }
+        rtDepth[launchIndex.xy] = deviceZ;
+    }
 }
 
 [shader("anyhit")]
@@ -705,11 +720,9 @@ void anyhit(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes a
     float4 baseColor = color * mat.baseColorFactor;
     if (HasTexture(textureMask, TEX_BASE_COLOR_BIT))
         baseColor *= GetBaseColor(constantsId, uv);
-    // Alpha-cut discard applies to AlphaCut materials ONLY. Transmission materials get their
-    // transparency from refraction (transmissionFactor) and AlphaBlend from ray continuation in
-    // closesthit — both author baseColor.a < 1 for the raster path, and discarding them here made
-    // glass and alpha-blend surfaces invisible to every RT ray wherever interpolated alpha fell
-    // below alphaCut (facet-shaped see-through patches, camera-dependent).
+    // Alpha-cut discard applies to AlphaCut materials only: Transmission and AlphaBlend author
+    // baseColor.a < 1 for the raster path (their transparency comes from refraction / ray
+    // continuation), so discarding them here would make those surfaces invisible to RT rays.
     uint renderType = meshInfos[instanceId].renderType;
     if (renderType == 2 && baseColor.a < constants[constantsId].alphaCut)
     {
@@ -793,7 +806,10 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         emissive *= GetEmissive(constantsId, uv).xyz;
     }
     emissive = saturate(emissive);
-    bool rtOwnsMaterial = cb_renderMode == 2 || isAlphaCutMaterial || isAlphaBlendMaterial;
+    // Self-lit is an authoring signal for alpha cards (emissive mirrors albedo to mean "unlit").
+    // Genuinely emissive opaque materials must take the standard lit path below, which adds the
+    // emissive term; albedo * SelfLitMaterialScale renders dim-albedo/strong-emissive near-black.
+    bool rtOwnsMaterial = isAlphaCutMaterial || isAlphaBlendMaterial;
     bool selfLitMaterial = rtOwnsMaterial && IsSelfLitMaterial(emissive, mat);
 
     // 3. Normal Mapping
@@ -820,8 +836,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
 
     float3 lighting = 0.0.xxx;
 
-    // ATH-style materials use emissive as a self-lit authoring signal. Hybrid only
-    // ray-traces alpha cards, while full RT owns the opaque stage too.
+    // Self-lit alpha cards render as unlit albedo.
     if (selfLitMaterial)
     {
         lighting = combinedColor.rgb;
@@ -948,12 +963,9 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
 
         float3 transColor = transPayload.radiance;
 
-        // Base-color tint + volume attenuation (Beer's law): applied once per medium traversal, at
-        // the ENTRY (front-face) hit, where transPayload.t is the interior chord length. Exit
-        // (backface) hits pass the escaped radiance through untouched — tinting at every hit
-        // double-tinted proper refracted paths while leak/TIR paths tinted once, and that two-tone
-        // difference showed as facet-shaped mottling. (Beer at the exit hit was also measuring the
-        // escape ray's distance OUTSIDE the medium.)
+        // Base-color tint + Beer's-law absorption apply once per medium traversal, at the ENTRY
+        // (front-face) hit, where transPayload.t is the interior chord length; exit hits pass the
+        // escaped radiance through untouched (their t measures distance outside the medium).
         bool exitingSurface = isTransmissive && dot(WorldRayDirection(), normalWorld) > 0.0;
         if (isTransmissive && !exitingSurface)
         {
@@ -973,11 +985,9 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
 
         if (isTransmissive)
         {
-            // Front faces: Fresnel-weighted mix — plain lerp(lighting, transColor, tf) erased all
-            // surface reflection at transmissionFactor=1. Interior (backface) exit hits: pure
-            // transmission — NdV is clamped to 0.001 there, which drives Fresnel to ~1 and would
-            // replace the refracted color with the backface's near-black surface lighting; TIR at
-            // the exit face is already handled by the refract/reflect branch above.
+            // Front faces: Fresnel-weighted mix keeps the surface reflection. Interior exit hits:
+            // pure transmission — NdV clamps to 0.001 there, driving Fresnel to ~1 and returning
+            // the backface's near-black surface lighting; TIR is handled by the refract branch above.
             float3 glass = exitingSurface ? transColor : lerp(transColor, lighting, Fresnel(F0, NdV));
             lighting = lerp(lighting, glass, transmissionFactor);
         }
@@ -986,11 +996,10 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     }
     else if (isTransmissive)
     {
-        // Bounce budget exhausted inside the glass (TIR chains burn depth fast): sample the
-        // environment along the current direction instead of returning this interior face's
-        // surface lighting, which is near-black and shows as jagged camera-shifting patches.
-        // Untinted: the entry-face hit applies the medium tint once. Do NOT raise the bounce cap
-        // instead: depth-2 hits already put their shadow rays at maxRecursionDepth (4).
+        // Bounce budget exhausted inside the glass (TIR chains): sample the environment along the
+        // current direction instead of this interior face's near-black surface lighting. Untinted —
+        // the entry hit applies the medium tint. Do NOT raise the bounce cap instead: depth-2 hits
+        // already put their shadow rays at maxRecursionDepth (4).
         lighting = skybox.SampleLevel(material_sampler, WorldRayDirection(), 0).rgb * cb_iblIntensity;
     }
 
