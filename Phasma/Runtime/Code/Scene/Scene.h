@@ -226,6 +226,9 @@ namespace pe
         // --- Trigger Zone: one bounded box driving script / post-process / audio sections ---
         NodeId *CreateTriggerZoneNode(NodeId *parent = nullptr, bool markDirty = true);
         NodeTriggerZoneTag *GetTriggerZoneForNode(const NodeId *node) const;
+        NodeId *CreateVoxelWorldNode(NodeId *parent = nullptr, bool markDirty = true);
+        NodeId *GetVoxelWorldNode() const;
+        NodeVoxelWorldTag *GetVoxelWorldForNode(const NodeId *node) const;
         // Highest-priority post-process-enabled zone whose bounds contain cameraPos, blended over the
         // scene default. Returns null when none apply, so the caller falls back to the scene default.
         PostProcessProfile *ResolvePostProcessProfile(const vec3 &cameraPos);
@@ -540,6 +543,8 @@ namespace pe
                 flags |= Component_SceneSettings;
             if (c.triggerZone)
                 flags |= Component_TriggerZone;
+            if (c.voxelWorld)
+                flags |= Component_VoxelWorld;
             if (c.runtimeUi)
                 flags |= Component_RuntimeUi;
             if (c.prefab)

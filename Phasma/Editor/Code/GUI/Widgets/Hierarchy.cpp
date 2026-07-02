@@ -165,6 +165,18 @@ namespace pe
             selection.Select(node, SelectionType::Node);
         };
 
+        auto createVoxelWorld = [&scene, &selection, &recordSnapshot]()
+        {
+            if (NodeId *existing = scene.GetVoxelWorldNode())
+            {
+                selection.Select(existing, SelectionType::Node);
+                return;
+            }
+            recordSnapshot("Added Voxel World");
+            NodeId *node = scene.CreateVoxelWorldNode();
+            selection.Select(node, SelectionType::Node);
+        };
+
         auto createSceneSettings = [&scene, &selection, &recordSnapshot]()
         {
             if (NodeId *existing = scene.GetSceneSettingsNode())
@@ -427,6 +439,10 @@ namespace pe
             if (ImGui::MenuItem("Trigger Zone"))
                 createTriggerZone();
             ui::ItemTooltip("Create a Trigger Zone (script on_enter/on_exit + post-process + audio sections).");
+            if (!scene.GetVoxelWorldNode() && ImGui::MenuItem("Voxel World"))
+                createVoxelWorld();
+            if (!scene.GetVoxelWorldNode())
+                ui::ItemTooltip("Create the voxel world node — all voxel settings live on it. One per scene.");
             if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
                 createSceneSettings();
             if (!scene.GetSceneSettingsNode())
@@ -620,6 +636,10 @@ namespace pe
             if (ImGui::MenuItem("Trigger Zone"))
                 createTriggerZone();
             ui::ItemTooltip("Create a Trigger Zone (script on_enter/on_exit + post-process + audio sections).");
+            if (!scene.GetVoxelWorldNode() && ImGui::MenuItem("Voxel World"))
+                createVoxelWorld();
+            if (!scene.GetVoxelWorldNode())
+                ui::ItemTooltip("Create the voxel world node — all voxel settings live on it. One per scene.");
             if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
                 createSceneSettings();
             if (!scene.GetSceneSettingsNode())
@@ -1490,6 +1510,10 @@ namespace pe
                 if (ImGui::MenuItem("Trigger Zone"))
                     createTriggerZone();
                 ui::ItemTooltip("Create a Trigger Zone (script on_enter/on_exit + post-process + audio sections).");
+                if (!scene.GetVoxelWorldNode() && ImGui::MenuItem("Voxel World"))
+                    createVoxelWorld();
+                if (!scene.GetVoxelWorldNode())
+                    ui::ItemTooltip("Create the voxel world node — all voxel settings live on it. One per scene.");
                 if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
                     createSceneSettings();
                 if (!scene.GetSceneSettingsNode())

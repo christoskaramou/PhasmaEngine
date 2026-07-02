@@ -236,6 +236,46 @@ namespace pe::voxel
         return std::min(kMaxVoxelLod, ColumnDistance(coord, m_streamAnchorColumn) / m_cfg.lod0Radius);
     }
 
+    // Radius actually requested around the (possibly pinned) anchor: streaming worlds use loadRadius,
+    // non-streaming worlds load their whole bound at once; a finite worldRadius caps either.
+    int VoxelWorld::RequestRadius() const
+    {
+        int radius = m_cfg.streaming ? m_cfg.loadRadius
+                                     : (m_cfg.worldRadius > 0 ? m_cfg.worldRadius : m_cfg.loadRadius);
+        if (m_cfg.worldRadius > 0)
+            radius = std::min(radius, m_cfg.worldRadius);
+        return radius;
+    }
+
+    bool VoxelWorld::InWorldBounds(ColumnCoord coord) const
+    {
+        if (m_cfg.worldRadius <= 0)
+            return true;
+        return ColumnDistance(coord, {m_cfg.boundsCenterCx, m_cfg.boundsCenterCz}) <= m_cfg.worldRadius;
+    }
+
+    bool VoxelWorld::IsArenaAlive() const
+    {
+        return m_scene && m_arena.IsInitialized() && m_scene->GetArenaVertexCapacity() > 0;
+    }
+
+    void VoxelWorld::SetLod0Radius(int lod0Radius)
+    {
+        lod0Radius = std::max(0, lod0Radius);
+        if (m_cfg.lod0Radius == lod0Radius)
+            return;
+        m_cfg.lod0Radius = lod0Radius;
+        for (auto &entry : m_columns)
+        {
+            ColumnState &state = entry.second;
+            if (state.state != ColumnLoadState::Ready || !state.column)
+                continue;
+            const int lod = DesiredLod(state.coord);
+            if (lod != state.lod)
+                RemeshColumnAtLod(state, lod);
+        }
+    }
+
     void VoxelWorld::RemeshColumnAtLod(ColumnState &state, int lod)
     {
         state.lod = lod;
@@ -288,6 +328,7 @@ namespace pe::voxel
         m_cfg.uploadBudgetPerFrame = std::max(1, m_cfg.uploadBudgetPerFrame);
         m_cfg.groundY = ClampInt(m_cfg.groundY, 0, kWorldHeight);
         m_cfg.lod0Radius = std::max(0, m_cfg.lod0Radius);
+        m_cfg.worldRadius = std::max(0, m_cfg.worldRadius);
         m_saveRoot = ColumnChunkStore::ResolveRoot(m_cfg.saveDir);
         if (!m_saveRoot.empty())
             PE_INFO("VoxelWorld: column persistence root %s", m_saveRoot.generic_string().c_str());
@@ -300,6 +341,12 @@ namespace pe::voxel
             PE_INFO("VoxelWorld: clamping load_radius %d -> %d (Debug build)", m_cfg.loadRadius,
                     kDebugMaxLoadRadius);
             m_cfg.loadRadius = kDebugMaxLoadRadius;
+        }
+        if (!m_cfg.streaming && m_cfg.worldRadius > kDebugMaxLoadRadius)
+        {
+            PE_INFO("VoxelWorld: clamping world_radius %d -> %d (Debug build, non-streaming loads it all)",
+                    m_cfg.worldRadius, kDebugMaxLoadRadius);
+            m_cfg.worldRadius = kDebugMaxLoadRadius;
         }
 #endif
         m_anchor = vec3(0.0f);
@@ -335,7 +382,7 @@ namespace pe::voxel
         m_materialGpuIndex = m_hostMaterial ? m_hostMaterial->gpuIndex : 0xFFFFFFFF;
         PE_ERROR_IF(m_materialGpuIndex == 0xFFFFFFFF, "VoxelWorld host material was not assigned a GPU index");
 
-        const int capacityRadius = m_cfg.loadRadius + m_cfg.unloadMargin;
+        const int capacityRadius = RequestRadius() + (m_cfg.streaming ? m_cfg.unloadMargin : 0);
         const int gridDim = capacityRadius * 2 + 1;
         const uint32_t gridSections = static_cast<uint32_t>(gridDim * gridDim * kSectionCount);
         // Initial per-section budget for the dedicated voxel pool. The arena GROWS on pressure
@@ -417,7 +464,10 @@ namespace pe::voxel
         if (!m_scene || !m_arena.IsInitialized())
             return;
 
-        const ColumnCoord anchorCol = AnchorToColumn(worldPos);
+        // Non-streaming worlds pin the anchor to the bounds center: the fixed grid loads once and
+        // never follows the camera/player.
+        const ColumnCoord anchorCol = m_cfg.streaming ? AnchorToColumn(worldPos)
+                                                      : ColumnCoord{m_cfg.boundsCenterCx, m_cfg.boundsCenterCz};
         if (m_streamAnchorValid && anchorCol.cx == m_streamAnchorColumn.cx && anchorCol.cz == m_streamAnchorColumn.cz)
             return;
 
@@ -527,6 +577,13 @@ namespace pe::voxel
 
     void VoxelWorld::CreateHostMesh()
     {
+        // Zombie hosts appear when a scene was saved or play-snapshotted while a world was live
+        // (the host is a real scene node); any pre-existing one is stale by definition here, since
+        // the live world was just destroyed. Deleting them keeps saves and play/stop cycles from
+        // accumulating dead "VoxelWorldHost" nodes.
+        while (NodeId *stale = m_scene->FindNodeByName("VoxelWorldHost"))
+            m_scene->DeleteNode(stale);
+
         m_hostMaterial = std::make_unique<Material>();
         m_hostMaterial->name = "VoxelWorldHostMaterial";
         m_hostMaterial->baseColorFactor = vec4(1.0f);
@@ -583,14 +640,18 @@ namespace pe::voxel
 
     void VoxelWorld::RequestColumnsForAnchor()
     {
-        const ColumnCoord anchorCoord = AnchorToColumn(m_anchor);
-        const int radius = m_cfg.loadRadius;
+        const ColumnCoord anchorCoord = m_streamAnchorValid ? m_streamAnchorColumn : AnchorToColumn(m_anchor);
+        const int radius = RequestRadius();
         std::vector<ColumnCoord> desired;
         desired.reserve(static_cast<size_t>((radius * 2 + 1) * (radius * 2 + 1)));
 
         for (int dz = -radius; dz <= radius; ++dz)
             for (int dx = -radius; dx <= radius; ++dx)
-                desired.push_back({anchorCoord.cx + dx, anchorCoord.cz + dz});
+            {
+                const ColumnCoord coord{anchorCoord.cx + dx, anchorCoord.cz + dz};
+                if (InWorldBounds(coord))
+                    desired.push_back(coord);
+            }
 
         std::sort(desired.begin(), desired.end(), [anchorCoord](ColumnCoord a, ColumnCoord b)
                   {
@@ -609,10 +670,10 @@ namespace pe::voxel
                 EnqueueColumnGeneration(coord);
         }
 
-        const int unloadRadius = m_cfg.loadRadius + m_cfg.unloadMargin;
+        const int unloadRadius = radius + m_cfg.unloadMargin;
         for (auto it = m_columns.begin(); it != m_columns.end();)
         {
-            if (ColumnDistance(it->second.coord, anchorCoord) > unloadRadius)
+            if (m_cfg.streaming && ColumnDistance(it->second.coord, anchorCoord) > unloadRadius)
             {
                 const uint64_t key = it->first;
                 ReleaseColumn(it->second);

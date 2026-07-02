@@ -38,6 +38,7 @@ namespace pe
         // 1 << 13 retired (was Component_PostProcessVolume; folded into Component_TriggerZone)
         Component_SceneSettings = 1 << 14, // Singleton anchor node; its inspector edits SceneSettings
         Component_TriggerZone = 1 << 15,   // Bounded box: script on_enter/on_exit + post-process + audio sections
+        Component_VoxelWorld = 1 << 16,    // Singleton voxel-world authoring node; VoxelSystem reconciles it
     };
 
     // Lightweight mesh descriptor — references into Scene's data stores

@@ -75,15 +75,34 @@ meshing/noise does not stall for tens of seconds. `PhasmaRuntime` compiles with 
 - Shaders: `VoxelGBuffer{VS,PS}.hlsl`, `VoxelShadowVS.hlsl`, `voxel_gbuffer.passinfo`.
 - Render: `VoxelHiZPyramidPass` (temporal Hi-Z from post-G-buffer depth), `ShadowCullCS.hlsl`.
 
+## Editor authoring — the "Voxel World" node
+
+One `Component_VoxelWorld` node per scene (`NodeVoxelWorldTag`) holds every voxel-world setting:
+enabled, streaming on/off, anchor-follows-camera, load radius, unload margin, upload budget, ground Y,
+world radius (total bound in columns around the node; 0 = infinite), LOD on/off + full-detail radius,
+save dir. Create it from the hierarchy Add menu ("Voxel World") or `node:set_voxel_world{...}` /
+`node:get_voxel_world()` from Lua; the inspector edits it live. `VoxelSystem::ReconcileComponentWorld`
+keeps the live world in sync every frame: create on enable, recreate on structural change (debounced 30
+frames so inspector drags don't thrash), `SetLod0Radius` retunes LOD live without a rebuild, destroy on
+disable/delete. The node's position is the volume center for bounded / non-streaming worlds. A world
+whose shared arena got wiped by a scene rebuild (scene load, play-stop restore) is detected via
+`IsArenaAlive` and rebuilt. Script worlds (`voxel.create`) take precedence while healthy; every
+play-exit path (Stop button's `StopRuntimePlaySession` AND `engine.set_play_mode(false)`) destroys the
+script world so a stale one can't shadow the component. Stale `VoxelWorldHost` nodes (saved or
+snapshotted while a world was live) are deleted on the next world create. Section size (16) and block
+size (1 unit) are engine constants baked into the packed vertex format — not per-world settings.
+
 ## Lua API (`voxel` table)
 
 Blocks are registered C++-side — there is no Lua `register_block`.
 
-- `voxel.create{load_radius=, unload_margin=, ground_y=, upload_budget=, lod0_radius=, save_dir=}` —
-  build the world. `save_dir` is relative to the project Assets root (or absolute); enables column
-  `.pevcol` persistence. `lod0_radius` (columns) enables distance LOD: full detail inside it, one mip
-  per band beyond (capped at lod 2 = 4-block cells); 0/absent = LOD off. Coarse columns skip neighbor
-  snapshots and the neighbor-gen wait; band changes remesh through the budgeted remesh path.
+- `voxel.create{load_radius=, unload_margin=, ground_y=, upload_budget=, lod0_radius=, world_radius=,
+  streaming=, save_dir=}` — build the world. `save_dir` is relative to the project Assets root (or
+  absolute); enables column `.pevcol` persistence. `lod0_radius` (columns) enables distance LOD: full
+  detail inside it, one mip per band beyond (capped at lod 2 = 4-block cells); 0/absent = LOD off.
+  Coarse columns skip neighbor snapshots and the neighbor-gen wait; band changes remesh through the
+  budgeted remesh path. `world_radius` bounds the world (columns from origin; 0 = infinite);
+  `streaming=false` loads a fixed grid once and ignores the anchor.
 - `voxel.destroy()` (auto-saves touched columns when `save_dir` is set)
 - `voxel.save_all()` — flush edited column sections to disk immediately
 - `voxel.set_anchor(x, y, z)` — stream columns around this point.

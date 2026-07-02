@@ -248,6 +248,11 @@ namespace pe
                 {
                     if (RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi())
                         runtimeUi->ClearAllScreens();
+                    // Play-scoped script voxel worlds (voxel.create) die on ANY play-exit, mirroring
+                    // StopRuntimePlaySession — engine.set_play_mode(false) skips that teardown and
+                    // would otherwise strand the world; a Voxel World node rebuilds via reconcile.
+                    if (auto *voxels = GetGlobalSystem<voxel::VoxelSystem>())
+                        voxels->Destroy();
                 }
             }
         }

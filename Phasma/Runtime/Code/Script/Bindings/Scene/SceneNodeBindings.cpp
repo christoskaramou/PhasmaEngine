@@ -606,6 +606,51 @@ namespace pe
                     }
                 });
 
+                // Attach/update the scene's Voxel World component on this node (all keys optional):
+                // enabled, streaming, anchor_follows_camera, load_radius, unload_margin, upload_budget,
+                // ground_y, world_radius, lod_enabled, lod0_radius, save_dir. VoxelSystem reconciles the
+                // live world from it (same data the editor's Voxel World inspector edits).
+                ut.set_function("set_voxel_world", [](SceneNodeHandle &h, sol::optional<sol::table> params) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    s->AddComponentFlag(h.nodeId, Component_VoxelWorld);
+                    NodeVoxelWorldTag *v = s->GetVoxelWorldForNode(h.nodeId);
+                    if (!v || !params) return;
+                    sol::table p = *params;
+                    if (p["enabled"].valid()) v->worldEnabled = p["enabled"];
+                    if (p["streaming"].valid()) v->streaming = p["streaming"];
+                    if (p["anchor_follows_camera"].valid()) v->anchorFollowsCamera = p["anchor_follows_camera"];
+                    if (p["load_radius"].valid()) v->loadRadius = p["load_radius"];
+                    if (p["unload_margin"].valid()) v->unloadMargin = p["unload_margin"];
+                    if (p["upload_budget"].valid()) v->uploadBudget = p["upload_budget"];
+                    if (p["ground_y"].valid()) v->groundY = p["ground_y"];
+                    if (p["world_radius"].valid()) v->worldRadius = p["world_radius"];
+                    if (p["lod_enabled"].valid()) v->lodEnabled = p["lod_enabled"];
+                    if (p["lod0_radius"].valid()) v->lod0Radius = p["lod0_radius"];
+                    if (p["save_dir"].valid()) v->saveDir = p["save_dir"].get<std::string>();
+                    s->MarkDirty();
+                });
+
+                ut.set_function("get_voxel_world", [&lua](SceneNodeHandle &h) -> sol::object {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return sol::lua_nil;
+                    NodeVoxelWorldTag *v = s->GetVoxelWorldForNode(h.nodeId);
+                    if (!v) return sol::lua_nil;
+                    sol::table t = lua.create_table();
+                    t["enabled"] = v->worldEnabled;
+                    t["streaming"] = v->streaming;
+                    t["anchor_follows_camera"] = v->anchorFollowsCamera;
+                    t["load_radius"] = v->loadRadius;
+                    t["unload_margin"] = v->unloadMargin;
+                    t["upload_budget"] = v->uploadBudget;
+                    t["ground_y"] = v->groundY;
+                    t["world_radius"] = v->worldRadius;
+                    t["lod_enabled"] = v->lodEnabled;
+                    t["lod0_radius"] = v->lod0Radius;
+                    t["save_dir"] = v->saveDir;
+                    return sol::make_object(lua, t);
+                });
+
                 ut.set_function("remove", [](SceneNodeHandle &h) {
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return;

@@ -44,6 +44,8 @@ namespace pe
             c.sceneSettings = entity->CreateComponent<NodeSceneSettingsTag>();
         if ((flag & Component_TriggerZone) && !c.triggerZone)
             c.triggerZone = entity->CreateComponent<NodeTriggerZoneTag>();
+        if ((flag & Component_VoxelWorld) && !c.voxelWorld)
+            c.voxelWorld = entity->CreateComponent<NodeVoxelWorldTag>();
     }
 
     void Scene::RemoveComponentFlag(NodeId *node, uint32_t flag)
@@ -109,6 +111,11 @@ namespace pe
         {
             entity->RemoveComponent<NodeTriggerZoneTag>();
             c.triggerZone = nullptr;
+        }
+        if ((flag & Component_VoxelWorld) && c.voxelWorld)
+        {
+            entity->RemoveComponent<NodeVoxelWorldTag>();
+            c.voxelWorld = nullptr;
         }
     }
 
@@ -592,6 +599,32 @@ namespace pe
         if (!IsNodeAlive(node))
             return nullptr;
         return m_nodeComponentCache[node->index].triggerZone;
+    }
+
+    NodeId *Scene::CreateVoxelWorldNode(NodeId *parent, bool markDirty)
+    {
+        if (NodeId *existing = GetVoxelWorldNode())
+            return existing; // one voxel world per scene (VoxelSystem holds a single world)
+        NodeId *node = CreateNode("Voxel World", parent);
+        AddComponentFlag(node, Component_VoxelWorld);
+        if (markDirty)
+            MarkDirty();
+        return node;
+    }
+
+    NodeId *Scene::GetVoxelWorldNode() const
+    {
+        for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
+            if (m_nodeComponentCache[i].voxelWorld && IsNodeAlive(m_nodeIds[i]))
+                return m_nodeIds[i];
+        return nullptr;
+    }
+
+    NodeVoxelWorldTag *Scene::GetVoxelWorldForNode(const NodeId *node) const
+    {
+        if (!IsNodeAlive(node))
+            return nullptr;
+        return m_nodeComponentCache[node->index].voxelWorld;
     }
 
     // Blend src into dst by weight t (0..1): floats lerp, ints round, bools snap at t>=0.5. Field
