@@ -41,6 +41,28 @@ When the user signals a session is wrapping ("ready for new session", "we're don
 - **No test-only engine code in the tracked repo.** Local-repro hooks (env vars, debug toggles, CTS-only branches) stay local; do not commit them even when inert at runtime. Production-relevant feature work (advertising / gating optional features) is unaffected — that does belong in the engine.
 - **`third_party/` is off-limits.** Never edit any `third_party/` directory. If an extension is needed, relocate the crate out of `third_party/` first.
 
+## Rules — code quality & performance (ponytail)
+
+**Hard rule:** Prefer the smallest correct solution and protect performance. Applies to every agent session and code change — not only when the user says "ponytail".
+
+Follow the ponytail ladder — stop at the first rung that holds:
+
+1. **YAGNI** — does this need to exist?
+2. **Reuse** — helper, util, or pattern already in this codebase?
+3. **Stdlib / engine utilities** before bespoke code.
+4. **Platform / RHI primitives** before new abstractions or dependencies.
+5. **Existing dependencies** — never add a new one for what a few lines can do.
+6. **One line** if one line is correct.
+7. **Minimum diff** that fixes the real problem.
+
+**Style:** No unrequested abstractions (single-impl interfaces, factories for one product). Deletion over addition; boring over clever; fewest files; shortest working diff — but only after tracing the full flow end to end. Bug fixes go at the shared choke point, not symptom patches in every caller. Mark deliberate simplifications with `// ponytail:` (name the ceiling and upgrade path).
+
+**Performance:** Hot-path and render changes must not regress without explicit user approval. Use `Rules — performance testing` before claiming render/perf work is done. Profile before adding caches or speculative complexity — measure, then be lazy.
+
+**Never ponytail away:** trust-boundary validation, data-loss prevention, security, accessibility, or anything the user explicitly requested in full.
+
+Default engine posture is ponytail **full**. Use `/ponytail lite|ultra` when the user wants a different intensity.
+
 ## Rules — tools
 
 - **Use Grep / Glob for code lookups.** The codebase vector store is binary (`.bin` / VSTB) and not directly readable.

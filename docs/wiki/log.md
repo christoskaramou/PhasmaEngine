@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-07-02
+
+- Added `architecture/code-quality-performance.md` and synced a ponytail hard rule across `AGENTS.md`, sibling agent instruction files, `INSTRUCTIONS.md`, and `.cursor/rules/ponytail-code-quality.mdc`. Default posture: smallest correct diff + perf regression gates on hot paths; ponytail **full** unless the user changes intensity.
+
 ## 2026-06-26
 
 - Added a frustum-culled voxel indirect bucket. `CullingCS` now lets voxel arena meshes pass through the normal frustum test and appends visible draws into a voxel-only filtered indirect buffer/counter, while `GbufferPass` still binds the dedicated voxel pipeline and atlas instead of routing those draws through standard PBR. Hi-Z voxel occlusion, shadows, and editor viewport authoring remain separate follow-ups.

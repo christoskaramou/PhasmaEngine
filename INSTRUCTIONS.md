@@ -14,6 +14,8 @@ Subdirectory `INSTRUCTIONS.md` files cascade on top of this root.
   - Physics timestep / API → `Phasma/Runtime/Code/Systems/PhysicsSystem.cpp`
   - PE_API export sites → `grep PE_API Phasma/Core/Code/`
 
+- **Code quality & performance (hard rule)** → `AGENTS.md` (`Rules — code quality & performance (ponytail)`). Smallest correct diff, ponytail ladder, perf regression gates for hot paths. Default posture is ponytail **full** on every change.
+
 - **Non-obvious rules and gotchas live in MemPalace.** Search with `mempalace_search` for things like: PCH `<vector>` trap, GPU resource wrappers (`Buffer`/`Image`/`Sampler`), perf regression thresholds, hot-reload safe-window / ImGui forwarding, scripting MCP caveat (`ScriptSystem*` caching), `MaterialGpuData` 80-byte layout + IOR/transmission flush rule. Use lowercase `phasmaengine` for new project memories.
 
 - **Recent state and session history** → `mempalace_kg_timeline`, `mempalace_diary_read`.

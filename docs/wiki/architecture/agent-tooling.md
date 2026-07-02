@@ -5,6 +5,8 @@ remains the source of truth.
 
 ## Current Layers
 
+- **Code quality & performance** — hard rule in `AGENTS.md` (`Rules — code quality & performance (ponytail)`), `.cursor/rules/ponytail-code-quality.mdc`, and `docs/wiki/architecture/code-quality-performance.md`. Every agent change defaults to ponytail **full**: smallest correct diff, reuse before invention, perf gates on hot paths. See the wiki page for the ladder and boundaries.
+
 - `PhasmaMCP` is the reusable C++ MCP server library. It owns JSON-RPC dispatch,
   HTTP transport, tool schemas, result envelopes, and optional BM25 codebase
   indexing. It is not an LLM client and does not run an agent loop.
