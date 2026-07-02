@@ -34,6 +34,8 @@ namespace pe
                             cfg.groundY = p["ground_y"];
                         if (p["upload_budget"].valid())
                             cfg.uploadBudgetPerFrame = p["upload_budget"];
+                        if (p["lod0_radius"].valid())
+                            cfg.lod0Radius = p["lod0_radius"];
                         if (p["save_dir"].valid())
                             cfg.saveDir = p["save_dir"].get<std::string>();
                     }

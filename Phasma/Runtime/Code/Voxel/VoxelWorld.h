@@ -37,6 +37,9 @@ namespace pe::voxel
         int unloadMargin = 2;
         int uploadBudgetPerFrame = 4;
         int groundY = 64;
+        // Full-detail radius in columns; each lod0Radius further drops one mip (max lod 2, so 4-block
+        // cells). 0 disables LOD — every column meshes at full detail regardless of distance.
+        int lod0Radius = 0;
         std::string saveDir; // relative to Assets or absolute; empty disables persistence
     };
 
@@ -93,7 +96,10 @@ namespace pe::voxel
             std::array<bool, kSectionCount> sectionUploaded{};
             std::array<bool, kSectionCount> remeshPending{};
             std::array<bool, kSectionCount> dirtyAfterRemesh{};
-            uint16_t touchedSectionMask = 0; // sections edited or loaded from disk; drives save
+            std::array<uint8_t, kSectionCount> sectionLod{}; // lod each section's live mesh was built at
+            std::array<uint8_t, kSectionCount> remeshLod{};  // lod each in-flight remesh was enqueued at
+            uint16_t touchedSectionMask = 0;                 // sections edited or loaded from disk; drives save
+            int lod = 0;                                     // lod new meshing/remeshing enqueues at
         };
 
         ColumnCoord m_streamAnchorColumn{};
@@ -102,6 +108,8 @@ namespace pe::voxel
         static uint64_t ColumnKey(ColumnCoord coord);
         static ColumnCoord AnchorToColumn(const vec3 &worldPos);
         static int ColumnDistance(ColumnCoord a, ColumnCoord b);
+        int DesiredLod(ColumnCoord coord) const;
+        void RemeshColumnAtLod(ColumnState &state, int lod);
         ColumnState *FindColumnState(ColumnCoord coord);
         const ColumnState *FindColumnState(ColumnCoord coord) const;
         ChunkColumn *FindColumn(ColumnCoord coord);

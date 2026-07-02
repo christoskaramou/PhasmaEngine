@@ -39,7 +39,51 @@ namespace pe::voxel
                          bool transparentPass, std::vector<VoxelVertex> &outVerts,
                          std::vector<uint16_t> &outIdx, int mn[3], int mx[3])
         {
-            int stride = 1 << lod;
+            const int stride = 1 << lod;
+            const int cells = kSectionDim >> lod;
+
+            // lod > 0 samples stride^3 block regions ("cells"). A cell is opaque when ANY block in it
+            // is opaque, so the coarse silhouette is a superset of the fine one — at a lod-band seam
+            // the coarse side never dips below its fine neighbor, which is what keeps the seam hole-free.
+            // Horizontal out-of-section cells read as AIR so coarse sections always cap their column
+            // walls (crack-proof against any-lod neighbor at small hidden-face cost); vertical sampling
+            // stays exact through the sampler's worldY conversion, so buried sections still mesh empty.
+            auto cellOpaque = [&](int cx, int cy, int cz) -> bool
+            {
+                if (cx < 0 || cx >= cells || cz < 0 || cz >= cells)
+                    return false;
+                for (int by = 0; by < stride; ++by)
+                    for (int bz = 0; bz < stride; ++bz)
+                        for (int bx = 0; bx < stride; ++bx)
+                            if (reg.IsOpaque(sample(sampleCtx, cx * stride + bx, cy * stride + by, cz * stride + bz)))
+                                return true;
+                return false;
+            };
+            auto cellTransparent = [&](int cx, int cy, int cz) -> bool
+            {
+                if (cx < 0 || cx >= cells || cz < 0 || cz >= cells)
+                    return false;
+                for (int by = 0; by < stride; ++by)
+                    for (int bz = 0; bz < stride; ++bz)
+                        for (int bx = 0; bx < stride; ++bx)
+                            if (reg.IsTransparent(sample(sampleCtx, cx * stride + bx, cy * stride + by, cz * stride + bz)))
+                                return true;
+                return false;
+            };
+            // Tile of the topmost matching block in the cell (grass caps stay grass at distance).
+            auto cellTile = [&](int cx, int cy, int cz, int face, bool transparent) -> int
+            {
+                for (int by = stride - 1; by >= 0; --by)
+                    for (int bz = 0; bz < stride; ++bz)
+                        for (int bx = 0; bx < stride; ++bx)
+                        {
+                            const BlockId b = sample(sampleCtx, cx * stride + bx, cy * stride + by, cz * stride + bz);
+                            if (transparent ? reg.IsTransparent(b) : reg.IsOpaque(b))
+                                return (int)reg.FaceTile(b, face);
+                        }
+                return -1;
+            };
+
             MaskCell mask[kSectionDim * kSectionDim];
             for (int d = 0; d < 3; d++)
             {
@@ -57,16 +101,16 @@ namespace pe::voxel
 
                 for (int dir = 1; dir >= -1; dir -= 2)
                 {
-                    for (int p = 0; p <= kSectionDim; p++)
+                    for (int p = 0; p <= cells; p++)
                     {
                         // Air-side layer along d for AO occluder sampling: +d face sits between solid
                         // at p-1 and air at p; -d face between solid at p and air at p-1.
                         int airD = (dir == 1) ? p : p - 1;
 
-                        // Build mask: check face between block at p-1 and block at p along axis d
-                        for (int pu = 0; pu < kSectionDim; pu++)
+                        // Build mask: check face between cell at p-1 and cell at p along axis d
+                        for (int pu = 0; pu < cells; pu++)
                         {
-                            for (int pv = 0; pv < kSectionDim; pv++)
+                            for (int pv = 0; pv < cells; pv++)
                             {
                                 int cA[3], cB[3];
                                 cA[d] = p - 1;
@@ -75,45 +119,85 @@ namespace pe::voxel
                                 cB[d] = p;
                                 cB[u] = pu;
                                 cB[v] = pv;
-                                BlockId bA = sample(sampleCtx, cA[0], cA[1], cA[2]);
-                                BlockId bB = sample(sampleCtx, cB[0], cB[1], cB[2]);
 
-                                MaskCell &cell = mask[pu * kSectionDim + pv];
+                                MaskCell &cell = mask[pu * cells + pv];
                                 bool vis;
-                                if (!transparentPass)
+                                if (lod == 0)
                                 {
-                                    if (dir == 1)
+                                    BlockId bA = sample(sampleCtx, cA[0], cA[1], cA[2]);
+                                    BlockId bB = sample(sampleCtx, cB[0], cB[1], cB[2]);
+                                    if (!transparentPass)
                                     {
-                                        vis = reg.IsOpaque(bA) && !reg.IsOpaque(bB);
-                                        cell.tile = vis ? (int)reg.FaceTile(bA, d * 2) : -1;
+                                        if (dir == 1)
+                                        {
+                                            vis = reg.IsOpaque(bA) && !reg.IsOpaque(bB);
+                                            cell.tile = vis ? (int)reg.FaceTile(bA, d * 2) : -1;
+                                        }
+                                        else
+                                        {
+                                            vis = reg.IsOpaque(bB) && !reg.IsOpaque(bA);
+                                            cell.tile = vis ? (int)reg.FaceTile(bB, d * 2 + 1) : -1;
+                                        }
                                     }
                                     else
                                     {
-                                        vis = reg.IsOpaque(bB) && !reg.IsOpaque(bA);
-                                        cell.tile = vis ? (int)reg.FaceTile(bB, d * 2 + 1) : -1;
+                                        // Water surface: emit only where a transparent block faces AIR.
+                                        if (dir == 1)
+                                        {
+                                            vis = reg.IsTransparent(bA) && bB == kAir;
+                                            cell.tile = vis ? (int)reg.FaceTile(bA, d * 2) : -1;
+                                        }
+                                        else
+                                        {
+                                            vis = reg.IsTransparent(bB) && bA == kAir;
+                                            cell.tile = vis ? (int)reg.FaceTile(bB, d * 2 + 1) : -1;
+                                        }
+                                    }
+                                }
+                                else if (!transparentPass)
+                                {
+                                    const bool oA = cellOpaque(cA[0], cA[1], cA[2]);
+                                    const bool oB = cellOpaque(cB[0], cB[1], cB[2]);
+                                    if (dir == 1)
+                                    {
+                                        vis = oA && !oB;
+                                        cell.tile = vis ? cellTile(cA[0], cA[1], cA[2], d * 2, false) : -1;
+                                    }
+                                    else
+                                    {
+                                        vis = oB && !oA;
+                                        cell.tile = vis ? cellTile(cB[0], cB[1], cB[2], d * 2 + 1, false) : -1;
                                     }
                                 }
                                 else
                                 {
-                                    // Water surface: emit only where a transparent block faces AIR.
+                                    // Coarse water: emit only against a fully-empty in-range cell.
+                                    // Horizontal out-of-section culls (NOT air) so an ocean doesn't
+                                    // grow alpha-blended wall quads at every column border.
+                                    auto emptyCell = [&](const int c[3]) -> bool
+                                    {
+                                        if (c[0] < 0 || c[0] >= cells || c[2] < 0 || c[2] >= cells)
+                                            return false;
+                                        return !cellOpaque(c[0], c[1], c[2]) && !cellTransparent(c[0], c[1], c[2]);
+                                    };
                                     if (dir == 1)
                                     {
-                                        vis = reg.IsTransparent(bA) && bB == kAir;
-                                        cell.tile = vis ? (int)reg.FaceTile(bA, d * 2) : -1;
+                                        vis = cellTransparent(cA[0], cA[1], cA[2]) && emptyCell(cB);
+                                        cell.tile = vis ? cellTile(cA[0], cA[1], cA[2], d * 2, true) : -1;
                                     }
                                     else
                                     {
-                                        vis = reg.IsTransparent(bB) && bA == kAir;
-                                        cell.tile = vis ? (int)reg.FaceTile(bB, d * 2 + 1) : -1;
+                                        vis = cellTransparent(cB[0], cB[1], cB[2]) && emptyCell(cA);
+                                        cell.tile = vis ? cellTile(cB[0], cB[1], cB[2], d * 2 + 1, true) : -1;
                                     }
                                 }
                                 if (!vis)
                                     continue;
 
-                                if (transparentPass)
+                                if (transparentPass || lod > 0)
                                 {
-                                    // Water is unshaded — full-bright corners (also lets co-planar water
-                                    // merge into one big quad since AO never differs).
+                                    // Water is unshaded, and coarse lods skip AO (invisible at their
+                                    // draw distance) — full-bright corners also merge into bigger quads.
                                     cell.ao[0] = cell.ao[1] = cell.ao[2] = cell.ao[3] = 3;
                                     continue;
                                 }
@@ -151,25 +235,25 @@ namespace pe::voxel
                             }
                         }
                         // Greedy merge
-                        for (int qu = 0; qu < kSectionDim; qu++)
+                        for (int qu = 0; qu < cells; qu++)
                         {
-                            for (int qv = 0; qv < kSectionDim;)
+                            for (int qv = 0; qv < cells;)
                             {
-                                MaskCell seed = mask[qu * kSectionDim + qv];
+                                MaskCell seed = mask[qu * cells + qv];
                                 if (seed.tile < 0)
                                 {
                                     qv++;
                                     continue;
                                 }
                                 int w = 1;
-                                while (qv + w < kSectionDim && CellEq(mask[qu * kSectionDim + qv + w], seed))
+                                while (qv + w < cells && CellEq(mask[qu * cells + qv + w], seed))
                                     w++;
                                 int h = 1;
-                                while (qu + h < kSectionDim)
+                                while (qu + h < cells)
                                 {
                                     bool ok = true;
                                     for (int i = 0; i < w; i++)
-                                        if (!CellEq(mask[(qu + h) * kSectionDim + qv + i], seed))
+                                        if (!CellEq(mask[(qu + h) * cells + qv + i], seed))
                                         {
                                             ok = false;
                                             break;
@@ -248,8 +332,10 @@ namespace pe::voxel
                                     const uint32_t py = (uint32_t)(pos[ci][1] * (float)stride + 0.5f);
                                     const uint32_t pz = (uint32_t)(pos[ci][2] * (float)stride + 0.5f);
                                     const uint32_t ao = seed.ao[ci];
-                                    const uint32_t uu = (uint32_t)(uvCoords[ci][0] + 0.5f);
-                                    const uint32_t vv = (uint32_t)(uvCoords[ci][1] + 0.5f);
+                                    // UV extents in BLOCKS (not cells) so texel density matches lod 0;
+                                    // the PS frac()-tiles, so a coarse quad repeats its tile per block.
+                                    const uint32_t uu = (uint32_t)(uvCoords[ci][0] * (float)stride + 0.5f);
+                                    const uint32_t vv = (uint32_t)(uvCoords[ci][1] * (float)stride + 0.5f);
                                     if ((int)px < mn[0])
                                         mn[0] = (int)px;
                                     if ((int)px > mx[0])
@@ -296,7 +382,7 @@ namespace pe::voxel
                                 }
                                 for (int du = 0; du < h; du++)
                                     for (int dv = 0; dv < w; dv++)
-                                        mask[(qu + du) * kSectionDim + qv + dv].tile = -1;
+                                        mask[(qu + du) * cells + qv + dv].tile = -1;
                                 qv += w;
                             }
                         }

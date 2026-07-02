@@ -56,6 +56,10 @@ meshing/noise does not stall for tens of seconds. `PhasmaRuntime` compiles with 
 - `BlockType` / `BlockRegistry` — block defs + lookup; air auto-registered at id 0.
 - `GreedyMesher` (`IChunkMesher`) — sweep-and-merge; packed `VoxelVertex` + tight bounds; cardinal +
   diagonal neighbor-column AO at horizontal seams (`BlockSampleFn` hot path, no `std::function`).
+  `lod N` meshes `(16 >> N)`-cell grids where a cell is solid if ANY block in its `2^N`-cube is opaque
+  (conservative silhouette — coarse never dips below fine, so band seams can't open holes), skips AO,
+  and always caps section walls horizontally instead of sampling neighbor columns. Positions stay in
+  block units, so the packed format and shaders are lod-agnostic.
 - `NoiseGen` (`ITerrainGenerator`) — domain-warped FBM + ridged hills, worm-tunnel caves (default terrain).
 - `FreeListAllocator` / `GeometryArena` — coalescing suballocator + Scene arena; `GrowIfNeeded`.
 - `VoxelMaterial` — builds the `Texture2DArray` tile atlas; bound via `Scene::SetVoxelAtlasView` (no Material object).
@@ -75,8 +79,11 @@ meshing/noise does not stall for tens of seconds. `PhasmaRuntime` compiles with 
 
 Blocks are registered C++-side — there is no Lua `register_block`.
 
-- `voxel.create{load_radius=, unload_margin=, ground_y=, upload_budget=, save_dir=}` — build the world.
-  `save_dir` is relative to the project Assets root (or absolute); enables column `.pevcol` persistence.
+- `voxel.create{load_radius=, unload_margin=, ground_y=, upload_budget=, lod0_radius=, save_dir=}` —
+  build the world. `save_dir` is relative to the project Assets root (or absolute); enables column
+  `.pevcol` persistence. `lod0_radius` (columns) enables distance LOD: full detail inside it, one mip
+  per band beyond (capped at lod 2 = 4-block cells); 0/absent = LOD off. Coarse columns skip neighbor
+  snapshots and the neighbor-gen wait; band changes remesh through the budgeted remesh path.
 - `voxel.destroy()` (auto-saves touched columns when `save_dir` is set)
 - `voxel.save_all()` — flush edited column sections to disk immediately
 - `voxel.set_anchor(x, y, z)` — stream columns around this point.
@@ -92,4 +99,5 @@ to check for popping (tune `occlusion_culling_bias` if needed).
 
 ## Follow-ups
 
-Transparency (water/glass), mesh LOD (mesher has `lod` stride param).
+Non-water transparent block types (water shipped via the dual-stream mesher; glass-like blocks would
+reuse the same transparent stream), LOD crack skirts if capped walls ever read as seams up close.
