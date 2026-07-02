@@ -56,7 +56,6 @@ namespace pe
 
         void CreateRenderPassComponents(bool includeRayTracingPass, CommandBuffer *cmd);
         void DestroyRenderPassComponents();
-        void PrepareRenderTargetResize(bool hasRayTracingGeometry);
         void ResizeRenderPassComponents(uint32_t width, uint32_t height, bool hasRayTracingGeometry);
         void CacheGlobalComponents();
         const SceneRenderGraphPassComponents &GetSceneRenderGraphPassComponents() const { return m_scenePasses; }
@@ -87,8 +86,6 @@ namespace pe
 
     private:
         void InitEnabledRenderPassComponents(CommandBuffer *cmd);
-        bool HasDisabledRenderPassComponents() const;
-        void DestroyDisabledRenderPassComponents();
 
         RenderGraph m_renderGraph;
         Image *m_displayRT = nullptr;

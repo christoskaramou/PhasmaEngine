@@ -280,7 +280,6 @@ namespace pe
 
         RHII.WaitDeviceIdle();
         const bool hasRTGeom = SupportsRayTracingPass() && m_scene.GetTLAS() != nullptr;
-        m_sceneRenderer.PrepareRenderTargetResize(hasRTGeom);
         m_sceneRenderer.DestroyFrameResources();
         RHII.GetSurface()->SetActualExtent({0, 0, width, height});
 

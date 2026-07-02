@@ -441,7 +441,6 @@ namespace pe
         // Wait idle, we dont want to destroy objects in use
         RHII.WaitDeviceIdle();
         const bool hasRTGeom = SupportsRayTracingPass() && m_scene.GetTLAS() != nullptr;
-        m_sceneRenderer.PrepareRenderTargetResize(hasRTGeom);
         RHII.GetSurface()->SetActualExtent({0, 0, width, height});
 
         Swapchain *swapchain = RHII.GetSwapchain();
