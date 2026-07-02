@@ -636,6 +636,41 @@ namespace pe
             scene.SetSkyboxPath(node, path, false);
         }
 
+        void RestoreVoxelWorldNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
+        {
+            if (!node || !nodeValue.HasMember("voxelWorld") || !nodeValue["voxelWorld"].IsObject())
+                return;
+
+            const auto &vv = nodeValue["voxelWorld"];
+            scene.AddComponentFlag(node, Component_VoxelWorld);
+            NodeVoxelWorldTag *v = scene.GetVoxelWorldForNode(node);
+            if (!v)
+                return;
+
+            if (vv.HasMember("enabled"))
+                v->worldEnabled = vv["enabled"].GetBool();
+            if (vv.HasMember("streaming"))
+                v->streaming = vv["streaming"].GetBool();
+            if (vv.HasMember("anchorFollowsCamera"))
+                v->anchorFollowsCamera = vv["anchorFollowsCamera"].GetBool();
+            if (vv.HasMember("loadRadius"))
+                v->loadRadius = vv["loadRadius"].GetInt();
+            if (vv.HasMember("unloadMargin"))
+                v->unloadMargin = vv["unloadMargin"].GetInt();
+            if (vv.HasMember("uploadBudget"))
+                v->uploadBudget = vv["uploadBudget"].GetInt();
+            if (vv.HasMember("groundY"))
+                v->groundY = vv["groundY"].GetInt();
+            if (vv.HasMember("worldRadius"))
+                v->worldRadius = vv["worldRadius"].GetInt();
+            if (vv.HasMember("lodEnabled"))
+                v->lodEnabled = vv["lodEnabled"].GetBool();
+            if (vv.HasMember("lod0Radius"))
+                v->lod0Radius = vv["lod0Radius"].GetInt();
+            if (vv.HasMember("saveDir") && vv["saveDir"].IsString())
+                v->saveDir = vv["saveDir"].GetString();
+        }
+
         void RestoreTriggerZoneNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
         {
             if (!node || !nodeValue.HasMember("triggerZone") || !nodeValue["triggerZone"].IsObject())
@@ -1833,6 +1868,24 @@ namespace pe
                     nodeObj.AddMember("triggerZone", zObj.Move(), allocator);
                 }
 
+                if ((flags & Component_VoxelWorld) && cache.voxelWorld)
+                {
+                    const NodeVoxelWorldTag &v = *cache.voxelWorld;
+                    rapidjson::Value vObj(rapidjson::kObjectType);
+                    vObj.AddMember("enabled", v.worldEnabled, allocator);
+                    vObj.AddMember("streaming", v.streaming, allocator);
+                    vObj.AddMember("anchorFollowsCamera", v.anchorFollowsCamera, allocator);
+                    vObj.AddMember("loadRadius", v.loadRadius, allocator);
+                    vObj.AddMember("unloadMargin", v.unloadMargin, allocator);
+                    vObj.AddMember("uploadBudget", v.uploadBudget, allocator);
+                    vObj.AddMember("groundY", v.groundY, allocator);
+                    vObj.AddMember("worldRadius", v.worldRadius, allocator);
+                    vObj.AddMember("lodEnabled", v.lodEnabled, allocator);
+                    vObj.AddMember("lod0Radius", v.lod0Radius, allocator);
+                    vObj.AddMember("saveDir", MakeStringValue(v.saveDir), allocator);
+                    nodeObj.AddMember("voxelWorld", vObj.Move(), allocator);
+                }
+
                 if ((flags & Component_RuntimeUi) && cache.runtimeUi && cache.runtimeUi->authored)
                 {
                     const NodeRuntimeUiTag &ui = *cache.runtimeUi;
@@ -2900,6 +2953,8 @@ namespace pe
                     RestoreTriggerZoneNode(*this, nodeMap[ni], nodesVal[ni]);
                 }
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+                    RestoreVoxelWorldNode(*this, nodeMap[ni], nodesVal[ni]);
+                for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreRuntimeUiNode(*this, nodeMap[ni], nodesVal[ni], &sceneDir);
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreSpriteNode(*this, nodeMap[ni], nodesVal[ni], &sceneDir);
@@ -3601,6 +3656,8 @@ namespace pe
             RestoreTriggerZoneNode(*this, nodeMap[ni], nodesVal[ni]);
         }
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+            RestoreVoxelWorldNode(*this, nodeMap[ni], nodesVal[ni]);
+        for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreRuntimeUiNode(*this, nodeMap[ni], nodesVal[ni], &prefabDir);
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreSpriteNode(*this, nodeMap[ni], nodesVal[ni], &prefabDir);
@@ -4132,6 +4189,8 @@ namespace pe
                     RestoreTriggerZoneNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
                 }
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestoreVoxelWorldNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreRuntimeUiNode(*this, m_nodeIds[ni], snapshotNodes[ni], nullptr);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSpriteNode(*this, m_nodeIds[ni], snapshotNodes[ni], nullptr);
@@ -4583,6 +4642,8 @@ namespace pe
                 {
                     RestoreTriggerZoneNode(*this, nodeMap[ni], snapshotNodes[ni]);
                 }
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestoreVoxelWorldNode(*this, nodeMap[ni], snapshotNodes[ni]);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreRuntimeUiNode(*this, nodeMap[ni], snapshotNodes[ni], nullptr);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)

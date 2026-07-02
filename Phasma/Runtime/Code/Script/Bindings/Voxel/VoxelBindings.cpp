@@ -36,6 +36,10 @@ namespace pe
                             cfg.uploadBudgetPerFrame = p["upload_budget"];
                         if (p["lod0_radius"].valid())
                             cfg.lod0Radius = p["lod0_radius"];
+                        if (p["world_radius"].valid())
+                            cfg.worldRadius = p["world_radius"];
+                        if (p["streaming"].valid())
+                            cfg.streaming = p["streaming"];
                         if (p["save_dir"].valid())
                             cfg.saveDir = p["save_dir"].get<std::string>();
                     }

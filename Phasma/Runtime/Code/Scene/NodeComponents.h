@@ -220,6 +220,27 @@ namespace pe
         float cameraPrevFovDeg = 0.0f; // runtime-only: FOV before our override
     };
 
+    // Singleton "Voxel World" authoring node: all voxel-world settings live here and VoxelSystem
+    // reconciles the live world against it every frame (create on enable, recreate on config change,
+    // destroy on disable/delete). The node's world position is the volume center for bounded
+    // (worldRadius > 0) and non-streaming worlds. Section size (16) and block size (1 unit) are
+    // engine constants baked into the packed vertex format — not per-world settings.
+    class NodeVoxelWorldTag : public IComponent
+    {
+    public:
+        bool worldEnabled = true;        // build/keep the world while the component is enabled
+        bool streaming = true;           // stream columns around the anchor; off = fixed grid at the node
+        bool anchorFollowsCamera = true; // anchor = active camera; off = scripts drive voxel.set_anchor
+        int loadRadius = 8;              // streaming radius, columns
+        int unloadMargin = 2;            // extra columns kept loaded past loadRadius
+        int uploadBudget = 4;            // section mesh uploads applied per frame
+        int groundY = 64;                // terrain base height fed to the generator
+        int worldRadius = 0;             // total world bound in columns around the node (0 = infinite)
+        bool lodEnabled = false;         // distance LOD (coarser mesh per lod0Radius band)
+        int lod0Radius = 5;              // full-detail radius in columns when LOD is on
+        std::string saveDir;             // .pevcol persistence dir under Assets ("" = no persistence)
+    };
+
     enum class NodeRuntimeUiWidgetType : uint8_t
     {
         Panel,
@@ -343,5 +364,6 @@ namespace pe
         NodePrefabComponent *prefab = nullptr;
         NodeSpriteComponent *sprite = nullptr;
         NodeTriggerZoneTag *triggerZone = nullptr;
+        NodeVoxelWorldTag *voxelWorld = nullptr;
     };
 } // namespace pe

@@ -1902,6 +1902,72 @@ namespace pe
                 }
             }
 
+            if (flags & Component_VoxelWorld)
+            {
+                ImGui::Separator();
+                const bool voxOpen = ImGui::CollapsingHeader("Voxel World", ImGuiTreeNodeFlags_DefaultOpen);
+                ui::ItemTooltip("All voxel-world settings. The world is created and kept in sync with these "
+                                "values live (editor and play); the node's position is the volume center for "
+                                "bounded or non-streaming worlds.");
+                if (voxOpen)
+                {
+                    ImGui::Indent(8.f);
+                    if (NodeVoxelWorldTag *v = scene.GetVoxelWorldForNode(node))
+                    {
+                        bool changed = false;
+                        changed |= ImGui::Checkbox("Enabled##voxelworld", &v->worldEnabled);
+                        ui::ItemTooltip("Build and keep the voxel world while this node is enabled.");
+                        changed |= ImGui::Checkbox("Streaming", &v->streaming);
+                        ui::ItemTooltip("Stream columns around the anchor (camera/player). Off = load a fixed "
+                                        "grid at this node once (World Radius, or Load Radius when 0) and never "
+                                        "unload.");
+                        if (v->streaming)
+                        {
+                            changed |= ImGui::Checkbox("Anchor Follows Camera", &v->anchorFollowsCamera);
+                            ui::ItemTooltip("Stream around the active camera. Off: a script drives "
+                                            "voxel.set_anchor (e.g. around the player).");
+                            changed |= ImGui::DragInt("Load Radius", &v->loadRadius, 0.2f, 1, 64);
+                            ui::ItemTooltip("Streaming radius in 16-block columns around the anchor.");
+                            changed |= ImGui::DragInt("Unload Margin", &v->unloadMargin, 0.2f, 0, 16);
+                            ui::ItemTooltip("Extra columns kept loaded past the radius before unloading.");
+                        }
+                        changed |= ImGui::DragInt("World Radius", &v->worldRadius, 0.2f, 0, 4096);
+                        ui::ItemTooltip("Total world size in columns around this node; columns outside never "
+                                        "generate. 0 = infinite in X/Z.");
+                        changed |= ImGui::DragInt("Ground Y", &v->groundY, 0.5f, 0, 256);
+                        ui::ItemTooltip("Terrain base height fed to the world generator.");
+                        changed |= ImGui::DragInt("Upload Budget", &v->uploadBudget, 0.2f, 1, 64);
+                        ui::ItemTooltip("Section meshes uploaded per frame; higher streams in faster but can "
+                                        "spike frame time.");
+                        changed |= ImGui::Checkbox("LOD", &v->lodEnabled);
+                        ui::ItemTooltip("Distance LOD: full detail near the anchor, coarser mesh per band "
+                                        "beyond. Retuned live without rebuilding the world.");
+                        if (v->lodEnabled)
+                        {
+                            ImGui::Indent(16.0f);
+                            ImGui::SetNextItemWidth(120.0f);
+                            changed |= ImGui::DragInt("Full-Detail Radius", &v->lod0Radius, 0.2f, 1, 64);
+                            ui::ItemTooltip("Columns at full detail; each band beyond drops one mip (2-block, "
+                                            "then 4-block cells).");
+                            ImGui::Unindent(16.0f);
+                        }
+                        char saveBuf[260];
+                        snprintf(saveBuf, sizeof(saveBuf), "%s", v->saveDir.c_str());
+                        if (ImGui::InputText("Save Dir", saveBuf, sizeof(saveBuf)))
+                        {
+                            v->saveDir = saveBuf;
+                            changed = true;
+                        }
+                        ui::ItemTooltip("Column persistence dir under Assets (edits save as .pevcol overlays). "
+                                        "Empty = no persistence. Changing it rebuilds the world.");
+                        ImGui::TextDisabled("Block = 1 unit, section = 16^3 (engine constants)");
+                        if (changed)
+                            scene.MarkDirty();
+                    }
+                    ImGui::Unindent(8.f);
+                }
+            }
+
             // Mesh component
             if (flags & Component_Mesh)
             {

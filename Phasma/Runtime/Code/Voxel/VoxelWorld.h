@@ -40,6 +40,14 @@ namespace pe::voxel
         // Full-detail radius in columns; each lod0Radius further drops one mip (max lod 2, so 4-block
         // cells). 0 disables LOD — every column meshes at full detail regardless of distance.
         int lod0Radius = 0;
+        // Total world bound in columns around (boundsCenterCx, boundsCenterCz); columns outside never
+        // generate (queries there read air). 0 = infinite in X/Z.
+        int worldRadius = 0;
+        int boundsCenterCx = 0;
+        int boundsCenterCz = 0;
+        // false = fixed grid at the bounds center (worldRadius, or loadRadius when unbounded); the
+        // anchor is ignored and nothing ever unloads.
+        bool streaming = true;
         std::string saveDir; // relative to Assets or absolute; empty disables persistence
     };
 
@@ -63,6 +71,13 @@ namespace pe::voxel
         // installs a default NoiseGen. Pass nullptr to revert to the default. Generators run on
         // worker threads, so the implementation must be thread-safe.
         void SetTerrainGenerator(std::shared_ptr<ITerrainGenerator> generator);
+        // Live LOD retune (0 = off): updates the config and remeshes Ready columns whose band
+        // changed through the budgeted remesh path — no world recreate.
+        void SetLod0Radius(int lod0Radius);
+        const VoxelConfig &Config() const { return m_cfg; }
+        // False once a Scene buffer rebuild (scene load, play-stop restore) wiped the shared arena
+        // out from under this world — streaming into it would just warn-spam; recreate instead.
+        bool IsArenaAlive() const;
 
     private:
         enum class ColumnLoadState
@@ -109,6 +124,8 @@ namespace pe::voxel
         static ColumnCoord AnchorToColumn(const vec3 &worldPos);
         static int ColumnDistance(ColumnCoord a, ColumnCoord b);
         int DesiredLod(ColumnCoord coord) const;
+        int RequestRadius() const;
+        bool InWorldBounds(ColumnCoord coord) const;
         void RemeshColumnAtLod(ColumnState &state, int lod);
         ColumnState *FindColumnState(ColumnCoord coord);
         const ColumnState *FindColumnState(ColumnCoord coord) const;
