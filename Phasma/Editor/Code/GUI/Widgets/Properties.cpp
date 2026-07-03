@@ -1947,8 +1947,9 @@ namespace pe
                             ImGui::Indent(16.0f);
                             ImGui::SetNextItemWidth(120.0f);
                             changed |= ImGui::DragInt("Full-Detail Radius", &v->lod0Radius, 0.2f, 1, 64);
-                            ui::ItemTooltip("Columns at full detail; each band beyond drops one mip (2-block, "
-                                            "then 4-block cells).");
+                            ui::ItemTooltip("Full-detail ring in columns, measured 3D from the camera "
+                                            "(circular; height counts — a high camera coarsens everything). "
+                                            "2-block cells out to 3x this radius, 4-block cells beyond.");
                             ImGui::Unindent(16.0f);
                         }
                         char saveBuf[260];
@@ -1960,6 +1961,62 @@ namespace pe
                         }
                         ui::ItemTooltip("Column persistence dir under Assets (edits save as .pevcol overlays). "
                                         "Empty = no persistence. Changing it rebuilds the world.");
+
+                        ImGui::SeparatorText("World Generation");
+                        auto pathField = [&changed](const char *label, std::string &path)
+                        {
+                            char buf[260];
+                            snprintf(buf, sizeof(buf), "%s", path.c_str());
+                            if (ImGui::InputText(label, buf, sizeof(buf)))
+                            {
+                                path = buf;
+                                changed = true;
+                            }
+                        };
+                        pathField("Heightmap", v->heightmapPath);
+                        ui::ItemTooltip("Grayscale image under Assets: pixel value = surface height in blocks "
+                                        "(0-255), lerped between pixels, centered on this node. Empty = "
+                                        "procedural noise terrain.");
+                        if (v->heightmapPath.empty())
+                        {
+                            changed |= ImGui::DragFloat("Mountain Height", &v->noiseAmplitude, 0.25f, 0.0f, 128.0f,
+                                                        "%.0f");
+                            ui::ItemTooltip("Peak height above Ground Y in blocks. 0 = flat plain.");
+                            changed |= ImGui::DragFloat("Feature Scale", &v->noiseFeatureScale, 0.5f, 8.0f, 1024.0f,
+                                                        "%.0f");
+                            ui::ItemTooltip("Terrain feature wavelength in blocks — small = choppy hills, large = "
+                                            "wide rolling terrain.");
+                            changed |= ImGui::DragInt("Seed", &v->noiseSeed);
+                            ui::ItemTooltip("Shifts the noise domain; each seed is a different world.");
+                            changed |= ImGui::Checkbox("Caves", &v->caves);
+                            ui::ItemTooltip("Carve worm caves under the surface.");
+                        }
+                        else
+                        {
+                            pathField("Strata 1 Map", v->strata1Path);
+                            ui::ItemTooltip("Grayscale thickness (blocks) of the band under the surface block. "
+                                            "Empty = fixed Strata 1 Thickness.");
+                            pathField("Strata 2 Map", v->strata2Path);
+                            ui::ItemTooltip("Grayscale thickness (blocks) of the band under strata 1. Empty = "
+                                            "fixed Strata 2 Thickness.");
+                            changed |= ImGui::DragInt("Blocks / Pixel", &v->blocksPerPixel, 0.1f, 1, 64);
+                            ui::ItemTooltip("Blocks each map pixel spans in X/Z; heights lerp between pixels.");
+                            changed |= ImGui::DragInt("Surface Block", &v->surfaceBlock, 0.1f, 0, 255);
+                            ui::ItemTooltip("Block ids: 1=stone 2=dirt 3=grass 4=water, 0=air.");
+                            changed |= ImGui::DragInt("Strata 1 Block", &v->strata1Block, 0.1f, 0, 255);
+                            changed |= ImGui::DragInt("Strata 1 Thickness", &v->strata1Thickness, 0.2f, 0, 128);
+                            changed |= ImGui::DragInt("Strata 2 Block", &v->strata2Block, 0.1f, 0, 255);
+                            changed |= ImGui::DragInt("Strata 2 Thickness", &v->strata2Thickness, 0.2f, 0, 128);
+                            changed |= ImGui::DragInt("Fill Block", &v->fillBlock, 0.1f, 0, 255);
+                            ui::ItemTooltip("Fills below the strata down to y=0. 0 = air (floating-island "
+                                            "shells).");
+                        }
+                        changed |= ImGui::DragInt("Sea Level", &v->seaLevel, 0.2f, -1, 256);
+                        ui::ItemTooltip("Water surface height in blocks: -1 = auto (Ground Y - 2), 0 = no water.");
+                        if (ImGui::Button("Rebuild World"))
+                            v->rebuildRequested = true;
+                        ui::ItemTooltip("Force-rebuild now — needed after repainting a map file (same path is "
+                                        "not auto-detected).");
                         ImGui::TextDisabled("Block = 1 unit, section = 16^3 (engine constants)");
                         if (changed)
                             scene.MarkDirty();

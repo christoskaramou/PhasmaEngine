@@ -239,6 +239,23 @@ namespace pe
         bool lodEnabled = false;         // distance LOD (coarser mesh per lod0Radius band)
         int lod0Radius = 5;              // full-detail radius in columns when LOD is on
         std::string saveDir;             // .pevcol persistence dir under Assets ("" = no persistence)
+        // Worldgen (mirrors VoxelConfig; see MapGen.h for the heightmap/strata model):
+        float noiseAmplitude = 28.0f;    // peak height above groundY in blocks; 0 = flat plain
+        float noiseFeatureScale = 96.0f; // feature wavelength in blocks (bigger = rolling hills)
+        int noiseSeed = 0;               // each seed is a different world
+        bool caves = true;
+        int seaLevel = -1;         // <0 = auto (groundY - 2), 0 = no water, >0 = absolute blocks
+        std::string heightmapPath; // grayscale surface map under Assets; empty = noise terrain
+        std::string strata1Path;   // thickness map of the band under the surface block
+        std::string strata2Path;   // thickness map of the band under strata 1
+        int blocksPerPixel = 1;    // one map pixel spans this many blocks in X/Z
+        int surfaceBlock = 3;      // block ids: 1=stone 2=dirt 3=grass 4=water, 0=air
+        int strata1Block = 2;
+        int strata2Block = 1;
+        int fillBlock = 1;        // below the strata to y=0; 0 = air (floating shells)
+        int strata1Thickness = 3; // fixed thickness when the strata map is absent
+        int strata2Thickness = 8;
+        bool rebuildRequested = false; // transient: inspector "Rebuild" (repainted map, same path)
     };
 
     enum class NodeRuntimeUiWidgetType : uint8_t

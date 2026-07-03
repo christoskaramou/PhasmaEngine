@@ -185,5 +185,16 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     output.color.rgb = fragColor + emmission;
     output.color.a   = albedo.a;
 
+    // Distance haze: exponential fog past cb_fogStart toward the blurred skybox in the view
+    // direction — the haze color IS the sky behind the pixel, so there is no horizon line. Softens
+    // far detail (e.g. voxel LOD band transitions). Runs for the transparent pass too (water).
+    if (cb_fogDensity > 0.0f)
+    {
+        float dist = length(wolrdPos - cb_camPos.xyz);
+        float fogAmount = 1.0f - exp(-max(dist - cb_fogStart, 0.0f) * cb_fogDensity);
+        float3 fogColor = Cube.SampleLevel(sampler_Cube, -V, 2.0f).xyz;
+        output.color.rgb = lerp(output.color.rgb, fogColor, fogAmount);
+    }
+
     return output;
 }

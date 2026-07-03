@@ -57,10 +57,36 @@ meshing/noise does not stall for tens of seconds. `PhasmaRuntime` compiles with 
 - `GreedyMesher` (`IChunkMesher`) — sweep-and-merge; packed `VoxelVertex` + tight bounds; cardinal +
   diagonal neighbor-column AO at horizontal seams (`BlockSampleFn` hot path, no `std::function`).
   `lod N` meshes `(16 >> N)`-cell grids where a cell is solid if ANY block in its `2^N`-cube is opaque
-  (conservative silhouette — coarse never dips below fine, so band seams can't open holes), skips AO,
-  and always caps section walls horizontally instead of sampling neighbor columns. Positions stay in
-  block units, so the packed format and shaders are lod-agnostic.
+  (conservative silhouette — coarse never dips below fine, so band seams can't open holes), keeps
+  cell-resolution AO at lod 1 (skipped at lod 2 — invisible at that distance), and always caps section
+  walls horizontally instead of sampling neighbor columns. Positions stay in block units, so the
+  packed format and shaders are lod-agnostic. Bands widen with distance: lod 0 in `[0, r)`, lod 1 in
+  `[r, 3r)`, lod 2 beyond (`r` = `lod0_radius` columns). Band distance is Euclidean and 3D — circular
+  rings around the anchor, and anchor height above `ground_y` counts, so a high top-down camera
+  coarsens the whole view while an underground anchor keeps its full-detail core; anchor movement
+  (including vertical) re-sweeps the bands once it drifts half a section. Band transitions have
+  hysteresis (a live column only re-bands once the anchor is clearly past the boundary — no edge
+  flip-flop) and swap instantly; the `fog` scene setting (distance haze toward the skybox color)
+  masks the far ones. A screen-door cross-fade between the old/new meshes was tried and REVERTED
+  2026-07-03: dithering between silhouettes that differ by blocks interleaves dark step-wall pixels
+  into the surface — reads as dark-green mud, worse than the pop. **Generation is lod-aware too**
+  (`ITerrainGenerator::Generate(col, lod)`): coarse bands generate coarse block data — one height
+  sample per cell, no caves — which is where big radii win their load time (the per-block 3D cave fbm
+  dominates). A column whose band later drops regenerates finer data in the background (old meshes
+  stay live until the swap, then the column and its lod-0 neighbor seams remesh); block queries in
+  coarse bands are approximate, and `SetBlock` out there queues the edit and forces a full-detail
+  regen so edits are never lost or persisted against a coarse baseline.
 - `NoiseGen` (`ITerrainGenerator`) — domain-warped FBM + ridged hills, worm-tunnel caves (default terrain).
+  Shape knobs via `NoiseParams`: amplitude (0 = flat plain), feature wavelength, seed (domain shift),
+  caves on/off, sea level (<0 = auto groundY-2, 0 = none). Defaults reproduce the historical look.
+- `MapGen` (`ITerrainGenerator`) — layered heightmap terrain, selected when the config sets a heightmap
+  path (falls back to noise if the image fails to load). Layer 0 = grayscale surface map: pixel value
+  0..255 == surface height in blocks (1:1 with `kWorldHeight`), bilinearly sampled, one pixel spans
+  `blocksPerPixel` blocks, centered on the world bounds center. Optional strata maps paint the
+  thickness of the material bands under the surface block (thickness, not absolute height — strata
+  can't invert through the surface); below the last band `fillBlock` fills to y=0 (0 = air →
+  floating-island shells). A bounded non-streaming world with `worldRadius` 0 derives its radius from
+  the map extent, so a painted map IS the island.
 - `FreeListAllocator` / `GeometryArena` — coalescing suballocator + Scene arena; `GrowIfNeeded`.
 - `VoxelMaterial` — builds the `Texture2DArray` tile atlas; bound via `Scene::SetVoxelAtlasView` (no Material object).
 - `VoxelCollider` — DDA raycast + swept-AABB (`voxel.move_aabb`).
@@ -80,7 +106,11 @@ meshing/noise does not stall for tens of seconds. `PhasmaRuntime` compiles with 
 One `Component_VoxelWorld` node per scene (`NodeVoxelWorldTag`) holds every voxel-world setting:
 enabled, streaming on/off, anchor-follows-camera, load radius, unload margin, upload budget, ground Y,
 world radius (total bound in columns around the node; 0 = infinite), LOD on/off + full-detail radius,
-save dir. Create it from the hierarchy Add menu ("Voxel World") or `node:set_voxel_world{...}` /
+save dir, plus the full worldgen block — noise knobs (mountain height, feature scale, seed, caves, sea
+level) or heightmap mode (surface map + strata maps + per-band block ids + blocks-per-pixel; the
+inspector switches views on whether a heightmap path is set). A "Rebuild World" button forces a
+recreate — the only way to pick up a repainted map file behind an unchanged path (also scriptable via
+`set_voxel_world{rebuild=true}`). Create it from the hierarchy Add menu ("Voxel World") or `node:set_voxel_world{...}` /
 `node:get_voxel_world()` from Lua; the inspector edits it live. `VoxelSystem::ReconcileComponentWorld`
 keeps the live world in sync every frame: create on enable, recreate on structural change (debounced 30
 frames so inspector drags don't thrash), `SetLod0Radius` retunes LOD live without a rebuild, destroy on
@@ -102,7 +132,11 @@ Blocks are registered C++-side — there is no Lua `register_block`.
   detail inside it, one mip per band beyond (capped at lod 2 = 4-block cells); 0/absent = LOD off.
   Coarse columns skip neighbor snapshots and the neighbor-gen wait; band changes remesh through the
   budgeted remesh path. `world_radius` bounds the world (columns from origin; 0 = infinite);
-  `streaming=false` loads a fixed grid once and ignores the anchor.
+  `streaming=false` loads a fixed grid once and ignores the anchor. Worldgen keys (same model as the
+  Voxel World node): `noise_amplitude`, `noise_feature_scale`, `noise_seed`, `caves`, `sea_level`,
+  and heightmap mode via `heightmap`, `strata1_map`, `strata2_map`, `blocks_per_pixel`,
+  `surface_block`, `strata1_block`, `strata2_block`, `fill_block`, `strata1_thickness`,
+  `strata2_thickness` (see `MapGen.h`).
 - `voxel.destroy()` (auto-saves touched columns when `save_dir` is set)
 - `voxel.save_all()` — flush edited column sections to disk immediately
 - `voxel.set_anchor(x, y, z)` — stream columns around this point.

@@ -151,6 +151,12 @@ namespace pe
         float render_scale = 0.75f;
         bool forward_plus = true;
         float lights_intensity = 1.0f;
+        // Distance haze: blends far opaque/transparent pixels toward the blurred skybox in the view
+        // direction (exponential past fog_start, world units). Softens the horizon and masks far
+        // voxel-LOD band transitions; no color knob — the haze color IS the sky behind the pixel.
+        bool fog = false;
+        float fog_density = 0.008f;
+        float fog_start = 150.0f;
         bool randomize_lights = false;
         // Point lights attenuate by windowed inverse-square (intensity in units of
         // luminance * distance^2) instead of the range-relative artistic falloff.

@@ -12,6 +12,7 @@
 // Icons used in Hierarchy
 #define ICON_FA_CUBE "\xef\x86\xb2"                 // f1b2 - cube (for models)
 #define ICON_FA_CUBES "\xef\x86\xb3"                // f1b3 - cubes (for model groups)
+#define ICON_FA_BORDER_ALL "\xef\xa1\x8c"           // f84c - border-all (3x3 grid, for voxel world)
 #define ICON_FA_CIRCLE "\xef\x84\x91"               // f111 - circle (for generic nodes)
 #define ICON_FA_CIRCLE_DOT "\xef\x86\x92"           // f192 - circle-dot (for mesh nodes)
 #define ICON_FA_VECTOR_SQUARE "\xef\x97\x8b"        // f5cb - vector-square (for nodes)

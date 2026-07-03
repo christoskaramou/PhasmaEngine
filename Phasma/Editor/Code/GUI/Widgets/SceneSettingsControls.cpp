@@ -143,6 +143,20 @@ namespace pe
         Track(ImGui::Checkbox("Physical Falloff", &gSettings.physical_point_falloff));
         ui::ItemTooltip("Point lights attenuate by windowed inverse-square (raster path). Intensity is interpreted "
                         "as luminance * distance^2, so expect to raise it massively.");
+        Track(ImGui::Checkbox("Distance Haze", &gSettings.fog));
+        ui::ItemTooltip("Exponential fog toward the skybox color past the start distance. Softens the horizon "
+                        "and masks far voxel LOD transitions.");
+        if (gSettings.fog)
+        {
+            ImGui::Indent(16.0f);
+            ImGui::SetNextItemWidth(120.0f);
+            Track(ImGui::DragFloat("Density##Fog", &gSettings.fog_density, 0.0005f, 0.0f, 0.1f, "%.4f"));
+            ui::ItemTooltip("Exponential falloff rate per world unit past the start distance.");
+            ImGui::SetNextItemWidth(120.0f);
+            Track(ImGui::DragFloat("Start##Fog", &gSettings.fog_start, 1.0f, 0.0f, 100000.0f));
+            ui::ItemTooltip("World-unit distance where the haze begins.");
+            ImGui::Unindent(16.0f);
+        }
         ImGui::Separator();
 
         // Culling / debug
