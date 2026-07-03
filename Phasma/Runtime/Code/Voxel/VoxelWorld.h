@@ -65,8 +65,12 @@ namespace pe::voxel
         std::string heightmapPath;
         std::string strata1Path;
         std::string strata2Path;
-        int blocksPerPixel = 1; // one map pixel spans this many blocks in X/Z
-        int surfaceBlock = 3;   // block ids: 1=stone 2=dirt 3=grass 4=water, 0=air
+        // Feature map: a non-zero pixel places a decoration at that pixel's center block
+        // (1 = tree, 2 = rock, 3 = road, 4 = olive, 5 = cypress). Painted sparse.
+        std::string featuresPath;
+        int blocksPerPixel = 1;    // one map pixel spans this many blocks in X/Z
+        int surfaceBlock = 3;      // block ids: 1=stone 2=dirt 3=grass 4=water, 0=air
+        bool surfaceBands = false; // pick the top block by elevation (sand/dry_grass/rock/snow) instead of surfaceBlock
         int strata1Block = 2;
         int strata2Block = 1;
         int fillBlock = 1;        // fills below the strata to y=0; 0 = air (floating shells)

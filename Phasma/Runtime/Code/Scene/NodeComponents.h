@@ -248,8 +248,10 @@ namespace pe
         std::string heightmapPath; // grayscale surface map under Assets; empty = noise terrain
         std::string strata1Path;   // thickness map of the band under the surface block
         std::string strata2Path;   // thickness map of the band under strata 1
+        std::string featuresPath;  // decoration map: 1=tree 2=rock 3=road 4=olive 5=cypress at that pixel
         int blocksPerPixel = 1;    // one map pixel spans this many blocks in X/Z
         int surfaceBlock = 3;      // block ids: 1=stone 2=dirt 3=grass 4=water, 0=air
+        bool surfaceBands = false; // top block by elevation (sand/dry_grass/rock/snow) instead of surfaceBlock
         int strata1Block = 2;
         int strata2Block = 1;
         int fillBlock = 1;        // below the strata to y=0; 0 = air (floating shells)

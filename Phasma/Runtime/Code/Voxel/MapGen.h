@@ -35,14 +35,21 @@ namespace pe::voxel
             float SampleNorm(float nu, float nv) const; // bilinear, edge-clamped, uv in 0..1
         };
 
+        // Decorations from the features map (pixel 1 = tree, 2 = rock at the pixel's center block).
+        // Deterministic per anchor, so neighboring columns emit identical blocks for a feature that
+        // spans their seam. Skipped at lod > 0 — coarse cells would mangle 1-block trunks.
+        void SpawnFeatures(ChunkColumn &col);
+
         MapImage m_surface;
         MapImage m_strata1;
         MapImage m_strata2;
+        MapImage m_features;
         int m_centerWX = 0; // world-block coords the map center is pinned to
         int m_centerWZ = 0;
         int m_blocksPerPixel = 1;
         int m_seaLevel = 0; // resolved absolute height; <=0 = no water
         BlockId m_surfaceBlock = 3;
+        bool m_surfaceBands = false; // pick the top block by elevation instead of m_surfaceBlock
         BlockId m_strata1Block = 2;
         BlockId m_strata2Block = 1;
         BlockId m_fillBlock = 1;

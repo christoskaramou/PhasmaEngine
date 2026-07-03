@@ -58,10 +58,14 @@ namespace pe
                             cfg.strata1Path = p["strata1_map"].get<std::string>();
                         if (p["strata2_map"].valid())
                             cfg.strata2Path = p["strata2_map"].get<std::string>();
+                        if (p["features_map"].valid())
+                            cfg.featuresPath = p["features_map"].get<std::string>();
                         if (p["blocks_per_pixel"].valid())
                             cfg.blocksPerPixel = p["blocks_per_pixel"];
                         if (p["surface_block"].valid())
                             cfg.surfaceBlock = p["surface_block"];
+                        if (p["surface_bands"].valid())
+                            cfg.surfaceBands = p["surface_bands"];
                         if (p["strata1_block"].valid())
                             cfg.strata1Block = p["strata1_block"];
                         if (p["strata2_block"].valid())

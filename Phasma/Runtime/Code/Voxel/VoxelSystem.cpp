@@ -47,8 +47,10 @@ namespace pe::voxel
             h = HashString(h, cfg.heightmapPath);
             h = HashString(h, cfg.strata1Path);
             h = HashString(h, cfg.strata2Path);
+            h = HashString(h, cfg.featuresPath);
             h = HashInt(h, cfg.blocksPerPixel);
             h = HashInt(h, cfg.surfaceBlock);
+            h = HashInt(h, cfg.surfaceBands ? 1 : 0);
             h = HashInt(h, cfg.strata1Block);
             h = HashInt(h, cfg.strata2Block);
             h = HashInt(h, cfg.fillBlock);
@@ -155,8 +157,10 @@ namespace pe::voxel
         cfg.heightmapPath = tag->heightmapPath;
         cfg.strata1Path = tag->strata1Path;
         cfg.strata2Path = tag->strata2Path;
+        cfg.featuresPath = tag->featuresPath;
         cfg.blocksPerPixel = tag->blocksPerPixel;
         cfg.surfaceBlock = tag->surfaceBlock;
+        cfg.surfaceBands = tag->surfaceBands;
         cfg.strata1Block = tag->strata1Block;
         cfg.strata2Block = tag->strata2Block;
         cfg.fillBlock = tag->fillBlock;

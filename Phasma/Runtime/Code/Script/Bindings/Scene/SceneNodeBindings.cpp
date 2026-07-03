@@ -610,6 +610,7 @@ namespace pe
                 // enabled, streaming, anchor_follows_camera, load_radius, unload_margin, upload_budget,
                 // ground_y, world_radius, lod_enabled, lod0_radius, save_dir, plus worldgen: noise_amplitude,
                 // noise_feature_scale, noise_seed, caves, sea_level, heightmap, strata1_map, strata2_map,
+                // features_map (pixel 1 = tree, 2 = rock),
                 // blocks_per_pixel, surface_block, strata1_block, strata2_block, fill_block,
                 // strata1_thickness, strata2_thickness, rebuild. VoxelSystem reconciles the
                 // live world from it (same data the editor's Voxel World inspector edits).
@@ -639,8 +640,10 @@ namespace pe
                     if (p["heightmap"].valid()) v->heightmapPath = p["heightmap"].get<std::string>();
                     if (p["strata1_map"].valid()) v->strata1Path = p["strata1_map"].get<std::string>();
                     if (p["strata2_map"].valid()) v->strata2Path = p["strata2_map"].get<std::string>();
+                    if (p["features_map"].valid()) v->featuresPath = p["features_map"].get<std::string>();
                     if (p["blocks_per_pixel"].valid()) v->blocksPerPixel = p["blocks_per_pixel"];
                     if (p["surface_block"].valid()) v->surfaceBlock = p["surface_block"];
+                    if (p["surface_bands"].valid()) v->surfaceBands = p["surface_bands"];
                     if (p["strata1_block"].valid()) v->strata1Block = p["strata1_block"];
                     if (p["strata2_block"].valid()) v->strata2Block = p["strata2_block"];
                     if (p["fill_block"].valid()) v->fillBlock = p["fill_block"];
@@ -675,8 +678,10 @@ namespace pe
                     t["heightmap"] = v->heightmapPath;
                     t["strata1_map"] = v->strata1Path;
                     t["strata2_map"] = v->strata2Path;
+                    t["features_map"] = v->featuresPath;
                     t["blocks_per_pixel"] = v->blocksPerPixel;
                     t["surface_block"] = v->surfaceBlock;
+                    t["surface_bands"] = v->surfaceBands;
                     t["strata1_block"] = v->strata1Block;
                     t["strata2_block"] = v->strata2Block;
                     t["fill_block"] = v->fillBlock;
