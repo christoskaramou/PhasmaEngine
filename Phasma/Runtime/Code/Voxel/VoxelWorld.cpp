@@ -20,6 +20,24 @@ namespace pe::voxel
         constexpr BlockId kDirtBlock = 2;
         constexpr BlockId kGrassBlock = 3;
         constexpr BlockId kWaterBlock = 4;
+        constexpr BlockId kWoodBlock = 5;
+        constexpr BlockId kLeavesBlock = 6;
+        constexpr BlockId kRoadBlock = 7;
+        // Greece set: terrain bands + Mediterranean build materials + tree-variant foliage.
+        constexpr BlockId kSandBlock = 8;
+        constexpr BlockId kDryGrassBlock = 9;
+        constexpr BlockId kRockBlock = 10;
+        constexpr BlockId kSnowBlock = 11;
+        constexpr BlockId kGravelBlock = 12;
+        constexpr BlockId kMarbleBlock = 13;
+        constexpr BlockId kLimestoneBlock = 14;
+        constexpr BlockId kTerracottaBlock = 15;
+        constexpr BlockId kWhitewashBlock = 16;
+        constexpr BlockId kBluePlasterBlock = 17;
+        constexpr BlockId kRoofTileBlock = 18;
+        constexpr BlockId kMarbleColumnBlock = 19;
+        constexpr BlockId kOliveLeavesBlock = 20;
+        constexpr BlockId kCypressLeavesBlock = 21;
         constexpr size_t kInvalidNodeDataOffset = static_cast<size_t>(-1);
         constexpr size_t kMaxHostDataOffset = 0xFFFFFFFFull;
         constexpr size_t kMaxPendingUpdateCommands = 4;
@@ -447,7 +465,25 @@ namespace pe::voxel
         m_voxelMaterial->Build(m_scene, {Path::RuntimeAssets + "Textures/Voxel/grass.png",
                                          Path::RuntimeAssets + "Textures/Voxel/dirt.png",
                                          Path::RuntimeAssets + "Textures/Voxel/stone.png",
-                                         Path::RuntimeAssets + "Textures/Voxel/water.png"});
+                                         Path::RuntimeAssets + "Textures/Voxel/water.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/wood.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/wood_top.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/leaves.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/cobblestone.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/sand.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/dry_grass.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/rock.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/snow.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/gravel.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/marble.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/limestone.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/terracotta.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/whitewash.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/blue_plaster.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/roof_tile.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/marble_column.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/olive_leaves.png",
+                                         Path::RuntimeAssets + "Textures/Voxel/cypress_leaves.png"});
         if (m_voxelMaterial->Atlas() && m_voxelMaterial->Atlas()->GetSRV())
             m_scene->SetVoxelAtlasView(m_voxelMaterial->Atlas()->GetSRV());
 
@@ -674,6 +710,29 @@ namespace pe::voxel
         m_registry.Register({kGrassBlock, "grass", true, true, VoxelRenderClass::Opaque, {1, 1, 0, 1, 1, 1}});
         // water: alpha-blended, non-solid (walk/fall through for now), atlas layer 3 on every face.
         m_registry.Register({kWaterBlock, "water", false, false, VoxelRenderClass::Transparent, {3, 3, 3, 3, 3, 3}});
+        // wood: bark sides (layer 4), ring ends on +Y/-Y (layer 5). leaves: layer 6 on every face.
+        m_registry.Register({kWoodBlock, "wood", true, true, VoxelRenderClass::Opaque, {4, 4, 5, 5, 4, 4}});
+        m_registry.Register({kLeavesBlock, "leaves", true, true, VoxelRenderClass::Opaque, {6, 6, 6, 6, 6, 6}});
+        // road: cobblestone (layer 7) on every face; paved onto the surface by MapGen features id 3.
+        m_registry.Register({kRoadBlock, "road", true, true, VoxelRenderClass::Opaque, {7, 7, 7, 7, 7, 7}});
+        // Greece terrain bands (atlas layers 8-12) — MapGen picks the top block by elevation.
+        m_registry.Register({kSandBlock, "sand", true, true, VoxelRenderClass::Opaque, {8, 8, 8, 8, 8, 8}});
+        m_registry.Register({kDryGrassBlock, "dry_grass", true, true, VoxelRenderClass::Opaque, {1, 1, 9, 1, 1, 1}});
+        m_registry.Register({kRockBlock, "rock", true, true, VoxelRenderClass::Opaque, {10, 10, 10, 10, 10, 10}});
+        m_registry.Register({kSnowBlock, "snow", true, true, VoxelRenderClass::Opaque, {11, 11, 11, 11, 11, 11}});
+        m_registry.Register({kGravelBlock, "gravel", true, true, VoxelRenderClass::Opaque, {12, 12, 12, 12, 12, 12}});
+        // Mediterranean build materials (layers 13-19) — placeable for villages/temples.
+        m_registry.Register({kMarbleBlock, "marble", true, true, VoxelRenderClass::Opaque, {13, 13, 13, 13, 13, 13}});
+        m_registry.Register({kLimestoneBlock, "limestone", true, true, VoxelRenderClass::Opaque, {14, 14, 14, 14, 14, 14}});
+        m_registry.Register({kTerracottaBlock, "terracotta", true, true, VoxelRenderClass::Opaque, {15, 15, 15, 15, 15, 15}});
+        m_registry.Register({kWhitewashBlock, "whitewash", true, true, VoxelRenderClass::Opaque, {16, 16, 16, 16, 16, 16}});
+        m_registry.Register({kBluePlasterBlock, "blue_plaster", true, true, VoxelRenderClass::Opaque, {17, 17, 17, 17, 17, 17}});
+        m_registry.Register({kRoofTileBlock, "roof_tile", true, true, VoxelRenderClass::Opaque, {18, 18, 18, 18, 18, 18}});
+        // column: fluted sides (layer 19), marble caps on +Y/-Y (layer 13).
+        m_registry.Register({kMarbleColumnBlock, "marble_column", true, true, VoxelRenderClass::Opaque, {19, 19, 13, 13, 19, 19}});
+        // tree-variant foliage (layers 20-21) — placed by MapGen features id 4 (olive) / 5 (cypress).
+        m_registry.Register({kOliveLeavesBlock, "olive_leaves", true, true, VoxelRenderClass::Opaque, {20, 20, 20, 20, 20, 20}});
+        m_registry.Register({kCypressLeavesBlock, "cypress_leaves", true, true, VoxelRenderClass::Opaque, {21, 21, 21, 21, 21, 21}});
     }
 
     void VoxelWorld::CreateHostMesh()

@@ -694,10 +694,14 @@ namespace pe
                 v->strata1Path = vv["strata1Path"].GetString();
             if (vv.HasMember("strata2Path") && vv["strata2Path"].IsString())
                 v->strata2Path = vv["strata2Path"].GetString();
+            if (vv.HasMember("featuresPath") && vv["featuresPath"].IsString())
+                v->featuresPath = vv["featuresPath"].GetString();
             if (vv.HasMember("blocksPerPixel"))
                 v->blocksPerPixel = vv["blocksPerPixel"].GetInt();
             if (vv.HasMember("surfaceBlock"))
                 v->surfaceBlock = vv["surfaceBlock"].GetInt();
+            if (vv.HasMember("surfaceBands"))
+                v->surfaceBands = vv["surfaceBands"].GetBool();
             if (vv.HasMember("strata1Block"))
                 v->strata1Block = vv["strata1Block"].GetInt();
             if (vv.HasMember("strata2Block"))
@@ -1930,8 +1934,10 @@ namespace pe
                     vObj.AddMember("heightmapPath", MakeStringValue(v.heightmapPath), allocator);
                     vObj.AddMember("strata1Path", MakeStringValue(v.strata1Path), allocator);
                     vObj.AddMember("strata2Path", MakeStringValue(v.strata2Path), allocator);
+                    vObj.AddMember("featuresPath", MakeStringValue(v.featuresPath), allocator);
                     vObj.AddMember("blocksPerPixel", v.blocksPerPixel, allocator);
                     vObj.AddMember("surfaceBlock", v.surfaceBlock, allocator);
+                    vObj.AddMember("surfaceBands", v.surfaceBands, allocator);
                     vObj.AddMember("strata1Block", v.strata1Block, allocator);
                     vObj.AddMember("strata2Block", v.strata2Block, allocator);
                     vObj.AddMember("fillBlock", v.fillBlock, allocator);

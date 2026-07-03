@@ -29,6 +29,7 @@
 #include "Widgets/Hierarchy.h"
 #include "Widgets/LightWidget.h"
 #include "Widgets/Loading.h"
+#include "Widgets/MapPainter.h"
 #include "Widgets/MeshWidget.h"
 #include "Widgets/ProfilerWidget.h"
 #include "Widgets/Particles.h"
@@ -842,6 +843,18 @@ namespace pe
         addAction("play.stop", "Stop", "Toolbar", "command", GUIState::s_playMode, false, false);
         addAction("play.pause", "Pause", "Toolbar", "toggle", GUIState::s_playMode, GUIState::s_isPaused, true);
 
+        const bool hasMapPainter = GetWidget<MapPainter>() != nullptr;
+        addAction("voxelpainter.layer",
+                  "Voxel Map Painter: Select Layer (args: layer 0=surface 1=strata1 2=strata2 3=features)",
+                  "VoxelPainter", "command", hasMapPainter, false, false);
+        addAction("voxelpainter.stroke",
+                  "Voxel Map Painter: Brush Stroke (args: u, v 0..1; optional radius px, strength, lower, "
+                  "brush raise|smooth|flatten|set on gray layers or tree|rock|olive|cypress|block|erase on the "
+                  "features layer, value = target for set / block id for block)",
+                  "VoxelPainter", "command", hasMapPainter, false, false);
+        addAction("voxelpainter.save", "Voxel Map Painter: Save PNG + Rebuild World", "VoxelPainter", "command",
+                  hasMapPainter, false, false);
+
         addAction("status.console_errors", "Show Console Errors", "Status", "command", GetWidget<Console>() != nullptr, false, false);
         addAction("status.console_warnings", "Show Console Warnings", "Status", "command", GetWidget<Console>() != nullptr, false, false);
         addAction("help.imgui_demo", "Dear ImGui Demo", "Help", "toggle", true, m_show_demo_window, true);
@@ -916,6 +929,52 @@ namespace pe
 
         if (action.rfind("window.", 0) == 0)
             return SetEditorWindowOpen(action, argsJson);
+
+        // Map Painter programmatic route: lets agents paint voxel terrain maps without mouse input.
+        if (action.rfind("voxelpainter.", 0) == 0)
+        {
+            auto *painter = GetWidget<MapPainter>();
+            if (!painter)
+                return R"({"error":"Map Painter not available"})";
+            if (action == "voxelpainter.layer")
+            {
+                painter->SetLayer(args.value("layer", 0));
+                return ok();
+            }
+            if (action == "voxelpainter.stroke")
+            {
+                int brush = -1; // -1 = widget's current brush
+                if (args.contains("brush"))
+                {
+                    if (args["brush"].is_string())
+                    {
+                        // Gray-layer brushes and Features-layer stamps share the arg; the painter
+                        // interprets the index by the active layer.
+                        static const std::map<std::string, int> kBrushNames = {
+                            {"raise", 0}, {"smooth", 1}, {"flatten", 2}, {"set", 3}, {"tree", 0}, {"rock", 1}, {"olive", 2}, {"cypress", 3}, {"block", 4}, {"erase", 5}};
+                        const auto it = kBrushNames.find(args["brush"]);
+                        if (it == kBrushNames.end())
+                            return R"({"error":"unknown brush - gray: raise|smooth|flatten|set; features: tree|rock|olive|cypress|block|erase; block uses value as the block id"})";
+                        brush = it->second;
+                    }
+                    else
+                    {
+                        brush = args.value("brush", -1);
+                    }
+                }
+                if (!painter->Stroke(args.value("u", 0.5f), args.value("v", 0.5f), args.value("radius", 0.0f),
+                                     args.value("strength", 0.0f), args.value("lower", false), brush,
+                                     args.value("value", -1)))
+                    return R"({"error":"no map loaded for this layer - set or create it on the Voxel World node"})";
+                return ok();
+            }
+            if (action == "voxelpainter.save")
+            {
+                if (!painter->Save())
+                    return R"({"error":"nothing to save - no Voxel World node or no map loaded"})";
+                return ok();
+            }
+        }
 
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
 
@@ -3143,6 +3202,7 @@ namespace pe
         auto scriptEditor = std::make_shared<ScriptEditor>();
         auto shaderEditor = std::make_shared<ShaderEditor>();
         auto spriteEditor = std::make_shared<SpriteEditor>();
+        auto mapPainter = std::make_shared<MapPainter>();
         auto runtimeUiPalette = std::make_shared<RuntimeUiPalette>();
         auto sceneScripts = std::make_shared<SceneScripts>();
         auto animTimeline = std::make_shared<AnimationTimeline>();
@@ -3174,6 +3234,7 @@ namespace pe
             scriptEditor,
             shaderEditor,
             spriteEditor,
+            mapPainter,
             runtimeUiPalette,
             sceneScripts,
             animTimeline,
@@ -3203,6 +3264,7 @@ namespace pe
                                scriptEditor,
                                shaderEditor,
                                spriteEditor,
+                               mapPainter,
                                runtimeUiPalette,
                                sceneScripts,
                                animTimeline};

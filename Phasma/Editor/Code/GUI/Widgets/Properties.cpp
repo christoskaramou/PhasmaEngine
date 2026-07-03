@@ -1999,10 +1999,17 @@ namespace pe
                             pathField("Strata 2 Map", v->strata2Path);
                             ui::ItemTooltip("Grayscale thickness (blocks) of the band under strata 1. Empty = "
                                             "fixed Strata 2 Thickness.");
+                            pathField("Features Map", v->featuresPath);
+                            ui::ItemTooltip("Decoration map: pixel 1 = tree, 2 = rock at that pixel's block. "
+                                            "Paint it sparse in the Map Painter's Features layer.");
                             changed |= ImGui::DragInt("Blocks / Pixel", &v->blocksPerPixel, 0.1f, 1, 64);
                             ui::ItemTooltip("Blocks each map pixel spans in X/Z; heights lerp between pixels.");
+                            changed |= ImGui::Checkbox("Elevation Bands", &v->surfaceBands);
+                            ui::ItemTooltip("Pick the top block by height (sand < dry grass < rock < snow) instead of "
+                                            "one Surface Block. Great for coast-to-summit terrain.");
                             changed |= ImGui::DragInt("Surface Block", &v->surfaceBlock, 0.1f, 0, 255);
-                            ui::ItemTooltip("Block ids: 1=stone 2=dirt 3=grass 4=water, 0=air.");
+                            ui::ItemTooltip("Top block when Elevation Bands is off. Ids: 1=stone 2=dirt 3=grass "
+                                            "4=water 8=sand 10=rock 11=snow 13=marble, 0=air.");
                             changed |= ImGui::DragInt("Strata 1 Block", &v->strata1Block, 0.1f, 0, 255);
                             changed |= ImGui::DragInt("Strata 1 Thickness", &v->strata1Thickness, 0.2f, 0, 128);
                             changed |= ImGui::DragInt("Strata 2 Block", &v->strata2Block, 0.1f, 0, 255);
