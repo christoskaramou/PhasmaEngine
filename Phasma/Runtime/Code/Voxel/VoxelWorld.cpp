@@ -9,6 +9,7 @@
 #include "Scene/Material.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
+#include "Voxel/MapGen.h"
 #include "Voxel/NoiseGen.h"
 
 namespace pe::voxel
@@ -229,11 +230,37 @@ namespace pe::voxel
         return std::max(std::abs(a.cx - b.cx), std::abs(a.cz - b.cz));
     }
 
-    int VoxelWorld::DesiredLod(ColumnCoord coord) const
+    int VoxelWorld::DesiredLod(ColumnCoord coord, int currentLod) const
     {
         if (m_cfg.lod0Radius <= 0 || !m_streamAnchorValid)
             return 0;
-        return std::min(kMaxVoxelLod, ColumnDistance(coord, m_streamAnchorColumn) / m_cfg.lod0Radius);
+        // Circular (Euclidean) LOD rings, measured in 3D from the real anchor position: a column one
+        // ring out diagonally is as coarse as one straight ahead, and a high camera (top-down view)
+        // pushes every column coarser — block detail is invisible from up there anyway. Only height
+        // ABOVE the terrain counts, so underground anchors keep their full-detail core.
+        const float dx = ((float)coord.cx + 0.5f) * (float)kSectionDim - m_anchor.x;
+        const float dz = ((float)coord.cz + 0.5f) * (float)kSectionDim - m_anchor.z;
+        const float dy = std::max(0.0f, m_anchor.y - (float)m_cfg.groundY);
+        const float d = std::sqrt(dx * dx + dz * dz + dy * dy) / (float)kSectionDim;
+        // Each coarser band is twice as wide as the previous one: lod 0 in [0, r), lod 1 in [r, 3r),
+        // lod 2 beyond. Equal-width bands read too aggressive — 4-block cells at only 2r were
+        // visibly blobby.
+        auto bandAt = [&](float dist)
+        {
+            const int di = (int)dist;
+            if (di < m_cfg.lod0Radius)
+                return 0;
+            return std::min(kMaxVoxelLod, 1 + (di - m_cfg.lod0Radius) / (2 * m_cfg.lod0Radius));
+        };
+        const int desired = bandAt(d);
+        if (currentLod < 0 || desired == currentLod)
+            return desired;
+        // Hysteresis for live meshes: re-band only once the anchor is clearly past the boundary.
+        // 3/4 section > the half-section re-sweep step, so hovering on a band edge can't flip-flop.
+        constexpr float kHysteresis = 0.75f;
+        if (bandAt(desired > currentLod ? d - kHysteresis : d + kHysteresis) == currentLod)
+            return currentLod;
+        return desired;
     }
 
     // Radius actually requested around the (possibly pinned) anchor: streaming worlds use loadRadius,
@@ -265,12 +292,19 @@ namespace pe::voxel
         if (m_cfg.lod0Radius == lod0Radius)
             return;
         m_cfg.lod0Radius = lod0Radius;
+        SweepLodTransitions();
+    }
+
+    // Remesh Ready columns whose LOD band changed (anchor moved, band radius retuned).
+    void VoxelWorld::SweepLodTransitions()
+    {
+        m_lodSweepAnchor = m_anchor;
         for (auto &entry : m_columns)
         {
             ColumnState &state = entry.second;
             if (state.state != ColumnLoadState::Ready || !state.column)
                 continue;
-            const int lod = DesiredLod(state.coord);
+            const int lod = DesiredLod(state.coord, state.lod);
             if (lod != state.lod)
                 RemeshColumnAtLod(state, lod);
         }
@@ -279,6 +313,19 @@ namespace pe::voxel
     void VoxelWorld::RemeshColumnAtLod(ColumnState &state, int lod)
     {
         state.lod = lod;
+        // The band dropped below the data's generation lod — regenerate finer data first; the old
+        // (coarser) meshes stay live and ProcessGenerationResults swaps + remeshes on completion.
+        // An in-flight regen at the needed detail (or finer) is left alone; the swap re-checks the band.
+        if (lod < state.genLod)
+        {
+            if (!state.regenPending || lod < state.regenLod)
+            {
+                state.regenPending = true;
+                state.regenLod = static_cast<uint8_t>(lod);
+                state.generationFuture = EnqueueGenerationJob(state.coord, lod);
+            }
+            return;
+        }
         std::vector<int> allSections(kSectionCount);
         for (int si = 0; si < kSectionCount; ++si)
             allSections[si] = si;
@@ -351,10 +398,40 @@ namespace pe::voxel
 #endif
         m_anchor = vec3(0.0f);
 
-        // Engine ships a default noise generator; a game keeps its own by calling
-        // SetTerrainGenerator before Create (m_generatorOverridden guards it from this default).
+        // Engine ships default generators; a game keeps its own by calling SetTerrainGenerator
+        // before Create (m_generatorOverridden guards it from these defaults). A configured
+        // heightmap selects MapGen; a failed map load falls back to noise (MapGen warns).
         if (!m_generatorOverridden)
-            m_generator = std::make_shared<NoiseGen>(m_cfg.groundY);
+        {
+            m_generator.reset();
+            if (!m_cfg.heightmapPath.empty())
+            {
+                auto mapGen = std::make_shared<MapGen>(m_cfg);
+                if (mapGen->Valid())
+                {
+                    // A bounded non-streaming world without an explicit radius covers exactly the map.
+                    if (!m_cfg.streaming && m_cfg.worldRadius == 0)
+                    {
+                        m_cfg.worldRadius = mapGen->WorldRadiusColumns();
+#if defined(PE_DEBUG)
+                        m_cfg.worldRadius = std::min(m_cfg.worldRadius, kDebugMaxLoadRadius);
+#endif
+                    }
+                    m_generator = std::move(mapGen);
+                }
+            }
+            if (!m_generator)
+            {
+                NoiseParams p{};
+                p.groundY = m_cfg.groundY;
+                p.amplitude = m_cfg.noiseAmplitude;
+                p.featureScale = m_cfg.noiseFeatureScale;
+                p.seed = m_cfg.noiseSeed;
+                p.caves = m_cfg.caves;
+                p.seaLevel = m_cfg.seaLevel;
+                m_generator = std::make_shared<NoiseGen>(p);
+            }
+        }
 
         RegisterDefaultBlocks();
         CreateHostMesh();
@@ -469,7 +546,16 @@ namespace pe::voxel
         const ColumnCoord anchorCol = m_cfg.streaming ? AnchorToColumn(worldPos)
                                                       : ColumnCoord{m_cfg.boundsCenterCx, m_cfg.boundsCenterCz};
         if (m_streamAnchorValid && anchorCol.cx == m_streamAnchorColumn.cx && anchorCol.cz == m_streamAnchorColumn.cz)
+        {
+            // Same stream column, but the LOD rings are Euclidean and height-aware, so they can shift
+            // without a column change (vertical flight, non-streaming worlds) — re-sweep the bands
+            // once the anchor drifts half a section from where the last sweep ran.
+            const vec3 moved = m_anchor - m_lodSweepAnchor;
+            constexpr float kResweepDistSq = (kSectionDim * 0.5f) * (kSectionDim * 0.5f);
+            if (m_cfg.lod0Radius > 0 && moved.x * moved.x + moved.y * moved.y + moved.z * moved.z >= kResweepDistSq)
+                SweepLodTransitions();
             return;
+        }
 
         m_streamAnchorColumn = anchorCol;
         m_streamAnchorValid = true;
@@ -505,6 +591,21 @@ namespace pe::voxel
         }
         if (state.state == ColumnLoadState::Unloading || !state.column)
             return;
+
+        // Edits into coarse-generated data would be discarded by the fine regeneration (and must
+        // never persist a coarse baseline) — queue them and force full-detail data instead. Rare:
+        // edits normally happen near the player, inside the full-detail band.
+        if (state.genLod > 0 || state.regenPending)
+        {
+            m_pendingEdits[key].push_back({x, y, z, id});
+            if (!state.regenPending || state.regenLod > 0)
+            {
+                state.regenPending = true;
+                state.regenLod = 0;
+                state.generationFuture = EnqueueGenerationJob(coord, 0);
+            }
+            return;
+        }
 
         if (state.column->GetLocal(LocalX(x), y, LocalZ(z)) == id)
             return; // no change
@@ -693,17 +794,7 @@ namespace pe::voxel
         // LOD transitions: Ready columns whose distance band changed remesh at the new lod through
         // the budgeted remesh path (columns still meshing re-check when they become Ready).
         if (m_cfg.lod0Radius > 0)
-        {
-            for (auto &entry : m_columns)
-            {
-                ColumnState &state = entry.second;
-                if (state.state != ColumnLoadState::Ready || !state.column)
-                    continue;
-                const int lod = DesiredLod(state.coord);
-                if (lod != state.lod)
-                    RemeshColumnAtLod(state, lod);
-            }
-        }
+            SweepLodTransitions();
     }
 
     void VoxelWorld::SetTerrainGenerator(std::shared_ptr<ITerrainGenerator> generator)
@@ -717,23 +808,31 @@ namespace pe::voxel
         ColumnState state{};
         state.coord = coord;
         state.state = ColumnLoadState::Generating;
+        // Coarse bands generate coarse data (cell-resolution heights, no caves) — the bulk of the
+        // load-time win for big radii; the column regenerates finer if its band later drops.
+        state.genLod = static_cast<uint8_t>(DesiredLod(coord));
+        state.generationFuture = EnqueueGenerationJob(coord, state.genLod);
+        m_columns.emplace(ColumnKey(coord), std::move(state));
+    }
+
+    std::shared_future<ChunkColumn> VoxelWorld::EnqueueGenerationJob(ColumnCoord coord, int genLod)
+    {
         // Capture the generator by shared_ptr (not a raw VoxelWorld pointer): Destroy() drops the
         // generationFuture without waiting, so an in-flight job may outlive Destroy — the shared_ptr
         // keeps the generator alive until that last job returns. Generators must be thread-safe
         // (NoiseGen is stateless); workers run Generate() concurrently on distinct columns.
         std::shared_ptr<ITerrainGenerator> gen = m_generator;
         const std::filesystem::path saveRoot = m_saveRoot;
-        state.generationFuture = ThreadPool::General.Enqueue(
-            [coord, gen, saveRoot]() -> ChunkColumn
+        return ThreadPool::General.Enqueue(
+            [coord, gen, saveRoot, genLod]() -> ChunkColumn
             {
                 ChunkColumn column(coord);
                 if (gen)
-                    gen->Generate(column);
+                    gen->Generate(column, genLod);
                 if (!saveRoot.empty())
                     ColumnChunkStore::TryOverlay(saveRoot, column);
                 return column;
             });
-        m_columns.emplace(ColumnKey(coord), std::move(state));
     }
 
     void VoxelWorld::ProcessGenerationResults()
@@ -742,7 +841,8 @@ namespace pe::voxel
         for (auto &entry : m_columns)
         {
             ColumnState &state = entry.second;
-            if (state.state == ColumnLoadState::Generating && FutureReady(state.generationFuture))
+            if ((state.state == ColumnLoadState::Generating || state.regenPending) &&
+                FutureReady(state.generationFuture))
                 readyColumns.push_back(entry.first);
         }
 
@@ -753,16 +853,36 @@ namespace pe::voxel
                 continue;
 
             ColumnState &state = it->second;
-            if (state.state != ColumnLoadState::Generating || !state.generationFuture.valid())
+            if (!state.generationFuture.valid() || !FutureReady(state.generationFuture))
                 continue;
 
-            state.column = std::make_unique<ChunkColumn>(state.generationFuture.get());
-            state.generationFuture = std::shared_future<ChunkColumn>();
-            if (!m_saveRoot.empty())
-                state.touchedSectionMask |= ColumnChunkStore::PersistedSectionMask(m_saveRoot, state.coord);
-            ApplyPendingEdits(key, *state.column);
-            state.state = ColumnLoadState::Generated;
-            TryStartColumnMeshing(state);
+            if (state.state == ColumnLoadState::Generating)
+            {
+                state.column = std::make_unique<ChunkColumn>(state.generationFuture.get());
+                state.generationFuture = std::shared_future<ChunkColumn>();
+                if (!m_saveRoot.empty())
+                    state.touchedSectionMask |= ColumnChunkStore::PersistedSectionMask(m_saveRoot, state.coord);
+                ApplyPendingEdits(key, *state.column);
+                state.state = ColumnLoadState::Generated;
+                TryStartColumnMeshing(state);
+            }
+            else if (state.regenPending)
+            {
+                // Finer-data regeneration finished: swap the column and remesh through the budgeted
+                // path (the old, coarser meshes stayed live until now — no visual hole).
+                state.column = std::make_unique<ChunkColumn>(state.generationFuture.get());
+                state.generationFuture = std::shared_future<ChunkColumn>();
+                state.regenPending = false;
+                state.genLod = state.regenLod;
+                ApplyPendingEdits(key, *state.column);
+                if (state.state == ColumnLoadState::Ready)
+                    RemeshColumnAtLod(state, DesiredLod(state.coord, state.lod));
+                else if (state.state == ColumnLoadState::Meshing)
+                    for (int si = 0; si < kSectionCount; ++si)
+                        MarkSectionDirty(state.coord, si); // in-flight meshes read the old data; redo when Ready
+                // Full-detail neighbors culled their seam faces against the old coarse blocks.
+                RemeshNeighborSeams(state.coord);
+            }
         }
     }
 
@@ -782,9 +902,18 @@ namespace pe::voxel
     {
         if (state.state != ColumnLoadState::Generated || !state.column)
             return;
+        const int lod = DesiredLod(state.coord);
+        // The anchor moved closer while this column generated coarse data — regenerate finer before
+        // the first meshing (cheap: nothing is meshed yet).
+        if (lod < state.genLod)
+        {
+            state.state = ColumnLoadState::Generating;
+            state.genLod = static_cast<uint8_t>(lod);
+            state.generationFuture = EnqueueGenerationJob(state.coord, lod);
+            return;
+        }
         // Coarse columns never read neighbor blocks (the mesher caps their walls), so they skip both
         // the neighbor-generation wait and the 9-column snapshot copy — distant rings fill faster.
-        const int lod = DesiredLod(state.coord);
         if (lod == 0 && NeighborGenerationInProgress(state.coord))
             return;
         state.lod = lod;
@@ -979,7 +1108,7 @@ namespace pe::voxel
                 state.state = ColumnLoadState::Ready;
                 // The anchor may have crossed a lod band while this column was meshing — the
                 // transition sweep in RequestColumnsForAnchor only sees Ready columns, so re-check here.
-                const int lod = DesiredLod(state.coord);
+                const int lod = DesiredLod(state.coord, state.lod);
                 if (lod != state.lod)
                     RemeshColumnAtLod(state, lod);
                 RemeshNeighborSeams(state.coord);

@@ -261,6 +261,9 @@ namespace pe
             settings.AddMember("shadow_fade_fraction", gSettings.shadow_fade_fraction, allocator);
             settings.AddMember("shadow_filter_radius", gSettings.shadow_filter_radius, allocator);
             settings.AddMember("shadow_debug_mode", gSettings.shadow_debug_mode, allocator);
+            settings.AddMember("fog", gSettings.fog, allocator);
+            settings.AddMember("fog_density", gSettings.fog_density, allocator);
+            settings.AddMember("fog_start", gSettings.fog_start, allocator);
             settings.AddMember("render_scale", gSettings.render_scale, allocator);
             settings.AddMember("ssao", gSettings.ssao, allocator);
             settings.AddMember("ssao_radius", gSettings.ssao_radius, allocator);
@@ -418,6 +421,12 @@ namespace pe
                 gSettings.lod_distances[1] = settings["lod_distances"][1].GetFloat();
                 gSettings.lod_distances[2] = settings["lod_distances"][2].GetFloat();
             }
+            if (settings.HasMember("fog"))
+                gSettings.fog = settings["fog"].GetBool();
+            if (settings.HasMember("fog_density"))
+                gSettings.fog_density = settings["fog_density"].GetFloat();
+            if (settings.HasMember("fog_start"))
+                gSettings.fog_start = settings["fog_start"].GetFloat();
             if (settings.HasMember("shadows"))
                 gSettings.shadows = settings["shadows"].GetBool();
             if (settings.HasMember("shadow_map_size"))
@@ -669,6 +678,36 @@ namespace pe
                 v->lod0Radius = vv["lod0Radius"].GetInt();
             if (vv.HasMember("saveDir") && vv["saveDir"].IsString())
                 v->saveDir = vv["saveDir"].GetString();
+            if (vv.HasMember("noiseAmplitude"))
+                v->noiseAmplitude = vv["noiseAmplitude"].GetFloat();
+            if (vv.HasMember("noiseFeatureScale"))
+                v->noiseFeatureScale = vv["noiseFeatureScale"].GetFloat();
+            if (vv.HasMember("noiseSeed"))
+                v->noiseSeed = vv["noiseSeed"].GetInt();
+            if (vv.HasMember("caves"))
+                v->caves = vv["caves"].GetBool();
+            if (vv.HasMember("seaLevel"))
+                v->seaLevel = vv["seaLevel"].GetInt();
+            if (vv.HasMember("heightmapPath") && vv["heightmapPath"].IsString())
+                v->heightmapPath = vv["heightmapPath"].GetString();
+            if (vv.HasMember("strata1Path") && vv["strata1Path"].IsString())
+                v->strata1Path = vv["strata1Path"].GetString();
+            if (vv.HasMember("strata2Path") && vv["strata2Path"].IsString())
+                v->strata2Path = vv["strata2Path"].GetString();
+            if (vv.HasMember("blocksPerPixel"))
+                v->blocksPerPixel = vv["blocksPerPixel"].GetInt();
+            if (vv.HasMember("surfaceBlock"))
+                v->surfaceBlock = vv["surfaceBlock"].GetInt();
+            if (vv.HasMember("strata1Block"))
+                v->strata1Block = vv["strata1Block"].GetInt();
+            if (vv.HasMember("strata2Block"))
+                v->strata2Block = vv["strata2Block"].GetInt();
+            if (vv.HasMember("fillBlock"))
+                v->fillBlock = vv["fillBlock"].GetInt();
+            if (vv.HasMember("strata1Thickness"))
+                v->strata1Thickness = vv["strata1Thickness"].GetInt();
+            if (vv.HasMember("strata2Thickness"))
+                v->strata2Thickness = vv["strata2Thickness"].GetInt();
         }
 
         void RestoreTriggerZoneNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
@@ -1883,6 +1922,21 @@ namespace pe
                     vObj.AddMember("lodEnabled", v.lodEnabled, allocator);
                     vObj.AddMember("lod0Radius", v.lod0Radius, allocator);
                     vObj.AddMember("saveDir", MakeStringValue(v.saveDir), allocator);
+                    vObj.AddMember("noiseAmplitude", v.noiseAmplitude, allocator);
+                    vObj.AddMember("noiseFeatureScale", v.noiseFeatureScale, allocator);
+                    vObj.AddMember("noiseSeed", v.noiseSeed, allocator);
+                    vObj.AddMember("caves", v.caves, allocator);
+                    vObj.AddMember("seaLevel", v.seaLevel, allocator);
+                    vObj.AddMember("heightmapPath", MakeStringValue(v.heightmapPath), allocator);
+                    vObj.AddMember("strata1Path", MakeStringValue(v.strata1Path), allocator);
+                    vObj.AddMember("strata2Path", MakeStringValue(v.strata2Path), allocator);
+                    vObj.AddMember("blocksPerPixel", v.blocksPerPixel, allocator);
+                    vObj.AddMember("surfaceBlock", v.surfaceBlock, allocator);
+                    vObj.AddMember("strata1Block", v.strata1Block, allocator);
+                    vObj.AddMember("strata2Block", v.strata2Block, allocator);
+                    vObj.AddMember("fillBlock", v.fillBlock, allocator);
+                    vObj.AddMember("strata1Thickness", v.strata1Thickness, allocator);
+                    vObj.AddMember("strata2Thickness", v.strata2Thickness, allocator);
                     nodeObj.AddMember("voxelWorld", vObj.Move(), allocator);
                 }
 

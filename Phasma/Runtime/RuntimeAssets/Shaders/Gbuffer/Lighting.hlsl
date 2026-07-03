@@ -52,7 +52,11 @@ TexSamplerDecl(6, 0, Emission)
     float       cb_skyboxTanHalfFovY;
     float       cb_physicalPointFalloff;
     uint        cb_forwardPlus;
-    float       cb_lightPassPad2;
+    float       cb_fogDensity; // 0 = fog off
+    float       cb_fogStart;
+    float       cb_fogPad0;
+    float       cb_fogPad1;
+    float       cb_fogPad2;
 };
 TexSamplerDecl(8, 0, Transparency)
 TexSamplerDecl(9, 0, LutIBL)

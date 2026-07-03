@@ -42,6 +42,36 @@ namespace pe
                             cfg.streaming = p["streaming"];
                         if (p["save_dir"].valid())
                             cfg.saveDir = p["save_dir"].get<std::string>();
+                        if (p["noise_amplitude"].valid())
+                            cfg.noiseAmplitude = p["noise_amplitude"];
+                        if (p["noise_feature_scale"].valid())
+                            cfg.noiseFeatureScale = p["noise_feature_scale"];
+                        if (p["noise_seed"].valid())
+                            cfg.noiseSeed = p["noise_seed"];
+                        if (p["caves"].valid())
+                            cfg.caves = p["caves"];
+                        if (p["sea_level"].valid())
+                            cfg.seaLevel = p["sea_level"];
+                        if (p["heightmap"].valid())
+                            cfg.heightmapPath = p["heightmap"].get<std::string>();
+                        if (p["strata1_map"].valid())
+                            cfg.strata1Path = p["strata1_map"].get<std::string>();
+                        if (p["strata2_map"].valid())
+                            cfg.strata2Path = p["strata2_map"].get<std::string>();
+                        if (p["blocks_per_pixel"].valid())
+                            cfg.blocksPerPixel = p["blocks_per_pixel"];
+                        if (p["surface_block"].valid())
+                            cfg.surfaceBlock = p["surface_block"];
+                        if (p["strata1_block"].valid())
+                            cfg.strata1Block = p["strata1_block"];
+                        if (p["strata2_block"].valid())
+                            cfg.strata2Block = p["strata2_block"];
+                        if (p["fill_block"].valid())
+                            cfg.fillBlock = p["fill_block"];
+                        if (p["strata1_thickness"].valid())
+                            cfg.strata1Thickness = p["strata1_thickness"];
+                        if (p["strata2_thickness"].valid())
+                            cfg.strata2Thickness = p["strata2_thickness"];
                     }
                     vs->CreateWorld(scene, cfg);
                 });

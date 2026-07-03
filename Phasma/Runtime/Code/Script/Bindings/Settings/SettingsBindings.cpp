@@ -29,6 +29,7 @@ namespace pe
         {"aabbs_depth_aware", &SceneSettings::aabbs_depth_aware},
         {"selection_outline", &SceneSettings::selection_outline},
         {"dynamic_rendering", &SceneSettings::dynamic_rendering},
+        {"fog", &SceneSettings::fog},
     };
 
     static const std::unordered_map<std::string_view, float SceneSettings::*> s_floatSettings = {
@@ -72,6 +73,8 @@ namespace pe
         {"shadow_normal_bias", &SceneSettings::shadow_normal_bias},
         {"shadow_fade_fraction", &SceneSettings::shadow_fade_fraction},
         {"shadow_filter_radius", &SceneSettings::shadow_filter_radius},
+        {"fog_density", &SceneSettings::fog_density},
+        {"fog_start", &SceneSettings::fog_start},
     };
 
     static const std::unordered_map<std::string_view, int SceneSettings::*> s_intSettings = {

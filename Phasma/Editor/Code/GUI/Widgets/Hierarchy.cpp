@@ -881,6 +881,8 @@ namespace pe
                     icon = ICON_FA_BELL;
                 else if (nodeCompFlags & Component_SceneSettings)
                     icon = ICON_FA_GEAR;
+                else if (nodeCompFlags & Component_VoxelWorld)
+                    icon = ICON_FA_BORDER_ALL;
                 else if (nodeCompFlags & Component_RuntimeUi)
                     icon = ICON_FA_WINDOW_MAXIMIZE;
                 else if (spriteHierarchyNode)

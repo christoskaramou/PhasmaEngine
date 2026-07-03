@@ -18,7 +18,11 @@ namespace pe
         float skyboxTanHalfFovY = 1.0f;
         float physical_point_falloff = 0.0f;
         uint32_t forward_plus = 1;
-        float pad2 = 0.0f;
+        float fog_density = 0.0f; // 0 = fog off (enable bool resolved CPU-side)
+        float fog_start = 0.0f;
+        float fog_pad0 = 0.0f;
+        float fog_pad1 = 0.0f;
+        float fog_pad2 = 0.0f;
     };
 
     class Image;

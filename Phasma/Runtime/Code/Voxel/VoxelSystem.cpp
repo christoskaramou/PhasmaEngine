@@ -12,20 +12,48 @@ namespace pe::voxel
             return (h ^ v) * 1099511628211ull; // FNV-1a step
         }
 
+        uint64_t HashInt(uint64_t h, int v)
+        {
+            return HashCombine(h, static_cast<uint64_t>(static_cast<int64_t>(v)));
+        }
+
+        uint64_t HashString(uint64_t h, const std::string &s)
+        {
+            h = HashCombine(h, s.size());
+            for (char c : s)
+                h = HashCombine(h, static_cast<uint64_t>(static_cast<uint8_t>(c)));
+            return h;
+        }
+
         // Structural config: any change here recreates the world (lod0Radius retunes live instead).
         uint64_t HashStructuralConfig(const VoxelConfig &cfg)
         {
             uint64_t h = 1469598103934665603ull;
-            h = HashCombine(h, static_cast<uint64_t>(static_cast<int64_t>(cfg.loadRadius)));
-            h = HashCombine(h, static_cast<uint64_t>(static_cast<int64_t>(cfg.unloadMargin)));
-            h = HashCombine(h, static_cast<uint64_t>(static_cast<int64_t>(cfg.uploadBudgetPerFrame)));
-            h = HashCombine(h, static_cast<uint64_t>(static_cast<int64_t>(cfg.groundY)));
-            h = HashCombine(h, static_cast<uint64_t>(static_cast<int64_t>(cfg.worldRadius)));
-            h = HashCombine(h, static_cast<uint64_t>(static_cast<int64_t>(cfg.boundsCenterCx)));
-            h = HashCombine(h, static_cast<uint64_t>(static_cast<int64_t>(cfg.boundsCenterCz)));
+            h = HashInt(h, cfg.loadRadius);
+            h = HashInt(h, cfg.unloadMargin);
+            h = HashInt(h, cfg.uploadBudgetPerFrame);
+            h = HashInt(h, cfg.groundY);
+            h = HashInt(h, cfg.worldRadius);
+            h = HashInt(h, cfg.boundsCenterCx);
+            h = HashInt(h, cfg.boundsCenterCz);
             h = HashCombine(h, cfg.streaming ? 1u : 0u);
-            for (char c : cfg.saveDir)
-                h = HashCombine(h, static_cast<uint64_t>(static_cast<uint8_t>(c)));
+            h = HashString(h, cfg.saveDir);
+            // Worldgen. Floats are hashed quantized — inspector drags step well past 1/16 block.
+            h = HashInt(h, static_cast<int>(cfg.noiseAmplitude * 16.0f));
+            h = HashInt(h, static_cast<int>(cfg.noiseFeatureScale * 16.0f));
+            h = HashInt(h, cfg.noiseSeed);
+            h = HashCombine(h, cfg.caves ? 1u : 0u);
+            h = HashInt(h, cfg.seaLevel);
+            h = HashString(h, cfg.heightmapPath);
+            h = HashString(h, cfg.strata1Path);
+            h = HashString(h, cfg.strata2Path);
+            h = HashInt(h, cfg.blocksPerPixel);
+            h = HashInt(h, cfg.surfaceBlock);
+            h = HashInt(h, cfg.strata1Block);
+            h = HashInt(h, cfg.strata2Block);
+            h = HashInt(h, cfg.fillBlock);
+            h = HashInt(h, cfg.strata1Thickness);
+            h = HashInt(h, cfg.strata2Thickness);
             return h;
         }
     } // namespace
@@ -119,6 +147,21 @@ namespace pe::voxel
         cfg.worldRadius = tag->worldRadius;
         cfg.streaming = tag->streaming;
         cfg.saveDir = tag->saveDir;
+        cfg.noiseAmplitude = tag->noiseAmplitude;
+        cfg.noiseFeatureScale = tag->noiseFeatureScale;
+        cfg.noiseSeed = tag->noiseSeed;
+        cfg.caves = tag->caves;
+        cfg.seaLevel = tag->seaLevel;
+        cfg.heightmapPath = tag->heightmapPath;
+        cfg.strata1Path = tag->strata1Path;
+        cfg.strata2Path = tag->strata2Path;
+        cfg.blocksPerPixel = tag->blocksPerPixel;
+        cfg.surfaceBlock = tag->surfaceBlock;
+        cfg.strata1Block = tag->strata1Block;
+        cfg.strata2Block = tag->strata2Block;
+        cfg.fillBlock = tag->fillBlock;
+        cfg.strata1Thickness = tag->strata1Thickness;
+        cfg.strata2Thickness = tag->strata2Thickness;
         // The node's world position is the volume center. Only bounded / non-streaming worlds depend
         // on it, so dragging the node around an infinite streaming world doesn't churn recreates.
         if (tag->worldRadius > 0 || !tag->streaming)
@@ -131,6 +174,14 @@ namespace pe::voxel
         }
         const int lod0Radius = tag->lodEnabled ? std::max(1, tag->lod0Radius) : 0;
         const uint64_t hash = HashStructuralConfig(cfg);
+
+        // Inspector "Rebuild World": same config, force a recreate — the only way to pick up a
+        // repainted map file behind an unchanged path.
+        if (tag->rebuildRequested)
+        {
+            tag->rebuildRequested = false;
+            m_appliedHash = 0;
+        }
 
         // Debounce recreates: inspector drags change values every frame, and each structural change
         // is a full world rebuild. Wait for the config to sit still before applying it.

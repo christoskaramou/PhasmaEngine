@@ -398,6 +398,8 @@ namespace pe
         m_ubo.skyboxTanHalfFovY = tan(camera->Fovy() * 0.5f);
         m_ubo.physical_point_falloff = gSettings.physical_point_falloff ? 1.0f : 0.0f;
         m_ubo.forward_plus = forwardPlusEnabled ? 1u : 0u;
+        m_ubo.fog_density = gSettings.fog ? gSettings.fog_density : 0.0f;
+        m_ubo.fog_start = gSettings.fog_start;
 
         BufferRange range{};
         range.data = &m_ubo;
@@ -653,6 +655,8 @@ namespace pe
         m_ubo.skyboxTanHalfFovY = tan(camera->Fovy() * 0.5f);
         m_ubo.physical_point_falloff = gSettings.physical_point_falloff ? 1.0f : 0.0f;
         m_ubo.forward_plus = forwardPlusEnabled ? 1u : 0u;
+        m_ubo.fog_density = gSettings.fog ? gSettings.fog_density : 0.0f;
+        m_ubo.fog_start = gSettings.fog_start;
 
         BufferRange range{};
         range.data = &m_ubo;

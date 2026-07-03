@@ -90,13 +90,16 @@ namespace pe::voxel
                 int u = (d + 1) % 3, v = (d + 2) % 3;
 
                 // Air-side occupancy at axis-d layer `dd`, in-plane (u,v) = (uu,vv). Used for AO.
+                // Coordinates are blocks at lod 0 and cells at lod > 0 (cell-resolution AO).
                 auto occ = [&](int dd, int uu, int vv) -> bool
                 {
                     int c[3];
                     c[d] = dd;
                     c[u] = uu;
                     c[v] = vv;
-                    return reg.IsOpaque(sample(sampleCtx, c[0], c[1], c[2]));
+                    if (lod == 0)
+                        return reg.IsOpaque(sample(sampleCtx, c[0], c[1], c[2]));
+                    return cellOpaque(c[0], c[1], c[2]);
                 };
 
                 for (int dir = 1; dir >= -1; dir -= 2)
@@ -194,10 +197,12 @@ namespace pe::voxel
                                 if (!vis)
                                     continue;
 
-                                if (transparentPass || lod > 0)
+                                if (transparentPass || lod > 1)
                                 {
-                                    // Water is unshaded, and coarse lods skip AO (invisible at their
-                                    // draw distance) — full-bright corners also merge into bigger quads.
+                                    // Water is unshaded; lod 2 skips AO (invisible at its draw distance,
+                                    // and full-bright corners merge into bigger quads). lod 1 keeps
+                                    // cell-resolution AO — its band starts close enough that flat-bright
+                                    // terrain visibly pops against the lod-0 core.
                                     cell.ao[0] = cell.ao[1] = cell.ao[2] = cell.ao[3] = 3;
                                     continue;
                                 }
