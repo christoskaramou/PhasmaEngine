@@ -41,7 +41,9 @@
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/RegisterTypes.h>
@@ -504,6 +506,23 @@ namespace pe
         m_joltSystem->GetBodyInterface().SetLinearVelocity(bodyId, JPH::Vec3(vel.x, vel.y, vel.z));
     }
 
+    void PhysicsSystem::SetBodyMaterial(NodeId *node, float friction, float restitution)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end() || it->second >= m_bodies.size())
+            return;
+        PhysicsNodeState &st = m_bodies[it->second];
+        st.desc.friction = friction; // keep the desc in sync so the next cook preserves it
+        st.desc.restitution = restitution;
+        if (st.inWorld && m_joltSystem)
+        {
+            JPH::BodyID bodyId(st.joltBodyIdRaw);
+            JPH::BodyInterface &bi = m_joltSystem->GetBodyInterface();
+            bi.SetFriction(bodyId, friction);
+            bi.SetRestitution(bodyId, restitution);
+        }
+    }
+
     vec3 PhysicsSystem::GetLinearVelocity(NodeId *node) const
     {
         auto it = m_nodeToIndex.find(node);
@@ -874,6 +893,67 @@ namespace pe
                 }
                 break;
             }
+            case PhysicsShapeType::Mesh:
+            {
+                // Static triangle collider from the node's LOD0 geometry (voxel terrain). ONE MeshShape
+                // per tile (meshRef), combined into a StaticCompoundShape — not one giant mesh. Each tile
+                // cooks its own ~10k-tri AABB tree (fast, and a degenerate tile can't fail the whole
+                // terrain), and a future live-sculpt can re-cook only the touched tile. Static/kinematic
+                // only — Jolt mesh shapes can't back a dynamic body. Verts are already world-space (the
+                // host bakes world positions), so worldScale is 1 in practice, and each tile's LOD0
+                // indices are mesh-local (0-based) so no cross-tile base offset is needed.
+                const auto &refs = scene.GetNodeCache(state.nodeId).meshRefs->meshRefs;
+                const auto &vertexStore = scene.GetVertexStore();
+                const auto &indexStore = scene.GetIndexStore();
+                JPH::Array<JPH::Ref<JPH::Shape>> tileShapes;
+                for (int meshRef : refs)
+                {
+                    if (meshRef < 0)
+                        continue;
+                    const Mesh &mesh = scene.GetMesh(meshRef);
+                    JPH::VertexList verts;
+                    JPH::IndexedTriangleList tris;
+                    verts.reserve(mesh.vertexCount);
+                    for (uint32_t i = 0; i < mesh.vertexCount && (mesh.vertexOffset + i) < vertexStore.size(); ++i)
+                    {
+                        const auto &v = vertexStore[mesh.vertexOffset + i];
+                        verts.push_back(JPH::Float3(v.position[0] * worldScale.x, v.position[1] * worldScale.y,
+                                                    v.position[2] * worldScale.z));
+                    }
+                    const uint32_t io = mesh.indexOffset, ic = mesh.indexCount; // LOD0 index range
+                    tris.reserve(ic / 3);
+                    for (uint32_t t = 0; t + 2 < ic && (io + t + 2) < indexStore.size(); t += 3)
+                        tris.push_back(JPH::IndexedTriangle(indexStore[io + t], indexStore[io + t + 1],
+                                                            indexStore[io + t + 2], 0));
+                    if (tris.empty())
+                        continue;
+                    JPH::MeshShapeSettings settings(verts, tris);
+                    settings.Sanitize(); // drop degenerate/duplicate tris Jolt would assert on
+                    auto result = settings.Create();
+                    if (result.IsValid())
+                        tileShapes.push_back(result.Get());
+                    else
+                        PE_WARN("[Physics] Terrain tile cook failed: %s", result.GetError().c_str());
+                }
+                if (tileShapes.size() == 1)
+                {
+                    shape = tileShapes[0]; // single tile: skip the compound wrapper (Jolt needs >=2)
+                }
+                else if (tileShapes.size() > 1)
+                {
+                    JPH::StaticCompoundShapeSettings compound;
+                    for (auto &s : tileShapes)
+                        compound.AddShape(JPH::Vec3::sZero(), JPH::Quat::sIdentity(), s.GetPtr());
+                    auto result = compound.Create();
+                    if (result.IsValid())
+                        shape = result.Get();
+                    else
+                        PE_WARN("[Physics] Terrain compound cook failed: %s", result.GetError().c_str());
+                }
+                if (!shape) // empty/failed: tiny box keeps the body valid but harmless
+                    shape = new JPH::BoxShape(JPH::Vec3(minHE, minHE, minHE));
+                break;
+            }
             }
 
             // Store for reuse on next play toggle
@@ -919,6 +999,13 @@ namespace pe
         {
             bodySettings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
             bodySettings.mMassPropertiesOverride.mMass = std::max(desc.mass, 0.001f);
+            // Continuous collision (swept cast) so fast/small bodies don't tunnel through thin static
+            // geometry — voxel isosurface terrain is a single-sided shell, and at 1/30 s a falling body
+            // moves further than its radius per step. Jolt only pays the extra cast when a body actually
+            // moves >~half its inner radius in a step, so resting/slow objects cost nothing.
+            // ponytail: global default for all dynamics; expose a per-body Discrete opt-out only if a
+            // profile ever shows CCD is the bottleneck.
+            bodySettings.mMotionQuality = JPH::EMotionQuality::LinearCast;
         }
 
         bodySettings.mFriction = desc.friction;

@@ -698,6 +698,24 @@ namespace pe
                 v->featuresPath = vv["featuresPath"].GetString();
             if (vv.HasMember("blocksPerPixel"))
                 v->blocksPerPixel = vv["blocksPerPixel"].GetInt();
+            if (vv.HasMember("heightMin"))
+                v->heightMin = vv["heightMin"].GetFloat();
+            if (vv.HasMember("heightMax"))
+                v->heightMax = vv["heightMax"].GetFloat();
+            if (vv.HasMember("groundHeight"))
+                v->groundHeight = vv["groundHeight"].GetFloat();
+            if (vv.HasMember("seaLevelM"))
+                v->seaLevelM = vv["seaLevelM"].GetFloat();
+            if (vv.HasMember("smooth"))
+                v->smooth = vv["smooth"].GetBool();
+            if (vv.HasMember("physics"))
+                v->physics = vv["physics"].GetBool();
+            if (vv.HasMember("physicsFriction"))
+                v->physicsFriction = vv["physicsFriction"].GetFloat();
+            if (vv.HasMember("physicsRestitution"))
+                v->physicsRestitution = vv["physicsRestitution"].GetFloat();
+            if (vv.HasMember("autoRebuild"))
+                v->autoRebuild = vv["autoRebuild"].GetBool();
             if (vv.HasMember("surfaceBlock"))
                 v->surfaceBlock = vv["surfaceBlock"].GetInt();
             if (vv.HasMember("surfaceBands"))
@@ -1936,6 +1954,15 @@ namespace pe
                     vObj.AddMember("strata2Path", MakeStringValue(v.strata2Path), allocator);
                     vObj.AddMember("featuresPath", MakeStringValue(v.featuresPath), allocator);
                     vObj.AddMember("blocksPerPixel", v.blocksPerPixel, allocator);
+                    vObj.AddMember("heightMin", v.heightMin, allocator);
+                    vObj.AddMember("heightMax", v.heightMax, allocator);
+                    vObj.AddMember("groundHeight", v.groundHeight, allocator);
+                    vObj.AddMember("seaLevelM", v.seaLevelM, allocator);
+                    vObj.AddMember("smooth", v.smooth, allocator);
+                    vObj.AddMember("physics", v.physics, allocator);
+                    vObj.AddMember("physicsFriction", v.physicsFriction, allocator);
+                    vObj.AddMember("physicsRestitution", v.physicsRestitution, allocator);
+                    vObj.AddMember("autoRebuild", v.autoRebuild, allocator);
                     vObj.AddMember("surfaceBlock", v.surfaceBlock, allocator);
                     vObj.AddMember("surfaceBands", v.surfaceBands, allocator);
                     vObj.AddMember("strata1Block", v.strata1Block, allocator);

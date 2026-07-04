@@ -40,6 +40,10 @@ namespace pe
                             cfg.worldRadius = p["world_radius"];
                         if (p["streaming"].valid())
                             cfg.streaming = p["streaming"];
+                        if (p["smooth"].valid())
+                            cfg.smooth = p["smooth"];
+                        if (p["physics"].valid())
+                            cfg.physics = p["physics"];
                         if (p["save_dir"].valid())
                             cfg.saveDir = p["save_dir"].get<std::string>();
                         if (p["noise_amplitude"].valid())
@@ -112,6 +116,44 @@ namespace pe
                         vs->World()->SetBlock(x, y, z, static_cast<pe::voxel::BlockId>(id));
                 });
 
+                // Smooth (isosurface) worlds only: sphere-brush sculpt at (x,y,z). dig defaults true
+                // (subtract material); pass false to add. No-op on cube worlds.
+                voxel.set_function("sculpt", [](float x, float y, float z, float radius, sol::optional<bool> dig) {
+                    auto *vs = CreateGlobalSystem<pe::voxel::VoxelSystem>();
+                    if (vs && vs->World())
+                        vs->World()->SculptSmooth(vec3(x, y, z), radius, dig.value_or(true));
+                });
+
+                // Smooth-world density sample: > 0 inside terrain, < 0 air. For controller ground/wall checks.
+                voxel.set_function("sample_density", [](float x, float y, float z) -> float {
+                    auto *vs = CreateGlobalSystem<pe::voxel::VoxelSystem>();
+                    return (vs && vs->World()) ? vs->World()->SampleDensity(vec3(x, y, z)) : -1.0f;
+                });
+
+                // Ray-march the smooth terrain. Returns {hit, point={x,y,z}, normal={x,y,z}}; aim a ray
+                // down for ground height, or along the view for a dig target (feed point into voxel.sculpt).
+                voxel.set_function("raycast_smooth", [](float ox, float oy, float oz, float dx, float dy, float dz,
+                                                        float maxDist, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
+                    sol::table out = lua.create_table();
+                    out["hit"] = false;
+                    auto *vs = CreateGlobalSystem<pe::voxel::VoxelSystem>();
+                    if (!vs || !vs->World())
+                        return out;
+                    vec3 pt(0.0f), n(0.0f);
+                    if (!vs->World()->RaycastSmooth(vec3(ox, oy, oz), vec3(dx, dy, dz), maxDist, pt, n))
+                        return out;
+                    auto fvec = [&](const vec3 &v) {
+                        sol::table t = lua.create_table();
+                        t["x"] = v.x; t["y"] = v.y; t["z"] = v.z;
+                        return t;
+                    };
+                    out["hit"] = true;
+                    out["point"] = fvec(pt);
+                    out["normal"] = fvec(n);
+                    return out;
+                });
+
                 // Ray-pick a block. Returns {hit, cell={x,y,z}, adjacent={x,y,z}, normal={x,y,z}}.
                 // adjacent is the empty cell on the near side of the hit face (the place target).
                 voxel.set_function("raycast", [](float ox, float oy, float oz, float dx, float dy, float dz,
@@ -142,8 +184,9 @@ namespace pe
                     return out;
                 });
 
-                // Swept-AABB move with per-axis slide against solid blocks. pos/half are the AABB
-                // center + half-extents; returns the resolved center {x,y,z} after sliding.
+                // Swept-AABB move with per-axis slide against solid terrain (blocks on cube worlds, the
+                // smooth isosurface on smooth worlds). pos/half are the AABB center + half-extents;
+                // returns the resolved center {x,y,z} after sliding.
                 voxel.set_function("move_aabb", [](float px, float py, float pz, float hx, float hy, float hz,
                                                    float dx, float dy, float dz, sol::this_state ts) -> sol::table {
                     sol::state_view lua(ts);
@@ -153,9 +196,7 @@ namespace pe
                     {
                         auto *world = vs->World();
                         pos = pe::voxel::MoveAabb(pos, vec3(hx, hy, hz), vec3(dx, dy, dz),
-                                                  [world](int x, int y, int z) {
-                                                      return world->Registry().IsSolid(world->GetBlock(x, y, z));
-                                                  });
+                                                  [world](int x, int y, int z) { return world->IsSolidCell(x, y, z); });
                     }
                     else
                     {

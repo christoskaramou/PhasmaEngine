@@ -8,9 +8,15 @@
 #include "API/RHI.h"
 #include "Scene/Material.h"
 #include "Scene/Scene.h"
+#ifdef PE_PHYSICS
+#include "ECS/Context.h"           // GetGlobalSystem
+#include "Systems/PhysicsSystem.h" // static triangle-mesh terrain collider
+#endif
 #include "Scene/SceneNode.h"
 #include "Voxel/MapGen.h"
 #include "Voxel/NoiseGen.h"
+#include "Voxel/SurfaceNets.h"
+#include <meshoptimizer.h> // meshopt_simplify: standard discrete LODs on the smooth float mesh
 
 namespace pe::voxel
 {
@@ -301,7 +307,15 @@ namespace pe::voxel
 
     bool VoxelWorld::IsArenaAlive() const
     {
-        return m_scene && m_arena.IsInitialized() && m_scene->GetArenaVertexCapacity() > 0;
+        if (!m_scene)
+            return false;
+        // Smooth worlds have no arena; their liveness is the host mesh still living in the scene
+        // buffer — a scene-buffer rebuild (scene load, play-stop restore) wipes it, the same failure
+        // the arena-capacity probe catches for cube worlds, so reconcile recreates either the same way.
+        if (m_cfg.smooth)
+            return m_hostNode != nullptr && m_scene->IsNodeAlive(m_hostNode) && !m_smoothMeshIndices.empty() &&
+                   m_scene->IsValidMeshIndex(m_smoothMeshIndices.front());
+        return m_arena.IsInitialized() && m_scene->GetArenaVertexCapacity() > 0;
     }
 
     void VoxelWorld::SetLod0Radius(int lod0Radius)
@@ -311,6 +325,58 @@ namespace pe::voxel
             return;
         m_cfg.lod0Radius = lod0Radius;
         SweepLodTransitions();
+    }
+
+    void VoxelWorld::SetPhysicsEnabled(bool enabled)
+    {
+        m_cfg.physics = enabled;
+        UpdateTerrainCollider();
+    }
+
+    void VoxelWorld::SetTerrainMaterial(float friction, float restitution)
+    {
+        m_cfg.physicsFriction = friction;
+        m_cfg.physicsRestitution = restitution;
+#ifdef PE_PHYSICS
+        // Push straight to the live body — friction/restitution don't affect the cooked mesh shape, so
+        // no re-cook. Edit-mode has no live body; the values bake into the desc on the next cook instead.
+        if (m_terrainColliderActive && m_hostNode)
+            if (auto *physics = GetGlobalSystem<PhysicsSystem>())
+                physics->SetBodyMaterial(m_hostNode, friction, restitution);
+#endif
+    }
+
+    void VoxelWorld::UpdateTerrainCollider()
+    {
+#ifdef PE_PHYSICS
+        auto *physics = GetGlobalSystem<PhysicsSystem>();
+        if (!physics || !m_scene)
+            return;
+        const bool want = m_cfg.physics && m_cfg.smooth && m_hostNode && m_scene->IsNodeAlive(m_hostNode) &&
+                          !m_smoothMeshIndices.empty();
+        // Drop the old body first: the tiles are replaced on every rebuild/sculpt, so a cached mesh
+        // shape would be stale. RemoveBody releases the cached shape; AddBody re-cooks from the live
+        // tiles (registers now, actually built by CreateJoltBody on the next StartSimulation, or
+        // immediately when already simulating).
+        // ponytail: re-cooks the whole Jolt mesh tree on every sculpt when physics is on — fine for
+        // build-once terrain; add an incremental/heightfield path if live-sculpt physics ever hitches.
+        if (m_terrainColliderActive)
+        {
+            physics->RemoveBody(m_hostNode);
+            m_terrainColliderActive = false;
+        }
+        if (want)
+        {
+            PhysicsBodyDesc desc;
+            desc.bodyType = PhysicsBodyType::Static;
+            desc.shapeType = PhysicsShapeType::Mesh;
+            desc.autoFitShape = false; // the Mesh shape reads the tiles directly; no box auto-fit
+            desc.friction = m_cfg.physicsFriction;
+            desc.restitution = m_cfg.physicsRestitution;
+            physics->AddBody(*m_scene, m_hostNode, desc);
+            m_terrainColliderActive = true;
+        }
+#endif
     }
 
     // Remesh Ready columns whose LOD band changed (anchor moved, band radius retuned).
@@ -443,6 +509,9 @@ namespace pe::voxel
                 NoiseParams p{};
                 p.groundY = m_cfg.groundY;
                 p.amplitude = m_cfg.noiseAmplitude;
+                p.groundHeight = m_cfg.groundHeight;
+                p.heightMin = m_cfg.heightMin;
+                p.heightMax = m_cfg.heightMax;
                 p.featureScale = m_cfg.noiseFeatureScale;
                 p.seed = m_cfg.noiseSeed;
                 p.caves = m_cfg.caves;
@@ -452,6 +521,15 @@ namespace pe::voxel
         }
 
         RegisterDefaultBlocks();
+
+        // Smooth worlds skip the entire cube pipeline (host mesh, atlas, streamed arena) and build one
+        // static isosurface mesh through the standard render path. Bounded/static for now.
+        if (m_cfg.smooth)
+        {
+            BuildSmoothWorld();
+            return;
+        }
+
         CreateHostMesh();
 
         m_scene->FlushPendingGpuWork();
@@ -557,7 +635,19 @@ namespace pe::voxel
 
         if (m_scene && m_hostMeshIndex >= 0 && m_scene->IsValidMeshIndex(m_hostMeshIndex))
             m_scene->GetMesh(m_hostMeshIndex).material = nullptr;
+        for (int idx : m_smoothMeshIndices)
+            if (m_scene && idx >= 0 && m_scene->IsValidMeshIndex(idx))
+                m_scene->GetMesh(idx).material = nullptr;
+        m_smoothMeshIndices.clear();
 
+#ifdef PE_PHYSICS
+        if (m_terrainColliderActive && m_scene && m_hostNode)
+        {
+            if (auto *physics = GetGlobalSystem<PhysicsSystem>())
+                physics->RemoveBody(m_hostNode);
+            m_terrainColliderActive = false;
+        }
+#endif
         if (m_scene && m_hostNode && m_scene->IsNodeAlive(m_hostNode))
             m_scene->DeleteNode(m_hostNode);
 
@@ -667,6 +757,16 @@ namespace pe::voxel
 
     void VoxelWorld::Update()
     {
+        // Apply queued sculpts (from the editor viewport tool) at this safe system-tick point, before
+        // the arena guard so smooth worlds — which never init an arena — still get their edits.
+        if (!m_pendingSculpts.empty())
+        {
+            std::vector<PendingSculpt> sculpts;
+            sculpts.swap(m_pendingSculpts);
+            for (const PendingSculpt &s : sculpts)
+                SculptSmooth(s.center, s.radius, s.dig);
+        }
+
         if (!m_scene || !m_arena.IsInitialized())
             return;
 
@@ -796,6 +896,350 @@ namespace pe::voxel
         m_scene->SetLocalMatrix(m_hostNode, mat4(1.0f), false);
         m_scene->SetMeshRef(m_hostNode, m_hostMeshIndex);
         m_scene->SetGeometryDirty();
+    }
+
+    void VoxelWorld::BuildSmoothWorld()
+    {
+        // Sample only a Y band around the terrain to keep the corner count down. Smooth terrain (noise
+        // or heightmap) spans groundHeight + [heightMin, heightMax] (metres, mid value = groundHeight)
+        // and may dip below y=0; a small margin closes the surface at the extremes.
+        const int yMin = static_cast<int>(std::floor(m_cfg.groundHeight + m_cfg.heightMin)) - 4;
+        const int yMax = std::min(kWorldHeight, static_cast<int>(std::ceil(m_cfg.groundHeight + m_cfg.heightMax)) + 4);
+        const int ny = std::max(1, yMax - yMin);
+
+        // XZ extent from the world bound (or loadRadius when unbounded). No fixed radius cap (same in
+        // Debug and Release): the only limit is a memory ceiling on the one-shot corner field, so a huge
+        // radius clamps here with a warning instead of OOM-crashing. Streaming smooth chunks are the real
+        // answer for unbounded worlds. ponytail: budget the actual float count, not a magic radius, so it
+        // stays safe whatever the Y band is; raise kMaxSmoothCorners if you have the RAM to spend.
+        int radiusCols = std::max(1, m_cfg.worldRadius > 0 ? m_cfg.worldRadius : m_cfg.loadRadius);
+        constexpr int64_t kMaxSmoothCorners = 128'000'000; // ~512 MB of resident float density
+        const int64_t cornersPerRadiusSq =
+            static_cast<int64_t>(kSectionDim * 2) * (kSectionDim * 2) * (ny + 1); // corners per radiusCols^2
+        const int maxRadius = std::max(
+            1, static_cast<int>(std::sqrt(static_cast<double>(kMaxSmoothCorners) /
+                                          static_cast<double>(cornersPerRadiusSq))));
+        if (radiusCols > maxRadius)
+        {
+            PE_WARN("VoxelWorld(smooth): radius %d columns exceeds the ~%lld-corner memory ceiling; clamped "
+                    "to %d (~%d blocks). Use streaming smooth for larger worlds.",
+                    radiusCols, static_cast<long long>(kMaxSmoothCorners), maxRadius, maxRadius * kSectionDim);
+            radiusCols = maxRadius;
+        }
+        const int half = radiusCols * kSectionDim;
+        const int centerX = m_cfg.boundsCenterCx * kSectionDim + kSectionDim / 2;
+        const int centerZ = m_cfg.boundsCenterCz * kSectionDim + kSectionDim / 2;
+
+        m_smoothOrigin = vec3(static_cast<float>(centerX - half), static_cast<float>(yMin),
+                              static_cast<float>(centerZ - half));
+        m_smoothNx = half * 2;
+        m_smoothNz = half * 2;
+        m_smoothNy = ny;
+
+        // Sample the generator's continuous density into a persistent field so sculpt edits can mutate
+        // it and re-mesh without re-querying the generator. Corner (i,j,k) at m_smoothOrigin + (i,j,k).
+        const int cnx = m_smoothNx + 1, cny = m_smoothNy + 1, cnz = m_smoothNz + 1;
+        m_smoothField.assign(static_cast<size_t>(cnx) * cny * cnz, 0.0f);
+        ITerrainGenerator *gen = m_generator.get();
+        for (int k = 0; k < cnz; ++k)
+            for (int j = 0; j < cny; ++j)
+                for (int i = 0; i < cnx; ++i)
+                    m_smoothField[i + cnx * (j + cny * k)] =
+                        gen->Density(m_smoothOrigin.x + i, m_smoothOrigin.y + j, m_smoothOrigin.z + k);
+
+        RebuildSmoothMesh();
+    }
+
+    void VoxelWorld::RebuildSmoothMesh()
+    {
+        if (!m_scene || m_smoothField.empty())
+            return;
+
+        // Split the density field into horizontal tiles (full Y), each an independent standard mesh so it
+        // streams + LODs on its own. A tile samples ONE apron cell into its +X/+Z neighbour so its own
+        // boundary quads close the seam; the neighbour starts exactly at the border and never re-emits
+        // them, so shared-edge verts coincide (watertight). ponytail: fixed tile size, whole-field rebuild;
+        // anchor-driven load/unload + per-tile sculpt remesh are the next streaming step.
+        const int nx = m_smoothNx, ny = m_smoothNy, nz = m_smoothNz;
+        const int cnx = nx + 1, cny = ny + 1;
+        constexpr int kTileCells = 64; // tile size in X/Z blocks
+
+        std::vector<SmoothMeshData> tiles;
+        std::vector<float> subField;
+        float gYmin = 1e30f, gYmax = -1e30f;
+        for (int tz = 0; tz < nz; tz += kTileCells)
+        {
+            for (int tx = 0; tx < nx; tx += kTileCells)
+            {
+                const int bcx = std::min(kTileCells, nx - tx);
+                const int bcz = std::min(kTileCells, nz - tz);
+                const int mcx = bcx + (tx + bcx < nx ? 1 : 0); // +1 apron closes the +X seam
+                const int mcz = bcz + (tz + bcz < nz ? 1 : 0); // +1 apron closes the +Z seam
+                const int scnx = mcx + 1, scny = ny + 1, scnz = mcz + 1;
+                subField.assign(static_cast<size_t>(scnx) * scny * scnz, 0.0f);
+                for (int k = 0; k < scnz; ++k)
+                    for (int j = 0; j < scny; ++j)
+                        for (int i = 0; i < scnx; ++i)
+                            subField[i + scnx * (j + scny * k)] =
+                                m_smoothField[(tx + i) + cnx * (j + cny * (tz + k))];
+                SmoothMeshData tile = SurfaceNetsMesh(
+                    subField, m_smoothOrigin + vec3(static_cast<float>(tx), 0.0f, static_cast<float>(tz)), mcx, ny, mcz);
+                if (tile.vertices.empty())
+                    continue;
+                gYmin = std::min(gYmin, tile.aabbMin.y);
+                gYmax = std::max(gYmax, tile.aabbMax.y);
+                tiles.push_back(std::move(tile));
+            }
+        }
+        if (tiles.empty())
+            return;
+
+        // Tear down previous tile meshes/node — a rebuild replaces the whole set. ponytail: the old verts
+        // stay in the shared store until the next full scene rebuild (a per-rebuild leak).
+        for (int idx : m_smoothMeshIndices)
+            if (idx >= 0 && m_scene->IsValidMeshIndex(idx))
+                m_scene->GetMesh(idx).material = nullptr;
+        m_smoothMeshIndices.clear();
+        if (m_hostNode && m_scene->IsNodeAlive(m_hostNode))
+            m_scene->DeleteNode(m_hostNode);
+        while (NodeId *stale = m_scene->FindNodeByName("VoxelWorldHost"))
+            m_scene->DeleteNode(stale);
+        m_hostNode = nullptr;
+
+        m_hostMaterial = std::make_unique<Material>();
+        m_hostMaterial->name = "VoxelSmoothMaterial";
+        m_hostMaterial->baseColorFactor = vec4(1.0f); // white — per-vertex color carries the terrain bands
+        m_hostMaterial->metallic = 0.0f;
+        m_hostMaterial->roughness = 1.0f;
+        m_hostMaterial->occlusionStrength = 1.0f;
+        m_hostMaterial->textureMask = 0u;
+        m_hostMaterial->renderType = RenderType::Opaque;
+        m_hostMaterial->SyncParamsFromLegacy();
+
+        // Colour bands normalize to the GLOBAL Y range across all tiles — a per-tile range would make the
+        // sand/grass/rock/snow cutoffs jump at tile borders. GBufferPS multiplies albedo * input.color, so
+        // this needs no shader change. ponytail: fixed bands; triplanar atlas later.
+        const float ymin = gYmin;
+        const float yspan = std::max(1.0f, gYmax - gYmin);
+        const float seaY = m_cfg.seaLevelM;
+        const auto terrainColor = [&](const Vertex &v) -> vec3
+        {
+            const float f = (v.position[1] - ymin) / yspan;
+            vec3 c = f < 0.08f   ? vec3(0.76f, 0.70f, 0.50f)
+                     : f < 0.58f ? vec3(0.30f, 0.52f, 0.24f)
+                     : f < 0.90f ? vec3(0.45f, 0.42f, 0.38f)
+                                 : vec3(0.92f, 0.94f, 0.96f);
+            if (v.normals[1] < 0.5f && f < 0.90f)
+                c = vec3(0.42f, 0.39f, 0.36f);
+            if (v.position[1] < seaY)
+                c = glm::mix(c, vec3(0.16f, 0.26f, 0.40f), 0.6f);
+            return c;
+        };
+
+        std::vector<Vertex> &vertices = m_scene->GetVertexStore();
+        std::vector<PositionUvVertex> &positionUvs = m_scene->GetPositionUvStore();
+        std::vector<AabbVertex> &aabbVertices = m_scene->GetAabbVertexStore();
+        std::vector<uint32_t> &indices = m_scene->GetIndexStore();
+
+        m_hostNode = m_scene->CreateNode("VoxelWorldHost");
+        m_scene->SetLocalMatrix(m_hostNode, mat4(1.0f), false);
+
+        size_t totalVerts = 0, totalTris = 0;
+        for (SmoothMeshData &tile : tiles)
+        {
+            const uint32_t vertexBase = static_cast<uint32_t>(vertices.size());
+            const uint32_t positionBase = static_cast<uint32_t>(positionUvs.size());
+            const size_t aabbBase = aabbVertices.size();
+            const uint32_t indexBase = static_cast<uint32_t>(indices.size());
+
+            // Depth-prepass/shadows bind PositionUvVertex at the same vertexOffset as the GBuffer Vertex
+            // stream, so every vertex needs a matching entry in both.
+            for (const Vertex &src : tile.vertices)
+            {
+                Vertex v = src;
+                const vec3 c = terrainColor(v);
+                v.color[0] = c.x;
+                v.color[1] = c.y;
+                v.color[2] = c.z;
+                v.color[3] = 1.0f;
+                vertices.push_back(v);
+                PositionUvVertex pv{};
+                pv.position[0] = v.position[0];
+                pv.position[1] = v.position[1];
+                pv.position[2] = v.position[2];
+                pv.uv[0] = v.uv[0];
+                pv.uv[1] = v.uv[1];
+                positionUvs.push_back(pv);
+            }
+            for (int c = 0; c < 8; ++c)
+            {
+                AabbVertex av{};
+                av.position[0] = (c & 1) ? tile.aabbMax.x : tile.aabbMin.x;
+                av.position[1] = (c & 2) ? tile.aabbMax.y : tile.aabbMin.y;
+                av.position[2] = (c & 4) ? tile.aabbMax.z : tile.aabbMin.z;
+                aabbVertices.push_back(av);
+            }
+            for (uint32_t idx : tile.indices)
+                indices.push_back(idx);
+
+            Mesh m{};
+            m.vertexOffset = vertexBase;
+            m.vertexCount = static_cast<uint32_t>(tile.vertices.size());
+            m.indexOffset = indexBase;
+            m.indexCount = static_cast<uint32_t>(tile.indices.size());
+            m.positionsOffset = positionBase;
+            m.aabbVertexOffset = aabbBase;
+            m.aabbColor = 0xFFFFFFFF;
+            m.boundingBox = {tile.aabbMin, tile.aabbMax};
+            m.renderType = RenderType::Opaque;
+            m.material = m_hostMaterial.get();
+
+            // Standard mesh LOD via meshopt (border-locked so tile seams stay matched at every level):
+            // reduced index sets over the SAME verts, appended to the shared store; GPU CullingCS
+            // distance-picks the level, exactly like model meshes. No bespoke smooth LOD.
+            m.lodIndexOffset[0] = m.indexOffset;
+            m.lodIndexCount[0] = m.indexCount;
+            m.lodCount = 1;
+            if (m.indexCount >= 256)
+            {
+                const float *positions = reinterpret_cast<const float *>(tile.vertices.data());
+                const size_t vtxCount = tile.vertices.size();
+                static constexpr float kRatios[Mesh::kMaxLods] = {1.0f, 0.5f, 0.25f, 0.12f};
+                std::vector<uint32_t> simplified(tile.indices.size());
+                uint32_t prevCount = m.indexCount;
+                for (uint32_t lod = 1; lod < Mesh::kMaxLods; ++lod)
+                {
+                    const size_t target = (static_cast<size_t>(m.indexCount * kRatios[lod]) / 3) * 3;
+                    if (target < 12)
+                        break;
+                    float err = 0.0f;
+                    const size_t resCount =
+                        meshopt_simplify(simplified.data(), tile.indices.data(), tile.indices.size(), positions,
+                                         vtxCount, sizeof(Vertex), target, 0.1f, meshopt_SimplifyLockBorder, &err);
+                    if (resCount == 0 || resCount >= static_cast<size_t>(prevCount * 0.95f))
+                        break;
+                    const uint32_t off = static_cast<uint32_t>(indices.size());
+                    indices.insert(indices.end(), simplified.begin(), simplified.begin() + resCount);
+                    m.lodIndexOffset[lod] = off;
+                    m.lodIndexCount[lod] = static_cast<uint32_t>(resCount);
+                    m.lodCount = lod + 1;
+                    prevCount = static_cast<uint32_t>(resCount);
+                }
+            }
+
+            totalVerts += tile.vertices.size();
+            totalTris += tile.indices.size() / 3;
+            const int meshIdx = m_scene->AddMesh(std::move(m));
+            m_smoothMeshIndices.push_back(meshIdx);
+            m_scene->AddMeshRef(m_hostNode, meshIdx);
+        }
+        m_hostMeshIndex = m_smoothMeshIndices.empty() ? -1 : m_smoothMeshIndices.front();
+        PE_INFO("VoxelWorld(smooth): %zu tiles, %zu verts / %zu tris over %dx%dx%d cells",
+                m_smoothMeshIndices.size(), totalVerts, totalTris, nx, ny, nz);
+        m_scene->SetGeometryDirty();
+        m_scene->FlushPendingGpuWork();
+        UpdateTerrainCollider(); // (re)cook the static physics collider from the new tiles
+    }
+
+    void VoxelWorld::SculptSmooth(const vec3 &center, float radius, bool dig)
+    {
+        if (!m_cfg.smooth || m_smoothField.empty() || radius <= 0.0f)
+            return;
+
+        const int cnx = m_smoothNx + 1, cny = m_smoothNy + 1, cnz = m_smoothNz + 1;
+        // Only the brush's bounding box of corners changes; clamp it to the grid.
+        const vec3 lo = center - vec3(radius + 1.0f) - m_smoothOrigin;
+        const vec3 hi = center + vec3(radius + 1.0f) - m_smoothOrigin;
+        const int i0 = std::max(0, (int)std::floor(lo.x)), i1 = std::min(cnx - 1, (int)std::ceil(hi.x));
+        const int j0 = std::max(0, (int)std::floor(lo.y)), j1 = std::min(cny - 1, (int)std::ceil(hi.y));
+        const int k0 = std::max(0, (int)std::floor(lo.z)), k1 = std::min(cnz - 1, (int)std::ceil(hi.z));
+
+        for (int k = k0; k <= k1; ++k)
+            for (int j = j0; j <= j1; ++j)
+                for (int i = i0; i <= i1; ++i)
+                {
+                    const vec3 cw = m_smoothOrigin + vec3((float)i, (float)j, (float)k);
+                    const float sphere = radius - glm::length(cw - center); // > 0 inside the brush
+                    float &d = m_smoothField[i + cnx * (j + cny * k)];
+                    // CSG on the signed field (>0 solid): dig subtracts the sphere, add unions it.
+                    d = dig ? std::min(d, -sphere) : std::max(d, sphere);
+                }
+
+        RebuildSmoothMesh();
+    }
+
+    void VoxelWorld::QueueSculpt(const vec3 &center, float radius, bool dig)
+    {
+        if (m_cfg.smooth && radius > 0.0f)
+            m_pendingSculpts.push_back({center, radius, dig});
+    }
+
+    float VoxelWorld::SampleDensity(const vec3 &p) const
+    {
+        if (m_smoothField.empty())
+            return -1.0f;
+        const int cnx = m_smoothNx + 1, cny = m_smoothNy + 1, cnz = m_smoothNz + 1;
+        const vec3 g = p - m_smoothOrigin; // grid coords (one corner per world block)
+        const float fx = std::clamp(g.x, 0.0f, (float)(cnx - 1));
+        const float fy = std::clamp(g.y, 0.0f, (float)(cny - 1));
+        const float fz = std::clamp(g.z, 0.0f, (float)(cnz - 1));
+        const int x0 = (int)fx, y0 = (int)fy, z0 = (int)fz;
+        const int x1 = std::min(x0 + 1, cnx - 1), y1 = std::min(y0 + 1, cny - 1), z1 = std::min(z0 + 1, cnz - 1);
+        const float tx = fx - x0, ty = fy - y0, tz = fz - z0;
+        auto F = [&](int i, int j, int k)
+        { return m_smoothField[i + cnx * (j + cny * k)]; };
+        const float c00 = F(x0, y0, z0) * (1 - tx) + F(x1, y0, z0) * tx;
+        const float c10 = F(x0, y1, z0) * (1 - tx) + F(x1, y1, z0) * tx;
+        const float c01 = F(x0, y0, z1) * (1 - tx) + F(x1, y0, z1) * tx;
+        const float c11 = F(x0, y1, z1) * (1 - tx) + F(x1, y1, z1) * tx;
+        const float c0 = c00 * (1 - ty) + c10 * ty;
+        const float c1 = c01 * (1 - ty) + c11 * ty;
+        return c0 * (1 - tz) + c1 * tz;
+    }
+
+    bool VoxelWorld::IsSolidCell(int x, int y, int z)
+    {
+        // Collision solidity of block-cell (x,y,z): cube worlds test the block grid, smooth worlds
+        // sample the density field at the cell centre. The shared predicate MoveAabb uses, so cube
+        // and smooth terrain both stop a swept AABB.
+        // ponytail: smooth collision is voxelized at 1-block resolution here (the AABB rests on integer
+        // cell tops, not the sub-block isosurface). Upgrade to a heightfield floor-clamp / density-swept
+        // resolve if the stair-stepping shows on gentle slopes.
+        if (m_cfg.smooth)
+            return SampleDensity(vec3((float)x + 0.5f, (float)y + 0.5f, (float)z + 0.5f)) > 0.0f;
+        return Registry().IsSolid(GetBlock(x, y, z));
+    }
+
+    bool VoxelWorld::RaycastSmooth(const vec3 &o, const vec3 &d, float maxDist, vec3 &hitPoint,
+                                   vec3 &hitNormal) const
+    {
+        if (m_smoothField.empty() || glm::length(d) < 1e-6f)
+            return false;
+        const vec3 dir = glm::normalize(d);
+        // ponytail: fixed 0.5-block march + linear crossing refine. Fine for terrain; sphere-trace on
+        // the field magnitude if long rays ever cost too much.
+        constexpr float kStep = 0.5f;
+        float prevT = 0.0f;
+        float prevDen = SampleDensity(o);
+        for (float t = kStep; t <= maxDist; t += kStep)
+        {
+            const float den = SampleDensity(o + dir * t);
+            if (prevDen < 0.0f && den >= 0.0f) // air -> solid: the surface is between prevT and t
+            {
+                const float f = prevDen / (prevDen - den);
+                hitPoint = o + dir * (prevT + f * (t - prevT));
+                constexpr float e = 0.5f;
+                hitNormal = vec3(SampleDensity(hitPoint + vec3(e, 0, 0)) - SampleDensity(hitPoint - vec3(e, 0, 0)),
+                                 SampleDensity(hitPoint + vec3(0, e, 0)) - SampleDensity(hitPoint - vec3(0, e, 0)),
+                                 SampleDensity(hitPoint + vec3(0, 0, e)) - SampleDensity(hitPoint - vec3(0, 0, e))) *
+                            -1.0f; // -gradient points out toward the air side
+                hitNormal = glm::length(hitNormal) > 1e-4f ? glm::normalize(hitNormal) : vec3(0, 1, 0);
+                return true;
+            }
+            prevDen = den;
+            prevT = t;
+        }
+        return false;
     }
 
     void VoxelWorld::RequestColumnsForAnchor()

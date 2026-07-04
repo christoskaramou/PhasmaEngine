@@ -23,17 +23,27 @@ namespace pe::voxel
         int WorldRadiusColumns() const;
         // lod > 0 samples the maps once per 2^lod-block cell (coarse bands never show finer detail).
         void Generate(ChunkColumn &col, int lod) override;
+        // Continuous (fractional, bilinear) surface height from the map for smooth isosurface meshing.
+        float SurfaceHeight(float x, float z) const override;
 
     private:
         struct MapImage
         {
             int w = 0;
             int h = 0;
-            std::vector<uint8_t> px;
+            std::vector<uint8_t> px; // raw 0..255 maps (strata thickness, feature ids)
+            std::vector<float> pxf;  // signed [-1,1] height scaler (surface map); used when isFloat
+            bool isFloat = false;
             bool Valid() const { return w > 0; }
-            bool Load(const std::string &configured, const char *what);
+            // signedFloat: the surface height map, stored as float16 [-1,1] (PH16) or a legacy 8-bit
+            // PNG whose gray is remapped to [-1,1]. Otherwise a plain 0..255 grayscale PNG.
+            bool Load(const std::string &configured, const char *what, bool signedFloat);
             float SampleNorm(float nu, float nv) const; // bilinear, edge-clamped, uv in 0..1
         };
+
+        // Map a surface scalar v in [-1,1] to a world height (blocks/metres): 0 -> groundHeight,
+        // -1 -> +heightMin, +1 -> +heightMax. Cube and smooth paths both route through this.
+        float MapHeight(float v) const;
 
         // Decorations from the features map (pixel 1 = tree, 2 = rock at the pixel's center block).
         // Deterministic per anchor, so neighboring columns emit identical blocks for a feature that
@@ -47,6 +57,10 @@ namespace pe::voxel
         int m_centerWX = 0; // world-block coords the map center is pinned to
         int m_centerWZ = 0;
         int m_blocksPerPixel = 1;
+        // Smooth-terrain height mapping (see SurfaceHeight): gray 0..1 -> groundHeight + lerp(min,max).
+        float m_heightMin = -32.0f;
+        float m_heightMax = 32.0f;
+        float m_groundHeight = 0.0f;
         int m_seaLevel = 0; // resolved absolute height; <=0 = no water
         BlockId m_surfaceBlock = 3;
         bool m_surfaceBands = false; // pick the top block by elevation instead of m_surfaceBlock

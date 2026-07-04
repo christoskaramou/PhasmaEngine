@@ -13,6 +13,7 @@
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
 #include "Voxel/ColumnChunkStore.h" // ResolveRoot: Assets-relative or absolute map paths
+#include "Voxel/HeightMap.h"        // PH16 signed-half-float surface map format
 #include "imgui/imgui.h"
 #include "stb_image.h"
 
@@ -62,19 +63,38 @@ namespace pe
         };
         constexpr int kPaletteCount = static_cast<int>(sizeof(kPalette) / sizeof(kPalette[0]));
 
-        // Grayscale -> RGBA for the shared PNG encoder; stbi_load(..., 1) reads it back as the
-        // identical gray value (equal channels -> luma == value).
-        std::vector<uint8_t> GrayToRgba(const std::vector<uint8_t> &gray)
+        uint8_t ToU8(float v)
+        {
+            return static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(v)), 0, 255));
+        }
+
+        // Grayscale ([0,255] float) -> RGBA for the shared PNG encoder; stbi_load(..., 1) reads it back
+        // as the identical gray value (equal channels -> luma == value).
+        std::vector<uint8_t> GrayToRgba(const std::vector<float> &gray)
         {
             std::vector<uint8_t> rgba(gray.size() * 4);
             for (size_t i = 0; i < gray.size(); ++i)
             {
-                rgba[i * 4 + 0] = gray[i];
-                rgba[i * 4 + 1] = gray[i];
-                rgba[i * 4 + 2] = gray[i];
+                const uint8_t g = ToU8(gray[i]);
+                rgba[i * 4 + 0] = g;
+                rgba[i * 4 + 1] = g;
+                rgba[i * 4 + 2] = g;
                 rgba[i * 4 + 3] = 255;
             }
             return rgba;
+        }
+
+        // Surface height map: the painter's float buffer works in a [0,255] value domain (so brush
+        // strength/set numbers match the other layers) but never snaps to integers, so it keeps the
+        // file's half-float precision. These map between that domain and the stored signed [-1,1]
+        // scaler (0 = ground) at the load/save/UI edges.
+        float SurfSignedToRange(float v)
+        {
+            return std::clamp((v * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f);
+        }
+        float SurfRangeToSigned(float u)
+        {
+            return u / 255.0f * 2.0f - 1.0f;
         }
 
         uint32_t FeatureHash(int x, int z)
@@ -155,18 +175,49 @@ namespace pe
         if (resolved.empty())
             return;
 
-        int w = 0, h = 0, channels = 0;
-        if (stbi_uc *data = stbi_load(resolved.c_str(), &w, &h, &channels, 1))
+        int w = 0, h = 0;
+        bool loaded = false;
+        if (layer == 0) // surface height map: signed [-1,1] PH16 half-float -> the 0..255 buffer
         {
-            buf.w = w;
-            buf.h = h;
-            buf.px.assign(data, data + static_cast<size_t>(w) * static_cast<size_t>(h));
-            stbi_image_free(data);
-            if (layer == m_layer)
+            std::ifstream in(resolved, std::ios::binary | std::ios::ate);
+            if (in)
             {
-                m_newW = w;
-                m_newH = h;
+                const std::streamsize size = in.tellg();
+                in.seekg(0);
+                std::vector<uint8_t> bytes(static_cast<size_t>(std::max<std::streamsize>(0, size)));
+                if (!bytes.empty())
+                    in.read(reinterpret_cast<char *>(bytes.data()), size);
+                std::vector<float> pxf;
+                if (voxel::DecodeHeightMapF16(bytes.data(), bytes.size(), w, h, pxf))
+                {
+                    buf.w = w;
+                    buf.h = h;
+                    buf.px.resize(pxf.size());
+                    for (size_t i = 0; i < pxf.size(); ++i)
+                        buf.px[i] = SurfSignedToRange(pxf[i]);
+                    loaded = true;
+                }
             }
+        }
+        if (!loaded) // legacy 8-bit image (surface: gray remaps to [-1,1] on save) / strata / features
+        {
+            int channels = 0;
+            if (stbi_uc *data = stbi_load(resolved.c_str(), &w, &h, &channels, 1))
+            {
+                buf.w = w;
+                buf.h = h;
+                const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h);
+                buf.px.resize(n);
+                for (size_t i = 0; i < n; ++i)
+                    buf.px[i] = static_cast<float>(data[i]);
+                stbi_image_free(data);
+                loaded = true;
+            }
+        }
+        if (loaded && layer == m_layer)
+        {
+            m_newW = w;
+            m_newH = h;
         }
     }
 
@@ -184,7 +235,7 @@ namespace pe
         buf.w = std::clamp(m_newW, 16, 2048);
         buf.h = std::clamp(m_newH, 16, 2048);
         // A features map starts empty (0 = no feature); ids are discrete, a gray fill is garbage.
-        const uint8_t fill = OnFeatures() ? 0 : static_cast<uint8_t>(std::clamp(m_newValue, 0, 255));
+        const float fill = OnFeatures() ? 0.0f : std::clamp(m_newValue, 0.0f, 255.0f);
         buf.px.assign(static_cast<size_t>(buf.w) * static_cast<size_t>(buf.h), fill);
         buf.unsaved = true;
         m_textureDirty = true;
@@ -199,7 +250,7 @@ namespace pe
         if (buf.px.empty() || (newW == buf.w && newH == buf.h))
             return;
 
-        std::vector<uint8_t> out(static_cast<size_t>(newW) * static_cast<size_t>(newH));
+        std::vector<float> out(static_cast<size_t>(newW) * static_cast<size_t>(newH));
         for (int y = 0; y < newH; ++y)
         {
             for (int x = 0; x < newW; ++x)
@@ -223,11 +274,9 @@ namespace pe
                     const int y1 = std::min(y0 + 1, buf.h - 1);
                     const float tx = fx - static_cast<float>(x0);
                     const float ty = fy - static_cast<float>(y0);
-                    const float top = static_cast<float>(buf.px[y0 * buf.w + x0]) * (1.0f - tx) +
-                                      static_cast<float>(buf.px[y0 * buf.w + x1]) * tx;
-                    const float bot = static_cast<float>(buf.px[y1 * buf.w + x0]) * (1.0f - tx) +
-                                      static_cast<float>(buf.px[y1 * buf.w + x1]) * tx;
-                    out[y * newW + x] = static_cast<uint8_t>(std::lround(top + (bot - top) * ty));
+                    const float top = buf.px[y0 * buf.w + x0] * (1.0f - tx) + buf.px[y0 * buf.w + x1] * tx;
+                    const float bot = buf.px[y1 * buf.w + x0] * (1.0f - tx) + buf.px[y1 * buf.w + x1] * tx;
+                    out[y * newW + x] = top + (bot - top) * ty;
                 }
             }
         }
@@ -239,7 +288,7 @@ namespace pe
         m_haveLastStamp = false;
     }
 
-    void MapPainter::StampBrush(float px, float py, float radius, float strength, bool lower, Brush brush, int value)
+    void MapPainter::StampBrush(float px, float py, float radius, float strength, bool lower, Brush brush, float value)
     {
         LayerBuffer &buf = Buf();
         const float r = std::max(0.5f, radius);
@@ -251,14 +300,14 @@ namespace pe
             return;
 
         // Blend brushes read neighbors/originals, so work from a snapshot of the pre-stamp pixels.
-        std::vector<uint8_t> before;
+        std::vector<float> before;
         if (brush == Brush::Smooth)
             before = buf.px;
         const auto sample = [&](int x, int y) -> float
         {
             x = std::clamp(x, 0, buf.w - 1);
             y = std::clamp(y, 0, buf.h - 1);
-            return static_cast<float>(before[y * buf.w + x]);
+            return before[y * buf.w + x];
         };
 
         const float blend = std::clamp(strength / 64.0f, 0.0f, 1.0f); // strength 64 = full effect per stamp
@@ -272,31 +321,34 @@ namespace pe
                 if (d > r)
                     continue;
                 const float falloff = 1.0f - d / r; // linear falloff to the rim
-                uint8_t &v = buf.px[y * buf.w + x];
-                float painted = static_cast<float>(v);
+                float &v = buf.px[y * buf.w + x];
+                float painted = v;
                 switch (brush)
                 {
                 case Brush::Smooth:
                 {
+                    // 5x5 mean: on an already-smooth map a 3x3 mean barely differs from the center,
+                    // so there is nothing to converge to; a wider kernel gives a real target.
                     float avg = 0.0f;
-                    for (int oy = -1; oy <= 1; ++oy)
-                        for (int ox = -1; ox <= 1; ++ox)
+                    for (int oy = -2; oy <= 2; ++oy)
+                        for (int ox = -2; ox <= 2; ++ox)
                             avg += sample(x + ox, y + oy);
-                    painted += (avg / 9.0f - painted) * blend * falloff;
+                    const float smoothBlend = std::clamp(strength / 16.0f, 0.0f, 1.0f);
+                    painted += (avg / 25.0f - painted) * smoothBlend * falloff;
                     break;
                 }
                 case Brush::Flatten:
-                    painted += (static_cast<float>(m_flattenTarget) - painted) * blend * falloff;
+                    painted += (m_flattenTarget - painted) * blend * falloff;
                     break;
                 case Brush::Set:
-                    painted += (static_cast<float>(value) - painted) * blend * falloff;
+                    painted += (value - painted) * blend * falloff;
                     break;
                 case Brush::Raise:
                 default:
                     painted += (lower ? -strength : strength) * falloff;
                     break;
                 }
-                v = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(painted)), 0, 255));
+                v = std::clamp(painted, 0.0f, 255.0f);
             }
         }
     }
@@ -321,7 +373,7 @@ namespace pe
                     if ((static_cast<float>(x) - px) * (static_cast<float>(x) - px) +
                             (static_cast<float>(y) - py) * (static_cast<float>(y) - py) <=
                         r * r)
-                        buf.px[y * buf.w + x] = fill;
+                        buf.px[y * buf.w + x] = static_cast<float>(fill);
             return;
         }
 
@@ -346,7 +398,7 @@ namespace pe
                 const float dy = static_cast<float>(jy) - py;
                 if (dx * dx + dy * dy > r * r)
                     continue;
-                buf.px[jy * buf.w + jx] = id;
+                buf.px[jy * buf.w + jx] = static_cast<float>(id);
             }
         }
     }
@@ -372,12 +424,10 @@ namespace pe
         {
             const Brush type = static_cast<Brush>(std::clamp(brush < 0 ? m_brushType : brush, 0, 3));
             if (type == Brush::Flatten) // programmatic stamps are single: flatten to the value underneath
-                m_flattenTarget = static_cast<int>(buf.px[std::clamp(static_cast<int>(py), 0, buf.h - 1) * buf.w +
-                                                          std::clamp(static_cast<int>(px), 0, buf.w - 1)]);
-            StampBrush(px, py, r,
-                       strength > 0.0f ? strength : m_brushStrength,
-                       lower, type,
-                       std::clamp(value < 0 ? m_setValue : value, 0, 255));
+                m_flattenTarget = buf.px[std::clamp(static_cast<int>(py), 0, buf.h - 1) * buf.w +
+                                         std::clamp(static_cast<int>(px), 0, buf.w - 1)];
+            StampBrush(px, py, r, strength > 0.0f ? strength : m_brushStrength, lower, type,
+                       std::clamp(value < 0 ? m_setValue : static_cast<float>(value), 0.0f, 255.0f));
         }
         buf.unsaved = true;
         m_textureDirty = true;
@@ -391,9 +441,21 @@ namespace pe
         if (!tag || buf.px.empty() || buf.loadedPath.empty())
             return false;
 
-        const std::vector<uint8_t> rgba = GrayToRgba(buf.px);
-        const std::vector<uint8_t> png = pmcp::EncodeRGBA_PNG(rgba.data(), buf.w, buf.h);
-        if (png.empty())
+        std::vector<uint8_t> blob;
+        if (m_layer == 0)
+        {
+            // Surface height map: [0,255] float buffer -> signed [-1,1] half-float (PH16).
+            std::vector<float> pxf(buf.px.size());
+            for (size_t i = 0; i < buf.px.size(); ++i)
+                pxf[i] = SurfRangeToSigned(buf.px[i]);
+            blob = voxel::EncodeHeightMapF16(pxf.data(), buf.w, buf.h);
+        }
+        else
+        {
+            const std::vector<uint8_t> rgba = GrayToRgba(buf.px);
+            blob = pmcp::EncodeRGBA_PNG(rgba.data(), buf.w, buf.h);
+        }
+        if (blob.empty())
             return false;
 
         const std::filesystem::path path(buf.loadedPath);
@@ -406,7 +468,7 @@ namespace pe
             PE_WARN("MapPainter: cannot write '%s'", buf.loadedPath.c_str());
             return false;
         }
-        out.write(reinterpret_cast<const char *>(png.data()), static_cast<std::streamsize>(png.size()));
+        out.write(reinterpret_cast<const char *>(blob.data()), static_cast<std::streamsize>(blob.size()));
         out.close();
 
         buf.unsaved = false;
@@ -447,9 +509,9 @@ namespace pe
                     {
                         const int sx = std::clamp(x * surf.w / buf.w, 0, surf.w - 1);
                         const int sy = std::clamp(y * surf.h / buf.h, 0, surf.h - 1);
-                        rr = gg = bb = surf.px[sy * surf.w + sx] / 2;
+                        rr = gg = bb = ToU8(surf.px[sy * surf.w + sx] * 0.5f);
                     }
-                    const uint8_t fv = buf.px[i];
+                    const int fv = static_cast<int>(std::lround(buf.px[i]));
                     if (fv == 1)
                         rr = 40, gg = 220, bb = 40; // tree
                     else if (fv == 2)
@@ -687,9 +749,10 @@ namespace pe
         int layer = m_layer;
         if (ImGui::Combo("Layer", &layer, kLayerNames, 4))
             SetLayer(layer);
-        ui::ItemTooltip("Which MapGen input map the brush edits. Surface: pixel value = height in "
-                        "blocks. Strata: thickness of the band below the surface. Features: sparse "
-                        "decoration dots (tree/rock). Edits are kept per layer until saved.");
+        ui::ItemTooltip("Which MapGen input map the brush edits. Surface: signed height scaler -1..1 "
+                        "(0 = ground) mapped into the node's Height Range. Strata: thickness of the band "
+                        "below the surface. Features: sparse decoration dots (tree/rock). Edits are kept "
+                        "per layer until saved.");
         ImGui::SetNextItemWidth(90.0f);
         // Same tag field the inspector edits: a small texture can cover a big world. Changing it
         // rebuilds the world through the normal debounced reconcile - no save needed.
@@ -731,11 +794,31 @@ namespace pe
             ui::ItemTooltip("Map size in pixels; one pixel spans Blocks/Pixel blocks in X/Z.");
             ImGui::TextDisabled("covers %d x %d blocks at %d blocks/pixel", m_newW * tag->blocksPerPixel,
                                 m_newH * tag->blocksPerPixel, tag->blocksPerPixel);
-            if (!OnFeatures())
+            if (m_layer == 0) // surface: signed height scaler
             {
+                float f = SurfRangeToSigned(m_newValue);
                 ImGui::SetNextItemWidth(90.0f);
-                ImGui::DragInt("Fill Value", &m_newValue, 1.0f, 0, 255);
-                ui::ItemTooltip("Initial gray value for every pixel (surface: height in blocks).");
+                if (ImGui::DragFloat("Fill Value", &f, 0.002f, -1.0f, 1.0f, "%.3f"))
+                    m_newValue = SurfSignedToRange(f);
+                ui::ItemTooltip("Starting height scaler for every pixel: -1 = lowest, 0 = ground, +1 = highest. "
+                                "Mapped into the node's Height Range around Ground Height. This is only the flat "
+                                "starting level; paint hills and valleys on top afterwards.");
+                ImGui::SameLine();
+                const float span = tag->heightMax - tag->heightMin;
+                const float cur = tag->groundHeight + tag->heightMin + ((f + 1.0f) * 0.5f) * span;
+                ImGui::TextDisabled("= %.1f m   (-1..1 -> %.0f..%.0f m)", cur, tag->groundHeight + tag->heightMin,
+                                    tag->groundHeight + tag->heightMax);
+            }
+            else if (!OnFeatures()) // strata: thickness in blocks
+            {
+                int iv = static_cast<int>(std::lround(m_newValue));
+                ImGui::SetNextItemWidth(90.0f);
+                if (ImGui::DragInt("Fill Value", &iv, 1.0f, 0, 255))
+                    m_newValue = static_cast<float>(iv);
+                ui::ItemTooltip("Initial thickness in blocks for every pixel of the new strata map. "
+                                "This is only the flat starting level; paint on top afterwards.");
+                ImGui::SameLine();
+                ImGui::TextDisabled("= %d blocks", iv);
             }
             if (ImGui::Button("Create Map"))
                 CreateMap(tag);
@@ -773,8 +856,20 @@ namespace pe
             {
                 ImGui::SameLine();
                 ImGui::SetNextItemWidth(110.0f);
-                ImGui::DragInt("Value", &m_setValue, 1.0f, 0, 255);
-                ui::ItemTooltip("Target gray value the Set brush paints toward.");
+                if (m_layer == 0) // surface: signed height scaler
+                {
+                    float f = SurfRangeToSigned(m_setValue);
+                    if (ImGui::DragFloat("Value", &f, 0.002f, -1.0f, 1.0f, "%.3f"))
+                        m_setValue = SurfSignedToRange(f);
+                    ui::ItemTooltip("Target height scaler the Set brush paints toward (-1 low, 0 ground, +1 high).");
+                }
+                else
+                {
+                    int iv = static_cast<int>(std::lround(m_setValue));
+                    if (ImGui::DragInt("Value", &iv, 1.0f, 0, 255))
+                        m_setValue = static_cast<float>(iv);
+                    ui::ItemTooltip("Target value the Set brush paints toward.");
+                }
             }
         }
         ImGui::SetNextItemWidth(110.0f);
@@ -864,7 +959,8 @@ namespace pe
             ImGui::GetWindowDrawList()->AddImage((ImTextureID)(intptr_t)m_textureId, imageMin,
                                                  ImVec2(imageMin.x + drawSize.x, imageMin.y + drawSize.y));
 
-        int hoverValue = -1;
+        int hoverValue = -1;   // -1 = not over the image; else the rounded value (feature id / thickness)
+        float hoverRaw = 0.0f; // full-precision value under the cursor (surface scaler readout)
         int hoverX = 0, hoverY = 0;
         // IsItemActive keeps the stroke alive while the button is held, even if the cursor
         // momentarily leaves the canvas.
@@ -877,7 +973,10 @@ namespace pe
             hoverX = std::clamp(static_cast<int>(px), 0, buf.w - 1);
             hoverY = std::clamp(static_cast<int>(py), 0, buf.h - 1);
             if (inImage)
-                hoverValue = buf.px[hoverY * buf.w + hoverX];
+            {
+                hoverRaw = buf.px[hoverY * buf.w + hoverX];
+                hoverValue = static_cast<int>(std::lround(hoverRaw));
+            }
 
             ImGui::GetWindowDrawList()->AddCircle(mouse, m_brushRadius * scale, IM_COL32(255, 210, 40, 220));
 
@@ -921,7 +1020,7 @@ namespace pe
                     }
                     else
                     {
-                        m_flattenTarget = hoverValue; // flatten pulls toward the value under the stroke start
+                        m_flattenTarget = hoverRaw; // flatten pulls toward the value under the stroke start
                         stampAt(px, py);
                     }
                     m_lastPx = px;
@@ -962,9 +1061,12 @@ namespace pe
                 ImGui::Text("%d, %d = %s  |  LMB paint, Ctrl erase, Alt teleport cam, RMB pan", hoverX, hoverY,
                             lbl);
             }
+            else if (m_layer == 0)
+                ImGui::Text("%d, %d = %.3f (scaler)  |  LMB paint, Shift lower, Alt teleport cam, RMB pan", hoverX,
+                            hoverY, SurfRangeToSigned(hoverRaw));
             else
-                ImGui::Text("%d, %d = %d %s  |  LMB paint, Shift lower, Alt teleport cam, RMB pan", hoverX, hoverY,
-                            hoverValue, m_layer == 0 ? "blocks high" : "blocks thick");
+                ImGui::Text("%d, %d = %d blocks thick  |  LMB paint, Shift lower, Alt teleport cam, RMB pan", hoverX,
+                            hoverY, hoverValue);
         }
         else
         {

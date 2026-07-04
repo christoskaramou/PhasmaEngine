@@ -151,19 +151,19 @@ namespace pe
         const std::vector<std::pair<std::string, std::string>> &PrimitiveChoices()
         {
             static const std::vector<std::pair<std::string, std::string>> choices = {
+                {"circle", "Circle"},
+                {"cone", "Cone"},
                 {"cube", "Cube"},
-                {"sphere", "Sphere"},
-                {"uv_sphere", "UV Sphere"},
+                {"cylinder", "Cylinder"},
+                {"grid", "Grid"},
                 {"ico_sphere", "Ico Sphere"},
                 {"plane", "Plane"},
-                {"grid", "Grid"},
-                {"cylinder", "Cylinder"},
-                {"cone", "Cone"},
                 {"pyramid", "Pyramid"},
                 {"quad", "Quad"},
-                {"circle", "Circle"},
-                {"torus", "Torus"},
                 {"skinned_strip_2d", "Skinned Strip 2D"},
+                {"sphere", "Sphere"},
+                {"torus", "Torus"},
+                {"uv_sphere", "UV Sphere"},
             };
             return choices;
         }
@@ -1016,6 +1016,8 @@ namespace pe
 
     void PrefabViewer::DrawAttachMeshMenu(int nodeIndex)
     {
+        if (ImGui::MenuItem("Cooked .pemesh..."))
+            OpenCookedMeshDialog(false, nodeIndex);
         if (ImGui::BeginMenu("Primitive"))
         {
             for (const auto &[type, label] : PrimitiveChoices())
@@ -1025,8 +1027,6 @@ namespace pe
             }
             ImGui::EndMenu();
         }
-        if (ImGui::MenuItem("Cooked .pemesh..."))
-            OpenCookedMeshDialog(false, nodeIndex);
     }
 
     void PrefabViewer::DrawComponentAddMenu(int nodeIndex)
@@ -1037,18 +1037,20 @@ namespace pe
         nlohmann::json &nodeJson = m_document["nodes"][nodeIndex];
         const uint32_t flags = GetNodeFlags(nodeJson);
 
+        if (ImGui::MenuItem("Audio Source", nullptr, false, (flags & Component_Audio) == 0))
+            AddComponent(nodeIndex, Component_Audio);
         if (ImGui::MenuItem("Camera", nullptr, false, (flags & Component_Camera) == 0))
             AddComponent(nodeIndex, Component_Camera);
         if (ImGui::BeginMenu("Light", (flags & Component_Light) == 0))
         {
+            if (ImGui::MenuItem("Area"))
+                AddComponent(nodeIndex, Component_Light, "area");
             if (ImGui::MenuItem("Directional"))
                 AddComponent(nodeIndex, Component_Light, "directional");
             if (ImGui::MenuItem("Point"))
                 AddComponent(nodeIndex, Component_Light, "point");
             if (ImGui::MenuItem("Spot"))
                 AddComponent(nodeIndex, Component_Light, "spot");
-            if (ImGui::MenuItem("Area"))
-                AddComponent(nodeIndex, Component_Light, "area");
             ImGui::EndMenu();
         }
         if (ImGui::MenuItem("Lua Script...", nullptr, false, (flags & Component_Script) == 0))
@@ -1057,12 +1059,10 @@ namespace pe
             AddComponent(nodeIndex, Component_Physics);
         if (ImGui::MenuItem("Physics2D Body", nullptr, false, (flags & Component_Physics2D) == 0))
             AddComponent(nodeIndex, Component_Physics2D);
-        if (ImGui::MenuItem("Audio Source", nullptr, false, (flags & Component_Audio) == 0))
-            AddComponent(nodeIndex, Component_Audio);
-        if (ImGui::MenuItem("Skybox", nullptr, false, (flags & Component_Skybox) == 0))
-            AddComponent(nodeIndex, Component_Skybox);
         if (ImGui::MenuItem("Runtime UI", nullptr, false, (flags & Component_RuntimeUi) == 0))
             AddComponent(nodeIndex, Component_RuntimeUi);
+        if (ImGui::MenuItem("Skybox", nullptr, false, (flags & Component_Skybox) == 0))
+            AddComponent(nodeIndex, Component_Skybox);
     }
 
     void PrefabViewer::DrawJsonSummary(int nodeIndex)

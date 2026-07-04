@@ -1,5 +1,6 @@
 #include "Voxel/MapGen.h"
 #include "Voxel/ChunkColumn.h"
+#include "Voxel/HeightMap.h"        // PH16 signed-half-float surface map format
 #include "Voxel/ColumnChunkStore.h" // ResolveRoot: Assets-relative or absolute path resolution
 #include "Voxel/VoxelWorld.h"
 #include "stb_image.h"
@@ -44,11 +45,47 @@ namespace pe::voxel
         }
     } // namespace
 
-    bool MapGen::MapImage::Load(const std::string &configured, const char *what)
+    bool MapGen::MapImage::Load(const std::string &configured, const char *what, bool signedFloat)
     {
         if (configured.empty())
             return false;
         const std::filesystem::path path = ColumnChunkStore::ResolveRoot(configured);
+
+        if (signedFloat)
+        {
+            // Surface height map: a PH16 half-float blob ([-1,1]), or a legacy 8-bit image whose
+            // gray 0..255 is remapped to [-1,1]. Either way the surface is held as float in pxf.
+            std::ifstream in(path, std::ios::binary | std::ios::ate);
+            if (in)
+            {
+                const std::streamsize size = in.tellg();
+                in.seekg(0);
+                std::vector<uint8_t> bytes(static_cast<size_t>(std::max<std::streamsize>(0, size)));
+                if (!bytes.empty())
+                    in.read(reinterpret_cast<char *>(bytes.data()), size);
+                if (DecodeHeightMapF16(bytes.data(), bytes.size(), w, h, pxf))
+                {
+                    isFloat = true;
+                    return true;
+                }
+            }
+            int channels = 0;
+            stbi_uc *data = stbi_load(path.string().c_str(), &w, &h, &channels, 1);
+            if (!data)
+            {
+                PE_WARN("MapGen: cannot load %s map '%s' (%s)", what, path.string().c_str(), stbi_failure_reason());
+                w = h = 0;
+                return false;
+            }
+            const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h);
+            pxf.resize(n);
+            for (size_t i = 0; i < n; ++i)
+                pxf[i] = static_cast<float>(data[i]) / 255.0f * 2.0f - 1.0f;
+            stbi_image_free(data);
+            isFloat = true;
+            return true;
+        }
+
         int channels = 0;
         stbi_uc *data = stbi_load(path.string().c_str(), &w, &h, &channels, 1); // 1 = force grayscale
         if (!data)
@@ -59,6 +96,7 @@ namespace pe::voxel
         }
         px.assign(data, data + static_cast<size_t>(w) * static_cast<size_t>(h));
         stbi_image_free(data);
+        isFloat = false;
         return true;
     }
 
@@ -72,18 +110,30 @@ namespace pe::voxel
         const int y1 = std::min(y0 + 1, h - 1);
         const float fx = u - (float)x0;
         const float fy = v - (float)y0;
-        const float top = (float)px[y0 * w + x0] + ((float)px[y0 * w + x1] - (float)px[y0 * w + x0]) * fx;
-        const float bot = (float)px[y1 * w + x0] + ((float)px[y1 * w + x1] - (float)px[y1 * w + x0]) * fx;
+        const auto at = [&](int x, int y) -> float
+        { return isFloat ? pxf[y * w + x] : (float)px[y * w + x]; };
+        const float top = at(x0, y0) + (at(x1, y0) - at(x0, y0)) * fx;
+        const float bot = at(x0, y1) + (at(x1, y1) - at(x0, y1)) * fx;
         return top + (bot - top) * fy;
+    }
+
+    float MapGen::MapHeight(float v) const
+    {
+        // -1 -> 0.0, 0 -> 0.5 (= groundHeight for a symmetric range), +1 -> 1.0
+        const float t = (std::clamp(v, -1.0f, 1.0f) + 1.0f) * 0.5f;
+        return m_groundHeight + m_heightMin + t * (m_heightMax - m_heightMin);
     }
 
     MapGen::MapGen(const VoxelConfig &cfg)
     {
-        m_surface.Load(cfg.heightmapPath, "surface height");
-        m_strata1.Load(cfg.strata1Path, "strata 1 thickness");
-        m_strata2.Load(cfg.strata2Path, "strata 2 thickness");
-        m_features.Load(cfg.featuresPath, "features");
+        m_surface.Load(cfg.heightmapPath, "surface height", true); // signed [-1,1] height scaler
+        m_strata1.Load(cfg.strata1Path, "strata 1 thickness", false);
+        m_strata2.Load(cfg.strata2Path, "strata 2 thickness", false);
+        m_features.Load(cfg.featuresPath, "features", false);
         m_blocksPerPixel = std::max(1, cfg.blocksPerPixel);
+        m_heightMin = cfg.heightMin;
+        m_heightMax = cfg.heightMax;
+        m_groundHeight = cfg.groundHeight;
         m_centerWX = cfg.boundsCenterCx * kSectionDim + kSectionDim / 2;
         m_centerWZ = cfg.boundsCenterCz * kSectionDim + kSectionDim / 2;
         m_seaLevel = cfg.seaLevel < 0 ? cfg.groundY - 2 : cfg.seaLevel;
@@ -124,8 +174,8 @@ namespace pe::voxel
                 const int wz = baseWZ + lz0 + stride / 2;
                 const float nu = (float)(wx - m_centerWX) / extentX + 0.5f;
                 const float nv = (float)(wz - m_centerWZ) / extentZ + 0.5f;
-                // Pixel value == surface height in blocks; clamp to >=1 so there is always ground.
-                const int hgt = std::clamp((int)std::lround(m_surface.SampleNorm(nu, nv)), 1, kWorldHeight);
+                // Surface value is the signed [-1,1] scaler; MapHeight turns it into a block height.
+                const int hgt = std::clamp((int)std::lround(MapHeight(m_surface.SampleNorm(nu, nv))), 1, kWorldHeight);
                 const int topY = hgt - 1;
                 const int t1 = m_strata1.Valid() ? (int)std::lround(m_strata1.SampleNorm(nu, nv)) : m_strata1Thickness;
                 const int t2 = m_strata2.Valid() ? (int)std::lround(m_strata2.SampleNorm(nu, nv)) : m_strata2Thickness;
@@ -161,6 +211,19 @@ namespace pe::voxel
 
         if (lod == 0 && m_features.Valid())
             SpawnFeatures(col);
+    }
+
+    float MapGen::SurfaceHeight(float x, float z) const
+    {
+        if (!m_surface.Valid())
+            return 0.0f;
+        const float extentX = (float)(m_surface.w * m_blocksPerPixel);
+        const float extentZ = (float)(m_surface.h * m_blocksPerPixel);
+        const float nu = (x - (float)m_centerWX) / extentX + 0.5f;
+        const float nv = (z - (float)m_centerWZ) / extentZ + 0.5f;
+        // The surface map is a signed [-1,1] height scaler; MapHeight maps it into [heightMin,
+        // heightMax] metres around groundHeight (0 = ground), so the terrain can dip below y=0.
+        return MapHeight(m_surface.SampleNorm(nu, nv)); // SampleNorm edge-clamps uv at the border
     }
 
     void MapGen::SpawnFeatures(ChunkColumn &col)
@@ -201,7 +264,7 @@ namespace pe::voxel
                 const int az = originWZ + pz * bpp + bpp / 2;
                 const float nu = (float)(ax - m_centerWX) / (float)(m_surface.w * bpp) + 0.5f;
                 const float nv = (float)(az - m_centerWZ) / (float)(m_surface.h * bpp) + 0.5f;
-                const int hgt = std::clamp((int)std::lround(m_surface.SampleNorm(nu, nv)), 1, kWorldHeight);
+                const int hgt = std::clamp((int)std::lround(MapHeight(m_surface.SampleNorm(nu, nv))), 1, kWorldHeight);
                 if (hgt <= m_seaLevel) // underwater: no decorations
                     continue;
                 const int topY = hgt - 1;

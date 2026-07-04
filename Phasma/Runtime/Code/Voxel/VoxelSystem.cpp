@@ -2,6 +2,10 @@
 #include "Camera/Camera.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
+#ifdef PE_PHYSICS
+#include "ECS/Context.h"           // GetGlobalSystem
+#include "Systems/PhysicsSystem.h" // sim-state edge -> re-register the terrain collider
+#endif
 
 namespace pe::voxel
 {
@@ -37,6 +41,7 @@ namespace pe::voxel
             h = HashInt(h, cfg.boundsCenterCx);
             h = HashInt(h, cfg.boundsCenterCz);
             h = HashCombine(h, cfg.streaming ? 1u : 0u);
+            h = HashCombine(h, cfg.smooth ? 1u : 0u);
             h = HashString(h, cfg.saveDir);
             // Worldgen. Floats are hashed quantized — inspector drags step well past 1/16 block.
             h = HashInt(h, static_cast<int>(cfg.noiseAmplitude * 16.0f));
@@ -45,6 +50,10 @@ namespace pe::voxel
             h = HashCombine(h, cfg.caves ? 1u : 0u);
             h = HashInt(h, cfg.seaLevel);
             h = HashString(h, cfg.heightmapPath);
+            h = HashInt(h, static_cast<int>(cfg.heightMin * 16.0f));
+            h = HashInt(h, static_cast<int>(cfg.heightMax * 16.0f));
+            h = HashInt(h, static_cast<int>(cfg.groundHeight * 16.0f));
+            h = HashInt(h, static_cast<int>(cfg.seaLevelM * 16.0f));
             h = HashString(h, cfg.strata1Path);
             h = HashString(h, cfg.strata2Path);
             h = HashString(h, cfg.featuresPath);
@@ -75,6 +84,20 @@ namespace pe::voxel
         ReconcileComponentWorld();
         if (m_world)
             m_world->Update();
+#ifdef PE_PHYSICS
+        // The terrain collider registered in edit mode fails to build at StartSimulation because the
+        // runtime host node is re-churned on play-enter. Re-register it on the live host on the sim
+        // false->true edge (and drop it cleanly on stop). Re-applying the same flag re-cooks it.
+        bool sim = false;
+        if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+            sim = ps->IsSimulating();
+        if (sim != m_wasSimulating)
+        {
+            m_wasSimulating = sim;
+            if (m_world)
+                m_world->SetPhysicsEnabled(m_world->Config().physics);
+        }
+#endif
     }
 
     void VoxelSystem::Destroy()
@@ -87,6 +110,9 @@ namespace pe::voxel
         m_componentOwned = false;
         m_appliedHash = 0;
         m_appliedLod0Radius = 0;
+        m_appliedPhysics = false;
+        m_appliedFriction = 0.5f;
+        m_appliedRestitution = 0.3f;
         // Stay enabled: Context::UpdateSystems skips disabled systems, and the component reconcile
         // must keep running to rebuild a Voxel World node's world after play-stop teardown.
     }
@@ -155,10 +181,18 @@ namespace pe::voxel
         cfg.caves = tag->caves;
         cfg.seaLevel = tag->seaLevel;
         cfg.heightmapPath = tag->heightmapPath;
+        cfg.heightMin = tag->heightMin;
+        cfg.heightMax = tag->heightMax;
+        cfg.groundHeight = tag->groundHeight;
+        cfg.seaLevelM = tag->seaLevelM;
         cfg.strata1Path = tag->strata1Path;
         cfg.strata2Path = tag->strata2Path;
         cfg.featuresPath = tag->featuresPath;
         cfg.blocksPerPixel = tag->blocksPerPixel;
+        cfg.smooth = tag->smooth;
+        cfg.physics = tag->physics;                       // collider toggle — live-applied below, NOT in the structural hash
+        cfg.physicsFriction = tag->physicsFriction;       // collider material — live-applied below
+        cfg.physicsRestitution = tag->physicsRestitution; // (no re-cook), NOT in the structural hash
         cfg.surfaceBlock = tag->surfaceBlock;
         cfg.surfaceBands = tag->surfaceBands;
         cfg.strata1Block = tag->strata1Block;
@@ -179,12 +213,14 @@ namespace pe::voxel
         const int lod0Radius = tag->lodEnabled ? std::max(1, tag->lod0Radius) : 0;
         const uint64_t hash = HashStructuralConfig(cfg);
 
-        // Inspector "Rebuild World": same config, force a recreate — the only way to pick up a
-        // repainted map file behind an unchanged path.
+        // Inspector "Rebuild World" button (and Map Painter Save): force an immediate recreate — the
+        // only way to pick up a repainted map behind an unchanged path, and the manual trigger when
+        // Auto Rebuild is off.
+        bool forceRebuild = false;
         if (tag->rebuildRequested)
         {
             tag->rebuildRequested = false;
-            m_appliedHash = 0;
+            forceRebuild = true;
         }
 
         // Debounce recreates: inspector drags change values every frame, and each structural change
@@ -203,19 +239,41 @@ namespace pe::voxel
         // Scene buffer rebuilds (scene load, play-stop restore) wipe the shared arena out from under a
         // live world — recreate instead of streaming into the wiped arena (warn spam, no terrain).
         const bool arenaDead = m_world && !m_world->IsArenaAlive();
+        // Auto Rebuild off: worldgen edits stage silently and apply only on the button (forceRebuild).
+        // First build (!m_world) and arena death still recreate unconditionally so the world exists.
+        const bool configChanged =
+            tag->autoRebuild && hash != m_appliedHash && m_pendingFrames >= kRecreateDebounceFrames;
 
-        if (!m_world || arenaDead || (hash != m_appliedHash && m_pendingFrames >= kRecreateDebounceFrames))
+        bool created = false;
+        if (!m_world || arenaDead || forceRebuild || configChanged)
         {
             cfg.lod0Radius = lod0Radius;
             CreateWorld(scene, cfg);
             m_componentOwned = true;
             m_appliedHash = hash;
             m_appliedLod0Radius = lod0Radius;
+            m_appliedPhysics = tag->physics;
+            m_appliedFriction = tag->physicsFriction;
+            m_appliedRestitution = tag->physicsRestitution;
+            created = true;
         }
-        else if (lod0Radius != m_appliedLod0Radius)
+        // Live retunes (no rebuild): LOD band radius and the physics collider toggle are independent.
+        if (!created && m_world && lod0Radius != m_appliedLod0Radius)
         {
             m_world->SetLod0Radius(lod0Radius);
             m_appliedLod0Radius = lod0Radius;
+        }
+        if (!created && m_world && tag->physics != m_appliedPhysics)
+        {
+            m_world->SetPhysicsEnabled(tag->physics);
+            m_appliedPhysics = tag->physics;
+        }
+        if (!created && m_world &&
+            (tag->physicsFriction != m_appliedFriction || tag->physicsRestitution != m_appliedRestitution))
+        {
+            m_world->SetTerrainMaterial(tag->physicsFriction, tag->physicsRestitution);
+            m_appliedFriction = tag->physicsFriction;
+            m_appliedRestitution = tag->physicsRestitution;
         }
 
         if (tag->anchorFollowsCamera)
