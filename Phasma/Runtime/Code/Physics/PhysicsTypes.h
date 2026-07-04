@@ -14,7 +14,8 @@ namespace pe
         Box = 0,
         Sphere,
         Capsule,
-        ConvexHull
+        ConvexHull,
+        Mesh // exact triangle mesh from the node's mesh refs; static/kinematic only (e.g. voxel terrain)
     };
 
     struct PhysicsBodyDesc

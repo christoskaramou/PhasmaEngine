@@ -6,17 +6,9 @@ namespace pe::RuntimeUiAuthoring
 {
     const std::array<ElementTemplate, 4> &Templates()
     {
+        // Sorted by display name — drives the "Add -> UI" submenu order everywhere. FindTemplate matches
+        // by type (not index), so reordering is safe.
         static const std::array<ElementTemplate, 4> templates = {
-            ElementTemplate{NodeRuntimeUiWidgetType::Panel,
-                            "Panel",
-                            ICON_FA_WINDOW_MAXIMIZE,
-                            "Create an authored Runtime UI panel node.",
-                            vec2(320.0f, 180.0f)},
-            ElementTemplate{NodeRuntimeUiWidgetType::Text,
-                            "Text",
-                            ICON_FA_FILE,
-                            "Create an authored Runtime UI text node.",
-                            vec2(220.0f, 64.0f)},
             ElementTemplate{NodeRuntimeUiWidgetType::Button,
                             "Button",
                             ICON_FA_VECTOR_SQUARE,
@@ -27,6 +19,16 @@ namespace pe::RuntimeUiAuthoring
                             ICON_FA_IMAGE,
                             "Create an authored Runtime UI image node.",
                             vec2(240.0f, 160.0f)},
+            ElementTemplate{NodeRuntimeUiWidgetType::Panel,
+                            "Panel",
+                            ICON_FA_WINDOW_MAXIMIZE,
+                            "Create an authored Runtime UI panel node.",
+                            vec2(320.0f, 180.0f)},
+            ElementTemplate{NodeRuntimeUiWidgetType::Text,
+                            "Text",
+                            ICON_FA_FILE,
+                            "Create an authored Runtime UI text node.",
+                            vec2(220.0f, 64.0f)},
         };
         return templates;
     }

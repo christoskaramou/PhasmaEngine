@@ -20,21 +20,41 @@ namespace pe::voxel
             return vec2(seed * 157.31f, seed * 113.17f);
         }
 
-        int TerrainHeight(int wx, int wz, const NoiseParams &p)
+        // Raw signed terrain noise (~[-0.55, 0.55], mid ~0) — the shared warp/ridge FBM. Both the block
+        // height and the smooth normalized height read this, so the two paths see the same hills.
+        float TerrainNoiseN(float wx, float wz, const NoiseParams &p)
         {
             const float baseFreq = 1.0f / p.featureScale;
             const float warpFreq = baseFreq / 1.875f; // historical 96 -> 180 wavelength ratio
             const float warpAmp = p.amplitude * 0.5f; // historical 28 -> 14 amplitude ratio
 
-            const vec2 sp = vec2((float)wx, (float)wz) + SeedOffset2D(p.seed);
+            const vec2 sp = vec2(wx, wz) + SeedOffset2D(p.seed);
             const float warp = Fbm2D(sp, 2, warpFreq) * warpAmp;
             const vec2 wp = sp + vec2(warp, warp * 0.65f);
 
             const float hills = Fbm2D(wp, 3, baseFreq);
             float ridged = 1.0f - std::fabs(hills);
             ridged *= ridged;
-            const float n = hills * 0.55f + ridged * 0.45f;
-            return p.groundY + static_cast<int>(n * p.amplitude);
+            return hills * 0.55f + ridged * 0.45f;
+        }
+
+        // Block-path absolute height: groundY + noise * amplitude (the historical look). The block path
+        // floors it; the smooth path instead maps the normalized noise into the height range.
+        float TerrainHeightF(float wx, float wz, const NoiseParams &p)
+        {
+            return p.groundY + TerrainNoiseN(wx, wz, p) * p.amplitude;
+        }
+
+        // Smooth-path normalized height 0..1 (mid noise -> ~0.5), so it maps into the height range the
+        // same way a heightmap's grey value does.
+        float TerrainNorm01(float wx, float wz, const NoiseParams &p)
+        {
+            return std::clamp(0.5f + TerrainNoiseN(wx, wz, p), 0.0f, 1.0f);
+        }
+
+        int TerrainHeight(int wx, int wz, const NoiseParams &p)
+        {
+            return p.groundY + static_cast<int>((TerrainHeightF((float)wx, (float)wz, p) - p.groundY));
         }
 
         bool CarveCave(int wx, int wy, int wz, int seed)
@@ -109,5 +129,13 @@ namespace pe::voxel
                 }
             }
         }
+    }
+
+    float NoiseGen::SurfaceHeight(float x, float z) const
+    {
+        // Smooth terrain: map the normalized noise (0..1) into groundHeight + [heightMin, heightMax],
+        // the same metre-space mapping the heightmap path uses; may dip below y=0.
+        const float t = TerrainNorm01(x, z, m_p);
+        return m_p.groundHeight + m_p.heightMin + t * (m_p.heightMax - m_p.heightMin);
     }
 } // namespace pe::voxel

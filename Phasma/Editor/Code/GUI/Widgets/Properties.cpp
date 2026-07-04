@@ -47,6 +47,43 @@ namespace pe
 {
     namespace
     {
+        // Built-in primitive meshes for the "Add" menus, sorted by display name. One table drives both
+        // the "+ Add Mesh" popup and the "+ Add Component -> Mesh" submenu so the two lists can't drift.
+        struct PrimitiveMenuItem
+        {
+            const char *name;
+            ModelAsset *(*make)(); // captureless-lambda thunk: several Create* take defaulted params
+            const char *tip;
+        };
+        constexpr PrimitiveMenuItem kPrimitiveMenu[] = {
+            {"Circle", []
+             { return Primitives::CreateCircle(); }, "Circle primitive mesh."},
+            {"Cone", []
+             { return Primitives::CreateCone(); }, "Cone primitive mesh."},
+            {"Cube", []
+             { return Primitives::CreateCube(); }, "Cube primitive mesh."},
+            {"Cylinder", []
+             { return Primitives::CreateCylinder(); }, "Cylinder primitive mesh."},
+            {"Grid", []
+             { return Primitives::CreateGrid(); }, "Subdivided grid primitive mesh."},
+            {"Ico Sphere", []
+             { return Primitives::CreateIcoSphere(); }, "Ico-sphere primitive mesh."},
+            {"Plane", []
+             { return Primitives::CreatePlane(); }, "Flat plane primitive mesh."},
+            {"Pyramid", []
+             { return Primitives::CreatePyramid(); }, "Pyramid primitive mesh."},
+            {"Quad", []
+             { return Primitives::CreateQuad(); }, "Quad primitive mesh."},
+            {"Skinned Strip 2D", []
+             { return Primitives::CreateSkinnedStrip2D(); }, "GPU-skinned 2D strip primitive mesh."},
+            {"Sphere", []
+             { return Primitives::CreateSphere(); }, "Sphere primitive mesh."},
+            {"Torus", []
+             { return Primitives::CreateTorus(); }, "Torus primitive mesh."},
+            {"UV Sphere", []
+             { return Primitives::CreateUvSphere(); }, "UV sphere primitive mesh."},
+        };
+
         // Starter templates for the zone's "Create Script" buttons. The Script-section one is a minimal
         // working example; the Physics one (triggers are less obvious) carries extra commented examples.
         constexpr const char *kZoneScriptTemplate =
@@ -300,45 +337,12 @@ namespace pe
 
             if (ImGui::BeginPopup("AddMeshPopup"))
             {
-                if (ImGui::MenuItem("Plane"))
-                    attachPrimitive(node, Primitives::CreatePlane());
-                ui::ItemTooltip("Attach a flat plane primitive.");
-                if (ImGui::MenuItem("Grid"))
-                    attachPrimitive(node, Primitives::CreateGrid());
-                ui::ItemTooltip("Attach a subdivided grid primitive.");
-                if (ImGui::MenuItem("Cube"))
-                    attachPrimitive(node, Primitives::CreateCube());
-                ui::ItemTooltip("Attach a cube primitive.");
-                if (ImGui::MenuItem("Sphere"))
-                    attachPrimitive(node, Primitives::CreateSphere());
-                ui::ItemTooltip("Attach a sphere primitive.");
-                if (ImGui::MenuItem("UV Sphere"))
-                    attachPrimitive(node, Primitives::CreateUvSphere());
-                ui::ItemTooltip("Attach a UV sphere primitive.");
-                if (ImGui::MenuItem("Ico Sphere"))
-                    attachPrimitive(node, Primitives::CreateIcoSphere());
-                ui::ItemTooltip("Attach an ico-sphere primitive.");
-                if (ImGui::MenuItem("Cylinder"))
-                    attachPrimitive(node, Primitives::CreateCylinder());
-                ui::ItemTooltip("Attach a cylinder primitive.");
-                if (ImGui::MenuItem("Cone"))
-                    attachPrimitive(node, Primitives::CreateCone());
-                ui::ItemTooltip("Attach a cone primitive.");
-                if (ImGui::MenuItem("Pyramid"))
-                    attachPrimitive(node, Primitives::CreatePyramid());
-                ui::ItemTooltip("Attach a pyramid primitive.");
-                if (ImGui::MenuItem("Torus"))
-                    attachPrimitive(node, Primitives::CreateTorus());
-                ui::ItemTooltip("Attach a torus primitive.");
-                if (ImGui::MenuItem("Circle"))
-                    attachPrimitive(node, Primitives::CreateCircle());
-                ui::ItemTooltip("Attach a circle primitive.");
-                if (ImGui::MenuItem("Skinned Strip 2D"))
-                    attachPrimitive(node, Primitives::CreateSkinnedStrip2D());
-                ui::ItemTooltip("Attach a GPU-skinned 2D strip primitive.");
-                if (ImGui::MenuItem("Quad"))
-                    attachPrimitive(node, Primitives::CreateQuad());
-                ui::ItemTooltip("Attach a quad primitive.");
+                for (const auto &p : kPrimitiveMenu)
+                {
+                    if (ImGui::MenuItem(p.name))
+                        attachPrimitive(node, p.make());
+                    ui::ItemTooltip(p.tip);
+                }
                 ImGui::EndPopup();
             }
 
@@ -1194,51 +1198,63 @@ namespace pe
 
             if (ImGui::BeginPopup("AddComponentPopup"))
             {
+                // Items sorted by display name. Conditional/#ifdef blocks keep their own gating.
+#ifdef PE_AUDIO
+                if (!(flags & Component_Audio))
+                {
+                    if (ImGui::MenuItem("Audio Source"))
+                    {
+                        if (auto *as = GetGlobalSystem<AudioSystem>())
+                        {
+                            AudioSourceDesc desc;
+                            as->AddSource(scene, node, desc);
+                        }
+                    }
+                    ui::ItemTooltip("Add an audio source component.");
+                }
+#endif
+
+                if (!(flags & Component_Script))
+                {
+                    const bool scriptMenuOpen = ImGui::BeginMenu("Lua Script");
+                    ui::ItemTooltip("Attach a Lua script component to this node.");
+                    if (scriptMenuOpen)
+                    {
+                        if (ImGui::MenuItem("Browse Existing..."))
+                        {
+                            if (auto *fs = m_gui->GetWidget<FileSelector>())
+                            {
+                                fs->OpenSelection([node](const std::string &path) -> bool
+                                                  {
+                                    if (auto *r = GetGlobalSystem<RendererSystem>())
+                                        r->GetScene().SetNodeScript(node, path);
+                                    return true; },
+                                                  {".lua"});
+                            }
+                        }
+                        ui::ItemTooltip("Choose an existing Lua script asset.");
+                        if (ImGui::MenuItem("New Empty Script"))
+                        {
+                            if (auto *se = m_gui->GetWidget<ScriptEditor>())
+                                se->OpenNewScript(node);
+                        }
+                        ui::ItemTooltip("Create a new Lua script and attach it to this node.");
+                        ImGui::EndMenu();
+                    }
+                }
+
                 if (!(flags & Component_Mesh))
                 {
                     const bool meshMenuOpen = ImGui::BeginMenu("Mesh");
                     ui::ItemTooltip("Add a mesh component using a built-in primitive.");
                     if (meshMenuOpen)
                     {
-                        if (ImGui::MenuItem("Plane"))
-                            attachPrimitive(node, Primitives::CreatePlane());
-                        ui::ItemTooltip("Add a flat plane mesh.");
-                        if (ImGui::MenuItem("Grid"))
-                            attachPrimitive(node, Primitives::CreateGrid());
-                        ui::ItemTooltip("Add a subdivided grid mesh.");
-                        if (ImGui::MenuItem("Cube"))
-                            attachPrimitive(node, Primitives::CreateCube());
-                        ui::ItemTooltip("Add a cube mesh.");
-                        if (ImGui::MenuItem("Sphere"))
-                            attachPrimitive(node, Primitives::CreateSphere());
-                        ui::ItemTooltip("Add a sphere mesh.");
-                        if (ImGui::MenuItem("UV Sphere"))
-                            attachPrimitive(node, Primitives::CreateUvSphere());
-                        ui::ItemTooltip("Add a UV sphere mesh.");
-                        if (ImGui::MenuItem("Ico Sphere"))
-                            attachPrimitive(node, Primitives::CreateIcoSphere());
-                        ui::ItemTooltip("Add an ico-sphere mesh.");
-                        if (ImGui::MenuItem("Cylinder"))
-                            attachPrimitive(node, Primitives::CreateCylinder());
-                        ui::ItemTooltip("Add a cylinder mesh.");
-                        if (ImGui::MenuItem("Cone"))
-                            attachPrimitive(node, Primitives::CreateCone());
-                        ui::ItemTooltip("Add a cone mesh.");
-                        if (ImGui::MenuItem("Pyramid"))
-                            attachPrimitive(node, Primitives::CreatePyramid());
-                        ui::ItemTooltip("Add a pyramid mesh.");
-                        if (ImGui::MenuItem("Torus"))
-                            attachPrimitive(node, Primitives::CreateTorus());
-                        ui::ItemTooltip("Add a torus mesh.");
-                        if (ImGui::MenuItem("Circle"))
-                            attachPrimitive(node, Primitives::CreateCircle());
-                        ui::ItemTooltip("Add a circle mesh.");
-                        if (ImGui::MenuItem("Skinned Strip 2D"))
-                            attachPrimitive(node, Primitives::CreateSkinnedStrip2D());
-                        ui::ItemTooltip("Add a GPU-skinned 2D strip mesh.");
-                        if (ImGui::MenuItem("Quad"))
-                            attachPrimitive(node, Primitives::CreateQuad());
-                        ui::ItemTooltip("Add a quad mesh.");
+                        for (const auto &p : kPrimitiveMenu)
+                        {
+                            if (ImGui::MenuItem(p.name))
+                                attachPrimitive(node, p.make());
+                            ui::ItemTooltip(p.tip);
+                        }
                         ImGui::EndMenu();
                     }
                 }
@@ -1273,21 +1289,6 @@ namespace pe
                 }
 #endif
 
-#ifdef PE_AUDIO
-                if (!(flags & Component_Audio))
-                {
-                    if (ImGui::MenuItem("Audio Source"))
-                    {
-                        if (auto *as = GetGlobalSystem<AudioSystem>())
-                        {
-                            AudioSourceDesc desc;
-                            as->AddSource(scene, node, desc);
-                        }
-                    }
-                    ui::ItemTooltip("Add an audio source component.");
-                }
-#endif
-
                 if (!(flags & Component_RuntimeUi))
                 {
                     if (ImGui::MenuItem("Runtime UI"))
@@ -1300,35 +1301,6 @@ namespace pe
                     if (ImGui::MenuItem("Sprite"))
                         scene.AddComponentFlag(node, Component_Sprite);
                     ui::ItemTooltip("Tag this mesh node as a sprite authoring surface.");
-                }
-
-                if (!(flags & Component_Script))
-                {
-                    const bool scriptMenuOpen = ImGui::BeginMenu("Lua Script");
-                    ui::ItemTooltip("Attach a Lua script component to this node.");
-                    if (scriptMenuOpen)
-                    {
-                        if (ImGui::MenuItem("Browse Existing..."))
-                        {
-                            if (auto *fs = m_gui->GetWidget<FileSelector>())
-                            {
-                                fs->OpenSelection([node](const std::string &path) -> bool
-                                                  {
-                                    if (auto *r = GetGlobalSystem<RendererSystem>())
-                                        r->GetScene().SetNodeScript(node, path);
-                                    return true; },
-                                                  {".lua"});
-                            }
-                        }
-                        ui::ItemTooltip("Choose an existing Lua script asset.");
-                        if (ImGui::MenuItem("New Empty Script"))
-                        {
-                            if (auto *se = m_gui->GetWidget<ScriptEditor>())
-                                se->OpenNewScript(node);
-                        }
-                        ui::ItemTooltip("Create a new Lua script and attach it to this node.");
-                        ImGui::EndMenu();
-                    }
                 }
 
                 ImGui::EndPopup();
@@ -1934,8 +1906,15 @@ namespace pe
                         changed |= ImGui::DragInt("World Radius", &v->worldRadius, 0.2f, 0, 4096);
                         ui::ItemTooltip("Total world size in columns around this node; columns outside never "
                                         "generate. 0 = infinite in X/Z.");
-                        changed |= ImGui::DragInt("Ground Y", &v->groundY, 0.5f, 0, 256);
-                        ui::ItemTooltip("Terrain base height fed to the world generator.");
+                        // Smooth terrain (noise or heightmap) gets its base from Ground Height + Height Range
+                        // (World Generation, below), so Ground Y — the cube noise/sea-level datum — is hidden then.
+                        const bool smoothRange = v->smooth;
+                        if (!smoothRange)
+                        {
+                            changed |= ImGui::DragInt("Ground Y", &v->groundY, 0.5f, 0, 256);
+                            ui::ItemTooltip("Terrain base height fed to the cube world generator (noise base / "
+                                            "sea-level datum). Smooth terrain uses Ground Height instead.");
+                        }
                         changed |= ImGui::DragInt("Upload Budget", &v->uploadBudget, 0.2f, 1, 64);
                         ui::ItemTooltip("Section meshes uploaded per frame; higher streams in faster but can "
                                         "spike frame time.");
@@ -1963,6 +1942,52 @@ namespace pe
                                         "Empty = no persistence. Changing it rebuilds the world.");
 
                         ImGui::SeparatorText("World Generation");
+                        changed |= ImGui::Checkbox("Smooth Terrain", &v->smooth);
+                        ui::ItemTooltip("Surface-Nets isosurface terrain: rounded, sculptable hills instead of "
+                                        "cubes. Bounded/static (no streaming/LOD yet). Works with noise or a "
+                                        "heightmap. Sculpt from script with voxel.sculpt.");
+                        if (v->smooth)
+                        {
+                            changed |= ImGui::Checkbox("Physics Collision", &v->physics);
+                            ui::ItemTooltip("Give the terrain a static physics collider so ordinary rigidbodies "
+                                            "(add a Physics Body to a mesh) collide with it in play mode — no "
+                                            "scripting. Toggling this does not rebuild the world. Rebuilds the "
+                                            "collider on each sculpt.");
+                            if (v->physics)
+                            {
+                                // Live-applied to the terrain collider (no re-cook). The runtime VoxelWorldHost
+                                // shows these read-only — this is where you author them.
+                                changed |= ImGui::DragFloat("Friction", &v->physicsFriction, 0.01f, 0.0f, 1.0f);
+                                ui::ItemTooltip("Terrain surface friction — how much sliding objects grip it.");
+                                changed |= ImGui::DragFloat("Restitution", &v->physicsRestitution, 0.01f, 0.0f, 1.0f);
+                                ui::ItemTooltip("Terrain bounciness — how much objects rebound on impact.");
+                            }
+                        }
+                        // Height Range + Ground Height drive the heightmap/noise -> world-height mapping for
+                        // both cube and smooth terrain (a heightmap value is a signed [-1,1] scaler, 0 =
+                        // ground). Sea Level (m) is a smooth-only underwater tint.
+                        const bool usesHeightRange = v->smooth || !v->heightmapPath.empty();
+                        if (usesHeightRange)
+                        {
+                            changed |= ImGui::DragFloatRange2("Height Range (m)", &v->heightMin, &v->heightMax, 0.5f,
+                                                              -256.0f, 256.0f, "min %.0f", "max %.0f");
+                            ui::ItemTooltip("Vertical span in metres around Ground Height: terrain fills Ground Height "
+                                            "+ [min, max]. A heightmap's -1..1 scaler (or the noise) maps into this "
+                                            "range; 0 = Ground Height. May dip below y=0.");
+                            v->groundHeight = std::clamp(v->groundHeight, v->heightMin, v->heightMax);
+                            changed |= ImGui::DragFloat("Ground Height", &v->groundHeight, 0.25f, v->heightMin,
+                                                        v->heightMax, "%.1f m");
+                            ui::ItemTooltip("World height the 0 scaler sits at; drags within Height Range. "
+                                            "0 centres the terrain on world y=0.");
+                        }
+                        if (v->smooth)
+                        {
+                            v->seaLevelM = std::clamp(v->seaLevelM, v->heightMin, v->heightMax);
+                            changed |= ImGui::DragFloat("Sea Level (m)", &v->seaLevelM, 0.25f, v->heightMin,
+                                                        v->heightMax, "%.1f m");
+                            ui::ItemTooltip("Water height in metres: smooth terrain below this is tinted underwater "
+                                            "(no water surface mesh yet). Default -1.");
+                        }
                         auto pathField = [&changed](const char *label, std::string &path)
                         {
                             char buf[260];
@@ -1974,14 +1999,18 @@ namespace pe
                             }
                         };
                         pathField("Heightmap", v->heightmapPath);
-                        ui::ItemTooltip("Grayscale image under Assets: pixel value = surface height in blocks "
-                                        "(0-255), lerped between pixels, centered on this node. Empty = "
-                                        "procedural noise terrain.");
+                        ui::ItemTooltip("Signed height map under Assets (paint it in Map Painter): value -1..1 is a "
+                                        "height scaler (0 = ground) mapped into Height Range, lerped between pixels, "
+                                        "centered on this node. Empty = procedural noise terrain.");
                         if (v->heightmapPath.empty())
                         {
-                            changed |= ImGui::DragFloat("Mountain Height", &v->noiseAmplitude, 0.25f, 0.0f, 128.0f,
-                                                        "%.0f");
-                            ui::ItemTooltip("Peak height above Ground Y in blocks. 0 = flat plain.");
+                            if (!v->smooth) // smooth terrain's vertical extent comes from Height Range instead
+                            {
+                                changed |= ImGui::DragFloat("Mountain Height", &v->noiseAmplitude, 0.25f, 0.0f, 128.0f,
+                                                            "%.0f");
+                                ui::ItemTooltip("Peak height above Ground Y in blocks (cube terrain). 0 = flat plain. "
+                                                "Smooth terrain uses Height Range instead.");
+                            }
                             changed |= ImGui::DragFloat("Feature Scale", &v->noiseFeatureScale, 0.5f, 8.0f, 1024.0f,
                                                         "%.0f");
                             ui::ItemTooltip("Terrain feature wavelength in blocks — small = choppy hills, large = "
@@ -2018,12 +2047,19 @@ namespace pe
                             ui::ItemTooltip("Fills below the strata down to y=0. 0 = air (floating-island "
                                             "shells).");
                         }
-                        changed |= ImGui::DragInt("Sea Level", &v->seaLevel, 0.2f, -1, 256);
-                        ui::ItemTooltip("Water surface height in blocks: -1 = auto (Ground Y - 2), 0 = no water.");
+                        if (!smoothRange) // smooth terrain uses Sea Level (m) above instead
+                        {
+                            changed |= ImGui::DragInt("Sea Level", &v->seaLevel, 0.2f, -1, 256);
+                            ui::ItemTooltip("Water surface height in blocks: -1 = auto (Ground Y - 2), 0 = no water.");
+                        }
+                        changed |= ImGui::Checkbox("Auto Rebuild", &v->autoRebuild);
+                        ui::ItemTooltip("On (default): worldgen edits rebuild the world automatically after a short "
+                                        "settle. Off: edits only apply when you press Rebuild World — for batching "
+                                        "expensive smooth-terrain edits.");
                         if (ImGui::Button("Rebuild World"))
                             v->rebuildRequested = true;
-                        ui::ItemTooltip("Force-rebuild now — needed after repainting a map file (same path is "
-                                        "not auto-detected).");
+                        ui::ItemTooltip("Force-rebuild now — applies staged edits (needed after repainting a map "
+                                        "file, or any edit while Auto Rebuild is off).");
                         ImGui::TextDisabled("Block = 1 unit, section = 16^3 (engine constants)");
                         if (changed)
                             scene.MarkDirty();

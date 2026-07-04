@@ -41,6 +41,47 @@ namespace pe
         const ImVec4 TreeLineBg = ImVec4(0.35f, 0.35f, 0.35f, 0.5f);
     } // namespace HierarchyStyle
 
+    namespace
+    {
+        // Built-in primitives for the Hierarchy "Add -> Mesh" submenus, sorted by display name. One table
+        // drives all four add menus (toolbar Add, root right-click, node "Add", root "Add") so they stay
+        // in sync. Each Create* is wrapped in a captureless lambda because several take defaulted params.
+        struct AddMeshItem
+        {
+            const char *name;
+            ModelAsset *(*make)();
+            const char *tip;
+        };
+        constexpr AddMeshItem kAddMeshPrimitives[] = {
+            {"Circle", []
+             { return Primitives::CreateCircle(); }, "Circle primitive mesh."},
+            {"Cone", []
+             { return Primitives::CreateCone(); }, "Cone primitive mesh."},
+            {"Cube", []
+             { return Primitives::CreateCube(); }, "Cube primitive mesh."},
+            {"Cylinder", []
+             { return Primitives::CreateCylinder(); }, "Cylinder primitive mesh."},
+            {"Grid", []
+             { return Primitives::CreateGrid(); }, "Subdivided grid primitive mesh."},
+            {"Ico Sphere", []
+             { return Primitives::CreateIcoSphere(); }, "Ico-sphere primitive mesh."},
+            {"Plane", []
+             { return Primitives::CreatePlane(); }, "Flat plane primitive mesh."},
+            {"Pyramid", []
+             { return Primitives::CreatePyramid(); }, "Pyramid primitive mesh."},
+            {"Quad", []
+             { return Primitives::CreateQuad(); }, "Quad primitive mesh."},
+            {"Skinned Strip 2D", []
+             { return Primitives::CreateSkinnedStrip2D(); }, "GPU-skinned 2D strip primitive mesh."},
+            {"Sphere", []
+             { return Primitives::CreateSphere(); }, "Sphere primitive mesh."},
+            {"Torus", []
+             { return Primitives::CreateTorus(); }, "Torus primitive mesh."},
+            {"UV Sphere", []
+             { return Primitives::CreateUvSphere(); }, "UV sphere primitive mesh."},
+        };
+    } // namespace
+
     static bool ContainsSpriteMarker(const std::string &value)
     {
         return value.find("sprite") != std::string::npos || value.find("atlas") != std::string::npos;
@@ -262,6 +303,190 @@ namespace pe
             ImGui::EndMenu();
         };
 
+        // Single source of truth for the "Add" entity menu — drives the toolbar Add button, the root
+        // right-click, the background right-click, and each node's "Add" submenu, so they can never drift.
+        // parent==nullptr creates at the scene root; a non-null parent creates a child and enables the
+        // node-only items (Lua Script, Mesh component) while hiding the one-per-scene singletons.
+        auto drawAddEntityItems = [&](NodeId *parent)
+        {
+            const uint32_t componentFlags = parent ? scene.GetComponentFlags(parent) : 0u;
+
+            if (ImGui::MenuItem("Camera"))
+            {
+                recordSnapshot("Added Camera");
+                scene.AddCamera(parent);
+            }
+            ui::ItemTooltip(parent ? "Add a child camera node." : "Create a camera node.");
+
+            if (ImGui::MenuItem("Empty Node"))
+            {
+                recordSnapshot("Added Node");
+                NodeId *node = scene.CreateNode("Empty Node", parent);
+                if (parent)
+                    scene.MarkNodeDirty(node);
+                selection.Select(node, SelectionType::Node);
+            }
+            ui::ItemTooltip(parent ? "Add an empty child transform node." : "Create an empty transform node.");
+
+            const bool lightMenuOpen = ImGui::BeginMenu("Light");
+            ui::ItemTooltip(parent ? "Add a child light node." : "Create a light node.");
+            if (lightMenuOpen)
+            {
+                if (ImGui::MenuItem("Area Light"))
+                {
+                    recordSnapshot("Added Area Light");
+                    scene.CreateAreaLight(parent);
+                }
+                ui::ItemTooltip("Create a rectangular area light.");
+                if (ImGui::MenuItem("Directional Light"))
+                {
+                    recordSnapshot("Added Directional Light");
+                    scene.CreateDirectionalLight(parent);
+                }
+                ui::ItemTooltip("Create a sun-like directional light.");
+                if (ImGui::MenuItem("Point Light"))
+                {
+                    recordSnapshot("Added Point Light");
+                    scene.CreatePointLight(parent);
+                }
+                ui::ItemTooltip("Create an omnidirectional point light.");
+                if (ImGui::MenuItem("Spot Light"))
+                {
+                    recordSnapshot("Added Spot Light");
+                    scene.CreateSpotLight(parent);
+                }
+                ui::ItemTooltip("Create a cone-shaped spot light.");
+                ImGui::EndMenu();
+            }
+
+            // Lua Script — node-only (attaches a script component to the parent node).
+            if (parent && !(componentFlags & Component_Script))
+            {
+                const bool scriptMenuOpen = ImGui::BeginMenu("Lua Script");
+                ui::ItemTooltip("Attach a Lua script component to this node.");
+                if (scriptMenuOpen)
+                {
+                    if (ImGui::MenuItem("Browse Existing..."))
+                    {
+                        if (auto *fs = m_gui->GetWidget<FileSelector>())
+                        {
+                            fs->OpenSelection([parent](const std::string &path) -> bool
+                                              {
+                                if (auto *r = GetGlobalSystem<RendererSystem>())
+                                    r->GetScene().SetNodeScript(parent, path);
+                                return true; },
+                                              {".lua"});
+                        }
+                    }
+                    ui::ItemTooltip("Choose an existing Lua script asset.");
+                    if (ImGui::MenuItem("New Empty Script"))
+                    {
+                        if (auto *se = m_gui->GetWidget<ScriptEditor>())
+                            se->OpenNewScript(parent);
+                    }
+                    ui::ItemTooltip("Create a new Lua script and attach it to this node.");
+                    ImGui::EndMenu();
+                }
+            }
+
+            // Mesh — root adds a standalone model; a child attaches a primitive component (node-only gating).
+            if (!parent || !(componentFlags & Component_Mesh))
+            {
+                const bool meshMenuOpen = ImGui::BeginMenu("Mesh");
+                ui::ItemTooltip(parent ? "Attach a primitive mesh component to this node."
+                                       : "Create a built-in primitive mesh.");
+                if (meshMenuOpen)
+                {
+                    for (const auto &p : kAddMeshPrimitives)
+                    {
+                        if (ImGui::MenuItem(p.name))
+                        {
+                            if (parent)
+                            {
+                                recordSnapshot("Added Mesh Component");
+                                EventSystem::PushEvent(EventType::PrimitiveAttachedToNode,
+                                                       Scene::PrimitiveAttachRequest{parent, p.make()});
+                            }
+                            else
+                            {
+                                recordSnapshot("Added Mesh");
+                                EventSystem::PushEvent(EventType::ModelLoaded, p.make());
+                            }
+                        }
+                        ui::ItemTooltip(p.tip);
+                    }
+                    ImGui::EndMenu();
+                }
+            }
+
+            // Particle Emitter — spawns near the active camera (not parented); available in every scope.
+            if (ImGui::MenuItem("Particle Emitter"))
+            {
+                if (ParticleManager *pm = scene.GetParticleManager())
+                {
+                    recordSnapshot("Added Particle Emitter");
+                    auto &emitters = pm->GetEmitters();
+                    auto &names = pm->GetEmitterNames();
+                    Camera *camera = scene.GetActiveCamera();
+                    vec3 spawnPos = camera ? (camera->GetPosition() + camera->GetFront() * 5.0f) : vec3(0.0f);
+
+                    ParticleEmitter newEmitter{};
+                    newEmitter.position = vec4(spawnPos, 1.0f);
+                    newEmitter.velocity = vec4(0.0f, 5.0f, 0.0f, 0.0f);
+                    newEmitter.colorStart = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+                    newEmitter.colorEnd = vec4(0.0f, 0.0f, 0.0f, 0.0f);
+                    newEmitter.sizeLife = vec4(0.05f, 0.15f, 1.0f, 2.0f);
+                    newEmitter.physics = vec4(50.0f, 0.5f, 1.0f, 0.1f);
+                    newEmitter.gravity = vec4(0.0f, -9.8f, 0.0f, 0.0f);
+                    newEmitter.animation = vec4(1.0f, 1.0f, 1.0f, 0.0f);
+                    newEmitter.textureIndex = 0;
+                    newEmitter.count = 100;
+
+                    emitters.push_back(newEmitter);
+                    names.push_back("Emitter " + std::to_string(emitters.size() - 1));
+                    pm->UpdateEmitterBuffer();
+                    selection.SelectEmitter(static_cast<int>(emitters.size() - 1));
+                }
+            }
+            ui::ItemTooltip("Create a particle emitter near the active camera.");
+
+            // One-per-scene singletons — root scope only.
+            if (!parent)
+            {
+                if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
+                    createSceneSettings();
+                if (!scene.GetSceneSettingsNode())
+                    ui::ItemTooltip("Add the scene settings node (global render + default post-process). One per scene.");
+
+                if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
+                    createSkybox();
+                if (!scene.GetSkyboxNode())
+                    ui::ItemTooltip("Create the scene skybox node.");
+            }
+
+            if (ImGui::MenuItem("Sprite"))
+                createSpriteFromSelection(parent);
+            ui::ItemTooltip(parent ? "Add a child Component_Sprite node from the selected sprite asset when available."
+                                   : "Create a Component_Sprite node from the selected image or sprite metadata when available.");
+
+            if (!parent)
+            {
+                if (ImGui::MenuItem("Trigger Zone"))
+                    createTriggerZone();
+                ui::ItemTooltip("Create a Trigger Zone (script on_enter/on_exit + post-process + audio sections).");
+            }
+
+            drawRuntimeUiCreateMenu(parent);
+
+            if (!parent)
+            {
+                if (!scene.GetVoxelWorldNode() && ImGui::MenuItem("Voxel World"))
+                    createVoxelWorld();
+                if (!scene.GetVoxelWorldNode())
+                    ui::ItemTooltip("Create the voxel world node — all voxel settings live on it. One per scene.");
+            }
+        };
+
         auto makePrefabFileName = [](std::string name)
         {
             if (name.empty())
@@ -380,159 +605,7 @@ namespace pe
 
         if (ImGui::BeginPopup("AddEntityPopup"))
         {
-            if (ImGui::MenuItem("Camera"))
-            {
-                recordSnapshot("Added Camera");
-                scene.AddCamera();
-            }
-            ui::ItemTooltip("Create a camera node.");
-
-            const bool lightMenuOpen = ImGui::BeginMenu("Light");
-            ui::ItemTooltip("Create a light node.");
-            if (lightMenuOpen)
-            {
-                if (ImGui::MenuItem("Directional Light"))
-                {
-                    recordSnapshot("Added Directional Light");
-                    scene.CreateDirectionalLight();
-                }
-                ui::ItemTooltip("Create a sun-like directional light.");
-                if (ImGui::MenuItem("Point Light"))
-                {
-                    recordSnapshot("Added Point Light");
-                    scene.CreatePointLight();
-                }
-                ui::ItemTooltip("Create an omnidirectional point light.");
-                if (ImGui::MenuItem("Spot Light"))
-                {
-                    recordSnapshot("Added Spot Light");
-                    scene.CreateSpotLight();
-                }
-                ui::ItemTooltip("Create a cone-shaped spot light.");
-                if (ImGui::MenuItem("Area Light"))
-                {
-                    recordSnapshot("Added Area Light");
-                    scene.CreateAreaLight();
-                }
-                ui::ItemTooltip("Create a rectangular area light.");
-                ImGui::EndMenu();
-            }
-
-            if (ImGui::MenuItem("Empty Node"))
-            {
-                recordSnapshot("Added Node");
-                NodeId *node = scene.CreateNode("Empty Node");
-                selection.Select(node, SelectionType::Node);
-            }
-            ui::ItemTooltip("Create an empty transform node.");
-
-            if (ImGui::MenuItem("Sprite"))
-                createSpriteFromSelection(nullptr);
-            ui::ItemTooltip("Create a Component_Sprite node from the selected image or sprite metadata when available.");
-
-            drawRuntimeUiCreateMenu(nullptr);
-
-            if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
-                createSkybox();
-            if (!scene.GetSkyboxNode())
-                ui::ItemTooltip("Create the scene skybox node.");
-            if (ImGui::MenuItem("Trigger Zone"))
-                createTriggerZone();
-            ui::ItemTooltip("Create a Trigger Zone (script on_enter/on_exit + post-process + audio sections).");
-            if (!scene.GetVoxelWorldNode() && ImGui::MenuItem("Voxel World"))
-                createVoxelWorld();
-            if (!scene.GetVoxelWorldNode())
-                ui::ItemTooltip("Create the voxel world node — all voxel settings live on it. One per scene.");
-            if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
-                createSceneSettings();
-            if (!scene.GetSceneSettingsNode())
-                ui::ItemTooltip("Add the scene settings node (global render + default post-process). One per scene.");
-
-            const bool meshMenuOpen = ImGui::BeginMenu("Mesh");
-            ui::ItemTooltip("Create a built-in primitive mesh.");
-            if (meshMenuOpen)
-            {
-                auto AddPrimitive = [&](ModelAsset *m)
-                {
-                    recordSnapshot("Added Mesh");
-                    EventSystem::PushEvent(EventType::ModelLoaded, m);
-                    // After model is added to scene, select its first root node
-                    // The event handler will call AddModel which creates NodeIds
-                };
-                if (ImGui::MenuItem("Plane"))
-                    AddPrimitive(Primitives::CreatePlane());
-                ui::ItemTooltip("Create a flat plane mesh.");
-                if (ImGui::MenuItem("Grid"))
-                    AddPrimitive(Primitives::CreateGrid());
-                ui::ItemTooltip("Create a subdivided grid mesh.");
-                if (ImGui::MenuItem("Cube"))
-                    AddPrimitive(Primitives::CreateCube());
-                ui::ItemTooltip("Create a cube mesh.");
-                if (ImGui::MenuItem("Sphere"))
-                    AddPrimitive(Primitives::CreateSphere());
-                ui::ItemTooltip("Create a sphere mesh.");
-                if (ImGui::MenuItem("UV Sphere"))
-                    AddPrimitive(Primitives::CreateUvSphere());
-                ui::ItemTooltip("Create a UV sphere mesh.");
-                if (ImGui::MenuItem("Ico Sphere"))
-                    AddPrimitive(Primitives::CreateIcoSphere());
-                ui::ItemTooltip("Create an ico-sphere mesh.");
-                if (ImGui::MenuItem("Cylinder"))
-                    AddPrimitive(Primitives::CreateCylinder());
-                ui::ItemTooltip("Create a cylinder mesh.");
-                if (ImGui::MenuItem("Cone"))
-                    AddPrimitive(Primitives::CreateCone());
-                ui::ItemTooltip("Create a cone mesh.");
-                if (ImGui::MenuItem("Pyramid"))
-                    AddPrimitive(Primitives::CreatePyramid());
-                ui::ItemTooltip("Create a pyramid mesh.");
-                if (ImGui::MenuItem("Torus"))
-                    AddPrimitive(Primitives::CreateTorus());
-                ui::ItemTooltip("Create a torus mesh.");
-                if (ImGui::MenuItem("Circle"))
-                    AddPrimitive(Primitives::CreateCircle());
-                ui::ItemTooltip("Create a circle mesh.");
-                if (ImGui::MenuItem("Skinned Strip 2D"))
-                    AddPrimitive(Primitives::CreateSkinnedStrip2D());
-                ui::ItemTooltip("Create a GPU-skinned 2D strip mesh.");
-                if (ImGui::MenuItem("Quad"))
-                    AddPrimitive(Primitives::CreateQuad());
-                ui::ItemTooltip("Create a quad mesh.");
-                ImGui::EndMenu();
-            }
-
-            if (ImGui::MenuItem("Particle Emitter"))
-            {
-                ParticleManager *pm = scene.GetParticleManager();
-                if (pm)
-                {
-                    auto &emitters = pm->GetEmitters();
-                    auto &names = pm->GetEmitterNames();
-
-                    Camera *camera = scene.GetActiveCamera();
-                    vec3 spawnPos = camera ? (camera->GetPosition() + camera->GetFront() * 5.0f) : vec3(0.0f);
-
-                    ParticleEmitter newEmitter{};
-                    newEmitter.position = vec4(spawnPos, 1.0f);
-                    newEmitter.velocity = vec4(0.0f, 5.0f, 0.0f, 0.0f);
-                    newEmitter.colorStart = vec4(1.0f, 1.0f, 1.0f, 1.0f);
-                    newEmitter.colorEnd = vec4(0.0f, 0.0f, 0.0f, 0.0f);
-                    newEmitter.sizeLife = vec4(0.05f, 0.15f, 1.0f, 2.0f);
-                    newEmitter.physics = vec4(50.0f, 0.5f, 1.0f, 0.1f);
-                    newEmitter.gravity = vec4(0.0f, -9.8f, 0.0f, 0.0f);
-                    newEmitter.animation = vec4(1.0f, 1.0f, 1.0f, 0.0f);
-                    newEmitter.textureIndex = 0;
-                    newEmitter.count = 100;
-
-                    emitters.push_back(newEmitter);
-                    names.push_back("Emitter " + std::to_string(emitters.size() - 1));
-                    pm->UpdateEmitterBuffer();
-
-                    selection.SelectEmitter(static_cast<int>(emitters.size() - 1));
-                }
-            }
-            ui::ItemTooltip("Create a particle emitter near the active camera.");
-
+            drawAddEntityItems(nullptr);
             ImGui::EndPopup();
         }
 
@@ -582,118 +655,7 @@ namespace pe
 
         if (ImGui::BeginPopupContextItem("RootNodeContext"))
         {
-            if (ImGui::MenuItem("Camera"))
-            {
-                recordSnapshot("Added Camera");
-                scene.AddCamera();
-            }
-            ui::ItemTooltip("Create a camera node at the scene root.");
-            const bool lightMenuOpen = ImGui::BeginMenu("Light");
-            ui::ItemTooltip("Create a light node at the scene root.");
-            if (lightMenuOpen)
-            {
-                if (ImGui::MenuItem("Directional Light"))
-                {
-                    recordSnapshot("Added Directional Light");
-                    scene.CreateDirectionalLight();
-                }
-                ui::ItemTooltip("Create a sun-like directional light.");
-                if (ImGui::MenuItem("Point Light"))
-                {
-                    recordSnapshot("Added Point Light");
-                    scene.CreatePointLight();
-                }
-                ui::ItemTooltip("Create an omnidirectional point light.");
-                if (ImGui::MenuItem("Spot Light"))
-                {
-                    recordSnapshot("Added Spot Light");
-                    scene.CreateSpotLight();
-                }
-                ui::ItemTooltip("Create a cone-shaped spot light.");
-                if (ImGui::MenuItem("Area Light"))
-                {
-                    recordSnapshot("Added Area Light");
-                    scene.CreateAreaLight();
-                }
-                ui::ItemTooltip("Create a rectangular area light.");
-                ImGui::EndMenu();
-            }
-            if (ImGui::MenuItem("Empty Node"))
-            {
-                recordSnapshot("Added Node");
-                NodeId *node = scene.CreateNode("Empty Node");
-                selection.Select(node, SelectionType::Node);
-            }
-            ui::ItemTooltip("Create an empty transform node at the scene root.");
-            if (ImGui::MenuItem("Sprite"))
-                createSpriteFromSelection(nullptr);
-            ui::ItemTooltip("Create a root-level Component_Sprite node from the selected sprite asset when available.");
-            drawRuntimeUiCreateMenu(nullptr);
-            if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
-                createSkybox();
-            if (!scene.GetSkyboxNode())
-                ui::ItemTooltip("Create the scene skybox node.");
-            if (ImGui::MenuItem("Trigger Zone"))
-                createTriggerZone();
-            ui::ItemTooltip("Create a Trigger Zone (script on_enter/on_exit + post-process + audio sections).");
-            if (!scene.GetVoxelWorldNode() && ImGui::MenuItem("Voxel World"))
-                createVoxelWorld();
-            if (!scene.GetVoxelWorldNode())
-                ui::ItemTooltip("Create the voxel world node — all voxel settings live on it. One per scene.");
-            if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
-                createSceneSettings();
-            if (!scene.GetSceneSettingsNode())
-                ui::ItemTooltip("Add the scene settings node (global render + default post-process). One per scene.");
-            const bool meshMenuOpen = ImGui::BeginMenu("Mesh");
-            ui::ItemTooltip("Create a built-in primitive mesh at the scene root.");
-            if (meshMenuOpen)
-            {
-                auto AddPrim = [&](ModelAsset *m)
-                {
-                    recordSnapshot("Added Mesh");
-                    EventSystem::PushEvent(EventType::ModelLoaded, m);
-                };
-                if (ImGui::MenuItem("Plane"))
-                    AddPrim(Primitives::CreatePlane());
-                ui::ItemTooltip("Create a flat plane mesh.");
-                if (ImGui::MenuItem("Grid"))
-                    AddPrim(Primitives::CreateGrid());
-                ui::ItemTooltip("Create a subdivided grid mesh.");
-                if (ImGui::MenuItem("Cube"))
-                    AddPrim(Primitives::CreateCube());
-                ui::ItemTooltip("Create a cube mesh.");
-                if (ImGui::MenuItem("Sphere"))
-                    AddPrim(Primitives::CreateSphere());
-                ui::ItemTooltip("Create a sphere mesh.");
-                if (ImGui::MenuItem("UV Sphere"))
-                    AddPrim(Primitives::CreateUvSphere());
-                ui::ItemTooltip("Create a UV sphere mesh.");
-                if (ImGui::MenuItem("Ico Sphere"))
-                    AddPrim(Primitives::CreateIcoSphere());
-                ui::ItemTooltip("Create an ico-sphere mesh.");
-                if (ImGui::MenuItem("Cylinder"))
-                    AddPrim(Primitives::CreateCylinder());
-                ui::ItemTooltip("Create a cylinder mesh.");
-                if (ImGui::MenuItem("Cone"))
-                    AddPrim(Primitives::CreateCone());
-                ui::ItemTooltip("Create a cone mesh.");
-                if (ImGui::MenuItem("Pyramid"))
-                    AddPrim(Primitives::CreatePyramid());
-                ui::ItemTooltip("Create a pyramid mesh.");
-                if (ImGui::MenuItem("Torus"))
-                    AddPrim(Primitives::CreateTorus());
-                ui::ItemTooltip("Create a torus mesh.");
-                if (ImGui::MenuItem("Circle"))
-                    AddPrim(Primitives::CreateCircle());
-                ui::ItemTooltip("Create a circle mesh.");
-                if (ImGui::MenuItem("Skinned Strip 2D"))
-                    AddPrim(Primitives::CreateSkinnedStrip2D());
-                ui::ItemTooltip("Create a GPU-skinned 2D strip mesh.");
-                if (ImGui::MenuItem("Quad"))
-                    AddPrim(Primitives::CreateQuad());
-                ui::ItemTooltip("Create a quad mesh.");
-                ImGui::EndMenu();
-            }
+            drawAddEntityItems(nullptr);
             ImGui::EndPopup();
         }
         if (rootHovered)
@@ -1082,171 +1044,7 @@ namespace pe
                     ui::ItemTooltip("Add a child object or component under this node.");
                     if (addMenuOpen)
                     {
-                        if (ImGui::MenuItem("Camera"))
-                        {
-                            recordSnapshot("Added Camera");
-                            scene.AddCamera(node);
-                        }
-                        ui::ItemTooltip("Add a child camera node.");
-
-                        const bool lightMenuOpen = ImGui::BeginMenu("Light");
-                        ui::ItemTooltip("Add a child light node.");
-                        if (lightMenuOpen)
-                        {
-                            if (ImGui::MenuItem("Directional Light"))
-                            {
-                                recordSnapshot("Added Directional Light");
-                                scene.CreateDirectionalLight(node);
-                            }
-                            ui::ItemTooltip("Add a sun-like directional light.");
-                            if (ImGui::MenuItem("Point Light"))
-                            {
-                                recordSnapshot("Added Point Light");
-                                scene.CreatePointLight(node);
-                            }
-                            ui::ItemTooltip("Add an omnidirectional point light.");
-                            if (ImGui::MenuItem("Spot Light"))
-                            {
-                                recordSnapshot("Added Spot Light");
-                                scene.CreateSpotLight(node);
-                            }
-                            ui::ItemTooltip("Add a cone-shaped spot light.");
-                            if (ImGui::MenuItem("Area Light"))
-                            {
-                                recordSnapshot("Added Area Light");
-                                scene.CreateAreaLight(node);
-                            }
-                            ui::ItemTooltip("Add a rectangular area light.");
-                            ImGui::EndMenu();
-                        }
-
-                        if (ImGui::MenuItem("Empty Node"))
-                        {
-                            recordSnapshot("Added Node");
-                            NodeId *newNode = scene.CreateNode("Empty Node", node);
-                            scene.MarkNodeDirty(newNode);
-                            selection.Select(newNode, SelectionType::Node);
-                        }
-                        ui::ItemTooltip("Add an empty child transform node.");
-
-                        if (ImGui::MenuItem("Sprite"))
-                            createSpriteFromSelection(node);
-                        ui::ItemTooltip("Add a child Component_Sprite node from the selected sprite asset when available.");
-
-                        drawRuntimeUiCreateMenu(node);
-
-                        uint32_t componentFlags = scene.GetComponentFlags(node);
-
-                        const bool meshMenuOpen = !(componentFlags & Component_Mesh) && ImGui::BeginMenu("Mesh");
-                        if (!(componentFlags & Component_Mesh))
-                            ui::ItemTooltip("Attach a primitive mesh component to this node.");
-                        if (meshMenuOpen)
-                        {
-                            auto AttachPrimitive = [&](ModelAsset *m)
-                            {
-                                recordSnapshot("Added Mesh Component");
-                                EventSystem::PushEvent(EventType::PrimitiveAttachedToNode,
-                                                       Scene::PrimitiveAttachRequest{node, m});
-                            };
-                            if (ImGui::MenuItem("Plane"))
-                                AttachPrimitive(Primitives::CreatePlane());
-                            ui::ItemTooltip("Attach a flat plane mesh.");
-                            if (ImGui::MenuItem("Grid"))
-                                AttachPrimitive(Primitives::CreateGrid());
-                            ui::ItemTooltip("Attach a subdivided grid mesh.");
-                            if (ImGui::MenuItem("Cube"))
-                                AttachPrimitive(Primitives::CreateCube());
-                            ui::ItemTooltip("Attach a cube mesh.");
-                            if (ImGui::MenuItem("Sphere"))
-                                AttachPrimitive(Primitives::CreateSphere());
-                            ui::ItemTooltip("Attach a sphere mesh.");
-                            if (ImGui::MenuItem("UV Sphere"))
-                                AttachPrimitive(Primitives::CreateUvSphere());
-                            ui::ItemTooltip("Attach a UV sphere mesh.");
-                            if (ImGui::MenuItem("Ico Sphere"))
-                                AttachPrimitive(Primitives::CreateIcoSphere());
-                            ui::ItemTooltip("Attach an ico-sphere mesh.");
-                            if (ImGui::MenuItem("Cylinder"))
-                                AttachPrimitive(Primitives::CreateCylinder());
-                            ui::ItemTooltip("Attach a cylinder mesh.");
-                            if (ImGui::MenuItem("Cone"))
-                                AttachPrimitive(Primitives::CreateCone());
-                            ui::ItemTooltip("Attach a cone mesh.");
-                            if (ImGui::MenuItem("Pyramid"))
-                                AttachPrimitive(Primitives::CreatePyramid());
-                            ui::ItemTooltip("Attach a pyramid mesh.");
-                            if (ImGui::MenuItem("Torus"))
-                                AttachPrimitive(Primitives::CreateTorus());
-                            ui::ItemTooltip("Attach a torus mesh.");
-                            if (ImGui::MenuItem("Circle"))
-                                AttachPrimitive(Primitives::CreateCircle());
-                            ui::ItemTooltip("Attach a circle mesh.");
-                            if (ImGui::MenuItem("Skinned Strip 2D"))
-                                AttachPrimitive(Primitives::CreateSkinnedStrip2D());
-                            ui::ItemTooltip("Attach a GPU-skinned 2D strip mesh.");
-                            if (ImGui::MenuItem("Quad"))
-                                AttachPrimitive(Primitives::CreateQuad());
-                            ui::ItemTooltip("Attach a quad mesh.");
-                            ImGui::EndMenu();
-                        }
-
-                        const bool scriptMenuOpen = !(componentFlags & Component_Script) && ImGui::BeginMenu("Lua Script");
-                        if (!(componentFlags & Component_Script))
-                            ui::ItemTooltip("Attach a Lua script component to this node.");
-                        if (scriptMenuOpen)
-                        {
-                            if (ImGui::MenuItem("Browse Existing..."))
-                            {
-                                if (auto *fs = m_gui->GetWidget<FileSelector>())
-                                {
-                                    fs->OpenSelection([node](const std::string &path) -> bool
-                                                      {
-                                    if (auto *r = GetGlobalSystem<RendererSystem>())
-                                        r->GetScene().SetNodeScript(node, path);
-                                    return true; },
-                                                      {".lua"});
-                                }
-                            }
-                            ui::ItemTooltip("Choose an existing Lua script asset.");
-                            if (ImGui::MenuItem("New Empty Script"))
-                            {
-                                if (auto *se = m_gui->GetWidget<ScriptEditor>())
-                                    se->OpenNewScript(node);
-                            }
-                            ui::ItemTooltip("Create a new Lua script and attach it to this node.");
-                            ImGui::EndMenu();
-                        }
-
-                        if (ImGui::MenuItem("Particle Emitter"))
-                        {
-                            ParticleManager *pm = scene.GetParticleManager();
-                            if (pm)
-                            {
-                                recordSnapshot("Added Particle Emitter");
-                                auto &emitters = pm->GetEmitters();
-                                auto &names = pm->GetEmitterNames();
-                                Camera *activeCamera = scene.GetActiveCamera();
-                                vec3 spawnPos = activeCamera ? (activeCamera->GetPosition() + activeCamera->GetFront() * 5.0f) : vec3(0.0f);
-
-                                ParticleEmitter newEmitter{};
-                                newEmitter.position = vec4(spawnPos, 1.0f);
-                                newEmitter.velocity = vec4(0.0f, 5.0f, 0.0f, 0.0f);
-                                newEmitter.colorStart = vec4(1.0f, 1.0f, 1.0f, 1.0f);
-                                newEmitter.colorEnd = vec4(0.0f, 0.0f, 0.0f, 0.0f);
-                                newEmitter.sizeLife = vec4(0.05f, 0.15f, 1.0f, 2.0f);
-                                newEmitter.physics = vec4(50.0f, 0.5f, 1.0f, 0.1f);
-                                newEmitter.gravity = vec4(0.0f, -9.8f, 0.0f, 0.0f);
-                                newEmitter.animation = vec4(1.0f, 1.0f, 1.0f, 0.0f);
-                                newEmitter.textureIndex = 0;
-                                newEmitter.count = 100;
-
-                                emitters.push_back(newEmitter);
-                                names.push_back("Emitter " + std::to_string(emitters.size() - 1));
-                                pm->UpdateEmitterBuffer();
-                                selection.SelectEmitter(static_cast<int>(emitters.size() - 1));
-                            }
-                        }
-                        ui::ItemTooltip("Create a particle emitter near the active camera.");
+                        drawAddEntityItems(node);
                         ImGui::EndMenu();
                     }
 
@@ -1453,124 +1251,7 @@ namespace pe
             ui::ItemTooltip("Create a root-level scene object.");
             if (addMenuOpen)
             {
-                if (ImGui::MenuItem("Camera"))
-                {
-                    recordSnapshot("Added Camera");
-                    scene.AddCamera();
-                }
-                ui::ItemTooltip("Create a camera node at the scene root.");
-
-                const bool lightMenuOpen = ImGui::BeginMenu("Light");
-                ui::ItemTooltip("Create a light node at the scene root.");
-                if (lightMenuOpen)
-                {
-                    if (ImGui::MenuItem("Directional Light"))
-                    {
-                        recordSnapshot("Added Directional Light");
-                        scene.CreateDirectionalLight();
-                    }
-                    ui::ItemTooltip("Create a sun-like directional light.");
-                    if (ImGui::MenuItem("Point Light"))
-                    {
-                        recordSnapshot("Added Point Light");
-                        scene.CreatePointLight();
-                    }
-                    ui::ItemTooltip("Create an omnidirectional point light.");
-                    if (ImGui::MenuItem("Spot Light"))
-                    {
-                        recordSnapshot("Added Spot Light");
-                        scene.CreateSpotLight();
-                    }
-                    ui::ItemTooltip("Create a cone-shaped spot light.");
-                    if (ImGui::MenuItem("Area Light"))
-                    {
-                        recordSnapshot("Added Area Light");
-                        scene.CreateAreaLight();
-                    }
-                    ui::ItemTooltip("Create a rectangular area light.");
-                    ImGui::EndMenu();
-                }
-
-                if (ImGui::MenuItem("Empty Node"))
-                {
-                    recordSnapshot("Added Node");
-                    NodeId *node = scene.CreateNode("Empty Node");
-                    selection.Select(node, SelectionType::Node);
-                }
-                ui::ItemTooltip("Create an empty transform node at the scene root.");
-
-                if (ImGui::MenuItem("Sprite"))
-                    createSpriteFromSelection(nullptr);
-                ui::ItemTooltip("Create a root-level Component_Sprite node from the selected sprite asset when available.");
-
-                drawRuntimeUiCreateMenu(nullptr);
-
-                if (!scene.GetSkyboxNode() && ImGui::MenuItem("Skybox"))
-                    createSkybox();
-                if (!scene.GetSkyboxNode())
-                    ui::ItemTooltip("Create the scene skybox node.");
-                if (ImGui::MenuItem("Trigger Zone"))
-                    createTriggerZone();
-                ui::ItemTooltip("Create a Trigger Zone (script on_enter/on_exit + post-process + audio sections).");
-                if (!scene.GetVoxelWorldNode() && ImGui::MenuItem("Voxel World"))
-                    createVoxelWorld();
-                if (!scene.GetVoxelWorldNode())
-                    ui::ItemTooltip("Create the voxel world node — all voxel settings live on it. One per scene.");
-                if (!scene.GetSceneSettingsNode() && ImGui::MenuItem("Scene Settings"))
-                    createSceneSettings();
-                if (!scene.GetSceneSettingsNode())
-                    ui::ItemTooltip("Add the scene settings node (global render + default post-process). One per scene.");
-
-                const bool meshMenuOpen = ImGui::BeginMenu("Mesh");
-                ui::ItemTooltip("Create a built-in primitive mesh at the scene root.");
-                if (meshMenuOpen)
-                {
-                    auto AddPrim = [&](ModelAsset *m)
-                    {
-                        recordSnapshot("Added Mesh");
-                        EventSystem::PushEvent(EventType::ModelLoaded, m);
-                    };
-                    if (ImGui::MenuItem("Plane"))
-                        AddPrim(Primitives::CreatePlane());
-                    ui::ItemTooltip("Create a flat plane mesh.");
-                    if (ImGui::MenuItem("Grid"))
-                        AddPrim(Primitives::CreateGrid());
-                    ui::ItemTooltip("Create a subdivided grid mesh.");
-                    if (ImGui::MenuItem("Cube"))
-                        AddPrim(Primitives::CreateCube());
-                    ui::ItemTooltip("Create a cube mesh.");
-                    if (ImGui::MenuItem("Sphere"))
-                        AddPrim(Primitives::CreateSphere());
-                    ui::ItemTooltip("Create a sphere mesh.");
-                    if (ImGui::MenuItem("UV Sphere"))
-                        AddPrim(Primitives::CreateUvSphere());
-                    ui::ItemTooltip("Create a UV sphere mesh.");
-                    if (ImGui::MenuItem("Ico Sphere"))
-                        AddPrim(Primitives::CreateIcoSphere());
-                    ui::ItemTooltip("Create an ico-sphere mesh.");
-                    if (ImGui::MenuItem("Cylinder"))
-                        AddPrim(Primitives::CreateCylinder());
-                    ui::ItemTooltip("Create a cylinder mesh.");
-                    if (ImGui::MenuItem("Cone"))
-                        AddPrim(Primitives::CreateCone());
-                    ui::ItemTooltip("Create a cone mesh.");
-                    if (ImGui::MenuItem("Pyramid"))
-                        AddPrim(Primitives::CreatePyramid());
-                    ui::ItemTooltip("Create a pyramid mesh.");
-                    if (ImGui::MenuItem("Torus"))
-                        AddPrim(Primitives::CreateTorus());
-                    ui::ItemTooltip("Create a torus mesh.");
-                    if (ImGui::MenuItem("Circle"))
-                        AddPrim(Primitives::CreateCircle());
-                    ui::ItemTooltip("Create a circle mesh.");
-                    if (ImGui::MenuItem("Skinned Strip 2D"))
-                        AddPrim(Primitives::CreateSkinnedStrip2D());
-                    ui::ItemTooltip("Create a GPU-skinned 2D strip mesh.");
-                    if (ImGui::MenuItem("Quad"))
-                        AddPrim(Primitives::CreateQuad());
-                    ui::ItemTooltip("Create a quad mesh.");
-                    ImGui::EndMenu();
-                }
+                drawAddEntityItems(nullptr);
                 ImGui::EndMenu();
             }
             ImGui::EndPopup();

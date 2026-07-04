@@ -62,6 +62,8 @@ namespace pe
         void ClearAllBodies();
         void InvalidateShapeCache(NodeId *node);
         void NotifyScaleChanged(Scene &scene, NodeId *node);
+        // Update a body's friction/restitution live (no shape re-cook); no-op if the body isn't in-world.
+        void SetBodyMaterial(NodeId *node, float friction, float restitution);
 
         // Runtime API (during simulation)
         void SetLinearVelocity(NodeId *node, const vec3 &vel);

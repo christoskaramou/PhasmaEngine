@@ -12,7 +12,12 @@ namespace pe::voxel
     struct NoiseParams
     {
         int groundY = 64;
-        float amplitude = 28.0f;    // peak height above groundY in blocks; 0 = flat plain
+        float amplitude = 28.0f; // peak height above groundY in blocks; 0 = flat plain
+        // Smooth-path height range (metres): the normalized noise 0..1 maps to
+        // groundHeight + lerp(heightMin, heightMax, n), the same mapping the heightmap path uses.
+        float groundHeight = 0.0f;
+        float heightMin = -32.0f;
+        float heightMax = 32.0f;
         float featureScale = 96.0f; // base feature wavelength in blocks (bigger = wide rolling hills)
         int seed = 0;               // shifts the noise domain; each seed is a different world
         bool caves = true;
@@ -26,6 +31,9 @@ namespace pe::voxel
         // lod > 0 generates coarse data: one height sample per 2^lod-block cell and no caves —
         // the noise evaluations (especially per-block 3D cave fbm) dominate world load time.
         void Generate(ChunkColumn &col, int lod) override;
+        // Continuous (fractional) terrain height for smooth isosurface meshing — the same warp/ridge
+        // FBM as the block path without the integer quantization. Density stays the heightfield default.
+        float SurfaceHeight(float x, float z) const override;
 
     private:
         NoiseParams m_p;

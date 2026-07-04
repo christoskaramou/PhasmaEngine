@@ -52,7 +52,9 @@ namespace pe
             std::string loadedPath; // resolved absolute path; empty = nothing loaded
             int w = 0;
             int h = 0;
-            std::vector<uint8_t> px;
+            // Values in a [0,255] domain (float, no integer snapping) so a surface map keeps the file's
+            // half-float precision; strata/features hold integer-valued floats (thickness / discrete ids).
+            std::vector<float> px;
             bool unsaved = false;
         };
 
@@ -65,7 +67,7 @@ namespace pe
         void SyncLayer(NodeVoxelWorldTag *tag, int layer); // (re)load a buffer when its tag path changed
         void CreateMap(NodeVoxelWorldTag *tag);            // allocate + save a fresh map, point the tag at it
         void ResizeMap();                                  // resample the loaded buffer to m_newW x m_newH
-        void StampBrush(float px, float py, float radius, float strength, bool lower, Brush brush, int value);
+        void StampBrush(float px, float py, float radius, float strength, bool lower, Brush brush, float value);
         void StampFeatures(float px, float py, float radius, FeatureStamp stamp);
         void UploadPreview();
         void ReleasePreview();
@@ -86,8 +88,8 @@ namespace pe
         float m_brushRadius = 8.0f;    // map pixels
         float m_brushStrength = 12.0f; // value delta per stamp at the brush center
         int m_brushType = 0;           // Brush enum, or FeatureStamp on the Features layer
-        int m_setValue = 128;          // Set brush target
-        int m_flattenTarget = 64;      // sampled under the stroke start
+        float m_setValue = 127.5f;     // Set brush target ([0,255] domain; 127.5 = 0 surface scaler)
+        float m_flattenTarget = 64.0f; // sampled under the stroke start
         int m_featureSpacing = 5;      // min pixels between scattered features
         int m_paintBlock = 3;          // block id the Block stamp paints onto the surface
         // One block-tile thumbnail per palette entry (loaded lazily), + its average color for the
@@ -102,7 +104,7 @@ namespace pe
         float m_zoom = 1.0f;
         int m_newW = 128; // create/resize target size
         int m_newH = 128;
-        int m_newValue = 64;
+        float m_newValue = 127.5f; // create fill ([0,255] domain): 127.5 = 0 scaler = Ground Height
         std::array<char, 260> m_newPath{};
         Image *m_image = nullptr;
         void *m_textureId = nullptr;

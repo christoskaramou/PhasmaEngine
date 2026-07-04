@@ -239,6 +239,11 @@ namespace pe
         bool lodEnabled = false;         // distance LOD (coarser mesh per lod0Radius band)
         int lod0Radius = 5;              // full-detail radius in columns when LOD is on
         std::string saveDir;             // .pevcol persistence dir under Assets ("" = no persistence)
+        bool smooth = false;             // Surface-Nets isosurface terrain (rounded, sculptable) vs cubes
+        bool physics = false;            // static Jolt triangle-mesh collider on smooth terrain (live toggle)
+        float physicsFriction = 0.5f;    // terrain collider surface friction (live)
+        float physicsRestitution = 0.3f; // terrain collider bounciness (live)
+        bool autoRebuild = true;         // worldgen edits apply on their own (debounced); off = only via "Rebuild World"
         // Worldgen (mirrors VoxelConfig; see MapGen.h for the heightmap/strata model):
         float noiseAmplitude = 28.0f;    // peak height above groundY in blocks; 0 = flat plain
         float noiseFeatureScale = 96.0f; // feature wavelength in blocks (bigger = rolling hills)
@@ -246,6 +251,10 @@ namespace pe
         bool caves = true;
         int seaLevel = -1;         // <0 = auto (groundY - 2), 0 = no water, >0 = absolute blocks
         std::string heightmapPath; // grayscale surface map under Assets; empty = noise terrain
+        float heightMin = -32.0f;  // smooth-heightmap: height offset (m) at map value 0, relative to groundHeight
+        float heightMax = 32.0f;   // smooth-heightmap: height offset (m) at map value 1, relative to groundHeight
+        float groundHeight = 0.0f; // smooth-heightmap datum: the 0.5 gray level sits here (clamped to [min,max])
+        float seaLevelM = -1.0f;   // smooth-heightmap water height (m): surface below this is tinted underwater
         std::string strata1Path;   // thickness map of the band under the surface block
         std::string strata2Path;   // thickness map of the band under strata 1
         std::string featuresPath;  // decoration map: 1=tree 2=rock 3=road 4=olive 5=cypress at that pixel
