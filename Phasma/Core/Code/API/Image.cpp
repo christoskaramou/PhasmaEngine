@@ -2,12 +2,53 @@
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Downsampler/Downsampler.h"
+#include "API/RHI.h"
+#include "API/Vulkan/VulkanImageImpl.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12ImageImpl.h"
+#include "API/DX12/Dx12CommandBufferImpl.h"
+#endif
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
 namespace pe
 {
+    Image::Impl *CreateImageImpl(Image *owner, const ImageDesc &desc)
+    {
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            return new Dx12ImageImpl(owner, desc);
+#endif
+        return new VulkanImageImpl(owner, desc);
+    }
+
+    void Image_Barrier_Backend(CommandBuffer *cmd, const ImageBarrierInfo &info)
+    {
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+            PE_ERROR_IF(!cmd, "Image::Barrier: no command buffer specified");
+            Dx12CommandBufferImpl::From(cmd)->ImageBarrier(info);
+            return;
+        }
+#endif
+        Image_Barrier_Vulkan(cmd, info);
+    }
+
+    void Image_Barriers_Backend(CommandBuffer *cmd, const std::vector<ImageBarrierInfo> &infos)
+    {
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+        {
+            PE_ERROR_IF(!cmd, "Image::Barriers: no command buffer specified");
+            Dx12CommandBufferImpl::From(cmd)->ImageBarriers(infos);
+            return;
+        }
+#endif
+        Image_Barriers_Vulkan(cmd, infos);
+    }
+
     namespace
     {
         constexpr uint32_t MakeFourCC(const char a, const char b, const char c, const char d)

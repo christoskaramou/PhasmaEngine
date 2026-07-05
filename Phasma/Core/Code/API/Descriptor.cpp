@@ -1,7 +1,60 @@
 #include "API/Descriptor_Internal.h"
+#include "API/RHI.h"
+#include "API/Vulkan/VulkanDescriptorImpl.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12DescriptorImpl.h"
+#endif
 
 namespace pe
 {
+    DescriptorPool::Impl *CreateDescriptorPoolImpl(DescriptorPool *owner, const DescriptorPoolDesc &desc)
+    {
+        switch (RHII.GetApi())
+        {
+        case PE_GRAPHICS_API_VULKAN:
+            return new VulkanDescriptorPoolImpl(owner, desc);
+#if defined(PE_WIN32)
+        case PE_GRAPHICS_API_DX12:
+            return new Dx12DescriptorPoolImpl(owner, desc);
+#endif
+        default:
+            PE_ERROR("CreateDescriptorPoolImpl: unsupported graphics api %u", static_cast<uint32_t>(RHII.GetApi()));
+            return nullptr;
+        }
+    }
+
+    DescriptorLayout::Impl *CreateDescriptorLayoutImpl(DescriptorLayout *owner)
+    {
+        switch (RHII.GetApi())
+        {
+        case PE_GRAPHICS_API_VULKAN:
+            return new VulkanDescriptorLayoutImpl(owner);
+#if defined(PE_WIN32)
+        case PE_GRAPHICS_API_DX12:
+            return new Dx12DescriptorLayoutImpl(owner);
+#endif
+        default:
+            PE_ERROR("CreateDescriptorLayoutImpl: unsupported graphics api %u", static_cast<uint32_t>(RHII.GetApi()));
+            return nullptr;
+        }
+    }
+
+    Descriptor::Impl *CreateDescriptorImpl(Descriptor *owner)
+    {
+        switch (RHII.GetApi())
+        {
+        case PE_GRAPHICS_API_VULKAN:
+            return new VulkanDescriptorImpl(owner);
+#if defined(PE_WIN32)
+        case PE_GRAPHICS_API_DX12:
+            return new Dx12DescriptorImpl(owner);
+#endif
+        default:
+            PE_ERROR("CreateDescriptorImpl: unsupported graphics api %u", static_cast<uint32_t>(RHII.GetApi()));
+            return nullptr;
+        }
+    }
+
     namespace
     {
         int32_t GetBindingIndex(uint32_t binding, const std::vector<DescriptorBindingInfo> &bindingInfos)

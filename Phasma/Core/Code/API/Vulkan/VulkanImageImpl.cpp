@@ -10,10 +10,6 @@
 #include "API/Vulkan/VulkanImageViewImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 #include "API/Vulkan/VulkanSamplerImpl.h"
-#if defined(PE_WIN32)
-#include "API/DX12/Dx12CommandBufferImpl.h"
-#include "API/DX12/Dx12ImageImpl.h"
-#endif
 
 namespace pe
 {
@@ -974,30 +970,13 @@ namespace pe
         image->m_uavs[mip] = ImageView::Create(image, viewInfo, image->GetName() + "_UAV");
     }
 
-    Image::Impl *CreateImageImpl(Image *owner, const ImageDesc &desc)
-    {
-#if defined(PE_WIN32)
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-            return new Dx12ImageImpl(owner, desc);
-#endif
-        return new VulkanImageImpl(owner, desc);
-    }
-
     Image::Impl *CreateSwapchainImageImpl(Image *owner, vk::Image externalImage)
     {
         return new VulkanImageImpl(owner, externalImage);
     }
 
-    void Image_Barrier_Backend(CommandBuffer *cmd, const ImageBarrierInfo &info)
+    void Image_Barrier_Vulkan(CommandBuffer *cmd, const ImageBarrierInfo &info)
     {
-#if defined(PE_WIN32)
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-        {
-            PE_ERROR_IF(!cmd, "Image::Barrier: no command buffer specified");
-            Dx12CommandBufferImpl::From(cmd)->ImageBarrier(info);
-            return;
-        }
-#endif
         PE_ERROR_IF(!info.image, "Image::Barrier: no image specified.");
         PE_PROFILE_SCOPE("Vk ImageBarrier");
         Image &image = *info.image;
@@ -1078,16 +1057,8 @@ namespace pe
                 image.SetCurrentInfo(info, info.baseArrayLayer + i, info.baseMipLevel + j);
     }
 
-    void Image_Barriers_Backend(CommandBuffer *cmd, const std::vector<ImageBarrierInfo> &infos)
+    void Image_Barriers_Vulkan(CommandBuffer *cmd, const std::vector<ImageBarrierInfo> &infos)
     {
-#if defined(PE_WIN32)
-        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-        {
-            PE_ERROR_IF(!cmd, "Image::Barriers: no command buffer specified");
-            Dx12CommandBufferImpl::From(cmd)->ImageBarriers(infos);
-            return;
-        }
-#endif
         if (infos.empty())
             return;
         PE_PROFILE_SCOPE("Vk ImageBarriers");

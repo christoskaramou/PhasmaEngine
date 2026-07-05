@@ -1,7 +1,21 @@
 #include "API/ImageView_Internal.h"
+#include "API/RHI.h"
+#include "API/Vulkan/VulkanImageViewImpl.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12ImageViewImpl.h"
+#endif
 
 namespace pe
 {
+    ImageView::Impl *CreateImageViewImpl(ImageView *owner, const ImageViewDesc &desc)
+    {
+#if defined(PE_WIN32)
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            return new Dx12ImageViewImpl(owner, desc, Dx12ImageViewKind::Srv);
+#endif
+        return new VulkanImageViewImpl(owner, desc);
+    }
+
     ImageView *ImageView::Create(Image *parent, const ImageViewDesc &desc, const std::string &name)
     {
         ImageView *view = new ImageView(parent, desc, name);

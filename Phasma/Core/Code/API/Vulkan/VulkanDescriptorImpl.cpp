@@ -1,8 +1,5 @@
 #include "API/Vulkan/VulkanDescriptorImpl.h"
 #include "API/Vulkan/AccelerationStructure.h"
-#if defined(PE_WIN32)
-#include "API/DX12/Dx12DescriptorImpl.h"
-#endif
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanBufferImpl.h"
@@ -353,53 +350,5 @@ namespace pe
         }
 
         VulkanRhi::Device().updateDescriptorSets(static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
-    }
-
-    DescriptorPool::Impl *CreateDescriptorPoolImpl(DescriptorPool *owner, const DescriptorPoolDesc &desc)
-    {
-        switch (RHII.GetApi())
-        {
-        case PE_GRAPHICS_API_VULKAN:
-            return new VulkanDescriptorPoolImpl(owner, desc);
-#if defined(PE_WIN32)
-        case PE_GRAPHICS_API_DX12:
-            return new Dx12DescriptorPoolImpl(owner, desc);
-#endif
-        default:
-            PE_ERROR("CreateDescriptorPoolImpl: unsupported graphics api %u", static_cast<uint32_t>(RHII.GetApi()));
-            return nullptr;
-        }
-    }
-
-    DescriptorLayout::Impl *CreateDescriptorLayoutImpl(DescriptorLayout *owner)
-    {
-        switch (RHII.GetApi())
-        {
-        case PE_GRAPHICS_API_VULKAN:
-            return new VulkanDescriptorLayoutImpl(owner);
-#if defined(PE_WIN32)
-        case PE_GRAPHICS_API_DX12:
-            return new Dx12DescriptorLayoutImpl(owner);
-#endif
-        default:
-            PE_ERROR("CreateDescriptorLayoutImpl: unsupported graphics api %u", static_cast<uint32_t>(RHII.GetApi()));
-            return nullptr;
-        }
-    }
-
-    Descriptor::Impl *CreateDescriptorImpl(Descriptor *owner)
-    {
-        switch (RHII.GetApi())
-        {
-        case PE_GRAPHICS_API_VULKAN:
-            return new VulkanDescriptorImpl(owner);
-#if defined(PE_WIN32)
-        case PE_GRAPHICS_API_DX12:
-            return new Dx12DescriptorImpl(owner);
-#endif
-        default:
-            PE_ERROR("CreateDescriptorImpl: unsupported graphics api %u", static_cast<uint32_t>(RHII.GetApi()));
-            return nullptr;
-        }
     }
 } // namespace pe
