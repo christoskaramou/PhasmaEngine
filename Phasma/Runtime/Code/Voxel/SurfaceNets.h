@@ -1,6 +1,5 @@
 #pragma once
 #include "API/Vertex.h"
-#include "Base/Math.h"
 
 // Naive Surface Nets: mesh the density==0 isosurface of a scalar field into a smooth triangle mesh
 // (standard float Vertex, gradient normals). Unlike the cube GreedyMesher this emits arbitrary

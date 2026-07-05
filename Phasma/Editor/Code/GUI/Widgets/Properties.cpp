@@ -47,6 +47,34 @@ namespace pe
 {
     namespace
     {
+        // Path/name text field that commits on deactivate instead of per keystroke. The terrain
+        // fields feed the structural reconcile hash — per-keystroke writes rebuilt the world on
+        // every typing pause, with half-typed values (ModelAsset warned on the "g" of "grass").
+        // One shared buffer suffices: only one item is ever being edited.
+        bool InputTextDeferred(const char *label, std::string &value)
+        {
+            static char s_buf[260];
+            static ImGuiID s_editing = 0;
+            const ImGuiID id = ImGui::GetID(label);
+            if (s_editing != id)
+                snprintf(s_buf, sizeof(s_buf), "%s", value.c_str());
+            ImGui::InputText(label, s_buf, sizeof(s_buf));
+            if (ImGui::IsItemActivated())
+                s_editing = id;
+            bool committed = false;
+            if (s_editing == id)
+            {
+                if (ImGui::IsItemDeactivatedAfterEdit() && value != s_buf)
+                {
+                    value = s_buf;
+                    committed = true;
+                }
+                if (ImGui::IsItemDeactivated())
+                    s_editing = 0;
+            }
+            return committed;
+        }
+
         // Built-in primitive meshes for the "Add" menus, sorted by display name. One table drives both
         // the "+ Add Mesh" popup and the "+ Add Component -> Mesh" submenu so the two lists can't drift.
         struct PrimitiveMenuItem
@@ -2061,33 +2089,16 @@ namespace pe
                         ui::ItemTooltip("Surface below this world height is tinted underwater (no water surface yet). "
                                         "Default 0.");
 
-                        char buf[260];
-                        snprintf(buf, sizeof(buf), "%s", t->heightmapPath.c_str());
-                        if (ImGui::InputText("Heightmap", buf, sizeof(buf)))
-                        {
-                            t->heightmapPath = buf;
-                            changed = true;
-                        }
+                        changed |= InputTextDeferred("Heightmap", t->heightmapPath);
                         ui::ItemTooltip("Grayscale surface map under Assets (paint it in Map Painter): 0..1 maps into "
-                                        "Height Range, lerped between pixels, centered on this node. Empty = noise.");
-                        char cbuf[260];
-                        snprintf(cbuf, sizeof(cbuf), "%s", t->cavesPath.c_str());
-                        if (ImGui::InputText("Caves Map", cbuf, sizeof(cbuf)))
-                        {
-                            t->cavesPath = cbuf;
-                            changed = true;
-                        }
+                                        "Height Range, lerped between pixels, centered on this node. Empty = noise. "
+                                        "Applies when the field loses focus.");
+                        changed |= InputTextDeferred("Caves Map", t->cavesPath);
                         ui::ItemTooltip("Grayscale cave map under Assets (paint it in Map Painter's Caves layer): "
                                         "pixel value = how open the void under the surface is; caves pinch closed "
                                         "where the paint fades. Same extent/orientation as the heightmap. Reach them "
                                         "by sculpting an entrance (or via overhang mouths). Empty = none.");
-                        char sbuf[260];
-                        snprintf(sbuf, sizeof(sbuf), "%s", t->scatterPath.c_str());
-                        if (ImGui::InputText("Scatter Map", sbuf, sizeof(sbuf)))
-                        {
-                            t->scatterPath = sbuf;
-                            changed = true;
-                        }
+                        changed |= InputTextDeferred("Scatter Map", t->scatterPath);
                         ui::ItemTooltip("Scatter map under Assets (paint it in Map Painter's Scatter layer or the "
                                         "viewport Terrain Brush): pixel value picks a Scatter Mesh below; instances "
                                         "bake into the terrain tiles (they stream, LOD and collide with the tile). "
@@ -2095,16 +2106,10 @@ namespace pe
                         for (size_t si = 0; si < t->scatterMeshes.size(); ++si)
                         {
                             ImGui::PushID(static_cast<int>(si));
-                            char mbuf[260];
-                            snprintf(mbuf, sizeof(mbuf), "%s", t->scatterMeshes[si].c_str());
                             ImGui::SetNextItemWidth(ImGui::CalcItemWidth() - 28.0f);
                             char lbl[32];
                             snprintf(lbl, sizeof(lbl), "Scatter Mesh %zu", si + 1);
-                            if (ImGui::InputText(lbl, mbuf, sizeof(mbuf)))
-                            {
-                                t->scatterMeshes[si] = mbuf;
-                                changed = true;
-                            }
+                            changed |= InputTextDeferred(lbl, t->scatterMeshes[si]);
                             ui::ItemTooltip("Builtin \"tree\", \"rock\", \"grass\", or a low-poly model asset path "
                                             "under Assets. Painted pixels with this 1-based index place it.");
                             ImGui::SameLine();
