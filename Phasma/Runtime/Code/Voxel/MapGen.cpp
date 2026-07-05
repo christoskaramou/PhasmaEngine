@@ -45,7 +45,7 @@ namespace pe::voxel
         }
     } // namespace
 
-    bool MapGen::MapImage::Load(const std::string &configured, const char *what, bool signedFloat)
+    bool MapImage::Load(const std::string &configured, const char *what, bool signedFloat)
     {
         if (configured.empty())
             return false;
@@ -100,7 +100,7 @@ namespace pe::voxel
         return true;
     }
 
-    float MapGen::MapImage::SampleNorm(float nu, float nv) const
+    float MapImage::SampleNorm(float nu, float nv) const
     {
         const float u = std::clamp(nu * (float)w - 0.5f, 0.0f, (float)(w - 1));
         const float v = std::clamp(nv * (float)h - 0.5f, 0.0f, (float)(h - 1));

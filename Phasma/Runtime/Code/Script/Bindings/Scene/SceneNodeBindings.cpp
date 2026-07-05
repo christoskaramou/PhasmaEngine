@@ -699,9 +699,9 @@ namespace pe
                 });
 
                 // Terrain node config: size_x_meters, size_z_meters, ground_height, height_min,
-                // height_max, sea_level_m, heightmap, noise_feature_scale, noise_seed, meters_per_pixel,
-                // physics, physics_friction, physics_restitution, streaming, overhangs,
-                // collision_radius_m, auto_rebuild, rebuild.
+                // height_max, sea_level_m, heightmap, caves_map, noise_feature_scale, noise_seed,
+                // meters_per_pixel, physics, physics_friction, physics_restitution, streaming,
+                // overhangs, collision_radius_m, auto_rebuild, rebuild.
                 // TerrainSystem reconciles the live terrain from it (same data the Terrain inspector edits).
                 ut.set_function("set_terrain", [](SceneNodeHandle &h, sol::optional<sol::table> params) {
                     Scene *s = GetScene();
@@ -718,6 +718,7 @@ namespace pe
                     if (p["height_max"].valid()) t->heightMax = p["height_max"];
                     if (p["sea_level_m"].valid()) t->seaLevelM = p["sea_level_m"];
                     if (p["heightmap"].valid()) t->heightmapPath = p["heightmap"].get<std::string>();
+                    if (p["caves_map"].valid()) t->cavesPath = p["caves_map"].get<std::string>();
                     if (p["noise_feature_scale"].valid()) t->noiseFeatureScale = p["noise_feature_scale"];
                     if (p["noise_seed"].valid()) t->noiseSeed = p["noise_seed"];
                     if (p["meters_per_pixel"].valid()) t->metersPerPixel = p["meters_per_pixel"];
@@ -747,6 +748,7 @@ namespace pe
                     r["height_max"] = t->heightMax;
                     r["sea_level_m"] = t->seaLevelM;
                     r["heightmap"] = t->heightmapPath;
+                    r["caves_map"] = t->cavesPath;
                     r["noise_feature_scale"] = t->noiseFeatureScale;
                     r["noise_seed"] = t->noiseSeed;
                     r["meters_per_pixel"] = t->metersPerPixel;

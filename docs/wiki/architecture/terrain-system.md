@@ -47,6 +47,13 @@ density(x,y,z) = generator->DensityAtHeight(x,y,z, h(x,z))   // h cached once pe
   tag — flat vec4s: xyz centre, |w| radius, w < 0 digs; TerrainSystem syncs world → tag as you
   sculpt and seeds every recreate from it), so sculpts survive save/load and structural rebuilds.
   Sculpts made during play persist after stop — matching the mesh, which never reverts.
+- **Painted caves**: `cavesPath` (tag/inspector/Lua `caves_map`) is a grayscale map painted in Map
+  Painter's "Caves (Terrain)" layer, sharing the heightmap's extent/orientation (centred on the
+  bounds column, both axes flipped, zero OUTSIDE the map so streamed worlds don't tile it). Pixel
+  value = openness: the void is centred `3 + 3` m below the LOCAL surface with half-height
+  `3 m · v`, pinching closed where the paint fades (bilinear). Applied between worldgen and sculpt
+  ops, so sculpting can open entrances (or fill a cave back in); overhang-displaced surfaces open
+  natural mouths. A heightmap can never roof a void — this layer is how caves get painted top-down.
 - `terrain.raycast` / `IsSolidCell` march the density (overhang- and sculpt-aware);
   `terrain.height` is the pure worldgen heightfield.
 

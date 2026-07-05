@@ -44,6 +44,7 @@ namespace pe::terrain
             h = HashF(h, cfg.heightMax);
             h = HashF(h, cfg.seaLevelM);
             h = HashString(h, cfg.heightmapPath);
+            h = HashString(h, cfg.cavesPath);
             h = HashF(h, cfg.noiseFeatureScale);
             h = HashInt(h, cfg.noiseSeed);
             h = HashF(h, cfg.metersPerPixel);
@@ -157,6 +158,7 @@ namespace pe::terrain
         cfg.heightMax = tag->heightMax;
         cfg.seaLevelM = tag->seaLevelM;
         cfg.heightmapPath = tag->heightmapPath;
+        cfg.cavesPath = tag->cavesPath;
         cfg.noiseFeatureScale = tag->noiseFeatureScale;
         cfg.noiseSeed = tag->noiseSeed;
         cfg.metersPerPixel = tag->metersPerPixel;

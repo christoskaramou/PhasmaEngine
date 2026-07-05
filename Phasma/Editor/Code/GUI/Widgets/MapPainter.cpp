@@ -21,10 +21,10 @@ namespace pe
 {
     namespace
     {
-        constexpr const char *kLayerNames[4] = {"Surface Height", "Strata 1 Thickness", "Strata 2 Thickness",
-                                                "Features"};
-        constexpr const char *kDefaultPaths[4] = {"Maps/heightmap.png", "Maps/strata1.png", "Maps/strata2.png",
-                                                  "Maps/features.png"};
+        constexpr const char *kLayerNames[5] = {"Surface Height", "Strata 1 Thickness", "Strata 2 Thickness",
+                                                "Features", "Caves (Terrain)"};
+        constexpr const char *kDefaultPaths[5] = {"Maps/heightmap.png", "Maps/strata1.png", "Maps/strata2.png",
+                                                  "Maps/features.png", "Maps/caves.png"};
         constexpr const char *kFeatureNames[6] = {"Tree", "Rock", "Olive", "Cypress", "Block", "Erase"};
         constexpr uint8_t kScatterId[4] = {1, 2, 4, 5}; // Tree, Rock, Olive, Cypress map pixel values
         constexpr uint8_t kBlockPaintBase = 64;         // painted block = kBlockPaintBase + blockId
@@ -126,13 +126,14 @@ namespace pe
         MapTarget t;
         if (!scene)
             return t;
-        // Height layer: a Terrain node owns it when present (surface = terrain height).
-        if (layer == 0)
+        // Height layer: a Terrain node owns it when present (surface = terrain height). The Caves
+        // layer is Terrain-only (heightfield cube worlds have their own worldgen caves toggle).
+        if (layer == 0 || layer == kCavesLayer)
         {
             if (NodeId *tn = scene->GetTerrainNode())
                 if (NodeTerrainTag *tt = scene->GetTerrainForNode(tn))
                 {
-                    t.path = &tt->heightmapPath;
+                    t.path = layer == kCavesLayer ? &tt->cavesPath : &tt->heightmapPath;
                     t.metersPerPixel = &tt->metersPerPixel;
                     t.rebuild = &tt->rebuildRequested;
                     t.heightMin = &tt->heightMin;
@@ -143,6 +144,8 @@ namespace pe
                     t.terrainFlip = true; // Terrain maps col 0 -> +X, row 0 -> +Z
                     return t;
                 }
+            if (layer == kCavesLayer)
+                return t; // no Terrain node -> no caves target
         }
         // Strata / features (and the height layer's fallback) live on the Voxel World node.
         NodeId *vn = scene->GetVoxelWorldNode();
@@ -176,7 +179,7 @@ namespace pe
 
     bool MapPainter::SetLayer(int layer)
     {
-        const int clamped = std::clamp(layer, 0, 3);
+        const int clamped = std::clamp(layer, 0, kLayerCount - 1);
         if (clamped != m_layer)
         {
             m_layer = clamped;
@@ -270,8 +273,8 @@ namespace pe
         buf.loadedPath = voxel::ColumnChunkStore::ResolveRoot(slot).string();
         buf.w = std::clamp(m_newW, 16, 2048);
         buf.h = std::clamp(m_newH, 16, 2048);
-        // A features map starts empty (0 = no feature); ids are discrete, a gray fill is garbage.
-        const float fill = OnFeatures() ? 0.0f : std::clamp(m_newValue, 0.0f, 255.0f);
+        // Features/caves maps start empty (0 = no feature / solid ground); a gray fill is garbage.
+        const float fill = (OnFeatures() || m_layer == kCavesLayer) ? 0.0f : std::clamp(m_newValue, 0.0f, 255.0f);
         buf.px.assign(static_cast<size_t>(buf.w) * static_cast<size_t>(buf.h), fill);
         buf.unsaved = true;
         m_textureDirty = true;
@@ -786,17 +789,19 @@ namespace pe
         }
 
         int layer = m_layer;
-        if (ImGui::Combo("Layer", &layer, kLayerNames, 4))
+        if (ImGui::Combo("Layer", &layer, kLayerNames, kLayerCount))
             SetLayer(layer);
         ui::ItemTooltip("Which input map the brush edits. Surface: the terrain height (a Terrain node when "
                         "present, else the Voxel World's heightmap). Strata: thickness of the band below the "
-                        "surface (Voxel World). Features: sparse decoration dots (Voxel World). Edits are kept "
+                        "surface (Voxel World). Features: sparse decoration dots (Voxel World). Caves: painted "
+                        "underground voids (Terrain node; value = how open, roof stays intact). Edits are kept "
                         "per layer until saved.");
 
         MapTarget target = ResolveTarget(m_layer);
         if (!target.valid())
         {
             ImGui::TextDisabled(m_layer == kFeaturesLayer ? "The Features layer needs a Voxel World node."
+                                : m_layer == kCavesLayer  ? "The Caves layer needs a Terrain node."
                                 : m_layer == 0            ? "Add a Terrain or Voxel World node to paint the surface."
                                                           : "The Strata layers need a Voxel World node.");
             ImGui::End();
