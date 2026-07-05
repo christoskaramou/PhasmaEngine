@@ -239,5 +239,12 @@ namespace pe::terrain
         std::unique_ptr<Material> m_material;
         NodeId *m_hostNode = nullptr;
         std::vector<CommandBuffer *> m_submittedCmds;
+
+        // Grow memory: once ring 0 outgrows its estimate, recreates of the SAME worldgen (hash of
+        // the mesh-affecting config) start from the grown budget instead of re-discovering the
+        // overflow through repeated grow rebuilds (every recreate used to reset budgets — typing in
+        // the inspector replayed the whole grow chain each time). Deliberately survives Destroy.
+        uint64_t m_budgetHash = 0;
+        uint32_t m_grownRing0Budget = 0;
     };
 } // namespace pe::terrain

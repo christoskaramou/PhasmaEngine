@@ -46,6 +46,39 @@ namespace pe::terrain
         {
             return static_cast<uint32_t>(x) * 73856093u ^ static_cast<uint32_t>(z) * 19349663u;
         }
+
+        // Hash of the config fields that shape the MESH (and therefore per-tile vertex demand) — the
+        // key for the grow memory. Scatter/physics/sea-level are excluded on purpose: changing them
+        // recreates the world but leaves the demand (and the remembered budget) valid.
+        uint64_t BudgetHash(const TerrainConfig &c)
+        {
+            uint64_t h = 1469598103934665603ull;
+            const auto mix = [&h](uint64_t v)
+            { h = (h ^ v) * 1099511628211ull; };
+            const auto mixF = [&](float f)
+            { mix(static_cast<uint64_t>(static_cast<int64_t>(f * 16.0f))); };
+            const auto mixS = [&](const std::string &s)
+            {
+                mix(s.size());
+                for (char ch : s)
+                    mix(static_cast<uint8_t>(ch));
+            };
+            mix(static_cast<uint64_t>(static_cast<int64_t>(c.sizeXMeters)));
+            mix(static_cast<uint64_t>(static_cast<int64_t>(c.sizeZMeters)));
+            mix(static_cast<uint64_t>(static_cast<int64_t>(c.boundsCenterCx)));
+            mix(static_cast<uint64_t>(static_cast<int64_t>(c.boundsCenterCz)));
+            mixF(c.groundHeight);
+            mixF(c.heightMin);
+            mixF(c.heightMax);
+            mixS(c.heightmapPath);
+            mixS(c.cavesPath);
+            mixF(c.noiseFeatureScale);
+            mix(static_cast<uint64_t>(static_cast<int64_t>(c.noiseSeed)));
+            mixF(c.metersPerPixel);
+            mix(c.streaming ? 1u : 0u);
+            mixF(c.overhangs);
+            return h;
+        }
         constexpr size_t kMaxPendingCmds = 3;   // upload cmds in flight before waiting
         constexpr int kMaxFieldCellsY = 512;    // vertical sampling-band cap per tile
         constexpr float kSkirtDropCells = 3.0f; // coarse-tile skirt drop, in cells
@@ -302,6 +335,14 @@ namespace pe::terrain
         if (!m_scene)
             return;
 
+        // A different worldgen invalidates the grow memory; the same one reuses its grown budget.
+        const uint64_t budgetHash = BudgetHash(m_cfg);
+        if (budgetHash != m_budgetHash)
+        {
+            m_budgetHash = budgetHash;
+            m_grownRing0Budget = 0;
+        }
+
         m_material = std::make_unique<Material>();
         m_material->name = "TerrainMaterial";
         m_material->baseColorFactor = vec4(1.0f); // white — per-vertex colour carries the terrain bands
@@ -430,9 +471,17 @@ namespace pe::terrain
                 // column count (seed-7 noise and the Greece heightmap alike, no overhangs) and
                 // overhangs=0.8 tiles up to ~3.1x (folded surfaces cross most columns 2-3 times).
                 // Cliff-heavy heightmap regions have hit ~2.8x — those settle via one ring-wide grow.
-                const float slack = 1.5f + 2.5f * m_cfg.overhangs;
+                float slack = 1.5f + 2.5f * m_cfg.overhangs;
+                // Painted caves fold the surface into extra sheets (floor + ceiling + walls ≈ 3
+                // surfaces, each tracking its own slope) which the flat-surface estimate cannot
+                // see — cave scenes used to grow at every create. Measured: a full-paint cave tile
+                // runs ~3.6x the column count.
+                if (m_cavesMap)
+                    slack += 2.5f;
                 // Scatter props share the tile ranges: the measured worst-tile demand rides on top.
                 vertexBudget = RoundUpTo((uint32_t)(baseCols * slack) + m_scatterBudgetVerts, 256);
+                // Grow memory: a world this session already grew starts from its grown budget.
+                vertexBudget = std::max(vertexBudget, m_grownRing0Budget);
                 indexBudget = vertexBudget * 6 * 2; // quads ~ cells ~ verts; x2 for the meshopt LOD chain
             }
             else
@@ -1231,6 +1280,8 @@ namespace pe::terrain
                         m.lodIndexOffset[lod] = tile.indexOffset + (m.lodIndexOffset[lod] - oldIndexOffset);
                 }
             }
+            if (r == 0) // budgets stay uniform per ring, so any tile carries the grown value
+                m_grownRing0Budget = m_tiles[ring.firstTile].vertexBudget;
             PE_INFO("Terrain: ring %zu outgrew its tile budgets — doubled all %d tiles (one geometry rebuild).",
                     r, tileCount);
         }

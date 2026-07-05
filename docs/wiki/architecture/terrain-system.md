@@ -17,6 +17,10 @@ rare budget-overflow "grow": one overflowing tile means the ring's shared budget
 this worldgen region, so the WHOLE ring gets doubled ranges appended in ONE rebuild (slots are
 reused toroidally — growing per tile would replay the rebuild per slot). Live content is copied
 into the new ranges, so only the overflowed tile re-meshes; old ranges leak until scene load.
+The estimate accounts for overhangs, a configured caves map (folded surface sheets) and the
+scatter map's measured demand; and a **grow is remembered** across recreates of the same worldgen
+(hash of the mesh-affecting config), so inspector edits/rebuilds never replay the grow chain —
+a world pays each grow once per session.
 
 - A mesh slot must never hit `indexCount == 0` (it would lose its indirect/constants slot on the
   next full rebuild) — empty tiles keep one degenerate triangle far below the world.
