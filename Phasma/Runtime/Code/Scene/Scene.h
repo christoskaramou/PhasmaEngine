@@ -140,6 +140,7 @@ namespace pe
         void RemoveModel(ModelAsset *model);
         void RemoveModels(std::vector<ModelAsset *> models);
         Camera *AddCamera(NodeId *parent = nullptr);
+        void AttachDefaultCameraScript(NodeId *camNode);
         void RemoveCamera(Camera *camera);
         void SetActiveCamera(Camera *camera);
         void CreateDirectionalLight(NodeId *parent = nullptr);

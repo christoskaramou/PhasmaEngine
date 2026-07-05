@@ -198,6 +198,7 @@ namespace pe
         m_nodeComponentCache[camNode->index].camera->camera = camera;
         camera->SetNodeId(camNode);
         m_cameras.push_back(camera);
+        AttachDefaultCameraScript(camNode);
         EnsureSkyboxNodeFromSettings(false);
 
         uint32_t swapchainImageCount = RHII.GetSwapchainImageCount();
@@ -1100,7 +1101,20 @@ namespace pe
         m_nodeComponentCache[camNode->index].camera->camera = camera;
         camera->SetNodeId(camNode);
         m_cameras.push_back(camera);
+        AttachDefaultCameraScript(camNode);
         return camera;
+    }
+
+    // A freshly-created camera flies by default: attach the free-fly script (RMB look + WASD) set to run
+    // in both editor and play. Writes the fields directly (not via SetNodeScriptRunMode) so constructing a
+    // brand-new scene doesn't mark it dirty. RuntimeAssets path resolves through the script system fallback.
+    void Scene::AttachDefaultCameraScript(NodeId *camNode)
+    {
+        if (!camNode)
+            return;
+        SetNodeScript(camNode, "Assets/Scripts/fly_camera_play.lua");
+        if (auto *s = m_nodeComponentCache[camNode->index].script)
+            s->runMode = ScriptRunMode::Both;
     }
 
     void Scene::RemoveCamera(Camera *camera)
