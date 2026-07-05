@@ -131,6 +131,8 @@ namespace pe::voxel
         m_strata2.Load(cfg.strata2Path, "strata 2 thickness", false);
         m_features.Load(cfg.featuresPath, "features", false);
         m_blocksPerPixel = std::max(1, cfg.blocksPerPixel);
+        // Terrain passes a float metres/pixel; the cube path leaves it 0 and gets the integer bpp.
+        m_metersPerPixel = cfg.surfaceMetersPerPixel > 0.0f ? cfg.surfaceMetersPerPixel : (float)m_blocksPerPixel;
         m_heightMin = cfg.heightMin;
         m_heightMax = cfg.heightMax;
         m_groundHeight = cfg.groundHeight;
@@ -217,10 +219,12 @@ namespace pe::voxel
     {
         if (!m_surface.Valid())
             return 0.0f;
-        const float extentX = (float)(m_surface.w * m_blocksPerPixel);
-        const float extentZ = (float)(m_surface.h * m_blocksPerPixel);
-        const float nu = (x - (float)m_centerWX) / extentX + 0.5f;
-        const float nv = (z - (float)m_centerWZ) / extentZ + 0.5f;
+        const float extentX = (float)m_surface.w * m_metersPerPixel;
+        const float extentZ = (float)m_surface.h * m_metersPerPixel;
+        // Both axes flip vs the raw world->uv so the terrain matches the painted map (image col 0 = +X,
+        // row 0 = +Z) instead of mirroring. Terrain-only: the cube Generate path keeps its own mapping.
+        const float nu = 0.5f - (x - (float)m_centerWX) / extentX;
+        const float nv = 0.5f - (z - (float)m_centerWZ) / extentZ;
         // The surface map is a signed [-1,1] height scaler; MapHeight maps it into [heightMin,
         // heightMax] metres around groundHeight (0 = ground), so the terrain can dip below y=0.
         return MapHeight(m_surface.SampleNorm(nu, nv)); // SampleNorm edge-clamps uv at the border

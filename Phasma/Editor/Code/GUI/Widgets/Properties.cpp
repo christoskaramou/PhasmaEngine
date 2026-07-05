@@ -1906,15 +1906,8 @@ namespace pe
                         changed |= ImGui::DragInt("World Radius", &v->worldRadius, 0.2f, 0, 4096);
                         ui::ItemTooltip("Total world size in columns around this node; columns outside never "
                                         "generate. 0 = infinite in X/Z.");
-                        // Smooth terrain (noise or heightmap) gets its base from Ground Height + Height Range
-                        // (World Generation, below), so Ground Y — the cube noise/sea-level datum — is hidden then.
-                        const bool smoothRange = v->smooth;
-                        if (!smoothRange)
-                        {
-                            changed |= ImGui::DragInt("Ground Y", &v->groundY, 0.5f, 0, 256);
-                            ui::ItemTooltip("Terrain base height fed to the cube world generator (noise base / "
-                                            "sea-level datum). Smooth terrain uses Ground Height instead.");
-                        }
+                        changed |= ImGui::DragInt("Ground Y", &v->groundY, 0.5f, 0, 256);
+                        ui::ItemTooltip("Terrain base height fed to the world generator (noise base / sea-level datum).");
                         changed |= ImGui::DragInt("Upload Budget", &v->uploadBudget, 0.2f, 1, 64);
                         ui::ItemTooltip("Section meshes uploaded per frame; higher streams in faster but can "
                                         "spike frame time.");
@@ -1942,51 +1935,18 @@ namespace pe
                                         "Empty = no persistence. Changing it rebuilds the world.");
 
                         ImGui::SeparatorText("World Generation");
-                        changed |= ImGui::Checkbox("Smooth Terrain", &v->smooth);
-                        ui::ItemTooltip("Surface-Nets isosurface terrain: rounded, sculptable hills instead of "
-                                        "cubes. Bounded/static (no streaming/LOD yet). Works with noise or a "
-                                        "heightmap. Sculpt from script with voxel.sculpt.");
-                        if (v->smooth)
-                        {
-                            changed |= ImGui::Checkbox("Physics Collision", &v->physics);
-                            ui::ItemTooltip("Give the terrain a static physics collider so ordinary rigidbodies "
-                                            "(add a Physics Body to a mesh) collide with it in play mode — no "
-                                            "scripting. Toggling this does not rebuild the world. Rebuilds the "
-                                            "collider on each sculpt.");
-                            if (v->physics)
-                            {
-                                // Live-applied to the terrain collider (no re-cook). The runtime VoxelWorldHost
-                                // shows these read-only — this is where you author them.
-                                changed |= ImGui::DragFloat("Friction", &v->physicsFriction, 0.01f, 0.0f, 1.0f);
-                                ui::ItemTooltip("Terrain surface friction — how much sliding objects grip it.");
-                                changed |= ImGui::DragFloat("Restitution", &v->physicsRestitution, 0.01f, 0.0f, 1.0f);
-                                ui::ItemTooltip("Terrain bounciness — how much objects rebound on impact.");
-                            }
-                        }
-                        // Height Range + Ground Height drive the heightmap/noise -> world-height mapping for
-                        // both cube and smooth terrain (a heightmap value is a signed [-1,1] scaler, 0 =
-                        // ground). Sea Level (m) is a smooth-only underwater tint.
-                        const bool usesHeightRange = v->smooth || !v->heightmapPath.empty();
-                        if (usesHeightRange)
+                        // Height Range + Ground Height map a heightmap's 0..1 value into block height
+                        // (MapGen::MapHeight). Heightmap terrain only; noise cube terrain uses Ground Y.
+                        if (!v->heightmapPath.empty())
                         {
                             changed |= ImGui::DragFloatRange2("Height Range (m)", &v->heightMin, &v->heightMax, 0.5f,
                                                               -256.0f, 256.0f, "min %.0f", "max %.0f");
-                            ui::ItemTooltip("Vertical span in metres around Ground Height: terrain fills Ground Height "
-                                            "+ [min, max]. A heightmap's -1..1 scaler (or the noise) maps into this "
-                                            "range; 0 = Ground Height. May dip below y=0.");
+                            ui::ItemTooltip("Vertical span in blocks around Ground Height the heightmap maps into: "
+                                            "0 = Ground Height, 1 = Ground Height + max.");
                             v->groundHeight = std::clamp(v->groundHeight, v->heightMin, v->heightMax);
                             changed |= ImGui::DragFloat("Ground Height", &v->groundHeight, 0.25f, v->heightMin,
-                                                        v->heightMax, "%.1f m");
-                            ui::ItemTooltip("World height the 0 scaler sits at; drags within Height Range. "
-                                            "0 centres the terrain on world y=0.");
-                        }
-                        if (v->smooth)
-                        {
-                            v->seaLevelM = std::clamp(v->seaLevelM, v->heightMin, v->heightMax);
-                            changed |= ImGui::DragFloat("Sea Level (m)", &v->seaLevelM, 0.25f, v->heightMin,
-                                                        v->heightMax, "%.1f m");
-                            ui::ItemTooltip("Water height in metres: smooth terrain below this is tinted underwater "
-                                            "(no water surface mesh yet). Default -1.");
+                                                        v->heightMax, "%.1f");
+                            ui::ItemTooltip("Block height the 0 map value sits at; drags within Height Range.");
                         }
                         auto pathField = [&changed](const char *label, std::string &path)
                         {
@@ -2004,13 +1964,8 @@ namespace pe
                                         "centered on this node. Empty = procedural noise terrain.");
                         if (v->heightmapPath.empty())
                         {
-                            if (!v->smooth) // smooth terrain's vertical extent comes from Height Range instead
-                            {
-                                changed |= ImGui::DragFloat("Mountain Height", &v->noiseAmplitude, 0.25f, 0.0f, 128.0f,
-                                                            "%.0f");
-                                ui::ItemTooltip("Peak height above Ground Y in blocks (cube terrain). 0 = flat plain. "
-                                                "Smooth terrain uses Height Range instead.");
-                            }
+                            changed |= ImGui::DragFloat("Mountain Height", &v->noiseAmplitude, 0.25f, 0.0f, 128.0f, "%.0f");
+                            ui::ItemTooltip("Peak height above Ground Y in blocks. 0 = flat plain.");
                             changed |= ImGui::DragFloat("Feature Scale", &v->noiseFeatureScale, 0.5f, 8.0f, 1024.0f,
                                                         "%.0f");
                             ui::ItemTooltip("Terrain feature wavelength in blocks — small = choppy hills, large = "
@@ -2047,11 +2002,8 @@ namespace pe
                             ui::ItemTooltip("Fills below the strata down to y=0. 0 = air (floating-island "
                                             "shells).");
                         }
-                        if (!smoothRange) // smooth terrain uses Sea Level (m) above instead
-                        {
-                            changed |= ImGui::DragInt("Sea Level", &v->seaLevel, 0.2f, -1, 256);
-                            ui::ItemTooltip("Water surface height in blocks: -1 = auto (Ground Y - 2), 0 = no water.");
-                        }
+                        changed |= ImGui::DragInt("Sea Level", &v->seaLevel, 0.2f, -1, 256);
+                        ui::ItemTooltip("Water surface height in blocks: -1 = auto (Ground Y - 2), 0 = no water.");
                         changed |= ImGui::Checkbox("Auto Rebuild", &v->autoRebuild);
                         ui::ItemTooltip("On (default): worldgen edits rebuild the world automatically after a short "
                                         "settle. Off: edits only apply when you press Rebuild World — for batching "
@@ -2061,6 +2013,88 @@ namespace pe
                         ui::ItemTooltip("Force-rebuild now — applies staged edits (needed after repainting a map "
                                         "file, or any edit while Auto Rebuild is off).");
                         ImGui::TextDisabled("Block = 1 unit, section = 16^3 (engine constants)");
+                        if (changed)
+                            scene.MarkDirty();
+                    }
+                    ImGui::Unindent(8.f);
+                }
+            }
+
+            // Terrain (heightfield surface) component
+            if (flags & Component_Terrain)
+            {
+                ImGui::Separator();
+                const bool terrOpen = ImGui::CollapsingHeader("Terrain", ImGuiTreeNodeFlags_DefaultOpen);
+                ui::ItemTooltip("Heightfield terrain: a surface from a heightmap or noise (no caves/depth). Kept in "
+                                "sync with these values live; the node's position is the terrain center.");
+                if (terrOpen)
+                {
+                    ImGui::Indent(8.f);
+                    if (NodeTerrainTag *t = scene.GetTerrainForNode(node))
+                    {
+                        bool changed = false;
+                        changed |= ImGui::Checkbox("Enabled##terrain", &t->worldEnabled);
+                        ui::ItemTooltip("Build and keep the terrain while this node is enabled.");
+                        changed |= ImGui::DragInt("Size X (m)", &t->sizeXMeters, 1.0f, 0, 65536);
+                        ui::ItemTooltip("Terrain width in metres, centred on this node. 0 with a heightmap fills the "
+                                        "map's X extent. Mesh is capped at 2048 cells/axis — raise Meters/Pixel for a "
+                                        "bigger world.");
+                        changed |= ImGui::DragInt("Size Z (m)", &t->sizeZMeters, 1.0f, 0, 65536);
+                        ui::ItemTooltip("Terrain depth in metres, centred on this node. 0 with a heightmap fills the "
+                                        "map's Z extent.");
+                        changed |= ImGui::DragFloat("Meters / Pixel", &t->metersPerPixel, 0.05f, 0.05f, 256.0f, "%.2f");
+                        ui::ItemTooltip("World metres each heightmap pixel / mesh cell spans. >1 spreads a small map "
+                                        "over a big world with fewer verts; <1 adds mesh detail. Cells = Size / this, "
+                                        "capped at 2048/axis.");
+
+                        changed |= ImGui::DragFloatRange2("Height Range (m)", &t->heightMin, &t->heightMax, 0.5f,
+                                                          -256.0f, 256.0f, "min %.0f", "max %.0f");
+                        ui::ItemTooltip("Vertical span in metres around Ground Height: a heightmap 0..1 (or the noise) "
+                                        "maps into Ground Height + [min, max]. May dip below y=0.");
+                        t->groundHeight = std::clamp(t->groundHeight, t->heightMin, t->heightMax);
+                        changed |= ImGui::DragFloat("Ground Height", &t->groundHeight, 0.25f, t->heightMin, t->heightMax,
+                                                    "%.1f m");
+                        ui::ItemTooltip("World height the mid-gray level sits at; drags within Height Range.");
+                        t->seaLevelM = std::clamp(t->seaLevelM, t->heightMin, t->heightMax);
+                        changed |= ImGui::DragFloat("Sea Level (m)", &t->seaLevelM, 0.25f, t->heightMin, t->heightMax,
+                                                    "%.1f m");
+                        ui::ItemTooltip("Surface below this world height is tinted underwater (no water surface yet). "
+                                        "Default 0.");
+
+                        char buf[260];
+                        snprintf(buf, sizeof(buf), "%s", t->heightmapPath.c_str());
+                        if (ImGui::InputText("Heightmap", buf, sizeof(buf)))
+                        {
+                            t->heightmapPath = buf;
+                            changed = true;
+                        }
+                        ui::ItemTooltip("Grayscale surface map under Assets (paint it in Map Painter): 0..1 maps into "
+                                        "Height Range, lerped between pixels, centered on this node. Empty = noise.");
+                        if (t->heightmapPath.empty())
+                        {
+                            changed |= ImGui::DragFloat("Feature Scale", &t->noiseFeatureScale, 0.5f, 8.0f, 1024.0f, "%.0f");
+                            ui::ItemTooltip("Noise feature wavelength in blocks — small = choppy, large = rolling.");
+                            changed |= ImGui::DragInt("Seed", &t->noiseSeed);
+                            ui::ItemTooltip("Each seed is a different terrain.");
+                        }
+
+                        changed |= ImGui::Checkbox("Physics Collision", &t->physics);
+                        ui::ItemTooltip("Give the terrain a static physics collider so rigidbodies collide with it in "
+                                        "play mode. Toggling does not rebuild the terrain.");
+                        if (t->physics)
+                        {
+                            changed |= ImGui::DragFloat("Friction", &t->physicsFriction, 0.01f, 0.0f, 1.0f);
+                            ui::ItemTooltip("Terrain surface friction — how much sliding objects grip it.");
+                            changed |= ImGui::DragFloat("Restitution", &t->physicsRestitution, 0.01f, 0.0f, 1.0f);
+                            ui::ItemTooltip("Terrain bounciness — how much objects rebound on impact.");
+                        }
+
+                        changed |= ImGui::Checkbox("Auto Rebuild", &t->autoRebuild);
+                        ui::ItemTooltip("On: worldgen edits rebuild after a short settle. Off: only on Rebuild Terrain.");
+                        if (ImGui::Button("Rebuild Terrain"))
+                            t->rebuildRequested = true;
+                        ui::ItemTooltip("Force-rebuild now — needed after repainting the heightmap, or any edit while "
+                                        "Auto Rebuild is off.");
                         if (changed)
                             scene.MarkDirty();
                     }

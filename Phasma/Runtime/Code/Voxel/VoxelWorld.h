@@ -51,16 +51,6 @@ namespace pe::voxel
         std::string saveDir; // relative to Assets or absolute; empty disables persistence
 
         // --- Worldgen (any change rebuilds the world) ---
-        // Smooth (isosurface) terrain: mesh the generator's continuous density field with Surface Nets
-        // into a rounded surface instead of cubes. Bounded/static only for now (no streaming/edits);
-        // renders as a standard scene mesh, not the packed voxel arena.
-        bool smooth = false;
-        // Physics collider: give the smooth terrain a static Jolt triangle-mesh body so ordinary
-        // rigidbodies collide with it (no scripting). Toggling it does NOT rebuild the world — only
-        // adds/removes the collider. Smooth worlds only (cube worlds use voxel.move_aabb).
-        bool physics = false;
-        float physicsFriction = 0.5f;    // terrain collider surface friction (live-applied)
-        float physicsRestitution = 0.3f; // terrain collider bounciness (live-applied)
         // Noise terrain knobs, used while heightmapPath is empty (defaults = the historical look):
         float noiseAmplitude = 28.0f;    // peak height above groundY in blocks; 0 = flat plain
         float noiseFeatureScale = 96.0f; // base feature wavelength in blocks (bigger = rolling hills)
@@ -73,20 +63,21 @@ namespace pe::voxel
         // or absolute, centered on the bounds center. A bounded non-streaming world with
         // worldRadius 0 derives its radius from the map extent.
         std::string heightmapPath;
-        // Smooth-heightmap height mapping (meters): the gray map value 0..1 maps to
-        // groundHeight + lerp(heightMin, heightMax, value), so mid-gray (0.5) sits at groundHeight and
-        // the terrain can dip below y=0. Only the smooth isosurface path uses this; the cube Generate
-        // path still reads pixel == block height.
-        float heightMin = -32.0f;  // height offset (m) at map value 0 (black), relative to groundHeight
-        float heightMax = 32.0f;   // height offset (m) at map value 1 (white), relative to groundHeight
-        float groundHeight = 0.0f; // datum the 0.5 gray level sits at; UI-clamped to [heightMin, heightMax]
-        float seaLevelM = -1.0f;   // smooth water height (m): surface below this is tinted underwater
+        // Heightmap height mapping (MapGen::MapHeight): map value 0..1 -> groundHeight + lerp(heightMin,
+        // heightMax, value). Used by the cube heightmap Generate path AND by the heightfield Terrain
+        // system (TerrainWorld drives MapGen through a VoxelConfig). Ignored for noise cube terrain.
+        float heightMin = -32.0f;
+        float heightMax = 32.0f;
+        float groundHeight = 0.0f;
         std::string strata1Path;
         std::string strata2Path;
         // Feature map: a non-zero pixel places a decoration at that pixel's center block
         // (1 = tree, 2 = rock, 3 = road, 4 = olive, 5 = cypress). Painted sparse.
         std::string featuresPath;
-        int blocksPerPixel = 1;    // one map pixel spans this many blocks in X/Z
+        int blocksPerPixel = 1; // one map pixel spans this many blocks in X/Z (cube feature/strata step)
+        // Heightfield Terrain only: float metres each surface pixel spans (0 = fall back to blocksPerPixel).
+        // Lets a small heightmap drive a large terrain without inflating the mesh vertex count.
+        float surfaceMetersPerPixel = 0.0f;
         int surfaceBlock = 3;      // block ids: 1=stone 2=dirt 3=grass 4=water, 0=air
         bool surfaceBands = false; // pick the top block by elevation (sand/dry_grass/rock/snow) instead of surfaceBlock
         int strata1Block = 2;
@@ -112,20 +103,8 @@ namespace pe::voxel
         void SetBlock(int x, int y, int z, BlockId id);
         bool Raycast(const vec3 &o, const vec3 &d, float maxDist,
                      BlockPos &hit, BlockPos &adjacent, vec3 &normal) const;
-        // Smooth (isosurface) worlds only: CSG a sphere brush into the density field and re-mesh —
-        // dig subtracts material, otherwise it adds. No-op on cube worlds.
-        void SculptSmooth(const vec3 &center, float radius, bool dig);
-        // Defer a sculpt to the next Update() — safe to call from the editor render path, where an
-        // immediate re-mesh + GPU flush would run mid-frame. Smooth worlds only.
-        void QueueSculpt(const vec3 &center, float radius, bool dig);
-        // Trilinear sample of the smooth density field at a world point: > 0 = inside terrain (solid),
-        // < 0 = air. Outside the sampled volume clamps to the border. -1 on cube/empty worlds.
-        float SampleDensity(const vec3 &p) const;
-        // March the smooth density field for the first air->solid crossing within maxDist. Fills the
-        // world hit point and the outward (surface) normal. False if nothing is hit (or cube world).
-        bool RaycastSmooth(const vec3 &o, const vec3 &d, float maxDist, vec3 &hitPoint, vec3 &hitNormal) const;
-        // Collision solidity of block-cell (x,y,z): block-grid solidity on cube worlds, density at the
-        // cell centre on smooth worlds. The predicate MoveAabb uses so both terrains stop a swept AABB.
+        // Collision solidity of block-cell (x,y,z): block-grid solidity. The predicate voxel::MoveAabb
+        // uses so a swept AABB stops on the terrain.
         bool IsSolidCell(int x, int y, int z);
         void Update();
         BlockRegistry &Registry();
@@ -137,11 +116,6 @@ namespace pe::voxel
         // Live LOD retune (0 = off): updates the config and remeshes Ready columns whose band
         // changed through the budgeted remesh path — no world recreate.
         void SetLod0Radius(int lod0Radius);
-        // Live toggle of the smooth-terrain physics collider (no world rebuild). Adds/removes a static
-        // Jolt triangle-mesh body on the voxel host so ordinary rigidbodies collide with the terrain.
-        void SetPhysicsEnabled(bool enabled);
-        // Live-update the terrain collider's friction / restitution without re-cooking the mesh.
-        void SetTerrainMaterial(float friction, float restitution);
         const VoxelConfig &Config() const { return m_cfg; }
         // False once a Scene buffer rebuild (scene load, play-stop restore) wiped the shared arena
         // out from under this world — streaming into it would just warn-spam; recreate instead.
@@ -210,15 +184,6 @@ namespace pe::voxel
         const ChunkColumn *FindColumn(ColumnCoord coord) const;
         void RegisterDefaultBlocks();
         void CreateHostMesh();
-        // Smooth (isosurface) worldgen: sample the generator's density field over the world bound into
-        // m_smoothField, then RebuildSmoothMesh. Used instead of the streamed cube path when cfg.smooth.
-        void BuildSmoothWorld();
-        // Surface-Nets m_smoothField into one standard scene mesh (colored, host node), replacing any
-        // previous smooth host mesh. Called by BuildSmoothWorld and after every SculptSmooth edit.
-        void RebuildSmoothMesh();
-        // (Re)build or drop the static Jolt mesh collider on the host node to match cfg.physics and the
-        // current smooth tiles. No-op without PE_PHYSICS. Called after RebuildSmoothMesh and on toggle.
-        void UpdateTerrainCollider();
         void RequestColumnsForAnchor();
         void EnqueueColumnGeneration(ColumnCoord coord);
         std::shared_future<ChunkColumn> EnqueueGenerationJob(ColumnCoord coord, int genLod);
@@ -264,26 +229,10 @@ namespace pe::voxel
         std::unordered_map<uint64_t, std::vector<PendingEdit>> m_pendingEdits;
         std::vector<std::pair<uint64_t, int>> m_dirtySections; // (ColumnKey, sectionIndex) pending remesh
         std::vector<CommandBuffer *> m_submittedUpdateCmds;
-        // Smooth-world density field: persistent so sculpt edits mutate it and re-mesh (no generator
-        // re-query). Corner grid (m_smoothNx+1)^... at m_smoothOrigin, one corner per world block.
-        std::vector<float> m_smoothField;
-        vec3 m_smoothOrigin = vec3(0.0f);
-        int m_smoothNx = 0;
-        int m_smoothNy = 0;
-        int m_smoothNz = 0;
-        struct PendingSculpt
-        {
-            vec3 center;
-            float radius;
-            bool dig;
-        };
-        std::vector<PendingSculpt> m_pendingSculpts; // drained in Update() at the safe system-tick point
         std::unique_ptr<Material> m_hostMaterial;
         std::unique_ptr<VoxelMaterial> m_voxelMaterial;
         NodeId *m_hostNode = nullptr;
         int m_hostMeshIndex = -1;
-        std::vector<int> m_smoothMeshIndices; // smooth-terrain tile meshes (cube path uses m_hostMeshIndex)
-        bool m_terrainColliderActive = false; // a static physics body is registered on m_hostNode
         uint32_t m_hostDataOffset = 0xFFFFFFFF;
         uint32_t m_materialGpuIndex = 0xFFFFFFFF;
     };

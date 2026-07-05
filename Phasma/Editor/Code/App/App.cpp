@@ -32,6 +32,7 @@
 #include "Systems/AudioSystem.h"
 #endif
 #include "Systems/AnimationSystem.h"
+#include "Terrain/TerrainSystem.h"
 #include "Voxel/VoxelSystem.h"
 #include "Window/Window.h"
 #include "imgui/ImGuizmo.h"
@@ -253,6 +254,8 @@ namespace pe
                     // would otherwise strand the world; a Voxel World node rebuilds via reconcile.
                     if (auto *voxels = GetGlobalSystem<voxel::VoxelSystem>())
                         voxels->Destroy();
+                    if (auto *terr = GetGlobalSystem<terrain::TerrainSystem>())
+                        terr->Destroy();
                 }
             }
         }
@@ -428,6 +431,7 @@ namespace pe
 #endif
         CreateGlobalSystem<AnimationSystem>()->Init(nullptr);
         CreateGlobalSystem<voxel::VoxelSystem>()->Init(nullptr);
+        CreateGlobalSystem<terrain::TerrainSystem>()->Init(nullptr);
 
         // ScriptSystem is initialized last because it can call other systems in Init()
         CreateGlobalSystem<ScriptSystem>()->Init(nullptr);

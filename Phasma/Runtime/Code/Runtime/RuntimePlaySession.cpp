@@ -6,6 +6,7 @@
 #include "Systems/Physics2DSystem.h"
 #include "Systems/PhysicsSystem.h"
 #include "UI/RuntimeUi.h"
+#include "Terrain/TerrainSystem.h"
 #include "Voxel/VoxelSystem.h"
 
 namespace pe
@@ -79,6 +80,10 @@ namespace pe
         // arena that RestoreSnapshot just wiped (warn spam, and pre-fix a CopyBufferStaged overflow).
         if (auto *voxels = GetGlobalSystem<voxel::VoxelSystem>())
             voxels->Destroy();
+        // Terrain host mesh lives in the same scene buffers RestoreSnapshot wipes; drop it so reconcile
+        // rebuilds cleanly instead of holding a stale host node.
+        if (auto *terr = GetGlobalSystem<terrain::TerrainSystem>())
+            terr->Destroy();
     }
 
     void SetRuntimePlaySessionPaused(bool paused)

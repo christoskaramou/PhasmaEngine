@@ -23,6 +23,7 @@
 #include "Systems/AudioSystem.h"
 #include "Systems/Physics2DSystem.h"
 #include "Systems/PhysicsSystem.h"
+#include "Terrain/TerrainSystem.h"
 #include "Voxel/VoxelSystem.h"
 #include "UI/RuntimeUi.h"
 #include "Window/WindowEvents.h"
@@ -739,6 +740,8 @@ namespace pe
                 // Voxel subsystem: created idle; stays a no-op until a world is created via API
                 // (voxel.create / VoxelSystem::CreateWorld). Permanent subsystem, no feature guard.
                 CreateGlobalSystem<voxel::VoxelSystem>()->Init(nullptr);
+                // Terrain subsystem: heightfield terrain node reconcile. Permanent, idle until a Terrain node exists.
+                CreateGlobalSystem<terrain::TerrainSystem>()->Init(nullptr);
 
                 if (!startupScene.IsExplicitEmpty() && !startupScene.scenePath.empty())
                 {

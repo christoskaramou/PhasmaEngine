@@ -642,15 +642,10 @@ namespace pe
                     if (p["strata2_map"].valid()) v->strata2Path = p["strata2_map"].get<std::string>();
                     if (p["features_map"].valid()) v->featuresPath = p["features_map"].get<std::string>();
                     if (p["blocks_per_pixel"].valid()) v->blocksPerPixel = p["blocks_per_pixel"];
-                    if (p["smooth"].valid()) v->smooth = p["smooth"];
-                    if (p["physics"].valid()) v->physics = p["physics"];
-                    if (p["physics_friction"].valid()) v->physicsFriction = p["physics_friction"];
-                    if (p["physics_restitution"].valid()) v->physicsRestitution = p["physics_restitution"];
-                    if (p["auto_rebuild"].valid()) v->autoRebuild = p["auto_rebuild"];
                     if (p["height_min"].valid()) v->heightMin = p["height_min"];
                     if (p["height_max"].valid()) v->heightMax = p["height_max"];
                     if (p["ground_height"].valid()) v->groundHeight = p["ground_height"];
-                    if (p["sea_level_m"].valid()) v->seaLevelM = p["sea_level_m"];
+                    if (p["auto_rebuild"].valid()) v->autoRebuild = p["auto_rebuild"];
                     if (p["surface_block"].valid()) v->surfaceBlock = p["surface_block"];
                     if (p["surface_bands"].valid()) v->surfaceBands = p["surface_bands"];
                     if (p["strata1_block"].valid()) v->strata1Block = p["strata1_block"];
@@ -689,15 +684,10 @@ namespace pe
                     t["strata2_map"] = v->strata2Path;
                     t["features_map"] = v->featuresPath;
                     t["blocks_per_pixel"] = v->blocksPerPixel;
-                    t["smooth"] = v->smooth;
-                    t["physics"] = v->physics;
-                    t["physics_friction"] = v->physicsFriction;
-                    t["physics_restitution"] = v->physicsRestitution;
-                    t["auto_rebuild"] = v->autoRebuild;
                     t["height_min"] = v->heightMin;
                     t["height_max"] = v->heightMax;
                     t["ground_height"] = v->groundHeight;
-                    t["sea_level_m"] = v->seaLevelM;
+                    t["auto_rebuild"] = v->autoRebuild;
                     t["surface_block"] = v->surfaceBlock;
                     t["surface_bands"] = v->surfaceBands;
                     t["strata1_block"] = v->strata1Block;
@@ -706,6 +696,61 @@ namespace pe
                     t["strata1_thickness"] = v->strata1Thickness;
                     t["strata2_thickness"] = v->strata2Thickness;
                     return sol::make_object(lua, t);
+                });
+
+                // Heightfield-terrain node config (surface only): size_x_meters, size_z_meters, ground_height,
+                // height_min, height_max, sea_level_m, heightmap, noise_feature_scale, noise_seed,
+                // meters_per_pixel, physics, physics_friction, physics_restitution, auto_rebuild, rebuild.
+                // TerrainSystem reconciles the live terrain from it (same data the Terrain inspector edits).
+                ut.set_function("set_terrain", [](SceneNodeHandle &h, sol::optional<sol::table> params) {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return;
+                    s->AddComponentFlag(h.nodeId, Component_Terrain);
+                    NodeTerrainTag *t = s->GetTerrainForNode(h.nodeId);
+                    if (!t || !params) return;
+                    sol::table p = *params;
+                    if (p["enabled"].valid()) t->worldEnabled = p["enabled"];
+                    if (p["size_x_meters"].valid()) t->sizeXMeters = p["size_x_meters"];
+                    if (p["size_z_meters"].valid()) t->sizeZMeters = p["size_z_meters"];
+                    if (p["ground_height"].valid()) t->groundHeight = p["ground_height"];
+                    if (p["height_min"].valid()) t->heightMin = p["height_min"];
+                    if (p["height_max"].valid()) t->heightMax = p["height_max"];
+                    if (p["sea_level_m"].valid()) t->seaLevelM = p["sea_level_m"];
+                    if (p["heightmap"].valid()) t->heightmapPath = p["heightmap"].get<std::string>();
+                    if (p["noise_feature_scale"].valid()) t->noiseFeatureScale = p["noise_feature_scale"];
+                    if (p["noise_seed"].valid()) t->noiseSeed = p["noise_seed"];
+                    if (p["meters_per_pixel"].valid()) t->metersPerPixel = p["meters_per_pixel"];
+                    else if (p["blocks_per_pixel"].valid()) t->metersPerPixel = p["blocks_per_pixel"]; // pre-rename
+                    if (p["physics"].valid()) t->physics = p["physics"];
+                    if (p["physics_friction"].valid()) t->physicsFriction = p["physics_friction"];
+                    if (p["physics_restitution"].valid()) t->physicsRestitution = p["physics_restitution"];
+                    if (p["auto_rebuild"].valid()) t->autoRebuild = p["auto_rebuild"];
+                    if (p["rebuild"].valid()) t->rebuildRequested = p["rebuild"];
+                    s->MarkDirty();
+                });
+
+                ut.set_function("get_terrain", [&lua](SceneNodeHandle &h) -> sol::object {
+                    Scene *s = GetScene();
+                    if (!s || !h.IsValid(*s)) return sol::lua_nil;
+                    NodeTerrainTag *t = s->GetTerrainForNode(h.nodeId);
+                    if (!t) return sol::lua_nil;
+                    sol::table r = lua.create_table();
+                    r["enabled"] = t->worldEnabled;
+                    r["size_x_meters"] = t->sizeXMeters;
+                    r["size_z_meters"] = t->sizeZMeters;
+                    r["ground_height"] = t->groundHeight;
+                    r["height_min"] = t->heightMin;
+                    r["height_max"] = t->heightMax;
+                    r["sea_level_m"] = t->seaLevelM;
+                    r["heightmap"] = t->heightmapPath;
+                    r["noise_feature_scale"] = t->noiseFeatureScale;
+                    r["noise_seed"] = t->noiseSeed;
+                    r["meters_per_pixel"] = t->metersPerPixel;
+                    r["physics"] = t->physics;
+                    r["physics_friction"] = t->physicsFriction;
+                    r["physics_restitution"] = t->physicsRestitution;
+                    r["auto_rebuild"] = t->autoRebuild;
+                    return sol::make_object(lua, r);
                 });
 
                 ut.set_function("remove", [](SceneNodeHandle &h) {

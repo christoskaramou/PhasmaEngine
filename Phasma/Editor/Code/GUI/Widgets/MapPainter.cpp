@@ -120,26 +120,58 @@ namespace pe
         ReleasePalette();
     }
 
-    NodeVoxelWorldTag *MapPainter::Tag() const
+    MapPainter::MapTarget MapPainter::ResolveTarget(int layer) const
     {
         Scene *scene = GetActiveScene();
-        auto *node = scene ? scene->GetVoxelWorldNode() : nullptr;
-        return node ? scene->GetVoxelWorldForNode(node) : nullptr;
-    }
-
-    std::string &MapPainter::LayerPath(NodeVoxelWorldTag *tag, int layer) const
-    {
+        MapTarget t;
+        if (!scene)
+            return t;
+        // Height layer: a Terrain node owns it when present (surface = terrain height).
+        if (layer == 0)
+        {
+            if (NodeId *tn = scene->GetTerrainNode())
+                if (NodeTerrainTag *tt = scene->GetTerrainForNode(tn))
+                {
+                    t.path = &tt->heightmapPath;
+                    t.metersPerPixel = &tt->metersPerPixel;
+                    t.rebuild = &tt->rebuildRequested;
+                    t.heightMin = &tt->heightMin;
+                    t.heightMax = &tt->heightMax;
+                    t.groundHeight = &tt->groundHeight;
+                    t.node = tn;
+                    t.bounded = true;     // terrain is always bounded/static
+                    t.terrainFlip = true; // Terrain maps col 0 -> +X, row 0 -> +Z
+                    return t;
+                }
+        }
+        // Strata / features (and the height layer's fallback) live on the Voxel World node.
+        NodeId *vn = scene->GetVoxelWorldNode();
+        NodeVoxelWorldTag *vt = vn ? scene->GetVoxelWorldForNode(vn) : nullptr;
+        if (!vt)
+            return t;
+        t.node = vn;
+        t.blocksPerPixel = &vt->blocksPerPixel;
+        t.rebuild = &vt->rebuildRequested;
+        t.heightMin = &vt->heightMin;
+        t.heightMax = &vt->heightMax;
+        t.groundHeight = &vt->groundHeight;
+        t.bounded = (vt->worldRadius > 0 || !vt->streaming);
         switch (layer)
         {
         case 1:
-            return tag->strata1Path;
+            t.path = &vt->strata1Path;
+            break;
         case 2:
-            return tag->strata2Path;
+            t.path = &vt->strata2Path;
+            break;
         case kFeaturesLayer:
-            return tag->featuresPath;
+            t.path = &vt->featuresPath;
+            break;
         default:
-            return tag->heightmapPath;
+            t.path = &vt->heightmapPath;
+            break;
         }
+        return t;
     }
 
     bool MapPainter::SetLayer(int layer)
@@ -158,9 +190,10 @@ namespace pe
         return true;
     }
 
-    void MapPainter::SyncLayer(NodeVoxelWorldTag *tag, int layer)
+    void MapPainter::SyncLayer(int layer)
     {
-        const std::string &configured = LayerPath(tag, layer);
+        const MapTarget t = ResolveTarget(layer);
+        const std::string configured = t.valid() ? *t.path : std::string();
         const std::string resolved =
             configured.empty() ? std::string() : voxel::ColumnChunkStore::ResolveRoot(configured).string();
         LayerBuffer &buf = m_layers[layer];
@@ -221,9 +254,12 @@ namespace pe
         }
     }
 
-    void MapPainter::CreateMap(NodeVoxelWorldTag *tag)
+    void MapPainter::CreateMap()
     {
-        std::string &slot = LayerPath(tag, m_layer);
+        const MapTarget t = ResolveTarget(m_layer);
+        if (!t.valid())
+            return;
+        std::string &slot = *t.path;
         if (slot.empty())
         {
             slot = m_newPath.data();
@@ -405,8 +441,7 @@ namespace pe
 
     bool MapPainter::Stroke(float u, float v, float radius, float strength, bool lower, int brush, int value)
     {
-        if (NodeVoxelWorldTag *tag = Tag())
-            SyncLayer(tag, m_layer);
+        SyncLayer(m_layer);
         LayerBuffer &buf = Buf();
         if (buf.px.empty())
             return false;
@@ -436,9 +471,9 @@ namespace pe
 
     bool MapPainter::Save()
     {
-        NodeVoxelWorldTag *tag = Tag();
+        const MapTarget t = ResolveTarget(m_layer);
         LayerBuffer &buf = Buf();
-        if (!tag || buf.px.empty() || buf.loadedPath.empty())
+        if (!t.valid() || buf.px.empty() || buf.loadedPath.empty())
             return false;
 
         std::vector<uint8_t> blob;
@@ -472,7 +507,8 @@ namespace pe
         out.close();
 
         buf.unsaved = false;
-        tag->rebuildRequested = true; // same path as the inspector "Rebuild World" button
+        if (t.rebuild)
+            *t.rebuild = true; // same path as the inspector "Rebuild" button
         return true;
     }
 
@@ -708,25 +744,27 @@ namespace pe
     void MapPainter::TeleportCameraTo(float px, float py)
     {
         Scene *scene = GetActiveScene();
-        NodeVoxelWorldTag *tag = Tag();
+        const MapTarget t = ResolveTarget(m_layer);
         Camera *cam = scene ? scene->GetActiveCamera() : nullptr;
-        NodeId *node = scene ? scene->GetVoxelWorldNode() : nullptr;
-        if (!scene || !tag || !cam || !node || Buf().px.empty())
+        if (!scene || !t.valid() || !t.node || !cam || Buf().px.empty())
             return;
-        // Map center world column mirrors VoxelSystem::ReconcileComponentWorld + MapGen centerW: the
-        // node's position column for bounded/non-streaming worlds, origin otherwise. Section size = 16.
+        // Map center world column mirrors the reconcile + MapGen centerW: the owning node's position
+        // column for bounded worlds, origin otherwise. Section size = 16.
         int centerCx = 0, centerCz = 0;
-        if (tag->worldRadius > 0 || !tag->streaming)
+        if (t.bounded)
         {
-            const vec3 p = vec3(scene->GetWorldMatrix(node)[3]);
+            const vec3 p = vec3(scene->GetWorldMatrix(t.node)[3]);
             centerCx = FloorDiv(static_cast<int>(std::floor(p.x)), 16);
             centerCz = FloorDiv(static_cast<int>(std::floor(p.z)), 16);
         }
         const LayerBuffer &buf = Buf();
-        const float bpp = static_cast<float>(std::max(1, tag->blocksPerPixel));
+        const float bpp = std::max(0.05f, t.ppScale());
         // Invert MapGen's pixel<->world mapping: nu = (wx - centerW)/(w*bpp) + 0.5, pixel center nu = (px+0.5)/w.
-        const float worldX = (centerCx * 16 + 8) + (px + 0.5f - static_cast<float>(buf.w) * 0.5f) * bpp;
-        const float worldZ = (centerCz * 16 + 8) + (py + 0.5f - static_cast<float>(buf.h) * 0.5f) * bpp;
+        // Terrain flips both axes (col 0 = +X, row 0 = +Z), so its teleport must invert both or it lands mirrored.
+        const float pu = t.terrainFlip ? (static_cast<float>(buf.w) - 1.0f - px) : px;
+        const float pv = t.terrainFlip ? (static_cast<float>(buf.h) - 1.0f - py) : py;
+        const float worldX = (centerCx * 16 + 8) + (pu + 0.5f - static_cast<float>(buf.w) * 0.5f) * bpp;
+        const float worldZ = (centerCz * 16 + 8) + (pv + 0.5f - static_cast<float>(buf.h) * 0.5f) * bpp;
         const vec3 cur = cam->GetPosition();
         cam->SetPosition(vec3(worldX, cur.y, worldZ)); // keep the current height
     }
@@ -738,10 +776,11 @@ namespace pe
 
         ImGui::Begin(m_name.c_str(), &m_open);
 
-        NodeVoxelWorldTag *tag = Tag();
-        if (!tag)
+        Scene *scene = GetActiveScene();
+        if (!scene || (!scene->GetTerrainNode() && !scene->GetVoxelWorldNode()))
         {
-            ImGui::TextDisabled("Add a Voxel World node (Hierarchy > Add > Voxel World) to paint terrain maps.");
+            ImGui::TextDisabled(
+                "Add a Terrain node (for surface height) or a Voxel World node (Hierarchy > Add) to paint maps.");
             ImGui::End();
             return;
         }
@@ -749,34 +788,51 @@ namespace pe
         int layer = m_layer;
         if (ImGui::Combo("Layer", &layer, kLayerNames, 4))
             SetLayer(layer);
-        ui::ItemTooltip("Which MapGen input map the brush edits. Surface: signed height scaler -1..1 "
-                        "(0 = ground) mapped into the node's Height Range. Strata: thickness of the band "
-                        "below the surface. Features: sparse decoration dots (tree/rock). Edits are kept "
+        ui::ItemTooltip("Which input map the brush edits. Surface: the terrain height (a Terrain node when "
+                        "present, else the Voxel World's heightmap). Strata: thickness of the band below the "
+                        "surface (Voxel World). Features: sparse decoration dots (Voxel World). Edits are kept "
                         "per layer until saved.");
-        ImGui::SetNextItemWidth(90.0f);
-        // Same tag field the inspector edits: a small texture can cover a big world. Changing it
-        // rebuilds the world through the normal debounced reconcile - no save needed.
-        if (ImGui::DragInt("Blocks / Pixel", &tag->blocksPerPixel, 0.1f, 1, 64))
-        {
-            tag->blocksPerPixel = std::clamp(tag->blocksPerPixel, 1, 64);
-            if (Scene *scene = GetActiveScene())
-                scene->MarkDirty();
-        }
-        ui::ItemTooltip("World blocks each map pixel spans in X/Z (all layers; heights lerp between "
-                        "pixels, so bigger values trade detail for coverage). A bounded world derives "
-                        "its size from map size x this.");
 
-        SyncLayer(tag, m_layer);
+        MapTarget target = ResolveTarget(m_layer);
+        if (!target.valid())
+        {
+            ImGui::TextDisabled(m_layer == kFeaturesLayer ? "The Features layer needs a Voxel World node."
+                                : m_layer == 0            ? "Add a Terrain or Voxel World node to paint the surface."
+                                                          : "The Strata layers need a Voxel World node.");
+            ImGui::End();
+            return;
+        }
+
+        ImGui::SetNextItemWidth(90.0f);
+        // The owning node's field: a small texture can cover a big world. Changing it rebuilds through the
+        // normal debounced reconcile - no save needed. Terrain uses a float metres/pixel; Voxel World an int.
+        if (target.metersPerPixel)
+        {
+            if (ImGui::DragFloat("Meters / Pixel", target.metersPerPixel, 0.05f, 0.05f, 256.0f, "%.2f"))
+            {
+                *target.metersPerPixel = std::clamp(*target.metersPerPixel, 0.05f, 256.0f);
+                scene->MarkDirty();
+            }
+            ui::ItemTooltip("World metres each map pixel / mesh cell spans. Terrain size derives from map size x this; "
+                            "bigger spreads a small map over a large world with fewer verts.");
+        }
+        else if (target.blocksPerPixel && ImGui::DragInt("Blocks / Pixel", target.blocksPerPixel, 0.1f, 1, 64))
+        {
+            *target.blocksPerPixel = std::clamp(*target.blocksPerPixel, 1, 64);
+            scene->MarkDirty();
+        }
+
+        SyncLayer(m_layer);
         if (OnFeatures())
-            SyncLayer(tag, 0); // surface underlay for the preview
+            SyncLayer(0); // surface underlay for the preview
         LayerBuffer &buf = Buf();
-        const std::string &configured = LayerPath(tag, m_layer);
+        const std::string configured = *target.path;
 
         if (buf.px.empty())
         {
             if (configured.empty())
             {
-                ImGui::TextWrapped("No map set for this layer on the Voxel World node.");
+                ImGui::TextWrapped("No map file set for this layer.");
                 ImGui::InputText("New Map Path", m_newPath.data(), m_newPath.size());
                 ui::ItemTooltip("PNG path under the project's Assets folder.");
             }
@@ -791,9 +847,10 @@ namespace pe
             ImGui::SameLine();
             ImGui::SetNextItemWidth(90.0f);
             ImGui::DragInt("Height", &m_newH, 1.0f, 16, 2048);
-            ui::ItemTooltip("Map size in pixels; one pixel spans Blocks/Pixel blocks in X/Z.");
-            ImGui::TextDisabled("covers %d x %d blocks at %d blocks/pixel", m_newW * tag->blocksPerPixel,
-                                m_newH * tag->blocksPerPixel, tag->blocksPerPixel);
+            ui::ItemTooltip("Map size in pixels; one pixel spans Meters/Pixel (Terrain) or Blocks/Pixel in X/Z.");
+            const float ppN = target.ppScale();
+            ImGui::TextDisabled("covers %.0f x %.0f %s", m_newW * ppN, m_newH * ppN,
+                                target.metersPerPixel ? "m" : "blocks");
             if (m_layer == 0) // surface: signed height scaler
             {
                 float f = SurfRangeToSigned(m_newValue);
@@ -804,10 +861,10 @@ namespace pe
                                 "Mapped into the node's Height Range around Ground Height. This is only the flat "
                                 "starting level; paint hills and valleys on top afterwards.");
                 ImGui::SameLine();
-                const float span = tag->heightMax - tag->heightMin;
-                const float cur = tag->groundHeight + tag->heightMin + ((f + 1.0f) * 0.5f) * span;
-                ImGui::TextDisabled("= %.1f m   (-1..1 -> %.0f..%.0f m)", cur, tag->groundHeight + tag->heightMin,
-                                    tag->groundHeight + tag->heightMax);
+                const float span = *target.heightMax - *target.heightMin;
+                const float cur = *target.groundHeight + *target.heightMin + ((f + 1.0f) * 0.5f) * span;
+                ImGui::TextDisabled("= %.1f m   (-1..1 -> %.0f..%.0f m)", cur,
+                                    *target.groundHeight + *target.heightMin, *target.groundHeight + *target.heightMax);
             }
             else if (!OnFeatures()) // strata: thickness in blocks
             {
@@ -821,7 +878,7 @@ namespace pe
                 ImGui::TextDisabled("= %d blocks", iv);
             }
             if (ImGui::Button("Create Map"))
-                CreateMap(tag);
+                CreateMap();
             ImGui::End();
             return;
         }
@@ -910,8 +967,9 @@ namespace pe
         ui::ItemTooltip("Resample the map to the new size (bilinear; features resample nearest). "
                         "With Blocks/Pixel unchanged this also resizes the world area the map covers.");
         ImGui::SameLine();
-        ImGui::Text("%s%s  %dx%d px = %dx%d blocks", configured.c_str(), buf.unsaved ? " *" : "", buf.w, buf.h,
-                    buf.w * tag->blocksPerPixel, buf.h * tag->blocksPerPixel);
+        const float ppW = target.ppScale();
+        ImGui::Text("%s%s  %dx%d px = %.0fx%.0f %s", configured.c_str(), buf.unsaved ? " *" : "", buf.w, buf.h,
+                    buf.w * ppW, buf.h * ppW, target.metersPerPixel ? "m" : "blocks");
 
         UploadPreview();
 

@@ -21,6 +21,9 @@ namespace pe::voxel
         bool Valid() const { return m_surface.Valid(); }
         // Columns needed to cover the whole map — lets a bounded world derive its radius from the map.
         int WorldRadiusColumns() const;
+        // Map extent in world metres per axis — lets a bounded terrain match the map's aspect (no padding).
+        int MapBlocksX() const { return (int)std::lround(m_surface.w * m_metersPerPixel); }
+        int MapBlocksZ() const { return (int)std::lround(m_surface.h * m_metersPerPixel); }
         // lod > 0 samples the maps once per 2^lod-block cell (coarse bands never show finer detail).
         void Generate(ChunkColumn &col, int lod) override;
         // Continuous (fractional, bilinear) surface height from the map for smooth isosurface meshing.
@@ -56,7 +59,8 @@ namespace pe::voxel
         MapImage m_features;
         int m_centerWX = 0; // world-block coords the map center is pinned to
         int m_centerWZ = 0;
-        int m_blocksPerPixel = 1;
+        int m_blocksPerPixel = 1;     // integer pixel->block step for the cube feature/strata placement
+        float m_metersPerPixel = 1.f; // float metres/pixel for the smooth-surface extent (terrain); = bpp for cube
         // Smooth-terrain height mapping (see SurfaceHeight): gray 0..1 -> groundHeight + lerp(min,max).
         float m_heightMin = -32.0f;
         float m_heightMax = 32.0f;
