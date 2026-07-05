@@ -2,6 +2,7 @@
 
 #include "API/Vertex.h"
 #include "Base/Math.h"
+#include "Terrain/ScatterTemplates.h"
 
 namespace pe
 {
@@ -49,6 +50,12 @@ namespace pe::terrain
         // Painted caves: grayscale map (Map Painter "Caves" layer) sharing the heightmap's extent and
         // orientation; pixel value = cave openness carved below the local surface (0 = solid).
         std::string cavesPath;
+        // Painted mesh scatter: map (Map Painter "Scatter" layer, same extent/orientation rules as the
+        // caves map) whose pixel value is a 1-based index into scatterMeshes (0 = none). Instances are
+        // baked into ring-0 tile geometry at mesh time — they stream, LOD, shadow and collide with the
+        // tile, with no per-instance nodes or draws.
+        std::string scatterPath;
+        std::vector<std::string> scatterMeshes; // builtin "tree"/"rock"/"grass" or a model asset path
         float noiseFeatureScale = 96.0f;
         int noiseSeed = 0;
         float metersPerPixel = 1.0f; // world metres each ring-0 grid cell spans in X/Z (and Y)
@@ -87,11 +94,21 @@ namespace pe::terrain
         void Sculpt(const vec3 &center, float radius, float amount);
         // Defer a sculpt to the next Update() — safe from script/editor paths mid-frame.
         void QueueSculpt(const vec3 &center, float radius, float amount);
-        // Persistent CSG ops in the tag/serializer format: xyz = centre, |w| = radius, w < 0 digs.
-        // Set BEFORE Create (tiles apply ops as they mesh); Get syncs the authored tag after sculpting.
-        void SetSculptOps(const std::vector<vec4> &ops);
-        void GetSculptOps(std::vector<vec4> &out) const;
-        size_t SculptOpCount() const { return m_ops.size(); }
+        // Level brush, deferred like QueueSculpt: pulls the surface toward y = targetY inside the
+        // sphere (quartic falloff to the rim). weight 1 = hard flatten per stamp; partial weights
+        // toward a local surface average make a smooth brush. Ops persist like sculpt spheres.
+        void QueueLevel(const vec3 &center, float radius, float targetY, float weight);
+        // Persistent ops in the tag/serializer format: flat 7-float records
+        // [type, cx, cy, cz, radius, a, b] — type 0 = sphere (a = 1 digs), type 1 = level
+        // (a = targetY, b = weight). Set BEFORE Create (tiles apply ops as they mesh); Get syncs the
+        // authored tag after sculpting.
+        void SetOps(const std::vector<float> &ops);
+        void GetOps(std::vector<float> &out) const;
+        size_t OpCount() const { return m_ops.size(); }
+        // Live scatter painting: replace the map's pixels (same size or resized) and re-mesh only the
+        // ring-0 tiles overlapping the world-space rect — no rebuild. False when the world has no
+        // scatter templates yet (a structural rebuild must pick the config up first).
+        bool UpdateScatterMap(const uint8_t *px, int w, int h, const vec2 &worldMin, const vec2 &worldMax);
 
         // Worldgen surface world-Y at (x, z); ignores sculpts and 3D overhangs (use Raycast for the
         // true surface). Very low when there is no generator.
@@ -118,15 +135,12 @@ namespace pe::terrain
     private:
         struct SculptOp
         {
+            bool level = false; // false = CSG sphere (dig/build), true = pull toward y = targetY
             vec3 center = vec3(0.0f);
             float radius = 0.0f;
-            bool dig = true;
-        };
-        struct QueuedSculpt
-        {
-            vec3 center = vec3(0.0f);
-            float radius = 0.0f;
-            float amount = 0.0f;
+            bool dig = true;      // sphere only
+            float targetY = 0.0f; // level only
+            float weight = 1.0f;  // level only: blend per application
         };
         struct Tile
         {
@@ -142,7 +156,8 @@ namespace pe::terrain
             int tx = INT_MIN, tz = INT_MIN; // world tile coord currently meshed
             bool interiorHole = false;      // coarse tile meshed empty because a finer ring covers it
             uint32_t liveVerts = 0;
-            uint32_t liveIndices = 0; // lod0 + simplified levels, contiguous from indexOffset
+            uint32_t liveIndices = 0;    // lod0 + simplified levels, contiguous from indexOffset
+            uint32_t collideIndices = 0; // lod0 prefix the collider cooks (excludes no-collide scatter)
             bool dirty = false;
             bool growPending = false; // content overflowed the budget — grow re-places, then re-mesh
             // Physics (ring 0 only).
@@ -165,16 +180,26 @@ namespace pe::terrain
         vec3 TerrainColor(float y, float normalY) const;
 
         void BuildGenerator();
-        void LoadCavesMap();                    // cfg.cavesPath -> m_cavesMap (+ world extent), empty = none
+        void LoadCavesMap(); // cfg.cavesPath -> m_cavesMap (+ world extent), empty = none
+        // cfg.scatterMeshes -> m_templates and cfg.scatterPath -> m_scatterMap, plus the per-tile
+        // vertex demand histogram that feeds the ring-0 budget.
+        void LoadScatter();
         void BuildRings();                      // ring layout from cfg (no allocation)
         void AllocateTiles();                   // reserve store ranges + register scene meshes on the host node
         void MeshTile(int ringIdx, Tile &tile); // (re)mesh tile content into its store ranges
         void MeshTileSurfaceNets(const Ring &ring, Tile &tile);
         void MeshTileGrid(const Ring &ring, Tile &tile); // coarse heightfield tile + skirt
+        // Stamp scatter instances whose anchor pixel falls inside the tile rect onto the true surface
+        // (deterministic per pixel). Colliding kinds first; collideEnd = index count before the
+        // no-collide suffix.
+        void AppendScatter(const Ring &ring, const Tile &tile, std::vector<Vertex> &verts,
+                           std::vector<uint32_t> &indices, vec3 &bbMin, vec3 &bbMax, uint32_t &collideEnd);
         // Write verts/indices into the tile's reserved store ranges (+ meshopt LOD chain on ring 0),
         // update the Mesh's live fields; false = budget overflow (tile flagged for grow, content kept).
+        // collideIndexCount = lod0 prefix the tile collider cooks.
         bool WriteTileContent(int ringIdx, Tile &tile, std::vector<Vertex> &verts,
-                              std::vector<uint32_t> &indices, const vec3 &bbMin, const vec3 &bbMax);
+                              std::vector<uint32_t> &indices, const vec3 &bbMin, const vec3 &bbMax,
+                              uint32_t collideIndexCount);
         void WriteEmptyTile(Tile &tile);
         void StreamWindows();       // desired world tile per slot; mark moved slots dirty
         void ProcessDirtyTiles();   // budgeted re-mesh + staged in-place GPU upload
@@ -195,11 +220,19 @@ namespace pe::terrain
         std::unique_ptr<voxel::MapImage> m_cavesMap;
         float m_cavesCenterX = 0.0f, m_cavesCenterZ = 0.0f;
         float m_cavesExtentX = 0.0f, m_cavesExtentZ = 0.0f;
+        // Painted scatter map (same extent/orientation rules as the caves map) + the prop templates
+        // its pixel values index (1-based). m_scatterBudgetVerts = worst per-tile vertex demand,
+        // measured from the map at load, added to the ring-0 tile budget.
+        std::unique_ptr<voxel::MapImage> m_scatterMap;
+        float m_scatterCenterX = 0.0f, m_scatterCenterZ = 0.0f;
+        float m_scatterExtentX = 0.0f, m_scatterExtentZ = 0.0f;
+        std::vector<ScatterTemplate> m_templates;
+        uint32_t m_scatterBudgetVerts = 0;
 
         std::vector<Ring> m_rings;
         std::vector<Tile> m_tiles; // all rings, ring-major (Ring::firstTile indexes in here)
         std::vector<SculptOp> m_ops;
-        std::vector<QueuedSculpt> m_pendingSculpts;
+        std::vector<SculptOp> m_pendingSculpts; // queued brush strokes, drained on Update()
         vec3 m_anchor = vec3(0.0f);
         bool m_anchorSet = false;
 

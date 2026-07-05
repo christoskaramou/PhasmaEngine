@@ -47,6 +47,9 @@ namespace pe
         bool SetLayer(int layer);
         bool Stroke(float u, float v, float radius, float strength, bool lower, int brush = -1, int value = -1);
         bool Save();
+        // Viewport Terrain Brush route: scatter-stamp at a world position (radius in metres, kindId
+        // 1-based, 0 = erase) and apply live. Owns the world<->map transform so it stays in one place.
+        bool ScatterStrokeWorld(float worldX, float worldZ, float radiusM, int kindId);
 
     private:
         struct LayerBuffer
@@ -61,8 +64,9 @@ namespace pe
         };
 
         static constexpr int kFeaturesLayer = 3;
-        static constexpr int kCavesLayer = 4; // Terrain node only: painted underground voids
-        static constexpr int kLayerCount = 5;
+        static constexpr int kCavesLayer = 4;   // Terrain node only: painted underground voids
+        static constexpr int kScatterLayer = 5; // Terrain node only: painted mesh scatter (kind ids)
+        static constexpr int kLayerCount = 6;
 
         // The node fields that own a painter layer, resolved per layer: the height layer (0) prefers a
         // Terrain node when one exists; strata/features (1-3) are Voxel World only. Pointers are into the
@@ -70,8 +74,9 @@ namespace pe
         struct MapTarget
         {
             std::string *path = nullptr;
-            int *blocksPerPixel = nullptr;   // Voxel World node: integer blocks per pixel
-            float *metersPerPixel = nullptr; // Terrain node: float metres per pixel (one non-null)
+            int *blocksPerPixel = nullptr;                     // Voxel World node: integer blocks per pixel
+            float *metersPerPixel = nullptr;                   // Terrain node: float metres per pixel (one non-null)
+            std::vector<std::string> *scatterMeshes = nullptr; // Terrain node: the scatter kind list
             bool *rebuild = nullptr;
             float *heightMin = nullptr; // layer-0 surface-value readout
             float *heightMax = nullptr;
@@ -89,11 +94,17 @@ namespace pe
         MapTarget ResolveTarget(int layer) const;
         LayerBuffer &Buf() { return m_layers[m_layer]; }
         bool OnFeatures() const { return m_layer == kFeaturesLayer; }
+        bool OnScatter() const { return m_layer == kScatterLayer; }
         void SyncLayer(int layer); // (re)load a buffer when its owning node's path changed
         void CreateMap();          // allocate + save a fresh map, point the owning node's path at it
         void ResizeMap();          // resample the loaded buffer to m_newW x m_newH
         void StampBrush(float px, float py, float radius, float strength, bool lower, Brush brush, float value);
         void StampFeatures(float px, float py, float radius, FeatureStamp stamp);
+        // Scatter layer: jittered-grid dots of a 1-based kind id (0 = erase disk), like StampFeatures.
+        void StampScatter(LayerBuffer &buf, float px, float py, float radius, int kindId);
+        // Push the scatter buffer to the live TerrainWorld and re-mesh tiles under the stamped pixel
+        // rect (no rebuild). False = no live world/templates; caller falls back to rebuildRequested.
+        bool PushScatterLive(float px0, float py0, float px1, float py1);
         void UploadPreview();
         void ReleasePreview();
         void LoadPalette(); // lazily load the block tile thumbnails for the Block picker
@@ -115,8 +126,9 @@ namespace pe
         int m_brushType = 0;           // Brush enum, or FeatureStamp on the Features layer
         float m_setValue = 127.5f;     // Set brush target ([0,255] domain; 127.5 = 0 surface scaler)
         float m_flattenTarget = 64.0f; // sampled under the stroke start
-        int m_featureSpacing = 5;      // min pixels between scattered features
+        int m_featureSpacing = 5;      // min pixels between scattered features / scatter instances
         int m_paintBlock = 3;          // block id the Block stamp paints onto the surface
+        int m_scatterKind = 0;         // Scatter layer combo index: 0..N-1 = kind 1..N, N = Erase
         // One block-tile thumbnail per palette entry (loaded lazily), + its average color for the
         // features preview.
         struct Thumb

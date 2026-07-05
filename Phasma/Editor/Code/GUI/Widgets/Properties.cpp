@@ -2081,6 +2081,47 @@ namespace pe
                                         "pixel value = how open the void under the surface is; caves pinch closed "
                                         "where the paint fades. Same extent/orientation as the heightmap. Reach them "
                                         "by sculpting an entrance (or via overhang mouths). Empty = none.");
+                        char sbuf[260];
+                        snprintf(sbuf, sizeof(sbuf), "%s", t->scatterPath.c_str());
+                        if (ImGui::InputText("Scatter Map", sbuf, sizeof(sbuf)))
+                        {
+                            t->scatterPath = sbuf;
+                            changed = true;
+                        }
+                        ui::ItemTooltip("Scatter map under Assets (paint it in Map Painter's Scatter layer or the "
+                                        "viewport Terrain Brush): pixel value picks a Scatter Mesh below; instances "
+                                        "bake into the terrain tiles (they stream, LOD and collide with the tile). "
+                                        "Same extent/orientation as the heightmap. Empty = none.");
+                        for (size_t si = 0; si < t->scatterMeshes.size(); ++si)
+                        {
+                            ImGui::PushID(static_cast<int>(si));
+                            char mbuf[260];
+                            snprintf(mbuf, sizeof(mbuf), "%s", t->scatterMeshes[si].c_str());
+                            ImGui::SetNextItemWidth(ImGui::CalcItemWidth() - 28.0f);
+                            char lbl[32];
+                            snprintf(lbl, sizeof(lbl), "Scatter Mesh %zu", si + 1);
+                            if (ImGui::InputText(lbl, mbuf, sizeof(mbuf)))
+                            {
+                                t->scatterMeshes[si] = mbuf;
+                                changed = true;
+                            }
+                            ui::ItemTooltip("Builtin \"tree\", \"rock\", \"grass\", or a low-poly model asset path "
+                                            "under Assets. Painted pixels with this 1-based index place it.");
+                            ImGui::SameLine();
+                            if (ImGui::SmallButton("x"))
+                            {
+                                t->scatterMeshes.erase(t->scatterMeshes.begin() + si);
+                                changed = true;
+                                ImGui::PopID();
+                                break;
+                            }
+                            ImGui::PopID();
+                        }
+                        if (t->scatterMeshes.size() < 8 && ImGui::SmallButton("+ Add Scatter Mesh"))
+                        {
+                            t->scatterMeshes.emplace_back("tree");
+                            changed = true;
+                        }
                         if (t->heightmapPath.empty())
                         {
                             changed |= ImGui::DragFloat("Feature Scale", &t->noiseFeatureScale, 0.5f, 8.0f, 1024.0f, "%.0f");

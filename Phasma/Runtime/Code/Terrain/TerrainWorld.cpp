@@ -3,8 +3,10 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "Scene/Material.h"
+#include "Scene/ModelAsset.h" // scatter templates baked from model assets
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
+#include "Voxel/ColumnChunkStore.h" // ResolveRoot: Assets-relative or absolute asset paths
 #include "Voxel/ITerrainGenerator.h"
 #include "Voxel/MapGen.h"      // reuse the shared worldgen seam (heightmap SurfaceHeight)
 #include "Voxel/NoiseGen.h"    // reuse the shared worldgen seam (noise SurfaceHeight/Density)
@@ -33,6 +35,17 @@ namespace pe::terrain
         // fades. ponytail: fixed metric profile; per-map depth/height knobs if authors ever need them.
         constexpr float kCaveRoofDepthM = 3.0f;
         constexpr float kCaveHeightM = 6.0f;
+        // Scatter caps: a tile stops stamping instances at this many prop verts (and the budget
+        // histogram clamps to it), so a dense paint can never grow-loop the ring. Template meshes
+        // above the vert cap are rejected — props must be low-poly, they are baked per instance.
+        constexpr uint32_t kMaxScatterVertsPerTile = 8192;
+        constexpr uint32_t kMaxScatterTemplateVerts = 2500;
+
+        // Deterministic per-pixel hash driving scatter yaw/scale (MapGen::FeatureHash's constants).
+        uint32_t ScatterHash(int x, int z)
+        {
+            return static_cast<uint32_t>(x) * 73856093u ^ static_cast<uint32_t>(z) * 19349663u;
+        }
         constexpr size_t kMaxPendingCmds = 3;   // upload cmds in flight before waiting
         constexpr int kMaxFieldCellsY = 512;    // vertical sampling-band cap per tile
         constexpr float kSkirtDropCells = 3.0f; // coarse-tile skirt drop, in cells
@@ -66,6 +79,75 @@ namespace pe::terrain
             vc.boundsCenterCz = cfg.boundsCenterCz;
             vc.streaming = false;
             return vc;
+        }
+
+        // Scatter kind -> template mesh: a builtin procedural prop, else a model asset baked to
+        // template space (node transforms + material base colour folded into the vertices; base
+        // dropped to y = 0 so it sits on the surface). Empty template = kind is skipped.
+        ScatterTemplate BuildTemplateFor(const std::string &name)
+        {
+            ScatterTemplate t = BuildScatterTemplate(name);
+            if (!t.vertices.empty() || name.empty())
+                return t;
+            ModelAsset *model = ModelAsset::Load(voxel::ColumnChunkStore::ResolveRoot(name));
+            if (!model)
+                return t; // Load already warned
+            const std::vector<Vertex> &mv = model->GetVertices();
+            const std::vector<uint32_t> &mi = model->GetIndices();
+            for (int n = 0; n < model->GetNodeCount(); ++n)
+            {
+                const int meshIdx = model->GetNodeMesh(n);
+                const MeshInfo *info = meshIdx >= 0 ? model->GetMeshInfo(meshIdx) : nullptr;
+                if (!info || info->vertexOffset + info->verticesCount > mv.size() ||
+                    info->indexOffset + info->indicesCount > mi.size())
+                    continue;
+                mat4 world = model->GetNodeLocalMatrix(n);
+                for (int p = model->GetNodeParentIndex(n); p >= 0; p = model->GetNodeParentIndex(p))
+                    world = model->GetNodeLocalMatrix(p) * world;
+                const mat3 nrm = mat3(world); // approximate under non-uniform scale
+                const vec4 tint = info->material ? info->material->baseColorFactor : vec4(1.0f);
+                const uint32_t base = static_cast<uint32_t>(t.vertices.size());
+                for (uint32_t i = 0; i < info->verticesCount; ++i)
+                {
+                    const Vertex &src = mv[info->vertexOffset + i];
+                    Vertex v = src;
+                    const vec3 wp = vec3(world * vec4(src.position[0], src.position[1], src.position[2], 1.0f));
+                    vec3 wn = nrm * vec3(src.normals[0], src.normals[1], src.normals[2]);
+                    wn = glm::length(wn) > 1e-6f ? glm::normalize(wn) : vec3(0.0f, 1.0f, 0.0f);
+                    for (int c = 0; c < 3; ++c)
+                    {
+                        v.position[c] = wp[c];
+                        v.normals[c] = wn[c];
+                    }
+                    for (int c = 0; c < 4; ++c)
+                    {
+                        v.color[c] = src.color[c] * tint[c];
+                        v.joints[c] = 0;
+                        v.weights[c] = 0.0f;
+                    }
+                    t.vertices.push_back(v);
+                }
+                for (uint32_t i = 0; i < info->indicesCount; ++i)
+                    t.indices.push_back(base + mi[info->indexOffset + i]);
+            }
+            delete model;
+            if (t.vertices.size() > kMaxScatterTemplateVerts)
+            {
+                PE_WARN("Terrain: scatter mesh '%s' has %zu verts (cap %u) — use a low-poly prop, it is "
+                        "baked per painted instance.",
+                        name.c_str(), t.vertices.size(), kMaxScatterTemplateVerts);
+                return {};
+            }
+            if (!t.vertices.empty())
+            {
+                float minY = 1e30f;
+                for (const Vertex &v : t.vertices)
+                    minY = std::min(minY, v.position[1]);
+                for (Vertex &v : t.vertices)
+                    v.position[1] -= minY;
+            }
+            t.collide = true;
+            return t;
         }
     } // namespace
 
@@ -125,6 +207,56 @@ namespace pe::terrain
         }
     }
 
+    void TerrainWorld::LoadScatter()
+    {
+        m_scatterMap.reset();
+        m_templates.clear();
+        m_scatterBudgetVerts = 0;
+        m_scatterExtentX = m_scatterExtentZ = 0.0f;
+        if (m_cfg.scatterPath.empty() || m_cfg.scatterMeshes.empty())
+            return;
+        auto map = std::make_unique<voxel::MapImage>();
+        if (!map->Load(m_cfg.scatterPath, "scatter", false)) // plain 0..255 ids; Load warns on failure
+            return;
+        for (const std::string &name : m_cfg.scatterMeshes)
+            m_templates.push_back(BuildTemplateFor(name));
+        m_scatterCenterX = m_cfg.boundsCenterCx * kBlocksPerColumn + kBlocksPerColumn / 2.0f;
+        m_scatterCenterZ = m_cfg.boundsCenterCz * kBlocksPerColumn + kBlocksPerColumn / 2.0f;
+        m_scatterExtentX = map->w * m_cfg.metersPerPixel;
+        m_scatterExtentZ = map->h * m_cfg.metersPerPixel;
+
+        // Worst per-tile vertex demand feeds the shared ring-0 budget (tiles of a ring share one
+        // estimate) — measured from the actual paint, so ordinary maps never grow at load.
+        const float tw = m_cfg.metersPerPixel * kTileCells;
+        std::unordered_map<uint64_t, uint32_t> demand;
+        size_t instances = 0;
+        for (int pz = 0; pz < map->h; ++pz)
+            for (int px = 0; px < map->w; ++px)
+            {
+                const uint8_t id = map->px[static_cast<size_t>(pz) * map->w + px];
+                if (id == 0 || id > m_templates.size() || m_templates[id - 1].vertices.empty())
+                    continue;
+                const float ax = m_scatterCenterX + m_scatterExtentX * (0.5f - (px + 0.5f) / map->w);
+                const float az = m_scatterCenterZ + m_scatterExtentZ * (0.5f - (pz + 0.5f) / map->h);
+                const uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(TileFloor(ax, tw))) << 32) |
+                                     static_cast<uint32_t>(TileFloor(az, tw));
+                demand[key] += static_cast<uint32_t>(m_templates[id - 1].vertices.size());
+                ++instances;
+            }
+        for (const auto &[key, verts] : demand)
+            m_scatterBudgetVerts = std::max(m_scatterBudgetVerts, verts);
+        if (m_scatterBudgetVerts > kMaxScatterVertsPerTile)
+        {
+            PE_WARN("Terrain: scatter paint demands up to %u verts in one tile; capped at %u — the "
+                    "densest tiles will drop instances.",
+                    m_scatterBudgetVerts, kMaxScatterVertsPerTile);
+            m_scatterBudgetVerts = kMaxScatterVertsPerTile;
+        }
+        m_scatterMap = std::move(map);
+        PE_INFO("Terrain: scatter map %dx%d, %zu instances, +%u verts/tile budget.", m_scatterMap->w,
+                m_scatterMap->h, instances, m_scatterBudgetVerts);
+    }
+
     void TerrainWorld::LoadCavesMap()
     {
         m_cavesMap.reset();
@@ -143,7 +275,7 @@ namespace pe::terrain
 
     void TerrainWorld::Create(Scene *scene, const TerrainConfig &cfg)
     {
-        // Ops seeded via SetSculptOps before Create survive the reset — Create-time meshing must
+        // Ops seeded via SetOps before Create survive the reset — Create-time meshing must
         // apply them. A standalone Destroy still clears them.
         std::vector<SculptOp> ops = std::move(m_ops);
         Destroy();
@@ -157,6 +289,7 @@ namespace pe::terrain
 
         BuildGenerator();
         LoadCavesMap();
+        LoadScatter();
         if (m_cfg.sizeXMeters <= 0)
             m_cfg.sizeXMeters = 256; // no map + no explicit size: a default patch
         if (m_cfg.sizeZMeters <= 0)
@@ -298,7 +431,8 @@ namespace pe::terrain
                 // overhangs=0.8 tiles up to ~3.1x (folded surfaces cross most columns 2-3 times).
                 // Cliff-heavy heightmap regions have hit ~2.8x — those settle via one ring-wide grow.
                 const float slack = 1.5f + 2.5f * m_cfg.overhangs;
-                vertexBudget = RoundUpTo((uint32_t)(baseCols * slack), 256);
+                // Scatter props share the tile ranges: the measured worst-tile demand rides on top.
+                vertexBudget = RoundUpTo((uint32_t)(baseCols * slack) + m_scatterBudgetVerts, 256);
                 indexBudget = vertexBudget * 6 * 2; // quads ~ cells ~ verts; x2 for the meshopt LOD chain
             }
             else
@@ -425,17 +559,28 @@ namespace pe::terrain
                 }
             }
         }
-        // CSG sphere ops, in stroke order. The in-sphere-only application keeps the zero set exact and
-        // every tile computes the identical field; the (cheap) price is slightly faceted crater rims
-        // versus a full SDF blend. ponytail: linear scan; bucket ops per tile if counts ever hurt.
+        // Brush ops, in stroke order. Spheres: the in-sphere-only application keeps the zero set exact
+        // and every tile computes the identical field; the (cheap) price is slightly faceted crater
+        // rims versus a full SDF blend. Level ops blend the density toward the plane y = targetY with
+        // a quartic falloff (C1 at the rim), so flatten/smooth strokes leave no seam.
+        // ponytail: linear scan; bucket ops per tile if counts ever hurt.
         for (const SculptOp &op : m_ops)
         {
             const float dx = x - op.center.x, dy = y - op.center.y, dz = z - op.center.z;
             const float dd = dx * dx + dy * dy + dz * dz;
-            if (dd > op.radius * op.radius)
+            const float rr = op.radius * op.radius;
+            if (dd > rr)
                 continue;
-            const float s = op.radius - std::sqrt(dd); // > 0 inside the sphere
-            d = op.dig ? std::min(d, -s) : std::max(d, s);
+            if (op.level)
+            {
+                const float q = 1.0f - dd / rr;
+                d += ((op.targetY - y) - d) * (q * q * op.weight);
+            }
+            else
+            {
+                const float s = op.radius - std::sqrt(dd); // > 0 inside the sphere
+                d = op.dig ? std::min(d, -s) : std::max(d, s);
+            }
         }
         return d;
     }
@@ -532,6 +677,11 @@ namespace pe::terrain
                 continue;
             minY = std::min(minY, op.center.y - op.radius);
             maxY = std::max(maxY, op.center.y + op.radius);
+            if (op.level) // the surface can move all the way to the level target
+            {
+                minY = std::min(minY, op.targetY - 2.0f);
+                maxY = std::max(maxY, op.targetY + 2.0f);
+            }
         }
         minY -= 2.0f * cell;
         maxY += 2.0f * cell;
@@ -569,7 +719,29 @@ namespace pe::terrain
         }
         for (Vertex &v : mesh.vertices)
         {
-            const vec3 c = TerrainColor(v.position[1], v.normals[1]);
+            // Local surface height, bilinear from the corner-column cache (heights[i,k] holds the
+            // column at world (gx0 + i - 1) * cell).
+            const float li = std::clamp(v.position[0] / cell - gx0 + 1.0f, 0.0f, static_cast<float>(hnx - 1));
+            const float lk = std::clamp(v.position[2] / cell - gz0 + 1.0f, 0.0f, static_cast<float>(hnz - 1));
+            const int i0 = std::min(static_cast<int>(li), hnx - 2), k0 = std::min(static_cast<int>(lk), hnz - 2);
+            const float fx = li - i0, fz = lk - k0;
+            const auto Hc = [&](int i, int k)
+            { return heights[static_cast<size_t>(i) + static_cast<size_t>(hnx) * k]; };
+            const float hSurf = (Hc(i0, k0) * (1.0f - fx) + Hc(i0 + 1, k0) * fx) * (1.0f - fz) +
+                                (Hc(i0, k0 + 1) * (1.0f - fx) + Hc(i0 + 1, k0 + 1) * fx) * fz;
+
+            vec3 c = TerrainColor(v.position[1], v.normals[1]);
+            // Interior tint: cave floors/walls (solid overhead) and undersides read as rock, not the
+            // height band — painted caves and grottos were grass-green inside.
+            const float underBlend = std::clamp((-v.normals[1] - 0.1f) / 0.5f, 0.0f, 1.0f);
+            float rockBlend = underBlend;
+            const float depth = hSurf - v.position[1];
+            if (depth > 0.5f &&
+                (DensityLocal(v.position[0], v.position[1] + 4.0f, v.position[2], hSurf) > 0.0f ||
+                 DensityLocal(v.position[0], v.position[1] + 8.0f, v.position[2], hSurf) > 0.0f))
+                rockBlend = std::max(rockBlend, std::clamp((depth - 0.5f) / 2.0f, 0.0f, 1.0f));
+            if (rockBlend > 0.0f)
+                c = glm::mix(c, vec3(0.33f, 0.29f, 0.25f), rockBlend);
             v.color[0] = c.x;
             v.color[1] = c.y;
             v.color[2] = c.z;
@@ -577,7 +749,121 @@ namespace pe::terrain
             v.uv[0] = v.position[0] / cell;
             v.uv[1] = v.position[2] / cell;
         }
-        WriteTileContent(0, tile, mesh.vertices, mesh.indices, mesh.aabbMin, mesh.aabbMax);
+        uint32_t collideEnd = static_cast<uint32_t>(mesh.indices.size());
+        AppendScatter(ring, tile, mesh.vertices, mesh.indices, mesh.aabbMin, mesh.aabbMax, collideEnd);
+        WriteTileContent(0, tile, mesh.vertices, mesh.indices, mesh.aabbMin, mesh.aabbMax, collideEnd);
+    }
+
+    void TerrainWorld::AppendScatter(const Ring &ring, const Tile &tile, std::vector<Vertex> &verts,
+                                     std::vector<uint32_t> &indices, vec3 &bbMin, vec3 &bbMax,
+                                     uint32_t &collideEnd)
+    {
+        collideEnd = static_cast<uint32_t>(indices.size());
+        if (!m_scatterMap || m_templates.empty() || !m_generator)
+            return;
+        const float tw = TileWorldSize(ring);
+        const float x0 = tile.tx * tw, x1 = x0 + tw;
+        const float z0 = tile.tz * tw, z1 = z0 + tw;
+        // Inverse of the map transform (both axes flipped, texel centres at (p + 0.5) / dim): the
+        // pixel range whose centres can fall inside the tile rect.
+        const int w = m_scatterMap->w, h = m_scatterMap->h;
+        const auto pxOfX = [&](float x)
+        { return (0.5f - (x - m_scatterCenterX) / m_scatterExtentX) * w - 0.5f; };
+        const auto pzOfZ = [&](float z)
+        { return (0.5f - (z - m_scatterCenterZ) / m_scatterExtentZ) * h - 0.5f; };
+        const int pxMin = std::max(0, static_cast<int>(std::ceil(std::min(pxOfX(x0), pxOfX(x1)))));
+        const int pxMax = std::min(w - 1, static_cast<int>(std::floor(std::max(pxOfX(x0), pxOfX(x1)))));
+        const int pzMin = std::max(0, static_cast<int>(std::ceil(std::min(pzOfZ(z0), pzOfZ(z1)))));
+        const int pzMax = std::min(h - 1, static_cast<int>(std::floor(std::max(pzOfZ(z0), pzOfZ(z1)))));
+        if (pxMin > pxMax || pzMin > pzMax)
+            return;
+
+        const size_t vertsBase = verts.size();
+        bool capped = false;
+        // Overhang band bound for the surface-snap march (same fixed point the mesher band uses).
+        float bandTop = 2.0f;
+        if (m_cfg.overhangs > 0.0f)
+        {
+            const float band = 0.5f * std::max(2.0f, m_cfg.heightMax - m_cfg.heightMin);
+            const float cRel = m_cfg.overhangs;
+            bandTop += band * (-1.0f + std::sqrt(1.0f + 4.0f * cRel * cRel)) / (2.0f * cRel);
+        }
+        const float bandBottom = bandTop + kCaveRoofDepthM + kCaveHeightM + 12.0f;
+        const float step = 0.5f * ring.cellSize;
+
+        // Colliding kinds first, so the tile collider cooks a contiguous lod0 prefix.
+        for (int pass = 0; pass < 2 && !capped; ++pass)
+        {
+            for (int pz = pzMin; pz <= pzMax && !capped; ++pz)
+                for (int px = pxMin; px <= pxMax; ++px)
+                {
+                    const uint8_t id = m_scatterMap->px[static_cast<size_t>(pz) * w + px];
+                    if (id == 0 || id > m_templates.size())
+                        continue;
+                    const ScatterTemplate &tmpl = m_templates[id - 1];
+                    if (tmpl.vertices.empty() || tmpl.collide != (pass == 0))
+                        continue;
+                    const float ax = m_scatterCenterX + m_scatterExtentX * (0.5f - (px + 0.5f) / w);
+                    const float az = m_scatterCenterZ + m_scatterExtentZ * (0.5f - (pz + 0.5f) / h);
+                    if (ax < x0 || ax >= x1 || az < z0 || az >= z1) // anchor tile owns the instance
+                        continue;
+                    if (verts.size() - vertsBase + tmpl.vertices.size() > kMaxScatterVertsPerTile)
+                    {
+                        PE_WARN("Terrain: tile (%d,%d) hit the %u scatter-vert cap — dropping instances.",
+                                tile.tx, tile.tz, kMaxScatterVertsPerTile);
+                        capped = true;
+                        break;
+                    }
+
+                    // Snap to the TRUE surface: march the density down through overhang/cave/sculpt
+                    // space. No crossing = the ground here was carved away; skip the prop.
+                    const float hSurf = m_generator->SurfaceHeight(ax, az);
+                    float ground = hSurf;
+                    bool found = false;
+                    float prevD = DensityLocal(ax, hSurf + bandTop, az, hSurf);
+                    for (float y = hSurf + bandTop - step; y >= hSurf - bandBottom; y -= step)
+                    {
+                        const float d = DensityLocal(ax, y, az, hSurf);
+                        if (prevD < 0.0f && d >= 0.0f)
+                        {
+                            const float f = prevD / (prevD - d);
+                            ground = y + step - f * step;
+                            found = true;
+                            break;
+                        }
+                        prevD = d;
+                    }
+                    if (!found || ground < m_cfg.seaLevelM)
+                        continue; // carved away or underwater
+
+                    const uint32_t hash = ScatterHash(px, pz);
+                    const float yaw = static_cast<float>(hash & 0xFFFFu) * (6.2831853f / 65536.0f);
+                    const float scale = 0.8f + static_cast<float>((hash >> 16) & 0x3FFu) * (0.5f / 1024.0f);
+                    const float cy = std::cos(yaw), sy = std::sin(yaw);
+                    const float baseY = ground - 0.15f * scale; // sink a touch so slopes don't float it
+                    const uint32_t base = static_cast<uint32_t>(verts.size());
+                    for (const Vertex &tv : tmpl.vertices)
+                    {
+                        Vertex v = tv;
+                        const float lx = tv.position[0] * scale, ly = tv.position[1] * scale,
+                                    lz = tv.position[2] * scale;
+                        v.position[0] = ax + cy * lx + sy * lz;
+                        v.position[1] = baseY + ly;
+                        v.position[2] = az - sy * lx + cy * lz;
+                        v.normals[0] = cy * tv.normals[0] + sy * tv.normals[2];
+                        v.normals[2] = -sy * tv.normals[0] + cy * tv.normals[2];
+                        v.tangent[0] = cy * tv.tangent[0] + sy * tv.tangent[2];
+                        v.tangent[2] = -sy * tv.tangent[0] + cy * tv.tangent[2];
+                        bbMin = glm::min(bbMin, vec3(v.position[0], v.position[1], v.position[2]));
+                        bbMax = glm::max(bbMax, vec3(v.position[0], v.position[1], v.position[2]));
+                        verts.push_back(v);
+                    }
+                    for (const uint32_t idx : tmpl.indices)
+                        indices.push_back(base + idx);
+                }
+            if (pass == 0)
+                collideEnd = static_cast<uint32_t>(indices.size());
+        }
     }
 
     void TerrainWorld::MeshTileGrid(const Ring &ring, Tile &tile)
@@ -677,7 +963,7 @@ namespace pe::terrain
             addSkirtQuad(static_cast<uint32_t>(i * cx + kTileCells), static_cast<uint32_t>((i + 1) * cx + kTileCells)); // +X edge
         }
 
-        WriteTileContent(1, tile, verts, indices, bbMin, bbMax);
+        WriteTileContent(1, tile, verts, indices, bbMin, bbMax, static_cast<uint32_t>(indices.size()));
     }
 
     void TerrainWorld::WriteEmptyTile(Tile &tile)
@@ -713,10 +999,12 @@ namespace pe::terrain
         m.boundingBox = {vec3(-0.5f, -100000.5f, -0.5f), vec3(0.5f, -99999.5f, 0.5f)};
         tile.liveVerts = 1;
         tile.liveIndices = 3;
+        tile.collideIndices = 3;
     }
 
     bool TerrainWorld::WriteTileContent(int ringIdx, Tile &tile, std::vector<Vertex> &verts,
-                                        std::vector<uint32_t> &indices, const vec3 &bbMin, const vec3 &bbMax)
+                                        std::vector<uint32_t> &indices, const vec3 &bbMin, const vec3 &bbMax,
+                                        uint32_t collideIndexCount)
     {
         if (verts.empty() || indices.size() < 3)
         {
@@ -796,6 +1084,7 @@ namespace pe::terrain
         m.boundingBox = {bbMin, bbMax};
         tile.liveVerts = static_cast<uint32_t>(verts.size());
         tile.liveIndices = static_cast<uint32_t>(indices.size());
+        tile.collideIndices = std::min(collideIndexCount, lod0Count);
         return true;
     }
 
@@ -807,10 +1096,13 @@ namespace pe::terrain
 
         if (!m_pendingSculpts.empty())
         {
-            std::vector<QueuedSculpt> sculpts;
-            sculpts.swap(m_pendingSculpts);
-            for (const QueuedSculpt &s : sculpts)
-                Sculpt(s.center, s.radius, s.amount);
+            std::vector<SculptOp> ops;
+            ops.swap(m_pendingSculpts);
+            for (const SculptOp &op : ops)
+            {
+                m_ops.push_back(op);
+                MarkSculptDirty(op);
+            }
         }
         StreamWindows();
         GrowOverflowedTiles();
@@ -950,32 +1242,115 @@ namespace pe::terrain
     {
         if (radius <= 0.0f || m_tiles.empty())
             return;
-        const SculptOp op{center, radius, amount < 0.0f};
+        SculptOp op;
+        op.center = center;
+        op.radius = radius;
+        op.dig = amount < 0.0f;
         m_ops.push_back(op);
         MarkSculptDirty(op);
     }
 
     void TerrainWorld::QueueSculpt(const vec3 &center, float radius, float amount)
     {
-        if (radius > 0.0f)
-            m_pendingSculpts.push_back({center, radius, amount});
+        if (radius <= 0.0f)
+            return;
+        SculptOp op;
+        op.center = center;
+        op.radius = radius;
+        op.dig = amount < 0.0f;
+        m_pendingSculpts.push_back(op);
     }
 
-    void TerrainWorld::SetSculptOps(const std::vector<vec4> &ops)
+    void TerrainWorld::QueueLevel(const vec3 &center, float radius, float targetY, float weight)
+    {
+        if (radius <= 0.0f || weight <= 0.0f)
+            return;
+        SculptOp op;
+        op.level = true;
+        op.center = center;
+        op.radius = radius;
+        op.targetY = targetY;
+        op.weight = std::min(weight, 1.0f);
+        m_pendingSculpts.push_back(op);
+    }
+
+    void TerrainWorld::SetOps(const std::vector<float> &ops)
     {
         m_ops.clear();
-        m_ops.reserve(ops.size());
-        for (const vec4 &o : ops)
-            if (std::abs(o.w) > 0.0f)
-                m_ops.push_back({vec3(o.x, o.y, o.z), std::abs(o.w), o.w < 0.0f});
+        m_ops.reserve(ops.size() / 7);
+        for (size_t i = 0; i + 7 <= ops.size(); i += 7)
+        {
+            SculptOp op;
+            op.level = ops[i] != 0.0f;
+            op.center = vec3(ops[i + 1], ops[i + 2], ops[i + 3]);
+            op.radius = ops[i + 4];
+            if (op.level)
+            {
+                op.targetY = ops[i + 5];
+                op.weight = std::clamp(ops[i + 6], 0.0f, 1.0f);
+            }
+            else
+            {
+                op.dig = ops[i + 5] != 0.0f;
+            }
+            if (op.radius > 0.0f)
+                m_ops.push_back(op);
+        }
     }
 
-    void TerrainWorld::GetSculptOps(std::vector<vec4> &out) const
+    void TerrainWorld::GetOps(std::vector<float> &out) const
     {
         out.clear();
-        out.reserve(m_ops.size());
+        out.reserve(m_ops.size() * 7);
         for (const SculptOp &op : m_ops)
-            out.emplace_back(op.center, op.dig ? -op.radius : op.radius);
+        {
+            out.push_back(op.level ? 1.0f : 0.0f);
+            out.push_back(op.center.x);
+            out.push_back(op.center.y);
+            out.push_back(op.center.z);
+            out.push_back(op.radius);
+            out.push_back(op.level ? op.targetY : (op.dig ? 1.0f : 0.0f));
+            out.push_back(op.level ? op.weight : 0.0f);
+        }
+    }
+
+    bool TerrainWorld::UpdateScatterMap(const uint8_t *px, int w, int h, const vec2 &worldMin,
+                                        const vec2 &worldMax)
+    {
+        if (!px || w <= 0 || h <= 0 || m_templates.empty() || m_rings.empty())
+            return false; // no templates configured = a rebuild (structural change) is the only route in
+        if (!m_scatterMap)
+            m_scatterMap = std::make_unique<voxel::MapImage>();
+        m_scatterMap->w = w;
+        m_scatterMap->h = h;
+        m_scatterMap->isFloat = false;
+        m_scatterMap->px.assign(px, px + static_cast<size_t>(w) * h);
+        m_scatterMap->pxf.clear();
+        m_scatterCenterX = m_cfg.boundsCenterCx * kBlocksPerColumn + kBlocksPerColumn / 2.0f;
+        m_scatterCenterZ = m_cfg.boundsCenterCz * kBlocksPerColumn + kBlocksPerColumn / 2.0f;
+        m_scatterExtentX = w * m_cfg.metersPerPixel;
+        m_scatterExtentZ = h * m_cfg.metersPerPixel;
+
+        // Re-mesh only the ring-0 tiles the painted world rect touches (+ prop footprint margin) —
+        // the streamed-update path uploads them over the next frames, no rebuild.
+        const Ring &ring = m_rings[0];
+        const float tw = TileWorldSize(ring);
+        const float margin = 3.0f;
+        const int tx0 = TileFloor(worldMin.x - margin, tw), tx1 = TileFloor(worldMax.x + margin, tw);
+        const int tz0 = TileFloor(worldMin.y - margin, tw), tz1 = TileFloor(worldMax.y + margin, tw);
+        for (int tz = tz0; tz <= tz1; ++tz)
+            for (int tx = tx0; tx <= tx1; ++tx)
+            {
+                const int sx = WrapMod(tx, ring.tilesX);
+                const int sz = WrapMod(tz, ring.tilesZ);
+                Tile &tile = m_tiles[ring.firstTile + sz * ring.tilesX + sx];
+                if (tile.tx == tx && tile.tz == tz)
+                {
+                    tile.dirty = true;
+                    tile.bodyDirty = true;
+                }
+            }
+        return true;
     }
 
     // Ring 0 tiles whose sampling window (extent + apron + guard) the op's sphere overlaps. Coarse
@@ -1076,10 +1451,11 @@ namespace pe::terrain
             if ((tile.bodyId == 0xFFFFFFFF || tile.bodyDirty) && cookBudget > 0)
             {
                 RemoveTileBody(tile);
-                const Mesh &m = m_scene->GetMesh(tile.meshIndex);
                 tile.bodyId = physics->AddStaticMeshBody(vertexStore.data() + tile.vertexOffset, tile.liveVerts,
                                                          indexStore.data() + tile.indexOffset,
-                                                         m.indexCount, // lod0 only
+                                                         std::max(3u, tile.collideIndices), // lod0 prefix:
+                                                         // terrain + colliding props, no-collide scatter
+                                                         // (grass) excluded
                                                          m_cfg.physicsFriction, m_cfg.physicsRestitution);
                 tile.bodyDirty = false;
                 --cookBudget;
@@ -1161,6 +1537,10 @@ namespace pe::terrain
         m_pendingSculpts.clear();
         m_cavesMap.reset();
         m_cavesExtentX = m_cavesExtentZ = 0.0f;
+        m_scatterMap.reset();
+        m_templates.clear();
+        m_scatterBudgetVerts = 0;
+        m_scatterExtentX = m_scatterExtentZ = 0.0f;
         m_anchorSet = false;
         m_scene = nullptr;
     }
