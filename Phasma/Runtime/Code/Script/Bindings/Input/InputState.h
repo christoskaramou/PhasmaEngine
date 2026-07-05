@@ -24,6 +24,8 @@ namespace pe::InputState
     MouseDelta GetMouseWheel();
     void ResetMouseDelta();
 
+    bool SetRelativeMouse(bool enabled);
+
     // Touch (Android). Fed from SDL_FINGER* events; coordinates are normalized [0,1].
     void OnFingerDown(long long fingerId, float x, float y);
     void OnFingerUp(long long fingerId, float x, float y);

@@ -20,6 +20,7 @@ namespace pe
     class MaterialInstance;
     class ModelAsset;
     class Sampler;
+    struct Mesh_Constants;
     struct SceneSerializationHelper;
 
     // --- Light POD structs (GPU layout) ---
@@ -334,6 +335,24 @@ namespace pe
         // persistent identity host node so the VS applies an identity transform to already-world-baked
         // section vertices.
         size_t GetNodeDataOffset(const NodeId *node) const;
+
+        // --- In-place streamed-mesh updates (terrain tiles) ---
+        // Indirect-draw / Mesh_Constants slot of node's meshRefs[refSlot], assigned by the last
+        // geometry rebuild; UINT32_MAX if the mesh was skipped (disabled node, empty mesh, Lines).
+        // Slots shuffle on every rebuild — re-query when GetGeometryVersion() changes.
+        uint32_t GetMeshRefIndirectSlot(const NodeId *node, uint32_t refSlot) const;
+        // Overwrite a REGULAR mesh's reserved region of the shared geometry buffer, its indirect draw
+        // and its Mesh_Constants in place — no geometry rebuild; the streamed-terrain fast path (same
+        // staged-copy pattern AddArenaMesh proves for the voxel buffers). The caller has already
+        // rewritten the CPU stores inside the mesh's reserved ranges and updated the Mesh's live
+        // indexCount / boundingBox / lod tables; this stages the first vertexCopyCount vertices (both
+        // vertex streams), indexCopyCount indices and the 8 AABB corners to the GPU via `cmd` (the
+        // caller's frame command buffer — queue order lands the copies before this frame's draws, and
+        // frames already in flight keep reading the old bytes, so content never tears). Vulkan reads
+        // Mesh_Constants host-mapped, so an in-flight cull may see a half-written struct for one
+        // frame — transient cull wobble at worst, same acceptance as the arena path.
+        bool UpdateStreamedMesh(NodeId *node, uint32_t refSlot, int meshIndex,
+                                uint32_t vertexCopyCount, uint32_t indexCopyCount, CommandBuffer *cmd);
 
 #ifdef PE_DEBUG
         void ValidateNodeId(const NodeId *node) const
@@ -680,6 +699,9 @@ namespace pe
         void UpdateImageViews();
         void CreateMaterialTable();
         void CreateMeshConstants(CommandBuffer *cmd);
+        // One mesh's Mesh_Constants, derived from the current Mesh/material/node state. Shared by the
+        // full rebuild (CreateMeshConstants) and the in-place streamed update (UpdateStreamedMesh).
+        Mesh_Constants ComputeMeshConstants(uint32_t nodeIndex, int meshIndex) const;
         void RebuildRasterInstances(CommandBuffer *cmd); // rebuild instance data without geometry buffer
 
         // Ray tracing (SceneRayTracing.cpp)

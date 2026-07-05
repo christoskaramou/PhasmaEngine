@@ -18,6 +18,7 @@ namespace JPH
 namespace pe
 {
     struct NodeId;
+    struct Vertex;
     class Scene;
     class TriggerContactListener;
 
@@ -64,6 +65,16 @@ namespace pe
         void NotifyScaleChanged(Scene &scene, NodeId *node);
         // Update a body's friction/restitution live (no shape re-cook); no-op if the body isn't in-world.
         void SetBodyMaterial(NodeId *node, float friction, float restitution);
+
+        // Raw static triangle-mesh colliders (streamed terrain tiles): not node-backed, keyed by the
+        // returned Jolt body id. Verts are world-space scene vertices; indices are 0-based triples
+        // into them. Returns 0xFFFFFFFF on failure. The caller owns the lifecycle (re-cook a sculpted
+        // tile = remove + add); StopSimulation/Destroy tears down the Jolt world, so callers re-add on
+        // the sim edge like the node path does.
+        uint32_t AddStaticMeshBody(const Vertex *verts, uint32_t vertexCount, const uint32_t *indices,
+                                   uint32_t indexCount, float friction, float restitution);
+        void RemoveStaticMeshBody(uint32_t bodyIdRaw);
+        void SetStaticMeshBodyMaterial(uint32_t bodyIdRaw, float friction, float restitution);
 
         // Runtime API (during simulation)
         void SetLinearVelocity(NodeId *node, const vec3 &vel);
@@ -132,6 +143,7 @@ namespace pe
         std::unordered_map<const NodeId *, size_t> m_nodeToIndex;
         std::unordered_map<uint32_t, size_t> m_bodyIdToIndex;
         std::vector<PhysicsNodeState> m_bodies;
+        std::unordered_set<uint32_t> m_staticMeshBodies; // raw (non-node) static colliders, by Jolt body id
 
         // Persistent scratch — reused every frame to avoid per-frame heap alloc/dealloc
         std::unordered_map<const NodeId *, mat4> m_syncWorldMats;

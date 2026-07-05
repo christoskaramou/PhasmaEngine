@@ -3415,6 +3415,7 @@ namespace pe
 
         // Runtime UI input must not use stale Viewport coordinates when the editor GUI is hidden.
         GUIState::s_sceneViewImageRectValid = false;
+        GUIState::s_sceneViewFocused = false;
 
         if (!m_render)
             return;

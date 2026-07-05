@@ -1,34 +1,49 @@
 #include "Terrain/TerrainWorld.h"
+#include "API/Command.h"
+#include "API/Queue.h"
+#include "API/RHI.h"
 #include "Scene/Material.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "Voxel/ITerrainGenerator.h"
-#include "Voxel/VoxelWorld.h" // voxel::VoxelConfig (full definition, for the generator seam)
-#include "Voxel/MapGen.h"     // reuse the shared worldgen seam (heightmap SurfaceHeight)
-#include "Voxel/NoiseGen.h"   // reuse the shared worldgen seam (noise SurfaceHeight)
-#include "Voxel/VoxelTypes.h" // kSectionDim (blocks per column)
+#include "Voxel/MapGen.h"      // reuse the shared worldgen seam (heightmap SurfaceHeight)
+#include "Voxel/NoiseGen.h"    // reuse the shared worldgen seam (noise SurfaceHeight/Density)
+#include "Voxel/SurfaceNets.h" // ring-0 isosurface tile mesher
+#include "Voxel/VoxelTypes.h"  // kSectionDim (blocks per column)
+#include "Voxel/VoxelWorld.h"  // voxel::VoxelConfig (full definition, for the generator seam)
 #ifdef PE_PHYSICS
 #include "ECS/Context.h"           // GetGlobalSystem
-#include "Systems/PhysicsSystem.h" // static triangle-mesh terrain collider
+#include "Systems/PhysicsSystem.h" // per-tile static triangle-mesh colliders
 #endif
-#include <meshoptimizer.h> // meshopt_simplify: standard discrete LODs on the terrain mesh
+#include <meshoptimizer.h> // meshopt_simplify: discrete LODs on ring-0 tiles
 
 namespace pe::terrain
 {
     namespace
     {
         constexpr int kBlocksPerColumn = voxel::kSectionDim; // 16
-        constexpr int kTileCells = 64;                       // mesh tile size in X/Z blocks
-        constexpr int kMaxGridPerSide = 2048;                // cap the built grid so a huge radius can't OOM the mesh
+        constexpr int kTileCells = 32;                       // tile size in cells, every ring
+        constexpr int kMaxTilesPerSide = 64;                 // bounded cap (64 * 32 = 2048 cells/side)
+        constexpr int kMaxStreamTilesPerSide = 20;           // streaming fine-window cap (memory)
+        constexpr int kCoarseRings = 2;                      // streaming view rings past ring 0 (x4 cell each)
+        constexpr int kMeshBudgetPerUpdate = 3;              // tile re-meshes per frame
+        constexpr int kCookBudgetPerUpdate = 2;              // collider cooks per frame
+        constexpr size_t kMaxPendingCmds = 3;                // upload cmds in flight before waiting
+        constexpr int kMaxFieldCellsY = 512;                 // vertical sampling-band cap per tile
+        constexpr float kSkirtDropCells = 3.0f;              // coarse-tile skirt drop, in cells
 
-        // A single heightfield tile: standard float vertices + indices, rendered through the normal mesh path.
-        struct TileMesh
+        uint32_t RoundUpTo(uint32_t v, uint32_t a)
         {
-            std::vector<Vertex> vertices;
-            std::vector<uint32_t> indices;
-            vec3 aabbMin = vec3(0.0f);
-            vec3 aabbMax = vec3(0.0f);
-        };
+            return (v + a - 1) / a * a;
+        }
+        int WrapMod(int v, int n)
+        {
+            return ((v % n) + n) % n;
+        }
+        int TileFloor(float x, float tileWorld)
+        {
+            return static_cast<int>(std::floor(x / tileWorld));
+        }
 
         // MapGen/NoiseGen read a voxel::VoxelConfig; fill only the fields SurfaceHeight / Valid /
         // WorldRadiusColumns actually use. ponytail: the generator seam still lives in voxel::; a shared
@@ -61,182 +76,76 @@ namespace pe::terrain
         m_generatorOverridden = (m_generator != nullptr);
     }
 
+    void TerrainWorld::SetAnchor(const vec3 &anchor)
+    {
+        m_anchor = anchor;
+        m_anchorSet = true;
+    }
+
+    void TerrainWorld::BuildGenerator()
+    {
+        // Engine ships default generators; a game keeps its own via SetTerrainGenerator. A configured
+        // heightmap selects MapGen (a failed load falls back to noise); both expose SurfaceHeight(x,z).
+        if (m_generatorOverridden)
+            return;
+        m_generator.reset();
+        if (!m_cfg.heightmapPath.empty())
+        {
+            voxel::VoxelConfig vc = ToVoxelConfig(m_cfg);
+            auto mapGen = std::make_shared<voxel::MapGen>(vc);
+            if (mapGen->Valid())
+            {
+                // 0 on an axis: fill exactly the map's extent on that axis.
+                if (m_cfg.sizeXMeters == 0)
+                    m_cfg.sizeXMeters = mapGen->MapBlocksX();
+                if (m_cfg.sizeZMeters == 0)
+                    m_cfg.sizeZMeters = mapGen->MapBlocksZ();
+                m_generator = std::move(mapGen);
+            }
+        }
+        if (!m_generator)
+        {
+            voxel::NoiseParams p{};
+            p.groundY = 64;
+            p.amplitude = 28.0f; // ponytail: fixed domain-warp strength; surface peak height is the Height Range
+            p.groundHeight = m_cfg.groundHeight;
+            p.heightMin = m_cfg.heightMin;
+            p.heightMax = m_cfg.heightMax;
+            p.featureScale = m_cfg.noiseFeatureScale;
+            p.seed = m_cfg.noiseSeed;
+            p.caves = false; // surface only
+            p.seaLevel = -1;
+            p.overhangs = m_cfg.overhangs;
+            m_generator = std::make_shared<voxel::NoiseGen>(p);
+        }
+    }
+
     void TerrainWorld::Create(Scene *scene, const TerrainConfig &cfg)
     {
+        // Ops seeded via SetSculptOps before Create survive the reset — Create-time meshing must
+        // apply them. A standalone Destroy still clears them.
+        std::vector<SculptOp> ops = std::move(m_ops);
+        Destroy();
+        m_ops = std::move(ops);
         m_scene = scene;
         m_cfg = cfg;
         m_cfg.sizeXMeters = std::max(0, m_cfg.sizeXMeters);
         m_cfg.sizeZMeters = std::max(0, m_cfg.sizeZMeters);
+        m_cfg.overhangs = std::clamp(m_cfg.overhangs, 0.0f, 1.0f);
+        m_cfg.metersPerPixel = std::max(0.05f, m_cfg.metersPerPixel);
 
-        // Engine ships default generators; a game keeps its own via SetTerrainGenerator. A configured
-        // heightmap selects MapGen (a failed load falls back to noise); both expose SurfaceHeight(x,z).
-        if (!m_generatorOverridden)
-        {
-            m_generator.reset();
-            if (!m_cfg.heightmapPath.empty())
-            {
-                voxel::VoxelConfig vc = ToVoxelConfig(m_cfg);
-                auto mapGen = std::make_shared<voxel::MapGen>(vc);
-                if (mapGen->Valid())
-                {
-                    // 0 on an axis: fill exactly the map's extent on that axis.
-                    if (m_cfg.sizeXMeters == 0)
-                        m_cfg.sizeXMeters = mapGen->MapBlocksX();
-                    if (m_cfg.sizeZMeters == 0)
-                        m_cfg.sizeZMeters = mapGen->MapBlocksZ();
-                    m_generator = std::move(mapGen);
-                }
-            }
-            if (!m_generator)
-            {
-                voxel::NoiseParams p{};
-                p.groundY = 64;
-                p.amplitude = 28.0f; // ponytail: fixed domain-warp strength; surface peak height is the Height Range
-                p.groundHeight = m_cfg.groundHeight;
-                p.heightMin = m_cfg.heightMin;
-                p.heightMax = m_cfg.heightMax;
-                p.featureScale = m_cfg.noiseFeatureScale;
-                p.seed = m_cfg.noiseSeed;
-                p.caves = false; // surface only
-                p.seaLevel = -1;
-                m_generator = std::make_shared<voxel::NoiseGen>(p);
-            }
-        }
+        BuildGenerator();
         if (m_cfg.sizeXMeters <= 0)
             m_cfg.sizeXMeters = 256; // no map + no explicit size: a default patch
         if (m_cfg.sizeZMeters <= 0)
             m_cfg.sizeZMeters = 256;
 
-        BuildField();
-    }
+        if (!m_anchorSet)
+            m_anchor = vec3(m_cfg.boundsCenterCx * kBlocksPerColumn + kBlocksPerColumn / 2, 0.0f,
+                            m_cfg.boundsCenterCz * kBlocksPerColumn + kBlocksPerColumn / 2);
 
-    float TerrainWorld::FieldAt(int i, int j) const
-    {
-        i = std::clamp(i, 0, m_nx);
-        j = std::clamp(j, 0, m_nz);
-        return m_height[static_cast<size_t>(i) + static_cast<size_t>(m_nx + 1) * j];
-    }
-
-    void TerrainWorld::BuildField()
-    {
-        // One grid cell spans `step` metres, so the mesh has size/step cells per axis: a coarse map (big
-        // metersPerPixel) covers a large world with a bounded vertex count. Cells are capped, not metres.
-        m_step = std::max(0.05f, m_cfg.metersPerPixel);
-        const int sx = std::max(2, m_cfg.sizeXMeters);
-        const int sz = std::max(2, m_cfg.sizeZMeters);
-        int nx = std::max(2, (int)std::lround(sx / m_step));
-        int nz = std::max(2, (int)std::lround(sz / m_step));
-        if (nx > kMaxGridPerSide || nz > kMaxGridPerSide)
-        {
-            PE_WARN("Terrain: %dx%d cells exceeds the %d-cell mesh cap; clamped (raise Meters/Pixel for a "
-                    "bigger world).",
-                    nx, nz, kMaxGridPerSide);
-            nx = std::min(nx, kMaxGridPerSide);
-            nz = std::min(nz, kMaxGridPerSide);
-        }
-        m_nx = nx;
-        m_nz = nz;
-        const float halfWX = nx * m_step * 0.5f, halfWZ = nz * m_step * 0.5f;
-        const int centerX = m_cfg.boundsCenterCx * kBlocksPerColumn + kBlocksPerColumn / 2;
-        const int centerZ = m_cfg.boundsCenterCz * kBlocksPerColumn + kBlocksPerColumn / 2;
-        m_origin = vec3(centerX - halfWX, 0.0f, centerZ - halfWZ);
-
-        const int cnx = m_nx + 1, cnz = m_nz + 1;
-        m_height.assign(static_cast<size_t>(cnx) * cnz, m_cfg.groundHeight);
-        if (voxel::ITerrainGenerator *gen = m_generator.get())
-            for (int j = 0; j < cnz; ++j)
-                for (int i = 0; i < cnx; ++i)
-                    m_height[static_cast<size_t>(i) + static_cast<size_t>(cnx) * j] =
-                        gen->SurfaceHeight(m_origin.x + i * m_step, m_origin.z + j * m_step);
-
-        RebuildMesh();
-    }
-
-    void TerrainWorld::RebuildMesh()
-    {
-        if (!m_scene || m_height.empty())
+        if (!m_scene)
             return;
-
-        const int nx = m_nx, nz = m_nz;
-
-        // Split the height grid into tiles, each an independent standard mesh so it frustum/Hi-Z culls and
-        // LODs on its own. Neighbour tiles share their boundary vertex column (identical heights from the
-        // one field) so seams are watertight with no apron.
-        std::vector<TileMesh> tiles;
-        float gYmin = 1e30f, gYmax = -1e30f;
-        for (int tz = 0; tz < nz; tz += kTileCells)
-        {
-            for (int tx = 0; tx < nx; tx += kTileCells)
-            {
-                const int bcx = std::min(kTileCells, nx - tx);
-                const int bcz = std::min(kTileCells, nz - tz);
-                const int cx = bcx + 1, cz = bcz + 1; // corner counts (inclusive of the shared edge)
-
-                TileMesh tile;
-                tile.vertices.reserve(static_cast<size_t>(cx) * cz);
-                float yMin = 1e30f, yMax = -1e30f;
-                for (int j = 0; j < cz; ++j)
-                    for (int i = 0; i < cx; ++i)
-                    {
-                        const int gi = tx + i, gj = tz + j;
-                        const float wy = FieldAt(gi, gj);
-                        yMin = std::min(yMin, wy);
-                        yMax = std::max(yMax, wy);
-                        // Normal = -gradient of the surface: dh/dx ~ (hR-hL)/2, dh/dz ~ (hU-hD)/2.
-                        const float hL = FieldAt(gi - 1, gj), hR = FieldAt(gi + 1, gj);
-                        const float hD = FieldAt(gi, gj - 1), hU = FieldAt(gi, gj + 1);
-                        // Neighbours are m_step metres apart, so the gradient denominator scales with it.
-                        const vec3 n = glm::normalize(vec3(hL - hR, 2.0f * m_step, hD - hU));
-                        Vertex v{};
-                        v.position[0] = m_origin.x + gi * m_step;
-                        v.position[1] = wy;
-                        v.position[2] = m_origin.z + gj * m_step;
-                        v.normals[0] = n.x;
-                        v.normals[1] = n.y;
-                        v.normals[2] = n.z;
-                        v.uv[0] = static_cast<float>(gi);
-                        v.uv[1] = static_cast<float>(gj);
-                        tile.vertices.push_back(v);
-                    }
-                tile.indices.reserve(static_cast<size_t>(bcx) * bcz * 6);
-                for (int j = 0; j < bcz; ++j)
-                    for (int i = 0; i < bcx; ++i)
-                    {
-                        const uint32_t a = static_cast<uint32_t>(j * cx + i);
-                        const uint32_t b = a + 1;
-                        const uint32_t c = a + cx;
-                        const uint32_t d = c + 1;
-                        // CCW seen from above (engine FrontFace=CW + cull FRONT keeps CCW-from-outside).
-                        tile.indices.push_back(a);
-                        tile.indices.push_back(c);
-                        tile.indices.push_back(b);
-                        tile.indices.push_back(b);
-                        tile.indices.push_back(c);
-                        tile.indices.push_back(d);
-                    }
-                if (tile.vertices.empty())
-                    continue;
-                tile.aabbMin = vec3(m_origin.x + tx * m_step, yMin, m_origin.z + tz * m_step);
-                tile.aabbMax = vec3(m_origin.x + (tx + bcx) * m_step, yMax, m_origin.z + (tz + bcz) * m_step);
-                gYmin = std::min(gYmin, yMin);
-                gYmax = std::max(gYmax, yMax);
-                tiles.push_back(std::move(tile));
-            }
-        }
-        if (tiles.empty())
-            return;
-
-        // Tear down previous tile meshes/node — a rebuild replaces the whole set. ponytail: the old verts
-        // stay in the shared store until the next full scene rebuild (a per-rebuild leak, as voxel smooth).
-        for (int idx : m_meshIndices)
-            if (idx >= 0 && m_scene->IsValidMeshIndex(idx))
-                m_scene->GetMesh(idx).material = nullptr;
-        m_meshIndices.clear();
-        if (m_hostNode && m_scene->IsNodeAlive(m_hostNode))
-            m_scene->DeleteNode(m_hostNode);
-        while (NodeId *stale = m_scene->FindNodeByName("TerrainHost"))
-            m_scene->DeleteNode(stale);
-        m_hostNode = nullptr;
 
         m_material = std::make_unique<Material>();
         m_material->name = "TerrainMaterial";
@@ -248,163 +157,753 @@ namespace pe::terrain
         m_material->renderType = RenderType::Opaque;
         m_material->SyncParamsFromLegacy();
 
-        // Colour bands normalize to the GLOBAL Y range so the sand/grass/rock/snow cutoffs don't jump at
-        // tile borders. GBufferPS multiplies albedo * input.color, so this needs no shader change.
-        // ponytail: fixed bands; triplanar atlas later.
-        const float ymin = gYmin;
-        const float yspan = std::max(1.0f, gYmax - gYmin);
-        const float seaY = m_cfg.seaLevelM;
-        const auto terrainColor = [&](const Vertex &v) -> vec3
-        {
-            const float f = (v.position[1] - ymin) / yspan;
-            vec3 c = f < 0.08f   ? vec3(0.76f, 0.70f, 0.50f)
-                     : f < 0.58f ? vec3(0.30f, 0.52f, 0.24f)
-                     : f < 0.90f ? vec3(0.45f, 0.42f, 0.38f)
-                                 : vec3(0.92f, 0.94f, 0.96f);
-            if (v.normals[1] < 0.5f && f < 0.90f)
-                c = vec3(0.42f, 0.39f, 0.36f);
-            if (v.position[1] < seaY)
-                c = glm::mix(c, vec3(0.16f, 0.26f, 0.40f), 0.6f);
-            return c;
-        };
+        while (NodeId *stale = m_scene->FindNodeByName("TerrainHost"))
+            m_scene->DeleteNode(stale);
+        m_hostNode = m_scene->CreateNode("TerrainHost");
+        m_scene->SetLocalMatrix(m_hostNode, mat4(1.0f), false);
 
+        BuildRings();
+        AllocateTiles();
+
+        // Initial content, synchronous — the single Create-time flush uploads real terrain and later
+        // work never rebuilds the geometry buffer (in-place streamed updates only).
+        size_t totalVerts = 0, totalTris = 0;
+        for (size_t r = 0; r < m_rings.size(); ++r)
+        {
+            Ring &ring = m_rings[r];
+            for (int i = 0; i < ring.tilesX * ring.tilesZ; ++i)
+            {
+                Tile &tile = m_tiles[ring.firstTile + i];
+                MeshTile(static_cast<int>(r), tile);
+                tile.dirty = tile.growPending; // overflowed tiles re-mesh after the grow
+                totalVerts += tile.liveVerts;
+                totalTris += tile.liveIndices / 3;
+            }
+        }
+        PE_INFO("Terrain: %zu tiles in %zu ring(s), %zu live verts / %zu tris (streaming=%d overhangs=%.2f)",
+                m_tiles.size(), m_rings.size(), totalVerts, totalTris, m_cfg.streaming ? 1 : 0,
+                m_cfg.overhangs);
+        // ponytail: a runtime AddMesh here would clobber a coexisting cube-voxel GeometryArena
+        // reservation; fine while terrain and cube worlds live in separate scenes.
+        m_scene->SetGeometryDirty();
+        m_scene->FlushPendingGpuWork();
+    }
+
+    void TerrainWorld::BuildRings()
+    {
+        m_rings.clear();
+        const float cell0 = m_cfg.metersPerPixel;
+        const float tw0 = cell0 * kTileCells;
+        const float centerX = m_cfg.boundsCenterCx * kBlocksPerColumn + kBlocksPerColumn / 2.0f;
+        const float centerZ = m_cfg.boundsCenterCz * kBlocksPerColumn + kBlocksPerColumn / 2.0f;
+
+        Ring r0;
+        r0.cellSize = cell0;
+        if (m_cfg.streaming)
+        {
+            r0.tilesX = std::clamp((int)std::lround(m_cfg.sizeXMeters / tw0), 2, kMaxStreamTilesPerSide);
+            r0.tilesZ = std::clamp((int)std::lround(m_cfg.sizeZMeters / tw0), 2, kMaxStreamTilesPerSide);
+            const float tw = tw0;
+            r0.center = ivec2(TileFloor(m_anchor.x, tw) - r0.tilesX / 2, TileFloor(m_anchor.z, tw) - r0.tilesZ / 2);
+        }
+        else
+        {
+            // Bounded: the window is the world — minimal tile cover of the configured extent.
+            const float minX = centerX - m_cfg.sizeXMeters * 0.5f;
+            const float minZ = centerZ - m_cfg.sizeZMeters * 0.5f;
+            const int baseTx = TileFloor(minX, tw0);
+            const int baseTz = TileFloor(minZ, tw0);
+            int tilesX = (int)std::ceil((minX + m_cfg.sizeXMeters) / tw0) - baseTx;
+            int tilesZ = (int)std::ceil((minZ + m_cfg.sizeZMeters) / tw0) - baseTz;
+            if (tilesX > kMaxTilesPerSide || tilesZ > kMaxTilesPerSide)
+            {
+                PE_WARN("Terrain: %dx%d tiles exceeds the %d-tile cap; clamped (raise Meters/Pixel or "
+                        "enable streaming for a bigger world).",
+                        tilesX, tilesZ, kMaxTilesPerSide);
+                tilesX = std::min(tilesX, kMaxTilesPerSide);
+                tilesZ = std::min(tilesZ, kMaxTilesPerSide);
+            }
+            r0.tilesX = std::max(1, tilesX);
+            r0.tilesZ = std::max(1, tilesZ);
+            r0.center = ivec2(baseTx, baseTz);
+        }
+        m_rings.push_back(r0);
+
+        if (m_cfg.streaming)
+        {
+            for (int r = 1; r <= kCoarseRings; ++r)
+            {
+                Ring ring;
+                ring.cellSize = cell0 * std::pow(4.0f, (float)r);
+                ring.tilesX = m_rings[0].tilesX;
+                ring.tilesZ = m_rings[0].tilesZ;
+                const float tw = ring.cellSize * kTileCells;
+                ring.center =
+                    ivec2(TileFloor(m_anchor.x, tw) - ring.tilesX / 2, TileFloor(m_anchor.z, tw) - ring.tilesZ / 2);
+                m_rings.push_back(ring);
+            }
+        }
+    }
+
+    float TerrainWorld::TileWorldSize(const Ring &ring) const
+    {
+        return ring.cellSize * kTileCells;
+    }
+
+    void TerrainWorld::AllocateTiles()
+    {
         std::vector<Vertex> &vertices = m_scene->GetVertexStore();
         std::vector<PositionUvVertex> &positionUvs = m_scene->GetPositionUvStore();
         std::vector<AabbVertex> &aabbVertices = m_scene->GetAabbVertexStore();
         std::vector<uint32_t> &indices = m_scene->GetIndexStore();
 
-        m_hostNode = m_scene->CreateNode("TerrainHost");
-        m_scene->SetLocalMatrix(m_hostNode, mat4(1.0f), false);
-
-        size_t totalVerts = 0, totalTris = 0;
-        for (TileMesh &tile : tiles)
+        m_tiles.clear();
+        uint32_t refSlot = 0;
+        for (size_t r = 0; r < m_rings.size(); ++r)
         {
-            const uint32_t vertexBase = static_cast<uint32_t>(vertices.size());
-            const uint32_t positionBase = static_cast<uint32_t>(positionUvs.size());
-            const size_t aabbBase = aabbVertices.size();
-            const uint32_t indexBase = static_cast<uint32_t>(indices.size());
+            Ring &ring = m_rings[r];
+            ring.firstTile = static_cast<int>(m_tiles.size());
 
-            // Depth-prepass/shadows bind PositionUvVertex at the same vertexOffset as the GBuffer Vertex
-            // stream, so every vertex needs a matching entry in both.
-            for (const Vertex &src : tile.vertices)
+            // Budgets. Ring 0 (Surface Nets): roughly one vertex per surface cell over a (cells+1)^2
+            // column window; overhangs/sculpts multiply locally, and a grow event re-places any tile
+            // that outruns its slack. Coarse rings are exact grid meshes (+ skirt), no LODs.
+            const uint32_t baseCols = (kTileCells + 2) * (kTileCells + 2);
+            uint32_t vertexBudget, indexBudget;
+            if (r == 0)
             {
-                Vertex v = src;
-                const vec3 c = terrainColor(v);
+                // Measured: vertex count tracks surface area, so steep plain terrain runs ~1.45x the
+                // column count (seed-7 noise and the Greece heightmap alike, no overhangs) and
+                // overhangs=0.8 tiles up to ~3.1x (folded surfaces cross most columns 2-3 times).
+                // Cliff-heavy heightmap regions have hit ~2.8x — those settle via one ring-wide grow.
+                const float slack = 1.5f + 2.5f * m_cfg.overhangs;
+                vertexBudget = RoundUpTo((uint32_t)(baseCols * slack), 256);
+                indexBudget = vertexBudget * 6 * 2; // quads ~ cells ~ verts; x2 for the meshopt LOD chain
+            }
+            else
+            {
+                vertexBudget = RoundUpTo(baseCols + 4 * (kTileCells + 1), 128);
+                indexBudget = RoundUpTo(kTileCells * kTileCells * 6 + 4 * kTileCells * 12 + 64, 128);
+            }
+
+            for (int i = 0; i < ring.tilesX * ring.tilesZ; ++i)
+            {
+                Tile tile;
+                tile.vertexOffset = static_cast<uint32_t>(vertices.size());
+                tile.vertexBudget = vertexBudget;
+                vertices.resize(vertices.size() + vertexBudget);
+                positionUvs.resize(positionUvs.size() + vertexBudget);
+                tile.indexOffset = static_cast<uint32_t>(indices.size());
+                tile.indexBudget = indexBudget;
+                indices.resize(indices.size() + indexBudget, 0u);
+                tile.aabbVertexOffset = aabbVertices.size();
+                aabbVertices.resize(aabbVertices.size() + 8);
+
+                Mesh m{};
+                m.vertexOffset = tile.vertexOffset;
+                m.vertexCount = vertexBudget; // reserved budget; live counts drive the draws
+                m.indexOffset = tile.indexOffset;
+                m.indexCount = 3;
+                m.positionsOffset = tile.vertexOffset;
+                m.aabbVertexOffset = tile.aabbVertexOffset;
+                m.aabbColor = 0xFFFFFFFF;
+                m.renderType = RenderType::Opaque;
+                m.material = m_material.get();
+                m.lodEnabled = (r == 0); // coarse rings ARE the distance LOD
+                m.lodIndexOffset[0] = m.indexOffset;
+                m.lodIndexCount[0] = m.indexCount;
+                m.lodCount = 1;
+                tile.meshIndex = m_scene->AddMesh(std::move(m));
+                tile.refSlot = refSlot++;
+                m_scene->AddMeshRef(m_hostNode, tile.meshIndex);
+
+                // Desired world tile for this slot — the same toroidal congruence StreamWindows uses
+                // (slot s holds the window tile with T ≡ s mod N), so the first Update re-meshes nothing.
+                const int sx = i % ring.tilesX, sz = i / ring.tilesX;
+                tile.tx = ring.center.x + WrapMod(sx - ring.center.x, ring.tilesX);
+                tile.tz = ring.center.y + WrapMod(sz - ring.center.y, ring.tilesZ);
+                tile.interiorHole = TileInteriorHole(static_cast<int>(r), tile.tx, tile.tz);
+                WriteEmptyTile(tile); // valid placeholder even if the first mesh overflows into a grow
+                m_tiles.push_back(tile);
+            }
+        }
+    }
+
+    // The toroidal slot layout never moves tile slots — a slot is re-meshed for its new world tile
+    // when the window slides past it. Slot (sx, sz) of a ring holds the world tile congruent to it
+    // (mod tilesPerSide) inside the window [base, base + tiles).
+    void TerrainWorld::StreamWindows()
+    {
+        if (!m_cfg.streaming)
+            return;
+        for (size_t r = 0; r < m_rings.size(); ++r)
+        {
+            Ring &ring = m_rings[r];
+            const float tw = TileWorldSize(ring);
+            ring.center = ivec2(TileFloor(m_anchor.x, tw) - ring.tilesX / 2, TileFloor(m_anchor.z, tw) - ring.tilesZ / 2);
+            for (int i = 0; i < ring.tilesX * ring.tilesZ; ++i)
+            {
+                Tile &tile = m_tiles[ring.firstTile + i];
+                const int sx = i % ring.tilesX, sz = i / ring.tilesX;
+                const int dtx = ring.center.x + WrapMod(sx - ring.center.x, ring.tilesX);
+                const int dtz = ring.center.y + WrapMod(sz - ring.center.y, ring.tilesZ);
+                const bool hole = TileInteriorHole(static_cast<int>(r), dtx, dtz);
+                if (dtx != tile.tx || dtz != tile.tz || hole != tile.interiorHole)
+                {
+                    tile.tx = dtx;
+                    tile.tz = dtz;
+                    tile.interiorHole = hole;
+                    tile.dirty = true;
+                    RemoveTileBody(tile); // old-location collider is invalid immediately
+                }
+            }
+        }
+    }
+
+    // A coarse ring holes out tiles the next-finer ring already covers, keeping a one-tile overlap
+    // band so the fine window's rim (whose outermost stitch cells have no loaded neighbour) always
+    // has coarse terrain underneath it.
+    bool TerrainWorld::TileInteriorHole(int ringIdx, int tx, int tz) const
+    {
+        if (ringIdx <= 0)
+            return false;
+        const Ring &ring = m_rings[ringIdx];
+        const Ring &inner = m_rings[ringIdx - 1];
+        const float tw = TileWorldSize(ring);
+        const float itw = TileWorldSize(inner);
+        const float minX = tx * tw, maxX = (tx + 1) * tw;
+        const float minZ = tz * tw, maxZ = (tz + 1) * tw;
+        const float iMinX = inner.center.x * itw + tw;
+        const float iMaxX = (inner.center.x + inner.tilesX) * itw - tw;
+        const float iMinZ = inner.center.y * itw + tw;
+        const float iMaxZ = (inner.center.y + inner.tilesZ) * itw - tw;
+        return minX >= iMinX && maxX <= iMaxX && minZ >= iMinZ && maxZ <= iMaxZ;
+    }
+
+    float TerrainWorld::DensityLocal(float x, float y, float z, float surfaceHeight) const
+    {
+        float d = m_generator ? m_generator->DensityAtHeight(x, y, z, surfaceHeight)
+                              : (surfaceHeight - y);
+        // CSG sphere ops, in stroke order. The in-sphere-only application keeps the zero set exact and
+        // every tile computes the identical field; the (cheap) price is slightly faceted crater rims
+        // versus a full SDF blend. ponytail: linear scan; bucket ops per tile if counts ever hurt.
+        for (const SculptOp &op : m_ops)
+        {
+            const float dx = x - op.center.x, dy = y - op.center.y, dz = z - op.center.z;
+            const float dd = dx * dx + dy * dy + dz * dz;
+            if (dd > op.radius * op.radius)
+                continue;
+            const float s = op.radius - std::sqrt(dd); // > 0 inside the sphere
+            d = op.dig ? std::min(d, -s) : std::max(d, s);
+        }
+        return d;
+    }
+
+    float TerrainWorld::DensityAt(float x, float y, float z) const
+    {
+        return DensityLocal(x, y, z, m_generator ? m_generator->SurfaceHeight(x, z) : m_cfg.groundHeight);
+    }
+
+    // Colour bands normalized to the CONFIGURED height range (stable across tiles and streaming, no
+    // per-mesh normalization). GBufferPS multiplies albedo * input.color — no shader change.
+    // ponytail: fixed bands; triplanar atlas later.
+    vec3 TerrainWorld::TerrainColor(float y, float normalY) const
+    {
+        const float ymin = m_cfg.groundHeight + m_cfg.heightMin;
+        const float yspan = std::max(1.0f, m_cfg.heightMax - m_cfg.heightMin);
+        const float f = (y - ymin) / yspan;
+        vec3 c = f < 0.08f   ? vec3(0.76f, 0.70f, 0.50f)
+                 : f < 0.58f ? vec3(0.30f, 0.52f, 0.24f)
+                 : f < 0.90f ? vec3(0.45f, 0.42f, 0.38f)
+                             : vec3(0.92f, 0.94f, 0.96f);
+        if (normalY < 0.5f && f < 0.90f)
+            c = vec3(0.42f, 0.39f, 0.36f);
+        if (y < m_cfg.seaLevelM)
+            c = glm::mix(c, vec3(0.16f, 0.26f, 0.40f), 0.6f);
+        return c;
+    }
+
+    void TerrainWorld::MeshTile(int ringIdx, Tile &tile)
+    {
+        if (tile.interiorHole)
+        {
+            WriteEmptyTile(tile);
+            return;
+        }
+        if (ringIdx == 0)
+            MeshTileSurfaceNets(m_rings[0], tile);
+        else
+            MeshTileGrid(m_rings[ringIdx], tile);
+        tile.bodyDirty = true;
+    }
+
+    void TerrainWorld::MeshTileSurfaceNets(const Ring &ring, Tile &tile)
+    {
+        const float cell = ring.cellSize;
+        // One-cell negative apron stitches quads across tile seams (see SurfaceNetsTile); the missing
+        // apron at bounded world edges just drops the outermost cell ring of the rim.
+        const ivec3 apron(1, 0, 1);
+        const int cellsXZ = kTileCells + 1;
+        const int gx0 = tile.tx * kTileCells - apron.x;
+        const int gz0 = tile.tz * kTileCells - apron.z;
+
+        // Column surface heights over the corner lattice + guard ring: local corner l in [-1, cells+2)
+        // stored at l + 1, sampled at world = float(globalCorner) * cell so neighbouring tiles get
+        // bit-identical densities on shared corners.
+        const int hnx = cellsXZ + 3, hnz = cellsXZ + 3;
+        std::vector<float> heights(static_cast<size_t>(hnx) * hnz);
+        float minH = 1e30f, maxH = -1e30f;
+        for (int k = 0; k < hnz; ++k)
+            for (int i = 0; i < hnx; ++i)
+            {
+                const float wx = static_cast<float>(gx0 + i - 1) * cell;
+                const float wz = static_cast<float>(gz0 + k - 1) * cell;
+                const float h = m_generator ? m_generator->SurfaceHeight(wx, wz) : m_cfg.groundHeight;
+                heights[static_cast<size_t>(i) + static_cast<size_t>(hnx) * k] = h;
+                minH = std::min(minH, h);
+                maxH = std::max(maxH, h);
+            }
+
+        // Vertical band: the surface plus everything that can displace it — the overhang FBM's proven
+        // fixed-point bound, and any sculpt sphere overlapping this tile (XZ, guard included).
+        float minY = minH, maxY = maxH;
+        if (m_cfg.overhangs > 0.0f)
+        {
+            const float band = 0.5f * std::max(2.0f, m_cfg.heightMax - m_cfg.heightMin);
+            const float c = m_cfg.overhangs;
+            const float relStar = (-1.0f + std::sqrt(1.0f + 4.0f * c * c)) / (2.0f * c);
+            minY -= band * relStar;
+            maxY += band * relStar;
+        }
+        const float rMinX = static_cast<float>(gx0 - 1) * cell, rMaxX = static_cast<float>(gx0 + cellsXZ + 2) * cell;
+        const float rMinZ = static_cast<float>(gz0 - 1) * cell, rMaxZ = static_cast<float>(gz0 + cellsXZ + 2) * cell;
+        for (const SculptOp &op : m_ops)
+        {
+            if (op.center.x + op.radius < rMinX || op.center.x - op.radius > rMaxX ||
+                op.center.z + op.radius < rMinZ || op.center.z - op.radius > rMaxZ)
+                continue;
+            minY = std::min(minY, op.center.y - op.radius);
+            maxY = std::max(maxY, op.center.y + op.radius);
+        }
+        minY -= 2.0f * cell;
+        maxY += 2.0f * cell;
+        const int gy0 = (int)std::floor(minY / cell) - 1;
+        int cellsY = (int)std::ceil(maxY / cell) + 1 - gy0;
+        if (cellsY > kMaxFieldCellsY)
+        {
+            PE_WARN("Terrain: tile (%d,%d) vertical band %d cells exceeds the %d cap; clamped.",
+                    tile.tx, tile.tz, cellsY, kMaxFieldCellsY);
+            cellsY = kMaxFieldCellsY;
+        }
+        cellsY = std::max(cellsY, 4);
+
+        const ivec3 cells(cellsXZ, cellsY, cellsXZ);
+        const ivec3 gridMin(gx0, gy0, gz0);
+        const int fnx = cells.x + 3, fny = cells.y + 3, fnz = cells.z + 3;
+        std::vector<float> field(static_cast<size_t>(fnx) * fny * fnz);
+        for (int k = 0; k < fnz; ++k)
+            for (int j = 0; j < fny; ++j)
+                for (int i = 0; i < fnx; ++i)
+                {
+                    const float wx = static_cast<float>(gridMin.x + i - 1) * cell;
+                    const float wy = static_cast<float>(gridMin.y + j - 1) * cell;
+                    const float wz = static_cast<float>(gridMin.z + k - 1) * cell;
+                    const float h = heights[static_cast<size_t>(i) + static_cast<size_t>(hnx) * k];
+                    field[static_cast<size_t>(i) + static_cast<size_t>(fnx) * (j + static_cast<size_t>(fny) * k)] =
+                        DensityLocal(wx, wy, wz, h);
+                }
+
+        voxel::SmoothMeshData mesh = voxel::SurfaceNetsTile(field, gridMin, cells, apron, cell);
+        if (mesh.vertices.empty() || mesh.indices.empty())
+        {
+            WriteEmptyTile(tile);
+            return;
+        }
+        for (Vertex &v : mesh.vertices)
+        {
+            const vec3 c = TerrainColor(v.position[1], v.normals[1]);
+            v.color[0] = c.x;
+            v.color[1] = c.y;
+            v.color[2] = c.z;
+            v.color[3] = 1.0f;
+            v.uv[0] = v.position[0] / cell;
+            v.uv[1] = v.position[2] / cell;
+        }
+        WriteTileContent(0, tile, mesh.vertices, mesh.indices, mesh.aabbMin, mesh.aabbMax);
+    }
+
+    void TerrainWorld::MeshTileGrid(const Ring &ring, Tile &tile)
+    {
+        const float cell = ring.cellSize;
+        const int gx0 = tile.tx * kTileCells;
+        const int gz0 = tile.tz * kTileCells;
+        const int cx = kTileCells + 1; // corner count per axis
+
+        // Corner heights + one guard ring for central-difference normals; global-integer sampling
+        // keeps within-ring seams exact (shared corners, identical floats).
+        const int hn = cx + 2;
+        std::vector<float> h(static_cast<size_t>(hn) * hn);
+        for (int k = 0; k < hn; ++k)
+            for (int i = 0; i < hn; ++i)
+                h[static_cast<size_t>(i) + static_cast<size_t>(hn) * k] =
+                    m_generator ? m_generator->SurfaceHeight(static_cast<float>(gx0 + i - 1) * cell,
+                                                             static_cast<float>(gz0 + k - 1) * cell)
+                                : m_cfg.groundHeight;
+        auto H = [&](int i, int k)
+        { return h[static_cast<size_t>(i + 1) + static_cast<size_t>(hn) * (k + 1)]; };
+
+        std::vector<Vertex> verts;
+        std::vector<uint32_t> indices;
+        verts.reserve(static_cast<size_t>(cx) * cx + 4 * cx);
+        indices.reserve(static_cast<size_t>(kTileCells) * kTileCells * 6 + 4 * kTileCells * 12);
+        vec3 bbMin(1e30f), bbMax(-1e30f);
+        // Coarse rings sit a fraction of a cell BELOW the true surface: where a coarse tile's overlap
+        // band double-covers finer terrain, the fine surface always wins the depth test instead of
+        // coarse patches poking through on slopes. Each ring sinks 4x more than the finer one, and the
+        // skirts (3 cells) comfortably cover the offset at ring boundaries. Invisible at ring distances.
+        const float coarseBias = 0.35f * cell;
+        for (int k = 0; k < cx; ++k)
+            for (int i = 0; i < cx; ++i)
+            {
+                const float wy = H(i, k) - coarseBias;
+                // Neighbours are `cell` metres apart, so the gradient denominator scales with it.
+                const vec3 n = glm::normalize(vec3(H(i - 1, k) - H(i + 1, k), 2.0f * cell, H(i, k - 1) - H(i, k + 1)));
+                Vertex v{};
+                v.position[0] = static_cast<float>(gx0 + i) * cell;
+                v.position[1] = wy;
+                v.position[2] = static_cast<float>(gz0 + k) * cell;
+                v.normals[0] = n.x;
+                v.normals[1] = n.y;
+                v.normals[2] = n.z;
+                v.uv[0] = v.position[0] / cell;
+                v.uv[1] = v.position[2] / cell;
+                v.tangent[0] = 1.0f;
+                v.tangent[3] = 1.0f;
+                const vec3 c = TerrainColor(wy, n.y);
                 v.color[0] = c.x;
                 v.color[1] = c.y;
                 v.color[2] = c.z;
                 v.color[3] = 1.0f;
-                vertices.push_back(v);
-                PositionUvVertex pv{};
-                pv.position[0] = v.position[0];
-                pv.position[1] = v.position[1];
-                pv.position[2] = v.position[2];
-                pv.uv[0] = v.uv[0];
-                pv.uv[1] = v.uv[1];
-                positionUvs.push_back(pv);
+                bbMin = glm::min(bbMin, vec3(v.position[0], wy, v.position[2]));
+                bbMax = glm::max(bbMax, vec3(v.position[0], wy, v.position[2]));
+                verts.push_back(v);
             }
-            for (int c = 0; c < 8; ++c)
+        for (int k = 0; k < kTileCells; ++k)
+            for (int i = 0; i < kTileCells; ++i)
             {
-                AabbVertex av{};
-                av.position[0] = (c & 1) ? tile.aabbMax.x : tile.aabbMin.x;
-                av.position[1] = (c & 2) ? tile.aabbMax.y : tile.aabbMin.y;
-                av.position[2] = (c & 4) ? tile.aabbMax.z : tile.aabbMin.z;
-                aabbVertices.push_back(av);
-            }
-            for (uint32_t idx : tile.indices)
-                indices.push_back(idx);
-
-            Mesh m{};
-            m.vertexOffset = vertexBase;
-            m.vertexCount = static_cast<uint32_t>(tile.vertices.size());
-            m.indexOffset = indexBase;
-            m.indexCount = static_cast<uint32_t>(tile.indices.size());
-            m.positionsOffset = positionBase;
-            m.aabbVertexOffset = aabbBase;
-            m.aabbColor = 0xFFFFFFFF;
-            m.boundingBox = {tile.aabbMin, tile.aabbMax};
-            m.renderType = RenderType::Opaque;
-            m.material = m_material.get();
-
-            // Standard mesh LOD via meshopt (border-locked so tile seams stay matched at every level):
-            // reduced index sets over the SAME verts, appended to the shared store; GPU CullingCS
-            // distance-picks the level, exactly like model meshes.
-            m.lodIndexOffset[0] = m.indexOffset;
-            m.lodIndexCount[0] = m.indexCount;
-            m.lodCount = 1;
-            if (m.indexCount >= 256)
-            {
-                const float *positions = reinterpret_cast<const float *>(tile.vertices.data());
-                const size_t vtxCount = tile.vertices.size();
-                static constexpr float kRatios[Mesh::kMaxLods] = {1.0f, 0.5f, 0.25f, 0.12f};
-                std::vector<uint32_t> simplified(tile.indices.size());
-                uint32_t prevCount = m.indexCount;
-                for (uint32_t lod = 1; lod < Mesh::kMaxLods; ++lod)
-                {
-                    const size_t target = (static_cast<size_t>(m.indexCount * kRatios[lod]) / 3) * 3;
-                    if (target < 12)
-                        break;
-                    float err = 0.0f;
-                    const size_t resCount =
-                        meshopt_simplify(simplified.data(), tile.indices.data(), tile.indices.size(), positions,
-                                         vtxCount, sizeof(Vertex), target, 0.1f, meshopt_SimplifyLockBorder, &err);
-                    if (resCount == 0 || resCount >= static_cast<size_t>(prevCount * 0.95f))
-                        break;
-                    const uint32_t off = static_cast<uint32_t>(indices.size());
-                    indices.insert(indices.end(), simplified.begin(), simplified.begin() + resCount);
-                    m.lodIndexOffset[lod] = off;
-                    m.lodIndexCount[lod] = static_cast<uint32_t>(resCount);
-                    m.lodCount = lod + 1;
-                    prevCount = static_cast<uint32_t>(resCount);
-                }
+                const uint32_t a = static_cast<uint32_t>(k * cx + i);
+                const uint32_t b = a + 1;
+                const uint32_t c = a + cx;
+                const uint32_t d = c + 1;
+                // CCW seen from above (engine FrontFace=CW + cull FRONT keeps CCW-from-outside).
+                indices.push_back(a);
+                indices.push_back(c);
+                indices.push_back(b);
+                indices.push_back(b);
+                indices.push_back(c);
+                indices.push_back(d);
             }
 
-            totalVerts += tile.vertices.size();
-            totalTris += tile.indices.size() / 3;
-            const int meshIdx = m_scene->AddMesh(std::move(m));
-            m_meshIndices.push_back(meshIdx);
-            m_scene->AddMeshRef(m_hostNode, meshIdx);
+        // Skirt: perimeter corners duplicated `kSkirtDropCells` cells down, quads emitted two-sided —
+        // hides the height mismatch where this coarse ring meets the finer ring / the next ring out.
+        const float drop = kSkirtDropCells * cell;
+        auto addSkirtQuad = [&](uint32_t top0, uint32_t top1)
+        {
+            const uint32_t s0 = static_cast<uint32_t>(verts.size());
+            Vertex v0 = verts[top0];
+            Vertex v1 = verts[top1];
+            v0.position[1] -= drop;
+            v1.position[1] -= drop;
+            bbMin.y = std::min({bbMin.y, v0.position[1], v1.position[1]});
+            verts.push_back(v0);
+            verts.push_back(v1);
+            const uint32_t idx[12] = {top0, top1, s0 + 1, top0, s0 + 1, s0, // one side
+                                      top1, top0, s0, top1, s0, s0 + 1};    // the other
+            indices.insert(indices.end(), idx, idx + 12);
+        };
+        for (int i = 0; i < kTileCells; ++i)
+        {
+            addSkirtQuad(static_cast<uint32_t>(i), static_cast<uint32_t>(i + 1));                                       // -Z edge
+            addSkirtQuad(static_cast<uint32_t>(kTileCells * cx + i), static_cast<uint32_t>(kTileCells * cx + i + 1));   // +Z edge
+            addSkirtQuad(static_cast<uint32_t>(i * cx), static_cast<uint32_t>((i + 1) * cx));                           // -X edge
+            addSkirtQuad(static_cast<uint32_t>(i * cx + kTileCells), static_cast<uint32_t>((i + 1) * cx + kTileCells)); // +X edge
         }
-        PE_INFO("Terrain: %zu tiles, %zu verts / %zu tris over %dx%d cells", m_meshIndices.size(), totalVerts,
-                totalTris, nx, nz);
-        // ponytail: a runtime AddMesh here would clobber a coexisting cube-voxel GeometryArena reservation;
-        // fine while terrain and cube worlds live in separate scenes. Build terrain before reserving the
-        // arena if they ever share one.
-        m_scene->SetGeometryDirty();
-        m_scene->FlushPendingGpuWork();
-        UpdateCollider();
+
+        WriteTileContent(1, tile, verts, indices, bbMin, bbMax);
+    }
+
+    void TerrainWorld::WriteEmptyTile(Tile &tile)
+    {
+        std::vector<Vertex> &vertices = m_scene->GetVertexStore();
+        std::vector<PositionUvVertex> &positionUvs = m_scene->GetPositionUvStore();
+        std::vector<AabbVertex> &aabbVertices = m_scene->GetAabbVertexStore();
+        std::vector<uint32_t> &indices = m_scene->GetIndexStore();
+
+        // One degenerate triangle far below the world: the mesh slot keeps indexCount >= 3 (an empty
+        // mesh would lose its indirect/constants slot on the next full rebuild) and the AABB culls it.
+        Vertex v{};
+        v.position[1] = -100000.0f;
+        vertices[tile.vertexOffset] = v;
+        PositionUvVertex pv{};
+        pv.position[1] = -100000.0f;
+        positionUvs[tile.vertexOffset] = pv;
+        indices[tile.indexOffset] = 0;
+        indices[tile.indexOffset + 1] = 0;
+        indices[tile.indexOffset + 2] = 0;
+        for (int c = 0; c < 8; ++c)
+        {
+            AabbVertex av{};
+            av.position[1] = -100000.0f;
+            aabbVertices[tile.aabbVertexOffset + c] = av;
+        }
+
+        Mesh &m = m_scene->GetMesh(tile.meshIndex);
+        m.indexCount = 3;
+        m.lodIndexOffset[0] = tile.indexOffset;
+        m.lodIndexCount[0] = 3;
+        m.lodCount = 1;
+        m.boundingBox = {vec3(-0.5f, -100000.5f, -0.5f), vec3(0.5f, -99999.5f, 0.5f)};
+        tile.liveVerts = 1;
+        tile.liveIndices = 3;
+    }
+
+    bool TerrainWorld::WriteTileContent(int ringIdx, Tile &tile, std::vector<Vertex> &verts,
+                                        std::vector<uint32_t> &indices, const vec3 &bbMin, const vec3 &bbMax)
+    {
+        if (verts.empty() || indices.size() < 3)
+        {
+            WriteEmptyTile(tile);
+            return true;
+        }
+        if (verts.size() > tile.vertexBudget || indices.size() > tile.indexBudget)
+        {
+            if (!tile.growPending)
+                PE_WARN("Terrain: tile (%d,%d) overflowed its budget (%zu/%u verts, %zu/%u idx) — growing.",
+                        tile.tx, tile.tz, verts.size(), tile.vertexBudget, indices.size(), tile.indexBudget);
+            tile.growPending = true;
+            return false; // keep the old content until the grow re-places the ranges
+        }
+
+        Mesh &m = m_scene->GetMesh(tile.meshIndex);
+        const uint32_t lod0Count = static_cast<uint32_t>(indices.size());
+        m.lodIndexOffset[0] = tile.indexOffset;
+        m.lodIndexCount[0] = lod0Count;
+        m.lodCount = 1;
+
+        // Ring-0 LOD chain via meshopt (border-locked so tile seams stay matched at every level),
+        // appended after lod0 inside the tile's index budget; levels that no longer fit are dropped.
+        if (ringIdx == 0 && lod0Count >= 256)
+        {
+            const float *positions = reinterpret_cast<const float *>(verts.data());
+            static constexpr float kRatios[Mesh::kMaxLods] = {1.0f, 0.5f, 0.25f, 0.12f};
+            std::vector<uint32_t> simplified(indices.size());
+            uint32_t prevCount = lod0Count;
+            for (uint32_t lod = 1; lod < Mesh::kMaxLods; ++lod)
+            {
+                const size_t target = (static_cast<size_t>(lod0Count * kRatios[lod]) / 3) * 3;
+                if (target < 12 || indices.size() + target > tile.indexBudget)
+                    break;
+                float err = 0.0f;
+                const size_t resCount =
+                    meshopt_simplify(simplified.data(), indices.data(), lod0Count, positions, verts.size(),
+                                     sizeof(Vertex), target, 0.1f, meshopt_SimplifyLockBorder, &err);
+                if (resCount == 0 || resCount >= static_cast<size_t>(prevCount * 0.95f) ||
+                    indices.size() + resCount > tile.indexBudget)
+                    break;
+                m.lodIndexOffset[lod] = tile.indexOffset + static_cast<uint32_t>(indices.size());
+                m.lodIndexCount[lod] = static_cast<uint32_t>(resCount);
+                m.lodCount = lod + 1;
+                indices.insert(indices.end(), simplified.begin(), simplified.begin() + resCount);
+                prevCount = static_cast<uint32_t>(resCount);
+            }
+        }
+
+        std::vector<Vertex> &vertexStore = m_scene->GetVertexStore();
+        std::vector<PositionUvVertex> &positionUvStore = m_scene->GetPositionUvStore();
+        std::vector<AabbVertex> &aabbStore = m_scene->GetAabbVertexStore();
+        std::vector<uint32_t> &indexStore = m_scene->GetIndexStore();
+        for (size_t i = 0; i < verts.size(); ++i)
+        {
+            const Vertex &v = verts[i];
+            vertexStore[tile.vertexOffset + i] = v;
+            PositionUvVertex pv{};
+            pv.position[0] = v.position[0];
+            pv.position[1] = v.position[1];
+            pv.position[2] = v.position[2];
+            pv.uv[0] = v.uv[0];
+            pv.uv[1] = v.uv[1];
+            positionUvStore[tile.vertexOffset + i] = pv;
+        }
+        std::copy(indices.begin(), indices.end(), indexStore.begin() + tile.indexOffset);
+        for (int c = 0; c < 8; ++c)
+        {
+            AabbVertex av{};
+            av.position[0] = (c & 1) ? bbMax.x : bbMin.x;
+            av.position[1] = (c & 2) ? bbMax.y : bbMin.y;
+            av.position[2] = (c & 4) ? bbMax.z : bbMin.z;
+            aabbStore[tile.aabbVertexOffset + c] = av;
+        }
+
+        m.indexCount = lod0Count;
+        m.boundingBox = {bbMin, bbMax};
+        tile.liveVerts = static_cast<uint32_t>(verts.size());
+        tile.liveIndices = static_cast<uint32_t>(indices.size());
+        return true;
     }
 
     void TerrainWorld::Update()
     {
-        if (m_pendingSculpts.empty())
+        if (!m_scene || m_tiles.empty())
             return;
-        std::vector<PendingSculpt> sculpts;
-        sculpts.swap(m_pendingSculpts);
-        for (const PendingSculpt &s : sculpts)
-            Sculpt(s.center, s.radius, s.amount);
+        RetireSubmittedCommands(false);
+
+        if (!m_pendingSculpts.empty())
+        {
+            std::vector<QueuedSculpt> sculpts;
+            sculpts.swap(m_pendingSculpts);
+            for (const QueuedSculpt &s : sculpts)
+                Sculpt(s.center, s.radius, s.amount);
+        }
+        StreamWindows();
+        GrowOverflowedTiles();
+        ProcessDirtyTiles();
+        UpdateColliderRing();
+    }
+
+    void TerrainWorld::ProcessDirtyTiles()
+    {
+        struct Item
+        {
+            float key;
+            int ringIdx;
+            int tileIdx;
+        };
+        std::vector<Item> queue;
+        for (size_t r = 0; r < m_rings.size(); ++r)
+        {
+            const Ring &ring = m_rings[r];
+            const float tw = TileWorldSize(ring);
+            for (int i = 0; i < ring.tilesX * ring.tilesZ; ++i)
+            {
+                const int t = ring.firstTile + i;
+                const Tile &tile = m_tiles[t];
+                if (!tile.dirty || tile.growPending)
+                    continue;
+                const float cxw = (tile.tx + 0.5f) * tw, czw = (tile.tz + 0.5f) * tw;
+                const float dx = cxw - m_anchor.x, dz = czw - m_anchor.z;
+                queue.push_back({std::sqrt(dx * dx + dz * dz) + static_cast<float>(r) * 1e6f,
+                                 static_cast<int>(r), t});
+            }
+        }
+        if (queue.empty())
+            return;
+        std::sort(queue.begin(), queue.end(), [](const Item &a, const Item &b)
+                  { return a.key < b.key; });
+
+        std::vector<int> uploaded;
+        const int budget = std::min<int>(kMeshBudgetPerUpdate, static_cast<int>(queue.size()));
+        for (int i = 0; i < budget; ++i)
+        {
+            Tile &tile = m_tiles[queue[i].tileIdx];
+            MeshTile(queue[i].ringIdx, tile);
+            tile.dirty = tile.growPending; // a grown tile re-meshes after its ranges are re-placed
+            if (!tile.growPending)
+                uploaded.push_back(queue[i].tileIdx);
+        }
+        if (uploaded.empty())
+            return;
+
+        Queue *q = RHII.GetMainQueue();
+        if (!q)
+            return;
+        CommandBuffer *cmd = q->AcquireCommandBuffer();
+        cmd->Begin();
+        for (int t : uploaded)
+        {
+            Tile &tile = m_tiles[t];
+            m_scene->UpdateStreamedMesh(m_hostNode, tile.refSlot, tile.meshIndex, tile.liveVerts,
+                                        tile.liveIndices, cmd);
+        }
+        cmd->End();
+        q->Submit(1, &cmd, nullptr, nullptr);
+        m_submittedCmds.push_back(cmd);
+    }
+
+    // An overflow means the ring's shared budget estimate lost to this worldgen region — and slots are
+    // reused toroidally, so every other slot of the ring is one stream step from the same overflow and
+    // its own rebuild. Grow the WHOLE ring: doubled ranges appended to the stores (the old ranges leak
+    // until the next scene load — bounded, logged, rare), live content copied across so only the
+    // overflowed tiles re-mesh, and ONE geometry rebuild picks the layout up.
+    void TerrainWorld::GrowOverflowedTiles()
+    {
+        bool any = false;
+        for (const Tile &tile : m_tiles)
+            any |= tile.growPending;
+        if (!any)
+            return;
+
+        std::vector<Vertex> &vertices = m_scene->GetVertexStore();
+        std::vector<PositionUvVertex> &positionUvs = m_scene->GetPositionUvStore();
+        std::vector<uint32_t> &indices = m_scene->GetIndexStore();
+        for (size_t r = 0; r < m_rings.size(); ++r)
+        {
+            const Ring &ring = m_rings[r];
+            const int tileCount = ring.tilesX * ring.tilesZ;
+            bool ringGrow = false;
+            for (int i = 0; i < tileCount; ++i)
+                ringGrow |= m_tiles[ring.firstTile + i].growPending;
+            if (!ringGrow)
+                continue;
+            for (int i = 0; i < tileCount; ++i)
+            {
+                Tile &tile = m_tiles[ring.firstTile + i];
+                const uint32_t oldVertexOffset = tile.vertexOffset;
+                const uint32_t oldIndexOffset = tile.indexOffset;
+                tile.vertexBudget *= 2;
+                tile.indexBudget *= 2;
+                tile.vertexOffset = static_cast<uint32_t>(vertices.size());
+                vertices.resize(vertices.size() + tile.vertexBudget);
+                positionUvs.resize(positionUvs.size() + tile.vertexBudget);
+                tile.indexOffset = static_cast<uint32_t>(indices.size());
+                indices.resize(indices.size() + tile.indexBudget, 0u);
+                Mesh &m = m_scene->GetMesh(tile.meshIndex);
+                m.vertexOffset = tile.vertexOffset;
+                m.positionsOffset = tile.vertexOffset;
+                m.vertexCount = tile.vertexBudget;
+                m.indexOffset = tile.indexOffset;
+                if (tile.growPending)
+                {
+                    tile.growPending = false;
+                    WriteEmptyTile(tile); // valid placeholder in the new ranges for the flush
+                    tile.dirty = true;    // real content streams back in next Update
+                }
+                else
+                {
+                    // Keep the tile's live content: copy the old ranges (indices are mesh-local, so
+                    // they move verbatim) and re-base the LOD chain onto the new index range.
+                    std::copy_n(vertices.begin() + oldVertexOffset, tile.liveVerts,
+                                vertices.begin() + tile.vertexOffset);
+                    std::copy_n(positionUvs.begin() + oldVertexOffset, tile.liveVerts,
+                                positionUvs.begin() + tile.vertexOffset);
+                    std::copy_n(indices.begin() + oldIndexOffset, tile.liveIndices,
+                                indices.begin() + tile.indexOffset);
+                    for (uint32_t lod = 0; lod < m.lodCount; ++lod)
+                        m.lodIndexOffset[lod] = tile.indexOffset + (m.lodIndexOffset[lod] - oldIndexOffset);
+                }
+            }
+            PE_INFO("Terrain: ring %zu outgrew its tile budgets — doubled all %d tiles (one geometry rebuild).",
+                    r, tileCount);
+        }
+        m_scene->SetGeometryDirty();
+        m_scene->FlushPendingGpuWork();
     }
 
     void TerrainWorld::Sculpt(const vec3 &center, float radius, float amount)
     {
-        if (m_height.empty() || radius <= 0.0f)
+        if (radius <= 0.0f || m_tiles.empty())
             return;
-        const int cnx = m_nx + 1, cnz = m_nz + 1;
-        const int i0 = std::max(0, (int)std::floor((center.x - radius - m_origin.x) / m_step));
-        const int i1 = std::min(cnx - 1, (int)std::ceil((center.x + radius - m_origin.x) / m_step));
-        const int j0 = std::max(0, (int)std::floor((center.z - radius - m_origin.z) / m_step));
-        const int j1 = std::min(cnz - 1, (int)std::ceil((center.z + radius - m_origin.z) / m_step));
-        for (int j = j0; j <= j1; ++j)
-            for (int i = i0; i <= i1; ++i)
-            {
-                const float dx = (m_origin.x + i * m_step) - center.x;
-                const float dz = (m_origin.z + j * m_step) - center.z;
-                const float dist = std::sqrt(dx * dx + dz * dz);
-                if (dist > radius)
-                    continue;
-                m_height[static_cast<size_t>(i) + static_cast<size_t>(cnx) * j] += amount * (1.0f - dist / radius);
-            }
-        RebuildMesh();
+        const SculptOp op{center, radius, amount < 0.0f};
+        m_ops.push_back(op);
+        MarkSculptDirty(op);
     }
 
     void TerrainWorld::QueueSculpt(const vec3 &center, float radius, float amount)
@@ -413,47 +912,83 @@ namespace pe::terrain
             m_pendingSculpts.push_back({center, radius, amount});
     }
 
+    void TerrainWorld::SetSculptOps(const std::vector<vec4> &ops)
+    {
+        m_ops.clear();
+        m_ops.reserve(ops.size());
+        for (const vec4 &o : ops)
+            if (std::abs(o.w) > 0.0f)
+                m_ops.push_back({vec3(o.x, o.y, o.z), std::abs(o.w), o.w < 0.0f});
+    }
+
+    void TerrainWorld::GetSculptOps(std::vector<vec4> &out) const
+    {
+        out.clear();
+        out.reserve(m_ops.size());
+        for (const SculptOp &op : m_ops)
+            out.emplace_back(op.center, op.dig ? -op.radius : op.radius);
+    }
+
+    // Ring 0 tiles whose sampling window (extent + apron + guard) the op's sphere overlaps. Coarse
+    // rings ignore sculpts (heightfield-only); a big dig pops at the fine window's rim, the same trade
+    // the voxel LOD bands make with distant cave mouths. Ops on unloaded tiles apply when they stream
+    // back in — the op list is the persistent truth, not the meshes.
+    void TerrainWorld::MarkSculptDirty(const SculptOp &op)
+    {
+        const Ring &ring = m_rings[0];
+        const float tw = TileWorldSize(ring);
+        const float margin = 3.0f * ring.cellSize;
+        const int tx0 = TileFloor(op.center.x - op.radius - margin, tw);
+        const int tx1 = TileFloor(op.center.x + op.radius + margin, tw);
+        const int tz0 = TileFloor(op.center.z - op.radius - margin, tw);
+        const int tz1 = TileFloor(op.center.z + op.radius + margin, tw);
+        for (int tz = tz0; tz <= tz1; ++tz)
+            for (int tx = tx0; tx <= tx1; ++tx)
+            {
+                const int sx = WrapMod(tx, ring.tilesX);
+                const int sz = WrapMod(tz, ring.tilesZ);
+                Tile &tile = m_tiles[ring.firstTile + sz * ring.tilesX + sx];
+                if (tile.tx == tx && tile.tz == tz) // that world tile is actually loaded in this slot
+                {
+                    tile.dirty = true;
+                    tile.bodyDirty = true;
+                }
+            }
+    }
+
     float TerrainWorld::SampleHeight(float x, float z) const
     {
-        if (m_height.empty())
+        if (!m_generator)
             return m_cfg.groundHeight + m_cfg.heightMin;
-        const int cnx = m_nx + 1;
-        const float gx = std::clamp((x - m_origin.x) / m_step, 0.0f, (float)m_nx);
-        const float gz = std::clamp((z - m_origin.z) / m_step, 0.0f, (float)m_nz);
-        const int x0 = (int)gx, z0 = (int)gz;
-        const int x1 = std::min(x0 + 1, m_nx), z1 = std::min(z0 + 1, m_nz);
-        const float tx = gx - x0, tz = gz - z0;
-        auto H = [&](int i, int j)
-        { return m_height[static_cast<size_t>(i) + static_cast<size_t>(cnx) * j]; };
-        const float a = H(x0, z0) * (1 - tx) + H(x1, z0) * tx;
-        const float b = H(x0, z1) * (1 - tx) + H(x1, z1) * tx;
-        return a * (1 - tz) + b * tz;
+        return m_generator->SurfaceHeight(x, z);
     }
 
     bool TerrainWorld::Raycast(const vec3 &o, const vec3 &d, float maxDist, vec3 &hitPoint, vec3 &hitNormal) const
     {
-        if (m_height.empty() || glm::length(d) < 1e-6f)
+        if (!m_generator || glm::length(d) < 1e-6f)
             return false;
         const vec3 dir = glm::normalize(d);
-        // ponytail: fixed 0.5-block march + linear crossing refine. Fine for terrain rays.
-        constexpr float kStep = 0.5f;
+        // ponytail: fixed half-cell march + linear crossing refine over the density field, so sculpted
+        // craters and overhang undersides raycast correctly (a pure height march would not).
+        const float step = 0.5f * std::max(0.05f, m_cfg.metersPerPixel);
         float prevT = 0.0f;
-        float prevAbove = o.y - SampleHeight(o.x, o.z); // > 0 above the surface
-        for (float t = kStep; t <= maxDist; t += kStep)
+        float prevD = DensityAt(o.x, o.y, o.z);
+        for (float t = step; t <= maxDist; t += step)
         {
             const vec3 p = o + dir * t;
-            const float above = p.y - SampleHeight(p.x, p.z);
-            if (prevAbove > 0.0f && above <= 0.0f) // crossed the surface between prevT and t
+            const float dEnd = DensityAt(p.x, p.y, p.z);
+            if (prevD < 0.0f && dEnd >= 0.0f) // crossed air -> solid between prevT and t
             {
-                const float f = prevAbove / (prevAbove - above);
+                const float f = prevD / (prevD - dEnd);
                 hitPoint = o + dir * (prevT + f * (t - prevT));
-                constexpr float e = 0.5f;
-                const float hL = SampleHeight(hitPoint.x - e, hitPoint.z), hR = SampleHeight(hitPoint.x + e, hitPoint.z);
-                const float hD = SampleHeight(hitPoint.x, hitPoint.z - e), hU = SampleHeight(hitPoint.x, hitPoint.z + e);
-                hitNormal = glm::normalize(vec3(hL - hR, 2.0f * e, hD - hU));
+                const float e = 0.5f * step;
+                hitNormal = glm::normalize(vec3(
+                    DensityAt(hitPoint.x - e, hitPoint.y, hitPoint.z) - DensityAt(hitPoint.x + e, hitPoint.y, hitPoint.z),
+                    DensityAt(hitPoint.x, hitPoint.y - e, hitPoint.z) - DensityAt(hitPoint.x, hitPoint.y + e, hitPoint.z),
+                    DensityAt(hitPoint.x, hitPoint.y, hitPoint.z - e) - DensityAt(hitPoint.x, hitPoint.y, hitPoint.z + e)));
                 return true;
             }
-            prevAbove = above;
+            prevD = dEnd;
             prevT = t;
         }
         return false;
@@ -461,13 +996,69 @@ namespace pe::terrain
 
     bool TerrainWorld::IsSolidCell(int x, int y, int z) const
     {
-        return (float)y + 0.5f < SampleHeight((float)x + 0.5f, (float)z + 0.5f);
+        return DensityAt((float)x + 0.5f, (float)y + 0.5f, (float)z + 0.5f) > 0.0f;
+    }
+
+    void TerrainWorld::UpdateColliderRing()
+    {
+#ifdef PE_PHYSICS
+        auto *physics = GetGlobalSystem<PhysicsSystem>();
+        if (!physics || m_rings.empty())
+            return;
+        const Ring &ring = m_rings[0];
+        const float tw = TileWorldSize(ring);
+        int cookBudget = kCookBudgetPerUpdate;
+        const std::vector<Vertex> &vertexStore = m_scene->GetVertexStore();
+        const std::vector<uint32_t> &indexStore = m_scene->GetIndexStore();
+        for (int i = 0; i < ring.tilesX * ring.tilesZ; ++i)
+        {
+            Tile &tile = m_tiles[ring.firstTile + i];
+            const float cxw = (tile.tx + 0.5f) * tw, czw = (tile.tz + 0.5f) * tw;
+            const float dx = cxw - m_anchor.x, dz = czw - m_anchor.z;
+            const bool inRange = m_cfg.collisionRadiusM <= 0.0f ||
+                                 std::sqrt(dx * dx + dz * dz) <= m_cfg.collisionRadiusM + tw;
+            const bool want = m_cfg.physics && inRange && !tile.dirty && !tile.interiorHole && tile.liveVerts > 1;
+            if (!want)
+            {
+                if (tile.bodyId != 0xFFFFFFFF)
+                    RemoveTileBody(tile);
+                continue;
+            }
+            if ((tile.bodyId == 0xFFFFFFFF || tile.bodyDirty) && cookBudget > 0)
+            {
+                RemoveTileBody(tile);
+                const Mesh &m = m_scene->GetMesh(tile.meshIndex);
+                tile.bodyId = physics->AddStaticMeshBody(vertexStore.data() + tile.vertexOffset, tile.liveVerts,
+                                                         indexStore.data() + tile.indexOffset,
+                                                         m.indexCount, // lod0 only
+                                                         m_cfg.physicsFriction, m_cfg.physicsRestitution);
+                tile.bodyDirty = false;
+                --cookBudget;
+            }
+        }
+#endif
+    }
+
+    void TerrainWorld::RemoveTileBody(Tile &tile)
+    {
+#ifdef PE_PHYSICS
+        if (tile.bodyId == 0xFFFFFFFF)
+            return;
+        if (auto *physics = GetGlobalSystem<PhysicsSystem>())
+            physics->RemoveStaticMeshBody(tile.bodyId);
+        tile.bodyId = 0xFFFFFFFF;
+#else
+        (void)tile;
+#endif
     }
 
     void TerrainWorld::SetPhysicsEnabled(bool enabled)
     {
         m_cfg.physics = enabled;
-        UpdateCollider();
+        if (!enabled)
+            for (Tile &tile : m_tiles)
+                RemoveTileBody(tile);
+        // Enabled: the collider ring fills back up over the next Updates (budgeted cooks).
     }
 
     void TerrainWorld::SetTerrainMaterial(float friction, float restitution)
@@ -475,70 +1066,51 @@ namespace pe::terrain
         m_cfg.physicsFriction = friction;
         m_cfg.physicsRestitution = restitution;
 #ifdef PE_PHYSICS
-        if (m_colliderActive && m_hostNode)
-            if (auto *physics = GetGlobalSystem<PhysicsSystem>())
-                physics->SetBodyMaterial(m_hostNode, friction, restitution);
+        if (auto *physics = GetGlobalSystem<PhysicsSystem>())
+            for (Tile &tile : m_tiles)
+                if (tile.bodyId != 0xFFFFFFFF)
+                    physics->SetStaticMeshBodyMaterial(tile.bodyId, friction, restitution);
 #endif
     }
 
-    void TerrainWorld::UpdateCollider()
+    void TerrainWorld::RetireSubmittedCommands(bool all)
     {
-#ifdef PE_PHYSICS
-        auto *physics = GetGlobalSystem<PhysicsSystem>();
-        if (!physics || !m_scene)
-            return;
-        const bool want =
-            m_cfg.physics && m_hostNode && m_scene->IsNodeAlive(m_hostNode) && !m_meshIndices.empty();
-        // The tiles are replaced on every rebuild/sculpt, so drop any cached shape first, then re-cook.
-        if (m_colliderActive)
+        while (!m_submittedCmds.empty() && (all || m_submittedCmds.size() > kMaxPendingCmds))
         {
-            physics->RemoveBody(m_hostNode);
-            m_colliderActive = false;
+            CommandBuffer *cmd = m_submittedCmds.front();
+            cmd->Wait();
+            cmd->Return();
+            m_submittedCmds.erase(m_submittedCmds.begin());
         }
-        if (want)
-        {
-            PhysicsBodyDesc desc;
-            desc.bodyType = PhysicsBodyType::Static;
-            desc.shapeType = PhysicsShapeType::Mesh;
-            desc.autoFitShape = false; // the Mesh shape reads the tiles directly; no box auto-fit
-            desc.friction = m_cfg.physicsFriction;
-            desc.restitution = m_cfg.physicsRestitution;
-            physics->AddBody(*m_scene, m_hostNode, desc);
-            m_colliderActive = true;
-        }
-#endif
     }
 
     bool TerrainWorld::IsAlive() const
     {
         if (!m_scene)
             return false;
-        return m_hostNode != nullptr && m_scene->IsNodeAlive(m_hostNode) && !m_meshIndices.empty() &&
-               m_scene->IsValidMeshIndex(m_meshIndices.front());
+        return m_hostNode != nullptr && m_scene->IsNodeAlive(m_hostNode) && !m_tiles.empty() &&
+               m_scene->IsValidMeshIndex(m_tiles.front().meshIndex);
     }
 
     void TerrainWorld::Destroy()
     {
-        for (int idx : m_meshIndices)
-            if (m_scene && idx >= 0 && m_scene->IsValidMeshIndex(idx))
-                m_scene->GetMesh(idx).material = nullptr;
-        m_meshIndices.clear();
-
-#ifdef PE_PHYSICS
-        if (m_colliderActive && m_scene && m_hostNode)
+        RetireSubmittedCommands(true);
+        for (Tile &tile : m_tiles)
         {
-            if (auto *physics = GetGlobalSystem<PhysicsSystem>())
-                physics->RemoveBody(m_hostNode);
-            m_colliderActive = false;
+            RemoveTileBody(tile);
+            if (m_scene && tile.meshIndex >= 0 && m_scene->IsValidMeshIndex(tile.meshIndex))
+                m_scene->GetMesh(tile.meshIndex).material = nullptr;
         }
-#endif
         if (m_scene && m_hostNode && m_scene->IsNodeAlive(m_hostNode))
             m_scene->DeleteNode(m_hostNode);
 
         m_material.reset();
         m_hostNode = nullptr;
-        m_height.clear();
+        m_tiles.clear();
+        m_rings.clear();
+        m_ops.clear();
         m_pendingSculpts.clear();
+        m_anchorSet = false;
         m_scene = nullptr;
     }
 } // namespace pe::terrain

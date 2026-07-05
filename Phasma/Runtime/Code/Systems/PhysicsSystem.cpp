@@ -285,6 +285,7 @@ namespace pe
 
         StopSimulation();
         ClearAllBodies();
+        m_staticMeshBodies.clear(); // die with the Jolt world; owners re-add after the next Init
         m_joltSystem->SetContactListener(nullptr);
         delete m_contactListener;
         m_contactListener = nullptr;
@@ -1055,6 +1056,70 @@ namespace pe
             state.cachedShape->Release();
             state.cachedShape = nullptr;
         }
+    }
+
+    uint32_t PhysicsSystem::AddStaticMeshBody(const Vertex *verts, uint32_t vertexCount,
+                                              const uint32_t *indices, uint32_t indexCount,
+                                              float friction, float restitution)
+    {
+        if (!m_joltSystem || !verts || !indices || vertexCount == 0 || indexCount < 3)
+            return 0xFFFFFFFF;
+
+        JPH::VertexList vlist;
+        JPH::IndexedTriangleList tris;
+        vlist.reserve(vertexCount);
+        for (uint32_t i = 0; i < vertexCount; ++i)
+            vlist.push_back(JPH::Float3(verts[i].position[0], verts[i].position[1], verts[i].position[2]));
+        tris.reserve(indexCount / 3);
+        for (uint32_t t = 0; t + 2 < indexCount; t += 3)
+            tris.push_back(JPH::IndexedTriangle(indices[t], indices[t + 1], indices[t + 2], 0));
+
+        JPH::MeshShapeSettings settings(vlist, tris);
+        settings.Sanitize(); // drop degenerate/duplicate tris Jolt would assert on
+        auto result = settings.Create();
+        if (!result.IsValid())
+        {
+            PE_WARN("[Physics] Static mesh body cook failed: %s", result.GetError().c_str());
+            return 0xFFFFFFFF;
+        }
+
+        JPH::BodyCreationSettings bodySettings(result.Get(), JPH::RVec3::sZero(), JPH::Quat::sIdentity(),
+                                               JPH::EMotionType::Static, Layers::NON_MOVING);
+        bodySettings.mFriction = friction;
+        bodySettings.mRestitution = restitution;
+
+        JPH::BodyInterface &bi = m_joltSystem->GetBodyInterface();
+        JPH::BodyID bodyId = bi.CreateAndAddBody(bodySettings, JPH::EActivation::DontActivate);
+        if (bodyId.IsInvalid())
+        {
+            PE_WARN("[Physics] Static mesh body create failed (raw bodies=%zu)", m_staticMeshBodies.size());
+            return 0xFFFFFFFF;
+        }
+        const uint32_t raw = bodyId.GetIndexAndSequenceNumber();
+        m_staticMeshBodies.insert(raw);
+        return raw;
+    }
+
+    void PhysicsSystem::RemoveStaticMeshBody(uint32_t bodyIdRaw)
+    {
+        // The Jolt world owns the bodies: after Destroy() the set is already cleared, so a late caller
+        // (terrain teardown ordering) simply no-ops instead of touching a dead/rebuilt world.
+        if (!m_joltSystem || m_staticMeshBodies.erase(bodyIdRaw) == 0)
+            return;
+        JPH::BodyID bodyId(bodyIdRaw);
+        JPH::BodyInterface &bi = m_joltSystem->GetBodyInterface();
+        bi.RemoveBody(bodyId);
+        bi.DestroyBody(bodyId);
+    }
+
+    void PhysicsSystem::SetStaticMeshBodyMaterial(uint32_t bodyIdRaw, float friction, float restitution)
+    {
+        if (!m_joltSystem || m_staticMeshBodies.find(bodyIdRaw) == m_staticMeshBodies.end())
+            return;
+        JPH::BodyID bodyId(bodyIdRaw);
+        JPH::BodyInterface &bi = m_joltSystem->GetBodyInterface();
+        bi.SetFriction(bodyId, friction);
+        bi.SetRestitution(bodyId, restitution);
     }
 
     void PhysicsSystem::QueueTriggerContact(uint32_t body1Raw, uint32_t body2Raw, bool added)

@@ -12,6 +12,7 @@
 #include "Scene/SceneAccess.h"
 #include "Scene/SceneNodeHandle.h"
 #include "Scene/SceneHost.h"
+#include "Script/Bindings/Input/InputState.h"
 #include "Script/ScriptRuntimeHooks.h"
 #include "Script/Bindings/Lerp/Tween.h"
 #include "UI/RuntimeUi.h"
@@ -1493,6 +1494,9 @@ namespace pe
     void ScriptSystem::Update()
     {
         PE_PROFILE_SCOPE("Script System");
+
+        if (IsEditorHost() && !IsScriptPlayMode() && !IsScriptViewportFocused())
+            InputState::SetRelativeMouse(false);
 
         // Frame delta (seconds), forwarded as the first argument to every Lua
         // update()/update_editor() hook. These were previously called with no args, so

@@ -2020,12 +2020,12 @@ namespace pe
                 }
             }
 
-            // Terrain (heightfield surface) component
+            // Terrain (streamed isosurface) component
             if (flags & Component_Terrain)
             {
                 ImGui::Separator();
                 const bool terrOpen = ImGui::CollapsingHeader("Terrain", ImGuiTreeNodeFlags_DefaultOpen);
-                ui::ItemTooltip("Heightfield terrain: a surface from a heightmap or noise (no caves/depth). Kept in "
+                ui::ItemTooltip("Smooth terrain from a heightmap or noise, sculptable in 3D (terrain.sculpt). Kept in "
                                 "sync with these values live; the node's position is the terrain center.");
                 if (terrOpen)
                 {
@@ -2076,17 +2076,29 @@ namespace pe
                             ui::ItemTooltip("Noise feature wavelength in blocks — small = choppy, large = rolling.");
                             changed |= ImGui::DragInt("Seed", &t->noiseSeed);
                             ui::ItemTooltip("Each seed is a different terrain.");
+                            changed |= ImGui::SliderFloat("Overhangs", &t->overhangs, 0.0f, 1.0f, "%.2f");
+                            ui::ItemTooltip("3D relief strength: cliffs undercut and hollows open (true overhangs). "
+                                            "0 = pure heightfield. Widens the meshing band, so it costs build time.");
                         }
 
+                        changed |= ImGui::Checkbox("Streaming", &t->streaming);
+                        ui::ItemTooltip("The terrain window (Size X/Z) follows the camera instead of being a fixed "
+                                        "patch, with two coarser rings extending the view distance. Tiles re-mesh in "
+                                        "place as you move — no rebuild hitches.");
+
                         changed |= ImGui::Checkbox("Physics Collision", &t->physics);
-                        ui::ItemTooltip("Give the terrain a static physics collider so rigidbodies collide with it in "
-                                        "play mode. Toggling does not rebuild the terrain.");
+                        ui::ItemTooltip("Give the terrain per-tile static physics colliders so rigidbodies collide "
+                                        "with it in play mode. Toggling does not rebuild the terrain.");
                         if (t->physics)
                         {
                             changed |= ImGui::DragFloat("Friction", &t->physicsFriction, 0.01f, 0.0f, 1.0f);
                             ui::ItemTooltip("Terrain surface friction — how much sliding objects grip it.");
                             changed |= ImGui::DragFloat("Restitution", &t->physicsRestitution, 0.01f, 0.0f, 1.0f);
                             ui::ItemTooltip("Terrain bounciness — how much objects rebound on impact.");
+                            changed |= ImGui::DragFloat("Collision Radius (m)", &t->collisionRadiusM, 1.0f, 0.0f, 4096.0f,
+                                                        "%.0f");
+                            ui::ItemTooltip("Colliders exist only within this range of the camera (cook cost tracks "
+                                            "the player). 0 = collide everywhere. Applied live.");
                         }
 
                         changed |= ImGui::Checkbox("Auto Rebuild", &t->autoRebuild);

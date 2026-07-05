@@ -1113,65 +1113,7 @@ namespace pe
                 }
                 m_hasTransparentMeshes = m_hasAlphaBlendMeshes || m_hasTransmissionMeshes;
 
-                const MeshRuntime &meshRt = m_meshRuntimes[meshIdx];
-
-                float alphaCut = 0.0f;
-                float baseColorAlpha = 1.0f;
-                uint32_t texMask = 0u;
-                if (mesh.materialInstance)
-                {
-                    alphaCut = (mesh.renderType == RenderType::AlphaCut) ? mesh.materialInstance->GetAlphaCutoff() : 0.0f;
-                    baseColorAlpha = mesh.materialInstance->GetBaseColorFactor().a;
-                    texMask = mesh.materialInstance->GetTextureMask();
-                }
-                else if (mesh.material)
-                {
-                    const Material *mat = mesh.material;
-                    alphaCut = (mesh.renderType == RenderType::AlphaCut) ? mat->alphaCutoff : 0.0f;
-                    baseColorAlpha = mat->baseColorFactor.a;
-                    texMask = mat->textureMask;
-                }
-
-                Mesh_Constants constants{};
-                constants.alphaCut = alphaCut;
-                constants.baseColorAlpha = baseColorAlpha;
-                constants.meshDataOffset = static_cast<uint32_t>(m_nodeRuntime[i].dataOffset);
-                constants.textureMask = texMask;
-                constants.materialId = meshRt.materialGpuIndex;
-                for (int k = 0; k < 5; k++)
-                    constants.meshImageIndex[k] = meshRt.imageViewIndices[k];
-                if (mesh.materialInstance && mesh.materialInstance->gpuByteOffset != 0xFFFFFFFF)
-                    constants.materialByteOffset = mesh.materialInstance->gpuByteOffset;
-                else if (mesh.material && mesh.material->gpuByteOffset != 0xFFFFFFFF)
-                    constants.materialByteOffset = mesh.material->gpuByteOffset;
-                else
-                    constants.materialByteOffset = 0xFFFFFFFF;
-
-                uint32_t flags = 0;
-                if (IsSceneNodeSelected(m_nodeIds[i]))
-                    flags |= 1u;
-                bool isDoubleSided = mesh.material && mesh.material->doubleSided;
-                if (isDoubleSided)
-                    flags |= 2u;
-                constants.editorFlags = flags;
-                constants.renderType = static_cast<uint32_t>(mesh.renderType);
-
-                constants.aabbMinX = mesh.boundingBox.min.x;
-                constants.aabbMinY = mesh.boundingBox.min.y;
-                constants.aabbMinZ = mesh.boundingBox.min.z;
-                constants.aabbMaxX = mesh.boundingBox.max.x;
-                constants.aabbMaxY = mesh.boundingBox.max.y;
-                constants.aabbMaxZ = mesh.boundingBox.max.z;
-
-                constants.lodCount = mesh.lodCount;
-                for (uint32_t l = 0; l < Mesh::kMaxLods; ++l)
-                {
-                    constants.lodIndexOffset[l] = mesh.lodIndexOffset[l];
-                    constants.lodIndexCount[l] = mesh.lodIndexCount[l];
-                }
-                constants.lodShift = mesh.lodShift;
-                constants.lodMeshEnabled = mesh.lodEnabled ? 1u : 0u;
-                constants.lodMeshBias = mesh.lodBias;
+                Mesh_Constants constants = ComputeMeshConstants(i, meshIdx);
 
                 BufferRange range{};
                 range.data = &constants;
@@ -2182,5 +2124,183 @@ namespace pe
             bi.size = m_meshConstantsDevice->Size();
             m_meshConstantsDevice->GetTrackInfo() = bi;
         }
+    }
+
+    Mesh_Constants Scene::ComputeMeshConstants(uint32_t nodeIndex, int meshIndex) const
+    {
+        const Mesh &mesh = m_meshes[meshIndex];
+        const MeshRuntime &meshRt = m_meshRuntimes[meshIndex];
+
+        float alphaCut = 0.0f;
+        float baseColorAlpha = 1.0f;
+        uint32_t texMask = 0u;
+        if (mesh.materialInstance)
+        {
+            alphaCut = (mesh.renderType == RenderType::AlphaCut) ? mesh.materialInstance->GetAlphaCutoff() : 0.0f;
+            baseColorAlpha = mesh.materialInstance->GetBaseColorFactor().a;
+            texMask = mesh.materialInstance->GetTextureMask();
+        }
+        else if (mesh.material)
+        {
+            const Material *mat = mesh.material;
+            alphaCut = (mesh.renderType == RenderType::AlphaCut) ? mat->alphaCutoff : 0.0f;
+            baseColorAlpha = mat->baseColorFactor.a;
+            texMask = mat->textureMask;
+        }
+
+        Mesh_Constants constants{};
+        constants.alphaCut = alphaCut;
+        constants.baseColorAlpha = baseColorAlpha;
+        constants.meshDataOffset = static_cast<uint32_t>(m_nodeRuntime[nodeIndex].dataOffset);
+        constants.textureMask = texMask;
+        constants.materialId = meshRt.materialGpuIndex;
+        for (int k = 0; k < 5; k++)
+            constants.meshImageIndex[k] = meshRt.imageViewIndices[k];
+        if (mesh.materialInstance && mesh.materialInstance->gpuByteOffset != 0xFFFFFFFF)
+            constants.materialByteOffset = mesh.materialInstance->gpuByteOffset;
+        else if (mesh.material && mesh.material->gpuByteOffset != 0xFFFFFFFF)
+            constants.materialByteOffset = mesh.material->gpuByteOffset;
+        else
+            constants.materialByteOffset = 0xFFFFFFFF;
+
+        uint32_t flags = 0;
+        if (IsSceneNodeSelected(m_nodeIds[nodeIndex]))
+            flags |= 1u;
+        if (mesh.material && mesh.material->doubleSided)
+            flags |= 2u;
+        constants.editorFlags = flags;
+        constants.renderType = static_cast<uint32_t>(mesh.renderType);
+
+        constants.aabbMinX = mesh.boundingBox.min.x;
+        constants.aabbMinY = mesh.boundingBox.min.y;
+        constants.aabbMinZ = mesh.boundingBox.min.z;
+        constants.aabbMaxX = mesh.boundingBox.max.x;
+        constants.aabbMaxY = mesh.boundingBox.max.y;
+        constants.aabbMaxZ = mesh.boundingBox.max.z;
+
+        constants.lodCount = mesh.lodCount;
+        for (uint32_t l = 0; l < Mesh::kMaxLods; ++l)
+        {
+            constants.lodIndexOffset[l] = mesh.lodIndexOffset[l];
+            constants.lodIndexCount[l] = mesh.lodIndexCount[l];
+        }
+        constants.lodShift = mesh.lodShift;
+        constants.lodMeshEnabled = mesh.lodEnabled ? 1u : 0u;
+        constants.lodMeshBias = mesh.lodBias;
+        return constants;
+    }
+
+    uint32_t Scene::GetMeshRefIndirectSlot(const NodeId *node, uint32_t refSlot) const
+    {
+        if (!node)
+            return UINT32_MAX;
+        ValidateNodeId(node);
+        const auto &slots = m_nodeRuntime[node->index].meshRefIndirect;
+        return refSlot < slots.size() ? slots[refSlot] : UINT32_MAX;
+    }
+
+    bool Scene::UpdateStreamedMesh(NodeId *node, uint32_t refSlot, int meshIndex,
+                                   uint32_t vertexCopyCount, uint32_t indexCopyCount, CommandBuffer *cmd)
+    {
+        if (!cmd || !m_buffer || !m_indirectAll || !m_meshConstants || !IsValidMeshIndex(meshIndex))
+            return false;
+        const uint32_t slot = GetMeshRefIndirectSlot(node, refSlot);
+        if (slot == UINT32_MAX || slot >= m_meshCount)
+            return false;
+        const Mesh &mesh = m_meshes[meshIndex];
+
+        // The mesh's reserved ranges must sit inside the GPU buffer laid out at the last rebuild —
+        // store data appended after that rebuild has no GPU backing yet and can't be streamed into.
+        if (static_cast<size_t>(mesh.vertexOffset) + vertexCopyCount > m_verticesCount ||
+            static_cast<size_t>(mesh.positionsOffset) + vertexCopyCount > m_positionsCount ||
+            static_cast<size_t>(mesh.indexOffset) + indexCopyCount > m_indicesCount ||
+            mesh.aabbVertexOffset + 8 > m_aabbVerticesCount)
+        {
+            PE_WARN("Scene::UpdateStreamedMesh: mesh %d ranges outside the uploaded geometry buffer", meshIndex);
+            return false;
+        }
+
+        BufferBarrierInfo b{};
+        b.buffer = m_buffer;
+        b.stageMask = PE_STAGE_VERTEX_INPUT;
+        if (vertexCopyCount > 0)
+        {
+            const size_t vOff = m_verticesOffset + static_cast<size_t>(mesh.vertexOffset) * sizeof(Vertex);
+            cmd->CopyBufferStaged(m_buffer, m_vertexStore.data() + mesh.vertexOffset,
+                                  static_cast<size_t>(vertexCopyCount) * sizeof(Vertex), vOff);
+            b.accessMask = PE_ACCESS_VERTEX_ATTRIBUTE_READ;
+            b.offset = vOff;
+            b.size = static_cast<size_t>(vertexCopyCount) * sizeof(Vertex);
+            cmd->BufferBarrier(b);
+
+            // Depth-prepass/shadows bind the PositionUvVertex stream at the same vertex index.
+            const size_t pOff =
+                m_positionsOffset + static_cast<size_t>(mesh.positionsOffset) * sizeof(PositionUvVertex);
+            cmd->CopyBufferStaged(m_buffer, m_positionUvStore.data() + mesh.positionsOffset,
+                                  static_cast<size_t>(vertexCopyCount) * sizeof(PositionUvVertex), pOff);
+            b.offset = pOff;
+            b.size = static_cast<size_t>(vertexCopyCount) * sizeof(PositionUvVertex);
+            cmd->BufferBarrier(b);
+        }
+        if (indexCopyCount > 0)
+        {
+            const size_t iOff = static_cast<size_t>(mesh.indexOffset) * sizeof(uint32_t);
+            cmd->CopyBufferStaged(m_buffer, m_indexStore.data() + mesh.indexOffset,
+                                  static_cast<size_t>(indexCopyCount) * sizeof(uint32_t), iOff);
+            b.accessMask = PE_ACCESS_INDEX_READ;
+            b.offset = iOff;
+            b.size = static_cast<size_t>(indexCopyCount) * sizeof(uint32_t);
+            cmd->BufferBarrier(b);
+        }
+        // 8 AABB corner vertices (Hi-Z occluder proxy / debug AABB draw).
+        const size_t aOff = m_aabbVerticesOffset + mesh.aabbVertexOffset * sizeof(AabbVertex);
+        cmd->CopyBufferStaged(m_buffer, m_aabbVertexStore.data() + mesh.aabbVertexOffset,
+                              8 * sizeof(AabbVertex), aOff);
+        b.accessMask = PE_ACCESS_VERTEX_ATTRIBUTE_READ;
+        b.offset = aOff;
+        b.size = 8 * sizeof(AabbVertex);
+        cmd->BufferBarrier(b);
+
+        // Indirect draw template: live indexCount (the budget tail is never drawn). LOD-enabled meshes
+        // get firstIndex/indexCount overridden by the cull from Mesh_Constants anyway.
+        PeDrawIndexedIndirectCommand drawCmd{};
+        drawCmd.indexCount = mesh.indexCount;
+        drawCmd.instanceCount = 1;
+        drawCmd.firstIndex = mesh.indexOffset;
+        drawCmd.vertexOffset = static_cast<int32_t>(mesh.vertexOffset);
+        drawCmd.firstInstance = slot;
+        cmd->CopyBufferStaged(m_indirectAll, &drawCmd, PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
+                              static_cast<size_t>(slot) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
+        b.buffer = m_indirectAll;
+        b.stageMask = PE_STAGE_DRAW_INDIRECT | PE_STAGE_COMPUTE_SHADER;
+        b.accessMask = PE_ACCESS_INDIRECT_COMMAND_READ | PE_ACCESS_SHADER_READ;
+        b.offset = static_cast<size_t>(slot) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
+        b.size = PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
+        cmd->BufferBarrier(b);
+
+        // Mesh_Constants (host-mapped write + DX12 device mirror), the AddArenaMesh pattern.
+        Mesh_Constants mc = ComputeMeshConstants(node->index, meshIndex);
+        const size_t mcOffset = static_cast<size_t>(slot) * sizeof(Mesh_Constants);
+        m_meshConstants->Map();
+        BufferRange range{};
+        range.data = &mc;
+        range.offset = mcOffset;
+        range.size = sizeof(Mesh_Constants);
+        m_meshConstants->Copy(1, &range, true);
+        m_meshConstants->Flush(sizeof(Mesh_Constants), mcOffset);
+        m_meshConstants->Unmap();
+        if (m_meshConstantsDevice)
+        {
+            cmd->CopyBuffer(m_meshConstants, m_meshConstantsDevice, sizeof(Mesh_Constants), mcOffset, mcOffset);
+            BufferBarrierInfo mb{};
+            mb.buffer = m_meshConstantsDevice;
+            mb.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
+            mb.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
+            mb.offset = mcOffset;
+            mb.size = sizeof(Mesh_Constants);
+            cmd->BufferBarrier(mb);
+            m_meshConstantsDevice->GetTrackInfo() = mb;
+        }
+        return true;
     }
 } // namespace pe
