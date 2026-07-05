@@ -14,6 +14,7 @@ namespace pe
 namespace pe::voxel
 {
     class ITerrainGenerator;
+    struct MapImage;
 } // namespace pe::voxel
 
 namespace pe::terrain
@@ -45,6 +46,9 @@ namespace pe::terrain
         float seaLevelM = 0.0f; // surface below this world Y gets an underwater colour tint
         // Worldgen source: a grayscale heightmap when set (see MapGen.h), else procedural noise.
         std::string heightmapPath;
+        // Painted caves: grayscale map (Map Painter "Caves" layer) sharing the heightmap's extent and
+        // orientation; pixel value = cave openness carved below the local surface (0 = solid).
+        std::string cavesPath;
         float noiseFeatureScale = 96.0f;
         int noiseSeed = 0;
         float metersPerPixel = 1.0f; // world metres each ring-0 grid cell spans in X/Z (and Y)
@@ -161,6 +165,7 @@ namespace pe::terrain
         vec3 TerrainColor(float y, float normalY) const;
 
         void BuildGenerator();
+        void LoadCavesMap();                    // cfg.cavesPath -> m_cavesMap (+ world extent), empty = none
         void BuildRings();                      // ring layout from cfg (no allocation)
         void AllocateTiles();                   // reserve store ranges + register scene meshes on the host node
         void MeshTile(int ringIdx, Tile &tile); // (re)mesh tile content into its store ranges
@@ -185,6 +190,11 @@ namespace pe::terrain
         TerrainConfig m_cfg{};
         std::shared_ptr<voxel::ITerrainGenerator> m_generator;
         bool m_generatorOverridden = false;
+        // Painted caves map: heightmap-style extent (w/h * metersPerPixel, centred on the bounds
+        // column, both axes flipped); zero OUTSIDE the map so streamed worlds don't tile it.
+        std::unique_ptr<voxel::MapImage> m_cavesMap;
+        float m_cavesCenterX = 0.0f, m_cavesCenterZ = 0.0f;
+        float m_cavesExtentX = 0.0f, m_cavesExtentZ = 0.0f;
 
         std::vector<Ring> m_rings;
         std::vector<Tile> m_tiles; // all rings, ring-major (Ring::firstTile indexes in here)

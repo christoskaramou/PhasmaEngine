@@ -845,7 +845,8 @@ namespace pe
 
         const bool hasMapPainter = GetWidget<MapPainter>() != nullptr;
         addAction("voxelpainter.layer",
-                  "Voxel Map Painter: Select Layer (args: layer 0=surface 1=strata1 2=strata2 3=features)",
+                  "Voxel Map Painter: Select Layer (args: layer 0=surface 1=strata1 2=strata2 3=features "
+                  "4=caves - Terrain node)",
                   "VoxelPainter", "command", hasMapPainter, false, false);
         addAction("voxelpainter.stroke",
                   "Voxel Map Painter: Brush Stroke (args: u, v 0..1; optional radius px, strength, lower, "

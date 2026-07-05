@@ -279,6 +279,9 @@ namespace pe
         float heightMax = 32.0f;   // height offset (m) at map value 1 (white), relative to groundHeight
         float seaLevelM = 0.0f;    // water height (m): surface below this is tinted underwater
         std::string heightmapPath; // grayscale surface map under Assets; empty = noise terrain
+        // Grayscale cave map (paint it in Map Painter): pixel value = cave openness under the surface
+        // (0 = solid); voids pinch closed where the paint fades. Works on noise AND heightmap terrain.
+        std::string cavesPath;
         float noiseFeatureScale = 96.0f;
         int noiseSeed = 0;
         float metersPerPixel = 1.0f;     // world metres each heightmap pixel / mesh cell spans in X/Z

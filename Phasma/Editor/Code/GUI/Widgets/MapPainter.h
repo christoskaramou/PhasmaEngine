@@ -61,6 +61,8 @@ namespace pe
         };
 
         static constexpr int kFeaturesLayer = 3;
+        static constexpr int kCavesLayer = 4; // Terrain node only: painted underground voids
+        static constexpr int kLayerCount = 5;
 
         // The node fields that own a painter layer, resolved per layer: the height layer (0) prefers a
         // Terrain node when one exists; strata/features (1-3) are Voxel World only. Pointers are into the
@@ -99,8 +101,8 @@ namespace pe
         bool DrawPalette();                        // the tile grid; returns true when the selection changed
         void TeleportCameraTo(float px, float py); // Alt+LMB: move the camera over this map pixel (keeps height)
 
-        int m_layer = 0; // 0 = surface height, 1 = strata 1, 2 = strata 2, 3 = features
-        LayerBuffer m_layers[4];
+        int m_layer = 0; // 0 = surface height, 1 = strata 1, 2 = strata 2, 3 = features, 4 = caves
+        LayerBuffer m_layers[kLayerCount];
         bool m_textureDirty = false;
         bool m_haveLastStamp = false;
         bool m_panning = false; // right-drag pans the canvas

@@ -749,6 +749,8 @@ namespace pe
                 t->seaLevelM = tv["seaLevelM"].GetFloat();
             if (tv.HasMember("heightmapPath") && tv["heightmapPath"].IsString())
                 t->heightmapPath = tv["heightmapPath"].GetString();
+            if (tv.HasMember("cavesPath") && tv["cavesPath"].IsString())
+                t->cavesPath = tv["cavesPath"].GetString();
             if (tv.HasMember("noiseFeatureScale"))
                 t->noiseFeatureScale = tv["noiseFeatureScale"].GetFloat();
             if (tv.HasMember("noiseSeed"))
@@ -2029,6 +2031,7 @@ namespace pe
                     tObj.AddMember("heightMax", t.heightMax, allocator);
                     tObj.AddMember("seaLevelM", t.seaLevelM, allocator);
                     tObj.AddMember("heightmapPath", MakeStringValue(t.heightmapPath), allocator);
+                    tObj.AddMember("cavesPath", MakeStringValue(t.cavesPath), allocator);
                     tObj.AddMember("noiseFeatureScale", t.noiseFeatureScale, allocator);
                     tObj.AddMember("noiseSeed", t.noiseSeed, allocator);
                     tObj.AddMember("metersPerPixel", t.metersPerPixel, allocator);

@@ -13,6 +13,22 @@ namespace pe::voxel
 {
     struct VoxelConfig;
 
+    // A loaded grayscale input map (surface height, strata thickness, features, caves). Namespace-scope
+    // so non-generator users (TerrainWorld's caves map) can reuse the loader + bilinear sampling.
+    struct MapImage
+    {
+        int w = 0;
+        int h = 0;
+        std::vector<uint8_t> px; // raw 0..255 maps (strata thickness, feature ids)
+        std::vector<float> pxf;  // signed [-1,1] height scaler (surface map); used when isFloat
+        bool isFloat = false;
+        bool Valid() const { return w > 0; }
+        // signedFloat: the surface height map, stored as float16 [-1,1] (PH16) or a legacy 8-bit
+        // PNG whose gray is remapped to [-1,1]. Otherwise a plain 0..255 grayscale PNG.
+        bool Load(const std::string &configured, const char *what, bool signedFloat);
+        float SampleNorm(float nu, float nv) const; // bilinear, edge-clamped, uv in 0..1
+    };
+
     class MapGen : public ITerrainGenerator
     {
     public:
@@ -30,20 +46,6 @@ namespace pe::voxel
         float SurfaceHeight(float x, float z) const override;
 
     private:
-        struct MapImage
-        {
-            int w = 0;
-            int h = 0;
-            std::vector<uint8_t> px; // raw 0..255 maps (strata thickness, feature ids)
-            std::vector<float> pxf;  // signed [-1,1] height scaler (surface map); used when isFloat
-            bool isFloat = false;
-            bool Valid() const { return w > 0; }
-            // signedFloat: the surface height map, stored as float16 [-1,1] (PH16) or a legacy 8-bit
-            // PNG whose gray is remapped to [-1,1]. Otherwise a plain 0..255 grayscale PNG.
-            bool Load(const std::string &configured, const char *what, bool signedFloat);
-            float SampleNorm(float nu, float nv) const; // bilinear, edge-clamped, uv in 0..1
-        };
-
         // Map a surface scalar v in [-1,1] to a world height (blocks/metres): 0 -> groundHeight,
         // -1 -> +heightMin, +1 -> +heightMax. Cube and smooth paths both route through this.
         float MapHeight(float v) const;

@@ -28,9 +28,14 @@ namespace pe::terrain
         constexpr int kCoarseRings = 2;                      // streaming view rings past ring 0 (x4 cell each)
         constexpr int kMeshBudgetPerUpdate = 3;              // tile re-meshes per frame
         constexpr int kCookBudgetPerUpdate = 2;              // collider cooks per frame
-        constexpr size_t kMaxPendingCmds = 3;                // upload cmds in flight before waiting
-        constexpr int kMaxFieldCellsY = 512;                 // vertical sampling-band cap per tile
-        constexpr float kSkirtDropCells = 3.0f;              // coarse-tile skirt drop, in cells
+        // Painted-cave profile: at full paint (255) the void is kCaveHeightM tall with its roof
+        // kCaveRoofDepthM below the local surface, shrinking toward its centre line as the paint
+        // fades. ponytail: fixed metric profile; per-map depth/height knobs if authors ever need them.
+        constexpr float kCaveRoofDepthM = 3.0f;
+        constexpr float kCaveHeightM = 6.0f;
+        constexpr size_t kMaxPendingCmds = 3;   // upload cmds in flight before waiting
+        constexpr int kMaxFieldCellsY = 512;    // vertical sampling-band cap per tile
+        constexpr float kSkirtDropCells = 3.0f; // coarse-tile skirt drop, in cells
 
         uint32_t RoundUpTo(uint32_t v, uint32_t a)
         {
@@ -120,6 +125,22 @@ namespace pe::terrain
         }
     }
 
+    void TerrainWorld::LoadCavesMap()
+    {
+        m_cavesMap.reset();
+        m_cavesExtentX = m_cavesExtentZ = 0.0f;
+        if (m_cfg.cavesPath.empty())
+            return;
+        auto map = std::make_unique<voxel::MapImage>();
+        if (!map->Load(m_cfg.cavesPath, "caves", false)) // plain 0..255 grayscale; Load warns on failure
+            return;
+        m_cavesCenterX = m_cfg.boundsCenterCx * kBlocksPerColumn + kBlocksPerColumn / 2.0f;
+        m_cavesCenterZ = m_cfg.boundsCenterCz * kBlocksPerColumn + kBlocksPerColumn / 2.0f;
+        m_cavesExtentX = map->w * m_cfg.metersPerPixel;
+        m_cavesExtentZ = map->h * m_cfg.metersPerPixel;
+        m_cavesMap = std::move(map);
+    }
+
     void TerrainWorld::Create(Scene *scene, const TerrainConfig &cfg)
     {
         // Ops seeded via SetSculptOps before Create survive the reset — Create-time meshing must
@@ -135,6 +156,7 @@ namespace pe::terrain
         m_cfg.metersPerPixel = std::max(0.05f, m_cfg.metersPerPixel);
 
         BuildGenerator();
+        LoadCavesMap();
         if (m_cfg.sizeXMeters <= 0)
             m_cfg.sizeXMeters = 256; // no map + no explicit size: a default patch
         if (m_cfg.sizeZMeters <= 0)
@@ -383,6 +405,26 @@ namespace pe::terrain
     {
         float d = m_generator ? m_generator->DensityAtHeight(x, y, z, surfaceHeight)
                               : (surfaceHeight - y);
+        // Painted caves: a void centred kCaveRoofDepthM + halfH below the LOCAL surface, half-height
+        // kCaveHeightM/2 scaled by the map value — bilinear paint pinches it closed at the edges.
+        // Zero outside the map extent (edge-clamping would tile caves across a streamed world).
+        // Applied before sculpt ops so sculpting can open entrances or fill painted caves back in.
+        if (m_cavesMap)
+        {
+            const float nu = 0.5f - (x - m_cavesCenterX) / m_cavesExtentX; // both axes flip, like the
+            const float nv = 0.5f - (z - m_cavesCenterZ) / m_cavesExtentZ; // terrain heightmap sampling
+            if (nu >= 0.0f && nu <= 1.0f && nv >= 0.0f && nv <= 1.0f)
+            {
+                const float v = m_cavesMap->SampleNorm(nu, nv) * (1.0f / 255.0f);
+                if (v > 0.02f) // skip hairline slits from near-zero paint
+                {
+                    const float yc = surfaceHeight - (kCaveRoofDepthM + 0.5f * kCaveHeightM);
+                    const float s = 0.5f * kCaveHeightM * v - std::abs(y - yc); // > 0 inside the void
+                    if (s > 0.0f)
+                        d = std::min(d, -s);
+                }
+            }
+        }
         // CSG sphere ops, in stroke order. The in-sphere-only application keeps the zero set exact and
         // every tile computes the identical field; the (cheap) price is slightly faceted crater rims
         // versus a full SDF blend. ponytail: linear scan; bucket ops per tile if counts ever hurt.
@@ -476,6 +518,13 @@ namespace pe::terrain
         }
         const float rMinX = static_cast<float>(gx0 - 1) * cell, rMaxX = static_cast<float>(gx0 + cellsXZ + 2) * cell;
         const float rMinZ = static_cast<float>(gz0 - 1) * cell, rMaxZ = static_cast<float>(gz0 + cellsXZ + 2) * cell;
+        // Painted caves live within kCaveRoofDepthM + kCaveHeightM below the local surface — extend the
+        // band for tiles overlapping the caves map. ponytail: extent test only (not painted-pixel max),
+        // costs ~(9m / cell) extra field rows on overlapping tiles.
+        if (m_cavesMap && rMaxX > m_cavesCenterX - m_cavesExtentX * 0.5f &&
+            rMinX < m_cavesCenterX + m_cavesExtentX * 0.5f && rMaxZ > m_cavesCenterZ - m_cavesExtentZ * 0.5f &&
+            rMinZ < m_cavesCenterZ + m_cavesExtentZ * 0.5f)
+            minY = std::min(minY, minH - (kCaveRoofDepthM + kCaveHeightM + 1.0f));
         for (const SculptOp &op : m_ops)
         {
             if (op.center.x + op.radius < rMinX || op.center.x - op.radius > rMaxX ||
@@ -1110,6 +1159,8 @@ namespace pe::terrain
         m_rings.clear();
         m_ops.clear();
         m_pendingSculpts.clear();
+        m_cavesMap.reset();
+        m_cavesExtentX = m_cavesExtentZ = 0.0f;
         m_anchorSet = false;
         m_scene = nullptr;
     }

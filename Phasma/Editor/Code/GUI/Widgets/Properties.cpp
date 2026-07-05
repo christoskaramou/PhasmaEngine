@@ -2070,6 +2070,17 @@ namespace pe
                         }
                         ui::ItemTooltip("Grayscale surface map under Assets (paint it in Map Painter): 0..1 maps into "
                                         "Height Range, lerped between pixels, centered on this node. Empty = noise.");
+                        char cbuf[260];
+                        snprintf(cbuf, sizeof(cbuf), "%s", t->cavesPath.c_str());
+                        if (ImGui::InputText("Caves Map", cbuf, sizeof(cbuf)))
+                        {
+                            t->cavesPath = cbuf;
+                            changed = true;
+                        }
+                        ui::ItemTooltip("Grayscale cave map under Assets (paint it in Map Painter's Caves layer): "
+                                        "pixel value = how open the void under the surface is; caves pinch closed "
+                                        "where the paint fades. Same extent/orientation as the heightmap. Reach them "
+                                        "by sculpting an entrance (or via overhang mouths). Empty = none.");
                         if (t->heightmapPath.empty())
                         {
                             changed |= ImGui::DragFloat("Feature Scale", &t->noiseFeatureScale, 0.5f, 8.0f, 1024.0f, "%.0f");
