@@ -239,10 +239,6 @@ namespace pe
         bool lodEnabled = false;         // distance LOD (coarser mesh per lod0Radius band)
         int lod0Radius = 5;              // full-detail radius in columns when LOD is on
         std::string saveDir;             // .pevcol persistence dir under Assets ("" = no persistence)
-        bool smooth = false;             // Surface-Nets isosurface terrain (rounded, sculptable) vs cubes
-        bool physics = false;            // static Jolt triangle-mesh collider on smooth terrain (live toggle)
-        float physicsFriction = 0.5f;    // terrain collider surface friction (live)
-        float physicsRestitution = 0.3f; // terrain collider bounciness (live)
         bool autoRebuild = true;         // worldgen edits apply on their own (debounced); off = only via "Rebuild World"
         // Worldgen (mirrors VoxelConfig; see MapGen.h for the heightmap/strata model):
         float noiseAmplitude = 28.0f;    // peak height above groundY in blocks; 0 = flat plain
@@ -251,10 +247,10 @@ namespace pe
         bool caves = true;
         int seaLevel = -1;         // <0 = auto (groundY - 2), 0 = no water, >0 = absolute blocks
         std::string heightmapPath; // grayscale surface map under Assets; empty = noise terrain
-        float heightMin = -32.0f;  // smooth-heightmap: height offset (m) at map value 0, relative to groundHeight
-        float heightMax = 32.0f;   // smooth-heightmap: height offset (m) at map value 1, relative to groundHeight
-        float groundHeight = 0.0f; // smooth-heightmap datum: the 0.5 gray level sits here (clamped to [min,max])
-        float seaLevelM = -1.0f;   // smooth-heightmap water height (m): surface below this is tinted underwater
+        // Heightmap value 0..1 -> groundHeight + lerp(heightMin, heightMax, value) in blocks (MapGen::MapHeight).
+        float heightMin = -32.0f;
+        float heightMax = 32.0f;
+        float groundHeight = 0.0f;
         std::string strata1Path;   // thickness map of the band under the surface block
         std::string strata2Path;   // thickness map of the band under strata 1
         std::string featuresPath;  // decoration map: 1=tree 2=rock 3=road 4=olive 5=cypress at that pixel
@@ -267,6 +263,30 @@ namespace pe
         int strata1Thickness = 3; // fixed thickness when the strata map is absent
         int strata2Thickness = 8;
         bool rebuildRequested = false; // transient: inspector "Rebuild" (repainted map, same path)
+    };
+
+    // Singleton heightfield-terrain node (TerrainSystem reconciles it). A surface, not a volume: no
+    // blocks, no caves, no digging depth. Worldgen reuses the shared generator seam (a grayscale
+    // heightmap when heightmapPath is set, else noise); only SurfaceHeight is sampled. See TerrainWorld.h.
+    class NodeTerrainTag : public IComponent
+    {
+    public:
+        bool worldEnabled = true;  // build/keep the terrain while the component is enabled
+        int sizeXMeters = 256;     // terrain width (m); 0 with a map = the map's X extent
+        int sizeZMeters = 256;     // terrain depth (m); 0 with a map = the map's Z extent
+        float groundHeight = 0.0f; // datum (m) the mid-gray height level sits at
+        float heightMin = -32.0f;  // height offset (m) at map value 0 (black), relative to groundHeight
+        float heightMax = 32.0f;   // height offset (m) at map value 1 (white), relative to groundHeight
+        float seaLevelM = 0.0f;    // water height (m): surface below this is tinted underwater
+        std::string heightmapPath; // grayscale surface map under Assets; empty = noise terrain
+        float noiseFeatureScale = 96.0f;
+        int noiseSeed = 0;
+        float metersPerPixel = 1.0f;     // world metres each heightmap pixel / mesh cell spans in X/Z
+        bool physics = false;            // static Jolt triangle-mesh collider (live toggle)
+        float physicsFriction = 0.5f;    // collider surface friction (live)
+        float physicsRestitution = 0.3f; // collider bounciness (live)
+        bool autoRebuild = true;         // worldgen edits apply on their own (debounced); off = only via "Rebuild"
+        bool rebuildRequested = false;   // transient: inspector "Rebuild" / Map Painter save (repainted map, same path)
     };
 
     enum class NodeRuntimeUiWidgetType : uint8_t
@@ -393,5 +413,6 @@ namespace pe
         NodeSpriteComponent *sprite = nullptr;
         NodeTriggerZoneTag *triggerZone = nullptr;
         NodeVoxelWorldTag *voxelWorld = nullptr;
+        NodeTerrainTag *terrain = nullptr;
     };
 } // namespace pe

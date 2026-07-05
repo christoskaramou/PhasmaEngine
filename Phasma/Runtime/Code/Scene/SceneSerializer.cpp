@@ -704,16 +704,6 @@ namespace pe
                 v->heightMax = vv["heightMax"].GetFloat();
             if (vv.HasMember("groundHeight"))
                 v->groundHeight = vv["groundHeight"].GetFloat();
-            if (vv.HasMember("seaLevelM"))
-                v->seaLevelM = vv["seaLevelM"].GetFloat();
-            if (vv.HasMember("smooth"))
-                v->smooth = vv["smooth"].GetBool();
-            if (vv.HasMember("physics"))
-                v->physics = vv["physics"].GetBool();
-            if (vv.HasMember("physicsFriction"))
-                v->physicsFriction = vv["physicsFriction"].GetFloat();
-            if (vv.HasMember("physicsRestitution"))
-                v->physicsRestitution = vv["physicsRestitution"].GetFloat();
             if (vv.HasMember("autoRebuild"))
                 v->autoRebuild = vv["autoRebuild"].GetBool();
             if (vv.HasMember("surfaceBlock"))
@@ -730,6 +720,51 @@ namespace pe
                 v->strata1Thickness = vv["strata1Thickness"].GetInt();
             if (vv.HasMember("strata2Thickness"))
                 v->strata2Thickness = vv["strata2Thickness"].GetInt();
+        }
+
+        void RestoreTerrainNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
+        {
+            if (!node || !nodeValue.HasMember("terrain") || !nodeValue["terrain"].IsObject())
+                return;
+
+            const auto &tv = nodeValue["terrain"];
+            scene.AddComponentFlag(node, Component_Terrain);
+            NodeTerrainTag *t = scene.GetTerrainForNode(node);
+            if (!t)
+                return;
+
+            if (tv.HasMember("enabled"))
+                t->worldEnabled = tv["enabled"].GetBool();
+            if (tv.HasMember("sizeXMeters"))
+                t->sizeXMeters = tv["sizeXMeters"].GetInt();
+            if (tv.HasMember("sizeZMeters"))
+                t->sizeZMeters = tv["sizeZMeters"].GetInt();
+            if (tv.HasMember("groundHeight"))
+                t->groundHeight = tv["groundHeight"].GetFloat();
+            if (tv.HasMember("heightMin"))
+                t->heightMin = tv["heightMin"].GetFloat();
+            if (tv.HasMember("heightMax"))
+                t->heightMax = tv["heightMax"].GetFloat();
+            if (tv.HasMember("seaLevelM"))
+                t->seaLevelM = tv["seaLevelM"].GetFloat();
+            if (tv.HasMember("heightmapPath") && tv["heightmapPath"].IsString())
+                t->heightmapPath = tv["heightmapPath"].GetString();
+            if (tv.HasMember("noiseFeatureScale"))
+                t->noiseFeatureScale = tv["noiseFeatureScale"].GetFloat();
+            if (tv.HasMember("noiseSeed"))
+                t->noiseSeed = tv["noiseSeed"].GetInt();
+            if (tv.HasMember("metersPerPixel"))
+                t->metersPerPixel = tv["metersPerPixel"].GetFloat();
+            else if (tv.HasMember("blocksPerPixel")) // pre-rename scenes
+                t->metersPerPixel = static_cast<float>(tv["blocksPerPixel"].GetInt());
+            if (tv.HasMember("physics"))
+                t->physics = tv["physics"].GetBool();
+            if (tv.HasMember("physicsFriction"))
+                t->physicsFriction = tv["physicsFriction"].GetFloat();
+            if (tv.HasMember("physicsRestitution"))
+                t->physicsRestitution = tv["physicsRestitution"].GetFloat();
+            if (tv.HasMember("autoRebuild"))
+                t->autoRebuild = tv["autoRebuild"].GetBool();
         }
 
         void RestoreTriggerZoneNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
@@ -1957,11 +1992,6 @@ namespace pe
                     vObj.AddMember("heightMin", v.heightMin, allocator);
                     vObj.AddMember("heightMax", v.heightMax, allocator);
                     vObj.AddMember("groundHeight", v.groundHeight, allocator);
-                    vObj.AddMember("seaLevelM", v.seaLevelM, allocator);
-                    vObj.AddMember("smooth", v.smooth, allocator);
-                    vObj.AddMember("physics", v.physics, allocator);
-                    vObj.AddMember("physicsFriction", v.physicsFriction, allocator);
-                    vObj.AddMember("physicsRestitution", v.physicsRestitution, allocator);
                     vObj.AddMember("autoRebuild", v.autoRebuild, allocator);
                     vObj.AddMember("surfaceBlock", v.surfaceBlock, allocator);
                     vObj.AddMember("surfaceBands", v.surfaceBands, allocator);
@@ -1971,6 +2001,28 @@ namespace pe
                     vObj.AddMember("strata1Thickness", v.strata1Thickness, allocator);
                     vObj.AddMember("strata2Thickness", v.strata2Thickness, allocator);
                     nodeObj.AddMember("voxelWorld", vObj.Move(), allocator);
+                }
+
+                if ((flags & Component_Terrain) && cache.terrain)
+                {
+                    const NodeTerrainTag &t = *cache.terrain;
+                    rapidjson::Value tObj(rapidjson::kObjectType);
+                    tObj.AddMember("enabled", t.worldEnabled, allocator);
+                    tObj.AddMember("sizeXMeters", t.sizeXMeters, allocator);
+                    tObj.AddMember("sizeZMeters", t.sizeZMeters, allocator);
+                    tObj.AddMember("groundHeight", t.groundHeight, allocator);
+                    tObj.AddMember("heightMin", t.heightMin, allocator);
+                    tObj.AddMember("heightMax", t.heightMax, allocator);
+                    tObj.AddMember("seaLevelM", t.seaLevelM, allocator);
+                    tObj.AddMember("heightmapPath", MakeStringValue(t.heightmapPath), allocator);
+                    tObj.AddMember("noiseFeatureScale", t.noiseFeatureScale, allocator);
+                    tObj.AddMember("noiseSeed", t.noiseSeed, allocator);
+                    tObj.AddMember("metersPerPixel", t.metersPerPixel, allocator);
+                    tObj.AddMember("physics", t.physics, allocator);
+                    tObj.AddMember("physicsFriction", t.physicsFriction, allocator);
+                    tObj.AddMember("physicsRestitution", t.physicsRestitution, allocator);
+                    tObj.AddMember("autoRebuild", t.autoRebuild, allocator);
+                    nodeObj.AddMember("terrain", tObj.Move(), allocator);
                 }
 
                 if ((flags & Component_RuntimeUi) && cache.runtimeUi && cache.runtimeUi->authored)
@@ -3042,6 +3094,8 @@ namespace pe
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreVoxelWorldNode(*this, nodeMap[ni], nodesVal[ni]);
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+                    RestoreTerrainNode(*this, nodeMap[ni], nodesVal[ni]);
+                for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreRuntimeUiNode(*this, nodeMap[ni], nodesVal[ni], &sceneDir);
                 for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
                     RestoreSpriteNode(*this, nodeMap[ni], nodesVal[ni], &sceneDir);
@@ -3745,6 +3799,8 @@ namespace pe
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreVoxelWorldNode(*this, nodeMap[ni], nodesVal[ni]);
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
+            RestoreTerrainNode(*this, nodeMap[ni], nodesVal[ni]);
+        for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreRuntimeUiNode(*this, nodeMap[ni], nodesVal[ni], &prefabDir);
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
             RestoreSpriteNode(*this, nodeMap[ni], nodesVal[ni], &prefabDir);
@@ -4278,6 +4334,8 @@ namespace pe
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreVoxelWorldNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestoreTerrainNode(*this, m_nodeIds[ni], snapshotNodes[ni]);
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreRuntimeUiNode(*this, m_nodeIds[ni], snapshotNodes[ni], nullptr);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreSpriteNode(*this, m_nodeIds[ni], snapshotNodes[ni], nullptr);
@@ -4731,6 +4789,8 @@ namespace pe
                 }
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreVoxelWorldNode(*this, nodeMap[ni], snapshotNodes[ni]);
+                for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
+                    RestoreTerrainNode(*this, nodeMap[ni], snapshotNodes[ni]);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)
                     RestoreRuntimeUiNode(*this, nodeMap[ni], snapshotNodes[ni], nullptr);
                 for (uint32_t ni = 0; ni < snapshotNodeCount; ni++)

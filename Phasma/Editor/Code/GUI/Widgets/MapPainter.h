@@ -6,9 +6,11 @@ namespace pe
 {
     class Image;
     class NodeVoxelWorldTag;
+    struct NodeId;
 
-    // In-editor painter for the Voxel World node's MapGen input maps (surface height / strata
-    // thickness / features). Edits a CPU grayscale buffer with a round falloff brush (or sparse
+    // In-editor painter for terrain input maps. The surface-height layer paints a Terrain node's
+    // heightmap when one exists (else the Voxel World's); strata thickness / features are Voxel World
+    // only. Edits a CPU grayscale buffer with a round falloff brush (or sparse
     // feature stamps), previews it as a texture, saves it as a PNG under Assets, and triggers a
     // world rebuild through the same rebuildRequested path as the inspector's "Rebuild World"
     // button.
@@ -60,13 +62,34 @@ namespace pe
 
         static constexpr int kFeaturesLayer = 3;
 
-        NodeVoxelWorldTag *Tag() const;
-        std::string &LayerPath(NodeVoxelWorldTag *tag, int layer) const;
+        // The node fields that own a painter layer, resolved per layer: the height layer (0) prefers a
+        // Terrain node when one exists; strata/features (1-3) are Voxel World only. Pointers are into the
+        // owning node's live tag so the painter edits either node uniformly. path == null = no owner.
+        struct MapTarget
+        {
+            std::string *path = nullptr;
+            int *blocksPerPixel = nullptr;   // Voxel World node: integer blocks per pixel
+            float *metersPerPixel = nullptr; // Terrain node: float metres per pixel (one non-null)
+            bool *rebuild = nullptr;
+            float *heightMin = nullptr; // layer-0 surface-value readout
+            float *heightMax = nullptr;
+            float *groundHeight = nullptr;
+            NodeId *node = nullptr;   // world position = map center
+            bool bounded = true;      // node position is the map center
+            bool terrainFlip = false; // Terrain samples col 0 = +X, row 0 = +Z (both flip vs Voxel World)
+            bool valid() const { return path != nullptr; }
+            // World units each map pixel spans: metres for Terrain, blocks for the Voxel World.
+            float ppScale() const
+            {
+                return metersPerPixel ? *metersPerPixel : (blocksPerPixel ? (float)*blocksPerPixel : 1.0f);
+            }
+        };
+        MapTarget ResolveTarget(int layer) const;
         LayerBuffer &Buf() { return m_layers[m_layer]; }
         bool OnFeatures() const { return m_layer == kFeaturesLayer; }
-        void SyncLayer(NodeVoxelWorldTag *tag, int layer); // (re)load a buffer when its tag path changed
-        void CreateMap(NodeVoxelWorldTag *tag);            // allocate + save a fresh map, point the tag at it
-        void ResizeMap();                                  // resample the loaded buffer to m_newW x m_newH
+        void SyncLayer(int layer); // (re)load a buffer when its owning node's path changed
+        void CreateMap();          // allocate + save a fresh map, point the owning node's path at it
+        void ResizeMap();          // resample the loaded buffer to m_newW x m_newH
         void StampBrush(float px, float py, float radius, float strength, bool lower, Brush brush, float value);
         void StampFeatures(float px, float py, float radius, FeatureStamp stamp);
         void UploadPreview();

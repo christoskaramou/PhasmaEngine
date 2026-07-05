@@ -46,6 +46,8 @@ namespace pe
             c.triggerZone = entity->CreateComponent<NodeTriggerZoneTag>();
         if ((flag & Component_VoxelWorld) && !c.voxelWorld)
             c.voxelWorld = entity->CreateComponent<NodeVoxelWorldTag>();
+        if ((flag & Component_Terrain) && !c.terrain)
+            c.terrain = entity->CreateComponent<NodeTerrainTag>();
     }
 
     void Scene::RemoveComponentFlag(NodeId *node, uint32_t flag)
@@ -116,6 +118,11 @@ namespace pe
         {
             entity->RemoveComponent<NodeVoxelWorldTag>();
             c.voxelWorld = nullptr;
+        }
+        if ((flag & Component_Terrain) && c.terrain)
+        {
+            entity->RemoveComponent<NodeTerrainTag>();
+            c.terrain = nullptr;
         }
     }
 
@@ -627,6 +634,32 @@ namespace pe
         if (!IsNodeAlive(node))
             return nullptr;
         return m_nodeComponentCache[node->index].voxelWorld;
+    }
+
+    NodeId *Scene::CreateTerrainNode(NodeId *parent, bool markDirty)
+    {
+        if (NodeId *existing = GetTerrainNode())
+            return existing; // one terrain per scene (TerrainSystem holds a single world)
+        NodeId *node = CreateNode("Terrain", parent);
+        AddComponentFlag(node, Component_Terrain);
+        if (markDirty)
+            MarkDirty();
+        return node;
+    }
+
+    NodeId *Scene::GetTerrainNode() const
+    {
+        for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
+            if (m_nodeComponentCache[i].terrain && IsNodeAlive(m_nodeIds[i]))
+                return m_nodeIds[i];
+        return nullptr;
+    }
+
+    NodeTerrainTag *Scene::GetTerrainForNode(const NodeId *node) const
+    {
+        if (!IsNodeAlive(node))
+            return nullptr;
+        return m_nodeComponentCache[node->index].terrain;
     }
 
     // Blend src into dst by weight t (0..1): floats lerp, ints round, bools snap at t>=0.5. Field

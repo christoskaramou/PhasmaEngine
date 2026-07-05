@@ -230,6 +230,10 @@ namespace pe
         NodeId *CreateVoxelWorldNode(NodeId *parent = nullptr, bool markDirty = true);
         NodeId *GetVoxelWorldNode() const;
         NodeVoxelWorldTag *GetVoxelWorldForNode(const NodeId *node) const;
+        // --- Terrain: one singleton heightfield node driving TerrainSystem ---
+        NodeId *CreateTerrainNode(NodeId *parent = nullptr, bool markDirty = true);
+        NodeId *GetTerrainNode() const;
+        NodeTerrainTag *GetTerrainForNode(const NodeId *node) const;
         // Highest-priority post-process-enabled zone whose bounds contain cameraPos, blended over the
         // scene default. Returns null when none apply, so the caller falls back to the scene default.
         PostProcessProfile *ResolvePostProcessProfile(const vec3 &cameraPos);
@@ -546,6 +550,8 @@ namespace pe
                 flags |= Component_TriggerZone;
             if (c.voxelWorld)
                 flags |= Component_VoxelWorld;
+            if (c.terrain)
+                flags |= Component_Terrain;
             if (c.runtimeUi)
                 flags |= Component_RuntimeUi;
             if (c.prefab)

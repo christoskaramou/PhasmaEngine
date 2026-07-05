@@ -21,9 +21,9 @@ namespace pe
         if (!desc)
             return;
 
-        // The voxel terrain collider (Mesh shape) is cooked and owned by the Voxel World node's
-        // "Physics Collision" toggle. Show it read-only here — it's visible but not hand-editable,
-        // since the runtime host is rebuilt on every terrain change and would overwrite any edit.
+        // The terrain collider (Mesh shape) is cooked and owned by the Terrain node's "Physics Collision"
+        // toggle. Show it read-only here — it's visible but not hand-editable, since the runtime host is
+        // rebuilt on every terrain change and would overwrite any edit.
         if (desc->shapeType == PhysicsShapeType::Mesh)
         {
             ImGui::TextDisabled("Body Type:    Static");
@@ -31,7 +31,7 @@ namespace pe
             ImGui::TextDisabled("Friction:     %.2f", desc->friction);
             ImGui::TextDisabled("Restitution:  %.2f", desc->restitution);
             ImGui::Spacing();
-            ImGui::TextWrapped("Managed by the Voxel World node's Physics Collision toggle — "
+            ImGui::TextWrapped("Managed by the Terrain node's Physics Collision toggle — "
                                "select that node to change friction / restitution.");
             return;
         }

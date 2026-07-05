@@ -218,6 +218,18 @@ namespace pe
             selection.Select(node, SelectionType::Node);
         };
 
+        auto createTerrain = [&scene, &selection, &recordSnapshot]()
+        {
+            if (NodeId *existing = scene.GetTerrainNode())
+            {
+                selection.Select(existing, SelectionType::Node);
+                return;
+            }
+            recordSnapshot("Added Terrain");
+            NodeId *node = scene.CreateTerrainNode();
+            selection.Select(node, SelectionType::Node);
+        };
+
         auto createSceneSettings = [&scene, &selection, &recordSnapshot]()
         {
             if (NodeId *existing = scene.GetSceneSettingsNode())
@@ -471,6 +483,11 @@ namespace pe
 
             if (!parent)
             {
+                if (!scene.GetTerrainNode() && ImGui::MenuItem("Terrain"))
+                    createTerrain();
+                if (!scene.GetTerrainNode())
+                    ui::ItemTooltip("Create the heightfield terrain node (surface from a heightmap or noise). One per scene.");
+
                 if (ImGui::MenuItem("Trigger Zone"))
                     createTriggerZone();
                 ui::ItemTooltip("Create a Trigger Zone (script on_enter/on_exit + post-process + audio sections).");
