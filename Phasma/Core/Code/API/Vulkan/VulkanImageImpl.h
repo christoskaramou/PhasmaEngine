@@ -88,4 +88,9 @@ namespace pe
     // VkImage handles. Lives here (not Image_Internal.h) so the neutral header
     // does not leak vk::Image.
     Image::Impl *CreateSwapchainImageImpl(Image *owner, vk::Image externalImage);
+
+    // Vulkan barrier recorders. The api-switching Image_Barrier(s)_Backend
+    // dispatchers live in the neutral Image.cpp; these hold the pure Vulkan path.
+    void Image_Barrier_Vulkan(CommandBuffer *cmd, const ImageBarrierInfo &info);
+    void Image_Barriers_Vulkan(CommandBuffer *cmd, const std::vector<ImageBarrierInfo> &infos);
 } // namespace pe

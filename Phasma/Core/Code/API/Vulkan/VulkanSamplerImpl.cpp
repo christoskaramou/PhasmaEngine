@@ -1,7 +1,4 @@
 #include "API/Vulkan/VulkanSamplerImpl.h"
-#if defined(PE_WIN32)
-#include "API/DX12/Dx12SamplerImpl.h"
-#endif
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
@@ -154,19 +151,4 @@ namespace pe
             VulkanRhi::Device().destroySampler(m_sampler);
     }
 
-    Sampler::Impl *CreateSamplerImpl(Sampler *owner, const SamplerDesc &desc)
-    {
-        switch (RHII.GetApi())
-        {
-        case PE_GRAPHICS_API_VULKAN:
-            return new VulkanSamplerImpl(owner, desc);
-#if defined(PE_WIN32)
-        case PE_GRAPHICS_API_DX12:
-            return new Dx12SamplerImpl(owner, desc);
-#endif
-        default:
-            PE_ERROR("CreateSamplerImpl: unsupported graphics api %u", static_cast<uint32_t>(RHII.GetApi()));
-            return nullptr;
-        }
-    }
 } // namespace pe

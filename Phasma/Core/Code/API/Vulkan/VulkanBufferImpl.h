@@ -36,4 +36,9 @@ namespace pe
     {
         return buffer ? VulkanBufferImpl::From(buffer)->m_buffer : vk::Buffer{};
     }
+
+    // Vulkan barrier recorders. The api-switching Buffer_Barrier(s)_Backend
+    // dispatchers live in the neutral Buffer.cpp; these hold the pure Vulkan path.
+    void Buffer_Barrier_Vulkan(CommandBuffer *cmd, const BufferBarrierInfo &info);
+    void Buffer_Barriers_Vulkan(CommandBuffer *cmd, const std::vector<BufferBarrierInfo> &infos);
 } // namespace pe
