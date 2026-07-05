@@ -293,9 +293,14 @@ namespace pe
         float collisionRadiusM = 0.0f;   // colliders within this range of the camera (0 = all tiles; live)
         bool autoRebuild = true;         // worldgen edits apply on their own (debounced); off = only via "Rebuild"
         bool rebuildRequested = false;   // transient: inspector "Rebuild" / Map Painter save (repainted map, same path)
-        // Persistent CSG brush strokes (xyz = centre, |w| = radius, w < 0 digs) — serialized with the
-        // scene; TerrainSystem syncs live-world sculpts back here and seeds recreated worlds from it.
-        std::vector<vec4> sculptOps;
+        // Painted mesh scatter: map pixel value = 1-based index into scatterMeshes (builtin
+        // "tree"/"rock"/"grass" or a model asset path); instances bake into the terrain tiles.
+        std::string scatterPath;
+        std::vector<std::string> scatterMeshes;
+        // Persistent brush strokes, flat 7-float records [type, cx, cy, cz, radius, a, b]: type 0 =
+        // CSG sphere (a = 1 digs), type 1 = level toward y = a with weight b. Serialized with the
+        // scene; TerrainSystem syncs live-world ops back here and seeds recreated worlds from it.
+        std::vector<float> terrainOps;
     };
 
     enum class NodeRuntimeUiWidgetType : uint8_t

@@ -30,6 +30,7 @@
 #include "Widgets/LightWidget.h"
 #include "Widgets/Loading.h"
 #include "Widgets/MapPainter.h"
+#include "Widgets/TerrainBrush.h"
 #include "Widgets/MeshWidget.h"
 #include "Widgets/ProfilerWidget.h"
 #include "Widgets/Particles.h"
@@ -846,15 +847,17 @@ namespace pe
         const bool hasMapPainter = GetWidget<MapPainter>() != nullptr;
         addAction("voxelpainter.layer",
                   "Voxel Map Painter: Select Layer (args: layer 0=surface 1=strata1 2=strata2 3=features "
-                  "4=caves - Terrain node)",
+                  "4=caves 5=scatter - 4/5 Terrain node)",
                   "VoxelPainter", "command", hasMapPainter, false, false);
         addAction("voxelpainter.stroke",
                   "Voxel Map Painter: Brush Stroke (args: u, v 0..1; optional radius px, strength, lower, "
                   "brush raise|smooth|flatten|set on gray layers or tree|rock|olive|cypress|block|erase on the "
-                  "features layer, value = target for set / block id for block)",
+                  "features layer, value = target for set / block id for block; scatter layer: brush = numeric "
+                  "kind id 1..N, 0 erases, strokes apply live)",
                   "VoxelPainter", "command", hasMapPainter, false, false);
-        addAction("voxelpainter.save", "Voxel Map Painter: Save PNG + Rebuild World", "VoxelPainter", "command",
-                  hasMapPainter, false, false);
+        addAction("voxelpainter.save", "Voxel Map Painter: Save PNG + Rebuild World (scatter: persists only, "
+                                       "already applied live)",
+                  "VoxelPainter", "command", hasMapPainter, false, false);
 
         addAction("status.console_errors", "Show Console Errors", "Status", "command", GetWidget<Console>() != nullptr, false, false);
         addAction("status.console_warnings", "Show Console Warnings", "Status", "command", GetWidget<Console>() != nullptr, false, false);
@@ -3204,6 +3207,7 @@ namespace pe
         auto shaderEditor = std::make_shared<ShaderEditor>();
         auto spriteEditor = std::make_shared<SpriteEditor>();
         auto mapPainter = std::make_shared<MapPainter>();
+        auto terrainBrush = std::make_shared<TerrainBrush>();
         auto runtimeUiPalette = std::make_shared<RuntimeUiPalette>();
         auto sceneScripts = std::make_shared<SceneScripts>();
         auto animTimeline = std::make_shared<AnimationTimeline>();
@@ -3236,6 +3240,7 @@ namespace pe
             shaderEditor,
             spriteEditor,
             mapPainter,
+            terrainBrush,
             runtimeUiPalette,
             sceneScripts,
             animTimeline,
@@ -3266,6 +3271,7 @@ namespace pe
                                shaderEditor,
                                spriteEditor,
                                mapPainter,
+                               terrainBrush,
                                runtimeUiPalette,
                                sceneScripts,
                                animTimeline};

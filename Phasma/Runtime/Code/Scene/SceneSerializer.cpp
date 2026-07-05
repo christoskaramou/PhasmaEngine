@@ -773,13 +773,37 @@ namespace pe
                 t->collisionRadiusM = tv["collisionRadiusM"].GetFloat();
             if (tv.HasMember("autoRebuild"))
                 t->autoRebuild = tv["autoRebuild"].GetBool();
-            if (tv.HasMember("sculptOps") && tv["sculptOps"].IsArray())
+            if (tv.HasMember("scatterPath") && tv["scatterPath"].IsString())
+                t->scatterPath = tv["scatterPath"].GetString();
+            if (tv.HasMember("scatterMeshes") && tv["scatterMeshes"].IsArray())
             {
+                t->scatterMeshes.clear();
+                for (const auto &s : tv["scatterMeshes"].GetArray())
+                    if (s.IsString())
+                        t->scatterMeshes.emplace_back(s.GetString());
+            }
+            if (tv.HasMember("terrainOps") && tv["terrainOps"].IsArray())
+            {
+                const auto &ops = tv["terrainOps"];
+                t->terrainOps.clear();
+                t->terrainOps.reserve(ops.Size());
+                for (rapidjson::SizeType i = 0; i + 6 < ops.Size(); i += 7)
+                    for (rapidjson::SizeType c = 0; c < 7; ++c)
+                        t->terrainOps.push_back(ops[i + c].GetFloat());
+            }
+            else if (tv.HasMember("sculptOps") && tv["sculptOps"].IsArray())
+            {
+                // Legacy flat vec4 spheres (xyz = centre, |w| = radius, w < 0 digs) -> 7-float records.
                 const auto &ops = tv["sculptOps"];
-                t->sculptOps.clear();
+                t->terrainOps.clear();
                 for (rapidjson::SizeType i = 0; i + 3 < ops.Size(); i += 4)
-                    t->sculptOps.emplace_back(ops[i].GetFloat(), ops[i + 1].GetFloat(), ops[i + 2].GetFloat(),
-                                              ops[i + 3].GetFloat());
+                {
+                    const float w = ops[i + 3].GetFloat();
+                    const float rec[7] = {0.0f, ops[i].GetFloat(), ops[i + 1].GetFloat(),
+                                          ops[i + 2].GetFloat(), std::abs(w), w < 0.0f ? 1.0f : 0.0f,
+                                          0.0f};
+                    t->terrainOps.insert(t->terrainOps.end(), rec, rec + 7);
+                }
             }
         }
 
@@ -2042,18 +2066,21 @@ namespace pe
                     tObj.AddMember("overhangs", t.overhangs, allocator);
                     tObj.AddMember("collisionRadiusM", t.collisionRadiusM, allocator);
                     tObj.AddMember("autoRebuild", t.autoRebuild, allocator);
-                    if (!t.sculptOps.empty())
+                    tObj.AddMember("scatterPath", MakeStringValue(t.scatterPath), allocator);
+                    if (!t.scatterMeshes.empty())
                     {
-                        // Flat float quads: xyz = centre, |w| = radius, w < 0 digs.
+                        rapidjson::Value meshes(rapidjson::kArrayType);
+                        for (const std::string &s : t.scatterMeshes)
+                            meshes.PushBack(MakeStringValue(s), allocator);
+                        tObj.AddMember("scatterMeshes", meshes.Move(), allocator);
+                    }
+                    if (!t.terrainOps.empty())
+                    {
+                        // Flat 7-float records [type, cx, cy, cz, radius, a, b] — see NodeTerrainTag.
                         rapidjson::Value ops(rapidjson::kArrayType);
-                        for (const vec4 &o : t.sculptOps)
-                        {
-                            ops.PushBack(o.x, allocator);
-                            ops.PushBack(o.y, allocator);
-                            ops.PushBack(o.z, allocator);
-                            ops.PushBack(o.w, allocator);
-                        }
-                        tObj.AddMember("sculptOps", ops.Move(), allocator);
+                        for (const float f : t.terrainOps)
+                            ops.PushBack(f, allocator);
+                        tObj.AddMember("terrainOps", ops.Move(), allocator);
                     }
                     nodeObj.AddMember("terrain", tObj.Move(), allocator);
                 }

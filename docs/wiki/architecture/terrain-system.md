@@ -43,10 +43,20 @@ density(x,y,z) = generator->DensityAtHeight(x,y,z, h(x,z))   // h cached once pe
   persistent truth — a tile streamed out and back re-applies them. Digging sideways into a cliff
   undercuts it; a subtract below the surface makes a grotto with the surface intact. Lua:
   `terrain.sculpt(x, z, r, amount)` (raycasts the true surface first, so repeat digs burrow) and
-  `terrain.sculpt3d(x, y, z, r, amount)`. Ops serialize with the scene (`sculptOps` on the terrain
-  tag — flat vec4s: xyz centre, |w| radius, w < 0 digs; TerrainSystem syncs world → tag as you
-  sculpt and seeds every recreate from it), so sculpts survive save/load and structural rebuilds.
-  Sculpts made during play persist after stop — matching the mesh, which never reverts.
+  `terrain.sculpt3d(x, y, z, r, amount)`.
+- **Level ops** (smooth/flatten): a second op type pulls the density toward the plane `y = targetY`
+  inside the sphere with a quartic falloff (C1 at the rim, so strokes leave no seam) and a per-stamp
+  `weight` — weight 1 is a hard flatten, partial weights toward a local surface average make a
+  smooth brush that converges over a held stroke. Lua: `terrain.flatten(x, z, r, [y], [weight])`
+  (default target = the true surface under the centre) and `terrain.smooth(x, z, r, [strength])`.
+  Sphere and level ops live in ONE ordered list (stroke order matters: flatten-after-dig fills the
+  hole, dig-after-flatten re-opens it).
+- **Op persistence**: ops serialize with the scene as `terrainOps` on the terrain tag — flat 7-float
+  records `[type, cx, cy, cz, radius, a, b]`; type 0 = sphere (a = 1 digs), type 1 = level (a =
+  targetY, b = weight). Legacy `sculptOps` vec4 records still load (converted to sphere records).
+  TerrainSystem syncs world → tag as you sculpt and seeds every recreate from it, so ops survive
+  save/load and structural rebuilds. Sculpts made during play persist after stop — matching the
+  mesh, which never reverts.
 - **Painted caves**: `cavesPath` (tag/inspector/Lua `caves_map`) is a grayscale map painted in Map
   Painter's "Caves (Terrain)" layer, sharing the heightmap's extent/orientation (centred on the
   bounds column, both axes flipped, zero OUTSIDE the map so streamed worlds don't tile it). Pixel
@@ -56,6 +66,50 @@ density(x,y,z) = generator->DensityAtHeight(x,y,z, h(x,z))   // h cached once pe
   natural mouths. A heightmap can never roof a void — this layer is how caves get painted top-down.
 - `terrain.raycast` / `IsSolidCell` march the density (overhang- and sculpt-aware);
   `terrain.height` is the pure worldgen heightfield.
+- **Interior tint**: vertices well below their column surface with solid overhead (cave floors and
+  walls, checked with two density taps above the vertex) and down-facing undersides blend to a rock
+  colour, so painted caves and grottos stop reading grass-green inside. Pure vertex colouring, no
+  shader change.
+
+## Painted mesh scatter (trees, rocks, grass, props)
+
+A grayscale **scatter map** (`scatterPath`, same extent/orientation rules as the caves map) whose
+pixel value is a 1-based index into `scatterMeshes` on the terrain tag: builtin low-poly templates
+(`"tree"`, `"rock"`, `"grass"` — `Terrain/ScatterTemplates.*`) or any model asset path (baked at
+Create: node transforms + material base colour folded into vertices, capped at 2500 verts —
+low-poly props only, they are duplicated per instance).
+
+Instances are **baked into the ring-0 tile geometry at mesh time** — the engine has no GPU
+instancing and per-instance nodes would be thousands of draws, so props ride everything the tiles
+already have: streamed in-place updates, Hi-Z/GPU cull, the meshopt LOD chain, shadows, and the
+per-tile Jolt collider. Placement is deterministic per map pixel (anchor = texel centre, yaw/scale
+from a pixel hash, snapped to the TRUE surface by a density march — sculpt/cave aware; skipped when
+carved away or underwater), so re-meshed tiles always regenerate identical props. Non-colliding
+kinds (grass) are appended after colliding ones and excluded from the collider via a lod0 prefix
+(`Tile::collideIndices`). The measured worst-tile vertex demand joins the ring-0 budget at load;
+a per-tile cap (8192 scatter verts) keeps dense paint from grow-looping the ring.
+
+Painting routes:
+- **Map Painter layer 5 "Scatter (Terrain)"** — jittered-grid stamps like the voxel Features layer
+  (idempotent: dragging never densifies), kind combo from `scatterMeshes` + Erase. Strokes apply
+  LIVE through `TerrainWorld::UpdateScatterMap` (touched tiles re-mesh + re-cook, no rebuild); Save
+  just persists the PNG.
+- **Viewport Terrain Brush** in Scatter mode (below) plants/erases directly on the 3D terrain.
+- **Editor actions**: `voxelpainter.layer {layer:5}` + `voxelpainter.stroke {u,v,radius, brush:
+  <kind id 1..N, 0 erases>}` + `voxelpainter.save`.
+- Coarse rings never carry props (like sculpts/overhangs — pop at the fine rim is the accepted
+  trade).
+
+## Viewport Terrain Brush
+
+`TerrainBrush` (editor widget, Windows menu) sculpts in the Scene view: SceneView feeds it the
+mouse each frame; it raycasts the terrain density under the cursor, draws a projected ring decal
+(ImDrawList polyline — the engine has no 3D decal API), and applies strokes as deferred ops
+(`QueueSculpt`/`QueueLevel`, the safe mid-frame entry). While armed and over terrain it owns the
+left button (object picking is skipped). Modes: Raise/Dig (CSG spheres at the 3D hit — digging a
+cliff face undercuts it; Shift inverts), Smooth (level toward the average of 5 down-ray taps),
+Flatten (level toward the stroke-start height), Scatter (routes through the Map Painter's scatter
+layer so the map stays the single truth). Stamps are spaced at 0.45·radius along a held stroke.
 
 ### Watertight tile seams (SurfaceNetsTile contract)
 
@@ -92,13 +146,19 @@ play toggles, so bodies persist; `SetPhysicsEnabled(false)` drops them all.
 ## Config / plumbing
 
 `TerrainConfig` ⇄ `NodeTerrainTag` (inspector under the Terrain node, serializer keys `streaming`,
-`overhangs`, `collisionRadiusM`, Lua `node:set_terrain{streaming=, overhangs=, collision_radius_m=}`).
-`streaming`/`overhangs` are structural (rebuild, debounced); collision radius and physics knobs are
-live. Colour bands normalize to the CONFIGURED height range so they never shift while streaming.
+`overhangs`, `collisionRadiusM`, `scatterPath`, `scatterMeshes`, Lua `node:set_terrain{streaming=,
+overhangs=, collision_radius_m=, scatter_map=, scatter_meshes={...}}`). `streaming`/`overhangs`/
+scatter config are structural (rebuild, debounced); collision radius and physics knobs are live
+(and scatter PAINT is live — only the config strings rebuild). Colour bands normalize to the
+CONFIGURED height range so they never shift while streaming.
 
 ## Known limits / follow-ups
 
 - Meshing is main-thread, budgeted (~3 tiles/frame; overhang tiles cost ~5–10 ms each) — worker
   threads are the next step if streaming while walking ever stutters.
 - RT/BLAS does not track in-place tile updates (stale RT terrain until some full rebuild).
-- Coarse rings ignore sculpts/overhangs; grow leaks the old range until the next scene load.
+- Coarse rings ignore sculpts/overhangs/scatter; grow leaks the old range until the next scene load.
+- Scatter props share the terrain material (vertex colours, no textures) — textured props need
+  per-material instanced draws, a render-side feature that does not exist yet.
+- Terrain texturing is still per-vertex colour bands + the interior tint; triplanar splat/material
+  layers with a paintable splat map are the designed next step (shader + Map Painter layer).

@@ -39,6 +39,41 @@ namespace pe
                             ts->World()->QueueSculpt(vec3(x, y, z), radius, amount);
                 });
 
+                // Flatten brush: pull the surface inside the radius toward target_y (default: the
+                // surface height under (x, z)). One stamp with weight 1 flattens hard, soft rim.
+                terrain.set_function("flatten", [](float x, float z, float radius, sol::optional<float> targetY,
+                                                   sol::optional<float> weight) {
+                    auto *ts = GetGlobalSystem<terrain::TerrainSystem>();
+                    if (!ts || !ts->World())
+                        return;
+                    terrain::TerrainWorld *w = ts->World();
+                    vec3 pt(x, w->SampleHeight(x, z), z), n(0.0f);
+                    w->Raycast(vec3(x, pt.y + 200.0f, z), vec3(0.0f, -1.0f, 0.0f), 4000.0f, pt, n);
+                    w->QueueLevel(pt, radius, targetY.value_or(pt.y), weight.value_or(1.0f));
+                });
+
+                // Smooth brush: gentle pull toward the local surface average (repeat to converge).
+                terrain.set_function("smooth", [](float x, float z, float radius, sol::optional<float> strength) {
+                    auto *ts = GetGlobalSystem<terrain::TerrainSystem>();
+                    if (!ts || !ts->World())
+                        return;
+                    terrain::TerrainWorld *w = ts->World();
+                    vec3 pt(x, w->SampleHeight(x, z), z), n(0.0f);
+                    w->Raycast(vec3(x, pt.y + 200.0f, z), vec3(0.0f, -1.0f, 0.0f), 4000.0f, pt, n);
+                    float avg = 0.0f;
+                    int count = 0;
+                    for (int i = 0; i < 5; ++i) // centre + 4 half-radius taps: the level target
+                    {
+                        const float sx = x + (i == 1 ? radius * 0.5f : i == 2 ? -radius * 0.5f : 0.0f);
+                        const float sz = z + (i == 3 ? radius * 0.5f : i == 4 ? -radius * 0.5f : 0.0f);
+                        vec3 sp(sx, w->SampleHeight(sx, sz), sz), sn(0.0f);
+                        w->Raycast(vec3(sx, sp.y + 200.0f, sz), vec3(0.0f, -1.0f, 0.0f), 4000.0f, sp, sn);
+                        avg += sp.y;
+                        ++count;
+                    }
+                    w->QueueLevel(pt, radius, avg / count, std::clamp(strength.value_or(0.35f), 0.0f, 1.0f));
+                });
+
                 // Surface world-Y at (x, z). Very low when there is no terrain.
                 terrain.set_function("height", [](float x, float z) -> float {
                     auto *ts = GetGlobalSystem<terrain::TerrainSystem>();

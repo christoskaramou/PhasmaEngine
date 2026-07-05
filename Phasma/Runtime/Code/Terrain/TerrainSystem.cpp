@@ -45,6 +45,9 @@ namespace pe::terrain
             h = HashF(h, cfg.seaLevelM);
             h = HashString(h, cfg.heightmapPath);
             h = HashString(h, cfg.cavesPath);
+            h = HashString(h, cfg.scatterPath);
+            for (const std::string &s : cfg.scatterMeshes)
+                h = HashString(h, s);
             h = HashF(h, cfg.noiseFeatureScale);
             h = HashInt(h, cfg.noiseSeed);
             h = HashF(h, cfg.metersPerPixel);
@@ -111,14 +114,14 @@ namespace pe::terrain
         return m_world.get();
     }
 
-    TerrainWorld *TerrainSystem::CreateWorld(Scene *scene, const TerrainConfig &cfg, const std::vector<vec4> *sculptOps)
+    TerrainWorld *TerrainSystem::CreateWorld(Scene *scene, const TerrainConfig &cfg, const std::vector<float> *ops)
     {
         if (!m_world)
             m_world = std::make_unique<TerrainWorld>();
         else
             m_world->Destroy();
-        if (sculptOps)
-            m_world->SetSculptOps(*sculptOps); // before Create — tiles apply ops as they mesh
+        if (ops)
+            m_world->SetOps(*ops); // before Create — tiles apply ops as they mesh
         m_world->Create(scene, cfg);
         m_componentOwned = false;
         m_appliedHash = 0;
@@ -159,6 +162,8 @@ namespace pe::terrain
         cfg.seaLevelM = tag->seaLevelM;
         cfg.heightmapPath = tag->heightmapPath;
         cfg.cavesPath = tag->cavesPath;
+        cfg.scatterPath = tag->scatterPath;
+        cfg.scatterMeshes = tag->scatterMeshes;
         cfg.noiseFeatureScale = tag->noiseFeatureScale;
         cfg.noiseSeed = tag->noiseSeed;
         cfg.metersPerPixel = tag->metersPerPixel;
@@ -196,13 +201,13 @@ namespace pe::terrain
             ++m_pendingFrames;
         }
 
-        // Sculpt ops live on the world but persist through the tag (serialized with the scene, seeds
+        // Brush ops live on the world but persist through the tag (serialized with the scene, seeds
         // every recreate — so sculpts survive structural rebuilds too). Sync tag <- world only while
         // the world is ALIVE: a dead one (scene load wiped it) must not clobber ops just restored
         // from the file. Ops only append, so a count check suffices.
         if (m_world && m_componentOwned && m_world->IsAlive() &&
-            m_world->SculptOpCount() != tag->sculptOps.size())
-            m_world->GetSculptOps(tag->sculptOps);
+            m_world->OpCount() * 7 != tag->terrainOps.size())
+            m_world->GetOps(tag->terrainOps);
 
         const bool aliveDead = m_world && !m_world->IsAlive();
         const bool configChanged =
@@ -211,7 +216,7 @@ namespace pe::terrain
         bool created = false;
         if (!m_world || aliveDead || forceRebuild || configChanged)
         {
-            CreateWorld(scene, cfg, &tag->sculptOps);
+            CreateWorld(scene, cfg, &tag->terrainOps);
             m_componentOwned = true;
             m_appliedHash = hash;
             m_appliedPhysics = tag->physics;

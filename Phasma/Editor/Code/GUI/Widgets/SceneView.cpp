@@ -17,6 +17,7 @@
 #include "Scene/SelectionManager.h"
 #include "Script/Bindings/Input/InputState.h"
 #include "Systems/AnimationSystem.h"
+#include "TerrainBrush.h"
 #include "Systems/RendererSystem.h"
 #include "UI/RuntimeUi.h"
 #include "imgui/ImGuizmo.h"
@@ -902,8 +903,17 @@ namespace pe
         const bool usingGizmo = !playMode && (ImGuizmo::IsUsing() || s_orientationGizmoActive || s_stripIkGizmoActive);
         const bool runtimeUiMouseCaptured = InputState::IsMouseCapturedByUi();
 
+        // Terrain Brush viewport tool: while armed and over terrain it draws its decal and applies
+        // strokes, owning the left mouse button (object picking below is skipped).
+        bool terrainBrushCaptured = false;
+        if (!playMode && !overGizmo && !usingGizmo && !runtimeUiMouseCaptured)
+            if (TerrainBrush *brush = m_gui ? m_gui->GetWidget<TerrainBrush>() : nullptr; brush && brush->Active())
+                if (Scene *brushScene = GetActiveScene())
+                    terrainBrushCaptured = brush->HandleViewport(brushScene->GetActiveCamera(), ImGui::GetMousePos(),
+                                                                 imageMin, imageSize, imageHovered);
+
         // Input (picking / focus) only when not interacting with gizmos
-        if (!playMode && !overGizmo && !usingGizmo)
+        if (!playMode && !overGizmo && !usingGizmo && !terrainBrushCaptured)
         {
             if (imageHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
