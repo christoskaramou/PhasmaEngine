@@ -8,13 +8,13 @@ PhasmaEngine is a Vulkan and DirectX 12 3D engine for learning graphics techniqu
 
 ### Rendering
 * Deferred Rendering
-* Ray Tracing (Vulkan backend)
-* Hybrid RT (Transparency/Transmission/Refraction, Vulkan backend)
+* Ray Tracing — full and hybrid modes (Vulkan and DirectX 12 / DXR)
+* Hybrid RT transparency: transmission, refraction, Fresnel/TIR
 * Physically Based Rendering (PBR)
 * Image Based Lighting (IBL)
 * Screen Space Ambient Occlusion (SSAO)
 * Screen Space Reflections (SSR)
-* Cascaded Shadow Maps
+* Cascaded Shadow Maps (GPU-culled cascades)
 * Bloom
 * Depth of Field
 * Motion Blur
@@ -36,12 +36,23 @@ PhasmaEngine is a Vulkan and DirectX 12 3D engine for learning graphics techniqu
 * Multiple model formats loading (via Assimp)
 * Mesh optimization (via meshoptimizer)
 * Directional, Point, Spot, and Area lights
-* Scene save/load (.pescene)
+* Cameras and lights as scene nodes (Add Component)
+* Scene save/load (.pescene) and prefabs (save/instantiate node hierarchies)
+* Physics — Jolt rigid bodies, trigger zones, static terrain/voxel colliders; Box2D for 2D
+* Physics-driven walk camera (collide via forces) + auto-attached adaptive fly camera
+* Skeletal animation
+* Audio (miniaudio)
 * Particle system
-* Voxel terrain (streamed, textured chunks; Vulkan + DX12)
+* Runtime UI — script-driven HUD panels, text, buttons, images
 * Trigger Zones — box regions with opt-in Script (on_enter/on_exit), Post-Process, Audio, Physics force-field, and spawn/streaming/camera sections
 * Post-Process Volumes & Scene Settings node (per-effect spatial blending)
 * Per-axis transforms and material editing
+
+### Worlds & Terrain
+* Voxel World node (cube voxels; Vulkan + DX12): streamed chunks with packed 8-byte vertices, temporal Hi-Z occlusion, distance LOD bands, alpha-blended water with sea-level worldgen, per-column edit persistence
+* Voxel worldgen options: procedural noise knobs (height/scale/seed/caves) or layered heightmaps (surface + strata thickness + features maps), elevation-banded surface blocks, scattered features (trees, rocks, roads, block paint) from a 22-layer texture atlas
+* Terrain node (smooth isosurface terrain): streamed Surface Nets tiles updated in place (no rebuild hitches), noise or heightmap worldgen, worldgen overhangs, persistent CSG sculpting (`terrain.sculpt` / `terrain.sculpt3d`, saved with the scene), painted caves layer, per-tile Jolt colliders following the camera
+* Map Painter — in-editor painting of every world input map (surface height, strata, features with a block-tile palette, terrain caves) with pan/zoom canvas, resize, and save + live rebuild
 
 ### Editor (PhasmaEditor)
 * ImGui-based editor
@@ -51,6 +62,8 @@ PhasmaEngine is a Vulkan and DirectX 12 3D engine for learning graphics techniqu
 * Debug console
 * Lua scripting (incl. `tween.to` helpers for smooth animation/camera focus)
 * Event system
+* Editor module C++ hot reload (PhasmaEditorModule.dll)
+* Named editor actions invokable without mouse input (agents/automation)
 
 ### MCP Integration
 
@@ -68,7 +81,9 @@ PhasmaEngine has no in-engine LLM. Instead, PhasmaEditor runs an in-process MCP 
 
 Toggle the server from **Connection → MCP Server** in the editor. The **Connection → RAG** submenu controls codebase indexing. Status bar shows live MCP and indexing state.
 
-**Available MCP tools:** scene/model management, camera, lights, materials, shaders, Lua execution, screenshots, mouse injection, codebase search (BM25), file read/write, and more. See [PhasmaMCP README](Phasma/MCP/README.md) for the underlying library.
+**Available MCP tools:** scene/model management, camera, lights, materials, shaders, Lua execution, screenshots, mouse injection, editor actions, codebase search (BM25), file read/write, and more. See [PhasmaMCP README](Phasma/MCP/README.md) for the underlying library.
+
+PhasmaPlayer also has an opt-in loopback MCP (Lua execution, screenshots, state, plus script-registered tools) for testing shipped games.
 
 ## Sample Models
 
