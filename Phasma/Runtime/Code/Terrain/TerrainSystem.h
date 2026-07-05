@@ -21,7 +21,9 @@ namespace pe::terrain
         void Destroy() override;
 
         TerrainWorld *World();
-        TerrainWorld *CreateWorld(Scene *scene, const TerrainConfig &cfg);
+        // sculptOps (tag/serializer vec4 format) seed the new world before its Create-time meshing.
+        TerrainWorld *CreateWorld(Scene *scene, const TerrainConfig &cfg,
+                                  const std::vector<vec4> *sculptOps = nullptr);
 
     private:
         // Drive the terrain from the scene's "Terrain" node (NodeTerrainTag): build it when the node

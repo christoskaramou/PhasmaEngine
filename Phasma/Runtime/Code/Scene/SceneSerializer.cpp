@@ -763,8 +763,22 @@ namespace pe
                 t->physicsFriction = tv["physicsFriction"].GetFloat();
             if (tv.HasMember("physicsRestitution"))
                 t->physicsRestitution = tv["physicsRestitution"].GetFloat();
+            if (tv.HasMember("streaming"))
+                t->streaming = tv["streaming"].GetBool();
+            if (tv.HasMember("overhangs"))
+                t->overhangs = tv["overhangs"].GetFloat();
+            if (tv.HasMember("collisionRadiusM"))
+                t->collisionRadiusM = tv["collisionRadiusM"].GetFloat();
             if (tv.HasMember("autoRebuild"))
                 t->autoRebuild = tv["autoRebuild"].GetBool();
+            if (tv.HasMember("sculptOps") && tv["sculptOps"].IsArray())
+            {
+                const auto &ops = tv["sculptOps"];
+                t->sculptOps.clear();
+                for (rapidjson::SizeType i = 0; i + 3 < ops.Size(); i += 4)
+                    t->sculptOps.emplace_back(ops[i].GetFloat(), ops[i + 1].GetFloat(), ops[i + 2].GetFloat(),
+                                              ops[i + 3].GetFloat());
+            }
         }
 
         void RestoreTriggerZoneNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
@@ -2021,7 +2035,23 @@ namespace pe
                     tObj.AddMember("physics", t.physics, allocator);
                     tObj.AddMember("physicsFriction", t.physicsFriction, allocator);
                     tObj.AddMember("physicsRestitution", t.physicsRestitution, allocator);
+                    tObj.AddMember("streaming", t.streaming, allocator);
+                    tObj.AddMember("overhangs", t.overhangs, allocator);
+                    tObj.AddMember("collisionRadiusM", t.collisionRadiusM, allocator);
                     tObj.AddMember("autoRebuild", t.autoRebuild, allocator);
+                    if (!t.sculptOps.empty())
+                    {
+                        // Flat float quads: xyz = centre, |w| = radius, w < 0 digs.
+                        rapidjson::Value ops(rapidjson::kArrayType);
+                        for (const vec4 &o : t.sculptOps)
+                        {
+                            ops.PushBack(o.x, allocator);
+                            ops.PushBack(o.y, allocator);
+                            ops.PushBack(o.z, allocator);
+                            ops.PushBack(o.w, allocator);
+                        }
+                        tObj.AddMember("sculptOps", ops.Move(), allocator);
+                    }
                     nodeObj.AddMember("terrain", tObj.Move(), allocator);
                 }
 

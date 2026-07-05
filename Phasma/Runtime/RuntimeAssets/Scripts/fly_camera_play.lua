@@ -35,6 +35,9 @@ end
 -- Mouse look while Right Mouse is held (relative-mouse capture). Returns whether RMB is down.
 local function do_look(cam)
     local rmb = input.is_right_mouse_down()
+    if not engine.is_play_mode() and input.is_viewport_focused and not input.is_viewport_focused() then
+        rmb = false
+    end
     if rmb then
         if not input.is_relative_mouse() then
             input.set_relative_mouse(true)

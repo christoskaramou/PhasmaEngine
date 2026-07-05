@@ -23,52 +23,49 @@ namespace pe::voxel
         constexpr int kAxisCorner[3] = {1, 2, 4};
     } // namespace
 
-    SmoothMeshData SurfaceNetsMesh(const std::vector<float> &field, const vec3 &originW,
-                                   int nx, int ny, int nz)
+    SmoothMeshData SurfaceNetsTile(const std::vector<float> &field, const ivec3 &gridMin,
+                                   const ivec3 &cells, const ivec3 &apron, float cellSize)
     {
         SmoothMeshData out;
-        if (nx < 1 || ny < 1 || nz < 1)
+        if (cells.x < 1 || cells.y < 1 || cells.z < 1 || cellSize <= 0.0f)
             return out;
 
-        const int cnx = nx + 1, cny = ny + 1, cnz = nz + 1;
-        if (field.size() < static_cast<size_t>(cnx) * cny * cnz)
+        // Corner lattice with the one-corner guard ring: field (i,j,k) = global corner
+        // gridMin + (i,j,k) - 1. Cell c reads corners c..c+1 -> field c+1..c+2; central differences
+        // reach field c..c+3 — all in range.
+        const int fnx = cells.x + 3, fny = cells.y + 3, fnz = cells.z + 3;
+        if (field.size() < static_cast<size_t>(fnx) * fny * fnz)
             return out;
-        auto CIdx = [cnx, cny](int i, int j, int k)
-        { return i + cnx * (j + cny * k); };
-        // Field read with edge clamp, so central differences stay valid on the boundary.
-        auto F = [&](int i, int j, int k)
-        {
-            i = i < 0 ? 0 : (i >= cnx ? cnx - 1 : i);
-            j = j < 0 ? 0 : (j >= cny ? cny - 1 : j);
-            k = k < 0 ? 0 : (k >= cnz ? cnz - 1 : k);
-            return field[CIdx(i, j, k)];
-        };
+        auto FIdx = [fnx, fny](int i, int j, int k)
+        { return i + fnx * (j + fny * k); };
 
         // One vertex per surface cell; -1 = the cell has no surface.
-        std::vector<int> cellVert(static_cast<size_t>(nx) * ny * nz, -1);
-        auto VIdx = [nx, ny](int i, int j, int k)
-        { return i + nx * (j + ny * k); };
-        const int stride[3] = {1, nx, nx * ny};
+        std::vector<int> cellVert(static_cast<size_t>(cells.x) * cells.y * cells.z, -1);
+        auto VIdx = [&](int i, int j, int k)
+        { return i + cells.x * (j + cells.y * k); };
+        const int stride[3] = {1, cells.x, cells.x * cells.y};
 
         vec3 bbMin(1e30f), bbMax(-1e30f);
 
         // Scan i fastest, then j, then k, so a cell's negative-side neighbors are always meshed first.
-        for (int k = 0; k < nz; ++k)
-            for (int j = 0; j < ny; ++j)
-                for (int i = 0; i < nx; ++i)
+        for (int k = 0; k < cells.z; ++k)
+            for (int j = 0; j < cells.y; ++j)
+                for (int i = 0; i < cells.x; ++i)
                 {
                     float cd[8];
                     int mask = 0;
                     for (int c = 0; c < 8; ++c)
                     {
-                        cd[c] = field[CIdx(i + kCorner[c][0], j + kCorner[c][1], k + kCorner[c][2])];
+                        cd[c] = field[FIdx(i + 1 + kCorner[c][0], j + 1 + kCorner[c][1], k + 1 + kCorner[c][2])];
                         if (cd[c] >= 0.0f)
                             mask |= (1 << c); // solid corner
                     }
                     if (mask == 0 || mask == 0xFF)
                         continue; // wholly air or wholly solid — no surface here
 
-                    // Vertex = mean of the zero-crossings on the cell's edges.
+                    // Vertex = mean of the zero-crossings on the cell's edges, in GLOBAL lattice space
+                    // (float(globalCorner) * cellSize), so a neighbouring tile duplicating this apron
+                    // cell lands on the bit-identical position.
                     vec3 sum(0.0f);
                     int n = 0;
                     for (int e = 0; e < 12; ++e)
@@ -78,16 +75,22 @@ namespace pe::voxel
                             continue;
                         const float da = cd[a], db = cd[b];
                         const float t = da / (da - db); // crossing where density hits 0
-                        const vec3 pa(i + kCorner[a][0], j + kCorner[a][1], k + kCorner[a][2]);
-                        const vec3 pb(i + kCorner[b][0], j + kCorner[b][1], k + kCorner[b][2]);
+                        const vec3 pa(static_cast<float>(gridMin.x + i + kCorner[a][0]),
+                                      static_cast<float>(gridMin.y + j + kCorner[a][1]),
+                                      static_cast<float>(gridMin.z + k + kCorner[a][2]));
+                        const vec3 pb(static_cast<float>(gridMin.x + i + kCorner[b][0]),
+                                      static_cast<float>(gridMin.y + j + kCorner[b][1]),
+                                      static_cast<float>(gridMin.z + k + kCorner[b][2]));
                         sum += pa + (pb - pa) * t;
                         ++n;
                     }
-                    const vec3 world = originW + sum / static_cast<float>(n);
+                    const vec3 world = (sum / static_cast<float>(n)) * cellSize;
 
                     // Normal = -gradient of the field via central differences (density rises into solid,
-                    // so the outward normal is -grad). Reads the edited field, so sculpted craters carry
-                    // correct normals with no generator re-query.
+                    // so the outward normal is -grad). The guard ring keeps the stencil full even for
+                    // apron cells, so duplicated seam vertices shade identically in both tiles.
+                    auto F = [&](int ci, int cj, int ck)
+                    { return field[FIdx(ci + 1, cj + 1, ck + 1)]; };
                     vec3 nrm(-(F(i + 1, j, k) - F(i - 1, j, k)), -(F(i, j + 1, k) - F(i, j - 1, k)),
                              -(F(i, j, k + 1) - F(i, j, k - 1)));
                     const float len = glm::length(nrm);
@@ -113,7 +116,11 @@ namespace pe::voxel
                     bbMax = glm::max(bbMax, world);
 
                     // Dual quads: for each of the 3 min-corner edges that cross, join this cell's vertex
-                    // to the three cells on the negative side of the other two axes.
+                    // to the three cells on the negative side of the other two axes. Apron cells emit
+                    // nothing — the edge belongs to the neighbouring tile, which emits the quad with its
+                    // own duplicates of these vertices.
+                    if (i < apron.x || j < apron.y || k < apron.z)
+                        continue;
                     const bool s0 = (mask & 1) != 0;
                     const int cellX[3] = {i, j, k};
                     for (int ax = 0; ax < 3; ++ax)

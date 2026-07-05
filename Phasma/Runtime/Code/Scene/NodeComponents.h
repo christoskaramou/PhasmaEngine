@@ -265,9 +265,9 @@ namespace pe
         bool rebuildRequested = false; // transient: inspector "Rebuild" (repainted map, same path)
     };
 
-    // Singleton heightfield-terrain node (TerrainSystem reconciles it). A surface, not a volume: no
-    // blocks, no caves, no digging depth. Worldgen reuses the shared generator seam (a grayscale
-    // heightmap when heightmapPath is set, else noise); only SurfaceHeight is sampled. See TerrainWorld.h.
+    // Singleton streamed-isosurface-terrain node (TerrainSystem reconciles it). Worldgen reuses the
+    // shared generator seam (a grayscale heightmap when heightmapPath is set, else noise); 3D shape
+    // comes from `overhangs` (noise relief) and CSG sculpting. See TerrainWorld.h.
     class NodeTerrainTag : public IComponent
     {
     public:
@@ -282,11 +282,17 @@ namespace pe
         float noiseFeatureScale = 96.0f;
         int noiseSeed = 0;
         float metersPerPixel = 1.0f;     // world metres each heightmap pixel / mesh cell spans in X/Z
-        bool physics = false;            // static Jolt triangle-mesh collider (live toggle)
+        bool physics = false;            // per-tile static Jolt triangle-mesh colliders (live toggle)
         float physicsFriction = 0.5f;    // collider surface friction (live)
         float physicsRestitution = 0.3f; // collider bounciness (live)
+        bool streaming = false;          // windows follow the camera; adds coarse view rings + skirts
+        float overhangs = 0.0f;          // 0..1 worldgen 3D relief: cliffs undercut, hollows open (noise terrain)
+        float collisionRadiusM = 0.0f;   // colliders within this range of the camera (0 = all tiles; live)
         bool autoRebuild = true;         // worldgen edits apply on their own (debounced); off = only via "Rebuild"
         bool rebuildRequested = false;   // transient: inspector "Rebuild" / Map Painter save (repainted map, same path)
+        // Persistent CSG brush strokes (xyz = centre, |w| = radius, w < 0 digs) — serialized with the
+        // scene; TerrainSystem syncs live-world sculpts back here and seeds recreated worlds from it.
+        std::vector<vec4> sculptOps;
     };
 
     enum class NodeRuntimeUiWidgetType : uint8_t

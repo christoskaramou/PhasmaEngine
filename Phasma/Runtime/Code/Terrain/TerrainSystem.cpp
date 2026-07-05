@@ -1,4 +1,5 @@
 #include "Terrain/TerrainSystem.h"
+#include "Camera/Camera.h" // anchor follows the active camera (streamed windows + collider ring)
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
 #ifdef PE_PHYSICS
@@ -46,6 +47,9 @@ namespace pe::terrain
             h = HashF(h, cfg.noiseFeatureScale);
             h = HashInt(h, cfg.noiseSeed);
             h = HashF(h, cfg.metersPerPixel);
+            h = HashInt(h, cfg.streaming ? 1 : 0);
+            h = HashF(h, cfg.overhangs);
+            // collisionRadiusM is live-applied (ring re-fit), not structural.
             return h;
         }
     } // namespace
@@ -64,7 +68,13 @@ namespace pe::terrain
     {
         ReconcileComponentWorld();
         if (m_world)
+        {
+            // The anchor centres the streamed windows and the collider ring on the viewer.
+            if (Scene *scene = GetActiveScene())
+                if (Camera *camera = scene->GetActiveCamera())
+                    m_world->SetAnchor(camera->GetPosition());
             m_world->Update();
+        }
 #ifdef PE_PHYSICS
         // Play start re-churns the host node, so re-register the collider on the sim false->true edge
         // (and drop it cleanly on stop). Re-applying the same flag re-cooks it.
@@ -100,12 +110,14 @@ namespace pe::terrain
         return m_world.get();
     }
 
-    TerrainWorld *TerrainSystem::CreateWorld(Scene *scene, const TerrainConfig &cfg)
+    TerrainWorld *TerrainSystem::CreateWorld(Scene *scene, const TerrainConfig &cfg, const std::vector<vec4> *sculptOps)
     {
         if (!m_world)
             m_world = std::make_unique<TerrainWorld>();
         else
             m_world->Destroy();
+        if (sculptOps)
+            m_world->SetSculptOps(*sculptOps); // before Create — tiles apply ops as they mesh
         m_world->Create(scene, cfg);
         m_componentOwned = false;
         m_appliedHash = 0;
@@ -151,6 +163,9 @@ namespace pe::terrain
         cfg.physics = tag->physics;
         cfg.physicsFriction = tag->physicsFriction;
         cfg.physicsRestitution = tag->physicsRestitution;
+        cfg.streaming = tag->streaming;
+        cfg.overhangs = tag->overhangs;
+        cfg.collisionRadiusM = tag->collisionRadiusM;
         // The node's world position is the terrain centre.
         const vec3 p = vec3(scene->GetWorldMatrix(node)[3]);
         cfg.boundsCenterCx = static_cast<int>(std::floor(p.x / 16.0f));
@@ -179,6 +194,14 @@ namespace pe::terrain
             ++m_pendingFrames;
         }
 
+        // Sculpt ops live on the world but persist through the tag (serialized with the scene, seeds
+        // every recreate — so sculpts survive structural rebuilds too). Sync tag <- world only while
+        // the world is ALIVE: a dead one (scene load wiped it) must not clobber ops just restored
+        // from the file. Ops only append, so a count check suffices.
+        if (m_world && m_componentOwned && m_world->IsAlive() &&
+            m_world->SculptOpCount() != tag->sculptOps.size())
+            m_world->GetSculptOps(tag->sculptOps);
+
         const bool aliveDead = m_world && !m_world->IsAlive();
         const bool configChanged =
             tag->autoRebuild && hash != m_appliedHash && m_pendingFrames >= kRecreateDebounceFrames;
@@ -186,7 +209,7 @@ namespace pe::terrain
         bool created = false;
         if (!m_world || aliveDead || forceRebuild || configChanged)
         {
-            CreateWorld(scene, cfg);
+            CreateWorld(scene, cfg, &tag->sculptOps);
             m_componentOwned = true;
             m_appliedHash = hash;
             m_appliedPhysics = tag->physics;
@@ -206,5 +229,7 @@ namespace pe::terrain
             m_appliedFriction = tag->physicsFriction;
             m_appliedRestitution = tag->physicsRestitution;
         }
+        if (!created && m_world && tag->collisionRadiusM != m_world->Config().collisionRadiusM)
+            m_world->SetCollisionRadius(tag->collisionRadiusM);
     }
 } // namespace pe::terrain

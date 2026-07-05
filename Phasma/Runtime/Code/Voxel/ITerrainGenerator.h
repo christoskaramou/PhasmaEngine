@@ -19,9 +19,19 @@ namespace pe::voxel
         // --- Smooth (isosurface) worldgen ---
         // Surface height in blocks (may be fractional) at world (x, z). Density then defaults to a
         // heightfield: solid below the surface, air above. A generator supports smooth voxel terrain
-        // by overriding SurfaceHeight; overriding Density directly adds true 3D features (overhangs,
+        // by overriding SurfaceHeight; overriding DensityAtHeight adds true 3D features (overhangs,
         // caves). Generators that leave both at the default only produce flat terrain when smoothed.
         virtual float SurfaceHeight(float x, float z) const { return 0.0f; }
-        virtual float Density(float x, float y, float z) const { return SurfaceHeight(x, z) - y; }
+        // Density given a pre-computed SurfaceHeight(x, z): tile meshers sample whole columns, so they
+        // cache the (expensive) surface height once per column and the generator adds only its
+        // per-sample 3D term here. Override THIS for 3D features; Density() routes through it.
+        virtual float DensityAtHeight(float /*x*/, float y, float /*z*/, float surfaceHeight) const
+        {
+            return surfaceHeight - y;
+        }
+        virtual float Density(float x, float y, float z) const
+        {
+            return DensityAtHeight(x, y, z, SurfaceHeight(x, z));
+        }
     };
 } // namespace pe::voxel

@@ -16,12 +16,27 @@ namespace pe
                                       {
                 sol::table terrain = lua.create_named_table("terrain");
 
-                // Height brush: raise (amount > 0) or lower (amount < 0) the surface within radius at
-                // world (x, z), then re-mesh. Deferred to the next system tick (safe from script update).
+                // Surface brush: CSG sphere at the surface under (x, z) — amount < 0 digs (subtract),
+                // amount >= 0 builds (union). Deferred to the next system tick (safe from script update).
                 terrain.set_function("sculpt", [](float x, float z, float radius, float amount) {
                     if (auto *ts = GetGlobalSystem<terrain::TerrainSystem>())
+                        if (auto *w = ts->World())
+                        {
+                            // Ray from high above finds the TRUE surface (sculpt/overhang aware), so
+                            // repeated digs at the same (x, z) burrow progressively deeper.
+                            vec3 pt(x, w->SampleHeight(x, z), z), n(0.0f);
+                            const vec3 o(x, pt.y + 200.0f, z);
+                            w->Raycast(o, vec3(0.0f, -1.0f, 0.0f), 4000.0f, pt, n);
+                            w->QueueSculpt(pt, radius, amount);
+                        }
+                });
+
+                // Free 3D brush at an explicit point — dig sideways into a cliff for an overhang, or
+                // underground for a grotto.
+                terrain.set_function("sculpt3d", [](float x, float y, float z, float radius, float amount) {
+                    if (auto *ts = GetGlobalSystem<terrain::TerrainSystem>())
                         if (ts->World())
-                            ts->World()->QueueSculpt(vec3(x, 0.0f, z), radius, amount);
+                            ts->World()->QueueSculpt(vec3(x, y, z), radius, amount);
                 });
 
                 // Surface world-Y at (x, z). Very low when there is no terrain.

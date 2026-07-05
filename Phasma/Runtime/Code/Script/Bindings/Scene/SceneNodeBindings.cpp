@@ -698,9 +698,10 @@ namespace pe
                     return sol::make_object(lua, t);
                 });
 
-                // Heightfield-terrain node config (surface only): size_x_meters, size_z_meters, ground_height,
-                // height_min, height_max, sea_level_m, heightmap, noise_feature_scale, noise_seed,
-                // meters_per_pixel, physics, physics_friction, physics_restitution, auto_rebuild, rebuild.
+                // Terrain node config: size_x_meters, size_z_meters, ground_height, height_min,
+                // height_max, sea_level_m, heightmap, noise_feature_scale, noise_seed, meters_per_pixel,
+                // physics, physics_friction, physics_restitution, streaming, overhangs,
+                // collision_radius_m, auto_rebuild, rebuild.
                 // TerrainSystem reconciles the live terrain from it (same data the Terrain inspector edits).
                 ut.set_function("set_terrain", [](SceneNodeHandle &h, sol::optional<sol::table> params) {
                     Scene *s = GetScene();
@@ -724,6 +725,9 @@ namespace pe
                     if (p["physics"].valid()) t->physics = p["physics"];
                     if (p["physics_friction"].valid()) t->physicsFriction = p["physics_friction"];
                     if (p["physics_restitution"].valid()) t->physicsRestitution = p["physics_restitution"];
+                    if (p["streaming"].valid()) t->streaming = p["streaming"];
+                    if (p["overhangs"].valid()) t->overhangs = p["overhangs"];
+                    if (p["collision_radius_m"].valid()) t->collisionRadiusM = p["collision_radius_m"];
                     if (p["auto_rebuild"].valid()) t->autoRebuild = p["auto_rebuild"];
                     if (p["rebuild"].valid()) t->rebuildRequested = p["rebuild"];
                     s->MarkDirty();
@@ -749,6 +753,9 @@ namespace pe
                     r["physics"] = t->physics;
                     r["physics_friction"] = t->physicsFriction;
                     r["physics_restitution"] = t->physicsRestitution;
+                    r["streaming"] = t->streaming;
+                    r["overhangs"] = t->overhangs;
+                    r["collision_radius_m"] = t->collisionRadiusM;
                     r["auto_rebuild"] = t->autoRebuild;
                     return sol::make_object(lua, r);
                 });

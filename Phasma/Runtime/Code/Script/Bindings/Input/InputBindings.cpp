@@ -134,6 +134,11 @@ namespace pe
                 s_softwareMouseDeltaConsumed = false;
             }
 
+            bool EditorViewportInputAllowed()
+            {
+                return !IsEditorHost() || IsScriptPlayMode() || IsScriptViewportFocused();
+            }
+
             MouseDelta ReadSoftwareMouseDeltaFrame()
             {
                 if (s_mouseCapturedByUi)
@@ -247,7 +252,7 @@ namespace pe
 
         MouseDelta ConsumeMouseDelta()
         {
-            if (s_mouseCapturedByUi)
+            if (s_mouseCapturedByUi || !EditorViewportInputAllowed())
                 return {};
 
             if (s_softwareMouseDelta)
@@ -268,7 +273,7 @@ namespace pe
 
         MouseDelta PeekMouseDelta()
         {
-            if (s_mouseCapturedByUi)
+            if (s_mouseCapturedByUi || !EditorViewportInputAllowed())
                 return {};
 
             if (s_softwareMouseDelta)
@@ -328,6 +333,9 @@ namespace pe
 
         bool SetRelativeMouse(bool enabled)
         {
+            if (enabled && !EditorViewportInputAllowed())
+                return false;
+
             ResetMouseDelta();
             SetRelativeMouseRequested(enabled);
 

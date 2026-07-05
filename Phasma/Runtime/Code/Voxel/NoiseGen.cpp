@@ -76,6 +76,7 @@ namespace pe::voxel
     {
         m_p.amplitude = std::max(0.0f, m_p.amplitude);
         m_p.featureScale = std::max(4.0f, m_p.featureScale);
+        m_p.overhangs = std::clamp(m_p.overhangs, 0.0f, 1.0f);
     }
 
     void NoiseGen::Generate(ChunkColumn &col, int lod)
@@ -137,5 +138,32 @@ namespace pe::voxel
         // the same metre-space mapping the heightmap path uses; may dip below y=0.
         const float t = TerrainNorm01(x, z, m_p);
         return m_p.groundHeight + m_p.heightMin + t * (m_p.heightMax - m_p.heightMin);
+    }
+
+    float NoiseGen::DensityAtHeight(float x, float y, float z, float surfaceHeight) const
+    {
+        const float h = surfaceHeight;
+        float d = h - y;
+        if (m_p.overhangs > 0.0f)
+        {
+            // Near-surface 3D warp: where the FBM swings positive rock bulges out over air (overhangs),
+            // where it swings negative hollows open under the surface (grottos). The quadratic fade
+            // zeroes the term at ±band, so the surface provably stays inside SurfaceHeight ± band and
+            // the far field stays a pure heightfield (solid ground below, open sky above).
+            const float band = 0.5f * std::max(2.0f, m_p.heightMax - m_p.heightMin);
+            const float rel = (y - h) / band;
+            if (rel > -1.0f && rel < 1.0f)
+            {
+                // Y compressed a little so features stretch sideways (ledges) rather than chimneys.
+                const vec3 sp = vec3(x, y * 1.4f, z) +
+                                vec3(m_p.seed * 91.7f, m_p.seed * 45.3f, m_p.seed * 137.9f);
+                const float n3 = Fbm3D(sp, 2, 3.0f / m_p.featureScale);
+                const float fade = 1.0f - rel * rel;
+                // |Fbm3D| stays well under 1, so the added term stays under band * fade — the surface
+                // displacement cannot exceed the fade envelope's fixed point inside ±band.
+                d += m_p.overhangs * band * n3 * fade;
+            }
+        }
+        return d;
     }
 } // namespace pe::voxel
