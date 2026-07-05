@@ -1405,7 +1405,7 @@ namespace pe
                 break;
 
             uint32_t flags = scene.GetComponentFlags(node);
-            if (!(flags & (Component_Camera | Component_Light | Component_Skybox)))
+            if (!(flags & Component_Skybox))
                 scriptDropNode = node;
 #ifdef PE_AUDIO
             if (!(flags & Component_Skybox))
@@ -2229,7 +2229,7 @@ namespace pe
                 }
             }
 
-            if (!(flags & (Component_Camera | Component_Light | Component_Skybox)))
+            if (!(flags & Component_Skybox))
                 drawAddComponentButton(node);
             break;
         }

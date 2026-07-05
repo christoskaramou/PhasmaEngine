@@ -143,7 +143,7 @@ namespace pe
 
             for (const std::filesystem::path &candidate : candidates)
             {
-                if (std::filesystem::exists(candidate / "Scripts" / "global" / "fly_camera.lua"))
+                if (std::filesystem::exists(candidate / "Scripts" / "global" / "editor_shortcuts.lua"))
                     return NormalizeDirectoryPath(candidate);
             }
 

@@ -597,7 +597,22 @@ namespace pe
                 if (assets.has_parent_path())
                     base = assets.parent_path();
             }
-            scriptPath = base / scriptPath;
+            const std::string projectResolved = NormalizePath((base / scriptPath).string());
+            // Fall back to the shared RuntimeAssets tree so a scene can attach an engine-shipped script
+            // (e.g. Scripts/fly_camera_play.lua) by relative path from any project. The project copy wins
+            // when present, so a project can still override the engine default.
+            std::error_code ec;
+            if (!std::filesystem::exists(projectResolved, ec) && !Path::RuntimeAssets.empty())
+            {
+                std::string rel = NormalizeSlashes(path);
+                if (rel.rfind("Assets/", 0) == 0 || rel.rfind("assets/", 0) == 0)
+                    rel = rel.substr(7); // make it RuntimeAssets-relative (RuntimeAssets has no "Assets/" leaf)
+                const std::string runtimeResolved =
+                    NormalizePath((std::filesystem::path(Path::RuntimeAssets) / rel).string());
+                if (std::filesystem::exists(runtimeResolved, ec))
+                    return runtimeResolved;
+            }
+            return projectResolved;
         }
         return NormalizePath(scriptPath.string());
     }

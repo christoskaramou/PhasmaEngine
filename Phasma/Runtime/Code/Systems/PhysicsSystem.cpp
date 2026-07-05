@@ -4,6 +4,7 @@
 #include "Scene/SceneAccess.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
+#include "Camera/Camera.h"
 
 // Undef X11 macros that conflict with Jolt
 #ifdef None
@@ -1226,6 +1227,14 @@ namespace pe
 
             vec3 pos(joltPos.GetX(), joltPos.GetY(), joltPos.GetZ());
             quat rot(joltRot.GetW(), joltRot.GetX(), joltRot.GetY(), joltRot.GetZ());
+
+            // A physics body on a CAMERA node drives the camera's world position — it just fell /
+            // collided / was pushed by a script's forces this frame. The camera is normally
+            // authoritative over its node (Scene::UpdateCameras writes camera pos->node), which would
+            // otherwise clobber this. We set only position, never rotation, so mouse/script look stays
+            // camera-authoritative; UpdateCameras then writes (this body pos, camera euler) to the node.
+            if (Camera *cam = scene.GetCameraForNode(state.nodeId))
+                cam->SetPosition(pos);
 
             // Use cached authored scale — avoids 3x glm::length per body per frame
             const mat4 &oldLocal = scene.GetLocalMatrix(state.nodeId);

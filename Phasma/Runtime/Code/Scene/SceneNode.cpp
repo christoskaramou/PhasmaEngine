@@ -329,9 +329,11 @@ namespace pe
             std::swap(m_nodeComponentCache[index], m_nodeComponentCache[last]);
             std::swap(m_nodeRuntime[index], m_nodeRuntime[last]);
 
-            // Update the swapped node's identity and bump revision to invalidate old IDs
+            // The relocated node keeps its identity — only its array slot changes, so update index
+            // in place and DO NOT bump revision (per the NodeId contract in SceneNode.h). Bumping it
+            // here would silently orphan every cached (nodeId, revision) pair for a still-live node —
+            // physics/physics2d/animation/script state and Lua handles — whenever a sibling is deleted.
             m_nodeIds[index]->index = index;
-            m_nodeIds[index]->revision++;
         }
 
         m_nodeIds.pop_back();

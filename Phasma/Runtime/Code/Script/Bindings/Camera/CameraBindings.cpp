@@ -76,6 +76,13 @@ namespace pe
                         float yaw = atan2(dir.x, dir.z);
                         c.SetEuler(vec3(pitch, yaw, 0.0f));
                     },
+                    "get_node", [](Camera &c, sol::this_state ts) -> sol::object {
+                        sol::state_view lua(ts);
+                        Scene *scene = GetActiveScene();
+                        NodeId *n = c.GetNodeId();
+                        if (!scene || !n) return sol::make_object(lua, sol::nil);
+                        return sol::make_object(lua, scene->MakeHandle(n));
+                    },
                     "point_in_frustum", [](Camera &c, const vec3 &point, sol::optional<float> radius) -> bool {
                         return c.PointInFrustum(point, radius.value_or(0.0f));
                     },
