@@ -516,6 +516,14 @@ namespace pe
                 m_terrainLayerViews[i] = v;
         }
         ImageView *GetTerrainLayerView(int i) const { return (i >= 0 && i < 4) ? m_terrainLayerViews[i] : nullptr; }
+        // Optional per-layer material maps (tangent normal + roughness); a flat 1x1 default is always
+        // bound so the terrain shader can sample unconditionally.
+        void SetTerrainMaterialView(int i, ImageView *v)
+        {
+            if (i >= 0 && i < 4)
+                m_terrainMaterialViews[i] = v;
+        }
+        ImageView *GetTerrainMaterialView(int i) const { return (i >= 0 && i < 4) ? m_terrainMaterialViews[i] : nullptr; }
         bool HasTerrain() const { return m_terrainSplatView != nullptr && m_terrainLayerViews[0] != nullptr; }
         uint32_t GetMeshCount() const { return m_meshCount; }
         Buffer *GetMeshConstants();
@@ -840,6 +848,7 @@ namespace pe
         ImageView *m_voxelAtlasView = nullptr;
         ImageView *m_terrainSplatView = nullptr;
         ImageView *m_terrainLayerViews[4] = {nullptr, nullptr, nullptr, nullptr};
+        ImageView *m_terrainMaterialViews[4] = {nullptr, nullptr, nullptr, nullptr};
         uint64_t m_geometryVersion = 0;
 
         // Ray tracing

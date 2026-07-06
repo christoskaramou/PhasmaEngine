@@ -51,6 +51,8 @@ namespace pe::terrain
             h = HashString(h, cfg.splatPath);
             for (const std::string &s : cfg.layerPaths)
                 h = HashString(h, s);
+            for (const std::string &s : cfg.materialPaths)
+                h = HashString(h, s);
             h = HashF(h, cfg.noiseFeatureScale);
             h = HashInt(h, cfg.noiseSeed);
             h = HashF(h, cfg.metersPerPixel);
@@ -169,6 +171,7 @@ namespace pe::terrain
         cfg.scatterMeshes = tag->scatterMeshes;
         cfg.splatPath = tag->splatPath;
         cfg.layerPaths = tag->layerPaths;
+        cfg.materialPaths = tag->materialPaths;
         cfg.noiseFeatureScale = tag->noiseFeatureScale;
         cfg.noiseSeed = tag->noiseSeed;
         cfg.metersPerPixel = tag->metersPerPixel;

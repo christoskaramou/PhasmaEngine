@@ -104,6 +104,14 @@ steep face. So terrain is fully textured with zero authoring, and a splat map is
 - Terrain still casts shadows and writes depth normally (the shadow cull only tests the voxel bit,
   so terrain rides the regular shadow bucket; the surface variant writes its own depth like voxel).
   Isolating the ~12-tap triplanar shader to terrain draws keeps it off every other opaque pixel.
+- **Per-layer material maps** (optional): each layer may also supply a material texture (`materialPaths`,
+  RGB = tangent-space normal, A = roughness), sampled triplanar and reoriented into world space with
+  the **Whiteout blend** (no per-vertex tangents needed), then weight-blended like the albedo. The
+  blended normal drives the gbuffer normal and the blended roughness drives `metRough.y`. A layer with
+  no map is bound a **1x1 flat-normal / full-roughness default** (`128,128,255,255`): the whiteout
+  blend collapses it back to the exact geometric normal + roughness 1, so unauthored terrain is
+  byte-identical to before and the default texels are cache-resident (no bandwidth). Cost is opt-in —
+  measured ~0% fps delta with no maps, ~13% on the terrain pass when every layer has a real map.
 
 **Painting the splat (Map Painter layer 6 "Splat (Terrain)")** — paints which of the 4 layers
 textures the surface. The painter stores a discrete layer index per pixel (0 = unpainted → auto,
@@ -211,8 +219,9 @@ range so it never shifts while streaming.
 - Scatter props share the terrain material (baked vertex colours, no textures — the shader passes
   their `color.a < 0.5` verts straight through) — textured props need per-material instanced draws, a
   render-side feature that does not exist yet.
-- Triplanar splatting is albedo-only (metal 0, roughness 1, geometric normal): per-layer normal /
-  roughness maps and a configurable texture scale are follow-ups. `kTexScale` is a shader constant.
+- Triplanar splatting supports albedo + per-layer normal/roughness maps (above), but metal is fixed 0
+  and there is no per-layer AO or height/parallax. `kTexScale` (3 m/tile) is a shader constant — a
+  configurable per-terrain or per-layer texture scale is a follow-up.
 - Splat painting (Map Painter layer 6, above) is one-hot per pixel — you pick which single layer wins
   a pixel, and the linear sampler softens the seams. True multi-weight brushes (soft per-channel
   blends authored directly) would need a 4-channel painter buffer; not built (the single-channel index

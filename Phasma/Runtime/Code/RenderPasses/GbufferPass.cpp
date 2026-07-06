@@ -200,6 +200,8 @@ namespace pe
                 setTex->SetImageView(1, scene.GetTerrainSplatView());
                 for (int l = 0; l < 4; ++l)
                     setTex->SetImageView(2 + l, scene.GetTerrainLayerView(l));
+                for (int l = 0; l < 4; ++l)
+                    setTex->SetImageView(6 + l, scene.GetTerrainMaterialView(l));
                 setTex->Update();
             }
             m_lastTerrainSplatView = scene.GetTerrainSplatView();

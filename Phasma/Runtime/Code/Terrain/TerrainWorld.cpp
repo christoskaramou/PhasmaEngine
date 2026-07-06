@@ -1778,12 +1778,28 @@ namespace pe::terrain
             splat = Image::LoadRawFromMemory(cmd, zero, 1, 1, PE_FORMAT_R8G8B8A8_UNORM, "TerrainSplatDefault");
         }
 
+        // Per-layer material maps (RGB = tangent normal, A = roughness). Absent = a 1x1 flat-normal /
+        // full-roughness texel (128,128,255,255): the shader's whiteout blend collapses it to the
+        // geometric normal, so unauthored layers render exactly as before (and the 1x1 is bandwidth-free).
+        Image *mats[4] = {nullptr, nullptr, nullptr, nullptr};
+        for (int i = 0; i < 4; ++i)
+        {
+            if (!m_cfg.materialPaths[i].empty())
+                mats[i] = Image::LoadRGBA8(cmd, resolve(m_cfg.materialPaths[i]));
+            if (!mats[i])
+            {
+                uint8_t flat[4] = {128, 128, 255, 255};
+                mats[i] = Image::LoadRawFromMemory(cmd, flat, 1, 1, PE_FORMAT_R8G8B8A8_UNORM, "TerrainMatDefault");
+            }
+        }
+
         cmd->End();
         queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
         cmd->Return();
 
-        if (!layers[0] || !layers[1] || !layers[2] || !layers[3] || !splat)
+        if (!layers[0] || !layers[1] || !layers[2] || !layers[3] || !splat || !mats[0] || !mats[1] || !mats[2] ||
+            !mats[3])
         {
             PE_WARN("[Terrain] Failed to load a terrain layer/splat texture — using vertex-colour bands.");
             for (Image *img : layers)
@@ -1791,6 +1807,9 @@ namespace pe::terrain
                     Image::Destroy(img);
             if (splat)
                 Image::Destroy(splat);
+            for (Image *img : mats)
+                if (img)
+                    Image::Destroy(img);
             return false;
         }
 
@@ -1803,7 +1822,9 @@ namespace pe::terrain
         };
         for (int i = 0; i < 4; ++i)
             m_scene->SetTerrainLayerView(i, own(layers[i])->GetSRV());
-        m_scene->SetTerrainSplatView(own(splat)->GetSRV());
+        m_scene->SetTerrainSplatView(own(splat)->GetSRV()); // splat stays m_terrainTextures[4] (UpdateSplatMap)
+        for (int i = 0; i < 4; ++i)
+            m_scene->SetTerrainMaterialView(i, own(mats[i])->GetSRV());
         return true;
     }
 
@@ -1823,7 +1844,10 @@ namespace pe::terrain
         {
             m_scene->SetTerrainSplatView(nullptr);
             for (int i = 0; i < 4; ++i)
+            {
                 m_scene->SetTerrainLayerView(i, nullptr);
+                m_scene->SetTerrainMaterialView(i, nullptr);
+            }
         }
         m_terrainTextures.clear();
         m_material.reset();

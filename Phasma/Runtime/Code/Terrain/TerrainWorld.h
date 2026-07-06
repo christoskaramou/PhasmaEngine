@@ -63,6 +63,9 @@ namespace pe::terrain
         std::string splatPath;
         std::array<std::string, 4> layerPaths = {"Textures/Voxel/grass.png", "Textures/Voxel/rock.png",
                                                  "Textures/Voxel/sand.png", "Textures/Voxel/snow.png"};
+        // Optional per-layer material maps (RGB = tangent-space normal, A = roughness), same layer
+        // order. Empty = a flat-normal / full-roughness default (terrain looks exactly as untextured).
+        std::array<std::string, 4> materialPaths = {"", "", "", ""};
         float noiseFeatureScale = 96.0f;
         int noiseSeed = 0;
         float metersPerPixel = 1.0f; // world metres each ring-0 grid cell spans in X/Z (and Y)
