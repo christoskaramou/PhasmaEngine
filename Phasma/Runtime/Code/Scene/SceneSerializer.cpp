@@ -791,6 +791,13 @@ namespace pe
                     if (layers[i].IsString())
                         t->layerPaths[i] = layers[i].GetString();
             }
+            if (tv.HasMember("materialPaths") && tv["materialPaths"].IsArray())
+            {
+                const auto &mats = tv["materialPaths"].GetArray();
+                for (rapidjson::SizeType i = 0; i < mats.Size() && i < 4; ++i)
+                    if (mats[i].IsString())
+                        t->materialPaths[i] = mats[i].GetString();
+            }
             if (tv.HasMember("terrainOps") && tv["terrainOps"].IsArray())
             {
                 const auto &ops = tv["terrainOps"];
@@ -2089,6 +2096,12 @@ namespace pe
                         for (const std::string &s : t.layerPaths)
                             layers.PushBack(MakeStringValue(s), allocator);
                         tObj.AddMember("layerPaths", layers.Move(), allocator);
+                    }
+                    {
+                        rapidjson::Value mats(rapidjson::kArrayType);
+                        for (const std::string &s : t.materialPaths)
+                            mats.PushBack(MakeStringValue(s), allocator);
+                        tObj.AddMember("materialPaths", mats.Move(), allocator);
                     }
                     if (!t.terrainOps.empty())
                     {

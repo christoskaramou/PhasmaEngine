@@ -2136,6 +2136,12 @@ namespace pe
                         for (int li = 0; li < 4; ++li)
                             changed |= InputTextDeferred(kLayerLabels[li], t->layerPaths[li]);
                         ui::ItemTooltip("Triplanar albedo textures for the 4 splat layers (default = built-in tiles).");
+                        static const char *kMatLabels[4] = {"Material 0 (grass)", "Material 1 (rock)",
+                                                            "Material 2 (sand)", "Material 3 (snow)"};
+                        for (int li = 0; li < 4; ++li)
+                            changed |= InputTextDeferred(kMatLabels[li], t->materialPaths[li]);
+                        ui::ItemTooltip("Optional per-layer material maps: RGB = tangent-space normal, A = roughness. "
+                                        "Empty = flat normal + full roughness (terrain looks as before).");
 
                         if (t->heightmapPath.empty())
                         {

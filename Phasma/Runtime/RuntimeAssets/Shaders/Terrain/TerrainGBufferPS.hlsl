@@ -22,6 +22,14 @@
 [[vk::binding(3, 1)]] Texture2D<float4> gLayer1 : register(t3, space1); // rock
 [[vk::binding(4, 1)]] Texture2D<float4> gLayer2 : register(t4, space1); // sand
 [[vk::binding(5, 1)]] Texture2D<float4> gLayer3 : register(t5, space1); // snow
+// Optional per-layer material maps (RGB = tangent-space normal, A = roughness), same layer order.
+// A flat-normal default (RGB 0.5,0.5,1.0 + A 1.0) is bound where a layer has no map, so the whiteout
+// blend below reproduces the geometric normal + full roughness exactly — no visual change until a
+// map is supplied, and the default 1x1 texels are cache-resident (no bandwidth cost).
+[[vk::binding(6, 1)]] Texture2D<float4> gMat0 : register(t6, space1);
+[[vk::binding(7, 1)]] Texture2D<float4> gMat1 : register(t7, space1);
+[[vk::binding(8, 1)]] Texture2D<float4> gMat2 : register(t8, space1);
+[[vk::binding(9, 1)]] Texture2D<float4> gMat3 : register(t9, space1);
 
 static const float kTexScale = 3.0f; // world metres per texture tile
 
@@ -38,12 +46,37 @@ float3 TriplanarLayer(Texture2D<float4> tex, float3 wp, float3 blend)
     return cx * blend.x + cy * blend.y + cz * blend.z;
 }
 
+// One layer's material sampled triplanar. Normal maps are linear (NOT sRGB — no ToLinear): unpack
+// each plane's tangent normal, reorient into world space via the Whiteout blend (no per-vertex
+// tangents needed), and triblend by the same sharpened-normal weights. Returns the (un-normalized)
+// world normal in .xyz and the triplanar-blended roughness in .w.
+float4 TriplanarMaterial(Texture2D<float4> tex, float3 wp, float3 N, float3 blend)
+{
+    const float s = 1.0f / kTexScale;
+    float4 mx = tex.Sample(terrain_sampler, wp.zy * s);
+    float4 my = tex.Sample(terrain_sampler, wp.xz * s);
+    float4 mz = tex.Sample(terrain_sampler, wp.xy * s);
+    float3 tX = mx.xyz * 2.0f - 1.0f;
+    float3 tY = my.xyz * 2.0f - 1.0f;
+    float3 tZ = mz.xyz * 2.0f - 1.0f;
+    // Whiteout blend (Golus): fold the geometric normal into each plane's tangent normal, then
+    // swizzle each back to world orientation. A flat (0,0,1) tangent normal collapses to N exactly.
+    tX = float3(tX.xy + N.zy, abs(tX.z) * N.x);
+    tY = float3(tY.xy + N.xz, abs(tY.z) * N.y);
+    tZ = float3(tZ.xy + N.xy, abs(tZ.z) * N.z);
+    float3 wn = tX.zyx * blend.x + tY.xzy * blend.y + tZ.xyz * blend.z;
+    float rough = mx.w * blend.x + my.w * blend.y + mz.w * blend.z;
+    return float4(wn, rough);
+}
+
 PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
 {
     PS_OUTPUT_Gbuffer output;
 
     float3 N = normalize(input.normal);
     float3 albedo;
+    float3 outN = N;         // surface normal written to the gbuffer (perturbed for ground below)
+    float roughness = 1.0f;  // matches the terrain's prior fixed max-roughness output
 
     // Scatter props (trees/rocks/grass) are baked into the tile with color.a < 0.5 — keep their
     // baked colour, they are not ground.
@@ -84,13 +117,22 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
                  weight.z * TriplanarLayer(gLayer2, wp, blend) +
                  weight.w * TriplanarLayer(gLayer3, wp, blend);
 
+        // Per-layer normal + roughness, weight-blended like the albedo. Flat default maps leave
+        // outN == N and roughness == 1, so unauthored terrain is byte-identical to before.
+        float4 mat = weight.x * TriplanarMaterial(gMat0, wp, N, blend) +
+                     weight.y * TriplanarMaterial(gMat1, wp, N, blend) +
+                     weight.z * TriplanarMaterial(gMat2, wp, N, blend) +
+                     weight.w * TriplanarMaterial(gMat3, wp, N, blend);
+        outN = normalize(mat.xyz);
+        roughness = mat.w;
+
         // Per-vertex tint carries the cave-interior rock darkening and the underwater blue mix.
         albedo *= input.color.rgb;
     }
 
-    output.normal = float4(N * 0.5f + 0.5f, 1.0f);
+    output.normal = float4(outN * 0.5f + 0.5f, 1.0f);
     output.albedo = float4(albedo, 1.0f);
-    output.metRough = float4(1.0f, 1.0f, 0.0f, 0.0f); // full occlusion, max roughness, no metal
+    output.metRough = float4(1.0f, roughness, 0.0f, 0.0f); // full occlusion, per-layer roughness, no metal
     output.emissive = float4(0.0f, 0.0f, 0.0f, 1.0f);
     output.transparency = pc.passType ? 1.0f : 0.0f;
 
