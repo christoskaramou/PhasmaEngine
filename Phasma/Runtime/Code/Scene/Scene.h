@@ -480,6 +480,7 @@ namespace pe
         // changes reach the GPU selected-indirect bucket without a full geometry rebuild.
         void UpdateMeshSelectionFlags();
         Buffer *GetIndirectVoxels(uint32_t frame) const { return m_indirectVoxels[frame]; }
+        Buffer *GetIndirectTerrain(uint32_t frame) const { return m_indirectTerrain[frame]; }
         Buffer *GetShadowIndirectRegular(uint32_t frame) const { return m_shadowIndirectRegular[frame]; }
         Buffer *GetShadowIndirectVoxels(uint32_t frame) const { return m_shadowIndirectVoxels[frame]; }
         Buffer *GetShadowCullCounters(uint32_t frame) const { return m_shadowCullCounters[frame]; }
@@ -505,6 +506,17 @@ namespace pe
         const std::vector<ImageView *> &GetImageViews() const { return m_imageViews; }
         void SetVoxelAtlasView(ImageView *v) { m_voxelAtlasView = v; }
         ImageView *GetVoxelAtlasView() const { return m_voxelAtlasView; }
+        // Dedicated terrain triplanar-splat descriptor: the splat map + 4 layer albedos, bound by
+        // GbufferPass to the terrain pipeline. Set by TerrainWorld; nullptr = no terrain drawn.
+        void SetTerrainSplatView(ImageView *v) { m_terrainSplatView = v; }
+        ImageView *GetTerrainSplatView() const { return m_terrainSplatView; }
+        void SetTerrainLayerView(int i, ImageView *v)
+        {
+            if (i >= 0 && i < 4)
+                m_terrainLayerViews[i] = v;
+        }
+        ImageView *GetTerrainLayerView(int i) const { return (i >= 0 && i < 4) ? m_terrainLayerViews[i] : nullptr; }
+        bool HasTerrain() const { return m_terrainSplatView != nullptr && m_terrainLayerViews[0] != nullptr; }
         uint32_t GetMeshCount() const { return m_meshCount; }
         Buffer *GetMeshConstants();
         Buffer *GetMaterialTable() { return m_materialTable; }
@@ -746,6 +758,7 @@ namespace pe
         std::vector<Buffer *> m_indirectTransmission;
         std::vector<Buffer *> m_indirectSelected;
         std::vector<Buffer *> m_indirectVoxels;
+        std::vector<Buffer *> m_indirectTerrain; // dedicated terrain pipeline bucket (cull counter 8)
         // ShadowPass per-cascade light-frustum cull (reused each cascade; counters reset per dispatch).
         std::vector<Buffer *> m_shadowIndirectRegular;
         std::vector<Buffer *> m_shadowIndirectVoxels;
@@ -825,6 +838,8 @@ namespace pe
 
         std::vector<ImageView *> m_imageViews;
         ImageView *m_voxelAtlasView = nullptr;
+        ImageView *m_terrainSplatView = nullptr;
+        ImageView *m_terrainLayerViews[4] = {nullptr, nullptr, nullptr, nullptr};
         uint64_t m_geometryVersion = 0;
 
         // Ray tracing

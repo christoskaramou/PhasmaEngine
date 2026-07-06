@@ -782,6 +782,15 @@ namespace pe
                     if (s.IsString())
                         t->scatterMeshes.emplace_back(s.GetString());
             }
+            if (tv.HasMember("splatPath") && tv["splatPath"].IsString())
+                t->splatPath = tv["splatPath"].GetString();
+            if (tv.HasMember("layerPaths") && tv["layerPaths"].IsArray())
+            {
+                const auto &layers = tv["layerPaths"].GetArray();
+                for (rapidjson::SizeType i = 0; i < layers.Size() && i < 4; ++i)
+                    if (layers[i].IsString())
+                        t->layerPaths[i] = layers[i].GetString();
+            }
             if (tv.HasMember("terrainOps") && tv["terrainOps"].IsArray())
             {
                 const auto &ops = tv["terrainOps"];
@@ -2073,6 +2082,13 @@ namespace pe
                         for (const std::string &s : t.scatterMeshes)
                             meshes.PushBack(MakeStringValue(s), allocator);
                         tObj.AddMember("scatterMeshes", meshes.Move(), allocator);
+                    }
+                    tObj.AddMember("splatPath", MakeStringValue(t.splatPath), allocator);
+                    {
+                        rapidjson::Value layers(rapidjson::kArrayType);
+                        for (const std::string &s : t.layerPaths)
+                            layers.PushBack(MakeStringValue(s), allocator);
+                        tObj.AddMember("layerPaths", layers.Move(), allocator);
                     }
                     if (!t.terrainOps.empty())
                     {

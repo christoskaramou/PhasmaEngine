@@ -2127,6 +2127,16 @@ namespace pe
                             t->scatterMeshes.emplace_back("tree");
                             changed = true;
                         }
+
+                        changed |= InputTextDeferred("Splat Map", t->splatPath);
+                        ui::ItemTooltip("Optional RGBA splat map under Assets (R=grass G=rock B=sand A=snow weights). "
+                                        "Empty = automatic height/slope selection. Applies when the field loses focus.");
+                        static const char *kLayerLabels[4] = {"Layer 0 (grass)", "Layer 1 (rock)",
+                                                              "Layer 2 (sand)", "Layer 3 (snow)"};
+                        for (int li = 0; li < 4; ++li)
+                            changed |= InputTextDeferred(kLayerLabels[li], t->layerPaths[li]);
+                        ui::ItemTooltip("Triplanar albedo textures for the 4 splat layers (default = built-in tiles).");
+
                         if (t->heightmapPath.empty())
                         {
                             changed |= ImGui::DragFloat("Feature Scale", &t->noiseFeatureScale, 0.5f, 8.0f, 1024.0f, "%.0f");

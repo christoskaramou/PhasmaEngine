@@ -48,6 +48,9 @@ namespace pe::terrain
             h = HashString(h, cfg.scatterPath);
             for (const std::string &s : cfg.scatterMeshes)
                 h = HashString(h, s);
+            h = HashString(h, cfg.splatPath);
+            for (const std::string &s : cfg.layerPaths)
+                h = HashString(h, s);
             h = HashF(h, cfg.noiseFeatureScale);
             h = HashInt(h, cfg.noiseSeed);
             h = HashF(h, cfg.metersPerPixel);
@@ -164,6 +167,8 @@ namespace pe::terrain
         cfg.cavesPath = tag->cavesPath;
         cfg.scatterPath = tag->scatterPath;
         cfg.scatterMeshes = tag->scatterMeshes;
+        cfg.splatPath = tag->splatPath;
+        cfg.layerPaths = tag->layerPaths;
         cfg.noiseFeatureScale = tag->noiseFeatureScale;
         cfg.noiseSeed = tag->noiseSeed;
         cfg.metersPerPixel = tag->metersPerPixel;

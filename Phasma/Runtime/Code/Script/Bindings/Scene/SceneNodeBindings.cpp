@@ -726,6 +726,13 @@ namespace pe
                         for (size_t i = 1; i <= meshes.size(); ++i)
                             t->scatterMeshes.push_back(meshes[i].get<std::string>());
                     }
+                    if (p["splat_map"].valid()) t->splatPath = p["splat_map"].get<std::string>();
+                    if (p["layers"].valid())
+                    {
+                        sol::table layers = p["layers"];
+                        for (size_t i = 1; i <= layers.size() && i <= 4; ++i)
+                            t->layerPaths[i - 1] = layers[i].get<std::string>();
+                    }
                     if (p["noise_feature_scale"].valid()) t->noiseFeatureScale = p["noise_feature_scale"];
                     if (p["noise_seed"].valid()) t->noiseSeed = p["noise_seed"];
                     if (p["meters_per_pixel"].valid()) t->metersPerPixel = p["meters_per_pixel"];
@@ -761,6 +768,11 @@ namespace pe
                     for (size_t i = 0; i < t->scatterMeshes.size(); ++i)
                         meshes[i + 1] = t->scatterMeshes[i];
                     r["scatter_meshes"] = meshes;
+                    r["splat_map"] = t->splatPath;
+                    sol::table layers = lua.create_table();
+                    for (size_t i = 0; i < t->layerPaths.size(); ++i)
+                        layers[i + 1] = t->layerPaths[i];
+                    r["layers"] = layers;
                     r["noise_feature_scale"] = t->noiseFeatureScale;
                     r["noise_seed"] = t->noiseSeed;
                     r["meters_per_pixel"] = t->metersPerPixel;

@@ -1,0 +1,14 @@
+{
+  "name": "terrain_gbuffer",
+  "version": 1,
+  "surface": {
+    "vertexShader": "Shaders/Gbuffer/GBufferVS.hlsl",
+    "fragmentShader": "Shaders/Terrain/TerrainGBufferPS.hlsl",
+    "cullMode": "front",
+    "depthWriteEnable": true,
+    "depthTestEnable": true,
+    "blendEnable": false,
+    "dynamicStates": ["viewport", "scissor"],
+    "colorBlendAttachments": ["default", "default", "default", "default", "default", "default"]
+  }
+}
