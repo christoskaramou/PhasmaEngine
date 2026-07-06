@@ -847,16 +847,17 @@ namespace pe
         const bool hasMapPainter = GetWidget<MapPainter>() != nullptr;
         addAction("voxelpainter.layer",
                   "Voxel Map Painter: Select Layer (args: layer 0=surface 1=strata1 2=strata2 3=features "
-                  "4=caves 5=scatter - 4/5 Terrain node)",
+                  "4=caves 5=scatter 6=splat - 4/5/6 Terrain node)",
                   "VoxelPainter", "command", hasMapPainter, false, false);
         addAction("voxelpainter.stroke",
                   "Voxel Map Painter: Brush Stroke (args: u, v 0..1; optional radius px, strength, lower, "
                   "brush raise|smooth|flatten|set on gray layers or tree|rock|olive|cypress|block|erase on the "
                   "features layer, value = target for set / block id for block; scatter layer: brush = numeric "
-                  "kind id 1..N, 0 erases, strokes apply live)",
+                  "kind id 1..N, 0 erases; splat layer: brush = layer index 1=grass 2=rock 3=sand 4=snow, "
+                  "0 erases to auto; scatter/splat strokes apply live)",
                   "VoxelPainter", "command", hasMapPainter, false, false);
-        addAction("voxelpainter.save", "Voxel Map Painter: Save PNG + Rebuild World (scatter: persists only, "
-                                       "already applied live)",
+        addAction("voxelpainter.save", "Voxel Map Painter: Save PNG + Rebuild World (scatter/splat: persists "
+                                       "only, already applied live)",
                   "VoxelPainter", "command", hasMapPainter, false, false);
 
         addAction("status.console_errors", "Show Console Errors", "Status", "command", GetWidget<Console>() != nullptr, false, false);

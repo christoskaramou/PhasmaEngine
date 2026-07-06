@@ -66,7 +66,8 @@ namespace pe
         static constexpr int kFeaturesLayer = 3;
         static constexpr int kCavesLayer = 4;   // Terrain node only: painted underground voids
         static constexpr int kScatterLayer = 5; // Terrain node only: painted mesh scatter (kind ids)
-        static constexpr int kLayerCount = 6;
+        static constexpr int kSplatLayer = 6;   // Terrain node only: painted triplanar texture weights
+        static constexpr int kLayerCount = 7;
 
         // The node fields that own a painter layer, resolved per layer: the height layer (0) prefers a
         // Terrain node when one exists; strata/features (1-3) are Voxel World only. Pointers are into the
@@ -97,6 +98,7 @@ namespace pe
         LayerBuffer &Buf() { return m_layers[m_layer]; }
         bool OnFeatures() const { return m_layer == kFeaturesLayer; }
         bool OnScatter() const { return m_layer == kScatterLayer; }
+        bool OnSplat() const { return m_layer == kSplatLayer; }
         void SyncLayer(int layer); // (re)load a buffer when its owning node's path changed
         void CreateMap();          // allocate + save a fresh map, point the owning node's path at it
         void ResizeMap();          // resample the loaded buffer to m_newW x m_newH
@@ -104,9 +106,15 @@ namespace pe
         void StampFeatures(float px, float py, float radius, FeatureStamp stamp);
         // Scatter layer: jittered-grid dots of a 1-based kind id (0 = erase disk), like StampFeatures.
         void StampScatter(LayerBuffer &buf, float px, float py, float radius, int kindId);
+        // Splat layer: solid-fill the disk with a layer index (1..4 = grass/rock/sand/snow; 0 = erase
+        // back to the shader's auto height/slope selection).
+        void StampSplat(LayerBuffer &buf, float px, float py, float radius, int index);
         // Push the scatter buffer to the live TerrainWorld and re-mesh tiles under the stamped pixel
         // rect (no rebuild). False = no live world/templates; caller falls back to rebuildRequested.
         bool PushScatterLive(float px0, float py0, float px1, float py1);
+        // Push the splat buffer (expanded to one-hot RGBA layer weights) to the live TerrainWorld's
+        // GPU splat texture — re-textures with no rebuild. False = textured pipeline not active.
+        bool PushSplatLive();
         void UploadPreview();
         void ReleasePreview();
         void LoadPalette(); // lazily load the block tile thumbnails for the Block picker
@@ -131,6 +139,7 @@ namespace pe
         int m_featureSpacing = 5;      // min pixels between scattered features / scatter instances
         int m_paintBlock = 3;          // block id the Block stamp paints onto the surface
         int m_scatterKind = 0;         // Scatter layer combo index: 0..N-1 = kind 1..N, N = Erase
+        int m_splatLayer = 0;          // Splat layer combo: 0..3 = grass/rock/sand/snow (paints index+1)
         // One block-tile thumbnail per palette entry (loaded lazily), + its average color for the
         // features preview.
         struct Thumb

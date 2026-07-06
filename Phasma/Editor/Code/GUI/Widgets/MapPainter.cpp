@@ -23,8 +23,8 @@ namespace pe
 {
     namespace
     {
-        constexpr const char *kLayerNames[6] = {"Surface Height", "Strata 1 Thickness", "Strata 2 Thickness",
-                                                "Features", "Caves (Terrain)", "Scatter (Terrain)"};
+        constexpr const char *kLayerNames[7] = {"Surface Height", "Strata 1 Thickness", "Strata 2 Thickness",
+                                                "Features", "Caves (Terrain)", "Scatter (Terrain)", "Splat (Terrain)"};
         // Keep the Terrain node's bounded extent in sync with the painted heightmap dimensions. No-op
         // unless painting the surface-height layer (0); the pointers are null for non-terrain targets.
         void SyncTerrainExtentFromMap(int layer, float *metersPerPixel, int *sizeXMeters, int *sizeZMeters, int w, int h)
@@ -36,8 +36,14 @@ namespace pe
             *sizeZMeters = std::max(1, static_cast<int>(std::lround(h * mpp)));
         }
 
-        constexpr const char *kDefaultPaths[6] = {"Maps/heightmap.png", "Maps/strata1.png", "Maps/strata2.png",
-                                                  "Maps/features.png", "Maps/caves.png", "Maps/scatter.png"};
+        constexpr const char *kDefaultPaths[7] = {"Maps/heightmap.png", "Maps/strata1.png", "Maps/strata2.png",
+                                                  "Maps/features.png", "Maps/caves.png", "Maps/scatter.png",
+                                                  "Maps/splat.png"};
+        // The 4 triplanar terrain layers, in splat-channel order (matches TerrainConfig::layerPaths and
+        // TerrainGBufferPS). Preview colours approximate each so painting reads at a glance.
+        constexpr const char *kSplatLayerNames[4] = {"Grass", "Rock", "Sand", "Snow"};
+        constexpr uint8_t kSplatLayerColors[4][3] = {
+            {70, 160, 60}, {130, 120, 110}, {210, 190, 130}, {235, 235, 245}};
         // Scatter-kind preview dot colours, cycled by 1-based kind id.
         constexpr uint8_t kScatterKindColors[8][3] = {{40, 220, 40}, {210, 210, 210}, {150, 220, 90}, {200, 150, 90}, {90, 170, 220}, {220, 120, 200}, {230, 210, 90}, {160, 110, 220}};
         constexpr const char *kFeatureNames[6] = {"Tree", "Rock", "Olive", "Cypress", "Block", "Erase"};
@@ -99,6 +105,22 @@ namespace pe
             return rgba;
         }
 
+        // Splat map: the painter stores a discrete layer index per pixel (0 = unpainted/auto, 1..4 =
+        // grass/rock/sand/snow). Expand to the one-hot RGBA weights the shader reads — the terrain
+        // sampler is linear, so adjacent one-hot texels blend into soft transitions for free, and an
+        // all-zero texel makes the shader fall back to its auto height/slope selection.
+        std::vector<uint8_t> SplatToRgba(const std::vector<float> &idx)
+        {
+            std::vector<uint8_t> rgba(idx.size() * 4, 0);
+            for (size_t i = 0; i < idx.size(); ++i)
+            {
+                const int k = static_cast<int>(std::lround(idx[i]));
+                if (k >= 1 && k <= 4)
+                    rgba[i * 4 + (k - 1)] = 255;
+            }
+            return rgba;
+        }
+
         // Surface height map: the painter's float buffer works in a [0,255] value domain (so brush
         // strength/set numbers match the other layers) but never snaps to integers, so it keeps the
         // file's half-float precision. These map between that domain and the stored signed [-1,1]
@@ -141,16 +163,17 @@ namespace pe
         MapTarget t;
         if (!scene)
             return t;
-        // Height layer: a Terrain node owns it when present (surface = terrain height). The Caves and
-        // Scatter layers are Terrain-only (heightfield cube worlds have their own worldgen caves
-        // toggle, and the voxel Features layer covers cube decorations).
-        if (layer == 0 || layer == kCavesLayer || layer == kScatterLayer)
+        // Height layer: a Terrain node owns it when present (surface = terrain height). The Caves,
+        // Scatter and Splat layers are Terrain-only (heightfield cube worlds have their own worldgen
+        // caves toggle, and the voxel Features layer covers cube decorations).
+        if (layer == 0 || layer == kCavesLayer || layer == kScatterLayer || layer == kSplatLayer)
         {
             if (NodeId *tn = scene->GetTerrainNode())
                 if (NodeTerrainTag *tt = scene->GetTerrainForNode(tn))
                 {
                     t.path = layer == kCavesLayer     ? &tt->cavesPath
                              : layer == kScatterLayer ? &tt->scatterPath
+                             : layer == kSplatLayer   ? &tt->splatPath
                                                       : &tt->heightmapPath;
                     t.metersPerPixel = &tt->metersPerPixel;
                     t.scatterMeshes = &tt->scatterMeshes;
@@ -165,7 +188,7 @@ namespace pe
                     t.terrainFlip = true; // Terrain maps col 0 -> +X, row 0 -> +Z
                     return t;
                 }
-            if (layer == kCavesLayer || layer == kScatterLayer)
+            if (layer == kCavesLayer || layer == kScatterLayer || layer == kSplatLayer)
                 return t; // no Terrain node -> no target
         }
         // Strata / features (and the height layer's fallback) live on the Voxel World node.
@@ -256,6 +279,29 @@ namespace pe
                 }
             }
         }
+        if (!loaded && layer == kSplatLayer) // splat: RGBA layer weights -> the dominant layer index
+        {
+            int channels = 0;
+            if (stbi_uc *data = stbi_load(resolved.c_str(), &w, &h, &channels, 4))
+            {
+                buf.w = w;
+                buf.h = h;
+                const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h);
+                buf.px.resize(n);
+                for (size_t i = 0; i < n; ++i)
+                {
+                    const stbi_uc *p = data + i * 4;
+                    int best = 0;
+                    uint8_t bv = 0;
+                    for (int c = 0; c < 4; ++c)
+                        if (p[c] > bv)
+                            bv = p[c], best = c + 1;
+                    buf.px[i] = bv >= 32 ? static_cast<float>(best) : 0.0f; // near-zero = unpainted (auto)
+                }
+                stbi_image_free(data);
+                loaded = true;
+            }
+        }
         if (!loaded) // legacy 8-bit image (surface: gray remaps to [-1,1] on save) / strata / features
         {
             int channels = 0;
@@ -294,9 +340,10 @@ namespace pe
         buf.loadedPath = voxel::ColumnChunkStore::ResolveRoot(slot).string();
         buf.w = std::clamp(m_newW, 16, 2048);
         buf.h = std::clamp(m_newH, 16, 2048);
-        // Features/caves/scatter maps start empty (0 = nothing there); a gray fill is garbage.
-        const float fill =
-            (OnFeatures() || m_layer == kCavesLayer || OnScatter()) ? 0.0f : std::clamp(m_newValue, 0.0f, 255.0f);
+        // Features/caves/scatter/splat maps start empty (0 = nothing there / auto); a gray fill is garbage.
+        const float fill = (OnFeatures() || m_layer == kCavesLayer || OnScatter() || OnSplat())
+                               ? 0.0f
+                               : std::clamp(m_newValue, 0.0f, 255.0f);
         buf.px.assign(static_cast<size_t>(buf.w) * static_cast<size_t>(buf.h), fill);
         buf.unsaved = true;
         m_textureDirty = true;
@@ -319,9 +366,9 @@ namespace pe
             {
                 const float u = (static_cast<float>(x) + 0.5f) / static_cast<float>(newW);
                 const float v = (static_cast<float>(y) + 0.5f) / static_cast<float>(newH);
-                if (OnFeatures() || OnScatter())
+                if (OnFeatures() || OnScatter() || OnSplat())
                 {
-                    // Nearest: feature/kind ids are discrete, interpolating them invents garbage.
+                    // Nearest: feature/kind/layer ids are discrete, interpolating them invents garbage.
                     const int sx = std::clamp(static_cast<int>(u * static_cast<float>(buf.w)), 0, buf.w - 1);
                     const int sy = std::clamp(static_cast<int>(v * static_cast<float>(buf.h)), 0, buf.h - 1);
                     out[y * newW + x] = buf.px[sy * buf.w + sx];
@@ -568,6 +615,35 @@ namespace pe
         return true;
     }
 
+    void MapPainter::StampSplat(LayerBuffer &buf, float px, float py, float radius, int index)
+    {
+        // Solid disk of a discrete layer index (0 = erase to auto) — no falloff blend, the shader's
+        // linear splat sampler softens the seams between painted regions instead.
+        const float r = std::max(0.5f, radius);
+        const float v = static_cast<float>(std::clamp(index, 0, 4));
+        const int x0 = std::max(0, static_cast<int>(std::floor(px - r)));
+        const int x1 = std::min(buf.w - 1, static_cast<int>(std::ceil(px + r)));
+        const int y0 = std::max(0, static_cast<int>(std::floor(py - r)));
+        const int y1 = std::min(buf.h - 1, static_cast<int>(std::ceil(py + r)));
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x)
+                if ((static_cast<float>(x) - px) * (static_cast<float>(x) - px) +
+                        (static_cast<float>(y) - py) * (static_cast<float>(y) - py) <=
+                    r * r)
+                    buf.px[y * buf.w + x] = v;
+    }
+
+    bool MapPainter::PushSplatLive()
+    {
+        const MapTarget t = ResolveTarget(kSplatLayer);
+        LayerBuffer &buf = m_layers[kSplatLayer];
+        auto *ts = GetGlobalSystem<terrain::TerrainSystem>();
+        if (!t.valid() || buf.px.empty() || !ts || !ts->World())
+            return false;
+        const std::vector<uint8_t> rgba = SplatToRgba(buf.px);
+        return ts->World()->UpdateSplatMap(rgba.data(), buf.w, buf.h);
+    }
+
     bool MapPainter::Stroke(float u, float v, float radius, float strength, bool lower, int brush, int value)
     {
         SyncLayer(m_layer);
@@ -585,6 +661,13 @@ namespace pe
             const int kind = brush >= 0 ? brush : (m_scatterKind >= kinds ? 0 : m_scatterKind + 1);
             StampScatter(buf, px, py, r, kind);
             PushScatterLive(px - r, py - r, px + r, py + r);
+        }
+        else if (OnSplat())
+        {
+            // brush = layer index (1..4; 0 erases to auto); < 0 = the widget's combo selection.
+            const int index = brush >= 0 ? brush : (m_splatLayer >= 4 ? 0 : m_splatLayer + 1);
+            StampSplat(buf, px, py, r, index);
+            PushSplatLive(); // re-textures live, no rebuild
         }
         else if (OnFeatures())
         {
@@ -625,7 +708,8 @@ namespace pe
         }
         else
         {
-            const std::vector<uint8_t> rgba = GrayToRgba(buf.px);
+            // Splat: one-hot RGBA layer weights; every other layer: gray replicated across RGBA.
+            const std::vector<uint8_t> rgba = OnSplat() ? SplatToRgba(buf.px) : GrayToRgba(buf.px);
             blob = pmcp::EncodeRGBA_PNG(rgba.data(), buf.w, buf.h);
         }
         if (blob.empty())
@@ -645,9 +729,11 @@ namespace pe
         out.close();
 
         buf.unsaved = false;
-        // Scatter edits apply live through UpdateScatterMap — saving is just persistence, no rebuild
-        // hitch. Fall back to the rebuild flag when there is no live world (or no templates yet).
+        // Scatter/splat edits apply live (UpdateScatterMap / UpdateSplatMap) — saving is just
+        // persistence, no rebuild hitch. Fall back to the rebuild flag when there is no live world.
         if (OnScatter() && PushScatterLive(0.0f, 0.0f, static_cast<float>(buf.w), static_cast<float>(buf.h)))
+            return true;
+        if (OnSplat() && PushSplatLive())
             return true;
         SyncTerrainExtentFromMap(m_layer, t.metersPerPixel, t.sizeXMeters, t.sizeZMeters, buf.w, buf.h);
         if (t.rebuild)
@@ -737,6 +823,35 @@ namespace pe
                     if (kv > 0)
                     {
                         const uint8_t *c = kScatterKindColors[(kv - 1) & 7];
+                        rr = c[0], gg = c[1], bb = c[2];
+                    }
+                    rgba[i * 4 + 0] = rr;
+                    rgba[i * 4 + 1] = gg;
+                    rgba[i * 4 + 2] = bb;
+                    rgba[i * 4 + 3] = 255;
+                }
+        }
+        else if (OnSplat())
+        {
+            // Layer indices read as near-black gray: show each painted layer's colour over a dimmed
+            // surface underlay (unpainted = the underlay, i.e. where the shader's auto selection runs).
+            const LayerBuffer &surf = m_layers[0];
+            rgba.resize(buf.px.size() * 4);
+            for (int y = 0; y < buf.h; ++y)
+                for (int x = 0; x < buf.w; ++x)
+                {
+                    const size_t i = static_cast<size_t>(y) * buf.w + x;
+                    uint8_t rr = 20, gg = 20, bb = 20;
+                    if (!surf.px.empty())
+                    {
+                        const int sx = std::clamp(x * surf.w / buf.w, 0, surf.w - 1);
+                        const int sy = std::clamp(y * surf.h / buf.h, 0, surf.h - 1);
+                        rr = gg = bb = ToU8(surf.px[sy * surf.w + sx] * 0.5f);
+                    }
+                    const int lv = static_cast<int>(std::lround(buf.px[i]));
+                    if (lv >= 1 && lv <= 4)
+                    {
+                        const uint8_t *c = kSplatLayerColors[lv - 1];
                         rr = c[0], gg = c[1], bb = c[2];
                     }
                     rgba[i * 4 + 0] = rr;
@@ -963,8 +1078,9 @@ namespace pe
                         "present, else the Voxel World's heightmap). Strata: thickness of the band below the "
                         "surface (Voxel World). Features: sparse decoration dots (Voxel World). Caves: painted "
                         "underground voids (Terrain node; value = how open, roof stays intact). Scatter: painted "
-                        "prop meshes baked into the terrain tiles (Terrain node; strokes apply live). Edits are "
-                        "kept per layer until saved.");
+                        "prop meshes baked into the terrain tiles (Terrain node; strokes apply live). Splat: "
+                        "which triplanar texture layer paints the surface (Terrain node; strokes apply live; "
+                        "unpainted = auto height/slope). Edits are kept per layer until saved.");
 
         MapTarget target = ResolveTarget(m_layer);
         if (!target.valid())
@@ -972,6 +1088,7 @@ namespace pe
             ImGui::TextDisabled(m_layer == kFeaturesLayer  ? "The Features layer needs a Voxel World node."
                                 : m_layer == kCavesLayer   ? "The Caves layer needs a Terrain node."
                                 : m_layer == kScatterLayer ? "The Scatter layer needs a Terrain node."
+                                : m_layer == kSplatLayer   ? "The Splat layer needs a Terrain node."
                                 : m_layer == 0             ? "Add a Terrain or Voxel World node to paint the surface."
                                                            : "The Strata layers need a Voxel World node.");
             ImGui::End();
@@ -998,7 +1115,7 @@ namespace pe
         }
 
         SyncLayer(m_layer);
-        if (OnFeatures() || OnScatter())
+        if (OnFeatures() || OnScatter() || OnSplat())
             SyncLayer(0); // surface underlay for the preview
         LayerBuffer &buf = Buf();
         const std::string configured = *target.path;
@@ -1087,6 +1204,18 @@ namespace pe
                 ui::ItemTooltip("Minimum pixels between scattered instances.");
             }
         }
+        else if (OnSplat())
+        {
+            // The 4 triplanar layers + Erase. Painting sets a discrete layer index; the shader's linear
+            // splat sampler softens the seams, and Erase drops back to the auto height/slope selection.
+            static const char *kSplatItems[5] = {"Grass", "Rock", "Sand", "Snow", "Erase"};
+            m_splatLayer = std::clamp(m_splatLayer, 0, 4);
+            ImGui::SetNextItemWidth(150.0f);
+            ImGui::Combo("Texture", &m_splatLayer, kSplatItems, 5);
+            ui::ItemTooltip("Which terrain texture layer the brush paints (grass/rock/sand/snow, in "
+                            "the Terrain node's Layer order). Strokes re-texture live; Save persists "
+                            "the PNG. Erase (or Ctrl+LMB) reverts to the auto height/slope selection.");
+        }
         else if (OnFeatures())
         {
             LoadPalette(); // thumbnails for the Block picker + tile colors for the preview
@@ -1136,7 +1265,7 @@ namespace pe
         ImGui::SetNextItemWidth(110.0f);
         ImGui::DragFloat("Brush", &m_brushRadius, 0.2f, 1.0f, 128.0f, "%.0f px");
         ui::ItemTooltip("Brush radius in map pixels.");
-        if (!OnFeatures())
+        if (!OnFeatures() && !OnSplat()) // features/splat are solid stamps — no per-stamp strength
         {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(110.0f);
@@ -1256,7 +1385,7 @@ namespace pe
                 {
                     const bool lower = ImGui::GetIO().KeyShift;
                     const bool ctrlErase =
-                        (OnFeatures() || OnScatter()) && ImGui::GetIO().KeyCtrl; // Ctrl+LMB clears
+                        (OnFeatures() || OnScatter() || OnSplat()) && ImGui::GetIO().KeyCtrl; // Ctrl+LMB clears
                     const int scatterKinds =
                         target.scatterMeshes ? static_cast<int>(target.scatterMeshes->size()) : 0;
                     const auto stampAt = [&](float sx, float sy)
@@ -1264,6 +1393,9 @@ namespace pe
                         if (OnScatter())
                             StampScatter(buf, sx, sy, m_brushRadius,
                                          (ctrlErase || m_scatterKind >= scatterKinds) ? 0 : m_scatterKind + 1);
+                        else if (OnSplat())
+                            StampSplat(buf, sx, sy, m_brushRadius,
+                                       (ctrlErase || m_splatLayer >= 4) ? 0 : m_splatLayer + 1);
                         else if (OnFeatures())
                             StampFeatures(sx, sy, m_brushRadius,
                                           ctrlErase ? FeatureStamp::Erase
@@ -1296,6 +1428,8 @@ namespace pe
                     if (OnScatter()) // strokes apply live — touched tiles re-mesh, no rebuild
                         PushScatterLive(std::min(segX, px) - m_brushRadius, std::min(segY, py) - m_brushRadius,
                                         std::max(segX, px) + m_brushRadius, std::max(segY, py) + m_brushRadius);
+                    else if (OnSplat()) // strokes apply live — the GPU splat texture re-uploads, no rebuild
+                        PushSplatLive();
                     m_lastPx = px;
                     m_lastPy = py;
                     m_haveLastStamp = true;
@@ -1343,6 +1477,11 @@ namespace pe
                 ImGui::Text("%d, %d = %s  |  LMB paint, Ctrl erase, Alt teleport cam, RMB pan", hoverX, hoverY,
                             lbl);
             }
+            else if (OnSplat())
+            {
+                const char *lbl = (hoverValue >= 1 && hoverValue <= 4) ? kSplatLayerNames[hoverValue - 1] : "auto";
+                ImGui::Text("%d, %d = %s  |  LMB paint, Ctrl erase, Alt teleport cam, RMB pan", hoverX, hoverY, lbl);
+            }
             else if (m_layer == 0)
                 ImGui::Text("%d, %d = %.3f (scaler)  |  LMB paint, Shift lower, Alt teleport cam, RMB pan", hoverX,
                             hoverY, SurfRangeToSigned(hoverRaw));
@@ -1352,8 +1491,9 @@ namespace pe
         }
         else
         {
-            ImGui::TextDisabled(OnFeatures() ? "LMB paint, Ctrl erase, Alt teleport cam, RMB pan"
-                                             : "LMB paint, Shift lower, Alt teleport cam, RMB pan");
+            ImGui::TextDisabled((OnFeatures() || OnScatter() || OnSplat())
+                                    ? "LMB paint, Ctrl erase, Alt teleport cam, RMB pan"
+                                    : "LMB paint, Shift lower, Alt teleport cam, RMB pan");
         }
 
         ImGui::End();
