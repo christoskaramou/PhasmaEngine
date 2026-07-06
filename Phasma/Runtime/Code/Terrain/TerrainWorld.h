@@ -66,6 +66,7 @@ namespace pe::terrain
         // Optional per-layer material maps (RGB = tangent-space normal, A = roughness), same layer
         // order. Empty = a flat-normal / full-roughness default (terrain looks exactly as untextured).
         std::array<std::string, 4> materialPaths = {"", "", "", ""};
+        float textureScaleM = 3.0f; // metres per triplanar texture tile (live, not structural)
         float noiseFeatureScale = 96.0f;
         int noiseSeed = 0;
         float metersPerPixel = 1.0f; // world metres each ring-0 grid cell spans in X/Z (and Y)
@@ -136,6 +137,8 @@ namespace pe::terrain
 
         void SetPhysicsEnabled(bool enabled);
         void SetTerrainMaterial(float friction, float restitution);
+        // Live metres-per-tile change (no rebuild): updates config + the Scene value the shader reads.
+        void SetTextureScale(float metersPerTile);
         // Live: the collider ring re-fits over the next Updates (no rebuild).
         void SetCollisionRadius(float radiusM) { m_cfg.collisionRadiusM = radiusM; }
         // Override the generator (call before Create; nullptr reverts to the default). Must be

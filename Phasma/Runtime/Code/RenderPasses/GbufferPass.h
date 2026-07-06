@@ -15,7 +15,7 @@ namespace pe
     struct PushConstants_GBuffer
     {
         uint32_t jointsCount;
-        float pad0;
+        float terrainTexScale; // metres per triplanar tile, set for the terrain draw only
         vec2 projJitter;
         vec2 prevProjJitter;
         uint32_t passType;

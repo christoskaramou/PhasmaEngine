@@ -327,6 +327,9 @@ namespace pe::terrain
         m_cfg.sizeZMeters = std::max(0, m_cfg.sizeZMeters);
         m_cfg.overhangs = std::clamp(m_cfg.overhangs, 0.0f, 1.0f);
         m_cfg.metersPerPixel = std::max(0.05f, m_cfg.metersPerPixel);
+        m_cfg.textureScaleM = std::max(0.05f, m_cfg.textureScaleM);
+        if (m_scene)
+            m_scene->SetTerrainTexScale(m_cfg.textureScaleM);
 
         BuildGenerator();
         LoadCavesMap();
@@ -1702,6 +1705,13 @@ namespace pe::terrain
             for (Tile &tile : m_tiles)
                 RemoveTileBody(tile);
         // Enabled: the collider ring fills back up over the next Updates (budgeted cooks).
+    }
+
+    void TerrainWorld::SetTextureScale(float metersPerTile)
+    {
+        m_cfg.textureScaleM = std::max(0.05f, metersPerTile);
+        if (m_scene)
+            m_scene->SetTerrainTexScale(m_cfg.textureScaleM); // shader reads it via the terrain push constant
     }
 
     void TerrainWorld::SetTerrainMaterial(float friction, float restitution)

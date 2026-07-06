@@ -113,11 +113,13 @@ steep face. So terrain is fully textured with zero authoring, and a splat map is
   byte-identical to before and the default texels are cache-resident (no bandwidth). Cost is opt-in —
   measured ~0% fps delta with no maps, ~13% on the terrain pass when every layer has a real map.
 
-**Painting the splat (Map Painter layer 6 "Splat (Terrain)")** — paints which of the 4 layers
-textures the surface. The painter stores a discrete layer index per pixel (0 = unpainted → auto,
-1..4 = grass/rock/sand/snow); Save expands it to a one-hot RGBA PNG. The terrain sampler is linear,
-so adjacent one-hot texels blend into soft seams for free, and a zero texel keeps the auto selection.
-Strokes apply **LIVE** through `TerrainWorld::UpdateSplatMap` — it re-uploads the GPU splat texture in
+**Painting the splat (Map Painter layer 6 "Splat (Terrain)")** — paints per-layer WEIGHTS. The painter
+stores 4 float weights per pixel (R grass, G rock, B sand, A snow); the brush is additive with linear
+falloff (Strength = weight added per stamp) and gently pulls the other channels down, so layers blend
+softly — build a layer up with repeated strokes. Erase (or Ctrl+LMB) fades all 4 weights toward 0
+(back to the auto selection). Save writes the 4-channel buffer straight to an RGBA PNG; an all-zero
+texel keeps the auto height/slope selection. Strokes apply **LIVE** through
+`TerrainWorld::UpdateSplatMap` — it re-uploads the GPU splat texture in
 place (`CopyDataToImageStaged`, or a full recreate + `SetTerrainSplatView` on the first paint / a
 resize) with **no rebuild or re-mesh** (the tile mesh already carries the splat uv). The painter's
 pixel→texel mapping is 1:1 with the shader's uv: the painter's terrain-flip (`col 0 = +X`,
@@ -219,14 +221,12 @@ range so it never shifts while streaming.
 - Scatter props share the terrain material (baked vertex colours, no textures — the shader passes
   their `color.a < 0.5` verts straight through) — textured props need per-material instanced draws, a
   render-side feature that does not exist yet.
-- Triplanar splatting supports albedo + per-layer normal/roughness maps (above), but metal is fixed 0
-  and there is no per-layer AO or height/parallax. `kTexScale` (3 m/tile) is a shader constant — a
-  configurable per-terrain or per-layer texture scale is a follow-up.
-- Splat painting (Map Painter layer 6, above) is one-hot per pixel — you pick which single layer wins
-  a pixel, and the linear sampler softens the seams. True multi-weight brushes (soft per-channel
-  blends authored directly) would need a 4-channel painter buffer; not built (the single-channel index
-  buffer reuses all the existing painter plumbing). Live upload re-uploads the whole texture per stroke
-  (fine for ≤2048² maps); a dirty-rect sub-region copy is the upgrade if huge maps ever hitch.
+- Triplanar splatting supports albedo + per-layer normal/roughness maps and a configurable texture
+  scale (`textureScaleM`, metres per tile, live via the terrain push constant — no rebuild), but metal
+  is fixed 0 and there is no per-layer AO or height/parallax. Texture scale is per-terrain; a per-layer
+  scale is a follow-up.
+- Splat painting (Map Painter layer 6, above) uploads the whole splat texture per stroke (fine for
+  ≤2048² maps); a dirty-rect sub-region copy is the upgrade if huge maps ever hitch.
 - A missing or broken `terrain_gbuffer.passinfo` / `TerrainGBufferPS.hlsl` leaves terrain routed to
   cull bucket 8 but never drawn (`PE_WARN` only) — mirrors the voxel pipeline's identical gap when
   `voxel_gbuffer.passinfo` fails. Texture-load failure is the only runtime fallback (vertex-colour

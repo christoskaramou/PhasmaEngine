@@ -2142,6 +2142,13 @@ namespace pe
                             changed |= InputTextDeferred(kMatLabels[li], t->materialPaths[li]);
                         ui::ItemTooltip("Optional per-layer material maps: RGB = tangent-space normal, A = roughness. "
                                         "Empty = flat normal + full roughness (terrain looks as before).");
+                        if (ImGui::DragFloat("Texture Scale", &t->textureScaleM, 0.05f, 0.1f, 64.0f, "%.2f m/tile"))
+                        {
+                            t->textureScaleM = std::clamp(t->textureScaleM, 0.1f, 64.0f);
+                            changed = true;
+                        }
+                        ui::ItemTooltip("World metres each triplanar texture tile spans (live — no rebuild). "
+                                        "Bigger = coarser, more stretched; smaller = finer, more repetition.");
 
                         if (t->heightmapPath.empty())
                         {

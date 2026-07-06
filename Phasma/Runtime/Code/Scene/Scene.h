@@ -524,6 +524,9 @@ namespace pe
                 m_terrainMaterialViews[i] = v;
         }
         ImageView *GetTerrainMaterialView(int i) const { return (i >= 0 && i < 4) ? m_terrainMaterialViews[i] : nullptr; }
+        // Metres per triplanar texture tile; GbufferPass feeds it to the terrain draw's push constant.
+        void SetTerrainTexScale(float m) { m_terrainTexScale = m > 0.05f ? m : 0.05f; }
+        float GetTerrainTexScale() const { return m_terrainTexScale; }
         bool HasTerrain() const { return m_terrainSplatView != nullptr && m_terrainLayerViews[0] != nullptr; }
         uint32_t GetMeshCount() const { return m_meshCount; }
         Buffer *GetMeshConstants();
@@ -849,6 +852,7 @@ namespace pe
         ImageView *m_terrainSplatView = nullptr;
         ImageView *m_terrainLayerViews[4] = {nullptr, nullptr, nullptr, nullptr};
         ImageView *m_terrainMaterialViews[4] = {nullptr, nullptr, nullptr, nullptr};
+        float m_terrainTexScale = 3.0f;
         uint64_t m_geometryVersion = 0;
 
         // Ray tracing

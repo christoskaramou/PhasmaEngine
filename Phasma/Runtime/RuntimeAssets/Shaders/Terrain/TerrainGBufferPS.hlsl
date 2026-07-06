@@ -31,15 +31,13 @@
 [[vk::binding(8, 1)]] Texture2D<float4> gMat2 : register(t8, space1);
 [[vk::binding(9, 1)]] Texture2D<float4> gMat3 : register(t9, space1);
 
-static const float kTexScale = 3.0f; // world metres per texture tile
-
 // Layers are UNORM (DX12 forbids SRGB storage images), so linearize in-shader before lighting.
 float3 ToLinear(float3 c) { return pow(c, 2.2f); }
 
 // One layer sampled triplanar: project onto the three world planes, blend by the sharpened normal.
-float3 TriplanarLayer(Texture2D<float4> tex, float3 wp, float3 blend)
+// s = 1 / (metres per tile), so bigger tiles sample lower texture frequency.
+float3 TriplanarLayer(Texture2D<float4> tex, float3 wp, float3 blend, float s)
 {
-    const float s = 1.0f / kTexScale;
     float3 cx = ToLinear(tex.Sample(terrain_sampler, wp.zy * s).rgb);
     float3 cy = ToLinear(tex.Sample(terrain_sampler, wp.xz * s).rgb);
     float3 cz = ToLinear(tex.Sample(terrain_sampler, wp.xy * s).rgb);
@@ -50,9 +48,8 @@ float3 TriplanarLayer(Texture2D<float4> tex, float3 wp, float3 blend)
 // each plane's tangent normal, reorient into world space via the Whiteout blend (no per-vertex
 // tangents needed), and triblend by the same sharpened-normal weights. Returns the (un-normalized)
 // world normal in .xyz and the triplanar-blended roughness in .w.
-float4 TriplanarMaterial(Texture2D<float4> tex, float3 wp, float3 N, float3 blend)
+float4 TriplanarMaterial(Texture2D<float4> tex, float3 wp, float3 N, float3 blend, float s)
 {
-    const float s = 1.0f / kTexScale;
     float4 mx = tex.Sample(terrain_sampler, wp.zy * s);
     float4 my = tex.Sample(terrain_sampler, wp.xz * s);
     float4 mz = tex.Sample(terrain_sampler, wp.xy * s);
@@ -112,17 +109,19 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
         float3 blend = pow(abs(N), 4.0f);            // sharpen so faces read as one plane, not a smear
         blend /= (blend.x + blend.y + blend.z + 1e-4f);
 
-        albedo = weight.x * TriplanarLayer(gLayer0, wp, blend) +
-                 weight.y * TriplanarLayer(gLayer1, wp, blend) +
-                 weight.z * TriplanarLayer(gLayer2, wp, blend) +
-                 weight.w * TriplanarLayer(gLayer3, wp, blend);
+        // Configurable metres per tile (pc.terrainTexScale, default 3 m if unset). s = 1 / metres.
+        const float s = 1.0f / (pc.terrainTexScale > 0.01f ? pc.terrainTexScale : 3.0f);
+        albedo = weight.x * TriplanarLayer(gLayer0, wp, blend, s) +
+                 weight.y * TriplanarLayer(gLayer1, wp, blend, s) +
+                 weight.z * TriplanarLayer(gLayer2, wp, blend, s) +
+                 weight.w * TriplanarLayer(gLayer3, wp, blend, s);
 
         // Per-layer normal + roughness, weight-blended like the albedo. Flat default maps leave
         // outN == N and roughness == 1, so unauthored terrain is byte-identical to before.
-        float4 mat = weight.x * TriplanarMaterial(gMat0, wp, N, blend) +
-                     weight.y * TriplanarMaterial(gMat1, wp, N, blend) +
-                     weight.z * TriplanarMaterial(gMat2, wp, N, blend) +
-                     weight.w * TriplanarMaterial(gMat3, wp, N, blend);
+        float4 mat = weight.x * TriplanarMaterial(gMat0, wp, N, blend, s) +
+                     weight.y * TriplanarMaterial(gMat1, wp, N, blend, s) +
+                     weight.z * TriplanarMaterial(gMat2, wp, N, blend, s) +
+                     weight.w * TriplanarMaterial(gMat3, wp, N, blend, s);
         outN = normalize(mat.xyz);
         roughness = mat.w;
 

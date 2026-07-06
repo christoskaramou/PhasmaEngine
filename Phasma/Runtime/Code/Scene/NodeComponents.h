@@ -304,6 +304,7 @@ namespace pe
                                                  "Textures/Voxel/sand.png", "Textures/Voxel/snow.png"};
         // Optional per-layer material maps (RGB = tangent normal, A = roughness); empty = flat default.
         std::array<std::string, 4> materialPaths = {"", "", "", ""};
+        float textureScaleM = 3.0f; // metres per triplanar texture tile (live, no rebuild)
         // Persistent brush strokes, flat 7-float records [type, cx, cy, cz, radius, a, b]: type 0 =
         // CSG sphere (a = 1 digs), type 1 = level toward y = a with weight b. Serialized with the
         // scene; TerrainSystem syncs live-world ops back here and seeds recreated worlds from it.
