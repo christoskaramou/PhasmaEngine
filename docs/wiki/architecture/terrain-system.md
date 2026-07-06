@@ -105,6 +105,21 @@ steep face. So terrain is fully textured with zero authoring, and a splat map is
   so terrain rides the regular shadow bucket; the surface variant writes its own depth like voxel).
   Isolating the ~12-tap triplanar shader to terrain draws keeps it off every other opaque pixel.
 
+**Painting the splat (Map Painter layer 6 "Splat (Terrain)")** — paints which of the 4 layers
+textures the surface. The painter stores a discrete layer index per pixel (0 = unpainted → auto,
+1..4 = grass/rock/sand/snow); Save expands it to a one-hot RGBA PNG. The terrain sampler is linear,
+so adjacent one-hot texels blend into soft seams for free, and a zero texel keeps the auto selection.
+Strokes apply **LIVE** through `TerrainWorld::UpdateSplatMap` — it re-uploads the GPU splat texture in
+place (`CopyDataToImageStaged`, or a full recreate + `SetTerrainSplatView` on the first paint / a
+resize) with **no rebuild or re-mesh** (the tile mesh already carries the splat uv). The painter's
+pixel→texel mapping is 1:1 with the shader's uv: the painter's terrain-flip (`col 0 = +X`,
+`row 0 = +Z`) exactly cancels the mesher's `uv = 0.5 − (worldXZ − boundsCenter)/sizeMeters` flip, so
+the CPU buffer uploads unrotated. Live upload needs the textured pipeline active (`Material::terrain`,
+i.e. `BuildTerrainTextures` succeeded); otherwise the painter falls back to save + rebuild. Editor
+actions: `voxelpainter.layer {layer:6}` + `voxelpainter.stroke {u,v,radius, brush:<1=grass 2=rock
+3=sand 4=snow, 0 erases to auto>}` + `voxelpainter.save`. Size the splat map like the heightmap so the
+preview underlay and Alt+LMB camera teleport line up.
+
 ## Painted mesh scatter (trees, rocks, grass, props)
 
 A grayscale **scatter map** (`scatterPath`, same extent/orientation rules as the caves map) whose
@@ -198,10 +213,11 @@ range so it never shifts while streaming.
   render-side feature that does not exist yet.
 - Triplanar splatting is albedo-only (metal 0, roughness 1, geometric normal): per-layer normal /
   roughness maps and a configurable texture scale are follow-ups. `kTexScale` is a shader constant.
-- A splat map can be **loaded** (`splatPath`) and overrides the auto selection, but there is not yet
-  an in-editor RGBA paint layer — the next step is a Map Painter "Splat (Terrain)" layer that paints
-  one of the 4 material weights and live-uploads the splat texture (the auto selection covers the
-  no-paint case today).
+- Splat painting (Map Painter layer 6, above) is one-hot per pixel — you pick which single layer wins
+  a pixel, and the linear sampler softens the seams. True multi-weight brushes (soft per-channel
+  blends authored directly) would need a 4-channel painter buffer; not built (the single-channel index
+  buffer reuses all the existing painter plumbing). Live upload re-uploads the whole texture per stroke
+  (fine for ≤2048² maps); a dirty-rect sub-region copy is the upgrade if huge maps ever hitch.
 - A missing or broken `terrain_gbuffer.passinfo` / `TerrainGBufferPS.hlsl` leaves terrain routed to
   cull bucket 8 but never drawn (`PE_WARN` only) — mirrors the voxel pipeline's identical gap when
   `voxel_gbuffer.passinfo` fails. Texture-load failure is the only runtime fallback (vertex-colour

@@ -116,6 +116,11 @@ namespace pe::terrain
         // ring-0 tiles overlapping the world-space rect — no rebuild. False when the world has no
         // scatter templates yet (a structural rebuild must pick the config up first).
         bool UpdateScatterMap(const uint8_t *px, int w, int h, const vec2 &worldMin, const vec2 &worldMax);
+        // Live splat painting: replace the GPU splat texture (RGBA layer weights) in place — the
+        // terrain re-textures next frame with no rebuild or re-mesh (the mesh already carries the splat
+        // uv). False when the textured terrain pipeline is not active (BuildTerrainTextures never ran),
+        // so the caller falls back to save + rebuild.
+        bool UpdateSplatMap(const uint8_t *rgba, int w, int h);
 
         // Worldgen surface world-Y at (x, z); ignores sculpts and 3D overhangs (use Raycast for the
         // true surface). Very low when there is no generator.

@@ -1515,6 +1515,62 @@ namespace pe::terrain
         return true;
     }
 
+    bool TerrainWorld::UpdateSplatMap(const uint8_t *rgba, int w, int h)
+    {
+        // Only meaningful once the textured terrain pipeline is live: BuildTerrainTextures owns the 4
+        // layers + the splat at m_terrainTextures[4], and the mesh already carries the splat uv. No
+        // texture pipeline (layers failed to load) = a rebuild can't help either; caller falls back.
+        if (!rgba || w <= 0 || h <= 0 || !m_scene || !m_material || !m_material->terrain ||
+            m_terrainTextures.size() < 5)
+            return false;
+        Queue *queue = RHII.GetMainQueue();
+        if (!queue)
+            return false;
+
+        Image *cur = m_terrainTextures[4].get();
+        // The default splat is a 1x1 zero texel; first paint (or a resize) needs a full-size texture.
+        const bool recreate =
+            !cur || static_cast<int>(cur->GetWidth()) != w || static_cast<int>(cur->GetHeight()) != h;
+
+        CommandBuffer *cmd = queue->AcquireCommandBuffer();
+        cmd->Begin();
+        Image *target = cur;
+        if (recreate)
+        {
+            target = Image::LoadRawFromMemory(cmd, const_cast<uint8_t *>(rgba), static_cast<uint32_t>(w),
+                                              static_cast<uint32_t>(h), PE_FORMAT_R8G8B8A8_UNORM, "TerrainSplatPainted");
+        }
+        else
+        {
+            // Re-upload into the existing texture so the SRV (and GbufferPass binding) stays put —
+            // ponytail: full-texture copy, maps are tiny (<=2048^2); switch to a dirty-rect
+            // sub-region copy if paint on huge maps ever hitches.
+            cmd->CopyDataToImageStaged(target, const_cast<uint8_t *>(rgba), static_cast<size_t>(w) * h * 4);
+            ImageBarrierInfo toRead{};
+            toRead.image = target;
+            toRead.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            toRead.stageFlags = PE_STAGE_FRAGMENT_SHADER;
+            toRead.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
+            cmd->ImageBarrier(toRead);
+        }
+        cmd->End();
+        queue->Submit(1, &cmd, nullptr, nullptr);
+        cmd->Wait();
+        cmd->Return();
+
+        if (recreate)
+        {
+            if (!target)
+                return false;
+            m_terrainTextures[4] = std::shared_ptr<Image>(
+                target, [](Image *p)
+                { RHII.AddToDeletionQueue([p]() mutable
+                                          { Image *img = p; Image::Destroy(img); }); });
+            m_scene->SetTerrainSplatView(m_terrainTextures[4]->GetSRV()); // GbufferPass rebinds on the SRV change
+        }
+        return true;
+    }
+
     // Ring 0 tiles whose sampling window (extent + apron + guard) the op's sphere overlaps. Coarse
     // rings ignore sculpts (heightfield-only); a big dig pops at the fine window's rim, the same trade
     // the voxel LOD bands make with distant cave mouths. Ops on unloaded tiles apply when they stream
