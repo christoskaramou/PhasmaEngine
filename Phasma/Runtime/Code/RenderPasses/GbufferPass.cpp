@@ -46,7 +46,10 @@ namespace pe
             m_passInfoDS = std::make_shared<PassInfo>();
         if (!m_voxelPassInfo)
             m_voxelPassInfo = std::make_shared<PassInfo>();
+        if (!m_terrainPassInfo)
+            m_terrainPassInfo = std::make_shared<PassInfo>();
         m_lastVoxelAtlasView = nullptr;
+        m_lastTerrainSplatView = nullptr;
         m_scene = nullptr;
     }
 
@@ -96,47 +99,55 @@ namespace pe
             throw;
         }
 
-        Shader *oldVoxelVert = m_voxelPassInfo->pVertShader;
-        Shader *oldVoxelFrag = m_voxelPassInfo->pFragShader;
-        auto restoreVoxelShaders = [&]()
+        // Subsystem GBuffer pipelines (voxel, terrain): each reuses the stock GBufferVS and swaps only
+        // the pixel shader. On any failure the old shaders are restored and it PE_WARNs — that
+        // subsystem's bucket is simply not drawn, rather than taking down the whole opaque pass.
+        auto buildSubsystemPipeline = [&](std::shared_ptr<PassInfo> &pi, ResourceHandle<PassInfoAsset> &asset,
+                                          const char *passinfoPath, const char *pipelineName)
         {
-            if (m_voxelPassInfo->pVertShader != oldVoxelVert)
-                Shader::Destroy(m_voxelPassInfo->pVertShader);
-            if (m_voxelPassInfo->pFragShader != oldVoxelFrag)
-                Shader::Destroy(m_voxelPassInfo->pFragShader);
-            m_voxelPassInfo->pVertShader = oldVoxelVert;
-            m_voxelPassInfo->pFragShader = oldVoxelFrag;
+            Shader *oldVert = pi->pVertShader;
+            Shader *oldFrag = pi->pFragShader;
+            auto restore = [&]()
+            {
+                if (pi->pVertShader != oldVert)
+                    Shader::Destroy(pi->pVertShader);
+                if (pi->pFragShader != oldFrag)
+                    Shader::Destroy(pi->pFragShader);
+                pi->pVertShader = oldVert;
+                pi->pFragShader = oldFrag;
+            };
+            try
+            {
+                if (!asset)
+                    asset = ResourceManager::Get().Load<PassInfoAsset>(Path::RuntimeAssets + passinfoPath);
+                const PassVariant *surf = asset ? asset->GetVariant("surface") : nullptr;
+                if (!surf)
+                {
+                    PE_WARN("%s missing 'surface' variant", passinfoPath);
+                    return;
+                }
+                pi->name = pipelineName;
+                pi->Apply(*surf);
+                pi->colorFormats = colorformats;
+                pi->depthFormat = depthFormat;
+                pi->Update();
+            }
+            catch (const std::exception &e)
+            {
+                restore();
+                PE_WARN("GbufferOpaquePass %s update failed: %s", pipelineName, e.what());
+            }
+            catch (...)
+            {
+                restore();
+                PE_WARN("GbufferOpaquePass %s update failed", pipelineName);
+            }
         };
 
-        try
-        {
-            if (!m_voxelPassAsset)
-                m_voxelPassAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::RuntimeAssets + "Shaders/Voxel/voxel_gbuffer.passinfo");
-
-            const PassVariant *voxelSurface = m_voxelPassAsset ? m_voxelPassAsset->GetVariant("surface") : nullptr;
-            if (!voxelSurface)
-            {
-                PE_WARN("voxel_gbuffer.passinfo missing 'surface' variant");
-            }
-            else
-            {
-                m_voxelPassInfo->name = "gbuffer_voxel_pipeline";
-                m_voxelPassInfo->Apply(*voxelSurface);
-                m_voxelPassInfo->colorFormats = colorformats;
-                m_voxelPassInfo->depthFormat = depthFormat;
-                m_voxelPassInfo->Update();
-            }
-        }
-        catch (const std::exception &e)
-        {
-            restoreVoxelShaders();
-            PE_WARN("GbufferOpaquePass voxel pipeline update failed: %s", e.what());
-        }
-        catch (...)
-        {
-            restoreVoxelShaders();
-            PE_WARN("GbufferOpaquePass voxel pipeline update failed");
-        }
+        buildSubsystemPipeline(m_voxelPassInfo, m_voxelPassAsset, "Shaders/Voxel/voxel_gbuffer.passinfo",
+                               "gbuffer_voxel_pipeline");
+        buildSubsystemPipeline(m_terrainPassInfo, m_terrainPassAsset, "Shaders/Terrain/terrain_gbuffer.passinfo",
+                               "gbuffer_terrain_pipeline");
     }
 
     void GbufferOpaquePass::Update()
@@ -170,6 +181,30 @@ namespace pe
             m_lastVoxelAtlasView = atlasView;
         };
 
+        const bool terrainPipelineReady = m_terrainPassInfo && m_terrainPassInfo->pFragShader;
+        auto updateTerrainDescriptors = [&]()
+        {
+            if (!terrainPipelineReady || !scene.HasTerrain())
+            {
+                m_lastTerrainSplatView = nullptr;
+                return;
+            }
+            for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
+            {
+                const auto &sets = m_terrainPassInfo->GetDescriptors(i);
+                if (sets.size() <= 1)
+                    continue;
+
+                Descriptor *setTex = sets[1];
+                setTex->SetSampler(0, scene.GetDefaultSampler());
+                setTex->SetImageView(1, scene.GetTerrainSplatView());
+                for (int l = 0; l < 4; ++l)
+                    setTex->SetImageView(2 + l, scene.GetTerrainLayerView(l));
+                setTex->Update();
+            }
+            m_lastTerrainSplatView = scene.GetTerrainSplatView();
+        };
+
         uint64_t geoVersion = scene.GetGeometryVersion();
         if (geoVersion != m_lastGeometryVersion)
         {
@@ -195,10 +230,13 @@ namespace pe
             }
 
             updateVoxelAtlasDescriptors(scene.GetVoxelAtlasView());
+            updateTerrainDescriptors();
         }
 
         if (scene.HasArenaVoxels() && scene.GetVoxelAtlasView() != m_lastVoxelAtlasView)
             updateVoxelAtlasDescriptors(scene.GetVoxelAtlasView());
+        if (scene.HasTerrain() && scene.GetTerrainSplatView() != m_lastTerrainSplatView)
+            updateTerrainDescriptors();
 
         if (scene.GetMeshCount() > 0)
         {
@@ -217,6 +255,18 @@ namespace pe
             if (voxelPipelineReady)
             {
                 const auto &sets = m_voxelPassInfo->GetDescriptors(frame);
+                if (!sets.empty())
+                {
+                    Descriptor *setUniforms = sets[0];
+                    setUniforms->SetBuffer(0, scene.GetUniforms(frame));
+                    setUniforms->SetBuffer(1, scene.GetMeshConstants());
+                    setUniforms->Update();
+                }
+            }
+
+            if (terrainPipelineReady)
+            {
+                const auto &sets = m_terrainPassInfo->GetDescriptors(frame);
                 if (!sets.empty())
                 {
                     Descriptor *setUniforms = sets[0];
@@ -316,6 +366,26 @@ namespace pe
                                               mesh);
             }
 
+            // Terrain: standard geometry drawn with the dedicated triplanar-splat pipeline from its
+            // own cull bucket (index 8). Drawn last so it depth-tests against the opaque scene.
+            Buffer *terrainIndirect = m_scene->GetIndirectTerrain(frame);
+            const bool terrainDrawReady = m_scene->HasTerrain() && m_terrainPassInfo &&
+                                          m_terrainPassInfo->pFragShader && terrainIndirect != nullptr;
+            if (terrainDrawReady)
+            {
+                cmd->BindPipeline(*m_terrainPassInfo);
+                cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+                cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
+                cmd->SetConstants(pushConstants);
+                cmd->PushConstants();
+
+                cmd->DrawIndexedIndirectCount(terrainIndirect,
+                                              0,
+                                              m_scene->GetCullingCountersBuffer(frame),
+                                              8 * sizeof(uint32_t),
+                                              mesh);
+            }
+
             cmd->EndPass();
         }
 
@@ -353,7 +423,14 @@ namespace pe
             Shader::Destroy(m_voxelPassInfo->pFragShader);
             m_voxelPassInfo.reset();
         }
+        if (m_terrainPassInfo)
+        {
+            Shader::Destroy(m_terrainPassInfo->pVertShader);
+            Shader::Destroy(m_terrainPassInfo->pFragShader);
+            m_terrainPassInfo.reset();
+        }
         m_lastVoxelAtlasView = nullptr;
+        m_lastTerrainSplatView = nullptr;
     }
 
     void GbufferTransparentPass::Init()

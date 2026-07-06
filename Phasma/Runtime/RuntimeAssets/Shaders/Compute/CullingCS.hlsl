@@ -11,7 +11,7 @@ struct DrawIndexedIndirectCommand
 
 [[vk::binding(0, 0)]] StructuredBuffer<DrawIndexedIndirectCommand> IndirectCommandsIn;
 [[vk::binding(1, 0)]] StructuredBuffer<Mesh_Constants> MeshConstants;
-[[vk::binding(2, 0)]] RWStructuredBuffer<uint> Counters; // [opaqueSS, alphaCutSS, alphaBlend, transmission, selected, opaqueDS, alphaCutDS, voxels]
+[[vk::binding(2, 0)]] RWStructuredBuffer<uint> Counters; // [opaqueSS, alphaCutSS, alphaBlend, transmission, selected, opaqueDS, alphaCutDS, voxels, terrain]
 [[vk::binding(3, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectOpaqueSS;
 [[vk::binding(4, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectAlphaCutSS;
 [[vk::binding(5, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectAlphaBlendOut;
@@ -24,6 +24,7 @@ struct DrawIndexedIndirectCommand
 [[vk::binding(12, 0)]] ByteAddressBuffer NodeData;
 #if !defined(PHASE1) && !defined(PHASE2)
 [[vk::binding(17, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectVoxelsOut;
+[[vk::binding(18, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectTerrainOut;
 #endif
 
 struct PushConstants
@@ -238,6 +239,9 @@ uint WaveAppend(uint counterIndex, bool emit)
     // bit3 = transparent (water) voxel: still a voxel (skips the standard-pbr two-phase buckets) but kept
     // OUT of the opaque voxel bucket below — the transparent GBuffer pass draws it unculled by slot list.
     bool isVoxelTransparent = (constants.editorFlags & 8u) != 0u;
+    // bit4 = terrain: like voxels, drawn by a dedicated pipeline from its own bucket (frustum-only,
+    // not the standard-pbr two-phase Hi-Z buckets).
+    bool isTerrain = (constants.editorFlags & 16u) != 0u;
 
     // Per-instance render-visible flag (NodeGpuData byte offset 128, after the two matrices).
     // Cleared by node:set_visible(false) to cull this draw cheaply — no instance/TLAS rebuild.
@@ -268,8 +272,8 @@ uint WaveAppend(uint counterIndex, bool emit)
     }
 
 #if defined(PHASE1)
-    if (isVoxel)
-        return; // voxels use the frustum-only voxel bucket, not the standard-pbr Hi-Z buckets.
+    if (isVoxel || isTerrain)
+        return; // voxels/terrain use their frustum-only buckets, not the standard-pbr Hi-Z buckets.
     // Two-phase Hi-Z, phase 1: draw last-frame-visible opaque objects only (set A).
     if (pc.enableFrustumCulling)
     {
@@ -281,8 +285,8 @@ uint WaveAppend(uint counterIndex, bool emit)
     cmd.firstInstance = idx;
     EmitOpaque(cmd, constants.renderType, (constants.editorFlags & 2) != 0);
 #elif defined(PHASE2)
-    if (isVoxel)
-        return; // voxels use the frustum-only voxel bucket, not the standard-pbr Hi-Z buckets.
+    if (isVoxel || isTerrain)
+        return; // voxels/terrain use their frustum-only buckets, not the standard-pbr Hi-Z buckets.
     // Two-phase Hi-Z, phase 2: test every frustum-visible object against THIS frame's Hi-Z,
     // rewrite its visibility flag, and emit only the newly-disoccluded opaque objects (set B).
     if (pc.enableFrustumCulling)
@@ -325,12 +329,12 @@ uint WaveAppend(uint counterIndex, bool emit)
     if (emitVoxel && pc.enableVoxelOcclusion != 0u && AABBOccluded(aabbMin, aabbMax))
         emitVoxel = false;
 #endif
-    bool emitOpaqueSS = !isVoxel && (type == 1) && !doubleSided;
-    bool emitOpaqueDS = !isVoxel && (type == 1) && doubleSided;
-    bool emitAlphaCutSS = !isVoxel && (type == 2) && !doubleSided;
-    bool emitAlphaCutDS = !isVoxel && (type == 2) && doubleSided;
-    bool emitAlphaBlend = !isVoxel && (type == 3);
-    bool emitTransmission = !isVoxel && (type == 4);
+    bool emitOpaqueSS = !isVoxel && !isTerrain && (type == 1) && !doubleSided;
+    bool emitOpaqueDS = !isVoxel && !isTerrain && (type == 1) && doubleSided;
+    bool emitAlphaCutSS = !isVoxel && !isTerrain && (type == 2) && !doubleSided;
+    bool emitAlphaCutDS = !isVoxel && !isTerrain && (type == 2) && doubleSided;
+    bool emitAlphaBlend = !isVoxel && !isTerrain && (type == 3);
+    bool emitTransmission = !isVoxel && !isTerrain && (type == 4);
     bool emitSelected = !isVoxel && ((constants.editorFlags & 1) != 0);
 
     // One atomic per wave per non-empty bucket instead of one per visible lane (see WaveAppend).
@@ -377,5 +381,10 @@ uint WaveAppend(uint counterIndex, bool emit)
     slot = WaveAppend(7, emitVoxel);
     if (emitVoxel)
         IndirectVoxelsOut[slot] = cmd;
+
+    bool emitTerrain = isTerrain;
+    slot = WaveAppend(8, emitTerrain);
+    if (emitTerrain)
+        IndirectTerrainOut[slot] = cmd;
 #endif
 }

@@ -74,6 +74,8 @@ namespace pe
                     flags |= 1u;
                 if (mesh.material && mesh.material->doubleSided)
                     flags |= 2u;
+                if (mesh.material && mesh.material->terrain)
+                    flags |= 16u; // dedicated terrain triplanar pipeline (cull bucket 8)
 
                 BufferRange range{};
                 range.data = &flags;
@@ -418,7 +420,7 @@ namespace pe
         for (uint32_t i = 0; i < m_cullingCountersBuffers.size(); ++i)
         {
             m_cullingCountersBuffers[i] = Buffer::Create({
-                .size = 8 * sizeof(uint32_t),
+                .size = 9 * sizeof(uint32_t), // 8 base buckets + terrain (index 8)
                 .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
                 .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
                 .name = "culling_counters_" + std::to_string(i),
@@ -449,6 +451,7 @@ namespace pe
         m_indirectTransmission = createFilteredIndirect("indirect_Transmission_");
         m_indirectSelected = createFilteredIndirect("indirect_Selected_");
         m_indirectVoxels = createFilteredIndirect("indirect_Voxels_");
+        m_indirectTerrain = createFilteredIndirect("indirect_Terrain_");
         m_shadowIndirectRegular = createFilteredIndirect("shadow_indirect_regular_");
         m_shadowIndirectVoxels = createFilteredIndirect("shadow_indirect_voxels_");
 
@@ -1197,6 +1200,7 @@ namespace pe
         destroyBufferVec(m_indirectTransmission);
         destroyBufferVec(m_indirectSelected);
         destroyBufferVec(m_indirectVoxels);
+        destroyBufferVec(m_indirectTerrain);
         destroyBufferVec(m_shadowIndirectRegular);
         destroyBufferVec(m_shadowIndirectVoxels);
         destroyBufferVec(m_shadowCullCounters);
@@ -1313,6 +1317,7 @@ namespace pe
         destroyBufferVecEager(m_indirectTransmission);
         destroyBufferVecEager(m_indirectSelected);
         destroyBufferVecEager(m_indirectVoxels);
+        destroyBufferVecEager(m_indirectTerrain);
         destroyBufferVecEager(m_shadowIndirectRegular);
         destroyBufferVecEager(m_shadowIndirectVoxels);
         destroyBufferVecEager(m_shadowCullCounters);
@@ -1510,6 +1515,8 @@ namespace pe
                 growIndirectVec(m_indirectSelected, "indirect_Selected_", indFlags,
                                 PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
                 growIndirectVec(m_indirectVoxels, "indirect_Voxels_", indFlags,
+                                PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
+                growIndirectVec(m_indirectTerrain, "indirect_Terrain_", indFlags,
                                 PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
                 growIndirectVec(m_shadowIndirectRegular, "shadow_indirect_regular_", indFlags,
                                 PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
@@ -2168,6 +2175,8 @@ namespace pe
             flags |= 1u;
         if (mesh.material && mesh.material->doubleSided)
             flags |= 2u;
+        if (mesh.material && mesh.material->terrain)
+            flags |= 16u; // dedicated terrain triplanar pipeline (cull bucket 8)
         constants.editorFlags = flags;
         constants.renderType = static_cast<uint32_t>(mesh.renderType);
 

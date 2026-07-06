@@ -40,6 +40,8 @@ namespace pe
                 passInfos.push_back(m_passInfoDS.get());
             if (m_voxelPassInfo)
                 passInfos.push_back(m_voxelPassInfo.get());
+            if (m_terrainPassInfo)
+                passInfos.push_back(m_terrainPassInfo.get());
             return passInfos;
         }
 
@@ -52,9 +54,11 @@ namespace pe
 
         std::shared_ptr<PassInfo> m_passInfoDS; // double-sided variant (cullMode=eNone)
         std::shared_ptr<PassInfo> m_voxelPassInfo;
+        std::shared_ptr<PassInfo> m_terrainPassInfo; // dedicated triplanar-splat terrain pipeline
 
         ResourceHandle<PassInfoAsset> m_passAsset;
         ResourceHandle<PassInfoAsset> m_voxelPassAsset;
+        ResourceHandle<PassInfoAsset> m_terrainPassAsset;
         Image *m_ibl_brdf_lut;
         Image *m_normalRT;
         Image *m_albedoRT;
@@ -68,6 +72,7 @@ namespace pe
         Scene *m_scene = nullptr;
         uint64_t m_lastGeometryVersion = 0;
         ImageView *m_lastVoxelAtlasView = nullptr;
+        ImageView *m_lastTerrainSplatView = nullptr;
     };
 
     class GbufferTransparentPass : public IRenderPassComponent

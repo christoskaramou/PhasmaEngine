@@ -7,6 +7,7 @@
 namespace pe
 {
     class CommandBuffer;
+    class Image;
     class Material;
     class Scene;
     struct NodeId;
@@ -56,6 +57,12 @@ namespace pe::terrain
         // tile, with no per-instance nodes or draws.
         std::string scatterPath;
         std::vector<std::string> scatterMeshes; // builtin "tree"/"rock"/"grass" or a model asset path
+        // Triplanar texture splatting. 4 layer albedo textures (0 grass, 1 rock, 2 sand, 3 snow) are
+        // sampled triplanar and blended by an optional splat map (RGBA = layer weights). Empty splat =
+        // auto height/slope selection everywhere.
+        std::string splatPath;
+        std::array<std::string, 4> layerPaths = {"Textures/Voxel/grass.png", "Textures/Voxel/rock.png",
+                                                 "Textures/Voxel/sand.png", "Textures/Voxel/snow.png"};
         float noiseFeatureScale = 96.0f;
         int noiseSeed = 0;
         float metersPerPixel = 1.0f; // world metres each ring-0 grid cell spans in X/Z (and Y)
@@ -206,8 +213,13 @@ namespace pe::terrain
         void UpdateColliderRing();  // budgeted per-tile Jolt body add/remove/re-cook
         void GrowOverflowedTiles(); // any overflow doubles its whole ring's budgets (one flush, rare)
         void RemoveTileBody(Tile &tile);
+        // Load the 4 layer albedo textures + the splat map and bind them to the Scene's terrain
+        // descriptor. Returns false (terrain keeps the standard pipeline) if the layers fail to load.
+        bool BuildTerrainTextures();
         void RetireSubmittedCommands(bool all);
         bool TileInteriorHole(int ringIdx, int tx, int tz) const;
+        // True when a heightmap is loaded and the tile lies entirely outside its footprint (no mesh).
+        bool TileOutsideHeightmapFootprint(const Ring &ring, int tx, int tz) const;
         float TileWorldSize(const Ring &ring) const;
         void MarkSculptDirty(const SculptOp &op);
 
@@ -215,6 +227,11 @@ namespace pe::terrain
         TerrainConfig m_cfg{};
         std::shared_ptr<voxel::ITerrainGenerator> m_generator;
         bool m_generatorOverridden = false;
+        // Heightmap footprint in world metres (centred on the bounds column). Tiles fully outside it
+        // stay empty so edge-clamped samples do not fill a configured extent larger than the map.
+        bool m_hasHeightmapFootprint = false;
+        float m_heightmapCenterX = 0.0f, m_heightmapCenterZ = 0.0f;
+        float m_heightmapExtentX = 0.0f, m_heightmapExtentZ = 0.0f;
         // Painted caves map: heightmap-style extent (w/h * metersPerPixel, centred on the bounds
         // column, both axes flipped); zero OUTSIDE the map so streamed worlds don't tile it.
         std::unique_ptr<voxel::MapImage> m_cavesMap;
@@ -239,6 +256,9 @@ namespace pe::terrain
         std::unique_ptr<Material> m_material;
         NodeId *m_hostNode = nullptr;
         std::vector<CommandBuffer *> m_submittedCmds;
+        // Triplanar layer albedos [0..3] + the splat map [4], kept alive while bound to the Scene's
+        // terrain descriptor. Empty until BuildTerrainTextures succeeds.
+        std::vector<std::shared_ptr<Image>> m_terrainTextures;
 
         // Grow memory: once ring 0 outgrows its estimate, recreates of the SAME worldgen (hash of
         // the mesh-affecting config) start from the grown budget instead of re-discovering the

@@ -1,7 +1,9 @@
 #include "Terrain/TerrainWorld.h"
 #include "API/Command.h"
+#include "API/Image.h" // triplanar layer/splat textures
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "Base/Path.h" // Path::RuntimeAssets for the default layer textures
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h" // scatter templates baked from model assets
 #include "Scene/Scene.h"
@@ -209,6 +211,7 @@ namespace pe::terrain
         if (m_generatorOverridden)
             return;
         m_generator.reset();
+        m_hasHeightmapFootprint = false;
         if (!m_cfg.heightmapPath.empty())
         {
             voxel::VoxelConfig vc = ToVoxelConfig(m_cfg);
@@ -220,6 +223,11 @@ namespace pe::terrain
                     m_cfg.sizeXMeters = mapGen->MapBlocksX();
                 if (m_cfg.sizeZMeters == 0)
                     m_cfg.sizeZMeters = mapGen->MapBlocksZ();
+                m_heightmapCenterX = m_cfg.boundsCenterCx * kBlocksPerColumn + kBlocksPerColumn / 2.0f;
+                m_heightmapCenterZ = m_cfg.boundsCenterCz * kBlocksPerColumn + kBlocksPerColumn / 2.0f;
+                m_heightmapExtentX = static_cast<float>(mapGen->MapBlocksX());
+                m_heightmapExtentZ = static_cast<float>(mapGen->MapBlocksZ());
+                m_hasHeightmapFootprint = m_heightmapExtentX > 0.0f && m_heightmapExtentZ > 0.0f;
                 m_generator = std::move(mapGen);
             }
         }
@@ -345,12 +353,32 @@ namespace pe::terrain
 
         m_material = std::make_unique<Material>();
         m_material->name = "TerrainMaterial";
-        m_material->baseColorFactor = vec4(1.0f); // white — per-vertex colour carries the terrain bands
+        m_material->baseColorFactor = vec4(1.0f); // white — vertex colour is a tint over the layers
         m_material->metallic = 0.0f;
         m_material->roughness = 1.0f;
         m_material->occlusionStrength = 1.0f;
         m_material->textureMask = 0u;
         m_material->renderType = RenderType::Opaque;
+
+        // Triplanar splat: the terrain draws through the dedicated TerrainGBufferPS (the mesher packs
+        // normalized height into color.a for auto layer selection). Two conditions gate it — the shader
+        // assets must be deployed AND the layer textures must load; either failing keeps terrain=false
+        // and the standard pipeline + per-vertex band colours. Checking the passinfo/PS actually exist
+        // (not just relying on the GbufferPass PE_WARN) matters: CullingCS pulls terrain=true meshes out
+        // of the opaque buckets (editorFlags 0x10) into bucket 8, so if the shader never built, bucket 8
+        // is undrawn and terrain would silently vanish instead of falling back.
+        const bool terrainShaderPresent =
+            std::filesystem::exists(Path::RuntimeAssets + "Shaders/Terrain/terrain_gbuffer.passinfo") &&
+            std::filesystem::exists(Path::RuntimeAssets + "Shaders/Terrain/TerrainGBufferPS.hlsl");
+        if (terrainShaderPresent && BuildTerrainTextures())
+        {
+            m_material->terrain = true;
+            // Ray tracing has no triplanar path — its closest-hit shades terrain as color.rgb *
+            // baseColorFactor with no albedo texture, and color.rgb is now the raster tint (~white).
+            // Give the RT/reflection view a representative ground albedo here; TerrainGBufferPS ignores
+            // baseColorFactor, so the raster view is unchanged.
+            m_material->baseColorFactor = vec4(0.38f, 0.36f, 0.28f, 1.0f);
+        }
         m_material->SyncParamsFromLegacy();
 
         while (NodeId *stale = m_scene->FindNodeByName("TerrainHost"))
@@ -584,6 +612,22 @@ namespace pe::terrain
         return minX >= iMinX && maxX <= iMaxX && minZ >= iMinZ && maxZ <= iMaxZ;
     }
 
+    bool TerrainWorld::TileOutsideHeightmapFootprint(const Ring &ring, int tx, int tz) const
+    {
+        if (!m_hasHeightmapFootprint)
+            return false;
+        const float tw = TileWorldSize(ring);
+        const float tMinX = static_cast<float>(tx) * tw;
+        const float tMaxX = static_cast<float>(tx + 1) * tw;
+        const float tMinZ = static_cast<float>(tz) * tw;
+        const float tMaxZ = static_cast<float>(tz + 1) * tw;
+        const float mMinX = m_heightmapCenterX - m_heightmapExtentX * 0.5f;
+        const float mMaxX = m_heightmapCenterX + m_heightmapExtentX * 0.5f;
+        const float mMinZ = m_heightmapCenterZ - m_heightmapExtentZ * 0.5f;
+        const float mMaxZ = m_heightmapCenterZ + m_heightmapExtentZ * 0.5f;
+        return tMaxX <= mMinX || tMinX >= mMaxX || tMaxZ <= mMinZ || tMinZ >= mMaxZ;
+    }
+
     float TerrainWorld::DensityLocal(float x, float y, float z, float surfaceHeight) const
     {
         float d = m_generator ? m_generator->DensityAtHeight(x, y, z, surfaceHeight)
@@ -661,6 +705,11 @@ namespace pe::terrain
     void TerrainWorld::MeshTile(int ringIdx, Tile &tile)
     {
         if (tile.interiorHole)
+        {
+            WriteEmptyTile(tile);
+            return;
+        }
+        if (TileOutsideHeightmapFootprint(m_rings[ringIdx], tile.tx, tile.tz))
         {
             WriteEmptyTile(tile);
             return;
@@ -766,6 +815,16 @@ namespace pe::terrain
             WriteEmptyTile(tile);
             return;
         }
+        // Triplanar splat path (m_material->terrain): vertex colour is a tint, uv is the splat coord
+        // over the terrain footprint (both axes flipped, like the caves/scatter maps), and color.a
+        // packs the normalized surface height for the shader's auto layer selection.
+        const bool textured = m_material && m_material->terrain;
+        const float splatCx = m_cfg.boundsCenterCx * kBlocksPerColumn + kBlocksPerColumn / 2.0f;
+        const float splatCz = m_cfg.boundsCenterCz * kBlocksPerColumn + kBlocksPerColumn / 2.0f;
+        const float splatInvX = 1.0f / std::max(1.0f, static_cast<float>(m_cfg.sizeXMeters));
+        const float splatInvZ = 1.0f / std::max(1.0f, static_cast<float>(m_cfg.sizeZMeters));
+        const float heightBase = m_cfg.groundHeight + m_cfg.heightMin;
+        const float heightSpan = std::max(1.0f, m_cfg.heightMax - m_cfg.heightMin);
         for (Vertex &v : mesh.vertices)
         {
             // Local surface height, bilinear from the corner-column cache (heights[i,k] holds the
@@ -779,9 +838,8 @@ namespace pe::terrain
             const float hSurf = (Hc(i0, k0) * (1.0f - fx) + Hc(i0 + 1, k0) * fx) * (1.0f - fz) +
                                 (Hc(i0, k0 + 1) * (1.0f - fx) + Hc(i0 + 1, k0 + 1) * fx) * fz;
 
-            vec3 c = TerrainColor(v.position[1], v.normals[1]);
-            // Interior tint: cave floors/walls (solid overhead) and undersides read as rock, not the
-            // height band — painted caves and grottos were grass-green inside.
+            // Interior detection: cave floors/walls (solid overhead) and undersides read as rock, not
+            // the height band — painted caves and grottos were grass-green inside.
             const float underBlend = std::clamp((-v.normals[1] - 0.1f) / 0.5f, 0.0f, 1.0f);
             float rockBlend = underBlend;
             const float depth = hSurf - v.position[1];
@@ -789,14 +847,39 @@ namespace pe::terrain
                 (DensityLocal(v.position[0], v.position[1] + 4.0f, v.position[2], hSurf) > 0.0f ||
                  DensityLocal(v.position[0], v.position[1] + 8.0f, v.position[2], hSurf) > 0.0f))
                 rockBlend = std::max(rockBlend, std::clamp((depth - 0.5f) / 2.0f, 0.0f, 1.0f));
-            if (rockBlend > 0.0f)
-                c = glm::mix(c, vec3(0.33f, 0.29f, 0.25f), rockBlend);
-            v.color[0] = c.x;
-            v.color[1] = c.y;
-            v.color[2] = c.z;
-            v.color[3] = 1.0f;
-            v.uv[0] = v.position[0] / cell;
-            v.uv[1] = v.position[2] / cell;
+
+            if (textured)
+            {
+                // TerrainGBufferPS textures the surface; vertex colour is only a TINT (white default,
+                // darkened for cave interiors, blued underwater). uv = 0..1 splat coord over the
+                // terrain footprint (both axes flipped, like the caves/scatter maps).
+                vec3 tint(1.0f);
+                if (rockBlend > 0.0f)
+                    tint = glm::mix(tint, vec3(0.5f, 0.46f, 0.42f), rockBlend);
+                if (v.position[1] < m_cfg.seaLevelM)
+                    tint = glm::mix(tint, vec3(0.40f, 0.55f, 0.75f), 0.5f);
+                v.color[0] = tint.x;
+                v.color[1] = tint.y;
+                v.color[2] = tint.z;
+                // >= 0.5 marks a ground vertex (scatter props set < 0.5); the fraction carries the
+                // normalized surface height the shader keys its auto layer selection on.
+                const float fNorm = std::clamp((v.position[1] - heightBase) / heightSpan, 0.0f, 1.0f);
+                v.color[3] = 0.5f + 0.5f * fNorm;
+                v.uv[0] = 0.5f - (v.position[0] - splatCx) * splatInvX;
+                v.uv[1] = 0.5f - (v.position[2] - splatCz) * splatInvZ;
+            }
+            else
+            {
+                vec3 c = TerrainColor(v.position[1], v.normals[1]);
+                if (rockBlend > 0.0f)
+                    c = glm::mix(c, vec3(0.33f, 0.29f, 0.25f), rockBlend);
+                v.color[0] = c.x;
+                v.color[1] = c.y;
+                v.color[2] = c.z;
+                v.color[3] = 1.0f;
+                v.uv[0] = v.position[0] / cell;
+                v.uv[1] = v.position[2] / cell;
+            }
         }
         uint32_t collideEnd = static_cast<uint32_t>(mesh.indices.size());
         AppendScatter(ring, tile, mesh.vertices, mesh.indices, mesh.aabbMin, mesh.aabbMax, collideEnd);
@@ -810,6 +893,9 @@ namespace pe::terrain
         collideEnd = static_cast<uint32_t>(indices.size());
         if (!m_scatterMap || m_templates.empty() || !m_generator)
             return;
+        // TerrainGBufferPS keys ground-vs-prop off color.a: scatter props get < 0.5 so the shader
+        // keeps their baked colour instead of texturing them as ground.
+        const bool textured = m_material && m_material->terrain;
         const float tw = TileWorldSize(ring);
         const float x0 = tile.tx * tw, x1 = x0 + tw;
         const float z0 = tile.tz * tw, z1 = z0 + tw;
@@ -903,6 +989,8 @@ namespace pe::terrain
                         v.normals[2] = -sy * tv.normals[0] + cy * tv.normals[2];
                         v.tangent[0] = cy * tv.tangent[0] + sy * tv.tangent[2];
                         v.tangent[2] = -sy * tv.tangent[0] + cy * tv.tangent[2];
+                        if (textured)
+                            v.color[3] = 0.0f; // prop marker for TerrainGBufferPS
                         bbMin = glm::min(bbMin, vec3(v.position[0], v.position[1], v.position[2]));
                         bbMax = glm::max(bbMax, vec3(v.position[0], v.position[1], v.position[2]));
                         verts.push_back(v);
@@ -945,6 +1033,14 @@ namespace pe::terrain
         // coarse patches poking through on slopes. Each ring sinks 4x more than the finer one, and the
         // skirts (3 cells) comfortably cover the offset at ring boundaries. Invisible at ring distances.
         const float coarseBias = 0.35f * cell;
+        // Splat-terrain packing invariants, hoisted out of the per-vertex loop (matches the fine ring).
+        const bool textured = m_material && m_material->terrain;
+        const float heightBase = m_cfg.groundHeight + m_cfg.heightMin;
+        const float heightSpan = std::max(1.0f, m_cfg.heightMax - m_cfg.heightMin);
+        const float splatCx = m_cfg.boundsCenterCx * kBlocksPerColumn + kBlocksPerColumn / 2.0f;
+        const float splatCz = m_cfg.boundsCenterCz * kBlocksPerColumn + kBlocksPerColumn / 2.0f;
+        const float splatInvX = 1.0f / std::max(1.0f, static_cast<float>(m_cfg.sizeXMeters));
+        const float splatInvZ = 1.0f / std::max(1.0f, static_cast<float>(m_cfg.sizeZMeters));
         for (int k = 0; k < cx; ++k)
             for (int i = 0; i < cx; ++i)
             {
@@ -958,15 +1054,30 @@ namespace pe::terrain
                 v.normals[0] = n.x;
                 v.normals[1] = n.y;
                 v.normals[2] = n.z;
-                v.uv[0] = v.position[0] / cell;
-                v.uv[1] = v.position[2] / cell;
                 v.tangent[0] = 1.0f;
                 v.tangent[3] = 1.0f;
-                const vec3 c = TerrainColor(wy, n.y);
-                v.color[0] = c.x;
-                v.color[1] = c.y;
-                v.color[2] = c.z;
-                v.color[3] = 1.0f;
+                if (textured)
+                {
+                    vec3 tint(1.0f);
+                    if (wy < m_cfg.seaLevelM)
+                        tint = glm::mix(tint, vec3(0.40f, 0.55f, 0.75f), 0.5f);
+                    v.color[0] = tint.x;
+                    v.color[1] = tint.y;
+                    v.color[2] = tint.z;
+                    v.color[3] = 0.5f + 0.5f * std::clamp((wy - heightBase) / heightSpan, 0.0f, 1.0f);
+                    v.uv[0] = 0.5f - (v.position[0] - splatCx) * splatInvX;
+                    v.uv[1] = 0.5f - (v.position[2] - splatCz) * splatInvZ;
+                }
+                else
+                {
+                    const vec3 c = TerrainColor(wy, n.y);
+                    v.color[0] = c.x;
+                    v.color[1] = c.y;
+                    v.color[2] = c.z;
+                    v.color[3] = 1.0f;
+                    v.uv[0] = v.position[0] / cell;
+                    v.uv[1] = v.position[2] / cell;
+                }
                 bbMin = glm::min(bbMin, vec3(v.position[0], wy, v.position[2]));
                 bbMax = glm::max(bbMax, vec3(v.position[0], wy, v.position[2]));
                 verts.push_back(v);
@@ -1568,6 +1679,78 @@ namespace pe::terrain
                m_scene->IsValidMeshIndex(m_tiles.front().meshIndex);
     }
 
+    bool TerrainWorld::BuildTerrainTextures()
+    {
+        m_terrainTextures.clear();
+        if (!m_scene)
+            return false;
+        Queue *queue = RHII.GetMainQueue();
+        if (!queue)
+        {
+            PE_WARN("[Terrain] Cannot build terrain textures without a main queue.");
+            return false;
+        }
+
+        // RuntimeAssets holds the default layer textures; a user path resolves against project Assets.
+        auto resolve = [](const std::string &p) -> std::string
+        {
+            if (p.empty())
+                return p;
+            const std::string rt = Path::RuntimeAssets + p;
+            if (std::filesystem::exists(rt))
+                return rt;
+            return voxel::ColumnChunkStore::ResolveRoot(p).string();
+        };
+
+        CommandBuffer *cmd = queue->AcquireCommandBuffer();
+        cmd->Begin();
+
+        // UNORM, not SRGB: Image::LoadRGBA adds a STORAGE flag for GPU mip generation, and SRGB +
+        // STORAGE is illegal on DX12. The shader converts each sample sRGB->linear instead.
+        Image *layers[4] = {nullptr, nullptr, nullptr, nullptr};
+        for (int i = 0; i < 4; ++i)
+            layers[i] = Image::LoadRGBA8(cmd, resolve(m_cfg.layerPaths[i]));
+
+        // Splat map: RGBA layer weights (UNORM, not colour). Empty/failed = a 1x1 zero texel so the
+        // shader's auto height/slope selection runs everywhere.
+        Image *splat = nullptr;
+        if (!m_cfg.splatPath.empty())
+            splat = Image::LoadRGBA8(cmd, resolve(m_cfg.splatPath));
+        if (!splat)
+        {
+            uint8_t zero[4] = {0, 0, 0, 0};
+            splat = Image::LoadRawFromMemory(cmd, zero, 1, 1, PE_FORMAT_R8G8B8A8_UNORM, "TerrainSplatDefault");
+        }
+
+        cmd->End();
+        queue->Submit(1, &cmd, nullptr, nullptr);
+        cmd->Wait();
+        cmd->Return();
+
+        if (!layers[0] || !layers[1] || !layers[2] || !layers[3] || !splat)
+        {
+            PE_WARN("[Terrain] Failed to load a terrain layer/splat texture — using vertex-colour bands.");
+            for (Image *img : layers)
+                if (img)
+                    Image::Destroy(img);
+            if (splat)
+                Image::Destroy(splat);
+            return false;
+        }
+
+        auto own = [&](Image *img)
+        {
+            m_terrainTextures.emplace_back(img, [](Image *p)
+                                           { RHII.AddToDeletionQueue([p]() mutable
+                                                                     { Image *img = p; Image::Destroy(img); }); });
+            return img;
+        };
+        for (int i = 0; i < 4; ++i)
+            m_scene->SetTerrainLayerView(i, own(layers[i])->GetSRV());
+        m_scene->SetTerrainSplatView(own(splat)->GetSRV());
+        return true;
+    }
+
     void TerrainWorld::Destroy()
     {
         RetireSubmittedCommands(true);
@@ -1580,6 +1763,13 @@ namespace pe::terrain
         if (m_scene && m_hostNode && m_scene->IsNodeAlive(m_hostNode))
             m_scene->DeleteNode(m_hostNode);
 
+        if (m_scene)
+        {
+            m_scene->SetTerrainSplatView(nullptr);
+            for (int i = 0; i < 4; ++i)
+                m_scene->SetTerrainLayerView(i, nullptr);
+        }
+        m_terrainTextures.clear();
         m_material.reset();
         m_hostNode = nullptr;
         m_tiles.clear();

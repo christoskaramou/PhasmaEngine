@@ -77,6 +77,8 @@ namespace pe
             int *blocksPerPixel = nullptr;                     // Voxel World node: integer blocks per pixel
             float *metersPerPixel = nullptr;                   // Terrain node: float metres per pixel (one non-null)
             std::vector<std::string> *scatterMeshes = nullptr; // Terrain node: the scatter kind list
+            int *sizeXMeters = nullptr;                        // Terrain node: bounded-world extent
+            int *sizeZMeters = nullptr;
             bool *rebuild = nullptr;
             float *heightMin = nullptr; // layer-0 surface-value readout
             float *heightMax = nullptr;

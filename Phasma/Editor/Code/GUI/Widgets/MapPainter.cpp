@@ -25,6 +25,17 @@ namespace pe
     {
         constexpr const char *kLayerNames[6] = {"Surface Height", "Strata 1 Thickness", "Strata 2 Thickness",
                                                 "Features", "Caves (Terrain)", "Scatter (Terrain)"};
+        // Keep the Terrain node's bounded extent in sync with the painted heightmap dimensions. No-op
+        // unless painting the surface-height layer (0); the pointers are null for non-terrain targets.
+        void SyncTerrainExtentFromMap(int layer, float *metersPerPixel, int *sizeXMeters, int *sizeZMeters, int w, int h)
+        {
+            if (layer != 0 || !metersPerPixel || !sizeXMeters || !sizeZMeters || w <= 0 || h <= 0)
+                return;
+            const float mpp = std::max(0.05f, *metersPerPixel);
+            *sizeXMeters = std::max(1, static_cast<int>(std::lround(w * mpp)));
+            *sizeZMeters = std::max(1, static_cast<int>(std::lround(h * mpp)));
+        }
+
         constexpr const char *kDefaultPaths[6] = {"Maps/heightmap.png", "Maps/strata1.png", "Maps/strata2.png",
                                                   "Maps/features.png", "Maps/caves.png", "Maps/scatter.png"};
         // Scatter-kind preview dot colours, cycled by 1-based kind id.
@@ -143,6 +154,8 @@ namespace pe
                                                       : &tt->heightmapPath;
                     t.metersPerPixel = &tt->metersPerPixel;
                     t.scatterMeshes = &tt->scatterMeshes;
+                    t.sizeXMeters = &tt->sizeXMeters;
+                    t.sizeZMeters = &tt->sizeZMeters;
                     t.rebuild = &tt->rebuildRequested;
                     t.heightMin = &tt->heightMin;
                     t.heightMax = &tt->heightMax;
@@ -287,6 +300,7 @@ namespace pe
         buf.px.assign(static_cast<size_t>(buf.w) * static_cast<size_t>(buf.h), fill);
         buf.unsaved = true;
         m_textureDirty = true;
+        SyncTerrainExtentFromMap(m_layer, t.metersPerPixel, t.sizeXMeters, t.sizeZMeters, buf.w, buf.h);
         Save(); // write it out right away so MapGen can load it on the rebuild
     }
 
@@ -334,6 +348,8 @@ namespace pe
         buf.unsaved = true;
         m_textureDirty = true;
         m_haveLastStamp = false;
+        const MapTarget t = ResolveTarget(m_layer);
+        SyncTerrainExtentFromMap(m_layer, t.metersPerPixel, t.sizeXMeters, t.sizeZMeters, buf.w, buf.h);
     }
 
     void MapPainter::StampBrush(float px, float py, float radius, float strength, bool lower, Brush brush, float value)
@@ -633,6 +649,7 @@ namespace pe
         // hitch. Fall back to the rebuild flag when there is no live world (or no templates yet).
         if (OnScatter() && PushScatterLive(0.0f, 0.0f, static_cast<float>(buf.w), static_cast<float>(buf.h)))
             return true;
+        SyncTerrainExtentFromMap(m_layer, t.metersPerPixel, t.sizeXMeters, t.sizeZMeters, buf.w, buf.h);
         if (t.rebuild)
             *t.rebuild = true; // same path as the inspector "Rebuild" button
         return true;

@@ -71,9 +71,39 @@ density(x,y,z) = generator->DensityAtHeight(x,y,z, h(x,z))   // h cached once pe
 - `terrain.raycast` / `IsSolidCell` march the density (overhang- and sculpt-aware);
   `terrain.height` is the pure worldgen heightfield.
 - **Interior tint**: vertices well below their column surface with solid overhead (cave floors and
-  walls, checked with two density taps above the vertex) and down-facing undersides blend to a rock
-  colour, so painted caves and grottos stop reading grass-green inside. Pure vertex colouring, no
-  shader change.
+  walls, checked with two density taps above the vertex) and down-facing undersides darken toward a
+  rock tint, so painted caves and grottos stop reading grass-green inside. Under the triplanar path
+  the tint modulates the textures (the underwater blue mix rides the same channel); pure vertex
+  colouring, no shader branch.
+
+## Terrain texturing (triplanar splat)
+
+Terrain draws through a **dedicated GBuffer pipeline** (`Shaders/Terrain/TerrainGBufferPS.hlsl`),
+not the standard PBR shader — the voxel subsystem's precedent for a subsystem that needs its own
+gbuffer texturing. It reuses the stock `GBufferVS` (terrain tiles are standard float meshes, so
+`positionWS` + world normal arrive interpolated) and only swaps the pixel shader. Four **layer**
+albedo textures (0 grass, 1 rock, 2 sand, 3 snow — configurable `layerPaths`, default the built-in
+`Textures/Voxel/*` tiles) are sampled **triplanar** (three world-plane projections blended by the
+sharpened normal, so cliffs never stretch) and blended by per-pixel weights. Weights come from an
+optional RGBA **splat map** (`splatPath`; R/G/B/A = layer weights) where painted, else an **auto
+height/slope selection**: sand near sea level, grass on the mid band, snow on peaks, rock on any
+steep face. So terrain is fully textured with zero authoring, and a splat map is a pure override.
+
+- **No per-draw constants**: the mesher packs the normalized surface height into `color.a` (scatter
+  props < 0.5 keep their baked colour; ground = 0.5 + 0.5·f), so the shader keys its auto selection
+  off the vertex alone — no material table / uniform buffer to keep in sync. `color.rgb` is the
+  interior/underwater tint. Layers load UNORM (SRGB storage images are illegal on DX12) and are
+  linearized in-shader.
+- **Dedicated cull bucket**: terrain is standard geometry (not a voxel arena), so a triplanar
+  pipeline needs its own GPU-cull bucket, not just a shader swap. `Material::terrain` sets
+  `editorFlags` bit 0x10 (`ComputeMeshConstants` + `UpdateMeshSelectionFlags`), `CullingCS` routes
+  those draws to bucket 8 (`IndirectTerrainOut`, counter index 8) and excludes them from the
+  standard/opaque buckets, and `GbufferOpaquePass` draws bucket 8 with `m_terrainPassInfo` after the
+  standard + voxel draws. The layer/splat views bind to a dedicated descriptor set
+  (`Scene::SetTerrainLayerView`/`SetTerrainSplatView`), like the voxel atlas.
+- Terrain still casts shadows and writes depth normally (the shadow cull only tests the voxel bit,
+  so terrain rides the regular shadow bucket; the surface variant writes its own depth like voxel).
+  Isolating the ~12-tap triplanar shader to terrain draws keeps it off every other opaque pixel.
 
 ## Painted mesh scatter (trees, rocks, grass, props)
 
@@ -150,11 +180,12 @@ play toggles, so bodies persist; `SetPhysicsEnabled(false)` drops them all.
 ## Config / plumbing
 
 `TerrainConfig` ⇄ `NodeTerrainTag` (inspector under the Terrain node, serializer keys `streaming`,
-`overhangs`, `collisionRadiusM`, `scatterPath`, `scatterMeshes`, Lua `node:set_terrain{streaming=,
-overhangs=, collision_radius_m=, scatter_map=, scatter_meshes={...}}`). `streaming`/`overhangs`/
-scatter config are structural (rebuild, debounced); collision radius and physics knobs are live
-(and scatter PAINT is live — only the config strings rebuild). Colour bands normalize to the
-CONFIGURED height range so they never shift while streaming.
+`overhangs`, `collisionRadiusM`, `scatterPath`, `scatterMeshes`, `splatPath`, `layerPaths`, Lua
+`node:set_terrain{streaming=, overhangs=, collision_radius_m=, scatter_map=, scatter_meshes={...},
+splat_map=, layers={...}}`). `streaming`/`overhangs`/scatter/splat/layer config are structural
+(rebuild, debounced); collision radius and physics knobs are live (and scatter PAINT is live — only
+the config strings rebuild). The auto-splat height selection normalizes to the CONFIGURED height
+range so it never shifts while streaming.
 
 ## Known limits / follow-ups
 
@@ -162,7 +193,16 @@ CONFIGURED height range so they never shift while streaming.
   threads are the next step if streaming while walking ever stutters.
 - RT/BLAS does not track in-place tile updates (stale RT terrain until some full rebuild).
 - Coarse rings ignore sculpts/overhangs/scatter; grow leaks the old range until the next scene load.
-- Scatter props share the terrain material (vertex colours, no textures) — textured props need
-  per-material instanced draws, a render-side feature that does not exist yet.
-- Terrain texturing is still per-vertex colour bands + the interior tint; triplanar splat/material
-  layers with a paintable splat map are the designed next step (shader + Map Painter layer).
+- Scatter props share the terrain material (baked vertex colours, no textures — the shader passes
+  their `color.a < 0.5` verts straight through) — textured props need per-material instanced draws, a
+  render-side feature that does not exist yet.
+- Triplanar splatting is albedo-only (metal 0, roughness 1, geometric normal): per-layer normal /
+  roughness maps and a configurable texture scale are follow-ups. `kTexScale` is a shader constant.
+- A splat map can be **loaded** (`splatPath`) and overrides the auto selection, but there is not yet
+  an in-editor RGBA paint layer — the next step is a Map Painter "Splat (Terrain)" layer that paints
+  one of the 4 material weights and live-uploads the splat texture (the auto selection covers the
+  no-paint case today).
+- A missing or broken `terrain_gbuffer.passinfo` / `TerrainGBufferPS.hlsl` leaves terrain routed to
+  cull bucket 8 but never drawn (`PE_WARN` only) — mirrors the voxel pipeline's identical gap when
+  `voxel_gbuffer.passinfo` fails. Texture-load failure is the only runtime fallback (vertex-colour
+  bands via the standard pipeline).

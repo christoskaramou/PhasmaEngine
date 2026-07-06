@@ -86,6 +86,10 @@ namespace pe
         RenderType renderType = RenderType::Opaque;
         bool doubleSided = false;
 
+        // Terrain surface: routes draws to the dedicated triplanar-splat GBuffer pipeline
+        // (editorFlags bit 0x10, TerrainGBufferPS).
+        bool terrain = false;
+
         // --- Textures ---
         ResourceHandle<Image> textures[5];
         Sampler *samplers[5]{nullptr};

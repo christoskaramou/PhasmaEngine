@@ -297,6 +297,11 @@ namespace pe
         // "tree"/"rock"/"grass" or a model asset path); instances bake into the terrain tiles.
         std::string scatterPath;
         std::vector<std::string> scatterMeshes;
+        // Triplanar texture splatting: 4 layer albedo textures (0 grass, 1 rock, 2 sand, 3 snow) and
+        // an optional RGBA splat map (layer weights). Empty splat = auto height/slope selection.
+        std::string splatPath;
+        std::array<std::string, 4> layerPaths = {"Textures/Voxel/grass.png", "Textures/Voxel/rock.png",
+                                                 "Textures/Voxel/sand.png", "Textures/Voxel/snow.png"};
         // Persistent brush strokes, flat 7-float records [type, cx, cy, cz, radius, a, b]: type 0 =
         // CSG sphere (a = 1 digs), type 1 = level toward y = a with weight b. Serialized with the
         // scene; TerrainSystem syncs live-world ops back here and seeds recreated worlds from it.
