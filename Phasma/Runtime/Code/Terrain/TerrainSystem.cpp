@@ -172,6 +172,7 @@ namespace pe::terrain
         cfg.splatPath = tag->splatPath;
         cfg.layerPaths = tag->layerPaths;
         cfg.materialPaths = tag->materialPaths;
+        cfg.textureScaleM = tag->textureScaleM; // live (kept out of the structural hash below)
         cfg.noiseFeatureScale = tag->noiseFeatureScale;
         cfg.noiseSeed = tag->noiseSeed;
         cfg.metersPerPixel = tag->metersPerPixel;
@@ -246,5 +247,9 @@ namespace pe::terrain
         }
         if (!created && m_world && tag->collisionRadiusM != m_world->Config().collisionRadiusM)
             m_world->SetCollisionRadius(tag->collisionRadiusM);
+        // Texture scale is live (not in the structural hash): push it every frame it differs so the
+        // inspector slider retextures with no rebuild.
+        if (m_world && tag->textureScaleM != m_world->Config().textureScaleM)
+            m_world->SetTextureScale(tag->textureScaleM);
     }
 } // namespace pe::terrain

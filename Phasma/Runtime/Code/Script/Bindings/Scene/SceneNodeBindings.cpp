@@ -739,6 +739,7 @@ namespace pe
                         for (size_t i = 1; i <= mats.size() && i <= 4; ++i)
                             t->materialPaths[i - 1] = mats[i].get<std::string>();
                     }
+                    if (p["texture_scale"].valid()) t->textureScaleM = p["texture_scale"];
                     if (p["noise_feature_scale"].valid()) t->noiseFeatureScale = p["noise_feature_scale"];
                     if (p["noise_seed"].valid()) t->noiseSeed = p["noise_seed"];
                     if (p["meters_per_pixel"].valid()) t->metersPerPixel = p["meters_per_pixel"];
@@ -783,6 +784,7 @@ namespace pe
                     for (size_t i = 0; i < t->materialPaths.size(); ++i)
                         mats[i + 1] = t->materialPaths[i];
                     r["material_maps"] = mats;
+                    r["texture_scale"] = t->textureScaleM;
                     r["noise_feature_scale"] = t->noiseFeatureScale;
                     r["noise_seed"] = t->noiseSeed;
                     r["meters_per_pixel"] = t->metersPerPixel;

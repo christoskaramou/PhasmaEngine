@@ -105,19 +105,15 @@ namespace pe
             return rgba;
         }
 
-        // Splat map: the painter stores a discrete layer index per pixel (0 = unpainted/auto, 1..4 =
-        // grass/rock/sand/snow). Expand to the one-hot RGBA weights the shader reads — the terrain
-        // sampler is linear, so adjacent one-hot texels blend into soft transitions for free, and an
-        // all-zero texel makes the shader fall back to its auto height/slope selection.
-        std::vector<uint8_t> SplatToRgba(const std::vector<float> &idx)
+        // Splat map: the painter stores real per-channel layer WEIGHTS — 4 floats [0,255] per pixel
+        // (R grass, G rock, B sand, A snow), so the brush blends layers softly rather than a hard
+        // one-hot pick. An all-zero texel makes the shader fall back to its auto height/slope selection.
+        // The buffer already IS the RGBA the shader reads; this just rounds float -> u8.
+        std::vector<uint8_t> SplatToRgba(const std::vector<float> &w4)
         {
-            std::vector<uint8_t> rgba(idx.size() * 4, 0);
-            for (size_t i = 0; i < idx.size(); ++i)
-            {
-                const int k = static_cast<int>(std::lround(idx[i]));
-                if (k >= 1 && k <= 4)
-                    rgba[i * 4 + (k - 1)] = 255;
-            }
+            std::vector<uint8_t> rgba(w4.size());
+            for (size_t i = 0; i < w4.size(); ++i)
+                rgba[i] = ToU8(w4[i]);
             return rgba;
         }
 
@@ -279,25 +275,17 @@ namespace pe
                 }
             }
         }
-        if (!loaded && layer == kSplatLayer) // splat: RGBA layer weights -> the dominant layer index
+        if (!loaded && layer == kSplatLayer) // splat: RGBA layer weights, 4 floats per pixel
         {
             int channels = 0;
             if (stbi_uc *data = stbi_load(resolved.c_str(), &w, &h, &channels, 4))
             {
                 buf.w = w;
                 buf.h = h;
-                const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h);
+                const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h) * 4;
                 buf.px.resize(n);
                 for (size_t i = 0; i < n; ++i)
-                {
-                    const stbi_uc *p = data + i * 4;
-                    int best = 0;
-                    uint8_t bv = 0;
-                    for (int c = 0; c < 4; ++c)
-                        if (p[c] > bv)
-                            bv = p[c], best = c + 1;
-                    buf.px[i] = bv >= 32 ? static_cast<float>(best) : 0.0f; // near-zero = unpainted (auto)
-                }
+                    buf.px[i] = static_cast<float>(data[i]);
                 stbi_image_free(data);
                 loaded = true;
             }
@@ -344,7 +332,9 @@ namespace pe
         const float fill = (OnFeatures() || m_layer == kCavesLayer || OnScatter() || OnSplat())
                                ? 0.0f
                                : std::clamp(m_newValue, 0.0f, 255.0f);
-        buf.px.assign(static_cast<size_t>(buf.w) * static_cast<size_t>(buf.h), fill);
+        // Splat holds 4 weight channels per pixel; every other layer is single-channel.
+        const size_t chan = OnSplat() ? 4u : 1u;
+        buf.px.assign(static_cast<size_t>(buf.w) * static_cast<size_t>(buf.h) * chan, fill);
         buf.unsaved = true;
         m_textureDirty = true;
         SyncTerrainExtentFromMap(m_layer, t.metersPerPixel, t.sizeXMeters, t.sizeZMeters, buf.w, buf.h);
@@ -359,33 +349,37 @@ namespace pe
         if (buf.px.empty() || (newW == buf.w && newH == buf.h))
             return;
 
-        std::vector<float> out(static_cast<size_t>(newW) * static_cast<size_t>(newH));
+        const int chan = OnSplat() ? 4 : 1; // splat = 4 weight channels; everything else single-channel
+        std::vector<float> out(static_cast<size_t>(newW) * static_cast<size_t>(newH) * chan);
         for (int y = 0; y < newH; ++y)
         {
             for (int x = 0; x < newW; ++x)
             {
                 const float u = (static_cast<float>(x) + 0.5f) / static_cast<float>(newW);
                 const float v = (static_cast<float>(y) + 0.5f) / static_cast<float>(newH);
-                if (OnFeatures() || OnScatter() || OnSplat())
+                if (OnFeatures() || OnScatter())
                 {
-                    // Nearest: feature/kind/layer ids are discrete, interpolating them invents garbage.
+                    // Nearest: feature/kind ids are discrete, interpolating them invents garbage.
                     const int sx = std::clamp(static_cast<int>(u * static_cast<float>(buf.w)), 0, buf.w - 1);
                     const int sy = std::clamp(static_cast<int>(v * static_cast<float>(buf.h)), 0, buf.h - 1);
                     out[y * newW + x] = buf.px[sy * buf.w + sx];
                 }
                 else
                 {
+                    // Bilinear per channel (splat weights and gray layers are both continuous).
                     const float fx = std::clamp(u * static_cast<float>(buf.w) - 0.5f, 0.0f, static_cast<float>(buf.w - 1));
                     const float fy = std::clamp(v * static_cast<float>(buf.h) - 0.5f, 0.0f, static_cast<float>(buf.h - 1));
-                    const int x0 = static_cast<int>(fx);
-                    const int y0 = static_cast<int>(fy);
-                    const int x1 = std::min(x0 + 1, buf.w - 1);
-                    const int y1 = std::min(y0 + 1, buf.h - 1);
-                    const float tx = fx - static_cast<float>(x0);
-                    const float ty = fy - static_cast<float>(y0);
-                    const float top = buf.px[y0 * buf.w + x0] * (1.0f - tx) + buf.px[y0 * buf.w + x1] * tx;
-                    const float bot = buf.px[y1 * buf.w + x0] * (1.0f - tx) + buf.px[y1 * buf.w + x1] * tx;
-                    out[y * newW + x] = top + (bot - top) * ty;
+                    const int x0 = static_cast<int>(fx), y0 = static_cast<int>(fy);
+                    const int x1 = std::min(x0 + 1, buf.w - 1), y1 = std::min(y0 + 1, buf.h - 1);
+                    const float tx = fx - static_cast<float>(x0), ty = fy - static_cast<float>(y0);
+                    for (int c = 0; c < chan; ++c)
+                    {
+                        const float top = buf.px[(y0 * buf.w + x0) * chan + c] * (1.0f - tx) +
+                                          buf.px[(y0 * buf.w + x1) * chan + c] * tx;
+                        const float bot = buf.px[(y1 * buf.w + x0) * chan + c] * (1.0f - tx) +
+                                          buf.px[(y1 * buf.w + x1) * chan + c] * tx;
+                        out[(y * newW + x) * chan + c] = top + (bot - top) * ty;
+                    }
                 }
             }
         }
@@ -615,22 +609,41 @@ namespace pe
         return true;
     }
 
-    void MapPainter::StampSplat(LayerBuffer &buf, float px, float py, float radius, int index)
+    void MapPainter::StampSplat(LayerBuffer &buf, float px, float py, float radius, int layer, float strength,
+                                bool erase)
     {
-        // Solid disk of a discrete layer index (0 = erase to auto) — no falloff blend, the shader's
-        // linear splat sampler softens the seams between painted regions instead.
+        // Additive weight brush with linear falloff: build up the painted layer's channel and gently
+        // pull the others down so it takes over gradually (soft blends, not a hard one-hot pick).
+        // Erase fades all channels toward 0 (back to the shader's auto height/slope selection).
         const float r = std::max(0.5f, radius);
-        const float v = static_cast<float>(std::clamp(index, 0, 4));
+        const float amt = std::clamp(strength, 1.0f, 255.0f); // weight delta per stamp at the centre
+        const int lc = std::clamp(layer, 0, 3);
         const int x0 = std::max(0, static_cast<int>(std::floor(px - r)));
         const int x1 = std::min(buf.w - 1, static_cast<int>(std::ceil(px + r)));
         const int y0 = std::max(0, static_cast<int>(std::floor(py - r)));
         const int y1 = std::min(buf.h - 1, static_cast<int>(std::ceil(py + r)));
         for (int y = y0; y <= y1; ++y)
             for (int x = x0; x <= x1; ++x)
-                if ((static_cast<float>(x) - px) * (static_cast<float>(x) - px) +
-                        (static_cast<float>(y) - py) * (static_cast<float>(y) - py) <=
-                    r * r)
-                    buf.px[y * buf.w + x] = v;
+            {
+                const float dx = static_cast<float>(x) - px, dy = static_cast<float>(y) - py;
+                const float d = std::sqrt(dx * dx + dy * dy);
+                if (d > r)
+                    continue;
+                const float step = amt * (1.0f - d / r);
+                float *w = &buf.px[(static_cast<size_t>(y) * buf.w + x) * 4];
+                if (erase)
+                {
+                    for (int c = 0; c < 4; ++c)
+                        w[c] = std::max(0.0f, w[c] - step);
+                }
+                else
+                {
+                    w[lc] = std::min(255.0f, w[lc] + step);
+                    for (int c = 0; c < 4; ++c)
+                        if (c != lc)
+                            w[c] = std::max(0.0f, w[c] - step * 0.5f); // painted layer displaces the rest
+                }
+            }
     }
 
     bool MapPainter::PushSplatLive()
@@ -665,8 +678,8 @@ namespace pe
         else if (OnSplat())
         {
             // brush = layer index (1..4; 0 erases to auto); < 0 = the widget's combo selection.
-            const int index = brush >= 0 ? brush : (m_splatLayer >= 4 ? 0 : m_splatLayer + 1);
-            StampSplat(buf, px, py, r, index);
+            const int sel = brush >= 0 ? brush : (m_splatLayer >= 4 ? 0 : m_splatLayer + 1);
+            StampSplat(buf, px, py, r, sel - 1, strength > 0.0f ? strength : m_brushStrength, sel <= 0);
             PushSplatLive(); // re-textures live, no rebuild
         }
         else if (OnFeatures())
@@ -708,7 +721,8 @@ namespace pe
         }
         else
         {
-            // Splat: one-hot RGBA layer weights; every other layer: gray replicated across RGBA.
+            // Splat: RGBA layer weights straight from the 4-channel buffer; every other layer: gray
+            // replicated across RGBA.
             const std::vector<uint8_t> rgba = OnSplat() ? SplatToRgba(buf.px) : GrayToRgba(buf.px);
             blob = pmcp::EncodeRGBA_PNG(rgba.data(), buf.w, buf.h);
         }
@@ -833,10 +847,10 @@ namespace pe
         }
         else if (OnSplat())
         {
-            // Layer indices read as near-black gray: show each painted layer's colour over a dimmed
-            // surface underlay (unpainted = the underlay, i.e. where the shader's auto selection runs).
+            // Weight channels read as near-black: show a weighted blend of the 4 layer colours over a
+            // dimmed surface underlay (weight sum ~0 = unpainted, where the shader's auto selection runs).
             const LayerBuffer &surf = m_layers[0];
-            rgba.resize(buf.px.size() * 4);
+            rgba.resize(static_cast<size_t>(buf.w) * static_cast<size_t>(buf.h) * 4);
             for (int y = 0; y < buf.h; ++y)
                 for (int x = 0; x < buf.w; ++x)
                 {
@@ -848,11 +862,18 @@ namespace pe
                         const int sy = std::clamp(y * surf.h / buf.h, 0, surf.h - 1);
                         rr = gg = bb = ToU8(surf.px[sy * surf.w + sx] * 0.5f);
                     }
-                    const int lv = static_cast<int>(std::lround(buf.px[i]));
-                    if (lv >= 1 && lv <= 4)
+                    const float *w = &buf.px[i * 4];
+                    const float sum = w[0] + w[1] + w[2] + w[3];
+                    if (sum >= 1.0f)
                     {
-                        const uint8_t *c = kSplatLayerColors[lv - 1];
-                        rr = c[0], gg = c[1], bb = c[2];
+                        float fr = 0.0f, fg = 0.0f, fb = 0.0f;
+                        for (int c = 0; c < 4; ++c)
+                        {
+                            fr += kSplatLayerColors[c][0] * w[c];
+                            fg += kSplatLayerColors[c][1] * w[c];
+                            fb += kSplatLayerColors[c][2] * w[c];
+                        }
+                        rr = ToU8(fr / sum), gg = ToU8(fg / sum), bb = ToU8(fb / sum);
                     }
                     rgba[i * 4 + 0] = rr;
                     rgba[i * 4 + 1] = gg;
@@ -1206,15 +1227,16 @@ namespace pe
         }
         else if (OnSplat())
         {
-            // The 4 triplanar layers + Erase. Painting sets a discrete layer index; the shader's linear
-            // splat sampler softens the seams, and Erase drops back to the auto height/slope selection.
+            // The 4 triplanar layers + Erase. The brush builds up that layer's weight (Strength per
+            // stamp, soft falloff) and pulls the others down, so layers blend; Erase fades to auto.
             static const char *kSplatItems[5] = {"Grass", "Rock", "Sand", "Snow", "Erase"};
             m_splatLayer = std::clamp(m_splatLayer, 0, 4);
             ImGui::SetNextItemWidth(150.0f);
             ImGui::Combo("Texture", &m_splatLayer, kSplatItems, 5);
-            ui::ItemTooltip("Which terrain texture layer the brush paints (grass/rock/sand/snow, in "
-                            "the Terrain node's Layer order). Strokes re-texture live; Save persists "
-                            "the PNG. Erase (or Ctrl+LMB) reverts to the auto height/slope selection.");
+            ui::ItemTooltip("Which terrain texture layer the brush paints (grass/rock/sand/snow, in the "
+                            "Terrain node's Layer order). Weights blend softly — build a layer up with "
+                            "repeated strokes (Strength = per-stamp amount). Strokes re-texture live; "
+                            "Save persists the PNG. Erase (or Ctrl+LMB) reverts to auto height/slope.");
         }
         else if (OnFeatures())
         {
@@ -1265,7 +1287,7 @@ namespace pe
         ImGui::SetNextItemWidth(110.0f);
         ImGui::DragFloat("Brush", &m_brushRadius, 0.2f, 1.0f, 128.0f, "%.0f px");
         ui::ItemTooltip("Brush radius in map pixels.");
-        if (!OnFeatures() && !OnSplat()) // features/splat are solid stamps — no per-stamp strength
+        if (!OnFeatures()) // features are a solid scatter stamp — every other layer has a strength
         {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(110.0f);
@@ -1394,8 +1416,8 @@ namespace pe
                             StampScatter(buf, sx, sy, m_brushRadius,
                                          (ctrlErase || m_scatterKind >= scatterKinds) ? 0 : m_scatterKind + 1);
                         else if (OnSplat())
-                            StampSplat(buf, sx, sy, m_brushRadius,
-                                       (ctrlErase || m_splatLayer >= 4) ? 0 : m_splatLayer + 1);
+                            StampSplat(buf, sx, sy, m_brushRadius, std::clamp(m_splatLayer, 0, 3),
+                                       m_brushStrength, ctrlErase || m_splatLayer >= 4);
                         else if (OnFeatures())
                             StampFeatures(sx, sy, m_brushRadius,
                                           ctrlErase ? FeatureStamp::Erase
@@ -1479,8 +1501,20 @@ namespace pe
             }
             else if (OnSplat())
             {
-                const char *lbl = (hoverValue >= 1 && hoverValue <= 4) ? kSplatLayerNames[hoverValue - 1] : "auto";
-                ImGui::Text("%d, %d = %s  |  LMB paint, Ctrl erase, Alt teleport cam, RMB pan", hoverX, hoverY, lbl);
+                // Dominant layer + its share of the painted weight at the cursor (4 channels per pixel).
+                const size_t base = (static_cast<size_t>(hoverY) * buf.w + hoverX) * 4;
+                int best = -1;
+                float bw = 0.0f, sum = 0.0f;
+                for (int c = 0; c < 4; ++c)
+                {
+                    const float wv = base + c < buf.px.size() ? buf.px[base + c] : 0.0f;
+                    sum += wv;
+                    if (wv > bw)
+                        bw = wv, best = c;
+                }
+                const char *lbl = (sum >= 1.0f && best >= 0) ? kSplatLayerNames[best] : "auto";
+                ImGui::Text("%d, %d = %s %d%%  |  LMB paint, Ctrl erase, Alt teleport cam, RMB pan", hoverX, hoverY,
+                            lbl, sum > 0.0f ? static_cast<int>(bw / sum * 100.0f) : 0);
             }
             else if (m_layer == 0)
                 ImGui::Text("%d, %d = %.3f (scaler)  |  LMB paint, Shift lower, Alt teleport cam, RMB pan", hoverX,

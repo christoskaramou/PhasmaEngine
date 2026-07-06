@@ -798,6 +798,8 @@ namespace pe
                     if (mats[i].IsString())
                         t->materialPaths[i] = mats[i].GetString();
             }
+            if (tv.HasMember("textureScaleM") && tv["textureScaleM"].IsNumber())
+                t->textureScaleM = tv["textureScaleM"].GetFloat();
             if (tv.HasMember("terrainOps") && tv["terrainOps"].IsArray())
             {
                 const auto &ops = tv["terrainOps"];
@@ -2103,6 +2105,7 @@ namespace pe
                             mats.PushBack(MakeStringValue(s), allocator);
                         tObj.AddMember("materialPaths", mats.Move(), allocator);
                     }
+                    tObj.AddMember("textureScaleM", t.textureScaleM, allocator);
                     if (!t.terrainOps.empty())
                     {
                         // Flat 7-float records [type, cx, cy, cz, radius, a, b] — see NodeTerrainTag.

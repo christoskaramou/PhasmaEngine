@@ -93,7 +93,7 @@ struct PushConstants_Lighting
 struct PushConstants_GBuffer
 {
     uint jointsCount;
-    float pad0;
+    float terrainTexScale; // metres per triplanar tile for the terrain pass (0 elsewhere, unused)
     float2 projJitter;
     float2 prevProjJitter;
     uint passType;

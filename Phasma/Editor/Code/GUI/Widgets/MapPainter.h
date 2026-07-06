@@ -106,9 +106,9 @@ namespace pe
         void StampFeatures(float px, float py, float radius, FeatureStamp stamp);
         // Scatter layer: jittered-grid dots of a 1-based kind id (0 = erase disk), like StampFeatures.
         void StampScatter(LayerBuffer &buf, float px, float py, float radius, int kindId);
-        // Splat layer: solid-fill the disk with a layer index (1..4 = grass/rock/sand/snow; 0 = erase
-        // back to the shader's auto height/slope selection).
-        void StampSplat(LayerBuffer &buf, float px, float py, float radius, int index);
+        // Splat layer: additive per-channel weight brush (layer 0..3 = grass/rock/sand/snow). erase
+        // fades all 4 weights toward 0 (back to the shader's auto height/slope selection).
+        void StampSplat(LayerBuffer &buf, float px, float py, float radius, int layer, float strength, bool erase);
         // Push the scatter buffer to the live TerrainWorld and re-mesh tiles under the stamped pixel
         // rect (no rebuild). False = no live world/templates; caller falls back to rebuildRequested.
         bool PushScatterLive(float px0, float py0, float px1, float py1);

@@ -378,6 +378,7 @@ namespace pe
                 cmd->BindPipeline(*m_terrainPassInfo);
                 cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
                 cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
+                pushConstants.terrainTexScale = m_scene->GetTerrainTexScale(); // metres per triplanar tile
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
 
