@@ -48,11 +48,11 @@ namespace pe
 
         // In-place rewrite of the editorFlags field for every mesh, in the SAME iteration order
         // CreateMeshConstants uses (so per-mesh offsets line up). Lets selection changes reach the
-        // GPU selected bucket each frame without a full geometry rebuild.
-        // Vulkan: the GPU reads m_meshConstants directly, so this takes effect next frame.
-        // DX12 caveat: the cull pass reads the m_meshConstantsDevice mirror, which only refreshes on
-        // a geometry rebuild — selection highlight there updates lazily until that path is added.
+        // GPU selected bucket each frame without a full geometry rebuild. Vulkan reads m_meshConstants
+        // directly; DX12 reads the m_meshConstantsDevice mirror, republished below when selection changes.
         size_t offset = 0;
+        uint32_t meshOrdinal = 0;
+        uint64_t selectionSignature = 0; // XOR of a per-ordinal hash for each SELECTED mesh
         m_meshConstants->Map();
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
@@ -71,7 +71,18 @@ namespace pe
 
                 uint32_t flags = 0;
                 if (IsSceneNodeSelected(m_nodeIds[i]))
+                {
                     flags |= 1u;
+                    // splitmix64 of the ordinal. XOR-accumulating distinct terms flips the signature
+                    // whenever any single mesh's selected state toggles (no collision on add/remove).
+                    uint64_t h = meshOrdinal + 1u;
+                    h ^= h >> 30;
+                    h *= 0xbf58476d1ce4e5b9ull;
+                    h ^= h >> 27;
+                    h *= 0x94d049bb133111ebull;
+                    h ^= h >> 31;
+                    selectionSignature ^= h;
+                }
                 if (mesh.material && mesh.material->doubleSided)
                     flags |= 2u;
                 if (mesh.material && mesh.material->terrain)
@@ -84,11 +95,38 @@ namespace pe
                 m_meshConstants->Copy(1, &range, true);
 
                 offset += sizeof(Mesh_Constants);
+                ++meshOrdinal;
             }
         }
 
         m_meshConstants->Flush(offset, 0);
         m_meshConstants->Unmap();
+
+        // DX12: the cull pass reads m_meshConstantsDevice (a GPU-cached mirror), so the host writes
+        // above are invisible to it — without this the selected bucket keeps whatever was baked at the
+        // last geometry rebuild, so the outline stays on the previously selected mesh. Republish the
+        // mirror ONLY when the selected set changed: this runs every frame and a per-frame device
+        // copy+wait would stall the cull hot path.
+        if (m_meshConstantsDevice && offset > 0 && selectionSignature != m_meshSelectionMirrorSignature)
+        {
+            m_meshSelectionMirrorSignature = selectionSignature;
+            Queue *queue = RHII.GetMainQueue();
+            CommandBuffer *cmd = queue->AcquireCommandBuffer();
+            cmd->Begin();
+            cmd->CopyBuffer(m_meshConstants, m_meshConstantsDevice, offset, 0, 0);
+            BufferBarrierInfo barrier{};
+            barrier.buffer = m_meshConstantsDevice;
+            barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
+            barrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
+            barrier.offset = 0;
+            barrier.size = offset;
+            cmd->BufferBarrier(barrier);
+            m_meshConstantsDevice->GetTrackInfo() = barrier;
+            cmd->End();
+            queue->Submit(1, &cmd, nullptr, nullptr);
+            cmd->Wait();
+            queue->ReturnCommandBuffer(cmd);
+        }
     }
 
     void Scene::UploadBuffers(CommandBuffer *cmd)
@@ -1146,6 +1184,9 @@ namespace pe
             cmd->BufferBarrier(barrier);
             m_meshConstantsDevice->GetTrackInfo() = barrier;
         }
+        // The mirror was just recreated; force UpdateMeshSelectionFlags to republish the selection next
+        // frame regardless of whether the selected set changed (ComputeMeshConstants doesn't bake it).
+        m_meshSelectionMirrorSignature = ~0ull;
     }
 
     void Scene::DestroyBuffers()

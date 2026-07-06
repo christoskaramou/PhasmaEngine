@@ -449,7 +449,7 @@ namespace pe
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::MotionBlur, pp.motion_blur && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Grid, gs.draw_grid);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::SelectionOutline,
-                           gs.selection_outline && dx12RenderRaster);
+                           gs.selection_outline && (dx12RenderRaster || dx12RayTracing));
             return;
         }
 
@@ -490,7 +490,11 @@ namespace pe
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::DOF, pp.dof);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::MotionBlur, pp.motion_blur);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Grid, gs.draw_grid);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::SelectionOutline, gs.selection_outline && renderRaster);
+        // Outline composites into "viewport" (x-ray mask, no depth) before TAA/Upsample, so it works
+        // over either the raster or the ray-traced image -- gate on "did any color producer write
+        // viewport", not raster-only, else full RT (renderRaster == false) silently drops the outline.
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::SelectionOutline,
+                       gs.selection_outline && (renderRaster || renderRayTracing));
     }
 
     void UpdateSceneRenderGraphPassComponents(const OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,

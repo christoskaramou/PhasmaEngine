@@ -855,6 +855,9 @@ namespace pe
         std::vector<RtInstanceRecord> m_rtInstances;
         Buffer *m_meshConstants = nullptr;
         Buffer *m_meshConstantsDevice = nullptr; // DX12: GPU-cached DEFAULT mirror (see GetMeshConstants)
+        // XOR set-signature of the currently selected meshes last published to m_meshConstantsDevice.
+        // UpdateMeshSelectionFlags re-copies the DX12 mirror only when this changes (~0ull = force).
+        uint64_t m_meshSelectionMirrorSignature = ~0ull;
         Buffer *m_materialTable = nullptr;
         Buffer *m_materialByteBuffer = nullptr; // ByteAddressBuffer for shader-driven materials
         uint32_t m_materialByteBufferUsed = 0;  // current byte offset (append-only)
