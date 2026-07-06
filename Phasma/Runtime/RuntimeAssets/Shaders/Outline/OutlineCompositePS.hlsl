@@ -4,6 +4,17 @@
 TexSamplerDecl(0, 0, Mask)
 [[vk::push_constant]] PushConstants_SelectionOutline pc;
 
+// The mask RT uses the default color-RT sampler, which is LINEAR + REPEAT. A ring-search read past
+// the viewport border would wrap to the opposite edge (still covering the mesh) and draw a phantom
+// outline there when a selection runs off-screen. Clamp UV to the texel-center band: at a texel
+// center the bilinear weight on the wrapped neighbor is exactly zero, so this reads pure edge
+// coverage (0 outside the silhouette) with no wrap contribution -- equivalent to clamp-to-edge.
+// ponytail: in-shader clamp instead of a dedicated clamp sampler; only this pass reads the mask.
+float SampleMask(float2 uv, float2 texel)
+{
+    return Mask.Sample(sampler_Mask, clamp(uv, 0.5 * texel, 1.0 - 0.5 * texel)).r;
+}
+
 // X-ray selection outline from an R8 coverage mask. A bounded ring search estimates the signed
 // pixel distance to the silhouette edge; the line is solid out to `thickness` and smoothsteps off
 // over `outerFade` outward / `innerFade` inward.
@@ -19,7 +30,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     float outerFade = pc.params1.x;
 
     float reach = thickness + max(innerFade, outerFade) + 1.0;
-    float center = Mask.Sample(sampler_Mask, input.uv).r;
+    float center = SampleMask(input.uv, texel);
 
     // Cheap reject: pixel is neither inside a selected silhouette nor within `reach` of one.
     float coarse = center;
@@ -27,8 +38,8 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     {
         float a = 0.78539816 * k; // 45 deg steps
         float2 d = float2(cos(a), sin(a)) * texel;
-        coarse = max(coarse, Mask.Sample(sampler_Mask, input.uv + d * reach).r);
-        coarse = max(coarse, Mask.Sample(sampler_Mask, input.uv + d * (reach * 0.5)).r);
+        coarse = max(coarse, SampleMask(input.uv + d * reach, texel));
+        coarse = max(coarse, SampleMask(input.uv + d * (reach * 0.5), texel));
     }
     if (coarse < 0.5)
     {
@@ -48,7 +59,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
         float2 dirStep = float2(cos(a), sin(a)) * texel;
         [loop] for (float r = 1.0; r <= reach; r += 1.0)
         {
-            float s = Mask.Sample(sampler_Mask, input.uv + dirStep * r).r;
+            float s = SampleMask(input.uv + dirStep * r, texel);
             if ((s > 0.5) != inside)
             {
                 dist = min(dist, r);
