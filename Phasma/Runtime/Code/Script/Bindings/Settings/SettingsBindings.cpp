@@ -47,6 +47,7 @@ namespace pe
         {"ssao_power", &SceneSettings::ssao_power},
         {"occlusion_culling_bias", &SceneSettings::occlusion_culling_bias},
         {"lod_bias", &SceneSettings::lod_bias},
+        {"shadow_lod_bias", &SceneSettings::shadow_lod_bias},
         {"cas_sharpness", &SceneSettings::cas_sharpness},
         {"dof_focus_scale", &SceneSettings::dof_focus_scale},
         {"dof_blur_range", &SceneSettings::dof_blur_range},

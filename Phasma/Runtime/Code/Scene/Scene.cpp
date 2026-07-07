@@ -1968,6 +1968,9 @@ namespace pe
             set->SetBuffer(3, m_shadowIndirectRegular[frame]);
             set->SetBuffer(4, m_shadowIndirectVoxels[frame]);
             set->SetBuffer(12, GetUniforms(frame));
+            // LOD params (binding 16) so shadow casters pick the same distance-based LOD as the main pass.
+            if (Buffer *lodUbo = UpdateLodUniforms(frame); lodUbo && set->HasBinding(16))
+                set->SetBuffer(16, lodUbo);
             set->Update();
         }
 
@@ -1979,13 +1982,23 @@ namespace pe
             uint32_t arenaSlotBase;
             uint32_t pad0[2];
             alignas(16) vec4 planes[6];
+            float cameraPos[3];
+            float shadowLodBias;
         } constants{};
-        static_assert(sizeof(PushConstants) == 112, "ShadowCull push constants must match ShadowCullCS.hlsl");
+        static_assert(sizeof(PushConstants) == 128, "ShadowCull push constants must match ShadowCullCS.hlsl");
         constants.maxDrawCount = m_meshCount;
         // No arena: m_arenaSlotBase stays 0 — treat all draws as regular (idx >= meshCount is never true).
         constants.arenaSlotBase = HasArenaVoxels() ? m_arenaSlotBase : m_meshCount;
         for (int i = 0; i < 6; ++i)
             constants.planes[i] = frustumPlanes[i];
+        if (Camera *camera = m_cameras.empty() ? nullptr : m_cameras[0])
+        {
+            vec3 camPos = camera->GetPosition();
+            constants.cameraPos[0] = camPos.x;
+            constants.cameraPos[1] = camPos.y;
+            constants.cameraPos[2] = camPos.z;
+        }
+        constants.shadowLodBias = Settings::Get<SceneSettings>().shadow_lod_bias;
 
         cmd->SetConstants(constants);
         cmd->PushConstants();
