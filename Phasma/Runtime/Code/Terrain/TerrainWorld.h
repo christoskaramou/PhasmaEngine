@@ -63,9 +63,10 @@ namespace pe::terrain
         std::string splatPath;
         std::array<std::string, 4> layerPaths = {"Textures/Voxel/grass.png", "Textures/Voxel/rock.png",
                                                  "Textures/Voxel/sand.png", "Textures/Voxel/snow.png"};
-        // Optional per-layer material maps (RGB = tangent-space normal, A = roughness), same layer
-        // order. Empty = a flat-normal / full-roughness default (terrain looks exactly as untextured).
-        std::array<std::string, 4> materialPaths = {"", "", "", ""};
+        // Per-layer material maps (RGB = tangent-space normal, A = roughness), same layer order. Ship
+        // defaults give lit terrain micro-relief; clear a path for a flat 1x1 (geometric normal, as before).
+        std::array<std::string, 4> materialPaths = {"Textures/Voxel/grass_n.png", "Textures/Voxel/rock_n.png",
+                                                    "Textures/Voxel/sand_n.png", "Textures/Voxel/snow_n.png"};
         float textureScaleM = 3.0f; // metres per triplanar texture tile (live, not structural)
         float noiseFeatureScale = 96.0f;
         int noiseSeed = 0;
@@ -178,6 +179,7 @@ namespace pe::terrain
             uint32_t collideIndices = 0; // lod0 prefix the collider cooks (excludes no-collide scatter)
             bool dirty = false;
             bool growPending = false; // content overflowed the budget — grow re-places, then re-mesh
+            bool meshing = false;     // an async mesh for this slot is in flight (don't re-dispatch)
             // Physics (ring 0 only).
             uint32_t bodyId = 0xFFFFFFFF;
             bool bodyDirty = false;
@@ -189,6 +191,38 @@ namespace pe::terrain
             int tilesZ = 0;
             int firstTile = 0;                      // index of this ring's first tile in m_tiles
             ivec2 center = ivec2(INT_MIN, INT_MIN); // window BASE: min world tile coord of the window
+        };
+        // Immutable per-tile snapshot handed to the (worker-safe) mesher. Captures everything the mesh
+        // build reads that a streaming step can change (tx/tz/interiorHole) or that grow can change
+        // (budgets) so the worker never races those main-thread writes; everything else the mesher
+        // reads (generator, cfg, ops, maps, rings) only changes under a worker drain.
+        struct TileJob
+        {
+            int tileIdx = -1;
+            int ringIdx = 0;
+            int tx = 0, tz = 0;
+            bool interiorHole = false;
+            uint32_t vertexBudget = 0;
+            uint32_t indexBudget = 0;
+        };
+        // CPU meshing output — the worker fills this with LOCAL buffers only (no store/Tile writes);
+        // the main thread commits it into the tile's store ranges. tx/tz are echoed for a staleness
+        // check (discard if the slot streamed to a new world tile while the mesh was in flight).
+        static constexpr int kTileLods = 4; // == Mesh::kMaxLods (static_assert in the .cpp)
+        struct TileMesh
+        {
+            int tileIdx = -1;
+            int tx = 0, tz = 0;
+            bool valid = false;       // produced by the mesher this batch
+            bool empty = false;       // degenerate (interior hole / outside footprint / no surface)
+            bool growPending = false; // over budget — commit flags the tile, writes nothing
+            std::vector<Vertex> verts;
+            std::vector<uint32_t> indices; // lod0 then simplified levels, contiguous
+            uint32_t lodIndexCount[kTileLods] = {};
+            uint32_t lodCount = 0;
+            uint32_t lod0Count = 0;
+            uint32_t collideEnd = 0;
+            vec3 bbMin = vec3(0.0f), bbMax = vec3(0.0f);
         };
 
         // Density of the shared worldgen + sculpt CSG ops. The h-cached variant is the mesher fast
@@ -202,25 +236,39 @@ namespace pe::terrain
         // cfg.scatterMeshes -> m_templates and cfg.scatterPath -> m_scatterMap, plus the per-tile
         // vertex demand histogram that feeds the ring-0 budget.
         void LoadScatter();
-        void BuildRings();                      // ring layout from cfg (no allocation)
-        void AllocateTiles();                   // reserve store ranges + register scene meshes on the host node
-        void MeshTile(int ringIdx, Tile &tile); // (re)mesh tile content into its store ranges
-        void MeshTileSurfaceNets(const Ring &ring, Tile &tile);
-        void MeshTileGrid(const Ring &ring, Tile &tile); // coarse heightfield tile + skirt
+        void BuildRings();    // ring layout from cfg (no allocation)
+        void AllocateTiles(); // reserve store ranges + register scene meshes on the host node
+        // (Re)mesh a tile into a TileMesh result. const + LOCAL buffers only (no Scene store or Tile
+        // writes) so it runs on the meshing worker for any number of tiles concurrently; the main
+        // thread commits the result. All member reads are stable for the job's lifetime (see TileJob).
+        TileMesh MeshTile(const TileJob &job) const;
+        void MeshTileSurfaceNets(const Ring &ring, const TileJob &job, TileMesh &out) const;
+        void MeshTileGrid(const Ring &ring, const TileJob &job, TileMesh &out) const; // coarse tile + skirt
         // Stamp scatter instances whose anchor pixel falls inside the tile rect onto the true surface
         // (deterministic per pixel). Colliding kinds first; collideEnd = index count before the
         // no-collide suffix.
-        void AppendScatter(const Ring &ring, const Tile &tile, std::vector<Vertex> &verts,
-                           std::vector<uint32_t> &indices, vec3 &bbMin, vec3 &bbMax, uint32_t &collideEnd);
-        // Write verts/indices into the tile's reserved store ranges (+ meshopt LOD chain on ring 0),
-        // update the Mesh's live fields; false = budget overflow (tile flagged for grow, content kept).
-        // collideIndexCount = lod0 prefix the tile collider cooks.
-        bool WriteTileContent(int ringIdx, Tile &tile, std::vector<Vertex> &verts,
-                              std::vector<uint32_t> &indices, const vec3 &bbMin, const vec3 &bbMax,
-                              uint32_t collideIndexCount);
-        void WriteEmptyTile(Tile &tile);
-        void StreamWindows();       // desired world tile per slot; mark moved slots dirty
-        void ProcessDirtyTiles();   // budgeted re-mesh + staged in-place GPU upload
+        void AppendScatter(const Ring &ring, const TileJob &job, std::vector<Vertex> &verts,
+                           std::vector<uint32_t> &indices, vec3 &bbMin, vec3 &bbMax, uint32_t &collideEnd) const;
+        // Build the LOD chain (ring 0) and finalize a TileMesh from local verts/indices, capped by the
+        // index budget; sets growPending (no LOD, caller grows) when the base mesh overflows. No writes.
+        void BuildTileMesh(int ringIdx, const TileJob &job, std::vector<Vertex> &verts,
+                           std::vector<uint32_t> &indices, const vec3 &bbMin, const vec3 &bbMax,
+                           uint32_t collideEnd, TileMesh &out) const;
+        // Commit a finished TileMesh into the tile's reserved store ranges + Mesh live fields (main
+        // thread). Discards a stale result (slot streamed away) and flags grow on overflow. Returns
+        // true when the tile needs a GPU upload.
+        bool CommitTileMesh(Tile &tile, const TileMesh &m);
+        void WriteEmptyTile(Tile &tile); // main-thread degenerate placeholder (Create + empty commits)
+        void StreamWindows();            // desired world tile per slot; mark moved slots dirty
+        void ProcessDirtyTiles();        // commit finished async meshes + dispatch new dirty tiles + upload
+        // Background meshing worker: dispatched tile jobs are meshed off the main thread; the main
+        // thread commits + uploads their results. Any mutation of data the mesher reads (ops, scatter
+        // map, generator, tile offsets) must DrainMeshWorker() first — streaming's tx/tz is captured in
+        // the job snapshot so it alone needs no drain.
+        void StartMeshWorker();
+        void StopMeshWorker();  // signal stop + join; drop uncommitted results (rebuild/teardown)
+        void DrainMeshWorker(); // block until in-flight meshing finishes; drop + re-dirty pending
+        void MeshWorkerLoop();
         void UpdateColliderRing();  // budgeted per-tile Jolt body add/remove/re-cook
         void GrowOverflowedTiles(); // any overflow doubles its whole ring's budgets (one flush, rare)
         void RemoveTileBody(Tile &tile);
@@ -260,6 +308,18 @@ namespace pe::terrain
         std::vector<Ring> m_rings;
         std::vector<Tile> m_tiles; // all rings, ring-major (Ring::firstTile indexes in here)
         std::vector<SculptOp> m_ops;
+        // Background meshing. Dirty tiles are snapshotted into m_meshInput (main -> worker), meshed off
+        // the main thread, and returned in m_meshOutput (worker -> main) for commit + upload. All three
+        // + m_meshProcessing/m_meshStop are guarded by m_meshMutex. The mesher's other reads (generator,
+        // cfg, ops, maps, rings, tile offsets) are only mutated under DrainMeshWorker(), so they need no
+        // lock. m_tiles is main-thread-only (the worker sees tiles only through the job snapshot).
+        std::thread m_meshThread;
+        std::mutex m_meshMutex;
+        std::condition_variable m_meshCv;
+        std::vector<TileJob> m_meshInput;
+        std::vector<TileMesh> m_meshOutput;
+        int m_meshProcessing = 0; // jobs pulled from input, not yet in output
+        bool m_meshStop = false;
         std::vector<SculptOp> m_pendingSculpts; // queued brush strokes, drained on Update()
         vec3 m_anchor = vec3(0.0f);
         bool m_anchorSet = false;
