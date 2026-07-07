@@ -1927,7 +1927,7 @@ namespace pe
                             ui::ItemTooltip("Stream around the active camera. Off: a script drives "
                                             "voxel.set_anchor (e.g. around the player).");
                             changed |= ImGui::DragInt("Load Radius", &v->loadRadius, 0.2f, 1, 64);
-                            ui::ItemTooltip("Streaming radius in 16-block columns around the anchor.");
+                            ui::ItemTooltip("Streaming radius in 16 m columns around the anchor.");
                             changed |= ImGui::DragInt("Unload Margin", &v->unloadMargin, 0.2f, 0, 16);
                             ui::ItemTooltip("Extra columns kept loaded past the radius before unloading.");
                         }
@@ -1949,7 +1949,7 @@ namespace pe
                             changed |= ImGui::DragInt("Full-Detail Radius", &v->lod0Radius, 0.2f, 1, 64);
                             ui::ItemTooltip("Full-detail ring in columns, measured 3D from the camera "
                                             "(circular; height counts — a high camera coarsens everything). "
-                                            "2-block cells out to 3x this radius, 4-block cells beyond.");
+                                            "2 m cells out to 3x this radius, 4 m cells beyond.");
                             ImGui::Unindent(16.0f);
                         }
                         char saveBuf[260];
@@ -1969,12 +1969,12 @@ namespace pe
                         {
                             changed |= ImGui::DragFloatRange2("Height Range (m)", &v->heightMin, &v->heightMax, 0.5f,
                                                               -256.0f, 256.0f, "min %.0f", "max %.0f");
-                            ui::ItemTooltip("Vertical span in blocks around Ground Height the heightmap maps into: "
+                            ui::ItemTooltip("Vertical span in metres around Ground Height the heightmap maps into: "
                                             "0 = Ground Height, 1 = Ground Height + max.");
                             v->groundHeight = std::clamp(v->groundHeight, v->heightMin, v->heightMax);
                             changed |= ImGui::DragFloat("Ground Height", &v->groundHeight, 0.25f, v->heightMin,
                                                         v->heightMax, "%.1f");
-                            ui::ItemTooltip("Block height the 0 map value sits at; drags within Height Range.");
+                            ui::ItemTooltip("Height in metres the 0 map value sits at; drags within Height Range.");
                         }
                         auto pathField = [&changed](const char *label, std::string &path)
                         {
@@ -1993,10 +1993,10 @@ namespace pe
                         if (v->heightmapPath.empty())
                         {
                             changed |= ImGui::DragFloat("Mountain Height", &v->noiseAmplitude, 0.25f, 0.0f, 128.0f, "%.0f");
-                            ui::ItemTooltip("Peak height above Ground Y in blocks. 0 = flat plain.");
+                            ui::ItemTooltip("Peak height above Ground Y in metres. 0 = flat plain.");
                             changed |= ImGui::DragFloat("Feature Scale", &v->noiseFeatureScale, 0.5f, 8.0f, 1024.0f,
                                                         "%.0f");
-                            ui::ItemTooltip("Terrain feature wavelength in blocks — small = choppy hills, large = "
+                            ui::ItemTooltip("Terrain feature wavelength in metres — small = choppy hills, large = "
                                             "wide rolling terrain.");
                             changed |= ImGui::DragInt("Seed", &v->noiseSeed);
                             ui::ItemTooltip("Shifts the noise domain; each seed is a different world.");
@@ -2006,16 +2006,16 @@ namespace pe
                         else
                         {
                             pathField("Strata 1 Map", v->strata1Path);
-                            ui::ItemTooltip("Grayscale thickness (blocks) of the band under the surface block. "
+                            ui::ItemTooltip("Grayscale thickness (m) of the band under the surface block. "
                                             "Empty = fixed Strata 1 Thickness.");
                             pathField("Strata 2 Map", v->strata2Path);
-                            ui::ItemTooltip("Grayscale thickness (blocks) of the band under strata 1. Empty = "
+                            ui::ItemTooltip("Grayscale thickness (m) of the band under strata 1. Empty = "
                                             "fixed Strata 2 Thickness.");
                             pathField("Features Map", v->featuresPath);
                             ui::ItemTooltip("Decoration map: pixel 1 = tree, 2 = rock at that pixel's block. "
                                             "Paint it sparse in the Map Painter's Features layer.");
-                            changed |= ImGui::DragInt("Blocks / Pixel", &v->blocksPerPixel, 0.1f, 1, 64);
-                            ui::ItemTooltip("Blocks each map pixel spans in X/Z; heights lerp between pixels.");
+                            changed |= ImGui::DragInt("Meters / Pixel", &v->blocksPerPixel, 0.1f, 1, 64);
+                            ui::ItemTooltip("Metres each map pixel spans in X/Z; heights lerp between pixels.");
                             changed |= ImGui::Checkbox("Elevation Bands", &v->surfaceBands);
                             ui::ItemTooltip("Pick the top block by height (sand < dry grass < rock < snow) instead of "
                                             "one Surface Block. Great for coast-to-summit terrain.");
@@ -2031,7 +2031,7 @@ namespace pe
                                             "shells).");
                         }
                         changed |= ImGui::DragInt("Sea Level", &v->seaLevel, 0.2f, -1, 256);
-                        ui::ItemTooltip("Water surface height in blocks: -1 = auto (Ground Y - 2), 0 = no water.");
+                        ui::ItemTooltip("Water surface height in metres: -1 = auto (Ground Y - 2), 0 = no water.");
                         changed |= ImGui::Checkbox("Auto Rebuild", &v->autoRebuild);
                         ui::ItemTooltip("On (default): worldgen edits rebuild the world automatically after a short "
                                         "settle. Off: edits only apply when you press Rebuild World — for batching "
@@ -2040,7 +2040,7 @@ namespace pe
                             v->rebuildRequested = true;
                         ui::ItemTooltip("Force-rebuild now — applies staged edits (needed after repainting a map "
                                         "file, or any edit while Auto Rebuild is off).");
-                        ImGui::TextDisabled("Block = 1 unit, section = 16^3 (engine constants)");
+                        ImGui::TextDisabled("Block = 1 m, section = 16^3 m (engine constants)");
                         if (changed)
                             scene.MarkDirty();
                     }
@@ -2153,7 +2153,7 @@ namespace pe
                         if (t->heightmapPath.empty())
                         {
                             changed |= ImGui::DragFloat("Feature Scale", &t->noiseFeatureScale, 0.5f, 8.0f, 1024.0f, "%.0f");
-                            ui::ItemTooltip("Noise feature wavelength in blocks — small = choppy, large = rolling.");
+                            ui::ItemTooltip("Noise feature wavelength in metres — small = choppy, large = rolling.");
                             changed |= ImGui::DragInt("Seed", &t->noiseSeed);
                             ui::ItemTooltip("Each seed is a different terrain.");
                             changed |= ImGui::SliderFloat("Overhangs", &t->overhangs, 0.0f, 1.0f, "%.2f");

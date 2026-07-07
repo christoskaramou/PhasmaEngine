@@ -1129,7 +1129,7 @@ namespace pe
             ui::ItemTooltip("World metres each map pixel / mesh cell spans. Terrain size derives from map size x this; "
                             "bigger spreads a small map over a large world with fewer verts.");
         }
-        else if (target.blocksPerPixel && ImGui::DragInt("Blocks / Pixel", target.blocksPerPixel, 0.1f, 1, 64))
+        else if (target.blocksPerPixel && ImGui::DragInt("Meters / Pixel", target.blocksPerPixel, 0.1f, 1, 64))
         {
             *target.blocksPerPixel = std::clamp(*target.blocksPerPixel, 1, 64);
             scene->MarkDirty();
@@ -1160,10 +1160,9 @@ namespace pe
             ImGui::SameLine();
             ImGui::SetNextItemWidth(90.0f);
             ImGui::DragInt("Height", &m_newH, 1.0f, 16, 2048);
-            ui::ItemTooltip("Map size in pixels; one pixel spans Meters/Pixel (Terrain) or Blocks/Pixel in X/Z.");
+            ui::ItemTooltip("Map size in pixels; one pixel spans Meters/Pixel in X/Z.");
             const float ppN = target.ppScale();
-            ImGui::TextDisabled("covers %.0f x %.0f %s", m_newW * ppN, m_newH * ppN,
-                                target.metersPerPixel ? "m" : "blocks");
+            ImGui::TextDisabled("covers %.0f x %.0f m", m_newW * ppN, m_newH * ppN);
             if (m_layer == 0) // surface: signed height scaler
             {
                 float f = SurfRangeToSigned(m_newValue);
@@ -1185,10 +1184,10 @@ namespace pe
                 ImGui::SetNextItemWidth(90.0f);
                 if (ImGui::DragInt("Fill Value", &iv, 1.0f, 0, 255))
                     m_newValue = static_cast<float>(iv);
-                ui::ItemTooltip("Initial thickness in blocks for every pixel of the new strata map. "
+                ui::ItemTooltip("Initial thickness in metres for every pixel of the new strata map. "
                                 "This is only the flat starting level; paint on top afterwards.");
                 ImGui::SameLine();
-                ImGui::TextDisabled("= %d blocks", iv);
+                ImGui::TextDisabled("= %d m", iv);
             }
             if (ImGui::Button("Create Map"))
                 CreateMap();
@@ -1320,11 +1319,11 @@ namespace pe
         if (ImGui::Button("Resize"))
             ResizeMap();
         ui::ItemTooltip("Resample the map to the new size (bilinear; features resample nearest). "
-                        "With Blocks/Pixel unchanged this also resizes the world area the map covers.");
+                        "With Meters/Pixel unchanged this also resizes the world area the map covers.");
         ImGui::SameLine();
         const float ppW = target.ppScale();
-        ImGui::Text("%s%s  %dx%d px = %.0fx%.0f %s", configured.c_str(), buf.unsaved ? " *" : "", buf.w, buf.h,
-                    buf.w * ppW, buf.h * ppW, target.metersPerPixel ? "m" : "blocks");
+        ImGui::Text("%s%s  %dx%d px = %.0fx%.0f m", configured.c_str(), buf.unsaved ? " *" : "", buf.w, buf.h,
+                    buf.w * ppW, buf.h * ppW);
 
         UploadPreview();
 
@@ -1520,7 +1519,7 @@ namespace pe
                 ImGui::Text("%d, %d = %.3f (scaler)  |  LMB paint, Shift lower, Alt teleport cam, RMB pan", hoverX,
                             hoverY, SurfRangeToSigned(hoverRaw));
             else
-                ImGui::Text("%d, %d = %d blocks thick  |  LMB paint, Shift lower, Alt teleport cam, RMB pan", hoverX,
+                ImGui::Text("%d, %d = %d m thick  |  LMB paint, Shift lower, Alt teleport cam, RMB pan", hoverX,
                             hoverY, hoverValue);
         }
         else
