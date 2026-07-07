@@ -147,6 +147,10 @@ namespace pe
         float shadow_normal_bias = 1.5f;
         float shadow_fade_fraction = 0.15f;
         float shadow_filter_radius = 0.75f;
+        // Multiplies the camera-distance LOD selection for shadow casters (ShadowCullCS). 1.0 = shadows
+        // match the visible geometry's LOD; >1 drops shadow detail sooner (cheaper, still PCF-blurred);
+        // <=0 forces full-res casters. ponytail: live via Lua/A-B; GUI + scene serialize deferred.
+        float shadow_lod_bias = 1.0f;
         int shadow_debug_mode = 0;
         float render_scale = 0.75f;
         bool forward_plus = true;

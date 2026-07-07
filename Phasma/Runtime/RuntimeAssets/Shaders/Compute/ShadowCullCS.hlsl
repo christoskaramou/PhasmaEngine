@@ -16,12 +16,25 @@ struct DrawIndexedIndirectCommand
 [[vk::binding(4, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectVoxelsOut;
 [[vk::binding(12, 0)]] ByteAddressBuffer NodeData;
 
+// Same LOD params buffer the main CullingCS consumes (Scene::UpdateLodUniforms, binding 16). Lets the
+// shadow cull pick each caster's LOD by camera distance instead of always emitting LOD0.
+[[vk::binding(16, 0)]] cbuffer LodUBO
+{
+    uint lodEnabled;
+    uint lodPad0;
+    float lodBias;
+    float lodPad1;
+    float4 lodDistances;
+};
+
 struct PushConstants
 {
     uint maxDrawCount;
     uint arenaSlotBase;
     uint2 pad0;
     float4 frustumPlanes[6];
+    float3 cameraPos;    // for distance-based LOD selection (matches CullingCS)
+    float shadowLodBias; // extra coarsening on top of lodBias; <=0 disables LOD (full-res casters)
 };
 [[vk::push_constant]] PushConstants pc;
 
@@ -102,6 +115,23 @@ uint WaveAppend(uint counterIndex, bool emit)
 
     if (!AABBInFrustum(aabbMin, aabbMax))
         return;
+
+    // Discrete LOD: override this draw's index range by camera distance, exactly like CullingCS, so
+    // shadow casters shed vertices with distance instead of transforming full-res geometry x4 cascades.
+    // shadowLodBias>1 drops shadow detail sooner than the visible geometry (PCF-blurred silhouettes
+    // tolerate it); shadowLodBias<=0 keeps full-res (baseline / A-B toggle).
+    if (lodEnabled != 0u && constants.lodMeshEnabled != 0u && constants.lodCount > 1u && pc.shadowLodBias > 0.0)
+    {
+        float3 lodCenter = (aabbMin + aabbMax) * 0.5;
+        float lodDist = distance(pc.cameraPos, lodCenter) * lodBias * constants.lodMeshBias * pc.shadowLodBias;
+        uint lod = 0u;
+        if (lodDist > lodDistances.x) lod = 1u;
+        if (lodDist > lodDistances.y) lod = 2u;
+        if (lodDist > lodDistances.z) lod = 3u;
+        lod = min(lod + constants.lodShift, constants.lodCount - 1u);
+        cmd.firstIndex = constants.lodIndexOffset[lod];
+        cmd.indexCount = constants.lodIndexCount[lod];
+    }
 
     const bool isVoxel = idx >= pc.arenaSlotBase;
     const bool emitRegular = !isVoxel;
