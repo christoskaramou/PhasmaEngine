@@ -104,14 +104,15 @@ steep face. So terrain is fully textured with zero authoring, and a splat map is
 - Terrain still casts shadows and writes depth normally (the shadow cull only tests the voxel bit,
   so terrain rides the regular shadow bucket; the surface variant writes its own depth like voxel).
   Isolating the ~12-tap triplanar shader to terrain draws keeps it off every other opaque pixel.
-- **Per-layer material maps** (optional): each layer may also supply a material texture (`materialPaths`,
-  RGB = tangent-space normal, A = roughness), sampled triplanar and reoriented into world space with
-  the **Whiteout blend** (no per-vertex tangents needed), then weight-blended like the albedo. The
-  blended normal drives the gbuffer normal and the blended roughness drives `metRough.y`. A layer with
-  no map is bound a **1x1 flat-normal / full-roughness default** (`128,128,255,255`): the whiteout
-  blend collapses it back to the exact geometric normal + roughness 1, so unauthored terrain is
-  byte-identical to before and the default texels are cache-resident (no bandwidth). Cost is opt-in —
-  measured ~0% fps delta with no maps, ~13% on the terrain pass when every layer has a real map.
+- **Per-layer material maps**: each layer supplies a material texture (`materialPaths`, RGB =
+  tangent-space normal, A = roughness), sampled triplanar and reoriented into world space with the
+  **Whiteout blend** (no per-vertex tangents needed), then weight-blended like the albedo. The blended
+  normal drives the gbuffer normal and the blended roughness drives `metRough.y`. The four layers ship
+  **default `Textures/Voxel/{grass,rock,sand,snow}_n.png`** (seamless-tiling procedural micro-relief +
+  per-layer roughness — snow shiniest, grass mattest), so lit terrain reads as textured out of the box.
+  Clearing a path binds a **1x1 flat-normal / full-roughness default** (`128,128,255,255`): the whiteout
+  blend collapses it to the exact geometric normal + roughness 1 (terrain as before), and the 1x1 is
+  cache-resident (no bandwidth). Cost ~13% on the terrain pass with all four maps; ~0% with them cleared.
 
 **Painting the splat (Map Painter layer 6 "Splat (Terrain)")** — paints per-layer WEIGHTS. The painter
 stores 4 float weights per pixel (R grass, G rock, B sand, A snow); the brush is additive with linear
@@ -184,8 +185,24 @@ at the seam (no lighting seam).
 With `streaming` on, each ring's window follows the anchor (the active camera, fed by
 `TerrainSystem::Update`) with **toroidal slot reuse**: slot s always holds the window tile with
 `T ≡ s (mod N)`, so nothing moves — a slot is just re-meshed for its new world tile when the window
-slides. Dirty tiles re-mesh nearest-first, a few per frame (`kMeshBudgetPerUpdate`), uploads ride
-one submitted-not-waited command buffer per Update (VoxelWorld's retire pattern).
+slides.
+
+**Meshing is off the main thread.** A dirty tile is snapshotted into an immutable `TileJob`
+(tx/tz/interiorHole + budgets) and dispatched to a persistent background **mesh worker**; the worker
+meshes the batch into a local `TileMesh` (verts/indices/LOD — no Scene or `Tile` writes, whole read
+path is const), and the next `Update` **commits** ready results (store writes) + uploads them on the
+main queue. So the main thread never blocks on meshing: `ProcessDirtyTiles` costs ~0.07 ms (commit +
+dispatch + one submitted-not-waited upload buffer), down from ~7.7 ms when the budgeted tiles meshed
+on the main thread. A stale result (the slot streamed to a new world tile mid-flight) is discarded by
+a tx/tz guard and re-meshed. The worker meshes its batch with `std::for_each(execution::par)` too, so
+a burst still drains fast.
+
+Because the worker reads shared state (generator, cfg, `m_ops`, caves/scatter maps, tile store
+offsets), any mutation of that state **drains the worker first** (`DrainMeshWorker`): sculpt apply,
+`SetOps`, `UpdateScatterMap`, generator swap, ring grow, and `Destroy`/`Create` (which stop/start the
+worker). These are all rare/interactive, so the common streaming case never drains — only tx/tz
+changes, and those ride the job snapshot. Nearest-first ordering, `kMeshBudgetPerUpdate` dispatched
+per frame, one-shot `meshing` flag to avoid re-dispatching an in-flight tile.
 
 Two coarse view rings (cell size ×4, ×16; same tile counts) extend the view distance. Coarse tiles
 are plain heightfield grid meshes (no ops/overhangs — a big dig pops at the fine rim, same trade as
@@ -214,8 +231,11 @@ range so it never shifts while streaming.
 
 ## Known limits / follow-ups
 
-- Meshing is main-thread, budgeted (~3 tiles/frame; overhang tiles cost ~5–10 ms each) — worker
-  threads are the next step if streaming while walking ever stutters.
+- Meshing is budgeted (~3 tiles dispatched/frame; overhang tiles cost ~5–10 ms each) and runs on the
+  background worker (see Streaming). The main-thread cost is just commit + upload (~0.07 ms); a big
+  sculpt/stream burst simply drains over more frames rather than stalling. A single worker with an
+  internal parallel-for is enough today; a worker pool would only help if dispatch throughput (not the
+  main thread) becomes the bound.
 - RT/BLAS does not track in-place tile updates (stale RT terrain until some full rebuild).
 - Coarse rings ignore sculpts/overhangs/scatter; grow leaks the old range until the next scene load.
 - Scatter props share the terrain material (baked vertex colours, no textures — the shader passes

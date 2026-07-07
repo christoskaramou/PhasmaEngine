@@ -194,6 +194,7 @@ namespace pe::terrain
 
     void TerrainWorld::SetTerrainGenerator(std::shared_ptr<voxel::ITerrainGenerator> generator)
     {
+        DrainMeshWorker(); // the mesher samples m_generator — quiesce before swapping it
         m_generator = std::move(generator);
         m_generatorOverridden = (m_generator != nullptr);
     }
@@ -401,7 +402,9 @@ namespace pe::terrain
             for (int i = 0; i < ring.tilesX * ring.tilesZ; ++i)
             {
                 Tile &tile = m_tiles[ring.firstTile + i];
-                MeshTile(static_cast<int>(r), tile);
+                const TileJob job{ring.firstTile + i, static_cast<int>(r), tile.tx, tile.tz,
+                                  tile.interiorHole, tile.vertexBudget, tile.indexBudget};
+                CommitTileMesh(tile, MeshTile(job));
                 tile.dirty = tile.growPending; // overflowed tiles re-mesh after the grow
                 totalVerts += tile.liveVerts;
                 totalTris += tile.liveIndices / 3;
@@ -414,6 +417,10 @@ namespace pe::terrain
         // reservation; fine while terrain and cube worlds live in separate scenes.
         m_scene->SetGeometryDirty();
         m_scene->FlushPendingGpuWork();
+
+        // Everything the mesher reads is now built; later streaming/sculpt meshing runs off the main
+        // thread (Update commits + uploads the results). Create-time meshing above stayed synchronous.
+        StartMeshWorker();
     }
 
     void TerrainWorld::BuildRings()
@@ -705,34 +712,34 @@ namespace pe::terrain
         return c;
     }
 
-    void TerrainWorld::MeshTile(int ringIdx, Tile &tile)
+    TerrainWorld::TileMesh TerrainWorld::MeshTile(const TileJob &job) const
     {
-        if (tile.interiorHole)
+        TileMesh out;
+        out.tileIdx = job.tileIdx;
+        out.tx = job.tx;
+        out.tz = job.tz;
+        out.valid = true;
+        if (job.interiorHole || TileOutsideHeightmapFootprint(m_rings[job.ringIdx], job.tx, job.tz))
         {
-            WriteEmptyTile(tile);
-            return;
+            out.empty = true;
+            return out;
         }
-        if (TileOutsideHeightmapFootprint(m_rings[ringIdx], tile.tx, tile.tz))
-        {
-            WriteEmptyTile(tile);
-            return;
-        }
-        if (ringIdx == 0)
-            MeshTileSurfaceNets(m_rings[0], tile);
+        if (job.ringIdx == 0)
+            MeshTileSurfaceNets(m_rings[0], job, out);
         else
-            MeshTileGrid(m_rings[ringIdx], tile);
-        tile.bodyDirty = true;
+            MeshTileGrid(m_rings[job.ringIdx], job, out);
+        return out;
     }
 
-    void TerrainWorld::MeshTileSurfaceNets(const Ring &ring, Tile &tile)
+    void TerrainWorld::MeshTileSurfaceNets(const Ring &ring, const TileJob &job, TileMesh &out) const
     {
         const float cell = ring.cellSize;
         // One-cell negative apron stitches quads across tile seams (see SurfaceNetsTile); the missing
         // apron at bounded world edges just drops the outermost cell ring of the rim.
         const ivec3 apron(1, 0, 1);
         const int cellsXZ = kTileCells + 1;
-        const int gx0 = tile.tx * kTileCells - apron.x;
-        const int gz0 = tile.tz * kTileCells - apron.z;
+        const int gx0 = job.tx * kTileCells - apron.x;
+        const int gz0 = job.tz * kTileCells - apron.z;
 
         // Column surface heights over the corner lattice + guard ring: local corner l in [-1, cells+2)
         // stored at l + 1, sampled at world = float(globalCorner) * cell so neighbouring tiles get
@@ -791,7 +798,7 @@ namespace pe::terrain
         if (cellsY > kMaxFieldCellsY)
         {
             PE_WARN("Terrain: tile (%d,%d) vertical band %d cells exceeds the %d cap; clamped.",
-                    tile.tx, tile.tz, cellsY, kMaxFieldCellsY);
+                    job.tx, job.tz, cellsY, kMaxFieldCellsY);
             cellsY = kMaxFieldCellsY;
         }
         cellsY = std::max(cellsY, 4);
@@ -815,7 +822,7 @@ namespace pe::terrain
         voxel::SmoothMeshData mesh = voxel::SurfaceNetsTile(field, gridMin, cells, apron, cell);
         if (mesh.vertices.empty() || mesh.indices.empty())
         {
-            WriteEmptyTile(tile);
+            out.empty = true;
             return;
         }
         // Triplanar splat path (m_material->terrain): vertex colour is a tint, uv is the splat coord
@@ -885,13 +892,13 @@ namespace pe::terrain
             }
         }
         uint32_t collideEnd = static_cast<uint32_t>(mesh.indices.size());
-        AppendScatter(ring, tile, mesh.vertices, mesh.indices, mesh.aabbMin, mesh.aabbMax, collideEnd);
-        WriteTileContent(0, tile, mesh.vertices, mesh.indices, mesh.aabbMin, mesh.aabbMax, collideEnd);
+        AppendScatter(ring, job, mesh.vertices, mesh.indices, mesh.aabbMin, mesh.aabbMax, collideEnd);
+        BuildTileMesh(0, job, mesh.vertices, mesh.indices, mesh.aabbMin, mesh.aabbMax, collideEnd, out);
     }
 
-    void TerrainWorld::AppendScatter(const Ring &ring, const Tile &tile, std::vector<Vertex> &verts,
+    void TerrainWorld::AppendScatter(const Ring &ring, const TileJob &job, std::vector<Vertex> &verts,
                                      std::vector<uint32_t> &indices, vec3 &bbMin, vec3 &bbMax,
-                                     uint32_t &collideEnd)
+                                     uint32_t &collideEnd) const
     {
         collideEnd = static_cast<uint32_t>(indices.size());
         if (!m_scatterMap || m_templates.empty() || !m_generator)
@@ -900,8 +907,8 @@ namespace pe::terrain
         // keeps their baked colour instead of texturing them as ground.
         const bool textured = m_material && m_material->terrain;
         const float tw = TileWorldSize(ring);
-        const float x0 = tile.tx * tw, x1 = x0 + tw;
-        const float z0 = tile.tz * tw, z1 = z0 + tw;
+        const float x0 = job.tx * tw, x1 = x0 + tw;
+        const float z0 = job.tz * tw, z1 = z0 + tw;
         // Inverse of the map transform (both axes flipped, texel centres at (p + 0.5) / dim): the
         // pixel range whose centres can fall inside the tile rect.
         const int w = m_scatterMap->w, h = m_scatterMap->h;
@@ -948,7 +955,7 @@ namespace pe::terrain
                     if (verts.size() - vertsBase + tmpl.vertices.size() > kMaxScatterVertsPerTile)
                     {
                         PE_WARN("Terrain: tile (%d,%d) hit the %u scatter-vert cap — dropping instances.",
-                                tile.tx, tile.tz, kMaxScatterVertsPerTile);
+                                job.tx, job.tz, kMaxScatterVertsPerTile);
                         capped = true;
                         break;
                     }
@@ -1006,11 +1013,11 @@ namespace pe::terrain
         }
     }
 
-    void TerrainWorld::MeshTileGrid(const Ring &ring, Tile &tile)
+    void TerrainWorld::MeshTileGrid(const Ring &ring, const TileJob &job, TileMesh &out) const
     {
         const float cell = ring.cellSize;
-        const int gx0 = tile.tx * kTileCells;
-        const int gz0 = tile.tz * kTileCells;
+        const int gx0 = job.tx * kTileCells;
+        const int gz0 = job.tz * kTileCells;
         const int cx = kTileCells + 1; // corner count per axis
 
         // Corner heights + one guard ring for central-difference normals; global-integer sampling
@@ -1126,7 +1133,7 @@ namespace pe::terrain
             addSkirtQuad(static_cast<uint32_t>(i * cx + kTileCells), static_cast<uint32_t>((i + 1) * cx + kTileCells)); // +X edge
         }
 
-        WriteTileContent(1, tile, verts, indices, bbMin, bbMax, static_cast<uint32_t>(indices.size()));
+        BuildTileMesh(1, job, verts, indices, bbMin, bbMax, static_cast<uint32_t>(indices.size()), out);
     }
 
     void TerrainWorld::WriteEmptyTile(Tile &tile)
@@ -1165,32 +1172,30 @@ namespace pe::terrain
         tile.collideIndices = 3;
     }
 
-    bool TerrainWorld::WriteTileContent(int ringIdx, Tile &tile, std::vector<Vertex> &verts,
-                                        std::vector<uint32_t> &indices, const vec3 &bbMin, const vec3 &bbMax,
-                                        uint32_t collideIndexCount)
+    void TerrainWorld::BuildTileMesh(int ringIdx, const TileJob &job, std::vector<Vertex> &verts,
+                                     std::vector<uint32_t> &indices, const vec3 &bbMin, const vec3 &bbMax,
+                                     uint32_t collideEnd, TileMesh &out) const
     {
+        static_assert(kTileLods == Mesh::kMaxLods, "TileMesh lod array must match Mesh::kMaxLods");
         if (verts.empty() || indices.size() < 3)
         {
-            WriteEmptyTile(tile);
-            return true;
+            out.empty = true;
+            return;
         }
-        if (verts.size() > tile.vertexBudget || indices.size() > tile.indexBudget)
+        if (verts.size() > job.vertexBudget || indices.size() > job.indexBudget)
         {
-            if (!tile.growPending)
-                PE_WARN("Terrain: tile (%d,%d) overflowed its budget (%zu/%u verts, %zu/%u idx) — growing.",
-                        tile.tx, tile.tz, verts.size(), tile.vertexBudget, indices.size(), tile.indexBudget);
-            tile.growPending = true;
-            return false; // keep the old content until the grow re-places the ranges
+            out.growPending = true; // commit flags the tile + warns once; no content built here
+            return;
         }
 
-        Mesh &m = m_scene->GetMesh(tile.meshIndex);
         const uint32_t lod0Count = static_cast<uint32_t>(indices.size());
-        m.lodIndexOffset[0] = tile.indexOffset;
-        m.lodIndexCount[0] = lod0Count;
-        m.lodCount = 1;
+        out.lod0Count = lod0Count;
+        out.lodIndexCount[0] = lod0Count;
+        out.lodCount = 1;
 
         // Ring-0 LOD chain via meshopt (border-locked so tile seams stay matched at every level),
         // appended after lod0 inside the tile's index budget; levels that no longer fit are dropped.
+        // Only the per-level COUNTS are recorded; the commit turns them into offsets from indexOffset.
         if (ringIdx == 0 && lod0Count >= 256)
         {
             const float *positions = reinterpret_cast<const float *>(verts.data());
@@ -1200,30 +1205,69 @@ namespace pe::terrain
             for (uint32_t lod = 1; lod < Mesh::kMaxLods; ++lod)
             {
                 const size_t target = (static_cast<size_t>(lod0Count * kRatios[lod]) / 3) * 3;
-                if (target < 12 || indices.size() + target > tile.indexBudget)
+                if (target < 12 || indices.size() + target > job.indexBudget)
                     break;
                 float err = 0.0f;
                 const size_t resCount =
                     meshopt_simplify(simplified.data(), indices.data(), lod0Count, positions, verts.size(),
                                      sizeof(Vertex), target, 0.1f, meshopt_SimplifyLockBorder, &err);
                 if (resCount == 0 || resCount >= static_cast<size_t>(prevCount * 0.95f) ||
-                    indices.size() + resCount > tile.indexBudget)
+                    indices.size() + resCount > job.indexBudget)
                     break;
-                m.lodIndexOffset[lod] = tile.indexOffset + static_cast<uint32_t>(indices.size());
-                m.lodIndexCount[lod] = static_cast<uint32_t>(resCount);
-                m.lodCount = lod + 1;
+                out.lodIndexCount[lod] = static_cast<uint32_t>(resCount);
+                out.lodCount = lod + 1;
                 indices.insert(indices.end(), simplified.begin(), simplified.begin() + resCount);
                 prevCount = static_cast<uint32_t>(resCount);
             }
+        }
+
+        out.collideEnd = collideEnd;
+        out.bbMin = bbMin;
+        out.bbMax = bbMax;
+        out.verts = std::move(verts);
+        out.indices = std::move(indices);
+    }
+
+    bool TerrainWorld::CommitTileMesh(Tile &tile, const TileMesh &m)
+    {
+        // Stale: the slot streamed to a different world tile while this mesh was in flight. Discard —
+        // the tile stays dirty and re-meshes for its current location. (Never fires when meshing is
+        // synchronous; the guard makes the async path safe.)
+        if (tile.tx != m.tx || tile.tz != m.tz)
+            return false;
+        tile.bodyDirty = true; // re-cook the collider (matches the old unconditional MeshTile set)
+
+        if (m.empty)
+        {
+            WriteEmptyTile(tile);
+            return true;
+        }
+        if (m.growPending)
+        {
+            if (!tile.growPending)
+                PE_WARN("Terrain: tile (%d,%d) overflowed its budget (%zu verts, %zu idx) — growing.",
+                        tile.tx, tile.tz, m.verts.size(), m.indices.size());
+            tile.growPending = true;
+            return false; // keep the old content until the grow re-places the ranges
+        }
+
+        Mesh &mesh = m_scene->GetMesh(tile.meshIndex);
+        mesh.lodCount = m.lodCount;
+        uint32_t off = tile.indexOffset;
+        for (uint32_t lod = 0; lod < m.lodCount; ++lod)
+        {
+            mesh.lodIndexOffset[lod] = off;
+            mesh.lodIndexCount[lod] = m.lodIndexCount[lod];
+            off += m.lodIndexCount[lod];
         }
 
         std::vector<Vertex> &vertexStore = m_scene->GetVertexStore();
         std::vector<PositionUvVertex> &positionUvStore = m_scene->GetPositionUvStore();
         std::vector<AabbVertex> &aabbStore = m_scene->GetAabbVertexStore();
         std::vector<uint32_t> &indexStore = m_scene->GetIndexStore();
-        for (size_t i = 0; i < verts.size(); ++i)
+        for (size_t i = 0; i < m.verts.size(); ++i)
         {
-            const Vertex &v = verts[i];
+            const Vertex &v = m.verts[i];
             vertexStore[tile.vertexOffset + i] = v;
             PositionUvVertex pv{};
             pv.position[0] = v.position[0];
@@ -1233,21 +1277,21 @@ namespace pe::terrain
             pv.uv[1] = v.uv[1];
             positionUvStore[tile.vertexOffset + i] = pv;
         }
-        std::copy(indices.begin(), indices.end(), indexStore.begin() + tile.indexOffset);
+        std::copy(m.indices.begin(), m.indices.end(), indexStore.begin() + tile.indexOffset);
         for (int c = 0; c < 8; ++c)
         {
             AabbVertex av{};
-            av.position[0] = (c & 1) ? bbMax.x : bbMin.x;
-            av.position[1] = (c & 2) ? bbMax.y : bbMin.y;
-            av.position[2] = (c & 4) ? bbMax.z : bbMin.z;
+            av.position[0] = (c & 1) ? m.bbMax.x : m.bbMin.x;
+            av.position[1] = (c & 2) ? m.bbMax.y : m.bbMin.y;
+            av.position[2] = (c & 4) ? m.bbMax.z : m.bbMin.z;
             aabbStore[tile.aabbVertexOffset + c] = av;
         }
 
-        m.indexCount = lod0Count;
-        m.boundingBox = {bbMin, bbMax};
-        tile.liveVerts = static_cast<uint32_t>(verts.size());
-        tile.liveIndices = static_cast<uint32_t>(indices.size());
-        tile.collideIndices = std::min(collideIndexCount, lod0Count);
+        mesh.indexCount = m.lod0Count;
+        mesh.boundingBox = {m.bbMin, m.bbMax};
+        tile.liveVerts = static_cast<uint32_t>(m.verts.size());
+        tile.liveIndices = static_cast<uint32_t>(m.indices.size());
+        tile.collideIndices = std::min(m.collideEnd, m.lod0Count);
         return true;
     }
 
@@ -1259,6 +1303,7 @@ namespace pe::terrain
 
         if (!m_pendingSculpts.empty())
         {
+            DrainMeshWorker(); // m_ops is about to change — no in-flight mesh may read it mid-change
             std::vector<SculptOp> ops;
             ops.swap(m_pendingSculpts);
             for (const SculptOp &op : ops)
@@ -1273,8 +1318,107 @@ namespace pe::terrain
         UpdateColliderRing();
     }
 
+    // Worker loop: pull a batch of jobs, mesh them concurrently into local TileMesh results (off the
+    // main thread), hand them back. Its whole read path is stable while un-drained (see DrainMeshWorker).
+    void TerrainWorld::MeshWorkerLoop()
+    {
+        for (;;)
+        {
+            std::vector<TileJob> batch;
+            {
+                std::unique_lock<std::mutex> lk(m_meshMutex);
+                m_meshCv.wait(lk, [this]
+                              { return m_meshStop || !m_meshInput.empty(); });
+                if (m_meshStop && m_meshInput.empty())
+                    return;
+                batch.swap(m_meshInput);
+                m_meshProcessing = static_cast<int>(batch.size());
+            }
+            std::vector<TileMesh> results(batch.size());
+            std::transform(std::execution::par, batch.begin(), batch.end(), results.begin(),
+                           [this](const TileJob &j)
+                           { return MeshTile(j); });
+            {
+                std::lock_guard<std::mutex> lk(m_meshMutex);
+                for (TileMesh &r : results)
+                    m_meshOutput.push_back(std::move(r));
+                m_meshProcessing = 0;
+            }
+            m_meshCv.notify_all(); // wake a DrainMeshWorker waiter
+        }
+    }
+
+    void TerrainWorld::StartMeshWorker()
+    {
+        if (m_meshThread.joinable())
+            return;
+        m_meshStop = false;
+        m_meshThread = std::thread(&TerrainWorld::MeshWorkerLoop, this);
+    }
+
+    void TerrainWorld::StopMeshWorker()
+    {
+        if (!m_meshThread.joinable())
+            return;
+        {
+            std::lock_guard<std::mutex> lk(m_meshMutex);
+            m_meshStop = true;
+            m_meshInput.clear(); // start no new batch; the in-flight one finishes before join returns
+        }
+        m_meshCv.notify_all();
+        m_meshThread.join();
+        m_meshStop = false;
+        m_meshOutput.clear(); // uncommitted results dropped (world is being rebuilt / torn down)
+        m_meshProcessing = 0;
+    }
+
+    void TerrainWorld::DrainMeshWorker()
+    {
+        if (!m_meshThread.joinable())
+            return;
+        std::unique_lock<std::mutex> lk(m_meshMutex);
+        m_meshCv.wait(lk, [this]
+                      { return m_meshInput.empty() && m_meshProcessing == 0; });
+        // Un-committed results can be stale in ways the per-tile tx/tz guard can't see once the caller
+        // mutates ops / the scatter map / tile offsets. Drop them and re-dirty their tiles so they
+        // re-mesh against the new state (they were dirty when dispatched — over-meshing is only waste).
+        for (const TileMesh &r : m_meshOutput)
+            if (r.tileIdx >= 0 && r.tileIdx < static_cast<int>(m_tiles.size()))
+            {
+                m_tiles[r.tileIdx].meshing = false;
+                m_tiles[r.tileIdx].dirty = true;
+            }
+        m_meshOutput.clear();
+    }
+
     void TerrainWorld::ProcessDirtyTiles()
     {
+        // 1. Commit meshes the worker finished since last frame (main thread: store writes + upload).
+        std::vector<TileMesh> done;
+        {
+            std::lock_guard<std::mutex> lk(m_meshMutex);
+            done.swap(m_meshOutput);
+        }
+        std::vector<int> uploaded;
+        for (TileMesh &mesh : done)
+        {
+            if (mesh.tileIdx < 0 || mesh.tileIdx >= static_cast<int>(m_tiles.size()))
+                continue;
+            Tile &tile = m_tiles[mesh.tileIdx];
+            tile.meshing = false;
+            if (CommitTileMesh(tile, mesh))
+            {
+                uploaded.push_back(mesh.tileIdx);
+                tile.dirty = false;
+            }
+            else if (tile.growPending)
+                tile.dirty = true; // re-mesh after the grow re-places the ranges
+            // else stale: StreamWindows already re-set tile.dirty for the new location.
+        }
+
+        // 2. Dispatch newly-dirty tiles (not already in flight) to the worker, nearest-first. Streaming
+        // may have changed tx/tz since a job was queued; the job snapshot below captures the current
+        // location so the worker never races StreamWindows.
         struct Item
         {
             float key;
@@ -1290,7 +1434,7 @@ namespace pe::terrain
             {
                 const int t = ring.firstTile + i;
                 const Tile &tile = m_tiles[t];
-                if (!tile.dirty || tile.growPending)
+                if (!tile.dirty || tile.growPending || tile.meshing)
                     continue;
                 const float cxw = (tile.tx + 0.5f) * tw, czw = (tile.tz + 0.5f) * tw;
                 const float dx = cxw - m_anchor.x, dz = czw - m_anchor.z;
@@ -1298,21 +1442,29 @@ namespace pe::terrain
                                  static_cast<int>(r), t});
             }
         }
-        if (queue.empty())
-            return;
-        std::sort(queue.begin(), queue.end(), [](const Item &a, const Item &b)
-                  { return a.key < b.key; });
-
-        std::vector<int> uploaded;
-        const int budget = std::min<int>(kMeshBudgetPerUpdate, static_cast<int>(queue.size()));
-        for (int i = 0; i < budget; ++i)
+        if (!queue.empty())
         {
-            Tile &tile = m_tiles[queue[i].tileIdx];
-            MeshTile(queue[i].ringIdx, tile);
-            tile.dirty = tile.growPending; // a grown tile re-meshes after its ranges are re-placed
-            if (!tile.growPending)
-                uploaded.push_back(queue[i].tileIdx);
+            std::sort(queue.begin(), queue.end(), [](const Item &a, const Item &b)
+                      { return a.key < b.key; });
+            const int budget = std::min<int>(kMeshBudgetPerUpdate, static_cast<int>(queue.size()));
+            std::vector<TileJob> jobs;
+            jobs.reserve(budget);
+            for (int i = 0; i < budget; ++i)
+            {
+                Tile &tile = m_tiles[queue[i].tileIdx];
+                jobs.push_back({queue[i].tileIdx, queue[i].ringIdx, tile.tx, tile.tz, tile.interiorHole,
+                                tile.vertexBudget, tile.indexBudget});
+                tile.meshing = true; // in flight until its result commits (don't re-dispatch)
+            }
+            {
+                std::lock_guard<std::mutex> lk(m_meshMutex);
+                for (TileJob &j : jobs)
+                    m_meshInput.push_back(j);
+            }
+            m_meshCv.notify_all();
         }
+
+        // 3. Upload the tiles committed above (staged, submitted-not-waited on the main queue).
         if (uploaded.empty())
             return;
 
@@ -1344,6 +1496,7 @@ namespace pe::terrain
             any |= tile.growPending;
         if (!any)
             return;
+        DrainMeshWorker(); // tile store offsets are about to be re-placed — no in-flight mesh may commit
 
         std::vector<Vertex> &vertices = m_scene->GetVertexStore();
         std::vector<PositionUvVertex> &positionUvs = m_scene->GetPositionUvStore();
@@ -1407,6 +1560,7 @@ namespace pe::terrain
     {
         if (radius <= 0.0f || m_tiles.empty())
             return;
+        DrainMeshWorker(); // mutates m_ops directly — quiesce the mesher first
         SculptOp op;
         op.center = center;
         op.radius = radius;
@@ -1441,6 +1595,7 @@ namespace pe::terrain
 
     void TerrainWorld::SetOps(const std::vector<float> &ops)
     {
+        DrainMeshWorker(); // replaces m_ops wholesale — no in-flight mesh may read it mid-swap
         m_ops.clear();
         m_ops.reserve(ops.size() / 7);
         for (size_t i = 0; i + 7 <= ops.size(); i += 7)
@@ -1483,7 +1638,8 @@ namespace pe::terrain
                                         const vec2 &worldMax)
     {
         if (!px || w <= 0 || h <= 0 || m_templates.empty() || m_rings.empty())
-            return false; // no templates configured = a rebuild (structural change) is the only route in
+            return false;  // no templates configured = a rebuild (structural change) is the only route in
+        DrainMeshWorker(); // the mesher reads m_scatterMap in AppendScatter — quiesce before replacing it
         if (!m_scatterMap)
             m_scatterMap = std::make_unique<voxel::MapImage>();
         m_scatterMap->w = w;
@@ -1840,6 +1996,7 @@ namespace pe::terrain
 
     void TerrainWorld::Destroy()
     {
+        StopMeshWorker(); // join the mesher before any state it reads is freed
         RetireSubmittedCommands(true);
         for (Tile &tile : m_tiles)
         {

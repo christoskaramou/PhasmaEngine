@@ -302,8 +302,10 @@ namespace pe
         std::string splatPath;
         std::array<std::string, 4> layerPaths = {"Textures/Voxel/grass.png", "Textures/Voxel/rock.png",
                                                  "Textures/Voxel/sand.png", "Textures/Voxel/snow.png"};
-        // Optional per-layer material maps (RGB = tangent normal, A = roughness); empty = flat default.
-        std::array<std::string, 4> materialPaths = {"", "", "", ""};
+        // Per-layer material maps (RGB = tangent normal, A = roughness); ship defaults give lit terrain
+        // micro-relief instead of flat tint. Clear a path for a flat 1x1 (geometric normal, as before).
+        std::array<std::string, 4> materialPaths = {"Textures/Voxel/grass_n.png", "Textures/Voxel/rock_n.png",
+                                                    "Textures/Voxel/sand_n.png", "Textures/Voxel/snow_n.png"};
         float textureScaleM = 3.0f; // metres per triplanar texture tile (live, no rebuild)
         // Persistent brush strokes, flat 7-float records [type, cx, cy, cz, radius, a, b]: type 0 =
         // CSG sphere (a = 1 digs), type 1 = level toward y = a with weight b. Serialized with the
