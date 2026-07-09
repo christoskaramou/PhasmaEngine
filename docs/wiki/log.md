@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-07-10
+
+- Fixed a per-call filesystem cost in `RuntimeUiSystem::SetQuad`: image-backed quads re-ran `LoadImageResource` (asset candidate probing plus `weakly_canonical`, ~10 syscalls, ~150µs) on every call even when the path was unchanged, before ever reaching the image cache. `SetQuad` now re-resolves only when the widget's image path actually changes. Script UIs that update many image quads per frame benefit directly — Ylem's heaviest atom view (108 orbiting electrons + trembling nucleus) dropped from ~9.4ms to ~0.9ms per frame, and authored scene widgets synced through `SyncSceneWidgets` stop paying the same cost every frame.
+
 ## 2026-07-02
 
 - Added `architecture/code-quality-performance.md` and synced a ponytail hard rule across `AGENTS.md`, sibling agent instruction files, `INSTRUCTIONS.md`, and `.cursor/rules/ponytail-code-quality.mdc`. Default posture: smallest correct diff + perf regression gates on hot paths; ponytail **full** unless the user changes intensity.
