@@ -580,8 +580,14 @@ namespace pe
         widget.textOffsetY = desc.textOffsetY;
         widget.visualStyle = desc.visualStyle;
         widget.fit = desc.fit;
+        // Resolve the image only when the path actually changes. LoadImageResource stats the
+        // filesystem (ResolveImagePath candidates + weakly_canonical, ~10 syscalls) before its
+        // cache lookup — ~150us per call, paid per animated quad per frame by set_quad-driven UIs.
+        if (path.empty())
+            widget.image = desc.image;
+        else if (path != widget.imagePath)
+            widget.image = LoadImageResource(path);
         widget.imagePath = path;
-        widget.image = path.empty() ? desc.image : LoadImageResource(path);
         // Quad draw order (z / bringToFront) is resolved once per frame in BuildFrame, not on
         // every SetQuad. Sorting here made each authored/script HUD update O(W log W), so a
         // frame driving M widgets cost O(M * W log W) of redundant re-sorts.
