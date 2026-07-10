@@ -816,6 +816,7 @@ namespace pe
                 state.hovered = ImGui::IsItemHovered();
                 state.active = itemActive;
                 state.clicked = itemClicked;
+                state.rightClicked = ImGui::IsItemClicked(ImGuiMouseButton_Right);
                 state.down = itemActive && ImGui::IsMouseDown(ImGuiMouseButton_Left);
                 state.dragStarted = quad.draggable && itemClicked;
                 state.dragging = quad.draggable && m_activeDragWidget == id && !mouseReleased &&

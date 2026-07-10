@@ -130,6 +130,7 @@ namespace pe
         bool hovered = false;
         bool active = false;
         bool clicked = false;
+        bool rightClicked = false;
         bool down = false;
         bool dragging = false;
         bool dragStarted = false;
