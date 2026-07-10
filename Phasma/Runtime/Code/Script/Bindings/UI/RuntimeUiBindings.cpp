@@ -266,6 +266,7 @@ namespace pe
             result["hovered"] = state.hovered;
             result["active"] = state.active;
             result["clicked"] = state.clicked;
+            result["right_clicked"] = state.rightClicked;
             result["down"] = state.down;
             result["dragging"] = state.dragging;
             result["drag_started"] = state.dragStarted;
