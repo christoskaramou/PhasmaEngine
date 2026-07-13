@@ -19,6 +19,18 @@ namespace pe
             return scene->GetSpriteComponent(handle.nodeId);
         }
 
+        float OptFloat(const sol::table &t, const char *key, float fallback)
+        {
+            sol::optional<float> v = t[key];
+            return v ? *v : fallback;
+        }
+
+        std::string OptString(const sol::table &t, const char *key, const std::string &fallback = {})
+        {
+            sol::optional<std::string> v = t[key];
+            return v ? *v : fallback;
+        }
+
     } // namespace
 
     static struct SpriteBindings
@@ -28,6 +40,58 @@ namespace pe
             ScriptSystem::AddBindings([](sol::state &lua)
                                       {
                 sol::table sprite = lua.create_named_table("sprite");
+
+                sprite.set_function("create", [](sol::table opts, sol::this_state ts) -> sol::object {
+                    sol::state_view luaView(ts);
+                    Scene *scene = GetScene();
+                    if (!scene)
+                        return sol::make_object(luaView, sol::nil);
+
+                    const std::string metadata = OptString(opts, "metadata");
+                    if (metadata.empty())
+                        return sol::make_object(luaView, sol::nil);
+
+                    NodeId *parent = nullptr;
+                    sol::optional<SceneNodeHandle> parentHandle = opts["parent"];
+                    if (parentHandle && parentHandle->IsValid(*scene))
+                        parent = parentHandle->nodeId;
+
+                    const std::string name = OptString(opts, "name", "Sprite");
+                    const float qw = OptFloat(opts, "quad_width", OptFloat(opts, "width", 1.6f));
+                    const float qh = OptFloat(opts, "quad_height", OptFloat(opts, "height", 2.2f));
+
+                    std::string error;
+                    NodeId *node = scene->CreateSpriteNode(name, parent, metadata, qw, qh, &error);
+                    if (!node)
+                        return sol::make_object(luaView, sol::nil);
+                    return sol::make_object(luaView, scene->MakeHandle(node));
+                });
+
+                sprite.set_function("setup", [](SceneNodeHandle &h, sol::object metadataOrOpts) -> bool {
+                    Scene *scene = GetScene();
+                    if (!scene || !h.IsValid(*scene))
+                        return false;
+
+                    std::string metadata;
+                    int meshSlot = 0;
+                    if (metadataOrOpts.is<std::string>())
+                    {
+                        metadata = metadataOrOpts.as<std::string>();
+                    }
+                    else if (metadataOrOpts.is<sol::table>())
+                    {
+                        sol::table opts = metadataOrOpts.as<sol::table>();
+                        metadata = OptString(opts, "metadata");
+                        sol::optional<int> slot = opts["mesh_slot"];
+                        if (slot)
+                            meshSlot = *slot;
+                    }
+                    if (metadata.empty())
+                        return false;
+
+                    std::string error;
+                    return scene->SetupSpriteFromMetadata(h.nodeId, metadata, meshSlot, &error);
+                });
 
                 sprite.set_function("reload", [](SceneNodeHandle &h) -> bool {
                     Scene *scene = GetScene();

@@ -208,6 +208,12 @@ namespace pe
         NodeSpriteComponent &GetOrCreateSpriteComponent(NodeId *node);
         void ClearSpriteComponent(NodeId *node);
         bool LoadSpriteMetadata(NodeId *node, std::string *outError = nullptr);
+        // Player/Lua path: attach Component_Sprite to an existing quad (or create node+quad)
+        // from a .sprite.json metadata path. Does not depend on Editor SpriteAuthoring.
+        bool SetupSpriteFromMetadata(NodeId *node, const std::string &metadataPath, int meshSlot = 0,
+                                     std::string *outError = nullptr);
+        NodeId *CreateSpriteNode(const std::string &name, NodeId *parent, const std::string &metadataPath,
+                                 float quadWidth = 1.0f, float quadHeight = 1.0f, std::string *outError = nullptr);
         bool SetSpriteFrame(NodeId *node, int frameIndex, int meshSlot = -1, std::string *outError = nullptr);
         bool SetSpriteFrame(NodeId *node, const std::string &frameName, int meshSlot = -1, std::string *outError = nullptr);
         bool PlaySpriteClip(NodeId *node, const std::string &clipName = {}, bool restart = true, int meshSlot = -1, std::string *outError = nullptr);
