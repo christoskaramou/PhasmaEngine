@@ -1,4 +1,11 @@
 #include "Scene/Scene.h"
+#include "API/Command.h"
+#include "API/Image.h"
+#include "API/Queue.h"
+#include "API/RHI.h"
+#include "Scene/Material.h"
+#include "Scene/ModelAsset.h"
+#include "Scene/Primitives.h"
 #include "rapidjson/document.h"
 #include "rapidjson/istreamwrapper.h"
 
@@ -165,6 +172,97 @@ namespace pe
                 scene.MarkDirty();
             return true;
         }
+
+        ResourceHandle<Image> LoadSpriteImage(const std::string &path)
+        {
+            if (path.empty())
+                return ResourceHandle<Image>();
+
+            Queue *queue = RHII.GetMainQueue();
+            if (!queue)
+                return ResourceHandle<Image>();
+
+            const std::filesystem::path resolved = ResolveSpritePath(path);
+            std::error_code ec;
+            if (resolved.empty() || !std::filesystem::exists(resolved, ec))
+                return ResourceHandle<Image>();
+
+            CommandBuffer *cmd = queue->AcquireCommandBuffer();
+            cmd->Begin();
+            ModelAsset loader;
+            ResourceHandle<Image> image = loader.LoadTexture(cmd, resolved);
+            cmd->End();
+            queue->Submit(1, &cmd, nullptr, nullptr);
+            cmd->Wait();
+            queue->ReturnCommandBuffer(cmd);
+            return image;
+        }
+
+        bool ApplySpriteTextures(Scene &scene, NodeId *node, NodeSpriteComponent &sprite, int meshSlot, std::string *outError)
+        {
+            const auto &refs = scene.GetMeshRefs(node);
+            if (meshSlot < 0 || meshSlot >= static_cast<int>(refs.size()))
+            {
+                SetError(outError, "sprite mesh slot out of range");
+                return false;
+            }
+
+            const int meshIndex = refs[meshSlot];
+            if (!scene.IsValidMeshIndex(meshIndex))
+            {
+                SetError(outError, "sprite mesh slot does not reference a valid mesh");
+                return false;
+            }
+
+            Mesh &mesh = scene.GetMesh(meshIndex);
+            if (!mesh.material)
+            {
+                SetError(outError, "sprite mesh has no material");
+                return false;
+            }
+
+            ResourceHandle<Image> image = LoadSpriteImage(sprite.imagePath);
+            if (!image)
+            {
+                SetError(outError, "sprite image not found: " + sprite.imagePath);
+                return false;
+            }
+
+            if (sprite.imageWidth <= 0)
+                sprite.imageWidth = static_cast<int>(image->GetWidth());
+            if (sprite.imageHeight <= 0)
+                sprite.imageHeight = static_cast<int>(image->GetHeight());
+
+            MaterialInstance *inst = mesh.materialInstance;
+            if (!inst)
+                inst = scene.CreateMaterialInstance(mesh);
+            if (!inst)
+            {
+                SetError(outError, "failed to create sprite material instance");
+                return false;
+            }
+
+            const vec4 tint = sprite.tint;
+            inst->SetTexture(TextureType::BaseColor, image);
+            inst->SetTexture(TextureType::Emissive, image);
+            inst->SetTextureMask(inst->GetTextureMask() |
+                                 (1u << static_cast<uint32_t>(TextureType::BaseColor)) |
+                                 (1u << static_cast<uint32_t>(TextureType::Emissive)));
+            inst->SetBaseColorFactor(vec4(0.0f, 0.0f, 0.0f, tint.a));
+            inst->SetEmissiveFactor(vec3(tint));
+            inst->SetMetallic(1.0f);
+            inst->SetRoughness(1.0f);
+            // AlphaCut matches ATH top-down flat sprites; Lua can still override.
+            inst->SetRenderType(RenderType::AlphaCut);
+            mesh.renderType = RenderType::AlphaCut;
+
+            scene.SetTexturesDirty();
+            scene.SetMaterialDirty();
+            scene.SetGeometryDirty();
+            scene.MarkNodeDirty(node);
+            scene.MarkDirty();
+            return true;
+        }
     } // namespace
 
     bool Scene::LoadSpriteMetadata(NodeId *node, std::string *outError)
@@ -287,6 +385,100 @@ namespace pe
         if (sprite->activeClipIndex >= static_cast<int>(sprite->clips.size()))
             sprite->activeClipIndex = -1;
         return true;
+    }
+
+    bool Scene::SetupSpriteFromMetadata(NodeId *node, const std::string &metadataPath, int meshSlot, std::string *outError)
+    {
+        if (!node || !IsNodeAlive(node))
+        {
+            SetError(outError, "node not found");
+            return false;
+        }
+        if (metadataPath.empty())
+        {
+            SetError(outError, "sprite metadata path is empty");
+            return false;
+        }
+
+        const auto &refs = GetMeshRefs(node);
+        if (meshSlot < 0 || meshSlot >= static_cast<int>(refs.size()))
+        {
+            SetError(outError, "sprite mesh slot out of range");
+            return false;
+        }
+
+        NodeSpriteComponent &sprite = GetOrCreateSpriteComponent(node);
+        sprite.metadataPath = metadataPath;
+        sprite.imagePath.clear();
+        sprite.frames.clear();
+        sprite.clips.clear();
+        sprite.frameIndex = -1;
+        sprite.frameName.clear();
+        sprite.activeClipName.clear();
+        sprite.activeClipIndex = -1;
+        sprite.playbackAccumulator = 0.0f;
+        sprite.playing = false;
+        sprite.metadataLoaded = false;
+        sprite.meshSlot = meshSlot;
+
+        if (!LoadSpriteMetadata(node, outError))
+            return false;
+
+        if (!ApplySpriteTextures(*this, node, sprite, meshSlot, outError))
+            return false;
+
+        // Recompute UVs now that image size may have been filled from the loaded texture.
+        for (NodeSpriteFrame &frame : sprite.frames)
+            frame.uvRect = FrameUvRect(frame, sprite.imageWidth, sprite.imageHeight);
+
+        if (sprite.frames.empty())
+        {
+            SetError(outError, "sprite metadata has no frames: " + metadataPath);
+            return false;
+        }
+
+        if (sprite.quadWidth <= 0.0f || sprite.quadHeight <= 0.0f)
+        {
+            const NodeSpriteFrame &frame0 = sprite.frames[0];
+            const float fw = static_cast<float>(std::max(1, frame0.w));
+            const float fh = static_cast<float>(std::max(1, frame0.h));
+            sprite.quadWidth = fw >= fh ? 1.0f : fw / fh;
+            sprite.quadHeight = fh >= fw ? 1.0f : fh / fw;
+        }
+
+        if (!SetSpriteFrame(node, 0, meshSlot, outError))
+            return false;
+
+        // Prefer named idle clip when present; otherwise leave on frame 0 stopped.
+        for (const NodeSpriteClip &clip : sprite.clips)
+        {
+            if (clip.name == "idle")
+                return PlaySpriteClip(node, "idle", true, meshSlot, outError);
+        }
+        return true;
+    }
+
+    NodeId *Scene::CreateSpriteNode(const std::string &name, NodeId *parent, const std::string &metadataPath,
+                                    float quadWidth, float quadHeight, std::string *outError)
+    {
+        const float qw = quadWidth > 0.0f ? quadWidth : 1.0f;
+        const float qh = quadHeight > 0.0f ? quadHeight : 1.0f;
+        NodeId *node = CreateNode(name.empty() ? "Sprite" : name, parent);
+        if (!node)
+        {
+            SetError(outError, "failed to create sprite node");
+            return nullptr;
+        }
+
+        AttachPrimitiveToNode(node, Primitives::CreateQuad(qw, qh));
+        NodeSpriteComponent &sprite = GetOrCreateSpriteComponent(node);
+        sprite.quadWidth = qw;
+        sprite.quadHeight = qh;
+
+        if (!SetupSpriteFromMetadata(node, metadataPath, 0, outError))
+            return node; // node exists; caller may fall back to plain texture
+
+        return node;
     }
 
     bool Scene::SetSpriteFrame(NodeId *node, int frameIndex, int meshSlot, std::string *outError)
