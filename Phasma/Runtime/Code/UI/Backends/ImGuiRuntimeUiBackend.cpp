@@ -83,6 +83,20 @@ namespace pe
                     ImGuiIO &io = ImGui::GetIO();
                     runtime_ui_imgui::ApplyContextSettings(io);
                     runtime_ui_imgui::ApplyStyle();
+                    // Bake Greek (+ Latin) into the runtime UI atlas before the backend builds it.
+                    {
+                        const float fontSize = 16.0f;
+                        const ImWchar *ranges = io.Fonts->GetGlyphRangesGreek();
+                        const std::filesystem::path dejaVu(Path::ResolveAsset("Fonts/DejaVuSans.ttf"));
+                        const std::filesystem::path inter(Path::ResolveAsset("Fonts/Inter-Regular.ttf"));
+                        ImFont *font = nullptr;
+                        if (std::filesystem::exists(dejaVu))
+                            font = io.Fonts->AddFontFromFileTTF(dejaVu.string().c_str(), fontSize, nullptr, ranges);
+                        if (!font && std::filesystem::exists(inter))
+                            font = io.Fonts->AddFontFromFileTTF(inter.string().c_str(), fontSize, nullptr, ranges);
+                        if (font)
+                            io.FontDefault = font;
+                    }
 
                     if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
                     {
@@ -965,7 +979,7 @@ namespace pe
                         y += fontSize + 5.0f * scale;
                     }
                     if (HasText(quad.body))
-                        y += drawSimpleText(quad.body, y, 8);
+                        y += drawSimpleText(quad.body, y, 14);
                     if (HasText(quad.footer))
                     {
                         drawList->AddLine(ImVec2(pos.x + pad, max.y - 30.0f * scale),
@@ -1032,7 +1046,7 @@ namespace pe
                     y += fontSize + 5.0f * scale;
                 }
                 if (HasText(quad.body))
-                    y += DrawWrappedText(drawList, font, fontSize * 0.88f, quad.body, ImVec2(pos.x + pad, y), textWidth, text, 8, ah, ox);
+                    y += DrawWrappedText(drawList, font, fontSize * 0.88f, quad.body, ImVec2(pos.x + pad, y), textWidth, text, 14, ah, ox);
                 if (HasText(quad.footer))
                 {
                     drawList->AddLine(ImVec2(pos.x + pad, max.y - 30.0f * scale), ImVec2(max.x - pad, max.y - 30.0f * scale), border, 1.0f);
