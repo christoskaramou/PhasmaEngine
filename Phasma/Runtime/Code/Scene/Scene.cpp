@@ -911,14 +911,6 @@ namespace pe
             return {};
 
         const std::string key = PrimitiveGeometryKey(*model);
-        int sourceIndex = static_cast<int>(m_sources.size());
-        SceneSource source;
-        source.filePath = model->GetFilePath();
-        source.primitiveType = model->GetPrimitiveType();
-        source.primitiveParams = model->GetPrimitiveParams();
-        source.primitiveParamCount = model->GetPrimitiveParamCount();
-        m_sources.push_back(std::move(source));
-
         const MeshInfo *sourceMesh = model->GetMeshInfo(0);
         if (!sourceMesh)
         {
@@ -927,9 +919,12 @@ namespace pe
         }
 
         int meshIndex = -1;
+        int sourceIndex = -1;
         auto cacheIt = m_primitiveGeometryCache.find(key);
-        if (cacheIt != m_primitiveGeometryCache.end() && IsValidMeshIndex(cacheIt->second.meshIndex))
+        if (cacheIt != m_primitiveGeometryCache.end() && IsValidMeshIndex(cacheIt->second.meshIndex) &&
+            cacheIt->second.sourceIndex >= 0 && cacheIt->second.sourceIndex < static_cast<int>(m_sources.size()))
         {
+            sourceIndex = cacheIt->second.sourceIndex;
             Mesh mesh = m_meshes[cacheIt->second.meshIndex];
             mesh.renderType = sourceMesh->renderType;
             mesh.material = sourceMesh->material;
@@ -943,11 +938,19 @@ namespace pe
         }
         else
         {
+            sourceIndex = static_cast<int>(m_sources.size());
+            SceneSource source;
+            source.filePath = model->GetFilePath();
+            source.primitiveType = model->GetPrimitiveType();
+            source.primitiveParams = model->GetPrimitiveParams();
+            source.primitiveParamCount = model->GetPrimitiveParamCount();
+            m_sources.push_back(std::move(source));
+
             std::vector<int> meshMap = AddModelGeometry(model, sourceIndex);
             if (!meshMap.empty())
                 meshIndex = meshMap[0];
             if (meshIndex >= 0)
-                m_primitiveGeometryCache[key] = {meshIndex};
+                m_primitiveGeometryCache[key] = {meshIndex, sourceIndex};
             m_geometryDirty = true;
         }
 

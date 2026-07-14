@@ -88,14 +88,12 @@ namespace pe
 
         if (reallocate || !m_particleBuffer)
         {
-            // Wait for queue idle before destroying buffer in use
-            RHII.GetMainQueue()->WaitIdle();
-
             m_gpuCapacity = newCapacity;
 
             if (m_particleBuffer)
             {
-                Buffer::Destroy(m_particleBuffer);
+                RHII.AddToDeletionQueue([b = m_particleBuffer]()
+                                        { Buffer *buffer = b; Buffer::Destroy(buffer); });
                 m_particleBuffer = nullptr;
             }
             m_pendingParticleClears.clear();

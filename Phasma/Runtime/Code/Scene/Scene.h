@@ -425,11 +425,17 @@ namespace pe
         }
         bool IsGeometryDirty() const { return m_geometryDirty; }
         void SetGeometryDirty() { m_geometryDirty = true; }
+        void SetInstancesDirty()
+        {
+            m_instancesDirty = true;
+            m_tlasDirty = true;
+        }
         bool HasDirtyCameras() const;
         bool HasPendingRenderUpdate() const;
         void SetMaterialDirty() { m_materialDirty = true; }
         void SetTexturesDirty() { m_texturesDirty = true; }
         void FlushPendingGpuWork();
+        void RecordPendingUvUploads(CommandBuffer *cmd);
 
         Buffer *GetUniforms(uint32_t frame);
         void UploadDynamicUniforms(CommandBuffer *cmd);
@@ -690,6 +696,7 @@ namespace pe
         struct PrimitiveGeometryCacheEntry
         {
             int meshIndex = -1;
+            int sourceIndex = -1;
         };
 
         struct RtInstanceRecord
@@ -716,7 +723,6 @@ namespace pe
         void UpdateGeometry();
         void UpdateUniformData();
         bool ApplyMeshUvRect(int meshIndex, const vec4 &uvRect, bool markGeometryDirty, bool uploadGpu);
-
         // Buffer management (SceneBuffers.cpp)
         void DestroyBuffers();
         void CreateGeometryBuffer();
@@ -944,6 +950,11 @@ namespace pe
         bool m_instancesDirty = false; // Pending raster instance data rebuild (mesh refs changed, no new geometry)
         bool m_materialDirty = false;  // Pending material table update
         bool m_texturesDirty = false;  // Pending image view update
+
+        // Mesh indices whose quad UVs changed on the CPU stores and await a batched copy
+        // at the front of the next render command. A separate Submit+Wait here stalls every
+        // animated sprite frame-advance.
+        std::vector<int> m_pendingUvUploads;
 
         // RT dirty flags (independent of raster geometry)
         bool m_blasDirty = false; // BLAS rebuild needed (geometry buffer was recreated)

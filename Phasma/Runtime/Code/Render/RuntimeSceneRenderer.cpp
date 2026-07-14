@@ -175,6 +175,7 @@ namespace pe
         }
 
         cmd->Begin();
+        m_scene.RecordPendingUvUploads(cmd);
         m_sceneRenderer.ExecuteRenderGraph(cmd);
         Image *displayRT = m_sceneRenderer.GetDisplayRT();
         if (m_runtimeUi)

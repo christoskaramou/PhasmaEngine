@@ -243,6 +243,7 @@ namespace pe
             PE_PROFILE_SCOPE("Record Cmd Begin");
             cmd->Begin();
         }
+        m_scene.RecordPendingUvUploads(cmd);
         {
             PE_PROFILE_SCOPE("Render Graph Execute");
             m_sceneRenderer.ExecuteRenderGraph(cmd);
