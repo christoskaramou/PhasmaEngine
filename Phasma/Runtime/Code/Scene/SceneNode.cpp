@@ -217,9 +217,62 @@ namespace pe
             }
             if (!otherRef)
             {
-                m_meshes[meshRef].material = nullptr;
-                m_meshes[meshRef].materialInstance = nullptr;
-                m_meshes[meshRef].live = false;
+                Mesh &mesh = m_meshes[meshRef];
+                DestroyMaterialInstance(mesh);
+
+                Material *material = mesh.material;
+                const bool materialUsedElsewhere = material && std::any_of(
+                                                                   m_meshes.begin(), m_meshes.end(), [&](const Mesh &candidate)
+                                                                   { return &candidate != &mesh && candidate.live && candidate.material == material; });
+                if (material && !materialUsedElsewhere)
+                {
+                    auto materialIt = std::find_if(m_ownedMaterials.begin(), m_ownedMaterials.end(),
+                                                   [&](const std::unique_ptr<Material> &owned)
+                                                   { return owned.get() == material; });
+                    if (materialIt != m_ownedMaterials.end())
+                    {
+                        std::swap(*materialIt, m_ownedMaterials.back());
+                        m_ownedMaterials.pop_back();
+                    }
+                }
+
+                for (auto cacheIt = m_primitiveGeometryCache.begin(); cacheIt != m_primitiveGeometryCache.end();)
+                {
+                    if (cacheIt->second.meshIndex != meshRef)
+                    {
+                        ++cacheIt;
+                        continue;
+                    }
+
+                    int replacement = -1;
+                    for (int i = 0; i < static_cast<int>(m_meshes.size()); ++i)
+                    {
+                        if (i != meshRef && m_meshes[i].live &&
+                            i < static_cast<int>(m_meshSourceInfos.size()) &&
+                            m_meshSourceInfos[i].sourceIndex == cacheIt->second.sourceIndex)
+                        {
+                            replacement = i;
+                            break;
+                        }
+                    }
+                    if (replacement >= 0)
+                    {
+                        cacheIt->second.meshIndex = replacement;
+                        ++cacheIt;
+                    }
+                    else
+                    {
+                        cacheIt = m_primitiveGeometryCache.erase(cacheIt);
+                    }
+                }
+
+                m_pendingUvUploads.erase(
+                    std::remove(m_pendingUvUploads.begin(), m_pendingUvUploads.end(), meshRef),
+                    m_pendingUvUploads.end());
+                if (meshRef < static_cast<int>(m_meshSourceInfos.size()))
+                    m_meshSourceInfos[meshRef] = {};
+                mesh.material = nullptr;
+                mesh.live = false;
             }
         }
 
@@ -1141,47 +1194,69 @@ namespace pe
 
         if (uploadGpu && m_buffer && !m_geometryDirty)
         {
-            Queue *queue = RHII.GetMainQueue();
-            const size_t vertexBytes = mesh.vertexCount * sizeof(Vertex);
-            const size_t positionUvBytes = mesh.vertexCount * sizeof(PositionUvVertex);
-            const size_t vertexDstOffset = m_verticesOffset + mesh.vertexOffset * sizeof(Vertex);
-            const size_t positionUvDstOffset = m_positionsOffset + mesh.positionsOffset * sizeof(PositionUvVertex);
-            const bool rangesFit = vertexDstOffset + vertexBytes <= m_buffer->Size() &&
-                                   positionUvDstOffset + positionUvBytes <= m_buffer->Size();
-            if (queue && rangesFit)
-            {
-                CommandBuffer *cmd = queue->AcquireCommandBuffer();
-                cmd->Begin();
-                cmd->CopyBufferStaged(m_buffer, &m_vertexStore[mesh.vertexOffset], vertexBytes, vertexDstOffset);
-                cmd->CopyBufferStaged(m_buffer, &m_positionUvStore[mesh.positionsOffset], positionUvBytes, positionUvDstOffset);
-
-                BufferBarrierInfo vertexBarrier{};
-                vertexBarrier.buffer = m_buffer;
-                vertexBarrier.stageMask = PE_STAGE_VERTEX_INPUT;
-                vertexBarrier.accessMask = PE_ACCESS_VERTEX_ATTRIBUTE_READ;
-                vertexBarrier.offset = vertexDstOffset;
-                vertexBarrier.size = vertexBytes;
-                cmd->BufferBarrier(vertexBarrier);
-
-                BufferBarrierInfo positionUvBarrier{};
-                positionUvBarrier.buffer = m_buffer;
-                positionUvBarrier.stageMask = PE_STAGE_VERTEX_INPUT;
-                positionUvBarrier.accessMask = PE_ACCESS_VERTEX_ATTRIBUTE_READ;
-                positionUvBarrier.offset = positionUvDstOffset;
-                positionUvBarrier.size = positionUvBytes;
-                cmd->BufferBarrier(positionUvBarrier);
-
-                cmd->End();
-                queue->Submit(1, &cmd, nullptr, nullptr);
-                cmd->Wait();
-                cmd->Return();
-                return true;
-            }
+            // Defer to one batched upload in FlushPendingGpuWork — a Submit+Wait here
+            // is a full GPU sync per animated sprite frame-advance.
+            m_pendingUvUploads.push_back(meshIndex);
+            return true;
         }
 
         if (markGeometryDirty || uploadGpu)
             m_geometryDirty = true;
         return true;
+    }
+
+    void Scene::RecordPendingUvUploads(CommandBuffer *cmd)
+    {
+        if (!cmd || m_pendingUvUploads.empty())
+            return;
+
+        // A pending full geometry upload re-writes every vertex from the CPU stores anyway.
+        if (m_geometryDirty || !m_buffer)
+        {
+            m_pendingUvUploads.clear();
+            return;
+        }
+
+        std::sort(m_pendingUvUploads.begin(), m_pendingUvUploads.end());
+        m_pendingUvUploads.erase(std::unique(m_pendingUvUploads.begin(), m_pendingUvUploads.end()),
+                                 m_pendingUvUploads.end());
+
+        bool copied = false;
+        for (int meshIndex : m_pendingUvUploads)
+        {
+            if (!IsValidMeshIndex(meshIndex))
+                continue;
+
+            const Mesh &mesh = m_meshes[meshIndex];
+            if (mesh.vertexCount != 4 ||
+                mesh.vertexOffset + mesh.vertexCount > m_vertexStore.size() ||
+                mesh.positionsOffset + mesh.vertexCount > m_positionUvStore.size())
+                continue;
+
+            const size_t vertexBytes = mesh.vertexCount * sizeof(Vertex);
+            const size_t positionUvBytes = mesh.vertexCount * sizeof(PositionUvVertex);
+            const size_t vertexDstOffset = m_verticesOffset + mesh.vertexOffset * sizeof(Vertex);
+            const size_t positionUvDstOffset = m_positionsOffset + mesh.positionsOffset * sizeof(PositionUvVertex);
+            if (vertexDstOffset + vertexBytes > m_buffer->Size() ||
+                positionUvDstOffset + positionUvBytes > m_buffer->Size())
+                continue;
+
+            cmd->CopyBufferStaged(m_buffer, &m_vertexStore[mesh.vertexOffset], vertexBytes, vertexDstOffset);
+            cmd->CopyBufferStaged(m_buffer, &m_positionUvStore[mesh.positionsOffset], positionUvBytes, positionUvDstOffset);
+            copied = true;
+        }
+
+        if (copied)
+        {
+            BufferBarrierInfo barrier{};
+            barrier.buffer = m_buffer;
+            barrier.stageMask = PE_STAGE_VERTEX_INPUT;
+            barrier.accessMask = PE_ACCESS_VERTEX_ATTRIBUTE_READ;
+            barrier.offset = 0;
+            barrier.size = m_buffer->Size();
+            cmd->BufferBarrier(barrier);
+        }
+        m_pendingUvUploads.clear();
     }
 
     bool Scene::SetMeshUvRect(int meshIndex, const vec4 &uvRect)
@@ -1196,6 +1271,18 @@ namespace pe
 
     int Scene::AddMesh(Mesh &&mesh)
     {
+        for (int index = 0; index < static_cast<int>(m_meshes.size()); ++index)
+        {
+            if (m_meshes[index].live)
+                continue;
+
+            m_meshes[index] = std::move(mesh);
+            m_meshRuntimes[index] = {};
+            if (index < static_cast<int>(m_meshSourceInfos.size()))
+                m_meshSourceInfos[index] = {};
+            return index;
+        }
+
         const int index = static_cast<int>(m_meshes.size());
         m_meshes.push_back(std::move(mesh));
         m_meshRuntimes.emplace_back();

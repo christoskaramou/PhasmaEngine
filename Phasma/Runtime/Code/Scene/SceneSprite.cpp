@@ -178,24 +178,175 @@ namespace pe
             if (path.empty())
                 return ResourceHandle<Image>();
 
-            Queue *queue = RHII.GetMainQueue();
-            if (!queue)
-                return ResourceHandle<Image>();
-
             const std::filesystem::path resolved = ResolveSpritePath(path);
             std::error_code ec;
             if (resolved.empty() || !std::filesystem::exists(resolved, ec))
                 return ResourceHandle<Image>();
 
+            std::filesystem::path normalized = std::filesystem::weakly_canonical(resolved, ec);
+            if (ec)
+                normalized = resolved;
+            const std::string normalizedStr = PathUtf8(normalized);
+
+            // Cached atlases must not re-Submit+Wait a no-op command buffer —
+            // ATH pools call sprite.setup on hundreds of bodies and each Wait
+            // was a multi-ms hitch on spawn / Arena prewarm.
+            if (ResourceHandle<Image> cached = ResourceManager::Get().Find<Image>(normalizedStr))
+                return cached;
+
+            Queue *queue = RHII.GetMainQueue();
+            if (!queue)
+                return ResourceHandle<Image>();
+
             CommandBuffer *cmd = queue->AcquireCommandBuffer();
             cmd->Begin();
             ModelAsset loader;
-            ResourceHandle<Image> image = loader.LoadTexture(cmd, resolved);
+            ResourceHandle<Image> image = loader.LoadTexture(cmd, normalized);
             cmd->End();
             queue->Submit(1, &cmd, nullptr, nullptr);
             cmd->Wait();
             queue->ReturnCommandBuffer(cmd);
             return image;
+        }
+
+        struct CachedSpriteMetadata
+        {
+            std::string imagePath;
+            int imageWidth = 0;
+            int imageHeight = 0;
+            std::vector<NodeSpriteFrame> frames;
+            std::vector<NodeSpriteClip> clips;
+        };
+
+        std::mutex &SpriteMetadataCacheMutex()
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
+
+        std::unordered_map<std::string, CachedSpriteMetadata> &SpriteMetadataCache()
+        {
+            static std::unordered_map<std::string, CachedSpriteMetadata> cache;
+            return cache;
+        }
+
+        bool ParseSpriteMetadataFile(const std::filesystem::path &metadataPath, CachedSpriteMetadata &out, std::string *outError)
+        {
+            std::ifstream in(metadataPath, std::ios::binary);
+            if (!in)
+            {
+                SetError(outError, "sprite metadata not found: " + PathUtf8(metadataPath));
+                return false;
+            }
+
+            rapidjson::IStreamWrapper stream(in);
+            rapidjson::Document root;
+            root.ParseStream(stream);
+            if (root.HasParseError() || !root.IsObject())
+            {
+                SetError(outError, "invalid sprite metadata JSON: " + PathUtf8(metadataPath));
+                return false;
+            }
+
+            out = {};
+            if (root.HasMember("image") && root["image"].IsString())
+            {
+                const std::filesystem::path imagePath = ResolveMetadataRelativePath(metadataPath, root["image"].GetString());
+                if (!imagePath.empty())
+                    out.imagePath = PathUtf8(imagePath);
+            }
+
+            if (root.HasMember("image_size") && root["image_size"].IsObject())
+            {
+                const auto &imageSize = root["image_size"];
+                if (imageSize.HasMember("width"))
+                    out.imageWidth = std::max(0, ReadInt(imageSize["width"], out.imageWidth));
+                if (imageSize.HasMember("height"))
+                    out.imageHeight = std::max(0, ReadInt(imageSize["height"], out.imageHeight));
+            }
+
+            if (root.HasMember("frames") && root["frames"].IsArray())
+            {
+                const auto &frames = root["frames"];
+                out.frames.reserve(frames.Size());
+                for (rapidjson::SizeType i = 0; i < frames.Size(); ++i)
+                {
+                    const auto &item = frames[i];
+                    if (!item.IsObject() || !item.HasMember("rect"))
+                        continue;
+
+                    NodeSpriteFrame frame;
+                    frame.name = item.HasMember("name") && item["name"].IsString() ? item["name"].GetString()
+                                                                                   : "frame_" + std::to_string(out.frames.size());
+                    if (!ReadRect(item["rect"], frame.x, frame.y, frame.w, frame.h))
+                        continue;
+                    if (item.HasMember("pivot") && item["pivot"].IsArray() && item["pivot"].Size() >= 2)
+                    {
+                        frame.pivotX = std::clamp(ReadFloat(item["pivot"][0], frame.pivotX), 0.0f, 1.0f);
+                        frame.pivotY = std::clamp(ReadFloat(item["pivot"][1], frame.pivotY), 0.0f, 1.0f);
+                    }
+                    if (item.HasMember("duration"))
+                        frame.duration = std::max(0.01f, ReadFloat(item["duration"], frame.duration));
+                    frame.uvRect = FrameUvRect(frame, out.imageWidth, out.imageHeight);
+                    out.frames.push_back(std::move(frame));
+                }
+            }
+
+            if (root.HasMember("clips") && root["clips"].IsArray())
+            {
+                const auto &clips = root["clips"];
+                out.clips.reserve(clips.Size());
+                for (rapidjson::SizeType i = 0; i < clips.Size(); ++i)
+                {
+                    const auto &item = clips[i];
+                    if (!item.IsObject())
+                        continue;
+
+                    NodeSpriteClip clip;
+                    clip.name = item.HasMember("name") && item["name"].IsString() ? item["name"].GetString()
+                                                                                  : "clip_" + std::to_string(out.clips.size());
+                    clip.start = item.HasMember("start") ? std::max(0, ReadInt(item["start"], clip.start)) : clip.start;
+                    clip.end = item.HasMember("end") ? std::max(0, ReadInt(item["end"], clip.end)) : clip.end;
+                    clip.fps = item.HasMember("fps") ? std::max(0.1f, ReadFloat(item["fps"], clip.fps)) : clip.fps;
+                    clip.loop = item.HasMember("loop") && item["loop"].IsBool() ? item["loop"].GetBool() : clip.loop;
+                    if (!out.frames.empty())
+                    {
+                        const int maxFrame = static_cast<int>(out.frames.size()) - 1;
+                        clip.start = std::clamp(clip.start, 0, maxFrame);
+                        clip.end = std::clamp(clip.end, 0, maxFrame);
+                        if (clip.start > clip.end)
+                            std::swap(clip.start, clip.end);
+                    }
+                    out.clips.push_back(std::move(clip));
+                }
+            }
+
+            if (out.clips.empty() && !out.frames.empty())
+                out.clips.push_back({"default", 0, static_cast<int>(out.frames.size()) - 1, 10.0f, true});
+            return true;
+        }
+
+        bool GetOrParseSpriteMetadata(const std::filesystem::path &metadataPath, CachedSpriteMetadata &out, std::string *outError)
+        {
+            const std::string key = PathUtf8(metadataPath);
+            {
+                std::lock_guard<std::mutex> lock(SpriteMetadataCacheMutex());
+                auto it = SpriteMetadataCache().find(key);
+                if (it != SpriteMetadataCache().end())
+                {
+                    out = it->second;
+                    return true;
+                }
+            }
+
+            CachedSpriteMetadata parsed;
+            if (!ParseSpriteMetadataFile(metadataPath, parsed, outError))
+                return false;
+
+            std::lock_guard<std::mutex> lock(SpriteMetadataCacheMutex());
+            auto [it, inserted] = SpriteMetadataCache().emplace(key, parsed);
+            out = inserted ? parsed : it->second;
+            return true;
         }
 
         bool ApplySpriteTextures(Scene &scene, NodeId *node, NodeSpriteComponent &sprite, int meshSlot, std::string *outError)
@@ -233,7 +384,30 @@ namespace pe
             if (sprite.imageHeight <= 0)
                 sprite.imageHeight = static_cast<int>(image->GetHeight());
 
+            const vec4 tint = sprite.tint;
+
             MaterialInstance *inst = mesh.materialInstance;
+            if (inst)
+            {
+                // Pooled rigs re-run sprite.setup on every spawn: when the identical
+                // sprite state is already bound, skip the dirty marks below — geometry
+                // dirty alone costs a full geometry re-upload + BLAS/TLAS rebuild.
+                const vec4 base = inst->GetBaseColorFactor();
+                const vec3 emis = inst->GetEmissiveFactor();
+                const uint32_t mask = (1u << static_cast<uint32_t>(TextureType::BaseColor)) |
+                                      (1u << static_cast<uint32_t>(TextureType::Emissive));
+                if (inst->GetTexture(static_cast<int>(TextureType::BaseColor)) == image.get() &&
+                    inst->GetTexture(static_cast<int>(TextureType::Emissive)) == image.get() &&
+                    (inst->GetTextureMask() & mask) == mask &&
+                    inst->GetRenderType() == RenderType::AlphaCut &&
+                    mesh.renderType == RenderType::AlphaCut &&
+                    base.x == 0.0f && base.y == 0.0f && base.z == 0.0f && base.w == tint.a &&
+                    emis.x == tint.x && emis.y == tint.y && emis.z == tint.z &&
+                    inst->GetMetallic() == 1.0f && inst->GetRoughness() == 1.0f)
+                {
+                    return true;
+                }
+            }
             if (!inst)
                 inst = scene.CreateMaterialInstance(mesh);
             if (!inst)
@@ -241,8 +415,6 @@ namespace pe
                 SetError(outError, "failed to create sprite material instance");
                 return false;
             }
-
-            const vec4 tint = sprite.tint;
             inst->SetTexture(TextureType::BaseColor, image);
             inst->SetTexture(TextureType::Emissive, image);
             inst->SetTextureMask(inst->GetTextureMask() |
@@ -253,12 +425,14 @@ namespace pe
             inst->SetMetallic(1.0f);
             inst->SetRoughness(1.0f);
             // AlphaCut matches ATH top-down flat sprites; Lua can still override.
+            const bool renderTypeChanged = mesh.renderType != RenderType::AlphaCut;
             inst->SetRenderType(RenderType::AlphaCut);
             mesh.renderType = RenderType::AlphaCut;
 
             scene.SetTexturesDirty();
             scene.SetMaterialDirty();
-            scene.SetGeometryDirty();
+            if (renderTypeChanged)
+                scene.SetInstancesDirty();
             scene.MarkNodeDirty(node);
             scene.MarkDirty();
             return true;
@@ -287,97 +461,19 @@ namespace pe
             return false;
         }
 
-        std::ifstream in(metadataPath, std::ios::binary);
-        if (!in)
-        {
-            SetError(outError, "sprite metadata not found: " + sprite->metadataPath);
+        CachedSpriteMetadata cached;
+        if (!GetOrParseSpriteMetadata(metadataPath, cached, outError))
             return false;
-        }
-
-        rapidjson::IStreamWrapper stream(in);
-        rapidjson::Document root;
-        root.ParseStream(stream);
-        if (root.HasParseError() || !root.IsObject())
-        {
-            SetError(outError, "invalid sprite metadata JSON: " + PathUtf8(metadataPath));
-            return false;
-        }
 
         sprite->metadataPath = PathUtf8(metadataPath);
-        if (root.HasMember("image") && root["image"].IsString())
-        {
-            const std::filesystem::path imagePath = ResolveMetadataRelativePath(metadataPath, root["image"].GetString());
-            if (!imagePath.empty())
-                sprite->imagePath = PathUtf8(imagePath);
-        }
-
-        if (root.HasMember("image_size") && root["image_size"].IsObject())
-        {
-            const auto &imageSize = root["image_size"];
-            if (imageSize.HasMember("width"))
-                sprite->imageWidth = std::max(0, ReadInt(imageSize["width"], sprite->imageWidth));
-            if (imageSize.HasMember("height"))
-                sprite->imageHeight = std::max(0, ReadInt(imageSize["height"], sprite->imageHeight));
-        }
-
-        sprite->frames.clear();
-        if (root.HasMember("frames") && root["frames"].IsArray())
-        {
-            const auto &frames = root["frames"];
-            sprite->frames.reserve(frames.Size());
-            for (rapidjson::SizeType i = 0; i < frames.Size(); ++i)
-            {
-                const auto &item = frames[i];
-                if (!item.IsObject() || !item.HasMember("rect"))
-                    continue;
-
-                NodeSpriteFrame frame;
-                frame.name = item.HasMember("name") && item["name"].IsString() ? item["name"].GetString() : "frame_" + std::to_string(sprite->frames.size());
-                if (!ReadRect(item["rect"], frame.x, frame.y, frame.w, frame.h))
-                    continue;
-                if (item.HasMember("pivot") && item["pivot"].IsArray() && item["pivot"].Size() >= 2)
-                {
-                    frame.pivotX = std::clamp(ReadFloat(item["pivot"][0], frame.pivotX), 0.0f, 1.0f);
-                    frame.pivotY = std::clamp(ReadFloat(item["pivot"][1], frame.pivotY), 0.0f, 1.0f);
-                }
-                if (item.HasMember("duration"))
-                    frame.duration = std::max(0.01f, ReadFloat(item["duration"], frame.duration));
-                frame.uvRect = FrameUvRect(frame, sprite->imageWidth, sprite->imageHeight);
-                sprite->frames.push_back(std::move(frame));
-            }
-        }
-
-        sprite->clips.clear();
-        if (root.HasMember("clips") && root["clips"].IsArray())
-        {
-            const auto &clips = root["clips"];
-            sprite->clips.reserve(clips.Size());
-            for (rapidjson::SizeType i = 0; i < clips.Size(); ++i)
-            {
-                const auto &item = clips[i];
-                if (!item.IsObject())
-                    continue;
-
-                NodeSpriteClip clip;
-                clip.name = item.HasMember("name") && item["name"].IsString() ? item["name"].GetString() : "clip_" + std::to_string(sprite->clips.size());
-                clip.start = item.HasMember("start") ? std::max(0, ReadInt(item["start"], clip.start)) : clip.start;
-                clip.end = item.HasMember("end") ? std::max(0, ReadInt(item["end"], clip.end)) : clip.end;
-                clip.fps = item.HasMember("fps") ? std::max(0.1f, ReadFloat(item["fps"], clip.fps)) : clip.fps;
-                clip.loop = item.HasMember("loop") && item["loop"].IsBool() ? item["loop"].GetBool() : clip.loop;
-                if (!sprite->frames.empty())
-                {
-                    const int maxFrame = static_cast<int>(sprite->frames.size()) - 1;
-                    clip.start = std::clamp(clip.start, 0, maxFrame);
-                    clip.end = std::clamp(clip.end, 0, maxFrame);
-                    if (clip.start > clip.end)
-                        std::swap(clip.start, clip.end);
-                }
-                sprite->clips.push_back(std::move(clip));
-            }
-        }
-
-        if (sprite->clips.empty() && !sprite->frames.empty())
-            sprite->clips.push_back({"default", 0, static_cast<int>(sprite->frames.size()) - 1, 10.0f, true});
+        sprite->imagePath = cached.imagePath;
+        sprite->imageWidth = cached.imageWidth;
+        sprite->imageHeight = cached.imageHeight;
+        sprite->frames = cached.frames;
+        sprite->clips = cached.clips;
+        // Recompute UVs in case image size was filled later from the texture.
+        for (NodeSpriteFrame &frame : sprite->frames)
+            frame.uvRect = FrameUvRect(frame, sprite->imageWidth, sprite->imageHeight);
 
         sprite->metadataLoaded = true;
         if (sprite->frameIndex >= static_cast<int>(sprite->frames.size()))
@@ -405,6 +501,35 @@ namespace pe
         {
             SetError(outError, "sprite mesh slot out of range");
             return false;
+        }
+
+        const int meshIndex = refs[meshSlot];
+        if (!IsValidMeshIndex(meshIndex) || m_meshes[meshIndex].vertexCount != 4 ||
+            static_cast<size_t>(m_meshes[meshIndex].vertexOffset) + 4 > m_vertexStore.size() ||
+            static_cast<size_t>(m_meshes[meshIndex].positionsOffset) + 4 > m_positionUvStore.size())
+        {
+            SetError(outError, "sprite setup requires a four-vertex quad mesh");
+            return false;
+        }
+
+        Mesh &mesh = m_meshes[meshIndex];
+        for (int i = 0; i < static_cast<int>(m_meshes.size()); ++i)
+        {
+            const Mesh &other = m_meshes[i];
+            if (i == meshIndex || !other.live || other.vertexOffset != mesh.vertexOffset ||
+                other.positionsOffset != mesh.positionsOffset)
+                continue;
+
+            std::array<Vertex, 4> vertices;
+            std::array<PositionUvVertex, 4> positions;
+            std::copy_n(m_vertexStore.begin() + mesh.vertexOffset, 4, vertices.begin());
+            std::copy_n(m_positionUvStore.begin() + mesh.positionsOffset, 4, positions.begin());
+            mesh.vertexOffset = static_cast<uint32_t>(m_vertexStore.size());
+            mesh.positionsOffset = static_cast<uint32_t>(m_positionUvStore.size());
+            m_vertexStore.insert(m_vertexStore.end(), vertices.begin(), vertices.end());
+            m_positionUvStore.insert(m_positionUvStore.end(), positions.begin(), positions.end());
+            m_geometryDirty = true;
+            break;
         }
 
         NodeSpriteComponent &sprite = GetOrCreateSpriteComponent(node);
@@ -446,7 +571,10 @@ namespace pe
             sprite.quadHeight = fh >= fw ? 1.0f : fh / fw;
         }
 
-        if (!SetSpriteFrame(node, 0, meshSlot, outError))
+        // Transient UV apply: the non-transient path force-marks full geometry dirty,
+        // which costs a whole-scene re-upload + BLAS/TLAS rebuild when setup runs on
+        // an already-live pooled quad. New quads are covered by their creation dirty.
+        if (!ApplySpriteFrame(*this, node, sprite, 0, meshSlot, true, true, outError))
             return false;
 
         // Prefer named idle clip when present; otherwise leave on frame 0 stopped.

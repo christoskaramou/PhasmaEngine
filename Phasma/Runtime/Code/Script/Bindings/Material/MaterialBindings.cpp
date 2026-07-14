@@ -151,14 +151,20 @@ namespace pe
             return;
 
         Mesh &mesh = s->GetMesh(meshIdx);
+        MaterialInstance *inst = mesh.materialInstance;
+        if (mesh.renderType == renderType && (!inst || inst->GetRenderType() == renderType))
+            return;
+
+        const bool routingChanged = mesh.renderType != renderType;
         mesh.renderType = renderType;
         if (mesh.material)
         {
-            MaterialInstance *inst = EnsureInstance(s, mesh);
+            inst = EnsureInstance(s, mesh);
             if (inst)
                 inst->SetRenderType(renderType);
         }
-        s->SetGeometryDirty();
+        if (routingChanged)
+            s->SetInstancesDirty();
         s->SetMaterialDirty();
         s->MarkNodeDirty(nodeId);
     }
@@ -189,7 +195,7 @@ namespace pe
 
         mesh.material->doubleSided = doubleSided;
         mesh.material->dirty = true;
-        s->SetGeometryDirty();
+        s->SetInstancesDirty();
         s->SetMaterialDirty();
         s->MarkNodeDirty(nodeId);
     }
