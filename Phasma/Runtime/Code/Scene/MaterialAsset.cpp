@@ -148,7 +148,8 @@ namespace pe
                         if (rawImg)
                         {
                             auto shared = std::shared_ptr<Image>(rawImg, [](Image *p)
-                                                                 { Image::Destroy(p); });
+                                                                 { RHII.AddToDeletionQueue([p]()
+                                                                                           { Image *i = p; Image::Destroy(i); }); });
                             ResourceManager::Get().Register<Image>(texStr, shared);
                             img = ResourceHandle<Image>(shared);
                         }
@@ -410,7 +411,8 @@ namespace pe
                         if (rawImg)
                         {
                             auto shared = std::shared_ptr<Image>(rawImg, [](Image *p)
-                                                                 { Image::Destroy(p); });
+                                                                 { RHII.AddToDeletionQueue([p]()
+                                                                                           { Image *i = p; Image::Destroy(i); }); });
                             ResourceManager::Get().Register<Image>(texStr, shared);
                             img = ResourceHandle<Image>(shared);
                         }

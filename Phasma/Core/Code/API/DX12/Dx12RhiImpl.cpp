@@ -143,6 +143,197 @@ namespace pe
                 repeatCount == 4 ? " (further repeats suppressed)" : "");
     }
 
+    static const char *DxgiDeviceRemovedReasonName(HRESULT reason)
+    {
+        switch (reason)
+        {
+        case DXGI_ERROR_DEVICE_HUNG:
+            return "DEVICE_HUNG (a submitted workload did not complete - GPU timeout/TDR)";
+        case DXGI_ERROR_DEVICE_REMOVED:
+            return "DEVICE_REMOVED (adapter lost)";
+        case DXGI_ERROR_DEVICE_RESET:
+            return "DEVICE_RESET";
+        case DXGI_ERROR_DRIVER_INTERNAL_ERROR:
+            return "DRIVER_INTERNAL_ERROR";
+        case DXGI_ERROR_INVALID_CALL:
+            return "INVALID_CALL (bad API usage - run with PE_DX12_DEBUG=1)";
+        default:
+            return "unknown reason";
+        }
+    }
+
+    static const char *Dx12BreadcrumbOpName(D3D12_AUTO_BREADCRUMB_OP op)
+    {
+        switch (op)
+        {
+        case D3D12_AUTO_BREADCRUMB_OP_SETMARKER:
+            return "SetMarker";
+        case D3D12_AUTO_BREADCRUMB_OP_BEGINEVENT:
+            return "BeginEvent";
+        case D3D12_AUTO_BREADCRUMB_OP_ENDEVENT:
+            return "EndEvent";
+        case D3D12_AUTO_BREADCRUMB_OP_DRAWINSTANCED:
+            return "DrawInstanced";
+        case D3D12_AUTO_BREADCRUMB_OP_DRAWINDEXEDINSTANCED:
+            return "DrawIndexedInstanced";
+        case D3D12_AUTO_BREADCRUMB_OP_EXECUTEINDIRECT:
+            return "ExecuteIndirect";
+        case D3D12_AUTO_BREADCRUMB_OP_DISPATCH:
+            return "Dispatch";
+        case D3D12_AUTO_BREADCRUMB_OP_COPYBUFFERREGION:
+            return "CopyBufferRegion";
+        case D3D12_AUTO_BREADCRUMB_OP_COPYTEXTUREREGION:
+            return "CopyTextureRegion";
+        case D3D12_AUTO_BREADCRUMB_OP_COPYRESOURCE:
+            return "CopyResource";
+        case D3D12_AUTO_BREADCRUMB_OP_RESOLVESUBRESOURCE:
+            return "ResolveSubresource";
+        case D3D12_AUTO_BREADCRUMB_OP_CLEARRENDERTARGETVIEW:
+            return "ClearRenderTargetView";
+        case D3D12_AUTO_BREADCRUMB_OP_CLEARUNORDEREDACCESSVIEW:
+            return "ClearUnorderedAccessView";
+        case D3D12_AUTO_BREADCRUMB_OP_CLEARDEPTHSTENCILVIEW:
+            return "ClearDepthStencilView";
+        case D3D12_AUTO_BREADCRUMB_OP_RESOURCEBARRIER:
+            return "ResourceBarrier";
+        case D3D12_AUTO_BREADCRUMB_OP_PRESENT:
+            return "Present";
+        case D3D12_AUTO_BREADCRUMB_OP_BEGINSUBMISSION:
+            return "BeginSubmission";
+        case D3D12_AUTO_BREADCRUMB_OP_ENDSUBMISSION:
+            return "EndSubmission";
+        case D3D12_AUTO_BREADCRUMB_OP_WRITEBUFFERIMMEDIATE:
+            return "WriteBufferImmediate";
+        case D3D12_AUTO_BREADCRUMB_OP_BUILDRAYTRACINGACCELERATIONSTRUCTURE:
+            return "BuildRaytracingAS";
+        case D3D12_AUTO_BREADCRUMB_OP_COPYRAYTRACINGACCELERATIONSTRUCTURE:
+            return "CopyRaytracingAS";
+        case D3D12_AUTO_BREADCRUMB_OP_EMITRAYTRACINGACCELERATIONSTRUCTUREPOSTBUILDINFO:
+            return "EmitRaytracingASPostbuildInfo";
+        case D3D12_AUTO_BREADCRUMB_OP_DISPATCHRAYS:
+            return "DispatchRays";
+        case D3D12_AUTO_BREADCRUMB_OP_SETPIPELINESTATE1:
+            return "SetPipelineState1";
+        case D3D12_AUTO_BREADCRUMB_OP_DISPATCHMESH:
+            return "DispatchMesh";
+        default:
+            return "op";
+        }
+    }
+
+    static const char *DredAllocationTypeName(D3D12_DRED_ALLOCATION_TYPE type)
+    {
+        switch (type)
+        {
+        case D3D12_DRED_ALLOCATION_TYPE_COMMAND_QUEUE:
+            return "CommandQueue";
+        case D3D12_DRED_ALLOCATION_TYPE_COMMAND_ALLOCATOR:
+            return "CommandAllocator";
+        case D3D12_DRED_ALLOCATION_TYPE_PIPELINE_STATE:
+            return "PipelineState";
+        case D3D12_DRED_ALLOCATION_TYPE_COMMAND_LIST:
+            return "CommandList";
+        case D3D12_DRED_ALLOCATION_TYPE_FENCE:
+            return "Fence";
+        case D3D12_DRED_ALLOCATION_TYPE_DESCRIPTOR_HEAP:
+            return "DescriptorHeap";
+        case D3D12_DRED_ALLOCATION_TYPE_HEAP:
+            return "Heap";
+        case D3D12_DRED_ALLOCATION_TYPE_QUERY_HEAP:
+            return "QueryHeap";
+        case D3D12_DRED_ALLOCATION_TYPE_COMMAND_SIGNATURE:
+            return "CommandSignature";
+        case D3D12_DRED_ALLOCATION_TYPE_PIPELINE_LIBRARY:
+            return "PipelineLibrary";
+        case D3D12_DRED_ALLOCATION_TYPE_RESOURCE:
+            return "Resource";
+        case D3D12_DRED_ALLOCATION_TYPE_PASS:
+            return "Pass";
+        default:
+            return "other";
+        }
+    }
+
+    void Dx12ReportDeviceRemoved()
+    {
+        ID3D12Device *device = GetDx12Device();
+        if (!device)
+            return;
+
+        const HRESULT reason = device->GetDeviceRemovedReason();
+        if (reason == S_OK)
+            return;
+
+        PE_WARN("[DX12] Device removed: 0x%08X %s",
+                static_cast<unsigned>(reason),
+                DxgiDeviceRemovedReasonName(reason));
+
+        ComPtr<ID3D12DeviceRemovedExtendedData> dred;
+        if (FAILED(device->QueryInterface(IID_PPV_ARGS(&dred))))
+        {
+            PE_WARN("[DX12] No DRED data available (enable with PE_DX12_DRED=1)");
+            return;
+        }
+
+        D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT breadcrumbs{};
+        if (SUCCEEDED(dred->GetAutoBreadcrumbsOutput(&breadcrumbs)))
+        {
+            for (const D3D12_AUTO_BREADCRUMB_NODE *node = breadcrumbs.pHeadAutoBreadcrumbNode; node;
+                 node = node->pNext)
+            {
+                const UINT count = node->BreadcrumbCount;
+                const UINT completed = node->pLastBreadcrumbValue ? *node->pLastBreadcrumbValue : 0;
+                if (count == 0 || completed >= count)
+                    continue;
+
+                std::string cmdList = WideToUtf8(node->pCommandListDebugNameW);
+                if (cmdList.empty() && node->pCommandListDebugNameA)
+                    cmdList = node->pCommandListDebugNameA;
+                std::string queue = WideToUtf8(node->pCommandQueueDebugNameW);
+                if (queue.empty() && node->pCommandQueueDebugNameA)
+                    queue = node->pCommandQueueDebugNameA;
+                PE_WARN("[DX12] DRED breadcrumbs: cmdlist='%s' queue='%s' completed %u of %u ops",
+                        cmdList.c_str(), queue.c_str(), completed, count);
+
+                const UINT begin = completed > 8 ? completed - 8 : 0;
+                const UINT end = std::min(count, completed + 4);
+                for (UINT i = begin; i < end && node->pCommandHistory; ++i)
+                {
+                    const D3D12_AUTO_BREADCRUMB_OP op = node->pCommandHistory[i];
+                    PE_WARN("[DX12]   [%u] %s(%u)%s", i, Dx12BreadcrumbOpName(op),
+                            static_cast<unsigned>(op), i == completed ? "  <-- did not complete" : "");
+                }
+            }
+        }
+
+        D3D12_DRED_PAGE_FAULT_OUTPUT pageFault{};
+        if (SUCCEEDED(dred->GetPageFaultAllocationOutput(&pageFault)) && pageFault.PageFaultVA != 0)
+        {
+            PE_WARN("[DX12] DRED page fault VA=0x%016llX",
+                    static_cast<unsigned long long>(pageFault.PageFaultVA));
+            int logged = 0;
+            for (const D3D12_DRED_ALLOCATION_NODE *node = pageFault.pHeadExistingAllocationNode;
+                 node && logged < 16; node = node->pNext, ++logged)
+            {
+                std::string name = WideToUtf8(node->ObjectNameW);
+                if (name.empty() && node->ObjectNameA)
+                    name = node->ObjectNameA;
+                PE_WARN("[DX12]   existing allocation near VA: '%s' (%s)", name.c_str(),
+                        DredAllocationTypeName(node->AllocationType));
+            }
+            logged = 0;
+            for (const D3D12_DRED_ALLOCATION_NODE *node = pageFault.pHeadRecentFreedAllocationNode;
+                 node && logged < 16; node = node->pNext, ++logged)
+            {
+                std::string name = WideToUtf8(node->ObjectNameW);
+                if (name.empty() && node->ObjectNameA)
+                    name = node->ObjectNameA;
+                PE_WARN("[DX12]   recently freed near VA: '%s' (%s)", name.c_str(),
+                        DredAllocationTypeName(node->AllocationType));
+            }
+        }
+    }
+
     bool Dx12RhiImpl::Init(SDL_Window * /*window*/)
     {
         const bool dx12DebugLayerRequested = EnvFlagOn("PE_DX12_DEBUG");

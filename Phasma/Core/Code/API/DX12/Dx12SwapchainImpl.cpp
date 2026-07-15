@@ -186,7 +186,11 @@ namespace pe
         const UINT syncInterval = immediate ? 0u : 1u;
         const UINT flags = immediate ? DXGI_PRESENT_ALLOW_TEARING : 0u;
         const HRESULT hr = m_swapchain->Present(syncInterval, flags);
-        PE_ERROR_IF(FAILED(hr), "Dx12SwapchainImpl: Present failed (0x%08X)", static_cast<unsigned>(hr));
+        if (FAILED(hr))
+        {
+            Dx12ReportDeviceRemoved();
+            PE_ERROR("Dx12SwapchainImpl: Present failed (0x%08X)", static_cast<unsigned>(hr));
+        }
         m_currentBackbuffer = m_swapchain->GetCurrentBackBufferIndex();
     }
 } // namespace pe

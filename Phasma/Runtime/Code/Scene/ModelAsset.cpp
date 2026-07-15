@@ -211,8 +211,10 @@ namespace pe
             if (!rawImg)
                 return ResourceHandle<Image>();
 
+            // The last handle may drop while in-flight bindless descriptors still reference the image.
             std::shared_ptr<Image> sharedImage(rawImg, [](Image *img)
-                                               { Image::Destroy(img); });
+                                               { RHII.AddToDeletionQueue([img]()
+                                                                         { Image *i = img; Image::Destroy(i); }); });
             ResourceManager::Get().Register<Image>(normalizedStr, sharedImage);
             handle = ResourceHandle<Image>(sharedImage);
         }

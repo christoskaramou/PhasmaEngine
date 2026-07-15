@@ -226,7 +226,8 @@ namespace pe::voxel
             cmd->Return();
 
             std::shared_ptr<Image> atlas(rawAtlas, [](Image *image)
-                                         { Image::Destroy(image); });
+                                         { RHII.AddToDeletionQueue([image]()
+                                                                   { Image *i = image; Image::Destroy(i); }); });
             ResourceManager::Get().Register<Image>(atlasId, atlas);
             return ResourceHandle<Image>(atlas);
         }
