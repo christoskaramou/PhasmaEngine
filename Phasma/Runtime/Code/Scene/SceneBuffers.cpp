@@ -587,11 +587,10 @@ namespace pe
             }
         }
 
+        // Disabled pooled rigs can re-enable without a texture rebuild, so keep their cached
+        // imageViewIndices stable across rebuilds.
         for (uint32_t ni = 0; ni < GetNodeCount(); ni++)
         {
-            if (!IsNodeHierarchyEnabled(m_nodeIds[ni]))
-                continue;
-
             for (int meshIndex : m_nodeComponentCache[ni].meshRefs->meshRefs)
             {
                 if (!IsValidMeshIndex(meshIndex))
@@ -681,7 +680,16 @@ namespace pe
 
     void Scene::CreateMaterialTable()
     {
-        Buffer::Destroy(m_materialTable);
+        auto deferDestroy = [](Buffer *&buffer)
+        {
+            if (!buffer)
+                return;
+            RHII.AddToDeletionQueue([b = buffer]()
+                                    { Buffer *old = b; Buffer::Destroy(old); });
+            buffer = nullptr;
+        };
+
+        deferDestroy(m_materialTable);
 
         std::vector<MaterialGpuData> tableData;
 
@@ -757,8 +765,7 @@ namespace pe
         m_materialTable->Flush(range.size, 0);
         m_materialTable->Unmap();
 
-        Buffer::Destroy(m_materialByteBuffer);
-        m_materialByteBuffer = nullptr;
+        deferDestroy(m_materialByteBuffer);
         m_materialByteBufferUsed = 0;
 
         struct ByteEntry

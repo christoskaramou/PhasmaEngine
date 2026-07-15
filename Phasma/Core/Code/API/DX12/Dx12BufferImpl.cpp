@@ -156,7 +156,11 @@ namespace pe
         D3D12_RANGE *range =
             (m_heapType == D3D12_HEAP_TYPE_UPLOAD || m_heapType == D3D12_HEAP_TYPE_GPU_UPLOAD) ? &readRange : nullptr;
         HRESULT hr = m_resource->Map(0, range, &m_mapped);
-        PE_ERROR_IF(FAILED(hr), "Dx12BufferImpl: Map failed (0x%08X)", static_cast<unsigned>(hr));
+        if (FAILED(hr))
+        {
+            Dx12ReportDeviceRemoved();
+            PE_ERROR("Dx12BufferImpl: Map failed (0x%08X)", static_cast<unsigned>(hr));
+        }
         return m_mapped;
     }
 

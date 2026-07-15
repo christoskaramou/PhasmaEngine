@@ -347,6 +347,8 @@ namespace pe
 
                     sol::object visible = opts["visible"];
                     if (visible.is<bool>()) ui->visible = visible.as<bool>();
+                    sol::object noInput = opts["no_input"];
+                    if (noInput.is<bool>()) ui->noInput = noInput.as<bool>();
                 });
 
                 // Rendered screen rect of an authored UI node (anchor+pivot+surface

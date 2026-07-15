@@ -202,6 +202,11 @@ namespace pe
 
             HRESULT hr = rhi->GetDevice()->CreateComputePipelineState(&desc, IID_PPV_ARGS(&m_pso));
             PE_ERROR_IF(FAILED(hr), "Dx12PipelineImpl: CreateComputePipelineState failed (0x%08X)", static_cast<unsigned>(hr));
+            if (m_pso && !info.name.empty())
+            {
+                const std::wstring wname(info.name.begin(), info.name.end());
+                m_pso->SetName(wname.c_str());
+            }
             return;
         }
 
@@ -283,6 +288,11 @@ namespace pe
                     info.depthWriteEnable ? 1 : 0,
                     infoQueueMessages.empty() ? "" : ": ",
                     infoQueueMessages.c_str());
+        if (m_pso && !info.name.empty())
+        {
+            const std::wstring wname(info.name.begin(), info.name.end());
+            m_pso->SetName(wname.c_str());
+        }
     }
 
     void Dx12PipelineImpl::CreateRayTracingPipeline()

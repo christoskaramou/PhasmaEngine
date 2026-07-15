@@ -76,4 +76,8 @@ namespace pe
         Dx12RhiImpl *impl = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
         return impl ? impl->GetDevice() : nullptr;
     }
+
+    // Logs GetDeviceRemovedReason plus DRED breadcrumbs/page-fault data (when DRED was
+    // enabled at device creation) after a device removal. No-op while the device is alive.
+    void Dx12ReportDeviceRemoved();
 } // namespace pe
