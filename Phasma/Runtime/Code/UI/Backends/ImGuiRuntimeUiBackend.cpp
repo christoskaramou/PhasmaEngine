@@ -949,10 +949,11 @@ namespace pe
                         drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
 
                     const char *content = HasText(quad.body) ? quad.body : (HasText(quad.title) ? quad.title : quad.label);
+                    // 48: skill/inventory tips wrap to many short lines; 12 clipped them.
                     DrawAlignedText(drawList, font, fontSize, content, pos, size, pad, text,
                                     ResolveH(quad.textAlignH, RuntimeUiTextAlignH::Left),
                                     ResolveV(quad.textAlignV, RuntimeUiTextAlignV::Top),
-                                    quad.textOffsetX, quad.textOffsetY, 12);
+                                    quad.textOffsetX, quad.textOffsetY, 48);
                     return;
                 }
 
