@@ -1,5 +1,4 @@
 #include "Scene/Scene.h"
-#include "Base/Path.h"     // Path::ResolveAsset for zone Spawn prefab paths
 #include <meshoptimizer.h> // meshopt_simplify for mesh LOD generation
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
@@ -634,7 +633,8 @@ namespace pe
         UpdateAudioZones();
         UpdatePhysicsZones();
 
-        UpdateSpriteAnimations(std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetDelta())));
+        UpdateSpriteAnimations(std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetDelta()) *
+                                                  Settings::Get<SceneSettings>().time_scale));
 
         UpdateGeometry();
         if (Settings::Get<SceneSettings>().selection_outline)
@@ -1108,16 +1108,15 @@ namespace pe
         return camera;
     }
 
-    // A freshly-created camera flies by default: attach the free-fly script (RMB look + WASD) set to run
-    // in both editor and play. Writes the fields directly (not via SetNodeScriptRunMode) so constructing a
-    // brand-new scene doesn't mark it dirty. RuntimeAssets path resolves through the script system fallback.
+    // Fresh cameras get the free-fly script for EDITOR viewport navigation only.
+    // Play/player sessions must not steal WASD/Space — games own their own camera.
     void Scene::AttachDefaultCameraScript(NodeId *camNode)
     {
         if (!camNode)
             return;
         SetNodeScript(camNode, "Assets/Scripts/fly_camera_play.lua");
         if (auto *s = m_nodeComponentCache[camNode->index].script)
-            s->runMode = ScriptRunMode::Both;
+            s->runMode = ScriptRunMode::Editor;
     }
 
     void Scene::RemoveCamera(Camera *camera)

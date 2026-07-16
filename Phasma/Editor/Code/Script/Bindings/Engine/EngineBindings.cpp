@@ -69,7 +69,13 @@ namespace pe
                 });
 
                 engine.set_function("quit", []() {
-                    EventSystem::PushEvent(EventType::Quit);
+                    // In-editor play: "quit the game" returns to edit mode.
+                    // GUI::Update sees play end + leftover snapshot and calls Stop().
+                    // Standalone PhasmaPlayer's binding still exits the process.
+                    if (IsScriptPlayMode())
+                        SetScriptPlayMode(false);
+                    else
+                        EventSystem::PushEvent(EventType::Quit);
                 });
 
                 engine.set_function("reload_module", []() {

@@ -4,7 +4,6 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/Sampler.h"
-#include "Base/Path.h"     // RuntimeAssets: the block tile PNGs for the palette thumbnails
 #include "Camera/Camera.h" // Alt+LMB camera teleport
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"

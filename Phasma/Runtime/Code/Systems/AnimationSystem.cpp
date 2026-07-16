@@ -4,9 +4,6 @@
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 
-#include <algorithm>
-#include <cmath>
-
 namespace pe
 {
     namespace
@@ -268,9 +265,8 @@ namespace pe
         if (!scene)
             return;
 
-        float dt = static_cast<float>(FrameTimer::Instance().GetDelta());
-
-        if (m_states.empty())
+        float dt = static_cast<float>(FrameTimer::Instance().GetDelta()) * Settings::Get<SceneSettings>().time_scale;
+        if (dt <= 0.0001f)
             return;
 
         for (auto &state : m_states)

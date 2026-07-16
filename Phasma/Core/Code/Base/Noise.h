@@ -1,5 +1,4 @@
 #pragma once
-#include "Base/Math.h"
 #include "gtc/noise.hpp" // glm::perlin
 
 // General-purpose procedural noise helpers — engine-wide, not tied to any subsystem.

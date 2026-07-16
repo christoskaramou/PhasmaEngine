@@ -1502,10 +1502,15 @@ namespace pe
         // update()/update_editor() hook. These were previously called with no args, so
         // scripts' `function update(dt)` received nil and any `dt` arithmetic threw every
         // frame. Passing it here makes dt reliable engine-wide (no per-script workaround).
-        const double dt = FrameTimer::Instance().GetDelta();
+        // Play-mode dt honors SceneSettings::time_scale so `settings.set("time_scale", 0)`
+        // freezes gameplay scripts + (via Scene/Anim/Particles) visuals without needing
+        // engine.set_paused (which would also stop UI/console updates).
+        const double realDt = FrameTimer::Instance().GetDelta();
+        const double playScale = IsScriptPlayMode() ? static_cast<double>(Settings::Get<SceneSettings>().time_scale) : 1.0;
+        const double dt = realDt * playScale;
 
         // Advance active tweens (tween.to + native camera focus) every frame,
-        // in edit and play mode.
+        // in edit and play mode. Play-mode tweens follow time_scale.
         TickTweens(dt);
 
         // Process completed async model loads

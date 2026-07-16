@@ -134,6 +134,14 @@ local function update_fly(cam, delta, rmb)
 end
 
 local function update(dt)
+    -- Editor viewport freecam only. During play (editor Play or packaged player)
+    -- games own WASD/Space — never steal them here even if runMode was left on "both".
+    if engine and engine.is_play_mode and engine.is_play_mode() then
+        if input and input.is_relative_mouse and input.is_relative_mouse() then
+            input.set_relative_mouse(false)
+        end
+        return
+    end
     local cam = get_camera()
     if not cam then return end
     local delta = dt or (engine.get_metrics().delta_ms / 1000.0)
@@ -147,6 +155,7 @@ local function update(dt)
 end
 
 local function init()
+    if engine and engine.is_play_mode and engine.is_play_mode() then return end
     pe_log("[fly_camera_play] active - RMB look; fly: RMB+WASD; physics: WASD walk, Space jump, Shift boost")
 end
 

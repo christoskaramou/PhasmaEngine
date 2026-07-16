@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Base/Settings.h"        // PostProcessProfile (value member of NodeTriggerZoneTag)
 #include "Audio/AudioTypes.h"     // AudioSourceDesc (value member of NodeTriggerZoneTag)
 #include "Physics/PhysicsTypes.h" // PhysicsBodyType (zone physics section)
 
