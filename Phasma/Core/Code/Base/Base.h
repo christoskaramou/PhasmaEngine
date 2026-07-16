@@ -1,5 +1,4 @@
 #pragma once
-#include "Base/PhasmaExport.h"
 #include "Base/PeTracker.h"
 
 namespace pe

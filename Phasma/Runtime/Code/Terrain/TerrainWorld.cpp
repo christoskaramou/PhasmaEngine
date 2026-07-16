@@ -3,7 +3,6 @@
 #include "API/Image.h" // triplanar layer/splat textures
 #include "API/Queue.h"
 #include "API/RHI.h"
-#include "Base/Path.h" // Path::RuntimeAssets for the default layer textures
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h" // scatter templates baked from model assets
 #include "Scene/Scene.h"

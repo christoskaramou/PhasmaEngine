@@ -6,7 +6,6 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
-#include "Base/Settings.h"
 #include "Render/SceneRendererHost.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"

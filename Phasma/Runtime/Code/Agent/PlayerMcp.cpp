@@ -5,8 +5,6 @@
 #include "Phasma/MCP/Server.h"
 #include "Phasma/MCP/Tool.h"
 
-#include "Base/EventSystem.h"
-#include "Base/Timer.h"
 #include "ECS/Context.h"
 #include "Script/ScriptSystem.h"
 

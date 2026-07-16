@@ -1,7 +1,6 @@
 #pragma once
 
 #include "API/Vertex.h"
-#include "Base/Math.h"
 #include "Terrain/ScatterTemplates.h"
 
 namespace pe

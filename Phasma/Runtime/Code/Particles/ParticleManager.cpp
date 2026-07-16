@@ -348,7 +348,10 @@ namespace pe
         if (m_transientEmitters.empty())
             return;
 
-        const float dt = std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetDelta()));
+        const float dt = std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetDelta()) *
+                                            Settings::Get<SceneSettings>().time_scale);
+        if (dt <= 0.0f)
+            return;
 
         for (TransientEmitter &transient : m_transientEmitters)
             transient.timeRemaining -= dt;

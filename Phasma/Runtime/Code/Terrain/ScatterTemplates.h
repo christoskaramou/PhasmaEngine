@@ -1,6 +1,5 @@
 #pragma once
 #include "API/Vertex.h"
-#include "Base/Math.h"
 
 namespace pe::terrain
 {
