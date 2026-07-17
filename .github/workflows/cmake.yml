@@ -146,13 +146,18 @@ jobs:
           name: PhasmaEngine-Linux-Prebuilds
           path: release-packages
 
-      - name: Automatic Release
-        uses: "marvinpinto/action-automatic-releases@d68defdd11f9dcc7f52f35c1b7c236ee7513bcc1" # latest
+      - name: Move development tag
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        run: gh api --method PATCH repos/${{ github.repository }}/git/refs/tags/latest -f sha=${{ github.sha }} -F force=true
+
+      - name: Update development release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.0
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "latest"
+          tag_name: "latest"
+          name: "Development Build"
           prerelease: true
-          title: "Development Build"
+          fail_on_unmatched_files: true
           files: |
             release-packages/PhasmaEngine-Full-Windows.zip
             release-packages/PhasmaEngine-Full-Linux.tar.gz
