@@ -161,12 +161,6 @@ namespace pe
                 PE_INFO("[Runtime] Startup scene: none");
         }
 
-        bool ShouldQuitFromEvent(const SDL_Event &event, bool uiCaptured)
-        {
-            return event.type == SDL_QUIT ||
-                   (!uiCaptured && event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE);
-        }
-
         // The runtime-UI HUD is authored at desktop pixel sizes. On high-density surfaces (phones,
         // hi-DPI monitors) those sizes are physically tiny -- the Android HUD rendered as an invisible
         // speck. Scale the UI by real display density, falling back to surface-height scaling when the
@@ -549,7 +543,8 @@ namespace pe
 
                     const bool uiCaptured = m_runtimeUi && m_runtimeUi->ProcessEvent(event);
 
-                    if (ShouldQuitFromEvent(event, uiCaptured))
+                    // Window close only — Escape is game-owned (menus / pause).
+                    if (event.type == SDL_QUIT)
                         return false;
 
                     if (!uiCaptured && event.type == SDL_MOUSEMOTION)
