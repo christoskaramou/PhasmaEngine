@@ -27,6 +27,7 @@
 #include "Voxel/VoxelSystem.h"
 #include "UI/RuntimeUi.h"
 #include "Window/WindowEvents.h"
+#include "Base/ProfilerStream.h"
 #if defined(PE_PLAYER_MCP)
 #include "Agent/PlayerMcp.h"
 #include <nlohmann/json.hpp>
@@ -427,8 +428,9 @@ namespace pe
         {
         public:
             PlayerFramePump(SDL_Window *window, RuntimeSceneRenderer &renderer, RuntimeUiSystem *runtimeUi,
-                            MainThreadActionQueue *mcpActions)
-                : m_window(window), m_renderer(renderer), m_runtimeUi(runtimeUi), m_mcpActions(mcpActions)
+                            MainThreadActionQueue *mcpActions, ProfilerStreamServer *profilerStream)
+                : m_window(window), m_renderer(renderer), m_runtimeUi(runtimeUi), m_mcpActions(mcpActions),
+                  m_profilerStream(profilerStream)
             {
             }
 
@@ -441,6 +443,24 @@ namespace pe
             {
                 RHII.NextFrame();
                 FrameTimer::Instance().Tick();
+                Profiler::BeginFrame();
+                struct ProfilerFrameGuard
+                {
+                    bool open = true;
+                    ~ProfilerFrameGuard()
+                    {
+                        if (open)
+                            Profiler::EndFrame();
+                    }
+                    void Close()
+                    {
+                        if (!open)
+                            return;
+                        Profiler::EndFrame();
+                        open = false;
+                    }
+                } profilerFrame;
+
                 m_renderer.WaitPreviousFrameCommands();
 
                 if (!ProcessEvents())
@@ -451,6 +471,9 @@ namespace pe
 
                 if (IsWindowMinimized(m_window))
                 {
+                    profilerFrame.Close();
+                    if (m_profilerStream)
+                        m_profilerStream->Tick();
                     SDL_Delay(16);
                     return true;
                 }
@@ -485,9 +508,12 @@ namespace pe
                     return false;
 
                 m_renderer.Update();
-                m_renderer.Draw();
                 FrameTimer::Instance().CountUpdatesStamp();
+                m_renderer.Draw();
                 FrameTimer::Instance().CountCpuTotalStamp();
+                profilerFrame.Close();
+                if (m_profilerStream)
+                    m_profilerStream->Tick();
                 LogFrameRate();
                 return true;
             }
@@ -644,6 +670,7 @@ namespace pe
             RuntimeSceneRenderer &m_renderer;
             RuntimeUiSystem *m_runtimeUi = nullptr;
             MainThreadActionQueue *m_mcpActions = nullptr;
+            ProfilerStreamServer *m_profilerStream = nullptr;
             bool m_resizePending = false;
             double m_fpsAccumSeconds = 0.0;
             uint32_t m_fpsAccumFrames = 0;
@@ -800,10 +827,30 @@ namespace pe
                 }
 #endif
 
+                std::unique_ptr<ProfilerStreamServer> profilerStream;
+                if (const std::optional<int> profilerPort = ParseProfilerStreamPortArg(argc, argv))
                 {
-                    PlayerFramePump framePump(window.Get(), renderer, runtimeUiPtr, &mcpActions);
+                    profilerStream = std::make_unique<ProfilerStreamServer>();
+                    if (profilerStream->Start(*profilerPort))
+                        PE_INFO("[Profiler] Live stream on 127.0.0.1:%d (connect PhasmaProfiler)",
+                                profilerStream->GetPort());
+                    else
+                    {
+                        PE_WARN("[Profiler] Failed to start live stream on port %d", *profilerPort);
+                        profilerStream.reset();
+                    }
+                }
+
+                {
+                    PlayerFramePump framePump(window.Get(), renderer, runtimeUiPtr, &mcpActions, profilerStream.get());
                     PE_INFO("[Runtime] Player frame pump running (startup scene render)");
                     framePump.Run();
+                }
+
+                if (profilerStream)
+                {
+                    profilerStream->Stop();
+                    profilerStream.reset();
                 }
 
 #if defined(PE_PLAYER_MCP)

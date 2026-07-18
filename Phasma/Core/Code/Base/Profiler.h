@@ -13,6 +13,7 @@ namespace pe
         {
             const char *name;
             float timeMs;
+            float startOffsetMs;
             uint32_t depth;
         };
 

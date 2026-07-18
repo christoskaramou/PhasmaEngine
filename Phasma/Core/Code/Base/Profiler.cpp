@@ -70,6 +70,7 @@ namespace pe
 
     void Profiler::BeginScope(const char *name)
     {
+        const auto start = std::chrono::high_resolution_clock::now();
         const uint32_t writeIndex = s_writeIndex;
         const uint32_t index = g_entryCount[writeIndex].fetch_add(1, std::memory_order_relaxed);
         // Scopes fired before the first BeginFrame safely no-op the write.
@@ -79,10 +80,11 @@ namespace pe
             entry.name = name;
             entry.depth = s_currentDepth;
             entry.timeMs = 0.0f;
+            entry.startOffsetMs = std::chrono::duration<float, std::milli>(start - s_frameStart).count();
         }
 
         ActiveScope scope{};
-        scope.start = std::chrono::high_resolution_clock::now();
+        scope.start = start;
         scope.entryIndex = index;
         scope.writeIndex = writeIndex;
         scope.generation = s_frameGeneration;

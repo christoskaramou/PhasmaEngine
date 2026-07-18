@@ -39,6 +39,7 @@ namespace
     constexpr const char *kDx12ValidationModeKey = "dx12_validation_mode";
     constexpr const char *kVulkanCoreValidationKey = "vulkan_core_validation";
     constexpr const char *kDx12CoreValidationKey = "dx12_core_validation";
+    constexpr const char *kLiveProfilerKey = "live_profiler";
     constexpr const char *k_editorLaunchTarget = "PhasmaEditor";
     constexpr const char *k_playerLaunchTarget = "PhasmaPlayer";
     constexpr size_t kSettingsTextBufferSize = 64 * 1024;
@@ -96,6 +97,15 @@ namespace
         return std::filesystem::path(pe::Path::Root) / "PhasmaPlayer.exe";
 #else
         return std::filesystem::path(pe::Path::Root) / "PhasmaPlayer";
+#endif
+    }
+
+    std::filesystem::path ProfilerExecutablePath()
+    {
+#if defined(PE_WIN32)
+        return std::filesystem::path(pe::Path::Root) / "PhasmaProfiler.exe";
+#else
+        return std::filesystem::path(pe::Path::Root) / "PhasmaProfiler";
 #endif
     }
 
@@ -611,6 +621,7 @@ namespace
                                  const std::string &startupScene,
                                  const std::string &launchTarget,
                                  const ValidationOptions &validation,
+                                 bool liveProfiler,
                                  int displayIndex,
                                  pe::GpuAdapterPreference gpuAdapterPreference,
                                  const std::optional<PePresentMode> &presentModeOverride,
@@ -632,6 +643,7 @@ namespace
                             pe::GpuAdapterPreferenceConfigName(gpuAdapterPreference));
         SetJsonBoolMember(document, kVulkanCoreValidationKey, validation.vulkanCoreValidation);
         SetJsonBoolMember(document, kDx12CoreValidationKey, validation.dx12CoreValidation);
+        SetJsonBoolMember(document, kLiveProfilerKey, liveProfiler);
         RemoveJsonMember(document, kVulkanValidationModeKey);
         RemoveJsonMember(document, kDx12ValidationModeKey);
         RemoveJsonMember(document, "vulkan_configurator_path");
@@ -687,6 +699,7 @@ namespace
         int displayIndex = 0;
         pe::GpuAdapterPreference gpuAdapterPreference = pe::GpuAdapterPreference::Auto;
         std::optional<PePresentMode> presentModeOverride;
+        bool liveProfiler = false;
         bool apiLocked = false;
         bool accepted = false;
     };
@@ -1039,7 +1052,11 @@ namespace
                                           error);
     }
 
-    bool LaunchExternalTarget(const LaunchTarget &target, PeGraphicsApi api, int displayIndex, std::string &error)
+    bool LaunchExternalTarget(const LaunchTarget &target,
+                              PeGraphicsApi api,
+                              int displayIndex,
+                              bool liveProfiler,
+                              std::string &error)
     {
         const std::filesystem::path executablePath = target.executablePath.lexically_normal();
         if (!std::filesystem::exists(executablePath))
@@ -1049,10 +1066,13 @@ namespace
         }
 
         const std::string displayValue = std::to_string(displayIndex < 0 ? 0 : displayIndex);
+        const bool playerProfiler = liveProfiler && target.kind == LaunchTargetKind::Player;
 
 #if defined(PE_WIN32)
         std::string commandLine = QuoteCommandLineArg(executablePath.string()) + " --api " +
                                   pe::GraphicsApiConfigName(api) + " --display " + displayValue;
+        if (playerProfiler)
+            commandLine += " --profiler";
 
         STARTUPINFOA startupInfo{};
         startupInfo.cb = sizeof(startupInfo);
@@ -1076,6 +1096,32 @@ namespace
 
         CloseHandle(processInfo.hThread);
         CloseHandle(processInfo.hProcess);
+
+        if (playerProfiler)
+        {
+            const std::filesystem::path profilerPath = ProfilerExecutablePath().lexically_normal();
+            if (std::filesystem::exists(profilerPath))
+            {
+                STARTUPINFOA profilerStartup{};
+                profilerStartup.cb = sizeof(profilerStartup);
+                PROCESS_INFORMATION profilerInfo{};
+                std::string profilerCommand = QuoteCommandLineArg(profilerPath.string());
+                if (CreateProcessA(nullptr,
+                                   profilerCommand.data(),
+                                   nullptr,
+                                   nullptr,
+                                   FALSE,
+                                   0,
+                                   nullptr,
+                                   workingDirectory.c_str(),
+                                   &profilerStartup,
+                                   &profilerInfo))
+                {
+                    CloseHandle(profilerInfo.hThread);
+                    CloseHandle(profilerInfo.hProcess);
+                }
+            }
+        }
         return true;
 #else
         const pid_t pid = fork();
@@ -1090,14 +1136,45 @@ namespace
             const std::filesystem::path workingDirectory = pe::Path::Root;
             if (!workingDirectory.empty() && chdir(workingDirectory.c_str()) != 0)
                 _exit(127);
-            execl(executablePath.c_str(),
-                  executablePath.filename().c_str(),
-                  "--api",
-                  apiName.c_str(),
-                  "--display",
-                  displayValue.c_str(),
-                  nullptr);
+            if (playerProfiler)
+            {
+                execl(executablePath.c_str(),
+                      executablePath.filename().c_str(),
+                      "--api",
+                      apiName.c_str(),
+                      "--display",
+                      displayValue.c_str(),
+                      "--profiler",
+                      nullptr);
+            }
+            else
+            {
+                execl(executablePath.c_str(),
+                      executablePath.filename().c_str(),
+                      "--api",
+                      apiName.c_str(),
+                      "--display",
+                      displayValue.c_str(),
+                      nullptr);
+            }
             _exit(127);
+        }
+
+        if (playerProfiler)
+        {
+            const std::filesystem::path profilerPath = ProfilerExecutablePath().lexically_normal();
+            if (std::filesystem::exists(profilerPath))
+            {
+                const pid_t profilerPid = fork();
+                if (profilerPid == 0)
+                {
+                    const std::filesystem::path workingDirectory = pe::Path::Root;
+                    if (!workingDirectory.empty() && chdir(workingDirectory.c_str()) != 0)
+                        _exit(127);
+                    execl(profilerPath.c_str(), profilerPath.filename().c_str(), nullptr);
+                    _exit(127);
+                }
+            }
         }
         return true;
 #endif
@@ -1786,6 +1863,16 @@ namespace
         return answer == 'y';
     }
 
+    bool PromptYesNo(const char *label, bool defaultYes)
+    {
+        std::cout << label << (defaultYes ? " [Y/n]: " : " [y/N]: ") << std::flush;
+        std::string input;
+        if (!std::getline(std::cin, input) || input.empty())
+            return defaultYes;
+        const char answer = static_cast<char>(std::tolower(static_cast<unsigned char>(input.front())));
+        return answer == 'y';
+    }
+
     LauncherDialogResult ShowConsoleLauncher(LauncherSelection &selection,
                                              const std::vector<LaunchTarget> &targets,
                                              int targetIndex)
@@ -1840,6 +1927,9 @@ namespace
         const int presentIndex =
             PromptIndex("Present mode", presentLabels, FindPresentModeOptionIndex(selection.presentModeOverride));
         selection.presentModeOverride = presentOptions[presentIndex].mode;
+
+        if (targets[targetIndex].kind == LaunchTargetKind::Player)
+            selection.liveProfiler = PromptYesNo("Enable live profiler (PhasmaProfiler)", selection.liveProfiler);
 
         std::cout << "\nProject: " << ActiveProfile(selection).projectPath << '\n'
                   << "Backend: " << pe::GraphicsApiConfigName(selection.api) << '\n'
@@ -2452,6 +2542,15 @@ namespace
         ImGui::PopID();
     }
 
+    void RenderLiveProfilerControls(bool &liveProfiler)
+    {
+        ImGui::TextUnformatted("Live profiler");
+        ImGui::SameLine(kFieldX);
+        ImGui::Checkbox("##live_profiler", &liveProfiler);
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+            ImGui::SetTooltip("Pass --profiler to PhasmaPlayer and launch PhasmaProfiler when available.");
+    }
+
     LauncherDialogResult ShowSdlLauncher(LauncherSelection &selection,
                                          const std::vector<LaunchTarget> &targets,
                                          int targetIndex,
@@ -2639,6 +2738,14 @@ namespace
                 if (selection.api == PE_GRAPHICS_API_DX12)
                     RenderValidationControls("dx12_validation", selection.validation.dx12CoreValidation);
 #endif
+
+                {
+                    const int activeIndex = FindLaunchTargetIndex(targets, selection.launchTarget);
+                    const bool isPlayer = activeIndex >= 0 && targets[activeIndex].kind == LaunchTargetKind::Player;
+                    ImGui::BeginDisabled(!isPlayer);
+                    RenderLiveProfilerControls(selection.liveProfiler);
+                    ImGui::EndDisabled();
+                }
 
                 const std::array<GpuAdapterPreferenceOption, 4> gpuOptions = GpuAdapterPreferenceOptions();
                 const int gpuIndex = FindGpuAdapterPreferenceOptionIndex(selection.gpuAdapterPreference);
@@ -2879,6 +2986,7 @@ namespace
         selection.player = selection.editor;
         selection.validation.vulkanCoreValidation = readCoreValidation(kVulkanValidationModeKey, kVulkanCoreValidationKey);
         selection.validation.dx12CoreValidation = readCoreValidation(kDx12ValidationModeKey, kDx12CoreValidationKey);
+        selection.liveProfiler = readRuntimeBool(kLiveProfilerKey);
         selection.launchTarget = currentLaunchTarget;
         selection.displayIndex = currentDisplayIndex;
         selection.gpuAdapterPreference = currentGpuAdapterPreference;
@@ -2907,6 +3015,7 @@ namespace
                 profile.startupScene,
                 selection.launchTarget,
                 selection.validation,
+                selection.liveProfiler,
                 selection.displayIndex,
                 selection.gpuAdapterPreference,
                 selection.presentModeOverride,
@@ -2940,7 +3049,7 @@ namespace
             return 1;
         }
 
-        if (!LaunchExternalTarget(targets[targetIndex], selectedApi, selection.displayIndex, error))
+        if (!LaunchExternalTarget(targets[targetIndex], selectedApi, selection.displayIndex, selection.liveProfiler, error))
         {
             pe::Log::Error(error);
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Phasma Launcher", error.c_str(), nullptr);
