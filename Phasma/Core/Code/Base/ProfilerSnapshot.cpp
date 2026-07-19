@@ -1,4 +1,5 @@
 #include "Base/ProfilerSnapshot.h"
+#include "API/Debug.h"
 #include "API/RHI.h"
 
 namespace pe
@@ -35,6 +36,8 @@ namespace pe
         d.cpuTotalMs = static_cast<float>(MILLI(ft.GetCpuTotal()));
         d.cpuUpdateMs = static_cast<float>(MILLI(ft.GetUpdatesStamp()));
         d.cpuDrawMs = static_cast<float>(MILLI(ft.GetCpuTotal() - ft.GetUpdatesStamp()));
+        d.renderDocAvailable = Debug::IsCaptureApiAvailable();
+        d.renderDocCaptureCount = Debug::GetNumCaptures();
 
         const SystemProcMem ram = RHII.GetSystemAndProcessMemory();
         const GpuMemorySnapshot gpu = RHII.GetGpuMemorySnapshot();
@@ -85,6 +88,9 @@ namespace pe
         std::snprintf(num, sizeof(num), "\"cpu_draw_ms\":%.3f,", cpuDrawMs);
         out += num;
         std::snprintf(num, sizeof(num), "\"gpu_total_ms\":%.3f,", gpuTotalMs);
+        out += num;
+        out += renderDocAvailable ? "\"renderdoc_available\":true," : "\"renderdoc_available\":false,";
+        std::snprintf(num, sizeof(num), "\"renderdoc_capture_count\":%u,", renderDocCaptureCount);
         out += num;
         out += "\"memory\":{";
         std::snprintf(num, sizeof(num), "\"ram_total_mb\":%llu,", (unsigned long long)ramTotalMb);
