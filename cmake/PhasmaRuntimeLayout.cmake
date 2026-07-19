@@ -137,6 +137,11 @@ function(pe_install_runtime_layout)
             RUNTIME DESTINATION "." COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
         )
     endif()
+    if(TARGET PhasmaExport)
+        install(TARGETS PhasmaExport
+            RUNTIME DESTINATION "." COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"
+        )
+    endif()
     if(TARGET PhasmaProfiler)
         install(TARGETS PhasmaProfiler
             RUNTIME DESTINATION "." COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}"

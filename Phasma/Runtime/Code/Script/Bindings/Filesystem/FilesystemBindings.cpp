@@ -1,5 +1,6 @@
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
+#include "Project/GamePack.h"
 
 namespace pe
 {
@@ -32,7 +33,8 @@ namespace pe
                     if (!IsUnderAssets(rootDir))
                         return result;
 
-                    if (!std::filesystem::exists(rootDir))
+                    const bool managedByPack = IsGamePackManagedAsset(rootDir);
+                    if (!managedByPack && !std::filesystem::exists(rootDir))
                         return result;
 
                     std::string queryLower = query;
@@ -40,24 +42,35 @@ namespace pe
                         c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 
                     int i = 1;
-                    for (const auto &entry : std::filesystem::recursive_directory_iterator(
-                             rootDir, std::filesystem::directory_options::skip_permission_denied))
+                    if (!managedByPack)
                     {
-                        if (!entry.is_regular_file())
-                            continue;
+                        for (const auto &entry : std::filesystem::recursive_directory_iterator(
+                                 rootDir, std::filesystem::directory_options::skip_permission_denied))
+                        {
+                            if (!entry.is_regular_file())
+                                continue;
 
-                        std::string name = pathToUtf8(entry.path().filename());
-                        std::string nameLower = name;
+                            std::string nameLower = pathToUtf8(entry.path().filename());
+                            for (auto &c : nameLower)
+                                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                            if (nameLower.find(queryLower) == std::string::npos)
+                                continue;
+
+                            std::string fullPath = pathToUtf8(entry.path());
+                            std::replace(fullPath.begin(), fullPath.end(), '\\', '/');
+                            result[i++] = fullPath;
+                            if (i > 50) break;
+                        }
+                    }
+
+                    for (const std::string &relative : ListGamePackAssets(rootDir))
+                    {
+                        std::string nameLower = std::filesystem::path(relative).filename().string();
                         for (auto &c : nameLower)
                             c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-
                         if (nameLower.find(queryLower) == std::string::npos)
                             continue;
-
-                        std::string fullPath = pathToUtf8(entry.path());
-                        std::replace(fullPath.begin(), fullPath.end(), '\\', '/');
-                        result[i++] = fullPath;
-
+                        result[i++] = pathToUtf8(std::filesystem::path(Path::Assets) / relative);
                         if (i > 50) break;
                     }
                     return result;
@@ -73,21 +86,45 @@ namespace pe
                     if (!IsUnderAssets(fpath))
                         return result;
 
-                    if (!std::filesystem::exists(fpath) || !std::filesystem::is_directory(fpath))
+                    const bool managedByPack = IsGamePackManagedAsset(fpath);
+                    std::set<std::string> fileNames;
+                    std::set<std::string> dirNames;
+                    if (!managedByPack && std::filesystem::is_directory(fpath))
+                    {
+                        for (const auto &entry : std::filesystem::directory_iterator(fpath))
+                        {
+                            std::string name = pathToUtf8(entry.path().filename());
+                            if (entry.is_directory())
+                                dirNames.insert(std::move(name));
+                            else
+                                fileNames.insert(std::move(name));
+                        }
+                    }
+
+                    std::string relativeRoot = pathToUtf8(fpath.lexically_relative(Path::Assets));
+                    std::replace(relativeRoot.begin(), relativeRoot.end(), '\\', '/');
+                    if (relativeRoot == ".")
+                        relativeRoot.clear();
+                    for (const std::string &relative : ListGamePackAssets(fpath))
+                    {
+                        std::string remainder = relativeRoot.empty() ? relative : relative.substr(relativeRoot.size() + 1);
+                        const size_t slash = remainder.find('/');
+                        if (slash == std::string::npos)
+                            fileNames.insert(std::move(remainder));
+                        else
+                            dirNames.insert(remainder.substr(0, slash));
+                    }
+                    if (fileNames.empty() && dirNames.empty())
                         return result;
 
                     sol::table files = lua.create_table();
                     sol::table dirs = lua.create_table();
-                    int fi = 1, di = 1;
-
-                    for (const auto &entry : std::filesystem::directory_iterator(fpath))
-                    {
-                        std::string name = pathToUtf8(entry.path().filename());
-                        if (entry.is_directory())
-                            dirs[di++] = name;
-                        else
-                            files[fi++] = name;
-                    }
+                    int fi = 1;
+                    for (const std::string &name : fileNames)
+                        files[fi++] = name;
+                    int di = 1;
+                    for (const std::string &name : dirNames)
+                        dirs[di++] = name;
 
                     std::string resolvedPath = pathToUtf8(fpath);
                     std::replace(resolvedPath.begin(), resolvedPath.end(), '\\', '/');
@@ -105,6 +142,12 @@ namespace pe
                     if (!IsUnderAssets(fpath))
                         return sol::nullopt;
 
+                    if (IsGamePackManagedAsset(fpath))
+                    {
+                        const std::optional<std::string> packed = ReadGamePackAsset(fpath);
+                        return packed ? sol::optional<std::string>(*packed) : sol::nullopt;
+                    }
+
                     if (!std::filesystem::exists(fpath))
                         return sol::nullopt;
 
@@ -121,7 +164,7 @@ namespace pe
 
                     std::filesystem::path fpath = ResolveAssetsPath(path);
 
-                    if (!IsUnderAssets(fpath))
+                    if (!IsUnderAssets(fpath) || IsGamePackManagedAsset(fpath))
                         return false;
 
                     // Create parent directories if needed

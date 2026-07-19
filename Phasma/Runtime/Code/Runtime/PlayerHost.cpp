@@ -5,6 +5,7 @@
 #include "API/RHI.h"
 #include "API/Surface.h"
 #include "Project/ProjectSelection.h"
+#include "Project/GamePack.h"
 #include "Camera/Camera.h"
 #include "Render/RuntimeSceneRenderer.h"
 #include "Scene/Scene.h"
@@ -694,6 +695,18 @@ namespace pe
 
             const ProjectSelection projectSelection = ResolveProjectSelection();
             ApplyProjectSelectionAssetsRoot(projectSelection);
+            const std::filesystem::path gamePackPath = std::filesystem::path(Path::Executable) / kGamePackFileName;
+            if (std::filesystem::exists(gamePackPath))
+            {
+                std::string packError;
+                if (!OpenGamePack(gamePackPath, &packError))
+                {
+                    PE_ERROR("%s", packError.c_str());
+                    return 1;
+                }
+                FileWatcher::SetEnabled(false);
+                PE_INFO("[Runtime] Loaded game pack: %s", gamePackPath.generic_string().c_str());
+            }
             RuntimeStartupSceneResolveOptions startupSceneOptions{};
             startupSceneOptions.allowEditorRestore = true;
             const RuntimeStartupSceneSelection startupScene =

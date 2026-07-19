@@ -3,6 +3,7 @@
 #include "Agent/AgentToolRegistry.h"
 #endif
 #include "Camera/Camera.h"
+#include "Project/GamePack.h"
 #include "Render/ScriptRenderPasses.h"
 #include "Scene/ModelAsset.h"
 #if defined(PE_ENABLE_ASSIMP)
@@ -286,6 +287,30 @@ namespace pe
         if (logSkip)
             PE_INFO("Skipped editor-only Lua script: %s", filePath.c_str());
         return false;
+    }
+
+    static sol::protected_function_result RunScriptFile(sol::state &lua,
+                                                        const std::string &path,
+                                                        const sol::environment &environment)
+    {
+        if (!IsGamePackManagedAsset(path))
+            return lua.safe_script_file(path, environment, sol::script_pass_on_error);
+
+        const std::optional<std::string> bytecode = ReadGamePackAsset(path);
+        if (bytecode)
+        {
+            return lua.safe_script(sol::string_view(bytecode->data(), bytecode->size()),
+                                   environment,
+                                   sol::script_pass_on_error,
+                                   "@" + path,
+                                   sol::load_mode::binary);
+        }
+
+        return lua.safe_script("error('packed script is missing')",
+                               environment,
+                               sol::script_pass_on_error,
+                               "@" + path,
+                               sol::load_mode::text);
     }
 
     static ScriptUpdateMode ParseScriptUpdateMode(std::string mode)
@@ -603,14 +628,15 @@ namespace pe
             // (e.g. Scripts/fly_camera_play.lua) by relative path from any project. The project copy wins
             // when present, so a project can still override the engine default.
             std::error_code ec;
-            if (!std::filesystem::exists(projectResolved, ec) && !Path::RuntimeAssets.empty())
+            if (!std::filesystem::exists(projectResolved, ec) && !HasGamePackAsset(projectResolved) &&
+                !Path::RuntimeAssets.empty())
             {
                 std::string rel = NormalizeSlashes(path);
                 if (rel.rfind("Assets/", 0) == 0 || rel.rfind("assets/", 0) == 0)
                     rel = rel.substr(7); // make it RuntimeAssets-relative (RuntimeAssets has no "Assets/" leaf)
                 const std::string runtimeResolved =
                     NormalizePath((std::filesystem::path(Path::RuntimeAssets) / rel).string());
-                if (std::filesystem::exists(runtimeResolved, ec))
+                if (std::filesystem::exists(runtimeResolved, ec) || HasGamePackAsset(runtimeResolved))
                     return runtimeResolved;
             }
             return projectResolved;
@@ -637,7 +663,7 @@ namespace pe
         RefreshNodeInstanceBindings(inst);
 
         // Execute the script file in this instance's private environment
-        auto result = m_lua.safe_script_file(inst.path, inst.env, sol::script_pass_on_error);
+        auto result = RunScriptFile(m_lua, inst.path, inst.env);
         if (!result.valid())
         {
             sol::error err = result;
@@ -1137,7 +1163,7 @@ namespace pe
                 continue; // also loaded from a directory scan (e.g. Scripts/Player) — don't double-run
 
             sol::environment env(m_lua, sol::create, m_lua.globals());
-            auto result = m_lua.safe_script_file(absPath, env, sol::script_pass_on_error);
+            auto result = RunScriptFile(m_lua, absPath, env);
             if (!result.valid())
             {
                 sol::error err = result;
@@ -1197,7 +1223,7 @@ namespace pe
         if (it == m_actionEnvs.end())
         {
             sol::environment env(m_lua, sol::create, m_lua.globals());
-            auto result = m_lua.safe_script_file(absPath, env, sol::script_pass_on_error);
+            auto result = RunScriptFile(m_lua, absPath, env);
             if (!result.valid())
             {
                 sol::error err = result;
@@ -1890,7 +1916,7 @@ namespace pe
         const std::string supportPath = NormalizePath((std::filesystem::path(Path::Assets) / "Scripts" / "tests" / "test_utils.lua").string());
         if (std::filesystem::exists(supportPath))
         {
-            auto supportResult = m_lua.safe_script_file(supportPath, env, sol::script_pass_on_error);
+            auto supportResult = RunScriptFile(m_lua, supportPath, env);
             if (!supportResult.valid())
             {
                 sol::error err = supportResult;
@@ -1901,7 +1927,7 @@ namespace pe
 
         for (const auto &filePath : normalizedPaths)
         {
-            auto loadResult = m_lua.safe_script_file(filePath, env, sol::script_pass_on_error);
+            auto loadResult = RunScriptFile(m_lua, filePath, env);
             if (!loadResult.valid())
             {
                 sol::error err = loadResult;
@@ -1949,25 +1975,39 @@ namespace pe
 
     void ScriptSystem::LoadScriptsFromDir(const std::string &dir, ScriptLifecycle lifecycle)
     {
-        if (dir.empty() || !std::filesystem::exists(dir))
+        if (dir.empty())
             return;
 
-        for (auto &file : std::filesystem::recursive_directory_iterator(dir))
+        std::vector<std::string> scriptPaths;
+        if (IsGamePackManagedAsset(dir))
         {
-            if (file.path().extension() != ".lua")
-                continue;
+            for (const std::string &relative : ListGamePackAssets(dir))
+            {
+                if (std::filesystem::path(relative).extension() == ".lua")
+                    scriptPaths.push_back(NormalizePath((std::filesystem::path(Path::Assets) / relative).string()));
+            }
+        }
+        else if (std::filesystem::exists(dir))
+        {
+            for (const auto &file : std::filesystem::recursive_directory_iterator(dir))
+            {
+                if (file.path().extension() == ".lua")
+                    scriptPaths.push_back(NormalizePath(file.path().string()));
+            }
+        }
 
-            std::string filePath = NormalizePath(file.path().string());
+        for (const std::string &filePath : scriptPaths)
+        {
             if (HasLoadedScriptPath(m_scripts, filePath))
                 continue;
 
-            if (lifecycle == ScriptLifecycle::Always &&
-                !ShouldLoadGlobalScript(file.path(), filePath, true))
+            if (lifecycle == ScriptLifecycle::Always && !HasGamePackAsset(filePath) &&
+                !ShouldLoadGlobalScript(filePath, filePath, true))
                 continue;
 
             sol::environment env(m_lua, sol::create, m_lua.globals());
 
-            auto result = m_lua.safe_script_file(filePath, env, sol::script_pass_on_error);
+            auto result = RunScriptFile(m_lua, filePath, env);
             if (!result.valid())
             {
                 sol::error err = result;
@@ -2006,6 +2046,9 @@ namespace pe
 
     void ScriptSystem::ScanForNewScripts()
     {
+        if (!FileWatcher::IsEnabled())
+            return;
+
         // Scan every 2 seconds
         double dt = FrameTimer::Instance().GetDelta();
         m_scanTimer += dt;
