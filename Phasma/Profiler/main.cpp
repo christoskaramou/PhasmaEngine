@@ -1,10 +1,13 @@
 // PhasmaProfiler — live viewer for ProfilerStreamServer (Player --profiler).
+#include "Base/Path.h"
 #include "Base/ProfilerStream.h"
 
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
 
 #include <rapidjson/document.h>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
 
 #include <SDL.h>
 #include <algorithm>
@@ -34,6 +37,7 @@ namespace
     constexpr size_t kMaxScopeRows = 65536;
     constexpr size_t kMaxCounterRows = 4096;
     constexpr size_t kStatWindow = 40;
+    constexpr size_t kMaxTraceEvents = 250000;
 
     constexpr ImVec4 kAccent = {0.20f, 0.68f, 0.96f, 1.0f};
     constexpr ImVec4 kCpuColor = {0.25f, 0.70f, 1.00f, 1.0f};
@@ -203,9 +207,9 @@ namespace
     bool CreateFontTexture(SDL_Renderer *renderer, SDL_Texture *&fontTexture)
     {
         ImGuiIO &io = ImGui::GetIO();
-        ImFontConfig fontConfig{};
-        fontConfig.SizePixels = 15.f;
-        io.Fonts->AddFontDefault(&fontConfig);
+        const std::string fontPath = pe::Path::ResolveAsset("Fonts/Inter-Regular.ttf");
+        if (!std::filesystem::exists(fontPath) || !io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 15.f))
+            io.Fonts->AddFontDefault();
 
         unsigned char *pixels = nullptr;
         int width = 0;
@@ -244,6 +248,15 @@ namespace
         float gpuTotalMs = 0.f;
     };
 
+    struct TraceEvent
+    {
+        std::string name;
+        double timestampUs = 0.0;
+        double durationUs = 0.0;
+        unsigned depth = 0;
+        unsigned track = 0; // 0 frame, 1 CPU, 2 GPU
+    };
+
     struct LiveFrame
     {
         float fps = 0.f;
@@ -253,6 +266,8 @@ namespace
         float cpuDrawMs = 0.f;
         float cpuScopeTotalMs = 0.f;
         float gpuTotalMs = 0.f;
+        uint32_t renderDocCaptureCount = 0;
+        bool renderDocAvailable = false;
         uint64_t ramTotalMb = 0;
         uint64_t ramUsedMb = 0;
         uint64_t ramProcessMb = 0;
@@ -304,10 +319,51 @@ namespace
         uint64_t packets = 0;
         uint64_t nextFrameId = 1;
         uint64_t pinnedFrameId = 0;
+        std::vector<TraceEvent> traceEvents;
+        uint64_t traceStartUs = 0;
+        uint64_t tracePackets = 0;
         bool hasData = false;
+        bool traceRecording = false;
+        bool traceFull = false;
+
+        void StartTrace()
+        {
+            traceEvents.clear();
+            traceStartUs = SDL_GetTicks64() * 1000;
+            tracePackets = 0;
+            traceRecording = true;
+            traceFull = false;
+        }
+
+        void CaptureTrace(const LiveFrame &frame)
+        {
+            if (!traceRecording)
+                return;
+
+            const size_t eventCount = 1 + frame.cpu.size() + frame.gpu.size();
+            if (traceEvents.size() + eventCount > kMaxTraceEvents)
+            {
+                traceRecording = false;
+                traceFull = true;
+                return;
+            }
+
+            const uint64_t nowUs = SDL_GetTicks64() * 1000;
+            const double elapsedUs = nowUs >= traceStartUs ? static_cast<double>(nowUs - traceStartUs) : 0.0;
+            const double frameStartUs = std::max(0.0, elapsedUs - frame.frameMs * 1000.0);
+            traceEvents.push_back({"Frame", frameStartUs, frame.frameMs * 1000.0, 0, 0});
+            for (const ScopeRow &scope : frame.cpu)
+                traceEvents.push_back({scope.name, frameStartUs + scope.startOffsetMs * 1000.0,
+                                       scope.curMs * 1000.0, scope.depth, 1});
+            for (const ScopeRow &scope : frame.gpu)
+                traceEvents.push_back({scope.name, frameStartUs + scope.startOffsetMs * 1000.0,
+                                       scope.curMs * 1000.0, scope.depth, 2});
+            tracePackets++;
+        }
 
         void Accept(LiveFrame frame, std::string json)
         {
+            CaptureTrace(frame);
             for (FrameSample &sample : frame.frameBatch)
             {
                 sample.id = nextFrameId++;
@@ -406,6 +462,10 @@ namespace
             ReadFloat(overview, "cpu_update_ms", frame.cpuUpdateMs);
             ReadFloat(overview, "cpu_draw_ms", frame.cpuDrawMs);
             ReadFloat(overview, "gpu_total_ms", frame.gpuTotalMs);
+            if (overview.HasMember("renderdoc_available") && overview["renderdoc_available"].IsBool())
+                frame.renderDocAvailable = overview["renderdoc_available"].GetBool();
+            if (overview.HasMember("renderdoc_capture_count") && overview["renderdoc_capture_count"].IsUint())
+                frame.renderDocCaptureCount = overview["renderdoc_capture_count"].GetUint();
             if (overview.HasMember("memory") && overview["memory"].IsObject())
             {
                 const auto &memory = overview["memory"];
@@ -480,9 +540,9 @@ namespace
         return targetFps > 0 ? 1000.f / static_cast<float>(targetFps) : 16.667f;
     }
 
-    void ItemTooltip(const char *text)
+    void ItemTooltip(const char *text, ImGuiHoveredFlags flags = ImGuiHoveredFlags_DelayShort)
     {
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+        if (ImGui::IsItemHovered(flags))
             ImGui::SetTooltip("%s", text);
     }
 
@@ -559,6 +619,98 @@ namespace
         return it == session.history.end() ? nullptr : &*it;
     }
 
+    size_t FindFrameIndex(const SessionData &session, uint64_t id)
+    {
+        for (size_t i = 0; i < session.history.size(); ++i)
+            if (session.history[i].id == id)
+                return i;
+        return session.history.size();
+    }
+
+    void PinPreviousHitch(SessionData &session, float budget)
+    {
+        size_t index = session.pinnedFrameId == 0 ? session.history.size()
+                                                  : FindFrameIndex(session, session.pinnedFrameId);
+        while (index > 0)
+        {
+            --index;
+            if (session.history[index].frameMs > budget)
+            {
+                session.pinnedFrameId = session.history[index].id;
+                return;
+            }
+        }
+    }
+
+    void PinNextHitch(SessionData &session, float budget)
+    {
+        size_t index = session.pinnedFrameId == 0 ? 0 : FindFrameIndex(session, session.pinnedFrameId) + 1;
+        for (; index < session.history.size(); ++index)
+        {
+            if (session.history[index].frameMs > budget)
+            {
+                session.pinnedFrameId = session.history[index].id;
+                return;
+            }
+        }
+    }
+
+    void DrawFrameNavigator(SessionData &session, int targetFps)
+    {
+        const size_t count = session.history.size();
+        const size_t selectedIndex = session.pinnedFrameId == 0 ? count : FindFrameIndex(session, session.pinnedFrameId);
+        const float budget = FrameBudgetMs(targetFps);
+
+        ImGui::BeginDisabled(count == 0 || selectedIndex == 0);
+        if (ImGui::SmallButton("|<"))
+            session.pinnedFrameId = session.history.front().id;
+        ItemTooltip("Select the oldest retained frame.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("<"))
+        {
+            const size_t index = selectedIndex < count ? selectedIndex - 1 : count - 1;
+            session.pinnedFrameId = session.history[index].id;
+        }
+        ItemTooltip("Select the previous retained frame.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(count == 0 || selectedIndex >= count - 1);
+        if (ImGui::SmallButton(">"))
+            session.pinnedFrameId = session.history[selectedIndex + 1].id;
+        ItemTooltip("Select the next retained frame.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(session.pinnedFrameId == 0);
+        if (ImGui::SmallButton(">| Live"))
+            session.pinnedFrameId = 0;
+        ItemTooltip("Return to the latest live frame.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::EndDisabled();
+
+        ImGui::SameLine(0.f, 18.f);
+        ImGui::BeginDisabled(count == 0);
+        if (ImGui::SmallButton("< Hitch"))
+            PinPreviousHitch(session, budget);
+        ItemTooltip("Jump backward to the previous frame over the selected frame budget.",
+                    ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::SameLine();
+        ImGui::BeginDisabled(session.pinnedFrameId == 0);
+        if (ImGui::SmallButton("Hitch >"))
+            PinNextHitch(session, budget);
+        ItemTooltip("Jump forward to the next frame over the selected frame budget.",
+                    ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::EndDisabled();
+        ImGui::EndDisabled();
+
+        ImGui::SameLine(0.f, 18.f);
+        if (session.pinnedFrameId == 0)
+            ImGui::TextColored(kGoodColor, "LIVE");
+        else
+            ImGui::Text("Frame #%llu", static_cast<unsigned long long>(session.pinnedFrameId));
+        ItemTooltip("Pinned frame summary. Detailed scope tables remain the latest streamed snapshot.");
+    }
+
     void DrawFrameChart(SessionData &session, int targetFps, bool showFrame, bool showCpu, bool showGpu)
     {
         const ImVec2 requested = {ImGui::GetContentRegionAvail().x, 230.f};
@@ -612,12 +764,38 @@ namespace
             return ImVec2{x, y};
         };
 
+        const float plotWidth = std::max(p1.x - p0.x, 1.f);
+        const float plotHeight = p1.y - p0.y;
+        auto valueY = [&](float value)
+        {
+            return p1.y - std::clamp(value / maxValue, 0.f, 1.f) * plotHeight;
+        };
+
         auto line = [&](auto getter, ImVec4 color)
         {
+            const size_t columns = std::min(count, static_cast<size_t>(std::max(1.f, std::floor(plotWidth))));
             std::vector<ImVec2> points;
-            points.reserve(count);
-            for (size_t i = 0; i < count; ++i)
-                points.push_back(point(i, getter(session.history[i])));
+            points.reserve(columns);
+            for (size_t column = 0; column < columns; ++column)
+            {
+                const size_t begin = column * count / columns;
+                const size_t end = std::max(begin + 1, (column + 1) * count / columns);
+                float minimum = std::numeric_limits<float>::max();
+                float maximum = 0.f;
+                float sum = 0.f;
+                for (size_t i = begin; i < std::min(end, count); ++i)
+                {
+                    const float value = getter(session.history[i]);
+                    minimum = std::min(minimum, value);
+                    maximum = std::max(maximum, value);
+                    sum += value;
+                }
+                const float x = columns > 1 ? p0.x + static_cast<float>(column) / static_cast<float>(columns - 1) * plotWidth
+                                            : p1.x;
+                if (end - begin > 1)
+                    draw->AddLine({x, valueY(minimum)}, {x, valueY(maximum)}, U32(WithAlpha(color, 0.28f)));
+                points.push_back({x, valueY(sum / static_cast<float>(end - begin))});
+            }
             if (points.size() == 1)
                 draw->AddCircleFilled(points.front(), 2.5f, U32(color));
             else
@@ -852,17 +1030,43 @@ namespace
         ItemTooltip("Show or hide GPU frame time in the history graph.");
         ImGui::SameLine();
         ImGui::TextDisabled("%zu frames retained", session.history.size());
-        ItemTooltip("Rendered-frame summaries kept for graphs and session statistics. Oldest frames are dropped at the history limit.");
-        if (session.pinnedFrameId != 0)
-        {
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Clear pin"))
-                session.pinnedFrameId = 0;
-            ItemTooltip("Unpin the selected graph frame and resume hover-only inspection.");
-        }
+        ItemTooltip("Rendered-frame summaries kept for graphs and session statistics. Dense history is reduced to a per-pixel average and min/max envelope so spikes remain visible without aliasing.");
+        DrawFrameNavigator(session, targetFps);
         DrawFrameChart(session, targetFps, showFrame, showCpu, showGpu);
 
         const float budget = FrameBudgetMs(targetFps);
+        const FrameSample *selectedFrame = session.pinnedFrameId == 0
+                                               ? (session.history.empty() ? nullptr : &session.history.back())
+                                               : FindFrame(session, session.pinnedFrameId);
+        if (selectedFrame)
+        {
+            const float budgetDelta = selectedFrame->frameMs - budget;
+            ImGui::SeparatorText(session.pinnedFrameId == 0 ? "Latest frame" : "Selected frame");
+            ItemTooltip(session.pinnedFrameId == 0
+                            ? "Summary of the newest retained rendered frame."
+                            : "Historical frame summary retained by the live stream. CPU/GPU scope tables below remain the latest detailed snapshot.");
+            if (ImGui::BeginTable("##selected_frame", 6, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_RowBg))
+            {
+                const std::array<std::pair<const char *, float>, 5> metrics = {
+                    std::pair{"FRAME", selectedFrame->frameMs}, std::pair{"CPU", selectedFrame->cpuTotalMs},
+                    std::pair{"GPU", selectedFrame->gpuTotalMs}, std::pair{"UPDATE", selectedFrame->cpuUpdateMs},
+                    std::pair{"DRAW", selectedFrame->cpuDrawMs}};
+                for (const auto &[label, value] : metrics)
+                {
+                    ImGui::TableNextColumn();
+                    ImGui::TextDisabled("%s", label);
+                    ImGui::TextColored(Heat(value / budget), "%.3f ms", value);
+                }
+                ImGui::TableNextColumn();
+                ImGui::TextDisabled("BUDGET");
+                if (budgetDelta > 0.f)
+                    ImGui::TextColored(kBadColor, "+%.3f ms HITCH", budgetDelta);
+                else
+                    ImGui::TextColored(kGoodColor, "%.3f ms headroom", -budgetDelta);
+                ImGui::EndTable();
+            }
+        }
+
         if (ImGui::BeginTable("##overview_columns", 2, ImGuiTableFlags_SizingStretchSame))
         {
             ImGui::TableNextColumn();
@@ -992,6 +1196,152 @@ namespace
         {
             ImGui::TreePop();
             openTree--;
+        }
+        ImGui::EndTable();
+    }
+
+    struct AggregatedScope
+    {
+        std::string name;
+        int firstIndex = -1;
+        size_t calls = 0;
+        float inclusiveMs = 0.f;
+        float selfMs = 0.f;
+        float maxMs = 0.f;
+    };
+
+    std::vector<AggregatedScope> AggregateScopes(const std::vector<ScopeRow> &rows, const char *filter)
+    {
+        std::vector<float> directChildMs(rows.size(), 0.f);
+        std::vector<int> parentStack;
+        parentStack.reserve(64);
+        for (int index = 0; index < static_cast<int>(rows.size()); ++index)
+        {
+            const size_t depth = std::min(static_cast<size_t>(rows[index].depth), parentStack.size());
+            parentStack.resize(depth);
+            if (!parentStack.empty())
+                directChildMs[parentStack.back()] += rows[index].curMs;
+            parentStack.push_back(index);
+        }
+
+        std::vector<AggregatedScope> result;
+        std::unordered_map<std::string, size_t> byName;
+        for (int index = 0; index < static_cast<int>(rows.size()); ++index)
+        {
+            const ScopeRow &row = rows[index];
+            if (!ContainsCaseInsensitive(row.name, filter))
+                continue;
+            const auto [it, inserted] = byName.try_emplace(row.name, result.size());
+            if (inserted)
+                result.push_back({row.name, index});
+            AggregatedScope &scope = result[it->second];
+            scope.calls++;
+            scope.inclusiveMs += row.curMs;
+            scope.selfMs += std::max(0.f, row.curMs - directChildMs[index]);
+            scope.maxMs = std::max(scope.maxMs, row.curMs);
+        }
+        return result;
+    }
+
+    void DrawAggregatedTimingTable(const char *id, const std::vector<ScopeRow> &rows, float totalMs,
+                                   const char *filter, int &selected)
+    {
+        if (rows.empty())
+        {
+            ImGui::TextDisabled("No timing scopes received.");
+            return;
+        }
+
+        std::vector<AggregatedScope> scopes = AggregateScopes(rows, filter);
+        if (scopes.empty())
+        {
+            ImGui::TextDisabled("No scopes match the filter.");
+            return;
+        }
+
+        const ImGuiTableFlags flags = ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg |
+                                      ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable |
+                                      ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY |
+                                      ImGuiTableFlags_Sortable | ImGuiTableFlags_NoSavedSettings;
+        if (!ImGui::BeginTable(id, 7, flags, {-FLT_MIN, ImGui::GetContentRegionAvail().y}))
+            return;
+
+        ImGui::TableSetupColumn("Scope", ImGuiTableColumnFlags_WidthStretch, 0.40f);
+        ImGui::TableSetupColumn("Calls", ImGuiTableColumnFlags_WidthFixed, 58.f);
+        ImGui::TableSetupColumn("Inclusive", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending,
+                                76.f);
+        ImGui::TableSetupColumn("Self", ImGuiTableColumnFlags_WidthFixed, 70.f);
+        ImGui::TableSetupColumn("Average", ImGuiTableColumnFlags_WidthFixed, 70.f);
+        ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthFixed, 70.f);
+        ImGui::TableSetupColumn("Share", ImGuiTableColumnFlags_WidthStretch, 0.22f);
+        ImGui::TableHeadersRow();
+
+        if (const ImGuiTableSortSpecs *sortSpecs = ImGui::TableGetSortSpecs(); sortSpecs && sortSpecs->SpecsCount > 0)
+        {
+            const ImGuiTableColumnSortSpecs &sort = sortSpecs->Specs[0];
+            std::stable_sort(scopes.begin(), scopes.end(), [&](const AggregatedScope &a, const AggregatedScope &b)
+                             {
+                                 int comparison = 0;
+                                 auto compare = [&](auto lhs, auto rhs)
+                                 {
+                                     comparison = lhs < rhs ? -1 : lhs > rhs ? 1
+                                                                              : 0;
+                                 };
+                                 switch (sort.ColumnIndex)
+                                 {
+                                 case 0:
+                                     comparison = a.name.compare(b.name);
+                                     break;
+                                 case 1:
+                                     compare(a.calls, b.calls);
+                                     break;
+                                 case 2:
+                                     compare(a.inclusiveMs, b.inclusiveMs);
+                                     break;
+                                 case 3:
+                                     compare(a.selfMs, b.selfMs);
+                                     break;
+                                 case 4:
+                                     compare(a.inclusiveMs / static_cast<float>(a.calls),
+                                             b.inclusiveMs / static_cast<float>(b.calls));
+                                     break;
+                                 case 5:
+                                     compare(a.maxMs, b.maxMs);
+                                     break;
+                                 default:
+                                     compare(a.inclusiveMs, b.inclusiveMs);
+                                     break;
+                                 }
+                                 if (comparison == 0)
+                                     comparison = a.name.compare(b.name);
+                                 return sort.SortDirection == ImGuiSortDirection_Ascending ? comparison < 0 : comparison > 0; });
+        }
+
+        totalMs = std::max(totalMs, 0.001f);
+        for (const AggregatedScope &scope : scopes)
+        {
+            const float share = scope.inclusiveMs / totalMs;
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::PushID(scope.firstIndex);
+            if (ImGui::Selectable(scope.name.c_str(), selected == scope.firstIndex, ImGuiSelectableFlags_SpanAllColumns))
+                selected = selected == scope.firstIndex ? -1 : scope.firstIndex;
+            ItemTooltip("Select the first matching occurrence; the selection is shared with Hierarchy and Timeline views.");
+            ImGui::PopID();
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("%zu", scope.calls);
+            ImGui::TableSetColumnIndex(2);
+            ImGui::TextColored(Heat(share), "%.3f", scope.inclusiveMs);
+            ItemTooltip("Inclusive time: this scope plus all nested child scopes, summed across matching calls.");
+            ImGui::TableSetColumnIndex(3);
+            ImGui::Text("%.3f", scope.selfMs);
+            ItemTooltip("Self time: inclusive time minus direct child-scope time.");
+            ImGui::TableSetColumnIndex(4);
+            ImGui::Text("%.3f", scope.inclusiveMs / static_cast<float>(scope.calls));
+            ImGui::TableSetColumnIndex(5);
+            ImGui::Text("%.3f", scope.maxMs);
+            ImGui::TableSetColumnIndex(6);
+            DrawMiniBar(share);
         }
         ImGui::EndTable();
     }
@@ -1137,24 +1487,28 @@ namespace
                        const std::unordered_map<std::string, ScopeStats> &stats, float totalMs,
                        char *filter, size_t filterSize, int &viewMode, float &zoomH, float &zoomV, int &selected)
     {
-        static const char *views[] = {"Timing table", "Timeline"};
+        static const char *views[] = {"Hierarchy", "Timeline", "Aggregated"};
         ImGui::SetNextItemWidth(140.f);
         ImGui::Combo("##view", &viewMode, views, IM_ARRAYSIZE(views));
-        ItemTooltip("Timing table shows hierarchy and rolling statistics. Timeline shows when each scope ran.");
+        ItemTooltip("Hierarchy preserves nesting and rolling statistics. Timeline shows when scopes ran. Aggregated groups repeated names and separates inclusive from self time.");
         ImGui::SameLine();
         ImGui::TextColored(std::strcmp(kind, "CPU") == 0 ? kCpuColor : kGpuColor, "%s %.3f ms", kind, totalMs);
-        if (viewMode == 0)
+        if (viewMode != 1)
         {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
             ImGui::InputTextWithHint("##filter", "Filter scopes...", filter, filterSize);
-            ItemTooltip("Filter scope names case-insensitively. Filtering flattens the hierarchy so every match remains visible.");
+            ItemTooltip(viewMode == 0
+                            ? "Filter scope names case-insensitively. Filtering flattens the hierarchy so every match remains visible."
+                            : "Filter aggregated scope names case-insensitively.");
         }
         ImGui::Separator();
         if (viewMode == 0)
             DrawTimingTable("##timings", rows, stats, totalMs, filter, selected);
-        else
+        else if (viewMode == 1)
             DrawTimeline("##timeline", rows, totalMs, zoomH, zoomV, selected);
+        else
+            DrawAggregatedTimingTable("##aggregated", rows, totalMs, filter, selected);
     }
 
     void DrawCounters(const SessionData &session, char *filter, size_t filterSize)
@@ -1252,6 +1606,71 @@ namespace
         return SaveTextFile(path, csv.str()) ? "Saved " + path : "Failed to save " + path;
     }
 
+    std::string SaveChromeTrace(const SessionData &session)
+    {
+        if (session.traceEvents.empty())
+            return "No recorded trace to save";
+
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        writer.StartObject();
+        writer.Key("displayTimeUnit");
+        writer.String("ms");
+        writer.Key("traceEvents");
+        writer.StartArray();
+
+        constexpr std::array<const char *, 3> trackNames = {"Frame", "CPU main thread", "GPU"};
+        for (unsigned track = 0; track < trackNames.size(); ++track)
+        {
+            writer.StartObject();
+            writer.Key("name");
+            writer.String("thread_name");
+            writer.Key("ph");
+            writer.String("M");
+            writer.Key("pid");
+            writer.Uint(1);
+            writer.Key("tid");
+            writer.Uint(track);
+            writer.Key("args");
+            writer.StartObject();
+            writer.Key("name");
+            writer.String(trackNames[track]);
+            writer.EndObject();
+            writer.EndObject();
+        }
+
+        constexpr std::array<const char *, 3> categories = {"frame", "cpu", "gpu"};
+        for (const TraceEvent &event : session.traceEvents)
+        {
+            writer.StartObject();
+            writer.Key("name");
+            writer.String(event.name.c_str(), static_cast<rapidjson::SizeType>(event.name.size()));
+            writer.Key("cat");
+            writer.String(categories[event.track]);
+            writer.Key("ph");
+            writer.String("X");
+            writer.Key("ts");
+            writer.Double(event.timestampUs);
+            writer.Key("dur");
+            writer.Double(event.durationUs);
+            writer.Key("pid");
+            writer.Uint(1);
+            writer.Key("tid");
+            writer.Uint(event.track);
+            writer.Key("args");
+            writer.StartObject();
+            writer.Key("depth");
+            writer.Uint(event.depth);
+            writer.EndObject();
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.EndObject();
+
+        const std::string path = TimestampedPath("trace", ".json");
+        return SaveTextFile(path, {buffer.GetString(), buffer.GetSize()}) ? "Saved " + path : "Failed to save " + path;
+    }
+
     float Percentile(std::vector<float> values, float percentile)
     {
         if (values.empty())
@@ -1309,7 +1728,8 @@ namespace
     }
 
     void DrawSessionTab(SessionData &session, int targetFps, const char *host, int port,
-                        bool connected, bool &autoConnect, bool &requestReconnect, std::string &notice)
+                        bool connected, pe::ProfilerStreamClient &client, int &renderDocFrameCount,
+                        bool &autoConnect, bool &requestReconnect, int &requestedTab, std::string &notice)
     {
         ImGui::SeparatorText("Connection");
         ImGui::TextColored(connected ? kGoodColor : kWarnColor, connected ? "CONNECTED" : "DISCONNECTED");
@@ -1338,6 +1758,35 @@ namespace
         }
         ItemTooltip("Drop the current connection and immediately connect again.");
 
+        ImGui::SeparatorText("RenderDoc GPU capture");
+        ItemTooltip("Request consecutive GPU frame captures from the connected Player through its existing RenderDoc API.");
+        ImGui::TextColored(session.live.renderDocAvailable ? kGoodColor : kWarnColor,
+                           session.live.renderDocAvailable ? "AVAILABLE" : "UNAVAILABLE");
+        ImGui::SameLine();
+        ImGui::TextDisabled("%u captures saved by Player", session.live.renderDocCaptureCount);
+        ItemTooltip("RenderDoc captures reported by this Player process since startup.");
+
+        const bool canCapture = connected && session.live.renderDocAvailable;
+        constexpr ImGuiHoveredFlags disabledTooltipFlags =
+            ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled;
+        ImGui::BeginDisabled(!canCapture);
+        ImGui::SetNextItemWidth(100.f);
+        ImGui::InputInt("Frames##renderdoc", &renderDocFrameCount);
+        renderDocFrameCount = std::clamp(renderDocFrameCount, 1, static_cast<int>(pe::kProfilerMaxRenderDocCaptureFrames));
+        ItemTooltip("Number of consecutive Player GPU frames to capture.", disabledTooltipFlags);
+        ImGui::SameLine();
+        if (ImGui::Button("Capture with RenderDoc"))
+        {
+            if (client.TriggerRenderDocCapture(static_cast<uint8_t>(renderDocFrameCount)))
+                notice = "Requested RenderDoc capture for " + std::to_string(renderDocFrameCount) + " frame(s)";
+            else
+                notice = "Failed to send RenderDoc capture request";
+        }
+        ItemTooltip("Trigger the Player's RenderDoc capture and open its replay UI.", disabledTooltipFlags);
+        ImGui::EndDisabled();
+        if (!session.live.renderDocAvailable)
+            ImGui::TextDisabled("Requires a debug Player built with PE_ENABLE_RENDERDOC_CAPTURE=ON and RenderDoc installed.");
+
         ImGui::SeparatorText("Session analysis");
         ItemTooltip("Statistics calculated from the retained rendered-frame history.");
         std::vector<float> frameTimes;
@@ -1349,6 +1798,7 @@ namespace
         const float p95 = Percentile(frameTimes, 0.95f);
         const float p99 = Percentile(frameTimes, 0.99f);
         const float worst = frameTimes.empty() ? 0.f : *std::max_element(frameTimes.begin(), frameTimes.end());
+        const float budget = FrameBudgetMs(targetFps);
 
         if (ImGui::BeginTable("##session_metrics", 5, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_RowBg))
         {
@@ -1368,14 +1818,106 @@ namespace
                 ImGui::TableNextColumn();
                 ImGui::TextDisabled("%s", label);
                 ItemTooltip(descriptions[i]);
-                ImGui::TextColored(Heat(value / FrameBudgetMs(targetFps)), "%.3f ms", value);
+                ImGui::TextColored(Heat(value / budget), "%.3f ms", value);
                 ItemTooltip(descriptions[i]);
             }
             ImGui::EndTable();
         }
         ImGui::TextDisabled("Frame-time distribution (%zu frames)", session.history.size());
         ItemTooltip("Histogram of retained frame times. Hover a bar for its time range and frame count.");
-        DrawHistogram(session.history, FrameBudgetMs(targetFps));
+        DrawHistogram(session.history, budget);
+
+        std::vector<const FrameSample *> slowFrames;
+        for (const FrameSample &sample : session.history)
+            if (sample.frameMs > budget)
+                slowFrames.push_back(&sample);
+        std::sort(slowFrames.begin(), slowFrames.end(), [](const FrameSample *a, const FrameSample *b)
+                  { return a->frameMs > b->frameMs; });
+        const size_t missCount = slowFrames.size();
+        if (slowFrames.size() > 10)
+            slowFrames.resize(10);
+
+        ImGui::SeparatorText("Budget misses");
+        ItemTooltip("Frames slower than the selected visualization budget, ranked by total frame time.");
+        const float missRate = session.history.empty() ? 0.f : static_cast<float>(missCount) / session.history.size() * 100.f;
+        ImGui::TextColored(missCount == 0 ? kGoodColor : kWarnColor, "%zu / %zu frames (%.1f%%) exceeded %.3f ms",
+                           missCount, session.history.size(), missRate, budget);
+        if (slowFrames.empty())
+        {
+            ImGui::TextDisabled("No retained frame exceeded the current budget.");
+        }
+        else if (ImGui::BeginTable("##slow_frames", 5,
+                                   ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg |
+                                       ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
+        {
+            ImGui::TableSetupColumn("Frame", ImGuiTableColumnFlags_WidthStretch, 0.30f);
+            ImGui::TableSetupColumn("Frame ms", ImGuiTableColumnFlags_WidthFixed, 80.f);
+            ImGui::TableSetupColumn("CPU ms", ImGuiTableColumnFlags_WidthFixed, 75.f);
+            ImGui::TableSetupColumn("GPU ms", ImGuiTableColumnFlags_WidthFixed, 75.f);
+            ImGui::TableSetupColumn("Over budget", ImGuiTableColumnFlags_WidthFixed, 90.f);
+            ImGui::TableHeadersRow();
+            for (const FrameSample *sample : slowFrames)
+            {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                const std::string label = "#" + std::to_string(sample->id);
+                ImGui::PushID(static_cast<int>(sample->id));
+                if (ImGui::Selectable(label.c_str(), session.pinnedFrameId == sample->id,
+                                      ImGuiSelectableFlags_SpanAllColumns))
+                {
+                    session.pinnedFrameId = sample->id;
+                    requestedTab = 0;
+                }
+                ItemTooltip("Pin this frame and open it in Overview.");
+                ImGui::PopID();
+                ImGui::TableSetColumnIndex(1);
+                ImGui::TextColored(kBadColor, "%.3f", sample->frameMs);
+                ImGui::TableSetColumnIndex(2);
+                ImGui::Text("%.3f", sample->cpuTotalMs);
+                ImGui::TableSetColumnIndex(3);
+                ImGui::Text("%.3f", sample->gpuTotalMs);
+                ImGui::TableSetColumnIndex(4);
+                ImGui::TextColored(kWarnColor, "+%.3f", sample->frameMs - budget);
+            }
+            ImGui::EndTable();
+        }
+
+        ImGui::SeparatorText("Trace recording");
+        ItemTooltip("Record streamed CPU/GPU scope timelines for Perfetto or chrome://tracing.");
+        ImGui::TextColored(session.traceRecording ? kBadColor : session.traceFull ? kWarnColor
+                                                                                  : kGoodColor,
+                           session.traceRecording ? "RECORDING" : session.traceFull ? "LIMIT REACHED"
+                                                                                    : "IDLE");
+        ImGui::SameLine();
+        ImGui::TextDisabled("%llu detailed packets   |   %zu / %zu events",
+                            static_cast<unsigned long long>(session.tracePackets), session.traceEvents.size(),
+                            kMaxTraceEvents);
+        ItemTooltip("Trace events are bounded in memory. Recording stops before an incomplete packet would exceed the limit.");
+        if (ImGui::Button(session.traceRecording ? "Stop trace" : "Start new trace"))
+        {
+            if (session.traceRecording)
+                session.traceRecording = false;
+            else
+                session.StartTrace();
+        }
+        ItemTooltip(session.traceRecording ? "Stop recording and keep the captured events for export."
+                                           : "Clear the previous trace and record detailed snapshots at the selected Sample refresh rate.");
+        ImGui::SameLine();
+        if (ImGui::Button("Export Chrome trace"))
+            notice = SaveChromeTrace(session);
+        ItemTooltip("Write Chrome Trace Event JSON for Perfetto or chrome://tracing.");
+        ImGui::SameLine();
+        if (ImGui::Button("Discard trace"))
+        {
+            session.traceEvents.clear();
+            session.tracePackets = 0;
+            session.traceRecording = false;
+            session.traceFull = false;
+            notice = "Trace discarded";
+        }
+        ItemTooltip("Stop recording and discard all currently captured trace events.");
+        ImGui::TextDisabled("Trace detail follows Sample refresh; use Per frame for continuous frame-by-frame tracing.");
+        ItemTooltip("Lower refresh rates sample detailed scope frames sparsely while retaining low profiler overhead.");
 
         ImGui::SeparatorText("Capture and export");
         ItemTooltip("Write the current detailed snapshot or retained frame history to disk.");
@@ -1506,6 +2048,7 @@ int main(int argc, char *argv[])
         pe::ProfilerRefreshRate::Hz60,
         pe::ProfilerRefreshRate::PerFrame,
     };
+    int renderDocFrameCount = 1;
     int requestedTab = -1;
     int cpuView = 0;
     int gpuView = 0;
@@ -1585,6 +2128,12 @@ int main(int argc, char *argv[])
         ImGui::SameLine();
         ImGui::TextDisabled("%s:%d", host, port);
         ItemTooltip("Player profiler stream address. The default is localhost port 9876.");
+        if (session.traceRecording)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(kBadColor, "REC");
+            ItemTooltip("Chrome trace recording is active. Stop or export it from the Session tab.");
+        }
 
         const float controlsWidth = 620.f;
         if (ImGui::GetContentRegionAvail().x > controlsWidth)
@@ -1627,15 +2176,16 @@ int main(int argc, char *argv[])
         DrawMetrics(session.live, targetFps);
         ImGui::Spacing();
 
+        const int pendingTab = requestedTab;
         if (ImGui::BeginTabBar("##profiler_tabs", ImGuiTabBarFlags_None))
         {
             const char *tabNames[] = {"Overview", "CPU", "GPU", "Counters", "Session"};
             const char *tabTooltips[] = {
-                "Live frame graph, frame composition, memory pressure, and current CPU/GPU hotspots.",
-                "CPU scope hierarchy, rolling statistics, and frame-relative timeline.",
-                "GPU timestamp hierarchy, rolling statistics, and frame-relative timeline.",
+                "Live frame graph, frame/hitch navigation, selected-frame summary, composition, memory pressure, and current hotspots.",
+                "CPU scope hierarchy, rolling statistics, timeline, and aggregated inclusive/self timings.",
+                "GPU timestamp hierarchy, rolling statistics, timeline, and aggregated inclusive/self timings.",
                 "Current PE_PROFILE_COUNTER values and their recent trends.",
-                "Connection controls, retained-frame statistics, histogram, capture, and export.",
+                "Connection controls, retained-frame statistics, histogram, ranked budget misses, capture, and export.",
             };
             for (int tab = 0; tab < IM_ARRAYSIZE(tabNames); ++tab)
             {
@@ -1658,8 +2208,8 @@ int main(int argc, char *argv[])
                 else
                 {
                     bool requestReconnect = false;
-                    DrawSessionTab(session, targetFps, host, port, client.IsConnected(), autoConnect,
-                                   requestReconnect, notice);
+                    DrawSessionTab(session, targetFps, host, port, client.IsConnected(), client,
+                                   renderDocFrameCount, autoConnect, requestReconnect, requestedTab, notice);
                     if (!autoConnect && client.IsConnected())
                     {
                         client.Disconnect();
@@ -1674,7 +2224,8 @@ int main(int argc, char *argv[])
                 }
                 ImGui::EndTabItem();
             }
-            requestedTab = -1;
+            if (requestedTab == pendingTab)
+                requestedTab = -1;
             ImGui::EndTabBar();
         }
 

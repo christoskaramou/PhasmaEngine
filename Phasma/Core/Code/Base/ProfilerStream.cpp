@@ -24,6 +24,10 @@ static bool WouldBlock(int err)
 {
     return err == WSAEWOULDBLOCK;
 }
+static bool ConnectInProgress(int err)
+{
+    return err == WSAEWOULDBLOCK || err == WSAEINPROGRESS;
+}
 #else
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -49,6 +53,10 @@ static int LastSocketError()
 static bool WouldBlock(int err)
 {
     return err == EAGAIN || err == EWOULDBLOCK;
+}
+static bool ConnectInProgress(int err)
+{
+    return err == EINPROGRESS || WouldBlock(err);
 }
 #endif
 
@@ -270,6 +278,18 @@ namespace pe
                 const auto rate = static_cast<ProfilerRefreshRate>(value);
                 m_publishIntervalSeconds.store(RefreshIntervalSeconds(rate), std::memory_order_relaxed);
             }
+            else if (value >= kProfilerRenderDocCaptureBase &&
+                     value < kProfilerRenderDocCaptureBase + kProfilerMaxRenderDocCaptureFrames)
+            {
+                const uint32_t frameCount = value - kProfilerRenderDocCaptureBase + 1;
+                if (!Debug::IsCaptureApiAvailable())
+                    Log::Warn("ProfilerStream: RenderDoc capture requested, but RenderDoc is not available");
+                else
+                {
+                    Log::Info("ProfilerStream: requesting RenderDoc capture for " + std::to_string(frameCount) + " frame(s)");
+                    Debug::TriggerMultiFrameCapture(frameCount);
+                }
+            }
         }
     }
 
@@ -383,13 +403,45 @@ namespace pe
             return false;
         }
 
-        if (connect(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0)
+        if (SetNonBlocking(fd) != 0)
         {
             CloseSocketFd(fd);
             return false;
         }
 
-        SetNonBlocking(fd);
+        if (connect(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0)
+        {
+            if (!ConnectInProgress(LastSocketError()))
+            {
+                CloseSocketFd(fd);
+                return false;
+            }
+
+            fd_set writeSet;
+            FD_ZERO(&writeSet);
+            FD_SET(fd, &writeSet);
+            // ponytail: the stream is loopback-only, so bound this UI-thread attempt instead of adding async state.
+            timeval timeout{0, 10000};
+            if (select(static_cast<int>(fd + 1), nullptr, &writeSet, nullptr, &timeout) <= 0)
+            {
+                CloseSocketFd(fd);
+                return false;
+            }
+
+            int connectError = 0;
+#if defined(PE_WIN32)
+            int optionLength = sizeof(connectError);
+#else
+            socklen_t optionLength = sizeof(connectError);
+#endif
+            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, reinterpret_cast<char *>(&connectError), &optionLength) != 0 ||
+                connectError != 0)
+            {
+                CloseSocketFd(fd);
+                return false;
+            }
+        }
+
         m_fd = ToStoredFd(fd);
         m_buf.clear();
         m_have = 0;
@@ -411,10 +463,20 @@ namespace pe
 
     bool ProfilerStreamClient::SetRefreshRate(ProfilerRefreshRate rate)
     {
+        return SendCommand(static_cast<uint8_t>(rate));
+    }
+
+    bool ProfilerStreamClient::TriggerRenderDocCapture(uint8_t frameCount)
+    {
+        frameCount = std::clamp<uint8_t>(frameCount, 1, kProfilerMaxRenderDocCaptureFrames);
+        return SendCommand(static_cast<uint8_t>(kProfilerRenderDocCaptureBase + frameCount - 1));
+    }
+
+    bool ProfilerStreamClient::SendCommand(uint8_t value)
+    {
         if (m_fd < 0)
             return false;
 
-        const uint8_t value = static_cast<uint8_t>(rate);
         const int sent = static_cast<int>(send(FromStoredFd(m_fd), reinterpret_cast<const char *>(&value), 1, 0));
         if (sent == 1)
             return true;

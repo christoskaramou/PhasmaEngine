@@ -21,6 +21,8 @@ namespace pe
         float cpuDrawMs = 0.f;
         float cpuScopeTotalMs = 0.f;
         float gpuTotalMs = 0.f;
+        uint32_t renderDocCaptureCount = 0;
+        bool renderDocAvailable = false;
 
         uint64_t ramTotalMb = 0;
         uint64_t ramUsedMb = 0;

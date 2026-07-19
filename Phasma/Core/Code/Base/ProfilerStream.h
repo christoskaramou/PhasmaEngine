@@ -15,9 +15,12 @@ namespace pe
         PerFrame,
     };
 
+    inline constexpr uint8_t kProfilerRenderDocCaptureBase = 0x80;
+    inline constexpr uint8_t kProfilerMaxRenderDocCaptureFrames = 64;
+
     // Loopback live profiler: Player/Editor pushes snapshot frames; PhasmaProfiler pulls them.
     // Server to client: little-endian uint32 length + UTF-8 JSON payload.
-    // Client to server: one ProfilerRefreshRate byte.
+    // Client to server: one-byte refresh or encoded RenderDoc capture command.
     // ponytail: one client; reconnect replaces; GPU timing on only while a client is connected.
     class ProfilerStreamServer
     {
@@ -82,11 +85,15 @@ namespace pe
 
         // Requests the Player's detailed-snapshot cadence. Non-blocking.
         bool SetRefreshRate(ProfilerRefreshRate rate);
+        // Requests 1..64 consecutive RenderDoc frames from the Player. Non-blocking.
+        bool TriggerRenderDocCapture(uint8_t frameCount);
 
         // Non-blocking: returns true when a full frame was read into outJson.
         bool TryRecvFrame(std::string &outJson);
 
     private:
+        bool SendCommand(uint8_t value);
+
         std::intptr_t m_fd = -1;
         std::vector<uint8_t> m_buf;
         size_t m_have = 0;
