@@ -67,6 +67,7 @@ option(PE_BUILD_EDITOR "Build the editor host and editor module" ${PE_DESKTOP_TA
 option(PE_BUILD_LAUNCHER "Build the desktop launcher" ${PE_DESKTOP_TARGETS_DEFAULT})
 option(PE_BUILD_MCP "Build the MCP server library" ${PE_DESKTOP_TARGETS_DEFAULT})
 option(PE_BUILD_PLAYER "Build the standalone player host" ON)
+option(PE_BUILD_EXPORTER "Build the desktop game export helper" ${PE_DESKTOP_TARGETS_DEFAULT})
 option(PE_BUILD_PROFILER "Build the live PhasmaProfiler viewer" ${PE_DESKTOP_TARGETS_DEFAULT})
 option(PE_LAUNCHER_DEPENDS_ON_CHILD_TARGETS "Make PhasmaLauncher build PhasmaEditor and PhasmaPlayer first" OFF)
 option(PE_WEBGPU "Build PhasmaWebGPU WebGPU abstraction layer" ${PE_DESKTOP_TARGETS_DEFAULT})
@@ -277,6 +278,10 @@ endif()
 
 # Shared project/runtime contract used by editor today and future player hosts.
 add_subdirectory(Phasma/Runtime)
+
+if(PE_BUILD_EXPORTER AND NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
+    add_subdirectory(Phasma/Export)
+endif()
 
 if(PE_BUILD_PLAYER)
     # Standalone player host over PhasmaRuntime.

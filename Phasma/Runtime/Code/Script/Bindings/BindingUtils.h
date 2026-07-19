@@ -6,13 +6,14 @@ namespace pe
     static bool IsUnderAssets(const std::filesystem::path &p)
     {
         std::error_code ec;
-        std::string normalized = std::filesystem::weakly_canonical(p, ec).string();
+        std::filesystem::path normalized = std::filesystem::weakly_canonical(p, ec);
         if (ec)
-            normalized = p.lexically_normal().string();
-        std::string assetsNorm = std::filesystem::weakly_canonical(Path::Assets, ec).string();
+            normalized = std::filesystem::absolute(p).lexically_normal();
+        std::filesystem::path assets = std::filesystem::weakly_canonical(Path::Assets, ec);
         if (ec)
-            assetsNorm = std::filesystem::path(Path::Assets).lexically_normal().string();
-        return normalized.find(assetsNorm) == 0;
+            assets = std::filesystem::absolute(Path::Assets).lexically_normal();
+        const std::filesystem::path relative = normalized.lexically_relative(assets);
+        return relative.empty() ? normalized == assets : !relative.is_absolute() && *relative.begin() != "..";
     }
 
     // Resolve a user-supplied path to an absolute path under Assets/.

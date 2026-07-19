@@ -143,6 +143,20 @@ Path resolution rules:
 
 After resolving the active project, editor and player hosts apply the selected assets root to `Path::Assets` before registering file watchers, resolving startup scenes, loading scripts, or creating render resources. Manifest projects use the manifest `assets` directory; legacy no-manifest projects keep treating the selected `project_path` as the assets root.
 
+## Game export
+
+`PhasmaExport` creates a standalone desktop game directory from any manifest project:
+
+```powershell
+PhasmaExport.exe --project C:\path\to\MyProject --output C:\path\to\MyGame [--force]
+```
+
+The exporter copies the minimal player runtime plus renderer-facing project and engine assets. Project `Assets/Scripts/`, project `Assets/Data/`, and engine `RuntimeAssets/Scripts/` are written into `game.pepak`; Lua files are compiled to Lua 5.4 bytecode before packing, so the export contains no loose `.lua` source. Bytecode debug metadata is retained because sol2 resolves the chunk `_ENV` upvalue by name. `Assets/Save`, `Assets/Agent`, editor scripts, test scripts, and scripts marked `phasma: editor-only` are excluded by default. Saves remain ordinary writable files created below `Assets/Save` at runtime.
+
+A project can add `.phasmaexportignore` at its root. Each non-comment line is a project-relative file or directory prefix such as `Assets/Skyboxes`; absolute paths and parent traversal are rejected. The exporter builds in a temporary sibling directory, verifies every packed entry after writing, and refuses to replace an existing output unless `--force` is present.
+
+When `PhasmaPlayer` finds `game.pepak` beside the executable, it verifies the pack before startup, serves managed script/data reads from it, rejects loose overrides and writes into those packed namespaces, and disables development file watchers. Renderer-facing assets remain loose in this first format so the existing renderer and resource loaders need no parallel virtual-filesystem path. The pack checksum detects corruption and casual edits; it is not cryptographic signing or DRM.
+
 ## Engine, editor, and project assets
 
 Asset content is split across three roots, each resolved by `Path` at startup:
