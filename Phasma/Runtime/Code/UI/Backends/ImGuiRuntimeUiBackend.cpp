@@ -27,6 +27,7 @@
 #include "imgui_internal.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_vulkan.h"
+#include <unordered_set>
 
 namespace pe
 {
@@ -87,13 +88,19 @@ namespace pe
                     {
                         const float fontSize = 16.0f;
                         const ImWchar *ranges = io.Fonts->GetGlyphRangesGreek();
-                        const std::filesystem::path dejaVu(Path::ResolveAsset("Fonts/DejaVuSans.ttf"));
-                        const std::filesystem::path inter(Path::ResolveAsset("Fonts/Inter-Regular.ttf"));
-                        ImFont *font = nullptr;
-                        if (std::filesystem::exists(dejaVu))
-                            font = io.Fonts->AddFontFromFileTTF(dejaVu.string().c_str(), fontSize, nullptr, ranges);
-                        if (!font && std::filesystem::exists(inter))
-                            font = io.Fonts->AddFontFromFileTTF(inter.string().c_str(), fontSize, nullptr, ranges);
+                        auto addFont = [&](const char *relative) -> ImFont *
+                        {
+                            FileSystem file(Path::ResolveAsset(relative), std::ios::in | std::ios::binary);
+                            if (!file.IsOpen() || file.Size() == 0)
+                                return nullptr;
+                            const std::vector<uint8_t> bytes = file.ReadAllBytes();
+                            void *data = IM_ALLOC(bytes.size()); // atlas takes ownership
+                            std::memcpy(data, bytes.data(), bytes.size());
+                            return io.Fonts->AddFontFromMemoryTTF(data, static_cast<int>(bytes.size()), fontSize, nullptr, ranges);
+                        };
+                        ImFont *font = addFont("Fonts/DejaVuSans.ttf");
+                        if (!font)
+                            font = addFont("Fonts/Inter-Regular.ttf");
                         if (font)
                             io.FontDefault = font;
                     }
@@ -172,8 +179,19 @@ namespace pe
                 if (!m_initialized || !m_context)
                     return false;
 
+                if (event.type == SDL_FINGERUP)
+                    m_touchFingers.erase(event.tfinger.fingerId);
+
                 if (!m_frameInfo.inputEnabled)
                     return false;
+
+                if (event.type == SDL_FINGERDOWN)
+                {
+                    const bool secondary = !m_touchFingers.empty();
+                    m_touchFingers.insert(event.tfinger.fingerId);
+                    if (secondary)
+                        m_pendingTouchClicks.push_back(MapFingerToSurface(event.tfinger.x, event.tfinger.y));
+                }
 
                 ScopedImGuiContext contextScope(m_context);
                 SDL_Event mappedEvent = MapEventToSurface(event);
@@ -374,6 +392,7 @@ namespace pe
                     m_showFrameGraph = !m_showFrameGraph;
                 DrawFrameTimeOverlay();
                 ImGui::Render();
+                m_pendingTouchClicks.clear();
                 m_frameOpen = false;
                 m_rendered = true;
             }
@@ -418,6 +437,8 @@ namespace pe
             void ResetInputState() override
             {
                 m_activeDragWidget.clear();
+                m_touchFingers.clear();
+                m_pendingTouchClicks.clear();
                 if (!m_context)
                     return;
 
@@ -794,8 +815,6 @@ namespace pe
 
                 ImGui::SetNextWindowPos(ImVec2(quad.x, quad.y), ImGuiCond_Always);
                 ImGui::SetNextWindowSize(size, ImGuiCond_Always);
-                if (quad.bringToFront)
-                    ImGui::SetNextWindowFocus();
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
@@ -843,6 +862,24 @@ namespace pe
                 state.dragDeltaY = dragDelta.y;
                 if (state.dragReleased)
                     m_activeDragWidget.clear();
+
+                if (!quad.noInput)
+                {
+                    for (auto it = m_pendingTouchClicks.begin(); it != m_pendingTouchClicks.end();)
+                    {
+                        if (it->x >= pos.x && it->x <= max.x && it->y >= pos.y && it->y <= max.y)
+                        {
+                            state.clicked = true;
+                            state.mouseX = it->x;
+                            state.mouseY = it->y;
+                            it = m_pendingTouchClicks.erase(it);
+                        }
+                        else
+                        {
+                            ++it;
+                        }
+                    }
+                }
 
                 DrawQuadVisual(quad, pos, max, size, state);
                 return state;
@@ -1184,6 +1221,24 @@ namespace pe
                        m_frameInfo.inputRectHeight;
             }
 
+            ImVec2 MapFingerToSurface(float x, float y) const
+            {
+                if (HasInputRect())
+                {
+                    int windowWidth = 0;
+                    int windowHeight = 0;
+                    SDL_GetWindowSize(RHII.GetWindow(), &windowWidth, &windowHeight);
+                    return ImVec2(MapXToSurface(x * static_cast<float>(windowWidth)),
+                                  MapYToSurface(y * static_cast<float>(windowHeight)));
+                }
+
+                const float width = m_frameInfo.width > 0 ? static_cast<float>(m_frameInfo.width)
+                                                          : static_cast<float>(RHII.GetWidth());
+                const float height = m_frameInfo.height > 0 ? static_cast<float>(m_frameInfo.height)
+                                                            : static_cast<float>(RHII.GetHeight());
+                return ImVec2(x * width, y * height);
+            }
+
             SDL_Event MapEventToSurface(const SDL_Event &event) const
             {
                 if (!HasInputRect())
@@ -1334,6 +1389,8 @@ namespace pe
             ImVec2 m_nextScreenPos = ImVec2(runtime_ui_imgui::kViewportPadding, runtime_ui_imgui::kViewportPadding);
             std::string m_currentScreenId;
             std::string m_activeDragWidget;
+            std::unordered_set<SDL_FingerID> m_touchFingers;
+            std::vector<ImVec2> m_pendingTouchClicks;
             PeGraphicsApi m_api = PE_GRAPHICS_API_VULKAN;
             bool m_initialized = false;
             bool m_platformInitialized = false;

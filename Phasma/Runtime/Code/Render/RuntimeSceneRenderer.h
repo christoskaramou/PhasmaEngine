@@ -19,7 +19,7 @@ namespace pe
         void Init(CommandBuffer *cmd);
         void Update();
         void Draw();
-        void Resize(uint32_t width, uint32_t height);
+        void Resize(uint32_t width, uint32_t height, bool recreateSurface = false);
         void Destroy();
         void RequestScreenshot(std::string path = {});
         void PollShaders(std::optional<size_t> hash = std::nullopt);

@@ -5,7 +5,7 @@
 #include "API/RHI.h"
 #include "API/Surface.h"
 #include "Project/ProjectSelection.h"
-#include "Project/GamePack.h"
+#include "Base/GamePack.h"
 #include "Camera/Camera.h"
 #include "Render/RuntimeSceneRenderer.h"
 #include "Scene/Scene.h"
@@ -153,7 +153,7 @@ namespace pe
 
             if (startupScene.IsExplicitEmpty())
                 PE_INFO("[Runtime] Startup scene: none (runtime settings)");
-            else if (!startupScene.scenePath.empty() && std::filesystem::exists(startupScene.scenePath))
+            else if (!startupScene.scenePath.empty() && AssetFileExists(startupScene.scenePath))
                 PE_INFO("[Runtime] Startup scene: %s (%s)",
                         startupScene.scenePath.generic_string().c_str(),
                         RuntimeStartupSceneSourceName(startupScene.source));
@@ -467,7 +467,17 @@ namespace pe
                 if (!ProcessEvents())
                     return false;
 
-                if (m_resizePending || WindowDrawableExtentChanged())
+                if (m_surfaceRecreatePending)
+                {
+                    ResizeSwapchain(true);
+                    if (m_surfaceRecreatePending)
+                    {
+                        profilerFrame.Close();
+                        SDL_Delay(16);
+                        return true;
+                    }
+                }
+                else if (m_resizePending || WindowDrawableExtentChanged())
                     ResizeSwapchain();
 
                 if (IsWindowMinimized(m_window))
@@ -574,6 +584,20 @@ namespace pe
                     if (event.type == SDL_QUIT)
                         return false;
 
+                    if (event.type == SDL_APP_WILLENTERBACKGROUND)
+                    {
+                        if (HasGlobalSystem<ScriptSystem>())
+                            GetGlobalSystem<ScriptSystem>()->OnAppBackgrounded();
+                        PlayerSetScriptPaused(true);
+                        PE_INFO("[Runtime] App backgrounded");
+                    }
+                    else if (event.type == SDL_APP_DIDENTERFOREGROUND)
+                    {
+                        m_surfaceRecreatePending = true;
+                        PlayerSetScriptPaused(false);
+                        PE_INFO("[Runtime] App foregrounded; recreating Android surface");
+                    }
+
                     if (!uiCaptured && event.type == SDL_MOUSEMOTION)
                         InputState::AddMouseMotion(event.motion.xrel, event.motion.yrel);
 
@@ -657,14 +681,15 @@ namespace pe
                 return true;
             }
 
-            void ResizeSwapchain()
+            void ResizeSwapchain(bool recreateSurface = false)
             {
                 const WindowDrawableExtent extent = GetWindowDrawableExtent(m_window);
                 if (!extent.IsValid())
                     return;
 
-                m_renderer.Resize(static_cast<uint32_t>(extent.width), static_cast<uint32_t>(extent.height));
+                m_renderer.Resize(static_cast<uint32_t>(extent.width), static_cast<uint32_t>(extent.height), recreateSurface);
                 m_resizePending = false;
+                m_surfaceRecreatePending = false;
             }
 
             SDL_Window *m_window = nullptr;
@@ -673,6 +698,7 @@ namespace pe
             MainThreadActionQueue *m_mcpActions = nullptr;
             ProfilerStreamServer *m_profilerStream = nullptr;
             bool m_resizePending = false;
+            bool m_surfaceRecreatePending = false;
             double m_fpsAccumSeconds = 0.0;
             uint32_t m_fpsAccumFrames = 0;
         };
@@ -780,7 +806,7 @@ namespace pe
 
                 if (!startupScene.IsExplicitEmpty() && !startupScene.scenePath.empty())
                 {
-                    if (std::filesystem::exists(startupScene.scenePath))
+                    if (AssetFileExists(startupScene.scenePath))
                     {
                         PE_INFO("[Runtime] Loading startup scene in player: %s",
                                 startupScene.scenePath.generic_string().c_str());

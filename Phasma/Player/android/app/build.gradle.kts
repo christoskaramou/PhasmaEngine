@@ -81,27 +81,13 @@ val stagePhasmaAssets by tasks.registering(Sync::class) {
     from(prebakedModelsDir) {
         into("Assets/Models")
     }
-    // AgainstTheHero game project (sibling repo): stage its Lua scripts + sprite
-    // textures so the APK runs the actual game (ath_bootstrap.pescene attaches
-    // Scripts/Player/ath_android_boot.lua), not just engine demo scenes. Old
-    // archived modes are excluded to keep the APK lean.
-    val athAssets = engineRoot.resolve("../PhasmaProjects/AgainstTheHero/Assets")
+    // AgainstTheHero game project (sibling repo): stage the complete runtime asset tree.
+    // Old archived modes and the desktop-only entry script stay excluded.
+    val athAssets = engineRoot.resolve("../AgainstTheHero/Assets")
     if (athAssets.isDirectory) {
-        from(athAssets.resolve("Scripts")) {
-            into("Assets/Scripts")
-            // old/ = archived modes. against_the_hero.lua is the desktop MENU entry;
-            // the engine file-level auto-runs every Player/*.lua, so shipping it would
-            // boot the menu ON TOP of the arena (ath_android_boot is the Android entry).
-            exclude("old/**", "Player/against_the_hero.lua")
-        }
-        from(athAssets.resolve("Textures")) {
-            into("Assets/Textures")
-        }
-        // Scene-driven flow: intro -> hero_select -> map -> game (authored runtime_ui
-        // HUD + node scripts). The startup scene (editor_config last_scene) is
-        // intro.pescene; node scripts (flow.lua, game_boot.lua, hud/*) drive the rest.
-        from(athAssets.resolve("Scenes")) {
-            into("Assets/Scenes")
+        from(athAssets) {
+            into("Assets")
+            exclude("Scripts/old/**", "Scripts/Player/against_the_hero.lua")
         }
     } else {
         logger.warn("AgainstTheHero project not found at $athAssets — APK will lack the game.")
@@ -188,7 +174,8 @@ android {
 }
 
 tasks.configureEach {
-    if (name.startsWith("merge") && name.endsWith("Assets")) {
+    if ((name.startsWith("merge") && name.endsWith("Assets")) ||
+        name.contains("lint", ignoreCase = true)) {
         dependsOn(stagePhasmaAssets)
     }
 }

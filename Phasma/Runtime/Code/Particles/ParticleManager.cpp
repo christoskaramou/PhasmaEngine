@@ -403,15 +403,15 @@ namespace pe
         std::filesystem::path path(pathInput);
 
         // Try to find the file
-        if (!std::filesystem::exists(path))
+        if (!AssetFileExists(path))
         {
             // Try relative to Assets
             path = std::filesystem::path(Path::Assets) / pathInput;
-            if (!std::filesystem::exists(path))
+            if (!AssetFileExists(path))
             {
                 // Try relative to Particles
                 path = std::filesystem::path(Path::Assets) / "Particles" / pathInput;
-                if (!std::filesystem::exists(path))
+                if (!AssetFileExists(path))
                 {
                     PE_ERROR("[Particles] LoadTexture: File not found: %s", pathInput.c_str());
                     return 0;

@@ -170,7 +170,7 @@ $env:PHASMA_API = "vulkan"
 foreach ($bakeScene in $bakeScenes) {
     Set-Content -Path $editorConfig -Value (@{ last_scene = $bakeScene } | ConvertTo-Json -Compress) -Encoding utf8
     Write-Host "[bake] launching PhasmaPlayer scene=$bakeScene (PHASMA_SPIRV_TARGET=1.2, --api vulkan); waiting ${WaitSeconds}s for shader compile..."
-    $proc = Start-Process $player -ArgumentList '--api', 'vulkan' -WorkingDirectory $binDir -PassThru
+    $proc = Start-Process $player -ArgumentList '--api', 'vulkan' -WorkingDirectory $binDir -WindowStyle Hidden -PassThru
     Start-Sleep -Seconds $WaitSeconds
     if (-not $proc.HasExited) {
         Stop-Process -Id $proc.Id -Force

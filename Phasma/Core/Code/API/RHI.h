@@ -212,6 +212,7 @@ namespace pe
         void CreateDevice();
         void CreateAllocator();
         void InitSwapchain();
+        void RecreateSurface();
         void CreateSwapchain(Surface *surface);
         void CreateDescriptorPool(uint32_t maxDescriptorSets);
         void CreateGlobalDescriptors();

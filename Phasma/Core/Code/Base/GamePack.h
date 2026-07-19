@@ -11,6 +11,7 @@ namespace pe
     };
 
     bool OpenGamePack(const std::filesystem::path &path, std::string *error = nullptr);
+    [[nodiscard]] bool AssetFileExists(const std::filesystem::path &path); // on disk or in the game pack
     void CloseGamePack();
     [[nodiscard]] bool HasGamePack();
     [[nodiscard]] bool HasGamePackAsset(const std::filesystem::path &path);

@@ -309,9 +309,8 @@ namespace pe
                     Scene *sc = GetActiveScene();
                     if (!sc) return sol::make_object(lua, sol::nil);
 
-                    std::error_code ec;
                     std::filesystem::path resolved = path;
-                    if (!std::filesystem::exists(resolved, ec))
+                    if (!AssetFileExists(resolved))
                         resolved = Path::ResolveAsset(path);
 
                     NodeId *parentNode = (parent && parent->IsValid(*sc)) ? parent->nodeId : nullptr;

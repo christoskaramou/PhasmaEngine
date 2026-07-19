@@ -6,7 +6,7 @@ namespace pe
     // Parse includes recursively and return the full code
     std::string ShaderCache::ParseShader(const std::string &sourcePath)
     {
-        PE_ERROR_IF(!std::filesystem::exists(sourcePath), std::string("file does not exist: " + sourcePath).c_str());
+        PE_ERROR_IF(!AssetFileExists(sourcePath), std::string("file does not exist: " + sourcePath).c_str());
 
         std::filesystem::path path(sourcePath);
         FileSystem file(path.string(), std::ios::in | std::ios::ate);

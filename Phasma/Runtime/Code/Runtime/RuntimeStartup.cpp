@@ -137,13 +137,13 @@ namespace pe
         if (selection.scenePath.empty())
             return out;
 
-        std::ifstream sceneFile(selection.scenePath);
-        if (!sceneFile)
+        FileSystem sceneFile(selection.scenePath.string(), std::ios::in | std::ios::binary);
+        if (!sceneFile.IsOpen())
             return out;
 
-        rapidjson::IStreamWrapper stream(sceneFile);
+        const std::string sceneText = sceneFile.ReadAll();
         rapidjson::Document scene;
-        scene.ParseStream(stream);
+        scene.Parse(sceneText.c_str(), sceneText.size());
         if (scene.HasParseError() || !scene.IsObject())
             return out;
 

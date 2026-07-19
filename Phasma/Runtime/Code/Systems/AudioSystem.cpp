@@ -11,6 +11,122 @@
 
 namespace pe
 {
+    namespace
+    {
+        // miniaudio VFS that serves game-pack audio from memory and delegates everything else
+        // to the stock file IO. Installed unconditionally; without a pack every open falls through.
+        struct PackVfs
+        {
+            ma_vfs_callbacks cb{};
+            ma_default_vfs fallback{};
+        };
+
+        struct PackVfsFile
+        {
+            std::string data; // packed payload; empty data + fallback handle = loose file
+            size_t cursor = 0;
+            ma_vfs_file fallback = nullptr;
+        };
+
+        ma_vfs *FallbackVfs(ma_vfs *pVFS)
+        {
+            return reinterpret_cast<ma_vfs *>(&reinterpret_cast<PackVfs *>(pVFS)->fallback);
+        }
+
+        ma_result PackVfsOpen(ma_vfs *pVFS, const char *pFilePath, ma_uint32 openMode, ma_vfs_file *pFile)
+        {
+            if ((openMode & MA_OPEN_MODE_READ) != 0 && IsGamePackManagedAsset(pFilePath))
+            {
+                std::optional<std::string> data = ReadGamePackAsset(pFilePath);
+                if (!data)
+                    return MA_DOES_NOT_EXIST;
+                auto *file = new PackVfsFile();
+                file->data = std::move(*data);
+                *pFile = file;
+                return MA_SUCCESS;
+            }
+
+            ma_vfs_file inner = nullptr;
+            const ma_result result = ma_vfs_open(FallbackVfs(pVFS), pFilePath, openMode, &inner);
+            if (result != MA_SUCCESS)
+                return result;
+            auto *file = new PackVfsFile();
+            file->fallback = inner;
+            *pFile = file;
+            return MA_SUCCESS;
+        }
+
+        ma_result PackVfsClose(ma_vfs *pVFS, ma_vfs_file file)
+        {
+            auto *f = static_cast<PackVfsFile *>(file);
+            const ma_result result = f->fallback ? ma_vfs_close(FallbackVfs(pVFS), f->fallback) : MA_SUCCESS;
+            delete f;
+            return result;
+        }
+
+        ma_result PackVfsRead(ma_vfs *pVFS, ma_vfs_file file, void *pDst, size_t sizeInBytes, size_t *pBytesRead)
+        {
+            auto *f = static_cast<PackVfsFile *>(file);
+            if (f->fallback)
+                return ma_vfs_read(FallbackVfs(pVFS), f->fallback, pDst, sizeInBytes, pBytesRead);
+
+            const size_t remaining = f->data.size() - std::min(f->cursor, f->data.size());
+            const size_t count = std::min(sizeInBytes, remaining);
+            std::memcpy(pDst, f->data.data() + f->cursor, count);
+            f->cursor += count;
+            if (pBytesRead)
+                *pBytesRead = count;
+            return count < sizeInBytes ? MA_AT_END : MA_SUCCESS;
+        }
+
+        ma_result PackVfsSeek(ma_vfs *pVFS, ma_vfs_file file, ma_int64 offset, ma_seek_origin origin)
+        {
+            auto *f = static_cast<PackVfsFile *>(file);
+            if (f->fallback)
+                return ma_vfs_seek(FallbackVfs(pVFS), f->fallback, offset, origin);
+
+            ma_int64 base = 0;
+            if (origin == ma_seek_origin_current)
+                base = static_cast<ma_int64>(f->cursor);
+            else if (origin == ma_seek_origin_end)
+                base = static_cast<ma_int64>(f->data.size());
+            const ma_int64 target = base + offset;
+            if (target < 0 || target > static_cast<ma_int64>(f->data.size()))
+                return MA_BAD_SEEK;
+            f->cursor = static_cast<size_t>(target);
+            return MA_SUCCESS;
+        }
+
+        ma_result PackVfsTell(ma_vfs *pVFS, ma_vfs_file file, ma_int64 *pCursor)
+        {
+            auto *f = static_cast<PackVfsFile *>(file);
+            if (f->fallback)
+                return ma_vfs_tell(FallbackVfs(pVFS), f->fallback, pCursor);
+            *pCursor = static_cast<ma_int64>(f->cursor);
+            return MA_SUCCESS;
+        }
+
+        ma_result PackVfsInfo(ma_vfs *pVFS, ma_vfs_file file, ma_file_info *pInfo)
+        {
+            auto *f = static_cast<PackVfsFile *>(file);
+            if (f->fallback)
+                return ma_vfs_info(FallbackVfs(pVFS), f->fallback, pInfo);
+            pInfo->sizeInBytes = f->data.size();
+            return MA_SUCCESS;
+        }
+
+        ma_result PackVfsWrite(ma_vfs *pVFS, ma_vfs_file file, const void *pSrc, size_t sizeInBytes, size_t *pBytesWritten)
+        {
+            auto *f = static_cast<PackVfsFile *>(file);
+            if (f->fallback)
+                return ma_vfs_write(FallbackVfs(pVFS), f->fallback, pSrc, sizeInBytes, pBytesWritten);
+            return MA_NOT_IMPLEMENTED;
+        }
+
+        PackVfs s_packVfs{};
+        ma_resource_manager *s_resourceManager = nullptr;
+    } // namespace
+
     AudioSystem::~AudioSystem()
     {
         Destroy();
@@ -18,9 +134,31 @@ namespace pe
 
     void AudioSystem::Init(CommandBuffer *)
     {
+        ma_default_vfs_init(&s_packVfs.fallback, nullptr);
+        s_packVfs.cb.onOpen = PackVfsOpen;
+        s_packVfs.cb.onClose = PackVfsClose;
+        s_packVfs.cb.onRead = PackVfsRead;
+        s_packVfs.cb.onWrite = PackVfsWrite;
+        s_packVfs.cb.onSeek = PackVfsSeek;
+        s_packVfs.cb.onTell = PackVfsTell;
+        s_packVfs.cb.onInfo = PackVfsInfo;
+
+        ma_resource_manager_config rmConfig = ma_resource_manager_config_init();
+        rmConfig.decodedFormat = ma_format_f32;
+        rmConfig.pVFS = reinterpret_cast<ma_vfs *>(&s_packVfs);
+        s_resourceManager = new ma_resource_manager();
+        if (ma_resource_manager_init(&rmConfig, s_resourceManager) != MA_SUCCESS)
+        {
+            PE_ERROR("[Audio] Failed to initialize audio resource manager");
+            delete s_resourceManager;
+            s_resourceManager = nullptr;
+            return;
+        }
+
         m_engine = new ma_engine();
         ma_engine_config config = ma_engine_config_init();
         config.listenerCount = 1;
+        config.pResourceManager = s_resourceManager;
 
         ma_result result = ma_engine_init(&config, m_engine);
         if (result != MA_SUCCESS)
@@ -28,6 +166,9 @@ namespace pe
             PE_ERROR("[Audio] Failed to initialize audio engine: %d", result);
             delete m_engine;
             m_engine = nullptr;
+            ma_resource_manager_uninit(s_resourceManager);
+            delete s_resourceManager;
+            s_resourceManager = nullptr;
             return;
         }
 
@@ -91,6 +232,13 @@ namespace pe
         ma_engine_uninit(m_engine);
         delete m_engine;
         m_engine = nullptr;
+
+        if (s_resourceManager)
+        {
+            ma_resource_manager_uninit(s_resourceManager);
+            delete s_resourceManager;
+            s_resourceManager = nullptr;
+        }
     }
 
     // --- Fire-and-forget ---

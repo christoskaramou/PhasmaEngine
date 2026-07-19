@@ -416,9 +416,8 @@ namespace pe
         {
             if (z.spawnPrefabPath.empty() || (z.spawnedNode && IsNodeAlive(z.spawnedNode)))
                 return; // nothing to spawn, or a previous instance is still live (no duplicates)
-            std::error_code ec;
             std::filesystem::path resolved = z.spawnPrefabPath;
-            if (!std::filesystem::exists(resolved, ec))
+            if (!AssetFileExists(resolved))
                 resolved = Path::ResolveAsset(z.spawnPrefabPath);
             // Spawn at the world root (not parented under the zone, whose box scale would distort it),
             // then place it at the zone's world position.

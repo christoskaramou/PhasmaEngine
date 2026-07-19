@@ -367,7 +367,7 @@ namespace pe
 
             std::filesystem::path texturePath = NormalizeExistingPath(PathFromUtf8String(imageName));
             std::error_code ec;
-            if (!std::filesystem::is_regular_file(texturePath, ec))
+            if (!std::filesystem::is_regular_file(texturePath, ec) && !HasGamePackAsset(texturePath))
             {
                 PE_WARN("[ModelAssetCooked] Texture path is not a file, deferring slot %d: %s",
                         slot, imageName.c_str());
@@ -644,7 +644,7 @@ namespace pe
 
     ModelAsset *ModelAssetCooked::Load(const std::filesystem::path &file)
     {
-        if (!std::filesystem::exists(file))
+        if (!AssetFileExists(file))
         {
             PE_WARN("[ModelAssetCooked] File not found: %s", file.generic_string().c_str());
             return nullptr;
@@ -901,8 +901,7 @@ namespace pe
                 }
 
                 const std::filesystem::path texturePath = (file.parent_path() / relPath).lexically_normal();
-                std::error_code ec;
-                if (!std::filesystem::exists(texturePath, ec))
+                if (!AssetFileExists(texturePath))
                 {
                     PE_WARN("[ModelAssetCooked] Missing texture for material '%s': %s",
                             material->name.c_str(), PathToUtf8String(texturePath).c_str());

@@ -1,4 +1,4 @@
-#include "Project/GamePack.h"
+#include "Base/GamePack.h"
 #include "Project/ProjectConfig.h"
 
 extern "C"
@@ -229,36 +229,30 @@ namespace
                 continue;
             const std::filesystem::path relative = entry.path().lexically_relative(runtimeAssets);
             const std::string relativePath = relative.generic_string();
-            if (relativePath.starts_with("Scripts/"))
+            if (relativePath.starts_with("Scripts/tests/") ||
+                (entry.path().extension() == ".lua" && HasEditorOnlyMarker(entry.path())))
             {
-                if (relativePath.starts_with("Scripts/tests/") ||
-                    (entry.path().extension() == ".lua" && HasEditorOnlyMarker(entry.path())))
-                {
-                    continue;
-                }
-                pe::GamePackBuildEntry packedEntry;
-                packedEntry.path = "RuntimeAssets/" + relativePath;
-                packedEntry.data = entry.path().extension() == ".lua"
-                                       ? CompileLua(lua, entry.path(), packedEntry.path)
-                                       : ReadFile(entry.path());
-                packEntries.push_back(std::move(packedEntry));
                 continue;
             }
-
-            const std::filesystem::path destination = output / "RuntimeAssets" / relative;
-            std::filesystem::create_directories(destination.parent_path());
-            std::filesystem::copy_file(entry.path(), destination, std::filesystem::copy_options::overwrite_existing);
+            pe::GamePackBuildEntry packedEntry;
+            packedEntry.path = "RuntimeAssets/" + relativePath;
+            packedEntry.data = entry.path().extension() == ".lua"
+                                   ? CompileLua(lua, entry.path(), packedEntry.path)
+                                   : ReadFile(entry.path());
+            packEntries.push_back(std::move(packedEntry));
         }
+        // Empty anchor: Path::Init resolves Path::RuntimeAssets by directory existence.
+        std::filesystem::create_directories(output / "RuntimeAssets");
     }
 
     void ExportAssets(const pe::ProjectConfig &project,
                       const std::filesystem::path &output,
                       lua_State *lua,
-                      std::vector<pe::GamePackBuildEntry> &packEntries,
-                      size_t &copiedFiles)
+                      std::vector<pe::GamePackBuildEntry> &packEntries)
     {
         const std::filesystem::path assetsRoot = project.AssetsRoot();
         const std::vector<std::string> ignoreRules = ReadIgnoreRules(project.root);
+        // Empty anchor: the project manifest's assets root must exist on disk, and saves land here.
         std::filesystem::create_directories(output / "Assets");
 
         for (const auto &entry : std::filesystem::recursive_directory_iterator(
@@ -271,26 +265,16 @@ namespace
             const std::string assetPath = "Assets/" + relative.generic_string();
             if (IsIgnored(assetPath, ignoreRules))
                 continue;
+            if (entry.path().extension() == ".lua" && HasEditorOnlyMarker(entry.path()))
+                continue;
 
             const std::string packPath = relative.generic_string();
-            const bool packed = packPath.starts_with("Scripts/") || packPath.starts_with("Data/");
-            if (packed)
-            {
-                if (entry.path().extension() == ".lua" && HasEditorOnlyMarker(entry.path()))
-                    continue;
-                pe::GamePackBuildEntry packedEntry;
-                packedEntry.path = packPath;
-                packedEntry.data = entry.path().extension() == ".lua"
-                                       ? CompileLua(lua, entry.path(), packPath)
-                                       : ReadFile(entry.path());
-                packEntries.push_back(std::move(packedEntry));
-                continue;
-            }
-
-            const std::filesystem::path destination = output / "Assets" / relative;
-            std::filesystem::create_directories(destination.parent_path());
-            std::filesystem::copy_file(entry.path(), destination, std::filesystem::copy_options::overwrite_existing);
-            ++copiedFiles;
+            pe::GamePackBuildEntry packedEntry;
+            packedEntry.path = packPath;
+            packedEntry.data = entry.path().extension() == ".lua"
+                                   ? CompileLua(lua, entry.path(), packPath)
+                                   : ReadFile(entry.path());
+            packEntries.push_back(std::move(packedEntry));
         }
     }
 
@@ -351,8 +335,7 @@ int main(int argc, char **argv)
 
             std::vector<pe::GamePackBuildEntry> packEntries;
             CopyRuntime(runtimeDir, temporary, lua.get(), packEntries);
-            size_t copiedFiles = 0;
-            ExportAssets(*project, temporary, lua.get(), packEntries, copiedFiles);
+            ExportAssets(*project, temporary, lua.get(), packEntries);
             std::sort(packEntries.begin(), packEntries.end(),
                       [](const auto &a, const auto &b)
                       { return a.path < b.path; });
@@ -385,8 +368,7 @@ int main(int argc, char **argv)
             std::filesystem::rename(temporary, options.output);
 
             std::cout << "Exported " << project->name << " to " << ToUtf8(options.output) << "\n"
-                      << "  packed: " << packEntries.size() << " files\n"
-                      << "  copied: " << copiedFiles << " project asset files\n";
+                      << "  packed: " << packEntries.size() << " files\n";
         }
         catch (...)
         {

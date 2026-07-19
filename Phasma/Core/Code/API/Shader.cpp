@@ -127,7 +127,7 @@ namespace pe
         std::error_code ec;
         const std::string path = std::filesystem::weakly_canonical(desc.sourcePath, ec).generic_string();
 
-        PE_ERROR_IF(!std::filesystem::exists(path), "[Shader] Source file does not exist: %s", desc.sourcePath.c_str());
+        PE_ERROR_IF(!AssetFileExists(path), "[Shader] Source file does not exist: %s", desc.sourcePath.c_str());
         if (!FileWatcher::Get(path))
         {
             FileWatcher::Add(path, [](size_t fileEvent)

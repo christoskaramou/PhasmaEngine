@@ -122,7 +122,11 @@ namespace pe::voxel
                 int tileWidth = 0;
                 int tileHeight = 0;
                 int channels = 0;
-                pixels[layer] = stbi_load(tilePngPaths[layer].c_str(), &tileWidth, &tileHeight, &channels, STBI_rgb_alpha);
+                FileSystem tileFile(tilePngPaths[layer], std::ios::in | std::ios::binary);
+                const std::vector<uint8_t> tileBytes = tileFile.IsOpen() ? tileFile.ReadAllBytes() : std::vector<uint8_t>{};
+                pixels[layer] = tileBytes.empty() ? nullptr
+                                                  : stbi_load_from_memory(tileBytes.data(), static_cast<int>(tileBytes.size()),
+                                                                          &tileWidth, &tileHeight, &channels, STBI_rgb_alpha);
                 if (!pixels[layer])
                 {
                     PE_WARN("[VoxelMaterial] Failed to load tile png: %s", tilePngPaths[layer].c_str());

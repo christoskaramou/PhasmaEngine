@@ -274,7 +274,7 @@ namespace pe
         return m_sceneRenderer.CreateFSSampledImage("RuntimeFSSampledImage", useRenderTergetScale);
     }
 
-    void RuntimeSceneRenderer::Resize(uint32_t width, uint32_t height)
+    void RuntimeSceneRenderer::Resize(uint32_t width, uint32_t height, bool recreateSurface)
     {
         if (!m_initialized)
             return;
@@ -282,12 +282,17 @@ namespace pe
         RHII.WaitDeviceIdle();
         const bool hasRTGeom = SupportsRayTracingPass() && m_scene.GetTLAS() != nullptr;
         m_sceneRenderer.DestroyFrameResources();
-        RHII.GetSurface()->SetActualExtent({0, 0, width, height});
 
-        Swapchain *swapchain = RHII.GetSwapchain();
-        Swapchain::Destroy(swapchain);
+        if (recreateSurface)
+            RHII.RecreateSurface();
+        else
+        {
+            Swapchain *swapchain = RHII.GetSwapchain();
+            Swapchain::Destroy(swapchain);
+        }
 
         Surface *surface = RHII.GetSurface();
+        surface->SetActualExtent({0, 0, width, height});
         RHII.CreateSwapchain(surface);
 
         m_sceneRenderer.CreateRenderTargets();

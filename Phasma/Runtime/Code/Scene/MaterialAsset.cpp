@@ -80,13 +80,13 @@ namespace pe
 
         bool Load(Mesh &mesh, const std::filesystem::path &path)
         {
-            std::ifstream ifs(path);
-            if (!ifs.is_open())
+            FileSystem file(path.string(), std::ios::in | std::ios::binary);
+            if (!file.IsOpen())
                 return false;
 
-            rapidjson::IStreamWrapper isw(ifs);
+            const std::string text = file.ReadAll();
             rapidjson::Document d;
-            d.ParseStream(isw);
+            d.Parse(text.c_str(), text.size());
             if (d.HasParseError())
                 return false;
 
@@ -137,7 +137,7 @@ namespace pe
                     std::filesystem::path texPath(relPath);
                     if (texPath.is_relative())
                         texPath = (path.parent_path() / texPath).lexically_normal();
-                    if (!std::filesystem::exists(texPath))
+                    if (!AssetFileExists(texPath))
                         continue;
 
                     std::string texStr = texPath.string();
@@ -278,13 +278,13 @@ namespace pe
 
         bool LoadMaterial(Material &material, const std::filesystem::path &path)
         {
-            std::ifstream ifs(path);
-            if (!ifs.is_open())
+            FileSystem file(path.string(), std::ios::in | std::ios::binary);
+            if (!file.IsOpen())
                 return false;
 
-            rapidjson::IStreamWrapper isw(ifs);
+            const std::string text = file.ReadAll();
             rapidjson::Document d;
-            d.ParseStream(isw);
+            d.Parse(text.c_str(), text.size());
             if (d.HasParseError())
                 return false;
 
@@ -400,7 +400,7 @@ namespace pe
                     std::filesystem::path texPath(relPath);
                     if (texPath.is_relative())
                         texPath = (path.parent_path() / texPath).lexically_normal();
-                    if (!std::filesystem::exists(texPath))
+                    if (!AssetFileExists(texPath))
                         continue;
 
                     std::string texStr = texPath.string();

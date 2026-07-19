@@ -14,6 +14,8 @@ Forward+ resources are descriptor-sensitive: scene render descriptor refresh mus
 
 Present-mode changes must be treated as resize work, not as an immediate mid-frame swapchain teardown. Editor/runtime requests should update the desired surface present mode, sync the stored preference to the effective supported mode, wait for idle, and queue `EventType::Resize` so swapchain, scene render targets, render-pass components, and frame resources rebuild together. Host window titles should be refreshed after the deferred swapchain recreation and should report the recreated swapchain's actual present mode.
 
+Every successful swapchain creation also rebuilds the RHI deletion-queue array to the new swapchain image count. Recreating only the swapchain images while retaining the old queue count lets the new frame index address past the queue array during later scene/resource destruction; Android surface loss and resume is a common trigger because its swapchain image count can change.
+
 Cached framebuffers are keyed by the actual attachment `ImageView` objects captured in the backend framebuffer. Implicit render-target views must be created before cache lookup so an RTV recreation cannot reuse a framebuffer that still holds a destroyed Vulkan image view or DX12 descriptor.
 
 ## Cached Pipelines
