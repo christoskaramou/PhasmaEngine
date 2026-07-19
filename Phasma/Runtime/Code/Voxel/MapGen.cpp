@@ -50,27 +50,22 @@ namespace pe::voxel
         if (configured.empty())
             return false;
         const std::filesystem::path path = ColumnChunkStore::ResolveRoot(configured);
+        FileSystem file(path.string(), std::ios::in | std::ios::binary);
+        const std::vector<uint8_t> bytes = file.IsOpen() ? file.ReadAllBytes() : std::vector<uint8_t>{};
 
         if (signedFloat)
         {
             // Surface height map: a PH16 half-float blob ([-1,1]), or a legacy 8-bit image whose
             // gray 0..255 is remapped to [-1,1]. Either way the surface is held as float in pxf.
-            std::ifstream in(path, std::ios::binary | std::ios::ate);
-            if (in)
+            if (DecodeHeightMapF16(bytes.data(), bytes.size(), w, h, pxf))
             {
-                const std::streamsize size = in.tellg();
-                in.seekg(0);
-                std::vector<uint8_t> bytes(static_cast<size_t>(std::max<std::streamsize>(0, size)));
-                if (!bytes.empty())
-                    in.read(reinterpret_cast<char *>(bytes.data()), size);
-                if (DecodeHeightMapF16(bytes.data(), bytes.size(), w, h, pxf))
-                {
-                    isFloat = true;
-                    return true;
-                }
+                isFloat = true;
+                return true;
             }
             int channels = 0;
-            stbi_uc *data = stbi_load(path.string().c_str(), &w, &h, &channels, 1);
+            stbi_uc *data = bytes.empty() ? nullptr
+                                          : stbi_load_from_memory(bytes.data(), static_cast<int>(bytes.size()),
+                                                                  &w, &h, &channels, 1);
             if (!data)
             {
                 PE_WARN("MapGen: cannot load %s map '%s' (%s)", what, path.string().c_str(), stbi_failure_reason());
@@ -87,7 +82,9 @@ namespace pe::voxel
         }
 
         int channels = 0;
-        stbi_uc *data = stbi_load(path.string().c_str(), &w, &h, &channels, 1); // 1 = force grayscale
+        stbi_uc *data = bytes.empty() ? nullptr
+                                      : stbi_load_from_memory(bytes.data(), static_cast<int>(bytes.size()),
+                                                              &w, &h, &channels, 1); // 1 = force grayscale
         if (!data)
         {
             PE_WARN("MapGen: cannot load %s map '%s' (%s)", what, path.string().c_str(), stbi_failure_reason());

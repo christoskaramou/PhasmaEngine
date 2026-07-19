@@ -19,7 +19,7 @@ namespace pe
                     if (path.find('/') == std::string::npos && path.find('\\') == std::string::npos)
                         fullPath = Path::ResolveAsset("Skybox/" + path);
 
-                    if (!std::filesystem::exists(fullPath))
+                    if (!AssetFileExists(fullPath))
                     {
                         PE_WARN("[Lua] skybox.load: file not found: %s", fullPath.c_str());
                         return;

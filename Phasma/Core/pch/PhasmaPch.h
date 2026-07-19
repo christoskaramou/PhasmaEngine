@@ -86,6 +86,7 @@
 #include "Base/Timer.h"
 #include "Base/Profiler.h"
 #include "Base/FileSystem.h"
+#include "Base/GamePack.h"
 #include "Base/FileWatcher.h"
 #include "Base/EventSystem.h"
 #include "Base/Resource.h"

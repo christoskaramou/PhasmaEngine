@@ -9,12 +9,12 @@ namespace pe
         ~FileSystem();
 
         inline size_t Size() { return m_size; }
-        inline bool IsOpen() { return m_fstream.is_open(); }
-        inline void SetReadCursor(size_t index) { m_fstream.seekg(index); }
-        inline void SetWriteCursor(size_t index) { m_fstream.seekp(index); }
-        inline size_t GetReadCursor() { return m_fstream.tellg(); }
-        inline size_t GetWriteCursor() { return m_fstream.tellp(); }
-        inline bool EndOfFile() { return m_fstream.eof(); }
+        inline bool IsOpen() { return m_fromPack || m_fstream.is_open(); }
+        inline void SetReadCursor(size_t index) { Stream().seekg(index); }
+        inline void SetWriteCursor(size_t index) { Stream().seekp(index); }
+        inline size_t GetReadCursor() { return Stream().tellg(); }
+        inline size_t GetWriteCursor() { return Stream().tellp(); }
+        inline bool EndOfFile() { return Stream().eof(); }
         std::string ReadAll();
         std::vector<uint8_t> ReadAllBytes();
         std::string ReadLine();
@@ -23,9 +23,13 @@ namespace pe
         void Close();
 
     private:
+        inline std::iostream &Stream() { return m_fromPack ? static_cast<std::iostream &>(m_memStream) : m_fstream; }
+
         std::string m_file;
         std::fstream m_fstream;
+        std::stringstream m_memStream; // read-only view served from the game pack
+        bool m_fromPack = false;
         std::ios_base::openmode m_mode;
-        size_t m_size;
+        size_t m_size = 0;
     };
 } // namespace pe

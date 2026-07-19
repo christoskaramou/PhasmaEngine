@@ -15,10 +15,23 @@ namespace pe
                     sol::state_view lua(ts);
                     sol::table result = lua.create_table();
                     std::string shadersDir = Path::Assets + "Shaders";
+                    int i = 1;
+                    if (IsGamePackManagedAsset(shadersDir))
+                    {
+                        for (const std::string &relative : ListGamePackAssets(shadersDir))
+                        {
+                            std::filesystem::path rel(relative);
+                            std::string ext = rel.extension().string();
+                            for (auto &c : ext)
+                                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                            if (ext == ".hlsl")
+                                result[i++] = std::filesystem::relative(rel, "Shaders").generic_string();
+                        }
+                        return result;
+                    }
                     if (!std::filesystem::exists(shadersDir))
                         return result;
 
-                    int i = 1;
                     for (const auto &entry : std::filesystem::recursive_directory_iterator(
                              shadersDir, std::filesystem::directory_options::skip_permission_denied))
                     {
@@ -47,15 +60,11 @@ namespace pe
                     if (!IsUnderAssets(fpath))
                         return sol::nullopt;
 
-                    if (!std::filesystem::exists(fpath))
+                    FileSystem file(fpath.string(), std::ios::in | std::ios::binary);
+                    if (!file.IsOpen())
                         return sol::nullopt;
 
-                    std::ifstream file(fpath, std::ios::in);
-                    if (!file.is_open())
-                        return sol::nullopt;
-
-                    return std::string(std::istreambuf_iterator<char>(file),
-                                      std::istreambuf_iterator<char>());
+                    return file.ReadAll();
                 });
 
                 shaders.set_function("edit", [](const std::string &path, const std::string &find, const std::string &replace) -> bool {
@@ -65,7 +74,7 @@ namespace pe
                     if (fpath.is_relative())
                         fpath = std::filesystem::path(Path::Assets + "Shaders") / fpath;
 
-                    if (!IsUnderAssets(fpath))
+                    if (!IsUnderAssets(fpath) || IsGamePackManagedAsset(fpath))
                         return false;
 
                     if (!std::filesystem::exists(fpath))
@@ -101,7 +110,7 @@ namespace pe
                     if (fpath.is_relative())
                         fpath = std::filesystem::path(Path::Assets + "Shaders") / fpath;
 
-                    if (!IsUnderAssets(fpath))
+                    if (!IsUnderAssets(fpath) || IsGamePackManagedAsset(fpath))
                         return false;
 
                     // Create parent directories if needed

@@ -77,6 +77,7 @@ namespace pe
         sol::function initFn;
         sol::function updateFn;
         sol::function updateEditModeFn;
+        sol::function backgroundFn;
         sol::function destroyFn;
         std::vector<ExposedVar> exposedVars;
         ScriptLifecycle lifecycle = ScriptLifecycle::Always;
@@ -110,6 +111,7 @@ namespace pe
         sol::function initFn;
         sol::function updateFn;
         sol::function updateEditModeFn;
+        sol::function backgroundFn;
         sol::function destroyFn;
         std::vector<ExposedVar> exposedVars;
         int exposedRef = LUA_NOREF; // Lua registry ref to __exposed table
@@ -138,6 +140,7 @@ namespace pe
         void Destroy() override;
         void Reload();
         void CallInit(InitScope scope = InitScope::AllScripts);
+        void OnAppBackgrounded();
         std::vector<std::string> GetTestScriptPaths() const;
         std::string RunScriptTests(const std::vector<std::string> &paths);
 

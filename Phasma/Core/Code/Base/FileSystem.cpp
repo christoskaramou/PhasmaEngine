@@ -1,4 +1,5 @@
 #include "FileSystem.h"
+#include "GamePack.h"
 
 namespace pe
 {
@@ -7,6 +8,19 @@ namespace pe
     {
         // One of these modes must be set
         PE_ERROR_IF(!(m_mode & std::ios_base::in) && !(m_mode & std::ios_base::out), "FileSystem: No mode set");
+
+        // Read-only opens in a pack-managed namespace are served from the game pack; a managed
+        // path missing from the pack stays closed instead of falling back to loose files.
+        if (!(m_mode & std::ios_base::out) && IsGamePackManagedAsset(m_file))
+        {
+            if (std::optional<std::string> data = ReadGamePackAsset(m_file))
+            {
+                m_size = data->size();
+                m_memStream.str(std::move(*data));
+                m_fromPack = true;
+            }
+            return;
+        }
 
 #ifdef _WIN32
         // On Windows, use wide-string path to support unicode filenames
@@ -46,7 +60,7 @@ namespace pe
         SetReadCursor(0);
         std::string content;
         content.reserve(m_size); // Reserve memory for performance improvement
-        content.assign(std::istreambuf_iterator<char>(m_fstream), std::istreambuf_iterator<char>());
+        content.assign(std::istreambuf_iterator<char>(Stream()), std::istreambuf_iterator<char>());
         return content;
     }
 
@@ -54,14 +68,14 @@ namespace pe
     {
         SetReadCursor(0);
         std::vector<uint8_t> bytes(m_size);
-        m_fstream.read(reinterpret_cast<char *>(bytes.data()), m_size);
+        Stream().read(reinterpret_cast<char *>(bytes.data()), m_size);
         return bytes;
     }
 
     std::string FileSystem::ReadLine()
     {
         std::string line;
-        std::getline(m_fstream, line);
+        std::getline(Stream(), line);
         return line;
     }
 
@@ -77,6 +91,7 @@ namespace pe
 
     void FileSystem::Close()
     {
-        m_fstream.close();
+        if (m_fstream.is_open())
+            m_fstream.close();
     }
 } // namespace pe

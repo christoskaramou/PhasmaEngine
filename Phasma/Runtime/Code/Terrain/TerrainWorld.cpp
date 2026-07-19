@@ -371,8 +371,8 @@ namespace pe::terrain
         // of the opaque buckets (editorFlags 0x10) into bucket 8, so if the shader never built, bucket 8
         // is undrawn and terrain would silently vanish instead of falling back.
         const bool terrainShaderPresent =
-            std::filesystem::exists(Path::RuntimeAssets + "Shaders/Terrain/terrain_gbuffer.passinfo") &&
-            std::filesystem::exists(Path::RuntimeAssets + "Shaders/Terrain/TerrainGBufferPS.hlsl");
+            AssetFileExists(Path::RuntimeAssets + "Shaders/Terrain/terrain_gbuffer.passinfo") &&
+            AssetFileExists(Path::RuntimeAssets + "Shaders/Terrain/TerrainGBufferPS.hlsl");
         if (terrainShaderPresent && BuildTerrainTextures())
         {
             m_material->terrain = true;
@@ -1334,9 +1334,13 @@ namespace pe::terrain
                 m_meshProcessing = static_cast<int>(batch.size());
             }
             std::vector<TileMesh> results(batch.size());
-            std::transform(std::execution::par, batch.begin(), batch.end(), results.begin(),
-                           [this](const TileJob &j)
-                           { return MeshTile(j); });
+            auto meshTile = [this](const TileJob &j)
+            { return MeshTile(j); };
+#if defined(__cpp_lib_parallel_algorithm)
+            std::transform(std::execution::par, batch.begin(), batch.end(), results.begin(), meshTile);
+#else
+            std::transform(batch.begin(), batch.end(), results.begin(), meshTile);
+#endif
             {
                 std::lock_guard<std::mutex> lk(m_meshMutex);
                 for (TileMesh &r : results)
@@ -1918,7 +1922,7 @@ namespace pe::terrain
             if (p.empty())
                 return p;
             const std::string rt = Path::RuntimeAssets + p;
-            if (std::filesystem::exists(rt))
+            if (AssetFileExists(rt))
                 return rt;
             return voxel::ColumnChunkStore::ResolveRoot(p).string();
         };

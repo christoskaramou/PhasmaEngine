@@ -51,7 +51,7 @@ namespace pe
 
         for (const auto &candidate : candidates)
         {
-            if (std::filesystem::exists(candidate))
+            if (AssetFileExists(candidate))
                 return candidate;
         }
 
@@ -65,7 +65,7 @@ namespace pe
             return ResourceHandle<Image>();
 
         const std::filesystem::path resolvedPath = ResolveTexturePath(path);
-        if (!std::filesystem::exists(resolvedPath))
+        if (!AssetFileExists(resolvedPath))
         {
             PE_WARN("[Lua] texture file not found: %s", path.c_str());
             return ResourceHandle<Image>();

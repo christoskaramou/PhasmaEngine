@@ -3,7 +3,7 @@
 #include "Agent/AgentToolRegistry.h"
 #endif
 #include "Camera/Camera.h"
-#include "Project/GamePack.h"
+#include "Base/GamePack.h"
 #include "Render/ScriptRenderPasses.h"
 #include "Scene/ModelAsset.h"
 #if defined(PE_ENABLE_ASSIMP)
@@ -473,6 +473,7 @@ namespace pe
         entry.initFn = get("init");
         entry.updateFn = get("update");
         entry.updateEditModeFn = get("update_editor");
+        entry.backgroundFn = get("background");
         entry.destroyFn = get("destroy");
     }
 
@@ -523,6 +524,7 @@ namespace pe
         inst.initFn = get("init");
         inst.updateFn = get("update");
         inst.updateEditModeFn = get("update_editor");
+        inst.backgroundFn = get("background");
         inst.destroyFn = get("destroy");
     }
 
@@ -1071,6 +1073,36 @@ namespace pe
 
         for (auto &inst : m_nodeInstances)
             InitializeNodeInstance(inst);
+    }
+
+    void ScriptSystem::OnAppBackgrounded()
+    {
+        for (auto &script : m_scripts)
+        {
+            if (!script.initialized || !script.backgroundFn.valid() || HasNodeInstanceForPath(m_nodeInstances, script.path))
+                continue;
+
+            auto result = CallProtected(script.backgroundFn);
+            if (!result.valid())
+            {
+                sol::error err = result;
+                Log::Error(PeFormat("[Lua] background() error in '%s': %s", script.path.c_str(), err.what()));
+            }
+        }
+
+        for (auto &inst : m_nodeInstances)
+        {
+            if (!inst.initCalled || !inst.lastError.empty() || !inst.backgroundFn.valid() || !NodeInstanceRunsInPlayer(inst))
+                continue;
+
+            auto result = CallProtected(inst.backgroundFn);
+            if (!result.valid())
+            {
+                sol::error err = result;
+                Log::Error(PeFormat("[Lua] background() error in node script '%s': %s", inst.path.c_str(), err.what()));
+                inst.lastError = err.what();
+            }
+        }
     }
 
     void ScriptSystem::OnPlayModeChanged(bool nowPlay)

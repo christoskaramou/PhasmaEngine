@@ -1,4 +1,4 @@
-#include "Project/GamePack.h"
+#include "Base/GamePack.h"
 
 #include <array>
 #include <fstream>
@@ -23,6 +23,21 @@ namespace pe
         std::filesystem::path s_packPath;
         std::unordered_map<std::string, PackEntry> s_entries;
         std::unordered_set<std::string> s_managedRoots;
+        std::string s_assetsRoot;        // canonical Path::Assets at pack-open time, trailing slash
+        std::string s_runtimeAssetsRoot; // canonical Path::RuntimeAssets at pack-open time, trailing slash
+
+        std::string CanonicalRootString(const std::string &root)
+        {
+            if (root.empty())
+                return {};
+            std::error_code ec;
+            const std::filesystem::path canonical = std::filesystem::weakly_canonical(root, ec);
+            std::string value = (ec ? std::filesystem::path(root).lexically_normal() : canonical.lexically_normal())
+                                    .generic_string();
+            if (!value.empty() && value.back() != '/')
+                value.push_back('/');
+            return value;
+        }
 
         void SetError(std::string *error, std::string message)
         {
@@ -50,27 +65,54 @@ namespace pe
             return normalized.generic_string();
         }
 
+        // Case-insensitive on Windows: the launch casing of the install directory (and any
+        // weakly_canonical real-casing round trip) must not defeat the root-prefix match.
+        bool StripRootPrefix(const std::string &value, const std::string &root, std::string &out)
+        {
+            if (root.empty() || value.size() <= root.size())
+                return false;
+            for (size_t i = 0; i < root.size(); ++i)
+            {
+                char a = value[i];
+                char b = root[i];
+#if defined(PE_WIN32)
+                a = static_cast<char>(std::tolower(static_cast<unsigned char>(a)));
+                b = static_cast<char>(std::tolower(static_cast<unsigned char>(b)));
+#endif
+                if (a != b)
+                    return false;
+            }
+            out = value.substr(root.size()); // roots carry a trailing slash
+            return true;
+        }
+
         std::string ToPackPath(const std::filesystem::path &path)
         {
             if (path.empty())
                 return {};
 
-            std::filesystem::path relative = path.lexically_normal();
-            if (relative.is_absolute())
+            const std::filesystem::path normalizedPath = path.lexically_normal();
+            if (!normalizedPath.is_absolute())
+                return NormalizeRelativePath(normalizedPath.generic_string());
+
+            std::error_code ec;
+            const std::filesystem::path canonical = std::filesystem::weakly_canonical(normalizedPath, ec);
+            const std::string value = (ec ? normalizedPath : canonical.lexically_normal()).generic_string();
+
+            std::string remainder;
+            if (StripRootPrefix(value, s_assetsRoot, remainder))
             {
-                Path::Init();
-                const std::filesystem::path assets = std::filesystem::path(Path::Assets).lexically_normal();
-                relative = relative.lexically_relative(assets);
-                std::string normalized = NormalizeRelativePath(relative.generic_string());
+                const std::string normalized = NormalizeRelativePath(remainder);
                 if (!normalized.empty())
                     return normalized;
-
-                const std::filesystem::path runtimeAssets = std::filesystem::path(Path::RuntimeAssets).lexically_normal();
-                relative = path.lexically_normal().lexically_relative(runtimeAssets);
-                normalized = NormalizeRelativePath(relative.generic_string());
-                return normalized.empty() ? std::string{} : "RuntimeAssets/" + normalized;
             }
-            return NormalizeRelativePath(relative.generic_string());
+            if (StripRootPrefix(value, s_runtimeAssetsRoot, remainder))
+            {
+                const std::string normalized = NormalizeRelativePath(remainder);
+                if (!normalized.empty())
+                    return "RuntimeAssets/" + normalized;
+            }
+            return {};
         }
 
         uint64_t HashBytes(const uint8_t *data, size_t size, uint64_t hash = 14695981039346656037ull)
@@ -193,6 +235,9 @@ namespace pe
         }
 
         s_packPath = std::filesystem::absolute(path).lexically_normal();
+        Path::Init();
+        s_assetsRoot = CanonicalRootString(Path::Assets);
+        s_runtimeAssetsRoot = CanonicalRootString(Path::RuntimeAssets);
         return true;
     }
 
@@ -201,6 +246,8 @@ namespace pe
         s_packPath.clear();
         s_entries.clear();
         s_managedRoots.clear();
+        s_assetsRoot.clear();
+        s_runtimeAssetsRoot.clear();
     }
 
     bool HasGamePack()
@@ -211,6 +258,12 @@ namespace pe
     bool HasGamePackAsset(const std::filesystem::path &path)
     {
         return s_entries.contains(ToPackPath(path));
+    }
+
+    bool AssetFileExists(const std::filesystem::path &path)
+    {
+        std::error_code ec;
+        return std::filesystem::exists(path, ec) || HasGamePackAsset(path);
     }
 
     bool IsGamePackManagedAsset(const std::filesystem::path &path)
@@ -246,10 +299,7 @@ namespace pe
         std::vector<std::string> paths;
         bool projectRoot = false;
         if (!prefix.empty() && prefix.is_absolute())
-        {
-            Path::Init();
-            projectRoot = prefix.lexically_normal() == std::filesystem::path(Path::Assets).lexically_normal();
-        }
+            projectRoot = !s_assetsRoot.empty() && CanonicalRootString(prefix.string()) == s_assetsRoot;
         std::string normalizedPrefix = prefix.empty() || projectRoot ? std::string{} : ToPackPath(prefix);
         if (!normalizedPrefix.empty() && normalizedPrefix.back() != '/')
             normalizedPrefix.push_back('/');

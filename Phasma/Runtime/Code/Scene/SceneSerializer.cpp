@@ -1370,7 +1370,7 @@ namespace pe
                 return (*relativeToDir / path).lexically_normal();
 
             const std::filesystem::path assetsPath = std::filesystem::path(Path::Assets) / path;
-            if (std::filesystem::exists(assetsPath))
+            if (AssetFileExists(assetsPath))
                 return assetsPath.lexically_normal();
 
             return path.lexically_normal();
@@ -1404,7 +1404,7 @@ namespace pe
                     continue;
 
                 const std::filesystem::path texPath = ResolveSerializedTexturePath(texVal[texSlotNames[k]], relativeToDir);
-                if (texPath.empty() || !std::filesystem::exists(texPath))
+                if (texPath.empty() || !AssetFileExists(texPath))
                     continue;
 
                 ResourceHandle<Image> img = textureLoader.LoadTexture(cmd, texPath);
@@ -2657,14 +2657,13 @@ namespace pe
         ScenePreload result;
         result.filePath = file;
 
-        std::ifstream ifs(file);
-        if (!ifs.is_open())
+        FileSystem ifs(file.string(), std::ios::in | std::ios::binary);
+        if (!ifs.IsOpen())
         {
             Log::Error("Failed to open scene file: " + file.string());
             return result;
         }
-        result.jsonText = std::string(std::istreambuf_iterator<char>(ifs),
-                                      std::istreambuf_iterator<char>());
+        result.jsonText = ifs.ReadAll();
 
         rapidjson::Document d;
         d.Parse(result.jsonText.c_str());
@@ -2980,7 +2979,7 @@ namespace pe
                                     std::filesystem::path texPath = texVal[texSlotNames[k]].GetString();
                                     if (texPath.is_relative())
                                         texPath = (preload.filePath.parent_path() / texPath).lexically_normal();
-                                    if (std::filesystem::exists(texPath))
+                                    if (AssetFileExists(texPath))
                                     {
                                         int srcIdx = m_meshSourceInfos[sceneMeshIdx].sourceIndex;
                                         ModelAsset *srcModel = (srcIdx >= 0 && srcIdx < static_cast<int>(loadedModels.size()))
@@ -3359,7 +3358,7 @@ namespace pe
                                         std::filesystem::path texPath = texVal[methodNames[k]].GetString();
                                         if (texPath.is_relative())
                                             texPath = (preload.filePath.parent_path() / texPath).lexically_normal();
-                                        if (std::filesystem::exists(texPath))
+                                        if (AssetFileExists(texPath))
                                         {
                                             ResourceHandle<Image> img = model->LoadTexture(cmd, texPath);
                                             if (img && mi->material)
@@ -3513,14 +3512,14 @@ namespace pe
         if (parent && !IsNodeAlive(parent))
             parent = nullptr;
 
-        std::ifstream ifs(file);
-        if (!ifs.is_open())
+        FileSystem ifs(file.string(), std::ios::in | std::ios::binary);
+        if (!ifs.IsOpen())
         {
             PE_WARN("[Prefab] Failed to open prefab: %s", file.string().c_str());
             return {};
         }
 
-        std::string jsonText{std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>()};
+        std::string jsonText = ifs.ReadAll();
         rapidjson::Document d;
         d.Parse(jsonText.c_str(), jsonText.size());
         if (d.HasParseError() || !d.IsObject() || !d.HasMember("nodes") || !d["nodes"].IsArray())

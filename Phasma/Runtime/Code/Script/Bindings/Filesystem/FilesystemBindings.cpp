@@ -1,6 +1,6 @@
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
-#include "Project/GamePack.h"
+#include "Base/GamePack.h"
 
 namespace pe
 {

@@ -194,8 +194,10 @@ path is const), and the next `Update` **commits** ready results (store writes) +
 main queue. So the main thread never blocks on meshing: `ProcessDirtyTiles` costs ~0.07 ms (commit +
 dispatch + one submitted-not-waited upload buffer), down from ~7.7 ms when the budgeted tiles meshed
 on the main thread. A stale result (the slot streamed to a new world tile mid-flight) is discarded by
-a tx/tz guard and re-meshed. The worker meshes its batch with `std::for_each(execution::par)` too, so
-a burst still drains fast.
+a tx/tz guard and re-meshed. The worker meshes its batch with
+`std::transform(execution::par)` when parallel algorithms are available; otherwise the same batch
+runs sequentially inside the background worker (including Android), so meshing still stays off the
+main thread.
 
 Because the worker reads shared state (generator, cfg, `m_ops`, caves/scatter maps, tile store
 offsets), any mutation of that state **drains the worker first** (`DrainMeshWorker`): sculpt apply,

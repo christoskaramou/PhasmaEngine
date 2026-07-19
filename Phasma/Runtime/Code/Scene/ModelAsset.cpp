@@ -67,7 +67,7 @@ namespace pe
     {
         auto fileU8 = file.u8string();
         std::string fileStr(reinterpret_cast<const char *>(fileU8.c_str()));
-        if (!std::filesystem::exists(file))
+        if (!AssetFileExists(file))
         {
             PE_WARN("[ModelAsset] File not found: %s", fileStr.c_str());
             return nullptr;

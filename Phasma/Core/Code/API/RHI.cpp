@@ -1300,6 +1300,15 @@ namespace pe
         m_surface = Surface::Create(m_window);
     }
 
+    void RHI::RecreateSurface()
+    {
+        const PePresentMode presentMode = m_surface ? m_surface->GetPresentMode() : PE_PRESENT_MODE_FIFO;
+        Swapchain::Destroy(m_swapchain);
+        Surface::Destroy(m_surface);
+        CreateSurface();
+        m_surface->SetPresentMode(presentMode);
+    }
+
     bool RHI::UsesDozenVulkan() const
     {
 #if defined(PE_WIN32)
@@ -1935,6 +1944,15 @@ namespace pe
         desc.backbufferCount = 2;
         desc.name = "RHI_swapchain";
         m_swapchain = Swapchain::Create(desc);
+
+        for (DeletionQueue *queue : m_deletionQueues)
+        {
+            queue->Flush();
+            delete queue;
+        }
+        m_deletionQueues.assign(GetSwapchainImageCount(), nullptr);
+        for (DeletionQueue *&queue : m_deletionQueues)
+            queue = new DeletionQueue();
     }
 
     void RHI::InitSwapchain()
@@ -1954,11 +1972,6 @@ namespace pe
 
         CreateSwapchain(m_surface);
         Downsampler::Init();
-
-        m_deletionQueues.resize(GetSwapchainImageCount());
-        for (auto &queue : m_deletionQueues)
-            if (!queue)
-                queue = new DeletionQueue();
     }
 
     void RHI::CreateDescriptorPool(uint32_t maxDescriptorSets)
@@ -2396,7 +2409,7 @@ namespace pe
             deletor();
             return;
         }
-        m_deletionQueues[GetFrameIndex()]->Push(std::move(deletor));
+        m_deletionQueues[m_frameCounter % m_deletionQueues.size()]->Push(std::move(deletor));
     }
 
     void RHI::FlushDeletionQueue(uint32_t frameIndex)

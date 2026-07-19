@@ -6,6 +6,8 @@
 
 namespace pe
 {
+    bool HasGamePackAsset(const std::filesystem::path &path); // Base/GamePack.h
+
     class Path
     {
     public:
@@ -150,7 +152,7 @@ namespace pe
             {
                 std::error_code ec;
                 const std::filesystem::path projectPath = std::filesystem::path(Assets) / relative;
-                if (std::filesystem::exists(projectPath, ec))
+                if (std::filesystem::exists(projectPath, ec) || HasGamePackAsset(projectPath))
                     return projectPath.generic_string();
             }
             return RuntimeAssets + relative;

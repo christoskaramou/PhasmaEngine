@@ -12,6 +12,11 @@ namespace pe
     namespace
     {
         RuntimeUiSystem *s_activeRuntimeUi = nullptr;
+#if defined(PE_ANDROID)
+        constexpr float kTextReadabilityScale = 1.5f;
+#else
+        constexpr float kTextReadabilityScale = 1.0f;
+#endif
 
         std::string MakeDefaultTitle(const std::string &screenId)
         {
@@ -50,7 +55,7 @@ namespace pe
 
             for (const std::filesystem::path &candidate : candidates)
             {
-                if (std::filesystem::exists(candidate))
+                if (AssetFileExists(candidate))
                     return candidate;
             }
 
@@ -152,6 +157,8 @@ namespace pe
         void DispatchRuntimeUiNodeAction(const std::string &screenId,
                                          const std::string &widgetId,
                                          NodeId *node,
+                                         uint32_t nodeIndex,
+                                         uint32_t nodeRevision,
                                          const RuntimeUiWidgetState &state,
                                          const RuntimeUiWidgetState &previousState)
         {
@@ -159,7 +166,15 @@ namespace pe
                 return;
 
             Scene *scene = GetActiveScene();
-            if (!scene || !scene->IsNodeAlive(node))
+            if (!scene)
+                return;
+            // The retained widget's node pointer dangles once the node is destroyed (deferred
+            // destroy after SyncSceneWidgets, or a whole-scene swap) — IsNodeAlive would read
+            // freed memory. Validate through the pool by captured index+revision instead.
+            if (nodeIndex >= scene->GetNodeCount())
+                return;
+            const NodeId *current = scene->GetNodeId(nodeIndex);
+            if (current != node || current->revision != nodeRevision)
                 return;
 
             const NodeRuntimeUiTag *ui = scene->GetRuntimeUiComponent(node);
@@ -568,6 +583,8 @@ namespace pe
         widget.textColor = desc.textColor;
         widget.imageTint = desc.imageTint;
         widget.node = desc.node;
+        widget.nodeIndex = desc.node ? desc.node->index : 0;
+        widget.nodeRevision = desc.node ? desc.node->revision : 0;
         widget.draggable = desc.draggable;
         widget.selected = desc.selected;
         widget.visible = desc.visible;
@@ -600,6 +617,10 @@ namespace pe
         GetFrameSurfaceSize(surfW, surfH);
         const float fsw = static_cast<float>(surfW);
         const float fsh = static_cast<float>(surfH);
+        const float layoutX = m_frameSafeAreaValid ? m_frameSafeAreaMinX : 0.0f;
+        const float layoutY = m_frameSafeAreaValid ? m_frameSafeAreaMinY : 0.0f;
+        const float layoutW = m_frameSafeAreaValid ? m_frameSafeAreaWidth : fsw;
+        const float layoutH = m_frameSafeAreaValid ? m_frameSafeAreaHeight : fsh;
 
         // Update authored widgets in place this frame (SetQuad -> GetOrCreateWidget reuses the
         // existing widget), then remove only the ones that vanished. The old path removed and
@@ -620,8 +641,10 @@ namespace pe
             float z = 0.0f;
             float w = 0.0f;
             float h = 0.0f;
-            if (!GetRuntimeUiNodeRect(scene, node, *ui, fsw, fsh, x, y, z, w, h))
+            if (!GetRuntimeUiNodeRect(scene, node, *ui, layoutW, layoutH, x, y, z, w, h))
                 continue;
+            x += layoutX;
+            y += layoutY;
 
             const std::string screenId = ui->screenId.empty() ? "__scene_ui" : ui->screenId;
             const std::string widgetId = MakeSceneWidgetId(*ui, node);
@@ -842,7 +865,7 @@ namespace pe
         if (cacheIt != m_imageCache.end())
             return cacheIt->second.get();
 
-        if (!std::filesystem::exists(resolvedPath))
+        if (!AssetFileExists(resolvedPath))
         {
             PE_WARN("[RuntimeUI] image file not found: %s", path.c_str());
             m_imageCache.emplace(cacheKey, nullptr);
@@ -898,6 +921,20 @@ namespace pe
         std::stable_partition(m_screens.begin(), m_screens.end(),
                               [](const Screen &screen)
                               { return screen.id == "__scene_ui"; });
+
+        // Node actions run Lua that may mutate screens/widgets (set_ui, set_quad, remove), which
+        // would invalidate the containers being iterated below — collect now, dispatch after.
+        struct PendingAction
+        {
+            std::string screenId;
+            std::string widgetId;
+            NodeId *node;
+            uint32_t nodeIndex;
+            uint32_t nodeRevision;
+            RuntimeUiWidgetState state;
+            RuntimeUiWidgetState previousState;
+        };
+        std::vector<PendingAction> pendingActions;
 
         for (Screen &screen : m_screens)
         {
@@ -998,7 +1035,7 @@ namespace pe
                         quadDesc.visible = widget.visible;
                         quadDesc.bringToFront = widget.bringToFront;
                         quadDesc.noInput = widget.noInput;
-                        quadDesc.fontScale = widget.fontScale;
+                        quadDesc.fontScale = widget.fontScale * kTextReadabilityScale / m_frameUiScale;
                         quadDesc.textAlignH = widget.textAlignH;
                         quadDesc.textAlignV = widget.textAlignV;
                         quadDesc.textOffsetX = widget.textOffsetX;
@@ -1007,13 +1044,28 @@ namespace pe
                         quadDesc.fit = widget.fit;
                         const RuntimeUiWidgetState previousState = widget.state;
                         widget.state = m_backend->Quad(quadDesc);
-                        DispatchRuntimeUiNodeAction(screen.id, widget.id, widget.node, widget.state, previousState);
+                        const RuntimeUiWidgetState &s = widget.state;
+                        const bool actionable = s.clicked || s.dragStarted || s.dragging || s.dragReleased ||
+                                                s.hovered != previousState.hovered || s.down != previousState.down;
+                        if (widget.node && actionable)
+                        {
+                            pendingActions.push_back({screen.id, widget.id, widget.node,
+                                                      widget.nodeIndex, widget.nodeRevision,
+                                                      widget.state, previousState});
+                        }
                         break;
                     }
                     }
                 }
             }
             m_backend->EndScreen();
+        }
+
+        for (const PendingAction &action : pendingActions)
+        {
+            DispatchRuntimeUiNodeAction(action.screenId, action.widgetId, action.node,
+                                        action.nodeIndex, action.nodeRevision,
+                                        action.state, action.previousState);
         }
     }
 

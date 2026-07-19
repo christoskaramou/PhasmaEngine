@@ -285,6 +285,8 @@ namespace pe
             RuntimeUiColor textColor{0.92f, 0.93f, 0.94f, 1.0f};
             RuntimeUiColor imageTint{1.0f, 1.0f, 1.0f, 1.0f};
             NodeId *node = nullptr;
+            uint32_t nodeIndex = 0;    // captured at bind time; node itself may dangle
+            uint32_t nodeRevision = 0; // once the node is destroyed, so validate via these
             RuntimeUiWidgetState state{};
             bool bringToFront = false;
             bool noInput = false;

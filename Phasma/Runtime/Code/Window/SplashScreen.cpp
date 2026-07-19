@@ -15,13 +15,16 @@ namespace pe
         }
 
         std::string surface_path = Path::ResolveAsset("SplashScreen/splash_screen.jpg");
-        if (!std::filesystem::exists(surface_path))
+        FileSystem surfaceFile(surface_path, std::ios::in | std::ios::binary);
+        if (!surfaceFile.IsOpen())
         {
             PE_ERROR("[SDL] Splash screen not found: %s", surface_path.c_str());
             return;
         }
+        const std::vector<uint8_t> surfaceBytes = surfaceFile.ReadAllBytes();
         int width, height, nrChannels;
-        unsigned char *data = stbi_load(surface_path.c_str(), &width, &height, &nrChannels, STBI_rgb_alpha);
+        unsigned char *data = stbi_load_from_memory(surfaceBytes.data(), static_cast<int>(surfaceBytes.size()),
+                                                    &width, &height, &nrChannels, STBI_rgb_alpha);
         m_surface = SDL_CreateRGBSurfaceFrom(data, width, height, 32, width * 4, 0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000);
         if (!m_surface)
         {

@@ -28,8 +28,7 @@ namespace pe
         {
             for (const auto &candidate : candidates)
             {
-                std::error_code ec;
-                if (!candidate.empty() && std::filesystem::exists(candidate, ec))
+                if (!candidate.empty() && AssetFileExists(candidate))
                     return candidate.lexically_normal();
             }
             return candidates.size() ? candidates.begin()->lexically_normal() : std::filesystem::path();
@@ -180,7 +179,7 @@ namespace pe
 
             const std::filesystem::path resolved = ResolveSpritePath(path);
             std::error_code ec;
-            if (resolved.empty() || !std::filesystem::exists(resolved, ec))
+            if (resolved.empty() || !AssetFileExists(resolved))
                 return ResourceHandle<Image>();
 
             std::filesystem::path normalized = std::filesystem::weakly_canonical(resolved, ec);
@@ -232,16 +231,16 @@ namespace pe
 
         bool ParseSpriteMetadataFile(const std::filesystem::path &metadataPath, CachedSpriteMetadata &out, std::string *outError)
         {
-            std::ifstream in(metadataPath, std::ios::binary);
-            if (!in)
+            FileSystem in(PathUtf8(metadataPath), std::ios::in | std::ios::binary);
+            if (!in.IsOpen())
             {
                 SetError(outError, "sprite metadata not found: " + PathUtf8(metadataPath));
                 return false;
             }
 
-            rapidjson::IStreamWrapper stream(in);
+            const std::string text = in.ReadAll();
             rapidjson::Document root;
-            root.ParseStream(stream);
+            root.Parse(text.c_str(), text.size());
             if (root.HasParseError() || !root.IsObject())
             {
                 SetError(outError, "invalid sprite metadata JSON: " + PathUtf8(metadataPath));

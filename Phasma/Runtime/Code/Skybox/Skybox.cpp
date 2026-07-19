@@ -120,7 +120,11 @@ namespace pe
             int faceWidth = 0;
             int faceHeight = 0;
             int faceChannels = 0;
-            pixels[i] = stbi_load(textureNames[i].c_str(), &faceWidth, &faceHeight, &faceChannels, STBI_rgb_alpha);
+            FileSystem faceFile(textureNames[i], std::ios::in | std::ios::binary);
+            const std::vector<uint8_t> faceBytes = faceFile.IsOpen() ? faceFile.ReadAllBytes() : std::vector<uint8_t>{};
+            pixels[i] = faceBytes.empty() ? nullptr
+                                          : stbi_load_from_memory(faceBytes.data(), static_cast<int>(faceBytes.size()),
+                                                                  &faceWidth, &faceHeight, &faceChannels, STBI_rgb_alpha);
             if (!pixels[i])
             {
                 PE_WARN("[SkyBox] Failed to load cubemap face: %s", textureNames[i].c_str());

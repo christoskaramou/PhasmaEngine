@@ -87,16 +87,16 @@ namespace pe
     {
         m_filePath = path;
 
-        std::ifstream file(path);
-        if (!file.is_open())
+        FileSystem file(path.string(), std::ios::in | std::ios::binary);
+        if (!file.IsOpen())
         {
             Log::Error(PeFormat("[PassInfoAsset] Failed to open: %s", path.string().c_str()));
             return false;
         }
 
-        rapidjson::IStreamWrapper stream(file);
+        const std::string text = file.ReadAll();
         rapidjson::Document document;
-        document.ParseStream(stream);
+        document.Parse(text.c_str(), text.size());
         if (document.HasParseError() || !document.IsObject())
         {
             Log::Error(PeFormat("[PassInfoAsset] Parse error in %s", path.string().c_str()));
