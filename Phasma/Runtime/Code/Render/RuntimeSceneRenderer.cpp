@@ -5,6 +5,7 @@
 #include "API/RHI.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
+#include "Render/SceneRenderGraph.h"
 #include "Render/ScriptRenderPasses.h"
 #include "UI/RuntimeUi.h"
 
@@ -20,6 +21,17 @@ namespace pe
         bool SupportsRayTracingPass()
         {
             return RHII.GetCaps().rayTracing;
+        }
+
+        // Post that needs STORAGE/UAV or samples display can't target the swapchain
+        // (COLOR_ATTACHMENT|TRANSFER_DST only). Upsample+particles+UI are attachment-only.
+        bool CanDirectPresentToSwapchain(const SceneRendererCore &core)
+        {
+            const auto &pp = Settings::Get<SceneSettings>();
+            if (pp.taa || pp.bloom || pp.tonemapping || pp.dof || pp.motion_blur || pp.color_grading ||
+                pp.fxaa || pp.ssr || pp.cas_sharpening)
+                return false;
+            return core.IsPassEnabled(SceneRenderGraphPassId::Upsample);
         }
 
     } // namespace
@@ -174,16 +186,35 @@ namespace pe
             m_sceneRenderer.SetRenderPassScene(m_scene);
         }
 
+        const bool directPresent = CanDirectPresentToSwapchain(m_sceneRenderer);
+        if (directPresent)
+            m_sceneRenderer.SetFrameDisplayOverride(RHII.GetSwapchain()->GetImage(imageIndex));
+
         cmd->Begin();
         m_scene.RecordPendingUvUploads(cmd);
         m_sceneRenderer.ExecuteRenderGraph(cmd);
         Image *displayRT = m_sceneRenderer.GetDisplayRT();
         if (m_runtimeUi)
             m_runtimeUi->Render(cmd, displayRT);
-        m_sceneRenderer.BlitToSwapchain(cmd, displayRT, imageIndex);
+        if (directPresent)
+        {
+            ImageBarrierInfo barrier{};
+            barrier.image = displayRT;
+            barrier.layout = PE_IMAGE_LAYOUT_PRESENT_SRC;
+            barrier.stageFlags = PE_STAGE_ALL_COMMANDS;
+            barrier.accessMask = PE_ACCESS_NONE;
+            cmd->ImageBarrier(barrier);
+        }
+        else
+        {
+            m_sceneRenderer.BlitToSwapchain(cmd, displayRT, imageIndex);
+        }
         QueueScreenshotReadback(cmd, displayRT);
         Debug::CollectGpuTrace(cmd);
         cmd->End();
+
+        if (directPresent)
+            m_sceneRenderer.SetFrameDisplayOverride(nullptr);
 
         return cmd;
     }

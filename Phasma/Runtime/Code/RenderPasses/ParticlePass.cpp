@@ -118,6 +118,10 @@ namespace pe
         if (!m_scene->GetParticleManager())
             return;
 
+        // Skip empty draw (pass stays Init'd — do not gate via SetPassEnabled).
+        if (m_scene->GetParticleManager()->GetParticleCount() == 0)
+            return;
+
         Buffer *particleBuffer = m_scene->GetParticleManager()->GetParticleBuffer();
         if (!particleBuffer)
             return;
@@ -134,6 +138,9 @@ namespace pe
             descriptors[0]->SetBuffer(1, emitterBuffer);
             descriptors[0]->Update();
         }
+
+        // Honor per-frame display override (direct present to swapchain).
+        m_attachments[0].image = RequireActiveSceneRendererHost().GetRenderTarget("display");
 
         // 1. Barrier: Wait for Compute Write to finish before Vertex Read
         BufferBarrierInfo barrier{};
