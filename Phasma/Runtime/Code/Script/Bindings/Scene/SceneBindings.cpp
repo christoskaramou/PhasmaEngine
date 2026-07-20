@@ -28,6 +28,52 @@ namespace pe
                     LoadScene(Path::Assets + "Scenes/" + name);
                 });
 
+                // Batched transform writes: one Lua->C++ crossing for N nodes instead of N
+                // usertype calls. `t` is a flat interleaved array {node, x, y, z, ...} reused
+                // as a scratch table by callers; `count` is the number of node entries (the
+                // table may have a stale tail beyond count*4). Invalid/stale handles are
+                // skipped, so callers don't need a separate is_valid crossing per node.
+                scene.set_function("set_positions", [](sol::table t, int count) {
+                    Scene *s = GetActiveScene();
+                    if (!s) return;
+                    for (int i = 0; i < count; i++)
+                    {
+                        int base = i * 4;
+                        auto h = t.raw_get<sol::optional<SceneNodeHandle>>(base + 1);
+                        auto x = t.raw_get<sol::optional<float>>(base + 2);
+                        auto y = t.raw_get<sol::optional<float>>(base + 3);
+                        auto z = t.raw_get<sol::optional<float>>(base + 4);
+                        if (!h || !x || !y || !z || !h->IsValid(*s))
+                            continue;
+                        mat4 local = s->GetLocalMatrix(h->nodeId);
+                        local[3] = vec4(*x, *y, *z, 1.0f);
+                        s->SetLocalMatrix(h->nodeId, local);
+                    }
+                });
+
+                // Same contract as set_positions; rotation is euler degrees, matching
+                // node:set_rotation (decompose local matrix, rebuild T*R*S).
+                scene.set_function("set_rotations", [](sol::table t, int count) {
+                    Scene *s = GetActiveScene();
+                    if (!s) return;
+                    for (int i = 0; i < count; i++)
+                    {
+                        int base = i * 4;
+                        auto h = t.raw_get<sol::optional<SceneNodeHandle>>(base + 1);
+                        auto rx = t.raw_get<sol::optional<float>>(base + 2);
+                        auto ry = t.raw_get<sol::optional<float>>(base + 3);
+                        auto rz = t.raw_get<sol::optional<float>>(base + 4);
+                        if (!h || !rx || !ry || !rz || !h->IsValid(*s))
+                            continue;
+                        const mat4 &m = s->GetLocalMatrix(h->nodeId);
+                        vec3 pos(m[3]);
+                        vec3 sc(glm::length(vec3(m[0])), glm::length(vec3(m[1])), glm::length(vec3(m[2])));
+                        mat4 rot = glm::mat4_cast(glm::quat(glm::radians(vec3(*rx, *ry, *rz))));
+                        mat4 local = glm::translate(mat4(1.f), pos) * rot * glm::scale(mat4(1.f), sc);
+                        s->SetLocalMatrix(h->nodeId, local);
+                    }
+                });
+
                 scene.set_function("load_async", [](const std::string &name, sol::function callback) {
                     Scene *activeScene = GetActiveScene();
                     if (!activeScene) return;

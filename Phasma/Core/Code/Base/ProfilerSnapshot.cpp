@@ -12,10 +12,23 @@ namespace pe
                 return;
             for (const char *p = s; *p; ++p)
             {
-                const char c = *p;
+                const unsigned char c = static_cast<unsigned char>(*p);
                 if (c == '"' || c == '\\')
+                {
                     out.push_back('\\');
-                out.push_back(c);
+                    out.push_back(static_cast<char>(c));
+                }
+                else if (c < 0x20 || c >= 0x7f)
+                {
+                    // Keep stream UTF-8 JSON-safe; dangling/dynamic scope names can be garbage.
+                    char buf[8];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", c);
+                    out += buf;
+                }
+                else
+                {
+                    out.push_back(static_cast<char>(c));
+                }
             }
         }
 

@@ -69,6 +69,11 @@ namespace pe
         if (!scene.GetParticleManager())
             return;
 
+        // Skip empty dispatch; keep pass alive so InitTextures still has a valid cmd path.
+        if (scene.GetParticleManager()->GetEmitterCount() == 0 &&
+            scene.GetParticleManager()->GetParticleCount() == 0)
+            return;
+
         Buffer *particleBuffer = scene.GetParticleManager()->GetParticleBuffer();
         if (!particleBuffer)
             return;

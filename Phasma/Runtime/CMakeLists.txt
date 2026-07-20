@@ -32,9 +32,13 @@ target_precompile_headers(PhasmaRuntime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../
 
 target_include_directories(PhasmaRuntime PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/Code"
-    "${PE_SHARED_THIRD_PARTY_DIR}/lua"
     "${PE_SHARED_THIRD_PARTY_DIR}/sol2"
 )
+# Lua headers: vanilla dir must NOT be on the path under LuaJIT (it would shadow
+# luajit's lua.h for sol2); LuaJIT's include dir arrives via the Lua INTERFACE target.
+if(NOT PE_USE_LUAJIT)
+    target_include_directories(PhasmaRuntime PUBLIC "${PE_SHARED_THIRD_PARTY_DIR}/lua")
+endif()
 target_include_directories(PhasmaRuntime PRIVATE
     "${PE_SHARED_THIRD_PARTY_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/../Core/third_party"
