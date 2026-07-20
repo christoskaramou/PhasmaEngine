@@ -40,11 +40,15 @@ namespace pe
 
     Image *SceneRendererCore::GetRenderTarget(const std::string &name) const
     {
+        if (m_frameDisplayOverride && name == "display")
+            return m_frameDisplayOverride;
         return GetSceneRenderTarget(m_renderTargets, name);
     }
 
     Image *SceneRendererCore::GetRenderTarget(size_t hash) const
     {
+        if (m_frameDisplayOverride && hash == static_cast<size_t>(StringHash("display")))
+            return m_frameDisplayOverride;
         return GetSceneRenderTarget(m_renderTargets, hash);
     }
 

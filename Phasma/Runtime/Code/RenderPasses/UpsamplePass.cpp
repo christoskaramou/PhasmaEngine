@@ -61,6 +61,10 @@ namespace pe
 
     void UpsamplePass::ExecutePass(CommandBuffer *cmd)
     {
+        // Honor per-frame display override (direct present to swapchain).
+        m_displayRT = RequireActiveSceneRendererHost().GetDisplayRT();
+        m_attachments[0].image = m_displayRT;
+
         cmd->BeginDebugRegion("UpsamplePass");
         cmd->BeginPass(1, m_attachments.data(), "Upsample");
         cmd->BindPipeline(*m_passInfo);

@@ -20,7 +20,9 @@ namespace pe
         RenderGraph &GetRenderGraph() { return m_renderGraph; }
         const RenderGraph &GetRenderGraph() const { return m_renderGraph; }
 
-        Image *GetDisplayRT() const { return m_displayRT; }
+        Image *GetDisplayRT() const { return m_frameDisplayOverride ? m_frameDisplayOverride : m_displayRT; }
+        // ponytail: Player can alias display→swapchain for one frame to skip the 1:1 present blit.
+        void SetFrameDisplayOverride(Image *image) { m_frameDisplayOverride = image; }
         Image *GetViewportRT() const { return m_viewportRT; }
         Image *GetDepthStencilRT() const { return m_depthStencil; }
         Image *GetScreenshotRT() const { return m_screenshotRT; }
@@ -89,6 +91,7 @@ namespace pe
 
         RenderGraph m_renderGraph;
         Image *m_displayRT = nullptr;
+        Image *m_frameDisplayOverride = nullptr;
         Image *m_viewportRT = nullptr;
         Image *m_depthStencil = nullptr;
         Image *m_screenshotRT = nullptr;
