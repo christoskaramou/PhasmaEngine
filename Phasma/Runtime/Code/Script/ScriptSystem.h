@@ -212,6 +212,7 @@ namespace pe
 
         // Per-node script instance management
         void ReconcileNodeInstances();
+        void RememberReconcileSnapshot(const Scene *scene);
         NodeScriptInstance CreateNodeInstance(NodeId *node, const std::string &path);
         // Trigger-zone script instance (separate from the node's plain Component_Script instance):
         // found/created lazily in `store`, keyed by node, rebuilt in place on path change. Each store is
@@ -233,6 +234,10 @@ namespace pe
         std::vector<NodeScriptInstance> m_nodeInstances{};
         std::vector<NodeScriptInstance> m_zoneScriptInstances{};        // zone Script-section scripts
         std::vector<NodeScriptInstance> m_zonePhysicsScriptInstances{}; // zone Physics-section scripts
+        // Snapshot used to skip ReconcileNodeInstances when script membership is unchanged.
+        uint32_t m_lastReconcileSceneGen = 0;
+        uint32_t m_lastReconcileScriptGen = 0;
+        uint32_t m_lastReconcileNodeCount = UINT32_MAX; // force first reconcile
         std::vector<RegisteredScriptUpdate> m_registeredUpdates{};
         std::vector<PendingAsyncLoad> m_pendingAsyncLoads;
         std::vector<PendingSceneLoad> m_pendingSceneLoads;

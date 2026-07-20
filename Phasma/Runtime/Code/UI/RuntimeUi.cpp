@@ -567,6 +567,10 @@ namespace pe
     {
         Screen &screen = GetOrCreateScreen(screenId);
         Widget &widget = GetOrCreateWidget(screen, widgetId, WidgetType::Quad);
+        // Sort only when order keys change. Animated HUD (damage floats, etc.) updates x/y/alpha
+        // every step with fixed z — re-flagging needsSort each call forced a full screen sort
+        // every frame even though order was unchanged. New widgets still dirty via GetOrCreateWidget.
+        const bool orderDirty = widget.z != desc.z || widget.bringToFront != desc.bringToFront;
         widget.label = desc.label ? desc.label : "";
         widget.title = desc.title ? desc.title : "";
         widget.subtitle = desc.subtitle ? desc.subtitle : "";
@@ -605,10 +609,8 @@ namespace pe
         else if (path != widget.imagePath)
             widget.image = LoadImageResource(path);
         widget.imagePath = path;
-        // Quad draw order (z / bringToFront) is resolved once per frame in BuildFrame, not on
-        // every SetQuad. Sorting here made each authored/script HUD update O(W log W), so a
-        // frame driving M widgets cost O(M * W log W) of redundant re-sorts.
-        screen.needsSort = true;
+        if (orderDirty)
+            screen.needsSort = true;
     }
 
     void RuntimeUiSystem::SyncSceneWidgets(Scene &scene)
@@ -911,6 +913,11 @@ namespace pe
 
     void RuntimeUiSystem::BuildFrame()
     {
+        PE_PROFILE_SCOPE("RuntimeUI BuildFrame");
+        uint32_t quadCount = 0;
+        uint32_t overlayQuadCount = 0;
+        uint32_t textQuadCount = 0;
+
         // The authored scene-UI screen is base HUD chrome; draw it first so script-created
         // overlay screens (dynamic HUD content) always render on top. Overlay quads are all
         // brought to the display front in draw order, so the last screen drawn wins z-order.
@@ -1011,6 +1018,12 @@ namespace pe
                         break;
                     case WidgetType::Quad:
                     {
+                        ++quadCount;
+                        if (screen.overlay)
+                            ++overlayQuadCount;
+                        if (!widget.label.empty() || !widget.title.empty() || !widget.subtitle.empty() ||
+                            !widget.textValue.empty() || !widget.footer.empty())
+                            ++textQuadCount;
                         RuntimeUiQuadDesc quadDesc{};
                         quadDesc.id = widget.id.c_str();
                         quadDesc.label = widget.label.c_str();
@@ -1060,6 +1073,10 @@ namespace pe
             }
             m_backend->EndScreen();
         }
+
+        PE_PROFILE_COUNTER("RuntimeUI.Quads", quadCount);
+        PE_PROFILE_COUNTER("RuntimeUI.OverlayQuads", overlayQuadCount);
+        PE_PROFILE_COUNTER("RuntimeUI.TextQuads", textQuadCount);
 
         for (const PendingAction &action : pendingActions)
         {

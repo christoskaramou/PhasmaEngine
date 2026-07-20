@@ -275,48 +275,72 @@ namespace pe
                     return s->CreateMaterialInstance(mesh);
                 };
 
-                auto setVec4 = [ensureInstance](Scene *s, NodeId *nodeId, int meshIdx, const std::string &prop, vec4 value) {
+                auto setVec4 = [ensureInstance](Scene *s, NodeId * /*nodeId*/, int meshIdx, const std::string &prop, vec4 value) {
                     if (meshIdx < 0) return;
                     Mesh &mesh = s->GetMesh(meshIdx);
                     if (!mesh.material) return;
                     MaterialInstance *inst = ensureInstance(s, mesh);
                     if (!inst) return;
-                    if (prop == "base_color") inst->SetBaseColorFactor(value);
-                    s->SetMaterialDirty();
-                    s->MarkNodeDirty(nodeId);
+                    // Color/emissive live in the material buffer — no MarkNodeDirty
+                    // (avoids UpdateNodeMatrices subtree walks on ATH flash paths).
+                    bool changed = false;
+                    if (prop == "base_color")
+                        changed = inst->SetBaseColorFactor(value);
+                    if (changed)
+                        s->SetMaterialDirty();
                 };
-                auto setVec3 = [ensureInstance](Scene *s, NodeId *nodeId, int meshIdx, const std::string &prop, vec3 value) {
+                auto setVec3 = [ensureInstance](Scene *s, NodeId * /*nodeId*/, int meshIdx, const std::string &prop, vec3 value) {
                     if (meshIdx < 0) return;
                     Mesh &mesh = s->GetMesh(meshIdx);
                     if (!mesh.material) return;
                     MaterialInstance *inst = ensureInstance(s, mesh);
                     if (!inst) return;
-                    if (prop == "base_color") inst->SetBaseColorFactor(vec4(value, 1.f));
-                    else if (prop == "emissive") inst->SetEmissiveFactor(value);
-                    s->SetMaterialDirty();
-                    s->MarkNodeDirty(nodeId);
+                    bool changed = false;
+                    if (prop == "base_color")
+                        changed = inst->SetBaseColorFactor(vec4(value, 1.f));
+                    else if (prop == "emissive")
+                        changed = inst->SetEmissiveFactor(value);
+                    if (changed)
+                        s->SetMaterialDirty();
                 };
-                auto setFloat = [ensureInstance](Scene *s, NodeId *nodeId, int meshIdx, const std::string &prop, float value) {
+                auto setFloat = [ensureInstance](Scene *s, NodeId * /*nodeId*/, int meshIdx, const std::string &prop, float value) {
                     if (meshIdx < 0) return;
                     Mesh &mesh = s->GetMesh(meshIdx);
                     if (!mesh.material) return;
                     MaterialInstance *inst = ensureInstance(s, mesh);
                     if (!inst) return;
-                    if (prop == "transmission") inst->SetTransmissionFactor(value);
-                    else if (prop == "metallic") inst->SetMetallic(value);
-                    else if (prop == "roughness") inst->SetRoughness(value);
-                    else if (prop == "alpha_cutoff") inst->SetAlphaCutoff(value);
-                    else if (prop == "occlusion_strength") inst->SetOcclusionStrength(value);
-                    else if (prop == "normal_scale") inst->SetNormalScale(value);
-                    else if (prop == "ior") inst->SetIor(value);
-                    else if (prop == "thickness_factor") inst->SetThicknessFactor(value);
-                    else if (prop == "attenuation_distance") inst->SetAttenuationDistance(value);
+                    bool changed = false;
+                    if (prop == "transmission")
+                        changed = inst->SetTransmissionFactor(value);
+                    else if (prop == "metallic")
+                        changed = inst->SetMetallic(value);
+                    else if (prop == "roughness")
+                        changed = inst->SetRoughness(value);
+                    else if (prop == "alpha_cutoff")
+                        changed = inst->SetAlphaCutoff(value);
+                    else if (prop == "occlusion_strength")
+                        changed = inst->SetOcclusionStrength(value);
+                    else if (prop == "normal_scale")
+                        changed = inst->SetNormalScale(value);
+                    else if (prop == "ior")
+                        changed = inst->SetIor(value);
+                    else if (prop == "thickness_factor")
+                        changed = inst->SetThicknessFactor(value);
+                    else if (prop == "attenuation_distance")
+                        changed = inst->SetAttenuationDistance(value);
                     // No instance override: night emissive is a property of the material
                     // itself (a shared material is night-emissive for every user).
-                    else if (prop == "night_emissive") mesh.material->nightEmissive = value;
-                    else return;
-                    s->SetMaterialDirty();
-                    s->MarkNodeDirty(nodeId);
+                    else if (prop == "night_emissive")
+                    {
+                        if (mesh.material->nightEmissive == value)
+                            return;
+                        mesh.material->nightEmissive = value;
+                        changed = true;
+                    }
+                    else
+                        return;
+                    if (changed)
+                        s->SetMaterialDirty();
                 };
 
                 mat.set_function("set", sol::overload(
@@ -344,6 +368,37 @@ namespace pe
                         Scene *s = GetScene();
                         setFloat(s, h.nodeId, ResolveMeshIdx(s, h, slot), prop, value);
                     }));
+
+                // Batched emissive writes (mesh slot 0): one crossing for N nodes.
+                // `t` is a flat interleaved scratch array {node, r, g, b, ...}, `count` the
+                // number of node entries; stale tail beyond count*4 is ignored. Invalid
+                // handles are skipped. SetMaterialDirty fires once for the whole batch.
+                mat.set_function("set_emissives", [ensureInstance](sol::table t, int count) {
+                    Scene *s = GetScene();
+                    if (!s) return;
+                    bool anyChanged = false;
+                    for (int i = 0; i < count; i++)
+                    {
+                        int base = i * 4;
+                        auto h = t.raw_get<sol::optional<SceneNodeHandle>>(base + 1);
+                        auto r = t.raw_get<sol::optional<float>>(base + 2);
+                        auto g = t.raw_get<sol::optional<float>>(base + 3);
+                        auto b = t.raw_get<sol::optional<float>>(base + 4);
+                        if (!h || !r || !g || !b)
+                            continue;
+                        int meshIdx = ResolveMeshIdx(s, *h, 0);
+                        if (meshIdx < 0)
+                            continue;
+                        Mesh &mesh = s->GetMesh(meshIdx);
+                        if (!mesh.material)
+                            continue;
+                        MaterialInstance *inst = ensureInstance(s, mesh);
+                        if (inst && inst->SetEmissiveFactor(vec3(*r, *g, *b)))
+                            anyChanged = true;
+                    }
+                    if (anyChanged)
+                        s->SetMaterialDirty();
+                });
 
                 auto getRenderTypeStr = [](Scene *s, int meshIdx) -> std::string {
                     if (meshIdx < 0) return "opaque";

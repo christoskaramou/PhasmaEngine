@@ -143,6 +143,17 @@ namespace pe
                 return false;
             }
 
+            const NodeSpriteFrame &frame = sprite.frames[frameIndex];
+            // Same frame re-apply (e.g. oneshot hold): skip UV + dirty work.
+            if (sprite.frameIndex == frameIndex
+                && sprite.uvRect == frame.uvRect
+                && sprite.meshSlot == ResolveMeshSlot(sprite, meshSlot))
+            {
+                if (markDocumentDirty)
+                    scene.MarkDirty();
+                return true;
+            }
+
             const int slot = ResolveMeshSlot(sprite, meshSlot);
             const auto &refs = scene.GetMeshRefs(node);
             if (slot < 0 || slot >= static_cast<int>(refs.size()))
@@ -151,7 +162,6 @@ namespace pe
                 return false;
             }
 
-            const NodeSpriteFrame &frame = sprite.frames[frameIndex];
             const bool uvApplied = transientGpuUpdate ? scene.SetMeshUvRectTransient(refs[slot], frame.uvRect)
                                                       : scene.SetMeshUvRect(refs[slot], frame.uvRect);
             if (!uvApplied)
@@ -166,7 +176,10 @@ namespace pe
             sprite.frameHeight = frame.h;
             sprite.uvRect = frame.uvRect;
             sprite.meshSlot = slot;
-            scene.MarkNodeDirty(node);
+            // Transient animation UV uploads stage their own GPU copies — do not
+            // MarkNodeDirty (would force UpdateNodeMatrices for every walk frame).
+            if (!transientGpuUpdate)
+                scene.MarkNodeDirty(node);
             if (markDocumentDirty)
                 scene.MarkDirty();
             return true;

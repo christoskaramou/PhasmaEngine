@@ -5,6 +5,8 @@ import android.content.res.AssetManager;
 import android.graphics.Insets;
 import android.os.Build;
 import android.os.Bundle;
+import android.system.ErrnoException;
+import android.system.Os;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowInsets;
@@ -15,6 +17,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
     private static final String TAG = "PhasmaPlayer";
@@ -32,12 +36,56 @@ public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
     private static volatile int sSafeAreaInsetRight = 0;
     private static volatile int sSafeAreaInsetBottom = 0;
 
+    // Recents redelivers the last launch intent, so adb-harness extras (profiler,
+    // arena autostart, god mode) would leak into a normal user relaunch without
+    // this guard.
+    private boolean isHistoryRelaunch() {
+        return getIntent() != null
+                && (getIntent().getFlags() & android.content.Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0;
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        if (!isHistoryRelaunch()) {
+            applyProfilerLaunchOptions();
+            applyAthLaunchEnv();
+        } else {
+            Log.i(TAG, "Relaunch from Recents: ignoring redelivered launch extras");
+        }
         extractBundledAssets();
         super.onCreate(savedInstanceState);
         hideSystemBars();
         installSafeAreaInsetsListener();
+        requestMaxRefreshRate();
+    }
+
+    // Without an explicit mode request Android keeps many panels at 60/90Hz, which
+    // caps FIFO presentation regardless of how fast the engine renders. Ask for the
+    // highest refresh rate available at the current resolution (e.g. 120Hz).
+    private void requestMaxRefreshRate() {
+        try {
+            android.view.Display display = Build.VERSION.SDK_INT >= 30
+                    ? getDisplay()
+                    : getWindowManager().getDefaultDisplay();
+            if (display == null) {
+                return;
+            }
+            android.view.Display.Mode current = display.getMode();
+            android.view.Display.Mode best = current;
+            for (android.view.Display.Mode mode : display.getSupportedModes()) {
+                if (mode.getPhysicalWidth() == current.getPhysicalWidth()
+                        && mode.getPhysicalHeight() == current.getPhysicalHeight()
+                        && mode.getRefreshRate() > best.getRefreshRate()) {
+                    best = mode;
+                }
+            }
+            android.view.WindowManager.LayoutParams params = getWindow().getAttributes();
+            params.preferredDisplayModeId = best.getModeId();
+            getWindow().setAttributes(params);
+            Log.i(TAG, "Requested display mode " + best.getRefreshRate() + "Hz (id " + best.getModeId() + ")");
+        } catch (Throwable t) {
+            Log.w(TAG, "Failed to request high refresh rate", t);
+        }
     }
 
     @Override
@@ -57,6 +105,127 @@ public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
     @Override
     protected String[] getLibraries() {
         return new String[] {"SDL2", "main"};
+    }
+
+    // Opt-in live profiler: adb shell am start -n dev.phasma.player/.PhasmaPlayerActivity
+    //   --ez PE_PROFILER true   OR   --es PE_PROFILER 9876
+    // Then: adb forward tcp:9876 tcp:9876 and connect desktop PhasmaProfiler.
+    @Override
+    protected String[] getArguments() {
+        List<String> args = new ArrayList<>();
+        Bundle extras = (getIntent() != null && !isHistoryRelaunch()) ? getIntent().getExtras() : null;
+        if (extras != null && extras.containsKey("PE_PROFILER")) {
+            Object value = extras.get("PE_PROFILER");
+            boolean enabled = true;
+            String port = null;
+            if (value instanceof Boolean) {
+                enabled = (Boolean) value;
+            } else if (value instanceof Number) {
+                port = Integer.toString(((Number) value).intValue());
+            } else if (value != null) {
+                String text = String.valueOf(value).trim();
+                if (text.isEmpty() || text.equals("0") || text.equalsIgnoreCase("false")) {
+                    enabled = false;
+                } else if (!text.equals("1") && !text.equalsIgnoreCase("true")) {
+                    port = text;
+                }
+            }
+            if (enabled) {
+                if (port != null) {
+                    args.add("--profiler=" + port);
+                } else {
+                    args.add("--profiler");
+                }
+            }
+        }
+        return args.toArray(new String[0]);
+    }
+
+    private void applyProfilerLaunchOptions() {
+        Bundle extras = getIntent() != null ? getIntent().getExtras() : null;
+        if (extras == null || !extras.containsKey("PE_PROFILER")) {
+            return;
+        }
+        Object value = extras.get("PE_PROFILER");
+        // ParseProfilerStreamPortArg treats a leading digit as a port. Never set
+        // PE_PROFILER=1 (that becomes port 1). Use "true" or an explicit port.
+        String envValue = "true";
+        if (value instanceof Boolean) {
+            if (!(Boolean) value) {
+                return;
+            }
+        } else if (value instanceof Number) {
+            int port = ((Number) value).intValue();
+            if (port <= 0) {
+                return;
+            }
+            envValue = Integer.toString(port);
+        } else if (value != null) {
+            String text = String.valueOf(value).trim();
+            if (text.isEmpty() || text.equals("0") || text.equalsIgnoreCase("false")) {
+                return;
+            }
+            if (!text.equals("1") && !text.equalsIgnoreCase("true")) {
+                envValue = text;
+            }
+        }
+        try {
+            Os.setenv("PE_PROFILER", envValue, true);
+            Log.i(TAG, "PE_PROFILER=" + envValue);
+        } catch (ErrnoException e) {
+            Log.w(TAG, "Failed to set PE_PROFILER env", e);
+        }
+    }
+
+    // ATH launch env from intent extras (adb --es / --ez):
+    //   ATH_MONO_ARCH=sprout|off
+    //   ATH_DUEL_INVULNERABLE=true  (god mode for perf captures)
+    private void applyAthLaunchEnv() {
+        Bundle extras = getIntent() != null ? getIntent().getExtras() : null;
+        if (extras == null) {
+            return;
+        }
+        setAthEnvFromExtra(extras, "ATH_MONO_ARCH");
+        setAthEnvFromExtra(extras, "ATH_DUEL_INVULNERABLE");
+        // Direct arena boot + self-starting combat for hands-off perf captures:
+        //   --es ATH_MODE arena --ez ATH_AUTOSTART true
+        setAthEnvFromExtra(extras, "ATH_MODE");
+        setAthEnvFromExtra(extras, "ATH_AUTOSTART");
+        // Perf map/wave pins (Duel:start_map): --ei ATH_DUEL_MAP 8 --ei ATH_DUEL_WAVE 1
+        setAthEnvFromExtra(extras, "ATH_DUEL_MAP");
+        setAthEnvFromExtra(extras, "ATH_DUEL_WAVE");
+        // Present-mode A/B knob: --es PE_PRESENT_MODE mailbox|immediate|fifo
+        // (read by RuntimeStartup's ReadPresentModeEnvOverride; default stays FIFO).
+        setAthEnvFromExtra(extras, "PE_PRESENT_MODE");
+    }
+
+    private void setAthEnvFromExtra(Bundle extras, String key) {
+        if (!extras.containsKey(key)) {
+            return;
+        }
+        Object value = extras.get(key);
+        String text;
+        if (value instanceof Boolean) {
+            text = (Boolean) value ? "1" : "0";
+        } else if (value == null) {
+            return;
+        } else {
+            text = String.valueOf(value).trim();
+            if (text.isEmpty()) {
+                return;
+            }
+            if (text.equalsIgnoreCase("true")) {
+                text = "1";
+            } else if (text.equalsIgnoreCase("false")) {
+                text = "0";
+            }
+        }
+        try {
+            Os.setenv(key, text, true);
+            Log.i(TAG, key + "=" + text);
+        } catch (ErrnoException e) {
+            Log.w(TAG, "Failed to set " + key + " env", e);
+        }
     }
 
     public static int getSafeAreaInsetLeft() {

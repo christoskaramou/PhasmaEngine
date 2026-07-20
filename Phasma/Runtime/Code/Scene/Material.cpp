@@ -260,11 +260,15 @@ namespace pe
     }
 
     template <typename T, typename U>
-    void MaterialInstance::SetScalarOverride(std::optional<T> &opt, const std::string &paramKey, const U &value)
+    bool MaterialInstance::SetScalarOverride(std::optional<T> &opt, const std::string &paramKey, const U &value)
     {
-        opt = value;
-        m_paramOverrides[paramKey] = value;
+        const T typed = static_cast<T>(value);
+        if (opt.has_value() && *opt == typed)
+            return false;
+        opt = typed;
+        m_paramOverrides[paramKey] = typed;
         dirty = true;
+        return true;
     }
 
     template <typename T>
@@ -336,58 +340,61 @@ namespace pe
         }
     }
 
-    void MaterialInstance::SetBaseColorFactor(const vec4 &v)
+    bool MaterialInstance::SetBaseColorFactor(const vec4 &v)
     {
-        SetScalarOverride(m_baseColorOverride, "baseColorFactor", v);
+        return SetScalarOverride(m_baseColorOverride, "baseColorFactor", v);
     }
-    void MaterialInstance::SetMetallic(float v)
+    bool MaterialInstance::SetMetallic(float v)
     {
-        SetScalarOverride(m_metallicOverride, "metallic", v);
+        return SetScalarOverride(m_metallicOverride, "metallic", v);
     }
-    void MaterialInstance::SetRoughness(float v)
+    bool MaterialInstance::SetRoughness(float v)
     {
-        SetScalarOverride(m_roughnessOverride, "roughness", v);
+        return SetScalarOverride(m_roughnessOverride, "roughness", v);
     }
-    void MaterialInstance::SetAlphaCutoff(float v)
+    bool MaterialInstance::SetAlphaCutoff(float v)
     {
-        SetScalarOverride(m_alphaCutoffOverride, "alphaCutoff", v);
+        return SetScalarOverride(m_alphaCutoffOverride, "alphaCutoff", v);
     }
-    void MaterialInstance::SetEmissiveFactor(const vec3 &v)
+    bool MaterialInstance::SetEmissiveFactor(const vec3 &v)
     {
-        SetScalarOverride(m_emissiveOverride, "emissiveFactor", v);
+        return SetScalarOverride(m_emissiveOverride, "emissiveFactor", v);
     }
-    void MaterialInstance::SetOcclusionStrength(float v)
+    bool MaterialInstance::SetOcclusionStrength(float v)
     {
-        SetScalarOverride(m_occlusionStrengthOverride, "occlusionStrength", v);
+        return SetScalarOverride(m_occlusionStrengthOverride, "occlusionStrength", v);
     }
-    void MaterialInstance::SetTransmissionFactor(float v)
+    bool MaterialInstance::SetTransmissionFactor(float v)
     {
-        SetScalarOverride(m_transmissionFactorOverride, "transmissionFactor", v);
+        return SetScalarOverride(m_transmissionFactorOverride, "transmissionFactor", v);
     }
-    void MaterialInstance::SetThicknessFactor(float v)
+    bool MaterialInstance::SetThicknessFactor(float v)
     {
-        SetScalarOverride(m_thicknessFactorOverride, "thicknessFactor", v);
+        return SetScalarOverride(m_thicknessFactorOverride, "thicknessFactor", v);
     }
-    void MaterialInstance::SetAttenuationDistance(float v)
+    bool MaterialInstance::SetAttenuationDistance(float v)
     {
-        SetScalarOverride(m_attenuationDistanceOverride, "attenuationDistance", v);
+        return SetScalarOverride(m_attenuationDistanceOverride, "attenuationDistance", v);
     }
-    void MaterialInstance::SetIor(float v)
+    bool MaterialInstance::SetIor(float v)
     {
-        SetScalarOverride(m_iorOverride, "ior", v);
+        return SetScalarOverride(m_iorOverride, "ior", v);
     }
-    void MaterialInstance::SetAttenuationColor(const vec3 &v)
+    bool MaterialInstance::SetAttenuationColor(const vec3 &v)
     {
-        SetScalarOverride(m_attenuationColorOverride, "attenuationColor", v);
+        return SetScalarOverride(m_attenuationColorOverride, "attenuationColor", v);
     }
 
     // normalScale is packed into the legacy MaterialGpuData factors matrix
     // (see Material::ToFactors) and is not a top-level scalar in any byte-address
     // shader layout, so it has no m_paramOverrides key.
-    void MaterialInstance::SetNormalScale(float v)
+    bool MaterialInstance::SetNormalScale(float v)
     {
+        if (m_normalScaleOverride.has_value() && *m_normalScaleOverride == v)
+            return false;
         m_normalScaleOverride = v;
         dirty = true;
+        return true;
     }
     // RenderType / TextureMask drive render-path selection and aren't byte-buffer scalars.
     void MaterialInstance::SetRenderType(RenderType type)

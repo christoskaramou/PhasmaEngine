@@ -173,19 +173,19 @@ namespace pe
 
         Material *GetParent() const { return m_parent; }
 
-        // Override setters
-        void SetBaseColorFactor(const vec4 &v);
-        void SetMetallic(float v);
-        void SetRoughness(float v);
-        void SetAlphaCutoff(float v);
-        void SetEmissiveFactor(const vec3 &v);
-        void SetOcclusionStrength(float v);
-        void SetNormalScale(float v);
-        void SetTransmissionFactor(float v);
-        void SetThicknessFactor(float v);
-        void SetAttenuationDistance(float v);
-        void SetIor(float v);
-        void SetAttenuationColor(const vec3 &v);
+        // Override setters — return true when the stored value actually changed.
+        bool SetBaseColorFactor(const vec4 &v);
+        bool SetMetallic(float v);
+        bool SetRoughness(float v);
+        bool SetAlphaCutoff(float v);
+        bool SetEmissiveFactor(const vec3 &v);
+        bool SetOcclusionStrength(float v);
+        bool SetNormalScale(float v);
+        bool SetTransmissionFactor(float v);
+        bool SetThicknessFactor(float v);
+        bool SetAttenuationDistance(float v);
+        bool SetIor(float v);
+        bool SetAttenuationColor(const vec3 &v);
         void SetRenderType(RenderType type);
         void SetTexture(TextureType slot, ResourceHandle<Image> img);
         void SetTextureMask(uint32_t mask);
@@ -263,8 +263,9 @@ namespace pe
     private:
         // Centralized dual-write: keeps the legacy std::optional override and the
         // shader-driven m_paramOverrides map in sync, and flips dirty in one place.
+        // Returns false when the override already holds an equal value (no dirty).
         template <typename T, typename U>
-        void SetScalarOverride(std::optional<T> &opt, const std::string &paramKey, const U &value);
+        bool SetScalarOverride(std::optional<T> &opt, const std::string &paramKey, const U &value);
         template <typename T>
         void ClearScalarOverride(std::optional<T> &opt, const std::string &paramKey);
         // Resets the legacy optional that mirrors paramKey, if any. Called from

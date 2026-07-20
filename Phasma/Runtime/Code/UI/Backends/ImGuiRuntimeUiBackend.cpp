@@ -359,7 +359,17 @@ namespace pe
 
                 const std::string id = m_currentScreenId + "." + (quad.id ? quad.id : "quad");
                 if (m_currentScreenOverlay)
+                {
+                    // Decorative overlay quads (damage floats, bars, stick, FPS…) used to each
+                    // open an ImGui window + BringWindowToDisplayFront. That dominated ATH combat
+                    // CPU once dozens were live. Batch no-input quads onto the background draw
+                    // list (still above the 3D scene; below interactive overlay windows).
+                    // bring_to_front no-input quads (tooltips, toasts, boss bar) keep the
+                    // windowed path — batching would bury them under interactive windows.
+                    if (quad.noInput && !quad.bringToFront)
+                        return QuadOverlayBatched(quad, size);
                     return QuadOverlay(id, quad, size);
+                }
 
                 ImGui::PushID(id.c_str());
                 state = QuadInCurrentWindow(id, quad, size);
@@ -387,6 +397,7 @@ namespace pe
                 if (!m_frameOpen)
                     return;
 
+                PE_PROFILE_SCOPE("RuntimeUI ImGui::Render");
                 ScopedImGuiContext contextScope(m_context);
                 if (ImGui::IsKeyPressed(ImGuiKey_G, false))
                     m_showFrameGraph = !m_showFrameGraph;
@@ -460,6 +471,7 @@ namespace pe
                 if (!m_initialized || !context.cmd || !context.renderTarget || !HasDrawData())
                     return;
 
+                PE_PROFILE_SCOPE("RuntimeUI Vulkan Draw");
                 ScopedImGuiContext contextScope(m_context);
 
                 Attachment attachment{};
@@ -831,6 +843,16 @@ namespace pe
                 return state;
             }
 
+            // no_input overlay: draw only (no window / no hit target).
+            RuntimeUiWidgetState QuadOverlayBatched(const RuntimeUiQuadDesc &quad, ImVec2 size)
+            {
+                RuntimeUiWidgetState state{};
+                const ImVec2 pos(quad.x, quad.y);
+                const ImVec2 max(pos.x + size.x, pos.y + size.y);
+                DrawQuadVisual(quad, pos, max, size, state, ImGui::GetBackgroundDrawList());
+                return state;
+            }
+
             RuntimeUiWidgetState QuadInCurrentWindow(const std::string &id, const RuntimeUiQuadDesc &quad, ImVec2 size)
             {
                 RuntimeUiWidgetState state{};
@@ -881,7 +903,7 @@ namespace pe
                     }
                 }
 
-                DrawQuadVisual(quad, pos, max, size, state);
+                DrawQuadVisual(quad, pos, max, size, state, ImGui::GetWindowDrawList());
                 return state;
             }
 
@@ -889,9 +911,11 @@ namespace pe
                                 ImVec2 pos,
                                 ImVec2 max,
                                 ImVec2 size,
-                                const RuntimeUiWidgetState &state)
+                                const RuntimeUiWidgetState &state,
+                                ImDrawList *drawList)
             {
-                ImDrawList *drawList = ImGui::GetWindowDrawList();
+                if (!drawList)
+                    drawList = ImGui::GetWindowDrawList();
                 const float rounding = 7.0f;
                 ImU32 fill = ToColor(quad.fillColor);
                 ImU32 border = ToColor(quad.borderColor);

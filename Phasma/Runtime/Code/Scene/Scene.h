@@ -419,6 +419,10 @@ namespace pe
         uint64_t GetGeometryVersion() const { return m_geometryVersion; }
 
         uint32_t GetGeneration() const { return m_generation; }
+        // Bumped when a node's script path attaches/clears (or identity-affecting
+        // script membership changes). ScriptSystem gates per-frame reconcile on this.
+        uint32_t GetScriptAttachGeneration() const { return m_scriptAttachGeneration; }
+        void BumpScriptAttachGeneration() { ++m_scriptAttachGeneration; }
         SceneNodeHandle MakeHandle(NodeId *node) const
         {
             return SceneNodeHandle(node, m_generation, node ? node->revision : 0);
@@ -946,6 +950,7 @@ namespace pe
         PostProcessProfile m_resolvedPostProcessProfile{};
 
         uint32_t m_generation = 0;     // Incremented on full scene identity changes
+        uint32_t m_scriptAttachGeneration = 0; // Node script path attach/clear membership
         bool m_geometryDirty = false;  // Pending full geometry GPU upload (new mesh data)
         bool m_instancesDirty = false; // Pending raster instance data rebuild (mesh refs changed, no new geometry)
         bool m_materialDirty = false;  // Pending material table update

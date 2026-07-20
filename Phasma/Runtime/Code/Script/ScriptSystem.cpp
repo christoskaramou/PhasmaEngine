@@ -293,6 +293,13 @@ namespace pe
                                                         const std::string &path,
                                                         const sol::environment &environment)
     {
+        // LuaJIT (5.1) has no _ENV upvalue; scripts pass their environment by
+        // reading `_ENV` as a plain global (ATH load_script chunk parenting).
+        // Resolve it to the env itself, matching 5.4. Vanilla Lua ignores the
+        // field (the compiler always binds the _ENV name to the upvalue).
+        sol::environment envSelf = environment;
+        envSelf["_ENV"] = envSelf;
+
         if (!IsGamePackManagedAsset(path))
             return lua.safe_script_file(path, environment, sol::script_pass_on_error);
 
@@ -388,6 +395,27 @@ namespace pe
             sol::lib::io,
             sol::lib::os,
             sol::lib::coroutine);
+
+        // Generational GC: minor collections track only recent allocations, smoothing
+        // out the frame-time spikes the default incremental collector causes mid-combat.
+        // LuaJIT has no LUA_GCGEN (its own GC is already incremental-generational-ish).
+#ifdef LUA_GCGEN
+        lua_gc(m_lua.lua_state(), LUA_GCGEN, 0, 0);
+#endif
+
+        // Chunks run without a sandbox env (console/MCP ExecuteLua) use the real
+        // globals as their environment; mirror it as _ENV for LuaJIT (sandboxed
+        // file chunks get a per-env _ENV in RunScriptFile).
+        m_lua.globals()["_ENV"] = m_lua.globals();
+
+#ifdef PE_LUAJIT
+        // LuaJIT's math.atan is 5.1 single-argument (a second arg is silently
+        // ignored), but game scripts use the 5.3+ two-argument form for facing
+        // and projectile yaw. Route the optional second arg to atan2; with one
+        // arg atan2(y, 1) == atan(y).
+        m_lua.script("local atan2 = math.atan2 "
+                     "math.atan = function(y, x) return atan2(y, x or 1) end");
+#endif
 
         // Logging
         m_lua.set_function("pe_log", [](const std::string &msg)
@@ -799,6 +827,20 @@ namespace pe
         }
     }
 
+    void ScriptSystem::RememberReconcileSnapshot(const Scene *scene)
+    {
+        if (!scene)
+        {
+            m_lastReconcileSceneGen = 0;
+            m_lastReconcileScriptGen = 0;
+            m_lastReconcileNodeCount = UINT32_MAX;
+            return;
+        }
+        m_lastReconcileSceneGen = scene->GetGeneration();
+        m_lastReconcileScriptGen = scene->GetScriptAttachGeneration();
+        m_lastReconcileNodeCount = scene->GetNodeCount();
+    }
+
     void ScriptSystem::ReconcileNodeInstances()
     {
         Scene *scene = GetActiveScene();
@@ -859,6 +901,8 @@ namespace pe
             m_nodeInstances.push_back(CreateNodeInstance(node, scriptPath));
             existingNodeInstances.insert(node);
         }
+
+        RememberReconcileSnapshot(scene);
     }
 
     NodeScriptInstance *ScriptSystem::FindNodeInstance(const NodeId *node)
@@ -1582,8 +1626,13 @@ namespace pe
         // Re-register the active scene's on_play scripts when the scene changes
         SyncSceneScripts();
 
-        // Reconcile per-node script instances with the scene
-        ReconcileNodeInstances();
+        // Reconcile per-node script instances with the scene. Skip the full node
+        // scan when script membership + scene identity are unchanged (ATH combat
+        // creates hundreds of non-script nodes every second).
+        Scene *activeScene = GetActiveScene();
+        const bool needReconcile = !activeScene || activeScene->GetGeneration() != m_lastReconcileSceneGen || activeScene->GetScriptAttachGeneration() != m_lastReconcileScriptGen || activeScene->GetNodeCount() != m_lastReconcileNodeCount;
+        if (needReconcile)
+            ReconcileNodeInstances();
 
         for (auto &inst : m_nodeInstances)
         {

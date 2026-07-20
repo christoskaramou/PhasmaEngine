@@ -968,7 +968,11 @@ namespace pe
             PE_WARN("[Scene] SetNodeScript: node %d has no script component", node->index);
             return;
         }
-        cache.script->path = NormalizeNodeScriptPath(path);
+        const std::string normalized = NormalizeNodeScriptPath(path);
+        if (cache.script->path == normalized)
+            return;
+        cache.script->path = normalized;
+        ++m_scriptAttachGeneration;
     }
 
     void Scene::SetNodePrefabPath(NodeId *node, const std::string &path, bool markDirty)
