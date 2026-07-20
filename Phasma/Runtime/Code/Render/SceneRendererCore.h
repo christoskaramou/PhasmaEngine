@@ -47,9 +47,12 @@ namespace pe
         Image *GetDepthStencilTarget(const std::string &name) const;
         Image *GetDepthStencilTarget(size_t hash) const;
         Image *CreateFSSampledImage(const std::string &name, bool useRenderTargetScale = true);
-        void CreateRenderTargets();
+        void CreateRenderTargets(bool hasRayTracingGeometry = false);
         void DestroyRenderTargets();
         bool NeedsRenderScaleResize() const;
+        // Synchronize optional velocity membership and configurable scene-target formats.
+        // Returns true if membership/format changed — callers should refresh pass attachments.
+        bool SyncOptionalRenderTargets(bool hasRayTracingGeometry);
         void BlitToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex);
 
         void LoadSky(CommandBuffer *cmd);

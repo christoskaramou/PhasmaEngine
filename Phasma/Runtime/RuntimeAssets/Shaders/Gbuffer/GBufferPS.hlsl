@@ -100,6 +100,7 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     output.emissive = float4(emissive, nightEmissive > 0.5f ? 0.0f : combinedColor.a);
     output.transparency = pc.passType ? 1.0f : 0.0f;
 
+#ifndef GBUFFER_NO_VELOCITY
     // Calculate the velocity
     // Ensure that the positions are in NDC space by dividing by the w component
     float2 currentNDC = input.positionCS.xy / input.positionCS.w;
@@ -114,6 +115,7 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     
     // Store the velocity in the output
     output.velocity = velocityNDC;
+#endif
 
     return output;
 }

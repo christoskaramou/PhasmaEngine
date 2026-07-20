@@ -126,6 +126,7 @@ namespace pe
             PE_PROFILE_SCOPE("Runtime Scene");
             m_scene.Update();
         }
+        ApplyPendingOptionalRTSync();
 
         {
             PE_PROFILE_SCOPE("Runtime Render Graph Pass States");
@@ -326,7 +327,7 @@ namespace pe
         surface->SetActualExtent({0, 0, width, height});
         RHII.CreateSwapchain(surface);
 
-        m_sceneRenderer.CreateRenderTargets();
+        m_sceneRenderer.CreateRenderTargets(hasRTGeom);
         const bool isDx12 = UsesDx12RenderOrchestration();
         const PeBarrierSync semaphoreStageFlags = isDx12 ? PE_STAGE_NONE : PE_STAGE_ALL_COMMANDS;
         m_sceneRenderer.CreateFrameResources(RHII.GetSwapchainImageCount(),
@@ -346,6 +347,19 @@ namespace pe
             return;
 
         Resize(RHII.GetWidth(), RHII.GetHeight());
+    }
+
+    void RuntimeSceneRenderer::ApplyPendingOptionalRTSync()
+    {
+        if (!m_initialized)
+            return;
+
+        const bool hasRTGeom = SupportsRayTracingPass() && m_scene.GetTLAS() != nullptr;
+        if (!m_sceneRenderer.SyncOptionalRenderTargets(hasRTGeom))
+            return;
+
+        m_sceneRenderer.ResizeRenderPassComponents(RHII.GetWidth(), RHII.GetHeight(), hasRTGeom);
+        BuildRenderGraph();
     }
 
     void RuntimeSceneRenderer::QueueScreenshotReadback(CommandBuffer *cmd, Image *sourceImage)

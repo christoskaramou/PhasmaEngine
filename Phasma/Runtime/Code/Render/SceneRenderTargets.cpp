@@ -29,7 +29,55 @@ namespace pe
             return static_cast<uint32_t>(RHII.GetHeightf() * GetRenderTargetScale(useRenderTargetScale));
         }
 
+        void WarnUnsupportedSceneRTFormat(std::string_view name, const char *settingKey, std::string &lastWarned)
+        {
+            if (std::string_view(lastWarned) != name)
+            {
+                PE_WARN("Unsupported %s '%.*s' — using engine default",
+                        settingKey,
+                        static_cast<int>(name.size()),
+                        name.data());
+                lastWarned.assign(name);
+            }
+        }
+
     } // namespace
+
+    bool SceneNeedsVelocityRT(bool hasRayTracingGeometry)
+    {
+        const auto &pp = ActivePostProcessProfile();
+        const auto &gs = Settings::Get<SceneSettings>();
+        const bool renderRaster = gs.render_mode != RenderMode::RayTracing || !hasRayTracingGeometry;
+        return pp.taa || (pp.motion_blur && (RHII.GetApi() != PE_GRAPHICS_API_DX12 || renderRaster));
+    }
+
+    static ::PeFormat SceneNormalRTFormat()
+    {
+        const std::string_view name = Settings::Get<SceneSettings>().normal_format;
+        if (name.empty() || name == "rgba16f")
+            return PE_FORMAT_R16G16B16A16_SFLOAT;
+        if (name == "rgba32f")
+            return PE_FORMAT_R32G32B32A32_SFLOAT;
+
+        static std::string lastWarned;
+        WarnUnsupportedSceneRTFormat(name, "normal_format", lastWarned);
+        return PE_FORMAT_R16G16B16A16_SFLOAT;
+    }
+
+    static ::PeFormat SceneVelocityRTFormat()
+    {
+        const std::string_view name = Settings::Get<SceneSettings>().velocity_format;
+        if (name.empty() || name == "rg16f")
+            return PE_FORMAT_R16G16_SFLOAT;
+        if (name == "rgba16f")
+            return PE_FORMAT_R16G16B16A16_SFLOAT;
+        if (name == "rgba32f")
+            return PE_FORMAT_R32G32B32A32_SFLOAT;
+
+        static std::string lastWarned;
+        WarnUnsupportedSceneRTFormat(name, "velocity_format", lastWarned);
+        return PE_FORMAT_R16G16_SFLOAT;
+    }
 
     void DestroySceneRenderTargets(SceneRenderTargetMap &renderTargets, SceneRenderTargetMap &depthStencilTargets)
     {
@@ -174,7 +222,8 @@ namespace pe
     }
 
     SceneRenderTargets CreateDefaultSceneRenderTargets(SceneRenderTargetMap &renderTargets,
-                                                       SceneRenderTargetMap &depthStencilTargets)
+                                                       SceneRenderTargetMap &depthStencilTargets,
+                                                       bool hasRayTracingGeometry)
     {
         for (auto &framebuffer : CommandBuffer::GetFramebuffers())
             Framebuffer::Destroy(framebuffer.second);
@@ -200,14 +249,47 @@ namespace pe
                                                      surfaceFormat,
                                                      PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST,
                                                      false);
-        CreateSceneRenderTarget(renderTargets, "normal", PE_FORMAT_R16G16B16A16_SFLOAT);
+        CreateSceneRenderTarget(renderTargets, "normal", SceneNormalRTFormat());
         CreateSceneRenderTarget(renderTargets, "albedo", surfaceFormat);
         CreateSceneRenderTarget(renderTargets, "srm", surfaceFormat);
-        CreateSceneRenderTarget(renderTargets, "velocity", PE_FORMAT_R16G16_SFLOAT);
+        if (SceneNeedsVelocityRT(hasRayTracingGeometry))
+            CreateSceneRenderTarget(renderTargets, "velocity", SceneVelocityRTFormat());
         CreateSceneRenderTarget(renderTargets, "emissive", surfaceFormat);
         CreateSceneRenderTarget(renderTargets, "transparency", PE_FORMAT_R8_UNORM, PE_IMAGE_USAGE_NONE, true, false, Color::Black);
 
         return targets;
+    }
+
+    bool SyncOptionalSceneRenderTargets(SceneRenderTargetMap &renderTargets, bool hasRayTracingGeometry)
+    {
+        const bool needVelocity = SceneNeedsVelocityRT(hasRayTracingGeometry);
+        const ::PeFormat velocityFormat = SceneVelocityRTFormat();
+        Image *velocity = GetSceneRenderTarget(renderTargets, "velocity");
+        const ::PeFormat normalFormat = SceneNormalRTFormat();
+        Image *normal = GetSceneRenderTarget(renderTargets, "normal");
+        const bool velocityChanged = needVelocity ? !velocity || velocity->GetFormat() != velocityFormat : velocity != nullptr;
+        const bool normalChanged = !normal || normal->GetFormat() != normalFormat;
+        if (!velocityChanged && !normalChanged)
+            return false;
+
+        RHII.WaitDeviceIdle();
+
+        if (velocityChanged)
+        {
+            if (velocity)
+                DestroySceneRenderTarget(renderTargets, "velocity");
+            if (needVelocity)
+                CreateSceneRenderTarget(renderTargets, "velocity", velocityFormat);
+        }
+
+        if (normalChanged)
+        {
+            if (normal)
+                DestroySceneRenderTarget(renderTargets, "normal");
+            CreateSceneRenderTarget(renderTargets, "normal", normalFormat);
+        }
+
+        return true;
     }
 
     void BlitSceneImageToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex)

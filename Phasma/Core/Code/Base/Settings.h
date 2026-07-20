@@ -154,6 +154,10 @@ namespace pe
         int shadow_debug_mode = 0;
         float render_scale = 0.75f;
         bool forward_plus = true;
+        // Empty = engine defaults. Normal accepts rgba16f/rgba32f; velocity accepts
+        // rg16f/rgba16f/rgba32f.
+        std::string normal_format{};
+        std::string velocity_format{};
         float lights_intensity = 1.0f;
         // Distance haze: blends far opaque/transparent pixels toward the blurred skybox in the view
         // direction (exponential past fog_start, world units). Softens the horizon and masks far

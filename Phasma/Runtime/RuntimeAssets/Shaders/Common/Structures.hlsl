@@ -261,9 +261,14 @@ struct PS_OUTPUT_Gbuffer
     float4 normal : SV_TARGET0;
     float4 albedo : SV_TARGET1;
     float4 metRough : SV_TARGET2;
+#ifdef GBUFFER_NO_VELOCITY
+    float4 emissive : SV_TARGET3;
+    float transparency : SV_TARGET4;
+#else
     float2 velocity : SV_TARGET3;
     float4 emissive : SV_TARGET4;
     float transparency : SV_TARGET5;
+#endif
 };
 
 struct PS_OUTPUT_Color

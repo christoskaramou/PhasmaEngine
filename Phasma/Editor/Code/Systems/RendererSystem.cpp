@@ -135,6 +135,7 @@ namespace pe
             PE_PROFILE_SCOPE("Scene");
             m_scene.Update();
         }
+        ApplyPendingOptionalRTSync();
 
         {
             PE_PROFILE_SCOPE("Render Graph Pass States");
@@ -170,6 +171,7 @@ namespace pe
         {
             m_scene.UpdateCameraRenderState();
         }
+        ApplyPendingOptionalRTSync();
 
         {
             PE_PROFILE_SCOPE("Render Graph Pass States Late");
@@ -451,7 +453,7 @@ namespace pe
         RHII.CreateSwapchain(surface);
         DispatchWindowTitle();
 
-        m_sceneRenderer.CreateRenderTargets();
+        m_sceneRenderer.CreateRenderTargets(hasRTGeom);
 
         m_sceneRenderer.ResizeRenderPassComponents(width, height, hasRTGeom);
     }
@@ -468,6 +470,16 @@ namespace pe
         while (EventSystem::PeekAndPop(EventType::Resize, resizeEvent))
         {
         }
+    }
+
+    void RendererSystem::ApplyPendingOptionalRTSync()
+    {
+        const bool hasRTGeom = SupportsRayTracingPass() && m_scene.GetTLAS() != nullptr;
+        if (!m_sceneRenderer.SyncOptionalRenderTargets(hasRTGeom))
+            return;
+
+        m_sceneRenderer.ResizeRenderPassComponents(RHII.GetWidth(), RHII.GetHeight(), hasRTGeom);
+        BuildRenderGraph();
     }
 
     void RendererSystem::PollShaders(std::optional<size_t> hash)

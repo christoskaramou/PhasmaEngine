@@ -119,6 +119,10 @@ namespace pe
                     auto iIt = s_intSettings.find(std::string_view(name));
                     if (iIt != s_intSettings.end())
                         return sol::make_object(lua, gs.*(iIt->second));
+                    if (name == "normal_format")
+                        return sol::make_object(lua, gs.normal_format);
+                    if (name == "velocity_format")
+                        return sol::make_object(lua, gs.velocity_format);
                     PE_WARN("[Lua] settings.get: unknown setting '%s'", name.c_str());
                     return sol::nil;
                 });
@@ -132,6 +136,16 @@ namespace pe
                         {
                             gs.*(it->second) = value.as<bool>();
                         }
+                    }
+                    else if (value.is<std::string>())
+                    {
+                        const std::string s = value.as<std::string>();
+                        if (name == "normal_format")
+                            gs.normal_format = s;
+                        else if (name == "velocity_format")
+                            gs.velocity_format = s;
+                        else
+                            PE_WARN("[Lua] settings.set: unknown string setting '%s'", name.c_str());
                     }
                     else if (value.is<float>() || value.is<double>())
                     {

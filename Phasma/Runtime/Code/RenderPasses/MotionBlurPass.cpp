@@ -50,6 +50,9 @@ namespace pe
 
     void MotionBlurPass::UpdateDescriptorSets()
     {
+        if (!m_frameImage || !m_depth || !m_velocityRT)
+            return;
+
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); ++i)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
@@ -101,7 +104,8 @@ namespace pe
     {
         Image::Destroy(m_frameImage);
         Init();
-        UpdateDescriptorSets();
+        if (m_velocityRT)
+            UpdateDescriptorSets();
     }
 
     void MotionBlurPass::Destroy()

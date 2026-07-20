@@ -50,7 +50,6 @@ namespace pe
         Image *m_normalRT;
         Image *m_albedoRT;
         Image *m_srmRT;
-        Image *m_velocityRT;
         Image *m_emissiveRT;
         Image *m_viewportRT;
         Image *m_depthStencilRT;
@@ -86,7 +85,6 @@ namespace pe
         Image *m_normalRT;
         Image *m_albedoRT;
         Image *m_srmRT;
-        Image *m_velocityRT;
         Image *m_emissiveRT;
         Image *m_viewportRT;
         Image *m_depthStencilRT;

@@ -72,9 +72,10 @@ namespace pe
         return CreateSceneFSSampledImage(name, useRenderTargetScale);
     }
 
-    void SceneRendererCore::CreateRenderTargets()
+    void SceneRendererCore::CreateRenderTargets(bool hasRayTracingGeometry)
     {
-        const SceneRenderTargets targets = CreateDefaultSceneRenderTargets(m_renderTargets, m_depthStencilTargets);
+        const SceneRenderTargets targets =
+            CreateDefaultSceneRenderTargets(m_renderTargets, m_depthStencilTargets, hasRayTracingGeometry);
         m_depthStencil = targets.depthStencil;
         m_viewportRT = targets.viewport;
         m_displayRT = targets.display;
@@ -95,6 +96,11 @@ namespace pe
     bool SceneRendererCore::NeedsRenderScaleResize() const
     {
         return m_displayRT && m_renderTargetScale != Settings::Get<SceneSettings>().render_scale;
+    }
+
+    bool SceneRendererCore::SyncOptionalRenderTargets(bool hasRayTracingGeometry)
+    {
+        return SyncOptionalSceneRenderTargets(m_renderTargets, hasRayTracingGeometry);
     }
 
     void SceneRendererCore::BlitToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex)

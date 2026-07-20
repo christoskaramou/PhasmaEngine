@@ -2106,6 +2106,9 @@ namespace pe
                         continue;
                     if (name.size() >= 2 && name[0] == '_' && name[1] == '_')
                         continue;
+                    // Per-env LuaJIT _ENV mirror from RunScriptFile — not a real global export.
+                    if (name == "_ENV")
+                        continue;
                     sol::object existing = m_lua.globals().raw_get<sol::object>(name);
                     if (existing.valid() && existing.get_type() != sol::type::lua_nil)
                         PE_WARN("[Lua] global '%s' redefined by '%s'", name.c_str(), filePath.c_str());

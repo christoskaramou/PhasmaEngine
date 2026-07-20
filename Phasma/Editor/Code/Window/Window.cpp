@@ -259,13 +259,8 @@ namespace pe
                 }
                 case EventType::PresentMode:
                 {
-                    SceneSettings &gSettings = Settings::Get<SceneSettings>();
-                    const PePresentMode previousMode = RHII.GetSurface()->GetPresentMode();
-                    RHII.GetSurface()->SetPresentMode(gSettings.preferred_present_mode);
-                    const PePresentMode effectiveMode = RHII.GetSurface()->GetPresentMode();
-                    gSettings.preferred_present_mode = effectiveMode;
-                    if (effectiveMode != previousMode)
-                        EventSystem::PushEvent(EventType::Resize);
+                    // Recreate swapchain from scene preferred mode (authoritative).
+                    RHII.ChangePresentMode(Settings::Get<SceneSettings>().preferred_present_mode);
                     break;
                 }
                 case EventType::Resize:

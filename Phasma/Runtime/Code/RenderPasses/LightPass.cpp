@@ -235,7 +235,6 @@ namespace pe
         m_srmRT = rs->GetRenderTarget("srm"); // Specular Roughness Metallic
         m_normalRT = rs->GetRenderTarget("normal");
         m_albedoRT = rs->GetRenderTarget("albedo");
-        m_velocityRT = rs->GetRenderTarget("velocity");
         m_emissiveRT = rs->GetRenderTarget("emissive");
         m_viewportRT = rs->GetRenderTarget("viewport");
         m_ssaoRT = rs->GetRenderTarget("ssao");
@@ -417,7 +416,6 @@ namespace pe
         builder.Read(m_normalRT);
         builder.Read(m_albedoRT);
         builder.Read(m_srmRT);
-        builder.Read(m_velocityRT);
         builder.Read(m_emissiveRT);
         if (ActivePostProcessProfile().ssao && m_ssaoRT)
             builder.Read(m_ssaoRT);
@@ -495,7 +493,6 @@ namespace pe
         m_srmRT = rs->GetRenderTarget("srm"); // Specular Roughness Metallic
         m_normalRT = rs->GetRenderTarget("normal");
         m_albedoRT = rs->GetRenderTarget("albedo");
-        m_velocityRT = rs->GetRenderTarget("velocity");
         m_emissiveRT = rs->GetRenderTarget("emissive");
         m_viewportRT = rs->GetRenderTarget("viewport");
         m_ssaoRT = rs->GetRenderTarget("ssao");
@@ -674,7 +671,6 @@ namespace pe
         builder.Read(m_normalRT);
         builder.Read(m_albedoRT);
         builder.Read(m_srmRT);
-        builder.Read(m_velocityRT);
         builder.Read(m_emissiveRT);
         if (ActivePostProcessProfile().ssao && m_ssaoRT)
             builder.Read(m_ssaoRT);

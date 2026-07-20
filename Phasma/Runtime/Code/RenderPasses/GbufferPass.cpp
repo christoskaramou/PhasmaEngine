@@ -11,9 +11,85 @@
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
 #include "Render/SceneRendererHost.h"
+#include "Render/SceneRenderTargets.h"
 
 namespace pe
 {
+    namespace
+    {
+        void ApplyGBufferSurface(PassInfo &pi, const PassVariant &surface, bool writeVelocity)
+        {
+            pi.Apply(surface);
+            if (writeVelocity)
+                return;
+
+            if (!surface.fragmentShader.empty() && pi.pFragShader)
+            {
+                ShaderDesc desc{};
+                desc.sourcePath = Path::ResolveAsset(surface.fragmentShader);
+                desc.entryPoint = "mainPS";
+                desc.stage = PE_SHADER_STAGE_FRAGMENT;
+                desc.defines = {{"GBUFFER_NO_VELOCITY", "1"}};
+                Shader *oldFrag = pi.pFragShader;
+                pi.pFragShader = Shader::Create(desc);
+                Shader::Destroy(oldFrag);
+            }
+
+            // .pass lists 6 color blends: n,a,srm,velocity,emissive,transparency → drop velocity.
+            if (pi.colorBlendAttachments.size() >= 6)
+                pi.colorBlendAttachments.erase(pi.colorBlendAttachments.begin() + 3);
+        }
+
+        void BuildGBufferAttachments(std::vector<Attachment> &attachments,
+                                     Image *normal,
+                                     Image *albedo,
+                                     Image *srm,
+                                     Image *velocity,
+                                     Image *emissive,
+                                     Image *transparency,
+                                     Image *depth,
+                                     PeLoadOp colorLoadOp)
+        {
+            attachments.clear();
+            auto pushColor = [&](Image *img)
+            {
+                Attachment a{};
+                a.image = img;
+                a.loadOp = colorLoadOp;
+                a.storeOp = PE_STORE_OP_STORE;
+                attachments.push_back(a);
+            };
+            pushColor(normal);
+            pushColor(albedo);
+            pushColor(srm);
+            if (velocity)
+                pushColor(velocity);
+            pushColor(emissive);
+            pushColor(transparency);
+
+            Attachment depthAtt{};
+            depthAtt.image = depth;
+            depthAtt.loadOp = PE_LOAD_OP_LOAD;
+            depthAtt.storeOp = PE_STORE_OP_STORE;
+            attachments.push_back(depthAtt);
+        }
+
+        std::vector<::PeFormat> BuildGBufferColorFormats(Image *normal,
+                                                         Image *albedo,
+                                                         Image *srm,
+                                                         Image *velocity,
+                                                         Image *emissive,
+                                                         Image *transparency)
+        {
+            std::vector<::PeFormat> formats{normal->GetFormat(), albedo->GetFormat(), srm->GetFormat()};
+            if (velocity)
+                formats.push_back(velocity->GetFormat());
+            formats.push_back(emissive->GetFormat());
+            formats.push_back(transparency->GetFormat());
+            return formats;
+        }
+    } // namespace
+
     void GbufferOpaquePass::Init()
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
@@ -27,20 +103,15 @@ namespace pe
         m_transparencyRT = rs->GetRenderTarget("transparency");
         m_depthStencilRT = rs->GetDepthStencilTarget("depthStencil");
 
-        m_attachments.resize(7);
-        for (int i = 0; i < 7; i++)
-        {
-            m_attachments[i] = {};
-        }
-        m_attachments[0].image = m_normalRT;
-        m_attachments[1].image = m_albedoRT;
-        m_attachments[2].image = m_srmRT;
-        m_attachments[3].image = m_velocityRT;
-        m_attachments[4].image = m_emissiveRT;
-        m_attachments[5].image = m_transparencyRT;
-
-        m_attachments[6].image = m_depthStencilRT;
-        m_attachments[6].loadOp = PE_LOAD_OP_LOAD;
+        BuildGBufferAttachments(m_attachments,
+                                m_normalRT,
+                                m_albedoRT,
+                                m_srmRT,
+                                m_velocityRT,
+                                m_emissiveRT,
+                                m_transparencyRT,
+                                m_depthStencilRT,
+                                PE_LOAD_OP_CLEAR);
 
         if (!m_passInfoDS)
             m_passInfoDS = std::make_shared<PassInfo>();
@@ -58,13 +129,9 @@ namespace pe
         if (!m_passAsset)
             m_passAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::RuntimeAssets + "PassInfo/standard_pbr.pass");
 
-        std::vector<::PeFormat> colorformats{
-            m_normalRT->GetFormat(),
-            m_albedoRT->GetFormat(),
-            m_srmRT->GetFormat(),
-            m_velocityRT->GetFormat(),
-            m_emissiveRT->GetFormat(),
-            m_transparencyRT->GetFormat()};
+        const bool writeVelocity = m_velocityRT != nullptr;
+        std::vector<::PeFormat> colorformats = BuildGBufferColorFormats(
+            m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_transparencyRT);
 
         ::PeFormat depthFormat = RHII.GetDepthFormat();
 
@@ -72,7 +139,7 @@ namespace pe
         PE_ERROR_IF(!surface, "standard_pbr.pass missing 'surface' variant");
 
         m_passInfo->name = "gbuffer_opaque_pipeline";
-        m_passInfo->Apply(*surface);
+        ApplyGBufferSurface(*m_passInfo, *surface, writeVelocity);
         m_passInfo->colorFormats = colorformats;
         m_passInfo->depthFormat = depthFormat;
         m_passInfo->Update();
@@ -82,7 +149,7 @@ namespace pe
         m_passInfoDS->name = "gbuffer_opaque_ds_pipeline";
         try
         {
-            m_passInfoDS->Apply(*surface);
+            ApplyGBufferSurface(*m_passInfoDS, *surface, writeVelocity);
             m_passInfoDS->cullMode = PE_CULL_MODE_NONE;
             m_passInfoDS->colorFormats = colorformats;
             m_passInfoDS->depthFormat = depthFormat;
@@ -127,7 +194,7 @@ namespace pe
                     return;
                 }
                 pi->name = pipelineName;
-                pi->Apply(*surf);
+                ApplyGBufferSurface(*pi, *surf, writeVelocity);
                 pi->colorFormats = colorformats;
                 pi->depthFormat = depthFormat;
                 pi->Update();
@@ -321,7 +388,7 @@ namespace pe
             const bool voxelDrawReady =
                 hasArenaVoxels && hasVoxelAtlas && hasVoxelFrag && hasVoxelIndirect && hasVoxelGeometry;
 
-            cmd->BeginPass(7, m_attachments.data(), "GbufferOpaquePass");
+            cmd->BeginPass(static_cast<uint32_t>(m_attachments.size()), m_attachments.data(), "GbufferOpaquePass");
             cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
             cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
 
@@ -398,11 +465,28 @@ namespace pe
     void GbufferOpaquePass::Resize(uint32_t width, uint32_t height)
     {
         Init();
+        const std::vector<::PeFormat> colorFormats = BuildGBufferColorFormats(
+            m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_transparencyRT);
+        if (m_passInfo && m_passInfo->colorFormats == colorFormats && m_passInfo->depthFormat == RHII.GetDepthFormat())
+            return;
+
+        for (PassInfo *pi : GetPassInfos())
+        {
+            if (pi)
+                pi->DestroyShaders();
+        }
+        UpdatePassInfo();
+        UpdateDescriptorSets();
     }
 
     void GbufferOpaquePass::ClearRenderTargets(CommandBuffer *cmd)
     {
-        std::vector<Image *> colorTargets{m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_viewportRT, m_transparencyRT};
+        std::vector<Image *> colorTargets{m_normalRT, m_albedoRT, m_srmRT};
+        if (m_velocityRT)
+            colorTargets.push_back(m_velocityRT);
+        colorTargets.push_back(m_emissiveRT);
+        colorTargets.push_back(m_viewportRT);
+        colorTargets.push_back(m_transparencyRT);
         cmd->ClearColors(colorTargets);
     }
 
@@ -449,19 +533,15 @@ namespace pe
         m_transparencyRT = rs->GetRenderTarget("transparency");
         m_depthStencilRT = rs->GetDepthStencilTarget("depthStencil");
 
-        m_attachments.resize(7);
-        for (int i = 0; i < 7; i++)
-        {
-            m_attachments[i] = {};
-            m_attachments[i].loadOp = PE_LOAD_OP_LOAD;
-        }
-        m_attachments[0].image = m_normalRT;
-        m_attachments[1].image = m_albedoRT;
-        m_attachments[2].image = m_srmRT;
-        m_attachments[3].image = m_velocityRT;
-        m_attachments[4].image = m_emissiveRT;
-        m_attachments[5].image = m_transparencyRT;
-        m_attachments[6].image = m_depthStencilRT;
+        BuildGBufferAttachments(m_attachments,
+                                m_normalRT,
+                                m_albedoRT,
+                                m_srmRT,
+                                m_velocityRT,
+                                m_emissiveRT,
+                                m_transparencyRT,
+                                m_depthStencilRT,
+                                PE_LOAD_OP_LOAD);
 
         if (!m_voxelPassInfo)
             m_voxelPassInfo = std::make_shared<PassInfo>();
@@ -474,13 +554,9 @@ namespace pe
         if (!m_passAsset)
             m_passAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::RuntimeAssets + "PassInfo/standard_pbr.pass");
 
-        std::vector<::PeFormat> colorformats{
-            m_normalRT->GetFormat(),
-            m_albedoRT->GetFormat(),
-            m_srmRT->GetFormat(),
-            m_velocityRT->GetFormat(),
-            m_emissiveRT->GetFormat(),
-            m_transparencyRT->GetFormat()};
+        const bool writeVelocity = m_velocityRT != nullptr;
+        std::vector<::PeFormat> colorformats = BuildGBufferColorFormats(
+            m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_transparencyRT);
 
         ::PeFormat depthFormat = RHII.GetDepthFormat();
 
@@ -488,7 +564,7 @@ namespace pe
         PE_ERROR_IF(!transparent, "standard_pbr.pass missing 'transparent' variant");
 
         m_passInfo->name = "gbuffer_transparent_pipeline";
-        m_passInfo->Apply(*transparent);
+        ApplyGBufferSurface(*m_passInfo, *transparent, writeVelocity);
         m_passInfo->colorFormats = colorformats;
         m_passInfo->depthFormat = depthFormat;
         if (Settings::Get<SceneSettings>().reverse_depth)
@@ -522,7 +598,7 @@ namespace pe
             else
             {
                 m_voxelPassInfo->name = "gbuffer_voxel_transparent_pipeline";
-                m_voxelPassInfo->Apply(*voxelTransparent);
+                ApplyGBufferSurface(*m_voxelPassInfo, *voxelTransparent, writeVelocity);
                 m_voxelPassInfo->colorFormats = colorformats;
                 m_voxelPassInfo->depthFormat = depthFormat;
                 m_voxelPassInfo->Update();
@@ -652,7 +728,7 @@ namespace pe
 
         if (hasAlphaBlendMeshes)
         {
-            cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass_AlphaBlend");
+            cmd->BeginPass(static_cast<uint32_t>(m_attachments.size()), m_attachments.data(), "GbufferTransparentPass_AlphaBlend");
             cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
             cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
             cmd->BindPipeline(*m_passInfo);
@@ -667,7 +743,7 @@ namespace pe
         if (hasTransmissionMeshes)
         {
             pushConstants.passType = 2u;
-            cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass_Transmission");
+            cmd->BeginPass(static_cast<uint32_t>(m_attachments.size()), m_attachments.data(), "GbufferTransparentPass_Transmission");
             cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
             cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
             cmd->BindPipeline(*m_passInfo);
@@ -687,7 +763,7 @@ namespace pe
             // it like standard transparent meshes. ponytail: route through a cull bucket if water coverage
             // ever grows enough to matter.
             pushConstants.passType = 1u;
-            cmd->BeginPass(7, m_attachments.data(), "GbufferTransparentPass_VoxelWater");
+            cmd->BeginPass(static_cast<uint32_t>(m_attachments.size()), m_attachments.data(), "GbufferTransparentPass_VoxelWater");
             cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
             cmd->SetScissor(0, 0, m_depthStencilRT->GetWidth(), m_depthStencilRT->GetHeight());
             cmd->BindPipeline(*m_voxelPassInfo);
@@ -706,11 +782,28 @@ namespace pe
     void GbufferTransparentPass::Resize(uint32_t width, uint32_t height)
     {
         Init();
+        const std::vector<::PeFormat> colorFormats = BuildGBufferColorFormats(
+            m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_transparencyRT);
+        if (m_passInfo && m_passInfo->colorFormats == colorFormats && m_passInfo->depthFormat == RHII.GetDepthFormat())
+            return;
+
+        for (PassInfo *pi : GetPassInfos())
+        {
+            if (pi)
+                pi->DestroyShaders();
+        }
+        UpdatePassInfo();
+        UpdateDescriptorSets();
     }
 
     void GbufferTransparentPass::ClearRenderTargets(CommandBuffer *cmd)
     {
-        std::vector<Image *> colorTargets{m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_viewportRT, m_transparencyRT};
+        std::vector<Image *> colorTargets{m_normalRT, m_albedoRT, m_srmRT};
+        if (m_velocityRT)
+            colorTargets.push_back(m_velocityRT);
+        colorTargets.push_back(m_emissiveRT);
+        colorTargets.push_back(m_viewportRT);
+        colorTargets.push_back(m_transparencyRT);
         cmd->ClearColors(colorTargets);
     }
 

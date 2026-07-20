@@ -24,16 +24,11 @@ namespace pe
 
     static std::string RequestPresentModeChange(PePresentMode mode)
     {
-        Surface *surface = RHII.GetSurface();
-        if (!surface)
+        if (!RHII.GetSurface())
             return "unknown";
 
-        surface->SetPresentMode(mode);
-        PePresentMode effectiveMode = surface->GetPresentMode();
-        Settings::Get<SceneSettings>().preferred_present_mode = effectiveMode;
-        RHII.WaitDeviceIdle();
-        EventSystem::PushEvent(EventType::Resize);
-        return PresentModeToString(effectiveMode);
+        RHII.ChangePresentMode(mode);
+        return PresentModeToString(Settings::Get<SceneSettings>().preferred_present_mode);
     }
 
     static struct RHIBindings

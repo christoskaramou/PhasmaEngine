@@ -93,6 +93,8 @@ namespace pe
     {
         auto &gSettings = ActivePostProcessProfile();
         Image *taaOutput = gSettings.cas_sharpening ? m_taaResolved : m_displayRT;
+        if (!m_viewportRT || !m_historyImage || !m_velocityRT || !taaOutput)
+            return;
 
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
@@ -219,7 +221,9 @@ namespace pe
     {
         Destroy();
         Init();
-        UpdateDescriptorSets();
+        // The active post-process profile may leave velocity unallocated while this pass is disabled.
+        if (m_velocityRT)
+            UpdateDescriptorSets();
     }
 
     void TAAPass::Destroy()
