@@ -16,9 +16,8 @@
       3. Disassembles every baked blob and FAILS if any declares a capability whose Vulkan feature
          is softened to warn-on-Android in RHI.cpp.
 
-    PREREQUISITE: rebuild the desktop bake host AFTER any engine change so its portable cache hash
-    matches the Android build:
-        cmake --build build-ninja-full --config Release --target PhasmaPlayer
+    The script rebuilds the desktop bake host before launching it, then writes the content manifest
+    Gradle uses to reject a missing or stale cache before APK asset staging.
 
 .NOTES
     The cache key folds in the SPIR-V target version and is computed with a portable FNV-1a hash
@@ -44,6 +43,7 @@ $assetsDir = Join-Path $binDir "Assets"
 $cacheSpv = Join-Path $binDir "ShaderCache/_spv"
 $logFile = Join-Path $binDir "PhasmaEngine.log"
 $prebaked = Join-Path $repoRoot "Phasma/Player/android/prebaked/ShaderCache/_spv"
+$bakeManifest = Join-Path $repoRoot "Phasma/Player/android/prebaked/ShaderCache/bake-manifest.json"
 $spirvDis = if ($VulkanSdkBin) { Join-Path $VulkanSdkBin "spirv-dis.exe" } else { "spirv-dis" }
 
 function Fail([string]$msg) { Write-Host "[bake] ERROR: $msg" -ForegroundColor Red; exit 1 }
@@ -60,6 +60,25 @@ function Set-JsonProperty($obj, [string]$name, $value) {
     else {
         $obj | Add-Member -NotePropertyName $name -NotePropertyValue $value
     }
+}
+
+function Get-BakeInputHashes {
+    $files = @(
+        Get-Item (Join-Path $repoRoot "tools/bake_android_shaders.ps1")
+        Get-Item (Join-Path $repoRoot "Phasma/Core/Code/Base/Hash.h")
+        Get-ChildItem -File -Recurse (Join-Path $repoRoot "Phasma/Core/Code/API") | Where-Object { $_.Extension -in ".cpp", ".h" }
+        Get-ChildItem -File -Recurse (Join-Path $repoRoot "Phasma/Runtime/Code") | Where-Object { $_.Extension -in ".cpp", ".h" }
+        Get-ChildItem -File -Recurse (Join-Path $repoRoot "Phasma/Runtime/RuntimeAssets/Shaders")
+        Get-ChildItem -File -Recurse (Join-Path $repoRoot "Phasma/Runtime/RuntimeAssets/PassInfo")
+        Get-ChildItem -File -Recurse (Join-Path $repoRoot "Phasma/Player/android/app/src/main/assets/Assets")
+    ) | Sort-Object FullName -Unique
+
+    $hashes = [ordered]@{}
+    foreach ($file in $files) {
+        $relativePath = [System.IO.Path]::GetRelativePath($repoRoot, $file.FullName).Replace("\", "/")
+        $hashes[$relativePath] = (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLowerInvariant()
+    }
+    return $hashes
 }
 
 function New-BakeSceneVariant([string]$sourceScene, [string]$suffix, [hashtable]$settings) {
@@ -112,13 +131,17 @@ Write-Host "[bake] scene           : $Scene"
 Write-Host "[bake] spirv-dis       : $spirvDis"
 Write-Host "[bake] staging target  : $prebaked"
 
-if (-not (Test-Path $player)) {
-    Fail "PhasmaPlayer.exe not found at $player. Build it first: cmake --build $BuildDir --config $Config --target PhasmaPlayer"
+Write-Host "[bake] building desktop PhasmaPlayer bake host..."
+& cmake --build (Join-Path $repoRoot $BuildDir) --config $Config --target PhasmaPlayer
+if ($LASTEXITCODE -ne 0) {
+    Fail "Desktop PhasmaPlayer build failed."
 }
+if (-not (Test-Path $player)) { Fail "PhasmaPlayer.exe not found at $player after the build." }
 if (-not (Test-Path $assetsDir)) { Fail "Assets dir not found at $assetsDir (the bake host needs the shader sources + .pass assets)." }
 if (-not (Get-Command $spirvDis -ErrorAction SilentlyContinue) -and -not (Test-Path $spirvDis)) {
     Fail "spirv-dis not found. Set `$env:VULKAN_SDK or pass -VulkanSdkBin."
 }
+$bakeInputHashes = Get-BakeInputHashes
 
 # Android ships tracked local scene files under Phasma/Player/android/app/src/main/assets/Assets.
 # If the requested scene exists there, copy it into the desktop bake host so global render settings
@@ -233,5 +256,11 @@ if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Host "[bake]   VIOLATION $_" -ForegroundColor Red }
     Fail "Baked SPIR-V uses a capability whose Vulkan feature is softened to warn-on-Android in RHI.cpp. Promote that feature back to RequireVulkanFeature (or drop the shader usage) - otherwise Android GPUs that lack it will warn then crash."
 }
+$currentBakeInputHashes = Get-BakeInputHashes
+if (($bakeInputHashes | ConvertTo-Json -Compress) -cne ($currentBakeInputHashes | ConvertTo-Json -Compress)) {
+    Fail "Bake inputs changed while the cache was being generated. Run the bake again."
+}
+Write-TextUtf8NoBom $bakeManifest ([ordered]@{ version = 1; files = $bakeInputHashes } | ConvertTo-Json -Depth 4)
+Write-Host "[bake] manifest    : $bakeManifest"
 Write-Host "[bake] softened-feature capabilities (Int64/Int16/Float16/StorageBufferNonUniform): NONE -> warn-on-Android gates are SAFE." -ForegroundColor Green
 Write-Host "[bake] Next: cd Phasma/Player/android ; .\gradlew.bat :app:assembleDebug"

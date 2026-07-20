@@ -1,3 +1,5 @@
+import groovy.json.JsonSlurper
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -47,6 +49,36 @@ val androidAbiFilters = (localProperty("androidAbiFilters") ?: "arm64-v8a")
 // the underscore dir cannot ship under that name. We stage the blobs as `ShaderCache/spv/` (no
 // underscore) and PhasmaPlayerActivity renames `spv` -> `_spv` when extracting to internal storage.
 val prebakedSpvDir = rootProject.layout.projectDirectory.dir("prebaked/ShaderCache/_spv")
+val prebakedSpvManifest = rootProject.layout.projectDirectory.file("prebaked/ShaderCache/bake-manifest.json")
+
+val androidShaderBakeInputs: () -> List<File> = {
+    buildList {
+        add(engineRoot.resolve("tools/bake_android_shaders.ps1"))
+        add(engineRoot.resolve("Phasma/Core/Code/Base/Hash.h"))
+        addAll(fileTree(engineRoot.resolve("Phasma/Core/Code/API")) {
+            include("**/*.cpp", "**/*.h")
+        }.files)
+        addAll(fileTree(engineRoot.resolve("Phasma/Runtime/Code")) {
+            include("**/*.cpp", "**/*.h")
+        }.files)
+        addAll(fileTree(engineRoot.resolve("Phasma/Runtime/RuntimeAssets/Shaders")).files)
+        addAll(fileTree(engineRoot.resolve("Phasma/Runtime/RuntimeAssets/PassInfo")).files)
+        addAll(fileTree(rootProject.file("app/src/main/assets/Assets")).files)
+    }.map { it.canonicalFile }.filter { it.isFile }.distinct().sortedBy { it.invariantSeparatorsPath }
+}
+
+fun sha256(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().use { input ->
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            digest.update(buffer, 0, count)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+}
 
 // Cooked models (".pemesh" + their textures), produced by tools/cook_model.py into the gitignored
 // prebaked staging. Cooked assets are build artifacts, not source, so they never live under
@@ -63,6 +95,9 @@ val prebakedModelsDir = rootProject.layout.projectDirectory.dir("prebaked/Models
 // exist, making the APK machine-dependent.
 val stagedAssetsDir = layout.buildDirectory.dir("generated/phasmaAssets")
 val stagePhasmaAssets by tasks.registering(Sync::class) {
+    inputs.files(androidShaderBakeInputs()).withPropertyName("androidShaderBakeInputs")
+    inputs.file(prebakedSpvManifest).withPropertyName("androidShaderBakeManifest").optional()
+
     // Engine runtime assets (shaders, objects, particles, fonts, PassInfo) live in
     // Phasma/Runtime/RuntimeAssets after the 2026-06-13 RuntimeAssets carve;
     // Phasma/Editor/EditorAssets is editor chrome only. Shader SOURCES must ship because
@@ -95,13 +130,36 @@ val stagePhasmaAssets by tasks.registering(Sync::class) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     into(stagedAssetsDir)
     // Hard-fail (at task time, not configuration time so `gradlew tasks`/IDE sync still work):
-    // without a baked cache the APK is guaranteed to abort at the first Shader::Create on device.
+    // without a current baked cache the APK is guaranteed to abort at Shader::Create on device.
     doFirst {
-        val count = prebakedSpvDir.asFile.listFiles()?.size ?: 0
+        val count = prebakedSpvDir.asFile.listFiles { file -> file.isFile }?.size ?: 0
         if (count == 0) {
             throw GradleException(
                 "No pre-baked shaders in ${prebakedSpvDir.asFile} — run tools/bake_android_shaders.ps1 " +
                     "before assembling, or the APK will fail at Shader::Create on device."
+            )
+        }
+
+        val manifestFile = prebakedSpvManifest.asFile
+        val manifest = if (manifestFile.isFile) JsonSlurper().parse(manifestFile) as? Map<*, *> else null
+        val recordedFiles = manifest?.get("files") as? Map<*, *>
+        val currentFiles = androidShaderBakeInputs().associate {
+            it.relativeTo(engineRoot).invariantSeparatorsPath to sha256(it)
+        }
+        val changedPath = currentFiles.entries.firstOrNull { recordedFiles?.get(it.key) != it.value }?.key
+        val removedPath = recordedFiles?.keys?.map { it.toString() }?.firstOrNull { it !in currentFiles }
+        val staleReason = when {
+            !manifestFile.isFile -> "bake manifest is missing"
+            manifest?.get("version") != 1 || recordedFiles == null -> "bake manifest is invalid"
+            changedPath != null -> "$changedPath changed"
+            removedPath != null -> "$removedPath was removed"
+            recordedFiles.size != currentFiles.size -> "bake input set changed"
+            else -> null
+        }
+        if (staleReason != null) {
+            throw GradleException(
+                "Pre-baked Android shaders are stale ($staleReason). From $engineRoot run " +
+                    "'pwsh tools/bake_android_shaders.ps1', then assemble again."
             )
         }
         logger.lifecycle("Bundling $count pre-baked SPIR-V shader(s) into the APK.")
