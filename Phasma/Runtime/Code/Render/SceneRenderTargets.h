@@ -19,6 +19,9 @@ namespace pe
         Image *screenshot = nullptr;
     };
 
+    // Velocity follows active TAA/motion blur and backend raster requirements.
+    bool SceneNeedsVelocityRT(bool hasRayTracingGeometry);
+
     Image *CreateSceneRenderTarget(SceneRenderTargetMap &renderTargets,
                                    const std::string &name,
                                    ::PeFormat format,
@@ -42,7 +45,12 @@ namespace pe
     Image *CreateSceneFSSampledImage(const std::string &name, bool useRenderTargetScale = true);
 
     SceneRenderTargets CreateDefaultSceneRenderTargets(SceneRenderTargetMap &renderTargets,
-                                                       SceneRenderTargetMap &depthStencilTargets);
+                                                       SceneRenderTargetMap &depthStencilTargets,
+                                                       bool hasRayTracingGeometry);
+
+    // Synchronize optional velocity membership and configurable normal/velocity formats. Returns
+    // true if membership or format changed (callers should refresh GBuffer pipelines/attachments).
+    bool SyncOptionalSceneRenderTargets(SceneRenderTargetMap &renderTargets, bool hasRayTracingGeometry);
 
     void DestroySceneRenderTargets(SceneRenderTargetMap &renderTargets, SceneRenderTargetMap &depthStencilTargets);
 

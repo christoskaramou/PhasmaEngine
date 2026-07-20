@@ -259,47 +259,33 @@ endif()
 # Add PhasmaCore subdirectory
 add_subdirectory(Phasma/Core)
 
-# --- Lua VM: vanilla 5.4 (default) or LuaJIT 2.1 (PE_USE_LUAJIT=ON) ---
-# LuaJIT is the Android-perf interpreter swap: scripts are 5.1-clean (audited
-# 2026-07), sol2 auto-detects LuaJIT from its headers. Desktop keeps vanilla 5.4
-# unless opted in — the Export GamePack bytecode is PUC-only.
-option(PE_USE_LUAJIT "Use LuaJIT 2.1 instead of vanilla Lua 5.4" OFF)
-if(PE_USE_LUAJIT)
-    if(CMAKE_CROSSCOMPILING)
-        # LuaJIT's build generates its VM via host-run minilua/buildvm; the NDK
-        # environment exposes no host compiler, so hand the nested host builds an
-        # explicit one. Prefer standalone LLVM clang (self-locates the MSVC
-        # toolchain); the NDK's clang looks similar but has no host sysroot.
-        find_program(PE_LUAJIT_HOST_CC NAMES clang cl gcc
-                     PATHS "C:/Program Files/LLVM/bin" NO_DEFAULT_PATH)
-        find_program(PE_LUAJIT_HOST_CC NAMES clang cl gcc)
-        if(NOT PE_LUAJIT_HOST_CC)
-            message(FATAL_ERROR "PE_USE_LUAJIT cross build needs a host C compiler; install LLVM or pass -DPE_LUAJIT_HOST_CC=<path>")
-        endif()
-        set(LUAJIT_HOST_CMAKE_ARGS
-            -G Ninja
-            -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
-            -DCMAKE_C_COMPILER=${PE_LUAJIT_HOST_CC})
+# --- LuaJIT 2.1 VM ---
+if(CMAKE_CROSSCOMPILING)
+    # LuaJIT's build generates its VM via host-run minilua/buildvm; the NDK
+    # environment exposes no host compiler, so hand the nested host builds an
+    # explicit one. Prefer standalone LLVM clang (self-locates the MSVC
+    # toolchain); the NDK's clang looks similar but has no host sysroot.
+    find_program(PE_LUAJIT_HOST_CC NAMES clang cl gcc
+                 PATHS "C:/Program Files/LLVM/bin" NO_DEFAULT_PATH)
+    find_program(PE_LUAJIT_HOST_CC NAMES clang cl gcc)
+    if(NOT PE_LUAJIT_HOST_CC)
+        message(FATAL_ERROR "LuaJIT cross build needs a host C compiler; install LLVM or pass -DPE_LUAJIT_HOST_CC=<path>")
     endif()
-    set(LUAJIT_DIR "${PE_SHARED_THIRD_PARTY_DIR}/luajit" CACHE PATH "" FORCE)
-    set(LUAJIT_DISABLE_BUFFER OFF)
-    add_subdirectory("${PE_SHARED_THIRD_PARTY_DIR}/luajit-cmake" luajit-cmake)
-    # Keep the existing link/interface name so nothing downstream changes.
-    add_library(Lua INTERFACE)
-    target_link_libraries(Lua INTERFACE luajit::lib luajit::header)
-    # luajit.h is GENERATED into the subproject binary dir; luajit::header only
-    # exports the source dir, so sol2's lua.hpp can't see it without this.
-    target_include_directories(Lua INTERFACE "${CMAKE_BINARY_DIR}/luajit-cmake")
-    target_compile_definitions(Lua INTERFACE PE_LUAJIT=1)
-else()
-    file(GLOB LUA_SOURCES "${PE_SHARED_THIRD_PARTY_DIR}/lua/*.c")
-    add_library(Lua STATIC ${LUA_SOURCES})
-    target_include_directories(Lua PUBLIC "${PE_SHARED_THIRD_PARTY_DIR}/lua")
-    set_target_properties(Lua PROPERTIES LINKER_LANGUAGE C)
-    if(NOT MSVC)
-        target_compile_options(Lua PRIVATE -w)
-    endif()
+    set(LUAJIT_HOST_CMAKE_ARGS
+        -G Ninja
+        -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
+        -DCMAKE_C_COMPILER=${PE_LUAJIT_HOST_CC})
 endif()
+set(LUAJIT_DIR "${PE_SHARED_THIRD_PARTY_DIR}/luajit" CACHE PATH "" FORCE)
+set(LUAJIT_DISABLE_BUFFER OFF)
+add_subdirectory("${PE_SHARED_THIRD_PARTY_DIR}/luajit-cmake" luajit-cmake)
+# Keep the existing link/interface name so nothing downstream changes.
+add_library(Lua INTERFACE)
+target_link_libraries(Lua INTERFACE luajit::lib luajit::header)
+# luajit.h is GENERATED into the subproject binary dir; luajit::header only
+# exports the source dir, so sol2's lua.hpp can't see it without this.
+target_include_directories(Lua INTERFACE "${CMAKE_BINARY_DIR}/luajit-cmake")
+target_compile_definitions(Lua INTERFACE PE_LUAJIT=1)
 
 if(PE_BUILD_MCP)
     # Engine-agnostic MCP server library (protocol + transport + optional codebase indexer). Added

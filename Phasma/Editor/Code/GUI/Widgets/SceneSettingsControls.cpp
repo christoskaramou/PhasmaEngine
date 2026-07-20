@@ -50,7 +50,7 @@ namespace pe
         ui::ItemTooltip("Apply the current quality scale and resize render targets.");
         ImGui::Separator();
 
-        // Present mode
+        // Present mode (scene setting is authoritative; apply via swapchain recreate).
         ImGui::Text("Present Mode");
         PePresentMode currentPresentMode = RHII.GetSurface()->GetPresentMode();
         if (ImGui::BeginCombo("##present_mode", RHII.PresentModeToString(currentPresentMode)))
@@ -62,17 +62,16 @@ namespace pe
                 if (ImGui::Selectable(RHII.PresentModeToString(presentModes[i]), isSelected) &&
                     currentPresentMode != presentModes[i])
                 {
-                    gSettings.preferred_present_mode = presentModes[i];
-                    EventSystem::PushEvent(EventType::PresentMode);
+                    RHII.ChangePresentMode(presentModes[i]);
                     changed = true;
                 }
-                ui::ItemTooltip("Switch swapchain present behavior, such as FIFO vs immediate.");
+                ui::ItemTooltip("Scene present mode — saved with the scene; overrides editor_config / PE_PRESENT_MODE.");
                 if (isSelected)
                     ImGui::SetItemDefaultFocus();
             }
             ImGui::EndCombo();
         }
-        ui::ItemTooltip("Current swapchain present mode.");
+        ui::ItemTooltip("Swapchain present mode from scene settings (FIFO, mailbox, immediate, …).");
 
         static bool dynamic_rendering = gSettings.dynamic_rendering;
         if (Track(ImGui::Checkbox("Dynamic Rendering", &dynamic_rendering)))

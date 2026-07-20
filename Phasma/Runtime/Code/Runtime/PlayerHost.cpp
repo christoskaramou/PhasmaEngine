@@ -770,8 +770,9 @@ namespace pe
                 SceneSettings &settings = Settings::Get<SceneSettings>();
                 const RuntimeStartupSceneSettings startupSceneSettings =
                     ReadRuntimeStartupSceneSettings(startupScene);
-                const PePresentMode startupMode = forcedPresentMode.value_or(
-                    startupSceneSettings.presentMode.value_or(PE_PRESENT_MODE_FIFO));
+                // Scene settings win when authored; editor_config / PE_PRESENT_MODE only fill the gap.
+                const PePresentMode startupMode =
+                    startupSceneSettings.presentMode.value_or(forcedPresentMode.value_or(PE_PRESENT_MODE_FIFO));
                 settings.preferred_present_mode = startupMode;
                 RHII.GetSurface()->SetPresentMode(startupMode);
                 effectiveStartupMode = RHII.GetSurface()->GetPresentMode();

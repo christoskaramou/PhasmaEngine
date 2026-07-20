@@ -61,6 +61,7 @@ namespace pe
         void QueueScreenshotReadback(CommandBuffer *cmd, Image *sourceImage);
         void ApplyRuntimeRenderSettings();
         void ApplyPendingRenderScaleResize();
+        void ApplyPendingOptionalRTSync();
 
         Scene &m_scene;
         SceneRendererCore m_sceneRenderer;

@@ -272,6 +272,8 @@ namespace pe
             settings.AddMember("ssao_power", gSettings.ssao_power, allocator);
             settings.AddMember("ssao_samples", gSettings.ssao_samples, allocator);
             settings.AddMember("forward_plus", gSettings.forward_plus, allocator);
+            settings.AddMember("normal_format", rapidjson::Value(gSettings.normal_format.c_str(), allocator), allocator);
+            settings.AddMember("velocity_format", rapidjson::Value(gSettings.velocity_format.c_str(), allocator), allocator);
             settings.AddMember("fxaa", gSettings.fxaa, allocator);
             settings.AddMember("taa", gSettings.taa, allocator);
             settings.AddMember("cas_sharpening", gSettings.cas_sharpening, allocator);
@@ -468,6 +470,10 @@ namespace pe
                 gSettings.ssao_samples = settings["ssao_samples"].GetInt();
             if (settings.HasMember("forward_plus"))
                 gSettings.forward_plus = settings["forward_plus"].GetBool();
+            if (settings.HasMember("normal_format") && settings["normal_format"].IsString())
+                gSettings.normal_format = settings["normal_format"].GetString();
+            if (settings.HasMember("velocity_format") && settings["velocity_format"].IsString())
+                gSettings.velocity_format = settings["velocity_format"].GetString();
             if (settings.HasMember("fxaa"))
                 gSettings.fxaa = settings["fxaa"].GetBool();
             if (settings.HasMember("taa"))

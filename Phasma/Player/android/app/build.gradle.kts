@@ -139,10 +139,7 @@ android {
                     "-DPE_ENABLE_RUNTIME_SHADER_COMPILER=OFF",
                     "-DPE_PHYSICS=ON",
                     "-DPE_AUDIO=OFF",
-                    "-DPE_TRACY=OFF",
-                    // LuaJIT interpreter swap for the 120fps push; flip OFF to
-                    // fall back to vanilla Lua 5.4.
-                    "-DPE_USE_LUAJIT=ON"
+                    "-DPE_TRACY=OFF"
                 )
                 targets += "PhasmaPlayer"
             }

@@ -10,6 +10,7 @@ namespace pe
         {"bgra8", PE_FORMAT_B8G8R8A8_UNORM},
         {"rgba16f", PE_FORMAT_R16G16B16A16_SFLOAT},
         {"rgba32f", PE_FORMAT_R32G32B32A32_SFLOAT},
+        {"rg16f", PE_FORMAT_R16G16_SFLOAT},
         {"r8", PE_FORMAT_R8_UNORM},
         {"r16f", PE_FORMAT_R16_SFLOAT},
         {"r32f", PE_FORMAT_R32_SFLOAT},

@@ -135,12 +135,14 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     output.emissive = float4(0.0f, 0.0f, 0.0f, 1.0f);
     output.transparency = pc.passType ? 1.0f : 0.0f;
 
+#ifndef GBUFFER_NO_VELOCITY
     // Velocity (matches stock GBuffer PS).
     float2 currentNDC = input.positionCS.xy / input.positionCS.w;
     float2 previousNDC = input.prevPositionCS.xy / input.prevPositionCS.w;
     currentNDC -= float2(pc.projJitter.x, pc.projJitter.y);
     previousNDC -= float2(pc.prevProjJitter.x, pc.prevProjJitter.y);
     output.velocity = previousNDC - currentNDC;
+#endif
 
     return output;
 }

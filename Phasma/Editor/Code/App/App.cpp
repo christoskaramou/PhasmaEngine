@@ -369,9 +369,10 @@ namespace pe
         if (!startupScene.warning.empty())
             PE_WARN("[Runtime] %s", startupScene.warning.c_str());
         const RuntimeStartupSceneSettings startupSceneSettings = ReadRuntimeStartupSceneSettings(startupScene);
+        // Scene settings win when authored; editor_config / PE_PRESENT_MODE only fill the gap.
         if (startupSceneSettings.presentMode)
             settings.preferred_present_mode = *startupSceneSettings.presentMode;
-        if (const std::optional<PePresentMode> forcedPresentMode = ReadStartupPresentModeOverride())
+        else if (const std::optional<PePresentMode> forcedPresentMode = ReadStartupPresentModeOverride())
             settings.preferred_present_mode = *forcedPresentMode;
         if (startupSceneSettings.renderScale)
             settings.render_scale = *startupSceneSettings.renderScale;

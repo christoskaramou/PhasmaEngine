@@ -114,6 +114,7 @@ namespace pe
         Image *GetFrameOutputImage() const;
         void QueueScreenshotReadback(CommandBuffer *cmd, Image *sourceImage);
         void ApplyPendingRenderScaleResize();
+        void ApplyPendingOptionalRTSync();
         std::string m_screenshotSavedPath;
         Scene m_scene;
         SceneRendererCore m_sceneRenderer;

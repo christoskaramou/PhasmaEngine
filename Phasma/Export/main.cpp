@@ -111,9 +111,7 @@ namespace
         }
 
         std::vector<uint8_t> bytecode;
-        // sol2 identifies the chunk's _ENV upvalue by name when attaching per-node environments.
-        // Lua's strip mode removes that name, so keep metadata while still shipping bytecode only.
-        if (lua_dump(lua, DumpLua, &bytecode, 0) != 0)
+        if (lua_dump(lua, DumpLua, &bytecode) != 0)
         {
             lua_pop(lua, 1);
             throw std::runtime_error("Failed to compile " + packPath);

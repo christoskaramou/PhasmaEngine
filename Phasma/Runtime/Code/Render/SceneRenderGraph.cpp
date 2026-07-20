@@ -1,6 +1,7 @@
 #include "Render/SceneRenderGraph.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
+#include "Render/SceneRenderTargets.h"
 #include "RenderPasses/AabbsPass.h"
 #include "RenderPasses/BloomPass.h"
 #include "RenderPasses/CullPhase1Pass.h"
@@ -391,7 +392,7 @@ namespace pe
 
         const bool renderRaster = (gs.render_mode != RenderMode::RayTracing) || !hasRayTracingGeometry;
         const bool renderRayTracing = (gs.render_mode != RenderMode::Raster) && hasRayTracingGeometry;
-        const bool needVelocity = pp.taa || pp.motion_blur;
+        const bool needVelocity = SceneNeedsVelocityRT(hasRayTracingGeometry);
         const bool renderSSR = pp.ssr && renderRaster;
         const bool renderSSAO = pp.ssao && renderRaster;
         const bool needDepth = renderRaster || needVelocity || pp.dof || pp.motion_blur || gs.draw_aabbs || gs.draw_grid;
@@ -403,7 +404,7 @@ namespace pe
             const bool dx12RenderRaster = renderRaster || !dx12RayTracing;
             const bool dx12RtOnly = dx12RayTracing && !dx12RenderRaster;
             const bool dx12RenderTAA = pp.taa && (dx12RenderRaster || dx12RtOnly);
-            const bool dx12NeedVelocity = dx12RenderTAA || (pp.motion_blur && dx12RenderRaster);
+            const bool dx12NeedVelocity = needVelocity;
             const bool dx12NeedDepth = dx12RenderRaster || dx12NeedVelocity || gs.draw_aabbs || gs.draw_grid;
             const bool dx12NeedGBuffer = dx12RenderRaster || dx12NeedVelocity;
 
