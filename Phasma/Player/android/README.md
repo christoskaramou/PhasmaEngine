@@ -46,15 +46,13 @@ Two engine properties make a desktop-baked cache resolve on-device:
 - **Portable cache key.** The cache filename is a hash of the shader source + entry point + defines + SPIR-V target. That hash is computed with a deterministic FNV-1a (`Phasma/Core/Code/Base/Hash.h`), not `std::hash`, so the key is identical whether produced by the desktop MSVC build or the on-device NDK libc++ build.
 - **Matched SPIR-V target.** Android hard-forces the SPIR-V target to Vulkan 1.2 (`RHI.cpp`). The bake host pins the same target via the `PHASMA_SPIRV_TARGET=1.2` env override so the keys *and* the emitted bytecode match.
 
-The desktop bake host and the Android APK must be built from the **same engine revision** for the keys to match. To regenerate the cache after touching any shader, define, or the hash:
+The desktop bake host and the Android APK must be built from the **same engine revision** for the keys to match. The bake script rebuilds the desktop host and writes a content manifest covering the shader/cache-key code and assets. Gradle rejects a missing or stale manifest before staging assets, so `assembleDebug` cannot silently package an old cache. To regenerate after changing any bake input:
 
 ```powershell
-# 1. Rebuild the desktop bake host with the current engine:
-cmake --build build-ninja-full --config Release --target PhasmaPlayer
-# 2. Bake (runs the player at vulkan1.2, including Android HUD runtime-toggle variants,
+# 1. Bake (rebuilds PhasmaPlayer, then runs it at vulkan1.2, including Android HUD runtime-toggle variants,
 #    harvests ShaderCache/_spv into prebaked/, and validates the Android feature gate):
 pwsh tools/bake_android_shaders.ps1
-# 3. Build the APK; gradle stages prebaked/ShaderCache/ into the APK automatically:
+# 2. Build the APK; Gradle verifies the bake manifest and stages prebaked/ShaderCache/:
 cd Phasma/Player/android ; .\gradlew.bat :app:assembleDebug
 ```
 
