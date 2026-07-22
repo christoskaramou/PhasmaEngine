@@ -449,7 +449,7 @@ namespace pe
                 gSettings.shadow_debug_mode = settings["shadow_debug_mode"].GetInt();
             if (settings.HasMember("render_scale"))
             {
-                const float renderScale = settings["render_scale"].GetFloat();
+                const float renderScale = ClampRenderScale(settings["render_scale"].GetFloat());
                 if (gSettings.render_scale != renderScale)
                 {
                     gSettings.render_scale = renderScale;

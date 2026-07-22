@@ -72,10 +72,10 @@ namespace pe
         return CreateSceneFSSampledImage(name, useRenderTargetScale);
     }
 
-    void SceneRendererCore::CreateRenderTargets(bool hasRayTracingGeometry)
+    void SceneRendererCore::CreateRenderTargets(bool hasRayTracingGeometry, bool scaleOutput)
     {
         const SceneRenderTargets targets =
-            CreateDefaultSceneRenderTargets(m_renderTargets, m_depthStencilTargets, hasRayTracingGeometry);
+            CreateDefaultSceneRenderTargets(m_renderTargets, m_depthStencilTargets, hasRayTracingGeometry, scaleOutput);
         m_depthStencil = targets.depthStencil;
         m_viewportRT = targets.viewport;
         m_displayRT = targets.display;

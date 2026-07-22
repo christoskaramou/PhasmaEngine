@@ -493,10 +493,10 @@ namespace pe
                 {
                     if (Image *displayRT = m_renderer.GetDisplayRT())
                     {
-                        m_runtimeUi->SetFrameSurfaceSize(displayRT->GetWidth(), displayRT->GetHeight());
-                        m_runtimeUi->SetFrameUiScale(ComputeRuntimeUiScale(m_window, displayRT->GetHeight()));
+                        m_runtimeUi->SetFrameSurfaceSize(RHII.GetWidth(), RHII.GetHeight());
+                        m_runtimeUi->SetFrameUiScale(ComputeRuntimeUiScale(m_window, RHII.GetHeight()));
                         const RuntimeUiSafeArea safeArea =
-                            QueryAndroidRuntimeUiSafeArea(displayRT->GetWidth(), displayRT->GetHeight());
+                            QueryAndroidRuntimeUiSafeArea(RHII.GetWidth(), RHII.GetHeight());
                         if (safeArea.valid)
                             m_runtimeUi->SetFrameSafeArea(safeArea.minX, safeArea.minY, safeArea.width, safeArea.height);
                     }
@@ -539,14 +539,10 @@ namespace pe
         private:
             bool WindowDrawableExtentChanged() const
             {
-                Image *displayRT = m_renderer.GetDisplayRT();
-                if (!displayRT)
-                    return false;
-
                 const WindowDrawableExtent extent = GetWindowDrawableExtent(m_window);
                 return extent.IsValid() &&
-                       (extent.width != static_cast<int>(displayRT->GetWidth()) ||
-                        extent.height != static_cast<int>(displayRT->GetHeight()));
+                       (extent.width != static_cast<int>(RHII.GetWidth()) ||
+                        extent.height != static_cast<int>(RHII.GetHeight()));
             }
 
             // Emit one averaged FPS line per second. The on-screen runtime-UI HUD is unreadable on the

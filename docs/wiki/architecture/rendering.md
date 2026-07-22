@@ -17,6 +17,9 @@ Present-mode changes must be treated as resize work, not as an immediate mid-fra
 Every successful swapchain creation also rebuilds the RHI deletion-queue array to the new swapchain image count. Recreating only the swapchain images while retaining the old queue count lets the new frame index address past the queue array during later scene/resource destruction; Android surface loss and resume is a common trigger because its swapchain image count can change.
 
 Cached framebuffers are keyed by the actual attachment `ImageView` objects captured in the backend framebuffer. Implicit render-target views must be created before cache lookup so an RTV recreation cannot reuse a framebuffer that still holds a destroyed Vulkan image view or DX12 descriptor.
+Code outside PhasmaCore must clear this cache through `CommandBuffer::ClearFramebufferCache()`, not by accessing the inline static map from a header. A DLL/executable boundary can otherwise produce a separate inline-variable instance, leaving PhasmaCore's real cached framebuffer alive after its attachment view is destroyed.
+
+DX12 scaled image blits use the shader path rather than `CopyTextureRegion`. Its source Y scale is negative because the shared DX12 viewport path uses inverted viewport height; the matching bottom-edge offset keeps the result equivalent to Vulkan's top-to-top image blit instead of presenting the final scaled frame upside down.
 
 ## Cached Pipelines
 

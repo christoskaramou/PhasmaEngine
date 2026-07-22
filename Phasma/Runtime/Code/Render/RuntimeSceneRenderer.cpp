@@ -27,6 +27,10 @@ namespace pe
         // (COLOR_ATTACHMENT|TRANSFER_DST only). Upsample+particles+UI are attachment-only.
         bool CanDirectPresentToSwapchain(const SceneRendererCore &core)
         {
+            Image *display = core.GetDisplayRT();
+            if (!display || display->GetWidth() != RHII.GetWidth() || display->GetHeight() != RHII.GetHeight())
+                return false;
+
             const auto &pp = Settings::Get<SceneSettings>();
             if (pp.taa || pp.bloom || pp.tonemapping || pp.dof || pp.motion_blur || pp.color_grading ||
                 pp.fxaa || pp.ssr || pp.cas_sharpening)
@@ -75,7 +79,7 @@ namespace pe
                 initCmd->Begin();
             }
 
-            m_sceneRenderer.CreateRenderTargets();
+            m_sceneRenderer.CreateRenderTargets(false, true);
             m_sceneRenderer.LoadSky(initCmd);
 
             m_sceneRenderer.CreateRenderPassComponents(SupportsRayTracingPass(), initCmd);
@@ -327,7 +331,7 @@ namespace pe
         surface->SetActualExtent({0, 0, width, height});
         RHII.CreateSwapchain(surface);
 
-        m_sceneRenderer.CreateRenderTargets(hasRTGeom);
+        m_sceneRenderer.CreateRenderTargets(hasRTGeom, true);
         const bool isDx12 = UsesDx12RenderOrchestration();
         const PeBarrierSync semaphoreStageFlags = isDx12 ? PE_STAGE_NONE : PE_STAGE_ALL_COMMANDS;
         m_sceneRenderer.CreateFrameResources(RHII.GetSwapchainImageCount(),
@@ -346,7 +350,12 @@ namespace pe
         if (!m_sceneRenderer.NeedsRenderScaleResize())
             return;
 
-        Resize(RHII.GetWidth(), RHII.GetHeight());
+        RHII.WaitDeviceIdle();
+        WaitAllFramesCommands();
+        const bool hasRTGeom = SupportsRayTracingPass() && m_scene.GetTLAS() != nullptr;
+        m_sceneRenderer.CreateRenderTargets(hasRTGeom, true);
+        m_sceneRenderer.ResizeRenderPassComponents(RHII.GetWidth(), RHII.GetHeight(), hasRTGeom);
+        BuildRenderGraph();
     }
 
     void RuntimeSceneRenderer::ApplyPendingOptionalRTSync()

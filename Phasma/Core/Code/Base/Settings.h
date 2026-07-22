@@ -3,8 +3,19 @@
 #include "Base/PhasmaExport.h"
 #include "API/RHITypes.h"
 
+#include <algorithm>
+#include <cmath>
+
 namespace pe
 {
+    inline constexpr float kMinRenderScale = 0.1f;
+    inline constexpr float kMaxRenderScale = 1.0f;
+
+    inline float ClampRenderScale(float scale)
+    {
+        return std::isfinite(scale) ? std::clamp(scale, kMinRenderScale, kMaxRenderScale) : kMaxRenderScale;
+    }
+
     struct Settings
     {
     public:

@@ -52,6 +52,23 @@ namespace pe
             return fallback;
         }
 
+        bool TryParseVisualStyle(const std::string &value, RuntimeUiQuadVisualStyle &style)
+        {
+            if (value == "card")
+                style = RuntimeUiQuadVisualStyle::Card;
+            else if (value == "panel")
+                style = RuntimeUiQuadVisualStyle::Panel;
+            else if (value == "text")
+                style = RuntimeUiQuadVisualStyle::Text;
+            else if (value == "button")
+                style = RuntimeUiQuadVisualStyle::Button;
+            else if (value == "image")
+                style = RuntimeUiQuadVisualStyle::Image;
+            else
+                return false;
+            return true;
+        }
+
         RuntimeUiColor ReadColorOption(const sol::table &table, const char *key, const RuntimeUiColor &fallback)
         {
             sol::object value = table[key];
@@ -221,27 +238,9 @@ namespace pe
             result.desc.textAlignV = parseAlignV(options, "align_v", result.desc.textAlignV);
             result.desc.textOffsetX = ReadFloatOption(options, "offset_x", result.desc.textOffsetX);
             result.desc.textOffsetY = ReadFloatOption(options, "offset_y", result.desc.textOffsetY);
+            result.desc.textInsetRight = ReadFloatOption(options, "text_inset_right", result.desc.textInsetRight);
 
-            auto parseStyle = [](const sol::table &o, const char *k, RuntimeUiQuadVisualStyle cur) -> RuntimeUiQuadVisualStyle
-            {
-                sol::object v = o[k];
-                if (v.is<std::string>())
-                {
-                    const std::string s = v.as<std::string>();
-                    if (s == "card")
-                        return RuntimeUiQuadVisualStyle::Card;
-                    if (s == "panel")
-                        return RuntimeUiQuadVisualStyle::Panel;
-                    if (s == "text")
-                        return RuntimeUiQuadVisualStyle::Text;
-                    if (s == "button")
-                        return RuntimeUiQuadVisualStyle::Button;
-                    if (s == "image")
-                        return RuntimeUiQuadVisualStyle::Image;
-                }
-                return cur;
-            };
-            result.desc.visualStyle = parseStyle(options, "style", result.desc.visualStyle);
+            TryParseVisualStyle(ReadStringOption(options, "style"), result.desc.visualStyle);
 
             sol::object nodeObject = options["node"];
             if (nodeObject.is<SceneNodeHandle>())
@@ -443,6 +442,20 @@ namespace pe
                                         {
                                             if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
                                                 runtimeUi->SetScreenMaxHeight(screenId, static_cast<float>(maxHeight)); });
+                        ui.set_function("set_text_scale", [](double scale)
+                                        {
+                                            if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
+                                                runtimeUi->SetTextScale(static_cast<float>(scale)); });
+                        ui.set_function("set_style_background", [](const std::string &styleName, const std::string &path)
+                                        {
+                                            RuntimeUiQuadVisualStyle style{};
+                                            if (!TryParseVisualStyle(styleName, style))
+                                            {
+                                                PE_WARN("[Lua] runtime_ui.set_style_background: unknown style '%s'", styleName.c_str());
+                                                return;
+                                            }
+                                            if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
+                                                runtimeUi->SetStyleBackground(style, path); });
                         ui.set_function("get_surface_size", [](sol::this_state ts) -> sol::table
                                         {
                                             sol::state_view lua(ts);

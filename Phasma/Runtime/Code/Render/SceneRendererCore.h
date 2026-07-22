@@ -47,7 +47,7 @@ namespace pe
         Image *GetDepthStencilTarget(const std::string &name) const;
         Image *GetDepthStencilTarget(size_t hash) const;
         Image *CreateFSSampledImage(const std::string &name, bool useRenderTargetScale = true);
-        void CreateRenderTargets(bool hasRayTracingGeometry = false);
+        void CreateRenderTargets(bool hasRayTracingGeometry = false, bool scaleOutput = false);
         void DestroyRenderTargets();
         bool NeedsRenderScaleResize() const;
         // Synchronize optional velocity membership and configurable scene-target formats.

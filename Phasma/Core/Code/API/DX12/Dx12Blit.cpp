@@ -13,7 +13,6 @@
 #include "API/RHI.h"
 #include "API/Sampler.h"
 
-
 namespace pe
 {
     namespace
@@ -431,9 +430,9 @@ namespace pe
             const uint32_t srcExtentH = MipExtent(src->GetHeight(), region.srcSubresource.mipLevel);
             const float constants[4] = {
                 static_cast<float>(geometry.srcW) / static_cast<float>(srcExtentW),
-                static_cast<float>(geometry.srcH) / static_cast<float>(srcExtentH),
+                -static_cast<float>(geometry.srcH) / static_cast<float>(srcExtentH),
                 static_cast<float>(geometry.srcMin.x) / static_cast<float>(srcExtentW),
-                static_cast<float>(geometry.srcMin.y) / static_cast<float>(srcExtentH),
+                static_cast<float>(geometry.srcMin.y + geometry.srcH) / static_cast<float>(srcExtentH),
             };
             dxCmd->Get()->SetGraphicsRoot32BitConstants(DX12_ROOT_CONSTANTS_INDEX, 4, constants, 0);
 

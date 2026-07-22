@@ -162,13 +162,11 @@ namespace pe
                     return it != s_presentModeMap.end() ? RequestPresentModeChange(it->second) : "unknown";
                 });
 
-                // SetRenderScale — apply like the editor Global widget "Apply" (device-idle + Resize).
+                // SetRenderScale — scene renderers detect the change and rebuild only their scaled targets.
                 // Returns the clamped value so callers can sync their UI.
                 rhi.set_function("set_render_scale", [](double scale) -> float {
                     auto &gs = Settings::Get<SceneSettings>();
-                    gs.render_scale = std::clamp(static_cast<float>(scale), 0.1f, 2.0f);
-                    RHII.WaitDeviceIdle();
-                    EventSystem::PushEvent(EventType::Resize);
+                    gs.render_scale = ClampRenderScale(static_cast<float>(scale));
                     return gs.render_scale;
                 });
 

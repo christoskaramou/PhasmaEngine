@@ -68,11 +68,11 @@ namespace pe
         Panel,
         Text,
         Button,
-        Image
+        Image,
+        Count
     };
 
-    // Text alignment inside a widget rect. Default defers to each widget's natural
-    // alignment (text/panel/card -> Left/Top, button -> Center/Middle).
+    // Text alignment inside a widget rect. Default defers to each widget's natural alignment.
     enum class RuntimeUiTextAlignH : uint8_t
     {
         Default = 0,
@@ -98,6 +98,7 @@ namespace pe
         const char *body = nullptr;
         const char *footer = nullptr;
         Image *image = nullptr;
+        Image *backgroundImage = nullptr;
         float x = 0.0f;
         float y = 0.0f;
         float z = 0.0f;
@@ -108,6 +109,7 @@ namespace pe
         RuntimeUiColor accentColor{0.96f, 0.74f, 0.22f, 1.0f};
         RuntimeUiColor textColor{0.92f, 0.93f, 0.94f, 1.0f};
         RuntimeUiColor imageTint{1.0f, 1.0f, 1.0f, 1.0f};
+        RuntimeUiColor backgroundImageTint{1.0f, 1.0f, 1.0f, 0.90f};
         NodeId *node = nullptr;
         bool draggable = false;
         bool selected = false;
@@ -115,10 +117,12 @@ namespace pe
         bool bringToFront = false;
         bool noInput = false;
         float fontScale = 1.0f;
+        float textScale = 1.0f;
         RuntimeUiTextAlignH textAlignH = RuntimeUiTextAlignH::Default;
         RuntimeUiTextAlignV textAlignV = RuntimeUiTextAlignV::Default;
         float textOffsetX = 0.0f;
         float textOffsetY = 0.0f;
+        float textInsetRight = 0.0f;
         RuntimeUiQuadVisualStyle visualStyle = RuntimeUiQuadVisualStyle::Card;
         // Auto-size the quad to tightly fit its text (Text style). When set, the
         // backend ignores width/height and measures the content instead.
@@ -202,6 +206,7 @@ namespace pe
         void SetScreenOverlay(const std::string &screenId, bool overlay);
         void SetScreenScrollable(const std::string &screenId, bool scrollable);
         void SetScreenMaxHeight(const std::string &screenId, float maxHeight);
+        void SetTextScale(float scale);
         void ClearScreen(const std::string &screenId);
         void ClearAllScreens();
         // Remove screens created by scripts (everything except scene-authored UI). Called on
@@ -230,6 +235,7 @@ namespace pe
                       const std::string &path,
                       float width = 0.0f,
                       float height = 0.0f);
+        void SetStyleBackground(RuntimeUiQuadVisualStyle style, const std::string &path);
         void SetQuad(const std::string &screenId,
                      const std::string &widgetId,
                      const RuntimeUiQuadDesc &desc,
@@ -272,6 +278,7 @@ namespace pe
             bool visible = true;
             std::string imagePath;
             Image *image = nullptr;
+            Image *backgroundImage = nullptr;
             float imageWidth = 0.0f;
             float imageHeight = 0.0f;
             float x = 0.0f;
@@ -284,6 +291,7 @@ namespace pe
             RuntimeUiColor accentColor{0.96f, 0.74f, 0.22f, 1.0f};
             RuntimeUiColor textColor{0.92f, 0.93f, 0.94f, 1.0f};
             RuntimeUiColor imageTint{1.0f, 1.0f, 1.0f, 1.0f};
+            RuntimeUiColor backgroundImageTint{1.0f, 1.0f, 1.0f, 0.90f};
             NodeId *node = nullptr;
             uint32_t nodeIndex = 0;    // captured at bind time; node itself may dangle
             uint32_t nodeRevision = 0; // once the node is destroyed, so validate via these
@@ -295,6 +303,7 @@ namespace pe
             RuntimeUiTextAlignV textAlignV = RuntimeUiTextAlignV::Default;
             float textOffsetX = 0.0f;
             float textOffsetY = 0.0f;
+            float textInsetRight = 0.0f;
             RuntimeUiQuadVisualStyle visualStyle = RuntimeUiQuadVisualStyle::Card;
             bool fit = false;
         };
@@ -323,12 +332,15 @@ namespace pe
         std::vector<Screen> m_screens;
         std::unordered_map<std::string, std::unordered_set<std::string>> m_sceneAuthoredWidgetIds;
         std::unordered_map<std::string, std::shared_ptr<Image>> m_imageCache;
+        std::array<std::string, static_cast<size_t>(RuntimeUiQuadVisualStyle::Count)> m_styleBackgroundPaths{};
+        std::array<Image *, static_cast<size_t>(RuntimeUiQuadVisualStyle::Count)> m_styleBackgroundImages{};
         std::string m_backendName = "none";
         bool m_initialized = false;
         bool m_frameOpen = false;
         uint32_t m_frameSurfaceWidth = 0;
         uint32_t m_frameSurfaceHeight = 0;
         float m_frameUiScale = 1.0f;
+        float m_textScale = 1.0f;
         bool m_frameInputEnabled = true;
         bool m_frameInputRectValid = false;
         float m_frameInputRectMinX = 0.0f;

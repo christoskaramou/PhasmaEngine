@@ -238,8 +238,8 @@ static void ImGui_ImplDX12_SetupRenderState(ImDrawData *draw_data, ID3D12Graphic
 
     // Setup viewport
     D3D12_VIEWPORT vp = {};
-    vp.Width = draw_data->DisplaySize.x;
-    vp.Height = draw_data->DisplaySize.y;
+    vp.Width = draw_data->DisplaySize.x * draw_data->FramebufferScale.x;
+    vp.Height = draw_data->DisplaySize.y * draw_data->FramebufferScale.y;
     vp.MinDepth = 0.0f;
     vp.MaxDepth = 1.0f;
     vp.TopLeftX = vp.TopLeftY = 0.0f;
@@ -393,8 +393,10 @@ void ImGui_ImplDX12_RenderDrawData(ImDrawData *draw_data, ID3D12GraphicsCommandL
             else
             {
                 // Project scissor/clipping rectangles into framebuffer space
-                ImVec2 clip_min(pcmd->ClipRect.x - clip_off.x, pcmd->ClipRect.y - clip_off.y);
-                ImVec2 clip_max(pcmd->ClipRect.z - clip_off.x, pcmd->ClipRect.w - clip_off.y);
+                ImVec2 clip_min((pcmd->ClipRect.x - clip_off.x) * draw_data->FramebufferScale.x,
+                                (pcmd->ClipRect.y - clip_off.y) * draw_data->FramebufferScale.y);
+                ImVec2 clip_max((pcmd->ClipRect.z - clip_off.x) * draw_data->FramebufferScale.x,
+                                (pcmd->ClipRect.w - clip_off.y) * draw_data->FramebufferScale.y);
                 if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y)
                     continue;
 
