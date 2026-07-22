@@ -681,6 +681,59 @@ namespace pe
         return LoadRGBA(cmd, path, PE_FORMAT_R8G8B8A8_UNORM, false);
     }
 
+    Image *Image::LoadColorizeMaskRGBA8(CommandBuffer *cmd, const std::string &path)
+    {
+        std::vector<uint8_t> fileData;
+        {
+            FileSystem file(path, std::ios::in | std::ios::binary);
+            if (!file.IsOpen())
+            {
+                PE_WARN("[Image] Failed to open image file: %s", path.c_str());
+                return nullptr;
+            }
+            fileData = file.ReadAllBytes();
+        }
+
+        int texWidth = 0, texHeight = 0, texChannels = 0;
+        stbi_uc *pixels = stbi_load_from_memory(fileData.data(), static_cast<int>(fileData.size()),
+                                                &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        if (!pixels)
+        {
+            const char *reason = stbi_failure_reason();
+            PE_WARN("[Image] Colorize-mask decode failed for '%s': %s", path.c_str(), reason ? reason : "unknown");
+            return nullptr;
+        }
+
+        const int count = texWidth * texHeight;
+        for (int i = 0; i < count; ++i)
+        {
+            stbi_uc *p = pixels + i * 4;
+            p[0] = 255;
+            p[1] = 255;
+            p[2] = 255;
+            // Keep source alpha as coverage; RGB is forced white so tint SETS color.
+        }
+
+        uint32_t mipLevels = Image::CalculateMips(texWidth, texHeight);
+        PeImageUsageFlags usage = PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST |
+                                  PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE;
+
+        SamplerDesc samplerInfo = Sampler::CreateInfoInit();
+        samplerInfo.mipLodBias = log2(Settings::Get<SceneSettings>().render_scale) - 1.0f;
+        samplerInfo.maxLod = static_cast<float>(mipLevels);
+        samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+
+        const std::string maskName = path + "##colorize_mask";
+        Image *image = CreateImageAndUpload(cmd, maskName, pixels,
+                                            static_cast<size_t>(texWidth) * static_cast<size_t>(texHeight) * 4,
+                                            texWidth, texHeight, PE_FORMAT_R8G8B8A8_UNORM, mipLevels, usage, samplerInfo);
+
+        cmd->AddAfterWaitCallback([pixels]()
+                                  { stbi_image_free(pixels); });
+
+        return image;
+    }
+
     Image *Image::LoadRGBA32F(CommandBuffer *cmd, const std::string &path)
     {
         return LoadRGBA(cmd, path, PE_FORMAT_R32G32B32A32_SFLOAT, true);

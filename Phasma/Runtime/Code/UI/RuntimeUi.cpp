@@ -622,13 +622,18 @@ namespace pe
         widget.textInsetRight = std::max(0.0f, desc.textInsetRight);
         widget.visualStyle = desc.visualStyle;
         widget.fit = desc.fit;
-        // Resolve the image only when the path actually changes. LoadImageResource stats the
-        // filesystem (ResolveImagePath candidates + weakly_canonical, ~10 syscalls) before its
-        // cache lookup — ~150us per call, paid per animated quad per frame by set_quad-driven UIs.
+        // Resolve the image only when the path / colorize mode actually changes.
+        // LoadImageResource stats the filesystem before its cache lookup.
         if (path.empty())
+        {
             widget.image = desc.image;
-        else if (path != widget.imagePath)
-            widget.image = LoadImageResource(path);
+            widget.imageColorize = desc.imageColorize;
+        }
+        else if (path != widget.imagePath || desc.imageColorize != widget.imageColorize)
+        {
+            widget.image = desc.imageColorize ? LoadColorizeMask(path) : LoadImageResource(path);
+            widget.imageColorize = desc.imageColorize;
+        }
         widget.imagePath = path;
         const auto hasText = [](const char *text)
         { return text && text[0] != '\0'; };
@@ -939,6 +944,59 @@ namespace pe
                                      { Image::Destroy(p); });
         ResourceManager::Get().Register<Image>(cacheKey, image);
         m_imageCache.emplace(cacheKey, image);
+        return image.get();
+    }
+
+    Image *RuntimeUiSystem::LoadColorizeMask(const std::string &path)
+    {
+        const std::filesystem::path resolvedPath = ResolveImagePath(path);
+        const std::string cacheKey = "colorize:" + NormalizeImagePathKey(resolvedPath);
+
+        auto cacheIt = m_colorizeMaskCache.find(cacheKey);
+        if (cacheIt != m_colorizeMaskCache.end())
+            return cacheIt->second.get();
+
+        if (!AssetFileExists(resolvedPath))
+        {
+            PE_WARN("[RuntimeUI] colorize mask file not found: %s", path.c_str());
+            m_colorizeMaskCache.emplace(cacheKey, nullptr);
+            return nullptr;
+        }
+
+        if (ResourceHandle<Image> cached = ResourceManager::Get().Find<Image>(cacheKey))
+        {
+            m_colorizeMaskCache.emplace(cacheKey, cached.GetShared());
+            return cached.get();
+        }
+
+        Queue *queue = RHII.GetMainQueue();
+        if (!queue)
+        {
+            PE_WARN("[RuntimeUI] cannot load colorize mask without a main queue: %s", path.c_str());
+            m_colorizeMaskCache.emplace(cacheKey, nullptr);
+            return nullptr;
+        }
+
+        CommandBuffer *cmd = queue->AcquireCommandBuffer();
+        cmd->Begin();
+        Image *rawImage = Image::LoadColorizeMaskRGBA8(cmd, NormalizeImagePathKey(resolvedPath));
+        cmd->End();
+
+        if (!rawImage)
+        {
+            cmd->Return();
+            m_colorizeMaskCache.emplace(cacheKey, nullptr);
+            return nullptr;
+        }
+
+        queue->Submit(1, &cmd, nullptr, nullptr);
+        cmd->Wait();
+        cmd->Return();
+
+        std::shared_ptr<Image> image(rawImage, [](Image *p)
+                                     { Image::Destroy(p); });
+        ResourceManager::Get().Register<Image>(cacheKey, image);
+        m_colorizeMaskCache.emplace(cacheKey, image);
         return image.get();
     }
 
