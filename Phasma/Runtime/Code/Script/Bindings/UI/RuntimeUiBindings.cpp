@@ -189,6 +189,7 @@ namespace pe
             result.desc.accentColor = ReadColorOption(options, "accent", result.desc.accentColor);
             result.desc.textColor = ReadColorOption(options, "text_color", result.desc.textColor);
             result.desc.imageTint = ReadColorOption(options, "image_tint", result.desc.imageTint);
+            result.desc.imageColorize = ReadBoolOption(options, "image_colorize", result.desc.imageColorize);
             result.desc.draggable = ReadBoolOption(options, "draggable", result.desc.draggable);
             result.desc.selected = ReadBoolOption(options, "selected", result.desc.selected);
             result.desc.visible = ReadBoolOption(options, "visible", result.desc.visible);

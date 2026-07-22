@@ -854,11 +854,12 @@ namespace pe
             {
                 const char *content = HasText(quad.body) ? quad.body
                                                          : (HasText(quad.title) ? quad.title : quad.label);
-                const float scale = (quad.fontScale > 0.0f ? quad.fontScale : 1.0f) *
-                                    (quad.textScale > 0.0f ? quad.textScale : 1.0f);
-                const float pad = 10.0f * scale;
+                // Match DrawQuadVisual: pad from fontScale only; glyph size uses both.
+                const float fontScale = quad.fontScale > 0.0f ? quad.fontScale : 1.0f;
+                const float textScale = fontScale * (quad.textScale > 0.0f ? quad.textScale : 1.0f);
+                const float pad = 10.0f * fontScale;
                 ImFont *font = ImGui::GetFont();
-                const float fontSize = ImGui::GetFontSize() * scale;
+                const float fontSize = ImGui::GetFontSize() * textScale;
                 const float lineHeight = fontSize + kLineGap;
 
                 float maxWidth = 0.0f;

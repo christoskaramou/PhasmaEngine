@@ -110,6 +110,9 @@ namespace pe
         RuntimeUiColor textColor{0.92f, 0.93f, 0.94f, 1.0f};
         RuntimeUiColor imageTint{1.0f, 1.0f, 1.0f, 1.0f};
         RuntimeUiColor backgroundImageTint{1.0f, 1.0f, 1.0f, 0.90f};
+        // When true, the image is treated as a white+alpha mask so image_tint sets
+        // a flat color (multiply with white) instead of blending into the art.
+        bool imageColorize = false;
         NodeId *node = nullptr;
         bool draggable = false;
         bool selected = false;
@@ -292,6 +295,7 @@ namespace pe
             RuntimeUiColor textColor{0.92f, 0.93f, 0.94f, 1.0f};
             RuntimeUiColor imageTint{1.0f, 1.0f, 1.0f, 1.0f};
             RuntimeUiColor backgroundImageTint{1.0f, 1.0f, 1.0f, 0.90f};
+            bool imageColorize = false;
             NodeId *node = nullptr;
             uint32_t nodeIndex = 0;    // captured at bind time; node itself may dangle
             uint32_t nodeRevision = 0; // once the node is destroyed, so validate via these
@@ -325,6 +329,7 @@ namespace pe
         Screen *FindScreen(const std::string &screenId);
         Widget &GetOrCreateWidget(Screen &screen, const std::string &widgetId, WidgetType type);
         Image *LoadImageResource(const std::string &path);
+        Image *LoadColorizeMask(const std::string &path);
         void SortQuadWidgets(Screen &screen);
         void BuildFrame();
 
@@ -332,6 +337,7 @@ namespace pe
         std::vector<Screen> m_screens;
         std::unordered_map<std::string, std::unordered_set<std::string>> m_sceneAuthoredWidgetIds;
         std::unordered_map<std::string, std::shared_ptr<Image>> m_imageCache;
+        std::unordered_map<std::string, std::shared_ptr<Image>> m_colorizeMaskCache;
         std::array<std::string, static_cast<size_t>(RuntimeUiQuadVisualStyle::Count)> m_styleBackgroundPaths{};
         std::array<Image *, static_cast<size_t>(RuntimeUiQuadVisualStyle::Count)> m_styleBackgroundImages{};
         std::string m_backendName = "none";
