@@ -37,11 +37,11 @@ namespace pe
         }
         ImGui::Text("Resolution: %d x %d", static_cast<int>(RHII.GetWidthf() * gSettings.render_scale),
                     static_cast<int>(RHII.GetHeightf() * gSettings.render_scale));
-        ImGui::DragFloat("Quality", &rtScale, 0.01f, 0.05f, 1.0f);
+        ImGui::DragFloat("Quality", &rtScale, 0.01f, kMinRenderScale, kMaxRenderScale);
         ui::ItemTooltip("Render-scale preview; click Apply to recreate render targets.");
         if (ImGui::Button("Apply"))
         {
-            gSettings.render_scale = std::clamp(rtScale, 0.1f, 4.0f);
+            gSettings.render_scale = ClampRenderScale(rtScale);
             lastCommittedScale = gSettings.render_scale;
             RHII.WaitDeviceIdle();
             EventSystem::PushEvent(EventType::Resize);

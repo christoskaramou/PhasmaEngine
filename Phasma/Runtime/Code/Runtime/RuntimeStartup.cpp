@@ -10,9 +10,6 @@ namespace pe
 {
     namespace
     {
-        constexpr float kMinRenderScale = 0.1f;
-        constexpr float kMaxRenderScale = 4.0f;
-
         std::string PrefixStartupWarning(const char *source, const std::string &warning)
         {
             if (warning.empty())
@@ -162,7 +159,7 @@ namespace pe
 
         auto scaleIt = settings.FindMember("render_scale");
         if (scaleIt != settings.MemberEnd() && scaleIt->value.IsNumber())
-            out.renderScale = std::clamp(scaleIt->value.GetFloat(), kMinRenderScale, kMaxRenderScale);
+            out.renderScale = ClampRenderScale(scaleIt->value.GetFloat());
 
         return out;
     }

@@ -189,7 +189,6 @@ namespace pe
         static Pipeline *GetPipeline(RenderPass *renderPass, PassInfo &info);
         static void ClearFramebufferCache();
         static void ClearCache();
-        inline static auto &GetFramebuffers() { return s_framebuffers; }
 
     private:
         friend class Queue;

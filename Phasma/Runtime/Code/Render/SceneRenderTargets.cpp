@@ -1,6 +1,5 @@
 #include "Render/SceneRenderTargets.h"
 #include "API/Command.h"
-#include "API/Framebuffer.h"
 #include "API/Image.h"
 #include "API/RHI.h"
 #include "API/Sampler.h"
@@ -223,11 +222,10 @@ namespace pe
 
     SceneRenderTargets CreateDefaultSceneRenderTargets(SceneRenderTargetMap &renderTargets,
                                                        SceneRenderTargetMap &depthStencilTargets,
-                                                       bool hasRayTracingGeometry)
+                                                       bool hasRayTracingGeometry,
+                                                       bool scaleOutput)
     {
-        for (auto &framebuffer : CommandBuffer::GetFramebuffers())
-            Framebuffer::Destroy(framebuffer.second);
-        CommandBuffer::GetFramebuffers().clear();
+        CommandBuffer::ClearFramebufferCache();
 
         DestroySceneRenderTargets(renderTargets, depthStencilTargets);
         Settings::Get<SceneSettings>().rendering_images.clear();
@@ -243,12 +241,12 @@ namespace pe
                                                   "display",
                                                   surfaceFormat,
                                                   PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST,
-                                                  false);
+                                                  scaleOutput);
         targets.screenshot = CreateSceneRenderTarget(renderTargets,
                                                      "screenshot",
                                                      surfaceFormat,
                                                      PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST,
-                                                     false);
+                                                     scaleOutput);
         CreateSceneRenderTarget(renderTargets, "normal", SceneNormalRTFormat());
         CreateSceneRenderTarget(renderTargets, "albedo", surfaceFormat);
         CreateSceneRenderTarget(renderTargets, "srm", surfaceFormat);

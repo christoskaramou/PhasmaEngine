@@ -244,12 +244,15 @@ namespace pe
         m_backend.reset();
         ClearAllScreens();
         m_imageCache.clear();
+        m_styleBackgroundPaths = {};
+        m_styleBackgroundImages = {};
         m_backendName = "none";
         m_initialized = false;
         m_frameOpen = false;
         m_frameSurfaceWidth = 0;
         m_frameSurfaceHeight = 0;
         m_frameUiScale = 1.0f;
+        m_textScale = 1.0f;
         m_frameInputEnabled = true;
         m_frameInputRectValid = false;
         m_frameInputRectMinX = 0.0f;
@@ -560,6 +563,22 @@ namespace pe
         widget.image = path.empty() ? nullptr : LoadImageResource(path);
     }
 
+    void RuntimeUiSystem::SetStyleBackground(RuntimeUiQuadVisualStyle style, const std::string &path)
+    {
+        const size_t index = static_cast<size_t>(style);
+        if (index >= m_styleBackgroundImages.size() || m_styleBackgroundPaths[index] == path)
+            return;
+
+        m_styleBackgroundPaths[index] = path;
+        m_styleBackgroundImages[index] = path.empty() ? nullptr : LoadImageResource(path);
+    }
+
+    void RuntimeUiSystem::SetTextScale(float scale)
+    {
+        if (std::isfinite(scale))
+            m_textScale = std::clamp(scale, 0.5f, 3.0f);
+    }
+
     void RuntimeUiSystem::SetQuad(const std::string &screenId,
                                   const std::string &widgetId,
                                   const RuntimeUiQuadDesc &desc,
@@ -586,6 +605,7 @@ namespace pe
         widget.accentColor = desc.accentColor;
         widget.textColor = desc.textColor;
         widget.imageTint = desc.imageTint;
+        widget.backgroundImageTint = desc.backgroundImageTint;
         widget.node = desc.node;
         widget.nodeIndex = desc.node ? desc.node->index : 0;
         widget.nodeRevision = desc.node ? desc.node->revision : 0;
@@ -599,6 +619,7 @@ namespace pe
         widget.textAlignV = desc.textAlignV;
         widget.textOffsetX = desc.textOffsetX;
         widget.textOffsetY = desc.textOffsetY;
+        widget.textInsetRight = std::max(0.0f, desc.textInsetRight);
         widget.visualStyle = desc.visualStyle;
         widget.fit = desc.fit;
         // Resolve the image only when the path actually changes. LoadImageResource stats the
@@ -609,6 +630,16 @@ namespace pe
         else if (path != widget.imagePath)
             widget.image = LoadImageResource(path);
         widget.imagePath = path;
+        const auto hasText = [](const char *text)
+        { return text && text[0] != '\0'; };
+        const bool hasContent = hasText(desc.label) || hasText(desc.title) || hasText(desc.subtitle) ||
+                                hasText(desc.body) || hasText(desc.footer);
+        const bool wantsBackground = desc.fillColor.a > 0.0f ||
+                                     (desc.visualStyle == RuntimeUiQuadVisualStyle::Button && hasContent);
+        const size_t styleIndex = static_cast<size_t>(desc.visualStyle);
+        widget.backgroundImage = wantsBackground && styleIndex < m_styleBackgroundImages.size()
+                                     ? m_styleBackgroundImages[styleIndex]
+                                     : nullptr;
         if (orderDirty)
             screen.needsSort = true;
     }
@@ -1032,6 +1063,7 @@ namespace pe
                         quadDesc.body = widget.textValue.c_str();
                         quadDesc.footer = widget.footer.c_str();
                         quadDesc.image = widget.image;
+                        quadDesc.backgroundImage = widget.backgroundImage;
                         quadDesc.x = widget.x;
                         quadDesc.y = widget.y;
                         quadDesc.z = widget.z;
@@ -1042,17 +1074,20 @@ namespace pe
                         quadDesc.accentColor = widget.accentColor;
                         quadDesc.textColor = widget.textColor;
                         quadDesc.imageTint = widget.imageTint;
+                        quadDesc.backgroundImageTint = widget.backgroundImageTint;
                         quadDesc.node = widget.node;
                         quadDesc.draggable = widget.draggable;
                         quadDesc.selected = widget.selected;
                         quadDesc.visible = widget.visible;
                         quadDesc.bringToFront = widget.bringToFront;
                         quadDesc.noInput = widget.noInput;
-                        quadDesc.fontScale = widget.fontScale * kTextReadabilityScale / m_frameUiScale;
+                        quadDesc.fontScale = widget.fontScale / m_frameUiScale;
+                        quadDesc.textScale = kTextReadabilityScale * m_textScale;
                         quadDesc.textAlignH = widget.textAlignH;
                         quadDesc.textAlignV = widget.textAlignV;
                         quadDesc.textOffsetX = widget.textOffsetX;
                         quadDesc.textOffsetY = widget.textOffsetY;
+                        quadDesc.textInsetRight = widget.textInsetRight;
                         quadDesc.visualStyle = widget.visualStyle;
                         quadDesc.fit = widget.fit;
                         const RuntimeUiWidgetState previousState = widget.state;

@@ -16,7 +16,10 @@ namespace pe
         m_brightFilterRT = rs->GetRenderTarget("brightFilter");
         if (!m_brightFilterRT)
             m_brightFilterRT =
-                rs->CreateRenderTarget("brightFilter", RHII.GetSwapchainFormat(), PE_IMAGE_USAGE_NONE, false);
+                rs->CreateRenderTarget("brightFilter",
+                                       RHII.GetSwapchainFormat(),
+                                       PE_IMAGE_USAGE_NONE,
+                                       rs->GetDisplayRT()->GetWidth() != RHII.GetWidth());
         m_displayRT = rs->GetRenderTarget("display");
 
         m_attachments.resize(1);
@@ -89,7 +92,10 @@ namespace pe
         m_gaussianBlurHorizontalRT = rs->GetRenderTarget("gaussianBlurHorizontal");
         if (!m_gaussianBlurHorizontalRT)
             m_gaussianBlurHorizontalRT =
-                rs->CreateRenderTarget("gaussianBlurHorizontal", RHII.GetSwapchainFormat(), PE_IMAGE_USAGE_NONE, false);
+                rs->CreateRenderTarget("gaussianBlurHorizontal",
+                                       RHII.GetSwapchainFormat(),
+                                       PE_IMAGE_USAGE_NONE,
+                                       rs->GetDisplayRT()->GetWidth() != RHII.GetWidth());
         m_brightFilterRT = rs->GetRenderTarget("brightFilter");
 
         m_attachments.resize(1);

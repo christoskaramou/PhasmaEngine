@@ -46,7 +46,8 @@ namespace pe
 
     SceneRenderTargets CreateDefaultSceneRenderTargets(SceneRenderTargetMap &renderTargets,
                                                        SceneRenderTargetMap &depthStencilTargets,
-                                                       bool hasRayTracingGeometry);
+                                                       bool hasRayTracingGeometry,
+                                                       bool scaleOutput);
 
     // Synchronize optional velocity membership and configurable normal/velocity formats. Returns
     // true if membership or format changed (callers should refresh GBuffer pipelines/attachments).

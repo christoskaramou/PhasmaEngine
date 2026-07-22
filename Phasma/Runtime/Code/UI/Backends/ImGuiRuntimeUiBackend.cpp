@@ -27,7 +27,6 @@
 #include "imgui_internal.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_vulkan.h"
-#include <unordered_set>
 
 namespace pe
 {
@@ -88,6 +87,8 @@ namespace pe
                     {
                         const float fontSize = 16.0f;
                         const ImWchar *ranges = io.Fonts->GetGlyphRangesGreek();
+                        ImFontConfig fontConfig;
+                        fontConfig.RasterizerDensity = 4.0f;
                         auto addFont = [&](const char *relative) -> ImFont *
                         {
                             FileSystem file(Path::ResolveAsset(relative), std::ios::in | std::ios::binary);
@@ -96,9 +97,12 @@ namespace pe
                             const std::vector<uint8_t> bytes = file.ReadAllBytes();
                             void *data = IM_ALLOC(bytes.size()); // atlas takes ownership
                             std::memcpy(data, bytes.data(), bytes.size());
-                            return io.Fonts->AddFontFromMemoryTTF(data, static_cast<int>(bytes.size()), fontSize, nullptr, ranges);
+                            return io.Fonts->AddFontFromMemoryTTF(data, static_cast<int>(bytes.size()), fontSize,
+                                                                  &fontConfig, ranges);
                         };
-                        ImFont *font = addFont("Fonts/DejaVuSans.ttf");
+                        ImFont *font = addFont("Fonts/RuntimeUi.ttf");
+                        if (!font)
+                            font = addFont("Fonts/DejaVuSans.ttf");
                         if (!font)
                             font = addFont("Fonts/Inter-Regular.ttf");
                         if (font)
@@ -473,6 +477,11 @@ namespace pe
 
                 PE_PROFILE_SCOPE("RuntimeUI Vulkan Draw");
                 ScopedImGuiContext contextScope(m_context);
+                ImDrawData *drawData = ImGui::GetDrawData();
+                if (!drawData || drawData->DisplaySize.x <= 0.0f || drawData->DisplaySize.y <= 0.0f)
+                    return;
+                drawData->FramebufferScale = ImVec2(context.renderTarget->GetWidth_f() / drawData->DisplaySize.x,
+                                                    context.renderTarget->GetHeight_f() / drawData->DisplaySize.y);
 
                 Attachment attachment{};
                 attachment.image = context.renderTarget;
@@ -482,7 +491,7 @@ namespace pe
                 context.cmd->BeginPass(1, &attachment, "RuntimeUI", true);
                 if (m_api == PE_GRAPHICS_API_VULKAN)
                 {
-                    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), GetVulkanCommandBuffer(context.cmd));
+                    ImGui_ImplVulkan_RenderDrawData(drawData, GetVulkanCommandBuffer(context.cmd));
                 }
 #if defined(PE_WIN32)
                 else if (m_api == PE_GRAPHICS_API_DX12)
@@ -494,7 +503,7 @@ namespace pe
                                 "RuntimeUI: DX12 command state is not initialized");
 
                     dx12Cmd->Get()->SetDescriptorHeaps(1, &heap);
-                    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), dx12Cmd->Get());
+                    ImGui_ImplDX12_RenderDrawData(drawData, dx12Cmd->Get());
                     dx12Cmd->InvalidateShaderVisibleHeapBinding();
                 }
 #endif
@@ -620,6 +629,18 @@ namespace pe
                 return text && text[0] != '\0';
             }
 
+            static bool HasLineBreak(const char *text)
+            {
+                return HasText(text) && std::strchr(text, '\n') != nullptr;
+            }
+
+            static bool HasMultilineText(const RuntimeUiQuadDesc &quad)
+            {
+                return HasLineBreak(quad.label) || HasLineBreak(quad.title) ||
+                       HasLineBreak(quad.subtitle) || HasLineBreak(quad.body) ||
+                       HasLineBreak(quad.footer);
+            }
+
             static constexpr float kLineGap = 3.0f;
 
             static float LineWidth(ImFont *font, float fontSize, const std::string &s)
@@ -731,6 +752,63 @@ namespace pe
                 return static_cast<float>(lines.size()) * (fontSize + kLineGap);
             }
 
+            struct TextBlockMetrics
+            {
+                float width = 0.0f;
+                float height = 0.0f;
+            };
+
+            static TextBlockMetrics MeasureExplicitText(ImFont *font, float fontSize, const char *text)
+            {
+                TextBlockMetrics result{};
+                if (!HasText(text))
+                    return result;
+
+                const char *lineStart = text;
+                for (const char *cursor = text;; ++cursor)
+                {
+                    if (*cursor != '\n' && *cursor != '\0')
+                        continue;
+                    result.width = std::max(result.width,
+                                            LineWidth(font, fontSize, std::string(lineStart, cursor)));
+                    result.height += fontSize;
+                    if (*cursor == '\0')
+                        break;
+                    lineStart = cursor + 1;
+                }
+                return result;
+            }
+
+            static TextBlockMetrics MeasureTextBlock(ImFont *font, float fontSize, float gapScale,
+                                                     const RuntimeUiQuadDesc &quad, float maxWidth,
+                                                     float bodyScale, int maxBodyLines)
+            {
+                TextBlockMetrics result{};
+                auto addLine = [&](const char *value, float size, float gap)
+                {
+                    if (!HasText(value))
+                        return;
+                    const TextBlockMetrics line = MeasureExplicitText(font, size, value);
+                    result.width = std::max(result.width, line.width);
+                    result.height += line.height + gap * gapScale;
+                };
+
+                addLine(quad.label, fontSize * 0.83f, 2.0f);
+                addLine(quad.title, fontSize * 1.08f, 6.0f);
+                addLine(quad.subtitle, fontSize * 0.86f, 5.0f);
+                if (HasText(quad.body))
+                {
+                    const float bodyFontSize = fontSize * bodyScale;
+                    const std::vector<std::string> lines =
+                        WrapTextLines(font, bodyFontSize, quad.body, maxWidth, maxBodyLines);
+                    for (const std::string &line : lines)
+                        result.width = std::max(result.width, LineWidth(font, bodyFontSize, line));
+                    result.height += static_cast<float>(lines.size()) * (bodyFontSize + kLineGap);
+                }
+                addLine(quad.footer, fontSize * 0.82f, 0.0f);
+                return result;
+            }
+
             // Wrapped text aligned in BOTH axes within the box [boxMin, boxMin+boxSize]
             // (inset by pad), plus a pixel (offX,offY) nudge. Returns block height.
             static float DrawAlignedText(ImDrawList *drawList, ImFont *font, float fontSize, const char *text,
@@ -776,7 +854,8 @@ namespace pe
             {
                 const char *content = HasText(quad.body) ? quad.body
                                                          : (HasText(quad.title) ? quad.title : quad.label);
-                const float scale = quad.fontScale > 0.0f ? quad.fontScale : 1.0f;
+                const float scale = (quad.fontScale > 0.0f ? quad.fontScale : 1.0f) *
+                                    (quad.textScale > 0.0f ? quad.textScale : 1.0f);
                 const float pad = 10.0f * scale;
                 ImFont *font = ImGui::GetFont();
                 const float fontSize = ImGui::GetFontSize() * scale;
@@ -903,7 +982,10 @@ namespace pe
                     }
                 }
 
-                DrawQuadVisual(quad, pos, max, size, state, ImGui::GetWindowDrawList());
+                ImDrawList *drawList = ImGui::GetWindowDrawList();
+                drawList->PushClipRectFullScreen();
+                DrawQuadVisual(quad, pos, max, size, state, drawList);
+                drawList->PopClipRect();
                 return state;
             }
 
@@ -927,28 +1009,41 @@ namespace pe
                 const float scale = quad.fontScale > 0.0f ? quad.fontScale : 1.0f;
                 const float pad = 10.0f * scale;
                 ImFont *font = ImGui::GetFont();
-                const float fontSize = ImGui::GetFontSize() * scale;
-
-                auto drawSimpleText = [&](const char *value, float y, int maxLines)
+                const float textScale = scale * (quad.textScale > 0.0f ? quad.textScale : 1.0f);
+                const float fontSize = ImGui::GetFontSize() * textScale;
+                const float textInsetRight = std::clamp(quad.textInsetRight, 0.0f, std::max(0.0f, size.x - pad));
+                const float textBoxWidth = std::max(1.0f, size.x - textInsetRight);
+                const float textWidth = std::max(1.0f, textBoxWidth - pad * 2.0f);
+                const bool themed = quad.backgroundImage != nullptr;
+                auto drawSurface = [&](ImU32 surfaceFill)
                 {
-                    if (!HasText(value))
-                        return 0.0f;
-                    return DrawWrappedText(drawList,
-                                           font,
-                                           fontSize,
-                                           value,
-                                           ImVec2(pos.x + pad, y),
-                                           std::max(1.0f, size.x - pad * 2.0f),
-                                           text,
-                                           maxLines,
-                                           ResolveH(quad.textAlignH, RuntimeUiTextAlignH::Left),
-                                           quad.textOffsetX);
+                    drawList->AddRectFilled(pos, max, surfaceFill, rounding);
+                    if (quad.backgroundImage)
+                    {
+                        if (void *textureID = GetImageTexture(quad.backgroundImage))
+                        {
+                            drawList->AddImageRounded((ImTextureID)textureID, pos, max, ImVec2(0.0f, 0.0f),
+                                                      ImVec2(1.0f, 1.0f), ToColor(quad.backgroundImageTint), rounding);
+                        }
+                    }
+                    if (themed && (quad.selected || state.dragging || state.hovered))
+                    {
+                        RuntimeUiColor glow = quad.accentColor;
+                        glow.a *= quad.selected || state.dragging ? 0.22f : 0.08f;
+                        drawList->AddRectFilled(pos, max, ToColor(glow), rounding);
+                    }
+                };
+                auto drawBorder = [&]()
+                {
+                    if (!themed && (quad.borderColor.a > 0.0f || quad.selected || state.dragging))
+                        drawList->AddRect(pos, max, border, rounding, 0,
+                                          quad.selected || state.dragging ? 3.0f : 1.5f);
                 };
 
                 if (quad.visualStyle == RuntimeUiQuadVisualStyle::Image)
                 {
                     if (quad.fillColor.a > 0.0f)
-                        drawList->AddRectFilled(pos, max, fill, rounding);
+                        drawSurface(fill);
                     if (quad.image)
                     {
                         if (void *textureID = GetImageTexture(quad.image))
@@ -964,8 +1059,7 @@ namespace pe
                                                 accent,
                                                 std::max(0.0f, rounding - 2.0f));
                     }
-                    if (quad.borderColor.a > 0.0f || quad.selected || state.dragging)
-                        drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
+                    drawBorder();
                     return;
                 }
 
@@ -974,8 +1068,14 @@ namespace pe
                     RuntimeUiColor buttonFill = state.down ? quad.accentColor
                                                            : (state.hovered ? LerpColor(quad.fillColor, quad.accentColor, 0.35f)
                                                                             : quad.fillColor);
-                    drawList->AddRectFilled(pos, max, ToColor(buttonFill), rounding);
-                    drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
+                    drawSurface(ToColor(buttonFill));
+                    if (state.hovered)
+                    {
+                        RuntimeUiColor hover = quad.accentColor;
+                        hover.a *= state.down ? 0.34f : 0.16f;
+                        drawList->AddRectFilled(pos, max, ToColor(hover), rounding);
+                    }
+                    drawBorder();
 
                     const char *caption = HasText(quad.title) ? quad.title : (HasText(quad.label) ? quad.label : quad.body);
                     if (!HasText(caption))
@@ -985,98 +1085,134 @@ namespace pe
                                                     : ImGui::CalcTextSize(caption);
                     const RuntimeUiTextAlignH bah = ResolveH(quad.textAlignH, RuntimeUiTextAlignH::Center);
                     const RuntimeUiTextAlignV bav = ResolveV(quad.textAlignV, RuntimeUiTextAlignV::Middle);
-                    float btx = pos.x + (size.x - captionSize.x) * 0.5f;
+                    float btx = pos.x + (textBoxWidth - captionSize.x) * 0.5f;
                     if (bah == RuntimeUiTextAlignH::Left)
                         btx = pos.x + pad;
                     else if (bah == RuntimeUiTextAlignH::Right)
-                        btx = max.x - pad - captionSize.x;
+                        btx = pos.x + textBoxWidth - pad - captionSize.x;
                     float bty = pos.y + (size.y - captionSize.y) * 0.5f;
                     if (bav == RuntimeUiTextAlignV::Top)
                         bty = pos.y + pad;
                     else if (bav == RuntimeUiTextAlignV::Bottom)
                         bty = max.y - pad - captionSize.y;
                     ImVec2 textPos(std::max(pos.x + pad, btx) + quad.textOffsetX, bty + quad.textOffsetY);
-                    drawList->PushClipRect(pos, max, true);
                     drawList->AddText(font, fontSize, textPos, text, caption);
-                    drawList->PopClipRect();
                     return;
                 }
 
                 if (quad.visualStyle == RuntimeUiQuadVisualStyle::Text)
                 {
                     if (quad.fillColor.a > 0.0f)
-                        drawList->AddRectFilled(pos, max, fill, rounding);
-                    if (quad.borderColor.a > 0.0f || quad.selected || state.dragging)
-                        drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
+                        drawSurface(fill);
+                    drawBorder();
 
                     const char *content = HasText(quad.body) ? quad.body : (HasText(quad.title) ? quad.title : quad.label);
+                    const bool multiline = HasLineBreak(content);
                     // 48: skill/inventory tips wrap to many short lines; 12 clipped them.
-                    DrawAlignedText(drawList, font, fontSize, content, pos, size, pad, text,
-                                    ResolveH(quad.textAlignH, RuntimeUiTextAlignH::Left),
-                                    ResolveV(quad.textAlignV, RuntimeUiTextAlignV::Top),
+                    DrawAlignedText(drawList, font, fontSize, content, pos,
+                                    ImVec2(textBoxWidth, size.y), pad, text,
+                                    ResolveH(quad.textAlignH, multiline ? RuntimeUiTextAlignH::Left
+                                                                        : RuntimeUiTextAlignH::Center),
+                                    ResolveV(quad.textAlignV, multiline ? RuntimeUiTextAlignV::Top
+                                                                        : RuntimeUiTextAlignV::Middle),
                                     quad.textOffsetX, quad.textOffsetY, 48);
                     return;
                 }
 
                 if (quad.visualStyle == RuntimeUiQuadVisualStyle::Panel)
                 {
-                    drawList->AddRectFilled(pos, max, fill, rounding);
-                    drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
-                    const RuntimeUiTextAlignH ah = ResolveH(quad.textAlignH, RuntimeUiTextAlignH::Left);
+                    drawSurface(fill);
+                    drawBorder();
+                    const bool multiline = HasMultilineText(quad);
+                    const RuntimeUiTextAlignH ah = ResolveH(
+                        quad.textAlignH, multiline ? RuntimeUiTextAlignH::Left : RuntimeUiTextAlignH::Center);
+                    const RuntimeUiTextAlignV av = ResolveV(
+                        quad.textAlignV, multiline ? RuntimeUiTextAlignV::Top : RuntimeUiTextAlignV::Middle);
                     const float ox = quad.textOffsetX;
-                    float y = pos.y + pad + quad.textOffsetY;
+                    const float layoutFontSize = fontSize;
+                    const float layoutScale = textScale;
+                    const TextBlockMetrics block =
+                        MeasureTextBlock(font, layoutFontSize, layoutScale, quad, textWidth, 1.0f, 14);
+                    const float totalHeight = block.height;
+
+                    float y = pos.y + pad;
+                    if (av == RuntimeUiTextAlignV::Middle)
+                        y = std::max(y, pos.y + (size.y - totalHeight) * 0.5f);
+                    else if (av == RuntimeUiTextAlignV::Bottom)
+                        y = std::max(y, max.y - pad - totalHeight);
+                    y += quad.textOffsetY;
                     if (HasText(quad.label))
                     {
-                        drawList->AddText(font, fontSize * 0.83f, ImVec2(AlignLineX(font, fontSize * 0.83f, quad.label, pos.x, size.x, pad, ah, ox), y), accent, quad.label);
-                        y += fontSize + 2.0f * scale;
+                        drawList->AddText(font, layoutFontSize * 0.83f,
+                                          ImVec2(AlignLineX(font, layoutFontSize * 0.83f, quad.label,
+                                                            pos.x, textBoxWidth, pad, ah, ox),
+                                                 y),
+                                          accent, quad.label);
+                        y += layoutFontSize * 0.83f + 2.0f * layoutScale;
                     }
                     if (HasText(quad.title))
                     {
-                        drawList->AddText(font, fontSize * 1.08f, ImVec2(AlignLineX(font, fontSize * 1.08f, quad.title, pos.x, size.x, pad, ah, ox), y), text, quad.title);
-                        y += fontSize + 6.0f * scale;
+                        drawList->AddText(font, layoutFontSize * 1.08f,
+                                          ImVec2(AlignLineX(font, layoutFontSize * 1.08f, quad.title,
+                                                            pos.x, textBoxWidth, pad, ah, ox),
+                                                 y),
+                                          text, quad.title);
+                        y += layoutFontSize * 1.08f + 6.0f * layoutScale;
                     }
                     if (HasText(quad.subtitle))
                     {
-                        drawList->AddText(font, fontSize * 0.86f, ImVec2(AlignLineX(font, fontSize * 0.86f, quad.subtitle, pos.x, size.x, pad, ah, ox), y), accent, quad.subtitle);
-                        y += fontSize + 5.0f * scale;
+                        drawList->AddText(font, layoutFontSize * 0.86f,
+                                          ImVec2(AlignLineX(font, layoutFontSize * 0.86f, quad.subtitle,
+                                                            pos.x, textBoxWidth, pad, ah, ox),
+                                                 y),
+                                          accent, quad.subtitle);
+                        y += layoutFontSize * 0.86f + 5.0f * layoutScale;
                     }
                     if (HasText(quad.body))
-                        y += drawSimpleText(quad.body, y, 14);
+                        y += DrawWrappedText(drawList, font, layoutFontSize, quad.body, ImVec2(pos.x + pad, y),
+                                             textWidth, text, 14, ah, ox);
                     if (HasText(quad.footer))
                     {
-                        drawList->AddLine(ImVec2(pos.x + pad, max.y - 30.0f * scale),
-                                          ImVec2(max.x - pad, max.y - 30.0f * scale),
-                                          border,
-                                          1.0f);
-                        drawList->AddText(font, fontSize * 0.82f, ImVec2(AlignLineX(font, fontSize * 0.82f, quad.footer, pos.x, size.x, pad, ah, ox), max.y - 23.0f * scale), text, quad.footer);
+                        if (!themed)
+                            drawList->AddLine(ImVec2(pos.x + pad, y - 2.0f * layoutScale),
+                                              ImVec2(pos.x + textBoxWidth - pad, y - 2.0f * layoutScale), border, 1.0f);
+                        drawList->AddText(font, layoutFontSize * 0.82f,
+                                          ImVec2(AlignLineX(font, layoutFontSize * 0.82f, quad.footer,
+                                                            pos.x, textBoxWidth, pad, ah, ox),
+                                                 y),
+                                          text, quad.footer);
                     }
                     return;
                 }
 
-                drawList->AddRectFilled(pos, max, fill, rounding);
+                drawSurface(fill);
 
                 const bool textless = !HasText(quad.label) && !HasText(quad.title) && !HasText(quad.subtitle) &&
                                       !HasText(quad.body) && !HasText(quad.footer);
-                if (quad.image && textless)
+                if (textless)
                 {
-                    if (void *textureID = GetImageTexture(quad.image))
+                    if (quad.image)
                     {
-                        drawList->AddImageRounded((ImTextureID)textureID, pos, max, ImVec2(0.0f, 0.0f),
-                                                  ImVec2(1.0f, 1.0f), ToColor(quad.imageTint), rounding);
+                        if (void *textureID = GetImageTexture(quad.image))
+                        {
+                            drawList->AddImageRounded((ImTextureID)textureID, pos, max, ImVec2(0.0f, 0.0f),
+                                                      ImVec2(1.0f, 1.0f), ToColor(quad.imageTint), rounding);
+                        }
                     }
-                    drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
+                    drawBorder();
                     return;
                 }
 
-                drawList->AddRect(pos, max, border, rounding, 0, quad.selected || state.dragging ? 3.0f : 1.5f);
+                drawBorder();
 
-                const float artHeight = std::clamp(size.y * 0.34f, 42.0f * scale, 82.0f * scale);
-                const ImVec2 artMin(pos.x + pad, pos.y + pad);
-                const ImVec2 artMax(max.x - pad, pos.y + pad + artHeight);
-                drawList->AddRectFilled(artMin, artMax, accent, 5.0f);
-
+                float textMinY = pos.y + pad;
                 if (quad.image)
                 {
+                    const float artHeight = std::clamp(size.y * 0.34f, 42.0f * scale, 82.0f * scale);
+                    const ImVec2 artMin(pos.x + pad, pos.y + pad);
+                    const ImVec2 artMax(max.x - pad, pos.y + pad + artHeight);
+                    if (!themed)
+                        drawList->AddRectFilled(artMin, artMax, accent, 5.0f);
                     if (void *textureID = GetImageTexture(quad.image))
                     {
                         drawList->AddImage((ImTextureID)textureID,
@@ -1086,33 +1222,69 @@ namespace pe
                                            ImVec2(1.0f, 1.0f),
                                            ToColor(quad.imageTint));
                     }
+                    textMinY = artMax.y + 7.0f * scale;
                 }
 
-                const RuntimeUiTextAlignH ah = ResolveH(quad.textAlignH, RuntimeUiTextAlignH::Left);
+                const bool multiline = HasMultilineText(quad);
+                const RuntimeUiTextAlignH ah = ResolveH(
+                    quad.textAlignH, multiline ? RuntimeUiTextAlignH::Left : RuntimeUiTextAlignH::Center);
+                const RuntimeUiTextAlignV av = ResolveV(
+                    quad.textAlignV, multiline ? RuntimeUiTextAlignV::Top : RuntimeUiTextAlignV::Middle);
                 const float ox = quad.textOffsetX;
-                float y = artMax.y + 9.0f * scale + quad.textOffsetY;
-                const float textWidth = std::max(1.0f, size.x - pad * 2.0f);
+                const float textAreaHeight = std::max(0.0f, max.y - pad - textMinY);
+                const float layoutFontSize = fontSize;
+                const float layoutScale = textScale;
+                const float bodyFontSize = layoutFontSize * 0.88f;
+                const TextBlockMetrics block =
+                    MeasureTextBlock(font, layoutFontSize, layoutScale, quad, textWidth, 0.88f, 14);
+                const float totalHeight = block.height;
+                float y = textMinY;
+                if (av == RuntimeUiTextAlignV::Middle)
+                    y = std::max(y, textMinY + (textAreaHeight - totalHeight) * 0.5f);
+                else if (av == RuntimeUiTextAlignV::Bottom)
+                    y = std::max(y, max.y - pad - totalHeight);
+                y += quad.textOffsetY;
 
                 if (HasText(quad.label))
                 {
-                    drawList->AddText(font, fontSize * 0.83f, ImVec2(AlignLineX(font, fontSize * 0.83f, quad.label, pos.x, size.x, pad, ah, ox), pos.y + pad + 5.0f * scale + quad.textOffsetY), text, quad.label);
+                    drawList->AddText(font, layoutFontSize * 0.83f,
+                                      ImVec2(AlignLineX(font, layoutFontSize * 0.83f, quad.label,
+                                                        pos.x, textBoxWidth, pad, ah, ox),
+                                             y),
+                                      text, quad.label);
+                    y += layoutFontSize * 0.83f + 2.0f * layoutScale;
                 }
                 if (HasText(quad.title))
                 {
-                    drawList->AddText(font, fontSize * 1.08f, ImVec2(AlignLineX(font, fontSize * 1.08f, quad.title, pos.x, size.x, pad, ah, ox), y), text, quad.title);
-                    y += fontSize + 6.0f * scale;
+                    drawList->AddText(font, layoutFontSize * 1.08f,
+                                      ImVec2(AlignLineX(font, layoutFontSize * 1.08f, quad.title,
+                                                        pos.x, textBoxWidth, pad, ah, ox),
+                                             y),
+                                      text, quad.title);
+                    y += layoutFontSize * 1.08f + 6.0f * layoutScale;
                 }
                 if (HasText(quad.subtitle))
                 {
-                    drawList->AddText(font, fontSize * 0.86f, ImVec2(AlignLineX(font, fontSize * 0.86f, quad.subtitle, pos.x, size.x, pad, ah, ox), y), accent, quad.subtitle);
-                    y += fontSize + 5.0f * scale;
+                    drawList->AddText(font, layoutFontSize * 0.86f,
+                                      ImVec2(AlignLineX(font, layoutFontSize * 0.86f, quad.subtitle,
+                                                        pos.x, textBoxWidth, pad, ah, ox),
+                                             y),
+                                      accent, quad.subtitle);
+                    y += layoutFontSize * 0.86f + 5.0f * layoutScale;
                 }
                 if (HasText(quad.body))
-                    y += DrawWrappedText(drawList, font, fontSize * 0.88f, quad.body, ImVec2(pos.x + pad, y), textWidth, text, 14, ah, ox);
+                    y += DrawWrappedText(drawList, font, bodyFontSize, quad.body,
+                                         ImVec2(pos.x + pad, y), textWidth, text, 14, ah, ox);
                 if (HasText(quad.footer))
                 {
-                    drawList->AddLine(ImVec2(pos.x + pad, max.y - 30.0f * scale), ImVec2(max.x - pad, max.y - 30.0f * scale), border, 1.0f);
-                    drawList->AddText(font, fontSize * 0.82f, ImVec2(AlignLineX(font, fontSize * 0.82f, quad.footer, pos.x, size.x, pad, ah, ox), max.y - 23.0f * scale), text, quad.footer);
+                    if (!themed)
+                        drawList->AddLine(ImVec2(pos.x + pad, y - 2.0f * layoutScale),
+                                          ImVec2(pos.x + textBoxWidth - pad, y - 2.0f * layoutScale), border, 1.0f);
+                    drawList->AddText(font, layoutFontSize * 0.82f,
+                                      ImVec2(AlignLineX(font, layoutFontSize * 0.82f, quad.footer,
+                                                        pos.x, textBoxWidth, pad, ah, ox),
+                                             y),
+                                      text, quad.footer);
                 }
             }
 

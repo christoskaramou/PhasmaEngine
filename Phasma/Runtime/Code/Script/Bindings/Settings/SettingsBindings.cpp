@@ -152,7 +152,8 @@ namespace pe
                         auto fIt = s_floatSettings.find(std::string_view(name));
                         if (fIt != s_floatSettings.end())
                         {
-                            gs.*(fIt->second) = value.as<float>();
+                            const float number = value.as<float>();
+                            gs.*(fIt->second) = name == "render_scale" ? ClampRenderScale(number) : number;
                             return;
                         }
                         auto uIt = s_uint32Settings.find(std::string_view(name));
