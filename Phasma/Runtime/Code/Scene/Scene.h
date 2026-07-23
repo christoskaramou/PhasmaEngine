@@ -440,6 +440,8 @@ namespace pe
         void SetTexturesDirty() { m_texturesDirty = true; }
         void FlushPendingGpuWork();
         void RecordPendingUvUploads(CommandBuffer *cmd);
+        bool TryBindCachedTexture(int meshIndex, int textureSlot, Image *image);
+        void RecordPendingTextureUploads(CommandBuffer *cmd);
 
         Buffer *GetUniforms(uint32_t frame);
         void UploadDynamicUniforms(CommandBuffer *cmd);
@@ -864,6 +866,7 @@ namespace pe
         std::vector<uint32_t> m_arenaFreeSlots; // tombstoned slots awaiting reuse (refilled after retire delay)
 
         std::vector<ImageView *> m_imageViews;
+        std::vector<int> m_pendingTextureMeshUploads;
         ImageView *m_voxelAtlasView = nullptr;
         ImageView *m_terrainSplatView = nullptr;
         ImageView *m_terrainLayerViews[4] = {nullptr, nullptr, nullptr, nullptr};
@@ -949,12 +952,12 @@ namespace pe
         // profile so the renderer's active-profile pointer can target it for the frame.
         PostProcessProfile m_resolvedPostProcessProfile{};
 
-        uint32_t m_generation = 0;     // Incremented on full scene identity changes
+        uint32_t m_generation = 0;             // Incremented on full scene identity changes
         uint32_t m_scriptAttachGeneration = 0; // Node script path attach/clear membership
-        bool m_geometryDirty = false;  // Pending full geometry GPU upload (new mesh data)
-        bool m_instancesDirty = false; // Pending raster instance data rebuild (mesh refs changed, no new geometry)
-        bool m_materialDirty = false;  // Pending material table update
-        bool m_texturesDirty = false;  // Pending image view update
+        bool m_geometryDirty = false;          // Pending full geometry GPU upload (new mesh data)
+        bool m_instancesDirty = false;         // Pending raster instance data rebuild (mesh refs changed, no new geometry)
+        bool m_materialDirty = false;          // Pending material table update
+        bool m_texturesDirty = false;          // Pending image view update
 
         // Mesh indices whose quad UVs changed on the CPU stores and await a batched copy
         // at the front of the next render command. A separate Submit+Wait here stalls every

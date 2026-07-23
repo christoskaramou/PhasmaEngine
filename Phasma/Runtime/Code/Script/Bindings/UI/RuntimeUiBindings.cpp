@@ -336,6 +336,38 @@ namespace pe
                                         {
                                             if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
                                                 runtimeUi->RemoveWidget(screenId, widgetId); });
+                        ui.set_function("remove_many",
+                                        [](const std::string &screenId, const sol::table &idTable) -> size_t
+                                        {
+                                            RuntimeUiSystem *runtimeUi = RequireRuntimeUi();
+                                            if (!runtimeUi)
+                                                return 0;
+                                            std::vector<std::string> ids;
+                                            ids.reserve(idTable.size());
+                                            for (size_t i = 1; i <= idTable.size(); ++i)
+                                            {
+                                                if (auto id = idTable.raw_get<sol::optional<std::string>>(i))
+                                                    ids.push_back(*id);
+                                            }
+                                            return runtimeUi->RemoveWidgets(screenId, ids);
+                                        });
+                        ui.set_function("set_many_visible",
+                                        [](const std::string &screenId,
+                                           const sol::table &idTable,
+                                           bool visible) -> size_t
+                                        {
+                                            RuntimeUiSystem *runtimeUi = RequireRuntimeUi();
+                                            if (!runtimeUi)
+                                                return 0;
+                                            std::vector<std::string> ids;
+                                            ids.reserve(idTable.size());
+                                            for (size_t i = 1; i <= idTable.size(); ++i)
+                                            {
+                                                if (auto id = idTable.raw_get<sol::optional<std::string>>(i))
+                                                    ids.push_back(*id);
+                                            }
+                                            return runtimeUi->SetWidgetsVisible(screenId, ids, visible);
+                                        });
                         ui.set_function("set_text",
                                         [](const std::string &screenId,
                                            const std::string &widgetId,
@@ -457,6 +489,21 @@ namespace pe
                                             }
                                             if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
                                                 runtimeUi->SetStyleBackground(style, path); });
+                        ui.set_function("preload_images",
+                                        [](const sol::table &pathTable, sol::optional<bool> colorize) -> int
+                                        {
+                                            RuntimeUiSystem *runtimeUi = RequireRuntimeUi();
+                                            if (!runtimeUi)
+                                                return 0;
+                                            std::vector<std::string> paths;
+                                            paths.reserve(pathTable.size());
+                                            for (size_t i = 1; i <= pathTable.size(); ++i)
+                                            {
+                                                if (auto path = pathTable.raw_get<sol::optional<std::string>>(i))
+                                                    paths.push_back(*path);
+                                            }
+                                            return runtimeUi->PreloadImages(paths, colorize.value_or(false));
+                                        });
                         ui.set_function("get_surface_size", [](sol::this_state ts) -> sol::table
                                         {
                                             sol::state_view lua(ts);

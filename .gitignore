@@ -360,6 +360,7 @@ Projects/*/Assets/Agent/
 !/tools/precommit_validate.py
 !/tools/editor_stress.py
 !/tools/compare_snapshots.py
+!/tools/profiler_capture.py
 !/tools/perf_cycle.sh
 !/tools/bake_android_shaders.ps1
 !/tools/cook_model.py

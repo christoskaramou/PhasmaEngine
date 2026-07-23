@@ -11,6 +11,7 @@ namespace pe
     namespace
     {
         constexpr uint32_t kParticleCapacityStep = 1024;
+        constexpr uint32_t kEmitterCapacityMin = 128;
 
         ParticleEmitter MakeBurstEmitter(const ParticleBurstDesc &desc, float burstToken)
         {
@@ -81,7 +82,8 @@ namespace pe
 
         if (totalParticles > m_gpuCapacity)
         {
-            newCapacity = ((totalParticles + kParticleCapacityStep - 1) / kParticleCapacityStep) *
+            newCapacity = std::max(totalParticles, std::max(kParticleCapacityStep, m_gpuCapacity * 2));
+            newCapacity = ((newCapacity + kParticleCapacityStep - 1) / kParticleCapacityStep) *
                           kParticleCapacityStep;
             reallocate = true;
         }
@@ -156,11 +158,14 @@ namespace pe
         Buffer *&buffer = m_emitterBuffers[frame];
         if (!buffer || buffer->Size() < requiredSize)
         {
+            const size_t currentCapacity = buffer ? buffer->Size() / sizeof(ParticleEmitter) : 0;
+            const size_t emitterCapacity =
+                std::max<size_t>(m_emitters.size(), std::max<size_t>(kEmitterCapacityMin, currentCapacity * 2));
             if (buffer)
                 Buffer::Destroy(buffer);
 
             buffer = Buffer::Create({
-                .size = requiredSize,
+                .size = emitterCapacity * sizeof(ParticleEmitter),
                 .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
                 .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
                 .name = "emitter_buffer_" + std::to_string(frame),
