@@ -1,5 +1,6 @@
 #include "Script/ScriptSystem.h"
 #include "API/Command.h"
+#include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "Scene/Material.h"
@@ -60,11 +61,25 @@ namespace pe
 
     static ResourceHandle<Image> LoadTextureForLua(const std::string &path)
     {
+        const std::filesystem::path resolvedPath = ResolveTexturePath(path);
+
+        // Cache fast-path: a resident texture must not pay the submit+wait
+        // below — that full main-queue sync cost 5-12ms per set_texture call
+        // under FIFO backpressure (measured on ATH combat re-dressing).
+        {
+            std::error_code ec;
+            std::filesystem::path normalized = std::filesystem::weakly_canonical(resolvedPath, ec);
+            if (ec)
+                normalized = resolvedPath;
+            std::string normalizedStr(reinterpret_cast<const char *>(normalized.u8string().c_str()));
+            if (ResourceHandle<Image> cached = ResourceManager::Get().Find<Image>(normalizedStr))
+                return cached;
+        }
+
         Queue *queue = RHII.GetMainQueue();
         if (!queue)
             return ResourceHandle<Image>();
 
-        const std::filesystem::path resolvedPath = ResolveTexturePath(path);
         if (!AssetFileExists(resolvedPath))
         {
             PE_WARN("[Lua] texture file not found: %s", path.c_str());
@@ -97,6 +112,13 @@ namespace pe
         Mesh &mesh = s->GetMesh(meshIdx);
         if (!mesh.material)
             return false;
+
+        // Re-binding the identical image is a no-op: skip the instance fork
+        // and the textures/material/node dirty cascade (per-spawn re-dress).
+        MaterialInstance *existing = mesh.materialInstance;
+        if (existing && existing->GetTexture(static_cast<int>(slot)) == image.get() &&
+            (existing->GetTextureMask() & TextureBit(slot)) != 0)
+            return true;
 
         MaterialInstance *inst = EnsureInstance(s, mesh);
         if (!inst)
