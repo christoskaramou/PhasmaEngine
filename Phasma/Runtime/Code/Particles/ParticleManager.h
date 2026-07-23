@@ -66,6 +66,7 @@ namespace pe
         Buffer *GetEmitterBuffer(uint32_t frame) const;
         Buffer *PrepareEmitterBufferForFrame(uint32_t frame);
         uint32_t GetParticleCount() const { return m_particleCount; }
+        uint32_t GetParticleCapacity() const { return m_gpuCapacity; }
         uint32_t GetEmitterCount() const { return static_cast<uint32_t>(m_emitters.size()); }
         std::vector<ParticleEmitter> &GetEmitters() { return m_emitters; }
         std::vector<std::string> &GetEmitterNames() { return m_emitterNames; }

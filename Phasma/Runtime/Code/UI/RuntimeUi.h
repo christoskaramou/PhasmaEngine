@@ -216,6 +216,10 @@ namespace pe
         // play stop so a script-built HUD overlay does not linger after the scene is restored.
         void ClearScriptScreens();
         void RemoveWidget(const std::string &screenId, const std::string &widgetId);
+        size_t RemoveWidgets(const std::string &screenId, const std::vector<std::string> &widgetIds);
+        size_t SetWidgetsVisible(const std::string &screenId,
+                                 const std::vector<std::string> &widgetIds,
+                                 bool visible);
 
         void SetText(const std::string &screenId,
                      const std::string &widgetId,
@@ -239,6 +243,7 @@ namespace pe
                       float width = 0.0f,
                       float height = 0.0f);
         void SetStyleBackground(RuntimeUiQuadVisualStyle style, const std::string &path);
+        int PreloadImages(const std::vector<std::string> &paths, bool colorize);
         void SetQuad(const std::string &screenId,
                      const std::string &widgetId,
                      const RuntimeUiQuadDesc &desc,

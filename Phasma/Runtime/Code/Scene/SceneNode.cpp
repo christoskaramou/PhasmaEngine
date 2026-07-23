@@ -7,6 +7,7 @@
 #include "API/Queue.h"
 #include "Camera/Camera.h"
 #include "API/RHI.h"
+#include "API/StagingManager.h"
 
 namespace pe
 {
@@ -1225,7 +1226,15 @@ namespace pe
         m_pendingUvUploads.erase(std::unique(m_pendingUvUploads.begin(), m_pendingUvUploads.end()),
                                  m_pendingUvUploads.end());
 
-        bool copied = false;
+        struct PendingCopy
+        {
+            const void *data;
+            size_t size;
+            size_t dstOffset;
+        };
+        std::vector<PendingCopy> copies;
+        copies.reserve(m_pendingUvUploads.size() * 2);
+        size_t stagingBytes = 0;
         for (int meshIndex : m_pendingUvUploads)
         {
             if (!IsValidMeshIndex(meshIndex))
@@ -1245,13 +1254,27 @@ namespace pe
                 positionUvDstOffset + positionUvBytes > m_buffer->Size())
                 continue;
 
-            cmd->CopyBufferStaged(m_buffer, &m_vertexStore[mesh.vertexOffset], vertexBytes, vertexDstOffset);
-            cmd->CopyBufferStaged(m_buffer, &m_positionUvStore[mesh.positionsOffset], positionUvBytes, positionUvDstOffset);
-            copied = true;
+            copies.push_back({&m_vertexStore[mesh.vertexOffset], vertexBytes, vertexDstOffset});
+            copies.push_back({&m_positionUvStore[mesh.positionsOffset], positionUvBytes, positionUvDstOffset});
+            stagingBytes += vertexBytes + positionUvBytes;
         }
 
-        if (copied)
+        if (!copies.empty())
         {
+            PE_PROFILE_SCOPE("UV Mesh Uploads");
+            PE_PROFILE_COUNTER("UV Mesh Upload Count", m_pendingUvUploads.size());
+            StagingAllocation staging = RHII.GetStagingManager()->Allocate(stagingBytes);
+            size_t srcOffset = 0;
+            for (const PendingCopy &copy : copies)
+            {
+                std::memcpy(static_cast<uint8_t *>(staging.data) + srcOffset, copy.data, copy.size);
+                cmd->CopyBuffer(staging.buffer, m_buffer, copy.size, srcOffset, copy.dstOffset);
+                srcOffset += copy.size;
+            }
+            staging.buffer->Flush(stagingBytes, 0);
+            cmd->AddAfterWaitCallback([staging = std::move(staging)]()
+                                      { RHII.GetStagingManager()->SetUnused(staging); });
+
             BufferBarrierInfo barrier{};
             barrier.buffer = m_buffer;
             barrier.stageMask = PE_STAGE_VERTEX_INPUT;

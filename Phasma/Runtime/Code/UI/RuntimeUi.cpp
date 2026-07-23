@@ -505,6 +505,44 @@ namespace pe
                       });
     }
 
+    size_t RuntimeUiSystem::RemoveWidgets(const std::string &screenId,
+                                          const std::vector<std::string> &widgetIds)
+    {
+        Screen *screen = FindScreen(screenId);
+        if (!screen || widgetIds.empty())
+            return 0;
+
+        const std::unordered_set<std::string> ids(widgetIds.begin(), widgetIds.end());
+        const size_t before = screen->widgets.size();
+        std::erase_if(screen->widgets,
+                      [&](const Widget &widget)
+                      {
+                          return ids.contains(widget.id);
+                      });
+        return before - screen->widgets.size();
+    }
+
+    size_t RuntimeUiSystem::SetWidgetsVisible(const std::string &screenId,
+                                              const std::vector<std::string> &widgetIds,
+                                              bool visible)
+    {
+        Screen *screen = FindScreen(screenId);
+        if (!screen || widgetIds.empty())
+            return 0;
+
+        const std::unordered_set<std::string> ids(widgetIds.begin(), widgetIds.end());
+        size_t changed = 0;
+        for (Widget &widget : screen->widgets)
+        {
+            if (ids.contains(widget.id) && widget.visible != visible)
+            {
+                widget.visible = visible;
+                ++changed;
+            }
+        }
+        return changed;
+    }
+
     void RuntimeUiSystem::SetText(const std::string &screenId,
                                   const std::string &widgetId,
                                   const std::string &label,
@@ -896,6 +934,9 @@ namespace pe
 
     Image *RuntimeUiSystem::LoadImageResource(const std::string &path)
     {
+        if (const auto alias = m_imageCache.find(path); alias != m_imageCache.end())
+            return alias->second.get();
+
         const std::filesystem::path resolvedPath = ResolveImagePath(path);
         const std::string cacheKey = NormalizeImagePathKey(resolvedPath);
 
@@ -907,12 +948,14 @@ namespace pe
         {
             PE_WARN("[RuntimeUI] image file not found: %s", path.c_str());
             m_imageCache.emplace(cacheKey, nullptr);
+            m_imageCache.emplace(path, nullptr);
             return nullptr;
         }
 
         if (ResourceHandle<Image> cached = ResourceManager::Get().Find<Image>(cacheKey))
         {
             m_imageCache.emplace(cacheKey, cached.GetShared());
+            m_imageCache.emplace(path, cached.GetShared());
             return cached.get();
         }
 
@@ -921,6 +964,7 @@ namespace pe
         {
             PE_WARN("[RuntimeUI] cannot load image without a main queue: %s", path.c_str());
             m_imageCache.emplace(cacheKey, nullptr);
+            m_imageCache.emplace(path, nullptr);
             return nullptr;
         }
 
@@ -933,6 +977,7 @@ namespace pe
         {
             cmd->Return();
             m_imageCache.emplace(cacheKey, nullptr);
+            m_imageCache.emplace(path, nullptr);
             return nullptr;
         }
 
@@ -944,11 +989,16 @@ namespace pe
                                      { Image::Destroy(p); });
         ResourceManager::Get().Register<Image>(cacheKey, image);
         m_imageCache.emplace(cacheKey, image);
+        m_imageCache.emplace(path, image);
         return image.get();
     }
 
     Image *RuntimeUiSystem::LoadColorizeMask(const std::string &path)
     {
+        const std::string aliasKey = "colorize:" + path;
+        if (const auto alias = m_colorizeMaskCache.find(aliasKey); alias != m_colorizeMaskCache.end())
+            return alias->second.get();
+
         const std::filesystem::path resolvedPath = ResolveImagePath(path);
         const std::string cacheKey = "colorize:" + NormalizeImagePathKey(resolvedPath);
 
@@ -960,12 +1010,14 @@ namespace pe
         {
             PE_WARN("[RuntimeUI] colorize mask file not found: %s", path.c_str());
             m_colorizeMaskCache.emplace(cacheKey, nullptr);
+            m_colorizeMaskCache.emplace(aliasKey, nullptr);
             return nullptr;
         }
 
         if (ResourceHandle<Image> cached = ResourceManager::Get().Find<Image>(cacheKey))
         {
             m_colorizeMaskCache.emplace(cacheKey, cached.GetShared());
+            m_colorizeMaskCache.emplace(aliasKey, cached.GetShared());
             return cached.get();
         }
 
@@ -974,6 +1026,7 @@ namespace pe
         {
             PE_WARN("[RuntimeUI] cannot load colorize mask without a main queue: %s", path.c_str());
             m_colorizeMaskCache.emplace(cacheKey, nullptr);
+            m_colorizeMaskCache.emplace(aliasKey, nullptr);
             return nullptr;
         }
 
@@ -986,6 +1039,7 @@ namespace pe
         {
             cmd->Return();
             m_colorizeMaskCache.emplace(cacheKey, nullptr);
+            m_colorizeMaskCache.emplace(aliasKey, nullptr);
             return nullptr;
         }
 
@@ -997,7 +1051,89 @@ namespace pe
                                      { Image::Destroy(p); });
         ResourceManager::Get().Register<Image>(cacheKey, image);
         m_colorizeMaskCache.emplace(cacheKey, image);
+        m_colorizeMaskCache.emplace(aliasKey, image);
         return image.get();
+    }
+
+    int RuntimeUiSystem::PreloadImages(const std::vector<std::string> &paths, bool colorize)
+    {
+        struct PendingImage
+        {
+            std::string cacheKey;
+            std::string aliasKey;
+            std::string resolvedPath;
+        };
+
+        auto &cache = colorize ? m_colorizeMaskCache : m_imageCache;
+        std::vector<PendingImage> pending;
+        std::unordered_set<std::string> seen;
+        int added = 0;
+        for (const std::string &path : paths)
+        {
+            const std::string aliasKey = colorize ? "colorize:" + path : path;
+            if (cache.find(aliasKey) != cache.end())
+                continue;
+
+            const std::filesystem::path resolved = ResolveImagePath(path);
+            const std::string resolvedPath = NormalizeImagePathKey(resolved);
+            const std::string cacheKey = colorize ? "colorize:" + resolvedPath : resolvedPath;
+            if (const auto resident = cache.find(cacheKey); resident != cache.end())
+            {
+                cache.emplace(aliasKey, resident->second);
+                continue;
+            }
+            if (!seen.insert(cacheKey).second)
+                continue;
+
+            if (!AssetFileExists(resolved))
+            {
+                PE_WARN("[RuntimeUI] image file not found: %s", path.c_str());
+                cache.emplace(cacheKey, nullptr);
+                cache.emplace(aliasKey, nullptr);
+                continue;
+            }
+
+            if (ResourceHandle<Image> resident = ResourceManager::Get().Find<Image>(cacheKey))
+            {
+                cache.emplace(cacheKey, resident.GetShared());
+                cache.emplace(aliasKey, resident.GetShared());
+                ++added;
+                continue;
+            }
+            pending.push_back({cacheKey, aliasKey, resolvedPath});
+        }
+
+        Queue *queue = RHII.GetMainQueue();
+        if (pending.empty() || !queue)
+            return added;
+
+        PE_PROFILE_SCOPE("RuntimeUI Preload Images");
+        CommandBuffer *cmd = queue->AcquireCommandBuffer();
+        cmd->Begin();
+        for (const PendingImage &item : pending)
+        {
+            Image *rawImage = colorize
+                                  ? Image::LoadColorizeMaskRGBA8(cmd, item.resolvedPath)
+                                  : Image::LoadRGBA8(cmd, item.resolvedPath);
+            if (!rawImage)
+            {
+                cache.emplace(item.cacheKey, nullptr);
+                cache.emplace(item.aliasKey, nullptr);
+                continue;
+            }
+
+            std::shared_ptr<Image> image(rawImage, [](Image *p)
+                                         { Image::Destroy(p); });
+            ResourceManager::Get().Register<Image>(item.cacheKey, image);
+            cache.emplace(item.cacheKey, image);
+            cache.emplace(item.aliasKey, std::move(image));
+            ++added;
+        }
+        cmd->End();
+        queue->Submit(1, &cmd, nullptr, nullptr);
+        cmd->Wait();
+        cmd->Return();
+        return added;
     }
 
     void RuntimeUiSystem::BuildFrame()

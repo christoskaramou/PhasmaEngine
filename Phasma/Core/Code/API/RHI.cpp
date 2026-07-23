@@ -1941,7 +1941,8 @@ namespace pe
         desc.window = m_window;
         desc.surface = surface;
         desc.presentMode = surface ? surface->GetPresentMode() : PE_PRESENT_MODE_FIFO;
-        desc.backbufferCount = 2;
+        desc.backbufferCount =
+            m_api == PE_GRAPHICS_API_DX12 && desc.presentMode != PE_PRESENT_MODE_IMMEDIATE ? 3 : 2;
         desc.name = "RHI_swapchain";
         m_swapchain = Swapchain::Create(desc);
 

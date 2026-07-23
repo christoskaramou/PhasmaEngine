@@ -66,15 +66,14 @@ namespace pe
         // Cache fast-path: a resident texture must not pay the submit+wait
         // below — that full main-queue sync cost 5-12ms per set_texture call
         // under FIFO backpressure (measured on ATH combat re-dressing).
-        {
-            std::error_code ec;
-            std::filesystem::path normalized = std::filesystem::weakly_canonical(resolvedPath, ec);
-            if (ec)
-                normalized = resolvedPath;
-            std::string normalizedStr(reinterpret_cast<const char *>(normalized.u8string().c_str()));
-            if (ResourceHandle<Image> cached = ResourceManager::Get().Find<Image>(normalizedStr))
-                return cached;
-        }
+        std::error_code ec;
+        std::filesystem::path normalized = std::filesystem::weakly_canonical(resolvedPath, ec);
+        if (ec)
+            normalized = resolvedPath;
+        const auto normalizedU8 = normalized.u8string();
+        const std::string normalizedStr(normalizedU8.begin(), normalizedU8.end());
+        if (ResourceHandle<Image> cached = ResourceManager::Get().Find<Image>(normalizedStr))
+            return cached;
 
         Queue *queue = RHII.GetMainQueue();
         if (!queue)
@@ -95,6 +94,72 @@ namespace pe
         cmd->Wait();
         queue->ReturnCommandBuffer(cmd);
         return image;
+    }
+
+    static int PreloadTexturesForLua(sol::table paths)
+    {
+        Scene *scene = GetScene();
+        Queue *queue = RHII.GetMainQueue();
+        if (!scene || !queue)
+            return 0;
+
+        std::vector<std::filesystem::path> missingPaths;
+        std::vector<ResourceHandle<Image>> images;
+        std::unordered_set<std::string> seen;
+        for (size_t i = 1; i <= paths.size(); ++i)
+        {
+            const auto path = paths.raw_get<sol::optional<std::string>>(i);
+            if (!path)
+                continue;
+
+            const std::filesystem::path resolvedPath = ResolveTexturePath(*path);
+            std::error_code ec;
+            std::filesystem::path normalized = std::filesystem::weakly_canonical(resolvedPath, ec);
+            if (ec)
+                normalized = resolvedPath;
+            const auto normalizedU8 = normalized.u8string();
+            const std::string normalizedStr(normalizedU8.begin(), normalizedU8.end());
+            if (!seen.insert(normalizedStr).second)
+                continue;
+
+            if (ResourceHandle<Image> cached = ResourceManager::Get().Find<Image>(normalizedStr))
+                images.push_back(cached);
+            else if (AssetFileExists(resolvedPath))
+                missingPaths.push_back(resolvedPath);
+            else
+                PE_WARN("[Lua] texture file not found: %s", path->c_str());
+        }
+
+        if (!missingPaths.empty())
+        {
+            CommandBuffer *cmd = queue->AcquireCommandBuffer();
+            cmd->Begin();
+            ModelAsset loader;
+            for (const auto &path : missingPaths)
+            {
+                if (ResourceHandle<Image> image = loader.LoadTexture(cmd, path))
+                    images.push_back(image);
+            }
+            cmd->End();
+            queue->Submit(1, &cmd, nullptr, nullptr);
+            cmd->Wait();
+            queue->ReturnCommandBuffer(cmd);
+        }
+
+        auto &imageStore = scene->GetImageStore();
+        int added = 0;
+        for (const ResourceHandle<Image> &image : images)
+        {
+            if (std::find_if(imageStore.begin(), imageStore.end(),
+                             [&](const ResourceHandle<Image> &resident)
+                             { return resident.get() == image.get(); }) != imageStore.end())
+                continue;
+            imageStore.push_back(image);
+            ++added;
+        }
+        if (added > 0)
+            scene->SetTexturesDirty();
+        return added;
     }
 
     static MaterialInstance *EnsureInstance(Scene *s, Mesh &mesh)
@@ -126,7 +191,8 @@ namespace pe
 
         inst->SetTexture(slot, image);
         inst->SetTextureMask(inst->GetTextureMask() | TextureBit(slot));
-        s->SetTexturesDirty();
+        if (!s->TryBindCachedTexture(meshIdx, static_cast<int>(slot), image.get()))
+            s->SetTexturesDirty();
         s->SetMaterialDirty();
         s->MarkNodeDirty(nodeId);
         return true;
@@ -147,7 +213,8 @@ namespace pe
 
         inst->SetTexture(slot, ModelAsset::DefaultTextureForSlot(slot));
         inst->SetTextureMask(inst->GetTextureMask() & ~TextureBit(slot));
-        s->SetTexturesDirty();
+        if (!s->TryBindCachedTexture(meshIdx, static_cast<int>(slot), inst->GetTexture(static_cast<int>(slot))))
+            s->SetTexturesDirty();
         s->SetMaterialDirty();
         s->MarkNodeDirty(nodeId);
         return true;
@@ -524,6 +591,8 @@ namespace pe
                         if (it == s_texSlots.end()) return false;
                         return (mask & TextureBit(it->second)) != 0;
                     }));
+
+                mat.set_function("preload_textures", &PreloadTexturesForLua);
 
                 mat.set_function("set_texture", sol::overload(
                     [](SceneNodeHandle &h, const std::string &path) -> bool {

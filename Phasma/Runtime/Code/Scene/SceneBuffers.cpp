@@ -1194,6 +1194,7 @@ namespace pe
         // The mirror was just recreated; force UpdateMeshSelectionFlags to republish the selection next
         // frame regardless of whether the selected set changed (ComputeMeshConstants doesn't bake it).
         m_meshSelectionMirrorSignature = ~0ull;
+        m_pendingTextureMeshUploads.clear();
     }
 
     void Scene::DestroyBuffers()
@@ -2245,6 +2246,97 @@ namespace pe
         constants.lodMeshEnabled = mesh.lodEnabled ? 1u : 0u;
         constants.lodMeshBias = mesh.lodBias;
         return constants;
+    }
+
+    bool Scene::TryBindCachedTexture(int meshIndex, int textureSlot, Image *image)
+    {
+        if (!IsValidMeshIndex(meshIndex) || textureSlot < 0 || textureSlot >= 5 || !image)
+            return false;
+
+        uint32_t imageViewIndex = 0xFFFFFFFF;
+        const auto &defaults = ModelAsset::GetDefaultResources();
+        const bool isDefault = image == defaults.black || image == defaults.white || image == defaults.normal;
+        if (!isDefault)
+        {
+            const auto it = std::find(m_imageViews.begin(), m_imageViews.end(), image->GetSRV());
+            if (it == m_imageViews.end())
+                return false;
+            imageViewIndex = static_cast<uint32_t>(std::distance(m_imageViews.begin(), it));
+        }
+
+        MeshRuntime &runtime = m_meshRuntimes[meshIndex];
+        if (runtime.imageViewIndices[textureSlot] == imageViewIndex)
+            return true;
+
+        runtime.imageViewIndices[textureSlot] = imageViewIndex;
+        if (std::find(m_pendingTextureMeshUploads.begin(), m_pendingTextureMeshUploads.end(), meshIndex) ==
+            m_pendingTextureMeshUploads.end())
+            m_pendingTextureMeshUploads.push_back(meshIndex);
+        return true;
+    }
+
+    void Scene::RecordPendingTextureUploads(CommandBuffer *cmd)
+    {
+        if (m_pendingTextureMeshUploads.empty() || !cmd || !m_meshConstants)
+            return;
+
+        PE_PROFILE_SCOPE("Texture Mesh Uploads");
+        size_t firstOffset = SIZE_MAX;
+        size_t lastOffset = 0;
+        m_meshConstants->Map();
+
+        for (uint32_t nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex)
+        {
+            NodeId *node = m_nodeIds[nodeIndex];
+            if (m_nodeRuntime[nodeIndex].gpuPending || !IsNodeHierarchyEnabled(node))
+                continue;
+
+            const auto &meshRefs = m_nodeComponentCache[nodeIndex].meshRefs->meshRefs;
+            for (uint32_t refSlot = 0; refSlot < meshRefs.size(); ++refSlot)
+            {
+                const int meshIndex = meshRefs[refSlot];
+                if (std::find(m_pendingTextureMeshUploads.begin(), m_pendingTextureMeshUploads.end(), meshIndex) ==
+                    m_pendingTextureMeshUploads.end())
+                    continue;
+                if (!IsValidMeshIndex(meshIndex) || m_meshes[meshIndex].indexCount == 0 ||
+                    m_meshes[meshIndex].renderType == RenderType::Lines)
+                    continue;
+
+                const uint32_t indirectSlot = GetMeshRefIndirectSlot(node, refSlot);
+                if (indirectSlot == UINT32_MAX || indirectSlot >= m_meshCount)
+                    continue;
+
+                Mesh_Constants constants = ComputeMeshConstants(nodeIndex, meshIndex);
+                const size_t offset = static_cast<size_t>(indirectSlot) * sizeof(Mesh_Constants);
+                BufferRange range{};
+                range.data = &constants;
+                range.offset = offset;
+                range.size = sizeof(Mesh_Constants);
+                m_meshConstants->Copy(1, &range, true);
+
+                if (m_meshConstantsDevice)
+                    cmd->CopyBuffer(m_meshConstants, m_meshConstantsDevice, sizeof(Mesh_Constants), offset, offset);
+                firstOffset = std::min(firstOffset, offset);
+                lastOffset = std::max(lastOffset, offset + sizeof(Mesh_Constants));
+            }
+        }
+
+        if (firstOffset != SIZE_MAX)
+            m_meshConstants->Flush(lastOffset - firstOffset, firstOffset);
+        m_meshConstants->Unmap();
+
+        if (m_meshConstantsDevice && firstOffset != SIZE_MAX)
+        {
+            BufferBarrierInfo barrier{};
+            barrier.buffer = m_meshConstantsDevice;
+            barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
+            barrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
+            barrier.offset = firstOffset;
+            barrier.size = lastOffset - firstOffset;
+            cmd->BufferBarrier(barrier);
+            m_meshConstantsDevice->GetTrackInfo() = barrier;
+        }
+        m_pendingTextureMeshUploads.clear();
     }
 
     uint32_t Scene::GetMeshRefIndirectSlot(const NodeId *node, uint32_t refSlot) const

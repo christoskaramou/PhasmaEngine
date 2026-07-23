@@ -462,7 +462,10 @@ namespace pe
                     }
                 } profilerFrame;
 
-                m_renderer.WaitPreviousFrameCommands();
+                {
+                    PE_PROFILE_SCOPE("Runtime Wait Previous Frame");
+                    m_renderer.WaitPreviousFrameCommands();
+                }
 
                 if (!ProcessEvents())
                     return false;

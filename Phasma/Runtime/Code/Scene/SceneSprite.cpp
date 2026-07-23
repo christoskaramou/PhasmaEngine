@@ -145,9 +145,7 @@ namespace pe
 
             const NodeSpriteFrame &frame = sprite.frames[frameIndex];
             // Same frame re-apply (e.g. oneshot hold): skip UV + dirty work.
-            if (sprite.frameIndex == frameIndex
-                && sprite.uvRect == frame.uvRect
-                && sprite.meshSlot == ResolveMeshSlot(sprite, meshSlot))
+            if (sprite.frameIndex == frameIndex && sprite.uvRect == frame.uvRect && sprite.meshSlot == ResolveMeshSlot(sprite, meshSlot))
             {
                 if (markDocumentDirty)
                     scene.MarkDirty();
@@ -441,7 +439,12 @@ namespace pe
             inst->SetRenderType(RenderType::AlphaCut);
             mesh.renderType = RenderType::AlphaCut;
 
-            scene.SetTexturesDirty();
+            const bool baseColorCached =
+                scene.TryBindCachedTexture(meshIndex, static_cast<int>(TextureType::BaseColor), image.get());
+            const bool emissiveCached =
+                scene.TryBindCachedTexture(meshIndex, static_cast<int>(TextureType::Emissive), image.get());
+            if (!baseColorCached || !emissiveCached)
+                scene.SetTexturesDirty();
             scene.SetMaterialDirty();
             if (renderTypeChanged)
                 scene.SetInstancesDirty();
