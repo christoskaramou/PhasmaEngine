@@ -80,6 +80,11 @@ namespace pe
         return m_impl ? m_impl->GetSupportedPresentModes() : std::vector<PePresentMode>{};
     }
 
+    bool Surface::IsPresentable() const
+    {
+        return m_impl ? m_impl->IsPresentable() : false;
+    }
+
     void Surface::SetPresentMode(PePresentMode preferredMode)
     {
         const auto presentModes = GetSupportedPresentModes();

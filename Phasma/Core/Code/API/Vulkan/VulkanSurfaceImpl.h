@@ -17,6 +17,7 @@ namespace pe
         static const VulkanSurfaceImpl *TryFrom(const Surface *s) { return s && s->m_impl ? From(s) : nullptr; }
 
         std::vector<PePresentMode> GetSupportedPresentModes() const override;
+        bool IsPresentable() const override;
 
         Surface *m_owner{};
         vk::SurfaceKHR m_apiHandle{};

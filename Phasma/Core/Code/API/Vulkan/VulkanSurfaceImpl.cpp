@@ -49,6 +49,21 @@ namespace pe
             VulkanRhi::Instance().destroySurfaceKHR(m_apiHandle);
     }
 
+    bool VulkanSurfaceImpl::IsPresentable() const
+    {
+        if (!m_apiHandle)
+            return false;
+
+        const auto caps = VulkanRhi::Gpu().getSurfaceCapabilitiesKHR(m_apiHandle);
+        // UINT32_MAX means the surface lets us pick the size (Wayland), so it is
+        // always presentable. Otherwise a 0-area currentExtent means the window
+        // has no drawable region right now.
+        if (caps.currentExtent.width == UINT32_MAX)
+            return true;
+
+        return caps.currentExtent.width != 0 && caps.currentExtent.height != 0;
+    }
+
     std::vector<PePresentMode> VulkanSurfaceImpl::GetSupportedPresentModes() const
     {
         if (RHII.UsesDozenVulkan())
