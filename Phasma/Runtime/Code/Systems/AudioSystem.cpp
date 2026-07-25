@@ -264,6 +264,11 @@ namespace pe
             return;
         }
         ma_sound_set_volume(sound, m_sfxVolume);
+        // miniaudio spatializes every sound by default. This is the NON-positional
+        // entry point, so without this the clip sits at the world origin while the
+        // listener follows the camera — a top-down game with a camera 30 units out
+        // then plays its whole sfx bus at roughly -30 dB. PlaySound3D opts back in.
+        ma_sound_set_spatialization_enabled(sound, MA_FALSE);
         ma_sound_start(sound);
         m_fireAndForget.push_back(sound);
     }

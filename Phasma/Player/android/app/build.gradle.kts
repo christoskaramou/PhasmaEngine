@@ -196,7 +196,9 @@ android {
                     "-DPE_ENABLE_ASSIMP=OFF",
                     "-DPE_ENABLE_RUNTIME_SHADER_COMPILER=OFF",
                     "-DPE_PHYSICS=ON",
-                    "-DPE_AUDIO=OFF",
+                    // miniaudio is header-only and picks AAudio (minSdk 26) / OpenSL ES at
+                    // runtime via dlopen, so this costs one translation unit and no new deps.
+                    "-DPE_AUDIO=ON",
                     "-DPE_TRACY=OFF"
                 )
                 targets += "PhasmaPlayer"
