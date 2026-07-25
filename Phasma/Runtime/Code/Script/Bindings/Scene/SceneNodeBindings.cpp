@@ -313,6 +313,7 @@ namespace pe
                     readColor("accent", ui->accentColor);
                     readColor("text_color", ui->textColor);
                     readColor("image_tint", ui->imageTint);
+                    readColor("background_image_tint", ui->backgroundImageTint);
 
                     sol::object fontScale = opts["font_scale"];
                     if (fontScale.is<double>()) ui->fontScale = static_cast<float>(fontScale.as<double>());

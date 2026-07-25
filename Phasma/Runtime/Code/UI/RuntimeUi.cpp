@@ -12,11 +12,6 @@ namespace pe
     namespace
     {
         RuntimeUiSystem *s_activeRuntimeUi = nullptr;
-#if defined(PE_ANDROID)
-        constexpr float kTextReadabilityScale = 1.5f;
-#else
-        constexpr float kTextReadabilityScale = 1.0f;
-#endif
 
         std::string MakeDefaultTitle(const std::string &screenId)
         {
@@ -371,6 +366,11 @@ namespace pe
         return m_initialized && m_backend && m_backend->WantsMouseCapture();
     }
 
+    float RuntimeUiSystem::MouseWheel() const
+    {
+        return m_backend ? m_backend->MouseWheel() : 0.0f;
+    }
+
     bool RuntimeUiSystem::WantsKeyboardCapture() const
     {
         return m_initialized && m_backend && m_backend->WantsKeyboardCapture();
@@ -673,12 +673,19 @@ namespace pe
             widget.imageColorize = desc.imageColorize;
         }
         widget.imagePath = path;
-        const auto hasText = [](const char *text)
-        { return text && text[0] != '\0'; };
-        const bool hasContent = hasText(desc.label) || hasText(desc.title) || hasText(desc.subtitle) ||
-                                hasText(desc.body) || hasText(desc.footer);
-        const bool wantsBackground = desc.fillColor.a > 0.0f ||
-                                     (desc.visualStyle == RuntimeUiQuadVisualStyle::Button && hasContent);
+        // Theme plate follows fill alpha only. Buttons that clear fill (e.g. hero
+        // select hit areas over world sprites) must not keep painting the stone
+        // panel just because they still have a title caption.
+        // Plain textless cards (modal scrims) also skip — default style is Card, and
+        // stretching card_surface over the full screen muddies every control under it.
+        const bool hasText = (desc.label && desc.label[0]) || (desc.title && desc.title[0]) ||
+                             (desc.subtitle && desc.subtitle[0]) || (desc.body && desc.body[0]) ||
+                             (desc.footer && desc.footer[0]);
+        const bool styleWantsPlate = desc.visualStyle == RuntimeUiQuadVisualStyle::Button ||
+                                     desc.visualStyle == RuntimeUiQuadVisualStyle::Panel ||
+                                     (desc.visualStyle == RuntimeUiQuadVisualStyle::Card && hasText) ||
+                                     (desc.visualStyle == RuntimeUiQuadVisualStyle::Text && hasText);
+        const bool wantsBackground = desc.fillColor.a > 0.0f && styleWantsPlate;
         const size_t styleIndex = static_cast<size_t>(desc.visualStyle);
         widget.backgroundImage = wantsBackground && styleIndex < m_styleBackgroundImages.size()
                                      ? m_styleBackgroundImages[styleIndex]
@@ -747,6 +754,7 @@ namespace pe
             desc.accentColor = ToRuntimeUiColor(ui->accentColor);
             desc.textColor = ToRuntimeUiColor(ui->textColor);
             desc.imageTint = ToRuntimeUiColor(ui->imageTint);
+            desc.backgroundImageTint = ToRuntimeUiColor(ui->backgroundImageTint);
             desc.node = node;
             desc.draggable = ui->draggable;
             desc.visible = ui->visible;
@@ -1275,8 +1283,10 @@ namespace pe
                         quadDesc.visible = widget.visible;
                         quadDesc.bringToFront = widget.bringToFront;
                         quadDesc.noInput = widget.noInput;
+                        // Same text proportions on desktop and Android: DPI is cancelled
+                        // here, so do not reintroduce a platform readability bump.
                         quadDesc.fontScale = widget.fontScale / m_frameUiScale;
-                        quadDesc.textScale = kTextReadabilityScale * m_textScale;
+                        quadDesc.textScale = m_textScale;
                         quadDesc.textAlignH = widget.textAlignH;
                         quadDesc.textAlignV = widget.textAlignV;
                         quadDesc.textOffsetX = widget.textOffsetX;

@@ -449,6 +449,14 @@ namespace pe
                 return io.WantTextInput;
             }
 
+            float MouseWheel() const override
+            {
+                if (!m_initialized)
+                    return 0.0f;
+                ScopedImGuiContext contextScope(m_context);
+                return ImGui::GetIO().MouseWheel;
+            }
+
             void ResetInputState() override
             {
                 m_activeDragWidget.clear();
@@ -642,6 +650,16 @@ namespace pe
             }
 
             static constexpr float kLineGap = 3.0f;
+
+            // RuntimeUi cancels DPI into quad.fontScale (authored / uiScale) so glyph
+            // size stays resolution-stable. Pad must undo that cancel: otherwise phones
+            // get a smaller inset, a wider wrap box, and different line breaks than PC.
+            static float TextPadPx(float cancelledFontScale)
+            {
+                const float scale = cancelledFontScale > 0.0f ? cancelledFontScale : 1.0f;
+                const float uiScale = std::max(1.0f, ImGui::GetIO().FontGlobalScale);
+                return 10.0f * scale * uiScale;
+            }
 
             static float LineWidth(ImFont *font, float fontSize, const std::string &s)
             {
@@ -854,10 +872,10 @@ namespace pe
             {
                 const char *content = HasText(quad.body) ? quad.body
                                                          : (HasText(quad.title) ? quad.title : quad.label);
-                // Match DrawQuadVisual: pad from fontScale only; glyph size uses both.
+                // Match DrawQuadVisual: pad is DPI-stable; glyph size uses both scales.
                 const float fontScale = quad.fontScale > 0.0f ? quad.fontScale : 1.0f;
                 const float textScale = fontScale * (quad.textScale > 0.0f ? quad.textScale : 1.0f);
-                const float pad = 10.0f * fontScale;
+                const float pad = TextPadPx(fontScale);
                 ImFont *font = ImGui::GetFont();
                 const float fontSize = ImGui::GetFontSize() * textScale;
                 const float lineHeight = fontSize + kLineGap;
@@ -1008,7 +1026,7 @@ namespace pe
                     border = accent;
 
                 const float scale = quad.fontScale > 0.0f ? quad.fontScale : 1.0f;
-                const float pad = 10.0f * scale;
+                const float pad = TextPadPx(scale);
                 ImFont *font = ImGui::GetFont();
                 const float textScale = scale * (quad.textScale > 0.0f ? quad.textScale : 1.0f);
                 const float fontSize = ImGui::GetFontSize() * textScale;
@@ -1016,7 +1034,17 @@ namespace pe
                 const float textBoxWidth = std::max(1.0f, size.x - textInsetRight);
                 const float textWidth = std::max(1.0f, textBoxWidth - pad * 2.0f);
                 const bool themed = quad.backgroundImage != nullptr;
-                auto drawSurface = [&](ImU32 surfaceFill)
+                // Theme plates must stay opaque. The 0.90 default tint lets the
+                // underlay fill muddy button_surface — idle looks wrong until hover
+                // (or focus loss) changes the composite.
+                auto plateImageTint = [&]() -> RuntimeUiColor
+                {
+                    RuntimeUiColor tint = quad.backgroundImageTint;
+                    if (themed && tint.a < 0.999f)
+                        tint.a = 1.0f;
+                    return tint;
+                };
+                auto drawSurface = [&](ImU32 surfaceFill, bool accentWash)
                 {
                     drawList->AddRectFilled(pos, max, surfaceFill, rounding);
                     if (quad.backgroundImage)
@@ -1024,10 +1052,10 @@ namespace pe
                         if (void *textureID = GetImageTexture(quad.backgroundImage))
                         {
                             drawList->AddImageRounded((ImTextureID)textureID, pos, max, ImVec2(0.0f, 0.0f),
-                                                      ImVec2(1.0f, 1.0f), ToColor(quad.backgroundImageTint), rounding);
+                                                      ImVec2(1.0f, 1.0f), ToColor(plateImageTint()), rounding);
                         }
                     }
-                    if (themed && (quad.selected || state.dragging || state.hovered))
+                    if (accentWash && themed && (quad.selected || state.dragging || state.hovered))
                     {
                         RuntimeUiColor glow = quad.accentColor;
                         glow.a *= quad.selected || state.dragging ? 0.22f : 0.08f;
@@ -1044,7 +1072,7 @@ namespace pe
                 if (quad.visualStyle == RuntimeUiQuadVisualStyle::Image)
                 {
                     if (quad.fillColor.a > 0.0f)
-                        drawSurface(fill);
+                        drawSurface(fill, true);
                     if (quad.image)
                     {
                         if (void *textureID = GetImageTexture(quad.image))
@@ -1066,15 +1094,22 @@ namespace pe
 
                 if (quad.visualStyle == RuntimeUiQuadVisualStyle::Button)
                 {
+                    // Same idle/hover fill lerp as unthemed — this is the calculation
+                    // that makes the plate read correctly (hover was the only path that
+                    // still applied it after the themed-tint experiment).
                     RuntimeUiColor buttonFill = state.down ? quad.accentColor
                                                            : (state.hovered ? LerpColor(quad.fillColor, quad.accentColor, 0.35f)
                                                                             : quad.fillColor);
-                    drawSurface(ToColor(buttonFill));
-                    if (state.hovered)
+                    drawSurface(ToColor(buttonFill), false);
+                    // Themed buttons have no border to thicken (drawBorder is unthemed
+                    // only), so selected/dragging reads as an accent wash instead.
+                    const bool activeWash = themed && (quad.selected || state.dragging);
+                    if (state.hovered || activeWash)
                     {
-                        RuntimeUiColor hover = quad.accentColor;
-                        hover.a *= state.down ? 0.34f : 0.16f;
-                        drawList->AddRectFilled(pos, max, ToColor(hover), rounding);
+                        RuntimeUiColor wash = quad.accentColor;
+                        // Themed: restrained wash so wood/metal grain stays visible.
+                        wash.a *= state.down || activeWash ? (themed ? 0.18f : 0.34f) : (themed ? 0.08f : 0.16f);
+                        drawList->AddRectFilled(pos, max, ToColor(wash), rounding);
                     }
                     drawBorder();
 
@@ -1104,7 +1139,7 @@ namespace pe
                 if (quad.visualStyle == RuntimeUiQuadVisualStyle::Text)
                 {
                     if (quad.fillColor.a > 0.0f)
-                        drawSurface(fill);
+                        drawSurface(fill, true);
                     drawBorder();
 
                     const char *content = HasText(quad.body) ? quad.body : (HasText(quad.title) ? quad.title : quad.label);
@@ -1122,7 +1157,7 @@ namespace pe
 
                 if (quad.visualStyle == RuntimeUiQuadVisualStyle::Panel)
                 {
-                    drawSurface(fill);
+                    drawSurface(fill, true);
                     drawBorder();
                     const bool multiline = HasMultilineText(quad);
                     const RuntimeUiTextAlignH ah = ResolveH(
@@ -1186,7 +1221,7 @@ namespace pe
                     return;
                 }
 
-                drawSurface(fill);
+                drawSurface(fill, true);
 
                 const bool textless = !HasText(quad.label) && !HasText(quad.title) && !HasText(quad.subtitle) &&
                                       !HasText(quad.body) && !HasText(quad.footer);
