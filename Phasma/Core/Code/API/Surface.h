@@ -25,6 +25,12 @@ namespace pe
         ::PeColorSpace GetColorSpace() const { return m_colorSpace; }
         PePresentMode GetPresentMode() const { return m_presentMode; }
         std::vector<PePresentMode> GetSupportedPresentModes() const;
+        // False while the window has no drawable area (minimized, or hidden by
+        // Win+D "show desktop"). Callers must not rebuild the swapchain then:
+        // Vulkan reports currentExtent AND maxImageExtent as 0x0, so no legal
+        // swapchain size exists at all — not even 1x1. SDL_WINDOW_MINIMIZED is
+        // NOT a substitute: Win+D leaves that flag clear.
+        bool IsPresentable() const;
 
     private:
         friend struct VulkanSurfaceImpl;

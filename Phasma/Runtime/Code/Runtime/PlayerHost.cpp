@@ -483,7 +483,10 @@ namespace pe
                 else if (m_resizePending || WindowDrawableExtentChanged())
                     ResizeSwapchain();
 
-                if (IsWindowMinimized(m_window))
+                // Same test as the resize guard: with no drawable area there is nothing to
+                // acquire or present into, and skipping here also stops the resize request
+                // above from spinning acquire -> OUT_OF_DATE -> resize -> refused every frame.
+                if (!WindowRenderable())
                 {
                     profilerFrame.Close();
                     if (m_profilerStream)
@@ -540,6 +543,19 @@ namespace pe
             }
 
         private:
+            // Whether the window has a drawable area at all. SDL_WINDOW_MINIMIZED alone is
+            // NOT enough: Win+D ("show desktop") hides the window without setting it, which
+            // is exactly the case that used to crash — the flag stayed clear, the resize ran,
+            // and the surface handed back a 0x0 extent. Ask the surface itself instead.
+            bool WindowRenderable() const
+            {
+                if (IsWindowMinimized(m_window))
+                    return false;
+
+                const Surface *surface = RHII.GetSurface();
+                return surface && surface->IsPresentable();
+            }
+
             bool WindowDrawableExtentChanged() const
             {
                 const WindowDrawableExtent extent = GetWindowDrawableExtent(m_window);
@@ -682,6 +698,19 @@ namespace pe
 
             void ResizeSwapchain(bool recreateSurface = false)
             {
+                // Never rebuild the swapchain while the window has no drawable area. SDL
+                // keeps reporting the restored size, but the Vulkan surface reports
+                // currentExtent AND maxImageExtent as 0x0 — so the swapchain and every RT
+                // sized from it get built at 0x0 and vmaCreateImage fails with
+                // VK_ERROR_INITIALIZATION_FAILED. There is no legal size to fall back to
+                // either: max is 0, so even a 1x1 swapchain is invalid; the only correct
+                // move is to wait. DX12 never noticed because Dx12SwapchainImpl sizes from
+                // the extent passed in rather than querying surface capabilities.
+                // Returning early leaves m_resizePending set, so the real resize runs on
+                // restore.
+                if (!WindowRenderable())
+                    return;
+
                 const WindowDrawableExtent extent = GetWindowDrawableExtent(m_window);
                 if (!extent.IsValid())
                     return;
