@@ -189,6 +189,8 @@ namespace pe
             result.desc.accentColor = ReadColorOption(options, "accent", result.desc.accentColor);
             result.desc.textColor = ReadColorOption(options, "text_color", result.desc.textColor);
             result.desc.imageTint = ReadColorOption(options, "image_tint", result.desc.imageTint);
+            result.desc.backgroundImageTint =
+                ReadColorOption(options, "background_image_tint", result.desc.backgroundImageTint);
             result.desc.imageColorize = ReadBoolOption(options, "image_colorize", result.desc.imageColorize);
             result.desc.draggable = ReadBoolOption(options, "draggable", result.desc.draggable);
             result.desc.selected = ReadBoolOption(options, "selected", result.desc.selected);
@@ -475,6 +477,13 @@ namespace pe
                                         {
                                             if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
                                                 runtimeUi->SetScreenMaxHeight(screenId, static_cast<float>(maxHeight)); });
+                        // ImGui's wheel, not raw input: once the pointer is over an
+                        // interactive quad the UI captures the event and raw input
+                        // never sees it, so wheel-over-a-tile looked dead.
+                        ui.set_function("get_wheel", []() -> double
+                                        {
+                            RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi();
+                            return runtimeUi ? static_cast<double>(runtimeUi->MouseWheel()) : 0.0; });
                         ui.set_function("set_text_scale", [](double scale)
                                         {
                                             if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())

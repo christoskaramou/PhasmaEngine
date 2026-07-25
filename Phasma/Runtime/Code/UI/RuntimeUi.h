@@ -109,7 +109,7 @@ namespace pe
         RuntimeUiColor accentColor{0.96f, 0.74f, 0.22f, 1.0f};
         RuntimeUiColor textColor{0.92f, 0.93f, 0.94f, 1.0f};
         RuntimeUiColor imageTint{1.0f, 1.0f, 1.0f, 1.0f};
-        RuntimeUiColor backgroundImageTint{1.0f, 1.0f, 1.0f, 0.90f};
+        RuntimeUiColor backgroundImageTint{1.0f, 1.0f, 1.0f, 1.0f};
         // When true, the image is treated as a white+alpha mask so image_tint sets
         // a flat color (multiply with white) instead of blending into the art.
         bool imageColorize = false;
@@ -171,6 +171,10 @@ namespace pe
         virtual bool HasDrawData() const = 0;
         virtual bool WantsMouseCapture() const { return false; }
         virtual bool WantsKeyboardCapture() const { return false; }
+        // Vertical wheel for this frame. Read from the UI layer, not raw input:
+        // once the pointer is over an interactive quad the UI captures the event
+        // and raw input never sees it.
+        virtual float MouseWheel() const { return 0.0f; }
         virtual void ResetInputState() {}
         virtual void Render(const RuntimeUiRenderContext &context) = 0;
     };
@@ -202,6 +206,7 @@ namespace pe
         float GetFrameUiScale() const;
         bool WantsMouseCapture() const;
         bool WantsKeyboardCapture() const;
+        float MouseWheel() const;
 
         void SetScreenVisible(const std::string &screenId, bool visible);
         bool IsScreenVisible(const std::string &screenId) const;
@@ -299,7 +304,7 @@ namespace pe
             RuntimeUiColor accentColor{0.96f, 0.74f, 0.22f, 1.0f};
             RuntimeUiColor textColor{0.92f, 0.93f, 0.94f, 1.0f};
             RuntimeUiColor imageTint{1.0f, 1.0f, 1.0f, 1.0f};
-            RuntimeUiColor backgroundImageTint{1.0f, 1.0f, 1.0f, 0.90f};
+            RuntimeUiColor backgroundImageTint{1.0f, 1.0f, 1.0f, 1.0f};
             bool imageColorize = false;
             NodeId *node = nullptr;
             uint32_t nodeIndex = 0;    // captured at bind time; node itself may dangle

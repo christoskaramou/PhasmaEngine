@@ -339,6 +339,10 @@ namespace pe
         vec4 accentColor = vec4(0.96f, 0.74f, 0.22f, 1.0f);
         vec4 textColor = vec4(0.92f, 0.93f, 0.94f, 1.0f);
         vec4 imageTint = vec4(1.0f);
+        // Multiplies the style theme plate (set_style_background). The plate draws
+        // OVER fillColor at forced alpha, so this is the only way to recolour a
+        // themed widget — e.g. a warm tint to mark the active tab.
+        vec4 backgroundImageTint = vec4(1.0f);
         // RectTransform-style layout. anchor = screen point the element sticks to
         // (0..1 of the surface; (0,0)=top-left, (1,1)=bottom-right) for resolution
         // independence. pivot = the element's own reference point (0..1); the node
