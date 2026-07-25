@@ -1,4 +1,5 @@
 #include "UI/RuntimeUi.h"
+#include "UI/RuntimeUiInputEvents.h"
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/Queue.h"
@@ -263,6 +264,12 @@ namespace pe
 
     bool RuntimeUiSystem::ProcessEvent(const SDL_Event &event)
     {
+        // A script that claimed the keyboard owns every key event: drop it here so it never
+        // reaches ImGui (debug binds) and the host sees it as consumed. Gating readers one by
+        // one instead leaves every future direct SDL/ImGui key reader stealing input again.
+        if (m_keyboardCaptureOverride && IsRuntimeUiKeyboardInputEvent(event))
+            return true;
+
         return m_initialized && m_backend && m_backend->ProcessEvent(event);
     }
 
@@ -373,7 +380,20 @@ namespace pe
 
     bool RuntimeUiSystem::WantsKeyboardCapture() const
     {
+        if (m_keyboardCaptureOverride)
+            return true;
+
         return m_initialized && m_backend && m_backend->WantsKeyboardCapture();
+    }
+
+    // For script-drawn text entry (a dev console, a rename box) that is not an
+    // ImGui input widget, so io.WantTextInput never goes true on its own. The host
+    // feeds WantsKeyboardCapture() into InputState every frame, and input.is_key_down
+    // /is_key_pressed return false while it is set — so ONE flag mutes every Lua key
+    // reader at once. Read your own keys with input.is_key_down_raw.
+    void RuntimeUiSystem::SetKeyboardCaptureOverride(bool captured)
+    {
+        m_keyboardCaptureOverride = captured;
     }
 
     RuntimeUiSystem::Screen &RuntimeUiSystem::GetOrCreateScreen(const std::string &screenId)

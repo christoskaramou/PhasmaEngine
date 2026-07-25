@@ -484,6 +484,14 @@ namespace pe
                                         {
                             RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi();
                             return runtimeUi ? static_cast<double>(runtimeUi->MouseWheel()) : 0.0; });
+                        // Script-drawn text entry (dev console) is not an ImGui input
+                        // widget, so io.WantTextInput never fires for it. Setting this
+                        // mutes every input.is_key_* reader in Lua at once; the caller
+                        // reads its own keys with input.is_key_down_raw.
+                        ui.set_function("set_keyboard_capture", [](bool captured)
+                                        {
+                                            if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
+                                                runtimeUi->SetKeyboardCaptureOverride(captured); });
                         ui.set_function("set_text_scale", [](double scale)
                                         {
                                             if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())

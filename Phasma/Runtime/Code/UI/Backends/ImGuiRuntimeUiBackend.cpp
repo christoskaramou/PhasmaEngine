@@ -15,6 +15,7 @@
 #include "API/Vulkan/VulkanSamplerImpl.h"
 #include "UI/RuntimeUiInputEvents.h"
 #include "Runtime/RuntimeStartup.h"
+#include "Script/Bindings/Input/InputState.h"
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12CommandBufferImpl.h"
 #include "API/DX12/Dx12DescriptorHeap.h"
@@ -403,7 +404,9 @@ namespace pe
 
                 PE_PROFILE_SCOPE("RuntimeUI ImGui::Render");
                 ScopedImGuiContext contextScope(m_context);
-                if (ImGui::IsKeyPressed(ImGuiKey_G, false))
+                // ImGui reads its own key state, so this debug bind bypasses the input.is_key_*
+                // gate; without this it toggles while an ImGui text field is being typed into.
+                if (!InputState::IsKeyboardCapturedByUi() && ImGui::IsKeyPressed(ImGuiKey_G, false))
                     m_showFrameGraph = !m_showFrameGraph;
                 DrawFrameTimeOverlay();
                 ImGui::Render();
