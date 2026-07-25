@@ -206,6 +206,9 @@ namespace pe
         float GetFrameUiScale() const;
         bool WantsMouseCapture() const;
         bool WantsKeyboardCapture() const;
+        // Force keyboard capture on for script-drawn text entry (dev console) that
+        // is not an ImGui input widget. Mutes every Lua input.is_key_* reader.
+        void SetKeyboardCaptureOverride(bool captured);
         float MouseWheel() const;
 
         void SetScreenVisible(const std::string &screenId, bool visible);
@@ -352,6 +355,7 @@ namespace pe
         std::array<Image *, static_cast<size_t>(RuntimeUiQuadVisualStyle::Count)> m_styleBackgroundImages{};
         std::string m_backendName = "none";
         bool m_initialized = false;
+        bool m_keyboardCaptureOverride = false;
         bool m_frameOpen = false;
         uint32_t m_frameSurfaceWidth = 0;
         uint32_t m_frameSurfaceHeight = 0;

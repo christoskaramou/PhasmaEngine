@@ -414,6 +414,16 @@ namespace pe
                     return state[sc] != 0;
                 });
 
+                // Ignores UI keyboard capture. For the ONE reader that owns the
+                // keyboard while capture is on — a script-drawn console or text box
+                // — which would otherwise mute itself along with everything else.
+                input.set_function("is_key_down_raw", [](const std::string &keyName) -> bool {
+                    SDL_Scancode sc = SDL_GetScancodeFromName(keyName.c_str());
+                    if (sc == SDL_SCANCODE_UNKNOWN) return false;
+                    const Uint8 *state = SDL_GetKeyboardState(nullptr);
+                    return state[sc] != 0;
+                });
+
                 input.set_function("is_key_pressed", [](const std::string &keyName) -> bool {
                     if (InputState::IsKeyboardCapturedByUi()) return false;
                     SDL_Keycode kc = SDL_GetKeyFromName(keyName.c_str());
