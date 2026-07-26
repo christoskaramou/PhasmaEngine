@@ -597,7 +597,10 @@ namespace pe
 
                     // Window close only — Escape is game-owned (menus / pause).
                     if (event.type == SDL_QUIT)
+                    {
+                        PE_INFO("[Runtime] Exit requested: window close (SDL_QUIT)");
                         return false;
+                    }
 
                     if (event.type == SDL_APP_WILLENTERBACKGROUND)
                     {
@@ -653,7 +656,10 @@ namespace pe
                     switch (*type)
                     {
                     case EventType::Quit:
+                        PE_INFO("[Runtime] Exit requested: engine.quit() (EventType::Quit)");
+                        return false;
                     case EventType::RequestExit:
+                        PE_INFO("[Runtime] Exit requested: script play stopped (EventType::RequestExit)");
                         return false;
                     case EventType::CompileScripts:
                         if (HasGlobalSystem<ScriptSystem>())
@@ -913,6 +919,7 @@ namespace pe
                     PlayerFramePump framePump(window.Get(), renderer, runtimeUiPtr, &mcpActions, profilerStream.get());
                     PE_INFO("[Runtime] Player frame pump running (startup scene render)");
                     framePump.Run();
+                    PE_INFO("[Runtime] Player frame pump stopped cleanly");
                 }
 
                 if (profilerStream)

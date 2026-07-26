@@ -191,7 +191,7 @@ namespace pe
 
         inst->SetTexture(slot, image);
         inst->SetTextureMask(inst->GetTextureMask() | TextureBit(slot));
-        if (!s->TryBindCachedTexture(meshIdx, static_cast<int>(slot), image.get()))
+        if (!s->TryBindCachedTexture(meshIdx, static_cast<int>(slot), image))
             s->SetTexturesDirty();
         s->SetMaterialDirty();
         s->MarkNodeDirty(nodeId);
@@ -211,9 +211,10 @@ namespace pe
         if (!inst)
             return false;
 
-        inst->SetTexture(slot, ModelAsset::DefaultTextureForSlot(slot));
+        ResourceHandle<Image> image = ModelAsset::DefaultTextureForSlot(slot);
+        inst->SetTexture(slot, image);
         inst->SetTextureMask(inst->GetTextureMask() & ~TextureBit(slot));
-        if (!s->TryBindCachedTexture(meshIdx, static_cast<int>(slot), inst->GetTexture(static_cast<int>(slot))))
+        if (!s->TryBindCachedTexture(meshIdx, static_cast<int>(slot), image))
             s->SetTexturesDirty();
         s->SetMaterialDirty();
         s->MarkNodeDirty(nodeId);

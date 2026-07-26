@@ -363,6 +363,7 @@ Projects/*/Assets/Agent/
 !/tools/profiler_capture.py
 !/tools/perf_cycle.sh
 !/tools/bake_android_shaders.ps1
+!/tools/run_player_monitored.ps1
 !/tools/cook_model.py
 !/tools/new_game.py
 !/tools/minigamekit.py

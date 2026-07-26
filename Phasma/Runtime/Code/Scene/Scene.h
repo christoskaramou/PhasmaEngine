@@ -440,7 +440,7 @@ namespace pe
         void SetTexturesDirty() { m_texturesDirty = true; }
         void FlushPendingGpuWork();
         void RecordPendingUvUploads(CommandBuffer *cmd);
-        bool TryBindCachedTexture(int meshIndex, int textureSlot, Image *image);
+        bool TryBindCachedTexture(int meshIndex, int textureSlot, const ResourceHandle<Image> &image);
         void RecordPendingTextureUploads(CommandBuffer *cmd);
 
         Buffer *GetUniforms(uint32_t frame);
