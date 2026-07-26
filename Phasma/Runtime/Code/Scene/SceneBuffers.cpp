@@ -2248,8 +2248,9 @@ namespace pe
         return constants;
     }
 
-    bool Scene::TryBindCachedTexture(int meshIndex, int textureSlot, Image *image)
+    bool Scene::TryBindCachedTexture(int meshIndex, int textureSlot, const ResourceHandle<Image> &imageHandle)
     {
+        Image *image = imageHandle.get();
         if (!IsValidMeshIndex(meshIndex) || textureSlot < 0 || textureSlot >= 5 || !image)
             return false;
 
@@ -2258,6 +2259,12 @@ namespace pe
         const bool isDefault = image == defaults.black || image == defaults.white || image == defaults.normal;
         if (!isDefault)
         {
+            // m_imageViews stores raw views, so keep every descriptor-table image alive with the scene.
+            if (std::find_if(m_imageStore.begin(), m_imageStore.end(),
+                             [&](const ResourceHandle<Image> &resident)
+                             { return resident.get() == image; }) == m_imageStore.end())
+                m_imageStore.push_back(imageHandle);
+
             const auto it = std::find(m_imageViews.begin(), m_imageViews.end(), image->GetSRV());
             if (it == m_imageViews.end())
                 return false;

@@ -440,9 +440,9 @@ namespace pe
             mesh.renderType = RenderType::AlphaCut;
 
             const bool baseColorCached =
-                scene.TryBindCachedTexture(meshIndex, static_cast<int>(TextureType::BaseColor), image.get());
+                scene.TryBindCachedTexture(meshIndex, static_cast<int>(TextureType::BaseColor), image);
             const bool emissiveCached =
-                scene.TryBindCachedTexture(meshIndex, static_cast<int>(TextureType::Emissive), image.get());
+                scene.TryBindCachedTexture(meshIndex, static_cast<int>(TextureType::Emissive), image);
             if (!baseColorCached || !emissiveCached)
                 scene.SetTexturesDirty();
             scene.SetMaterialDirty();
