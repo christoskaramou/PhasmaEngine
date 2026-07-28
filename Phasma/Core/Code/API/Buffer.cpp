@@ -100,6 +100,11 @@ namespace pe
           m_memoryUsage{desc.memoryUsage},
           m_name{desc.name}
     {
+        PE_ERROR_IF((m_usage & PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS) &&
+                        !RHII.GetCaps().bufferDeviceAddress,
+                    "Buffer '%s' requests a device address on unsupported hardware",
+                    m_name.c_str());
+
         if (m_usage & PE_BUFFER_USAGE_UNIFORM_BUFFER)
         {
             m_size = RHII.AlignUniform(m_size);
@@ -208,6 +213,11 @@ namespace pe
 
     uint64_t Buffer::GetDeviceAddress() const
     {
+        PE_ERROR_IF(!(m_usage & PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS),
+                    "Buffer '%s' was not created for device-address access",
+                    m_name.c_str());
+        PE_ERROR_IF(!RHII.GetCaps().bufferDeviceAddress,
+                    "Buffer device addresses are not supported on this device");
         return m_impl->GetDeviceAddress();
     }
 

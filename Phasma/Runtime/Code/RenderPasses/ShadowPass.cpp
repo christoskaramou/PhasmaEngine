@@ -396,6 +396,7 @@ namespace pe
 
                     cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
                     cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
+                    m_scene->BindDrawIdBuffer(cmd);
                     if (regularCount > 0)
                         cmd->DrawIndexedIndirectCount(regularIndirect, 0, counters, 0, regularCount);
 
@@ -416,6 +417,7 @@ namespace pe
                 {
                     cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
                     cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
+                    m_scene->BindDrawIdBuffer(cmd);
                     if (regularCount > 0)
                         cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(), 0, regularCount);
 

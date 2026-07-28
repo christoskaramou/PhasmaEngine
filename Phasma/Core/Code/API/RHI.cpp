@@ -487,14 +487,14 @@ namespace pe
         warnOnly = true;
 #endif
         if (!supported && warnOnly)
-            PE_WARN("[Vulkan] Required feature missing: %s", message);
+            PE_WARN("[Vulkan] Optional feature missing: %s", message);
         else
             PE_ERROR_IF(!supported, "%s", message);
     }
 
     // Features the engine consumes unconditionally (no runtime capability guard exists for
     // them), so a missing one cannot be tolerated on any platform — fail fast instead of
-    // warning and then crashing in the VMA / buffer-device-address paths moments later.
+    // warning and then failing in a later resource or draw path.
     static void RequireVulkanFeature(bool supported, const char *message)
     {
         PE_ERROR_IF(!supported, "%s", message);
@@ -1632,6 +1632,7 @@ namespace pe
             optionalExtensionsAllowed && IsDeviceExtensionValid(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
 
         m_caps.rayTracing = false;
+        m_caps.bufferDeviceAddress = false;
         m_caps.sync2 = false;
         m_caps.dynamicRendering = false;
         m_caps.copyCommands2 = vulkan13Available;
@@ -1736,7 +1737,10 @@ namespace pe
 
         vk->m_gpu.getFeatures2(&deviceFeatures2);
 
+        m_caps.bufferDeviceAddress = static_cast<bool>(deviceFeatures12.bufferDeviceAddress);
+
         if (rayTracingExtensionsAvailable &&
+            m_caps.bufferDeviceAddress &&
             accelerationStructureFeatures.accelerationStructure &&
             rayTracingPipelineFeatures.rayTracingPipeline &&
             rayQueryFeatures.rayQuery)
@@ -1759,6 +1763,7 @@ namespace pe
         m_caps.descriptorBuffer.robustBufferAccess = deviceFeatures2.features.robustBufferAccess != 0;
         if (descriptorBufferRequested &&
             descriptorBufferExtAvailable &&
+            m_caps.bufferDeviceAddress &&
             supportedDescriptorBufferFeatures.descriptorBuffer)
         {
             deviceExtensions.push_back(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
@@ -1803,9 +1808,6 @@ namespace pe
         // eStencilAttachmentOptimal) are used unconditionally in VulkanImageImpl layout transitions.
         RequireVulkanFeature(deviceFeatures12.separateDepthStencilLayouts,
                              "Separate depth stencil layouts are not supported");
-        // VMA + acceleration-structure / shader-binding-table device addresses (host-side).
-        RequireVulkanFeature(deviceFeatures12.bufferDeviceAddress,
-                             "Buffer device address is not supported");
         // GPU-culling indirect draws: ShadowPass issues drawIndexedIndirect with drawCount = mesh
         // count (>1, needs multiDrawIndirect), and each indirect command carries a per-draw
         // firstInstance (SceneBuffers, needs drawIndirectFirstInstance) used for bindless lookups.
@@ -1814,16 +1816,16 @@ namespace pe
         RequireVulkanFeature(deviceFeatures2.features.drawIndirectFirstInstance,
                              "Draw indirect first instance is not supported");
 
-        // Soft (warn-on-Android/software): the shipped shaders declare none of the matching SPIR-V
-        // capabilities (verified by the bake's OpCapability scan), so requiring these would
-        // needlessly reject otherwise-capable Android GPUs or CPU renderers that happen to lack them.
+        // Soft: the shipped shaders declare none of the matching SPIR-V capabilities (verified by
+        // the bake's OpCapability scan), so requiring these would needlessly reject otherwise-
+        // capable devices. Float16 is also absent on Polaris-class desktop GPUs.
         const bool warnOnlyForSoftVulkanFeatures = m_gpuAdapterInfo.type == GpuAdapterType::Cpu;
         CheckRequiredVulkanFeature(deviceFeatures12.shaderStorageBufferArrayNonUniformIndexing,
                                    "Storage buffer array non uniform indexing is not supported on this device",
                                    warnOnlyForSoftVulkanFeatures);
         CheckRequiredVulkanFeature(deviceFeatures12.shaderFloat16,
                                    "Float16 is not supported on this device",
-                                   warnOnlyForSoftVulkanFeatures);
+                                   true);
         CheckRequiredVulkanFeature(deviceFeatures2.features.shaderInt16,
                                    "Int16 is not supported on this device",
                                    warnOnlyForSoftVulkanFeatures);
@@ -1876,7 +1878,8 @@ namespace pe
         }
         deviceFeatures2.pNext = deviceFeatureChain;
 
-        PE_INFO("[Vulkan] Effective caps: sync2=%u, copyCommands2=%u, dynamicRendering=%u, extendedDynamicState=%u, descriptorUpdateAfterBind=%u, indirectCount=%u, maintenance5=%u",
+        PE_INFO("[Vulkan] Effective caps: bufferDeviceAddress=%u, sync2=%u, copyCommands2=%u, dynamicRendering=%u, extendedDynamicState=%u, descriptorUpdateAfterBind=%u, indirectCount=%u, maintenance5=%u",
+                m_caps.bufferDeviceAddress ? 1u : 0u,
                 m_caps.sync2 ? 1u : 0u,
                 m_caps.copyCommands2 ? 1u : 0u,
                 m_caps.dynamicRendering ? 1u : 0u,
@@ -1909,7 +1912,9 @@ namespace pe
         const uint32_t apiVersion = m_caps.effectiveApiVersion ? m_caps.effectiveApiVersion : VK_API_VERSION_1_0;
 
         VmaAllocatorCreateInfo allocator_info = {};
-        allocator_info.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+        allocator_info.flags = m_caps.bufferDeviceAddress
+                                   ? VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT
+                                   : 0;
         if (m_caps.maintenance5)
             allocator_info.flags |= VMA_ALLOCATOR_CREATE_KHR_MAINTENANCE5_BIT;
         allocator_info.physicalDevice = vk->m_gpu;

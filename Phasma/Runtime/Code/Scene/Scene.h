@@ -485,6 +485,7 @@ namespace pe
         size_t GetAabbVerticesOffset() const { return m_aabbVerticesOffset; }
         size_t GetAabbIndicesOffset() const { return m_aabbIndicesOffset; }
         Buffer *GetIndirectAll() const { return m_indirectAll; }
+        void BindDrawIdBuffer(CommandBuffer *cmd) const;
         Buffer *GetCullingCountersBuffer(uint32_t frame) const { return m_cullingCountersBuffers[frame]; }
         Buffer *GetIndirectOpaqueSS(uint32_t frame) const { return m_indirectOpaqueSS[frame]; }
         Buffer *GetIndirectAlphaCutSS(uint32_t frame) const { return m_indirectAlphaCutSS[frame]; }

@@ -410,7 +410,7 @@ namespace pe
 
             DXGI_ADAPTER_DESC3 desc{};
             m_adapter->GetDesc3(&desc);
-            if (SUCCEEDED(D3D12CreateDevice(m_adapter.Get(), D3D_FEATURE_LEVEL_12_1,
+            if (SUCCEEDED(D3D12CreateDevice(m_adapter.Get(), D3D_FEATURE_LEVEL_12_0,
                                             IID_PPV_ARGS(&m_device))))
             {
                 m_adapterName = WideToUtf8(desc.Description);
@@ -444,7 +444,7 @@ namespace pe
                     m_adapter.Reset();
                     continue;
                 }
-                if (SUCCEEDED(D3D12CreateDevice(m_adapter.Get(), D3D_FEATURE_LEVEL_12_1,
+                if (SUCCEEDED(D3D12CreateDevice(m_adapter.Get(), D3D_FEATURE_LEVEL_12_0,
                                                 IID_PPV_ARGS(&m_device))))
                 {
                     m_adapterName = WideToUtf8(desc.Description);
@@ -507,16 +507,6 @@ namespace pe
             }
         }
 
-        D3D12_FEATURE_DATA_D3D12_OPTIONS13 options13{};
-        hr = m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS13, &options13, sizeof(options13));
-        if (FAILED(hr) || options13.InvertedViewportHeightFlipsYSupported == FALSE)
-        {
-            PE_ERROR("Dx12RhiImpl::Init: runtime lacks D3D12 OPTIONS13 inverted viewport Y-flip support");
-            return false;
-        }
-        m_invertedViewportHeightFlipsY = true;
-        PE_INFO("DX12 inverted viewport height flips Y: supported");
-
         D3D12MA::ALLOCATOR_DESC allocatorDesc{};
         allocatorDesc.pDevice = m_device.Get();
         allocatorDesc.pAdapter = m_adapter.Get();
@@ -541,12 +531,16 @@ namespace pe
         }
 
         D3D12_FEATURE_DATA_SHADER_MODEL sm{D3D_SHADER_MODEL_6_6};
-        m_device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &sm, sizeof(sm));
-        if (sm.HighestShaderModel < D3D_SHADER_MODEL_6_6)
+        const HRESULT shaderModelHr =
+            m_device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &sm, sizeof(sm));
+        if (FAILED(shaderModelHr) || sm.HighestShaderModel < D3D_SHADER_MODEL_6_6)
         {
             PE_ERROR("Dx12RhiImpl::Init: GPU/driver lacks Shader Model 6.6");
             return false;
         }
+
+        m_caps.bufferDeviceAddress = true;
+        PE_INFO("[DX12] Feature level minimum=12_0, shader model minimum=6.6, start-instance input=per-instance vertex");
 
         D3D12_FEATURE_DATA_D3D12_OPTIONS5 opts5{};
         m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &opts5, sizeof(opts5));

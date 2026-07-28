@@ -154,6 +154,7 @@ namespace pe
         cmd->BindPipeline(*m_passInfoMask);
         cmd->BindIndexBuffer(scene->GetBuffer(), 0);
         cmd->BindVertexBuffer(scene->GetBuffer(), scene->GetPositionsOffset());
+        scene->BindDrawIdBuffer(cmd);
         cmd->SetConstants(maskConstants);
         cmd->PushConstants();
         cmd->DrawIndexedIndirectCount(scene->GetIndirectSelected(frame),

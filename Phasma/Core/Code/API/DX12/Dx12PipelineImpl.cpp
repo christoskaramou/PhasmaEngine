@@ -226,6 +226,7 @@ namespace pe
         if (info.pVertShader)
         {
             std::unordered_map<uint32_t, uint32_t> bindingOffsets;
+            bool hasDrawIdInput = false;
             const auto &inputs = info.pVertShader->GetReflection().GetInputs();
             semanticNames.reserve(inputs.size());
             inputElements.reserve(inputs.size());
@@ -234,20 +235,37 @@ namespace pe
                 if (input.binding == INT32_MIN)
                     continue;
 
-                uint32_t &offset = bindingOffsets.try_emplace(static_cast<uint32_t>(input.binding), 0).first->second;
                 semanticNames.push_back(input.name);
                 D3D12_INPUT_ELEMENT_DESC element{};
                 element.SemanticName = semanticNames.back().c_str();
                 element.SemanticIndex = input.semanticIndex;
                 element.Format = pe_dx12::Format(input.format);
-                element.InputSlot = static_cast<UINT>(input.binding);
-                element.AlignedByteOffset = offset;
-                element.InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-                element.InstanceDataStepRate = 0;
+                if (input.name == "PE_DRAW_ID")
+                {
+                    hasDrawIdInput = true;
+                    element.InputSlot = 1;
+                    element.AlignedByteOffset = offsetof(D3D12_DRAW_INDEXED_ARGUMENTS, StartInstanceLocation);
+                    element.InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA;
+                    element.InstanceDataStepRate = 1;
+                    if (m_vertexBindingStrides.size() < 2)
+                        m_vertexBindingStrides.resize(2, 0u);
+                    m_vertexBindingStrides[1] = sizeof(D3D12_DRAW_INDEXED_ARGUMENTS);
+                }
+                else
+                {
+                    const uint32_t binding = static_cast<uint32_t>(input.binding);
+                    uint32_t &offset = bindingOffsets.try_emplace(binding, 0).first->second;
+                    element.InputSlot = binding;
+                    element.AlignedByteOffset = offset;
+                    element.InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+                    element.InstanceDataStepRate = 0;
+                    offset += input.size;
+                }
                 inputElements.push_back(element);
-                offset += input.size;
             }
 
+            PE_ERROR_IF(hasDrawIdInput && bindingOffsets.contains(1),
+                        "DX12 PE_DRAW_ID fallback reserves vertex input slot 1");
             for (const auto &[binding, stride] : bindingOffsets)
             {
                 if (binding >= m_vertexBindingStrides.size())

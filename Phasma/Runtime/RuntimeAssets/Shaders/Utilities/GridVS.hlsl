@@ -1,3 +1,5 @@
+#include "../Common/Structures.hlsl"
+
 struct VS_OUTPUT_GRID
 {
     float4 position : SV_POSITION;
@@ -82,7 +84,7 @@ VS_OUTPUT_GRID mainVS(uint VertexIndex : SV_VertexID)
     output.color = color;
     
     float4x4 viewProj = LoadMatrix(0);
-    output.position = mul(float4(pos, 1.0), viewProj);
+    output.position = ApplyViewportYConvention(mul(float4(pos, 1.0), viewProj));
     
     return output;
 }

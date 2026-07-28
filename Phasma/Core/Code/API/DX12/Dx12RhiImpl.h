@@ -32,7 +32,6 @@ namespace pe
         IDXGIFactory6 *GetFactory() const { return m_factory.Get(); }
         IDXGIAdapter4 *GetAdapter() const { return m_adapter.Get(); }
         bool SupportsAllowTearing() const { return m_allowTearing; }
-        bool SupportsInvertedViewportHeightFlipsY() const { return m_invertedViewportHeightFlipsY; }
         D3D12MA::Allocator *GetAllocator() const { return m_d3d12Allocator; }
         Dx12DescriptorHeap *GetCbvSrvUavHeap() const { return m_cbvSrvUavHeap.get(); }
         Dx12DescriptorHeap *GetSamplerHeap() const { return m_samplerHeap.get(); }
@@ -51,7 +50,6 @@ namespace pe
         Microsoft::WRL::ComPtr<IDXGIAdapter4> m_adapter;
         Microsoft::WRL::ComPtr<ID3D12Device> m_device;
         bool m_allowTearing = false;
-        bool m_invertedViewportHeightFlipsY = false;
         D3D12MA::Allocator *m_d3d12Allocator = nullptr;
         std::unique_ptr<Dx12DescriptorHeap> m_cbvSrvUavHeap;
         std::unique_ptr<Dx12DescriptorHeap> m_samplerHeap;

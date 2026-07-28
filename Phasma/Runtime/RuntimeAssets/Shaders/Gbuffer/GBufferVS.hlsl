@@ -62,7 +62,7 @@ VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
     output.positionWS       = mul(inPos, worldTransform);
     output.positionCS       = mul(inPos, mul(boneTransform, mul(GetMeshMatrix(id), GetViewProjection())));
     output.prevPositionCS   = mul(inPos, mul(boneTransform, mul(GetMeshPreviousMatrix(id), GetPreviousViewProjection())));
-    output.position         = output.positionCS;
+    output.position         = ApplyViewportYConvention(output.positionCS);
     
     // Normal
     float3x3 worldRotationScale3x3  = (float3x3)worldTransform;                       // remove translation
@@ -76,4 +76,3 @@ VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
 
     return output;
 }
-

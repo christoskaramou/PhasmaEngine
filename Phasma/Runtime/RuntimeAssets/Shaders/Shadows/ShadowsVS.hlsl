@@ -48,7 +48,7 @@ VS_OUTPUT_Position_Uv mainVS(VS_INPUT_Depth input)
     float4x4 combinedMatrix = mul(jointTransform, GetMeshMatrix(id));
     float4x4 final = mul(combinedMatrix, pc.vp);
 
-    output.position = mul(float4(input.position, 1.0), final);
+    output.position = ApplyViewportYConvention(mul(float4(input.position, 1.0), final));
 
     return output;
 }
