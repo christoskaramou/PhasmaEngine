@@ -60,7 +60,7 @@ struct VS_INPUT_VoxelPacked
     uint w0 : POSITION;
     uint w1 : TEXCOORD0;
 #if defined(PE_DX12)
-    uint id : SV_StartInstanceLocation;
+    uint id : PE_DRAW_ID;
 #else
     uint id : SV_InstanceID;
 #endif
@@ -106,7 +106,7 @@ VS_OUTPUT_Voxel mainVS(VS_INPUT_VoxelPacked input)
     output.positionWS = mul(inPos, worldTransform);
     output.positionCS = mul(inPos, mul(GetMeshMatrix(id), GetViewProjection()));
     output.prevPositionCS = mul(inPos, mul(GetMeshPreviousMatrix(id), GetPreviousViewProjection()));
-    output.position = output.positionCS;
+    output.position = ApplyViewportYConvention(output.positionCS);
 
     float3x3 worldRotationScale3x3 = (float3x3)worldTransform;
     float3x3 worldRotation3X3 = remove_scale3x3(worldRotationScale3x3);

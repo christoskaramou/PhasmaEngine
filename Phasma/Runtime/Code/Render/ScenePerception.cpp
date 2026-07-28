@@ -277,6 +277,7 @@ namespace pe
             cmd->BindPipeline(*cache.idPI);
             cmd->BindIndexBuffer(scene.GetBuffer(), 0);
             cmd->BindVertexBuffer(scene.GetBuffer(), scene.GetPositionsOffset());
+            scene.BindDrawIdBuffer(cmd);
             cmd->SetConstants(idConstants);
             cmd->PushConstants();
             cmd->DrawIndexedIndirectCount(scene.GetIndirectOpaqueSS(frame), 0, scene.GetCullingCountersBuffer(frame), 0 * sizeof(uint32_t), meshCount);

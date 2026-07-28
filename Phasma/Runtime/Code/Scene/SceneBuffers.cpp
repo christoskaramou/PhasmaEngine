@@ -187,9 +187,10 @@ namespace pe
         // buffer into a larger one when it reserves arena headroom (SceneBuffers.cpp ReserveArenaCapacity).
         PeBufferUsageFlags geometryUsage = PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_TRANSFER_SRC |
                                            PE_BUFFER_USAGE_INDEX_BUFFER | PE_BUFFER_USAGE_VERTEX_BUFFER |
-                                           PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS;
+                                           PE_BUFFER_USAGE_STORAGE_BUFFER;
         if (RHII.GetCaps().rayTracing)
-            geometryUsage |= PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR;
+            geometryUsage |= PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS |
+                             PE_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR;
 
         m_buffer = Buffer::Create({
             .size = m_aabbVerticesOffset + sizeof(AabbVertex) * m_aabbVerticesCount,
@@ -197,6 +198,15 @@ namespace pe
             .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
             .name = "combined_Geometry_buffer",
         });
+    }
+
+    void Scene::BindDrawIdBuffer(CommandBuffer *cmd) const
+    {
+        if (RHII.GetApi() != PE_GRAPHICS_API_DX12)
+            return;
+
+        PE_ERROR_IF(!m_indirectAll, "Scene draw-ID buffer is not initialized");
+        cmd->BindVertexBuffer(m_indirectAll, 0, 1, 1);
     }
 
     void Scene::CopyIndices(CommandBuffer *cmd)
@@ -421,6 +431,7 @@ namespace pe
             // TRANSFER_SRC: ReserveArenaCapacity copies the existing draws out of this buffer when it
             // regrows for arena headroom (Vulkan validates copy-source usage; DX12 does not).
             .usage = PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_STORAGE_BUFFER |
+                     PE_BUFFER_USAGE_VERTEX_BUFFER |
                      PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_TRANSFER_SRC,
             .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
             .name = "indirect_Geometry_buffer_all",

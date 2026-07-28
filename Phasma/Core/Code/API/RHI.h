@@ -164,6 +164,7 @@ namespace pe
             };
 
             bool rayTracing = false;
+            bool bufferDeviceAddress = false;
             bool dynamicRendering = false;
             bool sync2 = false;
             bool copyCommands2 = false;

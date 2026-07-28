@@ -31,7 +31,7 @@ struct VS_INPUT_VoxelShadow
 {
     uint2 packed : POSITION; // .x = w0 (pos5x3|normal3|ao2), .y = w1 (unused here)
 #if defined(PE_DX12)
-    uint id : SV_StartInstanceLocation;
+    uint id : PE_DRAW_ID;
 #else
     uint id : SV_InstanceID;
 #endif
@@ -48,6 +48,6 @@ VS_OUTPUT_Position mainVS(VS_INPUT_VoxelShadow input)
     float3 origin = float3(constants[id].aabbMinX, constants[id].aabbMinY, constants[id].aabbMinZ);
 
     float4x4 final = mul(GetMeshMatrix(id), pc.vp);
-    output.position = mul(float4(origin + localPos, 1.0), final);
+    output.position = ApplyViewportYConvention(mul(float4(origin + localPos, 1.0), final));
     return output;
 }

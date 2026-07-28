@@ -457,7 +457,7 @@ namespace pe
         LPCWSTR GetStageProfile(PeShaderStageFlags stage)
         {
             if (stage == PE_SHADER_STAGE_VERTEX)
-                return L"vs_6_8";
+                return L"vs_6_6";
             if (stage == PE_SHADER_STAGE_FRAGMENT)
                 return L"ps_6_6";
             if (stage == PE_SHADER_STAGE_COMPUTE)
@@ -587,7 +587,8 @@ namespace pe
             };
 
             Microsoft::WRL::ComPtr<IDxcBlobEncoding> source;
-            const std::string shaderCode = "#define PE_DX12 1\n" + prepareDx12ShaderCode(owner->GetCache().GetShaderCode());
+            const std::string shaderCode =
+                "#define PE_DX12 1\n" + prepareDx12ShaderCode(owner->GetCache().GetShaderCode());
             hr = utils->CreateBlob(shaderCode.data(), static_cast<uint32_t>(shaderCode.size()), CP_UTF8, &source);
             if (FAILED(hr))
             {

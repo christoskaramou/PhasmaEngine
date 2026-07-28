@@ -56,7 +56,7 @@ VS_OUTPUT_Position_Uv_ID mainVS(VS_INPUT_Depth input)
     float4x4 combinedMatrix = mul(jointTransform, GetMeshMatrix(id));
     float4x4 final = mul(combinedMatrix, GetViewProjection());
 
-    output.position = mul(float4(input.position, 1.0), final);
+    output.position = ApplyViewportYConvention(mul(float4(input.position, 1.0), final));
     output.uv = input.uv;
     output.alphaFactor = constants[id].baseColorAlpha;
 

@@ -159,7 +159,7 @@ VS_OUTPUT_Particle mainVS(uint vertexID : SV_VertexID)
         uv2.y = (uv2.y + (float)rowNext) / rows;
     }
 
-    output.pos = mul(float4(position, 1.0), pc.viewProjection);
+    output.pos = ApplyViewportYConvention(mul(float4(position, 1.0), pc.viewProjection));
     output.color = p.color;
     output.uv = uv;
     output.uv2 = uv2;

@@ -1001,14 +1001,11 @@ namespace pe
 
     void Dx12CommandBufferImpl::SetViewport(float x, float y, float width, float height, float minDepth, float maxDepth)
     {
-        const auto *rhi = static_cast<const Dx12RhiImpl *>(RHII.GetImpl());
-        const bool flipY = rhi && rhi->SupportsInvertedViewportHeightFlipsY();
-
         D3D12_VIEWPORT vp{};
         vp.TopLeftX = x;
-        vp.TopLeftY = flipY ? y + height : y;
+        vp.TopLeftY = y;
         vp.Width = width;
-        vp.Height = flipY ? -height : height;
+        vp.Height = height;
         vp.MinDepth = minDepth;
         vp.MaxDepth = maxDepth;
         m_cmdList->RSSetViewports(1, &vp);

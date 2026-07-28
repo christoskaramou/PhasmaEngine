@@ -395,6 +395,7 @@ namespace pe
             cmd->BindPipeline(*m_passInfo);
             cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
             cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
+            m_scene->BindDrawIdBuffer(cmd);
             cmd->SetConstants(pushConstants);
             cmd->PushConstants();
             if (occlusion)
@@ -734,6 +735,7 @@ namespace pe
             cmd->BindPipeline(*m_passInfo);
             cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
             cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
+            m_scene->BindDrawIdBuffer(cmd);
             cmd->SetConstants(pushConstants);
             cmd->PushConstants();
             cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaBlend(frame), 0, m_scene->GetCullingCountersBuffer(frame), 2 * sizeof(uint32_t), m_scene->GetMeshCount());
@@ -749,6 +751,7 @@ namespace pe
             cmd->BindPipeline(*m_passInfo);
             cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
             cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetVerticesOffset());
+            m_scene->BindDrawIdBuffer(cmd);
             cmd->SetConstants(pushConstants);
             cmd->PushConstants();
             cmd->DrawIndexedIndirectCount(m_scene->GetIndirectTransmission(frame), 0, m_scene->GetCullingCountersBuffer(frame), 3 * sizeof(uint32_t), m_scene->GetMeshCount());
@@ -769,6 +772,7 @@ namespace pe
             cmd->BindPipeline(*m_voxelPassInfo);
             cmd->BindIndexBuffer(m_scene->GetVoxelIndexBuffer(), 0, PE_INDEX_TYPE_UINT16);
             cmd->BindVertexBuffer(m_scene->GetVoxelVertexBuffer(), 0);
+            m_scene->BindDrawIdBuffer(cmd);
             cmd->SetConstants(pushConstants);
             cmd->PushConstants();
             for (const auto &d : voxelDraws)

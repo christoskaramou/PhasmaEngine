@@ -118,6 +118,7 @@ namespace pe
         cmd->BindPipeline(*m_passInfo);
         cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
         cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
+        m_scene->BindDrawIdBuffer(cmd);
         cmd->SetConstants(pushConstants);
         cmd->PushConstants();
         // set B (newly-disoccluded), single-sided

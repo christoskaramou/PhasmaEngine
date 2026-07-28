@@ -33,7 +33,8 @@ float4x4 GetMeshMatrix()     { return LoadMatrix(pc.meshIndex); }
 VS_OUTPUT_AABB mainVS(VS_INPUT_Depth input)
 {
     VS_OUTPUT_AABB output;
-    output.position = mul(float4(input.position, 1.0f), mul(GetMeshMatrix(), GetViewProjection()));
+    output.position = ApplyViewportYConvention(
+        mul(float4(input.position, 1.0f), mul(GetMeshMatrix(), GetViewProjection())));
     output.color    = pc.color;
     return output;
 }

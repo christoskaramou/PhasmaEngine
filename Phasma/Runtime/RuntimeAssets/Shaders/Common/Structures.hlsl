@@ -158,7 +158,7 @@ struct VS_INPUT_Depth
     uint4 joints : BLENDINDICES;
     float4 weights : BLENDWEIGHT;
 #if defined(PE_DX12)
-    uint id : SV_StartInstanceLocation;
+    uint id : PE_DRAW_ID;
 #else
     uint id : SV_InstanceID;
 #endif
@@ -174,11 +174,19 @@ struct VS_INPUT_Gbuffer
     uint4 joints : BLENDINDICES;
     float4 weights : BLENDWEIGHT;
 #if defined(PE_DX12)
-    uint id : SV_StartInstanceLocation;
+    uint id : PE_DRAW_ID;
 #else
     uint id : SV_InstanceID;
 #endif
 };
+
+float4 ApplyViewportYConvention(float4 position)
+{
+#if defined(PE_DX12)
+    position.y = -position.y;
+#endif
+    return position;
+}
 
 struct VS_OUTPUT_Position
 {
