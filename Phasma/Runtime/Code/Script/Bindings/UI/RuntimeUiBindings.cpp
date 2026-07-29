@@ -528,10 +528,14 @@ namespace pe
                                             uint32_t width = 0;
                                             uint32_t height = 0;
                                             float uiScale = 1.0f;
+                                            float safeX = 0.0f, safeY = 0.0f, safeW = 0.0f, safeH = 0.0f;
+                                            bool safeValid = false;
                                             if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
                                             {
                                                 runtimeUi->GetFrameSurfaceSize(width, height);
                                                 uiScale = runtimeUi->GetFrameUiScale();
+                                                // Matches SyncSceneWidgets layout rect (Android insets).
+                                                safeValid = runtimeUi->GetFrameSafeArea(safeX, safeY, safeW, safeH);
                                             }
                                             result["w"] = width;
                                             result["h"] = height;
@@ -541,6 +545,11 @@ namespace pe
                                             // desktops; up to 4.0 on phones. Resolution-relative UIs divide
                                             // their font_scale by this to cancel the backend's font DPI bump.
                                             result["ui_scale"] = uiScale;
+                                            result["safe_x"] = safeX;
+                                            result["safe_y"] = safeY;
+                                            result["safe_w"] = safeW;
+                                            result["safe_h"] = safeH;
+                                            result["safe_valid"] = safeValid;
                                             result["valid"] = width > 0 && height > 0;
                                             return result; });
                         ui.set_function("set_quad",

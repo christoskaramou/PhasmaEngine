@@ -368,6 +368,25 @@ namespace pe
         height = m_frameSurfaceHeight > 0 ? m_frameSurfaceHeight : RHII.GetHeight();
     }
 
+    bool RuntimeUiSystem::GetFrameSafeArea(float &minX, float &minY, float &width, float &height) const
+    {
+        uint32_t surfW = 0, surfH = 0;
+        GetFrameSurfaceSize(surfW, surfH);
+        if (!m_frameSafeAreaValid || m_frameSafeAreaWidth <= 0.0f || m_frameSafeAreaHeight <= 0.0f)
+        {
+            minX = 0.0f;
+            minY = 0.0f;
+            width = static_cast<float>(surfW);
+            height = static_cast<float>(surfH);
+            return false;
+        }
+        minX = m_frameSafeAreaMinX;
+        minY = m_frameSafeAreaMinY;
+        width = m_frameSafeAreaWidth;
+        height = m_frameSafeAreaHeight;
+        return true;
+    }
+
     bool RuntimeUiSystem::WantsMouseCapture() const
     {
         return m_initialized && m_backend && m_backend->WantsMouseCapture();
