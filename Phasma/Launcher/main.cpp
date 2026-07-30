@@ -40,9 +40,11 @@ namespace
     constexpr const char *kVulkanCoreValidationKey = "vulkan_core_validation";
     constexpr const char *kDx12CoreValidationKey = "dx12_core_validation";
     constexpr const char *kLiveProfilerKey = "live_profiler";
+    constexpr const char *kLaunchArgumentsKey = "launch_arguments";
     constexpr const char *k_editorLaunchTarget = "PhasmaEditor";
     constexpr const char *k_playerLaunchTarget = "PhasmaPlayer";
     constexpr size_t kSettingsTextBufferSize = 64 * 1024;
+    constexpr size_t kLaunchArgumentsBufferSize = 2048;
 
     bool PathElementEquals(const std::filesystem::path &a, const std::filesystem::path &b)
     {
@@ -620,6 +622,7 @@ namespace
                                  const std::string &projectPath,
                                  const std::string &startupScene,
                                  const std::string &launchTarget,
+                                 const std::string &launchArguments,
                                  const ValidationOptions &validation,
                                  bool liveProfiler,
                                  int displayIndex,
@@ -637,6 +640,7 @@ namespace
         SetJsonStringMember(document, pe::kProjectPathSettingsKey, projectPath);
         SetJsonStringMember(document, pe::kStartupSceneSettingsKey, startupScene);
         SetJsonStringMember(document, k_launchTargetKey, launchTarget.empty() ? k_editorLaunchTarget : launchTarget);
+        SetJsonStringMember(document, kLaunchArgumentsKey, launchArguments);
         SetJsonIntMember(document, k_displayIndexKey, displayIndex < 0 ? 0 : displayIndex);
         SetJsonStringMember(document,
                             pe::kGpuAdapterPreferenceSettingsKey,
@@ -696,6 +700,7 @@ namespace
         LaunchProfile player;
         ValidationOptions validation;
         std::string launchTarget;
+        char launchArguments[kLaunchArgumentsBufferSize] = {};
         int displayIndex = 0;
         pe::GpuAdapterPreference gpuAdapterPreference = pe::GpuAdapterPreference::Auto;
         std::optional<PePresentMode> presentModeOverride;
@@ -962,10 +967,73 @@ namespace
         return true;
     }
 
+    bool ParseLaunchArguments(const std::string &text,
+                              std::vector<std::string> &arguments,
+                              std::string &error)
+    {
+        enum class Quote
+        {
+            None,
+            Single,
+            Double
+        };
+
+        arguments.clear();
+        std::string argument;
+        Quote quote = Quote::None;
+        bool started = false;
+        for (size_t i = 0; i < text.size(); ++i)
+        {
+            const char ch = text[i];
+            const bool matchingQuote =
+                (quote == Quote::Single && ch == '\'') || (quote == Quote::Double && ch == '"');
+            if (matchingQuote)
+            {
+                quote = Quote::None;
+                started = true;
+                continue;
+            }
+            if (quote == Quote::None && (ch == '\'' || ch == '"'))
+            {
+                quote = ch == '\'' ? Quote::Single : Quote::Double;
+                started = true;
+                continue;
+            }
+            if (ch == '\\' && quote != Quote::Single && i + 1 < text.size() &&
+                (text[i + 1] == '\\' || text[i + 1] == '"' || text[i + 1] == '\''))
+            {
+                argument.push_back(text[++i]);
+                started = true;
+                continue;
+            }
+            if (quote == Quote::None && std::isspace(static_cast<unsigned char>(ch)))
+            {
+                if (started)
+                {
+                    arguments.push_back(argument);
+                    argument.clear();
+                    started = false;
+                }
+                continue;
+            }
+            argument.push_back(ch);
+            started = true;
+        }
+
+        if (quote != Quote::None)
+        {
+            error = "Launch parameters contain an unterminated quote.";
+            return false;
+        }
+        if (started)
+            arguments.push_back(argument);
+        return true;
+    }
+
 #if defined(PE_WIN32)
     std::string QuoteCommandLineArg(const std::string &arg)
     {
-        if (arg.find_first_of(" \t\"") == std::string::npos)
+        if (!arg.empty() && arg.find_first_of(" \t\"") == std::string::npos)
             return arg;
 
         std::string quoted = "\"";
@@ -1056,6 +1124,7 @@ namespace
                               PeGraphicsApi api,
                               int displayIndex,
                               bool liveProfiler,
+                              const std::string &launchArguments,
                               std::string &error)
     {
         const std::filesystem::path executablePath = target.executablePath.lexically_normal();
@@ -1067,12 +1136,19 @@ namespace
 
         const std::string displayValue = std::to_string(displayIndex < 0 ? 0 : displayIndex);
         const bool playerProfiler = liveProfiler && target.kind == LaunchTargetKind::Player;
+        std::vector<std::string> arguments = {
+            "--api", pe::GraphicsApiConfigName(api), "--display", displayValue};
+        if (playerProfiler)
+            arguments.emplace_back("--profiler");
+        std::vector<std::string> extraArguments;
+        if (!ParseLaunchArguments(launchArguments, extraArguments, error))
+            return false;
+        arguments.insert(arguments.end(), extraArguments.begin(), extraArguments.end());
 
 #if defined(PE_WIN32)
-        std::string commandLine = QuoteCommandLineArg(executablePath.string()) + " --api " +
-                                  pe::GraphicsApiConfigName(api) + " --display " + displayValue;
-        if (playerProfiler)
-            commandLine += " --profiler";
+        std::string commandLine = QuoteCommandLineArg(executablePath.string());
+        for (const std::string &argument : arguments)
+            commandLine += " " + QuoteCommandLineArg(argument);
 
         STARTUPINFOA startupInfo{};
         startupInfo.cb = sizeof(startupInfo);
@@ -1132,31 +1208,19 @@ namespace
         }
         if (pid == 0)
         {
-            const std::string apiName = pe::GraphicsApiConfigName(api);
             const std::filesystem::path workingDirectory = pe::Path::Root;
             if (!workingDirectory.empty() && chdir(workingDirectory.c_str()) != 0)
                 _exit(127);
-            if (playerProfiler)
-            {
-                execl(executablePath.c_str(),
-                      executablePath.filename().c_str(),
-                      "--api",
-                      apiName.c_str(),
-                      "--display",
-                      displayValue.c_str(),
-                      "--profiler",
-                      nullptr);
-            }
-            else
-            {
-                execl(executablePath.c_str(),
-                      executablePath.filename().c_str(),
-                      "--api",
-                      apiName.c_str(),
-                      "--display",
-                      displayValue.c_str(),
-                      nullptr);
-            }
+            std::vector<std::string> argumentStorage;
+            argumentStorage.reserve(arguments.size() + 1);
+            argumentStorage.push_back(executablePath.filename().string());
+            argumentStorage.insert(argumentStorage.end(), arguments.begin(), arguments.end());
+            std::vector<char *> argv;
+            argv.reserve(argumentStorage.size() + 1);
+            for (std::string &argument : argumentStorage)
+                argv.push_back(argument.data());
+            argv.push_back(nullptr);
+            execv(executablePath.c_str(), argv.data());
             _exit(127);
         }
 
@@ -1409,6 +1473,19 @@ namespace
     constexpr int kSceneComboWidth = 810;
     constexpr int kSettingsPathWidth = 660;
     constexpr int kLaunchButtonX = 878;
+
+    void RenderHelpLabel(const char *label, const char *explanation)
+    {
+        ImGui::TextUnformatted(label);
+        if (!ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled))
+            return;
+
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 32.0f);
+        ImGui::TextUnformatted(explanation);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
 
     void ApplyLauncherStyle()
     {
@@ -1931,6 +2008,11 @@ namespace
         if (targets[targetIndex].kind == LaunchTargetKind::Player)
             selection.liveProfiler = PromptYesNo("Enable live profiler (PhasmaProfiler)", selection.liveProfiler);
 
+        std::cout << "Parameters [" << selection.launchArguments << "]: " << std::flush;
+        std::string launchArguments;
+        if (std::getline(std::cin, launchArguments) && !launchArguments.empty())
+            CopyStringToArray(selection.launchArguments, launchArguments);
+
         std::cout << "\nProject: " << ActiveProfile(selection).projectPath << '\n'
                   << "Backend: " << pe::GraphicsApiConfigName(selection.api) << '\n'
                   << "GPU: " << pe::GpuAdapterPreferenceDisplayName(selection.gpuAdapterPreference) << '\n'
@@ -2000,7 +2082,9 @@ namespace
         static const char *kTemplateLabels[] = {"Empty", "Topdown mini-game"};
         static const char *kTemplateScripts[] = {"", "topdown"};
 
-        ImGui::TextUnformatted("Project folder");
+        RenderHelpLabel("Project folder",
+                        "The root folder of the project to open, or the destination for Create Project. "
+                        "An existing project must contain phasma.project.json before Editor or Player can launch it.");
         ImGui::SameLine(kFieldX);
         ImGui::SetNextItemWidth(kSceneComboWidth);
         ImGui::InputText("##project_folder", folderBuffer, sizeof(folderBuffer));
@@ -2029,7 +2113,9 @@ namespace
 #endif
         }
 
-        ImGui::TextUnformatted("Template");
+        RenderHelpLabel("Template",
+                        "Starting content used only by Create Project. Empty creates a blank project; Topdown mini-game "
+                        "creates the sample structure. It never modifies an existing project.");
         ImGui::SameLine(kFieldX);
         ImGui::SetNextItemWidth(240.0f);
         ImGui::Combo("##project_template", &templateIndex, kTemplateLabels, IM_ARRAYSIZE(kTemplateLabels));
@@ -2483,7 +2569,9 @@ namespace
         (void)window;
         ImGui::PushID(id);
 
-        ImGui::TextUnformatted("Startup scene");
+        RenderHelpLabel("Startup scene",
+                        "The .pescene loaded when Editor or Player starts. Choose Empty scene to start without loading "
+                        "one.");
         ImGui::SameLine(kFieldX);
         const std::string sceneLabel = SceneDisplayName(profile, profile.startupScene);
         ImGui::SetNextItemWidth(kSceneComboWidth);
@@ -2535,7 +2623,10 @@ namespace
     {
         ImGui::PushID(id);
 
-        ImGui::TextUnformatted("Validation");
+        RenderHelpLabel("Validation",
+                        "Enables the selected API's debug validation: Vulkan validation layers, or the DX12 debug layer, "
+                        "GPU-based validation and DRED. Use it to diagnose rendering and resource errors. Expect lower "
+                        "performance; disable it for performance measurements.");
         ImGui::SameLine(kFieldX);
         ImGui::Checkbox("##validation", &coreValidation);
 
@@ -2544,7 +2635,9 @@ namespace
 
     void RenderLiveProfilerControls(bool &liveProfiler)
     {
-        ImGui::TextUnformatted("Live profiler");
+        RenderHelpLabel("Live profiler",
+                        "Player only. Passes --profiler and opens PhasmaProfiler when available so the running game can "
+                        "stream live timing data. Leave it disabled unless profiling to avoid profiling overhead.");
         ImGui::SameLine(kFieldX);
         ImGui::Checkbox("##live_profiler", &liveProfiler);
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
@@ -2676,7 +2769,9 @@ namespace
                 int runIndex = FindLaunchTargetIndex(targets, selection.launchTarget);
                 if (runIndex < 0)
                     runIndex = 0;
-                ImGui::TextUnformatted("Run");
+                RenderHelpLabel("Run",
+                                "Selects the executable to start. Editor opens the project for editing, Player runs its "
+                                "startup scene.");
                 ImGui::SameLine(kFieldX);
                 ImGui::SetNextItemWidth(kFieldWidth);
                 if (!targets.empty() && ImGui::BeginCombo("##run_target", targets[runIndex].label.c_str()))
@@ -2697,6 +2792,21 @@ namespace
                 ImGui::BeginDisabled(!projectSceneTarget);
                 RenderStartupSceneControls("scene", window, selection.editor, statusText, browseDialog);
                 ImGui::EndDisabled();
+
+                RenderHelpLabel("Parameters",
+                                "Extra command-line arguments appended after the launcher-generated --api and --display "
+                                "arguments. Later duplicates override the dropdown values. Separate arguments with "
+                                "spaces and quote values that contain spaces.");
+                ImGui::SameLine(kFieldX);
+                ImGui::InputTextMultiline("##launch_arguments",
+                                          selection.launchArguments,
+                                          sizeof(selection.launchArguments),
+                                          ImVec2(kFieldWidth, ImGui::GetTextLineHeightWithSpacing() * 2.5f));
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                    ImGui::SetTooltip("Available parameters:\n"
+                                      "Common: --api <vulkan|dx12>, --display <index>, --screen <index>\n"
+                                      "Player: --profiler[=<port>], --profiler-port <port>\n"
+                                      "Quotes preserve spaces.");
             }
 
             // Target-derived state, kept current whether or not Launch Options is
@@ -2714,7 +2824,10 @@ namespace
 
             if (ImGui::CollapsingHeader("Rendering", ImGuiTreeNodeFlags_DefaultOpen))
             {
-                ImGui::TextUnformatted("Backend");
+                RenderHelpLabel("Backend",
+                                "Selects the graphics API used by the launched executable. Vulkan is cross-platform; "
+                                "DX12 is Windows-only. Use the backend you need to test because supported GPU features "
+                                "and validation behavior can differ.");
                 ImGui::SameLine(kFieldX);
                 ImGui::BeginDisabled(selection.apiLocked);
                 bool vulkan = selection.api == PE_GRAPHICS_API_VULKAN;
@@ -2749,7 +2862,10 @@ namespace
 
                 const std::array<GpuAdapterPreferenceOption, 4> gpuOptions = GpuAdapterPreferenceOptions();
                 const int gpuIndex = FindGpuAdapterPreferenceOptionIndex(selection.gpuAdapterPreference);
-                ImGui::TextUnformatted("GPU");
+                RenderHelpLabel("GPU",
+                                "Requests which adapter class the launched executable should use. Auto selects the "
+                                "best suitable adapter. Integrated, Discrete, or CPU / Software are useful for targeted "
+                                "testing; the engine falls back to Auto when the requested class is unavailable.");
                 ImGui::SameLine(kFieldX);
                 ImGui::SetNextItemWidth(kFieldWidth);
                 if (ImGui::BeginCombo("##gpu_adapter_preference", gpuOptions[gpuIndex].label))
@@ -2767,7 +2883,9 @@ namespace
 
                 if (!displays.empty())
                 {
-                    ImGui::TextUnformatted("Display");
+                    RenderHelpLabel("Display",
+                                    "Selects the monitor where the launched window is created. Use this for multi-monitor "
+                                    "testing; the launcher passes the selected display index to the executable.");
                     ImGui::SameLine(kFieldX);
                     ImGui::SetNextItemWidth(kFieldWidth);
                     const char *displayPreview = displays.front().label.c_str();
@@ -2795,7 +2913,10 @@ namespace
 
                 const std::array<PresentModeOption, 5> presentOptions = PresentModeOptions();
                 const int presentIndex = FindPresentModeOptionIndex(selection.presentModeOverride);
-                ImGui::TextUnformatted("Present mode");
+                RenderHelpLabel("Present mode",
+                                "Controls swapchain frame presentation. Default keeps the scene or engine setting. FIFO "
+                                "uses VSync without tearing; Immediate minimizes latency but may tear; Mailbox offers "
+                                "low-latency VSync when supported; FIFO relaxed may tear when frames miss VSync.");
                 ImGui::SameLine(kFieldX);
                 ImGui::SetNextItemWidth(kFieldWidth);
                 if (ImGui::BeginCombo("##present_mode", presentOptions[presentIndex].label))
@@ -2936,6 +3057,8 @@ namespace
         std::string currentLaunchTarget = ReadJsonStringField(RuntimeSettingsPath(), k_launchTargetKey);
         if (currentLaunchTarget.empty())
             currentLaunchTarget = k_editorLaunchTarget;
+        const std::string currentLaunchArguments =
+            ReadJsonStringField(RuntimeSettingsPath(), kLaunchArgumentsKey);
 
         int currentDisplayIndex = 0;
         if (loadedRuntimeSettings && runtimeSettings.HasMember(k_displayIndexKey) && runtimeSettings[k_displayIndexKey].IsInt())
@@ -2988,6 +3111,7 @@ namespace
         selection.validation.dx12CoreValidation = readCoreValidation(kDx12ValidationModeKey, kDx12CoreValidationKey);
         selection.liveProfiler = readRuntimeBool(kLiveProfilerKey);
         selection.launchTarget = currentLaunchTarget;
+        CopyStringToArray(selection.launchArguments, currentLaunchArguments);
         selection.displayIndex = currentDisplayIndex;
         selection.gpuAdapterPreference = currentGpuAdapterPreference;
         selection.presentModeOverride = currentPresentMode;
@@ -3014,6 +3138,7 @@ namespace
                 profile.projectPath,
                 profile.startupScene,
                 selection.launchTarget,
+                selection.launchArguments,
                 selection.validation,
                 selection.liveProfiler,
                 selection.displayIndex,
@@ -3049,7 +3174,12 @@ namespace
             return 1;
         }
 
-        if (!LaunchExternalTarget(targets[targetIndex], selectedApi, selection.displayIndex, selection.liveProfiler, error))
+        if (!LaunchExternalTarget(targets[targetIndex],
+                                  selectedApi,
+                                  selection.displayIndex,
+                                  selection.liveProfiler,
+                                  selection.launchArguments,
+                                  error))
         {
             pe::Log::Error(error);
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Phasma Launcher", error.c_str(), nullptr);
