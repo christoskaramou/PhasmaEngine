@@ -146,6 +146,8 @@ struct MaterialGpuData
 // -----------------------------------------
 
 // ------------ Vertex structs -------------
+static const uint SPRITE_FRAME_BLEND_MARKER = 0x53505254u; // "SPRT"
+
 struct VS_INPUT_Position
 {
     float3 position : POSITION;
@@ -204,6 +206,8 @@ struct VS_OUTPUT_Position_Uv_ID
     float2 uv : TEXCOORD0;
     float alphaFactor : TEXCOORD1;
     nointerpolation uint id : TEXCOORD2;
+    float2 nextUv : TEXCOORD3;
+    float spriteBlend : TEXCOORD4;
     float4 position : SV_POSITION;
 };
 
@@ -217,6 +221,8 @@ struct VS_OUTPUT_Gbuffer
     float4 prevPositionCS : POSITION1;
     float4 positionWS : POSITION2;
     nointerpolation uint id : TEXCOORD5;
+    float2 nextUv : TEXCOORD6;
+    float spriteBlend : TEXCOORD7;
     float4 position : SV_POSITION;
 };
 
@@ -238,6 +244,8 @@ struct PS_INPUT_Gbuffer
     float4 prevPositionCS : POSITION1;
     float4 positionWS : POSITION2;
     nointerpolation uint id : TEXCOORD5;
+    float2 nextUv : TEXCOORD6;
+    float spriteBlend : TEXCOORD7;
 };
 
 struct PS_INPUT_Position_Uv
@@ -251,6 +259,8 @@ struct PS_INPUT_Position_Uv_ID
     float2 uv : TEXCOORD0;
     float alphaFactor : TEXCOORD1;
     nointerpolation uint id : TEXCOORD2;
+    float2 nextUv : TEXCOORD3;
+    float spriteBlend : TEXCOORD4;
     float4 position : SV_POSITION;
 };
 

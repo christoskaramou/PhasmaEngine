@@ -113,6 +113,7 @@ namespace pe
         int m_selectedFrame = -1;
         int m_selectedClip = 0;
         bool m_playing = false;
+        bool m_interpolate = false;
         int m_previewFrame = -1;
         float m_playAccumulator = 0.0f;
         float m_atlasZoom = 1.0f;

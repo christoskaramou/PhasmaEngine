@@ -417,6 +417,7 @@ namespace pe
         float playbackSpeed = 1.0f;
         bool playing = false;
         bool loop = true;
+        bool interpolate = false;
         bool metadataLoaded = false;
     };
 

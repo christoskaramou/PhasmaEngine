@@ -497,6 +497,8 @@ namespace pe
             std::swap(clip.start, clip.end);
         ImGui::DragFloat("FPS", &clip.fps, 0.1f, 0.1f, 120.0f, "%.1f");
         ImGui::Checkbox("Loop", &clip.loop);
+        ImGui::Checkbox("Interpolate Frames", &m_interpolate);
+        ui::ItemTooltip("Blend each atlas frame into the next during playback.");
 
         if (ImGui::Button(m_playing ? "Pause" : "Play"))
         {
@@ -1205,6 +1207,7 @@ namespace pe
         nlohmann::json root;
         root["schema"] = "phasma.sprite_editor.v1";
         root["image"] = m_loadedImagePath.empty() ? BufferString(m_imagePath) : MakeAssetRelative(m_loadedImagePath);
+        root["interpolate"] = m_interpolate;
         if (!m_loadedSheetPath.empty())
         {
             root["sheet"] = MakeAssetRelative(m_loadedSheetPath);
@@ -1289,6 +1292,7 @@ namespace pe
         }
 
         SetMetadataPath(path);
+        m_interpolate = SafeBool(root.value("interpolate", nlohmann::json()), false);
 
         if (root.contains("grid") && root["grid"].is_object())
         {

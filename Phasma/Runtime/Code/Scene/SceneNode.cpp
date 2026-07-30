@@ -8,6 +8,7 @@
 #include "Camera/Camera.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
+#include <bit>
 
 namespace pe
 {
@@ -1294,6 +1295,48 @@ namespace pe
     bool Scene::SetMeshUvRectTransient(int meshIndex, const vec4 &uvRect)
     {
         return ApplyMeshUvRect(meshIndex, uvRect, false, true);
+    }
+
+    bool Scene::SetMeshSpriteFrameBlendTransient(int meshIndex, const vec4 &nextUvRect, float blend)
+    {
+        if (!IsValidMeshIndex(meshIndex))
+            return false;
+
+        const Mesh &mesh = m_meshes[meshIndex];
+        if (mesh.vertexCount != 4 ||
+            mesh.vertexOffset + mesh.vertexCount > m_vertexStore.size() ||
+            mesh.positionsOffset + mesh.vertexCount > m_positionUvStore.size())
+            return false;
+
+        constexpr uint32_t kSpriteFrameBlendMarker = 0x53505254u; // "SPRT"
+        const float safeBlend = std::isfinite(blend) ? std::clamp(blend, 0.0f, 1.0f) : 0.0f;
+        const vec2 nextUvs[4] = {
+            vec2(nextUvRect.x, nextUvRect.y),
+            vec2(nextUvRect.x, nextUvRect.w),
+            vec2(nextUvRect.z, nextUvRect.w),
+            vec2(nextUvRect.z, nextUvRect.y),
+        };
+
+        bool changed = false;
+        const uint32_t blendBits = std::bit_cast<uint32_t>(safeBlend);
+        for (uint32_t i = 0; i < 4; ++i)
+        {
+            const uint32_t uBits = std::bit_cast<uint32_t>(nextUvs[i].x);
+            const uint32_t vBits = std::bit_cast<uint32_t>(nextUvs[i].y);
+            Vertex &vertex = m_vertexStore[mesh.vertexOffset + i];
+            PositionUvVertex &positionUv = m_positionUvStore[mesh.positionsOffset + i];
+
+            changed |= vertex.joints[0] != uBits || vertex.joints[1] != vBits ||
+                       vertex.joints[2] != blendBits || vertex.joints[3] != kSpriteFrameBlendMarker;
+            vertex.joints[0] = positionUv.joints[0] = uBits;
+            vertex.joints[1] = positionUv.joints[1] = vBits;
+            vertex.joints[2] = positionUv.joints[2] = blendBits;
+            vertex.joints[3] = positionUv.joints[3] = kSpriteFrameBlendMarker;
+        }
+
+        if (changed)
+            m_pendingUvUploads.push_back(meshIndex);
+        return true;
     }
 
     int Scene::AddMesh(Mesh &&mesh)

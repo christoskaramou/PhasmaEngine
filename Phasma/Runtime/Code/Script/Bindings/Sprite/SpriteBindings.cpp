@@ -148,6 +148,18 @@ namespace pe
                         component->loop = loop;
                 });
 
+                sprite.set_function("set_interpolate", [](SceneNodeHandle &h, bool interpolate) {
+                    Scene *scene = GetScene();
+                    if (scene && h.IsValid(*scene))
+                        scene->SetSpriteInterpolation(h.nodeId, interpolate);
+                });
+
+                sprite.set_function("get_interpolate", [](SceneNodeHandle &h) -> bool {
+                    Scene *scene = GetScene();
+                    const NodeSpriteComponent *component = GetSprite(scene, h);
+                    return component && component->interpolate;
+                });
+
                 sprite.set_function("get_frame", [](SceneNodeHandle &h) -> int {
                     Scene *scene = GetScene();
                     const NodeSpriteComponent *component = GetSprite(scene, h);

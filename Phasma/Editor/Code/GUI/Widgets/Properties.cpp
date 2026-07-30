@@ -836,6 +836,14 @@ namespace pe
                     if (m_gui)
                         m_gui->NotifyChange();
                 }
+                bool interpolate = sprite->interpolate;
+                if (ImGui::Checkbox("Interpolate Frames", &interpolate))
+                {
+                    scene.SetSpriteInterpolation(node, interpolate);
+                    if (m_gui)
+                        m_gui->NotifyChange();
+                }
+                ui::ItemTooltip("Blend the current atlas frame into the next frame.");
 
                 if (ImGui::SmallButton(sprite->playing ? "Pause" : "Play"))
                 {

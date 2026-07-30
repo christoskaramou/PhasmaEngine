@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-07-30
+
+- Added opt-in sprite-frame interpolation over the existing mesh/material path. Sprite metadata can set `"interpolate": true`; playback then sends current/next atlas rectangles plus fractional clip time through the sprite quad's existing vertex payload, and the depth, GBuffer, and object-ID shaders alpha-crossfade the two samples. The editor Properties and Sprite Editor panels expose the flag, scene/prefab serialization preserves it, and Lua can change or query it without introducing a separate sprite render pass.
+
 ## 2026-07-26
 
 - Fixed an ATH arena Vulkan crash caused by a destroyed sprite texture remaining in the scene's raw image-view descriptor table. Cached sprite and Lua material texture binding now retains the owning `ResourceHandle<Image>` in the scene image store before reusing its descriptor index.

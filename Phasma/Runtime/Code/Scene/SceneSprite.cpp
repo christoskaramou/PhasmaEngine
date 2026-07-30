@@ -128,6 +128,16 @@ namespace pe
             return requested >= 0 ? requested : std::max(0, sprite.meshSlot);
         }
 
+        int NextClipFrame(const NodeSpriteComponent &sprite, const NodeSpriteClip &clip)
+        {
+            int nextFrame = sprite.frameIndex < clip.start || sprite.frameIndex > clip.end
+                                ? clip.start
+                                : sprite.frameIndex + 1;
+            if (nextFrame > clip.end)
+                nextFrame = clip.loop && sprite.loop ? clip.start : clip.end;
+            return nextFrame;
+        }
+
         bool ApplySpriteFrame(Scene &scene,
                               NodeId *node,
                               NodeSpriteComponent &sprite,
@@ -147,6 +157,9 @@ namespace pe
             // Same frame re-apply (e.g. oneshot hold): skip UV + dirty work.
             if (sprite.frameIndex == frameIndex && sprite.uvRect == frame.uvRect && sprite.meshSlot == ResolveMeshSlot(sprite, meshSlot))
             {
+                const auto &refs = scene.GetMeshRefs(node);
+                if (sprite.meshSlot >= 0 && sprite.meshSlot < static_cast<int>(refs.size()))
+                    scene.SetMeshSpriteFrameBlendTransient(refs[sprite.meshSlot], frame.uvRect, 0.0f);
                 if (markDocumentDirty)
                     scene.MarkDirty();
                 return true;
@@ -167,6 +180,7 @@ namespace pe
                 SetError(outError, "sprite mesh slot is not a four-vertex quad");
                 return false;
             }
+            scene.SetMeshSpriteFrameBlendTransient(refs[slot], frame.uvRect, 0.0f);
 
             sprite.frameIndex = frameIndex;
             sprite.frameName = frame.name;
@@ -224,6 +238,7 @@ namespace pe
             std::string imagePath;
             int imageWidth = 0;
             int imageHeight = 0;
+            bool interpolate = false;
             std::vector<NodeSpriteFrame> frames;
             std::vector<NodeSpriteClip> clips;
         };
@@ -259,6 +274,8 @@ namespace pe
             }
 
             out = {};
+            if (root.HasMember("interpolate") && root["interpolate"].IsBool())
+                out.interpolate = root["interpolate"].GetBool();
             if (root.HasMember("image") && root["image"].IsString())
             {
                 const std::filesystem::path imagePath = ResolveMetadataRelativePath(metadataPath, root["image"].GetString());
@@ -484,6 +501,7 @@ namespace pe
         sprite->imagePath = cached.imagePath;
         sprite->imageWidth = cached.imageWidth;
         sprite->imageHeight = cached.imageHeight;
+        sprite->interpolate = cached.interpolate;
         sprite->frames = cached.frames;
         sprite->clips = cached.clips;
         // Recompute UVs in case image size was filled later from the texture.
@@ -743,6 +761,25 @@ namespace pe
             sprite->activeClipIndex = 0;
     }
 
+    void Scene::SetSpriteInterpolation(NodeId *node, bool interpolate)
+    {
+        NodeSpriteComponent *sprite = GetSpriteComponent(node);
+        if (!sprite)
+            return;
+
+        sprite->interpolate = interpolate;
+        if (!interpolate && sprite->frameIndex >= 0 &&
+            sprite->frameIndex < static_cast<int>(sprite->frames.size()))
+        {
+            const auto &refs = GetMeshRefs(node);
+            if (sprite->meshSlot >= 0 && sprite->meshSlot < static_cast<int>(refs.size()))
+                SetMeshSpriteFrameBlendTransient(refs[sprite->meshSlot],
+                                                 sprite->frames[sprite->frameIndex].uvRect,
+                                                 0.0f);
+        }
+        MarkDirty();
+    }
+
     void Scene::StopSprite(NodeId *node)
     {
         NodeSpriteComponent *sprite = GetSpriteComponent(node);
@@ -797,7 +834,9 @@ namespace pe
             while (sprite->playing && sprite->playbackAccumulator >= step)
             {
                 sprite->playbackAccumulator -= step;
-                int nextFrame = sprite->frameIndex < clip.start || sprite->frameIndex > clip.end ? clip.start : sprite->frameIndex + 1;
+                int nextFrame = sprite->frameIndex < clip.start || sprite->frameIndex > clip.end
+                                    ? clip.start
+                                    : sprite->frameIndex + 1;
                 if (nextFrame > clip.end)
                 {
                     if (clip.loop && sprite->loop)
@@ -816,6 +855,20 @@ namespace pe
                 {
                     sprite->playing = false;
                     break;
+                }
+            }
+
+            if (sprite->interpolate && sprite->frameIndex >= 0 &&
+                sprite->frameIndex < static_cast<int>(sprite->frames.size()))
+            {
+                const auto &refs = GetMeshRefs(node);
+                if (sprite->meshSlot >= 0 && sprite->meshSlot < static_cast<int>(refs.size()))
+                {
+                    const int nextFrame = NextClipFrame(*sprite, clip);
+                    const float blend = sprite->playing ? sprite->playbackAccumulator / step : 0.0f;
+                    SetMeshSpriteFrameBlendTransient(refs[sprite->meshSlot],
+                                                     sprite->frames[nextFrame].uvRect,
+                                                     blend);
                 }
             }
         }

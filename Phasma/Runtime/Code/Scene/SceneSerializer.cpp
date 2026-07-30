@@ -1154,6 +1154,8 @@ namespace pe
             sprite.playbackSpeed = readFloat("playback_speed", 1.0f);
             sprite.playing = false;
             sprite.loop = sv.HasMember("loop") && sv["loop"].IsBool() ? sv["loop"].GetBool() : true;
+            sprite.interpolate =
+                sv.HasMember("interpolate") && sv["interpolate"].IsBool() ? sv["interpolate"].GetBool() : false;
             sprite.metadataLoaded = false;
         }
 
@@ -2225,6 +2227,7 @@ namespace pe
                     spriteObj.AddMember("mesh_slot", sprite.meshSlot, allocator);
                     spriteObj.AddMember("playback_speed", SafeFloat(sprite.playbackSpeed), allocator);
                     spriteObj.AddMember("loop", sprite.loop, allocator);
+                    spriteObj.AddMember("interpolate", sprite.interpolate, allocator);
 
                     nodeObj.AddMember("sprite", spriteObj.Move(), allocator);
                 }
