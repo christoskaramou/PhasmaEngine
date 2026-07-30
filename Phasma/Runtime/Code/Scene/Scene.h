@@ -218,6 +218,7 @@ namespace pe
         bool SetSpriteFrame(NodeId *node, const std::string &frameName, int meshSlot = -1, std::string *outError = nullptr);
         bool PlaySpriteClip(NodeId *node, const std::string &clipName = {}, bool restart = true, int meshSlot = -1, std::string *outError = nullptr);
         void SetSpritePlaying(NodeId *node, bool playing);
+        void SetSpriteInterpolation(NodeId *node, bool interpolate);
         void StopSprite(NodeId *node);
         void UpdateSpriteAnimations(float dt);
         NodeSkinnedStrip2DComponent *GetSkinnedStrip2DState(NodeId *node);
@@ -270,6 +271,7 @@ namespace pe
         void EnsureSceneSettingsNodeFromSettings(bool markDirty = false);
         bool SetMeshUvRect(int meshIndex, const vec4 &uvRect);
         bool SetMeshUvRectTransient(int meshIndex, const vec4 &uvRect);
+        bool SetMeshSpriteFrameBlendTransient(int meshIndex, const vec4 &nextUvRect, float blend);
         void SetNodeName(NodeId *node, const std::string &name)
         {
             ValidateNodeId(node);

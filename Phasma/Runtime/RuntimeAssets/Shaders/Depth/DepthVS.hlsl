@@ -38,9 +38,12 @@ VS_OUTPUT_Position_Uv_ID mainVS(VS_INPUT_Depth input)
 
     const uint id = input.id;
     output.id = id;
-    
+    const bool spriteFrameBlend = input.joints.w == SPRITE_FRAME_BLEND_MARKER;
+    output.nextUv = spriteFrameBlend ? float2(asfloat(input.joints.x), asfloat(input.joints.y)) : input.uv;
+    output.spriteBlend = spriteFrameBlend ? asfloat(input.joints.z) : 0.0f;
+
     float4x4 jointTransform = identity_mat;
-    if (pc.jointsCount > 0)
+    if (pc.jointsCount > 0 && !spriteFrameBlend)
     {
         float weightSum = input.weights[0] + input.weights[1] + input.weights[2] + input.weights[3];
         // Non-skinned nodes allocate no joint tail; zero weights keep them from loading past NodeGpuData.

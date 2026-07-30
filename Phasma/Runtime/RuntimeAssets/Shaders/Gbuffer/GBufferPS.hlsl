@@ -48,7 +48,10 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     float2 uv = input.uv;
     uint textureMask = constants[id].textureMask;
 
+    const float spriteBlend = saturate(input.spriteBlend);
     float4 sampledBaseColor = HasTexture(textureMask, TEX_BASE_COLOR_BIT) ? GetBaseColor(id, uv) : float4(1.0f, 1.0f, 1.0f, 1.0f);
+    if (spriteBlend > 0.0f && HasTexture(textureMask, TEX_BASE_COLOR_BIT))
+        sampledBaseColor = lerp(sampledBaseColor, GetBaseColor(id, input.nextUv), spriteBlend);
     float4 combinedColor    = sampledBaseColor * input.color * mat.baseColorFactor;
 
     if (combinedColor.a <= 0.0f || combinedColor.a < mat.pbrParams.z)
@@ -87,7 +90,10 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     float3 emissive = mat.emissiveTransmission.xyz;
     if (HasTexture(textureMask, TEX_EMISSIVE_BIT))
     {
-        emissive *= GetEmissive(id, uv).xyz;
+        float3 sampledEmissive = GetEmissive(id, uv).xyz;
+        if (spriteBlend > 0.0f)
+            sampledEmissive = lerp(sampledEmissive, GetEmissive(id, input.nextUv).xyz, spriteBlend);
+        emissive *= sampledEmissive;
     }
 
     output.normal = float4(normalWS * 0.5f + 0.5f, 1.0f);

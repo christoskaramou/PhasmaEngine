@@ -38,12 +38,15 @@ VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
 {
     VS_OUTPUT_Gbuffer output;
     output.uv = input.texCoord.xy;
+    const bool spriteFrameBlend = input.joints.w == SPRITE_FRAME_BLEND_MARKER;
+    output.nextUv = spriteFrameBlend ? float2(asfloat(input.joints.x), asfloat(input.joints.y)) : input.texCoord.xy;
+    output.spriteBlend = spriteFrameBlend ? asfloat(input.joints.z) : 0.0f;
 
     const uint id = input.id;
     output.id = id;
 
     float4x4 boneTransform = identity_mat;
-    if (pc.jointsCount)
+    if (pc.jointsCount && !spriteFrameBlend)
     {
         float weightSum = input.weights[0] + input.weights[1] + input.weights[2] + input.weights[3];
         // Non-skinned nodes allocate no joint tail; zero weights keep them from loading past NodeGpuData.
