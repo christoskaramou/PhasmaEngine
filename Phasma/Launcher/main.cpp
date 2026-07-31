@@ -510,18 +510,23 @@ namespace
         return pe::ReadEditorStartupScene();
     }
 
-    void AddUniqueScene(std::vector<std::string> &scenes, const std::string &scene)
+    void AddUniqueScene(std::vector<std::string> &scenes,
+                        const std::string &scene,
+                        const std::string &projectPath)
     {
-        if (std::find(scenes.begin(), scenes.end(), scene) == scenes.end())
+        const std::string displayPath = MakeRootRelativeDisplayPath(scene, projectPath);
+        const auto duplicate = std::find_if(scenes.begin(), scenes.end(), [&](const std::string &candidate)
+                                            { return MakeRootRelativeDisplayPath(candidate, projectPath) == displayPath; });
+        if (duplicate == scenes.end())
             scenes.push_back(scene);
     }
 
     std::vector<std::string> DiscoverStartupScenes(const std::string &projectPath, const std::string &currentScene)
     {
         std::vector<std::string> scenes;
-        AddUniqueScene(scenes, "");
+        AddUniqueScene(scenes, "", projectPath);
         if (!currentScene.empty())
-            AddUniqueScene(scenes, currentScene);
+            AddUniqueScene(scenes, currentScene, projectPath);
 
         std::filesystem::path scenesPath = ProjectAssetsRoot(projectPath) / "Scenes";
         std::error_code ec;
@@ -540,7 +545,7 @@ namespace
 
         std::sort(discovered.begin(), discovered.end());
         for (const std::string &scene : discovered)
-            AddUniqueScene(scenes, scene);
+            AddUniqueScene(scenes, scene, projectPath);
 
         return scenes;
     }
@@ -2026,7 +2031,6 @@ namespace
     void RefreshStartupScenes(LaunchProfile &profile)
     {
         profile.startupScenes = DiscoverStartupScenes(profile.projectPath, profile.startupScene);
-        AddUniqueScene(profile.startupScenes, profile.startupScene);
     }
 
     // The startup scene a freshly-selected project should default to: its manifest's
