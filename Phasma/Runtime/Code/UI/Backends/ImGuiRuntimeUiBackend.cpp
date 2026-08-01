@@ -1080,8 +1080,19 @@ namespace pe
                     {
                         if (void *textureID = GetImageTexture(quad.image))
                         {
-                            drawList->AddImageRounded((ImTextureID)textureID, pos, max, ImVec2(0.0f, 0.0f),
-                                                      ImVec2(1.0f, 1.0f), ToColor(quad.imageTint), rounding);
+                            // Transparent-fill HUD images (bars, ink icons) must stay
+                            // sharp — the themed 7px plate rounding turns thin fills
+                            // into pills. Plated image cards keep the rounded path.
+                            if (quad.fillColor.a <= 0.0f && !themed)
+                            {
+                                drawList->AddImage((ImTextureID)textureID, pos, max, ImVec2(0.0f, 0.0f),
+                                                   ImVec2(1.0f, 1.0f), ToColor(quad.imageTint));
+                            }
+                            else
+                            {
+                                drawList->AddImageRounded((ImTextureID)textureID, pos, max, ImVec2(0.0f, 0.0f),
+                                                          ImVec2(1.0f, 1.0f), ToColor(quad.imageTint), rounding);
+                            }
                         }
                     }
                     else if (quad.accentColor.a > 0.0f)
