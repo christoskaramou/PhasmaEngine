@@ -33,6 +33,22 @@ namespace pe
 {
     namespace
     {
+        std::string ReadEnvironmentVariable(const char *name)
+        {
+#if defined(PE_WIN32)
+            char *value = nullptr;
+            size_t size = 0;
+            if (::_dupenv_s(&value, &size, name) != 0 || !value)
+                return {};
+            std::string result(value);
+            std::free(value);
+            return result;
+#else
+            const char *value = std::getenv(name);
+            return value ? std::string(value) : std::string{};
+#endif
+        }
+
         class ScopedImGuiContext
         {
         public:
@@ -101,7 +117,27 @@ namespace pe
                             return io.Fonts->AddFontFromMemoryTTF(data, static_cast<int>(bytes.size()), fontSize,
                                                                   &fontConfig, ranges);
                         };
-                        ImFont *font = addFont("Fonts/RuntimeUi.ttf");
+                        std::string projectFont = "Fonts/RuntimeUi.ttf";
+                        const std::string variant = ReadEnvironmentVariable("PE_PROJECT_VARIANT");
+                        if (!variant.empty())
+                        {
+                            bool valid = true;
+                            for (const char c : variant)
+                            {
+                                const auto ch = static_cast<unsigned char>(c);
+                                if (!std::isalnum(ch) && ch != '_' && ch != '-')
+                                {
+                                    valid = false;
+                                    break;
+                                }
+                            }
+                            if (valid)
+                                projectFont = "Fonts/RuntimeUi." + variant + ".ttf";
+                        }
+
+                        ImFont *font = addFont(projectFont.c_str());
+                        if (!font && projectFont != "Fonts/RuntimeUi.ttf")
+                            font = addFont("Fonts/RuntimeUi.ttf");
                         if (!font)
                             font = addFont("Fonts/DejaVuSans.ttf");
                         if (!font)

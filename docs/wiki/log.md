@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-08-02
+
+- Added optional project-variant Runtime UI fonts. When `PE_PROJECT_VARIANT=<name>` is set, the runtime first tries `Fonts/RuntimeUi.<name>.ttf`, then falls back through the normal `Fonts/RuntimeUi.ttf`, DejaVu Sans, and Inter chain. Variant names are restricted to letters, digits, underscores, and hyphens.
+
 ## 2026-07-30
 
 - Added opt-in sprite-frame interpolation over the existing mesh/material path. Sprite metadata can set `"interpolate": true`; playback then sends current/next atlas rectangles plus fractional clip time through the sprite quad's existing vertex payload, and the depth, GBuffer, and object-ID shaders alpha-crossfade the two samples. The editor Properties and Sprite Editor panels expose the flag, scene/prefab serialization preserves it, and Lua can change or query it without introducing a separate sprite render pass.
