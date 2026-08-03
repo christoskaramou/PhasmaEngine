@@ -16,7 +16,7 @@ namespace pe
 {
     static bool IsRasterIndirectMesh(const Mesh &mesh)
     {
-        return mesh.renderType != RenderType::Lines;
+        return mesh.renderType != RenderType::Lines && mesh.renderType != RenderType::SpriteOutline;
     }
 
     bool Scene::HasSelectedRenderableMeshes() const
@@ -33,7 +33,8 @@ namespace pe
                     continue;
 
                 const Mesh &mesh = m_meshes[meshIdx];
-                if (mesh.indexCount != 0 && mesh.renderType != RenderType::Lines)
+                if (mesh.indexCount != 0 && mesh.renderType != RenderType::Lines &&
+                    mesh.renderType != RenderType::SpriteOutline)
                     return true;
             }
         }
@@ -1155,7 +1156,7 @@ namespace pe
                 if (mesh.indexCount == 0)
                     continue;
 
-                if (mesh.renderType == RenderType::Lines)
+                if (mesh.renderType == RenderType::Lines || mesh.renderType == RenderType::SpriteOutline)
                 {
                     m_hasLinesMeshes = true;
                     continue;
@@ -2317,7 +2318,7 @@ namespace pe
                     m_pendingTextureMeshUploads.end())
                     continue;
                 if (!IsValidMeshIndex(meshIndex) || m_meshes[meshIndex].indexCount == 0 ||
-                    m_meshes[meshIndex].renderType == RenderType::Lines)
+                    !IsRasterIndirectMesh(m_meshes[meshIndex]))
                     continue;
 
                 const uint32_t indirectSlot = GetMeshRefIndirectSlot(node, refSlot);

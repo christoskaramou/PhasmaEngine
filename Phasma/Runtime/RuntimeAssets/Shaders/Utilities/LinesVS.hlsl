@@ -5,18 +5,15 @@
 struct PushConstants_Lines
 {
     float4 color;
-    uint meshIndex;
+    uint meshDataOffset;
 };
 
 [[vk::push_constant]] PushConstants_Lines pc;
 
 [[vk::binding(0)]] ByteAddressBuffer data;
 
-static const uint MATRIX_SIZE = 64u;
-
-float4x4 LoadMatrix(uint matrixIndex)
+float4x4 LoadMatrix(uint offset)
 {
-    uint offset = matrixIndex * MATRIX_SIZE;
     float4x4 result;
     result[0] = asfloat(data.Load4(offset + 0 * 16));
     result[1] = asfloat(data.Load4(offset + 1 * 16));
@@ -26,7 +23,7 @@ float4x4 LoadMatrix(uint matrixIndex)
 }
 
 float4x4 GetViewProjection() { return LoadMatrix(0); }
-float4x4 GetMeshMatrix()     { return LoadMatrix(pc.meshIndex); }
+float4x4 GetMeshMatrix()     { return LoadMatrix(pc.meshDataOffset); }
 
 // VS_INPUT_Depth matches the positions stream layout (position+uv+joints+weights);
 // only position is used.

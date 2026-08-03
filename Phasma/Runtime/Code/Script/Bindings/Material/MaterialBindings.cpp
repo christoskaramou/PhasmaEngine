@@ -302,6 +302,8 @@ namespace pe
             out = RenderType::Transmission;
         else if (type == "lines")
             out = RenderType::Lines;
+        else if (type == "sprite_outline")
+            out = RenderType::SpriteOutline;
         else
             return false;
         return true;
@@ -499,6 +501,7 @@ namespace pe
                     case RenderType::AlphaBlend: return "alpha_blend";
                     case RenderType::Transmission: return "transmission";
                     case RenderType::Lines: return "lines";
+                    case RenderType::SpriteOutline: return "sprite_outline";
                     default: return "opaque";
                     }
                 };

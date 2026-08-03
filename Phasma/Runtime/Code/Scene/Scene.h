@@ -212,6 +212,8 @@ namespace pe
         // from a .sprite.json metadata path. Does not depend on Editor SpriteAuthoring.
         bool SetupSpriteFromMetadata(NodeId *node, const std::string &metadataPath, int meshSlot = 0,
                                      std::string *outError = nullptr);
+        bool EnsureSpriteOutlineMesh(NodeId *node, NodeSpriteComponent &sprite,
+                                     std::string *outError = nullptr);
         NodeId *CreateSpriteNode(const std::string &name, NodeId *parent, const std::string &metadataPath,
                                  float quadWidth = 1.0f, float quadHeight = 1.0f, std::string *outError = nullptr);
         bool SetSpriteFrame(NodeId *node, int frameIndex, int meshSlot = -1, std::string *outError = nullptr);
@@ -219,6 +221,9 @@ namespace pe
         bool PlaySpriteClip(NodeId *node, const std::string &clipName = {}, bool restart = true, int meshSlot = -1, std::string *outError = nullptr);
         void SetSpritePlaying(NodeId *node, bool playing);
         void SetSpriteInterpolation(NodeId *node, bool interpolate);
+        bool SetSpriteOutlineFrame(NodeId *node, int frameIndex, bool transientGpuUpdate,
+                                   std::string *outError = nullptr);
+        bool SetSpriteOutlineColor(NodeId *node, const vec4 &color);
         void StopSprite(NodeId *node);
         void UpdateSpriteAnimations(float dt);
         NodeSkinnedStrip2DComponent *GetSkinnedStrip2DState(NodeId *node);
@@ -962,9 +967,9 @@ namespace pe
         bool m_materialDirty = false;          // Pending material table update
         bool m_texturesDirty = false;          // Pending image view update
 
-        // Mesh indices whose quad UVs changed on the CPU stores and await a batched copy
-        // at the front of the next render command. A separate Submit+Wait here stalls every
-        // animated sprite frame-advance.
+        // Mesh indices whose sprite vertices changed on the CPU stores and await a batched
+        // copy at the front of the next render command. This covers quad UVs and optional
+        // authored silhouette vertices without a per-animation-frame Submit+Wait.
         std::vector<int> m_pendingUvUploads;
 
         // RT dirty flags (independent of raster geometry)

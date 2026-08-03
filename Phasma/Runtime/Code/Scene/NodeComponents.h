@@ -393,6 +393,12 @@ namespace pe
         bool loop = true;
     };
 
+    struct NodeSpriteOutlineVertex
+    {
+        vec2 position = vec2(0.0f);
+        float alpha = 0.0f;
+    };
+
     class NodeSpriteComponent : public IComponent
     {
     public:
@@ -408,11 +414,15 @@ namespace pe
         float quadHeight = 1.0f;
         vec4 uvRect = vec4(0.0f, 0.0f, 1.0f, 1.0f);
         vec4 tint = vec4(1.0f);
+        vec4 outlineColor = vec4(0.03f, 0.03f, 0.03f, 1.0f);
         std::vector<NodeSpriteFrame> frames;
+        std::vector<std::vector<NodeSpriteOutlineVertex>> outlineFrames;
         std::vector<NodeSpriteClip> clips;
         std::string activeClipName;
         int activeClipIndex = -1;
         int meshSlot = 0;
+        int outlineMeshIndex = -1;
+        uint32_t outlineVertexCount = 0;
         float playbackAccumulator = 0.0f;
         float playbackSpeed = 1.0f;
         bool playing = false;

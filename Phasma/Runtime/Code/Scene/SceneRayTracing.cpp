@@ -305,7 +305,8 @@ namespace pe
         for (int meshIndex = 0; meshIndex < static_cast<int>(m_meshes.size()); meshIndex++)
         {
             const Mesh &mesh = m_meshes[meshIndex];
-            if (!mesh.live || mesh.indexCount == 0 || mesh.renderType == RenderType::Lines)
+            if (!mesh.live || mesh.indexCount == 0 || mesh.renderType == RenderType::Lines ||
+                mesh.renderType == RenderType::SpriteOutline)
                 continue;
             if (hasSkeleton && mesh.skinned)
                 continue;
@@ -471,7 +472,8 @@ namespace pe
                 if (!IsValidMeshIndex(meshIdx))
                     continue;
                 if (m_meshes[meshIdx].indexCount == 0 ||
-                    m_meshes[meshIdx].renderType == RenderType::Lines)
+                    m_meshes[meshIdx].renderType == RenderType::Lines ||
+                    m_meshes[meshIdx].renderType == RenderType::SpriteOutline)
                 {
                     continue;
                 }

@@ -5,6 +5,7 @@
 #include "API/RHI.h"
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
+#include "Scene/PassInfoAsset.h"
 #include "Scene/Primitives.h"
 #include "rapidjson/document.h"
 #include "rapidjson/istreamwrapper.h"
@@ -138,6 +139,35 @@ namespace pe
             return nextFrame;
         }
 
+        vec3 SpriteOutlinePosition(const NodeSpriteOutlineVertex &vertex, const AABB &quadBounds)
+        {
+            const vec3 center = quadBounds.GetCenter();
+            const vec3 size = quadBounds.GetSize();
+            return vec3(center.x + vertex.position.x * size.x,
+                        center.y + vertex.position.y * size.y,
+                        center.z);
+        }
+
+        void FillOutlineAabbVertices(std::vector<AabbVertex> &vertices, size_t offset, const AABB &aabb)
+        {
+            const vec3 corners[8] = {
+                {aabb.min.x, aabb.min.y, aabb.min.z},
+                {aabb.max.x, aabb.min.y, aabb.min.z},
+                {aabb.max.x, aabb.max.y, aabb.min.z},
+                {aabb.min.x, aabb.max.y, aabb.min.z},
+                {aabb.min.x, aabb.min.y, aabb.max.z},
+                {aabb.max.x, aabb.min.y, aabb.max.z},
+                {aabb.max.x, aabb.max.y, aabb.max.z},
+                {aabb.min.x, aabb.max.y, aabb.max.z},
+            };
+            for (size_t i = 0; i < 8; ++i)
+            {
+                vertices[offset + i].position[0] = corners[i].x;
+                vertices[offset + i].position[1] = corners[i].y;
+                vertices[offset + i].position[2] = corners[i].z;
+            }
+        }
+
         bool ApplySpriteFrame(Scene &scene,
                               NodeId *node,
                               NodeSpriteComponent &sprite,
@@ -181,6 +211,8 @@ namespace pe
                 return false;
             }
             scene.SetMeshSpriteFrameBlendTransient(refs[slot], frame.uvRect, 0.0f);
+            if (!scene.SetSpriteOutlineFrame(node, frameIndex, transientGpuUpdate, outError))
+                return false;
 
             sprite.frameIndex = frameIndex;
             sprite.frameName = frame.name;
@@ -239,7 +271,9 @@ namespace pe
             int imageWidth = 0;
             int imageHeight = 0;
             bool interpolate = false;
+            vec4 outlineColor = vec4(0.03f, 0.03f, 0.03f, 1.0f);
             std::vector<NodeSpriteFrame> frames;
+            std::vector<std::vector<NodeSpriteOutlineVertex>> outlineFrames;
             std::vector<NodeSpriteClip> clips;
         };
 
@@ -253,6 +287,97 @@ namespace pe
         {
             static std::unordered_map<std::string, CachedSpriteMetadata> cache;
             return cache;
+        }
+
+        bool ParseSpriteOutlineFile(const std::filesystem::path &outlinePath,
+                                    const std::vector<NodeSpriteFrame> &spriteFrames,
+                                    std::vector<std::vector<NodeSpriteOutlineVertex>> &outFrames,
+                                    vec4 &outColor,
+                                    std::string *outError)
+        {
+            FileSystem in(PathUtf8(outlinePath), std::ios::in | std::ios::binary);
+            if (!in.IsOpen())
+            {
+                SetError(outError, "sprite outline metadata not found: " + PathUtf8(outlinePath));
+                return false;
+            }
+
+            const std::string text = in.ReadAll();
+            rapidjson::Document root;
+            root.Parse(text.c_str(), text.size());
+            if (root.HasParseError() || !root.IsObject() ||
+                !root.HasMember("frames") || !root["frames"].IsArray())
+            {
+                SetError(outError, "invalid sprite outline metadata: " + PathUtf8(outlinePath));
+                return false;
+            }
+
+            if (root.HasMember("color") && root["color"].IsArray() && root["color"].Size() >= 4)
+            {
+                const auto &color = root["color"];
+                outColor = vec4(std::clamp(ReadFloat(color[0], outColor.r), 0.0f, 1.0f),
+                                std::clamp(ReadFloat(color[1], outColor.g), 0.0f, 1.0f),
+                                std::clamp(ReadFloat(color[2], outColor.b), 0.0f, 1.0f),
+                                std::clamp(ReadFloat(color[3], outColor.a), 0.0f, 1.0f));
+            }
+
+            const auto &frames = root["frames"];
+            if (frames.Size() != spriteFrames.size())
+            {
+                SetError(outError, "sprite outline frame count does not match sprite metadata");
+                return false;
+            }
+
+            outFrames.clear();
+            outFrames.resize(spriteFrames.size());
+            size_t expectedVertexCount = 0;
+            for (rapidjson::SizeType i = 0; i < frames.Size(); ++i)
+            {
+                const auto &item = frames[i];
+                if (!item.IsObject() || !item.HasMember("vertices") || !item["vertices"].IsArray())
+                {
+                    SetError(outError, "sprite outline frame is missing vertices");
+                    return false;
+                }
+                if (item.HasMember("name") && item["name"].IsString() &&
+                    spriteFrames[i].name != item["name"].GetString())
+                {
+                    SetError(outError, "sprite outline frame order does not match sprite metadata");
+                    return false;
+                }
+
+                const auto &vertices = item["vertices"];
+                if (vertices.Size() < 6 || (vertices.Size() & 1u) != 0u)
+                {
+                    SetError(outError, "sprite outline frames require paired inner/outer vertices");
+                    return false;
+                }
+                if (expectedVertexCount == 0)
+                    expectedVertexCount = vertices.Size();
+                else if (expectedVertexCount != vertices.Size())
+                {
+                    SetError(outError, "sprite outline frames require a fixed vertex count");
+                    return false;
+                }
+
+                auto &dst = outFrames[i];
+                dst.reserve(vertices.Size());
+                for (const auto &vertex : vertices.GetArray())
+                {
+                    if (!vertex.IsArray() || vertex.Size() < 3 ||
+                        !vertex[0].IsNumber() || !vertex[1].IsNumber() || !vertex[2].IsNumber())
+                    {
+                        SetError(outError, "invalid sprite outline vertex");
+                        return false;
+                    }
+                    NodeSpriteOutlineVertex parsed;
+                    parsed.position.x = std::clamp(ReadFloat(vertex[0], 0.0f), -1.0f, 1.0f);
+                    parsed.position.y = std::clamp(ReadFloat(vertex[1], 0.0f), -1.0f, 1.0f);
+                    parsed.alpha = std::clamp(ReadFloat(vertex[2], 0.0f), 0.0f, 1.0f);
+                    dst.push_back(parsed);
+                }
+            }
+            return true;
         }
 
         bool ParseSpriteMetadataFile(const std::filesystem::path &metadataPath, CachedSpriteMetadata &out, std::string *outError)
@@ -317,6 +442,15 @@ namespace pe
                     frame.uvRect = FrameUvRect(frame, out.imageWidth, out.imageHeight);
                     out.frames.push_back(std::move(frame));
                 }
+            }
+
+            if (root.HasMember("outline") && root["outline"].IsString())
+            {
+                const std::filesystem::path outlinePath =
+                    ResolveMetadataRelativePath(metadataPath, root["outline"].GetString());
+                if (outlinePath.empty() ||
+                    !ParseSpriteOutlineFile(outlinePath, out.frames, out.outlineFrames, out.outlineColor, outError))
+                    return false;
             }
 
             if (root.HasMember("clips") && root["clips"].IsArray())
@@ -502,7 +636,9 @@ namespace pe
         sprite->imageWidth = cached.imageWidth;
         sprite->imageHeight = cached.imageHeight;
         sprite->interpolate = cached.interpolate;
+        sprite->outlineColor = cached.outlineColor;
         sprite->frames = cached.frames;
+        sprite->outlineFrames = cached.outlineFrames;
         sprite->clips = cached.clips;
         // Recompute UVs in case image size was filled later from the texture.
         for (NodeSpriteFrame &frame : sprite->frames)
@@ -569,6 +705,7 @@ namespace pe
         sprite.metadataPath = metadataPath;
         sprite.imagePath.clear();
         sprite.frames.clear();
+        sprite.outlineFrames.clear();
         sprite.clips.clear();
         sprite.frameIndex = -1;
         sprite.frameName.clear();
@@ -583,6 +720,9 @@ namespace pe
             return false;
 
         if (!ApplySpriteTextures(*this, node, sprite, meshSlot, outError))
+            return false;
+
+        if (!EnsureSpriteOutlineMesh(node, sprite, outError))
             return false;
 
         // Recompute UVs now that image size may have been filled from the loaded texture.
@@ -616,6 +756,211 @@ namespace pe
             if (clip.name == "idle")
                 return PlaySpriteClip(node, "idle", true, meshSlot, outError);
         }
+        return true;
+    }
+
+    bool Scene::EnsureSpriteOutlineMesh(NodeId *node, NodeSpriteComponent &sprite, std::string *outError)
+    {
+        if (!node || !IsNodeAlive(node))
+        {
+            SetError(outError, "node not found");
+            return false;
+        }
+
+        if (sprite.outlineFrames.empty())
+        {
+            if (IsValidMeshIndex(sprite.outlineMeshIndex))
+                RemoveMeshRef(node, sprite.outlineMeshIndex);
+            sprite.outlineVertexCount = 0;
+            return true;
+        }
+        if (sprite.outlineFrames.size() != sprite.frames.size() || sprite.outlineFrames[0].empty())
+        {
+            SetError(outError, "sprite outline frames do not match sprite frames");
+            return false;
+        }
+
+        const uint32_t vertexCount = static_cast<uint32_t>(sprite.outlineFrames[0].size());
+        const uint32_t pairCount = vertexCount / 2;
+        const auto &refs = GetMeshRefs(node);
+        if (sprite.meshSlot < 0 || sprite.meshSlot >= static_cast<int>(refs.size()) ||
+            !IsValidMeshIndex(refs[sprite.meshSlot]))
+        {
+            SetError(outError, "sprite outline requires a valid sprite quad");
+            return false;
+        }
+        const Mesh &quad = m_meshes[refs[sprite.meshSlot]];
+
+        if (IsValidMeshIndex(sprite.outlineMeshIndex))
+        {
+            Mesh &outline = m_meshes[sprite.outlineMeshIndex];
+            if (outline.vertexCount != vertexCount)
+            {
+                SetError(outError, "sprite outline vertex count changed; recreate the sprite node");
+                return false;
+            }
+            if (std::find(refs.begin(), refs.end(), sprite.outlineMeshIndex) == refs.end())
+                AddMeshRef(node, sprite.outlineMeshIndex);
+            sprite.outlineVertexCount = vertexCount;
+            return SetSpriteOutlineFrame(node, 0, true, outError);
+        }
+
+        const uint32_t vertexOffset = static_cast<uint32_t>(m_vertexStore.size());
+        const uint32_t positionOffset = static_cast<uint32_t>(m_positionUvStore.size());
+        const uint32_t indexOffset = static_cast<uint32_t>(m_indexStore.size());
+        const size_t aabbOffset = m_aabbVertexStore.size();
+        m_vertexStore.resize(m_vertexStore.size() + vertexCount);
+        m_positionUvStore.resize(m_positionUvStore.size() + vertexCount);
+        m_aabbVertexStore.resize(m_aabbVertexStore.size() + 8);
+        m_indexStore.reserve(m_indexStore.size() + pairCount * 6);
+
+        for (uint32_t i = 0; i < vertexCount; ++i)
+        {
+            const NodeSpriteOutlineVertex &source = sprite.outlineFrames[0][i];
+            const vec3 position = SpriteOutlinePosition(source, quad.boundingBox);
+            Vertex &vertex = m_vertexStore[vertexOffset + i];
+            PositionUvVertex &positionUv = m_positionUvStore[positionOffset + i];
+            FillVertexPosition(vertex, position.x, position.y, position.z);
+            FillVertexNormal(vertex, 0.0f, 0.0f, 1.0f);
+            FillVertexTangent(vertex, 1.0f, 0.0f, 0.0f, 1.0f);
+            FillVertexUV(vertex, 0.0f, 0.0f);
+            FillVertexColor(vertex, 1.0f, 1.0f, 1.0f, source.alpha);
+            FillVertexPosition(positionUv, position.x, position.y, position.z);
+            FillVertexUV(positionUv, source.alpha, 0.0f);
+        }
+
+        for (uint32_t i = 0; i < pairCount; ++i)
+        {
+            const uint32_t j = (i + 1) % pairCount;
+            const uint32_t inner0 = i * 2;
+            const uint32_t outer0 = inner0 + 1;
+            const uint32_t inner1 = j * 2;
+            const uint32_t outer1 = inner1 + 1;
+            const uint32_t triangles[6] = {
+                inner0,
+                outer0,
+                outer1,
+                inner0,
+                outer1,
+                inner1,
+            };
+            m_indexStore.insert(m_indexStore.end(), std::begin(triangles), std::end(triangles));
+        }
+
+        AABB outlineBounds;
+        outlineBounds.min = vec3(std::numeric_limits<float>::max());
+        outlineBounds.max = vec3(std::numeric_limits<float>::lowest());
+        for (const auto &frame : sprite.outlineFrames)
+        {
+            for (const NodeSpriteOutlineVertex &vertex : frame)
+            {
+                const vec3 position = SpriteOutlinePosition(vertex, quad.boundingBox);
+                outlineBounds.min = min(outlineBounds.min, position);
+                outlineBounds.max = max(outlineBounds.max, position);
+            }
+        }
+        FillOutlineAabbVertices(m_aabbVertexStore, aabbOffset, outlineBounds);
+
+        auto material = std::make_unique<Material>();
+        material->name = "Sprite Outline";
+        material->baseColorFactor = vec4(0.0f, 0.0f, 0.0f, sprite.outlineColor.a);
+        material->emissiveFactor = vec3(sprite.outlineColor);
+        material->metallic = 1.0f;
+        material->roughness = 1.0f;
+        material->renderType = RenderType::SpriteOutline;
+        material->doubleSided = true;
+        material->passInfoAsset =
+            ResourceManager::Get().Load<PassInfoAsset>(Path::RuntimeAssets + "PassInfo/standard_pbr.pass");
+        material->SyncParamsFromLegacy();
+
+        Mesh outline{};
+        outline.vertexOffset = vertexOffset;
+        outline.vertexCount = vertexCount;
+        outline.positionsOffset = positionOffset;
+        outline.indexOffset = indexOffset;
+        outline.indexCount = pairCount * 6;
+        outline.aabbVertexOffset = aabbOffset;
+        outline.boundingBox = outlineBounds;
+        outline.renderType = RenderType::SpriteOutline;
+        outline.material = material.get();
+        outline.lodEnabled = false;
+        outline.lodIndexOffset[0] = outline.indexOffset;
+        outline.lodIndexCount[0] = outline.indexCount;
+
+        m_ownedMaterials.push_back(std::move(material));
+        sprite.outlineMeshIndex = AddMesh(std::move(outline));
+        sprite.outlineVertexCount = vertexCount;
+        if (static_cast<int>(m_meshSourceInfos.size()) <= sprite.outlineMeshIndex)
+            m_meshSourceInfos.resize(sprite.outlineMeshIndex + 1);
+        m_meshSourceInfos[sprite.outlineMeshIndex] = {};
+        AddMeshRef(node, sprite.outlineMeshIndex);
+        m_hasLinesMeshes = true;
+        m_geometryDirty = true;
+        m_materialDirty = true;
+        return true;
+    }
+
+    bool Scene::SetSpriteOutlineFrame(NodeId *node, int frameIndex, bool transientGpuUpdate, std::string *outError)
+    {
+        NodeSpriteComponent *sprite = GetSpriteComponent(node);
+        if (!sprite || sprite->outlineFrames.empty())
+            return true;
+        if (frameIndex < 0 || frameIndex >= static_cast<int>(sprite->outlineFrames.size()) ||
+            !IsValidMeshIndex(sprite->outlineMeshIndex))
+        {
+            SetError(outError, "sprite outline frame is unavailable");
+            return false;
+        }
+
+        Mesh &outline = m_meshes[sprite->outlineMeshIndex];
+        const auto &vertices = sprite->outlineFrames[frameIndex];
+        const auto &refs = GetMeshRefs(node);
+        if (vertices.size() != outline.vertexCount || sprite->meshSlot < 0 ||
+            sprite->meshSlot >= static_cast<int>(refs.size()) || !IsValidMeshIndex(refs[sprite->meshSlot]))
+        {
+            SetError(outError, "sprite outline geometry does not match its sprite quad");
+            return false;
+        }
+
+        const AABB &quadBounds = m_meshes[refs[sprite->meshSlot]].boundingBox;
+        bool changed = false;
+        for (uint32_t i = 0; i < outline.vertexCount; ++i)
+        {
+            const vec3 position = SpriteOutlinePosition(vertices[i], quadBounds);
+            Vertex &vertex = m_vertexStore[outline.vertexOffset + i];
+            PositionUvVertex &positionUv = m_positionUvStore[outline.positionsOffset + i];
+            changed |= vertex.position[0] != position.x || vertex.position[1] != position.y ||
+                       vertex.position[2] != position.z || vertex.color[3] != vertices[i].alpha;
+            FillVertexPosition(vertex, position.x, position.y, position.z);
+            FillVertexColor(vertex, 1.0f, 1.0f, 1.0f, vertices[i].alpha);
+            FillVertexPosition(positionUv, position.x, position.y, position.z);
+            FillVertexUV(positionUv, vertices[i].alpha, 0.0f);
+        }
+        if (!changed)
+            return true;
+        if (transientGpuUpdate && m_buffer && !m_geometryDirty)
+            m_pendingUvUploads.push_back(sprite->outlineMeshIndex);
+        else
+            m_geometryDirty = true;
+        return true;
+    }
+
+    bool Scene::SetSpriteOutlineColor(NodeId *node, const vec4 &color)
+    {
+        NodeSpriteComponent *sprite = GetSpriteComponent(node);
+        if (!sprite || !IsValidMeshIndex(sprite->outlineMeshIndex))
+            return false;
+
+        const vec4 safeColor = clamp(color, vec4(0.0f), vec4(1.0f));
+        Mesh &mesh = m_meshes[sprite->outlineMeshIndex];
+        MaterialInstance *instance = mesh.materialInstance ? mesh.materialInstance : CreateMaterialInstance(mesh);
+        if (!instance)
+            return false;
+        const bool changed = instance->SetBaseColorFactor(vec4(0.0f, 0.0f, 0.0f, safeColor.a)) |
+                             instance->SetEmissiveFactor(vec3(safeColor));
+        if (changed)
+            SetMaterialDirty();
+        sprite->outlineColor = safeColor;
         return true;
     }
 

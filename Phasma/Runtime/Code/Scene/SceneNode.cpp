@@ -1242,8 +1242,7 @@ namespace pe
                 continue;
 
             const Mesh &mesh = m_meshes[meshIndex];
-            if (mesh.vertexCount != 4 ||
-                mesh.vertexOffset + mesh.vertexCount > m_vertexStore.size() ||
+            if (mesh.vertexCount == 0 || mesh.vertexOffset + mesh.vertexCount > m_vertexStore.size() ||
                 mesh.positionsOffset + mesh.vertexCount > m_positionUvStore.size())
                 continue;
 

@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-08-03
+
+- Added optional authored sprite silhouette sidecars for thin edge antialiasing. The original sprite remains an alpha-cut, depth-writing quad; setup creates one reusable actor-owned alpha-blend strip from fixed-count per-frame vertices, the direct pass explicitly enables blending and uses a minimal depth bias for the exterior fringe, frame changes share the existing batched sprite upload, and Lua can recolor only the strip for hover or selection. AgainstTheHero uses the path for every ink hero.
+
 ## 2026-08-02
 
 - Added optional project-variant Runtime UI fonts. When `PE_PROJECT_VARIANT=<name>` is set, the runtime first tries `Fonts/RuntimeUi.<name>.ttf`, then falls back through the normal `Fonts/RuntimeUi.ttf`, DejaVu Sans, and Inter chain. Variant names are restricted to letters, digits, underscores, and hyphens.

@@ -75,7 +75,7 @@ namespace pe
         struct PushConstants_AABB
         {
             vec2 projJitter;
-            uint32_t meshIndex;
+            uint32_t meshDataOffset;
             uint32_t color;
         } constants{};
         constants.projJitter = camera.GetProjJitter();
@@ -110,7 +110,7 @@ namespace pe
 
                 const Mesh &mesh = m_scene->GetMesh(meshIdx);
 
-                constants.meshIndex = GetUboDataOffset(rt.dataOffset);
+                constants.meshDataOffset = static_cast<uint32_t>(rt.dataOffset);
                 constants.color = mesh.aabbColor;
 
                 cmd->SetConstants(constants);
