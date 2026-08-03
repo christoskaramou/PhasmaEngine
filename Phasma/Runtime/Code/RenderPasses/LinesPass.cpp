@@ -5,6 +5,7 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "Base/Settings.h"
 #include "Render/SceneRendererHost.h"
 #include "Scene/Material.h"
 #include "Scene/Scene.h"
@@ -14,6 +15,9 @@ namespace pe
 {
     void LinesPass::Init()
     {
+        if (!m_spriteOutlinePassInfo)
+            m_spriteOutlinePassInfo = std::make_unique<PassInfo>();
+
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
 
         m_viewportRT = rs->GetRenderTarget("viewport");
@@ -45,6 +49,23 @@ namespace pe
         m_passInfo->depthTestEnable = true;
         m_passInfo->depthWriteEnable = false;
         m_passInfo->Update();
+
+        m_spriteOutlinePassInfo->name = "SpriteOutline_pipeline";
+        m_spriteOutlinePassInfo->pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Utilities/SpriteOutlineVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
+        m_spriteOutlinePassInfo->pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Utilities/LinesPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
+        m_spriteOutlinePassInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
+        m_spriteOutlinePassInfo->topology = PE_TOPOLOGY_TRIANGLE_LIST;
+        m_spriteOutlinePassInfo->cullMode = PE_CULL_MODE_NONE;
+        m_spriteOutlinePassInfo->blendEnable = true;
+        m_spriteOutlinePassInfo->colorBlendAttachments = {BlendState::Default};
+        m_spriteOutlinePassInfo->colorFormats = {m_viewportRT->GetFormat()};
+        m_spriteOutlinePassInfo->depthFormat = m_depthRT->GetFormat();
+        m_spriteOutlinePassInfo->depthTestEnable = true;
+        m_spriteOutlinePassInfo->depthWriteEnable = false;
+        m_spriteOutlinePassInfo->depthBiasEnable = true;
+        m_spriteOutlinePassInfo->depthBiasConstantFactor =
+            Settings::Get<SceneSettings>().reverse_depth ? 1.0f : -1.0f;
+        m_spriteOutlinePassInfo->Update();
     }
 
     void LinesPass::Update()
@@ -57,6 +78,11 @@ namespace pe
             Descriptor *setUniforms = sets[0];
             setUniforms->SetBuffer(0, scene.GetUniforms(frame));
             setUniforms->Update();
+
+            const auto &outlineSets = m_spriteOutlinePassInfo->GetDescriptors(frame);
+            Descriptor *outlineUniforms = outlineSets[0];
+            outlineUniforms->SetBuffer(0, scene.GetUniforms(frame));
+            outlineUniforms->Update();
         }
     }
 
@@ -71,7 +97,7 @@ namespace pe
         struct PushConstants_Lines
         {
             vec4 color;
-            uint32_t meshIndex;
+            uint32_t meshDataOffset;
         } constants{};
 
         cmd->BeginDebugRegion("Lines");
@@ -110,11 +136,43 @@ namespace pe
                 // Emissive is the line color when set (lit shading is meaningless for
                 // guide lines); base_color is the fallback.
                 constants.color = dot(emissive, emissive) > 0.f ? vec4(emissive, baseColor.a) : baseColor;
-                constants.meshIndex = GetUboDataOffset(rt.dataOffset);
+                constants.meshDataOffset = static_cast<uint32_t>(rt.dataOffset);
 
                 cmd->SetConstants(constants);
                 cmd->PushConstants();
                 cmd->DrawIndexed(mesh.indexCount, 1, mesh.indexOffset, mesh.vertexOffset, 0);
+            }
+        }
+
+        cmd->BindPipeline(*m_spriteOutlinePassInfo);
+        cmd->BindVertexBuffer(scene->GetBuffer(), scene->GetPositionsOffset());
+
+        for (uint32_t i = 0; i < scene->GetNodeCount(); i++)
+        {
+            NodeId *node = scene->GetNodeId(i);
+            const NodeRuntime &rt = scene->GetNodeRuntime(node);
+            if (rt.gpuPending)
+                continue;
+
+            for (int meshIdx : scene->GetMeshRefs(node))
+            {
+                if (meshIdx < 0)
+                    continue;
+
+                const Mesh &mesh = scene->GetMesh(meshIdx);
+                if (mesh.renderType != RenderType::SpriteOutline || mesh.indexCount == 0)
+                    continue;
+
+                const vec3 emissive = mesh.materialInstance ? mesh.materialInstance->GetEmissiveFactor()
+                                                            : mesh.material->emissiveFactor;
+                const vec4 baseColor = mesh.materialInstance ? mesh.materialInstance->GetBaseColorFactor()
+                                                             : mesh.material->baseColorFactor;
+                constants.color = vec4(emissive, baseColor.a);
+                constants.meshDataOffset = static_cast<uint32_t>(rt.dataOffset);
+
+                cmd->SetConstants(constants);
+                cmd->PushConstants();
+                cmd->DrawIndexed(mesh.indexCount, 1, mesh.indexOffset, mesh.positionsOffset, 0);
             }
         }
 

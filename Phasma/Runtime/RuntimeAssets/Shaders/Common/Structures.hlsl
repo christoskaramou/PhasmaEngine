@@ -30,7 +30,7 @@ struct PushConstants_Shadows
 struct PushConstants_AABB
 {
     float2 projJitter;
-    uint meshIndex;
+    uint meshDataOffset;
     uint color;
 };
 

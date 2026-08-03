@@ -1,8 +1,12 @@
 #include "../Common/Structures.hlsl"
-#include "../Common/Common.hlsl"
 
-static const int MAX_DATA_SIZE = 2048; // TODO: calculate on init
-[[vk::push_constant]] PushConstants_AABB pc;
+struct PushConstants_SpriteOutline
+{
+    float4 color;
+    uint meshDataOffset;
+};
+
+[[vk::push_constant]] PushConstants_SpriteOutline pc;
 
 [[vk::binding(0)]] ByteAddressBuffer data;
 
@@ -16,14 +20,11 @@ float4x4 LoadMatrix(uint offset)
     return result;
 }
 
-float4x4 GetViewProjection() { return LoadMatrix(0); }
-float4x4 GetMeshMatrix()     { return LoadMatrix(pc.meshDataOffset); }
-
-VS_OUTPUT_AABB mainVS(VS_INPUT_Position input)
+VS_OUTPUT_AABB mainVS(VS_INPUT_Depth input)
 {
     VS_OUTPUT_AABB output;
     output.position = ApplyViewportYConvention(
-        mul(float4(input.position, 1.0f), mul(GetMeshMatrix(), GetViewProjection())));
-    output.color    = UnpackColorRGBA(pc.color);
+        mul(float4(input.position, 1.0f), mul(LoadMatrix(pc.meshDataOffset), LoadMatrix(0))));
+    output.color = float4(pc.color.rgb, pc.color.a * input.uv.x);
     return output;
 }

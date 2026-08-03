@@ -160,6 +160,11 @@ namespace pe
                     return component && component->interpolate;
                 });
 
+                sprite.set_function("set_outline_color", [](SceneNodeHandle &h, const vec4 &color) -> bool {
+                    Scene *scene = GetScene();
+                    return scene && h.IsValid(*scene) && scene->SetSpriteOutlineColor(h.nodeId, color);
+                });
+
                 sprite.set_function("get_frame", [](SceneNodeHandle &h) -> int {
                     Scene *scene = GetScene();
                     const NodeSpriteComponent *component = GetSprite(scene, h);
