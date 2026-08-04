@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Probe PhasmaEditor's MCP HTTP endpoint without requiring ADK."""
+"""Probe PhasmaEditor's loopback MCP HTTP endpoint."""
 
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 DEFAULT_MCP_URL = "http://127.0.0.1:8765/mcp"
@@ -24,10 +26,36 @@ class McpProbeError(RuntimeError):
     """Raised when the probe cannot complete an MCP request."""
 
 
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def validate_mcp_url(url: str) -> str:
+    parsed = urllib.parse.urlsplit(url)
+    try:
+        host = parsed.hostname
+        loopback = host is not None and ipaddress.ip_address(host).is_loopback
+        parsed.port
+    except ValueError as exc:
+        raise ValueError(f"Invalid MCP URL: {url}") from exc
+    if (
+        parsed.scheme != "http"
+        or not loopback
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("MCP URL must be an HTTP loopback endpoint without credentials, query, or fragment")
+    return parsed.geturl()
+
+
 class McpClient:
     def __init__(self, url: str, timeout: float) -> None:
-        self.url = url
+        self.url = validate_mcp_url(url)
         self.timeout = timeout
+        self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirectHandler)
         self._next_id = 1
         self.protocol_version: str | None = None
         self.session_id: str | None = None
@@ -36,7 +64,7 @@ class McpClient:
         headers = {
             "Accept": "application/json, text/event-stream",
             "Content-Type": "application/json",
-            "User-Agent": "phasma-adk-mcp-probe/0.1",
+            "User-Agent": "phasma-mcp-probe/0.1",
         }
         if self.protocol_version:
             headers["MCP-Protocol-Version"] = self.protocol_version
@@ -124,7 +152,7 @@ class McpClient:
         )
 
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            with self._opener.open(request, timeout=self.timeout) as response:
                 response_body = response.read().decode("utf-8")
                 session_id = self._header(response, "Mcp-Session-Id")
                 if session_id:
@@ -168,7 +196,7 @@ class McpClient:
                 "protocolVersion": PROTOCOL_VERSION,
                 "capabilities": {},
                 "clientInfo": {
-                    "name": "phasma-adk-mcp-probe",
+                    "name": "phasma-mcp-probe",
                     "version": "0.1.0",
                 },
             },
@@ -268,7 +296,6 @@ def print_text_report(report: dict) -> None:
     visible_mutating = report["visible_mutating_tools"]
     if visible_mutating:
         print("Server also exposes mutating tools: " + ", ".join(visible_mutating))
-        print("ADK agent.py filters those out with tool_filter.")
 
     smoke = report.get("smoke") or {}
     for name, result in smoke.items():

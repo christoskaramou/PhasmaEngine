@@ -19,22 +19,15 @@ Usage:
                              [--out-dir DIR] [--build]
 """
 import argparse
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-# TODO: bump if the local Visual Studio install path changes.
-VCVARS = r"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
 
 
 def build_cook(build_dir: str, config: str) -> bool:
     target = ["cmake", "--build", build_dir, "--config", config, "--target", "PhasmaCook"]
-    if os.name == "nt" and os.path.isfile(VCVARS):
-        # Wrap in the VS dev environment so cl/link/ninja are on PATH.
-        cmd = f'call "{VCVARS}" >nul 2>&1 && ' + " ".join(target)
-        return subprocess.run(cmd, cwd=str(REPO_ROOT), shell=True).returncode == 0
     return subprocess.run(target, cwd=str(REPO_ROOT)).returncode == 0
 
 

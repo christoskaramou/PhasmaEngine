@@ -23,6 +23,7 @@
 !/README.md
 !/.gitignore
 !/.gitmodules
+!/.aikido
 
 !/Phasma/Core/Code/
 !/Phasma/Core/DLLs/
@@ -354,7 +355,7 @@ Projects/*/Assets/Agent/
 !/docs/wiki/
 !/docs/wiki/**
 
-# Tracked validation and ADK tools
+# Tracked validation and MCP tools
 !/tools/
 /tools/*
 !/tools/precommit_validate.py

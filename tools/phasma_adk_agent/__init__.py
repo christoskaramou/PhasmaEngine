@@ -1,2 +1,1 @@
-"""ADK sidecar package for PhasmaEditor."""
-
+"""Standard-library MCP inspection tools for PhasmaEditor."""

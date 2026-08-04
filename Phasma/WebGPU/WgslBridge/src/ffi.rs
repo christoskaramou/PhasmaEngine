@@ -313,7 +313,7 @@ impl NagaCompileResult {
     }
 }
 
-fn source_from_raw<'a>(
+unsafe fn source_from_raw<'a>(
     source: *const c_char,
     source_len: usize,
 ) -> Result<&'a str, NagaCompileResult> {
@@ -341,7 +341,9 @@ pub extern "C" fn naga_install_panic_suppression() {
 }
 
 #[no_mangle]
-pub extern "C" fn naga_compile_wgsl(
+/// # Safety
+/// `source` must reference `source_len` readable bytes when non-null.
+pub unsafe extern "C" fn naga_compile_wgsl(
     source: *const c_char,
     source_len: usize,
 ) -> *mut NagaCompileResult {
@@ -358,7 +360,9 @@ pub extern "C" fn naga_compile_wgsl(
 }
 
 #[no_mangle]
-pub extern "C" fn naga_result_free(result: *mut NagaCompileResult) {
+/// # Safety
+/// `result` must be null or an allocation returned by `naga_compile_wgsl` that has not been freed.
+pub unsafe extern "C" fn naga_result_free(result: *mut NagaCompileResult) {
     if !result.is_null() {
         unsafe {
             drop(Box::from_raw(result));
@@ -367,7 +371,9 @@ pub extern "C" fn naga_result_free(result: *mut NagaCompileResult) {
 }
 
 #[no_mangle]
-pub extern "C" fn naga_result_spirv(
+/// # Safety
+/// `result` and `out_word_count`, when non-null, must point to valid objects for the duration of the call.
+pub unsafe extern "C" fn naga_result_spirv(
     result: *const NagaCompileResult,
     out_word_count: *mut usize,
 ) -> *const u32 {
@@ -392,12 +398,16 @@ pub extern "C" fn naga_result_spirv(
 }
 
 #[no_mangle]
-pub extern "C" fn naga_result_entry_point_count(result: *const NagaCompileResult) -> usize {
+/// # Safety
+/// `result` must be null or point to a live result returned by `naga_compile_wgsl`.
+pub unsafe extern "C" fn naga_result_entry_point_count(result: *const NagaCompileResult) -> usize {
     unsafe { result.as_ref() }.map_or(0, |r| r.entry_points.len())
 }
 
 #[no_mangle]
-pub extern "C" fn naga_result_entry_point(
+/// # Safety
+/// `result` must be null or live, and `out` must be null or writable for one view.
+pub unsafe extern "C" fn naga_result_entry_point(
     result: *const NagaCompileResult,
     i: usize,
     out: *mut NagaEntryPointView,
@@ -420,12 +430,18 @@ pub extern "C" fn naga_result_entry_point(
 }
 
 #[no_mangle]
-pub extern "C" fn naga_result_comparison_sampler_count(result: *const NagaCompileResult) -> usize {
+/// # Safety
+/// `result` must be null or point to a live result returned by `naga_compile_wgsl`.
+pub unsafe extern "C" fn naga_result_comparison_sampler_count(
+    result: *const NagaCompileResult,
+) -> usize {
     unsafe { result.as_ref() }.map_or(0, |r| r.comparison_sampler_views.len())
 }
 
 #[no_mangle]
-pub extern "C" fn naga_result_comparison_sampler(
+/// # Safety
+/// `result` must be null or live, and `out` must be null or writable for one view.
+pub unsafe extern "C" fn naga_result_comparison_sampler(
     result: *const NagaCompileResult,
     i: usize,
     out: *mut NagaBindingView,
@@ -450,12 +466,16 @@ pub extern "C" fn naga_result_comparison_sampler(
 }
 
 #[no_mangle]
-pub extern "C" fn naga_result_override_count(result: *const NagaCompileResult) -> usize {
+/// # Safety
+/// `result` must be null or point to a live result returned by `naga_compile_wgsl`.
+pub unsafe extern "C" fn naga_result_override_count(result: *const NagaCompileResult) -> usize {
     unsafe { result.as_ref() }.map_or(0, |r| r.overrides.len())
 }
 
 #[no_mangle]
-pub extern "C" fn naga_result_override(
+/// # Safety
+/// `result` must be null or live, and `out` must be null or writable for one view.
+pub unsafe extern "C" fn naga_result_override(
     result: *const NagaCompileResult,
     i: usize,
     out: *mut NagaOverrideView,
@@ -481,12 +501,16 @@ pub extern "C" fn naga_result_override(
 }
 
 #[no_mangle]
-pub extern "C" fn naga_result_message_count(result: *const NagaCompileResult) -> usize {
+/// # Safety
+/// `result` must be null or point to a live result returned by `naga_compile_wgsl`.
+pub unsafe extern "C" fn naga_result_message_count(result: *const NagaCompileResult) -> usize {
     unsafe { result.as_ref() }.map_or(0, |r| r.messages.len())
 }
 
 #[no_mangle]
-pub extern "C" fn naga_result_message(
+/// # Safety
+/// `result` must be null or live, and `out` must be null or writable for one view.
+pub unsafe extern "C" fn naga_result_message(
     result: *const NagaCompileResult,
     i: usize,
     out: *mut NagaMessageView,
@@ -511,7 +535,9 @@ pub extern "C" fn naga_result_message(
 }
 
 #[no_mangle]
-pub extern "C" fn naga_bake_with_constants(
+/// # Safety
+/// Pointer/count pairs must reference readable data, C strings must be terminated, and outputs must be writable.
+pub unsafe extern "C" fn naga_bake_with_constants(
     source: *const c_char,
     source_len: usize,
     kvs: *const NagaConstantKv,
@@ -564,7 +590,9 @@ pub extern "C" fn naga_bake_with_constants(
 }
 
 #[no_mangle]
-pub extern "C" fn naga_bake_free(spirv: *const u32) {
+/// # Safety
+/// `spirv` must be null or an allocation returned by `naga_bake_with_constants` that has not been freed.
+pub unsafe extern "C" fn naga_bake_free(spirv: *const u32) {
     if !spirv.is_null() {
         unsafe {
             free(spirv.cast_mut().cast::<c_void>());
@@ -573,7 +601,9 @@ pub extern "C" fn naga_bake_free(spirv: *const u32) {
 }
 
 #[no_mangle]
-pub extern "C" fn naga_spirv_to_hlsl(
+/// # Safety
+/// Pointer/count pairs must reference readable data, C strings must be terminated, and `out_len` must be writable.
+pub unsafe extern "C" fn naga_spirv_to_hlsl(
     words: *const u32,
     word_count: usize,
     entry_point: *const c_char,
@@ -626,7 +656,9 @@ pub extern "C" fn naga_spirv_to_hlsl_error() -> *const c_char {
 }
 
 #[no_mangle]
-pub extern "C" fn naga_string_free(text: *const c_char) {
+/// # Safety
+/// `text` must be null or an allocation returned by this bridge that has not been freed.
+pub unsafe extern "C" fn naga_string_free(text: *const c_char) {
     if !text.is_null() {
         unsafe {
             free(text.cast_mut().cast::<c_void>());

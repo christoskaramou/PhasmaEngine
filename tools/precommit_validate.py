@@ -8,7 +8,6 @@ editor MCP tools instead of inventing a second build/test system.
 from __future__ import annotations
 
 import argparse
-import ast
 import hashlib
 import json
 import os
@@ -26,7 +25,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS = ROOT / "tools"
-SIDECAR_DIR = TOOLS / "phasma_adk_agent"
+MCP_CLIENT_DIR = TOOLS / "phasma_adk_agent"
 DEFAULT_BUILD_DIRS = (ROOT / "build-ninja-full", ROOT / "build")
 DEFAULT_CONFIG = "Release"
 DEFAULT_SCENE_ASSET_PATH = "Assets/Scenes/sponza.pescene"
@@ -39,9 +38,6 @@ INSTRUCTION_SYNC_FILES = (
     ROOT / "GEMINI.md",
     ROOT / ".github" / "copilot-instructions.md",
 )
-ADK_READ_ONLY_TOOLS = {"query_scene", "take_screenshot", "get_console_log"}
-MUTATING_TOOLS = {"write_project_file", "patch_project_file", "execute_lua", "inject_mouse_input"}
-MODEL_API_KEY_ENV_VARS = ("OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY")
 
 # Committed, per-machine record of the last measured average FPS (keyed by scene@api). Each commit
 # profile run compares the current average against this and fails on a >5% AND >1 fps drop (the
@@ -255,14 +251,13 @@ def git_status_step(v: Validator) -> None:
 def hygiene_steps(v: Validator) -> None:
     v.run_cmd("git diff whitespace", ["git", "diff", "--check"], log_name="git_diff_check")
     instruction_sync_step(v)
-    adk_read_only_guard_step(v)
+    repository_path_boundary_step(v)
     clang_format_dry_run_step(v)
 
     files = [
         TOOLS / "editor_stress.py",
         TOOLS / "precommit_validate.py",
-        SIDECAR_DIR / "agent.py",
-        SIDECAR_DIR / "mcp_probe.py",
+        MCP_CLIENT_DIR / "mcp_probe.py",
     ]
     code = "\n".join(
         [
@@ -308,48 +303,6 @@ def instruction_sync_step(v: Validator) -> None:
     v.add("instruction sync", "PASS", f"{len(INSTRUCTION_SYNC_FILES)} files match; sha256={digest}", time.monotonic() - start)
 
 
-def adk_read_only_guard_step(v: Validator) -> None:
-    start = time.monotonic()
-    agent_path = SIDECAR_DIR / "agent.py"
-    if not agent_path.exists():
-        v.add("adk read-only guard", "FAIL", f"Missing {rel(agent_path)}", time.monotonic() - start)
-        raise RuntimeError("adk read-only guard")
-
-    tree = ast.parse(agent_path.read_text(encoding="utf-8"), filename=str(agent_path))
-    tool_names: set[str] | None = None
-    for node in tree.body:
-        if not isinstance(node, ast.Assign):
-            continue
-        if not any(
-            isinstance(target, ast.Name) and target.id == "READ_ONLY_MCP_TOOLS"
-            for target in node.targets
-        ):
-            continue
-        value = ast.literal_eval(node.value)
-        tool_names = set(value)
-        break
-
-    if tool_names is None:
-        v.add("adk read-only guard", "FAIL", "READ_ONLY_MCP_TOOLS not found", time.monotonic() - start)
-        raise RuntimeError("adk read-only guard")
-
-    extra = sorted(tool_names - ADK_READ_ONLY_TOOLS)
-    missing = sorted(ADK_READ_ONLY_TOOLS - tool_names)
-    mutating = sorted(tool_names & MUTATING_TOOLS)
-    if extra or missing or mutating:
-        detail = []
-        if missing:
-            detail.append("missing: " + ", ".join(missing))
-        if extra:
-            detail.append("unexpected: " + ", ".join(extra))
-        if mutating:
-            detail.append("mutating tools exposed: " + ", ".join(mutating))
-        v.add("adk read-only guard", "FAIL", "\n".join(detail), time.monotonic() - start)
-        raise RuntimeError("adk read-only guard")
-
-    v.add("adk read-only guard", "PASS", ", ".join(sorted(tool_names)), time.monotonic() - start)
-
-
 def changed_cpp_headers() -> list[Path]:
     completed = subprocess.run(
         ["git", "status", "--short", "--untracked-files=all"],
@@ -388,49 +341,6 @@ def find_clang_format_binary() -> str | None:
         if candidate.exists():
             return str(candidate)
     return None
-
-
-def find_adk_binary() -> str | None:
-    for name in ("adk", "adk.exe"):
-        found = shutil.which(name)
-        if found:
-            return found
-
-    for candidate in (
-        TOOLS / ".venv" / "Scripts" / "adk.exe",
-        TOOLS / ".venv" / "bin" / "adk",
-        SIDECAR_DIR / ".venv" / "Scripts" / "adk.exe",
-        SIDECAR_DIR / ".venv" / "bin" / "adk",
-    ):
-        if candidate.exists():
-            return str(candidate)
-    return None
-
-
-def read_dotenv_file(path: Path, env: dict[str, str]) -> None:
-    if not path.exists():
-        return
-    for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        if not key or key in env:
-            continue
-        value = value.strip().strip("'\"")
-        env[key] = value
-
-
-def adk_subprocess_env() -> dict[str, str]:
-    env = os.environ.copy()
-    for path in (ROOT / ".env", TOOLS / ".env", SIDECAR_DIR / ".env"):
-        read_dotenv_file(path, env)
-    return env
-
-
-def has_model_api_key(env: dict[str, str]) -> bool:
-    return any(env.get(name) for name in MODEL_API_KEY_ENV_VARS)
 
 
 def clang_format_dry_run_step(v: Validator) -> None:
@@ -649,11 +559,13 @@ def launch_editor_for_mcp(v: Validator, build_dir: Path) -> None:
 
     stdout_path = v.report_dir / "editor_mcp_stdout.log"
     start = time.monotonic()
+    editor_env = os.environ.copy()
+    editor_env["PE_SCRIPT_PRECOMMIT_OPTION"] = "ok"
     with stdout_path.open("w", encoding="utf-8", errors="replace") as stdout:
         process = subprocess.Popen(
             [str(exe), "--api", v.args.editor_api, "--display", str(v.args.display)],
             cwd=str(bin_dir),
-            env=os.environ.copy(),
+            env=editor_env,
             stdout=stdout,
             stderr=subprocess.STDOUT,
             text=True,
@@ -717,7 +629,7 @@ def mcp_probe_step(v: Validator) -> None:
         f"tools={report.get('tool_count')}",
     ]
     if report.get("visible_mutating_tools"):
-        details.append("mutating tools visible on server; ADK sidecar still filters them")
+        details.append("mutating tools visible on server")
     missing = report.get("missing_phase1_tools") or []
     schema_missing = []
     smoke = report.get("smoke") or {}
@@ -765,7 +677,19 @@ def mcp_internal_smoke_step(v: Validator) -> None:
         v.add("mcp internal smoke", "SKIP", "MCP client unavailable")
         return
     start = time.monotonic()
-    code = 'pe_log("[precommit:mcp] execute_lua round-trip ok")\nreturn "PRECOMMIT_LUA_OK"'
+    code = """
+if os ~= nil or io ~= nil then error("Lua os/io libraries are exposed") end
+if type(script) ~= "table" or type(script.launch_option) ~= "function"
+    or type(script.random_seed) ~= "function" or type(script.platform) ~= "string" then
+    error("restricted script runtime API is missing")
+end
+if script.launch_option("../PATH") ~= nil then error("invalid launch option name accepted") end
+if script.launch_option("PATH") ~= nil then error("unprefixed process environment is exposed") end
+if type(script.random_seed()) ~= "number" then error("script random seed is not numeric") end
+""".strip()
+    if not v.editor_mcp_reused:
+        code += '\nif script.launch_option("PRECOMMIT_OPTION") ~= "ok" then error("launch option mapping failed") end'
+    code += '\npe_log("[precommit:mcp] execute_lua round-trip ok")\nreturn "PRECOMMIT_LUA_OK"'
     try:
         result = call_tool_with_timeout(v, "execute_lua", {"code": code}, v.args.mcp_tool_timeout)
     except Exception as exc:
@@ -946,63 +870,6 @@ def script_tests_step(v: Validator) -> None:
         v.add("script tests", "WARN", "Script test summary not found in recent console log", time.monotonic() - start)
         return
     v.add("script tests", "PASS", "Script test summary reports zero failures", time.monotonic() - start)
-
-
-def adk_smoke_step(v: Validator) -> None:
-    adk = find_adk_binary()
-    if not adk:
-        status = "FAIL" if v.args.require_adk else "SKIP"
-        v.add("adk smoke", status, "adk not found on PATH or in tools/.venv")
-        if v.args.require_adk:
-            raise RuntimeError("adk smoke")
-        return
-    env = adk_subprocess_env()
-    if not has_model_api_key(env):
-        status = "FAIL" if v.args.require_adk else "SKIP"
-        v.add("adk smoke", status, "No model API key env var found in process env or local .env files")
-        if v.args.require_adk:
-            raise RuntimeError("adk smoke")
-        return
-
-    prompt = (
-        "Use query_scene and get_console_log. If both tools return concrete data, "
-        "reply with a line starting ADK_MCP_OK and include node/camera/light counts. "
-        "If either tool is unavailable or empty, reply ADK_MCP_FAIL with the reason.\n"
-        "exit\n"
-    )
-    start = time.monotonic()
-    try:
-        completed = subprocess.run(
-            [adk, "run", "phasma_adk_agent"],
-            cwd=str(TOOLS),
-            env=env,
-            input=prompt,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            timeout=v.args.adk_timeout,
-        )
-    except subprocess.TimeoutExpired as exc:
-        output = exc.stdout or ""
-        if isinstance(output, bytes):
-            output = output.decode("utf-8", errors="replace")
-        v._write_log("adk_smoke", output)
-        v.add("adk smoke", "FAIL", f"Timed out after {v.args.adk_timeout}s", time.monotonic() - start)
-        if v.args.require_adk:
-            raise RuntimeError("adk smoke") from exc
-        return
-
-    v._write_log("adk_smoke", completed.stdout)
-    if completed.returncode == 0 and "ADK_MCP_OK" in completed.stdout:
-        v.add("adk smoke", "PASS", "ADK_MCP_OK observed", time.monotonic() - start)
-        return
-
-    status = "FAIL" if v.args.require_adk else "WARN"
-    v.add("adk smoke", status, tail(completed.stdout, 60), time.monotonic() - start)
-    if status == "FAIL":
-        raise RuntimeError("adk smoke")
 
 
 def ensure_scene_config(bin_dir: Path, scene: str) -> None:
@@ -1221,8 +1088,9 @@ def display_marker_present(log_text: str, display: int) -> bool:
 def copy_tool_path(path_text: str, destination_dir: Path) -> Path | None:
     if not path_text:
         return None
-    path = local_path_from_tool(path_text)
-    if not path.exists():
+    try:
+        path = resolve_repo_path(local_path_from_tool(path_text))
+    except (OSError, ValueError):
         return None
     destination_dir.mkdir(parents=True, exist_ok=True)
     dest = destination_dir / path.name
@@ -1240,6 +1108,27 @@ def local_path_from_tool(path_text: str) -> Path:
         rest = match.group(2).replace("\\", "/")
         return Path("/mnt") / drive / rest
     return path
+
+
+def resolve_repo_path(path: Path) -> Path:
+    root = ROOT.resolve()
+    candidate = Path(os.path.abspath(path if path.is_absolute() else root / path))
+    candidate.relative_to(root)
+    resolved = candidate.resolve(strict=True)
+    resolved.relative_to(root)
+    return resolved
+
+
+def repository_path_boundary_step(v: Validator) -> None:
+    start = time.monotonic()
+    resolve_repo_path(Path(__file__))
+    try:
+        resolve_repo_path(ROOT.parent)
+    except (OSError, ValueError):
+        v.add("repository path boundary", "PASS", "outside paths rejected", time.monotonic() - start)
+        return
+    v.add("repository path boundary", "FAIL", "outside path accepted", time.monotonic() - start)
+    raise RuntimeError("repository path boundary")
 
 
 def collect_screenshot(v: Validator) -> Path | None:
@@ -1407,10 +1296,16 @@ def compare_screenshot(v: Validator, current: Path | None) -> None:
         v.add("visual parity", "SKIP", "Install pillow for image RMS comparison: pip install pillow")
         return
 
-    baseline = latest_png(v.args.visual_baseline)
+    try:
+        baseline_root = resolve_repo_path(v.args.visual_baseline)
+    except (OSError, ValueError):
+        v.add("visual parity", "FAIL", "Visual baseline must exist inside the repository")
+        raise RuntimeError("visual parity")
+    baseline = latest_png(baseline_root)
     if not baseline:
         v.add("visual parity", "FAIL", f"No baseline PNG found in {v.args.visual_baseline}")
         raise RuntimeError("visual parity")
+    baseline = resolve_repo_path(baseline)
 
     with Image.open(baseline).convert("RGB") as base, Image.open(current).convert("RGB") as cur:
         if base.size != cur.size:
@@ -1463,7 +1358,8 @@ def collect_perf_snapshots(v: Validator) -> Path | None:
 
 
 def prepare_perf_scene(v: Validator) -> None:
-    assert v.mcp_client is not None
+    if v.mcp_client is None:
+        raise RuntimeError("MCP client unavailable for performance setup")
     lua_scene = scene_lua_path(v.args.scene)
     code = f"""
 local requested_scene = {json.dumps(lua_scene)}
@@ -1511,7 +1407,11 @@ def compare_perf(v: Validator, current_dir: Path | None) -> None:
     if not comparer.exists():
         v.add("performance compare", "FAIL", f"Missing required tool: {rel(comparer)}")
         raise RuntimeError("performance compare")
-    baseline = v.args.perf_baseline
+    try:
+        baseline = resolve_repo_path(v.args.perf_baseline)
+    except (OSError, ValueError):
+        v.add("performance compare", "FAIL", "Performance baseline must exist inside the repository")
+        raise RuntimeError("performance compare")
     v.run_cmd(
         "performance compare",
         [python_executable(), str(comparer), str(baseline), str(current_dir)],
@@ -1660,12 +1560,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     launch_group = parser.add_mutually_exclusive_group()
     launch_group.add_argument("--launch-editor", dest="launch_editor", action="store_true", default=True)
     launch_group.add_argument("--no-launch-editor", dest="launch_editor", action="store_false")
-    adk_group = parser.add_mutually_exclusive_group()
-    adk_group.add_argument("--adk-smoke", dest="adk_smoke", action="store_true", help="Run one ADK CLI smoke prompt")
-    adk_group.add_argument("--no-adk-smoke", dest="adk_smoke", action="store_false")
-    parser.set_defaults(adk_smoke=None)
-    parser.add_argument("--require-adk", action="store_true")
-    parser.add_argument("--adk-timeout", type=int, default=180)
     mcp_internal_group = parser.add_mutually_exclusive_group()
     mcp_internal_group.add_argument("--mcp-internal-smoke", dest="mcp_internal_smoke", action="store_true")
     mcp_internal_group.add_argument("--no-mcp-internal-smoke", dest="mcp_internal_smoke", action="store_false")
@@ -1738,8 +1632,6 @@ def apply_profile_defaults(args: argparse.Namespace) -> None:
             args.launcher_smoke = False
         if args.player_smoke is None:
             args.player_smoke = False
-        if args.adk_smoke is None:
-            args.adk_smoke = True
         if args.mcp_internal_smoke is None:
             args.mcp_internal_smoke = False
         if args.console_scan is None:
@@ -1757,9 +1649,6 @@ def apply_profile_defaults(args: argparse.Namespace) -> None:
     elif args.profile == "full":
         args.validation = True
         args.screenshot = True
-        if args.adk_smoke is None:
-            args.adk_smoke = True
-        args.require_adk = True
         if args.launcher_smoke is None:
             args.launcher_smoke = True
         if args.player_smoke is None:
@@ -1784,8 +1673,6 @@ def apply_profile_defaults(args: argparse.Namespace) -> None:
             args.launcher_smoke = True
         if args.player_smoke is None:
             args.player_smoke = True
-        if args.adk_smoke is None:
-            args.adk_smoke = True
         if args.mcp_internal_smoke is None:
             args.mcp_internal_smoke = True
         if args.console_scan is None:
@@ -1804,8 +1691,6 @@ def apply_profile_defaults(args: argparse.Namespace) -> None:
         args.launcher_smoke = False
     if args.player_smoke is None:
         args.player_smoke = False
-    if args.adk_smoke is None:
-        args.adk_smoke = False
     if args.mcp_internal_smoke is None:
         args.mcp_internal_smoke = False
     if args.console_scan is None:
@@ -1841,9 +1726,6 @@ def main(argv: list[str] | None = None) -> int:
         mcp_probe_step(validator)
         mcp_internal_smoke_step(validator)
         console_log_scan_step(validator, "startup")
-        if args.adk_smoke:
-            adk_smoke_step(validator)
-            console_log_scan_step(validator, "adk")
         current_screenshot = collect_screenshot(validator) if args.screenshot or args.visual_baseline else None
         screenshot_sanity_step(validator, current_screenshot)
         console_log_scan_step(validator, "screenshot")

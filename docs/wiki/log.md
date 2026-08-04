@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-08-05
+
+- Hardened the security boundary exposed by repository tooling and game scripts: Lua exposes no `os` or `io` library and receives only namespaced launch options, a platform identifier, and a non-wall-clock run seed through `script`; editor path opening and model-tool builds no longer construct shell commands; the MCP probe accepts only loopback HTTP endpoints; validation copies MCP artifacts only from inside the repository; Android rejects cleartext traffic and trusts system certificate authorities explicitly; Rust FFI pointer contracts are marked unsafe; and optimization-dependent Python assertions were replaced with runtime validation. Removed the optional Google ADK agent and dependency while retaining the standard-library MCP probe, and added narrow Aikido exclusions for vendored LuaJIT plus unused zlib headers.
+
 ## 2026-08-03
 
 - Added optional authored sprite silhouette sidecars for thin edge antialiasing. The original sprite remains an alpha-cut, depth-writing quad; setup creates one reusable actor-owned alpha-blend strip from fixed-count per-frame vertices, the direct pass explicitly enables blending and uses a minimal depth bias for the exterior fringe, frame changes share the existing batched sprite upload, and Lua can recolor only the strip for hover or selection. AgainstTheHero uses the path for every ink hero.

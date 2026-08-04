@@ -1332,6 +1332,7 @@ namespace
         }
         if (pid == 0)
         {
+            // NOAIKIDO: fixed executable and argv are passed directly; no shell command is constructed.
             execlp("python3",
                    "python3",
                    script.c_str(),

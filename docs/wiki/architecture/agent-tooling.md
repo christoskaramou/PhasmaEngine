@@ -32,21 +32,20 @@ remains the source of truth.
   `TRANSFER_SRC`, because staged readback must copy from a valid transfer
   source. `import_model` reads source models from `Assets/` and writes `.pemesh`
   outputs under `Assets/`.
-- `tools/phasma_adk_agent/` is the external ADK sidecar scaffold. Phase 1 uses
-  ADK's MCP toolset over Streamable HTTP and filters its ADK-visible MCP toolset
-  down to `query_scene`, `take_screenshot`, and `get_console_log`.
+- `tools/phasma_adk_agent/mcp_probe.py` is the standard-library loopback MCP
+  probe used by validation and stress tools. The historical package path is
+  retained for existing imports; it no longer contains or depends on Google ADK.
 
 As of 2026-05-19 on `master`, the repository does not contain a tracked
 `PhasmaAgent/` directory or CMake target. If an embedded PhasmaAgent lane is
 reintroduced, keep in-editor chat, provider routing, tool loops, and retrieval
-there. The ADK sidecar should remain the external orchestration lane rather than
-reimplementing embedded agent behavior.
+there rather than adding another external agent framework to the repository.
 
-## ADK And A2A Direction
+## MCP Probe And A2A Direction
 
-The ADK sidecar should connect directly to the editor's Streamable HTTP MCP
-endpoint. The `npx mcp-remote` bridge is for stdio-only clients, not for this
-sidecar. The Phase 1 probe follows the HTTP lifecycle enough for smoke testing:
+The probe connects directly to the editor's Streamable HTTP MCP endpoint and
+accepts only loopback HTTP URLs. The `npx mcp-remote` bridge is for stdio-only
+clients, not this probe. It follows the HTTP lifecycle needed for smoke testing:
 `initialize`, `notifications/initialized`, `tools/list`, then optional read-only
 `tools/call`, while preserving any `Mcp-Session-Id` returned by the server.
 
@@ -55,10 +54,9 @@ visual state, summarize logs, run an approved smoke workflow. Do not re-export
 low-level MCP tools such as `write_project_file`, `patch_project_file`,
 `execute_lua`, or `inject_mouse_input` over A2A.
 
-The repository's no-autonomous-commit rule applies to sidecar skills. Future
-native build or smoke helpers should wrap existing repo entry points, including
-Windows batch setup and `tools/perf_cycle.sh`, instead of reconstructing compiler
-environment logic.
+Future native build or smoke helpers should wrap existing repo entry points,
+including Windows batch setup and `tools/perf_cycle.sh`, instead of
+reconstructing compiler environment logic.
 
 ## Phase 1 Checks
 
@@ -73,7 +71,7 @@ Use `--screenshot` when the smoke should also call `take_screenshot`.
 
 `tools/precommit_validate.py` is the one-command validation harness to run before
 asking for a commit. It wraps existing CMake output, editor MCP tools, and the
-ADK sidecar rather than replacing them.
+standard-library MCP probe rather than replacing them.
 
 ```powershell
 py -3 tools\precommit_validate.py --profile quick
@@ -81,12 +79,10 @@ py -3 tools\precommit_validate.py --profile commit
 ```
 
 The quick profile is the daily routine: git hygiene, `third_party/` guard,
-instruction-file sync, ADK read-only tool-filter guard, `clang-format` dry-run
-for changed C/C++ files, Python syntax checks, wiki lint, editor MCP
-launch/probe, and ADK smoke when `adk` plus an API key are present. The
-validator finds `adk` either on PATH or in the repo-local `tools/.venv`, reads
-ignored local `.env` files for model keys, writes the build output
-`Assets/Agent/agent_config.json` with
+instruction-file sync, repository path-boundary checks, `clang-format` dry-run
+for changed C/C++ files, Python syntax checks, wiki lint, and editor MCP
+launch/probe. The validator writes the
+build output `Assets/Agent/agent_config.json` with
 `"mcp": true` before launching PhasmaEditor and passes `--display 1` by default;
 use `--display 0` only for the primary monitor. If MCP is already reachable, the
 script reuses the running editor.
@@ -95,9 +91,9 @@ The commit profile adds the Release editor/player/launcher build,
 PhasmaLauncher smoke, MCP `execute_lua` internal round-trip, console error
 scans, screenshot capture plus PNG sanity checks, Vulkan/DX12 Sponza editor
 smokes, and Vulkan/DX12 PhasmaPlayer smokes. Use `--profile full` to force
-validation-layer environment variables and require the ADK smoke. Use
-`--perf-baseline` and `--visual-baseline` for optional snapshot and screenshot
-parity comparisons. The performance path loads `Scenes/sponza.pescene`,
+validation-layer environment variables. Use `--perf-baseline` and
+`--visual-baseline` for optional snapshot and screenshot parity comparisons.
+The performance path loads `Scenes/sponza.pescene`,
 reapplies immediate present mode, captures 10 snapshots 1 second apart, then
 calls `tools/compare_snapshots.py`.
 
