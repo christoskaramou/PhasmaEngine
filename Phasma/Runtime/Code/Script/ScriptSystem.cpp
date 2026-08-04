@@ -20,6 +20,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
+#include <cstdlib>
 #include <unordered_set>
 
 namespace pe
@@ -27,6 +29,36 @@ namespace pe
     namespace
     {
         constexpr const char *kEditorOnlyScriptMarker = "phasma: editor-only";
+
+        static sol::optional<std::string> ReadScriptLaunchOption(const std::string &name)
+        {
+            if (name.empty() || name.size() > 64 ||
+                !std::all_of(name.begin(), name.end(), [](unsigned char c)
+                             { return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'; }))
+                return sol::nullopt;
+
+            const std::string environmentName =
+                name == "PE_PROJECT_VARIANT" ? name : "PE_SCRIPT_" + name;
+#if defined(PE_WIN32)
+            char *value = nullptr;
+            size_t size = 0;
+            if (::_dupenv_s(&value, &size, environmentName.c_str()) != 0 || !value)
+                return sol::nullopt;
+            std::string result(value);
+            std::free(value);
+            return result;
+#else
+            const char *value = std::getenv(environmentName.c_str());
+            return value ? sol::optional<std::string>(value) : sol::nullopt;
+#endif
+        }
+
+        static uint32_t MakeScriptRandomSeed()
+        {
+            const uint64_t ticks = static_cast<uint64_t>(
+                std::chrono::steady_clock::now().time_since_epoch().count());
+            return static_cast<uint32_t>(ticks ^ (ticks >> 32)) | 1u;
+        }
 
         static bool IsLuaIdentifier(const std::string &name)
         {
@@ -392,8 +424,6 @@ namespace pe
             sol::lib::math,
             sol::lib::string,
             sol::lib::table,
-            sol::lib::io,
-            sol::lib::os,
             sol::lib::coroutine);
 
         // Generational GC: minor collections track only recent allocations, smoothing
@@ -463,6 +493,19 @@ namespace pe
                             { UnregisterUpdateCallback(id); });
         script.set_function("clear_updates", [this]()
                             { m_registeredUpdates.clear(); });
+        script.set_function("launch_option", &ReadScriptLaunchOption);
+        script.set_function("random_seed", &MakeScriptRandomSeed);
+#if defined(PE_ANDROID)
+        script["platform"] = "android";
+#elif defined(PE_WIN32)
+        script["platform"] = "windows";
+#elif defined(PE_LINUX)
+        script["platform"] = "linux";
+#elif defined(__APPLE__)
+        script["platform"] = "macos";
+#else
+        script["platform"] = "unknown";
+#endif
 
         // Execute all registered binding functions
         for (auto &fn : GetBindings())

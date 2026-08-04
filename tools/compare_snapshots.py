@@ -47,7 +47,8 @@ def _sample_ms(sample: dict) -> float:
 def _average_snapshots(snapshots: list) -> dict:
     """Merge a list of snapshot dicts by averaging all numeric fields."""
     n = len(snapshots)
-    assert n > 0
+    if n == 0:
+        raise ValueError("No snapshots to average")
 
     # overview scalars
     ov_keys = ["fps", "frame_ms", "cpu_total_ms", "cpu_update_ms", "cpu_draw_ms", "gpu_total_ms"]

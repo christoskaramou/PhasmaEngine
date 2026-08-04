@@ -666,8 +666,7 @@ namespace pe
 #if defined(PE_WIN32)
         ShellExecuteW(nullptr, L"open", path.wstring().c_str(), nullptr, nullptr, SW_SHOW);
 #elif defined(PE_LINUX)
-        std::string cmd = "xdg-open \"" + path.string() + "\" &";
-        std::system(cmd.c_str());
+        GUIState::OpenExternalPath(path.string());
 #endif
     }
 
@@ -685,9 +684,8 @@ namespace pe
             ShellExecuteW(nullptr, L"open", path.wstring().c_str(), nullptr, nullptr, SW_SHOW);
         }
 #elif defined(PE_LINUX)
-        auto target = std::filesystem::is_directory(path) ? path : path.parent_path();
-        std::string cmd = "xdg-open \"" + target.string() + "\" &";
-        std::system(cmd.c_str());
+        const auto target = std::filesystem::is_directory(path) ? path : path.parent_path();
+        GUIState::OpenExternalPath(target.string());
 #endif
     }
 

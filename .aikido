@@ -1,0 +1,14 @@
+# Vendored sources are scanned through their upstream dependency records, not as first-party code.
+exclude:
+  paths:
+    - Phasma/Runtime/third_party/luajit
+    - Phasma/Runtime/third_party/luajit-cmake
+    - Phasma/Core/third_party/zlib
+
+# RapidJSON findings are assessed against the vendored source and supported targets.
+ignore:
+  cves:
+    CVE-2024-38517:
+      reason: Vendored reader.h contains the upstream negative exponent underflow fix
+    CVE-2024-39684:
+      reason: Vendored reader.h contains the upstream numeric overflow check after Strtod conversion
