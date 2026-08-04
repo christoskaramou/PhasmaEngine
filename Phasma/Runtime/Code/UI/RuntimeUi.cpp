@@ -729,6 +729,11 @@ namespace pe
         widget.backgroundImage = wantsBackground && styleIndex < m_styleBackgroundImages.size()
                                      ? m_styleBackgroundImages[styleIndex]
                                      : nullptr;
+        // Style plates are global, so a single odd-one-out button (a destructive
+        // action, a disabled variant) could not differ from its theme. The Button
+        // branch never draws a foreground image, so `image` is its plate override.
+        if (wantsBackground && desc.visualStyle == RuntimeUiQuadVisualStyle::Button && widget.image)
+            widget.backgroundImage = widget.image;
         if (orderDirty)
             screen.needsSort = true;
     }
