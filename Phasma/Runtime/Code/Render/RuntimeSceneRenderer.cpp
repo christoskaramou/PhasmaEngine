@@ -306,9 +306,9 @@ namespace pe
         return m_sceneRenderer.GetDepthStencilTarget(hash);
     }
 
-    Image *RuntimeSceneRenderer::CreateFSSampledImage(bool useRenderTergetScale)
+    Image *RuntimeSceneRenderer::CreateFSSampledImage(bool)
     {
-        return m_sceneRenderer.CreateFSSampledImage("RuntimeFSSampledImage", useRenderTergetScale);
+        return m_sceneRenderer.CreateFSSampledImage("RuntimeFSSampledImage", true);
     }
 
     void RuntimeSceneRenderer::Resize(uint32_t width, uint32_t height, bool recreateSurface)
