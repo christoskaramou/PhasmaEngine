@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-08-08
+
+- Bloom and colour grading now cover the whole player frame, runtime UI included. `SceneRendererCore` gained a deferred-pass flag that keeps an enabled pass out of the main render graph — while it still initializes and updates normally — and collects those passes into a second graph the host executes later; `RuntimeSceneRenderer` defers the passes that read and write the display target in place and runs that graph after the runtime UI composites into it. Deferred passes keep graph order and still go through `RenderGraph`, so declared input barriers are issued as before. Scene-side passes are untouched: FXAA still antialiases the viewport target before upsample, and TAA with its RCAS sharpen need motion vectors and jitter the UI has not got. The editor defers nothing and is unchanged.
+
 ## 2026-08-05
 
 - Hardened the security boundary exposed by repository tooling and game scripts: Lua exposes no `os` or `io` library and receives only namespaced launch options, a platform identifier, and a non-wall-clock run seed through `script`; editor path opening and model-tool builds no longer construct shell commands; the MCP probe accepts only loopback HTTP endpoints; validation copies MCP artifacts only from inside the repository; Android rejects cleartext traffic and trusts system certificate authorities explicitly; Rust FFI pointer contracts are marked unsafe; and optimization-dependent Python assertions were replaced with runtime validation. Removed the optional Google ADK agent and dependency while retaining the standard-library MCP probe, and added narrow Aikido exclusions for vendored LuaJIT plus unused zlib headers.

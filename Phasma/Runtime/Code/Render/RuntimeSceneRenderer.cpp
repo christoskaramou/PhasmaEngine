@@ -84,6 +84,19 @@ namespace pe
 
             m_sceneRenderer.CreateRenderPassComponents(SupportsRayTracingPass(), initCmd);
 
+            // The player composites its UI into the display RT after the graph, so post in graph
+            // order would leave HUD and menus out of it. Defer the passes that read and write
+            // display in place, so they land on the finished frame. FXAA (viewport), TAA and its
+            // RCAS sharpen stay in the graph: they run before the image reaches display, on
+            // buffers - and motion vectors - the UI has no part in.
+            // ponytail: unconditional in the player; if a project ever wants raw UI, this
+            // becomes a scene setting.
+            for (SceneRenderGraphPassId deferred : {SceneRenderGraphPassId::BloomBF,
+                                                    SceneRenderGraphPassId::BloomH,
+                                                    SceneRenderGraphPassId::BloomV,
+                                                    SceneRenderGraphPassId::ColorGrading})
+                m_sceneRenderer.SetPassDeferred(deferred, true);
+
             const uint32_t imageCount = RHII.GetSwapchainImageCount();
             const bool isDx12 = UsesDx12RenderOrchestration();
             const PeBarrierSync semaphoreStageFlags = isDx12 ? PE_STAGE_NONE : PE_STAGE_ALL_COMMANDS;
@@ -202,6 +215,7 @@ namespace pe
         Image *displayRT = m_sceneRenderer.GetDisplayRT();
         if (m_runtimeUi)
             m_runtimeUi->Render(cmd, displayRT);
+        m_sceneRenderer.ExecuteDeferredRenderGraph(cmd);
         if (directPresent)
         {
             ImageBarrierInfo barrier{};

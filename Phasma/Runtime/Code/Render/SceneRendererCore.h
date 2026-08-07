@@ -66,10 +66,15 @@ namespace pe
         const SceneRenderGraphPassComponents &GetSceneRenderGraphPassComponents() const { return m_scenePasses; }
         void UpdateRenderGraphPassStates(bool hasRayTracingGeometry, CommandBuffer *cmd = nullptr);
         bool IsPassEnabled(SceneRenderGraphPassId passId) const;
+        // Keeps an enabled pass out of the graph so the host can run it itself later in the
+        // frame (the player grades after compositing its UI). Init/Update still see it enabled.
+        void SetPassDeferred(SceneRenderGraphPassId passId, bool deferred);
+        bool IsPassDeferred(SceneRenderGraphPassId passId) const;
         void AddScenePassesToRenderGraph();
         void UpdateRenderPassComponents();
         void SetRenderPassScene(Scene &scene);
         void ExecuteRenderGraph(CommandBuffer *cmd);
+        void ExecuteDeferredRenderGraph(CommandBuffer *cmd);
         void PollShaders(std::optional<size_t> hash = std::nullopt);
 
         void CreateFrameResources(uint32_t imageCount,
@@ -93,6 +98,7 @@ namespace pe
         void InitEnabledRenderPassComponents(CommandBuffer *cmd);
 
         RenderGraph m_renderGraph;
+        RenderGraph m_deferredRenderGraph;
         Image *m_displayRT = nullptr;
         Image *m_frameDisplayOverride = nullptr;
         Image *m_viewportRT = nullptr;
@@ -110,6 +116,7 @@ namespace pe
         std::vector<Semaphore *> m_acquireSemaphores;
         std::vector<Semaphore *> m_submitSemaphores;
         std::array<bool, kSceneRenderGraphPassCount> m_renderGraphPassEnabled{};
+        std::array<bool, kSceneRenderGraphPassCount> m_renderGraphPassDeferred{};
         std::array<bool, kSceneRenderGraphPassCount> m_renderGraphPassInitialized{};
         SceneRenderGraphPassComponents m_scenePasses{};
         float m_renderTargetScale = 0.0f;

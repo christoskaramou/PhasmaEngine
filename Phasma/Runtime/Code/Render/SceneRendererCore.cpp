@@ -170,12 +170,32 @@ namespace pe
         return m_renderGraphPassEnabled[static_cast<size_t>(passId)];
     }
 
+    void SceneRendererCore::SetPassDeferred(SceneRenderGraphPassId passId, bool deferred)
+    {
+        m_renderGraphPassDeferred[static_cast<size_t>(passId)] = deferred;
+    }
+
+    bool SceneRendererCore::IsPassDeferred(SceneRenderGraphPassId passId) const
+    {
+        return m_renderGraphPassDeferred[static_cast<size_t>(passId)];
+    }
+
     void SceneRendererCore::AddScenePassesToRenderGraph()
     {
         AddSceneRenderGraphPasses(m_renderGraph,
                                   m_scenePasses,
                                   [this](SceneRenderGraphPassId passId)
-                                  { return IsPassEnabled(passId); });
+                                  { return IsPassEnabled(passId) && !IsPassDeferred(passId); });
+
+        // Deferred passes run in their normal graph order, just later in the frame: the player
+        // executes this graph after compositing its UI so display-space post covers the whole
+        // image. Own graph, so RenderGraph still issues each pass's declared input barriers.
+        m_deferredRenderGraph.Clear();
+        AddSceneRenderGraphPasses(m_deferredRenderGraph,
+                                  m_scenePasses,
+                                  [this](SceneRenderGraphPassId passId)
+                                  { return IsPassEnabled(passId) && IsPassDeferred(passId); });
+        m_deferredRenderGraph.Compile();
 
         // Script-registered passes (render_graph.add_pass): inserted by order among
         // the built-in passes; RenderGraph::Compile sorts them into place. The graph
@@ -221,6 +241,11 @@ namespace pe
             m_scene->UploadDynamicUniforms(cmd);
 
         m_renderGraph.Execute(cmd);
+    }
+
+    void SceneRendererCore::ExecuteDeferredRenderGraph(CommandBuffer *cmd)
+    {
+        m_deferredRenderGraph.Execute(cmd);
     }
 
     void SceneRendererCore::PollShaders(std::optional<size_t> hash)
