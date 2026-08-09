@@ -74,6 +74,7 @@ namespace pe
 
                     std::string metadata;
                     int meshSlot = 0;
+                    float whiten = 0.0f;
                     if (metadataOrOpts.is<std::string>())
                     {
                         metadata = metadataOrOpts.as<std::string>();
@@ -85,10 +86,13 @@ namespace pe
                         sol::optional<int> slot = opts["mesh_slot"];
                         if (slot)
                             meshSlot = *slot;
+                        whiten = OptFloat(opts, "whiten", 0.0f);
                     }
                     if (metadata.empty())
                         return false;
 
+                    NodeSpriteComponent &component = scene->GetOrCreateSpriteComponent(h.nodeId);
+                    component.whiten = std::isfinite(whiten) ? std::clamp(whiten, 0.0f, 1.0f) : 0.0f;
                     std::string error;
                     return scene->SetupSpriteFromMetadata(h.nodeId, metadata, meshSlot, &error);
                 });

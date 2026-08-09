@@ -343,6 +343,8 @@ namespace pe
         // OVER fillColor at forced alpha, so this is the only way to recolour a
         // themed widget — e.g. a warm tint to mark the active tab.
         vec4 backgroundImageTint = vec4(1.0f);
+        bool useBackgroundTint = false;
+        float imageWhiten = -1.0f;
         // RectTransform-style layout. anchor = screen point the element sticks to
         // (0..1 of the surface; (0,0)=top-left, (1,1)=bottom-right) for resolution
         // independence. pivot = the element's own reference point (0..1); the node
@@ -414,6 +416,7 @@ namespace pe
         float quadHeight = 1.0f;
         vec4 uvRect = vec4(0.0f, 0.0f, 1.0f, 1.0f);
         vec4 tint = vec4(1.0f);
+        float whiten = 0.0f;
         vec4 outlineColor = vec4(0.03f, 0.03f, 0.03f, 1.0f);
         std::vector<NodeSpriteFrame> frames;
         std::vector<std::vector<NodeSpriteOutlineVertex>> outlineFrames;

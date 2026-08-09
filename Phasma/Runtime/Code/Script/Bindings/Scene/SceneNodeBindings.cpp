@@ -273,7 +273,7 @@ namespace pe
                 //   text|body|title|subtitle|footer|label = string
                 //   image = string (path)
                 //   fill|border|accent|text_color|image_tint = {r,g,b,a} or {1,2,3,4}
-                //   font_scale = number, visible = bool
+                //   font_scale|image_whiten = number, visible|use_background_tint = bool
                 ut.set_function("set_ui", [](SceneNodeHandle &h, sol::table opts) {
                     Scene *s = GetScene();
                     if (!s || !h.IsValid(*s)) return;
@@ -317,6 +317,9 @@ namespace pe
 
                     sol::object fontScale = opts["font_scale"];
                     if (fontScale.is<double>()) ui->fontScale = static_cast<float>(fontScale.as<double>());
+                    sol::object imageWhiten = opts["image_whiten"];
+                    if (imageWhiten.is<double>())
+                        ui->imageWhiten = std::clamp(static_cast<float>(imageWhiten.as<double>()), -1.0f, 1.0f);
 
                     // Text alignment: align_h/align_v accept a string ("left"/"center"/
                     // "right", "top"/"middle"/"bottom", "default") or a number 0..3.
@@ -350,6 +353,8 @@ namespace pe
                     if (visible.is<bool>()) ui->visible = visible.as<bool>();
                     sol::object noInput = opts["no_input"];
                     if (noInput.is<bool>()) ui->noInput = noInput.as<bool>();
+                    sol::object useBackgroundTint = opts["use_background_tint"];
+                    if (useBackgroundTint.is<bool>()) ui->useBackgroundTint = useBackgroundTint.as<bool>();
                 });
 
                 // Rendered screen rect of an authored UI node (anchor+pivot+surface

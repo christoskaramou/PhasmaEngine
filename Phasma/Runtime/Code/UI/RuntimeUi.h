@@ -46,20 +46,21 @@ namespace pe
         float maxHeight = 0.0f;
     };
 
-    struct RuntimeUiImageDesc
-    {
-        Image *image = nullptr;
-        const char *label = nullptr;
-        float width = 0.0f;
-        float height = 0.0f;
-    };
-
     struct RuntimeUiColor
     {
         float r = 1.0f;
         float g = 1.0f;
         float b = 1.0f;
         float a = 1.0f;
+    };
+
+    struct RuntimeUiImageDesc
+    {
+        Image *image = nullptr;
+        const char *label = nullptr;
+        float width = 0.0f;
+        float height = 0.0f;
+        RuntimeUiColor tint{};
     };
 
     enum class RuntimeUiQuadVisualStyle
@@ -113,6 +114,9 @@ namespace pe
         // When true, the image is treated as a white+alpha mask so image_tint sets
         // a flat color (multiply with white) instead of blending into the art.
         bool imageColorize = false;
+        bool useBackgroundTint = false;
+        // Negative inherits the global element lift; 0..1 selects an explicit variant.
+        float imageWhiten = -1.0f;
         NodeId *node = nullptr;
         bool draggable = false;
         bool selected = false;
@@ -221,6 +225,10 @@ namespace pe
         void SetScreenScrollable(const std::string &screenId, bool scrollable);
         void SetScreenMaxHeight(const std::string &screenId, float maxHeight);
         void SetTextScale(float scale);
+        void SetGlobalTint(const RuntimeUiColor &tint);
+        void SetElementTint(const RuntimeUiColor &tint);
+        void SetBackgroundTint(const RuntimeUiColor &tint);
+        void SetElementWhiten(float amount);
         void ClearScreen(const std::string &screenId);
         void ClearAllScreens();
         // Remove screens created by scripts (everything except scene-authored UI). Called on
@@ -312,6 +320,9 @@ namespace pe
             RuntimeUiColor imageTint{1.0f, 1.0f, 1.0f, 1.0f};
             RuntimeUiColor backgroundImageTint{1.0f, 1.0f, 1.0f, 1.0f};
             bool imageColorize = false;
+            bool useBackgroundTint = false;
+            float imageWhiten = 0.0f;
+            float imageWhitenOverride = -1.0f;
             NodeId *node = nullptr;
             uint32_t nodeIndex = 0;    // captured at bind time; node itself may dangle
             uint32_t nodeRevision = 0; // once the node is destroyed, so validate via these
@@ -344,7 +355,7 @@ namespace pe
         const Screen *FindScreen(const std::string &screenId) const;
         Screen *FindScreen(const std::string &screenId);
         Widget &GetOrCreateWidget(Screen &screen, const std::string &widgetId, WidgetType type);
-        Image *LoadImageResource(const std::string &path);
+        Image *LoadImageResource(const std::string &path, float whitenAmount = 0.0f);
         Image *LoadColorizeMask(const std::string &path);
         void SortQuadWidgets(Screen &screen);
         void BuildFrame();
@@ -364,6 +375,9 @@ namespace pe
         uint32_t m_frameSurfaceHeight = 0;
         float m_frameUiScale = 1.0f;
         float m_textScale = 1.0f;
+        RuntimeUiColor m_elementTint{};
+        RuntimeUiColor m_backgroundTint{};
+        float m_elementWhiten = 0.0f;
         bool m_frameInputEnabled = true;
         bool m_frameInputRectValid = false;
         float m_frameInputRectMinX = 0.0f;

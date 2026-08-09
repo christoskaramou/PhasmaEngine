@@ -657,6 +657,9 @@ namespace pe
             editColor("Accent", uiComponent->accentColor);
             editColor("Text", uiComponent->textColor);
             editColor("Image Tint", uiComponent->imageTint);
+            if (ImGui::Checkbox("Use Background Tint", &uiComponent->useBackgroundTint))
+                markRuntimeUiChanged();
+            ui::ItemTooltip("Route this widget through the global background tint instead of the element tint.");
 
             float anchorVals[2] = {uiComponent->anchor.x, uiComponent->anchor.y};
             if (ImGui::DragFloat2("Anchor", anchorVals, 0.01f, 0.0f, 1.0f, "%.2f"))

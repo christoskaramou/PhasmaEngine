@@ -113,6 +113,8 @@ namespace pe
         // internally; the format param flows into ImageDesc.format.
         static Image *LoadRGBA(CommandBuffer *cmd, const std::string &path, ::PeFormat format, bool isFloat = false);
         static Image *LoadRGBA8(CommandBuffer *cmd, const std::string &path);
+        // Lift light pixels toward white while preserving dark line art and source alpha.
+        static Image *LoadWhitenedRGBA8(CommandBuffer *cmd, const std::string &path, float amount);
         // White RGB + source alpha — multiply tint then yields a pure flat color silhouette.
         static Image *LoadColorizeMaskRGBA8(CommandBuffer *cmd, const std::string &path);
         static Image *LoadRGBA32F(CommandBuffer *cmd, const std::string &path);
