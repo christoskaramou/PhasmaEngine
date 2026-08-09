@@ -69,13 +69,8 @@ namespace pe
             return true;
         }
 
-        RuntimeUiColor ReadColorOption(const sol::table &table, const char *key, const RuntimeUiColor &fallback)
+        RuntimeUiColor ReadColor(const sol::table &color, const RuntimeUiColor &fallback)
         {
-            sol::object value = table[key];
-            if (!value.is<sol::table>())
-                return fallback;
-
-            sol::table color = value.as<sol::table>();
             RuntimeUiColor result = fallback;
             result.r = ReadFloatOption(color, "r", result.r);
             result.g = ReadFloatOption(color, "g", result.g);
@@ -86,6 +81,14 @@ namespace pe
             result.b = ReadFloatOption(color, 3, result.b);
             result.a = ReadFloatOption(color, 4, result.a);
             return result;
+        }
+
+        RuntimeUiColor ReadColorOption(const sol::table &table, const char *key, const RuntimeUiColor &fallback)
+        {
+            sol::object value = table[key];
+            if (!value.is<sol::table>())
+                return fallback;
+            return ReadColor(value.as<sol::table>(), fallback);
         }
 
         struct ImageOptions
@@ -192,6 +195,9 @@ namespace pe
             result.desc.backgroundImageTint =
                 ReadColorOption(options, "background_image_tint", result.desc.backgroundImageTint);
             result.desc.imageColorize = ReadBoolOption(options, "image_colorize", result.desc.imageColorize);
+            result.desc.useBackgroundTint =
+                ReadBoolOption(options, "use_background_tint", result.desc.useBackgroundTint);
+            result.desc.imageWhiten = ReadFloatOption(options, "image_whiten", result.desc.imageWhiten);
             result.desc.draggable = ReadBoolOption(options, "draggable", result.desc.draggable);
             result.desc.selected = ReadBoolOption(options, "selected", result.desc.selected);
             result.desc.visible = ReadBoolOption(options, "visible", result.desc.visible);
@@ -496,6 +502,22 @@ namespace pe
                                         {
                                             if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
                                                 runtimeUi->SetTextScale(static_cast<float>(scale)); });
+                        ui.set_function("set_global_tint", [](const sol::table &tint)
+                                        {
+                                            if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
+                                                runtimeUi->SetGlobalTint(ReadColor(tint, RuntimeUiColor{})); });
+                        ui.set_function("set_element_tint", [](const sol::table &tint)
+                                        {
+                                            if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
+                                                runtimeUi->SetElementTint(ReadColor(tint, RuntimeUiColor{})); });
+                        ui.set_function("set_background_tint", [](const sol::table &tint)
+                                        {
+                                            if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
+                                                runtimeUi->SetBackgroundTint(ReadColor(tint, RuntimeUiColor{})); });
+                        ui.set_function("set_element_whiten", [](double amount)
+                                        {
+                                            if (RuntimeUiSystem *runtimeUi = RequireRuntimeUi())
+                                                runtimeUi->SetElementWhiten(static_cast<float>(amount)); });
                         ui.set_function("set_style_background", [](const std::string &styleName, const std::string &path)
                                         {
                                             RuntimeUiQuadVisualStyle style{};

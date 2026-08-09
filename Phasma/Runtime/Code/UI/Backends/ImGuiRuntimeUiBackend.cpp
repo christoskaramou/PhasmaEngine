@@ -381,7 +381,11 @@ namespace pe
 
                 if (image.label && image.label[0] != '\0')
                     ImGui::TextUnformatted(image.label);
-                ImGui::Image((ImTextureID)textureID, ImVec2(width, height));
+                ImGui::Image((ImTextureID)textureID,
+                             ImVec2(width, height),
+                             ImVec2(0.0f, 0.0f),
+                             ImVec2(1.0f, 1.0f),
+                             ImVec4(image.tint.r, image.tint.g, image.tint.b, image.tint.a));
             }
 
             RuntimeUiWidgetState Quad(const RuntimeUiQuadDesc &quad) override

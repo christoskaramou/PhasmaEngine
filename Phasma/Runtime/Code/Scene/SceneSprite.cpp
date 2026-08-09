@@ -229,7 +229,7 @@ namespace pe
             return true;
         }
 
-        ResourceHandle<Image> LoadSpriteImage(const std::string &path)
+        ResourceHandle<Image> LoadSpriteImage(const std::string &path, float whitenAmount)
         {
             if (path.empty())
                 return ResourceHandle<Image>();
@@ -243,11 +243,15 @@ namespace pe
             if (ec)
                 normalized = resolved;
             const std::string normalizedStr = PathUtf8(normalized);
+            whitenAmount = std::isfinite(whitenAmount) ? std::clamp(whitenAmount, 0.0f, 1.0f) : 0.0f;
+            const int whitenKey = static_cast<int>(std::lround(whitenAmount * 1000.0f));
+            const std::string cacheKey =
+                whitenKey > 0 ? "whiten:" + std::to_string(whitenKey) + ":" + normalizedStr : normalizedStr;
 
             // Cached atlases must not re-Submit+Wait a no-op command buffer —
             // ATH pools call sprite.setup on hundreds of bodies and each Wait
             // was a multi-ms hitch on spawn / Arena prewarm.
-            if (ResourceHandle<Image> cached = ResourceManager::Get().Find<Image>(normalizedStr))
+            if (ResourceHandle<Image> cached = ResourceManager::Get().Find<Image>(cacheKey))
                 return cached;
 
             Queue *queue = RHII.GetMainQueue();
@@ -256,9 +260,29 @@ namespace pe
 
             CommandBuffer *cmd = queue->AcquireCommandBuffer();
             cmd->Begin();
-            ModelAsset loader;
-            ResourceHandle<Image> image = loader.LoadTexture(cmd, normalized);
+            ResourceHandle<Image> image;
+            if (whitenKey > 0)
+            {
+                Image *rawImage = Image::LoadWhitenedRGBA8(cmd, normalizedStr, whitenAmount);
+                if (rawImage)
+                {
+                    std::shared_ptr<Image> shared(rawImage, [](Image *p)
+                                                  { Image::Destroy(p); });
+                    ResourceManager::Get().Register<Image>(cacheKey, shared);
+                    image = ResourceHandle<Image>(shared);
+                }
+            }
+            else
+            {
+                ModelAsset loader;
+                image = loader.LoadTexture(cmd, normalized);
+            }
             cmd->End();
+            if (!image)
+            {
+                queue->ReturnCommandBuffer(cmd);
+                return image;
+            }
             queue->Submit(1, &cmd, nullptr, nullptr);
             cmd->Wait();
             queue->ReturnCommandBuffer(cmd);
@@ -533,7 +557,7 @@ namespace pe
                 return false;
             }
 
-            ResourceHandle<Image> image = LoadSpriteImage(sprite.imagePath);
+            ResourceHandle<Image> image = LoadSpriteImage(sprite.imagePath, sprite.whiten);
             if (!image)
             {
                 SetError(outError, "sprite image not found: " + sprite.imagePath);

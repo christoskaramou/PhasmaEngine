@@ -72,6 +72,23 @@ namespace pe
             return RuntimeUiColor{value.r, value.g, value.b, value.a};
         }
 
+        RuntimeUiColor TintRgb(RuntimeUiColor color, const RuntimeUiColor &tint)
+        {
+            color.r *= tint.r;
+            color.g *= tint.g;
+            color.b *= tint.b;
+            return color;
+        }
+
+        RuntimeUiColor SanitizeTint(const RuntimeUiColor &tint)
+        {
+            return RuntimeUiColor{
+                std::isfinite(tint.r) ? std::clamp(tint.r, 0.0f, 1.0f) : 1.0f,
+                std::isfinite(tint.g) ? std::clamp(tint.g, 0.0f, 1.0f) : 1.0f,
+                std::isfinite(tint.b) ? std::clamp(tint.b, 0.0f, 1.0f) : 1.0f,
+                1.0f};
+        }
+
         RuntimeUiQuadVisualStyle ToRuntimeUiVisualStyle(NodeRuntimeUiWidgetType type)
         {
             switch (type)
@@ -637,7 +654,9 @@ namespace pe
         widget.imagePath = path;
         widget.imageWidth = width;
         widget.imageHeight = height;
-        widget.image = path.empty() ? nullptr : LoadImageResource(path);
+        widget.imageWhitenOverride = -1.0f;
+        widget.imageWhiten = m_elementWhiten;
+        widget.image = path.empty() ? nullptr : LoadImageResource(path, widget.imageWhiten);
     }
 
     void RuntimeUiSystem::SetStyleBackground(RuntimeUiQuadVisualStyle style, const std::string &path)
@@ -647,13 +666,64 @@ namespace pe
             return;
 
         m_styleBackgroundPaths[index] = path;
-        m_styleBackgroundImages[index] = path.empty() ? nullptr : LoadImageResource(path);
+        m_styleBackgroundImages[index] = path.empty() ? nullptr : LoadImageResource(path, m_elementWhiten);
     }
 
     void RuntimeUiSystem::SetTextScale(float scale)
     {
         if (std::isfinite(scale))
             m_textScale = std::clamp(scale, 0.5f, 3.0f);
+    }
+
+    void RuntimeUiSystem::SetGlobalTint(const RuntimeUiColor &tint)
+    {
+        SetElementTint(tint);
+        SetBackgroundTint(tint);
+    }
+
+    void RuntimeUiSystem::SetElementTint(const RuntimeUiColor &tint)
+    {
+        m_elementTint = SanitizeTint(tint);
+    }
+
+    void RuntimeUiSystem::SetBackgroundTint(const RuntimeUiColor &tint)
+    {
+        m_backgroundTint = SanitizeTint(tint);
+    }
+
+    void RuntimeUiSystem::SetElementWhiten(float amount)
+    {
+        const float sanitized = std::isfinite(amount) ? std::clamp(amount, 0.0f, 1.0f) : 0.0f;
+        if (m_elementWhiten == sanitized)
+            return;
+
+        m_elementWhiten = sanitized;
+        for (size_t i = 0; i < m_styleBackgroundPaths.size(); ++i)
+        {
+            const std::string &path = m_styleBackgroundPaths[i];
+            m_styleBackgroundImages[i] = path.empty() ? nullptr : LoadImageResource(path, m_elementWhiten);
+        }
+
+        for (Screen &screen : m_screens)
+        {
+            for (Widget &widget : screen.widgets)
+            {
+                if (widget.imageWhitenOverride < 0.0f && !widget.imagePath.empty() && !widget.imageColorize &&
+                    (widget.type != WidgetType::Quad || !widget.useBackgroundTint))
+                {
+                    widget.imageWhiten = m_elementWhiten;
+                    widget.image = LoadImageResource(widget.imagePath, widget.imageWhiten);
+                }
+                const size_t styleIndex = static_cast<size_t>(widget.visualStyle);
+                if (widget.type == WidgetType::Quad && widget.backgroundImage)
+                {
+                    if (widget.visualStyle == RuntimeUiQuadVisualStyle::Button && widget.image)
+                        widget.backgroundImage = widget.image;
+                    else if (styleIndex < m_styleBackgroundImages.size())
+                        widget.backgroundImage = m_styleBackgroundImages[styleIndex];
+                }
+            }
+        }
     }
 
     void RuntimeUiSystem::SetQuad(const std::string &screenId,
@@ -683,6 +753,7 @@ namespace pe
         widget.textColor = desc.textColor;
         widget.imageTint = desc.imageTint;
         widget.backgroundImageTint = desc.backgroundImageTint;
+        widget.useBackgroundTint = desc.useBackgroundTint;
         widget.node = desc.node;
         widget.nodeIndex = desc.node ? desc.node->index : 0;
         widget.nodeRevision = desc.node ? desc.node->revision : 0;
@@ -699,17 +770,26 @@ namespace pe
         widget.textInsetRight = std::max(0.0f, desc.textInsetRight);
         widget.visualStyle = desc.visualStyle;
         widget.fit = desc.fit;
-        // Resolve the image only when the path / colorize mode actually changes.
+        // Resolve the image only when the path or decoded variant actually changes.
         // LoadImageResource stats the filesystem before its cache lookup.
+        const float imageWhitenOverride =
+            std::isfinite(desc.imageWhiten) ? std::clamp(desc.imageWhiten, -1.0f, 1.0f) : -1.0f;
+        const float imageWhiten = !desc.useBackgroundTint && !desc.imageColorize
+                                      ? (imageWhitenOverride >= 0.0f ? imageWhitenOverride : m_elementWhiten)
+                                      : 0.0f;
+        widget.imageWhitenOverride = imageWhitenOverride;
         if (path.empty())
         {
             widget.image = desc.image;
             widget.imageColorize = desc.imageColorize;
+            widget.imageWhiten = 0.0f;
         }
-        else if (path != widget.imagePath || desc.imageColorize != widget.imageColorize)
+        else if (path != widget.imagePath || desc.imageColorize != widget.imageColorize ||
+                 imageWhiten != widget.imageWhiten)
         {
-            widget.image = desc.imageColorize ? LoadColorizeMask(path) : LoadImageResource(path);
+            widget.image = desc.imageColorize ? LoadColorizeMask(path) : LoadImageResource(path, imageWhiten);
             widget.imageColorize = desc.imageColorize;
+            widget.imageWhiten = imageWhiten;
         }
         widget.imagePath = path;
         // Theme plate follows fill alpha only. Buttons that clear fill (e.g. hero
@@ -799,6 +879,8 @@ namespace pe
             desc.textColor = ToRuntimeUiColor(ui->textColor);
             desc.imageTint = ToRuntimeUiColor(ui->imageTint);
             desc.backgroundImageTint = ToRuntimeUiColor(ui->backgroundImageTint);
+            desc.useBackgroundTint = ui->useBackgroundTint;
+            desc.imageWhiten = ui->imageWhiten;
             desc.node = node;
             desc.draggable = ui->draggable;
             desc.visible = ui->visible;
@@ -984,13 +1066,18 @@ namespace pe
                          });
     }
 
-    Image *RuntimeUiSystem::LoadImageResource(const std::string &path)
+    Image *RuntimeUiSystem::LoadImageResource(const std::string &path, float whitenAmount)
     {
-        if (const auto alias = m_imageCache.find(path); alias != m_imageCache.end())
+        whitenAmount = std::isfinite(whitenAmount) ? std::clamp(whitenAmount, 0.0f, 1.0f) : 0.0f;
+        const int whitenKey = static_cast<int>(std::lround(whitenAmount * 1000.0f));
+        const std::string variantPrefix = whitenKey > 0 ? "whiten:" + std::to_string(whitenKey) + ":" : "";
+        const std::string aliasKey = variantPrefix + path;
+        if (const auto alias = m_imageCache.find(aliasKey); alias != m_imageCache.end())
             return alias->second.get();
 
         const std::filesystem::path resolvedPath = ResolveImagePath(path);
-        const std::string cacheKey = NormalizeImagePathKey(resolvedPath);
+        const std::string normalizedPath = NormalizeImagePathKey(resolvedPath);
+        const std::string cacheKey = variantPrefix + normalizedPath;
 
         auto cacheIt = m_imageCache.find(cacheKey);
         if (cacheIt != m_imageCache.end())
@@ -1000,14 +1087,14 @@ namespace pe
         {
             PE_WARN("[RuntimeUI] image file not found: %s", path.c_str());
             m_imageCache.emplace(cacheKey, nullptr);
-            m_imageCache.emplace(path, nullptr);
+            m_imageCache.emplace(aliasKey, nullptr);
             return nullptr;
         }
 
         if (ResourceHandle<Image> cached = ResourceManager::Get().Find<Image>(cacheKey))
         {
             m_imageCache.emplace(cacheKey, cached.GetShared());
-            m_imageCache.emplace(path, cached.GetShared());
+            m_imageCache.emplace(aliasKey, cached.GetShared());
             return cached.get();
         }
 
@@ -1016,20 +1103,21 @@ namespace pe
         {
             PE_WARN("[RuntimeUI] cannot load image without a main queue: %s", path.c_str());
             m_imageCache.emplace(cacheKey, nullptr);
-            m_imageCache.emplace(path, nullptr);
+            m_imageCache.emplace(aliasKey, nullptr);
             return nullptr;
         }
 
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
-        Image *rawImage = Image::LoadRGBA8(cmd, cacheKey);
+        Image *rawImage = whitenKey > 0 ? Image::LoadWhitenedRGBA8(cmd, normalizedPath, whitenAmount)
+                                        : Image::LoadRGBA8(cmd, normalizedPath);
         cmd->End();
 
         if (!rawImage)
         {
             cmd->Return();
             m_imageCache.emplace(cacheKey, nullptr);
-            m_imageCache.emplace(path, nullptr);
+            m_imageCache.emplace(aliasKey, nullptr);
             return nullptr;
         }
 
@@ -1041,7 +1129,7 @@ namespace pe
                                      { Image::Destroy(p); });
         ResourceManager::Get().Register<Image>(cacheKey, image);
         m_imageCache.emplace(cacheKey, image);
-        m_imageCache.emplace(path, image);
+        m_imageCache.emplace(aliasKey, image);
         return image.get();
     }
 
@@ -1117,18 +1205,20 @@ namespace pe
         };
 
         auto &cache = colorize ? m_colorizeMaskCache : m_imageCache;
+        const int whitenKey = colorize ? 0 : static_cast<int>(std::lround(m_elementWhiten * 1000.0f));
+        const std::string variantPrefix = whitenKey > 0 ? "whiten:" + std::to_string(whitenKey) + ":" : "";
         std::vector<PendingImage> pending;
         std::unordered_set<std::string> seen;
         int added = 0;
         for (const std::string &path : paths)
         {
-            const std::string aliasKey = colorize ? "colorize:" + path : path;
+            const std::string aliasKey = colorize ? "colorize:" + path : variantPrefix + path;
             if (cache.find(aliasKey) != cache.end())
                 continue;
 
             const std::filesystem::path resolved = ResolveImagePath(path);
             const std::string resolvedPath = NormalizeImagePathKey(resolved);
-            const std::string cacheKey = colorize ? "colorize:" + resolvedPath : resolvedPath;
+            const std::string cacheKey = colorize ? "colorize:" + resolvedPath : variantPrefix + resolvedPath;
             if (const auto resident = cache.find(cacheKey); resident != cache.end())
             {
                 cache.emplace(aliasKey, resident->second);
@@ -1166,6 +1256,8 @@ namespace pe
         {
             Image *rawImage = colorize
                                   ? Image::LoadColorizeMaskRGBA8(cmd, item.resolvedPath)
+                              : whitenKey > 0
+                                  ? Image::LoadWhitenedRGBA8(cmd, item.resolvedPath, m_elementWhiten)
                                   : Image::LoadRGBA8(cmd, item.resolvedPath);
             if (!rawImage)
             {
@@ -1273,6 +1365,7 @@ namespace pe
                             imageDesc.label = widget.label.c_str();
                             imageDesc.width = widget.imageWidth;
                             imageDesc.height = widget.imageHeight;
+                            imageDesc.tint = m_elementTint;
 
                             const float nativeWidth = widget.image->GetWidth_f();
                             const float nativeHeight = widget.image->GetHeight_f();
@@ -1319,8 +1412,9 @@ namespace pe
                         quadDesc.borderColor = widget.borderColor;
                         quadDesc.accentColor = widget.accentColor;
                         quadDesc.textColor = widget.textColor;
-                        quadDesc.imageTint = widget.imageTint;
-                        quadDesc.backgroundImageTint = widget.backgroundImageTint;
+                        const RuntimeUiColor &globalTint = widget.useBackgroundTint ? m_backgroundTint : m_elementTint;
+                        quadDesc.imageTint = TintRgb(widget.imageTint, globalTint);
+                        quadDesc.backgroundImageTint = TintRgb(widget.backgroundImageTint, globalTint);
                         quadDesc.node = widget.node;
                         quadDesc.draggable = widget.draggable;
                         quadDesc.selected = widget.selected;

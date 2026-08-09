@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-08-09
+
+- Added independent Runtime UI element and page-background RGB multipliers through `runtime_ui.set_element_tint(...)` and `runtime_ui.set_background_tint(...)`; authored or scripted quads opt into the background channel with `use_background_tint`, while `set_global_tint(...)` sets both for compatibility. `runtime_ui.set_element_whiten(amount)` adds a cached load-time foreground-only white lift that preserves dark line art and source alpha, rather than trying to whiten warm art with a blue RGB multiplier. Individual quads can override the lift with `image_whiten`, and `sprite.setup{whiten=...}` uses the same cached decode for animated sprite atlases. The split preserves text, state colors, alpha, background-channel images, and world rendering.
+
 ## 2026-08-08
 
 - Bloom and colour grading now cover the whole player frame, runtime UI included. `SceneRendererCore` gained a deferred-pass flag that keeps an enabled pass out of the main render graph — while it still initializes and updates normally — and collects those passes into a second graph the host executes later; `RuntimeSceneRenderer` defers the passes that read and write the display target in place and runs that graph after the runtime UI composites into it. Deferred passes keep graph order and still go through `RenderGraph`, so declared input barriers are issued as before. Scene-side passes are untouched: FXAA still antialiases the viewport target before upsample, and TAA with its RCAS sharpen need motion vectors and jitter the UI has not got. The editor defers nothing and is unchanged.

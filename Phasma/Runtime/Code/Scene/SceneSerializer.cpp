@@ -1075,6 +1075,8 @@ namespace pe
             ui.accentColor = readVec4("accent", ui.accentColor);
             ui.textColor = readVec4("text_color", ui.textColor);
             ui.imageTint = readVec4("image_tint", ui.imageTint);
+            ui.useBackgroundTint = readBool("use_background_tint", false);
+            ui.imageWhiten = std::clamp(readFloat("image_whiten", -1.0f), -1.0f, 1.0f);
             ui.anchor = readVec2("anchor", vec2(0.0f, 0.0f));
             ui.pivot = readVec2("pivot", vec2(0.5f, 0.5f));
             ui.fontScale = readFloat("font_scale", 1.0f);
@@ -1147,6 +1149,7 @@ namespace pe
             sprite.quadHeight = readFloat("quad_height", 1.0f);
             sprite.uvRect = readVec4("uv_rect", sprite.uvRect);
             sprite.tint = readVec4("tint", sprite.tint);
+            sprite.whiten = std::clamp(readFloat("whiten", 0.0f), 0.0f, 1.0f);
             sprite.activeClipName = readString("active_clip");
             sprite.activeClipIndex = readInt("active_clip_index", -1);
             sprite.meshSlot = readInt("mesh_slot", 0);
@@ -2170,6 +2173,10 @@ namespace pe
                     rapidjson::Value imageTint;
                     SetVec4(imageTint, ui.imageTint);
                     uiObj.AddMember("image_tint", imageTint.Move(), allocator);
+                    if (ui.useBackgroundTint)
+                        uiObj.AddMember("use_background_tint", true, allocator);
+                    if (ui.imageWhiten >= 0.0f)
+                        uiObj.AddMember("image_whiten", SafeFloat(ui.imageWhiten), allocator);
 
                     rapidjson::Value anchorV(rapidjson::kArrayType);
                     anchorV.PushBack(SafeFloat(ui.anchor.x), allocator).PushBack(SafeFloat(ui.anchor.y), allocator);
@@ -2220,6 +2227,8 @@ namespace pe
                     rapidjson::Value tint;
                     SetVec4(tint, sprite.tint);
                     spriteObj.AddMember("tint", tint.Move(), allocator);
+                    if (sprite.whiten > 0.0f)
+                        spriteObj.AddMember("whiten", SafeFloat(sprite.whiten), allocator);
 
                     if (!sprite.activeClipName.empty())
                         spriteObj.AddMember("active_clip", MakeStringValue(sprite.activeClipName), allocator);
