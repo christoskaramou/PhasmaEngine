@@ -203,6 +203,7 @@ namespace pe
             result.desc.visible = ReadBoolOption(options, "visible", result.desc.visible);
             result.desc.bringToFront = ReadBoolOption(options, "bring_to_front", result.desc.bringToFront);
             result.desc.noInput = ReadBoolOption(options, "no_input", result.desc.noInput);
+            result.desc.cornerRadius = ReadFloatOption(options, "corner_radius", result.desc.cornerRadius);
             result.desc.fontScale = ReadFloatOption(options, "font_scale", result.desc.fontScale);
             result.desc.fit = ReadBoolOption(options, "fit", result.desc.fit);
             result.desc.fit = ReadBoolOption(options, "auto_size", result.desc.fit);

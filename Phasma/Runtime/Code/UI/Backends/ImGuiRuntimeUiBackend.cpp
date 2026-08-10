@@ -220,19 +220,27 @@ namespace pe
                 if (!m_initialized || !m_context)
                     return false;
 
+                // A secondary finger's tap is queued on FINGER-UP, not finger-down, so
+                // it matches the mouse: a press only counts once it is released on
+                // the widget. Queuing on touchdown fired the action (and its haptic)
+                // the instant the finger landed, with no way to slide off and cancel.
+                // The erase happens after, so the finger that is lifting still counts
+                // as a secondary one.
+                const bool secondaryFinger = event.type == SDL_FINGERUP && m_touchFingers.size() > 1 &&
+                                             m_touchFingers.count(event.tfinger.fingerId) > 0 &&
+                                             *m_touchFingers.begin() != event.tfinger.fingerId;
                 if (event.type == SDL_FINGERUP)
+                {
+                    if (secondaryFinger && m_frameInfo.inputEnabled)
+                        m_pendingTouchClicks.push_back(MapFingerToSurface(event.tfinger.x, event.tfinger.y));
                     m_touchFingers.erase(event.tfinger.fingerId);
+                }
 
                 if (!m_frameInfo.inputEnabled)
                     return false;
 
                 if (event.type == SDL_FINGERDOWN)
-                {
-                    const bool secondary = !m_touchFingers.empty();
                     m_touchFingers.insert(event.tfinger.fingerId);
-                    if (secondary)
-                        m_pendingTouchClicks.push_back(MapFingerToSurface(event.tfinger.x, event.tfinger.y));
-                }
 
                 ScopedImGuiContext contextScope(m_context);
                 SDL_Event mappedEvent = MapEventToSurface(event);
@@ -999,22 +1007,30 @@ namespace pe
                 RuntimeUiWidgetState state{};
                 const ImVec2 pos = ImGui::GetCursorScreenPos();
                 const ImVec2 max(pos.x + size.x, pos.y + size.y);
-                ImGui::InvisibleButton("hit", size);
+                // The return value IS the release-inside press: ImGui buttons default
+                // to PressedOnClickRelease, so a click only counts if the pointer
+                // goes down AND comes up on the widget. IsItemClicked, which this
+                // used to report as `clicked`, fires the moment the button goes
+                // down — so an action ran before the player could slide off to
+                // cancel it, and on phones it fired under the finger on touchdown.
+                const bool releasedOnItem = ImGui::InvisibleButton("hit", size);
 
                 ImGuiIO &io = ImGui::GetIO();
                 const bool itemActive = ImGui::IsItemActive();
-                const bool itemClicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+                // Press-time still drives DRAG, which must arm on the way down.
+                const bool itemPressed = ImGui::IsItemClicked(ImGuiMouseButton_Left);
                 const bool mouseReleased = ImGui::IsMouseReleased(ImGuiMouseButton_Left);
                 const bool mouseDragging = ImGui::IsMouseDragging(ImGuiMouseButton_Left, 1.0f);
-                if (quad.draggable && itemClicked)
+                if (quad.draggable && itemPressed)
                     m_activeDragWidget = id;
 
                 state.hovered = ImGui::IsItemHovered();
                 state.active = itemActive;
-                state.clicked = itemClicked;
-                state.rightClicked = ImGui::IsItemClicked(ImGuiMouseButton_Right);
+                state.clicked = releasedOnItem;
+                // Right-click matches: down-then-up on the widget, not bare down.
+                state.rightClicked = ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Right);
                 state.down = itemActive && ImGui::IsMouseDown(ImGuiMouseButton_Left);
-                state.dragStarted = quad.draggable && itemClicked;
+                state.dragStarted = quad.draggable && itemPressed;
                 state.dragging = quad.draggable && m_activeDragWidget == id && !mouseReleased &&
                                  (mouseDragging || state.down);
                 state.dragReleased = quad.draggable && m_activeDragWidget == id && mouseReleased;
@@ -1060,7 +1076,11 @@ namespace pe
             {
                 if (!drawList)
                     drawList = ImGui::GetWindowDrawList();
-                const float rounding = 7.0f;
+                // Caller-set radius wins; half the smaller edge draws a circle.
+                const float rounding =
+                    quad.cornerRadius >= 0.0f
+                        ? std::min(quad.cornerRadius, std::min(size.x, size.y) * 0.5f)
+                        : 7.0f;
                 ImU32 fill = ToColor(quad.fillColor);
                 ImU32 border = ToColor(quad.borderColor);
                 ImU32 accent = ToColor(quad.accentColor);
@@ -1080,12 +1100,29 @@ namespace pe
                 // Theme plates must stay opaque. The 0.90 default tint lets the
                 // underlay fill muddy button_surface — idle looks wrong until hover
                 // (or focus loss) changes the composite.
+                // Pointer feedback multiplies the colours the widget already draws
+                // instead of laying a translucent accent rectangle over them. One
+                // reaction for every button, and it can never introduce a colour
+                // the button did not have (the old wash showed the ACCENT, so a
+                // gold-accent tab flashed yellow and a grey-accent button grey).
+                const float pointerMul = state.down      ? runtime_ui_imgui::kPressTint
+                                         : state.hovered ? runtime_ui_imgui::kHoverTint
+                                                         : 1.0f;
+                auto pointerLit = [&](RuntimeUiColor c) -> RuntimeUiColor
+                {
+                    if (pointerMul == 1.0f)
+                        return c;
+                    c.r = std::clamp(c.r * pointerMul, 0.0f, 1.0f);
+                    c.g = std::clamp(c.g * pointerMul, 0.0f, 1.0f);
+                    c.b = std::clamp(c.b * pointerMul, 0.0f, 1.0f);
+                    return c;
+                };
                 auto plateImageTint = [&]() -> RuntimeUiColor
                 {
                     RuntimeUiColor tint = quad.backgroundImageTint;
                     if (themed && tint.a < 0.999f)
                         tint.a = 1.0f;
-                    return tint;
+                    return pointerLit(tint);
                 };
                 auto drawSurface = [&](ImU32 surfaceFill, bool accentWash)
                 {
@@ -1098,10 +1135,12 @@ namespace pe
                                                       ImVec2(1.0f, 1.0f), ToColor(plateImageTint()), rounding);
                         }
                     }
-                    if (accentWash && themed && (quad.selected || state.dragging || state.hovered))
+                    // Selected/dragging keep their accent wash — that is state, not
+                    // pointer feedback. Hover no longer contributes to it.
+                    if (accentWash && themed && (quad.selected || state.dragging))
                     {
                         RuntimeUiColor glow = quad.accentColor;
-                        glow.a *= quad.selected || state.dragging ? 0.22f : 0.08f;
+                        glow.a *= 0.22f;
                         drawList->AddRectFilled(pos, max, ToColor(glow), rounding);
                     }
                 };
@@ -1123,15 +1162,18 @@ namespace pe
                             // Transparent-fill HUD images (bars, ink icons) must stay
                             // sharp — the themed 7px plate rounding turns thin fills
                             // into pills. Plated image cards keep the rounded path.
+                            // Lit the same way as a plate, so an image button reacts
+                            // to the pointer through its own art rather than a wash.
+                            const ImU32 imgTint = ToColor(pointerLit(quad.imageTint));
                             if (quad.fillColor.a <= 0.0f && !themed)
                             {
                                 drawList->AddImage((ImTextureID)textureID, pos, max, ImVec2(0.0f, 0.0f),
-                                                   ImVec2(1.0f, 1.0f), ToColor(quad.imageTint));
+                                                   ImVec2(1.0f, 1.0f), imgTint);
                             }
                             else
                             {
                                 drawList->AddImageRounded((ImTextureID)textureID, pos, max, ImVec2(0.0f, 0.0f),
-                                                          ImVec2(1.0f, 1.0f), ToColor(quad.imageTint), rounding);
+                                                          ImVec2(1.0f, 1.0f), imgTint, rounding);
                             }
                         }
                     }
@@ -1148,21 +1190,18 @@ namespace pe
 
                 if (quad.visualStyle == RuntimeUiQuadVisualStyle::Button)
                 {
-                    // Same idle/hover fill lerp as unthemed — this is the calculation
-                    // that makes the plate read correctly (hover was the only path that
-                    // still applied it after the themed-tint experiment).
-                    RuntimeUiColor buttonFill = state.down ? quad.accentColor
-                                                           : (state.hovered ? LerpColor(quad.fillColor, quad.accentColor, 0.35f)
-                                                                            : quad.fillColor);
-                    drawSurface(ToColor(buttonFill), false);
+                    // Hover/press scale the button's OWN fill rather than bending it
+                    // toward the accent. The old lerp pulled every button toward
+                    // whatever accent it happened to carry, which is why hover was
+                    // yellow on one button and grey on the next.
+                    drawSurface(ToColor(pointerLit(quad.fillColor)), false);
                     // Themed buttons have no border to thicken (drawBorder is unthemed
                     // only), so selected/dragging reads as an accent wash instead.
-                    const bool activeWash = themed && (quad.selected || state.dragging);
-                    if (state.hovered || activeWash)
+                    // Pointer state is NOT part of it any more.
+                    if (themed && (quad.selected || state.dragging))
                     {
                         RuntimeUiColor wash = quad.accentColor;
-                        // Themed: restrained wash so wood/metal grain stays visible.
-                        wash.a *= state.down || activeWash ? (themed ? 0.18f : 0.34f) : (themed ? 0.08f : 0.16f);
+                        wash.a *= 0.18f;
                         drawList->AddRectFilled(pos, max, ToColor(wash), rounding);
                     }
                     drawBorder();
