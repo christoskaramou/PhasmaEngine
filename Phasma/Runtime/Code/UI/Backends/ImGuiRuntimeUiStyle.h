@@ -17,6 +17,19 @@ namespace pe::runtime_ui_imgui
         ImGuiWindowFlags_NoFocusOnAppearing |
         ImGuiWindowFlags_AlwaysAutoResize;
 
+    // Pointer feedback is a MULTIPLY on whatever the widget already draws — its
+    // plate art, its fill, its image. Not a translucent rectangle painted over
+    // the top, which is what it used to be: that added the widget's accent as a
+    // visible colour, so a gold-accent tab flashed yellow and a grey-accent
+    // button flashed grey, and no two buttons agreed. Scaling the drawn pixels
+    // keeps every button's own art and makes the reaction identical everywhere.
+    // Both DARKEN. Brightening cannot show on the common case: a plate tinted
+    // white already draws its texture at full value, so a >1 multiply clamps and
+    // nothing happens. Dimming reads on every plate, pale or saturated, and
+    // "presses in" the way a physical button does.
+    inline constexpr float kHoverTint = 0.92f; // hover: a touch darker
+    inline constexpr float kPressTint = 0.80f; // press: pushed in
+
     inline void ApplyContextSettings(ImGuiIO &io)
     {
         io.ConfigFlags |= ImGuiConfigFlags_IsSRGB;

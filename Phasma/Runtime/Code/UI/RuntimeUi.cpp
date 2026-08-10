@@ -762,6 +762,7 @@ namespace pe
         widget.visible = desc.visible;
         widget.bringToFront = desc.bringToFront;
         widget.noInput = desc.noInput;
+        widget.cornerRadius = desc.cornerRadius;
         widget.fontScale = desc.fontScale > 0.0f ? desc.fontScale : 1.0f;
         widget.textAlignH = desc.textAlignH;
         widget.textAlignV = desc.textAlignV;
@@ -1423,6 +1424,7 @@ namespace pe
                         quadDesc.noInput = widget.noInput;
                         // Same text proportions on desktop and Android: DPI is cancelled
                         // here, so do not reintroduce a platform readability bump.
+                        quadDesc.cornerRadius = widget.cornerRadius;
                         quadDesc.fontScale = widget.fontScale / m_frameUiScale;
                         quadDesc.textScale = m_textScale;
                         quadDesc.textAlignH = widget.textAlignH;

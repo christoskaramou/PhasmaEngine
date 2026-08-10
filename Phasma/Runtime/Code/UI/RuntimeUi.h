@@ -117,6 +117,10 @@ namespace pe
         bool useBackgroundTint = false;
         // Negative inherits the global element lift; 0..1 selects an explicit variant.
         float imageWhiten = -1.0f;
+        // Corner rounding in pixels. Negative keeps the default plate rounding.
+        // Set it to half the smaller edge to draw a circle — there is no separate
+        // circle primitive, and a rounded square IS one at that radius.
+        float cornerRadius = -1.0f;
         NodeId *node = nullptr;
         bool draggable = false;
         bool selected = false;
@@ -329,6 +333,7 @@ namespace pe
             RuntimeUiWidgetState state{};
             bool bringToFront = false;
             bool noInput = false;
+            float cornerRadius = -1.0f;
             float fontScale = 1.0f;
             RuntimeUiTextAlignH textAlignH = RuntimeUiTextAlignH::Default;
             RuntimeUiTextAlignV textAlignV = RuntimeUiTextAlignV::Default;
