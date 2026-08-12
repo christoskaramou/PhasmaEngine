@@ -21,6 +21,9 @@ add_executable(PhasmaCook
     "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/CookUI.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Code/Scene/ModelAssetAssimp.cpp"
+    # Real (assimp-backed) AnimationImporter: PhasmaRuntime only carries the PE_ENABLE_ASSIMP=off
+    # stubs, so the cook must compile the TU itself or every cooked model gets 0 bones / 0 clips.
+    "${CMAKE_SOURCE_DIR}/Phasma/Runtime/Code/Animation/AnimationImporter.cpp"
     ${PHASMACOOK_IMGUI_SOURCES}
 )
 
