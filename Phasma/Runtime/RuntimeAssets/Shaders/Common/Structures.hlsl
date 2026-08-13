@@ -69,7 +69,12 @@ struct PushConstants_ColorGrading
     float saturation;
     float contrast;
     float intensity;
-    float blend; // volume blend factor (0..1): lerp the graded result back toward the input
+    float blend;    // volume blend factor (0..1): lerp the graded result back toward the input
+    float use_mask; // 1 = scale effect strength per pixel by the Mask texture's red channel
+    // Scalar tail pad (not float3: scalars pack identically under DX cbuffer and SPIR-V rules).
+    float pad0;
+    float pad1;
+    float pad2;
 };
 
 #ifdef SHADOWMAP_CASCADES

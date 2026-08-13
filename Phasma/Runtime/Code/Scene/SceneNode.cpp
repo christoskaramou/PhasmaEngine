@@ -759,6 +759,10 @@ namespace pe
             &PostProcessProfile::IBL};
         for (auto m : kB)
             dst.*m = dst.*m || src.*m;
+        // Paths can't lerp: a volume with a mask overrides the base for the whole blend (mirrors
+        // the bool either-side-wants-it rule above).
+        if (!src.color_grading_mask.empty())
+            dst.color_grading_mask = src.color_grading_mask;
     }
 
     // Per-effect blend factor (0..1): how visible each effect is this frame. Seeded from the base

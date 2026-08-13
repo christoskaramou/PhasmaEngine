@@ -218,6 +218,7 @@ namespace pe
                     if (key == "on_enter") { z->onEnter = value.as<std::string>(); s->MarkDirty(); return; }
                     if (key == "on_exit") { z->onExit = value.as<std::string>(); s->MarkDirty(); return; }
                     PostProcessProfile &p = z->postProcess;
+                    if (key == "color_grading_mask") { p.color_grading_mask = value.is<std::string>() ? value.as<std::string>() : std::string{}; s->MarkDirty(); return; }
                     static const std::unordered_map<std::string_view, bool PostProcessProfile::*> B = {
                         {"ssao", &PostProcessProfile::ssao}, {"fxaa", &PostProcessProfile::fxaa},
                         {"taa", &PostProcessProfile::taa}, {"cas_sharpening", &PostProcessProfile::cas_sharpening},

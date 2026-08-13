@@ -117,6 +117,9 @@ namespace pe
         float color_grading_saturation = 1.0f;
         float color_grading_contrast = 1.0f;
         float color_grading_intensity = 1.0f;
+        // Single-channel strength mask (asset-relative path, e.g. a vignette): the pass scales the
+        // whole effect per pixel by the texture's red channel. Empty = uniform full strength.
+        std::string color_grading_mask{};
         bool dof = false;
         float dof_focus_scale = 15.0f;
         float dof_blur_range = 5.0f;

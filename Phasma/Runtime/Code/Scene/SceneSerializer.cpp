@@ -175,6 +175,7 @@ namespace pe
             v.AddMember("color_grading_saturation", p.color_grading_saturation, alloc);
             v.AddMember("color_grading_contrast", p.color_grading_contrast, alloc);
             v.AddMember("color_grading_intensity", p.color_grading_intensity, alloc);
+            v.AddMember("color_grading_mask", rapidjson::Value(p.color_grading_mask.c_str(), alloc), alloc);
             v.AddMember("dof", p.dof, alloc);
             v.AddMember("dof_focus_scale", p.dof_focus_scale, alloc);
             v.AddMember("dof_blur_range", p.dof_blur_range, alloc);
@@ -221,6 +222,8 @@ namespace pe
             F("color_grading_saturation", p.color_grading_saturation);
             F("color_grading_contrast", p.color_grading_contrast);
             F("color_grading_intensity", p.color_grading_intensity);
+            if (v.HasMember("color_grading_mask") && v["color_grading_mask"].IsString())
+                p.color_grading_mask = v["color_grading_mask"].GetString();
             B("dof", p.dof);
             F("dof_focus_scale", p.dof_focus_scale);
             F("dof_blur_range", p.dof_blur_range);
@@ -293,6 +296,7 @@ namespace pe
             settings.AddMember("color_grading_saturation", gSettings.color_grading_saturation, allocator);
             settings.AddMember("color_grading_contrast", gSettings.color_grading_contrast, allocator);
             settings.AddMember("color_grading_intensity", gSettings.color_grading_intensity, allocator);
+            settings.AddMember("color_grading_mask", rapidjson::Value(gSettings.color_grading_mask.c_str(), allocator), allocator);
             settings.AddMember("dof", gSettings.dof, allocator);
             settings.AddMember("dof_focus_scale", gSettings.dof_focus_scale, allocator);
             settings.AddMember("dof_blur_range", gSettings.dof_blur_range, allocator);
@@ -512,6 +516,8 @@ namespace pe
                 gSettings.color_grading_contrast = settings["color_grading_contrast"].GetFloat();
             if (settings.HasMember("color_grading_intensity"))
                 gSettings.color_grading_intensity = settings["color_grading_intensity"].GetFloat();
+            if (settings.HasMember("color_grading_mask") && settings["color_grading_mask"].IsString())
+                gSettings.color_grading_mask = settings["color_grading_mask"].GetString();
             if (settings.HasMember("dof"))
                 gSettings.dof = settings["dof"].GetBool();
             if (settings.HasMember("dof_focus_scale"))

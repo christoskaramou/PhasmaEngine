@@ -123,6 +123,8 @@ namespace pe
                         return sol::make_object(lua, gs.normal_format);
                     if (name == "velocity_format")
                         return sol::make_object(lua, gs.velocity_format);
+                    if (name == "color_grading_mask")
+                        return sol::make_object(lua, gs.color_grading_mask);
                     PE_WARN("[Lua] settings.get: unknown setting '%s'", name.c_str());
                     return sol::nil;
                 });
@@ -144,6 +146,8 @@ namespace pe
                             gs.normal_format = s;
                         else if (name == "velocity_format")
                             gs.velocity_format = s;
+                        else if (name == "color_grading_mask")
+                            gs.color_grading_mask = s;
                         else
                             PE_WARN("[Lua] settings.set: unknown string setting '%s'", name.c_str());
                     }
