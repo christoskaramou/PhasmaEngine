@@ -14,7 +14,7 @@ namespace pe
         void UpdatePassInfo() override;
         void CreateUniforms(CommandBuffer *cmd) override;
         void UpdateDescriptorSets() override;
-        void Update() override {};
+        void Update() override;
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
@@ -22,7 +22,13 @@ namespace pe
     private:
         friend class Renderer;
 
+        void LoadMask(const std::string &path);
+
         Image *m_frameImage;
         Image *m_displayRT;
+        // Strength mask (profile color_grading_mask). Cached once loaded so scripts can toggle the
+        // path on/off per frame for free; only a new path pays a load + descriptor rewrite.
+        Image *m_maskImage = nullptr;
+        std::string m_maskPath;
     };
 } // namespace pe

@@ -2,6 +2,7 @@
 #include "../Common/Common.hlsl"
 
 TexSamplerDecl(0, 0, Color)
+TexSamplerDecl(1, 0, Mask)
 
 [[vk::push_constant]] PushConstants_ColorGrading pc;
 
@@ -28,8 +29,11 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
 
     float3 finalColor = lerp(color, graded, saturate(pc.intensity));
 
+    // Single-channel strength mask (e.g. a vignette): scales the whole effect per pixel.
+    float mask = lerp(1.0, Mask.Sample(sampler_Mask, input.uv).r, saturate(pc.use_mask));
+
     // Volume blend: fade the whole effect back toward the unprocessed input.
-    finalColor = lerp(color, finalColor, saturate(pc.blend));
+    finalColor = lerp(color, finalColor, saturate(pc.blend) * mask);
 
     output.color = float4(finalColor, 1.0);
     return output;

@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-08-13
+
+- The colour-grading pass accepts an optional single-channel strength mask via `PostProcessProfile::color_grading_mask` (asset-relative path, e.g. a vignette): the shader scales the whole effect per pixel by the texture's red channel, so grading can be confined to screen regions (edge vignettes, letterbox tints) without touching the centre. Empty path keeps uniform full strength. The mask is exposed through `settings.get`/`settings.set("color_grading_mask", path)`, trigger-zone `set_zone`, `.pescene` serialization (scene settings and per-zone profiles), and an editor Strength Mask field under Color Grading. The pass caches the loaded mask and gates it with a `use_mask` push constant, so scripts can toggle the path per frame for free; only a new path pays a one-time load plus device-idle descriptor rewrite. Grayscale PNGs decode through the existing RGBA8 loader with the shader reading `.r`.
+
 ## 2026-08-09
 
 - Added independent Runtime UI element and page-background RGB multipliers through `runtime_ui.set_element_tint(...)` and `runtime_ui.set_background_tint(...)`; authored or scripted quads opt into the background channel with `use_background_tint`, while `set_global_tint(...)` sets both for compatibility. `runtime_ui.set_element_whiten(amount)` adds a cached load-time foreground-only white lift that preserves dark line art and source alpha, rather than trying to whiten warm art with a blue RGB multiplier. Individual quads can override the lift with `image_whiten`, and `sprite.setup{whiten=...}` uses the same cached decode for animated sprite atlases. The split preserves text, state colors, alpha, background-channel images, and world rendering.

@@ -3,6 +3,7 @@
 #include "API/Descriptor.h"
 #include "API/Image.h"
 #include "API/Pipeline.h"
+#include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
 #include "Render/SceneRendererHost.h"
@@ -20,8 +21,10 @@ namespace pe
         float contrast;
         float intensity;
         float blend;
+        float useMask;
+        float pad[3];
     };
-    static_assert(sizeof(ColorGradingPushConstants) == 64, "ColorGradingPushConstants must match HLSL PushConstants_ColorGrading");
+    static_assert(sizeof(ColorGradingPushConstants) == 80, "ColorGradingPushConstants must match HLSL PushConstants_ColorGrading");
 
     void ColorGradingPass::Init()
     {
@@ -63,12 +66,58 @@ namespace pe
 
     void ColorGradingPass::UpdateDescriptorSets()
     {
+        // Binding 1 must always be valid; before a mask loads, the frame image stands in
+        // (never sampled into the result while use_mask is 0).
+        Image *mask = m_maskImage ? m_maskImage : m_frameImage;
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
             DSet->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler());
+            DSet->SetImageView(1, mask->GetSRV(), mask->GetSampler());
             DSet->Update();
         }
+    }
+
+    void ColorGradingPass::Update()
+    {
+        // A cleared path keeps the cached mask bound (use_mask just drops to 0), so scripts can
+        // pulse a mask on/off per frame; only a different non-empty path pays a real load.
+        const std::string &path = ActivePostProcessProfile().color_grading_mask;
+        if (!path.empty() && path != m_maskPath)
+            LoadMask(path);
+    }
+
+    void ColorGradingPass::LoadMask(const std::string &path)
+    {
+        m_maskPath = path;
+
+        Queue *queue = RHII.GetMainQueue();
+        if (!queue)
+            return;
+
+        CommandBuffer *cmd = queue->AcquireCommandBuffer();
+        cmd->Begin();
+        // ponytail: grayscale PNG decoded as RGBA8, shader reads .r; switch to an R8 LoadRaw path
+        // if mask VRAM ever matters.
+        Image *mask = Image::LoadRGBA8(cmd, Path::ResolveAsset(path));
+        cmd->End();
+        if (mask)
+        {
+            queue->Submit(1, &cmd, nullptr, nullptr);
+            cmd->Wait();
+        }
+        else
+        {
+            PE_WARN("[ColorGrading] strength mask failed to load: %s", path.c_str());
+        }
+        cmd->Return();
+
+        // Rare (a new mask path, usually once per scene): drain the GPU so no in-flight frame
+        // still references the old binding, then rewrite all descriptor sets.
+        RHII.WaitDeviceIdle();
+        Image::Destroy(m_maskImage);
+        m_maskImage = mask;
+        UpdateDescriptorSets();
     }
 
     void ColorGradingPass::ExecutePass(CommandBuffer *cmd)
@@ -102,6 +151,7 @@ namespace pe
         pc.contrast = gSettings.color_grading_contrast;
         pc.intensity = gSettings.color_grading_intensity;
         pc.blend = ActivePostProcessBlend().color_grading;
+        pc.useMask = m_maskImage && !gSettings.color_grading_mask.empty() ? 1.0f : 0.0f;
 
         cmd->BeginPass(1, m_attachments.data(), "ColorGrading");
         cmd->BindPipeline(*m_passInfo);
@@ -125,5 +175,7 @@ namespace pe
     void ColorGradingPass::Destroy()
     {
         Image::Destroy(m_frameImage);
+        Image::Destroy(m_maskImage);
+        m_maskPath.clear();
     }
 } // namespace pe

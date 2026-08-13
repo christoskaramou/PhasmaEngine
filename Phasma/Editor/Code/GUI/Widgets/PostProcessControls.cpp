@@ -58,6 +58,13 @@ namespace pe
             T(ImGui::SliderFloat("Saturation##CG", &pp.color_grading_saturation, 0.0f, 2.0f));
             T(ImGui::SliderFloat("Contrast##CG", &pp.color_grading_contrast, 0.0f, 2.0f));
             T(ImGui::SliderFloat("Intensity##CG", &pp.color_grading_intensity, 0.0f, 1.0f));
+            char maskBuf[256];
+            snprintf(maskBuf, sizeof(maskBuf), "%s", pp.color_grading_mask.c_str());
+            if (ImGui::InputText("Strength Mask##CG", maskBuf, sizeof(maskBuf)))
+            {
+                pp.color_grading_mask = maskBuf;
+                T(true);
+            }
             ImGui::Unindent(16.0f);
         }
 
