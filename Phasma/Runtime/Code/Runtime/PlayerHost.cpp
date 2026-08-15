@@ -943,6 +943,9 @@ namespace pe
                 ThreadPool::GUI.WaitIdle();
                 ThreadPool::General.WaitIdle();
                 FileWatcher::Clear();
+                // Lua destroy() hooks still call runtime_ui.*; run them while the system is live.
+                if (auto *scripts = GetGlobalSystem<ScriptSystem>())
+                    scripts->Destroy();
                 renderer.SetRuntimeUi(nullptr);
                 SetActiveRuntimeUi(nullptr);
                 runtimeUi.Shutdown();

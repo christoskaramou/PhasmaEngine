@@ -546,6 +546,9 @@ namespace pe
         SetActiveSceneGetter(nullptr);
         SetSceneHostCallbacks({});
         SetSceneRuntimeHooks({});
+        // Lua destroy() hooks still call runtime_ui.*; run them while the system is live.
+        if (auto *scripts = GetGlobalSystem<ScriptSystem>())
+            scripts->Destroy();
         SetActiveRuntimeUi(nullptr);
         if (m_runtimeUi)
         {
