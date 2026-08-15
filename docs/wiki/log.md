@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-08-16
+
+- Android `PhasmaPlayerActivity` forwards any `PE_*` intent extra into the process environment under the same name. Game-specific `ATH_*` aliases and the `PE_SCRIPT_` rewrite are gone; script knobs use the desktop prefix (`--es PE_SCRIPT_FOO bar`). `PE_PROFILER` stays on its existing parser so a boolean extra cannot become profiler port 1.
+
 ## 2026-08-13
 
 - The colour-grading pass accepts an optional single-channel strength mask via `PostProcessProfile::color_grading_mask` (asset-relative path, e.g. a vignette): the shader scales the whole effect per pixel by the texture's red channel, so grading can be confined to screen regions (edge vignettes, letterbox tints) without touching the centre. Empty path keeps uniform full strength. The mask is exposed through `settings.get`/`settings.set("color_grading_mask", path)`, trigger-zone `set_zone`, `.pescene` serialization (scene settings and per-zone profiles), and an editor Strength Mask field under Color Grading. The pass caches the loaded mask and gates it with a `use_mask` push constant, so scripts can toggle the path per frame for free; only a new path pays a one-time load plus device-idle descriptor rewrite. Grayscale PNGs decode through the existing RGBA8 loader with the shader reading `.r`.

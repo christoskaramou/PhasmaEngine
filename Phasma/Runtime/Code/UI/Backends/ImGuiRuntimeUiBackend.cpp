@@ -414,8 +414,7 @@ namespace pe
                 if (m_currentScreenOverlay)
                 {
                     // Decorative overlay quads (damage floats, bars, stick, FPS…) used to each
-                    // open an ImGui window + BringWindowToDisplayFront. That dominated ATH combat
-                    // CPU once dozens were live. Batch no-input quads onto the background draw
+                    // open an ImGui window + BringWindowToDisplayFront. Batch no-input quads onto the background draw
                     // list (still above the 3D scene; below interactive overlay windows).
                     // bring_to_front no-input quads (tooltips, toasts, boss bar) keep the
                     // windowed path — batching would bury them under interactive windows.

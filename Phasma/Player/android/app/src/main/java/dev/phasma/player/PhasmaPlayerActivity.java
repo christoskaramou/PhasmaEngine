@@ -36,9 +36,8 @@ public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
     private static volatile int sSafeAreaInsetRight = 0;
     private static volatile int sSafeAreaInsetBottom = 0;
 
-    // Recents redelivers the last launch intent, so adb-harness extras (profiler,
-    // arena autostart, god mode) would leak into a normal user relaunch without
-    // this guard.
+    // Recents redelivers the last launch intent, so adb-harness extras would leak
+    // into a normal user relaunch without this guard.
     private boolean isHistoryRelaunch() {
         return getIntent() != null
                 && (getIntent().getFlags() & android.content.Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0;
@@ -48,7 +47,7 @@ public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
     protected void onCreate(Bundle savedInstanceState) {
         if (!isHistoryRelaunch()) {
             applyProfilerLaunchOptions();
-            applyAthLaunchEnv();
+            applyLaunchEnvFromExtras();
         } else {
             Log.i(TAG, "Relaunch from Recents: ignoring redelivered launch extras");
         }
@@ -177,32 +176,23 @@ public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
         }
     }
 
-    // ATH launch options from intent extras (adb --es / --ez):
-    //   ATH_MONO_ARCH=sprout|off
-    //   ATH_DUEL_INVULNERABLE=true  (god mode for perf captures)
-    private void applyAthLaunchEnv() {
+    // Intent extras whose keys start with PE_ become process env under the same name.
+    // Script options use the desktop prefix: --es PE_SCRIPT_FOO bar
+    // PE_PROFILER is parsed separately so a boolean "1" cannot become profiler port 1.
+    private void applyLaunchEnvFromExtras() {
         Bundle extras = getIntent() != null ? getIntent().getExtras() : null;
         if (extras == null) {
             return;
         }
-        setLaunchEnvFromExtra(extras, "ATH_MONO_ARCH");
-        setLaunchEnvFromExtra(extras, "ATH_DUEL_INVULNERABLE");
-        // Direct arena boot + self-starting combat for hands-off perf captures:
-        //   --es ATH_MODE arena --ez ATH_AUTOSTART true
-        setLaunchEnvFromExtra(extras, "ATH_MODE");
-        setLaunchEnvFromExtra(extras, "ATH_AUTOSTART");
-        // Perf map/wave pins (Duel:start_map): --ei ATH_DUEL_MAP 8 --ei ATH_DUEL_WAVE 1
-        setLaunchEnvFromExtra(extras, "ATH_DUEL_MAP");
-        setLaunchEnvFromExtra(extras, "ATH_DUEL_WAVE");
-        // Present-mode A/B knob: --es PE_PRESENT_MODE mailbox|immediate|fifo
-        // (read by RuntimeStartup's ReadPresentModeEnvOverride; default stays FIFO).
-        setLaunchEnvFromExtra(extras, "PE_PRESENT_MODE");
+        for (String key : extras.keySet()) {
+            if (key == null || !key.startsWith("PE_") || key.equals("PE_PROFILER")) {
+                continue;
+            }
+            setLaunchEnvFromExtra(extras, key);
+        }
     }
 
     private void setLaunchEnvFromExtra(Bundle extras, String key) {
-        if (!extras.containsKey(key)) {
-            return;
-        }
         Object value = extras.get(key);
         String text;
         if (value instanceof Boolean) {
@@ -221,9 +211,8 @@ public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
             }
         }
         try {
-            String environmentKey = key.startsWith("ATH_") ? "PE_SCRIPT_" + key : key;
-            Os.setenv(environmentKey, text, true);
-            Log.i(TAG, environmentKey + "=" + text);
+            Os.setenv(key, text, true);
+            Log.i(TAG, key + "=" + text);
         } catch (ErrnoException e) {
             Log.w(TAG, "Failed to set launch environment for " + key, e);
         }
