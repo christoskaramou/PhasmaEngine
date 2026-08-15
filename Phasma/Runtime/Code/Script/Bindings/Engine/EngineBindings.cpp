@@ -76,6 +76,47 @@ namespace pe
                     t["h"] = h;
                     t["valid"] = w > 0 && h > 0;
                     return t;
+                });
+
+                engine.set_function("get_window_mode", []() -> std::string {
+#if defined(PE_ANDROID)
+                    return "fullscreen";
+#else
+                    SDL_Window *window = RHII.GetWindow();
+                    if (!window)
+                        return "windowed";
+                    const Uint32 flags = SDL_GetWindowFlags(window);
+                    if ((flags & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP)
+                        return "borderless";
+                    if (flags & SDL_WINDOW_FULLSCREEN)
+                        return "fullscreen";
+                    return "windowed";
+#endif
+                });
+
+                engine.set_function("set_window_mode", [](const std::string &mode) {
+#if defined(PE_ANDROID)
+                    (void)mode;
+#else
+                    SDL_Window *window = RHII.GetWindow();
+                    if (!window)
+                        return;
+                    Uint32 flags = 0;
+                    if (mode == "fullscreen")
+                        flags = SDL_WINDOW_FULLSCREEN;
+                    else if (mode == "borderless")
+                        flags = SDL_WINDOW_FULLSCREEN_DESKTOP;
+                    else if (mode == "windowed")
+                        flags = 0;
+                    else
+                        return;
+                    SDL_SetWindowFullscreen(window, flags);
+                    if (flags == 0)
+                    {
+                        SDL_SetWindowBordered(window, SDL_TRUE);
+                        SDL_SetWindowResizable(window, SDL_TRUE);
+                    }
+#endif
                 }); });
         }
     } s_runtimeEngineBindings;
