@@ -1,8 +1,8 @@
 -- gamekit/init.lua — load every gamekit module and assemble the `kit` table.
 --
 -- PhasmaEngine's Lua does not wire `require` to the project asset tree, so the
--- project convention (Warbound wb_loader, ATH ath_common) is to read and compile
--- module files via the fs binding. A game's entry script bootstraps gamekit with:
+-- project convention is to read and compile module files via the fs binding.
+-- A game's entry script bootstraps gamekit with:
 --
 --     local kit = (function()
 --         local src = fs.read("Scripts/gamekit/init.lua")

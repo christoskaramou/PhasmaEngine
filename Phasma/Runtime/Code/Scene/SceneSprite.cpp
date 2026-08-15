@@ -249,7 +249,7 @@ namespace pe
                 whitenKey > 0 ? "whiten:" + std::to_string(whitenKey) + ":" + normalizedStr : normalizedStr;
 
             // Cached atlases must not re-Submit+Wait a no-op command buffer —
-            // ATH pools call sprite.setup on hundreds of bodies and each Wait
+            // pools that call sprite.setup on hundreds of bodies and each Wait
             // was a multi-ms hitch on spawn / Arena prewarm.
             if (ResourceHandle<Image> cached = ResourceManager::Get().Find<Image>(cacheKey))
                 return cached;
@@ -609,7 +609,7 @@ namespace pe
             inst->SetEmissiveFactor(vec3(tint));
             inst->SetMetallic(1.0f);
             inst->SetRoughness(1.0f);
-            // AlphaCut matches ATH top-down flat sprites; Lua can still override.
+
             const bool renderTypeChanged = mesh.renderType != RenderType::AlphaCut;
             inst->SetRenderType(RenderType::AlphaCut);
             mesh.renderType = RenderType::AlphaCut;

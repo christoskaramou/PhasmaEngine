@@ -65,7 +65,7 @@ namespace pe
 
         // Cache fast-path: a resident texture must not pay the submit+wait
         // below — that full main-queue sync cost 5-12ms per set_texture call
-        // under FIFO backpressure (measured on ATH combat re-dressing).
+        // under FIFO backpressure
         std::error_code ec;
         std::filesystem::path normalized = std::filesystem::weakly_canonical(resolvedPath, ec);
         if (ec)
@@ -374,7 +374,6 @@ namespace pe
                     MaterialInstance *inst = ensureInstance(s, mesh);
                     if (!inst) return;
                     // Color/emissive live in the material buffer — no MarkNodeDirty
-                    // (avoids UpdateNodeMatrices subtree walks on ATH flash paths).
                     bool changed = false;
                     if (prop == "base_color")
                         changed = inst->SetBaseColorFactor(value);
