@@ -98,6 +98,10 @@ namespace pe
 #if defined(PE_ANDROID)
                     (void)mode;
 #else
+                    // Fullscreen/borderless belong to the player; in the editor the
+                    // window is the tool, so a project script must not take it over.
+                    if (IsEditorHost())
+                        return;
                     SDL_Window *window = RHII.GetWindow();
                     if (!window)
                         return;
