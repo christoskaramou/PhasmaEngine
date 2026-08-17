@@ -1285,6 +1285,16 @@ namespace
             return false;
         }
 
+        // Trust boundary: the name reaches new_game.py as an argv element and as a
+        // path component in os.path.join(--dir, name). A leading dash would be read
+        // as a flag, and separators or a dot-segment would escape the projects dir.
+        if (name.empty() || name.front() == '-' || name == "." || name == ".." ||
+            name.find_first_of("/\\:") != std::string::npos)
+        {
+            error = "Invalid project name '" + name + "'; no leading '-', no path separators.";
+            return false;
+        }
+
 #if defined(PE_WIN32)
         const std::string commandLine =
             std::string("python ") + QuoteCommandLineArg(script.string()) +
