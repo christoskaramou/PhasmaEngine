@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-08-17
+
+- PhasmaPlayer boots the project manifest `startup_scene` and ignores `phasma_settings.json` / editor `last_scene`, so a play session cannot resume a map/hub instead of the title scene. Editor and launcher keep the old settings → restore → manifest order.
+
 ## 2026-08-16
 
 - Android `PhasmaPlayerActivity` forwards any `PE_*` intent extra into the process environment under the same name. Game-specific `ATH_*` aliases and the `PE_SCRIPT_` rewrite are gone; script knobs use the desktop prefix (`--es PE_SCRIPT_FOO bar`). `PE_PROFILER` stays on its existing parser so a boolean extra cannot become profiler port 1.

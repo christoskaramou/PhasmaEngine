@@ -768,7 +768,10 @@ namespace pe
                 PE_INFO("[Runtime] Loaded game pack: %s", gamePackPath.generic_string().c_str());
             }
             RuntimeStartupSceneResolveOptions startupSceneOptions{};
-            startupSceneOptions.allowEditorRestore = true;
+            // Player is the shipped game: always boot the project title scene.
+            // Editor/launcher last_scene would otherwise resume mid-run (map/hub).
+            startupSceneOptions.allowRuntimeSettings = false;
+            startupSceneOptions.allowEditorRestore = false;
             const RuntimeStartupSceneSelection startupScene =
                 ResolveRuntimeStartupScene(projectSelection, startupSceneOptions);
             LogProjectSelection(projectSelection, startupScene);
