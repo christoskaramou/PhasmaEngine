@@ -40,6 +40,7 @@ namespace pe
 
     struct RuntimeStartupSceneResolveOptions
     {
+        bool allowRuntimeSettings = true;
         bool allowEditorRestore = true;
         bool allowProjectFallback = true;
         std::filesystem::path settingsPath;

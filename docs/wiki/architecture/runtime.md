@@ -128,7 +128,9 @@ The active project selection is stored in executable-local `phasma_settings.json
 
 `startup_scene` may be omitted from the manifest, or set to an empty string, when a project does not have a startup scene yet.
 
-Startup scene precedence is explicit launch setting first, then editor restore, then project manifest fallback:
+Startup scene precedence is explicit launch setting first, then editor restore, then project manifest fallback. **PhasmaPlayer skips the first two** and always loads `phasma_project.json:startup_scene`, so a play session cannot resume last night's map instead of the title scene.
+
+Editor / launcher still use:
 
 - `phasma_settings.json:startup_scene` wins when it is non-empty, so a launcher-selected scene cannot be overwritten by stale editor restore state;
 - an existing `phasma_settings.json:startup_scene` key with an empty value is an explicit "no startup scene" selection and suppresses editor/manifest fallback;
