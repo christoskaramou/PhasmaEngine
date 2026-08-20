@@ -53,10 +53,11 @@ namespace pe
     {
         auto &settings = Settings::Get<SceneSettings>();
 
-        // These are editor overlays, not standalone player output.
+        // Editor overlays, not standalone player output. selection_outline is deliberately NOT
+        // forced off: the default runtime hooks feed it (selection.select_node from Lua), so a
+        // game can outline nodes; with nothing selected the pass early-outs to zero work.
         settings.draw_grid = false;
         settings.draw_aabbs = false;
-        settings.selection_outline = false;
     }
 
     void RuntimeSceneRenderer::Init(CommandBuffer *cmd)
