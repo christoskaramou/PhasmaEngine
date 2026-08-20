@@ -196,6 +196,20 @@ namespace
                name.starts_with("libvulkan.so");
     }
 
+    // Path::Init picks Path::RuntimeAssets by DIRECTORY EXISTENCE and falls back to Assets/ when
+    // RuntimeAssets/ is missing -- at which point every engine asset is looked up under the wrong
+    // root, misses the pack, and the first shader compile kills the game. Both anchors are empty
+    // directories, and an empty directory does not survive being zipped: Compress-Archive, GitHub's
+    // "download ZIP" and plenty of others store files only. So each anchor gets a file in it, which
+    // is what actually makes an exported game survive the trip to another machine.
+    void WriteAnchor(const std::filesystem::path &dir)
+    {
+        std::filesystem::create_directories(dir);
+        std::ofstream(dir / "anchor.txt")
+            << "This folder must exist for the game to find its assets. Do not delete it.\n"
+               "It is otherwise empty; this file is here so the folder survives being zipped.\n";
+    }
+
     void CopyRuntime(const std::filesystem::path &runtimeDir,
                      const std::filesystem::path &output,
                      lua_State *lua,
@@ -239,8 +253,7 @@ namespace
                                    : ReadFile(entry.path());
             packEntries.push_back(std::move(packedEntry));
         }
-        // Empty anchor: Path::Init resolves Path::RuntimeAssets by directory existence.
-        std::filesystem::create_directories(output / "RuntimeAssets");
+        WriteAnchor(output / "RuntimeAssets");
     }
 
     void ExportAssets(const pe::ProjectConfig &project,
@@ -250,8 +263,7 @@ namespace
     {
         const std::filesystem::path assetsRoot = project.AssetsRoot();
         const std::vector<std::string> ignoreRules = ReadIgnoreRules(project.root);
-        // Empty anchor: the project manifest's assets root must exist on disk, and saves land here.
-        std::filesystem::create_directories(output / "Assets");
+        WriteAnchor(output / "Assets");
 
         for (const auto &entry : std::filesystem::recursive_directory_iterator(
                  assetsRoot, std::filesystem::directory_options::skip_permission_denied))
