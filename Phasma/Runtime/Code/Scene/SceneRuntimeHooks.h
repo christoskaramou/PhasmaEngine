@@ -62,6 +62,9 @@ namespace pe
 
     [[nodiscard]] SceneRuntimeHooks CreateDefaultSceneRuntimeHooks();
     void SetSceneRuntimeHooks(SceneRuntimeHooks hooks);
+    // Feed for the default isNodeSelected hook: marks one node for the selection-outline pass in
+    // hosts without a SelectionManager (PhasmaPlayer). -1 = nothing selected.
+    void SetRuntimeSelectedNodeIndex(int nodeIndex);
     void ClearSceneSelection();
     [[nodiscard]] bool IsSceneNodeSelected(const NodeId *node);
     void ClearSceneAnimations();

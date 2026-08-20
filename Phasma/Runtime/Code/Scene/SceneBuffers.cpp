@@ -19,12 +19,26 @@ namespace pe
         return mesh.renderType != RenderType::Lines && mesh.renderType != RenderType::SpriteOutline;
     }
 
+    // A node counts as selected when it, or any ancestor, is selected. Selection is otherwise a
+    // strict per-node test, so selecting a model root outlined nothing and selecting a parent whose
+    // detail meshes hang off child nodes outlined only the parent's own mesh.
+    static bool IsSelectedInHierarchy(const Scene &scene, const NodeId *node)
+    {
+        for (const NodeId *n = node; n; n = scene.GetParent(n))
+        {
+            if (IsSceneNodeSelected(n))
+                return true;
+        }
+        return false;
+    }
+
     bool Scene::HasSelectedRenderableMeshes() const
     {
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
             NodeId *node = m_nodeIds[i];
-            if (!node || m_nodeRuntime[i].gpuPending || !IsNodeHierarchyEnabled(node) || !IsSceneNodeSelected(node))
+            if (!node || m_nodeRuntime[i].gpuPending || !IsNodeHierarchyEnabled(node) ||
+                !IsSelectedInHierarchy(*this, node))
                 continue;
 
             for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
@@ -71,7 +85,7 @@ namespace pe
                     continue;
 
                 uint32_t flags = 0;
-                if (IsSceneNodeSelected(m_nodeIds[i]))
+                if (IsSelectedInHierarchy(*this, m_nodeIds[i]))
                 {
                     flags |= 1u;
                     // splitmix64 of the ordinal. XOR-accumulating distinct terms flips the signature
@@ -2232,7 +2246,7 @@ namespace pe
             constants.materialByteOffset = 0xFFFFFFFF;
 
         uint32_t flags = 0;
-        if (IsSceneNodeSelected(m_nodeIds[nodeIndex]))
+        if (IsSelectedInHierarchy(*this, m_nodeIds[nodeIndex]))
             flags |= 1u;
         if (mesh.material && mesh.material->doubleSided)
             flags |= 2u;

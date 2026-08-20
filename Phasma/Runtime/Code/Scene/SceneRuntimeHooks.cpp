@@ -330,11 +330,30 @@ namespace pe
                 audio->SetZoneAudio(node, desc, gain);
         }
 #endif
+
+        // Fallback selection for hosts without a SelectionManager (PhasmaPlayer): one node index a
+        // script marks for the selection-outline pass. The editor replaces both selection hooks
+        // with SelectionManager-backed ones (App.cpp), so these only ever serve runtime hosts.
+        // ponytail: single selection; becomes a set if a runtime host ever needs multi-select.
+        int s_runtimeSelectedNodeIndex = -1;
+
+        bool DefaultIsSceneNodeSelected(const NodeId *node)
+        {
+            return node && s_runtimeSelectedNodeIndex >= 0 &&
+                   static_cast<int>(node->index) == s_runtimeSelectedNodeIndex;
+        }
+
+        void DefaultClearSceneSelection()
+        {
+            s_runtimeSelectedNodeIndex = -1;
+        }
     } // namespace
 
     SceneRuntimeHooks CreateDefaultSceneRuntimeHooks()
     {
         SceneRuntimeHooks hooks{};
+        hooks.clearSelection = DefaultClearSceneSelection;
+        hooks.isNodeSelected = DefaultIsSceneNodeSelected;
         hooks.clearAnimations = DefaultClearSceneAnimations;
         hooks.removeAnimation = DefaultRemoveSceneAnimation;
         hooks.playAnimation = DefaultPlaySceneAnimation;
@@ -379,6 +398,11 @@ namespace pe
     void SetSceneRuntimeHooks(SceneRuntimeHooks hooks)
     {
         s_sceneRuntimeHooks = hooks;
+    }
+
+    void SetRuntimeSelectedNodeIndex(int nodeIndex)
+    {
+        s_runtimeSelectedNodeIndex = nodeIndex;
     }
 
     void ClearSceneSelection()
