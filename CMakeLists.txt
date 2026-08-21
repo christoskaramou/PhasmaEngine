@@ -211,6 +211,38 @@ endif()
 
 option(PE_AUDIO "Enable miniaudio integration" ON)
 
+# --- mbedTLS (TLS client for the net binding) ---
+# Internet play dials out to a relay and pins that relay's public key, so the engine needs a TLS
+# client — and only a client: it never terminates TLS itself, and LAN play stays plain TCP.
+#
+# The packaged release, not the git tag: since 3.6.1 part of the build lives in a `framework`
+# submodule that only the release asset carries, and a bare clone fails to configure without it.
+option(PE_TLS "Build the net binding with TLS client support (mbedTLS)" ON)
+if(PE_TLS)
+    include(FetchContent)
+    set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
+    set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "" FORCE)
+    set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "" FORCE)
+    set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "" FORCE)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+    FetchContent_Declare(MbedTLS
+        URL      https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.2/mbedtls-3.6.2.tar.bz2
+        URL_HASH SHA256=8b54fb9bcf4d5a7078028e0520acddefb7900b3e66fec7f7175bb5b7d85ccdca
+    )
+    # mbedTLS picks its warning flags off CMAKE_C_SIMULATE_ID first, so clang targeting the MSVC
+    # ABI is handed /W3 /utf-8 — flags clang's GNU driver rejects outright ("no such file or
+    # directory: '/W3'"). Hide the simulate id for the duration and it uses its clang flags,
+    # which is what this compiler actually wants. Real cl.exe builds are untouched.
+    set(PE_SAVED_SIMULATE_ID "${CMAKE_C_SIMULATE_ID}")
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND NOT CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+        set(CMAKE_C_SIMULATE_ID "")
+    endif()
+    FetchContent_MakeAvailable(MbedTLS)
+    set(CMAKE_C_SIMULATE_ID "${PE_SAVED_SIMULATE_ID}")
+endif()
+
 # --- MeshOptimizer (built from source with -fPIC) ---
 include(FetchContent)
 FetchContent_Declare(meshoptimizer
