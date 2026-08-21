@@ -57,6 +57,12 @@ if(WIN32)
     # ws2_32 for the LAN net binding; PhasmaCore links it PRIVATE, so this target needs its own.
     target_link_libraries(PhasmaRuntime PUBLIC d3d12.lib dxgi.lib dxguid.lib d3dcompiler.lib ws2_32)
 endif()
+if(PE_TLS AND TARGET mbedtls)
+    # Implementation detail of one binding, so PRIVATE: nothing above the net binding knows or
+    # should know that TLS is mbedTLS. PE_TLS=OFF still builds — net.join just refuses a pin.
+    target_compile_definitions(PhasmaRuntime PRIVATE PE_TLS)
+    target_link_libraries(PhasmaRuntime PRIVATE mbedtls mbedx509 mbedcrypto)
+endif()
 if(PE_PHYSICS AND TARGET Jolt)
     target_compile_definitions(PhasmaRuntime PRIVATE PE_PHYSICS)
     target_link_libraries(PhasmaRuntime PUBLIC Jolt)
