@@ -31,13 +31,13 @@ namespace pe
         Camera();
 
         void Update();
-        void UpdateProjection();
+        void UpdateProjection(bool rollPrevious = true);
         inline float FovyToFovx(float fovy) { return 2.0f * atan(tan(fovy * 0.5f) * GetAspect()); } // In radians
         inline float FovxToFovy(float fovx) { return 2.0f * atan(tan(fovx * 0.5f) / GetAspect()); } // In radians
         inline float Fovy() { return 2.0f * atan(tan(m_fovx * 0.5f) / GetAspect()); }
         inline float Fovx() { return m_fovx; }
         float GetAspect();
-        void UpdateView();
+        void UpdateView(bool rollPrevious = true);
         vec3 WorldFront() const;
         vec3 WorldRight() const;
         vec3 WorldUp() const;
@@ -149,6 +149,7 @@ namespace pe
         std::array<Plane, 6> m_frustum{};
         vec2 m_projJitter;
         vec2 m_prevProjJitter;
+        uint32_t m_matrixRollFrame = UINT32_MAX; // Frame the previous-matrix roll last ran on
         bool m_dirty = true;
     };
 } // namespace pe

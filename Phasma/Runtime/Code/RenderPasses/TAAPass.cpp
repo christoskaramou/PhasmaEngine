@@ -237,6 +237,16 @@ namespace pe
         if (!m_viewportRT || m_jitterPhaseCount <= 0)
             return;
 
+        // ONCE PER FRAME. Camera::UpdateProjection() calls this, and Camera::Update() runs a
+        // second time on frames that take the editor's late script-mutation catch-up. Advancing
+        // twice steps Halton irregularly (1 or 2 per frame depending on whether a script moved
+        // anything) and, with an even phase count, only ever visits half the phases — an unstable
+        // sub-pixel sample pattern that shimmers exactly while scripts are driving the scene.
+        const uint32_t frameCounter = RHII.GetFrameCounter();
+        if (frameCounter == m_jitterFrame)
+            return;
+        m_jitterFrame = frameCounter;
+
         m_jitterIndex = (m_jitterIndex + 1) % m_jitterPhaseCount;
 
         // Halton sequence (2, 3)

@@ -955,6 +955,7 @@ namespace pe
 
         bool m_nodesDirty = false;
         std::vector<NodeId *> m_nodesMoved;
+        uint32_t m_motionRollFrame = UINT32_MAX; // Frame the previousWorldMatrix roll last ran on
 
         // Scratch for ResolvePostProcessProfile() when volumes are blended: holds the composited
         // profile so the renderer's active-profile pointer can target it for the frame.

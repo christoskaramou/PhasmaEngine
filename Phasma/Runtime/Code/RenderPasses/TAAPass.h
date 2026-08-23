@@ -39,6 +39,7 @@ namespace pe
         vec2 m_projectionJitter;
         int m_jitterPhaseCount = 0;
         int m_jitterIndex = 0;
+        uint32_t m_jitterFrame = UINT32_MAX; // Frame the Halton index last advanced on
         bool m_casSharpeningEnabled{false};
         bool m_resetHistory{false};
     };
