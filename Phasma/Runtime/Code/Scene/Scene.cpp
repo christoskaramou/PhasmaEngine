@@ -632,7 +632,7 @@ namespace pe
         UpdateAudioZones();
         UpdatePhysicsZones();
 
-        UpdateSpriteAnimations(std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetDelta()) *
+        UpdateSpriteAnimations(std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetSmoothDelta()) *
                                                   Settings::Get<SceneSettings>().time_scale));
 
         UpdateGeometry();

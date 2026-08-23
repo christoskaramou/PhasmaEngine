@@ -93,7 +93,7 @@ namespace pe
             uint32_t emitterCount;
         } pc{};
 
-        pc.deltaTime = static_cast<float>(FrameTimer::Instance().GetDelta()) * Settings::Get<SceneSettings>().time_scale;
+        pc.deltaTime = static_cast<float>(FrameTimer::Instance().GetSmoothDelta()) * Settings::Get<SceneSettings>().time_scale;
         pc.particleCount = scene.GetParticleManager()->GetParticleCount();
         pc.emitterCount = scene.GetParticleManager()->GetEmitterCount();
         PE_PROFILE_COUNTER("Particles.Count", pc.particleCount);
