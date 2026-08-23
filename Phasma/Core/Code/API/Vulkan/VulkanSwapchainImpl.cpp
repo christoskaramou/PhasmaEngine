@@ -12,6 +12,11 @@
 
 namespace pe
 {
+    namespace
+    {
+        constexpr uint64_t kPresentWaitTimeoutNs = 100'000'000ull;
+    }
+
     VulkanSwapchainImpl::VulkanSwapchainImpl(Swapchain *owner, const SwapchainDesc &desc)
         : m_owner{owner}
     {
@@ -100,6 +105,36 @@ namespace pe
         swapchainCreateInfo.presentMode = ToVkPresentMode(surface->GetPresentMode());
         swapchainCreateInfo.clipped = VK_TRUE;
 
+        const bool fifoPresentMode = surface->GetPresentMode() == PE_PRESENT_MODE_FIFO ||
+                                     surface->GetPresentMode() == PE_PRESENT_MODE_FIFO_RELAXED;
+        const char *presentWaitExtension = "unsupported";
+        if (VulkanRhi::Impl()->m_presentWait2 && fifoPresentMode)
+        {
+            vk::PhysicalDeviceSurfaceInfo2KHR surfaceInfo{};
+            surfaceInfo.surface = pe::GetVulkanSurface(surface);
+            vk::SurfaceCapabilitiesPresentWait2KHR presentWait2Capabilities{};
+            vk::SurfaceCapabilitiesPresentId2KHR presentId2Capabilities{};
+            presentId2Capabilities.pNext = &presentWait2Capabilities;
+            vk::SurfaceCapabilities2KHR surfaceCapabilities2{};
+            surfaceCapabilities2.pNext = &presentId2Capabilities;
+            const vk::Result result = VulkanRhi::Gpu().getSurfaceCapabilities2KHR(&surfaceInfo, &surfaceCapabilities2);
+            m_presentWait2 = result == vk::Result::eSuccess && presentId2Capabilities.presentId2Supported &&
+                             presentWait2Capabilities.presentWait2Supported;
+            if (m_presentWait2)
+            {
+                swapchainCreateInfo.flags |= vk::SwapchainCreateFlagBitsKHR::ePresentId2 |
+                                             vk::SwapchainCreateFlagBitsKHR::ePresentWait2;
+                presentWaitExtension = VK_KHR_PRESENT_WAIT_2_EXTENSION_NAME;
+            }
+        }
+        if (!m_presentWait2 && VulkanRhi::Impl()->m_presentWait && fifoPresentMode)
+        {
+            m_presentWait = true;
+            presentWaitExtension = VK_KHR_PRESENT_WAIT_EXTENSION_NAME;
+        }
+        if (fifoPresentMode)
+            PE_INFO("[Swapchain] Vulkan FIFO pacing: %s", presentWaitExtension);
+
         m_swapchain = VulkanRhi::Device().createSwapchainKHR(swapchainCreateInfo);
         m_vkFormat = surfaceFormat;
 
@@ -166,5 +201,34 @@ namespace pe
         {
             throw SwapchainOutOfDateError{};
         }
+    }
+
+    bool VulkanSwapchainImpl::WaitForNextFrame()
+    {
+        if ((!m_presentWait && !m_presentWait2) || m_pendingPresentId == 0)
+            return true;
+
+        vk::Result result{};
+        if (m_presentWait2)
+        {
+            vk::PresentWait2InfoKHR waitInfo{};
+            waitInfo.presentId = m_pendingPresentId;
+            waitInfo.timeout = kPresentWaitTimeoutNs;
+            result = VulkanRhi::Device().waitForPresent2KHR(m_swapchain, &waitInfo);
+        }
+        else
+        {
+            result = static_cast<vk::Result>(VULKAN_HPP_DEFAULT_DISPATCHER.vkWaitForPresentKHR(
+                VulkanRhi::Device(), m_swapchain, m_pendingPresentId, kPresentWaitTimeoutNs));
+        }
+        if (result == vk::Result::eTimeout)
+            return false;
+        if (result == vk::Result::eErrorOutOfDateKHR)
+            throw SwapchainOutOfDateError{};
+        if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
+            PE_ERROR("[Swapchain] Failed to wait for presentation (%d)", static_cast<int>(result));
+
+        m_pendingPresentId = 0;
+        return true;
     }
 } // namespace pe

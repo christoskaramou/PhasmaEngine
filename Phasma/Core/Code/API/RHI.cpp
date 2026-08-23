@@ -1200,6 +1200,8 @@ namespace pe
         // === Debugging (debug_utils always enabled — needed for GPU timers in profiler) ===
         if (RHII.IsInstanceExtensionValid("VK_EXT_debug_utils"))
             instanceExtensions.push_back("VK_EXT_debug_utils");
+        if (RHII.IsInstanceExtensionValid(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME))
+            instanceExtensions.push_back(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
         // =============================================
 
         const bool vulkanValidationRequested = IsEnvFlagEnabled("PE_VULKAN_VALIDATION");
@@ -1630,6 +1632,12 @@ namespace pe
             optionalExtensionsAllowed && IsDeviceExtensionValid(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
         const bool descriptorBufferExtAvailable =
             optionalExtensionsAllowed && IsDeviceExtensionValid(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
+        const bool presentWait2ExtensionsAvailable =
+            IsInstanceExtensionValid(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME) &&
+            IsDeviceExtensionValid(VK_KHR_PRESENT_ID_2_EXTENSION_NAME) &&
+            IsDeviceExtensionValid(VK_KHR_PRESENT_WAIT_2_EXTENSION_NAME);
+        const bool presentWaitExtensionsAvailable = IsDeviceExtensionValid(VK_KHR_PRESENT_ID_EXTENSION_NAME) &&
+                                                    IsDeviceExtensionValid(VK_KHR_PRESENT_WAIT_EXTENSION_NAME);
 
         m_caps.rayTracing = false;
         m_caps.bufferDeviceAddress = false;
@@ -1642,6 +1650,8 @@ namespace pe
         m_caps.meshShaders = false;
         m_caps.pushDescriptor = false;
         m_caps.indirectCount = false;
+        vk->m_presentWait = false;
+        vk->m_presentWait2 = false;
 #if defined(PE_ANDROID)
         m_caps.spirvTargetVulkanVersion = VK_API_VERSION_1_2;
 #else
@@ -1733,6 +1743,22 @@ namespace pe
             supportedDescriptorBufferFeatures.pNext = featureQueryChain;
             featureQueryChain = &supportedDescriptorBufferFeatures;
         }
+        vk::PhysicalDevicePresentIdFeaturesKHR presentIdFeatures{};
+        vk::PhysicalDevicePresentWaitFeaturesKHR presentWaitFeatures{};
+        if (presentWaitExtensionsAvailable)
+        {
+            presentIdFeatures.pNext = featureQueryChain;
+            presentWaitFeatures.pNext = &presentIdFeatures;
+            featureQueryChain = &presentWaitFeatures;
+        }
+        vk::PhysicalDevicePresentId2FeaturesKHR presentId2Features{};
+        vk::PhysicalDevicePresentWait2FeaturesKHR presentWait2Features{};
+        if (presentWait2ExtensionsAvailable)
+        {
+            presentId2Features.pNext = featureQueryChain;
+            presentWait2Features.pNext = &presentId2Features;
+            featureQueryChain = &presentWait2Features;
+        }
         deviceFeatures2.pNext = featureQueryChain;
 
         vk->m_gpu.getFeatures2(&deviceFeatures2);
@@ -1769,6 +1795,18 @@ namespace pe
             deviceExtensions.push_back(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
             m_caps.descriptorBuffer.supported = true;
             requestedDescriptorBufferFeatures.descriptorBuffer = VK_TRUE;
+        }
+        if (presentWait2ExtensionsAvailable && presentId2Features.presentId2 && presentWait2Features.presentWait2)
+        {
+            deviceExtensions.push_back(VK_KHR_PRESENT_ID_2_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_KHR_PRESENT_WAIT_2_EXTENSION_NAME);
+            vk->m_presentWait2 = true;
+        }
+        if (presentWaitExtensionsAvailable && presentIdFeatures.presentId && presentWaitFeatures.presentWait)
+        {
+            deviceExtensions.push_back(VK_KHR_PRESENT_ID_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_KHR_PRESENT_WAIT_EXTENSION_NAME);
+            vk->m_presentWait = true;
         }
 
         m_caps.sync2 = vulkan13Available && static_cast<bool>(deviceFeatures13.synchronization2);
@@ -1876,6 +1914,18 @@ namespace pe
             requestedDescriptorBufferFeatures.pNext = deviceFeatureChain;
             deviceFeatureChain = &requestedDescriptorBufferFeatures;
         }
+        if (vk->m_presentWait)
+        {
+            presentIdFeatures.pNext = deviceFeatureChain;
+            presentWaitFeatures.pNext = &presentIdFeatures;
+            deviceFeatureChain = &presentWaitFeatures;
+        }
+        if (vk->m_presentWait2)
+        {
+            presentId2Features.pNext = deviceFeatureChain;
+            presentWait2Features.pNext = &presentId2Features;
+            deviceFeatureChain = &presentWait2Features;
+        }
         deviceFeatures2.pNext = deviceFeatureChain;
 
         PE_INFO("[Vulkan] Effective caps: bufferDeviceAddress=%u, sync2=%u, copyCommands2=%u, dynamicRendering=%u, extendedDynamicState=%u, descriptorUpdateAfterBind=%u, indirectCount=%u, maintenance5=%u",
@@ -1946,8 +1996,10 @@ namespace pe
         desc.window = m_window;
         desc.surface = surface;
         desc.presentMode = surface ? surface->GetPresentMode() : PE_PRESENT_MODE_FIFO;
-        desc.backbufferCount =
-            m_api == PE_GRAPHICS_API_DX12 && desc.presentMode != PE_PRESENT_MODE_IMMEDIATE ? 3 : 2;
+        // Keep DX12's frame-resource cardinality stable across live present-mode changes. FIFO
+        // already uses three buffers to absorb a missed presentation boundary; changing immediate
+        // mode to two leaves scene and pass resources indexed with the old frame count.
+        desc.backbufferCount = m_api == PE_GRAPHICS_API_DX12 ? 3 : 2;
         desc.name = "RHI_swapchain";
         m_swapchain = Swapchain::Create(desc);
 

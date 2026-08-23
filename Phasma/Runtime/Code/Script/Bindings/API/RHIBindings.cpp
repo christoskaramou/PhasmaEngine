@@ -4,6 +4,7 @@
 #include "API/RHI.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
+#include "Base/EventSystem.h"
 
 namespace pe
 {
@@ -27,8 +28,18 @@ namespace pe
         if (!RHII.GetSurface())
             return "unknown";
 
-        RHII.ChangePresentMode(mode);
-        return PresentModeToString(Settings::Get<SceneSettings>().preferred_present_mode);
+        PePresentMode effective = PE_PRESENT_MODE_FIFO;
+        for (const PePresentMode supported : RHII.GetSurface()->GetSupportedPresentModes())
+        {
+            if (supported == mode)
+            {
+                effective = mode;
+                break;
+            }
+        }
+        Settings::Get<SceneSettings>().preferred_present_mode = effective;
+        EventSystem::PushEvent(EventType::PresentMode);
+        return PresentModeToString(effective);
     }
 
     static struct RHIBindings

@@ -96,6 +96,11 @@ namespace pe
         return m_impl->AquireNextImage(semaphore);
     }
 
+    bool Swapchain::WaitForNextFrame()
+    {
+        return m_impl->WaitForNextFrame();
+    }
+
     void Swapchain::Present()
     {
         m_impl->Present();

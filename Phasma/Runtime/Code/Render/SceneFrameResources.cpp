@@ -87,6 +87,11 @@ namespace pe
                 screenshotPending = false;
             }
         }
+        catch (const PresentWaitTimeoutError &)
+        {
+            // A newly created DX12 swapchain may not be ready before its bounded first-frame wait.
+            // Leave the frame unsubmitted and retry after the host pumps window events.
+        }
         catch (const SwapchainOutOfDateError &)
         {
             // Acquire or present reported the swapchain out-of-date/suboptimal (a window resize, or an

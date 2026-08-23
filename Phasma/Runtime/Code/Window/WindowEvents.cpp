@@ -10,6 +10,21 @@ namespace pe
         return extent;
     }
 
+    bool IsRuntimeWindowEventFor(const SDL_Event &event, SDL_Window *window)
+    {
+        return window && event.type == SDL_WINDOWEVENT && event.window.windowID == SDL_GetWindowID(window);
+    }
+
+    bool IsRuntimeWindowDisplayChangedEvent(uint8_t windowEvent)
+    {
+        return windowEvent == SDL_WINDOWEVENT_DISPLAY_CHANGED;
+    }
+
+    bool IsRuntimeWindowDisplayChangedEvent(const SDL_Event &event)
+    {
+        return event.type == SDL_WINDOWEVENT && IsRuntimeWindowDisplayChangedEvent(event.window.event);
+    }
+
     bool IsRuntimeWindowResizeEvent(uint8_t windowEvent)
     {
         switch (windowEvent)

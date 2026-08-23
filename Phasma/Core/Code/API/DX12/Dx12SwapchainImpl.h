@@ -17,6 +17,7 @@ namespace pe
         ~Dx12SwapchainImpl() override;
 
         uint32_t AquireNextImage(Semaphore *semaphore) override;
+        bool WaitForNextFrame() override;
         void Present() override;
 
         IDXGISwapChain3 *GetSwapchain() const { return m_swapchain.Get(); }
@@ -32,8 +33,10 @@ namespace pe
         Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
         std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> m_backbuffers;
         std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> m_rtvHandles;
+        HANDLE m_frameLatencyWaitableObject{};
         DXGI_FORMAT m_format{DXGI_FORMAT_R8G8B8A8_UNORM};
         uint32_t m_currentBackbuffer{0};
         bool m_allowTearing{false};
+        bool m_initialWaitPending{false};
     };
 } // namespace pe

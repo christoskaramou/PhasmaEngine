@@ -4,6 +4,7 @@
 #include "API/Image.h"
 #include "API/RHI.h"
 #include "API/Surface.h"
+#include "API/Swapchain.h"
 #include "Project/ProjectSelection.h"
 #include "Base/GamePack.h"
 #include "Camera/Camera.h"
@@ -467,21 +468,46 @@ namespace pe
                     m_renderer.WaitPreviousFrameCommands();
                 }
 
+                bool presentationReady = true;
+                if (WindowRenderable())
+                {
+                    try
+                    {
+                        PE_PROFILE_SCOPE("Runtime Wait Presentation");
+                        if (Swapchain *swapchain = RHII.GetSwapchain())
+                            presentationReady = swapchain->WaitForNextFrame();
+                    }
+                    catch (const SwapchainOutOfDateError &)
+                    {
+                        EventSystem::PushEvent(EventType::Resize);
+                        presentationReady = false;
+                    }
+                }
+
+                if (!presentationReady)
+                {
+                    bool keepRunning = ProcessEvents();
+                    if (keepRunning)
+                        keepRunning = ProcessRuntimeEvents();
+                    const bool resizeReady = !keepRunning || ApplyPendingResize();
+                    FrameTimer::Instance().CountCpuTotalStamp();
+                    FrameTimer::Instance().Tick();
+                    profilerFrame.Close();
+                    if (m_profilerStream)
+                        m_profilerStream->Tick();
+                    SDL_Delay(resizeReady ? 1 : 16);
+                    return keepRunning;
+                }
+
                 if (!ProcessEvents())
                     return false;
 
-                if (m_surfaceRecreatePending)
+                if (!ApplyPendingResize())
                 {
-                    ResizeSwapchain(true);
-                    if (m_surfaceRecreatePending)
-                    {
-                        profilerFrame.Close();
-                        SDL_Delay(16);
-                        return true;
-                    }
+                    profilerFrame.Close();
+                    SDL_Delay(16);
+                    return true;
                 }
-                else if (m_resizePending || WindowDrawableExtentChanged())
-                    ResizeSwapchain();
 
                 // Same test as the resize guard: with no drawable area there is nothing to
                 // acquire or present into, and skipping here also stops the resize request
@@ -631,7 +657,8 @@ namespace pe
                         InputState::OnFingerMotion(event.tfinger.fingerId, event.tfinger.x, event.tfinger.y,
                                                    event.tfinger.dx, event.tfinger.dy);
 
-                    if (IsRuntimeWindowResizeEvent(event))
+                    if (IsRuntimeWindowEventFor(event, m_window) &&
+                        (IsRuntimeWindowDisplayChangedEvent(event) || IsRuntimeWindowResizeEvent(event)))
                         m_resizePending = true;
                 }
 
@@ -671,9 +698,16 @@ namespace pe
                         break;
                     case EventType::PresentMode:
                     {
-                        const PePresentMode previous = RHII.GetSurface()->GetPresentMode();
-                        RHII.GetSurface()->SetPresentMode(Settings::Get<SceneSettings>().preferred_present_mode);
-                        if (RHII.GetSurface()->GetPresentMode() != previous)
+                        Surface *surface = RHII.GetSurface();
+                        const PePresentMode requested = Settings::Get<SceneSettings>().preferred_present_mode;
+                        surface->SetPresentMode(requested);
+                        const PePresentMode effective = surface->GetPresentMode();
+                        Settings::Get<SceneSettings>().preferred_present_mode = effective;
+                        if (effective != requested)
+                            PE_WARN("Requested present mode %s is not supported; using %s",
+                                    RHII.PresentModeToString(requested),
+                                    RHII.PresentModeToString(effective));
+                        if (!RHII.GetSwapchain() || RHII.GetSwapchain()->GetPresentMode() != effective)
                             m_resizePending = true;
                         break;
                     }
@@ -699,6 +733,19 @@ namespace pe
                     }
                 }
 
+                return true;
+            }
+
+            bool ApplyPendingResize()
+            {
+                if (m_surfaceRecreatePending)
+                {
+                    ResizeSwapchain(true);
+                    return !m_surfaceRecreatePending;
+                }
+
+                if (m_resizePending || WindowDrawableExtentChanged())
+                    ResizeSwapchain();
                 return true;
             }
 

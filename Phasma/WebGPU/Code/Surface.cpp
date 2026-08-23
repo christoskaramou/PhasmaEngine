@@ -7,6 +7,7 @@
 #include "API/Queue.h"
 #include "API/Command.h"
 #include "API/Image.h"
+#include "API/Swapchain.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 
 extern "C" void wgpuDeviceAddRef(WGPUDevice);
@@ -238,6 +239,8 @@ extern "C"
         if (!surfaceTexture)
             return;
 
+        surfaceTexture->texture = nullptr;
+
         if (!surface || !surface->configured)
         {
             surfaceTexture->texture = nullptr;
@@ -260,7 +263,26 @@ extern "C"
             return;
         }
 
-        uint32_t imageIndex = surface->swapchain->AquireNextImage(surface->acquireSemaphore);
+        uint32_t imageIndex = 0;
+        try
+        {
+            if (!surface->swapchain->WaitForNextFrame())
+            {
+                surfaceTexture->status = WGPUSurfaceGetCurrentTextureStatus_Timeout;
+                return;
+            }
+            imageIndex = surface->swapchain->AquireNextImage(surface->acquireSemaphore);
+        }
+        catch (const pe::PresentWaitTimeoutError &)
+        {
+            surfaceTexture->status = WGPUSurfaceGetCurrentTextureStatus_Timeout;
+            return;
+        }
+        catch (const pe::SwapchainOutOfDateError &)
+        {
+            surfaceTexture->status = WGPUSurfaceGetCurrentTextureStatus_Outdated;
+            return;
+        }
         pe::Image *swapImage = surface->swapchain->GetImage(imageIndex);
         if (!swapImage)
         {

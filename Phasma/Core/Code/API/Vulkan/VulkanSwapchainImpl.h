@@ -14,6 +14,7 @@ namespace pe
         ~VulkanSwapchainImpl() override;
 
         uint32_t AquireNextImage(Semaphore *semaphore) override;
+        bool WaitForNextFrame() override;
         void Present() override {}
 
         static VulkanSwapchainImpl *From(Swapchain *sc) { return static_cast<VulkanSwapchainImpl *>(sc->m_impl); }
@@ -24,6 +25,10 @@ namespace pe
         Swapchain *m_owner;
         vk::SwapchainKHR m_swapchain;
         vk::Format m_vkFormat{vk::Format::eUndefined};
+        uint64_t m_presentId = 0;
+        uint64_t m_pendingPresentId = 0;
+        bool m_presentWait = false;
+        bool m_presentWait2 = false;
     };
 
     inline vk::SwapchainKHR GetVulkanSwapchain(Swapchain *sc)
