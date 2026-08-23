@@ -1,5 +1,6 @@
 #include "Camera/Camera.h"
 #include "API/Image.h"
+#include "API/RHI.h"
 #include "Render/SceneRendererHost.h"
 #include "RenderPasses/TAAPass.h"
 
@@ -83,15 +84,26 @@ namespace pe
 
     void Camera::Update()
     {
+        // ONCE PER FRAME for the previous-matrix rolls. The editor's late script-mutation
+        // catch-up (RendererSystem::LateCatchUpForScriptMutations) runs Update() a second
+        // time in the same frame; rolling previous again there sets previous == current and
+        // zeroes the camera's motion vectors for that frame. TAA then alternates between
+        // real and zero camera velocity across frames - visible trembling while the camera
+        // moves. Same guard as Scene's motion roll and TAAPass::GenerateJitter.
+        const uint32_t frameCounter = RHII.GetFrameCounter();
+        const bool rollPrevious = frameCounter != m_matrixRollFrame;
+        m_matrixRollFrame = frameCounter;
+
         m_front = m_orientation * WorldFront();
         m_right = m_orientation * WorldRight();
         m_up = m_orientation * WorldUp();
 
-        UpdateProjection();
-        UpdateView();
+        UpdateProjection(rollPrevious);
+        UpdateView(rollPrevious);
 
         m_invViewProjection = m_invView * m_invProjection;
-        m_previousViewProjection = m_viewProjection;
+        if (rollPrevious)
+            m_previousViewProjection = m_viewProjection;
         m_viewProjection = m_projection * m_view;
 
         // On first update (or if reset), sync previous with current to avoid jump artifacts
@@ -114,10 +126,13 @@ namespace pe
         return 16.0f / 9.0f;
     }
 
-    void Camera::UpdateProjection()
+    void Camera::UpdateProjection(bool rollPrevious)
     {
-        m_prevProjJitter = m_projJitter;
-        m_previousProjection = m_projection;
+        if (rollPrevious)
+        {
+            m_prevProjJitter = m_projJitter;
+            m_previousProjection = m_projection;
+        }
 
         float const aspect = GetAspect();
 
@@ -180,9 +195,10 @@ namespace pe
         m_invProjection = inverse(m_projection);
     }
 
-    void Camera::UpdateView()
+    void Camera::UpdateView(bool rollPrevious)
     {
-        m_previousView = m_view;
+        if (rollPrevious)
+            m_previousView = m_view;
         m_view = lookAt(m_position, m_position + m_front, m_up);
         m_invView = inverse(m_view);
     }

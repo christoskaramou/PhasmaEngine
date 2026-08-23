@@ -2044,22 +2044,34 @@ namespace pe
         // matching old ModelAsset::UpdateNodeMatrix behaviour).
         // Must happen BEFORE UpdateNodeMatrices so that prev holds last frame's
         // world matrix while world gets updated to the current frame's value.
-        for (NodeId *node : m_nodesMoved)
+        //
+        // ONCE PER FRAME. Scene::Update() runs a second time in frames where a script or
+        // animation dirties a node after the renderer's own update (RendererSystem::
+        // LateCatchUpForScriptMutations). m_nodesMoved then holds THIS frame's nodes, so a
+        // second roll sets previous == current and zeroes their motion vectors. Because it
+        // only fires on frames that took the late path, moving objects lose motion vectors
+        // intermittently and TAA snaps their history back and forth — read as jitter.
+        const uint32_t frameCounter = RHII.GetFrameCounter();
+        if (frameCounter != m_motionRollFrame)
         {
-            if (node->index >= m_nodeIds.size() || m_nodeIds[node->index] != node)
-                continue; // Safety check for deleted/recycled nodes
-
-            NodeRuntime &rt = m_nodeRuntime[node->index];
-            if (rt.gpuData.previousWorldMatrix != rt.gpuData.worldMatrix)
+            m_motionRollFrame = frameCounter;
+            for (NodeId *node : m_nodesMoved)
             {
-                rt.gpuData.previousWorldMatrix = rt.gpuData.worldMatrix;
-                rt.dirtyUniforms = 0xFF;
-            }
-        }
+                if (node->index >= m_nodeIds.size() || m_nodeIds[node->index] != node)
+                    continue; // Safety check for deleted/recycled nodes
 
-        // Clear the list of last frame's moved nodes now that we've caught them up.
-        // This gives us a clean slate for the current frame's UpdateNodeMatrices() calls.
-        m_nodesMoved.clear();
+                NodeRuntime &rt = m_nodeRuntime[node->index];
+                if (rt.gpuData.previousWorldMatrix != rt.gpuData.worldMatrix)
+                {
+                    rt.gpuData.previousWorldMatrix = rt.gpuData.worldMatrix;
+                    rt.dirtyUniforms = 0xFF;
+                }
+            }
+
+            // Clear the list of last frame's moved nodes now that we've caught them up.
+            // This gives us a clean slate for the current frame's UpdateNodeMatrices() calls.
+            m_nodesMoved.clear();
+        }
 
         {
             PE_PROFILE_SCOPE("Update Node Matrices");
