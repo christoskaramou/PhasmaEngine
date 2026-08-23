@@ -265,7 +265,7 @@ namespace pe
         if (!scene)
             return;
 
-        float dt = static_cast<float>(FrameTimer::Instance().GetSmoothDelta()) * Settings::Get<SceneSettings>().time_scale;
+        float dt = static_cast<float>(FrameTimer::Instance().GetDelta()) * Settings::Get<SceneSettings>().time_scale;
         if (dt <= 0.0001f)
             return;
 

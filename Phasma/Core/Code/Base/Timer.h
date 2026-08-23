@@ -42,10 +42,6 @@ namespace pe
         double GetUpdatesStamp() const { return m_updatesStamp; }
         double GetCpuTotal() const { return m_cpuTotalStamp; }
         double GetDelta() const;
-        // Mean of the last s_deltaHistorySize frame intervals. GetDelta() stays the raw
-        // previous-frame time; use this where an even per-frame rate matters more than
-        // exactness, e.g. anything scaling movement by dt.
-        double GetSmoothDelta() const;
 
         static FrameTimer &Instance();
 
@@ -58,14 +54,9 @@ namespace pe
         FrameTimer();            // default constructor
         ~FrameTimer() = default; // destructor
 
-        static constexpr size_t s_deltaHistorySize = 10;
-
         double m_updatesStamp;
         double m_cpuTotalStamp;
         std::chrono::duration<double> m_delta{};
-        std::array<double, s_deltaHistorySize> m_deltaHistory{}; // seconds, all zero until filled
-        size_t m_deltaHistoryIndex{0};
-        double m_smoothDelta{0.0}; // mean of m_deltaHistory, recomputed once per Tick()
         std::chrono::high_resolution_clock::time_point m_lastTime;
     };
 
