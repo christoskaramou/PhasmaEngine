@@ -195,6 +195,24 @@ namespace pe
         pi.pSwapchains = &vkSwap;
         pi.pImageIndices = &imageIndex;
 
+        VulkanSwapchainImpl *swapchainVk = VulkanSwapchainImpl::From(swapchain);
+        const bool presentWaitEnabled = swapchainVk->m_presentWait || swapchainVk->m_presentWait2;
+        const uint64_t presentId = presentWaitEnabled ? ++swapchainVk->m_presentId : 0;
+        vk::PresentIdKHR presentIdInfo{};
+        vk::PresentId2KHR presentId2Info{};
+        if (swapchainVk->m_presentWait2)
+        {
+            presentId2Info.swapchainCount = 1;
+            presentId2Info.pPresentIds = &presentId;
+            pi.pNext = &presentId2Info;
+        }
+        else if (swapchainVk->m_presentWait)
+        {
+            presentIdInfo.swapchainCount = 1;
+            presentIdInfo.pPresentIds = &presentId;
+            pi.pNext = &presentIdInfo;
+        }
+
         try
         {
             auto result = m_apiHandle.presentKHR(pi);
@@ -207,6 +225,8 @@ namespace pe
             // loop's SwapchainOutOfDateError handler.
             if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
                 PE_ERROR("[Queue] Failed to present swapchain image!");
+            else if (presentWaitEnabled)
+                swapchainVk->m_pendingPresentId = presentId;
         }
         catch (vk::OutOfDateKHRError &)
         {

@@ -4,6 +4,7 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/Surface.h"
+#include "API/Swapchain.h"
 #include "Camera/Camera.h"
 #include "GUI/GUIState.h"
 #include "Scene/ModelAsset.h"
@@ -136,6 +137,8 @@ namespace pe
 
         SDL_Event sdlEvent;
         std::vector<std::string> dropAccum;
+        bool windowResizeRequested = false;
+        bool windowDisplayChanged = false;
         InputState::BeginFrame();
         RuntimeUiSystem *runtimeUi = GetActiveRuntimeUi();
         while (SDL_PollEvent(&sdlEvent))
@@ -157,17 +160,10 @@ namespace pe
                 (fullWindowViewport || IsMouseOverSceneViewImage()))
                 InputState::AddMouseWheel(sdlEvent.wheel.x, sdlEvent.wheel.y);
 
-            if (IsRuntimeWindowResizeEvent(sdlEvent))
-            {
-                const WindowDrawableExtent extent = GetWindowDrawableExtent(m_apiHandle);
-                if (extent.IsValid() &&
-                    (RHII.GetSwapchain() == nullptr ||
-                     RHII.GetWidth() != static_cast<uint32_t>(extent.width) ||
-                     RHII.GetHeight() != static_cast<uint32_t>(extent.height)))
-                {
-                    EventSystem::PushEvent(EventType::Resize);
-                }
-            }
+            const bool mainWindowEvent = IsRuntimeWindowEventFor(sdlEvent, m_apiHandle);
+            const bool displayChanged = mainWindowEvent && IsRuntimeWindowDisplayChangedEvent(sdlEvent);
+            windowDisplayChanged |= displayChanged;
+            windowResizeRequested |= displayChanged || (mainWindowEvent && IsRuntimeWindowResizeEvent(sdlEvent));
 
             if (sdlEvent.type == SDL_DROPBEGIN)
                 dropAccum.clear();
@@ -184,6 +180,19 @@ namespace pe
                 if (!dropAccum.empty())
                     EventSystem::DispatchEvent(EventType::FileDrop, dropAccum);
                 dropAccum.clear();
+            }
+        }
+
+        if (windowResizeRequested)
+        {
+            const WindowDrawableExtent extent = GetWindowDrawableExtent(m_apiHandle);
+            if (extent.IsValid() &&
+                (windowDisplayChanged ||
+                 RHII.GetSwapchain() == nullptr ||
+                 RHII.GetWidth() != static_cast<uint32_t>(extent.width) ||
+                 RHII.GetHeight() != static_cast<uint32_t>(extent.height)))
+            {
+                EventSystem::PushEvent(EventType::Resize);
             }
         }
 
@@ -259,8 +268,17 @@ namespace pe
                 }
                 case EventType::PresentMode:
                 {
-                    // Recreate swapchain from scene preferred mode (authoritative).
-                    RHII.ChangePresentMode(Settings::Get<SceneSettings>().preferred_present_mode);
+                    Surface *surface = RHII.GetSurface();
+                    const PePresentMode requested = Settings::Get<SceneSettings>().preferred_present_mode;
+                    surface->SetPresentMode(requested);
+                    const PePresentMode effective = surface->GetPresentMode();
+                    Settings::Get<SceneSettings>().preferred_present_mode = effective;
+                    if (effective != requested)
+                        PE_WARN("Requested present mode %s is not supported; using %s",
+                                RHII.PresentModeToString(requested),
+                                RHII.PresentModeToString(effective));
+                    if (!RHII.GetSwapchain() || RHII.GetSwapchain()->GetPresentMode() != effective)
+                        EventSystem::PushEvent(EventType::Resize);
                     break;
                 }
                 case EventType::Resize:

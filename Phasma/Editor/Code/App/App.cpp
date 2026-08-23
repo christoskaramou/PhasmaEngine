@@ -630,6 +630,32 @@ namespace pe
             rendererSystem->WaitPreviousFrameCommands();
         }
 
+        bool presentationReady = true;
+        if (!m_window->isMinimized())
+        {
+            try
+            {
+                PE_PROFILE_SCOPE("Wait Presentation");
+                if (Swapchain *swapchain = RHII.GetSwapchain())
+                    presentationReady = swapchain->WaitForNextFrame();
+            }
+            catch (const SwapchainOutOfDateError &)
+            {
+                EventSystem::PushEvent(EventType::Resize);
+                presentationReady = false;
+            }
+        }
+
+        if (!presentationReady)
+        {
+            const bool keepRunning = m_window->ProcessEvents();
+            m_frameTimer.CountCpuTotalStamp();
+            m_frameTimer.Tick();
+            Profiler::EndFrame();
+            PE_FRAME_MARK;
+            return keepRunning;
+        }
+
         // Start ImGui frame
         if (hasImGuiRenderer)
         {

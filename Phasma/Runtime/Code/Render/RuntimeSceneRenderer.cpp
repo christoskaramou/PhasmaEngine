@@ -345,6 +345,8 @@ namespace pe
 
         Surface *surface = RHII.GetSurface();
         surface->SetActualExtent({0, 0, width, height});
+        surface->SetPresentMode(Settings::Get<SceneSettings>().preferred_present_mode);
+        Settings::Get<SceneSettings>().preferred_present_mode = surface->GetPresentMode();
         RHII.CreateSwapchain(surface);
 
         m_sceneRenderer.CreateRenderTargets(hasRTGeom, true);

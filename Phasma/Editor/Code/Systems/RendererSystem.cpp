@@ -445,16 +445,30 @@ namespace pe
         // Wait idle, we dont want to destroy objects in use
         RHII.WaitDeviceIdle();
         const bool hasRTGeom = SupportsRayTracingPass() && m_scene.GetTLAS() != nullptr;
+        m_sceneRenderer.DestroyFrameResources();
         RHII.GetSurface()->SetActualExtent({0, 0, width, height});
 
         Swapchain *swapchain = RHII.GetSwapchain();
         Swapchain::Destroy(swapchain);
 
         Surface *surface = RHII.GetSurface();
+        surface->SetPresentMode(Settings::Get<SceneSettings>().preferred_present_mode);
+        Settings::Get<SceneSettings>().preferred_present_mode = surface->GetPresentMode();
         RHII.CreateSwapchain(surface);
         DispatchWindowTitle();
 
         m_sceneRenderer.CreateRenderTargets(hasRTGeom);
+
+        const bool isDx12 = UsesDx12RenderOrchestration();
+        const PeBarrierSync acquireStageFlags = isDx12 ? PE_STAGE_NONE
+                                                       : PE_STAGE_COLOR_ATTACHMENT_OUTPUT | PE_STAGE_COMPUTE_SHADER |
+                                                             PE_STAGE_RAY_TRACING_SHADER_KHR | PE_STAGE_TRANSFER;
+        const PeBarrierSync submitStageFlags = isDx12 ? PE_STAGE_NONE : PE_STAGE_ALL_COMMANDS;
+        m_sceneRenderer.CreateFrameResources(RHII.GetSwapchainImageCount(),
+                                             "AcquireSemaphore_",
+                                             "SubmitSemaphore_",
+                                             acquireStageFlags,
+                                             submitStageFlags);
 
         m_sceneRenderer.ResizeRenderPassComponents(width, height, hasRTGeom);
     }
@@ -464,13 +478,12 @@ namespace pe
         if (!m_sceneRenderer.NeedsRenderScaleResize())
             return;
 
-        Resize(RHII.GetWidth(), RHII.GetHeight());
-
-        // Scene loads queue this resize after the event pump has already run; avoid repeating it next frame.
+        // Consume resize requests that led to this rebuild. Requests arriving during Resize stay queued.
         EventSystem::QueuedEvent resizeEvent;
         while (EventSystem::PeekAndPop(EventType::Resize, resizeEvent))
         {
         }
+        Resize(RHII.GetWidth(), RHII.GetHeight());
     }
 
     void RendererSystem::ApplyPendingOptionalRTSync()

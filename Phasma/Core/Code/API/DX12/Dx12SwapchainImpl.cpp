@@ -14,6 +14,11 @@ namespace pe
 {
     using Microsoft::WRL::ComPtr;
 
+    namespace
+    {
+        constexpr DWORD kFrameLatencyWaitTimeoutMs = 100;
+    }
+
     static HWND HwndFromSdlWindow(SDL_Window *window)
     {
         if (!window)
@@ -41,6 +46,7 @@ namespace pe
 
         m_allowTearing = rhi->SupportsAllowTearing();
         const bool useImmediate = m_owner->m_presentMode == PE_PRESENT_MODE_IMMEDIATE && m_allowTearing;
+        const bool useFrameLatencyWaitableObject = !useImmediate;
         m_owner->m_presentMode = useImmediate ? PE_PRESENT_MODE_IMMEDIATE : PE_PRESENT_MODE_FIFO;
 
         const uint32_t bbCount = desc.backbufferCount < 2 ? 2 : desc.backbufferCount;
@@ -65,7 +71,8 @@ namespace pe
         sc.Scaling = DXGI_SCALING_STRETCH;
         sc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
         sc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-        sc.Flags = m_allowTearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
+        sc.Flags = (m_allowTearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0) |
+                   (useFrameLatencyWaitableObject ? DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT : 0);
 
         ComPtr<IDXGISwapChain1> sc1;
         HRESULT hr = factory->CreateSwapChainForHwnd(queue, hwnd, &sc, nullptr, nullptr, &sc1);
@@ -161,6 +168,20 @@ namespace pe
                                                   Dx12ImageViewKind::Rtv,
                                                   "Swapchain_image_view" + std::to_string(i)));
         }
+
+        if (useFrameLatencyWaitableObject)
+        {
+            hr = m_swapchain->SetMaximumFrameLatency(1);
+            PE_ERROR_IF(FAILED(hr),
+                        "Dx12SwapchainImpl: SetMaximumFrameLatency failed (0x%08X)",
+                        static_cast<unsigned>(hr));
+            m_frameLatencyWaitableObject = m_swapchain->GetFrameLatencyWaitableObject();
+            PE_ERROR_IF(!m_frameLatencyWaitableObject,
+                        "Dx12SwapchainImpl: frame latency waitable object unavailable");
+            m_initialWaitPending = true;
+            PE_INFO("[Swapchain] DX12 FIFO pacing enabled (latency=1, wait timeout=%lu ms)",
+                    kFrameLatencyWaitTimeoutMs);
+        }
     }
 
     Dx12SwapchainImpl::~Dx12SwapchainImpl()
@@ -171,11 +192,34 @@ namespace pe
         m_backbuffers.clear();
         m_rtvHandles.clear();
         m_rtvHeap.Reset();
+        if (m_frameLatencyWaitableObject)
+        {
+            ::CloseHandle(m_frameLatencyWaitableObject);
+            m_frameLatencyWaitableObject = nullptr;
+        }
         m_swapchain.Reset();
+    }
+
+    bool Dx12SwapchainImpl::WaitForNextFrame()
+    {
+        if (!m_frameLatencyWaitableObject)
+            return true;
+
+        const DWORD result =
+            ::WaitForSingleObjectEx(m_frameLatencyWaitableObject, kFrameLatencyWaitTimeoutMs, FALSE);
+        if (result == WAIT_TIMEOUT)
+            return false;
+        PE_ERROR_IF(result != WAIT_OBJECT_0,
+                    "Dx12SwapchainImpl: frame latency wait failed (%lu)",
+                    result == WAIT_FAILED ? ::GetLastError() : result);
+        m_initialWaitPending = false;
+        return true;
     }
 
     uint32_t Dx12SwapchainImpl::AquireNextImage(Semaphore * /*semaphore*/)
     {
+        if (m_initialWaitPending && !WaitForNextFrame())
+            throw PresentWaitTimeoutError{};
         m_currentBackbuffer = m_swapchain->GetCurrentBackBufferIndex();
         return m_currentBackbuffer;
     }

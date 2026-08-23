@@ -62,7 +62,8 @@ namespace pe
                 if (ImGui::Selectable(RHII.PresentModeToString(presentModes[i]), isSelected) &&
                     currentPresentMode != presentModes[i])
                 {
-                    RHII.ChangePresentMode(presentModes[i]);
+                    gSettings.preferred_present_mode = presentModes[i];
+                    EventSystem::PushEvent(EventType::PresentMode);
                     changed = true;
                 }
                 ui::ItemTooltip("Scene present mode — saved with the scene; overrides editor_config / PE_PRESENT_MODE.");

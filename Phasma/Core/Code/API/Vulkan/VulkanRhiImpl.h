@@ -25,6 +25,8 @@ namespace pe
         vk::PhysicalDevice m_gpu{};
         vk::Device m_device{};
         VmaAllocator m_allocator = nullptr;
+        bool m_presentWait = false;
+        bool m_presentWait2 = false;
 #ifdef PE_TRACY
         tracy::VkCtx *m_tracyVkCtx = nullptr;
 #endif

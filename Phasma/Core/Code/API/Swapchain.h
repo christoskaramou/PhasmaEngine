@@ -15,6 +15,10 @@ namespace pe
     {
     };
 
+    struct PresentWaitTimeoutError
+    {
+    };
+
     struct SwapchainDesc
     {
         SDL_Window *window = nullptr;
@@ -36,6 +40,7 @@ namespace pe
         static std::vector<Swapchain *> GetHandles();
 
         uint32_t AquireNextImage(Semaphore *semaphore);
+        bool WaitForNextFrame();
         void Present();
         Image *GetImage(uint32_t index) { return m_images[index]; }
         uint32_t GetImageCount() const { return static_cast<uint32_t>(m_images.size()); }

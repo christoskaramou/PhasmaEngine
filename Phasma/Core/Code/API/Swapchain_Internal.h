@@ -8,6 +8,7 @@ namespace pe
     {
         virtual ~Impl() = default;
         virtual uint32_t AquireNextImage(Semaphore *semaphore) = 0;
+        virtual bool WaitForNextFrame() = 0;
         virtual void Present() = 0;
     };
 
