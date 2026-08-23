@@ -56,18 +56,6 @@ namespace pe
     {
         auto now = std::chrono::high_resolution_clock::now();
         m_delta = now - m_lastTime;
-
-        // Averaged here, once per frame, rather than in the getter: GetSmoothDelta() is read
-        // by every system and script that scales by dt, and none of them should pay for the
-        // sum.
-        m_deltaHistory[m_deltaHistoryIndex] = m_delta.count();
-        m_deltaHistoryIndex = (m_deltaHistoryIndex + 1) % s_deltaHistorySize;
-
-        double sum = 0.0;
-        for (double delta : m_deltaHistory)
-            sum += delta;
-        m_smoothDelta = sum / static_cast<double>(s_deltaHistorySize);
-
         m_lastTime = now;
         m_start = now;
     }
@@ -75,11 +63,6 @@ namespace pe
     double FrameTimer::GetDelta() const
     {
         return m_delta.count();
-    }
-
-    double FrameTimer::GetSmoothDelta() const
-    {
-        return m_smoothDelta;
     }
 
     void FrameTimer::CountUpdatesStamp()
