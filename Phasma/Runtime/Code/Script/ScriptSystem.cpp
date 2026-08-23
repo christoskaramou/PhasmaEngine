@@ -1650,7 +1650,7 @@ namespace pe
         // Play-mode dt honors SceneSettings::time_scale so `settings.set("time_scale", 0)`
         // freezes gameplay scripts + (via Scene/Anim/Particles) visuals without needing
         // engine.set_paused (which would also stop UI/console updates).
-        const double realDt = FrameTimer::Instance().GetDelta();
+        const double realDt = FrameTimer::Instance().GetSmoothDelta();
         const double playScale = IsScriptPlayMode() ? static_cast<double>(Settings::Get<SceneSettings>().time_scale) : 1.0;
         const double dt = realDt * playScale;
 
