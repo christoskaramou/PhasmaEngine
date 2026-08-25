@@ -22,10 +22,15 @@ namespace pe
     // long-lived helper, and one slot keeps the whole lifetime question trivial. Add a handle id if
     // a second one is ever needed.
     //
+    // stdout without a newline is capped (same trust boundary as net.read_line): a helper that
+    // never sends '\n' must not grow the frame's buffer forever.
+    //
     // The executable must live under the project's Assets/ — same sandbox as fs.read/fs.write. A
     // scene script can therefore only launch something that shipped with the project.
     namespace
     {
+        constexpr size_t kMaxBuffer = 256 * 1024; // unparsed stdout before we kill the child
+
         class ChildProcess
         {
         public:
@@ -53,10 +58,18 @@ namespace pe
                 sa.bInheritHandle = TRUE;
 
                 HANDLE childIn = nullptr, childOut = nullptr;
-                if (!CreatePipe(&childIn, &m_stdin, &sa, 0) || !CreatePipe(&m_stdout, &childOut, &sa, 0))
+                if (!CreatePipe(&childIn, &m_stdin, &sa, 0))
                 {
                     error = "CreatePipe failed";
-                    Stop();
+                    return false;
+                }
+                if (!CreatePipe(&m_stdout, &childOut, &sa, 0))
+                {
+                    CloseHandle(childIn);
+                    CloseHandle(m_stdin);
+                    childIn = nullptr;
+                    m_stdin = nullptr;
+                    error = "CreatePipe failed";
                     return false;
                 }
                 // The parent's ends must NOT be inherited, or the child holds a copy of them and the
@@ -145,7 +158,8 @@ namespace pe
                 close(outPipe[1]);
                 m_stdin = inPipe[1];
                 m_stdout = outPipe[0];
-                fcntl(m_stdout, F_SETFL, O_NONBLOCK); // read_line must never block the frame
+                fcntl(m_stdin, F_SETFL, O_NONBLOCK);
+                fcntl(m_stdout, F_SETFL, O_NONBLOCK); // read_line / write must never block the frame
                 m_pid = pid;
                 return true;
 #endif
@@ -185,7 +199,11 @@ namespace pe
                 Drain();
                 size_t nl = m_buffer.find('\n');
                 if (nl == std::string::npos)
+                {
+                    if (m_buffer.size() > kMaxBuffer)
+                        Stop();
                     return std::nullopt;
+                }
                 std::string line = m_buffer.substr(0, nl);
                 m_buffer.erase(0, nl + 1);
                 if (!line.empty() && line.back() == '\r')
@@ -251,6 +269,8 @@ namespace pe
                     if (!ReadFile(m_stdout, chunk, want, &read, nullptr) || read == 0)
                         return;
                     m_buffer.append(chunk, read);
+                    if (m_buffer.size() > kMaxBuffer)
+                        return; // let ReadLine drain complete lines; kill only if no newline
                 }
 #else
                 if (m_stdout < 0)
@@ -261,6 +281,8 @@ namespace pe
                     if (read <= 0)
                         return;
                     m_buffer.append(chunk, static_cast<size_t>(read));
+                    if (m_buffer.size() > kMaxBuffer)
+                        return;
                 }
 #endif
             }

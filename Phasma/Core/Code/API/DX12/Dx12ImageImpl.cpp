@@ -582,7 +582,7 @@ namespace pe
         {
             if (image->m_srvs[mip])
             {
-                PE_INFO("Image::CreateSRV: SRV for mip {} already exists, recreating.", mip);
+                PE_INFO("Image::CreateSRV: SRV for mip %u already exists, recreating.", mip);
                 ImageView::Destroy(image->m_srvs[mip]);
             }
             image->m_srvs[mip] = view;
@@ -595,7 +595,7 @@ namespace pe
         PE_ERROR_IF(!(image->GetUsage() & PE_IMAGE_USAGE_STORAGE), "Image was not created with Storage usage for UAV");
         if (image->m_uavs[mip])
         {
-            PE_INFO("Image::CreateUAV: UAV for mip {} already exists, recreating.", mip);
+            PE_INFO("Image::CreateUAV: UAV for mip %u already exists, recreating.", mip);
             ImageView::Destroy(image->m_uavs[mip]);
         }
 

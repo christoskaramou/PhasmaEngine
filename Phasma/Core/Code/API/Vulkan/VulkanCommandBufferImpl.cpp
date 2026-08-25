@@ -478,19 +478,34 @@ namespace pe
 
     void VulkanCommandBufferImpl::BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding, uint32_t bindingCount)
     {
+        PE_ERROR_IF(bindingCount == 0, "VulkanCommandBufferImpl::BindVertexBuffer: bindingCount is zero");
         if (m_owner->m_boundVertexBuffer == buffer &&
             m_owner->m_boundVertexBufferOffset == offset &&
             m_owner->m_boundVertexBufferFirstBinding == firstBinding &&
             m_owner->m_boundVertexBufferBindingCount == bindingCount)
             return;
 
+        PE_ERROR_IF(!buffer, "VulkanCommandBufferImpl::BindVertexBuffer: null buffer");
+
         m_owner->m_boundVertexBuffer = buffer;
         m_owner->m_boundVertexBufferOffset = offset;
         m_owner->m_boundVertexBufferFirstBinding = firstBinding;
         m_owner->m_boundVertexBufferBindingCount = bindingCount;
 
-        vk::Buffer buff = pe::GetVulkanBuffer(buffer);
-        m_apiHandle.bindVertexBuffers(firstBinding, bindingCount, &buff, &offset);
+        const vk::Buffer buff = pe::GetVulkanBuffer(buffer);
+        const vk::DeviceSize vkOffset = offset;
+        if (bindingCount == 1)
+        {
+            m_apiHandle.bindVertexBuffers(firstBinding, 1, &buff, &vkOffset);
+            return;
+        }
+
+        // Same buffer bound to consecutive slots — matches Dx12CommandBufferImpl.
+        thread_local std::vector<vk::Buffer> buffers;
+        thread_local std::vector<vk::DeviceSize> offsets;
+        buffers.assign(bindingCount, buff);
+        offsets.assign(bindingCount, vkOffset);
+        m_apiHandle.bindVertexBuffers(firstBinding, bindingCount, buffers.data(), offsets.data());
     }
 
     void VulkanCommandBufferImpl::BindIndexBuffer(Buffer *buffer, size_t offset, PeIndexType indexType)
