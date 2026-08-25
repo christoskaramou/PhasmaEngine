@@ -5,41 +5,21 @@
 #include "API/Surface.h"
 #include "API/Swapchain.h"
 #include "Base/EventSystem.h"
+#include "Runtime/RuntimeStartup.h"
 
 namespace pe
 {
-    static const std::unordered_map<std::string_view, PePresentMode> s_presentModeMap = {
-        {"immediate", PE_PRESENT_MODE_IMMEDIATE},
-        {"mailbox", PE_PRESENT_MODE_MAILBOX},
-        {"fifo", PE_PRESENT_MODE_FIFO},
-        {"fifo_relaxed", PE_PRESENT_MODE_FIFO_RELAXED},
-    };
-
-    static std::string PresentModeToString(PePresentMode mode)
-    {
-        for (auto &[k, v] : s_presentModeMap)
-            if (v == mode)
-                return std::string(k);
-        return "unknown";
-    }
-
     static std::string RequestPresentModeChange(PePresentMode mode)
     {
-        if (!RHII.GetSurface())
+        Surface *surface = RHII.GetSurface();
+        if (!surface)
             return "unknown";
 
-        PePresentMode effective = PE_PRESENT_MODE_FIFO;
-        for (const PePresentMode supported : RHII.GetSurface()->GetSupportedPresentModes())
-        {
-            if (supported == mode)
-            {
-                effective = mode;
-                break;
-            }
-        }
+        surface->SetPresentMode(mode);
+        const PePresentMode effective = surface->GetPresentMode();
         Settings::Get<SceneSettings>().preferred_present_mode = effective;
         EventSystem::PushEvent(EventType::PresentMode);
-        return PresentModeToString(effective);
+        return PresentModeToConfigToken(effective);
     }
 
     static struct RHIBindings
@@ -163,14 +143,14 @@ namespace pe
 
                 // ChangePresentMode
                 rhi.set_function("change_present_mode", [](const std::string &mode) -> std::string {
-                    auto it = s_presentModeMap.find(std::string_view(mode));
-                    return it != s_presentModeMap.end() ? RequestPresentModeChange(it->second) : "unknown";
+                    const std::optional<PePresentMode> parsed = ParsePresentModeToken(mode);
+                    return parsed ? RequestPresentModeChange(*parsed) : "unknown";
                 });
 
                 // SetPresentMode - deferred, player-safe alias for change_present_mode.
                 rhi.set_function("set_present_mode", [](const std::string &mode) -> std::string {
-                    auto it = s_presentModeMap.find(std::string_view(mode));
-                    return it != s_presentModeMap.end() ? RequestPresentModeChange(it->second) : "unknown";
+                    const std::optional<PePresentMode> parsed = ParsePresentModeToken(mode);
+                    return parsed ? RequestPresentModeChange(*parsed) : "unknown";
                 });
 
                 // SetRenderScale — scene renderers detect the change and rebuild only their scaled targets.
@@ -188,15 +168,13 @@ namespace pe
 
                 // GetPresentMode
                 rhi.set_function("get_present_mode", []() -> std::string {
-                    return RHII.GetSurface() ? PresentModeToString(RHII.GetSurface()->GetPresentMode()) : "unknown";
+                    return RHII.GetSurface() ? PresentModeToConfigToken(RHII.GetSurface()->GetPresentMode()) : "unknown";
                 });
 
                 // PresentModeToString
                 rhi.set_function("present_mode_to_string", [](const std::string &mode) -> std::string {
-                    auto it = s_presentModeMap.find(std::string_view(mode));
-                    if (it != s_presentModeMap.end())
-                        return PresentModeToString(it->second);
-                    return "unknown";
+                    const std::optional<PePresentMode> parsed = ParsePresentModeToken(mode);
+                    return parsed ? PresentModeToConfigToken(*parsed) : "unknown";
                 });
 
                 // GetWidth

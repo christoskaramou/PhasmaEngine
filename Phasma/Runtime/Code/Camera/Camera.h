@@ -56,6 +56,8 @@ namespace pe
         inline mat4 GetInvView() const { return m_invView; }
         inline mat4 GetInvProjection() const { return m_invProjection; }
         inline mat4 GetInvViewProjection() const { return m_invViewProjection; }
+        // Reverse-Z: ndc in [-1,1], near z = 1, far z = 0.
+        bool BuildWorldRayFromNdc(float ndcX, float ndcY, vec3 &origin, vec3 &dir) const;
         inline vec3 GetPosition() const { return m_position; }
         inline vec3 GetFront() const { return m_front; }
         inline vec3 GetRight() const { return m_right; }
@@ -152,4 +154,7 @@ namespace pe
         uint32_t m_matrixRollFrame = UINT32_MAX; // Frame the previous-matrix roll last ran on
         bool m_dirty = true;
     };
+
+    bool ProjectWorldToViewportRect(const vec3 &world, const mat4 &viewProj, float minX, float minY, float width,
+                                    float height, float &screenX, float &screenY);
 } // namespace pe

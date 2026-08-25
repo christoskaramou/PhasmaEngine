@@ -105,6 +105,22 @@ namespace pe
         m_impl->Reset();
     }
 
+    void CommandBuffer::FixupLoadOpAttachmentWriteAccess()
+    {
+        for (uint32_t i = 0; i < m_attachmentCount; ++i)
+        {
+            const Attachment &att = m_attachments[i];
+            if (att.loadOp != PE_LOAD_OP_LOAD || !att.image)
+                continue;
+
+            ImageTrackInfo info = att.image->GetCurrentInfo(0, 0);
+            info.accessMask = PeFormatHasDepthOrStencil(att.image->GetFormat())
+                                  ? PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE
+                                  : PE_ACCESS_COLOR_ATTACHMENT_WRITE;
+            att.image->SetCurrentInfo(info, 0, 0);
+        }
+    }
+
     void CommandBuffer::SetDepthBias(float constantFactor, float clamp, float slopeFactor)
     {
         m_impl->SetDepthBias(constantFactor, clamp, slopeFactor);
@@ -477,7 +493,8 @@ namespace pe
             return;
         }
 
-        std::vector<ImageBarrierInfo> normalizedInfos;
+        thread_local std::vector<ImageBarrierInfo> normalizedInfos;
+        normalizedInfos.clear();
         normalizedInfos.reserve(infos.size());
         for (const ImageBarrierInfo &info : infos)
             normalizedInfos.push_back(NormalizeImageBarrierForBackend(info));

@@ -194,43 +194,15 @@ namespace pe
                                        const ImVec2 &imageSize,
                                        ImVec2 &screen)
     {
-        const vec4 clipPos = viewProj * vec4(world, 1.0f);
-        if (clipPos.w <= 0.0f)
-            return false;
-
-        const vec2 ndcPos = vec2(clipPos) / clipPos.w;
-        screen.x = (ndcPos.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
-        screen.y = (ndcPos.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
-        return std::isfinite(screen.x) && std::isfinite(screen.y);
+        return ProjectWorldToViewportRect(world, viewProj, imageMin.x, imageMin.y, imageSize.x, imageSize.y, screen.x,
+                                          screen.y);
     }
 
     static bool BuildViewportRay(Camera *camera, float normalizedX, float normalizedY, vec3 &rayOrigin, vec3 &rayDir)
     {
         if (!camera)
             return false;
-
-        const float ndcX = normalizedX * 2.0f - 1.0f;
-        const float ndcY = normalizedY * 2.0f - 1.0f;
-
-        const mat4 invViewProj = camera->GetInvViewProjection();
-        // Reverse-Z projection: near = 1, far = 0.
-        vec4 nearPoint = invViewProj * vec4(ndcX, ndcY, 1.0f, 1.0f);
-        if (std::abs(nearPoint.w) < 1e-6f)
-            return false;
-        nearPoint /= nearPoint.w;
-
-        vec4 farPoint = invViewProj * vec4(ndcX, ndcY, 0.0f, 1.0f);
-        rayOrigin = vec3(nearPoint);
-        if (std::abs(farPoint.w) < 1e-6f)
-            rayDir = normalize(vec3(farPoint));
-        else
-        {
-            farPoint /= farPoint.w;
-            rayDir = normalize(vec3(farPoint) - rayOrigin);
-        }
-
-        return std::isfinite(rayOrigin.x) && std::isfinite(rayOrigin.y) && std::isfinite(rayOrigin.z) &&
-               std::isfinite(rayDir.x) && std::isfinite(rayDir.y) && std::isfinite(rayDir.z);
+        return camera->BuildWorldRayFromNdc(normalizedX * 2.0f - 1.0f, normalizedY * 2.0f - 1.0f, rayOrigin, rayDir);
     }
 
     static bool BuildViewportRay(Camera *camera,

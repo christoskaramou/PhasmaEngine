@@ -14,43 +14,21 @@ namespace pe
 {
     namespace
     {
-        // Local copies of SceneView.cpp's file-static helpers (reverse-Z unproject + projector) —
-        // ponytail: 40 duplicated lines beat exporting SceneView internals; share a header if a
-        // third user appears.
-        bool BuildViewportRay(Camera *camera, const ImVec2 &mouse, const ImVec2 &imageMin,
-                              const ImVec2 &imageSize, vec3 &rayOrigin, vec3 &rayDir)
+        bool BuildViewportRay(Camera *camera, const ImVec2 &mouse, const ImVec2 &imageMin, const ImVec2 &imageSize,
+                              vec3 &rayOrigin, vec3 &rayDir)
         {
             if (!camera || imageSize.x <= 0.0f || imageSize.y <= 0.0f)
                 return false;
             const float ndcX = ((mouse.x - imageMin.x) / imageSize.x) * 2.0f - 1.0f;
             const float ndcY = ((mouse.y - imageMin.y) / imageSize.y) * 2.0f - 1.0f;
-            const mat4 invViewProj = camera->GetInvViewProjection();
-            vec4 nearPoint = invViewProj * vec4(ndcX, ndcY, 1.0f, 1.0f); // reverse-Z: near = 1
-            if (std::abs(nearPoint.w) < 1e-6f)
-                return false;
-            nearPoint /= nearPoint.w;
-            vec4 farPoint = invViewProj * vec4(ndcX, ndcY, 0.0f, 1.0f);
-            rayOrigin = vec3(nearPoint);
-            if (std::abs(farPoint.w) < 1e-6f)
-                rayDir = normalize(vec3(farPoint));
-            else
-            {
-                farPoint /= farPoint.w;
-                rayDir = normalize(vec3(farPoint) - rayOrigin);
-            }
-            return std::isfinite(rayOrigin.x) && std::isfinite(rayDir.x);
+            return camera->BuildWorldRayFromNdc(ndcX, ndcY, rayOrigin, rayDir);
         }
 
-        bool ProjectToViewport(const vec3 &world, const mat4 &viewProj, const ImVec2 &imageMin,
-                               const ImVec2 &imageSize, ImVec2 &screen)
+        bool ProjectToViewport(const vec3 &world, const mat4 &viewProj, const ImVec2 &imageMin, const ImVec2 &imageSize,
+                               ImVec2 &screen)
         {
-            const vec4 clip = viewProj * vec4(world, 1.0f);
-            if (clip.w <= 0.0f)
-                return false;
-            const vec2 ndc = vec2(clip) / clip.w;
-            screen.x = (ndc.x * 0.5f + 0.5f) * imageSize.x + imageMin.x;
-            screen.y = (ndc.y * 0.5f + 0.5f) * imageSize.y + imageMin.y;
-            return std::isfinite(screen.x) && std::isfinite(screen.y);
+            return ProjectWorldToViewportRect(world, viewProj, imageMin.x, imageMin.y, imageSize.x, imageSize.y, screen.x,
+                                              screen.y);
         }
 
         terrain::TerrainWorld *LiveWorld()

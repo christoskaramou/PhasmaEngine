@@ -69,19 +69,7 @@ namespace pe
 
     void VulkanCommandBufferImpl::Reset()
     {
-        m_owner->m_attachmentCount = 0;
-        m_owner->m_attachments = nullptr;
-        m_owner->m_renderPass = nullptr;
-        m_owner->m_framebuffer = nullptr;
-        m_owner->m_dynamicPass = false;
-        m_owner->m_boundPipeline = nullptr;
-        m_owner->m_boundVertexBuffer = nullptr;
-        m_owner->m_boundVertexBufferOffset = -1;
-        m_owner->m_boundVertexBufferFirstBinding = UINT32_MAX;
-        m_owner->m_boundVertexBufferBindingCount = UINT32_MAX;
-        m_owner->m_boundIndexBuffer = nullptr;
-        m_owner->m_boundIndexBufferOffset = -1;
-        m_owner->m_boundIndexBufferType = PE_INDEX_TYPE_UINT32;
+        m_owner->ClearBoundGraphicsState();
         // A buffer reaching Reset() with pending callbacks means the prior recording was
         // abandoned without Wait() — never submitted, or submitted but never waited and
         // now being recycled. Either way the GPU isn't using whatever those callbacks
@@ -139,16 +127,26 @@ namespace pe
         dst->Blit(m_owner, src, region, filter);
     }
 
+    namespace
+    {
+        void FillTransferDstBarriers(const std::vector<Image *> &images, std::vector<ImageBarrierInfo> &barriers)
+        {
+            barriers.resize(images.size());
+            for (uint32_t i = 0; i < images.size(); i++)
+            {
+                barriers[i] = {};
+                barriers[i].image = images[i];
+                barriers[i].layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                barriers[i].stageFlags = PE_STAGE_TRANSFER;
+                barriers[i].accessMask = PE_ACCESS_TRANSFER_WRITE;
+            }
+        }
+    } // namespace
+
     void VulkanCommandBufferImpl::ClearColors(std::vector<Image *> images)
     {
-        std::vector<ImageBarrierInfo> barriers(images.size());
-        for (uint32_t i = 0; i < images.size(); i++)
-        {
-            barriers[i].image = images[i];
-            barriers[i].layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            barriers[i].stageFlags = PE_STAGE_TRANSFER;
-            barriers[i].accessMask = PE_ACCESS_TRANSFER_WRITE;
-        }
+        thread_local std::vector<ImageBarrierInfo> barriers;
+        FillTransferDstBarriers(images, barriers);
         Image::Barriers(m_owner, barriers);
         FlushBarriers();
 
@@ -178,14 +176,8 @@ namespace pe
 
     void VulkanCommandBufferImpl::ClearDepthStencils(std::vector<Image *> images)
     {
-        std::vector<ImageBarrierInfo> barriers(images.size());
-        for (uint32_t i = 0; i < images.size(); i++)
-        {
-            barriers[i].image = images[i];
-            barriers[i].layout = PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            barriers[i].stageFlags = PE_STAGE_TRANSFER;
-            barriers[i].accessMask = PE_ACCESS_TRANSFER_WRITE;
-        }
+        thread_local std::vector<ImageBarrierInfo> barriers;
+        FillTransferDstBarriers(images, barriers);
         Image::Barriers(m_owner, barriers);
         FlushBarriers();
 
@@ -366,20 +358,9 @@ namespace pe
 
     void VulkanCommandBufferImpl::EndPass()
     {
-        // in favor of tracking image layout, stage and access, we need to set the correct access mask for the last operation
-        // attachments with AttachmentLoadOp::Load will have the ReadBit access mask and it is used for waiting to read/load the attachment
-        // but after the render pass is done, the correct access mask should be the WriteBit since it is the last operation
-        // so set the correct track info access mask here before any other access operation happen
-        for (uint32_t i = 0; i < m_owner->m_attachmentCount; i++)
-        {
-            const Attachment &attachment = m_owner->m_attachments[i];
-            if (attachment.loadOp == PE_LOAD_OP_LOAD)
-            {
-                attachment.image->m_trackInfos[0][0].accessMask = VulkanHelpers::HasDepth(pe::ToVkFormat(attachment.image->GetFormat()))
-                                                                      ? PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE
-                                                                      : PE_ACCESS_COLOR_ATTACHMENT_WRITE;
-            }
-        }
+        // Attachments entered with *_ATTACHMENT_READ on LOAD_OP_LOAD; the pass writes, so
+        // the tracker must report *_ATTACHMENT_WRITE before the next barrier query.
+        m_owner->FixupLoadOpAttachmentWriteAccess();
 
         if (m_owner->m_dynamicPass)
             m_apiHandle.endRendering();
@@ -388,25 +369,12 @@ namespace pe
 
         EndDebugRegion();
 
-        m_owner->m_attachmentCount = 0;
-        m_owner->m_attachments = nullptr;
-        m_owner->m_renderPass = nullptr;
-        m_owner->m_framebuffer = nullptr;
-        m_owner->m_dynamicPass = false;
-        m_owner->m_boundPipeline = nullptr;
-        m_owner->m_boundVertexBuffer = nullptr;
-        m_owner->m_boundVertexBufferOffset = -1;
-        m_owner->m_boundVertexBufferFirstBinding = UINT32_MAX;
-        m_owner->m_boundVertexBufferBindingCount = UINT32_MAX;
-        m_owner->m_boundIndexBuffer = nullptr;
-        m_owner->m_boundIndexBufferOffset = -1;
-        m_owner->m_boundIndexBufferType = PE_INDEX_TYPE_UINT32;
+        m_owner->ClearBoundGraphicsState();
     }
 
     static void BatchBindDescriptorsVk(vk::CommandBuffer apiHandle, Pipeline *boundPipeline, vk::PipelineBindPoint point, uint32_t count, Descriptor *const *descriptors)
     {
-        std::vector<vk::DescriptorSet> dsets;
-        dsets.reserve(count);
+        thread_local std::vector<vk::DescriptorSet> dsets;
 
         uint32_t start = 0;
         while (start < count)
@@ -452,9 +420,11 @@ namespace pe
             case Pipeline::Type::RayTracing:
                 return vk::PipelineBindPoint::eRayTracingKHR;
             case Pipeline::Type::Graphics:
-            default:
                 return vk::PipelineBindPoint::eGraphics;
             }
+
+            PE_ERROR("GetVulkanBindPoint: unknown pipeline type %u", static_cast<uint32_t>(pipeline->GetType()));
+            return vk::PipelineBindPoint::eGraphics;
         }
     } // namespace
 

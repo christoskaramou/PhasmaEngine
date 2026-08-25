@@ -14,7 +14,26 @@ namespace pe
     namespace
     {
         std::mutex s_submitMutex{};
-    }
+
+        void WarnVkSubmitResult(vk::Result result)
+        {
+            switch (result)
+            {
+            case vk::Result::eSuccess:
+                return;
+            case vk::Result::eErrorDeviceLost:
+                PE_WARN("[Queue] submit: device lost");
+                return;
+            case vk::Result::eErrorOutOfDeviceMemory:
+            case vk::Result::eErrorOutOfHostMemory:
+                PE_WARN("[Queue] submit: out of memory (%d)", static_cast<int>(result));
+                return;
+            default:
+                PE_WARN("[Queue] submit failed with VkResult=%d", static_cast<int>(result));
+                return;
+            }
+        }
+    } // namespace
 
     VulkanQueueImpl::VulkanQueueImpl(Queue *owner, uint32_t familyId, const std::string &name)
         : m_owner{owner},
@@ -89,21 +108,7 @@ namespace pe
             si.pSignalSemaphoreInfos = signalSemaphoreSubmitInfos.data();
 
             auto result = m_apiHandle.submit2(1, &si, nullptr);
-            switch (result)
-            {
-            case vk::Result::eSuccess:
-                break;
-            case vk::Result::eErrorDeviceLost:
-                PE_WARN("[Queue] submit: device lost");
-                break;
-            case vk::Result::eErrorOutOfDeviceMemory:
-            case vk::Result::eErrorOutOfHostMemory:
-                PE_WARN("[Queue] submit: out of memory (%d)", static_cast<int>(result));
-                break;
-            default:
-                PE_WARN("[Queue] submit failed with VkResult=%d", static_cast<int>(result));
-                break;
-            }
+            WarnVkSubmitResult(result);
             return;
         }
 
@@ -165,21 +170,7 @@ namespace pe
         si.pSignalSemaphores = signalSemaphores.data();
 
         auto result = m_apiHandle.submit(1, &si, nullptr);
-        switch (result)
-        {
-        case vk::Result::eSuccess:
-            break;
-        case vk::Result::eErrorDeviceLost:
-            PE_WARN("[Queue] submit: device lost");
-            break;
-        case vk::Result::eErrorOutOfDeviceMemory:
-        case vk::Result::eErrorOutOfHostMemory:
-            PE_WARN("[Queue] submit: out of memory (%d)", static_cast<int>(result));
-            break;
-        default:
-            PE_WARN("[Queue] submit failed with VkResult=%d", static_cast<int>(result));
-            break;
-        }
+        WarnVkSubmitResult(result);
     }
 
     void VulkanQueueImpl::Present(Swapchain *swapchain, uint32_t imageIndex, Semaphore *wait)

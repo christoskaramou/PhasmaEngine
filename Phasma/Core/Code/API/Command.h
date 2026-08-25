@@ -195,6 +195,24 @@ namespace pe
         friend struct VulkanCommandBufferImpl;
         friend struct Dx12CommandBufferImpl;
 
+        void ClearBoundGraphicsState()
+        {
+            m_attachmentCount = 0;
+            m_attachments = nullptr;
+            m_renderPass = nullptr;
+            m_framebuffer = nullptr;
+            m_dynamicPass = false;
+            m_boundPipeline = nullptr;
+            m_boundVertexBuffer = nullptr;
+            m_boundVertexBufferOffset = -1;
+            m_boundVertexBufferFirstBinding = 0xFFFFFFFFu;
+            m_boundVertexBufferBindingCount = 0xFFFFFFFFu;
+            m_boundIndexBuffer = nullptr;
+            m_boundIndexBufferOffset = -1;
+            m_boundIndexBufferType = PE_INDEX_TYPE_UINT32;
+        }
+        void FixupLoadOpAttachmentWriteAccess();
+
         // Resources
         inline static std::unordered_map<size_t, RenderPass *> s_renderPasses{};
         inline static std::unordered_map<size_t, Framebuffer *> s_framebuffers{};

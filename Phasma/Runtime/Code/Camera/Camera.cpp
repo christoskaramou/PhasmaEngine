@@ -308,4 +308,37 @@ namespace pe
 
         return true;
     }
+
+    bool Camera::BuildWorldRayFromNdc(float ndcX, float ndcY, vec3 &origin, vec3 &dir) const
+    {
+        vec4 nearPoint = m_invViewProjection * vec4(ndcX, ndcY, 1.0f, 1.0f);
+        if (std::abs(nearPoint.w) < 1e-6f)
+            return false;
+        nearPoint /= nearPoint.w;
+
+        vec4 farPoint = m_invViewProjection * vec4(ndcX, ndcY, 0.0f, 1.0f);
+        origin = vec3(nearPoint);
+        if (std::abs(farPoint.w) < 1e-6f)
+            dir = normalize(vec3(farPoint));
+        else
+        {
+            farPoint /= farPoint.w;
+            dir = normalize(vec3(farPoint) - origin);
+        }
+
+        return std::isfinite(origin.x) && std::isfinite(origin.y) && std::isfinite(origin.z) &&
+               std::isfinite(dir.x) && std::isfinite(dir.y) && std::isfinite(dir.z);
+    }
+
+    bool ProjectWorldToViewportRect(const vec3 &world, const mat4 &viewProj, float minX, float minY, float width,
+                                    float height, float &screenX, float &screenY)
+    {
+        const vec4 clip = viewProj * vec4(world, 1.0f);
+        if (clip.w <= 0.0f)
+            return false;
+        const vec2 ndc = vec2(clip) / clip.w;
+        screenX = (ndc.x * 0.5f + 0.5f) * width + minX;
+        screenY = (ndc.y * 0.5f + 0.5f) * height + minY;
+        return std::isfinite(screenX) && std::isfinite(screenY);
+    }
 } // namespace pe
