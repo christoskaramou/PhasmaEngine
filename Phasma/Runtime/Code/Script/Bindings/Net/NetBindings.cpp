@@ -449,7 +449,14 @@ namespace pe
                         continue;
                     }
                     if (n == 0)
-                        continue; // a move is a few dozen bytes; the buffer drains immediately
+                    {
+                        // Would-block. A partial line already on the wire cannot be
+                        // retried without duplicating bytes, so drop. Nothing sent
+                        // means the caller can try the same line next frame.
+                        if (sent > 0)
+                            Drop();
+                        return false;
+                    }
                     Drop();
                     return false;
                 }
