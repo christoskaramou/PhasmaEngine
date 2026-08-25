@@ -28,6 +28,7 @@
 #include "imgui_internal.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_vulkan.h"
+#include <cstdio>
 
 namespace pe
 {
@@ -410,7 +411,9 @@ namespace pe
                 if (size.x <= 0.0f || size.y <= 0.0f)
                     return state;
 
-                const std::string id = m_currentScreenId + "." + (quad.id ? quad.id : "quad");
+                char idBuf[256];
+                std::snprintf(idBuf, sizeof(idBuf), "%s.%s", m_currentScreenId.c_str(),
+                              (quad.id && quad.id[0]) ? quad.id : "quad");
                 if (m_currentScreenOverlay)
                 {
                     // Decorative overlay quads (damage floats, bars, stick, FPS…) used to each
@@ -420,11 +423,11 @@ namespace pe
                     // windowed path — batching would bury them under interactive windows.
                     if (quad.noInput && !quad.bringToFront)
                         return QuadOverlayBatched(quad, size);
-                    return QuadOverlay(id, quad, size);
+                    return QuadOverlay(idBuf, quad, size);
                 }
 
-                ImGui::PushID(id.c_str());
-                state = QuadInCurrentWindow(id, quad, size);
+                ImGui::PushID(idBuf);
+                state = QuadInCurrentWindow(idBuf, quad, size);
                 ImGui::PopID();
                 return state;
             }
@@ -711,10 +714,16 @@ namespace pe
                 return 10.0f * scale * uiScale;
             }
 
+            static float LineWidth(ImFont *font, float fontSize, const char *begin, const char *end = nullptr)
+            {
+                if (!begin)
+                    return 0.0f;
+                return font ? font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, begin, end).x
+                            : ImGui::CalcTextSize(begin, end).x;
+            }
             static float LineWidth(ImFont *font, float fontSize, const std::string &s)
             {
-                return font ? font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, s.c_str()).x
-                            : ImGui::CalcTextSize(s.c_str()).x;
+                return LineWidth(font, fontSize, s.c_str());
             }
 
             static RuntimeUiTextAlignH ResolveH(RuntimeUiTextAlignH a, RuntimeUiTextAlignH def)
@@ -837,8 +846,7 @@ namespace pe
                 {
                     if (*cursor != '\n' && *cursor != '\0')
                         continue;
-                    result.width = std::max(result.width,
-                                            LineWidth(font, fontSize, std::string(lineStart, cursor)));
+                    result.width = std::max(result.width, LineWidth(font, fontSize, lineStart, cursor));
                     result.height += fontSize;
                     if (*cursor == '\0')
                         break;
@@ -939,7 +947,7 @@ namespace pe
                     {
                         if (*c == '\n' || *c == '\0')
                         {
-                            maxWidth = std::max(maxWidth, LineWidth(font, fontSize, std::string(lineStart, c)));
+                            maxWidth = std::max(maxWidth, LineWidth(font, fontSize, lineStart, c));
                             ++lineCount;
                             if (*c == '\0')
                                 break;
@@ -953,7 +961,7 @@ namespace pe
                 return ImVec2(maxWidth + pad * 2.0f, static_cast<float>(lineCount) * lineHeight + pad * 2.0f);
             }
 
-            RuntimeUiWidgetState QuadOverlay(const std::string &id, const RuntimeUiQuadDesc &quad, ImVec2 size)
+            RuntimeUiWidgetState QuadOverlay(const char *id, const RuntimeUiQuadDesc &quad, ImVec2 size)
             {
                 ImGuiWindowFlags flags =
                     ImGuiWindowFlags_NoDecoration |
@@ -979,10 +987,12 @@ namespace pe
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
                 RuntimeUiWidgetState state{};
-                if (ImGui::Begin(("##runtime-ui-quad-" + id).c_str(), nullptr, flags))
+                char windowName[288];
+                std::snprintf(windowName, sizeof(windowName), "##runtime-ui-quad-%s", id);
+                if (ImGui::Begin(windowName, nullptr, flags))
                 {
                     ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
-                    ImGui::PushID(id.c_str());
+                    ImGui::PushID(id);
                     state = QuadInCurrentWindow(id, quad, size);
                     ImGui::PopID();
                 }
@@ -1001,7 +1011,7 @@ namespace pe
                 return state;
             }
 
-            RuntimeUiWidgetState QuadInCurrentWindow(const std::string &id, const RuntimeUiQuadDesc &quad, ImVec2 size)
+            RuntimeUiWidgetState QuadInCurrentWindow(const char *id, const RuntimeUiQuadDesc &quad, ImVec2 size)
             {
                 RuntimeUiWidgetState state{};
                 const ImVec2 pos = ImGui::GetCursorScreenPos();

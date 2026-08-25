@@ -44,21 +44,6 @@ namespace pe
             return pipeline && !IsComputePipeline(pipeline) && !IsRayTracingPipeline(pipeline);
         }
 
-        bool IsDepthStencilFormat(::PeFormat fmt)
-        {
-            return fmt == PE_FORMAT_D32_SFLOAT ||
-                   fmt == PE_FORMAT_D24_UNORM_S8_UINT ||
-                   fmt == PE_FORMAT_D32_SFLOAT_S8_UINT ||
-                   fmt == PE_FORMAT_S8_UINT;
-        }
-
-        bool HasStencilComponent(::PeFormat fmt)
-        {
-            return fmt == PE_FORMAT_D24_UNORM_S8_UINT ||
-                   fmt == PE_FORMAT_D32_SFLOAT_S8_UINT ||
-                   fmt == PE_FORMAT_S8_UINT;
-        }
-
         D3D12_CPU_DESCRIPTOR_HANDLE GetAttachmentCpuHandle(Image *image, ImageView *attachmentView, bool depthStencil, const char *what)
         {
             PE_ERROR_IF(!image, "Dx12CommandBufferImpl::%s: null attachment image", what);
@@ -352,19 +337,7 @@ namespace pe
 
     void Dx12CommandBufferImpl::Reset()
     {
-        m_owner->m_attachmentCount = 0;
-        m_owner->m_attachments = nullptr;
-        m_owner->m_renderPass = nullptr;
-        m_owner->m_framebuffer = nullptr;
-        m_owner->m_dynamicPass = false;
-        m_owner->m_boundPipeline = nullptr;
-        m_owner->m_boundVertexBuffer = nullptr;
-        m_owner->m_boundVertexBufferOffset = -1;
-        m_owner->m_boundVertexBufferFirstBinding = UINT32_MAX;
-        m_owner->m_boundVertexBufferBindingCount = UINT32_MAX;
-        m_owner->m_boundIndexBuffer = nullptr;
-        m_owner->m_boundIndexBufferOffset = -1;
-        m_owner->m_boundIndexBufferType = PE_INDEX_TYPE_UINT32;
+        m_owner->ClearBoundGraphicsState();
 
         if (!m_owner->m_afterWaitCallbacks.IsEmpty())
         {
@@ -506,13 +479,15 @@ namespace pe
         // (PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL maps to D3D12_RESOURCE_STATE_RENDER_TARGET).
         // The Vulkan path uses TRANSFER_DST_OPTIMAL because vkCmdClearColorImage is a
         // transfer command - different verb, same intent.
-        std::vector<ImageBarrierInfo> barriers(images.size());
+        thread_local std::vector<ImageBarrierInfo> barriers;
+        barriers.resize(images.size());
         for (size_t i = 0; i < images.size(); ++i)
         {
             PE_ERROR_IF(!images[i], "Dx12CommandBufferImpl::ClearColors: image %zu is null", i);
-            PE_ERROR_IF(IsDepthStencilFormat(images[i]->GetFormat()),
+            PE_ERROR_IF(PeFormatHasDepthOrStencil(images[i]->GetFormat()),
                         "Dx12CommandBufferImpl::ClearColors: image '%s' is depth/stencil",
                         images[i]->GetName().c_str());
+            barriers[i] = {};
             barriers[i].image = images[i];
             barriers[i].layout = PE_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
             barriers[i].stageFlags = PE_STAGE_COLOR_ATTACHMENT_OUTPUT;
@@ -532,13 +507,15 @@ namespace pe
 
     void Dx12CommandBufferImpl::ClearDepthStencils(std::vector<Image *> images)
     {
-        std::vector<ImageBarrierInfo> barriers(images.size());
+        thread_local std::vector<ImageBarrierInfo> barriers;
+        barriers.resize(images.size());
         for (size_t i = 0; i < images.size(); ++i)
         {
             PE_ERROR_IF(!images[i], "Dx12CommandBufferImpl::ClearDepthStencils: image %zu is null", i);
-            PE_ERROR_IF(!IsDepthStencilFormat(images[i]->GetFormat()),
+            PE_ERROR_IF(!PeFormatHasDepthOrStencil(images[i]->GetFormat()),
                         "Dx12CommandBufferImpl::ClearDepthStencils: image '%s' is not depth/stencil",
                         images[i]->GetName().c_str());
+            barriers[i] = {};
             barriers[i].image = images[i];
             barriers[i].layout = PE_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             barriers[i].stageFlags = PE_STAGE_EARLY_FRAGMENT_TESTS | PE_STAGE_LATE_FRAGMENT_TESTS;
@@ -552,7 +529,7 @@ namespace pe
             const float depth = image->m_clearColor[0];
             const uint8_t stencil = static_cast<uint8_t>(image->m_clearColor[1]);
             D3D12_CLEAR_FLAGS flags = D3D12_CLEAR_FLAG_DEPTH;
-            if (HasStencilComponent(image->GetFormat()))
+            if (PeFormatHasStencil(image->GetFormat()))
                 flags |= D3D12_CLEAR_FLAG_STENCIL;
             const D3D12_CPU_DESCRIPTOR_HANDLE dsv = GetAttachmentCpuHandle(image, nullptr, true, "ClearDepthStencils");
             m_cmdList->ClearDepthStencilView(dsv, flags, depth, stencil, 0, nullptr);
@@ -594,7 +571,7 @@ namespace pe
                 PE_ERROR_IF(!att.image, "Dx12CommandBufferImpl::BeginPass: attachment %u has null image", i);
 
                 const ::PeFormat fmt = att.image->GetFormat();
-                const bool isDepthStencil = IsDepthStencilFormat(fmt);
+                const bool isDepthStencil = PeFormatHasDepthOrStencil(fmt);
 
                 ImageBarrierInfo barrier{};
                 barrier.image = att.image;
@@ -641,12 +618,12 @@ namespace pe
                 const Attachment &att = attachments[i];
                 const ::PeFormat fmt = att.image->GetFormat();
 
-                if (IsDepthStencilFormat(fmt))
+                if (PeFormatHasDepthOrStencil(fmt))
                 {
                     D3D12_CLEAR_FLAGS flags = static_cast<D3D12_CLEAR_FLAGS>(0);
                     if (att.loadOp == PE_LOAD_OP_CLEAR)
                         flags |= D3D12_CLEAR_FLAG_DEPTH;
-                    if (HasStencilComponent(fmt) && att.stencilLoadOp == PE_LOAD_OP_CLEAR)
+                    if (PeFormatHasStencil(fmt) && att.stencilLoadOp == PE_LOAD_OP_CLEAR)
                         flags |= D3D12_CLEAR_FLAG_STENCIL;
                     if (flags == 0)
                         continue;
@@ -669,20 +646,7 @@ namespace pe
 
     void Dx12CommandBufferImpl::EndPass()
     {
-        // Mirror the Vulkan EndPass tracker fix-up: attachments entered the pass with
-        // an *_ATTACHMENT_READ mask (LOAD_OP_LOAD) but the pass executes writes, so the
-        // final access mask must be *_ATTACHMENT_WRITE before the next barrier query.
-        for (uint32_t i = 0; i < m_owner->m_attachmentCount; ++i)
-        {
-            const Attachment &att = m_owner->m_attachments[i];
-            if (att.loadOp == PE_LOAD_OP_LOAD && att.image)
-            {
-                const ::PeFormat fmt = att.image->GetFormat();
-                att.image->m_trackInfos[0][0].accessMask = IsDepthStencilFormat(fmt)
-                                                               ? PE_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE
-                                                               : PE_ACCESS_COLOR_ATTACHMENT_WRITE;
-            }
-        }
+        m_owner->FixupLoadOpAttachmentWriteAccess();
 
         // DX12 has no end-render-pass call in the legacy command-list path; just
         // unbind so the next non-pass command (e.g. a copy) doesn't trip over a
@@ -691,19 +655,7 @@ namespace pe
 
         EndDebugRegion();
 
-        m_owner->m_attachmentCount = 0;
-        m_owner->m_attachments = nullptr;
-        m_owner->m_renderPass = nullptr;
-        m_owner->m_framebuffer = nullptr;
-        m_owner->m_dynamicPass = false;
-        m_owner->m_boundPipeline = nullptr;
-        m_owner->m_boundVertexBuffer = nullptr;
-        m_owner->m_boundVertexBufferOffset = -1;
-        m_owner->m_boundVertexBufferFirstBinding = UINT32_MAX;
-        m_owner->m_boundVertexBufferBindingCount = UINT32_MAX;
-        m_owner->m_boundIndexBuffer = nullptr;
-        m_owner->m_boundIndexBufferOffset = -1;
-        m_owner->m_boundIndexBufferType = PE_INDEX_TYPE_UINT32;
+        m_owner->ClearBoundGraphicsState();
     }
 
     void Dx12CommandBufferImpl::BindPipeline(PassInfo &passInfo, bool bindDescriptors)

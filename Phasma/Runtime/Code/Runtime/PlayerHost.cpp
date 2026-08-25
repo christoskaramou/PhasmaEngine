@@ -55,16 +55,70 @@ namespace pe
         };
 
 #if defined(PE_ANDROID)
-        int QueryPhasmaPlayerSafeInset(JNIEnv *env, jclass activityClass, const char *methodName)
+        struct AndroidSafeAreaJni
         {
-            jmethodID method = env->GetStaticMethodID(activityClass, methodName, "()I");
-            if (!method || env->ExceptionCheck())
+            jclass activityClass = nullptr;
+            jmethodID left = nullptr;
+            jmethodID top = nullptr;
+            jmethodID right = nullptr;
+            jmethodID bottom = nullptr;
+        };
+
+        AndroidSafeAreaJni &SafeAreaJni()
+        {
+            static AndroidSafeAreaJni jni;
+            return jni;
+        }
+
+        bool EnsureAndroidSafeAreaJni(JNIEnv *env)
+        {
+            AndroidSafeAreaJni &jni = SafeAreaJni();
+            if (jni.activityClass && jni.left && jni.top && jni.right && jni.bottom)
+                return true;
+
+            jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
+            if (!activity || env->ExceptionCheck())
             {
                 env->ExceptionClear();
-                return 0;
+                return false;
             }
+            jclass localClass = env->GetObjectClass(activity);
+            env->DeleteLocalRef(activity);
+            if (!localClass || env->ExceptionCheck())
+            {
+                env->ExceptionClear();
+                return false;
+            }
+            if (!jni.activityClass)
+                jni.activityClass = static_cast<jclass>(env->NewGlobalRef(localClass));
+            env->DeleteLocalRef(localClass);
+            if (!jni.activityClass)
+                return false;
 
-            const jint value = env->CallStaticIntMethod(activityClass, method);
+            auto lookup = [&](const char *name) -> jmethodID
+            {
+                jmethodID method = env->GetStaticMethodID(jni.activityClass, name, "()I");
+                if (!method || env->ExceptionCheck())
+                {
+                    env->ExceptionClear();
+                    return nullptr;
+                }
+                return method;
+            };
+            if (!jni.left)
+                jni.left = lookup("getSafeAreaInsetLeft");
+            if (!jni.top)
+                jni.top = lookup("getSafeAreaInsetTop");
+            if (!jni.right)
+                jni.right = lookup("getSafeAreaInsetRight");
+            if (!jni.bottom)
+                jni.bottom = lookup("getSafeAreaInsetBottom");
+            return jni.left && jni.top && jni.right && jni.bottom;
+        }
+
+        int QueryCachedSafeInset(JNIEnv *env, jmethodID method)
+        {
+            const jint value = env->CallStaticIntMethod(SafeAreaJni().activityClass, method);
             if (env->ExceptionCheck())
             {
                 env->ExceptionClear();
@@ -80,30 +134,14 @@ namespace pe
                 return area;
 
             JNIEnv *env = static_cast<JNIEnv *>(SDL_AndroidGetJNIEnv());
-            if (!env)
+            if (!env || !EnsureAndroidSafeAreaJni(env))
                 return area;
 
-            jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
-            if (!activity || env->ExceptionCheck())
-            {
-                env->ExceptionClear();
-                return area;
-            }
-
-            jclass activityClass = env->GetObjectClass(activity);
-            if (!activityClass || env->ExceptionCheck())
-            {
-                env->ExceptionClear();
-                env->DeleteLocalRef(activity);
-                return area;
-            }
-
-            const int left = QueryPhasmaPlayerSafeInset(env, activityClass, "getSafeAreaInsetLeft");
-            const int top = QueryPhasmaPlayerSafeInset(env, activityClass, "getSafeAreaInsetTop");
-            const int right = QueryPhasmaPlayerSafeInset(env, activityClass, "getSafeAreaInsetRight");
-            const int bottom = QueryPhasmaPlayerSafeInset(env, activityClass, "getSafeAreaInsetBottom");
-            env->DeleteLocalRef(activityClass);
-            env->DeleteLocalRef(activity);
+            AndroidSafeAreaJni &jni = SafeAreaJni();
+            const int left = QueryCachedSafeInset(env, jni.left);
+            const int top = QueryCachedSafeInset(env, jni.top);
+            const int right = QueryCachedSafeInset(env, jni.right);
+            const int bottom = QueryCachedSafeInset(env, jni.bottom);
 
             const float clampedLeft = static_cast<float>(std::clamp(left, 0, static_cast<int>(surfaceWidth)));
             const float clampedTop = static_cast<float>(std::clamp(top, 0, static_cast<int>(surfaceHeight)));
@@ -122,7 +160,8 @@ namespace pe
             if (area.valid &&
                 (left != s_loggedLeft || top != s_loggedTop || right != s_loggedRight || bottom != s_loggedBottom))
             {
-                PE_INFO("[RuntimeUI] Android safe area insets: left=%d top=%d right=%d bottom=%d", left, top, right, bottom);
+                PE_INFO("[RuntimeUI] Android safe area insets: left=%d top=%d right=%d bottom=%d", left, top, right,
+                        bottom);
                 s_loggedLeft = left;
                 s_loggedTop = top;
                 s_loggedRight = right;
@@ -491,7 +530,6 @@ namespace pe
                         keepRunning = ProcessRuntimeEvents();
                     const bool resizeReady = !keepRunning || ApplyPendingResize();
                     FrameTimer::Instance().CountCpuTotalStamp();
-                    FrameTimer::Instance().Tick();
                     profilerFrame.Close();
                     if (m_profilerStream)
                         m_profilerStream->Tick();

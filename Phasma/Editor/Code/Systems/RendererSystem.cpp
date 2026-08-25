@@ -478,11 +478,6 @@ namespace pe
         if (!m_sceneRenderer.NeedsRenderScaleResize())
             return;
 
-        // Consume resize requests that led to this rebuild. Requests arriving during Resize stay queued.
-        EventSystem::QueuedEvent resizeEvent;
-        while (EventSystem::PeekAndPop(EventType::Resize, resizeEvent))
-        {
-        }
         Resize(RHII.GetWidth(), RHII.GetHeight());
     }
 

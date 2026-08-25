@@ -1,24 +1,10 @@
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
 #include "API/Surface.h"
+#include "Runtime/RuntimeStartup.h"
 
 namespace pe
 {
-    static const std::unordered_map<std::string_view, PePresentMode> s_surfPresentModeMap = {
-        {"immediate", PE_PRESENT_MODE_IMMEDIATE},
-        {"mailbox", PE_PRESENT_MODE_MAILBOX},
-        {"fifo", PE_PRESENT_MODE_FIFO},
-        {"fifo_relaxed", PE_PRESENT_MODE_FIFO_RELAXED},
-    };
-
-    static std::string PresentModeStr(PePresentMode mode)
-    {
-        for (auto &[k, v] : s_surfPresentModeMap)
-            if (v == mode)
-                return std::string(k);
-        return "unknown";
-    }
-
     static struct SurfaceBindings
     {
         SurfaceBindings()
@@ -29,9 +15,8 @@ namespace pe
 
                 // SetPresentMode
                 surfType["set_present_mode"] = [](Surface &s, const std::string &mode) {
-                    auto it = s_surfPresentModeMap.find(std::string_view(mode));
-                    if (it != s_surfPresentModeMap.end())
-                        s.SetPresentMode(it->second);
+                    if (const std::optional<PePresentMode> parsed = ParsePresentModeToken(mode))
+                        s.SetPresentMode(*parsed);
                 };
 
                 // GetActualExtent (width/height)
@@ -54,7 +39,7 @@ namespace pe
 
                 // GetPresentMode
                 surfType["get_present_mode"] = [](Surface &s) -> std::string {
-                    return PresentModeStr(s.GetPresentMode());
+                    return PresentModeToConfigToken(s.GetPresentMode());
                 };
 
                 // GetSupportedPresentModes
@@ -63,7 +48,7 @@ namespace pe
                     auto modes = s.GetSupportedPresentModes();
                     sol::table t = lua.create_table();
                     for (size_t i = 0; i < modes.size(); i++)
-                        t[i + 1] = PresentModeStr(modes[i]);
+                        t[i + 1] = PresentModeToConfigToken(modes[i]);
                     return t;
                 }; });
         }

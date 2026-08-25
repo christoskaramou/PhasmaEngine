@@ -76,6 +76,9 @@ namespace pe
                 // read end never sees EOF.
                 SetHandleInformation(m_stdin, HANDLE_FLAG_INHERIT, 0);
                 SetHandleInformation(m_stdout, HANDLE_FLAG_INHERIT, 0);
+                // Same contract as posix O_NONBLOCK: proc.write must not stall the frame.
+                DWORD pipeMode = PIPE_NOWAIT;
+                SetNamedPipeHandleState(m_stdin, &pipeMode, nullptr, nullptr);
 
                 STARTUPINFOW si{};
                 si.cb = sizeof(si);
@@ -183,7 +186,9 @@ namespace pe
                 if (!m_stdin)
                     return false;
                 DWORD written = 0;
-                return WriteFile(m_stdin, text.data(), static_cast<DWORD>(text.size()), &written, nullptr) != 0;
+                if (!WriteFile(m_stdin, text.data(), static_cast<DWORD>(text.size()), &written, nullptr))
+                    return false;
+                return written == static_cast<DWORD>(text.size());
 #else
                 if (m_stdin < 0)
                     return false;

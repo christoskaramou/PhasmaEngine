@@ -650,7 +650,6 @@ namespace pe
         {
             const bool keepRunning = m_window->ProcessEvents();
             m_frameTimer.CountCpuTotalStamp();
-            m_frameTimer.Tick();
             Profiler::EndFrame();
             PE_FRAME_MARK;
             return keepRunning;

@@ -43,8 +43,6 @@ namespace pe
         {
             gSettings.render_scale = ClampRenderScale(rtScale);
             lastCommittedScale = gSettings.render_scale;
-            RHII.WaitDeviceIdle();
-            EventSystem::PushEvent(EventType::Resize);
             changed = true;
         }
         ui::ItemTooltip("Apply the current quality scale and resize render targets.");

@@ -20,6 +20,7 @@ namespace pe
         bool IsDepthStencilFormat(DXGI_FORMAT format)
         {
             return format == DXGI_FORMAT_D32_FLOAT ||
+                   format == DXGI_FORMAT_D16_UNORM ||
                    format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
                    format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
         }
