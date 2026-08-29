@@ -3,6 +3,7 @@
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
 #include "Scene/ModelAsset.h"
+#include "Scene/ModelAssetCooked.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
@@ -171,12 +172,18 @@ namespace pe
 
         if (!model)
         {
-            // Keep the current document while the selection wanders, drop it when its root is gone.
-            if (m_model && (!m_rootNode || !scene.IsNodeAlive(m_rootNode)))
+            // Nothing of a model selected: the editor follows the selection, so drop the target (the
+            // document is autosaved, undo/redo stay keyed to the rig file and survive a re-select).
+            if (m_model)
             {
+                if (m_dirty && m_dragBone < 0)
+                    SaveJson(nullptr, true);
+                RestoreHeatMap(scene);
                 m_model = nullptr;
                 m_rootNode = nullptr;
                 ClearDocument();
+                BuildCaches();
+                m_status = "No model selected: select a node of a .pemesh model";
             }
             return;
         }
@@ -907,6 +914,16 @@ namespace pe
             m_undo.pop_back();
             return fail(error);
         }
+        if (action == "rig.bake")
+        {
+            RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+            if (!renderer)
+                return fail("renderer not available");
+            std::string error, outPath;
+            if (!Bake(renderer->GetScene(), error, outPath))
+                return fail(error);
+            return ok({{"path", outPath}});
+        }
         return fail("unknown rig action");
     }
 
@@ -1071,10 +1088,19 @@ namespace pe
             }
         }
         ImGui::SameLine();
-        ImGui::BeginDisabled(true);
-        ImGui::Button("Bake");
+        ImGui::BeginDisabled(m_bones.empty() || !m_model);
+        if (ImGui::Button("Bake"))
+        {
+            std::string error, outPath;
+            RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+            if (renderer && Bake(renderer->GetScene(), error, outPath))
+                m_status = "Baked " + std::filesystem::path(outPath).filename().generic_string();
+            else
+                m_status = "Bake failed: " + (renderer ? error : std::string("renderer not available"));
+        }
         ImGui::EndDisabled();
-        ui::ItemTooltip("Shapes -> vertex weights -> _rigged.pemesh: next drop");
+        ui::ItemTooltip("Write the rig into the mesh: parts flattened into rig space, skeleton from the bones, joints/weights per vertex "
+                        "(owned parts 100%, shapes for the rest) -> <model>_rigged.pemesh beside the source, then swap it into the scene");
         ImGui::SameLine();
         ImGui::Checkbox("Shapes", &m_showShapes);
         ui::ItemTooltip("Draw the influence capsules in the viewport");
@@ -1263,6 +1289,214 @@ namespace pe
             }
             ui::ItemTooltip("Put this bone's head exactly on its parent's tail (Blender: Connect); from then on the parent's tail drags it along");
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // bake
+    // -------------------------------------------------------------------------
+    // Writes the rig into the mesh: every part is flattened into rig space (node locals become
+    // identity), the skeleton is built from the bones, ComputeVertexWeights fills joints/weights, the
+    // result is saved as <model>_rigged.pemesh beside the source with the rig.json copied next to it,
+    // and the scene swaps the source model for the rigged one.
+    // ponytail: translation-only bind frames (bone axes = rig axes, the proven skinned-strip pattern);
+    // add tail-aligned rest rotations when a BVH bridge needs bone-local rotation spaces.
+    bool RigEditor::Bake(Scene &scene, std::string &error, std::string &outPath)
+    {
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        if (!renderer || !m_model || !m_rootNode || !scene.IsNodeAlive(m_rootNode))
+        {
+            error = "no target model: select a node of a .pemesh model first";
+            return false;
+        }
+        if (m_bones.empty())
+        {
+            error = "no bones to bake";
+            return false;
+        }
+        if (m_model->GetFilePath().empty())
+        {
+            error = "the model has no file path to bake beside";
+            return false;
+        }
+        const int nodeCount = m_model->GetNodeCount();
+        const int meshCount = m_model->GetMeshInfoCount();
+        const int rootIndex = m_model->GetRootNodeIndex();
+        const int boneCount = static_cast<int>(m_bones.size());
+
+        // heat colours live in the scene copy that is about to be replaced
+        m_heat = 0;
+        RestoreHeatMap(scene);
+
+        // rig-space matrix of every node BEFORE any local is reset
+        std::vector<mat4> toRig(nodeCount);
+        for (int n = 0; n < nodeCount; n++)
+            toRig[n] = ModelNodeWorld(n);
+
+        std::vector<int> meshNode(meshCount, -1);
+        for (int n = 0; n < nodeCount; n++)
+        {
+            const int mi = m_model->GetNodeMesh(n);
+            if (mi < 0 || mi >= meshCount)
+                continue;
+            if (meshNode[mi] >= 0)
+            {
+                error = "mesh shared by nodes '" + m_model->GetNodeName(meshNode[mi]) + "' and '" + m_model->GetNodeName(n) +
+                        "' cannot be flattened into one frame";
+                return false;
+            }
+            meshNode[mi] = n;
+        }
+
+        std::vector<Vertex> &verts = m_model->GetMutableVertices();
+        std::vector<PositionUvVertex> &posUv = m_model->GetMutablePositionUvs();
+        std::vector<AabbVertex> &aabbs = m_model->GetMutableAabbVertices();
+        for (int mi = 0; mi < meshCount; mi++)
+        {
+            MeshInfo *mesh = m_model->GetMeshInfo(mi);
+            const int n = meshNode[mi];
+            if (!mesh || n < 0 || mesh->vertexOffset + mesh->verticesCount > verts.size())
+                continue;
+            const mat4 &m = toRig[n];
+            const mat3 linear(m);
+            const mat3 normalM = glm::transpose(glm::inverse(linear));
+            const int owner = ShellOwner(m_model->GetNodeName(n));
+            vec3 boxMin(std::numeric_limits<float>::max()), boxMax(-std::numeric_limits<float>::max());
+            for (uint32_t v = 0; v < mesh->verticesCount; v++)
+            {
+                Vertex &vert = verts[mesh->vertexOffset + v];
+                const vec3 p = vec3(m * vec4(vert.position[0], vert.position[1], vert.position[2], 1.f));
+                vec3 nrm = normalM * vec3(vert.normals[0], vert.normals[1], vert.normals[2]);
+                if (glm::length(nrm) > 1e-8f)
+                    nrm = glm::normalize(nrm);
+                vec3 tan = linear * vec3(vert.tangent[0], vert.tangent[1], vert.tangent[2]);
+                if (glm::length(tan) > 1e-8f)
+                    tan = glm::normalize(tan);
+                for (int k = 0; k < 3; k++)
+                {
+                    vert.position[k] = p[k];
+                    vert.normals[k] = nrm[k];
+                    vert.tangent[k] = tan[k];
+                }
+                int joints[4];
+                float weights[4];
+                ComputeVertexWeights(p, owner, joints, weights);
+                float sum = 0.f;
+                for (int k = 0; k < 4; k++)
+                {
+                    joints[k] = std::clamp(joints[k], 0, boneCount - 1);
+                    weights[k] = std::max(weights[k], 0.f);
+                    sum += weights[k];
+                }
+                if (sum <= 0.f) // never leave a skinned vertex with no bone: it would collapse to the origin
+                {
+                    joints[0] = owner >= 0 ? owner : 0;
+                    weights[0] = 1.f;
+                    weights[1] = weights[2] = weights[3] = 0.f;
+                    sum = 1.f;
+                }
+                for (int k = 0; k < 4; k++)
+                {
+                    vert.joints[k] = static_cast<uint32_t>(joints[k]);
+                    vert.weights[k] = weights[k] / sum;
+                }
+                // the depth/shadow stream is indexed like the PBR stream (Scene derives positionsOffset)
+                const size_t pi = static_cast<size_t>(mesh->vertexOffset) + v;
+                if (pi < posUv.size())
+                {
+                    PositionUvVertex &pv = posUv[pi];
+                    for (int k = 0; k < 3; k++)
+                        pv.position[k] = p[k];
+                    for (int k = 0; k < 4; k++)
+                    {
+                        pv.joints[k] = vert.joints[k];
+                        pv.weights[k] = vert.weights[k];
+                    }
+                }
+                boxMin = glm::min(boxMin, p);
+                boxMax = glm::max(boxMax, p);
+            }
+            if (mesh->verticesCount == 0)
+                continue;
+            mesh->boundingBox.min = boxMin;
+            mesh->boundingBox.max = boxMax;
+            mesh->skinned = true;
+            if (mesh->aabbVertexOffset + 8 <= aabbs.size())
+            {
+                const vec3 c[8] = {{boxMin.x, boxMin.y, boxMin.z}, {boxMax.x, boxMin.y, boxMin.z}, {boxMax.x, boxMax.y, boxMin.z}, {boxMin.x, boxMax.y, boxMin.z}, {boxMin.x, boxMin.y, boxMax.z}, {boxMax.x, boxMin.y, boxMax.z}, {boxMax.x, boxMax.y, boxMax.z}, {boxMin.x, boxMax.y, boxMax.z}};
+                for (int i = 0; i < 8; i++)
+                    for (int k = 0; k < 3; k++)
+                        aabbs[mesh->aabbVertexOffset + i].position[k] = c[i][k];
+            }
+        }
+        // the part transforms now live in the vertices; the root keeps its own frame (= rig space)
+        for (int n = 0; n < nodeCount; n++)
+            if (n != rootIndex)
+                m_model->SetNodeLocalMatrix(n, mat4(1.f));
+
+        Skeleton &skeleton = m_model->GetMutableSkeleton();
+        skeleton = Skeleton{};
+        skeleton.bones.reserve(m_bones.size());
+        for (int i = 0; i < boneCount; i++)
+        {
+            const RigBone &b = m_bones[i];
+            BoneInfo bone{};
+            bone.name = b.name;
+            bone.parentIndex = b.parent;
+            const vec3 parentHead = b.parent >= 0 ? m_bones[b.parent].head : vec3(0.f);
+            bone.localBindTransform = glm::translate(mat4(1.f), b.head - parentHead);
+            bone.offsetMatrix = glm::inverse(glm::translate(mat4(1.f), b.head));
+            bone.intermediatePrefix = mat4(1.f);
+            skeleton.boneNameToIndex[bone.name] = i;
+            skeleton.bones.push_back(bone);
+        }
+        skeleton.rootTransform = mat4(1.f);
+
+        std::filesystem::path out = m_model->GetFilePath();
+        std::string stem = out.stem().generic_string();
+        const std::string suffix = "_rigged";
+        if (stem.size() > suffix.size() && stem.compare(stem.size() - suffix.size(), suffix.size(), suffix) == 0)
+            stem.resize(stem.size() - suffix.size());
+        out.replace_filename(stem + suffix + ".pemesh");
+        const std::string document = DocumentJson();
+        const bool written = ModelAssetCooked::WriteToFile(m_model, out);
+        if (written)
+        {
+            std::filesystem::path json = out;
+            json.replace_extension(".rig.json");
+            std::ofstream f(json, std::ios::binary | std::ios::trunc);
+            f << document;
+        }
+
+        // the in-memory asset is rewritten either way: drop it and let the scene swap decide the target
+        ModelAsset *old = m_model;
+        m_model = nullptr;
+        m_rootNode = nullptr;
+        ClearDocument();
+        m_heatBackup.clear();
+        BuildCaches();
+        renderer->WaitAllFramesCommands();
+        scene.RemoveModel(old);
+        if (!written)
+        {
+            scene.UpdateGeometryBuffers();
+            error = "failed to write " + out.generic_string();
+            return false;
+        }
+        ModelAsset *rigged = ModelAsset::Load(out);
+        if (!rigged)
+        {
+            scene.UpdateGeometryBuffers();
+            error = "wrote " + out.generic_string() + " but could not load it back";
+            return false;
+        }
+        const SceneNodeHandle handle = scene.AddModelDeferred(rigged);
+        scene.UpdateGeometryBuffers();
+        scene.MarkDirty();
+        renderer->ResetTAAHistory();
+        if (handle.nodeId)
+            SelectionManager::Instance().Select(handle.nodeId);
+        outPath = out.generic_string();
+        return true;
     }
 
     // -------------------------------------------------------------------------
