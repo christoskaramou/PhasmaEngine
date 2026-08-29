@@ -860,6 +860,12 @@ namespace pe
                                        "only, already applied live)",
                   "VoxelPainter", "command", hasMapPainter, false, false);
 
+        const bool hasTimeline = GetWidget<AnimationTimeline>() != nullptr;
+        addAction("timeline.mode", "Animation Timeline: Set Mode (args: mode dope|graph)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.frame", "Animation Timeline: Set Current Frame (args: frame)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.bone", "Animation Timeline: Select Bone Channel (args: bone name)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.save", "Animation Timeline: Save Clips Into The Model's .pemesh", "Timeline", "command", hasTimeline, false, false);
+
         addAction("status.console_errors", "Show Console Errors", "Status", "command", GetWidget<Console>() != nullptr, false, false);
         addAction("status.console_warnings", "Show Console Warnings", "Status", "command", GetWidget<Console>() != nullptr, false, false);
         addAction("help.imgui_demo", "Dear ImGui Demo", "Help", "toggle", true, m_show_demo_window, true);
@@ -934,6 +940,37 @@ namespace pe
 
         if (action.rfind("window.", 0) == 0)
             return SetEditorWindowOpen(action, argsJson);
+
+        // Animation Timeline programmatic route (mode / frame / bone / save) for agents.
+        if (action.rfind("timeline.", 0) == 0)
+        {
+            auto *timeline = GetWidget<AnimationTimeline>();
+            if (!timeline)
+                return R"({"error":"Animation Timeline not available"})";
+            *timeline->GetOpen() = true;
+            if (action == "timeline.mode")
+            {
+                const std::string mode = args.value("mode", "dope");
+                timeline->SetGraphMode(mode == "graph" || mode == "graph_editor" || mode == "curves");
+                return ok();
+            }
+            if (action == "timeline.frame")
+            {
+                timeline->RequestFrame(args.value("frame", 0.0f));
+                return ok();
+            }
+            if (action == "timeline.bone")
+            {
+                timeline->RequestBone(args.value("bone", ""));
+                return ok();
+            }
+            if (action == "timeline.save")
+            {
+                timeline->RequestSave();
+                return ok();
+            }
+            return R"({"error":"unknown timeline action"})";
+        }
 
         // Map Painter programmatic route: lets agents paint voxel terrain maps without mouse input.
         if (action.rfind("voxelpainter.", 0) == 0)

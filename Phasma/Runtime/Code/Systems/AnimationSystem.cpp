@@ -303,6 +303,16 @@ namespace pe
                     state.playing = false;
                 }
             }
+            else if (state.time < 0.0f) // reverse playback
+            {
+                if (state.loop)
+                    state.time = clip.duration + std::fmod(state.time, clip.duration);
+                else
+                {
+                    state.time = 0.0f;
+                    state.playing = false;
+                }
+            }
 
             NodeRuntime &rt = scene->GetNodeRuntime(state.nodeId);
             AnimationEvaluator::EvaluatePose(clip, skeleton, state.time, rt.jointMatrices);
