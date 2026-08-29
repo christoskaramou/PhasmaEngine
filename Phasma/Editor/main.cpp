@@ -17,8 +17,6 @@ static constexpr const char *k_versionedModuleSuffix = ".dll";
 using TickFunc = bool (*)();
 using RenderReloadFunc = void (*)();
 using DestroyFunc = void (*)();
-using GetImGuiCtxFunc = void *(*)();
-using InitWithCtxFunc = void (*)(void *);
 
 namespace
 {
@@ -34,8 +32,6 @@ namespace
         TickFunc tick = nullptr;
         RenderReloadFunc renderReload = nullptr;
         DestroyFunc destroy = nullptr;
-        GetImGuiCtxFunc getImguiCtx = nullptr;
-        InitWithCtxFunc initWithCtx = nullptr;
         std::string loadedPath;
     };
 
@@ -86,6 +82,14 @@ namespace
         if (!s_removedStaleModules)
         {
             RemoveStaleModuleCopies(modulePath.parent_path());
+            // A reload snapshot and its flag can only be written later in this process, by the reload
+            // cycle itself. Anything already on disk at the first load is left over from a killed or
+            // crashed run: drop it so a cold start keeps the normal splash + last_scene path instead of
+            // silently restoring stale state, and so a snapshot that kills the restore cannot do it again
+            // on every launch.
+            std::error_code stale;
+            std::filesystem::remove(pe::Path::Executable + "reload_state.json", stale);
+            std::filesystem::remove(pe::Path::Executable + "reload.flag", stale);
             s_removedStaleModules = true;
         }
 #if defined(PE_LINUX)
@@ -110,8 +114,6 @@ namespace
         m.tick = reinterpret_cast<TickFunc>(dlsym(m.lib, "TickEditorModule"));
         m.renderReload = reinterpret_cast<RenderReloadFunc>(dlsym(m.lib, "RenderReloadFrameEditorModule"));
         m.destroy = reinterpret_cast<DestroyFunc>(dlsym(m.lib, "DestroyEditorModule"));
-        m.getImguiCtx = reinterpret_cast<GetImGuiCtxFunc>(dlsym(m.lib, "GetImGuiContextEditorModule"));
-        m.initWithCtx = reinterpret_cast<InitWithCtxFunc>(dlsym(m.lib, "InitEditorModuleWithContext"));
 #elif defined(PE_WIN32)
         // The module copy can transiently fail with ACCESS_DENIED/SHARING_VIOLATION when an anti-virus
         // (e.g. Bitdefender) is scanning the freshly-built DLL, or when a stale versioned copy from a
@@ -164,10 +166,6 @@ namespace
         m.renderReload = reinterpret_cast<RenderReloadFunc>(
             ::GetProcAddress(static_cast<HMODULE>(m.lib), "RenderReloadFrameEditorModule"));
         m.destroy = reinterpret_cast<DestroyFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "DestroyEditorModule"));
-        m.getImguiCtx =
-            reinterpret_cast<GetImGuiCtxFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "GetImGuiContextEditorModule"));
-        m.initWithCtx =
-            reinterpret_cast<InitWithCtxFunc>(::GetProcAddress(static_cast<HMODULE>(m.lib), "InitEditorModuleWithContext"));
 #endif
         if (!m.tick || !m.renderReload || !m.destroy)
         {
@@ -285,7 +283,6 @@ int main(int argc, char *argv[])
             if (pe::EventSystem::PeekAndPop(pe::EventType::ReloadModule, ev))
             {
                 mod.renderReload(); // drain in-flight frames and show "Reloading..." overlay
-                void *imguiCtx = mod.getImguiCtx ? mod.getImguiCtx() : nullptr;
                 std::ofstream(pe::Path::Executable + "reload.flag").close();
                 mod.destroy();
                 pe::ThreadPool::FW.WaitIdle();
@@ -296,8 +293,6 @@ int main(int argc, char *argv[])
                     PE_ERROR("Reload failed");
                     break;
                 }
-                if (imguiCtx && mod.initWithCtx)
-                    mod.initWithCtx(imguiCtx);
             }
         }
 

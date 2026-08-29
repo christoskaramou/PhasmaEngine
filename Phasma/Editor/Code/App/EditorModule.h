@@ -6,6 +6,4 @@ extern "C"
     PE_EDITOR_MODULE_API bool TickEditorModule();
     PE_EDITOR_MODULE_API void RenderReloadFrameEditorModule();
     PE_EDITOR_MODULE_API void DestroyEditorModule();
-    PE_EDITOR_MODULE_API void *GetImGuiContextEditorModule();
-    PE_EDITOR_MODULE_API void InitEditorModuleWithContext(void *imguiCtx);
 }

@@ -16,7 +16,6 @@ namespace pe
         bool Frame();
         void Run();
         void RenderReloadFrame();
-        void ReleaseImGuiContext();
 
     private:
         Window *m_window = nullptr;

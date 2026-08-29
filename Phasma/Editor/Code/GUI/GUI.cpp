@@ -72,8 +72,9 @@ namespace pe
 {
     namespace
     {
-        // The launcher copies PhasmaEditorModule.dll to a versioned name at start, so a rebuilt DLL only
-        // takes effect after a restart: the status bar shows which build runs and flags a newer one.
+        // The launcher copies PhasmaEditorModule.dll to a versioned name at start, so a rebuilt DLL is
+        // picked up by File > Reload Module (or a restart): the status bar shows which build runs and
+        // flags a newer one.
         struct ModuleBuildInfo
         {
             std::filesystem::file_time_type loaded{};
@@ -131,7 +132,7 @@ namespace pe
             if (s_moduleBuild.stale && !s_moduleBuild.warned)
             {
                 s_moduleBuild.warned = true;
-                PE_WARN("[Module] PhasmaEditorModule rebuilt at %s but this editor still runs the %s build - restart it",
+                PE_WARN("[Module] PhasmaEditorModule rebuilt at %s but this editor still runs the %s build - File > Reload Module",
                         FormatFileTime(stamp).c_str(), FormatFileTime(s_moduleBuild.loaded).c_str());
             }
         }
@@ -144,7 +145,6 @@ namespace pe
         constexpr const char *kEditorFontScaleKey = "font_scale";
         constexpr float kMinEditorFontScale = 0.5f;
         constexpr float kMaxEditorFontScale = 2.5f;
-        ImGuiContext *s_hotReloadCtx = nullptr;
 
         bool IsScriptTestFailureLine(const std::string &line)
         {
@@ -786,8 +786,7 @@ namespace pe
         if (m_initialized)
         {
             GUIBackend::Shutdown();
-            if (m_ownsImGuiContext)
-                ImGui::DestroyContext();
+            ImGui::DestroyContext(); // ImGui is compiled into this module: the context must die with it (hot reload)
         }
     }
 
@@ -838,11 +837,6 @@ namespace pe
             if (it != ui.end() && it->is_boolean())
                 *w->GetOpen() = it->get<bool>();
         }
-    }
-
-    void GUI::SetHotReloadContext(ImGuiContext *ctx)
-    {
-        s_hotReloadCtx = ctx;
     }
 
     bool GUI::IsMcpServerRunning() const
@@ -2881,7 +2875,7 @@ namespace pe
         {
             const std::string text = s_moduleBuild.stale
                                          ? "Module " + FormatFileTime(s_moduleBuild.loaded) + "  ->  NEW BUILD " +
-                                               FormatFileTime(s_moduleBuild.onDisk) + ": restart the editor"
+                                               FormatFileTime(s_moduleBuild.onDisk) + ": File > Reload Module"
                                          : "Module " + FormatFileTime(s_moduleBuild.loaded);
             const float pad = ImGui::GetStyle().FramePadding.x * 2.0f;
             const float w = ImGui::CalcTextSize(text.c_str()).x + pad + ImGui::CalcTextSize("MCP").x + pad + 8.f;
@@ -2890,8 +2884,8 @@ namespace pe
             ImGui::SmallButton(text.c_str());
             ImGui::PopStyleColor();
             ui::ItemTooltip(s_moduleBuild.stale
-                                ? "A newer PhasmaEditorModule is on disk. The editor keeps the copy it loaded at start: close it and start it again."
-                                : "Build time of the editor module this process loaded. A rebuilt module needs an editor restart.");
+                                ? "A newer PhasmaEditorModule is on disk. File > Reload Module swaps it in (scene and layout are kept), or restart the editor."
+                                : "Build time of the editor module this process loaded. After a rebuild use File > Reload Module or restart.");
         }
 
         // MCP status button — right-aligned
@@ -3270,18 +3264,10 @@ namespace pe
         m_iniFilePath = Path::Assets + "imgui.ini";
         m_hasIniFile = std::filesystem::exists(m_iniFilePath);
 
-        if (s_hotReloadCtx)
-        {
-            ImGui::SetCurrentContext(s_hotReloadCtx);
-            m_ownsImGuiContext = false;
-            s_hotReloadCtx = nullptr;
-        }
-
-        if (!ImGui::GetCurrentContext())
-        {
-            ImGui::CreateContext();
-            m_ownsImGuiContext = true;
-        }
+        // A fresh context per module load: a context handed across a reload keeps ImGui-internal function
+        // pointers (settings handlers, platform callbacks) into the unloaded DLL. imgui.ini + the UI snapshot
+        // carry the layout instead.
+        ImGui::CreateContext();
 
         ImGuiIO &io = ImGui::GetIO();
         io.IniFilename = nullptr;
@@ -3296,117 +3282,91 @@ namespace pe
         m_attachment->loadOp = PE_LOAD_OP_LOAD;
         GUIBackend::Init(m_attachment.get());
 
-        // Load ALL fonts upfront for dynamic style switching. A hot-reload context
-        // already owns its font atlas, so reuse its first font instead of appending
-        // duplicate font data on every DLL swap.
-        if (m_ownsImGuiContext)
+        // Load ALL fonts upfront for dynamic style switching.
+        static const ImWchar icon_ranges[] = {0xf000, 0xf8ff, 0}; // FontAwesome range
+        std::string iconFontPath = Path::EditorAssets + "Fonts/fa-solid-900.ttf";
+        std::string interFontPath = Path::EditorAssets + "Fonts/Inter-Regular.ttf";
+        std::string robotoFontPath = Path::EditorAssets + "Fonts/Roboto-Regular.ttf";
+        // std::string sourceSansFontPath = Path::EditorAssets + "Fonts/SourceSans3-Regular.ttf";
+        std::string openSansFontPath = Path::EditorAssets + "Fonts/OpenSans-Regular.ttf";
+        // std::string latoFontPath = Path::EditorAssets + "Fonts/Lato-Regular.ttf";
+        float fontSize = 15.0f;
+
+        // Symbol glyph ranges for fallback font (DejaVu Sans covers these)
+        static const ImWchar symbolRanges[] = {
+            0x2000,
+            0x206F, // General Punctuation (' ' " " … – — etc.)
+            0x2190,
+            0x21FF, // Arrows
+            0x2200,
+            0x22FF, // Mathematical Operators
+            0x2500,
+            0x257F, // Box Drawing
+            0x2580,
+            0x259F, // Block Elements
+            0x25A0,
+            0x25FF, // Geometric Shapes
+            0x2600,
+            0x26FF, // Miscellaneous Symbols
+            0x2700,
+            0x27BF, // Dingbats
+            0,
+        };
+        std::string fallbackFontPath = Path::EditorAssets + "Fonts/DejaVuSans.ttf";
+
+        // Helper lambda to merge icon font + symbol fallback into the current base font
+        auto addMergedFonts = [&]()
         {
-            static const ImWchar icon_ranges[] = {0xf000, 0xf8ff, 0}; // FontAwesome range
-            std::string iconFontPath = Path::EditorAssets + "Fonts/fa-solid-900.ttf";
-            std::string interFontPath = Path::EditorAssets + "Fonts/Inter-Regular.ttf";
-            std::string robotoFontPath = Path::EditorAssets + "Fonts/Roboto-Regular.ttf";
-            // std::string sourceSansFontPath = Path::EditorAssets + "Fonts/SourceSans3-Regular.ttf";
-            std::string openSansFontPath = Path::EditorAssets + "Fonts/OpenSans-Regular.ttf";
-            // std::string latoFontPath = Path::EditorAssets + "Fonts/Lato-Regular.ttf";
-            float fontSize = 15.0f;
-
-            // Symbol glyph ranges for fallback font (DejaVu Sans covers these)
-            static const ImWchar symbolRanges[] = {
-                0x2000,
-                0x206F, // General Punctuation (' ' " " … – — etc.)
-                0x2190,
-                0x21FF, // Arrows
-                0x2200,
-                0x22FF, // Mathematical Operators
-                0x2500,
-                0x257F, // Box Drawing
-                0x2580,
-                0x259F, // Block Elements
-                0x25A0,
-                0x25FF, // Geometric Shapes
-                0x2600,
-                0x26FF, // Miscellaneous Symbols
-                0x2700,
-                0x27BF, // Dingbats
-                0,
-            };
-            std::string fallbackFontPath = Path::EditorAssets + "Fonts/DejaVuSans.ttf";
-
-            // Helper lambda to merge icon font + symbol fallback into the current base font
-            auto addMergedFonts = [&]()
+            if (std::filesystem::exists(iconFontPath))
             {
-                if (std::filesystem::exists(iconFontPath))
-                {
-                    ImFontConfig config;
-                    config.MergeMode = true;
-                    config.PixelSnapH = true;
-                    config.GlyphMinAdvanceX = fontSize;
-                    io.Fonts->AddFontFromFileTTF(iconFontPath.c_str(), fontSize, &config, icon_ranges);
-                }
-                if (std::filesystem::exists(fallbackFontPath))
-                {
-                    ImFontConfig config;
-                    config.MergeMode = true;
-                    io.Fonts->AddFontFromFileTTF(fallbackFontPath.c_str(), fontSize, &config, symbolRanges);
-                }
-            };
+                ImFontConfig config;
+                config.MergeMode = true;
+                config.PixelSnapH = true;
+                config.GlyphMinAdvanceX = fontSize;
+                io.Fonts->AddFontFromFileTTF(iconFontPath.c_str(), fontSize, &config, icon_ranges);
+            }
+            if (std::filesystem::exists(fallbackFontPath))
+            {
+                ImFontConfig config;
+                config.MergeMode = true;
+                io.Fonts->AddFontFromFileTTF(fallbackFontPath.c_str(), fontSize, &config, symbolRanges);
+            }
+        };
 
-            // 1. Classic (Default ImGui)
-            GUIState::s_fontClassic = io.Fonts->AddFontDefault();
+        // 1. Classic (Default ImGui)
+        GUIState::s_fontClassic = io.Fonts->AddFontDefault();
+        addMergedFonts();
+
+        // 2. Unity (Inter)
+        if (std::filesystem::exists(interFontPath))
+        {
+            GUIState::s_fontUnity = io.Fonts->AddFontFromFileTTF(interFontPath.c_str(), fontSize);
             addMergedFonts();
-
-            // 2. Unity (Inter)
-            if (std::filesystem::exists(interFontPath))
-            {
-                GUIState::s_fontUnity = io.Fonts->AddFontFromFileTTF(interFontPath.c_str(), fontSize);
-                addMergedFonts();
-            }
-            else
-                GUIState::s_fontUnity = GUIState::s_fontClassic;
-
-            // 3. Unreal (Roboto)
-            if (std::filesystem::exists(robotoFontPath))
-            {
-                GUIState::s_fontUnreal = io.Fonts->AddFontFromFileTTF(robotoFontPath.c_str(), fontSize);
-                addMergedFonts();
-            }
-            else
-                GUIState::s_fontUnreal = GUIState::s_fontClassic;
-
-            // 4, 5, 6. Modern, Dark, Light (OpenSans)
-            if (std::filesystem::exists(openSansFontPath))
-            {
-                GUIState::s_fontLight = io.Fonts->AddFontFromFileTTF(openSansFontPath.c_str(), fontSize + 2);
-                addMergedFonts();
-            }
-            else
-            {
-                GUIState::s_fontLight = GUIState::s_fontClassic;
-            }
-            GUIState::s_fontDark = GUIState::s_fontLight;
-            GUIState::s_fontModern = GUIState::s_fontLight;
         }
-        else if (io.Fonts && io.Fonts->Fonts.Size > 0)
+        else
+            GUIState::s_fontUnity = GUIState::s_fontClassic;
+
+        // 3. Unreal (Roboto)
+        if (std::filesystem::exists(robotoFontPath))
         {
-            ImVector<ImFont *> &fonts = io.Fonts->Fonts;
-            int idx = 0;
-            auto nextFont = [&](ImFont *fallback) -> ImFont *
-            { return idx < fonts.Size ? fonts[idx++] : fallback; };
-
-            const std::string fontDir = Path::EditorAssets + "Fonts/";
-            GUIState::s_fontClassic = nextFont(fonts[0]); // AddFontDefault() is always first
-            GUIState::s_fontUnity = std::filesystem::exists(fontDir + "Inter-Regular.ttf")
-                                        ? nextFont(GUIState::s_fontClassic)
-                                        : GUIState::s_fontClassic;
-            GUIState::s_fontUnreal = std::filesystem::exists(fontDir + "Roboto-Regular.ttf")
-                                         ? nextFont(GUIState::s_fontClassic)
-                                         : GUIState::s_fontClassic;
-            GUIState::s_fontLight = std::filesystem::exists(fontDir + "OpenSans-Regular.ttf")
-                                        ? nextFont(GUIState::s_fontClassic)
-                                        : GUIState::s_fontClassic;
-            GUIState::s_fontDark = GUIState::s_fontLight;
-            GUIState::s_fontModern = GUIState::s_fontLight;
+            GUIState::s_fontUnreal = io.Fonts->AddFontFromFileTTF(robotoFontPath.c_str(), fontSize);
+            addMergedFonts();
         }
+        else
+            GUIState::s_fontUnreal = GUIState::s_fontClassic;
+
+        // 4, 5, 6. Modern, Dark, Light (OpenSans)
+        if (std::filesystem::exists(openSansFontPath))
+        {
+            GUIState::s_fontLight = io.Fonts->AddFontFromFileTTF(openSansFontPath.c_str(), fontSize + 2);
+            addMergedFonts();
+        }
+        else
+        {
+            GUIState::s_fontLight = GUIState::s_fontClassic;
+        }
+        GUIState::s_fontDark = GUIState::s_fontLight;
+        GUIState::s_fontModern = GUIState::s_fontLight;
 
         GUIBackend::CreateFontsTexture();
 
