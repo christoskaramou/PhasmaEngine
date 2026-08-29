@@ -30,11 +30,20 @@ namespace pe
         int GetBoneCount() const { return static_cast<int>(bones.size()); }
     };
 
+    enum class AnimationInterpolation : uint8_t
+    {
+        Linear = 0,
+        Smooth,
+        Stepped
+    };
+
     template <typename T>
     struct AnimationKey
     {
         float time;
         T value;
+        // Controls the segment from this key to the next key.
+        AnimationInterpolation interpolation = AnimationInterpolation::Linear;
     };
 
     using PositionKey = AnimationKey<vec3>;

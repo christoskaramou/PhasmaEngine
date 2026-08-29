@@ -540,6 +540,92 @@ namespace pe
         }
     }
 
+    AnimationInterpolation AnimationTimeline::KeyInterpolation(const AnimationClip &clip, const KeyRef &ref) const
+    {
+        if (ref.channelIdx < 0 || ref.channelIdx >= static_cast<int>(clip.channels.size()) || ref.keyIdx < 0)
+            return AnimationInterpolation::Linear;
+        const AnimationChannel &chan = clip.channels[ref.channelIdx];
+        switch (ref.type)
+        {
+        case KeyType::Position:
+            return ref.keyIdx < static_cast<int>(chan.positionKeys.size()) ? chan.positionKeys[ref.keyIdx].interpolation : AnimationInterpolation::Linear;
+        case KeyType::Rotation:
+            return ref.keyIdx < static_cast<int>(chan.rotationKeys.size()) ? chan.rotationKeys[ref.keyIdx].interpolation : AnimationInterpolation::Linear;
+        case KeyType::Scale:
+            return ref.keyIdx < static_cast<int>(chan.scaleKeys.size()) ? chan.scaleKeys[ref.keyIdx].interpolation : AnimationInterpolation::Linear;
+        }
+        return AnimationInterpolation::Linear;
+    }
+
+    void AnimationTimeline::SetKeyInterpolation(AnimationClip &clip, const KeyRef &ref, AnimationInterpolation interpolation)
+    {
+        if (ref.channelIdx < 0 || ref.channelIdx >= static_cast<int>(clip.channels.size()) || ref.keyIdx < 0)
+            return;
+        AnimationChannel &chan = clip.channels[ref.channelIdx];
+        switch (ref.type)
+        {
+        case KeyType::Position:
+            if (ref.keyIdx < static_cast<int>(chan.positionKeys.size()))
+                chan.positionKeys[ref.keyIdx].interpolation = interpolation;
+            break;
+        case KeyType::Rotation:
+            if (ref.keyIdx < static_cast<int>(chan.rotationKeys.size()))
+                chan.rotationKeys[ref.keyIdx].interpolation = interpolation;
+            break;
+        case KeyType::Scale:
+            if (ref.keyIdx < static_cast<int>(chan.scaleKeys.size()))
+                chan.scaleKeys[ref.keyIdx].interpolation = interpolation;
+            break;
+        }
+    }
+
+    bool AnimationTimeline::DrawInterpolationMenu(AnimationClip &clip)
+    {
+        if (!ImGui::BeginMenu("Interpolation", !m_selectedKeys.empty()))
+            return false;
+
+        AnimationInterpolation common = AnimationInterpolation::Linear;
+        bool first = true;
+        bool mixed = false;
+        for (const KeyRef &ref : m_selectedKeys)
+        {
+            const AnimationInterpolation interpolation = KeyInterpolation(clip, ref);
+            if (first)
+            {
+                common = interpolation;
+                first = false;
+            }
+            else
+                mixed = mixed || interpolation != common;
+        }
+
+        AnimationInterpolation chosen = common;
+        bool picked = false;
+        if (ImGui::MenuItem("Linear", nullptr, !mixed && common == AnimationInterpolation::Linear))
+        {
+            chosen = AnimationInterpolation::Linear;
+            picked = true;
+        }
+        if (ImGui::MenuItem("Smooth", nullptr, !mixed && common == AnimationInterpolation::Smooth))
+        {
+            chosen = AnimationInterpolation::Smooth;
+            picked = true;
+        }
+        if (ImGui::MenuItem("Stepped", nullptr, !mixed && common == AnimationInterpolation::Stepped))
+        {
+            chosen = AnimationInterpolation::Stepped;
+            picked = true;
+        }
+        ImGui::EndMenu();
+
+        if (!picked || (!mixed && chosen == common))
+            return false;
+        PushUndo(clip);
+        for (const KeyRef &ref : m_selectedKeys)
+            SetKeyInterpolation(clip, ref, chosen);
+        return true;
+    }
+
     // Sorting invalidates key indices; rebuild the selection by (channel, type, time).
     void AnimationTimeline::SortAndRemapSelection(AnimationClip &clip)
     {
@@ -690,6 +776,7 @@ namespace pe
             e.channelIdx = ref.channelIdx;
             e.absTime = KeyTime(clip, ref);
             e.relTime = e.absTime - earliest;
+            e.interpolation = KeyInterpolation(clip, ref);
             switch (ref.type)
             {
             case KeyType::Position:
@@ -729,15 +816,15 @@ namespace pe
             switch (e.type)
             {
             case KeyType::Position:
-                chan.positionKeys.push_back({t, e.posValue});
+                chan.positionKeys.push_back({t, e.posValue, e.interpolation});
                 SelAdd({e.channelIdx, KeyType::Position, static_cast<int>(chan.positionKeys.size()) - 1});
                 break;
             case KeyType::Rotation:
-                chan.rotationKeys.push_back({t, e.rotValue});
+                chan.rotationKeys.push_back({t, e.rotValue, e.interpolation});
                 SelAdd({e.channelIdx, KeyType::Rotation, static_cast<int>(chan.rotationKeys.size()) - 1});
                 break;
             case KeyType::Scale:
-                chan.scaleKeys.push_back({t, e.sclValue});
+                chan.scaleKeys.push_back({t, e.sclValue, e.interpolation});
                 SelAdd({e.channelIdx, KeyType::Scale, static_cast<int>(chan.scaleKeys.size()) - 1});
                 break;
             }
@@ -755,12 +842,21 @@ namespace pe
         const vec3 pos = AnimationEvaluator::InterpolatePosition(chan.positionKeys, frame);
         const quat rot = AnimationEvaluator::InterpolateRotation(chan.rotationKeys, frame);
         const vec3 scl = AnimationEvaluator::InterpolateScale(chan.scaleKeys, frame);
-        if (FindKeyAtTime(chan.positionKeys, frame) < 0)
-            chan.positionKeys.push_back({frame, pos});
-        if (FindKeyAtTime(chan.rotationKeys, frame) < 0)
-            chan.rotationKeys.push_back({frame, rot});
-        if (FindKeyAtTime(chan.scaleKeys, frame) < 0)
-            chan.scaleKeys.push_back({frame, scl});
+        auto insert = [&](auto &keys, const auto &value)
+        {
+            if (FindKeyAtTime(keys, frame) >= 0)
+                return;
+            AnimationInterpolation interpolation = AnimationInterpolation::Linear;
+            const auto next = std::lower_bound(keys.begin(), keys.end(), frame,
+                                               [](const auto &key, float time)
+                                               { return key.time < time; });
+            if (next != keys.begin() && next != keys.end())
+                interpolation = std::prev(next)->interpolation;
+            keys.push_back({frame, value, interpolation});
+        };
+        insert(chan.positionKeys, pos);
+        insert(chan.rotationKeys, rot);
+        insert(chan.scaleKeys, scl);
         SortChannelKeys(chan);
     }
 
@@ -1801,6 +1897,8 @@ namespace pe
                 PasteKeys(clip, 0.f, true);
                 BeginModal(Modal::Grab, clip, mouseFrame);
             }
+            if (DrawInterpolationMenu(clip))
+                ReevaluatePose(scene, anim);
             ImGui::Separator();
             if (ImGui::MenuItem("Copy", "Ctrl+C", false, selCount > 0))
                 CopySelectedKeys(clip);
@@ -1977,7 +2075,7 @@ namespace pe
     }
 
     // -------------------------------------------------------------------------
-    // graph editor (Blender F-curves: one curve per channel component, linear like the evaluator)
+    // graph editor (Blender F-curves: one curve per channel component, matching the evaluator)
     // -------------------------------------------------------------------------
     float AnimationTimeline::ValueToPx(float value) const
     {
@@ -2274,7 +2372,50 @@ namespace pe
                 const float value = m_normalize ? (KeyComponent(chan, c.type, k, c.axis) - c.mid) / c.half : KeyComponent(chan, c.type, k, c.axis);
                 const ImVec2 pt(FrameToPx(ToFrame(time)), ValueToPx(value));
                 if (k > 0)
-                    dl->AddLine(prev, pt, c.color, 1.5f);
+                {
+                    const AnimationInterpolation interpolation = KeyInterpolation(clip, {c.channelIdx, c.type, k - 1});
+                    if (interpolation == AnimationInterpolation::Stepped)
+                    {
+                        const ImVec2 corner(pt.x, prev.y);
+                        dl->AddLine(prev, corner, c.color, 1.5f);
+                        dl->AddLine(corner, pt, c.color, 1.5f);
+                    }
+                    else if (interpolation == AnimationInterpolation::Smooth || c.type == KeyType::Rotation)
+                    {
+                        const int samples = std::clamp(static_cast<int>(std::abs(pt.x - prev.x) / 12.f), 4, 24);
+                        ImVec2 samplePrev = prev;
+                        for (int sample = 1; sample <= samples; sample++)
+                        {
+                            const float u = static_cast<float>(sample) / static_cast<float>(samples);
+                            const float factor = AnimationEvaluator::ApplyInterpolation(interpolation, u);
+                            float sampleValue = 0.f;
+                            switch (c.type)
+                            {
+                            case KeyType::Position:
+                                sampleValue = glm::mix(chan.positionKeys[k - 1].value, chan.positionKeys[k].value, factor)[c.axis];
+                                break;
+                            case KeyType::Rotation:
+                            {
+                                const quat q = glm::slerp(chan.rotationKeys[k - 1].value, chan.rotationKeys[k].value, factor);
+                                sampleValue = c.axis == 0 ? q.w : c.axis == 1 ? q.x
+                                                              : c.axis == 2   ? q.y
+                                                                              : q.z;
+                                break;
+                            }
+                            case KeyType::Scale:
+                                sampleValue = glm::mix(chan.scaleKeys[k - 1].value, chan.scaleKeys[k].value, factor)[c.axis];
+                                break;
+                            }
+                            if (m_normalize)
+                                sampleValue = (sampleValue - c.mid) / c.half;
+                            const ImVec2 samplePoint(prev.x + (pt.x - prev.x) * u, ValueToPx(sampleValue));
+                            dl->AddLine(samplePrev, samplePoint, c.color, 1.5f);
+                            samplePrev = samplePoint;
+                        }
+                    }
+                    else
+                        dl->AddLine(prev, pt, c.color, 1.5f);
+                }
                 prev = pt;
                 if (pt.x >= origin.x - 8.f && pt.x <= end.x + 8.f)
                 {
@@ -2419,6 +2560,9 @@ namespace pe
                 DeleteSelectedKeys(clip);
                 ReevaluatePose(scene, anim);
             }
+            if (DrawInterpolationMenu(clip))
+                ReevaluatePose(scene, anim);
+            ImGui::Separator();
             if (ImGui::MenuItem("Select All", "A"))
                 SelectAllKeys(clip, true);
             if (ImGui::MenuItem("Deselect All", "Alt+A"))

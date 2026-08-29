@@ -18,6 +18,7 @@
 #include "Script/Bindings/Input/InputState.h"
 #include "Systems/AnimationSystem.h"
 #include "TerrainBrush.h"
+#include "RigEditor.h"
 #include "Systems/RendererSystem.h"
 #include "UI/RuntimeUi.h"
 #include "imgui/ImGuizmo.h"
@@ -31,6 +32,8 @@ namespace pe
         bool s_orientationGizmoActive = false;
         bool s_stripIkGizmoHovered = false;
         bool s_stripIkGizmoActive = false;
+        bool s_rigGizmoHovered = false;
+        bool s_rigGizmoActive = false;
     } // namespace
 
     static void HandleViewportDocking(GUI *gui)
@@ -50,7 +53,8 @@ namespace pe
 
     static bool BeginViewportWindow(bool floating)
     {
-        ImGuiWindowFlags flags = 0;
+        // gizmo handles are ImGui items at projected positions; the viewport must never scroll
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
         if (floating)
             flags |= ImGuiWindowFlags_NoDocking;
 
@@ -871,7 +875,8 @@ namespace pe
         if (!playMode)
             DrawGizmos(imageMin, imageSize);
 
-        const bool overGizmo = !playMode && (ImGuizmo::IsOver() || s_orientationGizmoHovered || s_stripIkGizmoHovered);
+        const bool overGizmo = !playMode && (ImGuizmo::IsOver() || s_orientationGizmoHovered || s_stripIkGizmoHovered ||
+                                             s_rigGizmoHovered || s_rigGizmoActive);
         const bool usingGizmo = !playMode && (ImGuizmo::IsUsing() || s_orientationGizmoActive || s_stripIkGizmoActive);
         const bool runtimeUiMouseCaptured = InputState::IsMouseCapturedByUi();
 
@@ -1246,6 +1251,16 @@ namespace pe
             m_gui->NotifyChange();
     }
 
+    void SceneView::DrawRigEditorGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    {
+        RigEditor *rig = m_gui ? m_gui->GetWidget<RigEditor>() : nullptr;
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        if (!rig || !rig->IsOpen() || !rig->HasTarget() || !renderer)
+            return;
+        Scene &scene = renderer->GetScene();
+        rig->DrawViewport(scene, scene.GetActiveCamera(), imageMin, imageSize, s_rigGizmoHovered, s_rigGizmoActive);
+    }
+
     void SceneView::DrawTransformGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize)
     {
         auto &selection = SelectionManager::Instance();
@@ -1507,6 +1522,8 @@ namespace pe
         s_orientationGizmoActive = false;
         s_stripIkGizmoHovered = false;
         s_stripIkGizmoActive = false;
+        s_rigGizmoHovered = false;
+        s_rigGizmoActive = false;
 
         ImDrawList *dl = ImGui::GetWindowDrawList();
         const ImVec2 imageMax(imageMin.x + imageSize.x, imageMin.y + imageSize.y);
@@ -1519,7 +1536,9 @@ namespace pe
         if (!runtimeUiGizmoActive)
         {
             DrawSkinnedStrip2DIkGizmo(imageMin, imageSize);
-            if (GUIState::s_useTransformGizmo && !s_stripIkGizmoHovered && !s_stripIkGizmoActive)
+            DrawRigEditorGizmo(imageMin, imageSize);
+            if (GUIState::s_useTransformGizmo && !s_stripIkGizmoHovered && !s_stripIkGizmoActive && !s_rigGizmoHovered &&
+                !s_rigGizmoActive)
                 DrawTransformGizmo(imageMin, imageSize);
         }
 

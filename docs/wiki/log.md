@@ -1,5 +1,10 @@
 # PhasmaEngine Wiki Log
 
+## 2026-08-29
+
+- Editor Layout Style and Font Size now persist in `Assets/editor_config.json` (`gui_style`, `font_scale`) and restore on startup with the other editor settings.
+- Added persistent per-key Linear, Smooth, and Stepped interpolation to skeletal animation clips. Runtime TRS evaluation applies each key's outgoing mode, the Animation Timeline exposes the modes for selected keys and renders matching eased/held F-curve segments, and copy/paste plus in-segment insertion preserve interpolation. Cooked `.pemesh` v4 serializes modes field-by-field while the loader continues to accept v3 keys as Linear.
+
 ## 2026-08-17
 
 - PhasmaPlayer boots the project manifest `startup_scene` and ignores `phasma_settings.json` / editor `last_scene`, so a play session cannot resume a map/hub instead of the title scene. Editor and launcher keep the old settings → restore → manifest order.

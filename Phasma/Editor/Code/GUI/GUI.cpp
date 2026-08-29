@@ -43,6 +43,7 @@
 #include "Widgets/ShaderEditor.h"
 #include "Widgets/SpriteEditor.h"
 #include "Widgets/AnimationTimeline.h"
+#include "Widgets/RigEditor.h"
 #include "Phasma/MCP/Codebase/CodebaseIndexer.h"
 #include "Widgets/TransformWidget.h"
 #ifdef PE_PHYSICS
@@ -57,6 +58,7 @@
 #include "UndoRedo.h"
 #include <nlohmann/json.hpp>
 #include "imgui/imgui_internal.h"
+#include <algorithm>
 
 #if defined(PE_WIN32)
 #include <windows.h>
@@ -70,7 +72,78 @@ namespace pe
 {
     namespace
     {
+        // The launcher copies PhasmaEditorModule.dll to a versioned name at start, so a rebuilt DLL only
+        // takes effect after a restart: the status bar shows which build runs and flags a newer one.
+        struct ModuleBuildInfo
+        {
+            std::filesystem::file_time_type loaded{};
+            std::filesystem::file_time_type onDisk{};
+            bool valid = false;
+            bool stale = false;
+            bool warned = false;
+            double nextCheck = 0.0;
+        };
+        ModuleBuildInfo s_moduleBuild;
+
+        std::filesystem::path EditorModulePath()
+        {
+#if defined(PE_WIN32)
+            const char *name = "PhasmaEditorModule.dll";
+#else
+            const char *name = "libPhasmaEditorModule.so";
+#endif
+            return std::filesystem::path(reinterpret_cast<const char8_t *>(Path::Executable.c_str())) / name;
+        }
+
+        std::string FormatFileTime(std::filesystem::file_time_type t)
+        {
+            const auto sys = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+                t - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
+            const std::time_t tt = std::chrono::system_clock::to_time_t(sys);
+            std::tm tm{};
+#if defined(PE_WIN32)
+            localtime_s(&tm, &tt);
+#else
+            localtime_r(&tt, &tm);
+#endif
+            char buf[32];
+            std::strftime(buf, sizeof(buf), "%H:%M:%S", &tm);
+            return buf;
+        }
+
+        void RefreshModuleBuild(double now)
+        {
+            if (now < s_moduleBuild.nextCheck)
+                return;
+            s_moduleBuild.nextCheck = now + 2.0;
+            std::error_code ec;
+            const auto stamp = std::filesystem::last_write_time(EditorModulePath(), ec);
+            if (ec)
+                return;
+            if (!s_moduleBuild.valid)
+            {
+                s_moduleBuild.loaded = stamp;
+                s_moduleBuild.valid = true;
+                PE_INFO("[Module] running the PhasmaEditorModule build of %s", FormatFileTime(stamp).c_str());
+            }
+            s_moduleBuild.onDisk = stamp;
+            s_moduleBuild.stale = stamp != s_moduleBuild.loaded;
+            if (s_moduleBuild.stale && !s_moduleBuild.warned)
+            {
+                s_moduleBuild.warned = true;
+                PE_WARN("[Module] PhasmaEditorModule rebuilt at %s but this editor still runs the %s build - restart it",
+                        FormatFileTime(stamp).c_str(), FormatFileTime(s_moduleBuild.loaded).c_str());
+            }
+        }
+    } // namespace
+
+    namespace
+    {
         constexpr float kToolbarHeight = 35.0f;
+        constexpr const char *kEditorGuiStyleKey = "gui_style";
+        constexpr const char *kEditorFontScaleKey = "font_scale";
+        constexpr float kMinEditorFontScale = 0.5f;
+        constexpr float kMaxEditorFontScale = 2.5f;
         ImGuiContext *s_hotReloadCtx = nullptr;
 
         bool IsScriptTestFailureLine(const std::string &line)
@@ -346,7 +419,9 @@ namespace pe
             }
         }
 
-        bool ApplyEditorStyle(const std::string &styleId, std::string &error)
+        void PersistEditorLayoutSettings();
+
+        bool ApplyEditorStyle(const std::string &styleId, std::string &error, bool persist = true)
         {
             std::string style = NormalizeEditorActionId(styleId);
             if (style.rfind("layout.style.", 0) == 0)
@@ -387,7 +462,61 @@ namespace pe
                 error = "unknown style: " + styleId;
                 return false;
             }
+            if (persist)
+                PersistEditorLayoutSettings();
             return true;
+        }
+
+        void SetEditorFontScale(float scale, bool persist = true)
+        {
+            if (!ImGui::GetCurrentContext())
+                return;
+            ImGui::GetIO().FontGlobalScale = std::clamp(scale, kMinEditorFontScale, kMaxEditorFontScale);
+            if (persist)
+                PersistEditorLayoutSettings();
+        }
+
+        nlohmann::ordered_json LoadEditorConfigObject(const std::filesystem::path &path)
+        {
+            std::ifstream in(path);
+            if (!in)
+                return nlohmann::ordered_json::object();
+            nlohmann::ordered_json j = nlohmann::ordered_json::parse(in, nullptr, false);
+            return j.is_object() ? j : nlohmann::ordered_json::object();
+        }
+
+        void PersistEditorLayoutSettings()
+        {
+            if (!ImGui::GetCurrentContext())
+                return;
+
+            const std::filesystem::path path = RuntimeEditorConfigWritePath({});
+            nlohmann::ordered_json j = LoadEditorConfigObject(path);
+            j[kEditorGuiStyleKey] = StyleId(GUIState::s_guiStyle);
+            j[kEditorFontScaleKey] = ImGui::GetIO().FontGlobalScale;
+
+            std::error_code ec;
+            std::filesystem::create_directories(path.parent_path(), ec);
+            std::ofstream out(path);
+            if (!out)
+            {
+                PE_WARN("[editor_config] Could not write layout settings: %s", path.generic_string().c_str());
+                return;
+            }
+            out << j.dump(2) << '\n';
+        }
+
+        void ApplyPersistedEditorLayoutSettings()
+        {
+            const nlohmann::ordered_json j = LoadEditorConfigObject(RuntimeEditorConfigPath({}));
+            if (j.contains(kEditorGuiStyleKey) && j[kEditorGuiStyleKey].is_string())
+            {
+                std::string error;
+                ApplyEditorStyle(j[kEditorGuiStyleKey].get<std::string>(), error, false);
+            }
+            if (j.contains(kEditorFontScaleKey) && j[kEditorFontScaleKey].is_number())
+                SetEditorFontScale(j[kEditorFontScaleKey].get<float>(), false);
+            ui::ApplyTheme(GUIState::s_guiStyle);
         }
 
         float FontScaleForPreset(const std::string &preset, bool &ok)
@@ -642,6 +771,7 @@ namespace pe
         if (m_initialized)
         {
             SaveWindowState();
+            PersistEditorLayoutSettings();
 
             if (!m_iniFilePath.empty() && ImGui::GetCurrentContext())
                 ImGui::SaveIniSettingsToDisk(m_iniFilePath.c_str());
@@ -797,6 +927,7 @@ namespace pe
         addAction("file.save_scene", "Save Scene", "File", "command", true, false, false);
         addAction("file.save_scene_as", "Save Scene As", "File", "command", true, false, false);
         addAction("file.reload_module", "Reload Module", "File", "command", true, false, false);
+        addAction("editor.module_info", "Editor Module Build (loaded vs on disk)", "Editor", "query", true, false, false);
         addAction("file.exit", "Exit", "File", "command", true, false, false);
 
         addAction("edit.undo", "Undo", "Edit", "command", undoRedo.CanUndo(), false, false);
@@ -865,6 +996,21 @@ namespace pe
         addAction("timeline.frame", "Animation Timeline: Set Current Frame (args: frame)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.bone", "Animation Timeline: Select Bone Channel (args: bone name)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.save", "Animation Timeline: Save Clips Into The Model's .pemesh", "Timeline", "command", hasTimeline, false, false);
+        const bool hasRig = GetWidget<RigEditor>() != nullptr;
+        addAction("rig.state", "Rig Editor: Dump The Rig Document (bones, shapes, selection)", "Rig", "command", hasRig, false, false);
+        addAction("rig.preset", "Rig Editor: Build Bones (args: preset auto|humanoid|existing|clear)", "Rig", "command", hasRig, false, false);
+        addAction("rig.add", "Rig Editor: Add Bone (args: name, parent, head[3], tail[3], radius_head, radius_tail, rigid)", "Rig", "command", hasRig, false, false);
+        addAction("rig.set", "Rig Editor: Edit Bone (args: bone name|index, name, parent, head, tail, radius_head, radius_tail, rigid)", "Rig", "command", hasRig, false, false);
+        addAction("rig.remove", "Rig Editor: Remove Bone (args: bone)", "Rig", "command", hasRig, false, false);
+        addAction("rig.select", "Rig Editoimage.pngr: Select Bone (args: bone)", "Rig", "command", hasRig, false, false);
+        addAction("rig.save", "Rig Editor: Save <model>.rig.json Beside The .pemesh", "Rig", "command", hasRig, false, false);
+        addAction("rig.load", "Rig Editor: Load <model>.rig.json", "Rig", "command", hasRig, false, false);
+        addAction("rig.shapes", "Rig Editor: Show Influence Shapes (args: show)", "Rig", "command", hasRig, false, false);
+        addAction("rig.snap", "Rig Editor: Snapping (args: enabled, mode joints|surface|volume|increment)", "Rig", "command", hasRig, false, false);
+        addAction("rig.mirror", "Rig Editor: X-Mirror .L/.R Edits (args: enabled)", "Rig", "command", hasRig, false, false);
+        addAction("rig.heat", "Rig Editor: Weight Heat Map On The Mesh (args: mode off|selected|all)", "Rig", "command", hasRig, false, false);
+        addAction("rig.undo", "Rig Editor: Undo", "Rig", "command", hasRig, false, false);
+        addAction("rig.redo", "Rig Editor: Redo", "Rig", "command", hasRig, false, false);
 
         addAction("status.console_errors", "Show Console Errors", "Status", "command", GetWidget<Console>() != nullptr, false, false);
         addAction("status.console_warnings", "Show Console Warnings", "Status", "command", GetWidget<Console>() != nullptr, false, false);
@@ -940,6 +1086,16 @@ namespace pe
 
         if (action.rfind("window.", 0) == 0)
             return SetEditorWindowOpen(action, argsJson);
+
+        // Rig Editor programmatic route (the widget parses and applies the args itself).
+        if (action.rfind("rig.", 0) == 0)
+        {
+            auto *rig = GetWidget<RigEditor>();
+            if (!rig)
+                return R"({"error":"Rig Editor not available"})";
+            *rig->GetOpen() = true;
+            return rig->HandleAction(action, argsJson);
+        }
 
         // Animation Timeline programmatic route (mode / frame / bone / save) for agents.
         if (action.rfind("timeline.", 0) == 0)
@@ -1172,6 +1328,16 @@ namespace pe
             return ok();
         }
 
+        if (action == "editor.module_info")
+        {
+            s_moduleBuild.nextCheck = 0.0;
+            RefreshModuleBuild(ImGui::GetTime());
+            return ok({{"loaded", FormatFileTime(s_moduleBuild.loaded)},
+                       {"on_disk", FormatFileTime(s_moduleBuild.onDisk)},
+                       {"stale", s_moduleBuild.stale},
+                       {"module", EditorModulePath().generic_string()}});
+        }
+
         if (action == "file.exit")
         {
             if (args.value("discard_unsaved", false))
@@ -1289,7 +1455,7 @@ namespace pe
         {
             if (args.contains("scale") && args["scale"].is_number())
             {
-                ImGui::GetIO().FontGlobalScale = args["scale"].get<float>();
+                SetEditorFontScale(args["scale"].get<float>());
                 return ok({{"font_scale", ImGui::GetIO().FontGlobalScale}});
             }
 
@@ -1299,8 +1465,8 @@ namespace pe
             if (!presetOk)
                 return nlohmann::json{{"error", "unknown font preset: " + preset}}.dump();
 
-            ImGui::GetIO().FontGlobalScale = scale;
-            return ok({{"font_scale", scale}});
+            SetEditorFontScale(scale);
+            return ok({{"font_scale", ImGui::GetIO().FontGlobalScale}});
         }
 
         if (action == "layout.reset")
@@ -2670,6 +2836,25 @@ namespace pe
             ui::ItemTooltip("Filter the console to warning messages.");
         }
 
+        // Module build stamp — right-aligned, left of MCP; orange when a newer DLL is on disk
+        RefreshModuleBuild(ImGui::GetTime());
+        if (s_moduleBuild.valid)
+        {
+            const std::string text = s_moduleBuild.stale
+                                         ? "Module " + FormatFileTime(s_moduleBuild.loaded) + "  ->  NEW BUILD " +
+                                               FormatFileTime(s_moduleBuild.onDisk) + ": restart the editor"
+                                         : "Module " + FormatFileTime(s_moduleBuild.loaded);
+            const float pad = ImGui::GetStyle().FramePadding.x * 2.0f;
+            const float w = ImGui::CalcTextSize(text.c_str()).x + pad + ImGui::CalcTextSize("MCP").x + pad + 8.f;
+            ImGui::SetCursorPosX(ImGui::GetContentRegionMax().x - w);
+            ImGui::PushStyleColor(ImGuiCol_Text, s_moduleBuild.stale ? ImVec4(1.f, 0.55f, 0.15f, 1.f) : ImVec4(0.45f, 0.45f, 0.45f, 1.f));
+            ImGui::SmallButton(text.c_str());
+            ImGui::PopStyleColor();
+            ui::ItemTooltip(s_moduleBuild.stale
+                                ? "A newer PhasmaEditorModule is on disk. The editor keeps the copy it loaded at start: close it and start it again."
+                                : "Build time of the editor module this process loaded. A rebuilt module needs an editor restart.");
+        }
+
         // MCP status button — right-aligned
         {
             const bool mcpRunning = IsMcpServerRunning();
@@ -2866,41 +3051,24 @@ namespace pe
                     bool isUnity = GUIState::s_guiStyle == GUIStyle::Unity;
                     bool isUnreal = GUIState::s_guiStyle == GUIStyle::Unreal;
 
+                    std::string styleError;
                     if (ImGui::MenuItem("Classic", nullptr, isClassic))
-                    {
-                        GUIState::s_guiStyle = GUIStyle::Classic;
-                        ui::ApplyTheme(GUIState::s_guiStyle);
-                    }
+                        ApplyEditorStyle("classic", styleError);
                     ui::ItemTooltip("Use the classic editor color theme.");
                     if (ImGui::MenuItem("Dark", nullptr, isDark))
-                    {
-                        GUIState::s_guiStyle = GUIStyle::Dark;
-                        ui::ApplyTheme(GUIState::s_guiStyle);
-                    }
+                        ApplyEditorStyle("dark", styleError);
                     ui::ItemTooltip("Use the dark editor color theme.");
                     if (ImGui::MenuItem("Light", nullptr, isLight))
-                    {
-                        GUIState::s_guiStyle = GUIStyle::Light;
-                        ui::ApplyTheme(GUIState::s_guiStyle);
-                    }
+                        ApplyEditorStyle("light", styleError);
                     ui::ItemTooltip("Use the light editor color theme.");
                     if (ImGui::MenuItem("Modern", nullptr, isModern))
-                    {
-                        GUIState::s_guiStyle = GUIStyle::Modern;
-                        ui::ApplyTheme(GUIState::s_guiStyle);
-                    }
+                        ApplyEditorStyle("modern", styleError);
                     ui::ItemTooltip("Use the modern editor color theme.");
                     if (ImGui::MenuItem("Unity", nullptr, isUnity))
-                    {
-                        GUIState::s_guiStyle = GUIStyle::Unity;
-                        ui::ApplyTheme(GUIState::s_guiStyle);
-                    }
+                        ApplyEditorStyle("unity", styleError);
                     ui::ItemTooltip("Use the Unity-inspired editor theme.");
                     if (ImGui::MenuItem("Unreal", nullptr, isUnreal))
-                    {
-                        GUIState::s_guiStyle = GUIStyle::Unreal;
-                        ui::ApplyTheme(GUIState::s_guiStyle);
-                    }
+                        ApplyEditorStyle("unreal", styleError);
                     ui::ItemTooltip("Use the Unreal-inspired editor theme.");
                     ImGui::EndMenu();
                 }
@@ -2912,16 +3080,16 @@ namespace pe
                     float scale = io.FontGlobalScale;
 
                     if (ImGui::MenuItem("Small", nullptr, scale < 0.95f))
-                        io.FontGlobalScale = 0.85f;
+                        SetEditorFontScale(0.85f);
                     ui::ItemTooltip("Use a compact editor font scale.");
                     if (ImGui::MenuItem("Medium", nullptr, scale >= 0.95f && scale < 1.15f))
-                        io.FontGlobalScale = 1.0f;
+                        SetEditorFontScale(1.0f);
                     ui::ItemTooltip("Use the default editor font scale.");
                     if (ImGui::MenuItem("Large", nullptr, scale >= 1.15f && scale < 1.35f))
-                        io.FontGlobalScale = 1.25f;
+                        SetEditorFontScale(1.25f);
                     ui::ItemTooltip("Use a larger editor font scale.");
                     if (ImGui::MenuItem("Extra Large", nullptr, scale >= 1.35f))
-                        io.FontGlobalScale = 1.5f;
+                        SetEditorFontScale(1.5f);
                     ui::ItemTooltip("Use the largest editor font scale.");
                     ImGui::EndMenu();
                 }
@@ -3203,7 +3371,7 @@ namespace pe
 
         GUIBackend::CreateFontsTexture();
 
-        ui::ApplyTheme(GUIState::s_guiStyle);
+        ApplyPersistedEditorLayoutSettings();
 
         auto AddGpuTimerInfo = [this](const std::any &data)
         {
@@ -3249,6 +3417,7 @@ namespace pe
         auto runtimeUiPalette = std::make_shared<RuntimeUiPalette>();
         auto sceneScripts = std::make_shared<SceneScripts>();
         auto animTimeline = std::make_shared<AnimationTimeline>();
+        auto rigEditor = std::make_shared<RigEditor>();
 #ifdef PE_PHYSICS
         auto physicsWidget = std::make_shared<PhysicsWidget>();
 #endif
@@ -3282,6 +3451,7 @@ namespace pe
             runtimeUiPalette,
             sceneScripts,
             animTimeline,
+            rigEditor,
 #ifdef PE_PHYSICS
             physicsWidget,
 #endif
@@ -3312,7 +3482,8 @@ namespace pe
                                terrainBrush,
                                runtimeUiPalette,
                                sceneScripts,
-                               animTimeline};
+                               animTimeline,
+                               rigEditor};
         for (auto &widget : m_widgets)
             widget->Init(this);
 
