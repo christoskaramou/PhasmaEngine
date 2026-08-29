@@ -1080,6 +1080,18 @@ namespace pe
                 return;
             m_modelRootNodes.erase(modelId);
         }
+        else
+        {
+            // Scene loads register geometry without root nodes: drop every node still drawing this model,
+            // or the next tick dereferences the deleted asset through them.
+            std::vector<NodeId *> users;
+            for (uint32_t i = 0; i < GetNodeCount(); i++)
+                if (GetModelForNode(GetNodeId(i)) == model)
+                    users.push_back(GetNodeId(i));
+            for (NodeId *node : users) // collected first: DeleteNode swap-and-pops the slots
+                if (IsNodeAlive(node))
+                    DeleteNode(node);
+        }
 
         if (m_models.erase(modelId))
         {

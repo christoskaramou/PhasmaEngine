@@ -221,7 +221,7 @@ namespace pe
                     m_curveMax += dv;
                 }
                 else
-                    m_scrollY -= wheel * kRowHeight * 3.f;
+                    m_scrollY -= wheel * m_rowHeight * 3.f;
             }
             else // zoom around the cursor
             {
@@ -1054,7 +1054,7 @@ namespace pe
                 return;
             std::sort(list.begin(), list.end(), [](const Entry &a, const Entry &b)
                       { return a.time < b.time; });
-            const float y = rowTop + rowIdx * kRowHeight + kRowHeight * 0.5f;
+            const float y = rowTop + rowIdx * m_rowHeight + m_rowHeight * 0.5f;
             size_t i = 0;
             while (i < list.size())
             {
@@ -1092,8 +1092,8 @@ namespace pe
             if (ci < 0)
                 continue;
             const AnimationChannel &chan = clip.channels[ci];
-            const float rowY = rowTop + r * kRowHeight;
-            const bool visible = rowY + kRowHeight >= visibleTop && rowY <= visibleBottom;
+            const float rowY = rowTop + r * m_rowHeight;
+            const bool visible = rowY + m_rowHeight >= visibleTop && rowY <= visibleBottom;
             entries.clear();
             if (row.type < 0 || row.type == 0)
                 for (int k = 0; k < static_cast<int>(chan.positionKeys.size()); k++)
@@ -1109,7 +1109,7 @@ namespace pe
             if (visible)
                 emitRow(r, entries, row.type < 0 ? 5.f : 4.f);
         }
-        if (rowTop + kRowHeight >= visibleTop && rowTop <= visibleBottom)
+        if (rowTop + m_rowHeight >= visibleTop && rowTop <= visibleBottom)
             emitRow(0, summary, 6.f);
     }
 
@@ -1117,14 +1117,14 @@ namespace pe
     {
         const float wheel = ImGui::GetIO().MouseWheel;
         if (wheel != 0.f && !ImGui::GetIO().KeyCtrl)
-            m_scrollY -= wheel * kRowHeight * 3.f;
+            m_scrollY -= wheel * m_rowHeight * 3.f;
         m_scrollY = std::clamp(m_scrollY, 0.f, std::max(0.f, contentHeight - visibleHeight));
     }
 
     // Thin Blender-style scrollbar on the right edge of a region; drag the thumb or wheel to scroll.
     void AnimationTimeline::DrawVScrollbar(const ImVec2 &origin, const ImVec2 &size, float contentHeight)
     {
-        const float visible = size.y - kRulerHeight;
+        const float visible = size.y - m_rulerHeight;
         if (contentHeight <= visible || visible <= 0.f)
         {
             m_scrollDragging = false;
@@ -1132,7 +1132,7 @@ namespace pe
         }
         ImDrawList *dl = ImGui::GetWindowDrawList();
         const float x0 = origin.x + size.x - kScrollbarWidth - 2.f, x1 = origin.x + size.x - 2.f;
-        const float y0 = origin.y + kRulerHeight + 2.f, y1 = origin.y + size.y - 2.f;
+        const float y0 = origin.y + m_rulerHeight + 2.f, y1 = origin.y + size.y - 2.f;
         const float trackH = y1 - y0;
         const float thumbH = std::max(trackH * visible / contentHeight, 18.f);
         const float maxScroll = contentHeight - visible;
@@ -1223,8 +1223,8 @@ namespace pe
         ImDrawList *dl = ImGui::GetWindowDrawList();
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
-        dl->AddRectFilled(p, {p.x + w, p.y + kHeaderHeight * 2.f}, bl::kHeaderBg);
-        dl->AddLine({p.x, p.y + kHeaderHeight - 0.5f}, {p.x + w, p.y + kHeaderHeight - 0.5f}, IM_COL32(0, 0, 0, 90));
+        dl->AddRectFilled(p, {p.x + w, p.y + m_headerHeight * 2.f}, bl::kHeaderBg);
+        dl->AddLine({p.x, p.y + m_headerHeight - 0.5f}, {p.x + w, p.y + m_headerHeight - 0.5f}, IM_COL32(0, 0, 0, 90));
         ImGui::SetCursorScreenPos({p.x + 6.f, p.y + 4.f});
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {6.f, 3.f});
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {4.f, 4.f});
@@ -1300,7 +1300,7 @@ namespace pe
         {
             // The clip vector was resized: every clip reference this frame is stale.
             ImGui::PopStyleVar(2);
-            ImGui::SetCursorScreenPos({p.x, p.y + kHeaderHeight * 2.f});
+            ImGui::SetCursorScreenPos({p.x, p.y + m_headerHeight * 2.f});
             return true;
         }
 
@@ -1343,7 +1343,7 @@ namespace pe
         // Current frame / range / fps (wrap to the second row when the window is narrow)
         const bool narrow = w < 1010.f;
         if (narrow)
-            ImGui::SetCursorScreenPos({p.x + 6.f, p.y + kHeaderHeight + 4.f});
+            ImGui::SetCursorScreenPos({p.x + 6.f, p.y + m_headerHeight + 4.f});
         else
             ImGui::SameLine(0.f, 14.f);
         ImGui::SetNextItemWidth(70.f);
@@ -1387,7 +1387,7 @@ namespace pe
         if (narrow)
             ImGui::SameLine(0.f, 14.f);
         else
-            ImGui::SetCursorScreenPos({p.x + 6.f, p.y + kHeaderHeight + 4.f});
+            ImGui::SetCursorScreenPos({p.x + 6.f, p.y + m_headerHeight + 4.f});
         // ponytail: the pose bar always keys the current frame (there is no transient pose buffer); this toggle
         // will arm viewport bone dragging when that lands.
         IconButton("##autokey", Icon::Record, "Auto keying: pose bar edits always key the current frame; viewport bone dragging (next drop) will honour this toggle.", false);
@@ -1451,7 +1451,7 @@ namespace pe
                                 : "Model was not loaded from a .pemesh; cook it first to save clips.");
 
         ImGui::PopStyleVar(2);
-        ImGui::SetCursorScreenPos({p.x, p.y + kHeaderHeight * 2.f});
+        ImGui::SetCursorScreenPos({p.x, p.y + m_headerHeight * 2.f});
         return false;
     }
 
@@ -1522,7 +1522,7 @@ namespace pe
         dl->AddRectFilled(origin, {origin.x + size.x, origin.y + size.y}, bl::kChannelBg);
         dl->PushClipRect(origin, {origin.x + size.x, origin.y + size.y}, true);
 
-        const float rowTop = origin.y + kRulerHeight - m_scrollY;
+        const float rowTop = origin.y + m_rulerHeight - m_scrollY;
         const ImVec2 mouse = ImGui::GetMousePos();
         const bool hovered = ImGui::IsMouseHoveringRect(origin, {origin.x + size.x, origin.y + size.y}) && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
         const bool ctrl = ImGui::GetIO().KeyCtrl;
@@ -1530,9 +1530,9 @@ namespace pe
         for (int r = 0; r < static_cast<int>(m_rows.size()); r++)
         {
             const Row &row = m_rows[r];
-            const float y0 = rowTop + r * kRowHeight;
-            const float y1 = y0 + kRowHeight;
-            if (y1 < origin.y + kRulerHeight || y0 > origin.y + size.y)
+            const float y0 = rowTop + r * m_rowHeight;
+            const float y1 = y0 + m_rowHeight;
+            if (y1 < origin.y + m_rulerHeight || y0 > origin.y + size.y)
                 continue;
             ImU32 bg;
             if (row.bone < 0)
@@ -1544,15 +1544,15 @@ namespace pe
             dl->AddRectFilled({origin.x, y0}, {origin.x + size.x, y1}, bg);
             dl->AddLine({origin.x, y1 - 0.5f}, {origin.x + size.x, y1 - 0.5f}, bl::kRowLine);
 
-            const bool rowHovered = hovered && mouse.y >= y0 && mouse.y < y1 && mouse.y >= origin.y + kRulerHeight;
+            const bool rowHovered = hovered && mouse.y >= y0 && mouse.y < y1 && mouse.y >= origin.y + m_rulerHeight;
             if (rowHovered)
                 dl->AddRectFilled({origin.x, y0}, {origin.x + size.x, y1}, bl::kRowHover);
 
             float x = origin.x + 8.f;
-            const float cy = y0 + kRowHeight * 0.5f;
+            const float cy = y0 + m_rowHeight * 0.5f;
             if (row.bone < 0)
             {
-                dl->AddText({x, cy - 7.f}, bl::kText, "Summary");
+                dl->AddText({x, cy - ImGui::GetTextLineHeight() * 0.5f}, bl::kText, "Summary");
             }
             else if (row.type < 0)
             {
@@ -1569,7 +1569,7 @@ namespace pe
                 x += 12.f;
                 const int ci = ChannelForBone(clip, row.bone);
                 const bool hasKeys = ci >= 0 && (!clip.channels[ci].positionKeys.empty() || !clip.channels[ci].rotationKeys.empty() || !clip.channels[ci].scaleKeys.empty());
-                dl->AddText({x, cy - 7.f}, hasKeys ? bl::kText : bl::kTextDim, skeleton.bones[row.bone].name.c_str());
+                dl->AddText({x, cy - ImGui::GetTextLineHeight() * 0.5f}, hasKeys ? bl::kText : bl::kTextDim, skeleton.bones[row.bone].name.c_str());
                 if (rowHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
                 {
                     if (mouse.x < x - 2.f)
@@ -1594,17 +1594,34 @@ namespace pe
                     depth++;
                 x += depth * 10.f + 22.f;
                 dl->AddRectFilled({x, cy - 5.f}, {x + 4.f, cy + 5.f}, cols[row.type], 1.f);
-                dl->AddText({x + 10.f, cy - 7.f}, bl::kText, names[row.type]);
+                dl->AddText({x + 10.f, cy - ImGui::GetTextLineHeight() * 0.5f}, bl::kText, names[row.type]);
             }
         }
 
+        if (m_scrollToActive)
+        {
+            m_scrollToActive = false;
+            for (int r = 0; r < static_cast<int>(m_rows.size()); r++)
+            {
+                if (m_rows[r].bone != m_activeBone || m_rows[r].type >= 0)
+                    continue;
+                const float visible = size.y - m_rulerHeight;
+                const float top = r * m_rowHeight;
+                if (top < m_scrollY)
+                    m_scrollY = top;
+                else if (top + m_rowHeight > m_scrollY + visible)
+                    m_scrollY = top + m_rowHeight - visible;
+                m_scrollY = std::clamp(m_scrollY, 0.f, std::max(0.f, m_contentHeight - visible));
+                break;
+            }
+        }
         if (hovered)
-            ScrollWheel(size.y - kRulerHeight, m_contentHeight);
+            ScrollWheel(size.y - m_rulerHeight, m_contentHeight);
 
         // Header strip above the rows (aligned with the ruler)
-        dl->AddRectFilled(origin, {origin.x + size.x, origin.y + kRulerHeight}, bl::kRulerBg);
-        dl->AddLine({origin.x, origin.y + kRulerHeight - 0.5f}, {origin.x + size.x, origin.y + kRulerHeight - 0.5f}, bl::kRowLine);
-        dl->AddText({origin.x + 8.f, origin.y + 5.f}, bl::kTextDim, "Channels");
+        dl->AddRectFilled(origin, {origin.x + size.x, origin.y + m_rulerHeight}, bl::kRulerBg);
+        dl->AddLine({origin.x, origin.y + m_rulerHeight - 0.5f}, {origin.x + size.x, origin.y + m_rulerHeight - 0.5f}, bl::kRowLine);
+        dl->AddText({origin.x + 8.f, origin.y + (m_rulerHeight - ImGui::GetTextLineHeight()) * 0.5f}, bl::kTextDim, "Channels");
         dl->AddLine({origin.x + size.x - 0.5f, origin.y}, {origin.x + size.x - 0.5f, origin.y + size.y}, IM_COL32(0, 0, 0, 120));
         dl->PopClipRect();
     }
@@ -1694,7 +1711,7 @@ namespace pe
         for (int r = 0; r < static_cast<int>(m_rows.size()); r++)
         {
             const Row &row = m_rows[r];
-            const float y0 = rowTop + r * kRowHeight, y1 = y0 + kRowHeight;
+            const float y0 = rowTop + r * m_rowHeight, y1 = y0 + m_rowHeight;
             if (y1 < origin.y || y0 > end.y)
                 continue;
             ImU32 bg = 0;
@@ -1835,7 +1852,7 @@ namespace pe
             }
             if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && hoveredGlyph < 0)
             {
-                const int r = static_cast<int>((mouse.y - rowTop) / kRowHeight);
+                const int r = static_cast<int>((mouse.y - rowTop) / m_rowHeight);
                 if (r >= 0 && r < static_cast<int>(m_rows.size()) && m_rows[r].bone >= 0)
                 {
                     PushUndo(clip);
@@ -2057,12 +2074,12 @@ namespace pe
     {
         const ImVec2 origin = ImGui::GetCursorScreenPos();
         const ImVec2 avail = ImGui::GetContentRegionAvail();
-        const ImVec2 size(avail.x, std::max(avail.y - kStatusHeight, 40.f));
+        const ImVec2 size(avail.x, std::max(avail.y - m_statusHeight, 40.f));
 
         BuildRows(skeleton);
         m_keyLeft = origin.x + m_channelWidth;
         m_keyWidth = std::max(size.x - m_channelWidth - kRightMargin, 10.f);
-        m_contentHeight = m_rows.size() * kRowHeight;
+        m_contentHeight = m_rows.size() * m_rowHeight;
         if (m_fitPending)
         {
             const float durationFrames = ToFrame(clip.duration);
@@ -2077,12 +2094,12 @@ namespace pe
         if (focusClick)
             ImGui::SetWindowFocus();
 
-        const ImVec2 body(size.x, size.y - kHScrollHeight);
-        DrawRuler(scene, anim, clip, currentFrame, {m_keyLeft, origin.y}, {body.x - m_channelWidth, kRulerHeight});
-        DrawKeyArea(scene, anim, skeleton, clip, currentFrame, {m_keyLeft, origin.y + kRulerHeight}, {body.x - m_channelWidth, body.y - kRulerHeight});
+        const ImVec2 body(size.x, size.y - m_hScrollHeight);
+        DrawRuler(scene, anim, clip, currentFrame, {m_keyLeft, origin.y}, {body.x - m_channelWidth, m_rulerHeight});
+        DrawKeyArea(scene, anim, skeleton, clip, currentFrame, {m_keyLeft, origin.y + m_rulerHeight}, {body.x - m_channelWidth, body.y - m_rulerHeight});
         DrawChannelRegion(skeleton, clip, origin, {m_channelWidth, body.y});
         DrawVScrollbar(origin, {m_channelWidth, body.y}, m_contentHeight);
-        DrawHScrollbar({origin.x, origin.y + body.y}, {size.x, kHScrollHeight}, ToFrame(clip.duration));
+        DrawHScrollbar({origin.x, origin.y + body.y}, {size.x, m_hScrollHeight}, ToFrame(clip.duration));
         ImGui::SetCursorScreenPos({origin.x, origin.y + size.y});
     }
 
@@ -2259,22 +2276,22 @@ namespace pe
         const ImVec2 mouse = ImGui::GetMousePos();
         const bool hovered = ImGui::IsMouseHoveringRect(origin, {origin.x + size.x, origin.y + size.y}) && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
         const bool ctrl = ImGui::GetIO().KeyCtrl;
-        float y = origin.y + kRulerHeight - m_scrollY;
+        float y = origin.y + m_rulerHeight - m_scrollY;
 
         // bones
-        for (int b = 0; b < skeleton.GetBoneCount(); b++, y += kRowHeight)
+        for (int b = 0; b < skeleton.GetBoneCount(); b++, y += m_rowHeight)
         {
-            if (y + kRowHeight < origin.y + kRulerHeight || y > origin.y + size.y)
+            if (y + m_rowHeight < origin.y + m_rulerHeight || y > origin.y + size.y)
                 continue;
             const bool sel = m_boneSelected[b];
-            dl->AddRectFilled({origin.x, y}, {origin.x + size.x, y + kRowHeight}, sel ? (b == m_activeBone ? bl::kRowActive : bl::kRowSelected) : ((b & 1) ? bl::kGroupRowAlt : bl::kGroupRow));
-            dl->AddLine({origin.x, y + kRowHeight - 0.5f}, {origin.x + size.x, y + kRowHeight - 0.5f}, bl::kRowLine);
+            dl->AddRectFilled({origin.x, y}, {origin.x + size.x, y + m_rowHeight}, sel ? (b == m_activeBone ? bl::kRowActive : bl::kRowSelected) : ((b & 1) ? bl::kGroupRowAlt : bl::kGroupRow));
+            dl->AddLine({origin.x, y + m_rowHeight - 0.5f}, {origin.x + size.x, y + m_rowHeight - 0.5f}, bl::kRowLine);
             int depth = 0;
             for (int parent = skeleton.bones[b].parentIndex; parent >= 0 && depth < 12; parent = skeleton.bones[parent].parentIndex)
                 depth++;
             const bool hasKeys = ChannelForBone(clip, b) >= 0;
-            dl->AddText({origin.x + 10.f + depth * 10.f, y + 3.f}, hasKeys ? bl::kText : bl::kTextDim, skeleton.bones[b].name.c_str());
-            if (hovered && mouse.y >= y && mouse.y < y + kRowHeight && mouse.y >= origin.y + kRulerHeight && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            dl->AddText({origin.x + 10.f + depth * 10.f, y + (m_rowHeight - ImGui::GetTextLineHeight()) * 0.5f}, hasKeys ? bl::kText : bl::kTextDim, skeleton.bones[b].name.c_str());
+            if (hovered && mouse.y >= y && mouse.y < y + m_rowHeight && mouse.y >= origin.y + m_rulerHeight && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
                 if (!ctrl)
                     std::fill(m_boneSelected.begin(), m_boneSelected.end(), 0);
@@ -2294,30 +2311,30 @@ namespace pe
         {
             if (!labels[slot][0])
                 continue;
-            if (y + kRowHeight >= origin.y + kRulerHeight && y <= origin.y + size.y)
+            if (y + m_rowHeight >= origin.y + m_rulerHeight && y <= origin.y + size.y)
             {
                 const bool hidden = m_curveHidden[slot] != 0;
-                dl->AddRectFilled({origin.x, y}, {origin.x + size.x, y + kRowHeight}, bl::kSubRow);
-                dl->AddRectFilled({origin.x + 12.f, y + 5.f}, {origin.x + 16.f, y + kRowHeight - 5.f}, hidden ? bl::kTextDim : cols[slot], 1.f);
-                dl->AddText({origin.x + 24.f, y + 3.f}, hidden ? bl::kTextDim : bl::kText, labels[slot]);
+                dl->AddRectFilled({origin.x, y}, {origin.x + size.x, y + m_rowHeight}, bl::kSubRow);
+                dl->AddRectFilled({origin.x + 12.f, y + 5.f}, {origin.x + 16.f, y + m_rowHeight - 5.f}, hidden ? bl::kTextDim : cols[slot], 1.f);
+                dl->AddText({origin.x + 24.f, y + (m_rowHeight - ImGui::GetTextLineHeight()) * 0.5f}, hidden ? bl::kTextDim : bl::kText, labels[slot]);
                 // eye toggle
-                const ImVec2 e(origin.x + size.x - 16.f, y + kRowHeight * 0.5f);
+                const ImVec2 e(origin.x + size.x - 16.f, y + m_rowHeight * 0.5f);
                 dl->AddCircle(e, 4.f, hidden ? bl::kTextDim : bl::kText, 12, 1.2f);
                 if (!hidden)
                     dl->AddCircleFilled(e, 1.6f, bl::kText, 8);
-                if (hovered && mouse.y >= y && mouse.y < y + kRowHeight && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                if (hovered && mouse.y >= y && mouse.y < y + m_rowHeight && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
                 {
                     m_curveHidden[slot] = hidden ? 0 : 1;
                     m_curveFitPending = true;
                 }
             }
-            y += kRowHeight;
+            y += m_rowHeight;
         }
 
         if (hovered)
-            ScrollWheel(size.y - kRulerHeight, m_contentHeight);
-        dl->AddRectFilled(origin, {origin.x + size.x, origin.y + kRulerHeight}, bl::kRulerBg);
-        dl->AddText({origin.x + 8.f, origin.y + 5.f}, bl::kTextDim, "F-Curves");
+            ScrollWheel(size.y - m_rulerHeight, m_contentHeight);
+        dl->AddRectFilled(origin, {origin.x + size.x, origin.y + m_rulerHeight}, bl::kRulerBg);
+        dl->AddText({origin.x + 8.f, origin.y + (m_rulerHeight - ImGui::GetTextLineHeight()) * 0.5f}, bl::kTextDim, "F-Curves");
         dl->AddLine({origin.x + size.x - 0.5f, origin.y}, {origin.x + size.x - 0.5f, origin.y + size.y}, IM_COL32(0, 0, 0, 120));
         dl->PopClipRect();
     }
@@ -2360,12 +2377,12 @@ namespace pe
         for (float v = std::floor(m_curveMin / vstep) * vstep; v <= m_curveMax; v += vstep)
         {
             const float y = ValueToPx(v);
-            dl->AddLine({origin.x + kAxisWidth, y}, {end.x, y}, std::abs(v) < 1e-6f ? IM_COL32(255, 255, 255, 60) : bl::kGridMajor);
+            dl->AddLine({origin.x + m_axisWidth, y}, {end.x, y}, std::abs(v) < 1e-6f ? IM_COL32(255, 255, 255, 60) : bl::kGridMajor);
             char buf[24];
             snprintf(buf, sizeof(buf), "%.3g", std::abs(v) < 1e-6f ? 0.f : v);
-            dl->AddText({origin.x + 4.f, y - 7.f}, bl::kTextDim, buf);
+            dl->AddText({origin.x + 4.f, y - ImGui::GetTextLineHeight() * 0.5f}, bl::kTextDim, buf);
         }
-        dl->AddRectFilled(origin, {origin.x + kAxisWidth, end.y}, IM_COL32(0, 0, 0, 40));
+        dl->AddRectFilled(origin, {origin.x + m_axisWidth, end.y}, IM_COL32(0, 0, 0, 40));
 
         // curves + points (points are thinned when keys sit closer than a few pixels, Blender-style density)
         m_curvePoints.clear();
@@ -2601,12 +2618,12 @@ namespace pe
     {
         const ImVec2 origin = ImGui::GetCursorScreenPos();
         const ImVec2 avail = ImGui::GetContentRegionAvail();
-        const ImVec2 size(avail.x, std::max(avail.y - kStatusHeight, 40.f));
+        const ImVec2 size(avail.x, std::max(avail.y - m_statusHeight, 40.f));
 
         BuildRows(skeleton);
-        m_keyLeft = origin.x + m_channelWidth + kAxisWidth;
-        m_keyWidth = std::max(size.x - m_channelWidth - kAxisWidth - kRightMargin, 10.f);
-        m_contentHeight = (skeleton.GetBoneCount() + 10) * kRowHeight + 6.f; // bones + 10 component toggles
+        m_keyLeft = origin.x + m_channelWidth + m_axisWidth;
+        m_keyWidth = std::max(size.x - m_channelWidth - m_axisWidth - kRightMargin, 10.f);
+        m_contentHeight = (skeleton.GetBoneCount() + 10) * m_rowHeight + 6.f; // bones + 10 component toggles
         if (m_fitPending)
         {
             const float durationFrames = ToFrame(clip.duration);
@@ -2620,12 +2637,12 @@ namespace pe
         if (ImGui::IsItemHovered() && (ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right)))
             ImGui::SetWindowFocus();
 
-        const ImVec2 body(size.x, size.y - kHScrollHeight);
-        DrawRuler(scene, anim, clip, currentFrame, {origin.x + m_channelWidth, origin.y}, {body.x - m_channelWidth, kRulerHeight});
-        DrawCurveArea(scene, anim, clip, clip, currentFrame, {origin.x + m_channelWidth, origin.y + kRulerHeight}, {body.x - m_channelWidth, body.y - kRulerHeight});
+        const ImVec2 body(size.x, size.y - m_hScrollHeight);
+        DrawRuler(scene, anim, clip, currentFrame, {origin.x + m_channelWidth, origin.y}, {body.x - m_channelWidth, m_rulerHeight});
+        DrawCurveArea(scene, anim, clip, clip, currentFrame, {origin.x + m_channelWidth, origin.y + m_rulerHeight}, {body.x - m_channelWidth, body.y - m_rulerHeight});
         DrawCurveChannels(skeleton, clip, origin, {m_channelWidth, body.y});
         DrawVScrollbar(origin, {m_channelWidth, body.y}, m_contentHeight);
-        DrawHScrollbar({origin.x, origin.y + body.y}, {size.x, kHScrollHeight}, ToFrame(clip.duration));
+        DrawHScrollbar({origin.x, origin.y + body.y}, {size.x, m_hScrollHeight}, ToFrame(clip.duration));
         ImGui::SetCursorScreenPos({origin.x, origin.y + size.y});
     }
 
@@ -2654,7 +2671,7 @@ namespace pe
         ImDrawList *dl = ImGui::GetWindowDrawList();
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
-        dl->AddRectFilled(p, {p.x + w, p.y + kHeaderHeight}, bl::kHeaderBg);
+        dl->AddRectFilled(p, {p.x + w, p.y + m_headerHeight}, bl::kHeaderBg);
         dl->AddLine({p.x, p.y + 0.5f}, {p.x + w, p.y + 0.5f}, IM_COL32(0, 0, 0, 90));
         ImGui::SetCursorScreenPos({p.x + 6.f, p.y + 4.f});
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {6.f, 3.f});
@@ -2676,10 +2693,12 @@ namespace pe
                 AnimationEvaluator::SampleChannel(clip.channels[ci], info, time, pos, rot, scl);
             else
                 pos = bindPos, rot = bindRot, scl = bindScl;
-            vec3 loc = pos - bindPos;
+            vec3 loc = glm::inverse(bindRot) * (pos - bindPos); // Blender: pose location lives in the bone's rest frame
             vec3 sclRel = scl / bindScl;
-            if (!m_poseEditing)
-                m_poseEuler = glm::degrees(glm::eulerAngles(glm::normalize(glm::inverse(bindRot) * rot)));
+            const quat delta = glm::normalize(glm::inverse(bindRot) * rot);
+            // keep the typed Euler triplet while it still describes the key (eulerAngles picks other, equivalent triplets)
+            if (!m_poseEditing && std::abs(glm::dot(glm::normalize(quat(glm::radians(m_poseEuler))), delta)) < 0.99999f)
+                m_poseEuler = glm::degrees(glm::eulerAngles(delta));
 
             ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.35f, 1.f), "%s", info.name.c_str());
             ui::ItemTooltip("Active bone (click a bone channel to change). Values are relative to the bind pose.");
@@ -2695,8 +2714,8 @@ namespace pe
                 active |= ImGui::IsItemActive();
                 ui::ItemTooltip(tip);
             };
-            field("Loc", "##poseloc", &loc.x, 0.002f, 0.f, 0.f, "%.3f", "Location offset from the bind pose (rig units).");
-            field("Rot", "##poserot", &m_poseEuler.x, 0.5f, 0.f, 0.f, "%.1f", "Rotation (XYZ Euler, degrees) in the parent bone's frame.");
+            field("Loc", "##poseloc", &loc.x, 0.002f, 0.f, 0.f, "%.3f", "Location offset from the bind pose, in the bone's own rest frame (Y along the bone).");
+            field("Rot", "##poserot", &m_poseEuler.x, 0.5f, 0.f, 0.f, "%.1f", "Rotation (XYZ Euler, degrees) in the bone's own rest frame: Y = twist along the bone, X / Z = bends.");
             field("Scale", "##posescl", &sclRel.x, 0.01f, 0.001f, 100.f, "%.3f", "Scale relative to the bind pose.");
             m_poseEditing = active;
             if (activated)
@@ -2704,7 +2723,7 @@ namespace pe
             if (changed)
             {
                 const int c = EnsureChannel(clip, bone);
-                SetPoseKey(clip, c, time, bindPos + loc, glm::normalize(bindRot * quat(glm::radians(m_poseEuler))), bindScl * sclRel);
+                SetPoseKey(clip, c, time, bindPos + bindRot * loc, glm::normalize(bindRot * quat(glm::radians(m_poseEuler))), bindScl * sclRel);
                 m_dirty = true;
                 ReevaluatePose(scene, anim);
             }
@@ -2727,7 +2746,7 @@ namespace pe
             ui::ItemTooltip("Key the bind pose at this frame (Blender Alt+G / Alt+R / Alt+S).");
         }
         ImGui::PopStyleVar(2);
-        ImGui::SetCursorScreenPos({p.x, p.y + kHeaderHeight});
+        ImGui::SetCursorScreenPos({p.x, p.y + m_headerHeight});
     }
 
     void AnimationTimeline::SetGraphMode(bool graph)
@@ -2754,6 +2773,15 @@ namespace pe
             ImGui::End();
             return;
         }
+
+        const float lineHeight = ImGui::GetTextLineHeight();
+        m_rowHeight = std::round(lineHeight + 6.f);
+        m_rulerHeight = std::round(lineHeight + 10.f);
+        m_headerHeight = std::round(lineHeight + 16.f);
+        m_statusHeight = std::round(lineHeight + 8.f);
+        m_hScrollHeight = std::round(std::max(14.f, lineHeight));
+        m_axisWidth = std::round(ImGui::CalcTextSize("-0.000").x + 12.f);
+        m_channelWidth = std::round(std::max(210.f, ImGui::CalcTextSize("ForearmHand.R.001").x + 90.f));
 
         auto *rs = GetGlobalSystem<RendererSystem>();
         auto *anim = GetGlobalSystem<AnimationSystem>();
@@ -2889,6 +2917,7 @@ namespace pe
                 m_boneSelected[b] = 1;
                 m_activeBone = b;
                 m_curveFitPending = true;
+                m_scrollToActive = true;
             }
         }
         if (m_pendingFrame >= 0.f)
@@ -2911,7 +2940,7 @@ namespace pe
                 AnimationEvaluator::BindPose(skeleton.bones[b], bindPos, bindRot, bindScl);
                 AnimationEvaluator::SampleChannel(clip.channels[ci], skeleton.bones[b], time, pos, rot, scl);
                 if (pp.mask & 1)
-                    pos = bindPos + pp.loc;
+                    pos = bindPos + bindRot * pp.loc;
                 if (pp.mask & 2)
                     rot = glm::normalize(bindRot * quat(glm::radians(pp.rot)));
                 if (pp.mask & 4)

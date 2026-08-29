@@ -328,15 +328,17 @@ namespace pe
         char m_nameBuf[128] = {};
         int m_popupClip = -1;
 
-        static constexpr float kRowHeight = 20.f;
-        static constexpr float kRulerHeight = 24.f;
-        static constexpr float kHeaderHeight = 30.f;
-        static constexpr float kStatusHeight = 22.f;
+        // Layout derived from the current font each frame (Update), so a scaled editor font never clips rows or labels.
+        float m_rowHeight = 20.f;
+        float m_rulerHeight = 24.f;
+        float m_headerHeight = 30.f;
+        float m_statusHeight = 22.f;
+        float m_axisWidth = 52.f;
+        float m_hScrollHeight = 14.f;
+        bool m_scrollToActive = false; // scroll the channel list to the active bone on the next draw
         static constexpr float kKeyHitRadius = 6.f;
-        static constexpr float kAxisWidth = 52.f;
         static constexpr float kRightMargin = 16.f; // keeps the last frame's keys and ruler label inside the view
         static constexpr float kScrollbarWidth = 8.f;
-        static constexpr float kHScrollHeight = 14.f;
         static constexpr float kMinViewFrames = 4.f;
         static constexpr int kMaxUndo = 64;
     };

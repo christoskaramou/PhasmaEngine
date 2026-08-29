@@ -1,4 +1,5 @@
 #include "RigEditor.h"
+#include "AnimationTimeline.h"
 #include "Camera/Camera.h"
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
@@ -18,6 +19,7 @@ namespace pe
         constexpr ImU32 kBoneCol = IM_COL32(120, 200, 255, 230);
         constexpr ImU32 kBoneSelCol = IM_COL32(255, 200, 80, 255);
         constexpr ImU32 kRigidCol = IM_COL32(255, 140, 120, 230);
+        constexpr ImU32 kSplineCol = IM_COL32(120, 255, 190, 230);
         constexpr ImU32 kShapeCol = IM_COL32(120, 200, 255, 80);
         constexpr ImU32 kShapeSelCol = IM_COL32(255, 200, 80, 140);
         constexpr ImU32 kHandleCol = IM_COL32(255, 255, 255, 235);
@@ -652,6 +654,7 @@ namespace pe
             bone["radius_head"] = b.headRadius;
             bone["radius_tail"] = b.tailRadius;
             bone["rigid"] = b.rigid;
+            bone["spline"] = b.spline;
             bone["shell"] = b.shell;
             bones.push_back(bone);
         }
@@ -713,6 +716,7 @@ namespace pe
             b.headRadius = std::max(jb.value("radius_head", 0.05f), kMinRadius);
             b.tailRadius = std::max(jb.value("radius_tail", 0.05f), kMinRadius);
             b.rigid = jb.value("rigid", false);
+            b.spline = jb.value("spline", false);
             b.shell = jb.value("shell", "");
             anyShell |= jb.contains("shell");
             m_bones.push_back(b);
@@ -860,6 +864,23 @@ namespace pe
             m_selected = index;
             return ok({{"index", index}});
         }
+        if (action == "rig.chain")
+        {
+            if (!boneArg(index))
+                return fail("unknown bone");
+            PushUndo();
+            const int count = args.value("count", m_chainCount);
+            const int last = MakeChain(index, count);
+            if (m_mirrorX)
+            {
+                const int twin = MirrorCounterpart(index);
+                if (twin >= 0)
+                    MakeChain(twin, count);
+            }
+            std::vector<int> chain;
+            ChainOf(index, chain);
+            return ok({{"first", index}, {"last", last}, {"count", static_cast<int>(chain.size())}});
+        }
         if (action == "rig.remove")
         {
             PushUndo();
@@ -893,6 +914,8 @@ namespace pe
                 b.tailRadius = std::max(args.value("radius_tail", b.tailRadius), kMinRadius);
             if (args.contains("rigid"))
                 b.rigid = args.value("rigid", b.rigid);
+            if (args.contains("spline"))
+                b.spline = args.value("spline", b.spline);
             if (args.contains("shell"))
                 b.shell = args.value("shell", b.shell);
             if (m_mirrorX)
@@ -1048,6 +1071,34 @@ namespace pe
         ui::ItemTooltip("New bone extruded from the selected bone's tail (or at the origin); with Mirror X on it comes as a .L/.R pair");
         ImGui::SameLine();
         ImGui::BeginDisabled(m_selected < 0);
+        if (ImGui::Button("Spline Chain"))
+            ImGui::OpenPopup("Spline Chain");
+        ImGui::EndDisabled();
+        ui::ItemTooltip("Subdivide the selected bone into a chain of spline links: vertices blend the 4 nearest joints with "
+                        "Catmull-Rom weights along the chain, so it bends smoothly (tails, capes, ropes, hair) instead of in rigid parts");
+        if (ImGui::BeginPopup("Spline Chain"))
+        {
+            ImGui::SetNextItemWidth(90.f);
+            ImGui::InputInt("Links", &m_chainCount);
+            m_chainCount = std::clamp(m_chainCount, 2, 32);
+            ImGui::SameLine();
+            if (ImGui::Button("Convert") && m_selected >= 0)
+            {
+                PushUndo();
+                const int first = m_selected;
+                MakeChain(first, m_chainCount);
+                if (m_mirrorX)
+                {
+                    const int twin = MirrorCounterpart(first);
+                    if (twin >= 0)
+                        MakeChain(twin, m_chainCount);
+                }
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(m_selected < 0);
         if (ImGui::Button("Delete"))
         {
             PushUndo();
@@ -1106,12 +1157,13 @@ namespace pe
         ui::ItemTooltip("Draw the influence capsules in the viewport");
         ImGui::SameLine();
         ImGui::Checkbox("Snap", &m_snap);
-        ui::ItemTooltip("Magnet for joint drags (Ctrl while dragging inverts it: Ctrl snaps when this is off, and frees when it is on)");
-        ui::ItemTooltip("Magnet: joints snap while dragging (hold Ctrl to invert)");
-        ImGui::SameLine();
+        ui::ItemTooltip("Magnet for joint drags in the viewport, using the mode next to it (Ctrl while dragging inverts it: Ctrl snaps when this is off, and frees when it is on)");
+        ImGui::SameLine(0.f, 2.f);
+        ImGui::BeginDisabled(!m_snap);
         ImGui::SetNextItemWidth(96.f);
         ImGui::Combo("##snapmode", &m_snapMode, "Joints\0Surface\0Volume\0Increment\0");
-        ui::ItemTooltip("Joints: other bones' heads and tails   Surface: mesh surface under the cursor\nVolume: middle of the mesh under the cursor (Blender)   Increment: 0.01 grid");
+        ImGui::EndDisabled();
+        ui::ItemTooltip("Snap mode (only while Snap is on, or Ctrl is held while dragging)\nJoints: other bones' heads and tails   Surface: mesh surface under the cursor\nVolume: middle of the mesh under the cursor (Blender)   Increment: 0.01 grid");
         ImGui::SameLine();
         ImGui::Checkbox("Mirror X", &m_mirrorX);
         ui::ItemTooltip("Blender X-Axis Mirror: edits to a bone named *.L / *.R (or _L/_R, .l/.r) mirror to its twin across the rig's X plane, and Add Bone / Extrude Child create the twin");
@@ -1242,6 +1294,11 @@ namespace pe
             ImGui::TextDisabled("Shape unused: this bone owns the part (head = pivot, tail = axis)");
         else
             ui::ItemTooltip("Vertices inside this shape belong to this bone only (parts characters); off = blended with overlapping shapes");
+        ImGui::SameLine();
+        m_dirty |= ImGui::Checkbox("Spline", &b.spline);
+        undoOnActivate();
+        ui::ItemTooltip("Link of a spline chain (consecutive spline bones): vertices claimed by the chain blend its 4 nearest joints "
+                        "with Catmull-Rom weights, bending smoothly along the chain");
         if (ImGui::BeginCombo("Shell", b.shell.empty() ? "(none)" : b.shell.c_str()))
         {
             if (ImGui::Selectable("(none)", b.shell.empty()) && !b.shell.empty())
@@ -1298,8 +1355,9 @@ namespace pe
     // identity), the skeleton is built from the bones, ComputeVertexWeights fills joints/weights, the
     // result is saved as <model>_rigged.pemesh beside the source with the rig.json copied next to it,
     // and the scene swaps the source model for the rigged one.
-    // ponytail: translation-only bind frames (bone axes = rig axes, the proven skinned-strip pattern);
-    // add tail-aligned rest rotations when a BVH bridge needs bone-local rotation spaces.
+    // Rest frames are bone-aligned like Blender's: Y runs head -> tail (Rot Y = twist), X is the rig X
+    // projected perpendicular to the bone (Rot X = the forward/back bend for upright bones, so a vertical
+    // leg keeps its rig-space meaning), Z = X x Y. Pose rotations and locations are expressed in this frame.
     bool RigEditor::Bake(Scene &scene, std::string &error, std::string &outPath)
     {
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
@@ -1384,10 +1442,9 @@ namespace pe
                 for (int k = 0; k < 4; k++)
                 {
                     joints[k] = std::clamp(joints[k], 0, boneCount - 1);
-                    weights[k] = std::max(weights[k], 0.f);
-                    sum += weights[k];
+                    sum += weights[k]; // Catmull-Rom outer weights are negative on purpose (the strip ships them too)
                 }
-                if (sum <= 0.f) // never leave a skinned vertex with no bone: it would collapse to the origin
+                if (sum <= 1e-6f) // never leave a skinned vertex with no bone: it would collapse to the origin
                 {
                     joints[0] = owner >= 0 ? owner : 0;
                     weights[0] = 1.f;
@@ -1436,15 +1493,27 @@ namespace pe
         Skeleton &skeleton = m_model->GetMutableSkeleton();
         skeleton = Skeleton{};
         skeleton.bones.reserve(m_bones.size());
+        std::vector<mat4> restGlobal(boneCount);
+        for (int i = 0; i < boneCount; i++)
+        {
+            const RigBone &b = m_bones[i];
+            vec3 y = b.tail - b.head;
+            y = glm::length(y) > 1e-6f ? glm::normalize(y) : vec3(0.f, 1.f, 0.f);
+            vec3 x = vec3(1.f, 0.f, 0.f) - y * y.x;
+            if (glm::length(x) < 1e-3f)
+                x = glm::cross(y, vec3(0.f, 0.f, 1.f));
+            x = glm::normalize(x);
+            const vec3 z = glm::cross(x, y);
+            restGlobal[i] = glm::translate(mat4(1.f), b.head) * mat4(mat3(x, y, z));
+        }
         for (int i = 0; i < boneCount; i++)
         {
             const RigBone &b = m_bones[i];
             BoneInfo bone{};
             bone.name = b.name;
             bone.parentIndex = b.parent;
-            const vec3 parentHead = b.parent >= 0 ? m_bones[b.parent].head : vec3(0.f);
-            bone.localBindTransform = glm::translate(mat4(1.f), b.head - parentHead);
-            bone.offsetMatrix = glm::inverse(glm::translate(mat4(1.f), b.head));
+            bone.localBindTransform = (b.parent >= 0 ? glm::inverse(restGlobal[b.parent]) : mat4(1.f)) * restGlobal[i];
+            bone.offsetMatrix = glm::inverse(restGlobal[i]);
             bone.intermediatePrefix = mat4(1.f);
             skeleton.boneNameToIndex[bone.name] = i;
             skeleton.bones.push_back(bone);
@@ -1469,12 +1538,16 @@ namespace pe
 
         // the in-memory asset is rewritten either way: drop it and let the scene swap decide the target
         ModelAsset *old = m_model;
+        NodeId *oldRoot = m_rootNode;
+        const mat4 oldLocal = scene.IsNodeAlive(oldRoot) ? scene.GetLocalMatrix(oldRoot) : mat4(1.f);
         m_model = nullptr;
         m_rootNode = nullptr;
         ClearDocument();
         m_heatBackup.clear();
         BuildCaches();
         renderer->WaitAllFramesCommands();
+        if (scene.IsNodeAlive(oldRoot))
+            scene.DeleteNode(oldRoot); // the whole rig subtree, including empty group nodes a scene load left unregistered
         scene.RemoveModel(old);
         if (!written)
         {
@@ -1490,6 +1563,8 @@ namespace pe
             return false;
         }
         const SceneNodeHandle handle = scene.AddModelDeferred(rigged);
+        if (handle.nodeId)
+            scene.SetLocalMatrix(handle.nodeId, oldLocal); // keep the placement the old root had in the scene
         scene.UpdateGeometryBuffers();
         scene.MarkDirty();
         renderer->ResetTAAHistory();
@@ -1583,6 +1658,98 @@ namespace pe
     // owned by a bone (`owner` = ShellOwner of the vertex's node) belongs to it outright; otherwise a
     // rigid capsule claims the point (deepest wins), soft capsules blend and normalise to <= 4
     // influences, and a point outside every capsule follows the nearest one.
+    // The maximal run of spline bones through `bone`: up to the first link, then down the first spline child of each link.
+    void RigEditor::ChainOf(int bone, std::vector<int> &chain) const
+    {
+        chain.clear();
+        int first = bone;
+        while (m_bones[first].parent >= 0 && m_bones[m_bones[first].parent].spline)
+            first = m_bones[first].parent;
+        for (int cur = first; cur >= 0;)
+        {
+            chain.push_back(cur);
+            int next = -1;
+            for (int i = 0; i < static_cast<int>(m_bones.size()) && next < 0; i++)
+                if (m_bones[i].parent == cur && m_bones[i].spline)
+                    next = i;
+            cur = next;
+        }
+    }
+
+    // Catmull-Rom curve-station weights (the skinned_strip_2d rule): stations are the chain heads plus the last
+    // tail; the closest polyline point gives the segment and t, the 4 surrounding joints get the cubic basis.
+    // ponytail: joint frames are the plain FK rotations; add 3D tangent-frame smoothing in AnimationSystem
+    // (the strip's WriteSmoothStripJointMatrices, lifted to 3D) if a concave bend looks chunky.
+    void RigEditor::ChainWeights(int bone, const vec3 &p, int joints[4], float weights[4]) const
+    {
+        std::vector<int> chain;
+        ChainOf(bone, chain);
+        const int n = static_cast<int>(chain.size());
+        std::vector<vec3> stations(n + 1);
+        for (int i = 0; i < n; i++)
+            stations[i] = m_bones[chain[i]].head;
+        stations[n] = m_bones[chain[n - 1]].tail;
+        int seg = 0;
+        float t = 0.f, best = std::numeric_limits<float>::max();
+        for (int s = 0; s < n; s++)
+        {
+            const vec3 d = stations[s + 1] - stations[s];
+            const float len2 = glm::dot(d, d);
+            const float u = len2 > 1e-10f ? std::clamp(glm::dot(p - stations[s], d) / len2, 0.f, 1.f) : 0.f;
+            const float dist = glm::length(p - (stations[s] + d * u));
+            if (dist < best)
+            {
+                best = dist;
+                seg = s;
+                t = u;
+            }
+        }
+        const float t2 = t * t, t3 = t2 * t;
+        const int idx[4] = {std::max(seg - 1, 0), seg, std::min(seg + 1, n - 1), std::min(seg + 2, n - 1)};
+        const float w[4] = {-0.5f * t + t2 - 0.5f * t3, 1.f - 2.5f * t2 + 1.5f * t3, 0.5f * t + 2.f * t2 - 1.5f * t3,
+                            -0.5f * t2 + 0.5f * t3};
+        for (int k = 0; k < 4; k++)
+        {
+            joints[k] = chain[idx[k]];
+            weights[k] = w[k];
+        }
+    }
+
+    int RigEditor::MakeChain(int index, int count)
+    {
+        count = std::clamp(count, 2, 32);
+        const RigBone src = m_bones[index];
+        std::vector<int> children;
+        for (int i = 0; i < static_cast<int>(m_bones.size()); i++)
+            if (m_bones[i].parent == index)
+                children.push_back(i);
+        auto at = [&](int k) -> vec3
+        { return glm::mix(src.head, src.tail, static_cast<float>(k) / count); };
+        auto radiusAt = [&](int k) -> float
+        { return glm::mix(src.headRadius, src.tailRadius, static_cast<float>(k) / count); };
+        m_bones[index].tail = at(1);
+        m_bones[index].tailRadius = radiusAt(1);
+        m_bones[index].spline = true;
+        m_bones[index].rigid = false;
+        int prev = index;
+        for (int k = 1; k < count; k++)
+        {
+            const int nb = AddBone(src.name, prev);
+            RigBone &b = m_bones[nb];
+            b.head = at(k);
+            b.tail = at(k + 1);
+            b.headRadius = radiusAt(k);
+            b.tailRadius = radiusAt(k + 1);
+            b.spline = true;
+            b.shell = src.shell;
+            prev = nb;
+        }
+        for (int c : children)
+            SetParent(c, prev);
+        m_dirty = true;
+        return prev;
+    }
+
     void RigEditor::ComputeVertexWeights(const vec3 &p, int owner, int joints[4], float weights[4]) const
     {
         for (int k = 0; k < 4; k++)
@@ -1594,6 +1761,11 @@ namespace pe
             return;
         if (owner >= 0 && owner < static_cast<int>(m_bones.size()))
         {
+            if (m_bones[owner].spline)
+            {
+                ChainWeights(owner, p, joints, weights);
+                return;
+            }
             joints[0] = owner;
             weights[0] = 1.f;
             return;
@@ -1644,11 +1816,25 @@ namespace pe
             }
             joints[0] = rigidBest >= 0 ? rigidBest : nearest;
             weights[0] = 1.f;
+            if (m_bones[joints[0]].spline)
+                ChainWeights(joints[0], p, joints, weights);
             return;
         }
+        int strongest = 0;
         float sum = 0.f;
         for (int k = 0; k < 4; k++)
+        {
             sum += weights[k];
+            if (weights[k] > weights[strongest])
+                strongest = k;
+        }
+        // ponytail: a chain claims the vertex outright; blend the chain root into neighbouring body bones if a
+        // tail/cape junction needs a soft seam.
+        if (m_bones[joints[strongest]].spline)
+        {
+            ChainWeights(joints[strongest], p, joints, weights);
+            return;
+        }
         for (int k = 0; k < 4; k++)
             weights[k] /= sum;
     }
@@ -1735,7 +1921,7 @@ namespace pe
                         float w = 0.f;
                         for (int k = 0; k < 4; k++)
                             if (joints[k] == m_selected)
-                                w += weights[k];
+                                w += std::max(weights[k], 0.f);
                         c = glm::mix(grey, orange, std::clamp(w, 0.f, 1.f));
                     }
                     else
@@ -1743,7 +1929,7 @@ namespace pe
                         for (int k = 0; k < 4; k++)
                         {
                             const ImU32 col = BoneColor(joints[k]);
-                            c += weights[k] * vec3((col & 0xFF) / 255.f, ((col >> 8) & 0xFF) / 255.f, ((col >> 16) & 0xFF) / 255.f);
+                            c += std::max(weights[k], 0.f) * vec3((col & 0xFF) / 255.f, ((col >> 8) & 0xFF) / 255.f, ((col >> 16) & 0xFF) / 255.f);
                         }
                     }
                     vert.color[0] = c.x;
@@ -1886,6 +2072,15 @@ namespace pe
         active = false;
         if (!m_open || !m_model || !m_rootNode || !camera || !scene.IsNodeAlive(m_rootNode) || m_bones.empty())
             return;
+        // Selecting a bone here (or in the tree) also makes it the Timeline's active bone, so the pose bar
+        // edits the bone under the cursor. Runs here because this draws even when the widget's tab is hidden.
+        if (m_selected != m_syncedSelected)
+        {
+            m_syncedSelected = m_selected;
+            if (m_selected >= 0 && m_selected < static_cast<int>(m_bones.size()) && m_gui)
+                if (AnimationTimeline *timeline = m_gui->GetWidget<AnimationTimeline>())
+                    timeline->RequestBone(m_bones[m_selected].name);
+        }
 
         const mat4 rootWorld = scene.GetWorldMatrix(m_rootNode);
         const mat4 invRootWorld = glm::inverse(rootWorld);
@@ -1920,7 +2115,8 @@ namespace pe
                 continue;
             const bool selected = i == m_selected;
             const ImU32 boneCol = m_heat == 2 ? BoneColor(i) : selected ? kBoneSelCol
-                                                                        : (b.rigid ? kRigidCol : kBoneCol);
+                                                                        : (b.spline ? kSplineCol : b.rigid ? kRigidCol
+                                                                                                           : kBoneCol);
             if (m_showShapes && b.shell.empty())
             {
                 const float rh = screenRadius(b.head, b.headRadius, hs), rt = screenRadius(b.tail, b.tailRadius, ts);
@@ -1944,6 +2140,37 @@ namespace pe
             dl->AddCircleFilled(ts, 3.f, boneCol, 12);
             if (selected)
                 dl->AddText({hs.x + 8.f, hs.y - 16.f}, kBoneSelCol, b.name.c_str());
+        }
+
+        // spline chains: the Catmull-Rom curve through each chain's stations, so the bend the weights follow is visible
+        for (int i = 0; i < static_cast<int>(m_bones.size()); i++)
+        {
+            const RigBone &b = m_bones[i];
+            if (!b.spline || (b.parent >= 0 && m_bones[b.parent].spline))
+                continue;
+            std::vector<int> chain;
+            ChainOf(i, chain);
+            const int n = static_cast<int>(chain.size());
+            std::vector<vec3> st(n + 1);
+            for (int k = 0; k < n; k++)
+                st[k] = m_bones[chain[k]].head;
+            st[n] = m_bones[chain[n - 1]].tail;
+            std::vector<ImVec2> pts;
+            for (int s = 0; s < n; s++)
+            {
+                const vec3 &p0 = st[std::max(s - 1, 0)], &p1 = st[s], &p2 = st[s + 1], &p3 = st[std::min(s + 2, n)];
+                for (int j = 0; j <= 8; j++)
+                {
+                    const float t = j / 8.f, t2 = t * t, t3 = t2 * t;
+                    const vec3 c = 0.5f * ((2.f * p1) + (-p0 + p2) * t + (2.f * p0 - 5.f * p1 + 4.f * p2 - p3) * t2 +
+                                           (-p0 + 3.f * p1 - 3.f * p2 + p3) * t3);
+                    ImVec2 q;
+                    if (project(c, q))
+                        pts.push_back(q);
+                }
+            }
+            if (pts.size() > 1)
+                dl->AddPolyline(pts.data(), static_cast<int>(pts.size()), kSplineCol, 0, 1.5f);
         }
 
         // pass 2: handles (ImGui items so hover/active state is ImGui's, like the strip IK gizmo)
