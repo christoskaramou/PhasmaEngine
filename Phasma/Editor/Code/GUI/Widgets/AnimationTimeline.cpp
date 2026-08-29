@@ -2687,11 +2687,12 @@ namespace pe
             model = scene.GetModelForNode(m_animatedNodes[0]);
         if (!model && m_targetNode)
             model = scene.GetModelForNode(m_targetNode);
-        if (!model)
-            model = scene.FindSkeletonModel();
+        // Follows the selection like the Rig Editor: nothing selected = no target.
         if (!model || !model->HasSkeleton())
         {
-            ImGui::TextDisabled("  No skeleton found. Select an animated model in the hierarchy.");
+            m_editModel = nullptr;
+            ImGui::TextDisabled(m_targetNode ? "  The selected model has no skeleton (bake a rig first)."
+                                             : "  No model selected: select a node of a rigged model in the hierarchy.");
             ImGui::End();
             return;
         }

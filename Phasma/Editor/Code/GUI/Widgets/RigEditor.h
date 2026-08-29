@@ -93,6 +93,7 @@ namespace pe
         std::string ShellsJson() const; // JSON text: the header stays free of nlohmann
         static float CapsuleInfluence(const RigBone &b, const vec3 &p, float &signedDistance);
         int ShellOwner(const std::string &nodeName) const;
+        bool Bake(Scene &scene, std::string &error, std::string &outPath);
         void ComputeVertexWeights(const vec3 &p, int owner, int joints[4], float weights[4]) const;
         static ImU32 BoneColor(int index);
         void UpdateHeatMap(Scene &scene);

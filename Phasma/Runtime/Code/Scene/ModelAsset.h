@@ -131,6 +131,11 @@ namespace pe
         const Skeleton &GetSkeleton() const { return m_skeleton; }
         const std::vector<AnimationClip> &GetAnimations() const { return m_animations; }
         std::vector<AnimationClip> &GetMutableAnimations() { return m_animations; }
+        // Editor bakes (rig -> skinned mesh) rewrite geometry streams and the skeleton in place.
+        std::vector<Vertex> &GetMutableVertices() { return m_vertices; }
+        std::vector<PositionUvVertex> &GetMutablePositionUvs() { return m_positionUvs; }
+        std::vector<AabbVertex> &GetMutableAabbVertices() { return m_aabbVertices; }
+        Skeleton &GetMutableSkeleton() { return m_skeleton; }
         int GetJointCount() const { return m_skeleton.GetBoneCount(); }
 
         struct DefaultResources

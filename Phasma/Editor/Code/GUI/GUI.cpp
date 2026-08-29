@@ -1005,6 +1005,7 @@ namespace pe
         addAction("rig.select", "Rig Editoimage.pngr: Select Bone (args: bone)", "Rig", "command", hasRig, false, false);
         addAction("rig.save", "Rig Editor: Save <model>.rig.json Beside The .pemesh", "Rig", "command", hasRig, false, false);
         addAction("rig.load", "Rig Editor: Load <model>.rig.json", "Rig", "command", hasRig, false, false);
+        addAction("rig.bake", "Rig Editor: Bake The Rig Into <model>_rigged.pemesh And Swap It Into The Scene", "Rig", "command", hasRig, false, false);
         addAction("rig.shapes", "Rig Editor: Show Influence Shapes (args: show)", "Rig", "command", hasRig, false, false);
         addAction("rig.snap", "Rig Editor: Snapping (args: enabled, mode joints|surface|volume|increment)", "Rig", "command", hasRig, false, false);
         addAction("rig.mirror", "Rig Editor: X-Mirror .L/.R Edits (args: enabled)", "Rig", "command", hasRig, false, false);
