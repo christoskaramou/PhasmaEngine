@@ -996,6 +996,9 @@ namespace pe
         addAction("timeline.frame", "Animation Timeline: Set Current Frame (args: frame)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.bone", "Animation Timeline: Select Bone Channel (args: bone name)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.save", "Animation Timeline: Save Clips Into The Model's .pemesh", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.play", "Animation Timeline: Play / Pause The Action (args: play bool, reverse bool)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.clip", "Animation Timeline: Select Or Create An Action (args: name, end frames, fps)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.pose", "Animation Timeline: Key A Bone Pose Relative To The Bind Pose (args: bone, frame, loc[3], rot[3] degrees, scale[3])", "Timeline", "command", hasTimeline, false, false);
         const bool hasRig = GetWidget<RigEditor>() != nullptr;
         addAction("rig.state", "Rig Editor: Dump The Rig Document (bones, shapes, selection)", "Rig", "command", hasRig, false, false);
         addAction("rig.preset", "Rig Editor: Build Bones (args: preset auto|humanoid|existing|clear)", "Rig", "command", hasRig, false, false);
@@ -1124,6 +1127,40 @@ namespace pe
             if (action == "timeline.save")
             {
                 timeline->RequestSave();
+                return ok();
+            }
+            if (action == "timeline.play")
+            {
+                timeline->RequestPlay(args.value("play", true), args.value("reverse", false));
+                return ok();
+            }
+            if (action == "timeline.clip")
+            {
+                AnimationTimeline::PendingClip clip;
+                clip.name = args.value("name", "");
+                clip.end = args.value("end", -1.f);
+                clip.fps = args.value("fps", -1.f);
+                timeline->RequestClip(clip);
+                return ok();
+            }
+            if (action == "timeline.pose")
+            {
+                AnimationTimeline::PendingPose pose;
+                pose.bone = args.value("bone", "");
+                if (pose.bone.empty())
+                    return R"({"error":"bone is required"})";
+                pose.frame = args.value("frame", -1.f);
+                auto readVec = [&](const char *key, vec3 &out, int bit)
+                {
+                    if (!args.contains(key) || !args[key].is_array() || args[key].size() != 3)
+                        return;
+                    out = vec3(args[key][0].get<float>(), args[key][1].get<float>(), args[key][2].get<float>());
+                    pose.mask |= bit;
+                };
+                readVec("loc", pose.loc, 1);
+                readVec("rot", pose.rot, 2);
+                readVec("scale", pose.scl, 4);
+                timeline->RequestPose(pose);
                 return ok();
             }
             return R"({"error":"unknown timeline action"})";

@@ -54,6 +54,32 @@ namespace pe
         void RequestFrame(float frame) { m_pendingFrame = frame; }
         void RequestBone(const std::string &name) { m_pendingBone = name; }
         void RequestSave() { m_pendingSave = true; }
+        void RequestPlay(bool play, bool reverse) { m_pendingPlay = play ? (reverse ? 2 : 1) : 0; }
+
+        // timeline.pose: key one bone at a frame (<0 = current). loc / rot (degrees) / scale are relative to the
+        // bind pose; mask bits 1/2/4 say which of them were given.
+        struct PendingPose
+        {
+            std::string bone;
+            float frame = -1.f;
+            int mask = 0;
+            vec3 loc = {};
+            vec3 rot = {};
+            vec3 scl = {1.f, 1.f, 1.f};
+        };
+        void RequestPose(const PendingPose &pose) { m_pendingPoses.push_back(pose); }
+        // timeline.clip: select (or create) the action by name and/or set its end frame and fps.
+        struct PendingClip
+        {
+            std::string name;
+            float end = -1.f;
+            float fps = -1.f;
+        };
+        void RequestClip(const PendingClip &clip)
+        {
+            m_pendingClip = clip;
+            m_pendingClipSet = true;
+        }
 
     private:
         enum class Mode
@@ -159,7 +185,9 @@ namespace pe
         void DeleteSelectedKeys(AnimationClip &clip);
         void CopySelectedKeys(const AnimationClip &clip);
         void PasteKeys(AnimationClip &clip, float atFrame, bool keepTimes);
-        void InsertKeyframe(AnimationClip &clip, int bone, float frame);
+        void InsertKeyframe(AnimationClip &clip, const Skeleton &skeleton, int bone, float frame);
+        // Writes (or overwrites) the Loc/Rot/Scale keys of a channel at a time in ticks.
+        void SetPoseKey(AnimationClip &clip, int channelIdx, float time, const vec3 &pos, const quat &rot, const vec3 &scl);
         void DeleteKeyframesAtFrame(AnimationClip &clip, int bone, float frame);
         void CollectKeyTimes(const AnimationClip &clip, std::vector<float> &out) const;
         bool NextKeyFrame(const AnimationClip &clip, float from, bool forward, float &out) const;
@@ -196,6 +224,8 @@ namespace pe
         static void SetKeyComponent(AnimationChannel &chan, KeyType type, int keyIdx, int axis, float value);
         void CollectCurves(const AnimationClip &clip);
         void DrawStatusBar(const Skeleton &skeleton, const AnimationClip &clip);
+        void DrawPoseBar(Scene &scene, AnimationSystem *anim, const Skeleton &skeleton, AnimationClip &clip,
+                         float currentFrame);
         void HandleHotkeys(Scene &scene, AnimationSystem *anim, const Skeleton &skeleton, AnimationClip &clip,
                            float currentFrame);
         void BuildRows(const Skeleton &skeleton);
@@ -283,8 +313,16 @@ namespace pe
 
         // --- state: pending programmatic requests ---
         float m_pendingFrame = -1.f;
+        std::vector<PendingPose> m_pendingPoses;
+        PendingClip m_pendingClip;
+        bool m_pendingClipSet = false;
+
+        // --- state: pose bar ---
+        vec3 m_poseEuler = {}; // degrees, held while a pose field is being dragged
+        bool m_poseEditing = false;
         std::string m_pendingBone;
         bool m_pendingSave = false;
+        int m_pendingPlay = -1; // 0 pause, 1 play, 2 play reverse
 
         // --- state: popups ---
         char m_nameBuf[128] = {};
