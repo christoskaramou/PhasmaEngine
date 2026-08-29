@@ -347,8 +347,9 @@ namespace pe
     {
         if (!scene.IsNodeAlive(root))
             return;
+        // A freshly baked model has a skeleton but no clips yet: the timeline creates its first action.
         ModelAsset *model = scene.GetModelForNode(root);
-        if (model && model->HasSkeleton() && model->HasAnimations() && scene.NodeHasSkinnedMesh(root))
+        if (model && model->HasSkeleton() && scene.NodeHasSkinnedMesh(root))
             m_animatedNodes.push_back(root);
         else if (anim->GetAnimationState(root))
             m_animatedNodes.push_back(root);
@@ -832,31 +833,41 @@ namespace pe
     }
 
     // Blender "Insert Keyframe" (I): keys the bone's current (evaluated) Loc/Rot/Scl at the frame.
-    void AnimationTimeline::InsertKeyframe(AnimationClip &clip, int bone, float frameIn)
+    void AnimationTimeline::InsertKeyframe(AnimationClip &clip, const Skeleton &skeleton, int bone, float frameIn)
     {
-        if (bone < 0)
+        if (bone < 0 || bone >= skeleton.GetBoneCount())
             return;
-        const float frame = ToTicks(frameIn);
+        const float time = ToTicks(frameIn);
         const int ci = EnsureChannel(clip, bone);
-        AnimationChannel &chan = clip.channels[ci];
-        const vec3 pos = AnimationEvaluator::InterpolatePosition(chan.positionKeys, frame);
-        const quat rot = AnimationEvaluator::InterpolateRotation(chan.rotationKeys, frame);
-        const vec3 scl = AnimationEvaluator::InterpolateScale(chan.scaleKeys, frame);
-        auto insert = [&](auto &keys, const auto &value)
+        vec3 pos, scl;
+        quat rot;
+        AnimationEvaluator::SampleChannel(clip.channels[ci], skeleton.bones[bone], time, pos, rot, scl);
+        SetPoseKey(clip, ci, time, pos, rot, scl);
+    }
+
+    void AnimationTimeline::SetPoseKey(AnimationClip &clip, int channelIdx, float time, const vec3 &pos, const quat &rot,
+                                       const vec3 &scl)
+    {
+        AnimationChannel &chan = clip.channels[channelIdx];
+        auto set = [&](auto &keys, const auto &value)
         {
-            if (FindKeyAtTime(keys, frame) >= 0)
+            const int at = FindKeyAtTime(keys, time);
+            if (at >= 0)
+            {
+                keys[at].value = value;
                 return;
+            }
             AnimationInterpolation interpolation = AnimationInterpolation::Linear;
-            const auto next = std::lower_bound(keys.begin(), keys.end(), frame,
-                                               [](const auto &key, float time)
-                                               { return key.time < time; });
+            const auto next = std::lower_bound(keys.begin(), keys.end(), time,
+                                               [](const auto &key, float t)
+                                               { return key.time < t; });
             if (next != keys.begin() && next != keys.end())
                 interpolation = std::prev(next)->interpolation;
-            keys.push_back({frame, value, interpolation});
+            keys.push_back({time, value, interpolation});
         };
-        insert(chan.positionKeys, pos);
-        insert(chan.rotationKeys, rot);
-        insert(chan.scaleKeys, scl);
+        set(chan.positionKeys, pos);
+        set(chan.rotationKeys, rot);
+        set(chan.scaleKeys, scl);
         SortChannelKeys(chan);
     }
 
@@ -1377,8 +1388,9 @@ namespace pe
             ImGui::SameLine(0.f, 14.f);
         else
             ImGui::SetCursorScreenPos({p.x + 6.f, p.y + kHeaderHeight + 4.f});
-        // ponytail: auto-key arms viewport bone posing, which lands with the Rig Editor's bone overlay; inert until then.
-        IconButton("##autokey", Icon::Record, "Auto keying (needs viewport bone posing - next drop).", false);
+        // ponytail: the pose bar always keys the current frame (there is no transient pose buffer); this toggle
+        // will arm viewport bone dragging when that lands.
+        IconButton("##autokey", Icon::Record, "Auto keying: pose bar edits always key the current frame; viewport bone dragging (next drop) will honour this toggle.", false);
         ImGui::SameLine();
         if (ImGui::Checkbox("Snap", &m_snap))
         {
@@ -1827,7 +1839,7 @@ namespace pe
                 if (r >= 0 && r < static_cast<int>(m_rows.size()) && m_rows[r].bone >= 0)
                 {
                     PushUndo(clip);
-                    InsertKeyframe(clip, m_rows[r].bone, std::clamp(SnapFrame(mouseFrame), 0.f, ToFrame(clip.duration)));
+                    InsertKeyframe(clip, skeleton, m_rows[r].bone, std::clamp(SnapFrame(mouseFrame), 0.f, ToFrame(clip.duration)));
                     ReevaluatePose(scene, anim);
                 }
                 m_boxSelecting = false;
@@ -1883,7 +1895,7 @@ namespace pe
                 PushUndo(clip);
                 for (int b = 0; b < static_cast<int>(m_boneSelected.size()); b++)
                     if (m_boneSelected[b])
-                        InsertKeyframe(clip, b, std::round(currentFrame));
+                        InsertKeyframe(clip, skeleton, b, std::round(currentFrame));
                 ReevaluatePose(scene, anim);
             }
             if (ImGui::MenuItem("Delete Keyframes", "X", false, selCount > 0))
@@ -2012,10 +2024,10 @@ namespace pe
                 {
                     for (int b = 0; b < static_cast<int>(m_boneSelected.size()); b++)
                         if (m_boneSelected[b])
-                            alt ? DeleteKeyframesAtFrame(clip, b, std::round(currentFrame)) : InsertKeyframe(clip, b, std::round(currentFrame));
+                            alt ? DeleteKeyframesAtFrame(clip, b, std::round(currentFrame)) : InsertKeyframe(clip, skeleton, b, std::round(currentFrame));
                 }
                 else
-                    alt ? DeleteKeyframesAtFrame(clip, m_activeBone, std::round(currentFrame)) : InsertKeyframe(clip, m_activeBone, std::round(currentFrame));
+                    alt ? DeleteKeyframesAtFrame(clip, m_activeBone, std::round(currentFrame)) : InsertKeyframe(clip, skeleton, m_activeBone, std::round(currentFrame));
                 SelClear();
                 ReevaluatePose(scene, anim);
             }
@@ -2634,6 +2646,90 @@ namespace pe
             ImGui::TextDisabled("G move  S scale  X delete  Shift+D duplicate  I insert key  A/Alt+A select  Home frame all  Numpad . frame selected  Space play  Wheel zoom  Ctrl/Shift+wheel scroll  MMB pan  Ctrl+MMB zoom");
     }
 
+    // Blender's N-panel Transform for the active bone: Loc / Rot / Scale relative to the bind pose at the
+    // current frame; every edit writes the keys of that frame.
+    void AnimationTimeline::DrawPoseBar(Scene &scene, AnimationSystem *anim, const Skeleton &skeleton, AnimationClip &clip,
+                                        float currentFrame)
+    {
+        ImDrawList *dl = ImGui::GetWindowDrawList();
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float w = ImGui::GetContentRegionAvail().x;
+        dl->AddRectFilled(p, {p.x + w, p.y + kHeaderHeight}, bl::kHeaderBg);
+        dl->AddLine({p.x, p.y + 0.5f}, {p.x + w, p.y + 0.5f}, IM_COL32(0, 0, 0, 90));
+        ImGui::SetCursorScreenPos({p.x + 6.f, p.y + 4.f});
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {6.f, 3.f});
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {4.f, 4.f});
+        const int bone = m_activeBone >= 0 && m_activeBone < skeleton.GetBoneCount() ? m_activeBone : -1;
+        if (bone < 0)
+        {
+            ImGui::TextDisabled("Pose: click a bone channel, then edit its Location / Rotation / Scale here (every edit keys the current frame).");
+        }
+        else
+        {
+            const float time = ToTicks(std::round(currentFrame));
+            const int ci = ChannelForBone(clip, bone);
+            const BoneInfo &info = skeleton.bones[bone];
+            vec3 pos, scl, bindPos, bindScl;
+            quat rot, bindRot;
+            AnimationEvaluator::BindPose(info, bindPos, bindRot, bindScl);
+            if (ci >= 0)
+                AnimationEvaluator::SampleChannel(clip.channels[ci], info, time, pos, rot, scl);
+            else
+                pos = bindPos, rot = bindRot, scl = bindScl;
+            vec3 loc = pos - bindPos;
+            vec3 sclRel = scl / bindScl;
+            if (!m_poseEditing)
+                m_poseEuler = glm::degrees(glm::eulerAngles(glm::normalize(glm::inverse(bindRot) * rot)));
+
+            ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.35f, 1.f), "%s", info.name.c_str());
+            ui::ItemTooltip("Active bone (click a bone channel to change). Values are relative to the bind pose.");
+            bool changed = false, activated = false, active = false;
+            auto field = [&](const char *label, const char *id, float *v, float speed, float lo, float hi, const char *fmt, const char *tip)
+            {
+                ImGui::SameLine(0.f, 12.f);
+                ImGui::TextDisabled("%s", label);
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(216.f);
+                changed |= ImGui::DragFloat3(id, v, speed, lo, hi, fmt);
+                activated |= ImGui::IsItemActivated();
+                active |= ImGui::IsItemActive();
+                ui::ItemTooltip(tip);
+            };
+            field("Loc", "##poseloc", &loc.x, 0.002f, 0.f, 0.f, "%.3f", "Location offset from the bind pose (rig units).");
+            field("Rot", "##poserot", &m_poseEuler.x, 0.5f, 0.f, 0.f, "%.1f", "Rotation (XYZ Euler, degrees) in the parent bone's frame.");
+            field("Scale", "##posescl", &sclRel.x, 0.01f, 0.001f, 100.f, "%.3f", "Scale relative to the bind pose.");
+            m_poseEditing = active;
+            if (activated)
+                PushUndo(clip);
+            if (changed)
+            {
+                const int c = EnsureChannel(clip, bone);
+                SetPoseKey(clip, c, time, bindPos + loc, glm::normalize(bindRot * quat(glm::radians(m_poseEuler))), bindScl * sclRel);
+                m_dirty = true;
+                ReevaluatePose(scene, anim);
+            }
+            ImGui::SameLine(0.f, 12.f);
+            if (ImGui::Button("Key"))
+            {
+                PushUndo(clip);
+                InsertKeyframe(clip, skeleton, bone, std::round(currentFrame));
+                ReevaluatePose(scene, anim);
+            }
+            ui::ItemTooltip("Key the bone's current pose at this frame (I).");
+            ImGui::SameLine();
+            if (ImGui::Button("Reset"))
+            {
+                PushUndo(clip);
+                SetPoseKey(clip, EnsureChannel(clip, bone), time, bindPos, bindRot, bindScl);
+                m_poseEuler = vec3(0.f);
+                ReevaluatePose(scene, anim);
+            }
+            ui::ItemTooltip("Key the bind pose at this frame (Blender Alt+G / Alt+R / Alt+S).");
+        }
+        ImGui::PopStyleVar(2);
+        ImGui::SetCursorScreenPos({p.x, p.y + kHeaderHeight});
+    }
+
     void AnimationTimeline::SetGraphMode(bool graph)
     {
         m_mode = graph ? Mode::GraphEditor : Mode::DopeSheet;
@@ -2708,12 +2804,57 @@ namespace pe
         if (clips.empty())
         {
             AnimationClip fresh;
-            fresh.name = "Action";
+            fresh.name = m_pendingClipSet && !m_pendingClip.name.empty() ? m_pendingClip.name : "Action";
             fresh.duration = 48.f;
             fresh.ticksPerSecond = 24.f;
             clips.push_back(fresh);
             m_lastClipCount = 1;
             m_dirty = true;
+        }
+        // timeline.clip: select / create by name, then set the range (before the clip reference below is bound).
+        if (m_pendingClipSet)
+        {
+            m_pendingClipSet = false;
+            if (!m_pendingClip.name.empty())
+            {
+                int idx = -1;
+                for (int i = 0; i < static_cast<int>(clips.size()); i++)
+                    if (clips[i].name == m_pendingClip.name)
+                        idx = i;
+                if (idx < 0 && clips.size() == 1 && clips[0].channels.empty())
+                {
+                    clips[0].name = m_pendingClip.name; // the placeholder action created above, still unkeyed
+                    idx = 0;
+                }
+                if (idx < 0)
+                {
+                    AnimationClip fresh;
+                    fresh.name = m_pendingClip.name;
+                    fresh.duration = 48.f;
+                    fresh.ticksPerSecond = 24.f;
+                    clips.push_back(fresh);
+                    idx = static_cast<int>(clips.size()) - 1;
+                    m_dirty = true;
+                }
+                if (idx != m_selectedClip)
+                {
+                    m_selectedClip = idx;
+                    ResetEditState();
+                }
+                m_lastClipCount = static_cast<int>(clips.size());
+                m_frameTicks = DetectFrameTicks(clips[idx]);
+                SetFrame(scene, anim, 0.f);
+            }
+            AnimationClip &target = clips[std::clamp(m_selectedClip, 0, static_cast<int>(clips.size()) - 1)];
+            if (m_frameTicks <= 0.f)
+                m_frameTicks = DetectFrameTicks(target);
+            if (m_pendingClip.end > 0.f)
+                target.duration = ToTicks(m_pendingClip.end);
+            if (m_pendingClip.fps > 0.f)
+                target.ticksPerSecond = m_pendingClip.fps * m_frameTicks;
+            if (m_pendingClip.end > 0.f || m_pendingClip.fps > 0.f)
+                m_dirty = true;
+            m_fitPending = true;
         }
         // The animation state is the source of truth for the active clip.
         NodeId *primary = m_animatedNodes.empty() ? nullptr : m_animatedNodes[0];
@@ -2755,6 +2896,40 @@ namespace pe
             SetFrame(scene, anim, std::clamp(m_pendingFrame, 0.f, ToFrame(clip.duration)));
             m_pendingFrame = -1.f;
         }
+        if (!m_pendingPoses.empty())
+        {
+            PushUndo(clip);
+            for (const PendingPose &pp : m_pendingPoses)
+            {
+                const int b = skeleton.GetBoneIndex(pp.bone);
+                if (b < 0)
+                    continue;
+                const float time = ToTicks(pp.frame >= 0.f ? pp.frame : std::round(currentFrame));
+                const int ci = EnsureChannel(clip, b);
+                vec3 pos, scl, bindPos, bindScl;
+                quat rot, bindRot;
+                AnimationEvaluator::BindPose(skeleton.bones[b], bindPos, bindRot, bindScl);
+                AnimationEvaluator::SampleChannel(clip.channels[ci], skeleton.bones[b], time, pos, rot, scl);
+                if (pp.mask & 1)
+                    pos = bindPos + pp.loc;
+                if (pp.mask & 2)
+                    rot = glm::normalize(bindRot * quat(glm::radians(pp.rot)));
+                if (pp.mask & 4)
+                    scl = bindScl * pp.scl;
+                SetPoseKey(clip, ci, time, pos, rot, scl);
+            }
+            m_pendingPoses.clear();
+            ReevaluatePose(scene, anim);
+        }
+        if (m_pendingPlay >= 0)
+        {
+            if (m_pendingPlay == 2)
+                m_speed = -std::abs(m_speed);
+            else if (m_pendingPlay == 1)
+                m_speed = std::abs(m_speed);
+            SetPlaying(scene, anim, m_pendingPlay != 0, m_pendingPlay == 2);
+            m_pendingPlay = -1;
+        }
         if (m_pendingSave)
         {
             m_pendingSave = false;
@@ -2767,6 +2942,7 @@ namespace pe
             ImGui::End();
             return;
         }
+        DrawPoseBar(scene, anim, skeleton, clip, currentFrame);
         if (m_mode == Mode::DopeSheet)
             DrawDopeSheet(scene, anim, skeleton, clip, currentFrame);
         else

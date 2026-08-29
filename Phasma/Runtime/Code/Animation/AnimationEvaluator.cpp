@@ -28,6 +28,27 @@ namespace pe
         }
     }
 
+    void AnimationEvaluator::BindPose(const BoneInfo &bone, vec3 &pos, quat &rot, vec3 &scl)
+    {
+        const mat4 m = glm::inverse(bone.intermediatePrefix) * bone.localBindTransform;
+        pos = vec3(m[3]);
+        scl = vec3(glm::length(vec3(m[0])), glm::length(vec3(m[1])), glm::length(vec3(m[2])));
+        rot = glm::normalize(glm::quat_cast(mat3(vec3(m[0]) / scl.x, vec3(m[1]) / scl.y, vec3(m[2]) / scl.z)));
+    }
+
+    void AnimationEvaluator::SampleChannel(const AnimationChannel &chan, const BoneInfo &bone, float time, vec3 &pos,
+                                           quat &rot, vec3 &scl)
+    {
+        if (chan.positionKeys.empty() || chan.rotationKeys.empty() || chan.scaleKeys.empty())
+            BindPose(bone, pos, rot, scl);
+        if (!chan.positionKeys.empty())
+            pos = InterpolatePosition(chan.positionKeys, time);
+        if (!chan.rotationKeys.empty())
+            rot = InterpolateRotation(chan.rotationKeys, time);
+        if (!chan.scaleKeys.empty())
+            scl = InterpolateScale(chan.scaleKeys, time);
+    }
+
     vec3 AnimationEvaluator::InterpolatePosition(const std::vector<PositionKey> &keys, float time)
     {
         if (keys.empty())
@@ -118,10 +139,9 @@ namespace pe
             int chIdx = boneToChannel[i];
             if (chIdx >= 0)
             {
-                const AnimationChannel &channel = clip.channels[chIdx];
-                vec3 pos = InterpolatePosition(channel.positionKeys, time);
-                quat rot = InterpolateRotation(channel.rotationKeys, time);
-                vec3 scl = InterpolateScale(channel.scaleKeys, time);
+                vec3 pos, scl;
+                quat rot;
+                SampleChannel(clip.channels[chIdx], skeleton.bones[i], time, pos, rot, scl);
 
                 mat4 animatedLocal = glm::translate(mat4(1.f), pos) *
                                      glm::mat4_cast(rot) *
