@@ -1003,7 +1003,8 @@ namespace pe
         addAction("rig.state", "Rig Editor: Dump The Rig Document (bones, shapes, selection)", "Rig", "command", hasRig, false, false);
         addAction("rig.preset", "Rig Editor: Build Bones (args: preset auto|humanoid|existing|clear)", "Rig", "command", hasRig, false, false);
         addAction("rig.add", "Rig Editor: Add Bone (args: name, parent, head[3], tail[3], radius_head, radius_tail, rigid)", "Rig", "command", hasRig, false, false);
-        addAction("rig.set", "Rig Editor: Edit Bone (args: bone name|index, name, parent, head, tail, radius_head, radius_tail, rigid)", "Rig", "command", hasRig, false, false);
+        addAction("rig.set", "Rig Editor: Edit Bone (args: bone name|index, name, parent, head, tail, radius_head, radius_tail, rigid, spline, shell)", "Rig", "command", hasRig, false, false);
+        addAction("rig.chain", "Rig Editor: Subdivide A Bone Into A Spline Chain (args: bone name|index, count)", "Rig", "command", hasRig, false, false);
         addAction("rig.remove", "Rig Editor: Remove Bone (args: bone)", "Rig", "command", hasRig, false, false);
         addAction("rig.select", "Rig Editoimage.pngr: Select Bone (args: bone)", "Rig", "command", hasRig, false, false);
         addAction("rig.save", "Rig Editor: Save <model>.rig.json Beside The .pemesh", "Rig", "command", hasRig, false, false);

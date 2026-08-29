@@ -21,7 +21,8 @@ namespace pe
         float headRadius = 0.05f;
         float tailRadius = 0.05f;
         bool rigid = false;
-        std::string shell; // node name of the part this bone owns outright (empty = shapes only)
+        bool spline = false; // link of a spline chain: vertices blend 4 chain joints with Catmull-Rom weights
+        std::string shell;   // node name of the part this bone owns outright (empty = shapes only)
     };
 
     // Rig Editor: authors a skeleton + per-bone influence capsules over the selected model (load
@@ -75,6 +76,9 @@ namespace pe
         void CollectShells(std::vector<ShellInfo> &out) const;
         mat4 ModelNodeWorld(int nodeIndex) const;
         int AddBone(const std::string &name, int parent);
+        int MakeChain(int index, int count); // subdivide a bone into a spline chain; returns the last link
+        void ChainOf(int bone, std::vector<int> &chain) const;
+        void ChainWeights(int bone, const vec3 &p, int joints[4], float weights[4]) const;
         void RemoveBone(int index);
         bool SetParent(int index, int parent);
         bool IsAncestor(int ancestor, int index) const;
@@ -124,7 +128,9 @@ namespace pe
         bool m_snap = false;
         int m_snapMode = 2; // 0 joints, 1 surface, 2 volume, 3 increment
         bool m_mirrorX = false;
-        int m_heat = 0; // 0 off, 1 selected bone, 2 all bones
+        int m_chainCount = 6;
+        int m_syncedSelected = -2; // last bone selection pushed to the Animation Timeline
+        int m_heat = 0;            // 0 off, 1 selected bone, 2 all bones
         bool m_heatDirty = false;
         int m_heatSelected = -1;
         std::vector<std::pair<uint32_t, vec4>> m_heatBackup; // scene vertex index -> original colour
