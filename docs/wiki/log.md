@@ -2,6 +2,7 @@
 
 ## 2026-08-29
 
+- Editor hot reload (`File > Reload Module`, `reload_module`) no longer crashes: the ImGui context is recreated per module load instead of being handed across the DLL swap; the module build indicator now points at Reload Module. `reload_state.json` now also carries the editor camera (position + euler), so a reload keeps the viewport where it was instead of dropping it at the scene origin. Reloading while in play mode now stops play first, so the play-mutated scene can no longer come back as the authoring scene, and the launcher drops a leftover `reload_state.json` / `reload.flag` before the first module load so a killed run cannot divert the next cold start. Rig Editor gained spline chains (Catmull-Rom chain weights, `rig.chain`) and bone-aligned rest frames; the Animation Timeline gained a pose bar, `timeline.clip|pose|play`, font-relative layout and selection sync from the Rig Editor.
 - Editor Layout Style and Font Size now persist in `Assets/editor_config.json` (`gui_style`, `font_scale`) and restore on startup with the other editor settings.
 - Added persistent per-key Linear, Smooth, and Stepped interpolation to skeletal animation clips. Runtime TRS evaluation applies each key's outgoing mode, the Animation Timeline exposes the modes for selected keys and renders matching eased/held F-curve segments, and copy/paste plus in-segment insertion preserve interpolation. Cooked `.pemesh` v4 serializes modes field-by-field while the loader continues to accept v3 keys as Linear.
 

@@ -63,8 +63,6 @@ namespace pe
         // Hot-reload UI state persistence
         std::string TakeUISnapshot() const;
         void RestoreUISnapshot(const std::string &jsonStr);
-        static void SetHotReloadContext(ImGuiContext *ctx);
-        void ReleaseImGuiOwnership() { m_ownsImGuiContext = false; }
 
         // Thread-safe GpuTimer access
         std::vector<GpuTimerSample> PopGpuTimerInfos();
@@ -90,6 +88,8 @@ namespace pe
         bool IsIndexing() const { return m_isIndexing.load(); }
         int GetIndexProgress() const { return m_indexProgress.load(); }
         int GetIndexTotal() const { return m_indexTotal.load(); }
+        // Leaves play mode the way the toolbar Stop button does (host teardown calls this before a reload).
+        void Stop();
         std::string GetIndexCurrentFile() const
         {
             std::lock_guard lock(m_indexMutex);
@@ -118,7 +118,6 @@ namespace pe
         void DrawExitPopup();
         void Toolbar();
         void Play();
-        void Stop();
         void NewScene();
         void SaveEditorConfig();
         void SaveWindowState();
@@ -159,7 +158,6 @@ namespace pe
         bool m_requestDockReset;
         bool m_hasIniFile = false;
         std::string m_iniFilePath;
-        bool m_ownsImGuiContext = true;
 
         // Undo/Redo state tracking
         bool m_wasAnyItemActive = false;

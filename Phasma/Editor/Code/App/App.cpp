@@ -476,6 +476,18 @@ namespace pe
                         rs->GetScene().SetScenePath(root["scene_path"].get<std::string>());
                     if (root.contains("ui") && root["ui"].is_string())
                         rs->GetGUI().RestoreUISnapshot(root["ui"].get<std::string>());
+                    // The scene snapshot deliberately skips the active camera (undo/play-mode share it).
+                    if (root.contains("camera") && root["camera"].is_array() && root["camera"].size() == 6 &&
+                        std::all_of(root["camera"].begin(), root["camera"].end(),
+                                    [](const nlohmann::json &v)
+                                    { return v.is_number(); }) &&
+                        !rs->GetScene().GetCameras().empty())
+                    {
+                        const auto &c = root["camera"];
+                        Camera *cam = rs->GetScene().GetActiveCamera();
+                        cam->SetPosition(vec3(c[0].get<float>(), c[1].get<float>(), c[2].get<float>()));
+                        cam->SetEuler(vec3(c[3].get<float>(), c[4].get<float>(), c[5].get<float>()));
+                    }
                 }
                 else
                 {
@@ -524,11 +536,23 @@ namespace pe
         {
             if (auto *rs = GetGlobalSystem<RendererSystem>())
             {
+                // Leave play mode first: the reloaded module starts with s_playMode false and no
+                // pre-play snapshot, so snapshotting a live play session here would hand the
+                // play-mutated scene back as the authoring scene (and Ctrl+S would then save it).
+                if (GUIState::s_playMode)
+                    rs->GetGUI().Stop();
+
                 nlohmann::json root;
                 root["scene"] = rs->GetScene().TakeSnapshot();
                 const auto &scenePath = rs->GetScene().GetScenePath();
                 root["scene_path"] = scenePath.empty() ? "" : scenePath.generic_string();
                 root["ui"] = rs->GetGUI().TakeUISnapshot();
+                if (!rs->GetScene().GetCameras().empty())
+                {
+                    const Camera *cam = rs->GetScene().GetActiveCamera();
+                    const vec3 p = cam->GetPosition(), e = cam->GetEuler();
+                    root["camera"] = {p.x, p.y, p.z, e.x, e.y, e.z};
+                }
                 std::ofstream(Path::Executable + "reload_state.json") << root.dump();
             }
             std::filesystem::remove(flagPath);
@@ -606,12 +630,6 @@ namespace pe
         ImGui::Render();
         rendererSystem->Draw();
         rendererSystem->WaitAllFramesCommands();
-    }
-
-    void App::ReleaseImGuiContext()
-    {
-        if (auto *rs = GetGlobalSystem<RendererSystem>())
-            rs->GetGUI().ReleaseImGuiOwnership();
     }
 
     bool App::Frame()
