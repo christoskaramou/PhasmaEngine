@@ -13,6 +13,21 @@ namespace pe
         return static_cast<int>(keys.size()) - 1;
     }
 
+    float AnimationEvaluator::ApplyInterpolation(AnimationInterpolation interpolation, float factor)
+    {
+        factor = glm::clamp(factor, 0.0f, 1.0f);
+        switch (interpolation)
+        {
+        case AnimationInterpolation::Smooth:
+            return factor * factor * (3.0f - 2.0f * factor);
+        case AnimationInterpolation::Stepped:
+            return 0.0f;
+        case AnimationInterpolation::Linear:
+        default:
+            return factor;
+        }
+    }
+
     vec3 AnimationEvaluator::InterpolatePosition(const std::vector<PositionKey> &keys, float time)
     {
         if (keys.empty())
@@ -27,7 +42,7 @@ namespace pe
 
         float dt = keys[next].time - keys[idx].time;
         float factor = (dt > 0.0f) ? (time - keys[idx].time) / dt : 0.0f;
-        factor = glm::clamp(factor, 0.0f, 1.0f);
+        factor = ApplyInterpolation(keys[idx].interpolation, factor);
 
         return glm::mix(keys[idx].value, keys[next].value, factor);
     }
@@ -46,7 +61,7 @@ namespace pe
 
         float dt = keys[next].time - keys[idx].time;
         float factor = (dt > 0.0f) ? (time - keys[idx].time) / dt : 0.0f;
-        factor = glm::clamp(factor, 0.0f, 1.0f);
+        factor = ApplyInterpolation(keys[idx].interpolation, factor);
 
         return glm::slerp(keys[idx].value, keys[next].value, factor);
     }
@@ -65,7 +80,7 @@ namespace pe
 
         float dt = keys[next].time - keys[idx].time;
         float factor = (dt > 0.0f) ? (time - keys[idx].time) / dt : 0.0f;
-        factor = glm::clamp(factor, 0.0f, 1.0f);
+        factor = ApplyInterpolation(keys[idx].interpolation, factor);
 
         return glm::mix(keys[idx].value, keys[next].value, factor);
     }

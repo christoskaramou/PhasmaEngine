@@ -17,7 +17,8 @@ namespace pe
         // vertex/index/aabb streams are a straight blit on both. The sizeof guards in the header catch
         // any future struct-layout change so a stale cooked file fails loudly instead of corrupting.
         constexpr char kMagic[4] = {'P', 'E', 'M', 'S'};
-        constexpr uint32_t kVersion = 3;
+        constexpr uint32_t kLegacyVersion = 3;
+        constexpr uint32_t kVersion = 4;
         constexpr int kTextureSlotCount = 5;
 
         static_assert(static_cast<int>(TextureType::Emissive) + 1 == kTextureSlotCount);
@@ -92,12 +93,6 @@ namespace pe
 #pragma pack(pop)
 
         static_assert(sizeof(MaterialScalarRecord) == 85);
-
-        // Animation keyframe arrays are raw-blitted; guard that memcpy is valid. The glm aligned
-        // layout is identical on x86-64 and arm64 (same as the vertex streams), so the blit is portable.
-        static_assert(std::is_trivially_copyable_v<PositionKey>);
-        static_assert(std::is_trivially_copyable_v<RotationKey>);
-        static_assert(std::is_trivially_copyable_v<ScaleKey>);
 
         struct CookedMaterialRecord
         {
@@ -177,24 +172,88 @@ namespace pe
             }
         };
 
-        template <typename KeyT>
-        void WriteKeys(ByteWriter &w, const std::vector<KeyT> &keys)
+        template <typename T>
+        struct LegacyAnimationKey
+        {
+            float time;
+            T value;
+        };
+
+        void WriteAnimationValue(ByteWriter &w, const vec3 &value)
+        {
+            w.Pod(value.x);
+            w.Pod(value.y);
+            w.Pod(value.z);
+        }
+
+        void WriteAnimationValue(ByteWriter &w, const quat &value)
+        {
+            w.Pod(value.w);
+            w.Pod(value.x);
+            w.Pod(value.y);
+            w.Pod(value.z);
+        }
+
+        bool ReadAnimationValue(ByteReader &r, vec3 &value)
+        {
+            return r.Pod(value.x) && r.Pod(value.y) && r.Pod(value.z);
+        }
+
+        bool ReadAnimationValue(ByteReader &r, quat &value)
+        {
+            return r.Pod(value.w) && r.Pod(value.x) && r.Pod(value.y) && r.Pod(value.z);
+        }
+
+        template <typename T>
+        void WriteKeys(ByteWriter &w, const std::vector<AnimationKey<T>> &keys)
         {
             uint32_t count = static_cast<uint32_t>(keys.size());
             w.Pod(count);
-            if (count)
-                w.Raw(keys.data(), keys.size() * sizeof(KeyT));
+            for (const AnimationKey<T> &key : keys)
+            {
+                w.Pod(key.time);
+                WriteAnimationValue(w, key.value);
+                const uint8_t interpolation = static_cast<uint8_t>(key.interpolation);
+                w.Pod(interpolation);
+            }
         }
 
-        template <typename KeyT>
-        bool ReadKeys(ByteReader &r, std::vector<KeyT> &keys)
+        template <typename T>
+        bool ReadKeys(ByteReader &r, uint32_t version, std::vector<AnimationKey<T>> &keys)
         {
             uint32_t count = 0;
             if (!r.Pod(count))
                 return false;
+
+            static_assert(std::is_trivially_copyable_v<T>);
+            static_assert(std::is_trivially_copyable_v<LegacyAnimationKey<T>>);
+            static_assert(std::is_same_v<T, vec3> || std::is_same_v<T, quat>);
+            constexpr size_t valueSize = sizeof(float) * (std::is_same_v<T, vec3> ? 3 : 4);
+            const size_t bytesPerKey = version == kLegacyVersion
+                                           ? sizeof(LegacyAnimationKey<T>)
+                                           : sizeof(float) + valueSize + sizeof(uint8_t);
+            if (count > (r.size - r.cursor) / bytesPerKey)
+                return false;
+
             keys.resize(count);
-            if (count)
-                return r.Raw(keys.data(), static_cast<size_t>(count) * sizeof(KeyT));
+            if (version == kLegacyVersion)
+            {
+                std::vector<LegacyAnimationKey<T>> legacyKeys(count);
+                if (count && !r.Raw(legacyKeys.data(), static_cast<size_t>(count) * sizeof(LegacyAnimationKey<T>)))
+                    return false;
+                for (size_t i = 0; i < legacyKeys.size(); i++)
+                    keys[i] = {legacyKeys[i].time, legacyKeys[i].value, AnimationInterpolation::Linear};
+                return true;
+            }
+
+            for (AnimationKey<T> &key : keys)
+            {
+                uint8_t interpolation = 0;
+                if (!r.Pod(key.time) || !ReadAnimationValue(r, key.value) || !r.Pod(interpolation) ||
+                    interpolation > static_cast<uint8_t>(AnimationInterpolation::Stepped))
+                    return false;
+                key.interpolation = static_cast<AnimationInterpolation>(interpolation);
+            }
             return true;
         }
 
@@ -593,7 +652,7 @@ namespace pe
             }
         }
 
-        // Skeleton table (v3): rootTransform + bones. boneNameToIndex is rebuilt from names on load.
+        // Skeleton table (v3+): rootTransform + bones. boneNameToIndex is rebuilt from names on load.
         if (header.boneCount > 0)
         {
             w.Raw(&skeleton.rootTransform, sizeof(float) * 16);
@@ -608,8 +667,9 @@ namespace pe
             }
         }
 
-        // Animation table (v3): one clip per entry, each with per-bone TRS keyframe channels. Vertex
-        // joint indices/weights are already in the cooked PBR vertex stream.
+        // Animation table (v4): one clip per entry, each with per-bone TRS keyframe channels and an
+        // outgoing interpolation mode per key. Vertex joint indices/weights are already in the cooked
+        // PBR vertex stream.
         for (const AnimationClip &clip : animations)
         {
             w.String(clip.name);
@@ -672,10 +732,10 @@ namespace pe
             PE_WARN("[ModelAssetCooked] Bad magic for %s", pathStr.c_str());
             return nullptr;
         }
-        if (header.version != kVersion)
+        if (header.version != kLegacyVersion && header.version != kVersion)
         {
-            PE_WARN("[ModelAssetCooked] Unsupported version (got v%u, expected v%u) for %s; re-cook required",
-                    header.version, kVersion, pathStr.c_str());
+            PE_WARN("[ModelAssetCooked] Unsupported version (got v%u, supported v%u-v%u) for %s; re-cook required",
+                    header.version, kLegacyVersion, kVersion, pathStr.c_str());
             return nullptr;
         }
         if (header.sizeofVertex != sizeof(Vertex) ||
@@ -834,7 +894,7 @@ namespace pe
             }
         }
 
-        // Animation table (v3): clips with per-bone TRS keyframe channels.
+        // Animation table: v3 keys load as Linear; v4 also restores each key's interpolation mode.
         model->m_animations.resize(header.clipCount);
         for (uint32_t i = 0; i < header.clipCount; i++)
         {
@@ -852,9 +912,9 @@ namespace pe
                 AnimationChannel &channel = clip.channels[c];
                 int32_t boneIndex = -1;
                 if (!r.Pod(boneIndex) ||
-                    !ReadKeys(r, channel.positionKeys) ||
-                    !ReadKeys(r, channel.rotationKeys) ||
-                    !ReadKeys(r, channel.scaleKeys))
+                    !ReadKeys(r, header.version, channel.positionKeys) ||
+                    !ReadKeys(r, header.version, channel.rotationKeys) ||
+                    !ReadKeys(r, header.version, channel.scaleKeys))
                 {
                     PE_WARN("[ModelAssetCooked] Truncated animation channel: %s", pathStr.c_str());
                     delete model;

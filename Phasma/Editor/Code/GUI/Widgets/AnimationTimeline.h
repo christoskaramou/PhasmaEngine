@@ -38,6 +38,7 @@ namespace pe
         vec3 posValue = {};
         quat rotValue = {1.f, 0.f, 0.f, 0.f};
         vec3 sclValue = {1.f, 1.f, 1.f};
+        AnimationInterpolation interpolation = AnimationInterpolation::Linear;
     };
 
     // Blender-style animation editor: Dope Sheet / Action Editor (+ Graph Editor) with a timeline
@@ -145,6 +146,9 @@ namespace pe
         float KeyTime(const AnimationClip &clip, const KeyRef &ref) const;  // ticks
         float KeyFrame(const AnimationClip &clip, const KeyRef &ref) const; // frames
         void SetKeyTime(AnimationClip &clip, const KeyRef &ref, float time);
+        AnimationInterpolation KeyInterpolation(const AnimationClip &clip, const KeyRef &ref) const;
+        void SetKeyInterpolation(AnimationClip &clip, const KeyRef &ref, AnimationInterpolation interpolation);
+        bool DrawInterpolationMenu(AnimationClip &clip);
         static uint64_t PackKey(const KeyRef &ref);
         bool IsKeySelected(const KeyRef &ref) const;
         void SelClear();

@@ -17,6 +17,7 @@ namespace pe
         static vec3 InterpolatePosition(const std::vector<PositionKey> &keys, float time);
         static quat InterpolateRotation(const std::vector<RotationKey> &keys, float time);
         static vec3 InterpolateScale(const std::vector<ScaleKey> &keys, float time);
+        static float ApplyInterpolation(AnimationInterpolation interpolation, float factor);
 
     private:
         template <typename T>
