@@ -3,6 +3,9 @@
 #include "Animation/AnimationTypes.h"
 #include "imgui/imgui.h"
 
+#include <array>
+#include <span>
+
 namespace pe
 {
     struct NodeId;
@@ -55,6 +58,36 @@ namespace pe
         void RequestBone(const std::string &name) { m_pendingBone = name; }
         void RequestSave() { m_pendingSave = true; }
         void RequestPlay(bool play, bool reverse) { m_pendingPlay = play ? (reverse ? 2 : 1) : 0; }
+
+        // Rig Editor viewport posing. Bone transforms are in skeleton rig space (rootTransform removed).
+        // The Timeline owns key insertion, the drag undo snapshot and immediate pose evaluation.
+        struct ViewportPose
+        {
+            NodeId *node = nullptr;
+            std::vector<mat4> boneTransforms;
+        };
+        bool GetViewportPose(ModelAsset *model, ViewportPose &out) const;
+        // Current active-clip playhead in seconds, clamped exactly like viewport pose sampling.
+        bool GetViewportTimeSeconds(ModelAsset *model, double &out) const;
+        // Samples the active clip at the current playhead plus a displayed-frame offset, clamped to the clip range.
+        bool SampleViewportPose(ModelAsset *model, float frameOffset, ViewportPose &out) const;
+        struct GlobalBoneRotation
+        {
+            int bone = -1;
+            quat rotation = quat(1.f, 0.f, 0.f, 0.f); // Skeleton rig-space global rotation.
+        };
+        // Keys every supplied rig-space global rotation at the current frame as one undoable edit.
+        bool KeyViewportGlobalRotations(Scene &scene, ModelAsset *model,
+                                        std::span<const GlobalBoneRotation> rotations);
+        bool CanViewportRotate(ModelAsset *model, int bone) const;
+        bool BeginViewportRotate(Scene &scene, ModelAsset *model, int bone);
+        bool UpdateViewportRotate(Scene &scene, ModelAsset *model, int bone, const mat4 &boneTransform,
+                                  int mirrorBone = -1);
+        void EndViewportRotate();
+        bool StepViewportUndo(Scene &scene, bool redo);
+        bool AutoKey() const { return m_autoKey; }
+        void SetAutoKey(bool enabled) { m_autoKey = enabled; }
+        std::string HandleAction(const std::string &action, const std::string &argsJson);
 
         // timeline.pose: key one bone at a frame (<0 = current). loc / rot (degrees) / scale are relative to the
         // bind pose; mask bits 1/2/4 say which of them were given.
@@ -188,6 +221,7 @@ namespace pe
         void InsertKeyframe(AnimationClip &clip, const Skeleton &skeleton, int bone, float frame);
         // Writes (or overwrites) the Loc/Rot/Scale keys of a channel at a time in ticks.
         void SetPoseKey(AnimationClip &clip, int channelIdx, float time, const vec3 &pos, const quat &rot, const vec3 &scl);
+        void SetRotationKey(AnimationClip &clip, int channelIdx, float time, const quat &rot);
         void DeleteKeyframesAtFrame(AnimationClip &clip, int bone, float frame);
         void CollectKeyTimes(const AnimationClip &clip, std::vector<float> &out) const;
         bool NextKeyFrame(const AnimationClip &clip, float from, bool forward, float &out) const;
@@ -202,6 +236,7 @@ namespace pe
         // Returns true when the clip list changed (references into it are stale for this frame).
         bool DrawHeader(Scene &scene, AnimationSystem *anim, ModelAsset *model, AnimationClip &clip,
                         float currentFrame);
+        void DrawMotionDoctor();
         void DrawDopeSheet(Scene &scene, AnimationSystem *anim, const Skeleton &skeleton, AnimationClip &clip,
                            float currentFrame);
         void DrawChannelRegion(const Skeleton &skeleton, const AnimationClip &clip, const ImVec2 &origin,
@@ -255,7 +290,7 @@ namespace pe
         float m_channelWidth = 210.f;
         bool m_fitPending = true;
         bool m_snap = true;
-        bool m_autoKey = false;
+        bool m_autoKey = true;
         bool m_loop = true;
         float m_speed = 1.f;
         bool m_scrubbing = false;
@@ -320,6 +355,9 @@ namespace pe
         // --- state: pose bar ---
         vec3 m_poseEuler = {}; // degrees, held while a pose field is being dragged
         bool m_poseEditing = false;
+        bool m_viewportRotateActive = false;
+        int m_viewportRotateBone = -1;
+        float m_viewportRotateTime = 0.f;
         std::string m_pendingBone;
         bool m_pendingSave = false;
         int m_pendingPlay = -1; // 0 pause, 1 play, 2 play reverse
@@ -327,6 +365,11 @@ namespace pe
         // --- state: popups ---
         char m_nameBuf[128] = {};
         int m_popupClip = -1;
+        std::array<size_t, 6> m_motionIssueCounts = {};
+        std::string m_motionStatus;
+        char m_springChainBuf[256] = {};
+        int m_motionOffsetFrames = 1;
+        float m_breakdownBias = 0.5f;
 
         // Layout derived from the current font each frame (Update), so a scaled editor font never clips rows or labels.
         float m_rowHeight = 20.f;

@@ -47,6 +47,35 @@ namespace pe::ui
             TooltipText(text);
     }
 
+    // ---------- wrapping toolbars ----------
+    // Widths of the item about to be submitted, so a row can decide whether it still fits.
+    inline float ButtonWidth(const char *label)
+    {
+        return ImGui::CalcTextSize(label, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.f;
+    }
+
+    inline float CheckboxWidth(const char *label)
+    {
+        return ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(label, nullptr, true).x;
+    }
+
+    // Item width set by SetNextItemWidth, plus the label ImGui draws to its right.
+    inline float LabelledItemWidth(float itemWidth, const char *label)
+    {
+        const float text = ImGui::CalcTextSize(label, nullptr, true).x;
+        return itemWidth + (text > 0.f ? ImGui::GetStyle().ItemInnerSpacing.x + text : 0.f);
+    }
+
+    // SameLine only while the next item still fits the row; otherwise it falls to the next line.
+    // Toolbars built this way reflow instead of clipping when the editor font is scaled up.
+    inline void SameLineIfFits(float nextItemWidth, float spacing = -1.f)
+    {
+        const float gap = spacing >= 0.f ? spacing : ImGui::GetStyle().ItemSpacing.x;
+        const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+        if (ImGui::GetItemRectMax().x + gap + nextItemWidth <= right)
+            ImGui::SameLine(0.f, spacing);
+    }
+
     inline ImVec4 Heat(float f) // 0..1 -> green->yellow->red
     {
         f = Clamp01(f);
