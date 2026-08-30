@@ -1,13 +1,18 @@
 #pragma once
 #include "GUI/Widget.h"
 #include "Animation/AnimationTypes.h"
+#include "Animation/AnimationReferenceFrames.h"
+#include "Animation/RigPresetLibrary.h"
+#include "Animation/RigWeightStroke.h"
 #include "imgui/imgui.h"
 
 namespace pe
 {
     struct NodeId;
+    class AnimationTimeline;
     class Scene;
     class Camera;
+    class Image;
     class ModelAsset;
 
     // One authored bone: head/tail in rig space (the model root node's local space) plus a capsule
@@ -25,17 +30,19 @@ namespace pe
         std::string shell;   // node name of the part this bone owns outright (empty = shapes only)
     };
 
-    // Rig Editor: authors a skeleton + per-bone influence capsules over the selected model (load
-    // existing / presets / manual), drawn and manipulated in the viewport. The document lives in the
-    // widget and in <model>.rig.json beside the .pemesh; baking weights into the model is the next drop.
+    // Rig Editor: authors and bakes a skeleton + per-bone influence capsules, poses baked rigs, and
+    // adjusts ordinary joint blends directly on a posed mesh. The rig document lives beside the
+    // .pemesh; baked weight edits stay in memory until explicitly saved to that .pemesh.
     class RigEditor : public Widget
     {
     public:
         RigEditor() : Widget("Rig Editor") { m_open = false; }
+        ~RigEditor() override;
         void Update() override;
 
         // rig.* editor actions (agent route). Returns a JSON result string.
         std::string HandleAction(const std::string &action, const std::string &argsJson);
+        std::string ProjectPresetsJson();
 
         // Viewport overlay + drag handles; called by SceneView inside the viewport clip rect.
         void DrawViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize, bool &hovered,
@@ -44,6 +51,12 @@ namespace pe
         bool HasTarget() const { return m_model != nullptr; }
 
     private:
+        enum class Mode
+        {
+            Edit,
+            Pose
+        };
+
         struct ShellInfo
         {
             int nodeIndex = -1;
@@ -62,6 +75,7 @@ namespace pe
         {
             std::vector<RigBone> bones;
             int selected = -1;
+            std::string preset;
         };
 
         void ResolveTarget(Scene &scene);
@@ -72,7 +86,9 @@ namespace pe
         void Redo();
         void ImportSkeleton();
         void PresetAuto();
-        void PresetHumanoid();
+        void ReloadProjectPresets();
+        const RigPreset *FindPreset(std::string_view idOrName) const;
+        bool ApplyPreset(const RigPreset &preset, std::string &error);
         void CollectShells(std::vector<ShellInfo> &out) const;
         mat4 ModelNodeWorld(int nodeIndex) const;
         int AddBone(const std::string &name, int parent);
@@ -111,12 +127,42 @@ namespace pe
                         const vec3 &rayDir, const std::function<bool(const vec3 &, ImVec2 &)> &project, const ImVec2 &mouse,
                         vec3 &out) const;
         void DrawBoneTree(int parent, int depth);
+        void DrawPoseBoneTree(const Skeleton &skeleton, int parent, int depth);
         void DrawBoneProperties();
+        void DrawRigTransform();
+        void TransformRig(std::span<const RigBone> base, const vec3 &move, const vec3 &rotateDegrees, const vec3 &scale,
+                          int pivotMode); // 0 feet, 1 centre, 2 origin
+        void DrawPosePanel(Scene &scene);
+        void DrawPoseViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize,
+                              bool &hovered, bool &active);
+        void DrawJointBlendViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize,
+                                    const mat4 &rootWorld, std::span<const mat4> boneTransforms,
+                                    const std::function<bool(const vec3 &, ImVec2 &)> &project, bool &hovered,
+                                    bool &active);
+        void DrawIkViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize,
+                            const mat4 &rootWorld, std::span<const mat4> boneTransforms,
+                            const std::function<bool(const vec3 &, ImVec2 &)> &project, bool &hovered, bool &active);
+        void DrawReferenceOverlay(AnimationTimeline *timeline, const ImVec2 &imageMin, const ImVec2 &imageSize);
+        bool BuildPosedVertices(std::span<const mat4> boneTransforms, std::vector<vec3> &out) const;
+        void ReadWeights(std::vector<RigWeightStroke::SkinWeight> &out) const;
+        bool WriteWeights(Scene &scene, std::span<const RigWeightStroke::SkinWeight> weights);
+        void UploadWeights(Scene &scene);
+        void PushWeightUndo();
+        bool WeightUndo(Scene &scene, bool redo);
+        bool SaveWeights(std::string &error);
+        bool LoadReference(const std::filesystem::path &path, std::string &error);
+        void ClearReference();
+        bool UpdateReferenceImage(AnimationTimeline *timeline, std::string &error);
+        void ReleaseReferenceImage(bool drainRendererFrames = false);
+        std::vector<std::string> SelectedSpringChain() const;
+        void SetMode(Mode mode);
 
         ModelAsset *m_model = nullptr;
         NodeId *m_rootNode = nullptr;
         std::vector<RigBone> m_bones;
         int m_selected = -1;
+        int m_poseSelected = -1;
+        Mode m_mode = Mode::Edit;
         bool m_dirty = false;
         bool m_showShapes = true;
         int m_dragBone = -1; // viewport drag in flight: bone + handle
@@ -128,6 +174,37 @@ namespace pe
         bool m_snap = false;
         int m_snapMode = 2; // 0 joints, 1 surface, 2 volume, 3 increment
         bool m_mirrorX = false;
+        bool m_poseDragging = false;
+        bool m_onionBones = false;
+        int m_onionPrevious = 2;
+        int m_onionNext = 2;
+        bool m_motionTrail = false;
+        int m_trailPrevious = 8;
+        int m_trailNext = 8;
+        bool m_twoBoneIk = false;
+        int m_ikBone = -1;
+        vec3 m_ikTarget = vec3(0.f);
+        vec3 m_ikPole = vec3(0.f);
+        bool m_ikDragging = false;
+        bool m_ikDirty = false;
+        bool m_jointBlend = false;
+        RigWeightStroke::Mode m_weightMode = RigWeightStroke::Mode::Add;
+        float m_weightRadius = 0.1f;
+        float m_weightStrength = 0.5f;
+        bool m_weightDragging = false;
+        bool m_weightStrokeChanged = false;
+        bool m_weightDirty = false;
+        bool m_weightHasLastCenter = false;
+        vec3 m_weightLastCenter = vec3(0.f);
+        std::vector<RigWeightStroke::SkinWeight> m_weightScratch;
+        std::vector<std::vector<RigWeightStroke::SkinWeight>> m_weightUndo;
+        std::vector<std::vector<RigWeightStroke::SkinWeight>> m_weightRedo;
+        std::filesystem::path m_referencePath;
+        AnimationReferenceFrames::Sequence m_referenceSequence;
+        int m_referenceFrameIndex = -1;
+        Image *m_referenceImage = nullptr;
+        void *m_referenceTexture = nullptr;
+        std::array<char, 512> m_referencePathBuffer{};
         int m_chainCount = 6;
         int m_syncedSelected = -2; // last bone selection pushed to the Animation Timeline
         int m_heat = 0;            // 0 off, 1 selected bone, 2 all bones
@@ -138,11 +215,18 @@ namespace pe
         std::vector<uint32_t> m_rigTris;
         std::vector<int> m_rigTriMesh; // model mesh index per triangle (Volume snap pairs hits per shell)
         std::vector<ShellInfo> m_shellCache;
+        std::vector<RigPreset> m_projectPresets;
+        std::vector<std::string> m_projectPresetErrors;
+        std::string m_presetName; // preset the current bones came from; empty = hand-edited (Custom)
+        vec3 m_xformMove = vec3(0.f), m_xformRotate = vec3(0.f), m_xformScale = vec3(1.f);
+        int m_xformPivot = 0;
+        std::vector<RigBone> m_xformBase; // bones at the start of the transform drag
         std::string m_status;
         char m_nameBuf[96] = {};
         std::string m_docPath; // model file the undo/redo stacks belong to
         std::vector<Snapshot> m_undo;
         std::vector<Snapshot> m_redo;
         static constexpr int kMaxUndo = 64;
+        static constexpr int kMaxWeightUndo = 16;
     };
 } // namespace pe

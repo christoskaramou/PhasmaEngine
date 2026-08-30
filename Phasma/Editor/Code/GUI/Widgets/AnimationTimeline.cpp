@@ -1,5 +1,7 @@
 #include "AnimationTimeline.h"
+#include "Animation/AnimationClipTools.h"
 #include "Animation/AnimationEvaluator.h"
+#include "Animation/AnimationPoseTools.h"
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
 #include "Scene/ModelAsset.h"
@@ -10,6 +12,10 @@
 #include "Systems/AnimationSystem.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui.h"
+
+#include <nlohmann/json.hpp>
+
+#include <numeric>
 
 namespace pe
 {
@@ -392,6 +398,769 @@ namespace pe
             m_gui->NotifyChange();
     }
 
+    bool AnimationTimeline::GetViewportPose(ModelAsset *model, ViewportPose &out) const
+    {
+        return SampleViewportPose(model, 0.f, out);
+    }
+
+    bool AnimationTimeline::GetViewportTimeSeconds(ModelAsset *model, double &out) const
+    {
+        out = 0.0;
+        if (!model || model != m_editModel || m_selectedClip < 0 ||
+            m_selectedClip >= static_cast<int>(model->GetAnimations().size()))
+            return false;
+
+        const AnimationClip &clip = model->GetAnimations()[m_selectedClip];
+        NodeId *node = m_animatedNodes.empty() ? m_targetNode : m_animatedNodes[0];
+        AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
+        const AnimationNodeState *state = anim && node ? anim->GetAnimationState(node) : nullptr;
+        const float time = state ? state->time : 0.f;
+        if (!std::isfinite(time) || !std::isfinite(clip.duration) || clip.duration < 0.f ||
+            !std::isfinite(clip.ticksPerSecond) || clip.ticksPerSecond <= 0.f)
+            return false;
+
+        out = static_cast<double>(std::clamp(time, 0.f, clip.duration)) /
+              static_cast<double>(clip.ticksPerSecond);
+        return std::isfinite(out);
+    }
+
+    bool AnimationTimeline::SampleViewportPose(ModelAsset *model, float frameOffset, ViewportPose &out) const
+    {
+        out = {};
+        if (!model || model != m_editModel || m_selectedClip < 0 ||
+            m_selectedClip >= static_cast<int>(model->GetAnimations().size()))
+            return false;
+
+        NodeId *node = m_animatedNodes.empty() ? m_targetNode : m_animatedNodes[0];
+        AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
+        const AnimationNodeState *state = anim && node ? anim->GetAnimationState(node) : nullptr;
+        const AnimationClip &clip = model->GetAnimations()[m_selectedClip];
+        const float frameTicks = m_frameTicks > 0.f ? m_frameTicks : DetectFrameTicks(clip);
+        const float time = std::clamp((state ? state->time : 0.f) + frameOffset * frameTicks,
+                                      0.f,
+                                      std::max(clip.duration, 0.f));
+        const Skeleton &skeleton = model->GetSkeleton();
+        std::vector<mat4> jointMatrices;
+        AnimationEvaluator::EvaluatePose(clip, skeleton, time, jointMatrices);
+
+        const mat4 invRoot = glm::inverse(skeleton.rootTransform);
+        out.node = node;
+        out.boneTransforms.resize(jointMatrices.size());
+        for (int i = 0; i < static_cast<int>(jointMatrices.size()); i++)
+            out.boneTransforms[i] = invRoot * jointMatrices[i] * glm::inverse(skeleton.bones[i].offsetMatrix);
+        return !out.boneTransforms.empty();
+    }
+
+    bool AnimationTimeline::KeyViewportGlobalRotations(Scene &scene, ModelAsset *model,
+                                                       std::span<const GlobalBoneRotation> rotations)
+    {
+        if (!model || model != m_editModel || rotations.size() < 2 || m_selectedClip < 0 ||
+            m_selectedClip >= static_cast<int>(model->GetAnimations().size()))
+            return false;
+
+        const Skeleton &skeleton = model->GetSkeleton();
+        std::vector<quat> desiredRotations(skeleton.GetBoneCount(), quat(1.f, 0.f, 0.f, 0.f));
+        std::vector<char> requested(skeleton.GetBoneCount(), 0);
+        for (const GlobalBoneRotation &edit : rotations)
+        {
+            const float lengthSquared = glm::dot(edit.rotation, edit.rotation);
+            if (edit.bone < 0 || edit.bone >= skeleton.GetBoneCount() || !std::isfinite(lengthSquared) ||
+                lengthSquared <= 1e-8f)
+                return false;
+            desiredRotations[edit.bone] = glm::normalize(edit.rotation);
+            requested[edit.bone] = 1;
+        }
+
+        std::vector<int> bones;
+        for (int bone = 0; bone < skeleton.GetBoneCount(); ++bone)
+            if (requested[bone])
+                bones.push_back(bone);
+        if (bones.size() < 2)
+            return false;
+        auto depth = [&](int bone)
+        {
+            int result = 0;
+            for (int guard = 0; guard < skeleton.GetBoneCount() && bone >= 0; ++guard)
+            {
+                bone = skeleton.bones[bone].parentIndex;
+                ++result;
+            }
+            return result;
+        };
+        std::stable_sort(bones.begin(), bones.end(), [&](int left, int right)
+                         { return depth(left) < depth(right); });
+
+        AnimationClip &clip = model->GetMutableAnimations()[m_selectedClip];
+        if (m_frameTicks <= 0.f)
+            m_frameTicks = DetectFrameTicks(clip);
+        NodeId *node = m_animatedNodes.empty() ? m_targetNode : m_animatedNodes[0];
+        AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
+        const AnimationNodeState *state = anim && node ? anim->GetAnimationState(node) : nullptr;
+        const float time = ToTicks(std::round(state ? ToFrame(state->time) : 0.f));
+
+        std::vector<mat4> joints;
+        AnimationEvaluator::EvaluatePose(clip, skeleton, time, joints);
+        if (joints.size() != skeleton.bones.size())
+            return false;
+        std::vector<mat4> sourceGlobals(joints.size());
+        std::vector<mat4> finalGlobals(joints.size());
+        const mat4 inverseRoot = glm::inverse(skeleton.rootTransform);
+        for (size_t bone = 0; bone < joints.size(); ++bone)
+            sourceGlobals[bone] = joints[bone] * glm::inverse(skeleton.bones[bone].offsetMatrix);
+
+        auto rotationOf = [](const mat4 &transform)
+        {
+            const vec3 scale(glm::length(vec3(transform[0])),
+                             glm::length(vec3(transform[1])),
+                             glm::length(vec3(transform[2])));
+            if (scale.x <= 1e-8f || scale.y <= 1e-8f || scale.z <= 1e-8f)
+                return quat(1.f, 0.f, 0.f, 0.f);
+            return glm::normalize(glm::quat_cast(mat3(vec3(transform[0]) / scale.x,
+                                                      vec3(transform[1]) / scale.y,
+                                                      vec3(transform[2]) / scale.z)));
+        };
+
+        struct LocalRotation
+        {
+            int bone = -1;
+            quat value = quat(1.f, 0.f, 0.f, 0.f);
+        };
+        std::vector<LocalRotation> solved;
+        solved.reserve(bones.size());
+        std::vector<int> hierarchy(skeleton.GetBoneCount());
+        std::iota(hierarchy.begin(), hierarchy.end(), 0);
+        std::stable_sort(hierarchy.begin(), hierarchy.end(), [&](int left, int right)
+                         { return depth(left) < depth(right); });
+        for (int boneIndex : hierarchy)
+        {
+            const BoneInfo &bone = skeleton.bones[boneIndex];
+            const mat4 parentGlobal = bone.parentIndex >= 0 ? finalGlobals[bone.parentIndex] : mat4(1.f);
+
+            vec3 localPosition, localScale;
+            quat localRotation;
+            const int channel = ChannelForBone(clip, boneIndex);
+            if (channel >= 0)
+                AnimationEvaluator::SampleChannel(clip.channels[channel],
+                                                  bone,
+                                                  time,
+                                                  localPosition,
+                                                  localRotation,
+                                                  localScale);
+            else
+                AnimationEvaluator::BindPose(bone, localPosition, localRotation, localScale);
+            if (requested[boneIndex])
+            {
+                const mat4 currentRig = inverseRoot * sourceGlobals[boneIndex];
+                const vec3 scale(glm::length(vec3(currentRig[0])),
+                                 glm::length(vec3(currentRig[1])),
+                                 glm::length(vec3(currentRig[2])));
+                const mat4 desiredRig = glm::translate(mat4(1.f), vec3(currentRig[3])) *
+                                        glm::mat4_cast(desiredRotations[boneIndex]) * glm::scale(mat4(1.f), scale);
+                const mat4 desiredGlobal = skeleton.rootTransform * desiredRig;
+                localRotation = rotationOf(glm::inverse(bone.intermediatePrefix) *
+                                           glm::inverse(parentGlobal) * desiredGlobal);
+                solved.push_back({boneIndex, localRotation});
+            }
+            finalGlobals[boneIndex] = parentGlobal * bone.intermediatePrefix *
+                                      glm::translate(mat4(1.f), localPosition) * glm::mat4_cast(localRotation) *
+                                      glm::scale(mat4(1.f), localScale);
+        }
+
+        const AnimationClip before = clip;
+        for (LocalRotation &rotation : solved)
+        {
+            const int channel = EnsureChannel(clip, rotation.bone);
+            const auto &keys = clip.channels[channel].rotationKeys;
+            const auto next = std::lower_bound(keys.begin(), keys.end(), time,
+                                               [](const RotationKey &key, float keyTime)
+                                               { return key.time < keyTime; });
+            if (next != keys.begin() && glm::dot(std::prev(next)->value, rotation.value) < 0.f)
+                rotation.value = quat(-rotation.value.w, -rotation.value.x, -rotation.value.y, -rotation.value.z);
+            SetRotationKey(clip, channel, time, rotation.value);
+        }
+        PushUndoSnapshot(before);
+        SelClear();
+        if (anim)
+            ReevaluatePose(scene, anim);
+        return true;
+    }
+
+    bool AnimationTimeline::CanViewportRotate(ModelAsset *model, int bone) const
+    {
+        if (!model || model != m_editModel || bone < 0 || bone >= model->GetSkeleton().GetBoneCount() ||
+            m_selectedClip < 0 || m_selectedClip >= static_cast<int>(model->GetAnimations().size()) || m_frameTicks <= 0.f)
+            return false;
+        if (m_autoKey)
+            return true;
+
+        const AnimationClip &clip = model->GetAnimations()[m_selectedClip];
+        const int channel = ChannelForBone(clip, bone);
+        if (channel < 0)
+            return false;
+        NodeId *node = m_animatedNodes.empty() ? m_targetNode : m_animatedNodes[0];
+        AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
+        const AnimationNodeState *state = anim && node ? anim->GetAnimationState(node) : nullptr;
+        const float time = ToTicks(std::round(state ? ToFrame(state->time) : 0.f));
+        return FindKeyAtTime(clip.channels[channel].rotationKeys, time) >= 0;
+    }
+
+    bool AnimationTimeline::BeginViewportRotate(Scene &scene, ModelAsset *model, int bone)
+    {
+        if (!CanViewportRotate(model, bone))
+            return false;
+        if (m_viewportRotateActive)
+            return m_viewportRotateBone == bone;
+
+        NodeId *node = m_animatedNodes.empty() ? m_targetNode : m_animatedNodes[0];
+        AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
+        const AnimationNodeState *state = anim && node ? anim->GetAnimationState(node) : nullptr;
+        const float frame = std::round(state ? ToFrame(state->time) : 0.f);
+        m_viewportRotateTime = ToTicks(frame);
+        PushUndo(model->GetMutableAnimations()[m_selectedClip]);
+        m_viewportRotateBone = bone;
+        m_viewportRotateActive = true;
+        if (anim)
+            SetFrame(scene, anim, frame);
+        return true;
+    }
+
+    bool AnimationTimeline::UpdateViewportRotate(Scene &scene, ModelAsset *model, int bone, const mat4 &boneTransform,
+                                                 int mirrorBone)
+    {
+        if (!m_viewportRotateActive || m_viewportRotateBone != bone || model != m_editModel ||
+            m_selectedClip < 0 || m_selectedClip >= static_cast<int>(model->GetAnimations().size()))
+            return false;
+
+        AnimationClip &clip = model->GetMutableAnimations()[m_selectedClip];
+        const Skeleton &skeleton = model->GetSkeleton();
+        std::vector<mat4> jointMatrices;
+        AnimationEvaluator::EvaluatePose(clip, skeleton, m_viewportRotateTime, jointMatrices);
+        std::vector<mat4> globalTransforms(jointMatrices.size());
+        std::vector<mat4> rigTransforms(jointMatrices.size());
+        const mat4 invRoot = glm::inverse(skeleton.rootTransform);
+        for (int i = 0; i < static_cast<int>(jointMatrices.size()); i++)
+        {
+            globalTransforms[i] = jointMatrices[i] * glm::inverse(skeleton.bones[i].offsetMatrix);
+            rigTransforms[i] = invRoot * globalTransforms[i];
+        }
+
+        auto rotationOf = [](const mat4 &m)
+        {
+            const vec3 scale(glm::length(vec3(m[0])), glm::length(vec3(m[1])), glm::length(vec3(m[2])));
+            if (scale.x <= 1e-8f || scale.y <= 1e-8f || scale.z <= 1e-8f)
+                return quat(1.f, 0.f, 0.f, 0.f);
+            return glm::normalize(glm::quat_cast(mat3(vec3(m[0]) / scale.x, vec3(m[1]) / scale.y, vec3(m[2]) / scale.z)));
+        };
+        auto writeGlobalRotation = [&](int targetBone, const mat4 &rigTransform)
+        {
+            if (targetBone < 0 || targetBone >= skeleton.GetBoneCount())
+                return;
+            const BoneInfo &info = skeleton.bones[targetBone];
+            const mat4 desiredGlobal = skeleton.rootTransform * rigTransform;
+            const mat4 local = info.parentIndex >= 0 && info.parentIndex < static_cast<int>(globalTransforms.size())
+                                   ? glm::inverse(globalTransforms[info.parentIndex]) * desiredGlobal
+                                   : desiredGlobal;
+            const quat rotation = rotationOf(glm::inverse(info.intermediatePrefix) * local);
+            int channel = ChannelForBone(clip, targetBone);
+            if (channel < 0)
+            {
+                if (!m_autoKey)
+                    return;
+                channel = EnsureChannel(clip, targetBone);
+            }
+            if (!m_autoKey && FindKeyAtTime(clip.channels[channel].rotationKeys, m_viewportRotateTime) < 0)
+                return;
+            SetRotationKey(clip, channel, m_viewportRotateTime, rotation);
+        };
+
+        writeGlobalRotation(bone, boneTransform);
+        if (mirrorBone >= 0 && mirrorBone < skeleton.GetBoneCount() && mirrorBone != bone)
+        {
+            mat4 reflection(1.f);
+            reflection[0][0] = -1.f;
+            const quat mirroredRotation = rotationOf(reflection * glm::mat4_cast(rotationOf(boneTransform)) * reflection);
+            const mat4 &current = rigTransforms[mirrorBone];
+            const vec3 scale(glm::length(vec3(current[0])), glm::length(vec3(current[1])), glm::length(vec3(current[2])));
+            const mat4 mirroredTransform = glm::translate(mat4(1.f), vec3(current[3])) * glm::mat4_cast(mirroredRotation) *
+                                           glm::scale(mat4(1.f), scale);
+            writeGlobalRotation(mirrorBone, mirroredTransform);
+        }
+
+        m_dirty = true;
+        if (AnimationSystem *anim = GetGlobalSystem<AnimationSystem>())
+            ReevaluatePose(scene, anim);
+        return true;
+    }
+
+    void AnimationTimeline::EndViewportRotate()
+    {
+        m_viewportRotateActive = false;
+        m_viewportRotateBone = -1;
+    }
+
+    bool AnimationTimeline::StepViewportUndo(Scene &scene, bool redo)
+    {
+        if (!m_editModel || m_selectedClip < 0 || m_selectedClip >= static_cast<int>(m_editModel->GetAnimations().size()))
+            return false;
+        AnimationClip &clip = m_editModel->GetMutableAnimations()[m_selectedClip];
+        const size_t before = redo ? m_redo.size() : m_undo.size();
+        redo ? Redo(clip) : Undo(clip);
+        if (before == (redo ? m_redo.size() : m_undo.size()))
+            return false;
+        if (AnimationSystem *anim = GetGlobalSystem<AnimationSystem>())
+            ReevaluatePose(scene, anim);
+        return true;
+    }
+
+    std::string AnimationTimeline::HandleAction(const std::string &action, const std::string &argsJson)
+    {
+        using namespace AnimationClipTools;
+        const nlohmann::json args = nlohmann::json::parse(argsJson.empty() ? "{}" : argsJson, nullptr, false);
+        if (args.is_discarded() || !args.is_object())
+            return R"({"ok":false,"error":"invalid args json"})";
+        auto fail = [&](const std::string &message)
+        { return nlohmann::json{{"ok", false}, {"action", action}, {"error", message}}.dump(); };
+        auto ok = [&](nlohmann::json result = nlohmann::json::object())
+        {
+            result["ok"] = true;
+            result["action"] = action;
+            return result.dump();
+        };
+
+        try
+        {
+            RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+            AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
+            if (!renderer || !anim)
+                return fail("animation system not available");
+            Scene &scene = renderer->GetScene();
+            if (m_targetNode && !scene.IsNodeAlive(m_targetNode))
+                m_targetNode = nullptr;
+            std::erase_if(m_animatedNodes, [&](NodeId *node)
+                          { return !scene.IsNodeAlive(node); });
+
+            ModelAsset *model = nullptr;
+            auto &selection = SelectionManager::Instance();
+            if (selection.HasSelection())
+            {
+                NodeId *selected = selection.GetSelectedNode();
+                if (scene.IsNodeAlive(selected))
+                {
+                    m_targetNode = selected;
+                    m_animatedNodes.clear();
+                    CollectAnimatedNodes(scene, anim, selected);
+                    model = !m_animatedNodes.empty() ? scene.GetModelForNode(m_animatedNodes[0])
+                                                     : scene.GetModelForNode(selected);
+                }
+            }
+            if (!model)
+            {
+                const auto &sceneModels = scene.GetModels();
+                const bool editModelAlive =
+                    std::find(sceneModels.begin(), sceneModels.end(), m_editModel) != sceneModels.end();
+                if (editModelAlive)
+                    model = m_editModel;
+                else if (m_editModel)
+                {
+                    ResetEditState();
+                    m_editModel = nullptr;
+                    m_lastModel = nullptr;
+                    m_targetNode = nullptr;
+                    m_animatedNodes.clear();
+                }
+            }
+            if (!model || !model->HasSkeleton() || model->GetAnimations().empty())
+                return fail("no rigged animation target selected");
+            if (model != m_editModel)
+            {
+                ResetEditState();
+                m_editModel = model;
+                m_lastModel = model;
+                m_lastClipCount = static_cast<int>(model->GetAnimations().size());
+                m_selectedClip = 0;
+            }
+
+            NodeId *primary = m_animatedNodes.empty() ? m_targetNode : m_animatedNodes[0];
+            const AnimationNodeState *state = primary ? anim->GetAnimationState(primary) : nullptr;
+            if (state && state->clipIndex >= 0 && state->clipIndex < static_cast<int>(model->GetAnimations().size()))
+                m_selectedClip = state->clipIndex;
+            m_selectedClip = std::clamp(m_selectedClip, 0, static_cast<int>(model->GetAnimations().size()) - 1);
+            AnimationClip &clip = model->GetMutableAnimations()[m_selectedClip];
+            const Skeleton &skeleton = model->GetSkeleton();
+            if (!std::isfinite(clip.duration) || !std::isfinite(clip.ticksPerSecond) || clip.duration < 0.0f ||
+                clip.ticksPerSecond <= 0.0f)
+                return fail("clip timing is invalid");
+            if (!std::isfinite(m_frameTicks) || m_frameTicks <= 0.f)
+                m_frameTicks = DetectFrameTicks(clip);
+            if (!std::isfinite(m_frameTicks) || m_frameTicks <= 0.f)
+                return fail("clip frame grid is invalid");
+            const float sampledFrame = state ? ToFrame(state->time) : 0.f;
+            const float currentFrame = std::isfinite(sampledFrame) ? sampledFrame : 0.f;
+            const float durationFrames = ToFrame(clip.duration);
+
+            auto parseBone = [&](const nlohmann::json &value) -> int
+            {
+                if (value.is_number_integer())
+                    return value.get<int>();
+                if (value.is_string())
+                {
+                    const std::string name = value.get<std::string>();
+                    int bone = skeleton.GetBoneIndex(name);
+                    if (bone >= 0)
+                        return bone;
+                    for (int index = 0; index < skeleton.GetBoneCount(); ++index)
+                        if (skeleton.bones[index].name == name)
+                            return index;
+                }
+                return -1;
+            };
+            auto appendChain = [&](const std::string &text, std::vector<int> &bones)
+            {
+                size_t begin = 0;
+                while (begin <= text.size())
+                {
+                    const size_t end = text.find_first_of(",;", begin);
+                    std::string name = text.substr(begin, end == std::string::npos ? std::string::npos : end - begin);
+                    const size_t first = name.find_first_not_of(" \t\r\n");
+                    const size_t last = name.find_last_not_of(" \t\r\n");
+                    if (first != std::string::npos)
+                    {
+                        name = name.substr(first, last - first + 1);
+                        bones.push_back(parseBone(name));
+                    }
+                    if (end == std::string::npos)
+                        break;
+                    begin = end + 1;
+                }
+            };
+            auto bonesArg = [&](bool ordered)
+            {
+                std::vector<int> bones;
+                const nlohmann::json *value = args.contains("bones")   ? &args["bones"]
+                                              : args.contains("chain") ? &args["chain"]
+                                                                       : nullptr;
+                const bool explicitlySupplied = value != nullptr;
+                if (value && value->is_array())
+                    for (const nlohmann::json &bone : *value)
+                        bones.push_back(parseBone(bone));
+                else if (value && value->is_string())
+                    appendChain(value->get<std::string>(), bones);
+                else if (value)
+                    throw std::invalid_argument("bones/chain must be an array or comma-separated string");
+                else
+                {
+                    for (int bone = 0; bone < static_cast<int>(m_boneSelected.size()); ++bone)
+                        if (m_boneSelected[bone])
+                            bones.push_back(bone);
+                    if (bones.empty() && m_activeBone >= 0)
+                        bones.push_back(m_activeBone);
+                }
+                if (std::any_of(bones.begin(), bones.end(), [&](int bone)
+                                { return bone < 0 || bone >= skeleton.GetBoneCount(); }))
+                    throw std::invalid_argument("bones/chain contains an unknown bone");
+                std::sort(bones.begin(), bones.end());
+                bones.erase(std::unique(bones.begin(), bones.end()), bones.end());
+                if (explicitlySupplied && bones.empty())
+                    throw std::invalid_argument("bones/chain must not be empty");
+                if (ordered)
+                {
+                    auto depth = [&](int bone)
+                    {
+                        int result = 0;
+                        while (bone >= 0 && result <= skeleton.GetBoneCount())
+                        {
+                            bone = skeleton.bones[bone].parentIndex;
+                            ++result;
+                        }
+                        return result;
+                    };
+                    std::stable_sort(bones.begin(), bones.end(), [&](int left, int right)
+                                     { return depth(left) < depth(right); });
+                }
+                return bones;
+            };
+            auto boneArg = [&]()
+            {
+                if (args.contains("bone"))
+                    return parseBone(args["bone"]);
+                return m_activeBone;
+            };
+            auto channelMask = [&]()
+            {
+                if (!args.contains("channels"))
+                    return ChannelMask::All;
+                ChannelMask result = ChannelMask::None;
+                auto add = [&](const std::string &name)
+                {
+                    if (name == "all" || name == "trs")
+                        result = ChannelMask::All;
+                    else if (name == "position" || name == "location")
+                        result = result | ChannelMask::Position;
+                    else if (name == "rotation")
+                        result = result | ChannelMask::Rotation;
+                    else if (name == "scale")
+                        result = result | ChannelMask::Scale;
+                    else
+                        throw std::invalid_argument("unknown channel: " + name);
+                };
+                if (args["channels"].is_string())
+                    add(args["channels"].get<std::string>());
+                else if (args["channels"].is_array())
+                {
+                    for (const auto &name : args["channels"])
+                    {
+                        if (!name.is_string())
+                            throw std::invalid_argument("channels entries must be strings");
+                        add(name.get<std::string>());
+                    }
+                }
+                else
+                    throw std::invalid_argument("channels must be a string or array");
+                if (result == ChannelMask::None)
+                    throw std::invalid_argument("channels must not be empty");
+                return result;
+            };
+            auto commit = [&](const AnimationClip &before, size_t changed)
+            {
+                if (changed == 0)
+                    return;
+                PushUndoSnapshot(before);
+                SelClear();
+                m_fitPending = true;
+                m_curveFitPending = true;
+                ReevaluatePose(scene, anim);
+            };
+
+            if (action == "timeline.motion.analyze")
+            {
+                const Analysis analysis = Analyze(clip, skeleton);
+                for (size_t issue = 0; issue < m_motionIssueCounts.size(); ++issue)
+                    m_motionIssueCounts[issue] = analysis.Count(static_cast<IssueType>(issue));
+                nlohmann::json result = {{"total", analysis.issues.size()},
+                                         {"quaternion_flips", m_motionIssueCounts[0]},
+                                         {"loop_pose_seams", m_motionIssueCounts[1]},
+                                         {"loop_velocity_seams", m_motionIssueCounts[2]},
+                                         {"root_drift", m_motionIssueCounts[3]},
+                                         {"jitter", m_motionIssueCounts[4]},
+                                         {"redundant_keys", m_motionIssueCounts[5]}};
+                const int bone = boneArg();
+                if (args.contains("bone") && (bone < 0 || bone >= skeleton.GetBoneCount()))
+                    return fail("unknown bone");
+                if (bone >= 0 && bone < skeleton.GetBoneCount() && clip.duration > 0.f)
+                {
+                    const WorldDriftResult drift = AnalyzeWorldPositionDrift(clip,
+                                                                             skeleton,
+                                                                             bone,
+                                                                             0.f,
+                                                                             clip.duration,
+                                                                             std::max(m_frameTicks, 0.00001f));
+                    if (drift)
+                        result["selected_bone_world_drift"] = drift.maxDrift;
+                }
+                return ok(result);
+            }
+            if (action == "timeline.motion.fix_quaternions")
+            {
+                const AnimationClip before = clip;
+                const size_t changed = FixQuaternionHemisphereFlips(clip);
+                commit(before, changed);
+                return ok({{"keys_fixed", changed}});
+            }
+            if (action == "timeline.motion.smooth")
+            {
+                const float startFrame = args.value("start_frame", 0.f);
+                const float endFrame = args.value("end_frame", durationFrames);
+                const float strength = args.value("strength", 0.5f);
+                const int passes = args.value("passes", 1);
+                if (!std::isfinite(startFrame) || !std::isfinite(endFrame) || startFrame < 0.0f ||
+                    endFrame > durationFrames || startFrame > endFrame)
+                    return fail("smooth range must be finite and inside the clip");
+                if (!std::isfinite(strength) || strength < 0.0f || strength > 1.0f)
+                    return fail("smooth strength must be between 0 and 1");
+                if (passes < 1 || passes > MaxSmoothPasses)
+                    return fail("smooth passes must be between 1 and " + std::to_string(MaxSmoothPasses));
+                SmoothSettings settings;
+                settings.startTime = ToTicks(startFrame);
+                settings.endTime = ToTicks(endFrame);
+                settings.strength = strength;
+                settings.passes = passes;
+                settings.channels = channelMask();
+                const std::vector<int> bones = bonesArg(false);
+                const AnimationClip before = clip;
+                const size_t changed = Smooth(clip, settings, bones);
+                commit(before, changed);
+                return ok({{"keys_smoothed", changed}});
+            }
+            if (action == "timeline.motion.simplify")
+            {
+                SimplifySettings settings;
+                settings.positionTolerance = args.value("position_tolerance", settings.positionTolerance);
+                settings.rotationToleranceDegrees = args.value("rotation_tolerance_degrees",
+                                                               settings.rotationToleranceDegrees);
+                settings.scaleTolerance = args.value("scale_tolerance", settings.scaleTolerance);
+                if (!std::isfinite(settings.positionTolerance) ||
+                    !std::isfinite(settings.rotationToleranceDegrees) ||
+                    !std::isfinite(settings.scaleTolerance) || settings.positionTolerance < 0.0f ||
+                    settings.rotationToleranceDegrees < 0.0f || settings.scaleTolerance < 0.0f)
+                    return fail("simplify tolerances must be finite and non-negative");
+                settings.channels = channelMask();
+                const std::vector<int> bones = bonesArg(false);
+                const AnimationClip before = clip;
+                const size_t changed = Simplify(clip, settings, bones);
+                commit(before, changed);
+                return ok({{"keys_removed", changed}});
+            }
+            if (action == "timeline.motion.make_cyclic")
+            {
+                const AnimationClip before = clip;
+                const size_t changed = MakeCyclic(clip, channelMask());
+                commit(before, changed);
+                return ok({{"keys_written", changed}});
+            }
+            if (action == "timeline.motion.mirror_pose")
+            {
+                const float sourceFrame = args.value("source_frame", currentFrame);
+                const float targetFrame = args.value("target_frame", currentFrame);
+                if (!std::isfinite(sourceFrame) || !std::isfinite(targetFrame))
+                    return fail("source_frame and target_frame must be finite");
+                const std::vector<int> bones = bonesArg(false);
+                const AnimationClip before = clip;
+                const size_t changed = PasteMirroredPose(clip,
+                                                         skeleton,
+                                                         ToTicks(sourceFrame),
+                                                         ToTicks(targetFrame),
+                                                         bones,
+                                                         args.value("include_center", true),
+                                                         channelMask());
+                commit(before, changed);
+                return ok({{"keys_written", changed}});
+            }
+            if (action == "timeline.motion.breakdown")
+            {
+                const int bone = boneArg();
+                if (bone < 0 || bone >= skeleton.GetBoneCount())
+                    return fail("select a bone or pass bone");
+                const float frame = args.value("frame", currentFrame);
+                const float bias = args.value("bias", 0.5f);
+                if (!std::isfinite(frame) || frame < 0.f || frame > durationFrames)
+                    return fail("frame must be inside the clip range");
+                if (!std::isfinite(bias) || bias < 0.f || bias > 1.f)
+                    return fail("bias must be between 0 and 1");
+                const AnimationClip before = clip;
+                const AnimationPoseTools::BreakdownResult breakdown =
+                    AnimationPoseTools::InsertBreakdown(clip, skeleton, bone, ToTicks(frame), bias);
+                if (!breakdown)
+                    return fail("breakdown insertion failed with status " +
+                                std::to_string(static_cast<int>(breakdown.status)));
+                commit(before, breakdown.keysWritten);
+                return ok({{"bone", bone},
+                           {"frame", frame},
+                           {"bias", breakdown.appliedBias},
+                           {"previous_frame", ToFrame(breakdown.previousTime)},
+                           {"next_frame", ToFrame(breakdown.nextTime)},
+                           {"channel", breakdown.channelIndex},
+                           {"keys_written", breakdown.keysWritten}});
+            }
+            if (action == "timeline.motion.offset_bone")
+            {
+                const std::vector<int> bones = bonesArg(false);
+                if (bones.empty())
+                    return fail("select a bone or pass bones");
+                const float deltaFrames = args.value("delta_frames", 1.f);
+                if (!std::isfinite(deltaFrames) || !std::isfinite(ToTicks(deltaFrames)))
+                    return fail("delta_frames must be finite");
+                const AnimationClip before = clip;
+                size_t changed = 0;
+                for (int bone : bones)
+                    changed += OffsetBoneKeyTimes(clip,
+                                                  bone,
+                                                  ToTicks(deltaFrames),
+                                                  args.value("wrap", false),
+                                                  channelMask());
+                commit(before, changed);
+                return ok({{"bones", bones.size()}, {"keys_touched", changed}});
+            }
+            if (action == "timeline.motion.spring_bake")
+            {
+                const std::vector<int> bones = bonesArg(true);
+                if (bones.empty())
+                    return fail("pass an ordered contiguous chain in bones or chain");
+                SpringBakeSettings settings;
+                settings.framesPerSecond = args.value("fps", clip.ticksPerSecond / m_frameTicks);
+                settings.frameStep = args.value("frame_step", settings.frameStep);
+                settings.stiffness = args.value("stiffness", settings.stiffness);
+                settings.damping = args.value("damping", settings.damping);
+                settings.response = args.value("response", settings.response);
+                settings.drag = args.value("drag", settings.drag);
+                settings.cyclicWarmupCycles = args.value("warmup_cycles", settings.cyclicWarmupCycles);
+                const std::string endpoint = args.value("endpoint", "preserve");
+                if (endpoint == "free")
+                    settings.endpointMode = SpringEndpointMode::Free;
+                else if (endpoint == "cyclic")
+                    settings.endpointMode = SpringEndpointMode::Cyclic;
+                else if (endpoint != "preserve")
+                    return fail("unknown endpoint (free|preserve|cyclic)");
+                const AnimationClip before = clip;
+                const SpringBakeResult baked = BakeSecondarySpring(clip, skeleton, bones, settings);
+                if (!baked)
+                    return fail("spring bake failed with status " + std::to_string(static_cast<int>(baked.status)));
+                commit(before, baked.keysWritten);
+                return ok({{"bones_baked", baked.bonesBaked},
+                           {"keys_written", baked.keysWritten},
+                           {"samples", baked.sampleCount},
+                           {"sample_step_ticks", baked.sampleStepTicks},
+                           {"max_angular_lag_degrees", baked.maxAngularLagDegrees}});
+            }
+            if (action == "timeline.motion.world_drift" || action == "timeline.motion.stabilize_world")
+            {
+                const int bone = boneArg();
+                if (bone < 0 || bone >= skeleton.GetBoneCount())
+                    return fail("select a bone or pass bone");
+                const float start = ToTicks(args.value("start_frame", currentFrame));
+                const float end = ToTicks(args.value("end_frame", durationFrames));
+                const float step = ToTicks(args.value("sample_step_frames", 1.f));
+                if (action == "timeline.motion.world_drift")
+                {
+                    const WorldDriftResult drift = AnalyzeWorldPositionDrift(clip, skeleton, bone, start, end, step);
+                    if (!drift)
+                        return fail("world drift analysis failed with status " +
+                                    std::to_string(static_cast<int>(drift.status)));
+                    return ok({{"bone", bone}, {"samples", drift.sampleCount}, {"max_world_drift", drift.maxDrift}});
+                }
+                int compensation = -1;
+                if (args.contains("compensation_bone"))
+                {
+                    compensation = parseBone(args["compensation_bone"]);
+                    if (compensation < 0 || compensation >= skeleton.GetBoneCount())
+                        return fail("unknown compensation_bone");
+                }
+                const AnimationClip before = clip;
+                const WorldDriftResult stabilized = StabilizeWorldPosition(clip,
+                                                                           skeleton,
+                                                                           bone,
+                                                                           start,
+                                                                           end,
+                                                                           step,
+                                                                           compensation);
+                if (!stabilized)
+                    return fail("world stabilization failed with status " +
+                                std::to_string(static_cast<int>(stabilized.status)));
+                commit(before, stabilized.keysWritten);
+                return ok({{"bone", bone},
+                           {"compensation_bone", stabilized.compensationBoneIndex},
+                           {"samples", stabilized.sampleCount},
+                           {"keys_written", stabilized.keysWritten},
+                           {"max_world_drift_before", stabilized.maxDrift},
+                           {"max_world_drift_after", stabilized.maxRemainingDrift}});
+            }
+            return fail("unknown timeline motion action");
+        }
+        catch (const std::exception &error)
+        {
+            return fail(std::string("invalid action arguments: ") + error.what());
+        }
+    }
+
     bool AnimationTimeline::IsPlaying(AnimationSystem *anim) const
     {
         NodeId *primary = m_animatedNodes.empty() ? nullptr : m_animatedNodes[0];
@@ -461,6 +1230,7 @@ namespace pe
         m_modal = Modal::None;
         m_boxSelecting = false;
         m_pressOnKey = false;
+        EndViewportRotate();
         m_dirty = false;
         m_fitPending = true;
         m_frameTicks = 0.f; // re-detect the frame grid for the new clip
@@ -869,6 +1639,26 @@ namespace pe
         set(chan.rotationKeys, rot);
         set(chan.scaleKeys, scl);
         SortChannelKeys(chan);
+    }
+
+    void AnimationTimeline::SetRotationKey(AnimationClip &clip, int channelIdx, float time, const quat &rot)
+    {
+        AnimationChannel &chan = clip.channels[channelIdx];
+        const int at = FindKeyAtTime(chan.rotationKeys, time);
+        if (at >= 0)
+        {
+            chan.rotationKeys[at].value = glm::normalize(rot);
+            return;
+        }
+        AnimationInterpolation interpolation = AnimationInterpolation::Linear;
+        const auto next = std::lower_bound(chan.rotationKeys.begin(), chan.rotationKeys.end(), time,
+                                           [](const auto &key, float t)
+                                           { return key.time < t; });
+        if (next != chan.rotationKeys.begin() && next != chan.rotationKeys.end())
+            interpolation = std::prev(next)->interpolation;
+        chan.rotationKeys.push_back({time, glm::normalize(rot), interpolation});
+        std::sort(chan.rotationKeys.begin(), chan.rotationKeys.end(), [](const auto &a, const auto &b)
+                  { return a.time < b.time; });
     }
 
     void AnimationTimeline::DeleteKeyframesAtFrame(AnimationClip &clip, int bone, float frame)
@@ -1388,9 +2178,10 @@ namespace pe
             ImGui::SameLine(0.f, 14.f);
         else
             ImGui::SetCursorScreenPos({p.x + 6.f, p.y + m_headerHeight + 4.f});
-        // ponytail: the pose bar always keys the current frame (there is no transient pose buffer); this toggle
-        // will arm viewport bone dragging when that lands.
-        IconButton("##autokey", Icon::Record, "Auto keying: pose bar edits always key the current frame; viewport bone dragging (next drop) will honour this toggle.", false);
+        if (IconButton("##autokey", Icon::Record,
+                       "Auto Key: viewport bone rotation inserts a key at the current frame. When off, only an existing rotation key can be edited.",
+                       m_autoKey))
+            m_autoKey = !m_autoKey;
         ImGui::SameLine();
         if (ImGui::Checkbox("Snap", &m_snap))
         {
@@ -1418,6 +2209,11 @@ namespace pe
                 m_curveFitPending = true;
             ui::ItemTooltip("Show every F-curve scaled to -1..1 so curves with different units share the view.");
         }
+        ImGui::SameLine();
+        if (ImGui::Button("Motion Doctor"))
+            ImGui::OpenPopup("Motion Doctor##timeline");
+        ui::ItemTooltip("Analyze and clean animation curves, mirror poses, bake follow-through, and stabilize a bone in world position.");
+        DrawMotionDoctor();
 
         // Save / undo (right side of the second row)
         ImGui::SameLine(std::max(ImGui::GetCursorPosX() + 14.f, w - 212.f));
@@ -1453,6 +2249,92 @@ namespace pe
         ImGui::PopStyleVar(2);
         ImGui::SetCursorScreenPos({p.x, p.y + m_headerHeight * 2.f});
         return false;
+    }
+
+    void AnimationTimeline::DrawMotionDoctor()
+    {
+        ImGui::SetNextWindowSize({430.f, 0.f}, ImGuiCond_Appearing);
+        if (!ImGui::BeginPopup("Motion Doctor##timeline"))
+            return;
+
+        auto run = [&](const char *action, const nlohmann::json &args = nlohmann::json::object())
+        {
+            m_motionStatus = HandleAction(action, args.dump());
+        };
+        if (ImGui::Button("Analyze Clip"))
+            run("timeline.motion.analyze");
+        ui::ItemTooltip("Scan the action for quaternion flips, loop seams, root drift, jitter spikes and redundant keys. Changes nothing.");
+        ImGui::SameLine();
+        ImGui::TextDisabled("Q %zu  Pose %zu  Vel %zu  Drift %zu  Jitter %zu  Extra %zu",
+                            m_motionIssueCounts[0],
+                            m_motionIssueCounts[1],
+                            m_motionIssueCounts[2],
+                            m_motionIssueCounts[3],
+                            m_motionIssueCounts[4],
+                            m_motionIssueCounts[5]);
+        ui::ItemTooltip("Issues found by the last Analyze: Q quaternion hemisphere flips, Pose and Vel loop seams between the last and first frame, Drift root drift, Jitter velocity spikes, Extra redundant keys.");
+
+        if (ImGui::Button("Fix Quats"))
+            run("timeline.motion.fix_quaternions");
+        ui::ItemTooltip("Negate rotation keys into the previous key's hemisphere so interpolation stops taking the long way round.");
+        ImGui::SameLine();
+        if (ImGui::Button("Smooth Selected"))
+            run("timeline.motion.smooth");
+        ui::ItemTooltip("Average the interior keys of the selected bones; the first and last key of every curve stay put.");
+        ImGui::SameLine();
+        if (ImGui::Button("Simplify Selected"))
+            run("timeline.motion.simplify");
+        ui::ItemTooltip("Drop the selected bones' keys that the curve through their kept neighbours already reproduces within tolerance.");
+        if (ImGui::Button("Make Cyclic"))
+            run("timeline.motion.make_cyclic");
+        ui::ItemTooltip("Write the frame-zero pose onto the end of the action so it loops without a pop.");
+        ImGui::SameLine();
+        if (ImGui::Button("Paste Mirrored Pose"))
+            run("timeline.motion.mirror_pose");
+        ui::ItemTooltip("Mirror the current pose across the rig X plane onto the current frame, swapping .L and .R bones.");
+
+        ImGui::SetNextItemWidth(180.f);
+        ImGui::SliderFloat("Breakdown bias", &m_breakdownBias, 0.f, 1.f, "%.2f");
+        ui::ItemTooltip("Where the breakdown sits between the surrounding keys: 0 is the previous pose, 1 the next.");
+        ImGui::SameLine();
+        if (ImGui::Button("Insert Breakdown"))
+            run("timeline.motion.breakdown", {{"bias", m_breakdownBias}});
+        ui::ItemTooltip("Write one complete pose for the active bone at the current frame, biased between its surrounding keys.");
+
+        ImGui::Separator();
+        ImGui::SetNextItemWidth(90.f);
+        ImGui::InputInt("Frame offset", &m_motionOffsetFrames);
+        ui::ItemTooltip("Frames to shift keys by; negative values shift them earlier.");
+        ImGui::SameLine();
+        if (ImGui::Button("Offset Selected Bones"))
+            run("timeline.motion.offset_bone", {{"delta_frames", m_motionOffsetFrames}});
+        ui::ItemTooltip("Slide the selected bones' keys in time, so a chain stops moving in mechanical lockstep.");
+        ImGui::SetNextItemWidth(-1.f);
+        ImGui::InputTextWithHint("##springchain",
+                                 "ordered chain: scarf.01, scarf.02, scarf.03",
+                                 m_springChainBuf,
+                                 sizeof(m_springChainBuf));
+        ui::ItemTooltip("Directly parented bones from root to tip, comma separated.");
+        if (ImGui::Button("Bake Spring Chain"))
+            run("timeline.motion.spring_bake", {{"chain", m_springChainBuf}});
+        ui::ItemTooltip("Simulate the chain above as a damped spring and bake the result as ordinary rotation keys.");
+        ImGui::SameLine();
+        if (ImGui::Button("Measure World Drift"))
+            run("timeline.motion.world_drift");
+        ui::ItemTooltip("Report how far the active bone travels in world space over the action. Changes nothing.");
+        ImGui::SameLine();
+        if (ImGui::Button("Stabilize World Position"))
+            run("timeline.motion.stabilize_world");
+        ui::ItemTooltip("Pin the active bone at its start world position by baking compensation into an ancestor - this is how a sliding foot gets planted.");
+
+        if (!m_motionStatus.empty())
+        {
+            ImGui::Separator();
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 410.f);
+            ImGui::TextDisabled("%s", m_motionStatus.c_str());
+            ImGui::PopTextWrapPos();
+        }
+        ImGui::EndPopup();
     }
 
     void AnimationTimeline::DrawClipPopups(Scene &scene, AnimationSystem *anim, ModelAsset *model)

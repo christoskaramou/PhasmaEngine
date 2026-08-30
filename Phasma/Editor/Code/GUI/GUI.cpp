@@ -993,14 +993,40 @@ namespace pe
         addAction("timeline.play", "Animation Timeline: Play / Pause The Action (args: play bool, reverse bool)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.clip", "Animation Timeline: Select Or Create An Action (args: name, end frames, fps)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.pose", "Animation Timeline: Key A Bone Pose Relative To The Bind Pose (args: bone, frame, loc[3], rot[3] degrees, scale[3])", "Timeline", "command", hasTimeline, false, false);
-        const bool hasRig = GetWidget<RigEditor>() != nullptr;
+        addAction("timeline.motion.analyze", "Motion Doctor: Analyze Quaternion Flips, Pops, Jitter, Loop Seam, Root Drift And Selected-Bone Sliding (optional bone)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.motion.fix_quaternions", "Motion Doctor: Fix Quaternion Hemisphere Flips", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.motion.smooth", "Motion Doctor: Smooth Keys (optional bones, frame range, strength, passes, channels)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.motion.simplify", "Motion Doctor: Simplify Curves (optional bones, tolerances, channels)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.motion.make_cyclic", "Motion Doctor: Make The Selected Clip Cyclic (optional channels)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.motion.breakdown", "Motion Doctor: Insert A Biased Breakdown Pose (bone or active bone; optional frame and bias 0..1)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.motion.mirror_pose", "Motion Doctor: Paste Mirrored Pose (optional bones, source_frame, target_frame, include_center, channels)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.motion.offset_bone", "Motion Doctor: Offset Bone Keys In Time (bone or bones, delta_frames, wrap, channels)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.motion.spring_bake", "Motion Doctor: Bake Spring Follow-Through (ordered bones chain; optional spring settings)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.motion.world_drift", "Motion Doctor: Measure A Bone's World Drift (bone; optional frame range and sampling)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.motion.stabilize_world", "Motion Doctor: Stabilize A Bone In World Space (bone; optional compensation bone, frame range and sampling)", "Timeline", "command", hasTimeline, false, false);
+        RigEditor *rig = GetWidget<RigEditor>();
+        const bool hasRig = rig != nullptr;
         addAction("rig.state", "Rig Editor: Dump The Rig Document (bones, shapes, selection)", "Rig", "command", hasRig, false, false);
-        addAction("rig.preset", "Rig Editor: Build Bones (args: preset auto|humanoid|existing|clear)", "Rig", "command", hasRig, false, false);
+        addAction("rig.reference_load", "Rig Editor: Load A .reference.json Image Sequence (args: path)", "Rig", "command", hasRig, false, false);
+        addAction("rig.reference_clear", "Rig Editor: Clear The Viewport Reference Sequence", "Rig", "command", hasRig, false, false);
+        addAction("rig.mode", "Rig Editor: Set Mode (args: mode edit|pose)", "Rig", "command", hasRig, false, false);
+        addAction("rig.preset", "Rig Editor: Build Bones (args: preset, id or name; auto|existing|clear, a builtin_presets id, or project data from Assets/RigPresets)", "Rig", "command", hasRig, false, false);
+        if (rig)
+        {
+            const nlohmann::json projectPresets = nlohmann::json::parse(rig->ProjectPresetsJson(), nullptr, false);
+            if (!projectPresets.is_discarded())
+            {
+                result["actions"].back()["builtin_presets"] = projectPresets.value("builtin", nlohmann::json::array());
+                result["actions"].back()["project_presets"] = projectPresets.value("presets", nlohmann::json::array());
+                result["actions"].back()["preset_errors"] = projectPresets.value("errors", nlohmann::json::array());
+            }
+        }
+        addAction("rig.transform", "Rig Editor: Move / Rotate / Scale Every Bone (args: move[3], rotate[3] degrees, scale number|[3], pivot feet|centre|origin)", "Rig", "command", hasRig, false, false);
         addAction("rig.add", "Rig Editor: Add Bone (args: name, parent, head[3], tail[3], radius_head, radius_tail, rigid)", "Rig", "command", hasRig, false, false);
         addAction("rig.set", "Rig Editor: Edit Bone (args: bone name|index, name, parent, head, tail, radius_head, radius_tail, rigid, spline, shell)", "Rig", "command", hasRig, false, false);
         addAction("rig.chain", "Rig Editor: Subdivide A Bone Into A Spline Chain (args: bone name|index, count)", "Rig", "command", hasRig, false, false);
         addAction("rig.remove", "Rig Editor: Remove Bone (args: bone)", "Rig", "command", hasRig, false, false);
-        addAction("rig.select", "Rig Editoimage.pngr: Select Bone (args: bone)", "Rig", "command", hasRig, false, false);
+        addAction("rig.select", "Rig Editor: Select Bone (args: bone)", "Rig", "command", hasRig, false, false);
         addAction("rig.save", "Rig Editor: Save <model>.rig.json Beside The .pemesh", "Rig", "command", hasRig, false, false);
         addAction("rig.load", "Rig Editor: Load <model>.rig.json", "Rig", "command", hasRig, false, false);
         addAction("rig.bake", "Rig Editor: Bake The Rig Into <model>_rigged.pemesh And Swap It Into The Scene", "Rig", "command", hasRig, false, false);
@@ -1008,6 +1034,10 @@ namespace pe
         addAction("rig.snap", "Rig Editor: Snapping (args: enabled, mode joints|surface|volume|increment)", "Rig", "command", hasRig, false, false);
         addAction("rig.mirror", "Rig Editor: X-Mirror .L/.R Edits (args: enabled)", "Rig", "command", hasRig, false, false);
         addAction("rig.heat", "Rig Editor: Weight Heat Map On The Mesh (args: mode off|selected|all)", "Rig", "command", hasRig, false, false);
+        addAction("rig.weight_stroke", "Rig Editor: Joint Blend Stroke On Current Posed Mesh (args: bone name|index, center[3] in posed rig space, mode add|erase|smooth, radius, strength, optional smooth_radius)", "Rig", "command", hasRig, false, false);
+        addAction("rig.weight_undo", "Rig Editor: Undo One Joint Blend Drag", "Rig", "command", hasRig, false, false);
+        addAction("rig.weight_redo", "Rig Editor: Redo One Joint Blend Drag", "Rig", "command", hasRig, false, false);
+        addAction("rig.weight_save", "Rig Editor: Explicitly Save Current Weights To The Current .pemesh", "Rig", "command", hasRig, false, false);
         addAction("rig.undo", "Rig Editor: Undo", "Rig", "command", hasRig, false, false);
         addAction("rig.redo", "Rig Editor: Redo", "Rig", "command", hasRig, false, false);
 
@@ -1158,7 +1188,7 @@ namespace pe
                 timeline->RequestPose(pose);
                 return ok();
             }
-            return R"({"error":"unknown timeline action"})";
+            return timeline->HandleAction(action, argsJson);
         }
 
         // Map Painter programmatic route: lets agents paint voxel terrain maps without mouse input.
