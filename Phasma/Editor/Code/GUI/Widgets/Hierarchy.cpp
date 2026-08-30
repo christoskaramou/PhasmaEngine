@@ -1198,7 +1198,7 @@ namespace pe
         {
             ImGui::InputText("Name", s_renameBuf, IM_ARRAYSIZE(s_renameBuf));
             ui::ItemTooltip("Edit the node or emitter display name.");
-            if (ImGui::Button("OK", ImVec2(120, 0)))
+            if (ImGui::Button("OK", ui::DialogButtonSize("OK", 9.2f)))
             {
                 if (s_renameEmitterIndex >= 0)
                 {
@@ -1242,7 +1242,7 @@ namespace pe
             }
             ui::ItemTooltip("Apply the new name.");
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            if (ImGui::Button("Cancel", ui::DialogButtonSize("Cancel", 9.2f)))
             {
                 s_renameNode = nullptr;
                 s_renameEmitterIndex = -1;

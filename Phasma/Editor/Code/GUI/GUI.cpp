@@ -991,6 +991,7 @@ namespace pe
         addAction("timeline.bone", "Animation Timeline: Select Bone Channel (args: bone name)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.save", "Animation Timeline: Save Clips Into The Model's .pemesh", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.play", "Animation Timeline: Play / Pause The Action (args: play bool, reverse bool)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.undo", "Animation Timeline: Undo / Redo The Last Clip Edit (args: redo bool)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.clip", "Animation Timeline: Select Or Create An Action (args: name, end frames, fps)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.pose", "Animation Timeline: Key A Bone Pose Relative To The Bind Pose (args: bone, frame, loc[3], rot[3] degrees, scale[3])", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.analyze", "Motion Doctor: Analyze Quaternion Flips, Pops, Jitter, Loop Seam, Root Drift And Selected-Bone Sliding (optional bone)", "Timeline", "command", hasTimeline, false, false);
@@ -1030,6 +1031,9 @@ namespace pe
         addAction("rig.save", "Rig Editor: Save <model>.rig.json Beside The .pemesh", "Rig", "command", hasRig, false, false);
         addAction("rig.load", "Rig Editor: Load <model>.rig.json", "Rig", "command", hasRig, false, false);
         addAction("rig.bake", "Rig Editor: Bake The Rig Into <model>_rigged.pemesh And Swap It Into The Scene", "Rig", "command", hasRig, false, false);
+        addAction("rig.pin", "Rig Editor: Pin / Unpin A Bone So Grab Pulls From Its Children Stop There (args: bone, pinned bool; omit pinned to toggle)", "Rig", "command", hasRig, false, false);
+        addAction("rig.grab", "Rig Editor: Pull A Bone's Tail To A Rig-Space Point, Bending The Chain Up To The First Pin (args: bone, target[3])", "Rig", "command", hasRig, false, false);
+        addAction("rig.lock", "Rig Editor: Pin A Bone's Tail To A Point On Another Bone Or In Rig Space, Solved With Two-Bone IK After Every Pose Edit (args: op list|add|remove|set|solve|bake, bone, target, anchor[3], reach 0.3-1, enabled, index)", "Rig", "command", hasRig, false, false);
         addAction("rig.shapes", "Rig Editor: Show Influence Shapes (args: show)", "Rig", "command", hasRig, false, false);
         addAction("rig.snap", "Rig Editor: Snapping (args: enabled, mode joints|surface|volume|increment)", "Rig", "command", hasRig, false, false);
         addAction("rig.mirror", "Rig Editor: X-Mirror .L/.R Edits (args: enabled)", "Rig", "command", hasRig, false, false);
@@ -1101,7 +1105,24 @@ namespace pe
         return nlohmann::json{{"error", "unknown editor window: " + windowName}, {"known_windows", known}}.dump();
     }
 
+    // Agent arguments are untrusted: a wrong JSON type must come back as an error, never unwind the host.
     std::string GUI::InvokeEditorAction(const std::string &actionId, const std::string &argsJson)
+    {
+        try
+        {
+            return InvokeEditorActionChecked(actionId, argsJson);
+        }
+        catch (const std::exception &e)
+        {
+            return nlohmann::json{{"error", std::string("invalid action arguments: ") + e.what()}}.dump();
+        }
+        catch (...)
+        {
+            return R"({"error":"invalid action arguments"})";
+        }
+    }
+
+    std::string GUI::InvokeEditorActionChecked(const std::string &actionId, const std::string &argsJson)
     {
         const std::string action = NormalizeEditorActionId(actionId);
         const nlohmann::json args = ParseEditorActionArgs(argsJson);
@@ -1159,6 +1180,15 @@ namespace pe
                 timeline->RequestPlay(args.value("play", true), args.value("reverse", false));
                 return ok();
             }
+            if (action == "timeline.undo")
+            {
+                RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+                if (!renderer)
+                    return R"({"error":"renderer not available"})";
+                return timeline->StepViewportUndo(renderer->GetScene(), args.value("redo", false))
+                           ? ok()
+                           : R"({"error":"nothing to undo"})";
+            }
             if (action == "timeline.clip")
             {
                 AnimationTimeline::PendingClip clip;
@@ -1177,14 +1207,24 @@ namespace pe
                 pose.frame = args.value("frame", -1.f);
                 auto readVec = [&](const char *key, vec3 &out, int bit)
                 {
-                    if (!args.contains(key) || !args[key].is_array() || args[key].size() != 3)
+                    if (!args.contains(key) || !args[key].is_array() || args[key].size() != 3 ||
+                        !std::all_of(args[key].begin(), args[key].end(),
+                                     [](const nlohmann::json &c)
+                                     { return c.is_number(); }))
                         return;
-                    out = vec3(args[key][0].get<float>(), args[key][1].get<float>(), args[key][2].get<float>());
+                    const vec3 v(args[key][0].get<float>(), args[key][1].get<float>(), args[key][2].get<float>());
+                    if (!std::isfinite(v.x) || !std::isfinite(v.y) || !std::isfinite(v.z))
+                        return;
+                    out = v;
                     pose.mask |= bit;
                 };
                 readVec("loc", pose.loc, 1);
                 readVec("rot", pose.rot, 2);
                 readVec("scale", pose.scl, 4);
+                // A typo ("rot":[0,90]) must fail, not silently key the full sampled TRS at this frame.
+                if (pose.mask == 0)
+                    return nlohmann::json{{"error", "give loc[3], rot[3] or scale[3] (three finite numbers each)"}}
+                        .dump();
                 timeline->RequestPose(pose);
                 return ok();
             }
@@ -2166,7 +2206,7 @@ namespace pe
             ImGui::Text("Current scene has unsaved changes.\nDo you want to save before loading?");
             ImGui::Dummy(ImVec2(0, 10));
 
-            if (ImGui::Button("Save", ImVec2(80, 0)))
+            if (ImGui::Button("Save", ui::DialogButtonSize("Save", 6.2f)))
             {
                 RendererSystem *rs = GetGlobalSystem<RendererSystem>();
                 if (rs)
@@ -2182,14 +2222,14 @@ namespace pe
             }
             ui::ItemTooltip("Save the current scene, then continue loading another scene.");
             ImGui::SameLine();
-            if (ImGui::Button("Don't Save", ImVec2(80, 0)))
+            if (ImGui::Button("Don't Save", ui::DialogButtonSize("Don't Save", 6.2f)))
             {
                 ImGui::CloseCurrentPopup();
                 OpenLoadSceneDialog();
             }
             ui::ItemTooltip("Discard unsaved changes and continue loading another scene.");
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(80, 0)))
+            if (ImGui::Button("Cancel", ui::DialogButtonSize("Cancel", 6.2f)))
             {
                 ImGui::CloseCurrentPopup();
             }
@@ -2227,7 +2267,7 @@ namespace pe
             ImGui::Text("Current scene has unsaved changes.\nDo you want to save before creating a new scene?");
             ImGui::Dummy(ImVec2(0, 10));
 
-            if (ImGui::Button("Save", ImVec2(80, 0)))
+            if (ImGui::Button("Save", ui::DialogButtonSize("Save", 6.2f)))
             {
                 RendererSystem *rs = GetGlobalSystem<RendererSystem>();
                 if (rs)
@@ -2245,7 +2285,7 @@ namespace pe
             }
             ui::ItemTooltip("Save the current scene, then create a new scene.");
             ImGui::SameLine();
-            if (ImGui::Button("Don't Save", ImVec2(80, 0)))
+            if (ImGui::Button("Don't Save", ui::DialogButtonSize("Don't Save", 6.2f)))
             {
                 RendererSystem *rs = GetGlobalSystem<RendererSystem>();
                 if (rs)
@@ -2258,7 +2298,7 @@ namespace pe
             }
             ui::ItemTooltip("Discard unsaved changes and create a new scene.");
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(80, 0)))
+            if (ImGui::Button("Cancel", ui::DialogButtonSize("Cancel", 6.2f)))
                 ImGui::CloseCurrentPopup();
             ui::ItemTooltip("Cancel creating a new scene.");
 
@@ -2395,7 +2435,7 @@ namespace pe
             ImGui::Text("'%s' already exists.\nDo you want to overwrite it?", filename.c_str());
             ImGui::Separator();
 
-            if (ImGui::Button("Overwrite", ImVec2(120, 0)))
+            if (ImGui::Button("Overwrite", ui::DialogButtonSize("Overwrite", 9.2f)))
             {
                 auto savePath = m_pendingSavePath;
                 auto saveAsync = [savePath]()
@@ -2410,7 +2450,7 @@ namespace pe
             }
             ui::ItemTooltip("Overwrite the existing scene file.");
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            if (ImGui::Button("Cancel", ui::DialogButtonSize("Cancel", 9.2f)))
             {
                 m_pendingSavePath.clear();
                 m_showOverwriteConfirmation = false;
@@ -2714,7 +2754,7 @@ namespace pe
             ImGui::Separator();
             ImGui::Dummy(ImVec2(0, 4));
 
-            if (ImGui::Button("Save & Exit", ImVec2(110, 0)))
+            if (ImGui::Button("Save & Exit", ui::DialogButtonSize("Save & Exit", 8.5f)))
             {
                 if (rs)
                 {
@@ -2735,7 +2775,7 @@ namespace pe
             }
             ui::ItemTooltip("Save the current scene, then exit the editor.");
             ImGui::SameLine();
-            if (ImGui::Button("Discard & Exit", ImVec2(110, 0)))
+            if (ImGui::Button("Discard & Exit", ui::DialogButtonSize("Discard & Exit", 8.5f)))
             {
                 SaveEditorConfig();
                 EventSystem::PushEvent(EventType::Quit);
@@ -2743,7 +2783,7 @@ namespace pe
             }
             ui::ItemTooltip("Exit the editor without saving scene changes.");
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(80, 0)))
+            if (ImGui::Button("Cancel", ui::DialogButtonSize("Cancel", 6.2f)))
                 ImGui::CloseCurrentPopup();
             ui::ItemTooltip("Cancel exit and return to the editor.");
 

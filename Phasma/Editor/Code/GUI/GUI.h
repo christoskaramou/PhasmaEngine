@@ -55,6 +55,7 @@ namespace pe
         std::string QueryEditorActions();
         std::string SetEditorWindowOpen(const std::string &windowName, const std::string &argsJson);
         std::string InvokeEditorAction(const std::string &actionId, const std::string &argsJson);
+        std::string InvokeEditorActionChecked(const std::string &actionId, const std::string &argsJson);
 
         // Called after the window is shown to apply the correct layout
         void ApplyStartupLayout(bool restoreLastScene, const RuntimeStartupSceneSelection &startupScene);

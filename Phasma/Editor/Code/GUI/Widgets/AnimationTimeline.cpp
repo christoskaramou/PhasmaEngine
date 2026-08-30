@@ -363,6 +363,55 @@ namespace pe
             CollectAnimatedNodes(scene, anim, child);
     }
 
+    // Selecting one part of a character must drive the whole character: climb from the selection to the
+    // highest ancestor whose animated nodes all belong to the selection's model (scene loads register
+    // rigs as plain group nodes, so the model root cannot be looked up directly).
+    namespace
+    {
+        // True when any node under root draws a model other than `model`: such a group (a prop shelf,
+        // the scene root) is a character boundary and is never adopted as the animation root.
+        bool SubtreeHasOtherModel(Scene &scene, NodeId *root, ModelAsset *model)
+        {
+            ModelAsset *owner = scene.GetModelForNode(root);
+            if (owner && owner != model)
+                return true;
+            for (NodeId *child : scene.GetChildren(root))
+                if (SubtreeHasOtherModel(scene, child, model))
+                    return true;
+            return false;
+        }
+    } // namespace
+
+    NodeId *AnimationTimeline::AnimationRootOf(Scene &scene, AnimationSystem *anim, NodeId *selected)
+    {
+        std::vector<NodeId *> keep = std::move(m_animatedNodes);
+        ModelAsset *model = nullptr;
+        NodeId *root = selected;
+        for (NodeId *node = selected; node && scene.IsNodeAlive(node); node = scene.GetParent(node))
+        {
+            m_animatedNodes.clear();
+            CollectAnimatedNodes(scene, anim, node);
+            if (m_animatedNodes.empty())
+            {
+                // An empty bone / group node: keep climbing inside the character, but a top-level empty
+                // (camera, light, the scene root) is not part of any character.
+                if (model || !scene.GetParent(node) || !scene.GetParent(scene.GetParent(node)))
+                    break;
+                continue;
+            }
+            ModelAsset *first = scene.GetModelForNode(m_animatedNodes[0]);
+            if (!model)
+                model = first;
+            const bool sameModel = std::all_of(m_animatedNodes.begin(), m_animatedNodes.end(), [&](NodeId *n)
+                                               { return scene.GetModelForNode(n) == model; });
+            if (!sameModel || SubtreeHasOtherModel(scene, node, model))
+                break;
+            root = node;
+        }
+        m_animatedNodes = std::move(keep);
+        return model ? root : selected;
+    }
+
     void AnimationTimeline::EnsureStates(Scene &scene, AnimationSystem *anim, float keepFrame)
     {
         for (NodeId *node : m_animatedNodes)
@@ -430,15 +479,44 @@ namespace pe
         if (!model || model != m_editModel || m_selectedClip < 0 ||
             m_selectedClip >= static_cast<int>(model->GetAnimations().size()))
             return false;
-
         NodeId *node = m_animatedNodes.empty() ? m_targetNode : m_animatedNodes[0];
         AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
         const AnimationNodeState *state = anim && node ? anim->GetAnimationState(node) : nullptr;
         const AnimationClip &clip = model->GetAnimations()[m_selectedClip];
         const float frameTicks = m_frameTicks > 0.f ? m_frameTicks : DetectFrameTicks(clip);
-        const float time = std::clamp((state ? state->time : 0.f) + frameOffset * frameTicks,
-                                      0.f,
-                                      std::max(clip.duration, 0.f));
+        return SampleViewportPoseTicks(model, (state ? state->time : 0.f) + frameOffset * frameTicks, out);
+    }
+
+    bool AnimationTimeline::SampleViewportPoseAtFrame(ModelAsset *model, float frame, ViewportPose &out) const
+    {
+        out = {};
+        if (!model || model != m_editModel || m_selectedClip < 0 ||
+            m_selectedClip >= static_cast<int>(model->GetAnimations().size()))
+            return false;
+        const AnimationClip &clip = model->GetAnimations()[m_selectedClip];
+        const float frameTicks = m_frameTicks > 0.f ? m_frameTicks : DetectFrameTicks(clip);
+        return SampleViewportPoseTicks(model, frame * frameTicks, out);
+    }
+
+    bool AnimationTimeline::GetClipEndFrame(ModelAsset *model, float &endFrame) const
+    {
+        endFrame = 0.f;
+        if (!model || model != m_editModel || m_selectedClip < 0 ||
+            m_selectedClip >= static_cast<int>(model->GetAnimations().size()))
+            return false;
+        const AnimationClip &clip = model->GetAnimations()[m_selectedClip];
+        const float frameTicks = m_frameTicks > 0.f ? m_frameTicks : DetectFrameTicks(clip);
+        if (frameTicks <= 0.f || !std::isfinite(clip.duration))
+            return false;
+        endFrame = std::max(clip.duration, 0.f) / frameTicks;
+        return true;
+    }
+
+    bool AnimationTimeline::SampleViewportPoseTicks(ModelAsset *model, float ticks, ViewportPose &out) const
+    {
+        NodeId *node = m_animatedNodes.empty() ? m_targetNode : m_animatedNodes[0];
+        const AnimationClip &clip = model->GetAnimations()[m_selectedClip];
+        const float time = std::clamp(ticks, 0.f, std::max(clip.duration, 0.f));
         const Skeleton &skeleton = model->GetSkeleton();
         std::vector<mat4> jointMatrices;
         AnimationEvaluator::EvaluatePose(clip, skeleton, time, jointMatrices);
@@ -451,10 +529,20 @@ namespace pe
         return !out.boneTransforms.empty();
     }
 
-    bool AnimationTimeline::KeyViewportGlobalRotations(Scene &scene, ModelAsset *model,
-                                                       std::span<const GlobalBoneRotation> rotations)
+    bool AnimationTimeline::PushViewportUndo(ModelAsset *model)
     {
-        if (!model || model != m_editModel || rotations.size() < 2 || m_selectedClip < 0 ||
+        if (!model || model != m_editModel || m_selectedClip < 0 ||
+            m_selectedClip >= static_cast<int>(model->GetAnimations().size()))
+            return false;
+        PushUndo(model->GetMutableAnimations()[m_selectedClip]);
+        return true;
+    }
+
+    bool AnimationTimeline::KeyViewportGlobalRotations(Scene &scene, ModelAsset *model,
+                                                       std::span<const GlobalBoneRotation> rotations, float frame,
+                                                       bool pushUndo)
+    {
+        if (!model || model != m_editModel || rotations.empty() || m_selectedClip < 0 ||
             m_selectedClip >= static_cast<int>(model->GetAnimations().size()))
             return false;
 
@@ -475,7 +563,7 @@ namespace pe
         for (int bone = 0; bone < skeleton.GetBoneCount(); ++bone)
             if (requested[bone])
                 bones.push_back(bone);
-        if (bones.size() < 2)
+        if (bones.empty())
             return false;
         auto depth = [&](int bone)
         {
@@ -496,7 +584,8 @@ namespace pe
         NodeId *node = m_animatedNodes.empty() ? m_targetNode : m_animatedNodes[0];
         AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
         const AnimationNodeState *state = anim && node ? anim->GetAnimationState(node) : nullptr;
-        const float time = ToTicks(std::round(state ? ToFrame(state->time) : 0.f));
+        const float time = ToTicks(std::round(frame >= 0.f ? frame : state ? ToFrame(state->time)
+                                                                           : 0.f));
 
         std::vector<mat4> joints;
         AnimationEvaluator::EvaluatePose(clip, skeleton, time, joints);
@@ -578,14 +667,16 @@ namespace pe
                 rotation.value = quat(-rotation.value.w, -rotation.value.x, -rotation.value.y, -rotation.value.z);
             SetRotationKey(clip, channel, time, rotation.value);
         }
-        PushUndoSnapshot(before);
+        if (pushUndo)
+            PushUndoSnapshot(before);
+        m_dirty = true;
         SelClear();
         if (anim)
             ReevaluatePose(scene, anim);
         return true;
     }
 
-    bool AnimationTimeline::CanViewportRotate(ModelAsset *model, int bone) const
+    bool AnimationTimeline::CanViewportRotate(ModelAsset *model, int bone, bool rotate, bool translate) const
     {
         if (!model || model != m_editModel || bone < 0 || bone >= model->GetSkeleton().GetBoneCount() ||
             m_selectedClip < 0 || m_selectedClip >= static_cast<int>(model->GetAnimations().size()) || m_frameTicks <= 0.f)
@@ -601,12 +692,13 @@ namespace pe
         AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
         const AnimationNodeState *state = anim && node ? anim->GetAnimationState(node) : nullptr;
         const float time = ToTicks(std::round(state ? ToFrame(state->time) : 0.f));
-        return FindKeyAtTime(clip.channels[channel].rotationKeys, time) >= 0;
+        return (rotate && FindKeyAtTime(clip.channels[channel].rotationKeys, time) >= 0) ||
+               (translate && FindKeyAtTime(clip.channels[channel].positionKeys, time) >= 0);
     }
 
-    bool AnimationTimeline::BeginViewportRotate(Scene &scene, ModelAsset *model, int bone)
+    bool AnimationTimeline::BeginViewportRotate(Scene &scene, ModelAsset *model, int bone, bool rotate, bool translate)
     {
-        if (!CanViewportRotate(model, bone))
+        if (!CanViewportRotate(model, bone, rotate, translate))
             return false;
         if (m_viewportRotateActive)
             return m_viewportRotateBone == bone;
@@ -625,7 +717,7 @@ namespace pe
     }
 
     bool AnimationTimeline::UpdateViewportRotate(Scene &scene, ModelAsset *model, int bone, const mat4 &boneTransform,
-                                                 int mirrorBone)
+                                                 int mirrorBone, bool rotate, bool translate)
     {
         if (!m_viewportRotateActive || m_viewportRotateBone != bone || model != m_editModel ||
             m_selectedClip < 0 || m_selectedClip >= static_cast<int>(model->GetAnimations().size()))
@@ -660,7 +752,8 @@ namespace pe
             const mat4 local = info.parentIndex >= 0 && info.parentIndex < static_cast<int>(globalTransforms.size())
                                    ? glm::inverse(globalTransforms[info.parentIndex]) * desiredGlobal
                                    : desiredGlobal;
-            const quat rotation = rotationOf(glm::inverse(info.intermediatePrefix) * local);
+            const mat4 localBone = glm::inverse(info.intermediatePrefix) * local;
+            const quat rotation = rotationOf(localBone);
             int channel = ChannelForBone(clip, targetBone);
             if (channel < 0)
             {
@@ -668,9 +761,11 @@ namespace pe
                     return;
                 channel = EnsureChannel(clip, targetBone);
             }
-            if (!m_autoKey && FindKeyAtTime(clip.channels[channel].rotationKeys, m_viewportRotateTime) < 0)
-                return;
-            SetRotationKey(clip, channel, m_viewportRotateTime, rotation);
+            if (rotate && (m_autoKey || FindKeyAtTime(clip.channels[channel].rotationKeys, m_viewportRotateTime) >= 0))
+                SetRotationKey(clip, channel, m_viewportRotateTime, rotation);
+            if (translate &&
+                (m_autoKey || FindKeyAtTime(clip.channels[channel].positionKeys, m_viewportRotateTime) >= 0))
+                SetPositionKey(clip, channel, m_viewportRotateTime, vec3(localBone[3]));
         };
 
         writeGlobalRotation(bone, boneTransform);
@@ -681,7 +776,9 @@ namespace pe
             const quat mirroredRotation = rotationOf(reflection * glm::mat4_cast(rotationOf(boneTransform)) * reflection);
             const mat4 &current = rigTransforms[mirrorBone];
             const vec3 scale(glm::length(vec3(current[0])), glm::length(vec3(current[1])), glm::length(vec3(current[2])));
-            const mat4 mirroredTransform = glm::translate(mat4(1.f), vec3(current[3])) * glm::mat4_cast(mirroredRotation) *
+            const vec3 mirroredPosition = translate ? vec3(-boneTransform[3].x, boneTransform[3].y, boneTransform[3].z)
+                                                    : vec3(current[3]);
+            const mat4 mirroredTransform = glm::translate(mat4(1.f), mirroredPosition) * glm::mat4_cast(mirroredRotation) *
                                            glm::scale(mat4(1.f), scale);
             writeGlobalRotation(mirrorBone, mirroredTransform);
         }
@@ -700,7 +797,11 @@ namespace pe
 
     bool AnimationTimeline::StepViewportUndo(Scene &scene, bool redo)
     {
-        if (!m_editModel || m_selectedClip < 0 || m_selectedClip >= static_cast<int>(m_editModel->GetAnimations().size()))
+        // rig.bake can free m_editModel before the next Update re-resolves it: only trust the pointer
+        // while the resolved target chain is still alive and still maps to it.
+        NodeId *carrier = m_animatedNodes.empty() ? m_targetNode : m_animatedNodes[0];
+        if (!m_editModel || !scene.IsNodeAlive(carrier) || scene.GetModelForNode(carrier) != m_editModel ||
+            m_selectedClip < 0 || m_selectedClip >= static_cast<int>(m_editModel->GetAnimations().size()))
             return false;
         AnimationClip &clip = m_editModel->GetMutableAnimations()[m_selectedClip];
         const size_t before = redo ? m_redo.size() : m_undo.size();
@@ -746,9 +847,9 @@ namespace pe
                 NodeId *selected = selection.GetSelectedNode();
                 if (scene.IsNodeAlive(selected))
                 {
-                    m_targetNode = selected;
+                    m_targetNode = AnimationRootOf(scene, anim, selected);
                     m_animatedNodes.clear();
-                    CollectAnimatedNodes(scene, anim, selected);
+                    CollectAnimatedNodes(scene, anim, m_targetNode);
                     model = !m_animatedNodes.empty() ? scene.GetModelForNode(m_animatedNodes[0])
                                                      : scene.GetModelForNode(selected);
                 }
@@ -1221,6 +1322,26 @@ namespace pe
         m_dirty = true;
     }
 
+    void AnimationTimeline::DropPendingRequests()
+    {
+        m_pendingPoses.clear();
+        m_pendingClipSet = false;
+        m_pendingBone.clear();
+        m_pendingFrame = -1.f;
+        m_pendingPlay = -1;
+        m_pendingSave = false;
+    }
+
+    void AnimationTimeline::DropTarget()
+    {
+        ResetEditState();
+        DropPendingRequests();
+        m_editModel = nullptr;
+        m_targetNode = nullptr;
+        m_lastModel = nullptr;
+        m_animatedNodes.clear();
+    }
+
     void AnimationTimeline::ResetEditState()
     {
         m_undo.clear();
@@ -1615,11 +1736,11 @@ namespace pe
         SetPoseKey(clip, ci, time, pos, rot, scl);
     }
 
-    void AnimationTimeline::SetPoseKey(AnimationClip &clip, int channelIdx, float time, const vec3 &pos, const quat &rot,
-                                       const vec3 &scl)
+    namespace
     {
-        AnimationChannel &chan = clip.channels[channelIdx];
-        auto set = [&](auto &keys, const auto &value)
+        // Overwrite-or-insert one key; a new key inherits the interpolation of the key before it.
+        template <class K, class V>
+        void SetKeyAt(std::vector<K> &keys, float time, const V &value)
         {
             const int at = FindKeyAtTime(keys, time);
             if (at >= 0)
@@ -1629,36 +1750,33 @@ namespace pe
             }
             AnimationInterpolation interpolation = AnimationInterpolation::Linear;
             const auto next = std::lower_bound(keys.begin(), keys.end(), time,
-                                               [](const auto &key, float t)
+                                               [](const K &key, float t)
                                                { return key.time < t; });
-            if (next != keys.begin() && next != keys.end())
+            if (next != keys.begin())
                 interpolation = std::prev(next)->interpolation;
             keys.push_back({time, value, interpolation});
-        };
-        set(chan.positionKeys, pos);
-        set(chan.rotationKeys, rot);
-        set(chan.scaleKeys, scl);
-        SortChannelKeys(chan);
+            std::sort(keys.begin(), keys.end(), [](const K &a, const K &b)
+                      { return a.time < b.time; });
+        }
+    } // namespace
+
+    void AnimationTimeline::SetPoseKey(AnimationClip &clip, int channelIdx, float time, const vec3 &pos, const quat &rot,
+                                       const vec3 &scl)
+    {
+        AnimationChannel &chan = clip.channels[channelIdx];
+        SetKeyAt(chan.positionKeys, time, pos);
+        SetKeyAt(chan.rotationKeys, time, rot);
+        SetKeyAt(chan.scaleKeys, time, scl);
     }
 
     void AnimationTimeline::SetRotationKey(AnimationClip &clip, int channelIdx, float time, const quat &rot)
     {
-        AnimationChannel &chan = clip.channels[channelIdx];
-        const int at = FindKeyAtTime(chan.rotationKeys, time);
-        if (at >= 0)
-        {
-            chan.rotationKeys[at].value = glm::normalize(rot);
-            return;
-        }
-        AnimationInterpolation interpolation = AnimationInterpolation::Linear;
-        const auto next = std::lower_bound(chan.rotationKeys.begin(), chan.rotationKeys.end(), time,
-                                           [](const auto &key, float t)
-                                           { return key.time < t; });
-        if (next != chan.rotationKeys.begin() && next != chan.rotationKeys.end())
-            interpolation = std::prev(next)->interpolation;
-        chan.rotationKeys.push_back({time, glm::normalize(rot), interpolation});
-        std::sort(chan.rotationKeys.begin(), chan.rotationKeys.end(), [](const auto &a, const auto &b)
-                  { return a.time < b.time; });
+        SetKeyAt(clip.channels[channelIdx].rotationKeys, time, glm::normalize(rot));
+    }
+
+    void AnimationTimeline::SetPositionKey(AnimationClip &clip, int channelIdx, float time, const vec3 &pos)
+    {
+        SetKeyAt(clip.channels[channelIdx].positionKeys, time, pos);
     }
 
     void AnimationTimeline::DeleteKeyframesAtFrame(AnimationClip &clip, int bone, float frame)
@@ -2020,7 +2138,7 @@ namespace pe
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {4.f, 4.f});
 
         // Editor mode
-        ImGui::SetNextItemWidth(118.f);
+        ImGui::SetNextItemWidth(ImGui::CalcTextSize("Graph Editor").x + ImGui::GetStyle().FramePadding.x * 2.f + ImGui::GetFrameHeight());
         const char *modeNames[] = {"Dope Sheet", "Graph Editor"};
         int modeIdx = static_cast<int>(m_mode);
         if (ImGui::Combo("##mode", &modeIdx, modeNames, 2))
@@ -2032,7 +2150,7 @@ namespace pe
 
         // Action (clip) selector + management
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(150.f);
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 11.f);
         const auto &clips = model->GetAnimations();
         const char *clipName = clip.name.empty() ? "<unnamed>" : clip.name.c_str();
         if (ImGui::BeginCombo("##action", clipName))
@@ -2136,7 +2254,7 @@ namespace pe
             ImGui::SetCursorScreenPos({p.x + 6.f, p.y + m_headerHeight + 4.f});
         else
             ImGui::SameLine(0.f, 14.f);
-        ImGui::SetNextItemWidth(70.f);
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.f);
         const float durationFrames = ToFrame(clip.duration);
         int frame = static_cast<int>(std::round(currentFrame));
         if (ImGui::DragInt("##frame", &frame, 0.2f, 0, static_cast<int>(durationFrames), "%d"))
@@ -2145,7 +2263,7 @@ namespace pe
         ImGui::SameLine();
         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.f), "Start");
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(46.f);
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 3.5f);
         int start = 0;
         ImGui::BeginDisabled();
         ImGui::DragInt("##start", &start, 1.f, 0, 0);
@@ -2153,7 +2271,7 @@ namespace pe
         ImGui::SameLine();
         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.f), "End");
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(60.f);
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 4.5f);
         int end = static_cast<int>(std::round(durationFrames));
         if (ImGui::DragInt("##end", &end, 0.5f, 1, 1000000, "%d"))
         {
@@ -2164,7 +2282,7 @@ namespace pe
         ImGui::SameLine();
         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.f), "FPS");
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(52.f);
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 4.f);
         float fps = clip.ticksPerSecond / m_frameTicks;
         if (ImGui::DragFloat("##fps", &fps, 0.1f, 1.f, 1000.f, "%.1f"))
         {
@@ -2193,7 +2311,7 @@ namespace pe
                 anim->SetLoop(n, m_loop);
         ui::ItemTooltip("Loop playback.");
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(56.f);
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 4.f);
         float speedAbs = std::abs(m_speed);
         if (ImGui::DragFloat("##speed", &speedAbs, 0.05f, 0.05f, 8.f, "%.2fx"))
         {
@@ -2293,7 +2411,7 @@ namespace pe
             run("timeline.motion.mirror_pose");
         ui::ItemTooltip("Mirror the current pose across the rig X plane onto the current frame, swapping .L and .R bones.");
 
-        ImGui::SetNextItemWidth(180.f);
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 13.f);
         ImGui::SliderFloat("Breakdown bias", &m_breakdownBias, 0.f, 1.f, "%.2f");
         ui::ItemTooltip("Where the breakdown sits between the surrounding keys: 0 is the previous pose, 1 the next.");
         ImGui::SameLine();
@@ -2302,7 +2420,7 @@ namespace pe
         ui::ItemTooltip("Write one complete pose for the active bone at the current frame, biased between its surrounding keys.");
 
         ImGui::Separator();
-        ImGui::SetNextItemWidth(90.f);
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 6.5f);
         ImGui::InputInt("Frame offset", &m_motionOffsetFrames);
         ui::ItemTooltip("Frames to shift keys by; negative values shift them earlier.");
         ImGui::SameLine();
@@ -2342,7 +2460,7 @@ namespace pe
         auto &clips = model->GetMutableAnimations();
         if (ImGui::BeginPopup("New Action"))
         {
-            ImGui::SetNextItemWidth(200.f);
+            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 14.5f);
             const bool enter = ImGui::InputText("##newname", m_nameBuf, sizeof(m_nameBuf), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
             ImGui::SameLine();
             if (ImGui::Button("Create") || enter)
@@ -2362,7 +2480,7 @@ namespace pe
         }
         if (ImGui::BeginPopup("Rename Action"))
         {
-            ImGui::SetNextItemWidth(200.f);
+            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 14.5f);
             const bool enter = ImGui::InputText("##rename", m_nameBuf, sizeof(m_nameBuf), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
             ImGui::SameLine();
             if (ImGui::Button("Rename") || enter)
@@ -3590,7 +3708,7 @@ namespace pe
                 ImGui::SameLine(0.f, 12.f);
                 ImGui::TextDisabled("%s", label);
                 ImGui::SameLine();
-                ImGui::SetNextItemWidth(216.f);
+                ImGui::SetNextItemWidth(ImGui::GetFontSize() * 15.5f);
                 changed |= ImGui::DragFloat3(id, v, speed, lo, hi, fmt);
                 activated |= ImGui::IsItemActivated();
                 active |= ImGui::IsItemActive();
@@ -3607,6 +3725,8 @@ namespace pe
                 const int c = EnsureChannel(clip, bone);
                 SetPoseKey(clip, c, time, bindPos + bindRot * loc, glm::normalize(bindRot * quat(glm::radians(m_poseEuler))), bindScl * sclRel);
                 m_dirty = true;
+                ++m_poseEditSerial;
+                m_poseEditFrame = -1.f;
                 ReevaluatePose(scene, anim);
             }
             ImGui::SameLine(0.f, 12.f);
@@ -3614,6 +3734,8 @@ namespace pe
             {
                 PushUndo(clip);
                 InsertKeyframe(clip, skeleton, bone, std::round(currentFrame));
+                ++m_poseEditSerial;
+                m_poseEditFrame = -1.f;
                 ReevaluatePose(scene, anim);
             }
             ui::ItemTooltip("Key the bone's current pose at this frame (I).");
@@ -3623,6 +3745,8 @@ namespace pe
                 PushUndo(clip);
                 SetPoseKey(clip, EnsureChannel(clip, bone), time, bindPos, bindRot, bindScl);
                 m_poseEuler = vec3(0.f);
+                ++m_poseEditSerial;
+                m_poseEditFrame = -1.f;
                 ReevaluatePose(scene, anim);
             }
             ui::ItemTooltip("Key the bind pose at this frame (Blender Alt+G / Alt+R / Alt+S).");
@@ -3648,13 +3772,10 @@ namespace pe
 
         ImGui::SetNextWindowSize({1360, 360}, ImGuiCond_FirstUseEver);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0.f, 0.f});
+        // Target resolution and the timeline.* request drains below run even while this window is a
+        // hidden docked tab: the Rig Editor's Pose overlay and agent actions depend on m_editModel.
         const bool visible = ImGui::Begin(m_name.c_str(), &m_open, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
         ImGui::PopStyleVar();
-        if (!visible)
-        {
-            ImGui::End();
-            return;
-        }
 
         const float lineHeight = ImGui::GetTextLineHeight();
         m_rowHeight = std::round(lineHeight + 6.f);
@@ -3669,7 +3790,8 @@ namespace pe
         auto *anim = GetGlobalSystem<AnimationSystem>();
         if (!rs || !anim)
         {
-            ImGui::TextDisabled("  Animation system not available.");
+            if (visible)
+                ImGui::TextDisabled("  Animation system not available.");
             ImGui::End();
             return;
         }
@@ -3682,7 +3804,7 @@ namespace pe
         {
             NodeId *sel = selection.GetSelectedNode();
             if (scene.IsNodeAlive(sel))
-                m_targetNode = sel;
+                m_targetNode = AnimationRootOf(scene, anim, sel);
         }
         m_animatedNodes.clear();
         if (m_targetNode)
@@ -3697,11 +3819,15 @@ namespace pe
         if (!model || !model->HasSkeleton())
         {
             m_editModel = nullptr;
-            ImGui::TextDisabled(m_targetNode ? "  The selected model has no skeleton (bake a rig first)."
-                                             : "  No model selected: select a node of a rigged model in the hierarchy.");
+            DropPendingRequests(); // a request queued with no target must not ambush the next selection
+            if (visible)
+                ImGui::TextDisabled(m_targetNode ? "  The selected model has no skeleton (bake a rig first)."
+                                                 : "  No model selected: select a node of a rigged model in the hierarchy.");
             ImGui::End();
             return;
         }
+        if (model != m_lastModel)
+            DropPendingRequests(); // requests were aimed at the previous character
         if (model != m_lastModel || static_cast<int>(model->GetAnimations().size()) != m_lastClipCount)
         {
             ResetEditState();
@@ -3711,6 +3837,19 @@ namespace pe
         }
         m_editModel = model;
         auto &clips = model->GetMutableAnimations();
+        // Requests naming unknown bones are dropped here, before they can force a placeholder action
+        // into the asset or burn an undo step in the drain below.
+        std::erase_if(m_pendingPoses, [&](const PendingPose &pp)
+                      { return model->GetSkeleton().GetBoneIndex(pp.bone) < 0; });
+        // A hidden tab must not mutate the asset: the placeholder Action appears only when the window
+        // is shown or an agent request needs a clip to land in; requests that need a clip that does
+        // not exist are dropped instead of ambushing the user when the tab is next shown.
+        if (clips.empty() && !visible && !m_pendingClipSet && m_pendingPoses.empty())
+        {
+            DropPendingRequests();
+            ImGui::End();
+            return;
+        }
         if (clips.empty())
         {
             AnimationClip fresh;
@@ -3779,7 +3918,7 @@ namespace pe
         const Skeleton &skeleton = model->GetSkeleton();
         if (m_frameTicks <= 0.f)
             m_frameTicks = DetectFrameTicks(clip);
-        const float currentFrame = state ? ToFrame(state->time) : 0.f;
+        float currentFrame = state ? ToFrame(state->time) : 0.f;
         if (state)
         {
             m_loop = state->loop;
@@ -3805,11 +3944,14 @@ namespace pe
         if (m_pendingFrame >= 0.f)
         {
             SetFrame(scene, anim, std::clamp(m_pendingFrame, 0.f, ToFrame(clip.duration)));
+            // Poses queued in the same action pump land at the frame just requested, not the stale playhead.
+            currentFrame = std::clamp(m_pendingFrame, 0.f, ToFrame(clip.duration));
             m_pendingFrame = -1.f;
         }
         if (!m_pendingPoses.empty())
         {
             PushUndo(clip);
+            m_poseEditFrame = m_pendingPoses.back().frame; // < 0 = playhead; the lock re-solve keys there
             for (const PendingPose &pp : m_pendingPoses)
             {
                 const int b = skeleton.GetBoneIndex(pp.bone);
@@ -3830,6 +3972,7 @@ namespace pe
                 SetPoseKey(clip, ci, time, pos, rot, scl);
             }
             m_pendingPoses.clear();
+            ++m_poseEditSerial;
             ReevaluatePose(scene, anim);
         }
         if (m_pendingPlay >= 0)
@@ -3846,6 +3989,12 @@ namespace pe
             m_pendingSave = false;
             if (ModelAssetCooked::IsCookedPath(model->GetFilePath()) && ModelAssetCooked::WriteToFile(model, model->GetFilePath()))
                 m_dirty = false;
+        }
+
+        if (!visible)
+        {
+            ImGui::End();
+            return;
         }
 
         if (DrawHeader(scene, anim, model, clip, currentFrame))

@@ -54,6 +54,12 @@ namespace pe::ui
         return ImGui::CalcTextSize(label, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.f;
     }
 
+    // Uniform dialog buttons: at least minEm font-heights wide, never narrower than the label.
+    inline ImVec2 DialogButtonSize(const char *label, float minEm = 6.f)
+    {
+        return ImVec2(std::max(ImGui::GetFontSize() * minEm, ButtonWidth(label)), 0.f);
+    }
+
     inline float CheckboxWidth(const char *label)
     {
         return ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(label, nullptr, true).x;
@@ -74,6 +80,37 @@ namespace pe::ui
         const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
         if (ImGui::GetItemRectMax().x + gap + nextItemWidth <= right)
             ImGui::SameLine(0.f, spacing);
+    }
+
+    // Vertical drag bar between two side-by-side children: call between them (SameLine(0,0) on both sides),
+    // it moves leftWidth by the mouse delta and keeps both panes at least min wide.
+    inline void SplitterV(const char *id, float &leftWidth, float minLeft, float minRight, float totalWidth,
+                          float height, float thickness = 6.f)
+    {
+        ImGui::InvisibleButton(id, ImVec2(thickness, height));
+        if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+        if (ImGui::IsItemActive())
+            leftWidth += ImGui::GetIO().MouseDelta.x;
+        leftWidth = std::clamp(leftWidth, minLeft, std::max(minLeft, totalWidth - thickness - minRight));
+        const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
+        const float x = (min.x + max.x) * 0.5f;
+        ImGui::GetWindowDrawList()->AddLine(ImVec2(x, min.y), ImVec2(x, max.y),
+                                            ImGui::GetColorU32(ImGui::IsItemActive()    ? ImGuiCol_SeparatorActive
+                                                               : ImGui::IsItemHovered() ? ImGuiCol_SeparatorHovered
+                                                                                        : ImGuiCol_Separator));
+    }
+
+    // Compact tree rows (the Hierarchy's density) for bone trees; pair with PopCompactTree.
+    inline void PushCompactTree()
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.f, 1.f));
+        ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, ImGui::GetFontSize() * 0.9f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.f, 1.f));
+    }
+    inline void PopCompactTree()
+    {
+        ImGui::PopStyleVar(3);
     }
 
     inline ImVec4 Heat(float f) // 0..1 -> green->yellow->red
