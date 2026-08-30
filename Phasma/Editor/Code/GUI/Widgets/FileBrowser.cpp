@@ -1242,7 +1242,7 @@ namespace pe
 
         if (!validNode)
             ImGui::BeginDisabled();
-        if (ImGui::Button("Create", ImVec2(120, 0)))
+        if (ImGui::Button("Create", ui::DialogButtonSize("Create", 9.2f)))
         {
             UndoRedo::Instance().RecordSnapshot(*scene, "Created Prefab");
             const bool saved = scene->SavePrefab(m_pendingPrefabNode.nodeId, savePath);
@@ -1259,7 +1259,7 @@ namespace pe
             ImGui::EndDisabled();
 
         ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(120, 0)))
+        if (ImGui::Button("Cancel", ui::DialogButtonSize("Cancel", 9.2f)))
             ImGui::CloseCurrentPopup();
         ui::ItemTooltip("Close without creating a prefab.");
 

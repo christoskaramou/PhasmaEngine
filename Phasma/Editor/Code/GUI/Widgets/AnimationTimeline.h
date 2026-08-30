@@ -58,6 +58,13 @@ namespace pe
         void RequestBone(const std::string &name) { m_pendingBone = name; }
         void RequestSave() { m_pendingSave = true; }
         void RequestPlay(bool play, bool reverse) { m_pendingPlay = play ? (reverse ? 2 : 1) : 0; }
+        // Agent actions that read the evaluated pose (rig.grab, rig.lock solve) must not run against a
+        // playhead or clip that queued requests are about to move.
+        bool HasPendingRequests() const
+        {
+            return m_pendingFrame >= 0.f || !m_pendingPoses.empty() || m_pendingClipSet || !m_pendingBone.empty() ||
+                   m_pendingPlay >= 0 || m_pendingSave;
+        }
 
         // Rig Editor viewport posing. Bone transforms are in skeleton rig space (rootTransform removed).
         // The Timeline owns key insertion, the drag undo snapshot and immediate pose evaluation.
@@ -71,20 +78,34 @@ namespace pe
         bool GetViewportTimeSeconds(ModelAsset *model, double &out) const;
         // Samples the active clip at the current playhead plus a displayed-frame offset, clamped to the clip range.
         bool SampleViewportPose(ModelAsset *model, float frameOffset, ViewportPose &out) const;
+        // Samples the active clip at an absolute displayed frame, clamped to the clip range.
+        bool SampleViewportPoseAtFrame(ModelAsset *model, float frame, ViewportPose &out) const;
+        bool GetClipEndFrame(ModelAsset *model, float &endFrame) const;
         struct GlobalBoneRotation
         {
             int bone = -1;
             quat rotation = quat(1.f, 0.f, 0.f, 0.f); // Skeleton rig-space global rotation.
         };
-        // Keys every supplied rig-space global rotation at the current frame as one undoable edit.
-        bool KeyViewportGlobalRotations(Scene &scene, ModelAsset *model,
-                                        std::span<const GlobalBoneRotation> rotations);
-        bool CanViewportRotate(ModelAsset *model, int bone) const;
-        bool BeginViewportRotate(Scene &scene, ModelAsset *model, int bone);
+        // Keys every supplied rig-space global rotation at the current frame (frame < 0) or at frame. pushUndo = false
+        // when the caller's edit already took the undo snapshot (a drag, PushViewportUndo, a Timeline pose edit).
+        bool KeyViewportGlobalRotations(Scene &scene, ModelAsset *model, std::span<const GlobalBoneRotation> rotations,
+                                        float frame = -1.f, bool pushUndo = true);
+        bool PushViewportUndo(ModelAsset *model);
+        // Bumps on pose-bar / timeline.pose edits only (never on undo/redo or viewport keying).
+        uint32_t PoseEditSerial() const { return m_poseEditSerial; }
+        // Frame the last pose edit targeted (< 0 = the playhead): lock re-solves key there, not at the playhead.
+        float PoseEditFrame() const { return m_poseEditFrame; }
+        bool CanViewportRotate(ModelAsset *model, int bone, bool rotate = true, bool translate = false) const;
+        bool BeginViewportRotate(Scene &scene, ModelAsset *model, int bone, bool rotate = true,
+                                 bool translate = false);
+        // translate also keys the bone's local position from boneTransform (Auto Key, or an existing position key).
         bool UpdateViewportRotate(Scene &scene, ModelAsset *model, int bone, const mat4 &boneTransform,
-                                  int mirrorBone = -1);
+                                  int mirrorBone = -1, bool rotate = true, bool translate = false);
         void EndViewportRotate();
         bool StepViewportUndo(Scene &scene, bool redo);
+        // Forget the resolved model, target nodes, undo stacks and queued requests: the Rig Editor
+        // calls this when Bake frees the model the Timeline had resolved.
+        void DropTarget();
         bool AutoKey() const { return m_autoKey; }
         void SetAutoKey(bool enabled) { m_autoKey = enabled; }
         std::string HandleAction(const std::string &action, const std::string &argsJson);
@@ -186,6 +207,7 @@ namespace pe
 
         // --- animation state plumbing ---
         void CollectAnimatedNodes(Scene &scene, AnimationSystem *anim, NodeId *root);
+        NodeId *AnimationRootOf(Scene &scene, AnimationSystem *anim, NodeId *selected);
         void EnsureStates(Scene &scene, AnimationSystem *anim, float keepFrame);
         void SetFrame(Scene &scene, AnimationSystem *anim, float frame);
         void ReevaluatePose(Scene &scene, AnimationSystem *anim);
@@ -198,6 +220,7 @@ namespace pe
         void Undo(AnimationClip &clip);
         void Redo(AnimationClip &clip);
         void ResetEditState();
+        void DropPendingRequests();
         int ChannelForBone(const AnimationClip &clip, int bone) const;
         int EnsureChannel(AnimationClip &clip, int bone);
         static void SortChannelKeys(AnimationChannel &chan);
@@ -222,6 +245,8 @@ namespace pe
         // Writes (or overwrites) the Loc/Rot/Scale keys of a channel at a time in ticks.
         void SetPoseKey(AnimationClip &clip, int channelIdx, float time, const vec3 &pos, const quat &rot, const vec3 &scl);
         void SetRotationKey(AnimationClip &clip, int channelIdx, float time, const quat &rot);
+        void SetPositionKey(AnimationClip &clip, int channelIdx, float time, const vec3 &pos);
+        bool SampleViewportPoseTicks(ModelAsset *model, float ticks, ViewportPose &out) const;
         void DeleteKeyframesAtFrame(AnimationClip &clip, int bone, float frame);
         void CollectKeyTimes(const AnimationClip &clip, std::vector<float> &out) const;
         bool NextKeyFrame(const AnimationClip &clip, float from, bool forward, float &out) const;
@@ -358,6 +383,8 @@ namespace pe
         bool m_viewportRotateActive = false;
         int m_viewportRotateBone = -1;
         float m_viewportRotateTime = 0.f;
+        uint32_t m_poseEditSerial = 0;
+        float m_poseEditFrame = -1.f;
         std::string m_pendingBone;
         bool m_pendingSave = false;
         int m_pendingPlay = -1; // 0 pause, 1 play, 2 play reverse

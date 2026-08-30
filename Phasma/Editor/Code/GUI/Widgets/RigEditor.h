@@ -30,6 +30,18 @@ namespace pe
         std::string shell;   // node name of the part this bone owns outright (empty = shapes only)
     };
 
+    // Pins a bone's tail to a point: on another bone (a hand on the shovel) or fixed in rig space (a planted
+    // foot). Solved with two-bone IK over the bone and its parent after every pose edit; reach caps how far
+    // the pair may extend (1 = fully straight).
+    struct RigLock
+    {
+        std::string bone;
+        std::string target;      // empty = anchor is a fixed rig-space point
+        vec3 anchor = vec3(0.f); // rig-space rest point on the target (or the fixed point)
+        float reach = 1.f;       // ponytail: the only limit is reach (0.3..1); per-joint angle cones are the upgrade
+        bool enabled = true;
+    };
+
     // Rig Editor: authors and bakes a skeleton + per-bone influence capsules, poses baked rigs, and
     // adjusts ordinary joint blends directly on a posed mesh. The rig document lives beside the
     // .pemesh; baked weight edits stay in memory until explicitly saved to that .pemesh.
@@ -76,11 +88,23 @@ namespace pe
             std::vector<RigBone> bones;
             int selected = -1;
             std::string preset;
+            std::vector<RigLock> locks;
+            std::vector<std::string> pins;
+        };
+
+        // One solved lock: the two-bone chain (root = the bone's parent, mid = the bone) and its rotation edits.
+        struct LockSolve
+        {
+            int lock = -1;
+            int root = -1, mid = -1;
+            quat rootRotation = quat(1.f, 0.f, 0.f, 0.f);
+            quat midRotation = quat(1.f, 0.f, 0.f, 0.f);
+            bool clamped = false;
         };
 
         void ResolveTarget(Scene &scene);
         void ClearDocument();
-        void PushUndo(); // call BEFORE mutating the document
+        void PushUndo(bool keepPreset = false); // call BEFORE mutating the document
         void Restore(const Snapshot &snapshot);
         void Undo();
         void Redo();
@@ -133,6 +157,35 @@ namespace pe
         void TransformRig(std::span<const RigBone> base, const vec3 &move, const vec3 &rotateDegrees, const vec3 &scale,
                           int pivotMode); // 0 feet, 1 centre, 2 origin
         void DrawPosePanel(Scene &scene);
+        void DrawLocksPanel(Scene &scene, AnimationTimeline *timeline);
+        // Drop any in-flight grab / IK / reach / gizmo interaction without keying anything.
+        void AbortPoseEdits();
+        // Posed head / tail of every skeleton bone (tails from the authored rig, else from the children).
+        void PoseTails(const Skeleton &skeleton, std::span<const mat4> boneTransforms, std::vector<vec3> &heads,
+                       std::vector<vec3> &tails, std::vector<vec3> *restTails = nullptr) const;
+        // Lock geometry at a pose; false when the lock names unknown bones or would chase its own chain.
+        bool LockChain(const RigLock &lock, const Skeleton &skeleton, int &root, int &mid, int &target,
+                       std::string *why = nullptr) const;
+        bool LockAnchorPosed(const RigLock &lock, const Skeleton &skeleton, std::span<const mat4> boneTransforms,
+                             vec3 &out) const;
+        int AddLock(const std::string &bone, const std::string &target, float reach, const vec3 *anchor,
+                    std::string &error);
+        // Solves every enabled lock at boneTransforms; skipBone = a bone being dragged (its own locks wait).
+        void SolveLockRotations(const Skeleton &skeleton, std::span<const mat4> boneTransforms, int skipBone,
+                                std::vector<LockSolve> &out);
+        // Solves at the playhead (frame < 0) or at an explicit frame; pushUndo = own undo step, else the caller's.
+        bool SolveLocks(Scene &scene, int skipBone = -1, bool pushUndo = false, float frame = -1.f);
+        bool BakeLocks(Scene &scene, std::string &status);
+        // Grab: pull a bone's tail to target; the chain up to the first pinned bone (or the skeleton root) bends,
+        // distal bones first (CCD with stiffer parents), so a hand pull moves the arm, then the shoulder, then the torso.
+        bool IsPinned(const std::string &bone) const;
+        void TogglePin(const std::string &bone);
+        void GrabSolve(const Skeleton &skeleton, std::span<const mat4> boneTransforms, int bone, const vec3 &target,
+                       std::vector<std::pair<int, quat>> &out) const;
+        // keyedOut reports whether keys actually landed (false for an at-target no-op).
+        bool GrabTo(Scene &scene, int bone, const vec3 &target, float *gap = nullptr, bool pushUndo = false,
+                    bool *keyedOut = nullptr);
+        static void DrawPadlock(ImDrawList *drawList, const ImVec2 &centre, bool closed, ImU32 colour);
         void DrawPoseViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize,
                               bool &hovered, bool &active);
         void DrawJointBlendViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize,
@@ -175,6 +228,19 @@ namespace pe
         int m_snapMode = 2; // 0 joints, 1 surface, 2 volume, 3 increment
         bool m_mirrorX = false;
         bool m_poseDragging = false;
+        int m_poseGizmo = 0;     // 0 rotate, 1 move, 2 both
+        float m_treeWidth = 0.f; // Bones pane width (px); 0 = 40% of the window on first draw
+        std::vector<RigLock> m_locks;
+        std::vector<std::string> m_pins; // bones a grab pull never bends past
+        int m_grabBone = -1;             // viewport grab in flight
+        bool m_grabPushed = false;       // this drag's Timeline undo landed with its first key
+        vec3 m_grabPlanePoint = vec3(0.f), m_grabOffset = vec3(0.f);
+        std::vector<vec3> m_lockBend; // last elbow bend direction per lock: pole continuity through straight arms
+        int m_lockTarget = -1;        // Add Lock target combo: -1 = fixed rig-space point
+        float m_lockReach = 1.f;
+        bool m_reachDragging = false;  // Reach slider: one undo pair per drag, pushed on the first real change
+        bool m_reachPushed = false;    // this reach drag's Timeline undo landed with its first solve
+        uint32_t m_poseEditSerial = 0; // Timeline pose edits already solved
         bool m_onionBones = false;
         int m_onionPrevious = 2;
         int m_onionNext = 2;
@@ -222,6 +288,7 @@ namespace pe
         int m_xformPivot = 0;
         std::vector<RigBone> m_xformBase; // bones at the start of the transform drag
         std::string m_status;
+        std::string m_bakeNote; // Bake: dropped-clips notice appended to the callers' status
         char m_nameBuf[96] = {};
         std::string m_docPath; // model file the undo/redo stacks belong to
         std::vector<Snapshot> m_undo;
