@@ -58,12 +58,13 @@ namespace pe
         void RequestBone(const std::string &name) { m_pendingBone = name; }
         void RequestSave() { m_pendingSave = true; }
         void RequestPlay(bool play, bool reverse) { m_pendingPlay = play ? (reverse ? 2 : 1) : 0; }
+        void RequestRestPose() { m_pendingRest = true; }
         // Agent actions that read the evaluated pose (rig.grab, rig.lock solve) must not run against a
         // playhead or clip that queued requests are about to move.
         bool HasPendingRequests() const
         {
             return m_pendingFrame >= 0.f || !m_pendingPoses.empty() || m_pendingClipSet || !m_pendingBone.empty() ||
-                   m_pendingPlay >= 0 || m_pendingSave;
+                   m_pendingPlay >= 0 || m_pendingSave || m_pendingRest;
         }
 
         // Rig Editor viewport posing. Bone transforms are in skeleton rig space (rootTransform removed).
@@ -244,6 +245,7 @@ namespace pe
         void InsertKeyframe(AnimationClip &clip, const Skeleton &skeleton, int bone, float frame);
         // Writes (or overwrites) the Loc/Rot/Scale keys of a channel at a time in ticks.
         void SetPoseKey(AnimationClip &clip, int channelIdx, float time, const vec3 &pos, const quat &rot, const vec3 &scl);
+        void RestPoseAll(Scene &scene, AnimationSystem *anim);
         void SetRotationKey(AnimationClip &clip, int channelIdx, float time, const quat &rot);
         void SetPositionKey(AnimationClip &clip, int channelIdx, float time, const vec3 &pos);
         bool SampleViewportPoseTicks(ModelAsset *model, float ticks, ViewportPose &out) const;
@@ -388,6 +390,8 @@ namespace pe
         std::string m_pendingBone;
         bool m_pendingSave = false;
         int m_pendingPlay = -1; // 0 pause, 1 play, 2 play reverse
+        bool m_pendingRest = false;
+        bool m_restDisplayed = false; // Rest Pose display active: the playhead viewport pose reads emit the bind pose
 
         // --- state: popups ---
         char m_nameBuf[128] = {};
