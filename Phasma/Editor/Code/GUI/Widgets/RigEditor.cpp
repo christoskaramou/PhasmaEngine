@@ -1785,6 +1785,10 @@ namespace pe
             return;
         AbortPoseEdits();
         m_mode = mode;
+        // Edit Rig edits rest data: show the rest pose so the document bones sit on the mesh they describe.
+        if (mode != Mode::Pose && m_gui && m_model && m_model->HasSkeleton())
+            if (AnimationTimeline *timeline = m_gui->GetWidget<AnimationTimeline>())
+                timeline->RequestRestPose();
         // Pose mode needs the Timeline resolved (it owns the evaluated pose and key writes).
         if (mode == Mode::Pose && m_gui)
             if (AnimationTimeline *timeline = m_gui->GetWidget<AnimationTimeline>())

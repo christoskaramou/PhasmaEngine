@@ -994,6 +994,7 @@ namespace pe
         addAction("timeline.undo", "Animation Timeline: Undo / Redo The Last Clip Edit (args: redo bool)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.clip", "Animation Timeline: Select Or Create An Action (args: name, end frames, fps)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.pose", "Animation Timeline: Key A Bone Pose Relative To The Bind Pose (args: bone, frame, loc[3], rot[3] degrees, scale[3])", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.rest", "Animation Timeline: Show The Bind Pose (pauses playback, clears the evaluated pose; writes no keys - scrub or play to return to the clip)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.analyze", "Motion Doctor: Analyze Quaternion Flips, Pops, Jitter, Loop Seam, Root Drift And Selected-Bone Sliding (optional bone)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.fix_quaternions", "Motion Doctor: Fix Quaternion Hemisphere Flips", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.smooth", "Motion Doctor: Smooth Keys (optional bones, frame range, strength, passes, channels)", "Timeline", "command", hasTimeline, false, false);
@@ -1226,6 +1227,11 @@ namespace pe
                     return nlohmann::json{{"error", "give loc[3], rot[3] or scale[3] (three finite numbers each)"}}
                         .dump();
                 timeline->RequestPose(pose);
+                return ok();
+            }
+            if (action == "timeline.rest")
+            {
+                timeline->RequestRestPose();
                 return ok();
             }
             return timeline->HandleAction(action, argsJson);

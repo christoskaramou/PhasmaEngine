@@ -428,6 +428,7 @@ namespace pe
 
     void AnimationTimeline::SetFrame(Scene &scene, AnimationSystem *anim, float frame)
     {
+        m_restDisplayed = false;
         EnsureStates(scene, anim, frame);
         for (NodeId *node : m_animatedNodes)
             anim->SetPlaybackTime(scene, node, ToTicks(frame));
@@ -482,6 +483,17 @@ namespace pe
         NodeId *node = m_animatedNodes.empty() ? m_targetNode : m_animatedNodes[0];
         AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
         const AnimationNodeState *state = anim && node ? anim->GetAnimationState(node) : nullptr;
+        if (m_restDisplayed && frameOffset == 0.f)
+        {
+            // Rest Pose display: the mesh skins identity, so hand the overlay the matching rest transforms.
+            const Skeleton &skeleton = model->GetSkeleton();
+            const mat4 invRoot = glm::inverse(skeleton.rootTransform);
+            out.node = node;
+            out.boneTransforms.resize(skeleton.bones.size());
+            for (int i = 0; i < static_cast<int>(skeleton.bones.size()); i++)
+                out.boneTransforms[i] = invRoot * glm::inverse(skeleton.bones[i].offsetMatrix);
+            return !out.boneTransforms.empty();
+        }
         const AnimationClip &clip = model->GetAnimations()[m_selectedClip];
         const float frameTicks = m_frameTicks > 0.f ? m_frameTicks : DetectFrameTicks(clip);
         return SampleViewportPoseTicks(model, (state ? state->time : 0.f) + frameOffset * frameTicks, out);
@@ -1281,6 +1293,8 @@ namespace pe
             anim->SetLoop(node, m_loop);
             anim->SetPaused(node, !play);
         }
+        if (play)
+            m_restDisplayed = false;
     }
 
     // -------------------------------------------------------------------------
@@ -1330,10 +1344,12 @@ namespace pe
         m_pendingFrame = -1.f;
         m_pendingPlay = -1;
         m_pendingSave = false;
+        m_pendingRest = false;
     }
 
     void AnimationTimeline::DropTarget()
     {
+        m_restDisplayed = false;
         ResetEditState();
         DropPendingRequests();
         m_editModel = nullptr;
@@ -2164,6 +2180,7 @@ namespace pe
                     {
                         m_selectedClip = i;
                         ResetEditState();
+                        m_frameTicks = DetectFrameTicks(clips[i]);
                         SetFrame(scene, anim, 0.f);
                     }
                 }
@@ -3751,8 +3768,34 @@ namespace pe
             }
             ui::ItemTooltip("Key the bind pose at this frame (Blender Alt+G / Alt+R / Alt+S).");
         }
+        ImGui::SameLine(0.f, 16.f);
+        if (ImGui::Button("Rest Pose"))
+            RestPoseAll(scene, anim);
+        ui::ItemTooltip("Show the bind pose: pauses playback and clears the evaluated pose. No keys are written - "
+                        "scrub, play or edit a pose to return to the clip.");
         ImGui::PopStyleVar(2);
         ImGui::SetCursorScreenPos({p.x, p.y + m_headerHeight});
+    }
+
+    // Rest Pose: SHOW the bind pose (Blender's Rest Position). Pauses playback and clears the evaluated
+    // joint matrices so skinning falls back to identity, which IS the bind pose. Nothing is keyed and the
+    // clip is untouched; the next scrub, play or pose edit re-evaluates the clip and takes over again.
+    void AnimationTimeline::RestPoseAll(Scene &scene, AnimationSystem *anim)
+    {
+        if (m_animatedNodes.empty())
+            return;
+        SetPlaying(scene, anim, false, false);
+        for (NodeId *node : m_animatedNodes)
+        {
+            if (!scene.IsNodeAlive(node))
+                continue;
+            auto &rt = scene.GetNodeRuntime(node);
+            rt.jointMatrices.clear();
+            scene.MarkNodeDirty(node);
+        }
+        m_restDisplayed = true;
+        if (m_gui)
+            m_gui->NotifyChange();
     }
 
     void AnimationTimeline::SetGraphMode(bool graph)
@@ -3974,6 +4017,11 @@ namespace pe
             m_pendingPoses.clear();
             ++m_poseEditSerial;
             ReevaluatePose(scene, anim);
+        }
+        if (m_pendingRest)
+        {
+            m_pendingRest = false;
+            RestPoseAll(scene, anim);
         }
         if (m_pendingPlay >= 0)
         {

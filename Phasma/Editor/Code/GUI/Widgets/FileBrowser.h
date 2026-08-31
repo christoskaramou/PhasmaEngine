@@ -124,8 +124,10 @@ namespace pe
         void *m_txtIconDS = nullptr;
         Image *m_shaderIcon = nullptr;
         void *m_shaderIconDS = nullptr;
-        Image *m_modelIcon = nullptr;
-        void *m_modelIconDS = nullptr;
+        Image *m_sceneIcon = nullptr;
+        void *m_sceneIconDS = nullptr;
+        Image *m_meshIcon = nullptr;
+        void *m_meshIconDS = nullptr;
         Image *m_prefabIcon = nullptr;
         void *m_prefabIconDS = nullptr;
         Image *m_scriptIcon = nullptr;

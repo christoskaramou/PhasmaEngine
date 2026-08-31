@@ -249,8 +249,8 @@ namespace pe
     std::unordered_set<std::string> FileBrowser::s_imageExtensions = {
         ".bmp", ".gif", ".hdr", ".jpeg", ".jpg", ".pic", ".png", ".psd", ".tga"};
     // A "loadable model" in the editor is a cooked ".pemesh"; source formats (glTF/FBX/OBJ/...) are
-    // import-only and live in s_modelExtensionsVec (the File > Import picker). This set drives the mesh
-    // icon, the browser model preview, and every scene-load affordance.
+    // import-only and live in s_modelExtensionsVec (the File > Import picker). This set drives the
+    // cooked-mesh icon, the browser model preview, and every scene-load affordance.
     std::unordered_set<std::string> FileBrowser::s_modelExtensions = {".pemesh"};
     std::unordered_set<std::string> FileBrowser::s_prefabExtensions = {".peprefab"};
     std::vector<const char *> FileBrowser::s_modelExtensionsVec = {
@@ -311,7 +311,8 @@ namespace pe
         ReleaseImGuiTexture(m_fileIconDS);
         ReleaseImGuiTexture(m_txtIconDS);
         ReleaseImGuiTexture(m_shaderIconDS);
-        ReleaseImGuiTexture(m_modelIconDS);
+        ReleaseImGuiTexture(m_sceneIconDS);
+        ReleaseImGuiTexture(m_meshIconDS);
         ReleaseImGuiTexture(m_prefabIconDS);
         ReleaseImGuiTexture(m_scriptIconDS);
         ReleaseImGuiTexture(m_imageIconDS);
@@ -325,7 +326,8 @@ namespace pe
         Image::Destroy(m_fileIcon);
         Image::Destroy(m_txtIcon);
         Image::Destroy(m_shaderIcon);
-        Image::Destroy(m_modelIcon);
+        Image::Destroy(m_sceneIcon);
+        Image::Destroy(m_meshIcon);
         Image::Destroy(m_prefabIcon);
         Image::Destroy(m_scriptIcon);
         Image::Destroy(m_imageIcon);
@@ -353,7 +355,8 @@ namespace pe
         LoadIcon(cmd, Path::EditorAssets + "Icons/file_icon.png", m_fileIcon);
         LoadIcon(cmd, Path::EditorAssets + "Icons/txt_icon.png", m_txtIcon);
         LoadIcon(cmd, Path::EditorAssets + "Icons/shader_icon.png", m_shaderIcon);
-        LoadIcon(cmd, Path::EditorAssets + "Icons/model_icon.png", m_modelIcon);
+        LoadIcon(cmd, Path::EditorAssets + "Icons/pescene_icon.png", m_sceneIcon);
+        LoadIcon(cmd, Path::EditorAssets + "Icons/pemesh_icon.png", m_meshIcon);
         LoadIcon(cmd, Path::EditorAssets + "Icons/prefab_icon.png", m_prefabIcon);
         LoadIcon(cmd, Path::EditorAssets + "Icons/script_icon.png", m_scriptIcon);
         LoadIcon(cmd, Path::EditorAssets + "Icons/image_icon.png", m_imageIcon);
@@ -368,7 +371,8 @@ namespace pe
         m_fileIconDS = RegisterImageForImGui(m_fileIcon);
         m_txtIconDS = RegisterImageForImGui(m_txtIcon);
         m_shaderIconDS = RegisterImageForImGui(m_shaderIcon);
-        m_modelIconDS = RegisterImageForImGui(m_modelIcon);
+        m_sceneIconDS = RegisterImageForImGui(m_sceneIcon);
+        m_meshIconDS = RegisterImageForImGui(m_meshIcon);
         m_prefabIconDS = RegisterImageForImGui(m_prefabIcon);
         m_scriptIconDS = RegisterImageForImGui(m_scriptIcon);
         m_imageIconDS = RegisterImageForImGui(m_imageIcon);
@@ -411,16 +415,16 @@ namespace pe
     {
         if (entry.isDirectory)
             return m_folderIconDS;
+        if (entry.path.extension() == ".pescene")
+            return m_sceneIconDS ? m_sceneIconDS : m_fileIconDS;
         if (IsSpriteMetadataFile(entry.path) || IsSpriteSheetFile(entry.path))
             return m_spriteIconDS ? m_spriteIconDS : (m_imageIconDS ? m_imageIconDS : m_fileIconDS);
         if (IsTextFile(entry.path))
             return m_txtIconDS ? m_txtIconDS : m_fileIconDS;
         if (IsShaderFile(entry.path))
             return m_shaderIconDS ? m_shaderIconDS : m_fileIconDS;
-        // The mesh icon denotes the engine's cooked ".pemesh" asset; source models (glTF/FBX/OBJ/...)
-        // are import inputs only and fall through to the generic file icon.
         if (IsCookedModelFile(entry.path))
-            return m_modelIconDS ? m_modelIconDS : m_fileIconDS;
+            return m_meshIconDS ? m_meshIconDS : m_fileIconDS;
         if (IsPrefabFile(entry.path))
             return m_prefabIconDS ? m_prefabIconDS : m_fileIconDS;
         if (IsScriptFile(entry.path))

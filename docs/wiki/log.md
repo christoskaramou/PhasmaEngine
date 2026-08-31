@@ -1,8 +1,13 @@
 # PhasmaEngine Wiki Log
 
+## 2026-09-01
+
+- Added distinct `.pescene` scene and `.pemesh` cooked-mesh icons to the editor FileBrowser, with matching multi-resolution `.ico` files for Windows shell registration.
+
 ## 2026-08-31
 
 - Third review round, six reviewers (2x Grok, 2x Sol, 2x Claude; lifecycle and math lenses): agent actions that name a frame now act on that frame (`timeline.frame`+`timeline.pose` in one pump key the requested frame, lock re-solves key the pose edit's frame via `PoseEditFrame`, and `rig.grab`/`rig.lock solve|bake` refuse to run while Timeline requests are queued); queued requests are dropped when the target vanishes or changes so they cannot ambush the next selected character; `AnimationRootOf` stops at model boundaries (a props group or the scene root is never adopted); Pose mode autosaves lock/pin/reach edits and exposes Rig Undo/Redo; one `AbortPoseEdits` helper ends grabs/IK/drags on every mode, tool or target switch and Bake drops the Timeline's target before freeing the model; undo snapshots now ride `KeyViewportGlobalRotations`' own success path (no snapshot flood from a failing reach drag, no-op grabs key nothing); the IK pole stays stable through straight-limb runs; bake never keys past the clip end and pre-sampling is capped at 20000 frames; malformed vectors and channel-less `timeline.pose` fail loudly; one lock per bone, shared-chain locks solve first-wins; keys appended past the last key inherit its interpolation.
+- Added the Timeline pose bar's `Rest Pose` button and the queued `timeline.rest` action: show the bind pose (pause playback, clear the evaluated joint matrices so skinning falls back to identity) without writing any keys; scrub, play or a pose edit returns to the clip; the Pose overlay and viewport tools read the same rest transforms while it is active, and entering Edit Rig shows the rest display automatically so Edit and Pose bones agree with the mesh.
 
 ## 2026-08-31
 
