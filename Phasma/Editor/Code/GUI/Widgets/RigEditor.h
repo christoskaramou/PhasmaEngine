@@ -1,7 +1,6 @@
 #pragma once
 #include "GUI/Widget.h"
 #include "Animation/AnimationTypes.h"
-#include "Animation/AnimationReferenceFrames.h"
 #include "Animation/RigPresetLibrary.h"
 #include "Animation/RigWeightStroke.h"
 #include "imgui/imgui.h"
@@ -9,6 +8,7 @@
 namespace pe
 {
     struct NodeId;
+    class AnimationPoseViewport;
     class AnimationTimeline;
     class Scene;
     class Camera;
@@ -26,8 +26,10 @@ namespace pe
         float headRadius = 0.05f;
         float tailRadius = 0.05f;
         bool rigid = false;
-        bool spline = false; // link of a spline chain: vertices blend 4 chain joints with Catmull-Rom weights
-        std::string shell;   // node name of the part this bone owns outright (empty = shapes only)
+        bool spline = false;           // link of a spline chain: vertices blend 4 chain joints with Catmull-Rom weights
+        std::string shell;             // node name of the part this bone owns outright (empty = shapes only)
+        float swingLimitDegrees = 0.f; // zero = unrestricted; relative to the bind/rest bone frame (+Y axis)
+        float twistLimitDegrees = 0.f;
     };
 
     // Pins a bone's tail to a point: on another bone (a hand on the shovel) or fixed in rig space (a planted
@@ -42,15 +44,15 @@ namespace pe
         bool enabled = true;
     };
 
-    // Rig Editor: authors and bakes a skeleton + per-bone influence capsules, poses baked rigs, and
-    // adjusts ordinary joint blends directly on a posed mesh. The rig document lives beside the
+    // Rig Editor: authors and bakes a skeleton + per-bone influence capsules, and adjusts ordinary
+    // joint blends directly on a posed mesh. The rig document lives beside the
     // .pemesh; baked weight edits stay in memory until explicitly saved to that .pemesh.
     class RigEditor : public Widget
     {
     public:
         RigEditor() : Widget("Rig Editor") { m_open = false; }
-        ~RigEditor() override;
-        void Update() override;
+        void ResolveTarget(Scene &scene);
+        void DrawPanel(Scene &scene);
 
         // rig.* editor actions (agent route). Returns a JSON result string.
         std::string HandleAction(const std::string &action, const std::string &argsJson);
@@ -63,11 +65,7 @@ namespace pe
         bool HasTarget() const { return m_model != nullptr; }
 
     private:
-        enum class Mode
-        {
-            Edit,
-            Pose
-        };
+        friend class AnimationPoseViewport;
 
         struct ShellInfo
         {
@@ -92,17 +90,6 @@ namespace pe
             std::vector<std::string> pins;
         };
 
-        // One solved lock: the two-bone chain (root = the bone's parent, mid = the bone) and its rotation edits.
-        struct LockSolve
-        {
-            int lock = -1;
-            int root = -1, mid = -1;
-            quat rootRotation = quat(1.f, 0.f, 0.f, 0.f);
-            quat midRotation = quat(1.f, 0.f, 0.f, 0.f);
-            bool clamped = false;
-        };
-
-        void ResolveTarget(Scene &scene);
         void ClearDocument();
         void PushUndo(bool keepPreset = false); // call BEFORE mutating the document
         void Restore(const Snapshot &snapshot);
@@ -151,51 +138,15 @@ namespace pe
                         const vec3 &rayDir, const std::function<bool(const vec3 &, ImVec2 &)> &project, const ImVec2 &mouse,
                         vec3 &out) const;
         void DrawBoneTree(int parent, int depth);
-        void DrawPoseBoneTree(const Skeleton &skeleton, int parent, int depth);
         void DrawBoneProperties();
+        void DrawJointBlendPanel(Scene &scene);
         void DrawRigTransform();
         void TransformRig(std::span<const RigBone> base, const vec3 &move, const vec3 &rotateDegrees, const vec3 &scale,
-                          int pivotMode); // 0 feet, 1 centre, 2 origin
-        void DrawPosePanel(Scene &scene);
-        void DrawLocksPanel(Scene &scene, AnimationTimeline *timeline);
-        // Drop any in-flight grab / IK / reach / gizmo interaction without keying anything.
-        void AbortPoseEdits();
-        // Posed head / tail of every skeleton bone (tails from the authored rig, else from the children).
-        void PoseTails(const Skeleton &skeleton, std::span<const mat4> boneTransforms, std::vector<vec3> &heads,
-                       std::vector<vec3> &tails, std::vector<vec3> *restTails = nullptr) const;
-        // Lock geometry at a pose; false when the lock names unknown bones or would chase its own chain.
-        bool LockChain(const RigLock &lock, const Skeleton &skeleton, int &root, int &mid, int &target,
-                       std::string *why = nullptr) const;
-        bool LockAnchorPosed(const RigLock &lock, const Skeleton &skeleton, std::span<const mat4> boneTransforms,
-                             vec3 &out) const;
-        int AddLock(const std::string &bone, const std::string &target, float reach, const vec3 *anchor,
-                    std::string &error);
-        // Solves every enabled lock at boneTransforms; skipBone = a bone being dragged (its own locks wait).
-        void SolveLockRotations(const Skeleton &skeleton, std::span<const mat4> boneTransforms, int skipBone,
-                                std::vector<LockSolve> &out);
-        // Solves at the playhead (frame < 0) or at an explicit frame; pushUndo = own undo step, else the caller's.
-        bool SolveLocks(Scene &scene, int skipBone = -1, bool pushUndo = false, float frame = -1.f);
-        bool BakeLocks(Scene &scene, std::string &status);
-        // Grab: pull a bone's tail to target; the chain up to the first pinned bone (or the skeleton root) bends,
-        // distal bones first (CCD with stiffer parents), so a hand pull moves the arm, then the shoulder, then the torso.
-        bool IsPinned(const std::string &bone) const;
-        void TogglePin(const std::string &bone);
-        void GrabSolve(const Skeleton &skeleton, std::span<const mat4> boneTransforms, int bone, const vec3 &target,
-                       std::vector<std::pair<int, quat>> &out) const;
-        // keyedOut reports whether keys actually landed (false for an at-target no-op).
-        bool GrabTo(Scene &scene, int bone, const vec3 &target, float *gap = nullptr, bool pushUndo = false,
-                    bool *keyedOut = nullptr);
-        static void DrawPadlock(ImDrawList *drawList, const ImVec2 &centre, bool closed, ImU32 colour);
-        void DrawPoseViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize,
-                              bool &hovered, bool &active);
+                          const vec3 &pivot);
         void DrawJointBlendViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize,
                                     const mat4 &rootWorld, std::span<const mat4> boneTransforms,
                                     const std::function<bool(const vec3 &, ImVec2 &)> &project, bool &hovered,
                                     bool &active);
-        void DrawIkViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize,
-                            const mat4 &rootWorld, std::span<const mat4> boneTransforms,
-                            const std::function<bool(const vec3 &, ImVec2 &)> &project, bool &hovered, bool &active);
-        void DrawReferenceOverlay(AnimationTimeline *timeline, const ImVec2 &imageMin, const ImVec2 &imageSize);
         bool BuildPosedVertices(std::span<const mat4> boneTransforms, std::vector<vec3> &out) const;
         void ReadWeights(std::vector<RigWeightStroke::SkinWeight> &out) const;
         bool WriteWeights(Scene &scene, std::span<const RigWeightStroke::SkinWeight> weights);
@@ -203,19 +154,12 @@ namespace pe
         void PushWeightUndo();
         bool WeightUndo(Scene &scene, bool redo);
         bool SaveWeights(std::string &error);
-        bool LoadReference(const std::filesystem::path &path, std::string &error);
-        void ClearReference();
-        bool UpdateReferenceImage(AnimationTimeline *timeline, std::string &error);
-        void ReleaseReferenceImage(bool drainRendererFrames = false);
-        std::vector<std::string> SelectedSpringChain() const;
-        void SetMode(Mode mode);
+        int SelectedSkeletonBone() const;
 
         ModelAsset *m_model = nullptr;
         NodeId *m_rootNode = nullptr;
         std::vector<RigBone> m_bones;
         int m_selected = -1;
-        int m_poseSelected = -1;
-        Mode m_mode = Mode::Edit;
         bool m_dirty = false;
         bool m_showShapes = true;
         int m_dragBone = -1; // viewport drag in flight: bone + handle
@@ -227,32 +171,9 @@ namespace pe
         bool m_snap = false;
         int m_snapMode = 2; // 0 joints, 1 surface, 2 volume, 3 increment
         bool m_mirrorX = false;
-        bool m_poseDragging = false;
-        int m_poseGizmo = 0;     // 0 rotate, 1 move, 2 both
         float m_treeWidth = 0.f; // Bones pane width (px); 0 = 40% of the window on first draw
         std::vector<RigLock> m_locks;
         std::vector<std::string> m_pins; // bones a grab pull never bends past
-        int m_grabBone = -1;             // viewport grab in flight
-        bool m_grabPushed = false;       // this drag's Timeline undo landed with its first key
-        vec3 m_grabPlanePoint = vec3(0.f), m_grabOffset = vec3(0.f);
-        std::vector<vec3> m_lockBend; // last elbow bend direction per lock: pole continuity through straight arms
-        int m_lockTarget = -1;        // Add Lock target combo: -1 = fixed rig-space point
-        float m_lockReach = 1.f;
-        bool m_reachDragging = false;  // Reach slider: one undo pair per drag, pushed on the first real change
-        bool m_reachPushed = false;    // this reach drag's Timeline undo landed with its first solve
-        uint32_t m_poseEditSerial = 0; // Timeline pose edits already solved
-        bool m_onionBones = false;
-        int m_onionPrevious = 2;
-        int m_onionNext = 2;
-        bool m_motionTrail = false;
-        int m_trailPrevious = 8;
-        int m_trailNext = 8;
-        bool m_twoBoneIk = false;
-        int m_ikBone = -1;
-        vec3 m_ikTarget = vec3(0.f);
-        vec3 m_ikPole = vec3(0.f);
-        bool m_ikDragging = false;
-        bool m_ikDirty = false;
         bool m_jointBlend = false;
         RigWeightStroke::Mode m_weightMode = RigWeightStroke::Mode::Add;
         float m_weightRadius = 0.1f;
@@ -265,12 +186,6 @@ namespace pe
         std::vector<RigWeightStroke::SkinWeight> m_weightScratch;
         std::vector<std::vector<RigWeightStroke::SkinWeight>> m_weightUndo;
         std::vector<std::vector<RigWeightStroke::SkinWeight>> m_weightRedo;
-        std::filesystem::path m_referencePath;
-        AnimationReferenceFrames::Sequence m_referenceSequence;
-        int m_referenceFrameIndex = -1;
-        Image *m_referenceImage = nullptr;
-        void *m_referenceTexture = nullptr;
-        std::array<char, 512> m_referencePathBuffer{};
         int m_chainCount = 6;
         int m_syncedSelected = -2; // last bone selection pushed to the Animation Timeline
         int m_heat = 0;            // 0 off, 1 selected bone, 2 all bones
@@ -285,7 +200,7 @@ namespace pe
         std::vector<std::string> m_projectPresetErrors;
         std::string m_presetName; // preset the current bones came from; empty = hand-edited (Custom)
         vec3 m_xformMove = vec3(0.f), m_xformRotate = vec3(0.f), m_xformScale = vec3(1.f);
-        int m_xformPivot = 0;
+        vec3 m_xformPivot = vec3(0.f);
         std::vector<RigBone> m_xformBase; // bones at the start of the transform drag
         std::string m_status;
         std::string m_bakeNote; // Bake: dropped-clips notice appended to the callers' status

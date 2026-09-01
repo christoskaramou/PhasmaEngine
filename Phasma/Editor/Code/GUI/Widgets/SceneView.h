@@ -16,7 +16,7 @@ namespace pe
         void DrawGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize);
         bool DrawRuntimeUiTransformGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize);
         void DrawSkinnedStrip2DIkGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize);
-        void DrawRigEditorGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize);
+        void DrawRigAndPoseGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize);
         void DrawTransformGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize);
         void DrawOrientationGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize);
         void DrawLightGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize);

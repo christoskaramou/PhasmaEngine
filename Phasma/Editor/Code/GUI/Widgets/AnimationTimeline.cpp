@@ -1,9 +1,11 @@
 #include "AnimationTimeline.h"
 #include "Animation/AnimationClipTools.h"
 #include "Animation/AnimationEvaluator.h"
+#include "Animation/AnimationPoseViewport.h"
 #include "Animation/AnimationPoseTools.h"
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
+#include "GUI/Widgets/RigEditor.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/ModelAssetCooked.h"
 #include "Scene/Scene.h"
@@ -19,6 +21,20 @@
 
 namespace pe
 {
+    AnimationTimeline::AnimationTimeline() : Widget("Animation Timeline")
+    {
+        m_open = false;
+        m_rigEditor = std::make_unique<RigEditor>();
+    }
+
+    AnimationTimeline::~AnimationTimeline() = default;
+
+    void AnimationTimeline::Init(GUI *gui)
+    {
+        Widget::Init(gui);
+        m_rigEditor->Init(gui);
+    }
+
     // Blender (4.x) Dope Sheet / Timeline palette.
     namespace bl
     {
@@ -882,7 +898,7 @@ namespace pe
                     m_animatedNodes.clear();
                 }
             }
-            if (!model || !model->HasSkeleton() || model->GetAnimations().empty())
+            if (!model || !model->HasSkeleton())
                 return fail("no rigged animation target selected");
             if (model != m_editModel)
             {
@@ -892,6 +908,12 @@ namespace pe
                 m_lastClipCount = static_cast<int>(model->GetAnimations().size());
                 m_selectedClip = 0;
             }
+
+            if (action == "timeline.grab" || action == "timeline.pin" || action == "timeline.lock" ||
+                action == "timeline.reference_load" || action == "timeline.reference_clear")
+                return PoseViewport(*m_rigEditor)->HandleAction(scene, action, argsJson);
+            if (model->GetAnimations().empty())
+                return fail("the selected rig has no animation clip");
 
             NodeId *primary = m_animatedNodes.empty() ? m_targetNode : m_animatedNodes[0];
             const AnimationNodeState *state = primary ? anim->GetAnimationState(primary) : nullptr;
@@ -1350,6 +1372,10 @@ namespace pe
     void AnimationTimeline::DropTarget()
     {
         m_restDisplayed = false;
+        m_tabSuspended = false;
+        m_tabResumePlaying = false;
+        m_tabResumeRestPose = false;
+        m_ownershipSceneGeneration = ~uint32_t{0};
         ResetEditState();
         DropPendingRequests();
         m_editModel = nullptr;
@@ -2140,8 +2166,25 @@ namespace pe
     // -------------------------------------------------------------------------
     // header (Blender timeline header: mode, action, transport, frame, range, options)
     // -------------------------------------------------------------------------
+    void AnimationTimeline::DrawPanelMode()
+    {
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        const float width = ImGui::GetContentRegionAvail().x;
+        drawList->AddRectFilled(start, {start.x + width, start.y + m_headerHeight}, bl::kHeaderBg);
+        drawList->AddLine({start.x, start.y + m_headerHeight - 0.5f},
+                          {start.x + width, start.y + m_headerHeight - 0.5f}, IM_COL32(0, 0, 0, 90));
+        ImGui::SetCursorScreenPos({start.x + 8.f, start.y + 5.f});
+        if (ImGui::RadioButton("Rig", m_rigMode))
+            m_rigMode = true;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Animate", !m_rigMode))
+            m_rigMode = false;
+        ImGui::SetCursorScreenPos({start.x, start.y + m_headerHeight});
+    }
+
     bool AnimationTimeline::DrawHeader(Scene &scene, AnimationSystem *anim, ModelAsset *model, AnimationClip &clip,
-                                       float currentFrame)
+                                       float currentFrame, bool showEditorMode)
     {
         const size_t clipCountBefore = model->GetAnimations().size();
         ImDrawList *dl = ImGui::GetWindowDrawList();
@@ -2153,19 +2196,21 @@ namespace pe
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {6.f, 3.f});
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {4.f, 4.f});
 
-        // Editor mode
-        ImGui::SetNextItemWidth(ImGui::CalcTextSize("Graph Editor").x + ImGui::GetStyle().FramePadding.x * 2.f + ImGui::GetFrameHeight());
-        const char *modeNames[] = {"Dope Sheet", "Graph Editor"};
-        int modeIdx = static_cast<int>(m_mode);
-        if (ImGui::Combo("##mode", &modeIdx, modeNames, 2))
+        if (showEditorMode)
         {
-            m_mode = static_cast<Mode>(modeIdx);
-            m_fitPending = true;
+            ImGui::SetNextItemWidth(ImGui::CalcTextSize("Graph Editor").x + ImGui::GetStyle().FramePadding.x * 2.f + ImGui::GetFrameHeight());
+            const char *modeNames[] = {"Dope Sheet", "Graph Editor"};
+            int modeIdx = static_cast<int>(m_mode);
+            if (ImGui::Combo("##mode", &modeIdx, modeNames, 2))
+            {
+                m_mode = static_cast<Mode>(modeIdx);
+                m_fitPending = true;
+            }
+            ui::ItemTooltip("Editor mode: Dope Sheet (keyframes per channel) or Graph Editor (F-curves).");
+            ImGui::SameLine();
         }
-        ui::ItemTooltip("Editor mode: Dope Sheet (keyframes per channel) or Graph Editor (F-curves).");
 
         // Action (clip) selector + management
-        ImGui::SameLine();
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 11.f);
         const auto &clips = model->GetAnimations();
         const char *clipName = clip.name.empty() ? "<unnamed>" : clip.name.c_str();
@@ -3115,7 +3160,7 @@ namespace pe
         DrawRuler(scene, anim, clip, currentFrame, {m_keyLeft, origin.y}, {body.x - m_channelWidth, m_rulerHeight});
         DrawKeyArea(scene, anim, skeleton, clip, currentFrame, {m_keyLeft, origin.y + m_rulerHeight}, {body.x - m_channelWidth, body.y - m_rulerHeight});
         DrawChannelRegion(skeleton, clip, origin, {m_channelWidth, body.y});
-        DrawVScrollbar(origin, {m_channelWidth, body.y}, m_contentHeight);
+        DrawVScrollbar({origin.x + m_channelWidth, origin.y}, {body.x - m_channelWidth, body.y}, m_contentHeight);
         DrawHScrollbar({origin.x, origin.y + body.y}, {size.x, m_hScrollHeight}, ToFrame(clip.duration));
         ImGui::SetCursorScreenPos({origin.x, origin.y + size.y});
     }
@@ -3658,7 +3703,7 @@ namespace pe
         DrawRuler(scene, anim, clip, currentFrame, {origin.x + m_channelWidth, origin.y}, {body.x - m_channelWidth, m_rulerHeight});
         DrawCurveArea(scene, anim, clip, clip, currentFrame, {origin.x + m_channelWidth, origin.y + m_rulerHeight}, {body.x - m_channelWidth, body.y - m_rulerHeight});
         DrawCurveChannels(skeleton, clip, origin, {m_channelWidth, body.y});
-        DrawVScrollbar(origin, {m_channelWidth, body.y}, m_contentHeight);
+        DrawVScrollbar({origin.x + m_channelWidth, origin.y}, {body.x - m_channelWidth, body.y}, m_contentHeight);
         DrawHScrollbar({origin.x, origin.y + body.y}, {size.x, m_hScrollHeight}, ToFrame(clip.duration));
         ImGui::SetCursorScreenPos({origin.x, origin.y + size.y});
     }
@@ -3798,11 +3843,65 @@ namespace pe
             m_gui->NotifyChange();
     }
 
+    void AnimationTimeline::EnforcePlaybackOwnership(Scene &scene, AnimationSystem *anim, bool ownsTarget)
+    {
+        for (uint32_t i = 0; i < scene.GetNodeCount(); i++)
+        {
+            NodeId *node = scene.GetNodeId(i);
+            if (!anim->GetAnimationState(node) ||
+                (ownsTarget && std::find(m_animatedNodes.begin(), m_animatedNodes.end(), node) != m_animatedNodes.end()))
+                continue;
+            anim->SetPaused(node, true);
+            auto &joints = scene.GetNodeRuntime(node).jointMatrices;
+            if (!joints.empty())
+            {
+                joints.clear();
+                scene.MarkNodeDirty(node);
+            }
+        }
+    }
+
     void AnimationTimeline::SetGraphMode(bool graph)
     {
         m_mode = graph ? Mode::GraphEditor : Mode::DopeSheet;
         m_fitPending = true;
         m_curveFitPending = true;
+    }
+
+    AnimationPoseViewport *AnimationTimeline::PoseViewport(RigEditor &rig)
+    {
+        if (!m_poseViewport)
+            m_poseViewport = std::make_unique<AnimationPoseViewport>(*this, rig);
+        return m_poseViewport.get();
+    }
+
+    void AnimationTimeline::DrawViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin,
+                                         const ImVec2 &imageSize, bool &hovered, bool &active)
+    {
+        hovered = false;
+        active = false;
+        if (!m_visible)
+            return;
+        if (m_rigMode)
+            m_rigEditor->DrawViewport(scene, camera, imageMin, imageSize, hovered, active);
+        else
+            DrawPoseViewport(scene, camera, imageMin, imageSize, hovered, active);
+    }
+
+    bool AnimationTimeline::DrawPoseViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin,
+                                             const ImVec2 &imageSize, bool &hovered, bool &active)
+    {
+        hovered = false;
+        active = false;
+        if (!m_open || !m_gui)
+            return false;
+        if (!m_editModel || !m_editModel->HasSkeleton())
+            return false;
+        ViewportPose pose;
+        if (!GetViewportPose(m_editModel, pose))
+            return false;
+        PoseViewport(*m_rigEditor)->DrawViewport(scene, camera, imageMin, imageSize, hovered, active);
+        return true;
     }
 
     // -------------------------------------------------------------------------
@@ -3811,14 +3910,35 @@ namespace pe
     void AnimationTimeline::Update()
     {
         if (!m_open)
+        {
+            m_visible = false;
+            auto *rs = GetGlobalSystem<RendererSystem>();
+            auto *anim = GetGlobalSystem<AnimationSystem>();
+            if (rs && anim)
+            {
+                Scene &scene = rs->GetScene();
+                if (!m_tabSuspended)
+                {
+                    m_tabSuspended = true;
+                    m_tabResumePlaying = IsPlaying(anim);
+                    m_tabResumeRestPose = m_restDisplayed;
+                    RestPoseAll(scene, anim);
+                    EnforcePlaybackOwnership(scene, anim, false);
+                }
+                else if (m_ownershipSceneGeneration != scene.GetGeneration())
+                    EnforcePlaybackOwnership(scene, anim, false);
+                m_ownershipSceneGeneration = scene.GetGeneration();
+            }
             return;
+        }
 
         ImGui::SetNextWindowSize({1360, 360}, ImGuiCond_FirstUseEver);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0.f, 0.f});
         // Target resolution and the timeline.* request drains below run even while this window is a
-        // hidden docked tab: the Rig Editor's Pose overlay and agent actions depend on m_editModel.
+        // hidden docked tab: agent actions depend on m_editModel. Playback does not retain ownership.
         const bool visible = ImGui::Begin(m_name.c_str(), &m_open, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
         ImGui::PopStyleVar();
+        m_visible = visible;
 
         const float lineHeight = ImGui::GetTextLineHeight();
         m_rowHeight = std::round(lineHeight + 6.f);
@@ -3828,6 +3948,8 @@ namespace pe
         m_hScrollHeight = std::round(std::max(14.f, lineHeight));
         m_axisWidth = std::round(ImGui::CalcTextSize("-0.000").x + 12.f);
         m_channelWidth = std::round(std::max(210.f, ImGui::CalcTextSize("ForearmHand.R.001").x + 90.f));
+        if (visible)
+            DrawPanelMode();
 
         auto *rs = GetGlobalSystem<RendererSystem>();
         auto *anim = GetGlobalSystem<AnimationSystem>();
@@ -3839,6 +3961,31 @@ namespace pe
             return;
         }
         Scene &scene = rs->GetScene();
+        m_rigEditor->ResolveTarget(scene);
+        auto drawRigPanel = [&]()
+        {
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {8.f, 8.f});
+            ImGui::BeginChild("##rig_panel", {}, ImGuiChildFlags_AlwaysUseWindowPadding);
+            m_rigEditor->DrawPanel(scene);
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+        };
+
+        NodeId *previousTarget = m_targetNode;
+        if (!visible && !m_tabSuspended)
+        {
+            m_tabSuspended = true;
+            m_tabResumePlaying = IsPlaying(anim);
+            m_tabResumeRestPose = m_restDisplayed;
+            NodeId *primary = m_animatedNodes.empty() ? nullptr : m_animatedNodes[0];
+            if (const AnimationNodeState *state = primary ? anim->GetAnimationState(primary) : nullptr)
+            {
+                m_loop = state->loop;
+                if (state->playing)
+                    m_speed = state->speed;
+            }
+            RestPoseAll(scene, anim);
+        }
 
         // Target = hierarchy selection (root or any node under an animated model).
         auto &selection = SelectionManager::Instance();
@@ -3852,20 +3999,34 @@ namespace pe
         m_animatedNodes.clear();
         if (m_targetNode)
             CollectAnimatedNodes(scene, anim, m_targetNode);
+        if (m_tabSuspended && m_targetNode != previousTarget)
+        {
+            m_tabResumePlaying = false;
+            m_tabResumeRestPose = false;
+            m_restDisplayed = false;
+        }
 
         ModelAsset *model = nullptr;
         if (!m_animatedNodes.empty())
             model = scene.GetModelForNode(m_animatedNodes[0]);
         if (!model && m_targetNode)
             model = scene.GetModelForNode(m_targetNode);
+        if (m_ownershipSceneGeneration != scene.GetGeneration() || m_targetNode != previousTarget)
+            EnforcePlaybackOwnership(scene, anim, visible && model && model->HasSkeleton());
+        m_ownershipSceneGeneration = scene.GetGeneration();
         // Follows the selection like the Rig Editor: nothing selected = no target.
         if (!model || !model->HasSkeleton())
         {
             m_editModel = nullptr;
             DropPendingRequests(); // a request queued with no target must not ambush the next selection
             if (visible)
-                ImGui::TextDisabled(m_targetNode ? "  The selected model has no skeleton (bake a rig first)."
-                                                 : "  No model selected: select a node of a rigged model in the hierarchy.");
+            {
+                if (m_rigMode)
+                    drawRigPanel();
+                else
+                    ImGui::TextDisabled(m_targetNode ? "  The selected model has no skeleton (bake a rig first)."
+                                                     : "  No model selected: select a node of a rigged model in the hierarchy.");
+            }
             ImGui::End();
             return;
         }
@@ -3969,6 +4130,38 @@ namespace pe
                 m_speed = state->speed;
         }
 
+        if (visible && m_tabSuspended)
+        {
+            const bool resumePlaying = m_tabResumePlaying;
+            const bool resumeRestPose = m_tabResumeRestPose;
+            m_tabSuspended = false;
+            m_tabResumePlaying = false;
+            m_tabResumeRestPose = false;
+            if (!resumeRestPose)
+            {
+                SetFrame(scene, anim, currentFrame);
+                if (resumePlaying)
+                    SetPlaying(scene, anim, true, m_speed < 0.f);
+            }
+        }
+
+        if (!visible)
+        {
+            if (m_pendingClipSet || m_pendingFrame >= 0.f || !m_pendingPoses.empty())
+                m_tabResumeRestPose = false;
+            if (m_pendingRest)
+            {
+                m_tabResumePlaying = false;
+                m_tabResumeRestPose = true;
+            }
+            if (m_pendingPlay >= 0)
+            {
+                m_tabResumePlaying = m_pendingPlay != 0;
+                if (m_pendingPlay != 0)
+                    m_tabResumeRestPose = false;
+            }
+        }
+
         // programmatic requests (editor actions timeline.*)
         if (!m_pendingBone.empty())
         {
@@ -4029,7 +4222,7 @@ namespace pe
                 m_speed = -std::abs(m_speed);
             else if (m_pendingPlay == 1)
                 m_speed = std::abs(m_speed);
-            SetPlaying(scene, anim, m_pendingPlay != 0, m_pendingPlay == 2);
+            SetPlaying(scene, anim, visible && m_pendingPlay != 0, m_pendingPlay == 2);
             m_pendingPlay = -1;
         }
         if (m_pendingSave)
@@ -4041,16 +4234,26 @@ namespace pe
 
         if (!visible)
         {
+            // Pose/agent requests may have reevaluated or started the newly resolved target above.
+            if (!m_restDisplayed || IsPlaying(anim))
+                RestPoseAll(scene, anim);
             ImGui::End();
             return;
         }
 
-        if (DrawHeader(scene, anim, model, clip, currentFrame))
+        if (DrawHeader(scene, anim, model, clip, currentFrame, !m_rigMode))
         {
             ImGui::End();
             return;
         }
+        if (m_rigMode)
+        {
+            drawRigPanel();
+            ImGui::End();
+            return;
+        }
         DrawPoseBar(scene, anim, skeleton, clip, currentFrame);
+        PoseViewport(*m_rigEditor)->DrawControls(scene);
         if (m_mode == Mode::DopeSheet)
             DrawDopeSheet(scene, anim, skeleton, clip, currentFrame);
         else

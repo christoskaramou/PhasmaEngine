@@ -20,7 +20,19 @@ namespace pe
         float tailRadius = 0.05f;
         bool rigid = false;
         bool spline = false;
+        float swingLimitDegrees = 0.f;
+        float twistLimitDegrees = 0.f;
         std::vector<std::string> shellPatterns;
+    };
+
+    struct RigPresetLock
+    {
+        std::string bone;
+        std::string target;
+        vec3 anchor = vec3(0.f);
+        bool hasAnchor = false;
+        float reach = 1.f;
+        bool enabled = true;
     };
 
     // Normalized Y stations (and hip / shoulder half-widths in X) of a biped template. Presets carrying them are
@@ -50,6 +62,8 @@ namespace pe
         std::string description;
         std::filesystem::path sourcePath;
         std::vector<RigPresetBone> bones;
+        std::vector<std::string> pins;
+        std::vector<RigPresetLock> locks;
         RigPresetLandmarks landmarks;
     };
 
@@ -65,7 +79,19 @@ namespace pe
         float tailRadius = 0.05f;
         bool rigid = false;
         bool spline = false;
+        float swingLimitDegrees = 0.f;
+        float twistLimitDegrees = 0.f;
         std::string shell;
+    };
+
+    struct FittedRigPresetLock
+    {
+        std::string bone;
+        std::string target;
+        vec3 anchor = vec3(0.f);
+        bool hasAnchor = false;
+        float reach = 1.f;
+        bool enabled = true;
     };
 
     class RigPresetLibrary
@@ -87,6 +113,7 @@ namespace pe
         // With landmarks (and a preset that carries template stations) Y and X are remapped onto them.
         static bool Fit(const RigPreset &preset, const AABB &bounds, std::span<const std::string> shellNames,
                         std::vector<FittedRigPresetBone> &bones, std::string &error,
-                        const MeasuredLandmarks *landmarks = nullptr);
+                        const MeasuredLandmarks *landmarks = nullptr,
+                        std::vector<FittedRigPresetLock> *locks = nullptr);
     };
 } // namespace pe

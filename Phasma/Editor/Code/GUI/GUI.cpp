@@ -985,7 +985,8 @@ namespace pe
                                        "only, already applied live)",
                   "VoxelPainter", "command", hasMapPainter, false, false);
 
-        const bool hasTimeline = GetWidget<AnimationTimeline>() != nullptr;
+        AnimationTimeline *timeline = GetWidget<AnimationTimeline>();
+        const bool hasTimeline = timeline != nullptr;
         addAction("timeline.mode", "Animation Timeline: Set Mode (args: mode dope|graph)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.frame", "Animation Timeline: Set Current Frame (args: frame)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.bone", "Animation Timeline: Select Bone Channel (args: bone name)", "Timeline", "command", hasTimeline, false, false);
@@ -995,6 +996,11 @@ namespace pe
         addAction("timeline.clip", "Animation Timeline: Select Or Create An Action (args: name, end frames, fps)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.pose", "Animation Timeline: Key A Bone Pose Relative To The Bind Pose (args: bone, frame, loc[3], rot[3] degrees, scale[3])", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.rest", "Animation Timeline: Show The Bind Pose (pauses playback, clears the evaluated pose; writes no keys - scrub or play to return to the clip)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.reference_load", "Animation Timeline: Load A .reference.json Viewport Sequence (args: path)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.reference_clear", "Animation Timeline: Clear The Viewport Reference Sequence", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.pin", "Animation Timeline: Pin / Unpin A Bone So Puppet Drag Stops There (args: bone, pinned bool; omit pinned to toggle)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.grab", "Animation Timeline: Puppet-Drag A Bone Tail To A Rig-Space Point Through The Limited Chain (args: bone, target[3])", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.lock", "Animation Timeline: Use A Rig Lock (args: op list|add|remove|set|solve|bake, bone, target, anchor[3], reach 0.3-1, enabled, index)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.analyze", "Motion Doctor: Analyze Quaternion Flips, Pops, Jitter, Loop Seam, Root Drift And Selected-Bone Sliding (optional bone)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.fix_quaternions", "Motion Doctor: Fix Quaternion Hemisphere Flips", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.smooth", "Motion Doctor: Smooth Keys (optional bones, frame range, strength, passes, channels)", "Timeline", "command", hasTimeline, false, false);
@@ -1006,12 +1012,12 @@ namespace pe
         addAction("timeline.motion.spring_bake", "Motion Doctor: Bake Spring Follow-Through (ordered bones chain; optional spring settings)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.world_drift", "Motion Doctor: Measure A Bone's World Drift (bone; optional frame range and sampling)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.stabilize_world", "Motion Doctor: Stabilize A Bone In World Space (bone; optional compensation bone, frame range and sampling)", "Timeline", "command", hasTimeline, false, false);
-        RigEditor *rig = GetWidget<RigEditor>();
+        RigEditor *rig = timeline ? &timeline->Rig() : nullptr;
         const bool hasRig = rig != nullptr;
         addAction("rig.state", "Rig Editor: Dump The Rig Document (bones, shapes, selection)", "Rig", "command", hasRig, false, false);
-        addAction("rig.reference_load", "Rig Editor: Load A .reference.json Image Sequence (args: path)", "Rig", "command", hasRig, false, false);
-        addAction("rig.reference_clear", "Rig Editor: Clear The Viewport Reference Sequence", "Rig", "command", hasRig, false, false);
-        addAction("rig.mode", "Rig Editor: Set Mode (args: mode edit|pose)", "Rig", "command", hasRig, false, false);
+        addAction("rig.reference_load", "Legacy Alias For timeline.reference_load", "Rig", "command", hasTimeline, false, false);
+        addAction("rig.reference_clear", "Legacy Alias For timeline.reference_clear", "Rig", "command", hasTimeline, false, false);
+        addAction("rig.mode", "Animation Timeline: Set Panel (args: mode rig|edit|animate|pose)", "Rig", "command", hasRig, false, false);
         addAction("rig.preset", "Rig Editor: Build Bones (args: preset, id or name; auto|existing|clear, a builtin_presets id, or project data from Assets/RigPresets)", "Rig", "command", hasRig, false, false);
         if (rig)
         {
@@ -1023,7 +1029,7 @@ namespace pe
                 result["actions"].back()["preset_errors"] = projectPresets.value("errors", nlohmann::json::array());
             }
         }
-        addAction("rig.transform", "Rig Editor: Move / Rotate / Scale Every Bone (args: move[3], rotate[3] degrees, scale number|[3], pivot feet|centre|origin)", "Rig", "command", hasRig, false, false);
+        addAction("rig.transform", "Rig Editor: Move / Rotate / Scale Every Bone (args: move[3], rotate[3] degrees, scale number|[3], pivot[3])", "Rig", "command", hasRig, false, false);
         addAction("rig.add", "Rig Editor: Add Bone (args: name, parent, head[3], tail[3], radius_head, radius_tail, rigid)", "Rig", "command", hasRig, false, false);
         addAction("rig.set", "Rig Editor: Edit Bone (args: bone name|index, name, parent, head, tail, radius_head, radius_tail, rigid, spline, shell)", "Rig", "command", hasRig, false, false);
         addAction("rig.chain", "Rig Editor: Subdivide A Bone Into A Spline Chain (args: bone name|index, count)", "Rig", "command", hasRig, false, false);
@@ -1032,9 +1038,9 @@ namespace pe
         addAction("rig.save", "Rig Editor: Save <model>.rig.json Beside The .pemesh", "Rig", "command", hasRig, false, false);
         addAction("rig.load", "Rig Editor: Load <model>.rig.json", "Rig", "command", hasRig, false, false);
         addAction("rig.bake", "Rig Editor: Bake The Rig Into <model>_rigged.pemesh And Swap It Into The Scene", "Rig", "command", hasRig, false, false);
-        addAction("rig.pin", "Rig Editor: Pin / Unpin A Bone So Grab Pulls From Its Children Stop There (args: bone, pinned bool; omit pinned to toggle)", "Rig", "command", hasRig, false, false);
-        addAction("rig.grab", "Rig Editor: Pull A Bone's Tail To A Rig-Space Point, Bending The Chain Up To The First Pin (args: bone, target[3])", "Rig", "command", hasRig, false, false);
-        addAction("rig.lock", "Rig Editor: Pin A Bone's Tail To A Point On Another Bone Or In Rig Space, Solved With Two-Bone IK After Every Pose Edit (args: op list|add|remove|set|solve|bake, bone, target, anchor[3], reach 0.3-1, enabled, index)", "Rig", "command", hasRig, false, false);
+        addAction("rig.pin", "Legacy Alias For timeline.pin", "Rig", "command", hasTimeline, false, false);
+        addAction("rig.grab", "Legacy Alias For timeline.grab", "Rig", "command", hasTimeline, false, false);
+        addAction("rig.lock", "Legacy Alias For timeline.lock", "Rig", "command", hasTimeline, false, false);
         addAction("rig.shapes", "Rig Editor: Show Influence Shapes (args: show)", "Rig", "command", hasRig, false, false);
         addAction("rig.snap", "Rig Editor: Snapping (args: enabled, mode joints|surface|volume|increment)", "Rig", "command", hasRig, false, false);
         addAction("rig.mirror", "Rig Editor: X-Mirror .L/.R Edits (args: enabled)", "Rig", "command", hasRig, false, false);
@@ -1138,14 +1144,27 @@ namespace pe
         if (action.rfind("window.", 0) == 0)
             return SetEditorWindowOpen(action, argsJson);
 
-        // Rig Editor programmatic route (the widget parses and applies the args itself).
+        // Pose aliases select the Animate panel of the combined window.
+        if (action == "rig.reference_load" || action == "rig.reference_clear" || action == "rig.pin" ||
+            action == "rig.grab" || action == "rig.lock")
+        {
+            auto *timeline = GetWidget<AnimationTimeline>();
+            if (!timeline)
+                return R"({"error":"Animation Timeline not available"})";
+            *timeline->GetOpen() = true;
+            timeline->SetRigMode(false);
+            return timeline->HandleAction("timeline." + action.substr(4), argsJson);
+        }
+
+        // Rig actions select the Rig panel of the combined window.
         if (action.rfind("rig.", 0) == 0)
         {
-            auto *rig = GetWidget<RigEditor>();
-            if (!rig)
-                return R"({"error":"Rig Editor not available"})";
-            *rig->GetOpen() = true;
-            return rig->HandleAction(action, argsJson);
+            auto *timeline = GetWidget<AnimationTimeline>();
+            if (!timeline)
+                return R"({"error":"Animation Timeline not available"})";
+            *timeline->GetOpen() = true;
+            timeline->SetRigMode(true);
+            return timeline->Rig().HandleAction(action, argsJson);
         }
 
         // Animation Timeline programmatic route (mode / frame / bone / save) for agents.
@@ -1155,6 +1174,7 @@ namespace pe
             if (!timeline)
                 return R"({"error":"Animation Timeline not available"})";
             *timeline->GetOpen() = true;
+            timeline->SetRigMode(false);
             if (action == "timeline.mode")
             {
                 const std::string mode = args.value("mode", "dope");
@@ -3492,7 +3512,6 @@ namespace pe
         auto runtimeUiPalette = std::make_shared<RuntimeUiPalette>();
         auto sceneScripts = std::make_shared<SceneScripts>();
         auto animTimeline = std::make_shared<AnimationTimeline>();
-        auto rigEditor = std::make_shared<RigEditor>();
 #ifdef PE_PHYSICS
         auto physicsWidget = std::make_shared<PhysicsWidget>();
 #endif
@@ -3526,7 +3545,6 @@ namespace pe
             runtimeUiPalette,
             sceneScripts,
             animTimeline,
-            rigEditor,
 #ifdef PE_PHYSICS
             physicsWidget,
 #endif
@@ -3557,8 +3575,7 @@ namespace pe
                                terrainBrush,
                                runtimeUiPalette,
                                sceneScripts,
-                               animTimeline,
-                               rigEditor};
+                               animTimeline};
         for (auto &widget : m_widgets)
             widget->Init(this);
 
@@ -3860,12 +3877,17 @@ namespace pe
             PE_PROFILE_SCOPE("Widgets");
             for (auto &widget : m_widgets)
             {
-                if (widget->IsOpen())
+                if (!widget->IsOpen())
                 {
-                    ApplyEditorDockedWindowClass();
-                    widget->Update();
-                    CloseWidgetOnHovered(widget->GetName().c_str(), *widget->GetOpen());
+                    // The Timeline owns animation playback, so it must release that ownership when closed.
+                    if (dynamic_cast<AnimationTimeline *>(widget.get()))
+                        widget->Update();
+                    continue;
                 }
+
+                ApplyEditorDockedWindowClass();
+                widget->Update();
+                CloseWidgetOnHovered(widget->GetName().c_str(), *widget->GetOpen());
             }
         }
 
