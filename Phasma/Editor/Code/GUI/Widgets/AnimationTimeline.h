@@ -473,6 +473,7 @@ namespace pe
         static constexpr float kRightMargin = 16.f; // keeps the last frame's keys and ruler label inside the view
         static constexpr float kScrollbarWidth = 8.f;
         static constexpr float kMinViewFrames = 4.f;
+        static constexpr float kMinBodyRows = 8.f; // rows the dope sheet / graph keeps before the window scrolls
         static constexpr int kMaxUndo = 64;
     };
 } // namespace pe

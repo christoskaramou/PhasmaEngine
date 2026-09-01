@@ -808,11 +808,12 @@ namespace pe
         j["bones"] = bones;
         nlohmann::ordered_json locks = nlohmann::ordered_json::array();
         for (const RigLock &lock : m_locks)
-            locks.push_back({{"bone", lock.bone},
-                             {"target", lock.target},
-                             {"anchor", FromVec3(lock.anchor)},
-                             {"reach", lock.reach},
-                             {"enabled", lock.enabled}});
+            if (!lock.automatic) // holds captured while posing belong to the session, not to the rig document
+                locks.push_back({{"bone", lock.bone},
+                                 {"target", lock.target},
+                                 {"anchor", FromVec3(lock.anchor)},
+                                 {"reach", lock.reach},
+                                 {"enabled", lock.enabled}});
         j["locks"] = locks;
         j["pins"] = m_pins;
         return j.dump(2);

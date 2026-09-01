@@ -176,6 +176,8 @@ namespace pe
 
         const float stepperWidth = ImGui::GetFontSize() * 4.f;
         ImGui::Checkbox("Onion Bones", &m_onionBones);
+        ui::ItemTooltip("Ghost the skeleton at the neighbouring frames: blue behind, red ahead, fading with distance. "
+                        "The two steppers set how many frames back and forward.");
         if (m_onionBones)
         {
             ImGui::SameLine();
@@ -187,6 +189,8 @@ namespace pe
         }
         ui::SameLineIfFits(ui::CheckboxWidth("Motion Trail"));
         ImGui::Checkbox("Motion Trail", &m_motionTrail);
+        ui::ItemTooltip("Trace the selected bone's path across the neighbouring frames. The two steppers set how many "
+                        "frames back and forward.");
         if (m_motionTrail)
         {
             ImGui::SameLine();
@@ -227,6 +231,8 @@ namespace pe
             ImGui::SetNextItemWidth(std::max(ImGui::GetFontSize() * 11.f,
                                              ImGui::GetContentRegionAvail().x - ui::ButtonWidth("Browse Load Clear")));
             ImGui::InputText("##timeline_reference_path", m_referencePathBuffer.data(), m_referencePathBuffer.size());
+            ui::ItemTooltip("Path to a *.reference.json manifest. Load draws its frames behind the viewport at the "
+                            "playhead's time, so you can pose against filmed footage. Browse picks one under Assets.");
             ImGui::SameLine();
             if (ImGui::Button("Browse##timeline_reference") && m_timeline.m_gui)
                 if (FileSelector *selector = m_timeline.m_gui->GetWidget<FileSelector>())
@@ -775,6 +781,7 @@ namespace pe
                         m_status = result.targetClamped
                                        ? "Two-Bone IK keyed as one edit; target was outside chain reach and was clamped."
                                        : "Two-Bone IK keyed as one edit at the current frame.";
+                        HoldPosedBone(m_poseSelected);
                         SolveLocks(scene); // the tip's own lock reapplies too: locks always win, like a grab release
                     }
                     else
@@ -891,32 +898,81 @@ namespace pe
         if (anchor)
             lock.anchor = *anchor;
         else
-        {
-            // Pin the tail where it is now: the Timeline pose when there is one, else the rest pose.
-            AnimationTimeline *timeline = &m_timeline;
-            AnimationTimeline::ViewportPose pose;
-            if (!timeline || !timeline->GetViewportPose(m_model, pose) ||
-                static_cast<int>(pose.boneTransforms.size()) != boneCount)
-            {
-                pose.boneTransforms.resize(boneCount);
-                for (int i = 0; i < boneCount; i++)
-                    pose.boneTransforms[i] = glm::inverse(skeleton.rootTransform) * glm::inverse(skeleton.bones[i].offsetMatrix);
-            }
-            std::vector<vec3> heads, tails;
-            PoseTails(skeleton, pose.boneTransforms, heads, tails);
-            if (targetIndex >= 0)
-            {
-                const mat4 bind = glm::inverse(skeleton.rootTransform) * glm::inverse(skeleton.bones[targetIndex].offsetMatrix);
-                lock.anchor = vec3(bind * glm::inverse(pose.boneTransforms[targetIndex]) * vec4(tails[mid], 1.f));
-            }
-            else
-                lock.anchor = tails[mid];
-        }
+            CaptureLockAnchor(lock);
         PushUndo(true);
         m_locks.push_back(std::move(lock));
         m_lockBend.clear();
         m_dirty = true;
         return static_cast<int>(m_locks.size()) - 1;
+    }
+
+    // Pin the tail where it is now: the Timeline pose when there is one, else the rest pose.
+    bool AnimationPoseViewport::CaptureLockAnchor(RigLock &lock)
+    {
+        if (!m_model || !m_model->HasSkeleton())
+            return false;
+        const Skeleton &skeleton = m_model->GetSkeleton();
+        const int boneCount = skeleton.GetBoneCount();
+        int root, mid, targetIndex;
+        if (!LockChain(lock, skeleton, root, mid, targetIndex))
+            return false;
+        AnimationTimeline::ViewportPose pose;
+        if (!m_timeline.GetViewportPose(m_model, pose) || static_cast<int>(pose.boneTransforms.size()) != boneCount)
+        {
+            pose.boneTransforms.resize(boneCount);
+            for (int i = 0; i < boneCount; i++)
+                pose.boneTransforms[i] = glm::inverse(skeleton.rootTransform) * glm::inverse(skeleton.bones[i].offsetMatrix);
+        }
+        std::vector<vec3> heads, tails;
+        PoseTails(skeleton, pose.boneTransforms, heads, tails);
+        if (targetIndex >= 0)
+        {
+            const mat4 bind = glm::inverse(skeleton.rootTransform) * glm::inverse(skeleton.bones[targetIndex].offsetMatrix);
+            lock.anchor = vec3(bind * glm::inverse(pose.boneTransforms[targetIndex]) * vec4(tails[mid], 1.f));
+        }
+        else
+            lock.anchor = tails[mid];
+        return true;
+    }
+
+    // Cascadeur's fixators: the bones you moved by hand hold the point you left them at while the rest of the
+    // body swings free. Dragging a bone that already holds carries its anchor along, so it never springs back.
+    void AnimationPoseViewport::HoldPosedBone(int bone)
+    {
+        if (!m_model || !m_model->HasSkeleton())
+            return;
+        const Skeleton &skeleton = m_model->GetSkeleton();
+        if (bone < 0 || bone >= skeleton.GetBoneCount())
+            return;
+        auto hold = [&](const std::string &name)
+        {
+            for (RigLock &existing : m_locks)
+                if (existing.bone == name)
+                {
+                    if (CaptureLockAnchor(existing))
+                    {
+                        m_lockBend.clear();
+                        m_dirty = m_dirty || !existing.automatic; // a hand-made lock moved: the rig document changed
+                    }
+                    return;
+                }
+            RigLock lock;
+            lock.bone = name;
+            lock.reach = m_lockReach;
+            lock.automatic = true;
+            int root, mid, target;
+            if (!m_autoLock || !LockChain(lock, skeleton, root, mid, target) || !CaptureLockAnchor(lock))
+                return; // no two-bone chain above it: nothing to hold the point with
+            m_locks.push_back(std::move(lock));
+            m_lockBend.clear();
+        };
+        hold(skeleton.bones[bone].name);
+        if (m_mirrorX)
+        {
+            const std::string mirror = MirrorName(skeleton.bones[bone].name);
+            if (!mirror.empty() && mirror != skeleton.bones[bone].name && skeleton.GetBoneIndex(mirror) >= 0)
+                hold(mirror); // the mirrored counterpart was posed too
+        }
     }
 
     void AnimationPoseViewport::SolveLockRotations(const Skeleton &skeleton, std::span<const mat4> boneTransforms, int skipBone,
@@ -1089,7 +1145,8 @@ namespace pe
             std::string why;
             const bool valid = LockChain(lock, skeleton, root, mid, target, &why);
             ImGui::SameLine();
-            ImGui::TextDisabled("%s -> %s%s%s", lock.bone.c_str(), lock.target.empty() ? "rig space" : lock.target.c_str(),
+            ImGui::TextDisabled("%s -> %s%s%s%s", lock.bone.c_str(),
+                                lock.target.empty() ? "rig space" : lock.target.c_str(), lock.automatic ? " (held)" : "",
                                 valid ? "" : " (", valid ? "" : (why + ")").c_str());
 
             ui::SameLineIfFits(ui::LabelledItemWidth(kReachWidth, "Reach") + ui::ButtonWidth("X"));
@@ -1145,6 +1202,11 @@ namespace pe
         ImGui::SetNextItemWidth(kReachWidth);
         ImGui::SliderFloat("##lock_reach", &m_lockReach, 0.3f, 1.f, "Reach %.2f");
         ui::ItemTooltip("Reach limit for the new lock.");
+        ui::SameLineIfFits(ui::CheckboxWidth("Hold Posed"));
+        ImGui::Checkbox("Hold Posed", &m_autoLock);
+        ui::ItemTooltip("Every bone you pose by hand keeps the point you left it at: it gets a lock there, so posing "
+                        "the rest of the body pulls the chain around instead of dragging it away. Re-dragging a held "
+                        "bone carries its lock along. These holds are session state and are not saved to the rig.");
         ui::SameLineIfFits(ui::ButtonWidth("Add Lock"));
         ImGui::BeginDisabled(!haveBone);
         if (ImGui::Button("Add Lock"))
@@ -1678,7 +1740,10 @@ namespace pe
                 if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) || m_grabBone >= boneCount)
                 {
                     if (m_grabPushed)
+                    {
+                        HoldPosedBone(m_grabBone);
                         SolveLocks(scene); // the grabbed bone's own lock waited for the release
+                    }
                     m_grabBone = -1;
                     active = false;
                 }
@@ -1816,7 +1881,10 @@ namespace pe
         if (m_poseDragging && !gizmoActive)
         {
             if (m_poseDirect || m_posePushed)
+            {
+                HoldPosedBone(m_poseSelected);
                 SolveLocks(scene); // the dragged bone's own locks, skipped during the drag
+            }
             if (m_poseDirect)
                 timeline->EndViewportRotate();
             m_poseDragging = false;
