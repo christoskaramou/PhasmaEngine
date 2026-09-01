@@ -2174,10 +2174,13 @@ namespace pe
         drawList->AddRectFilled(start, {start.x + width, start.y + m_headerHeight}, bl::kHeaderBg);
         drawList->AddLine({start.x, start.y + m_headerHeight - 0.5f},
                           {start.x + width, start.y + m_headerHeight - 0.5f}, IM_COL32(0, 0, 0, 90));
-        ImGui::SetCursorScreenPos({start.x + 8.f, start.y + 5.f});
+        // SameLine after SetCursorScreenPos keeps the previous line's Y, so Animate sat higher than Rig.
+        const float y = start.y + std::floor((m_headerHeight - ImGui::GetFrameHeight()) * 0.5f);
+        ImGui::SetCursorScreenPos({start.x + 8.f, y});
         if (ImGui::RadioButton("Rig", m_rigMode))
             m_rigMode = true;
         ImGui::SameLine();
+        ImGui::SetCursorScreenPos({ImGui::GetCursorScreenPos().x, y});
         if (ImGui::RadioButton("Animate", !m_rigMode))
             m_rigMode = false;
         ImGui::SetCursorScreenPos({start.x, start.y + m_headerHeight});

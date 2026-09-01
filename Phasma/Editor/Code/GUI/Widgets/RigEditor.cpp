@@ -1756,8 +1756,7 @@ namespace pe
             snprintf(m_nameBuf, sizeof(m_nameBuf), "%s", b.name.c_str());
             s_nameFor = m_selected;
         }
-        ImGui::SetNextItemWidth(-1.f);
-        const bool nameEdited = ImGui::InputText("##name", m_nameBuf, sizeof(m_nameBuf));
+        const bool nameEdited = ImGui::InputText("Name", m_nameBuf, sizeof(m_nameBuf));
         if (ImGui::IsItemActivated())
             PushUndo();
         if (nameEdited)
@@ -1768,10 +1767,10 @@ namespace pe
                 m_dirty = true;
             }
         }
+        ui::ItemTooltip("Bone name (must be unique in this rig)");
 
         const char *parentName = b.parent >= 0 ? m_bones[b.parent].name.c_str() : "(none)";
-        ImGui::SetNextItemWidth(-1.f);
-        if (ImGui::BeginCombo("##parent", parentName))
+        if (ImGui::BeginCombo("Parent", parentName))
         {
             if (ImGui::Selectable("(none)", b.parent < 0))
             {
@@ -1930,13 +1929,6 @@ namespace pe
         ImGui::SeparatorText("Weights");
         if (ImGui::Checkbox("Joint Blend", &m_jointBlend))
         {
-            if (m_jointBlend && SelectedSkeletonBone() < 0)
-                for (int i = 0; i < static_cast<int>(m_bones.size()); i++)
-                    if (m_model->GetSkeleton().GetBoneIndex(m_bones[i].name) >= 0)
-                    {
-                        m_selected = i;
-                        break;
-                    }
             if (!m_jointBlend && m_weightDragging)
             {
                 if (m_weightStrokeChanged)
@@ -1952,9 +1944,9 @@ namespace pe
         if (!m_jointBlend)
             return;
 
+        ImGui::Indent();
         const int selectedBone = SelectedSkeletonBone();
         const Skeleton &skeleton = m_model->GetSkeleton();
-        ImGui::SameLine();
         ImGui::TextDisabled("%s", selectedBone >= 0 ? skeleton.bones[selectedBone].name.c_str() : "(select a bind bone)");
         if (ImGui::RadioButton("Add", m_weightMode == RigWeightStroke::Mode::Add))
             m_weightMode = RigWeightStroke::Mode::Add;
@@ -1984,6 +1976,7 @@ namespace pe
                                           : error;
         }
         ui::ItemTooltip("Explicitly overwrite the current .pemesh. Weight strokes never autosave.");
+        ImGui::Unindent();
     }
 
     // -------------------------------------------------------------------------
