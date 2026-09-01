@@ -62,6 +62,8 @@ namespace pe
         constexpr ImU32 kKeyBorder = IM_COL32(0, 0, 0, 255);
         constexpr ImU32 kKeyBorderSel = IM_COL32(255, 235, 170, 255);
         constexpr ImU32 kKeyHover = IM_COL32(255, 255, 255, 255);
+        constexpr ImU32 kInterval = IM_COL32(255, 170, 60, 40);
+        constexpr ImU32 kIntervalEdge = IM_COL32(255, 190, 90, 215);
         constexpr ImU32 kBoxSelect = IM_COL32(255, 255, 255, 180);
         constexpr ImU32 kBoxSelectFill = IM_COL32(255, 255, 255, 18);
         constexpr ImU32 kIcon = IM_COL32(220, 220, 220, 255);
@@ -77,6 +79,51 @@ namespace pe
     namespace
     {
         constexpr float kFrameEps = 1e-3f;
+
+        bool ChannelKeyed(const AnimationChannel &channel)
+        {
+            return !channel.positionKeys.empty() || !channel.rotationKeys.empty() || !channel.scaleKeys.empty();
+        }
+
+        bool BoneKeyed(const AnimationClip &clip, int bone)
+        {
+            for (const AnimationChannel &channel : clip.channels)
+                if (channel.boneIndex == bone && ChannelKeyed(channel))
+                    return true;
+            return false;
+        }
+
+        std::string BoneNames(const Skeleton &skeleton, std::span<const int> bones)
+        {
+            std::string text;
+            const int shown = std::min(static_cast<int>(bones.size()), 3);
+            for (int i = 0; i < shown; ++i)
+            {
+                if (i)
+                    text += ", ";
+                const int bone = bones[i];
+                text += (bone >= 0 && bone < skeleton.GetBoneCount()) ? skeleton.bones[bone].name : std::to_string(bone);
+            }
+            if (static_cast<int>(bones.size()) > 3)
+                text += ", ...";
+            return text;
+        }
+
+        std::string TweenEmptyReason(const Skeleton &skeleton, const AnimationClip &clip, std::span<const int> bones)
+        {
+            if (!bones.empty())
+            {
+                std::vector<int> missing;
+                for (int bone : bones)
+                    if (!BoneKeyed(clip, bone))
+                        missing.push_back(bone);
+                if (!missing.empty() && missing.size() == bones.size())
+                    return "Tween wrote nothing: " + BoneNames(skeleton, missing) +
+                           (missing.size() == 1 ? " has no keys. Key its ends, or deselect to bake every keyed bone."
+                                                : " have no keys. Key their ends, or deselect to bake every keyed bone.");
+            }
+            return "Tween wrote nothing: no interior frames to bake.";
+        }
 
         enum class Icon
         {
@@ -574,7 +621,7 @@ namespace pe
 
     bool AnimationTimeline::KeyViewportGlobalRotations(Scene &scene, ModelAsset *model,
                                                        std::span<const GlobalBoneRotation> rotations, float frame,
-                                                       bool pushUndo)
+                                                       bool pushUndo, bool userPose)
     {
         if (!model || model != m_editModel || rotations.empty() || m_selectedClip < 0 ||
             m_selectedClip >= static_cast<int>(model->GetAnimations().size()))
@@ -701,6 +748,8 @@ namespace pe
                 rotation.value = quat(-rotation.value.w, -rotation.value.x, -rotation.value.y, -rotation.value.z);
             SetRotationKey(clip, channel, time, rotation.value);
         }
+        if (userPose)
+            RetweenAroundFrame(clip, bones, ToFrame(time));
         if (pushUndo)
             PushUndoSnapshot(before);
         m_dirty = true;
@@ -777,10 +826,12 @@ namespace pe
                 return quat(1.f, 0.f, 0.f, 0.f);
             return glm::normalize(glm::quat_cast(mat3(vec3(m[0]) / scale.x, vec3(m[1]) / scale.y, vec3(m[2]) / scale.z)));
         };
-        auto writeGlobalRotation = [&](int targetBone, const mat4 &rigTransform)
+        // Returns whether the bone was actually keyed: without Auto Key a bone with no key here is left
+        // alone, and interval mode must not rebuild the in-betweens of a bone nobody posed.
+        auto writeGlobalRotation = [&](int targetBone, const mat4 &rigTransform) -> bool
         {
             if (targetBone < 0 || targetBone >= skeleton.GetBoneCount())
-                return;
+                return false;
             const BoneInfo &info = skeleton.bones[targetBone];
             const mat4 desiredGlobal = skeleton.rootTransform * rigTransform;
             const mat4 local = info.parentIndex >= 0 && info.parentIndex < static_cast<int>(globalTransforms.size())
@@ -792,17 +843,27 @@ namespace pe
             if (channel < 0)
             {
                 if (!m_autoKey)
-                    return;
+                    return false;
                 channel = EnsureChannel(clip, targetBone);
             }
+            bool wrote = false;
             if (rotate && (m_autoKey || FindKeyAtTime(clip.channels[channel].rotationKeys, m_viewportRotateTime) >= 0))
+            {
                 SetRotationKey(clip, channel, m_viewportRotateTime, rotation);
+                wrote = true;
+            }
             if (translate &&
                 (m_autoKey || FindKeyAtTime(clip.channels[channel].positionKeys, m_viewportRotateTime) >= 0))
+            {
                 SetPositionKey(clip, channel, m_viewportRotateTime, vec3(localBone[3]));
+                wrote = true;
+            }
+            return wrote;
         };
 
-        writeGlobalRotation(bone, boneTransform);
+        std::vector<int> keyed;
+        if (writeGlobalRotation(bone, boneTransform))
+            keyed.push_back(bone);
         if (mirrorBone >= 0 && mirrorBone < skeleton.GetBoneCount() && mirrorBone != bone)
         {
             mat4 reflection(1.f);
@@ -814,9 +875,11 @@ namespace pe
                                                     : vec3(current[3]);
             const mat4 mirroredTransform = glm::translate(mat4(1.f), mirroredPosition) * glm::mat4_cast(mirroredRotation) *
                                            glm::scale(mat4(1.f), scale);
-            writeGlobalRotation(mirrorBone, mirroredTransform);
+            if (writeGlobalRotation(mirrorBone, mirroredTransform))
+                keyed.push_back(mirrorBone);
         }
 
+        RetweenAroundFrame(clip, keyed, ToFrame(m_viewportRotateTime));
         m_dirty = true;
         if (AnimationSystem *anim = GetGlobalSystem<AnimationSystem>())
             ReevaluatePose(scene, anim);
@@ -1072,6 +1135,78 @@ namespace pe
                 ReevaluatePose(scene, anim);
             };
 
+            if (action == "timeline.interval")
+            {
+                const float start = args.value("start", 0.f);
+                const float end = args.value("end", -1.f);
+                if (!std::isfinite(start) || !std::isfinite(end))
+                    return fail("start and end must be finite frames");
+                if (end < start + 1.f)
+                {
+                    ClearInterval();
+                    return ok({{"interval", false}});
+                }
+                m_intervalStart = std::clamp(start, 0.f, std::max(durationFrames - 1.f, 0.f));
+                m_intervalEnd = std::clamp(end, m_intervalStart + 1.f, std::max(durationFrames, m_intervalStart + 1.f));
+                return ok({{"interval", true}, {"start", m_intervalStart}, {"end", m_intervalEnd}});
+            }
+            if (action == "timeline.interval_slide" || action == "timeline.interval_scale")
+            {
+                if (!HasInterval())
+                    return fail("no interval: set one with timeline.interval");
+                const bool slide = action == "timeline.interval_slide";
+                const float factor = slide ? 1.f : args.value("factor", 1.f);
+                const float pivot = slide ? 0.f : args.value("pivot_frame", m_intervalStart);
+                const float requested = slide ? args.value("delta_frames", 0.f) : 0.f;
+                if (!std::isfinite(requested) || !std::isfinite(factor) || !std::isfinite(pivot) || factor <= 0.f ||
+                    factor > 100.f)
+                    return fail("delta_frames and pivot_frame must be finite, factor must be in (0, 100]");
+                // Clamp the delta, never the two ends on their own: clamping each end deforms the interval
+                // while its keys keep the full delta. The ruler drag clamps the same way.
+                const float delta =
+                    slide ? std::clamp(requested, -m_intervalStart, durationFrames - m_intervalEnd) : 0.f;
+                // Keys clamp into the clip range, so the band does too - a scale that reaches past frame
+                // zero is the specified case, not an error.
+                const float mappedStart = std::clamp(pivot + (m_intervalStart - pivot) * factor + delta, 0.f, durationFrames);
+                const float mappedEnd = std::clamp(pivot + (m_intervalEnd - pivot) * factor + delta, 0.f, durationFrames);
+                if (mappedEnd < mappedStart + 1.f)
+                    return fail("the interval would collapse below one frame");
+                const AnimationClip before = clip;
+                const size_t changed = RemapKeyTimes(clip, m_intervalStart, m_intervalEnd, pivot, factor, delta);
+                for (AnimationChannel &channel : clip.channels)
+                    SortChannelKeys(channel);
+                if (changed > 0)
+                    commit(before, changed); // pushes the undo snapshot while the band is still the old one
+                else if (std::abs(mappedStart - m_intervalStart) > kFrameEps ||
+                         std::abs(mappedEnd - m_intervalEnd) > kFrameEps)
+                    PushUndoSnapshot(before, m_intervalStart, m_intervalEnd); // an empty band that moved is undoable
+                m_intervalStart = mappedStart;
+                m_intervalEnd = mappedEnd;
+                return ok({{"keys_moved", changed},
+                           {"delta_frames", delta},
+                           {"start", m_intervalStart},
+                           {"end", m_intervalEnd}});
+            }
+            if (action == "timeline.tween")
+            {
+                if (m_intervalEnd < m_intervalStart + 2.f)
+                    return fail("the interval must span at least 2 frames: set one with timeline.interval");
+                const int everyN = args.value("every_n", 1);
+                if (everyN < 1 || everyN > 64)
+                    return fail("every_n must be between 1 and 64");
+                const std::vector<int> bones =
+                    args.contains("bones") || args.contains("chain") ? bonesArg(false) : IntervalBones();
+                const AnimationClip before = clip;
+                const size_t changed = TweenBones(clip, bones, m_intervalStart, m_intervalEnd, everyN,
+                                                  AnimationClipTools::TweenMode::SampleClip);
+                commit(before, changed);
+                m_tweenStatus = changed > 0 ? "Tween wrote " + std::to_string(changed) + " keys."
+                                            : TweenEmptyReason(skeleton, clip, bones);
+                return ok({{"keys_written", changed},
+                           {"start", m_intervalStart},
+                           {"end", m_intervalEnd},
+                           {"status", m_tweenStatus}});
+            }
             if (action == "timeline.motion.analyze")
             {
                 const Analysis analysis = Analyze(clip, skeleton);
@@ -1335,7 +1470,12 @@ namespace pe
 
     void AnimationTimeline::PushUndoSnapshot(const AnimationClip &snapshot)
     {
-        m_undo.push_back({snapshot, m_selectedClip});
+        PushUndoSnapshot(snapshot, m_intervalStart, m_intervalEnd);
+    }
+
+    void AnimationTimeline::PushUndoSnapshot(const AnimationClip &snapshot, float intervalStart, float intervalEnd)
+    {
+        m_undo.push_back({snapshot, m_selectedClip, intervalStart, intervalEnd});
         if (static_cast<int>(m_undo.size()) > kMaxUndo)
             m_undo.erase(m_undo.begin());
         m_redo.clear();
@@ -1346,8 +1486,10 @@ namespace pe
     {
         if (m_undo.empty() || m_undo.back().clipIndex != m_selectedClip)
             return;
-        m_redo.push_back({clip, m_selectedClip});
+        m_redo.push_back({clip, m_selectedClip, m_intervalStart, m_intervalEnd});
         clip = m_undo.back().clip;
+        m_intervalStart = m_undo.back().intervalStart;
+        m_intervalEnd = m_undo.back().intervalEnd;
         m_undo.pop_back();
         SelClear();
         m_dirty = true;
@@ -1357,8 +1499,10 @@ namespace pe
     {
         if (m_redo.empty() || m_redo.back().clipIndex != m_selectedClip)
             return;
-        m_undo.push_back({clip, m_selectedClip});
+        m_undo.push_back({clip, m_selectedClip, m_intervalStart, m_intervalEnd});
         clip = m_redo.back().clip;
+        m_intervalStart = m_redo.back().intervalStart;
+        m_intervalEnd = m_redo.back().intervalEnd;
         m_redo.pop_back();
         SelClear();
         m_dirty = true;
@@ -1406,6 +1550,7 @@ namespace pe
         m_boneExpanded.clear();
         m_boneSelected.clear();
         m_activeBone = -1;
+        ClearInterval(); // frames from the previous clip mean nothing in this one
     }
 
     int AnimationTimeline::ChannelForBone(const AnimationClip &clip, int bone) const
@@ -1782,6 +1927,10 @@ namespace pe
         quat rot;
         AnimationEvaluator::SampleChannel(clip.channels[ci], skeleton.bones[bone], time, pos, rot, scl);
         SetPoseKey(clip, ci, time, pos, rot, scl);
+        // One choke point for every user insert (I, dope double-click, the context menu, the pose bar):
+        // a key inside the interval is a new extreme, so both halves follow it.
+        const int keyed[1] = {bone};
+        RetweenAroundFrame(clip, keyed, frameIn);
     }
 
     namespace
@@ -2700,7 +2849,190 @@ namespace pe
     // -------------------------------------------------------------------------
     // ruler (scrub region)
     // -------------------------------------------------------------------------
-    void AnimationTimeline::DrawRuler(Scene &scene, AnimationSystem *anim, const AnimationClip &clip, float currentFrame,
+    void AnimationTimeline::ClearInterval()
+    {
+        m_intervalStart = 0.f;
+        m_intervalEnd = -1.f;
+        m_intervalDrag = 0;
+        m_intervalScale = false;
+    }
+
+    std::vector<int> AnimationTimeline::IntervalBones() const
+    {
+        std::vector<int> bones;
+        for (int bone = 0; bone < static_cast<int>(m_boneSelected.size()); bone++)
+            if (m_boneSelected[bone])
+                bones.push_back(bone);
+        return bones; // empty = every keyed bone, like the Motion Doctor tools
+    }
+
+    size_t AnimationTimeline::TweenBones(AnimationClip &clip, std::span<const int> bones, float startFrame,
+                                         float endFrame, int everyN, AnimationClipTools::TweenMode mode)
+    {
+        if (m_frameTicks <= 0.f)
+            return 0;
+        return AnimationClipTools::TweenInterval(clip, ToTicks(startFrame), ToTicks(endFrame),
+                                                 ToTicks(static_cast<float>(std::max(everyN, 1))), mode, bones);
+    }
+
+    size_t AnimationTimeline::RemapKeyTimes(AnimationClip &clip, float fromFrame, float toFrame, float pivot,
+                                            float factor, float delta)
+    {
+        const float from = ToTicks(fromFrame), to = ToTicks(toFrame);
+        const float pivotTicks = ToTicks(pivot), deltaTicks = ToTicks(delta);
+        const float tolerance = ToTicks(kFrameEps); // inclusive ends, in the clip's own tick scale
+        size_t touched = 0;
+        auto remap = [&](auto &keys)
+        {
+            std::vector<char> moved(keys.size(), 0);
+            for (size_t i = 0; i < keys.size(); i++)
+                if (keys[i].time >= from - tolerance && keys[i].time <= to + tolerance)
+                {
+                    keys[i].time =
+                        std::clamp(pivotTicks + (keys[i].time - pivotTicks) * factor + deltaTicks, 0.f, clip.duration);
+                    moved[i] = 1;
+                    ++touched;
+                }
+            // A moved key overwrites the key it lands on, like dragging one key onto another; two moved
+            // keys stacked by the clamp keep the later source key, like OffsetBoneKeyTimes.
+            for (int i = static_cast<int>(keys.size()) - 1; i >= 0; i--)
+                for (size_t j = 0; j < keys.size(); j++)
+                    if (static_cast<int>(j) != i && std::abs(keys[j].time - keys[i].time) <= tolerance &&
+                        moved[j] && (!moved[i] || static_cast<int>(j) > i))
+                    {
+                        keys.erase(keys.begin() + i);
+                        moved.erase(moved.begin() + i);
+                        // Selected keys are held by index: dropping one here would leave the selection
+                        // pointing at a different key, so it goes.
+                        SelClear();
+                        break;
+                    }
+        };
+        for (AnimationChannel &channel : clip.channels)
+        {
+            remap(channel.positionKeys);
+            remap(channel.rotationKeys);
+            remap(channel.scaleKeys);
+        }
+        return touched;
+    }
+
+    size_t AnimationTimeline::RetweenAroundFrame(AnimationClip &clip, std::span<const int> bones, float frame)
+    {
+        if (!HasInterval() || frame <= m_intervalStart + kFrameEps || frame >= m_intervalEnd - kFrameEps)
+            return 0; // no interval, or the pose IS one of the extremes
+        // The pose at this frame is the new extreme, so both halves are rebuilt from it.
+        return TweenBones(clip, bones, m_intervalStart, frame, 1, AnimationClipTools::TweenMode::RebuildFromEnds) +
+               TweenBones(clip, bones, frame, m_intervalEnd, 1, AnimationClipTools::TweenMode::RebuildFromEnds);
+    }
+
+    // Cascadeur-style interval: Alt-drag the ruler marks a span of frames the tools treat as one object.
+    // Dragging the band slides every key inside it, an edge resizes, Shift+edge scales those keys from the
+    // far edge. The playhead band keeps the click it would have had, so scrubbing is unchanged.
+    bool AnimationTimeline::DrawInterval(Scene &scene, AnimationSystem *anim, AnimationClip &clip, float currentFrame,
+                                         const ImVec2 &origin, const ImVec2 &size, bool hovered)
+    {
+        const float durationFrames = ToFrame(clip.duration);
+        if (HasInterval())
+        {
+            ImDrawList *dl = ImGui::GetWindowDrawList();
+            const float xs = FrameToPx(m_intervalStart), xe = FrameToPx(m_intervalEnd);
+            dl->PushClipRect(origin, {origin.x + size.x, origin.y + size.y}, true);
+            dl->AddRectFilled({xs, origin.y}, {xe, origin.y + size.y}, bl::kInterval);
+            dl->AddLine({xs, origin.y}, {xs, origin.y + size.y}, bl::kIntervalEdge, 2.f);
+            dl->AddLine({xe, origin.y}, {xe, origin.y + size.y}, bl::kIntervalEdge, 2.f);
+            dl->PopClipRect();
+        }
+        if (m_modal != Modal::None)
+            return false;
+
+        const float mouseX = ImGui::GetMousePos().x;
+        const float mouseFrame = std::clamp(SnapFrame(PxToFrame(mouseX)), 0.f, durationFrames);
+        if (hovered && m_intervalDrag == 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            if (ImGui::GetIO().KeyAlt)
+            {
+                m_intervalDrag = 4;
+                m_intervalGrab = mouseFrame;
+                m_intervalStart = m_intervalEnd = mouseFrame;
+            }
+            else if (HasInterval() && std::abs(mouseX - FrameToPx(currentFrame)) > 5.f)
+            {
+                const float xs = FrameToPx(m_intervalStart), xe = FrameToPx(m_intervalEnd);
+                const int part = std::abs(mouseX - xs) <= 4.f   ? 2
+                                 : std::abs(mouseX - xe) <= 4.f ? 3
+                                 : (mouseX > xs && mouseX < xe) ? 1
+                                                                : 0;
+                if (part == 0)
+                    ClearInterval(); // clicking the ruler outside the band drops it (and still scrubs)
+                else
+                {
+                    m_intervalDrag = part;
+                    m_intervalScale = part != 1 && ImGui::GetIO().KeyShift;
+                    m_intervalGrab = mouseFrame;
+                    m_intervalDragStart = m_intervalStart;
+                    m_intervalDragEnd = m_intervalEnd;
+                    m_intervalSnapshot = clip;
+                    // The interval is a time span, not the key selection: every drag update restores the
+                    // snapshot, so selected indices would drift against a re-sorted clip. Drop them once.
+                    SelClear();
+                }
+            }
+        }
+        if (m_intervalDrag == 0)
+            return false;
+
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            const bool movedKeys = (m_intervalDrag == 1 || m_intervalScale) &&
+                                   (std::abs(m_intervalStart - m_intervalDragStart) > kFrameEps ||
+                                    std::abs(m_intervalEnd - m_intervalDragEnd) > kFrameEps);
+            if (m_intervalDrag == 4 && !HasInterval())
+                ClearInterval(); // an Alt-click, or a drag too short to hold a frame
+            else if (movedKeys)
+                PushUndoSnapshot(m_intervalSnapshot, m_intervalDragStart, m_intervalDragEnd);
+            m_intervalDrag = 0;
+            m_intervalScale = false;
+            m_intervalSnapshot = {};
+            return true;
+        }
+
+        // Slide and scale rebuild from the pre-drag clip, so dragging back and forth never compounds.
+        auto remapKeys = [&](float pivot, float factor, float delta)
+        {
+            clip = m_intervalSnapshot;
+            RemapKeyTimes(clip, m_intervalDragStart, m_intervalDragEnd, pivot, factor, delta);
+            SortAndRemapSelection(clip);
+            ReevaluatePose(scene, anim);
+        };
+
+        if (m_intervalDrag == 4)
+        {
+            m_intervalStart = std::min(m_intervalGrab, mouseFrame);
+            m_intervalEnd = std::max(m_intervalGrab, mouseFrame);
+        }
+        else if (m_intervalDrag == 1)
+        {
+            const float delta =
+                std::clamp(mouseFrame - m_intervalGrab, -m_intervalDragStart, durationFrames - m_intervalDragEnd);
+            m_intervalStart = m_intervalDragStart + delta;
+            m_intervalEnd = m_intervalDragEnd + delta;
+            remapKeys(0.f, 1.f, delta);
+        }
+        else
+        {
+            const bool left = m_intervalDrag == 2;
+            const float pivot = left ? m_intervalDragEnd : m_intervalDragStart;
+            const float edge = left ? std::min(mouseFrame, pivot - 1.f) : std::max(mouseFrame, pivot + 1.f);
+            m_intervalStart = left ? edge : m_intervalDragStart;
+            m_intervalEnd = left ? m_intervalDragEnd : edge;
+            if (m_intervalScale && std::abs((left ? m_intervalDragStart : m_intervalDragEnd) - pivot) > kFrameEps)
+                remapKeys(pivot, (edge - pivot) / ((left ? m_intervalDragStart : m_intervalDragEnd) - pivot), 0.f);
+        }
+        return true;
+    }
+
+    void AnimationTimeline::DrawRuler(Scene &scene, AnimationSystem *anim, AnimationClip &clip, float currentFrame,
                                       const ImVec2 &origin, const ImVec2 &size)
     {
         ImDrawList *dl = ImGui::GetWindowDrawList();
@@ -2745,7 +3077,8 @@ namespace pe
 
         // scrub: press in the ruler, drag anywhere
         const bool hovered = ImGui::IsMouseHoveringRect(origin, {origin.x + size.x, origin.y + size.y}) && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
-        if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && m_modal == Modal::None)
+        const bool intervalDrag = DrawInterval(scene, anim, clip, currentFrame, origin, size, hovered);
+        if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && m_modal == Modal::None && !intervalDrag)
             m_scrubbing = true;
         if (hovered)
             NavigateView(ImGui::GetMousePos(), false);
@@ -3037,6 +3370,9 @@ namespace pe
         const ImGuiIO &io = ImGui::GetIO();
         const bool ctrl = io.KeyCtrl, shift = io.KeyShift, alt = io.KeyAlt;
         const float mouseFrame = PxToFrame(ImGui::GetMousePos().x);
+
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape) && HasInterval())
+            ClearInterval();
 
         if (ImGui::IsKeyPressed(ImGuiKey_Space, false))
         {
@@ -3755,6 +4091,7 @@ namespace pe
         else
         {
             const float time = ToTicks(std::round(currentFrame));
+            const int poseBones[1] = {bone}; // interval mode re-tweens the halves around a pose keyed here
             const int ci = ChannelForBone(clip, bone);
             const BoneInfo &info = skeleton.bones[bone];
             vec3 pos, scl, bindPos, bindScl;
@@ -3798,13 +4135,14 @@ namespace pe
                 m_dirty = true;
                 ++m_poseEditSerial;
                 m_poseEditFrame = -1.f;
+                RetweenAroundFrame(clip, poseBones, std::round(currentFrame));
                 ReevaluatePose(scene, anim);
             }
             ImGui::SameLine(0.f, 12.f);
             if (ImGui::Button("Key"))
             {
                 PushUndo(clip);
-                InsertKeyframe(clip, skeleton, bone, std::round(currentFrame));
+                InsertKeyframe(clip, skeleton, bone, std::round(currentFrame)); // retweens the interval itself
                 ++m_poseEditSerial;
                 m_poseEditFrame = -1.f;
                 ReevaluatePose(scene, anim);
@@ -3818,6 +4156,7 @@ namespace pe
                 m_poseEuler = vec3(0.f);
                 ++m_poseEditSerial;
                 m_poseEditFrame = -1.f;
+                RetweenAroundFrame(clip, poseBones, std::round(currentFrame));
                 ReevaluatePose(scene, anim);
             }
             ui::ItemTooltip("Key the bind pose at this frame (Blender Alt+G / Alt+R / Alt+S).");
@@ -3827,6 +4166,31 @@ namespace pe
             RestPoseAll(scene, anim);
         ui::ItemTooltip("Show the bind pose: pauses playback and clears the evaluated pose. No keys are written - "
                         "scrub, play or edit a pose to return to the clip.");
+        ImGui::SameLine();
+        ImGui::BeginDisabled(m_intervalEnd < m_intervalStart + 2.f);
+        if (ImGui::Button("Tween"))
+        {
+            const AnimationClip before = clip;
+            const std::vector<int> bones = IntervalBones();
+            const size_t written =
+                TweenBones(clip, bones, m_intervalStart, m_intervalEnd, 1, AnimationClipTools::TweenMode::SampleClip);
+            if (written > 0)
+            {
+                PushUndoSnapshot(before);
+                ReevaluatePose(scene, anim);
+            }
+            m_tweenStatus = written > 0 ? "Tween wrote " + std::to_string(written) + " keys."
+                                        : TweenEmptyReason(skeleton, clip, bones);
+        }
+        ImGui::EndDisabled();
+        ui::ItemTooltip("Bake the in-between frames of the interval (Alt-drag the ruler to mark one) for the "
+                        "selected bones, or every keyed bone when none are selected. The selected bone must already "
+                        "have keys; Tween will not invent a curve. Keys what the clip already plays; the ends stay put.");
+        if (!m_tweenStatus.empty())
+        {
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s", m_tweenStatus.c_str());
+        }
         ImGui::PopStyleVar(2);
         ImGui::SetCursorScreenPos({p.x, p.y + m_headerHeight});
     }
@@ -4197,6 +4561,8 @@ namespace pe
         {
             PushUndo(clip);
             m_poseEditFrame = m_pendingPoses.back().frame; // < 0 = playhead; the lock re-solve keys there
+            std::vector<int> posedBones;
+            float posedFrame = std::round(currentFrame);
             for (const PendingPose &pp : m_pendingPoses)
             {
                 const int b = skeleton.GetBoneIndex(pp.bone);
@@ -4215,9 +4581,12 @@ namespace pe
                 if (pp.mask & 4)
                     scl = bindScl * pp.scl;
                 SetPoseKey(clip, ci, time, pos, rot, scl);
+                posedBones.push_back(b);
+                posedFrame = pp.frame >= 0.f ? pp.frame : std::round(currentFrame);
             }
             m_pendingPoses.clear();
             ++m_poseEditSerial;
+            RetweenAroundFrame(clip, posedBones, posedFrame);
             ReevaluatePose(scene, anim);
         }
         if (m_pendingRest)
@@ -4257,6 +4626,24 @@ namespace pe
         }
         if (m_rigMode)
         {
+            // The Rig panel scrubs a posed mesh for Joint Blend, so it gets the same frame ruler: the
+            // interval band, its gestures and scrubbing are on both radios, not just Animate.
+            const ImVec2 rulerOrigin = ImGui::GetCursorScreenPos();
+            const float rulerWidth = ImGui::GetContentRegionAvail().x;
+            m_keyLeft = rulerOrigin.x;
+            m_keyWidth = std::max(rulerWidth - kRightMargin, 10.f);
+            if (m_fitPending)
+            {
+                const float durationFrames = ToFrame(clip.duration);
+                const float pad = std::max(durationFrames * 0.03f, 1.f);
+                m_viewStart = -pad;
+                m_viewEnd = durationFrames + pad;
+                m_fitPending = false;
+            }
+            DrawRuler(scene, anim, clip, currentFrame, rulerOrigin, {rulerWidth, m_rulerHeight});
+            if (HotkeysAllowed() && m_modal == Modal::None && ImGui::IsKeyPressed(ImGuiKey_Escape) && HasInterval())
+                ClearInterval(); // the Animate hotkey path never runs here, and the ruler is shared
+            ImGui::SetCursorScreenPos({rulerOrigin.x, rulerOrigin.y + m_rulerHeight});
             drawRigPanel();
             ImGui::End();
             return;

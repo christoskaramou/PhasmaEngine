@@ -163,6 +163,28 @@ namespace pe::AnimationClipTools
     // Writes the pose at time zero to clip.duration. Existing end keys are replaced; missing end keys are inserted.
     size_t MakeCyclic(AnimationClip &clip, ChannelMask channels = ChannelMask::All);
 
+    enum class TweenMode : uint8_t
+    {
+        // Key what the clip already plays at every interior frame: existing breakdowns survive, the ends
+        // are never written. This is the Tween button.
+        SampleClip,
+        // Drop the interior, pin both ends to the pose shown there and re-key the span from that pair.
+        // This is interval mode, where a new extreme has to push the in-betweens around.
+        RebuildFromEnds
+    };
+
+    // Keys the frames strictly between startTime and endTime on the clip's own frame grid (so an unsnapped
+    // interval still lands on whole frames). Baked keys are Linear, or Stepped where the sampled segment was
+    // stepped: the samples already carry the easing, and a Smooth key would ease an eased curve again.
+    // Channels with no keys of a kind are left alone - tweening never invents a curve a bone does not have.
+    size_t TweenInterval(AnimationClip &clip,
+                         float startTime,
+                         float endTime,
+                         float stepTicks,
+                         TweenMode mode = TweenMode::SampleClip,
+                         std::span<const int> boneIndices = {},
+                         ChannelMask channels = ChannelMask::All);
+
     // Smooths interior selected keys and preserves the first and last selected key on every curve.
     size_t Smooth(AnimationClip &clip,
                   const SmoothSettings &settings,

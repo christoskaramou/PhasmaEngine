@@ -1001,6 +1001,10 @@ namespace pe
         addAction("timeline.pin", "Animation Timeline: Pin / Unpin A Bone So Puppet Drag Stops There (args: bone, pinned bool; omit pinned to toggle)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.grab", "Animation Timeline: Puppet-Drag A Bone Tail To A Rig-Space Point Through The Limited Chain (args: bone, target[3])", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.lock", "Animation Timeline: Use A Rig Lock (args: op list|add|remove|set|solve|bake, bone, target, anchor[3], reach 0.3-1, enabled, index)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.interval", "Animation Timeline: Set Or Clear The Edit Interval (args: start, end frames; end below start + 1 clears)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.interval_slide", "Animation Timeline: Slide The Interval And Every Key Inside It (args: delta_frames)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.interval_scale", "Animation Timeline: Scale The Interval And Every Key Inside It (args: factor, pivot_frame)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.tween", "Animation Timeline: Key What The Clip Plays At Each Interior Frame Of The Interval (ends and existing in-betweens are kept; args: bones, every_n)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.analyze", "Motion Doctor: Analyze Quaternion Flips, Pops, Jitter, Loop Seam, Root Drift And Selected-Bone Sliding (optional bone)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.fix_quaternions", "Motion Doctor: Fix Quaternion Hemisphere Flips", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.smooth", "Motion Doctor: Smooth Keys (optional bones, frame range, strength, passes, channels)", "Timeline", "command", hasTimeline, false, false);
