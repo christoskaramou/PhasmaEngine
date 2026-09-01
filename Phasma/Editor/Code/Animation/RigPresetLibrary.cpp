@@ -102,6 +102,36 @@ namespace pe
             return true;
         }
 
+        bool ReadLimit(const nlohmann::json &object, float &swing, float &twist, std::string &error)
+        {
+            const auto limit = object.find("limit");
+            if (limit == object.end())
+                return true;
+            if (!limit->is_object())
+            {
+                error = "'limit' must be an object";
+                return false;
+            }
+            auto degrees = [&](const char *key, float &value)
+            {
+                const auto it = limit->find(key);
+                if (it == limit->end() || !it->is_number())
+                {
+                    error = std::string("'limit.") + key + "' must be a finite number from 0 to 180";
+                    return false;
+                }
+                const double number = it->get<double>();
+                if (!std::isfinite(number) || number < 0.0 || number > 180.0)
+                {
+                    error = std::string("'limit.") + key + "' must be a finite number from 0 to 180";
+                    return false;
+                }
+                value = static_cast<float>(number);
+                return true;
+            };
+            return degrees("swing_degrees", swing) && degrees("twist_degrees", twist);
+        }
+
         bool ReadShellPatterns(const nlohmann::json &object, std::vector<std::string> &patterns, std::string &error)
         {
             const auto it = object.find("shell_patterns");
@@ -414,7 +444,7 @@ namespace pe
         }
 
         RigPreset MakeBuiltIn(const char *id, const char *name, const char *description, std::span<const BuiltInBone> bones,
-                              const RigPresetLandmarks &landmarks = {})
+                              const RigPresetLandmarks &landmarks = {}, bool puppetDefaults = false)
         {
             RigPreset preset;
             preset.id = id;
@@ -427,6 +457,17 @@ namespace pe
                 if (std::string_view(b.name).find(".L") != std::string_view::npos)
                     PushBone(preset, b, true);
             Validate(preset);
+            if (puppetDefaults)
+            {
+                for (RigPresetBone &bone : preset.bones)
+                    if (bone.name.find("upper_arm.") == 0 || bone.name.find("forearm.") == 0 ||
+                        bone.name.find("hand.") == 0 || bone.name.find("thigh.") == 0 ||
+                        bone.name.find("shin.") == 0 || bone.name.find("foot.") == 0)
+                        bone.swingLimitDegrees = 120.f, bone.twistLimitDegrees = 45.f;
+                preset.pins.push_back("chest");
+                preset.locks.push_back({"foot.L"});
+                preset.locks.push_back({"foot.R"});
+            }
             return preset;
         }
 
@@ -517,8 +558,10 @@ namespace pe
     std::span<const RigPreset> RigPresetLibrary::BuiltIn()
     {
         static const std::vector<RigPreset> presets = {
-            MakeBuiltIn("humanoid", "Humanoid", "Biped with spine, neck, shoulders, arms and legs; +Z forward.", kHumanoid, kBipedLandmarks),
-            MakeBuiltIn("biped_tail", "Biped + Tail", "Humanoid with a three-link spline tail; lizardfolk, demons, kobolds.", kBipedTail, kBipedLandmarks),
+            MakeBuiltIn("humanoid", "Humanoid", "Biped with spine, neck, shoulders, arms and legs; +Z forward.", kHumanoid,
+                        kBipedLandmarks, true),
+            MakeBuiltIn("biped_tail", "Biped + Tail", "Humanoid with a three-link spline tail; lizardfolk, demons, kobolds.",
+                        kBipedTail, kBipedLandmarks, true),
             MakeBuiltIn("quadruped", "Quadruped", "Four legs, articulated neck and a spline tail; +Z forward.", kQuadruped),
             MakeBuiltIn("centaur", "Centaur", "Quadruped body carrying a humanoid torso, arms and head.", kCentaur),
             MakeBuiltIn("bird", "Bird", "Body, three-link neck, beak, tail, folded wings and backwards-knee legs with toes.", kBird),
@@ -656,6 +699,7 @@ namespace pe
                 !ReadRadius(jsonBone, "radius_tail", bone.tailRadius, boneError) ||
                 !ReadOptionalBool(jsonBone, "rigid", bone.rigid, boneError) ||
                 !ReadOptionalBool(jsonBone, "spline", bone.spline, boneError) ||
+                !ReadLimit(jsonBone, bone.swingLimitDegrees, bone.twistLimitDegrees, boneError) ||
                 !ReadShellPatterns(jsonBone, bone.shellPatterns, boneError))
             {
                 error = "bone " + std::to_string(i) + ": " + boneError;
@@ -713,6 +757,84 @@ namespace pe
         for (int i = 0; i < static_cast<int>(loaded.bones.size()); ++i)
             if (!visit(i))
                 return false;
+
+        if (const auto pins = root.find("pins"); pins != root.end())
+        {
+            if (!pins->is_array())
+            {
+                error = "'pins' must be an array of bone names";
+                return false;
+            }
+            std::unordered_set<std::string> uniquePins;
+            for (const nlohmann::json &pin : *pins)
+            {
+                if (!pin.is_string() || !indices.contains(pin.get<std::string>()))
+                {
+                    error = "each pin must name a preset bone";
+                    return false;
+                }
+                if (uniquePins.insert(pin.get<std::string>()).second)
+                    loaded.pins.push_back(pin.get<std::string>());
+            }
+        }
+        if (const auto locks = root.find("locks"); locks != root.end())
+        {
+            if (!locks->is_array())
+            {
+                error = "'locks' must be an array";
+                return false;
+            }
+            std::unordered_set<std::string> lockedBones;
+            for (size_t i = 0; i < locks->size(); ++i)
+            {
+                const nlohmann::json &jsonLock = (*locks)[i];
+                RigPresetLock lock;
+                std::string lockError;
+                if (!jsonLock.is_object() || !ReadString(jsonLock, "bone", lock.bone, lockError) ||
+                    !ReadString(jsonLock, "target", lock.target, lockError, false) ||
+                    !ReadOptionalBool(jsonLock, "enabled", lock.enabled, lockError))
+                {
+                    error = "lock " + std::to_string(i) + ": " +
+                            (lockError.empty() ? "must be an object" : lockError);
+                    return false;
+                }
+                if (!indices.contains(lock.bone) || (!lock.target.empty() && !indices.contains(lock.target)))
+                {
+                    error = "lock " + std::to_string(i) + ": bone and target must name preset bones";
+                    return false;
+                }
+                if (!lockedBones.insert(lock.bone).second)
+                {
+                    error = "duplicate lock for bone '" + lock.bone + "'";
+                    return false;
+                }
+                if (jsonLock.contains("anchor"))
+                {
+                    if (!ReadVec3(jsonLock, "anchor", lock.anchor, lockError))
+                    {
+                        error = "lock " + std::to_string(i) + ": " + lockError;
+                        return false;
+                    }
+                    lock.hasAnchor = true;
+                }
+                if (jsonLock.contains("reach"))
+                {
+                    if (!jsonLock["reach"].is_number())
+                    {
+                        error = "lock " + std::to_string(i) + ": 'reach' must be a finite number from 0.3 to 1";
+                        return false;
+                    }
+                    const double reach = jsonLock["reach"].get<double>();
+                    if (!std::isfinite(reach) || reach < 0.3 || reach > 1.0)
+                    {
+                        error = "lock " + std::to_string(i) + ": 'reach' must be a finite number from 0.3 to 1";
+                        return false;
+                    }
+                    lock.reach = static_cast<float>(reach);
+                }
+                loaded.locks.push_back(std::move(lock));
+            }
+        }
 
         preset = std::move(loaded);
         return true;
@@ -780,9 +902,12 @@ namespace pe
     }
 
     bool RigPresetLibrary::Fit(const RigPreset &preset, const AABB &bounds, std::span<const std::string> shellNames,
-                               std::vector<FittedRigPresetBone> &bones, std::string &error, const MeasuredLandmarks *landmarks)
+                               std::vector<FittedRigPresetBone> &bones, std::string &error,
+                               const MeasuredLandmarks *landmarks, std::vector<FittedRigPresetLock> *locks)
     {
         bones.clear();
+        if (locks)
+            locks->clear();
         if (!IsFinite(bounds.min) || !IsFinite(bounds.max))
         {
             error = "target bounds must be finite";
@@ -835,6 +960,8 @@ namespace pe
             bone.tailRadius = source.tailRadius * size.y;
             bone.rigid = source.rigid;
             bone.spline = source.spline;
+            bone.swingLimitDegrees = source.swingLimitDegrees;
+            bone.twistLimitDegrees = source.twistLimitDegrees;
 
             for (const std::string &pattern : source.shellPatterns)
             {
@@ -852,6 +979,18 @@ namespace pe
             }
             bones.push_back(std::move(bone));
         }
+        if (locks)
+            for (const RigPresetLock &source : preset.locks)
+            {
+                FittedRigPresetLock lock;
+                lock.bone = source.bone;
+                lock.target = source.target;
+                lock.anchor = source.hasAnchor ? fit(source.anchor) : vec3(0.f);
+                lock.hasAnchor = source.hasAnchor;
+                lock.reach = source.reach;
+                lock.enabled = source.enabled;
+                locks->push_back(std::move(lock));
+            }
         return true;
     }
 } // namespace pe

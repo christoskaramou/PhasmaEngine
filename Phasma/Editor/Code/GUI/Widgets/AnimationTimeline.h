@@ -4,14 +4,18 @@
 #include "imgui/imgui.h"
 
 #include <array>
+#include <memory>
 #include <span>
 
 namespace pe
 {
     struct NodeId;
     class Scene;
+    class Camera;
     class ModelAsset;
     class AnimationSystem;
+    class AnimationPoseViewport;
+    class RigEditor;
 
     enum class KeyType
     {
@@ -49,8 +53,13 @@ namespace pe
     class AnimationTimeline : public Widget
     {
     public:
-        AnimationTimeline() : Widget("Animation Timeline") { m_open = false; }
+        AnimationTimeline();
+        ~AnimationTimeline() override;
+        void Init(GUI *gui) override;
         void Update() override;
+        void SetRigMode(bool rig) { m_rigMode = rig; }
+        bool RigMode() const { return m_rigMode; }
+        RigEditor &Rig() { return *m_rigEditor; }
 
         // Programmatic route for editor actions (timeline.*): applied on the next Update.
         void SetGraphMode(bool graph);
@@ -59,7 +68,7 @@ namespace pe
         void RequestSave() { m_pendingSave = true; }
         void RequestPlay(bool play, bool reverse) { m_pendingPlay = play ? (reverse ? 2 : 1) : 0; }
         void RequestRestPose() { m_pendingRest = true; }
-        // Agent actions that read the evaluated pose (rig.grab, rig.lock solve) must not run against a
+        // Agent actions that read the evaluated pose (timeline.grab, timeline.lock solve) must not run against a
         // playhead or clip that queued requests are about to move.
         bool HasPendingRequests() const
         {
@@ -67,8 +76,8 @@ namespace pe
                    m_pendingPlay >= 0 || m_pendingSave || m_pendingRest;
         }
 
-        // Rig Editor viewport posing. Bone transforms are in skeleton rig space (rootTransform removed).
-        // The Timeline owns key insertion, the drag undo snapshot and immediate pose evaluation.
+        // Viewport posing. Bone transforms are in skeleton rig space (rootTransform removed).
+        // The Timeline owns the pose tool, key insertion, drag undo snapshot and immediate evaluation.
         struct ViewportPose
         {
             NodeId *node = nullptr;
@@ -110,6 +119,10 @@ namespace pe
         bool AutoKey() const { return m_autoKey; }
         void SetAutoKey(bool enabled) { m_autoKey = enabled; }
         std::string HandleAction(const std::string &action, const std::string &argsJson);
+        void DrawViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize,
+                          bool &hovered, bool &active);
+        bool DrawPoseViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize,
+                              bool &hovered, bool &active);
 
         // timeline.pose: key one bone at a frame (<0 = current). loc / rot (degrees) / scale are relative to the
         // bind pose; mask bits 1/2/4 say which of them were given.
@@ -137,6 +150,7 @@ namespace pe
         }
 
     private:
+        friend class AnimationPoseViewport;
         enum class Mode
         {
             DopeSheet,
@@ -246,6 +260,7 @@ namespace pe
         // Writes (or overwrites) the Loc/Rot/Scale keys of a channel at a time in ticks.
         void SetPoseKey(AnimationClip &clip, int channelIdx, float time, const vec3 &pos, const quat &rot, const vec3 &scl);
         void RestPoseAll(Scene &scene, AnimationSystem *anim);
+        void EnforcePlaybackOwnership(Scene &scene, AnimationSystem *anim, bool ownsTarget);
         void SetRotationKey(AnimationClip &clip, int channelIdx, float time, const quat &rot);
         void SetPositionKey(AnimationClip &clip, int channelIdx, float time, const vec3 &pos);
         bool SampleViewportPoseTicks(ModelAsset *model, float ticks, ViewportPose &out) const;
@@ -261,8 +276,9 @@ namespace pe
 
         // --- drawing ---
         // Returns true when the clip list changed (references into it are stale for this frame).
+        void DrawPanelMode();
         bool DrawHeader(Scene &scene, AnimationSystem *anim, ModelAsset *model, AnimationClip &clip,
-                        float currentFrame);
+                        float currentFrame, bool showEditorMode);
         void DrawMotionDoctor();
         void DrawDopeSheet(Scene &scene, AnimationSystem *anim, const Skeleton &skeleton, AnimationClip &clip,
                            float currentFrame);
@@ -297,12 +313,14 @@ namespace pe
         void BuildGlyphs(const Skeleton &skeleton, const AnimationClip &clip, float keyLeft, float rowTop,
                          float visibleTop, float visibleBottom);
         void DrawClipPopups(Scene &scene, AnimationSystem *anim, ModelAsset *model);
+        AnimationPoseViewport *PoseViewport(RigEditor &rig);
 
         // --- state: target ---
         NodeId *m_targetNode = nullptr;
         std::vector<NodeId *> m_animatedNodes;
         ModelAsset *m_editModel = nullptr;
         ModelAsset *m_lastModel = nullptr;
+        uint32_t m_ownershipSceneGeneration = ~uint32_t{0};
         int m_selectedClip = 0;
         int m_lastClipCount = -1;
         Mode m_mode = Mode::DopeSheet;
@@ -392,6 +410,9 @@ namespace pe
         int m_pendingPlay = -1; // 0 pause, 1 play, 2 play reverse
         bool m_pendingRest = false;
         bool m_restDisplayed = false; // Rest Pose display active: the playhead viewport pose reads emit the bind pose
+        bool m_tabSuspended = false;
+        bool m_tabResumePlaying = false;
+        bool m_tabResumeRestPose = false;
 
         // --- state: popups ---
         char m_nameBuf[128] = {};
@@ -401,6 +422,10 @@ namespace pe
         char m_springChainBuf[256] = {};
         int m_motionOffsetFrames = 1;
         float m_breakdownBias = 0.5f;
+        std::unique_ptr<AnimationPoseViewport> m_poseViewport;
+        std::unique_ptr<RigEditor> m_rigEditor;
+        bool m_rigMode = false;
+        bool m_visible = false;
 
         // Layout derived from the current font each frame (Update), so a scaled editor font never clips rows or labels.
         float m_rowHeight = 20.f;

@@ -18,7 +18,7 @@
 #include "Script/Bindings/Input/InputState.h"
 #include "Systems/AnimationSystem.h"
 #include "TerrainBrush.h"
-#include "RigEditor.h"
+#include "AnimationTimeline.h"
 #include "Systems/RendererSystem.h"
 #include "UI/RuntimeUi.h"
 #include "imgui/ImGuizmo.h"
@@ -1251,14 +1251,14 @@ namespace pe
             m_gui->NotifyChange();
     }
 
-    void SceneView::DrawRigEditorGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    void SceneView::DrawRigAndPoseGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize)
     {
-        RigEditor *rig = m_gui ? m_gui->GetWidget<RigEditor>() : nullptr;
+        AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
-        if (!rig || !rig->IsOpen() || !rig->HasTarget() || !renderer)
+        if (!timeline || !renderer)
             return;
         Scene &scene = renderer->GetScene();
-        rig->DrawViewport(scene, scene.GetActiveCamera(), imageMin, imageSize, s_rigGizmoHovered, s_rigGizmoActive);
+        timeline->DrawViewport(scene, scene.GetActiveCamera(), imageMin, imageSize, s_rigGizmoHovered, s_rigGizmoActive);
     }
 
     void SceneView::DrawTransformGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize)
@@ -1536,7 +1536,7 @@ namespace pe
         if (!runtimeUiGizmoActive)
         {
             DrawSkinnedStrip2DIkGizmo(imageMin, imageSize);
-            DrawRigEditorGizmo(imageMin, imageSize);
+            DrawRigAndPoseGizmo(imageMin, imageSize);
             if (GUIState::s_useTransformGizmo && !s_stripIkGizmoHovered && !s_stripIkGizmoActive && !s_rigGizmoHovered &&
                 !s_rigGizmoActive)
                 DrawTransformGizmo(imageMin, imageSize);

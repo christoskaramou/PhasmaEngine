@@ -1,21 +1,14 @@
 #include "RigEditor.h"
-#include "API/Command.h"
-#include "API/Image.h"
-#include "API/Queue.h"
-#include "API/RHI.h"
-#include "Animation/AnimationPoseTools.h"
 #include "AnimationTimeline.h"
 #include "Camera/Camera.h"
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
-#include "GUI/Widgets/FileSelector.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/ModelAssetCooked.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/RendererSystem.h"
-#include "imgui/ImGuizmo.h"
 #include "imgui/imgui.h"
 #include <nlohmann/json.hpp>
 
@@ -44,7 +37,7 @@ namespace pe
             return vec3(j[0].get<float>(), j[1].get<float>(), j[2].get<float>());
         }
 
-        // Vectors that key poses must be exact: a short or non-finite array is an error, never a
+        // Authored rig vectors must be exact: a short or non-finite array is an error, never a
         // silent rig-space origin.
         bool StrictVec3(const nlohmann::json &j, vec3 &out)
         {
@@ -59,57 +52,18 @@ namespace pe
             return true;
         }
 
+        std::vector<mat4> RestBoneTransforms(const Skeleton &skeleton)
+        {
+            std::vector<mat4> transforms(skeleton.GetBoneCount());
+            const mat4 inverseRoot = glm::inverse(skeleton.rootTransform);
+            for (int i = 0; i < skeleton.GetBoneCount(); i++)
+                transforms[i] = inverseRoot * glm::inverse(skeleton.bones[i].offsetMatrix);
+            return transforms;
+        }
+
         nlohmann::ordered_json FromVec3(const vec3 &v)
         {
             return nlohmann::ordered_json::array({v.x, v.y, v.z});
-        }
-
-        quat RotationOf(const mat4 &transform)
-        {
-            const vec3 scale(glm::length(vec3(transform[0])), glm::length(vec3(transform[1])),
-                             glm::length(vec3(transform[2])));
-            if (scale.x <= 1e-8f || scale.y <= 1e-8f || scale.z <= 1e-8f)
-                return quat(1.f, 0.f, 0.f, 0.f);
-            return glm::normalize(glm::quat_cast(
-                mat3(vec3(transform[0]) / scale.x, vec3(transform[1]) / scale.y, vec3(transform[2]) / scale.z)));
-        }
-
-        // Elbow bend of a two-bone chain: mid pushed off the root->tip line. carry keeps the last good direction
-        // so a straight arm does not flip its pole; returns false when neither exists (any perpendicular then).
-        bool BendDirection(const vec3 &root, const vec3 &mid, const vec3 &tip, vec3 *carry, vec3 &out)
-        {
-            const vec3 chain = tip - root;
-            const float chainLength = glm::length(chain);
-            const vec3 chainDirection = chainLength > 1e-5f ? chain / chainLength : vec3(0.f, 1.f, 0.f);
-            const vec3 bend = (mid - root) - chainDirection * glm::dot(mid - root, chainDirection);
-            if (glm::dot(bend, bend) > 1e-8f)
-            {
-                out = glm::normalize(bend);
-                if (carry)
-                    *carry = out;
-                return true;
-            }
-            if (carry && glm::dot(*carry, *carry) > 0.5f)
-            {
-                // Re-project the carried pole onto the current chain-perpendicular plane so a rotated
-                // straight limb keeps its side instead of drifting off-plane.
-                const vec3 projected = *carry - chainDirection * glm::dot(*carry, chainDirection);
-                if (glm::dot(projected, projected) > 1e-8f)
-                {
-                    out = glm::normalize(projected);
-                    *carry = out;
-                    return true;
-                }
-            }
-            const vec3 axis = std::abs(chainDirection.x) <= std::abs(chainDirection.y) &&
-                                      std::abs(chainDirection.x) <= std::abs(chainDirection.z)
-                                  ? vec3(1.f, 0.f, 0.f)
-                              : std::abs(chainDirection.y) <= std::abs(chainDirection.z) ? vec3(0.f, 1.f, 0.f)
-                                                                                         : vec3(0.f, 0.f, 1.f);
-            out = glm::normalize(glm::cross(chainDirection, axis));
-            if (carry)
-                *carry = out; // seed the pole on a straight start so the axis pick cannot flip mid-clip
-            return false;
         }
 
         // Dominant covariance eigenvector by power iteration: good enough for "which way is this shell long".
@@ -145,157 +99,7 @@ namespace pe
             return true;
         }
 
-        std::string Utf8Path(const std::filesystem::path &path)
-        {
-            const std::u8string value = path.u8string();
-            return std::string(reinterpret_cast<const char *>(value.c_str()), value.size());
-        }
-
-        std::filesystem::path PathFromUtf8(std::string_view value)
-        {
-            return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t *>(value.data()), value.size()));
-        }
     } // namespace
-
-    RigEditor::~RigEditor()
-    {
-        ReleaseReferenceImage(true);
-    }
-
-    void RigEditor::ReleaseReferenceImage(bool drainRendererFrames)
-    {
-        if (!m_referenceImage && !m_referenceTexture)
-        {
-            m_referenceFrameIndex = -1;
-            return;
-        }
-        if (drainRendererFrames)
-            if (RendererSystem *renderer = GetGlobalSystem<RendererSystem>())
-                renderer->WaitAllFramesCommands();
-        if (m_referenceTexture && m_gui)
-            m_gui->ReleaseImageTexture(m_referenceTexture);
-        m_referenceTexture = nullptr;
-        Image::Destroy(m_referenceImage);
-        m_referenceFrameIndex = -1;
-    }
-
-    void RigEditor::ClearReference()
-    {
-        ReleaseReferenceImage(true);
-        m_referencePath.clear();
-        m_referenceSequence = {};
-        m_referencePathBuffer.fill(0);
-    }
-
-    bool RigEditor::LoadReference(const std::filesystem::path &requestedPath, std::string &error)
-    {
-        error.clear();
-        std::filesystem::path path = requestedPath;
-        if (path.is_relative())
-        {
-            std::error_code directError;
-            if (!std::filesystem::is_regular_file(path, directError))
-                path = std::filesystem::path(Path::Assets) / path;
-        }
-        path = path.lexically_normal();
-        std::string filename = path.filename().generic_string();
-        std::transform(filename.begin(), filename.end(), filename.begin(), [](unsigned char c)
-                       { return static_cast<char>(std::tolower(c)); });
-        if (!filename.ends_with(".reference.json"))
-        {
-            error = "reference manifest must end in .reference.json";
-            return false;
-        }
-        AnimationReferenceFrames::Config config;
-        AnimationReferenceFrames::Sequence sequence;
-        if (!AnimationReferenceFrames::LoadConfig(path, config, error) ||
-            !AnimationReferenceFrames::BuildSequence(config, sequence, error))
-            return false;
-
-        ClearReference();
-        m_referencePath = path;
-        m_referenceSequence = std::move(sequence);
-        std::snprintf(m_referencePathBuffer.data(), m_referencePathBuffer.size(), "%s", Utf8Path(path).c_str());
-        return true;
-    }
-
-    bool RigEditor::UpdateReferenceImage(AnimationTimeline *timeline, std::string &error)
-    {
-        if (!timeline || m_referenceSequence.frames.empty())
-            return false;
-        double timeSeconds = 0.0;
-        if (!timeline->GetViewportTimeSeconds(m_model, timeSeconds))
-            return false;
-        const AnimationReferenceFrames::Lookup lookup = AnimationReferenceFrames::Resolve(m_referenceSequence, timeSeconds);
-        if (!lookup)
-        {
-            error = lookup.error;
-            return false;
-        }
-        const int frame = static_cast<int>(lookup.sequenceIndex);
-        if (frame == m_referenceFrameIndex)
-            return m_referenceImage && m_referenceTexture;
-
-        Queue *queue = RHII.GetMainQueue();
-        if (!queue || !m_gui)
-        {
-            error = "reference image upload is unavailable";
-            return false;
-        }
-        CommandBuffer *command = queue->AcquireCommandBuffer();
-        command->Begin();
-        Image *image = Image::LoadRGBA8(command, Utf8Path(lookup.path));
-        command->End();
-        queue->Submit(1, &command, nullptr, nullptr);
-        command->Wait();
-        command->Return();
-        if (!image)
-        {
-            ReleaseReferenceImage();
-            error = "failed to load reference frame " + lookup.path.filename().generic_string();
-            return false;
-        }
-        void *texture = m_gui->RegisterImageTexture(image);
-        if (!texture)
-        {
-            Image::Destroy(image);
-            ReleaseReferenceImage();
-            error = "failed to register the reference frame for ImGui";
-            return false;
-        }
-
-        ReleaseReferenceImage();
-        m_referenceImage = image;
-        m_referenceTexture = texture;
-        m_referenceFrameIndex = frame;
-        return true;
-    }
-
-    void RigEditor::DrawReferenceOverlay(AnimationTimeline *timeline, const ImVec2 &imageMin, const ImVec2 &imageSize)
-    {
-        std::string error;
-        if (!UpdateReferenceImage(timeline, error))
-        {
-            if (!error.empty())
-                m_status = error;
-            return;
-        }
-        const float imageWidth = static_cast<float>(m_referenceImage->GetWidth());
-        const float imageHeight = static_cast<float>(m_referenceImage->GetHeight());
-        if (imageWidth <= 0.f || imageHeight <= 0.f)
-            return;
-        const AnimationReferenceFrames::Config &config = m_referenceSequence.config;
-        const float fit = std::min(imageSize.x / imageWidth, imageSize.y / imageHeight) * config.scale;
-        const ImVec2 size(imageWidth * fit, imageHeight * fit);
-        const ImVec2 center(imageMin.x + imageSize.x * 0.5f + config.offset.x,
-                            imageMin.y + imageSize.y * 0.5f + config.offset.y);
-        const ImVec2 min(center.x - size.x * 0.5f, center.y - size.y * 0.5f);
-        const ImVec2 max(center.x + size.x * 0.5f, center.y + size.y * 0.5f);
-        const ImVec2 uv0(config.flipX ? 1.f : 0.f, config.flipY ? 1.f : 0.f);
-        const ImVec2 uv1(config.flipX ? 0.f : 1.f, config.flipY ? 0.f : 1.f);
-        ImGui::GetWindowDrawList()->AddImage((ImTextureID)(intptr_t)m_referenceTexture, min, max, uv0, uv1,
-                                             IM_COL32(255, 255, 255, static_cast<int>(config.opacity * 255.f)));
-    }
 
     // -------------------------------------------------------------------------
     // target + document
@@ -324,9 +128,6 @@ namespace pe
             modelAlive = modelAlive || m == m_model;
         if (m_model && !modelAlive)
         {
-            if (m_poseDragging && m_gui)
-                if (AnimationTimeline *timeline = m_gui->GetWidget<AnimationTimeline>())
-                    timeline->EndViewportRotate();
             m_model = nullptr;
             m_rootNode = nullptr;
             ClearDocument();
@@ -402,13 +203,7 @@ namespace pe
         if (m_model && m_dirty)
             SaveJson();        // the rig.json beside the previous model is this document's own file
         RestoreHeatMap(scene); // same scene, other model: put the previous model's colours back
-        if (m_poseDragging && m_gui)
-            if (AnimationTimeline *timeline = m_gui->GetWidget<AnimationTimeline>())
-                timeline->EndViewportRotate();
-        m_poseDragging = false;
         m_weightDragging = false;
-        if (!model->HasSkeleton())
-            m_mode = Mode::Edit;
         // Undo/redo belong to the rig file, not the ModelAsset: a reload of the same .pemesh (scene
         // load, play/stop, re-import) keeps them, only another model drops them.
         const std::string docPath = model->GetFilePath().generic_string();
@@ -443,16 +238,10 @@ namespace pe
     {
         m_bones.clear();
         m_locks.clear();
-        m_lockBend.clear();
         m_pins.clear();
-        AbortPoseEdits();
-        if (AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr)
-            m_poseEditSerial = timeline->PoseEditSerial(); // a new target must not solve older pose edits
         m_presetName.clear();
         m_selected = -1;
-        m_poseSelected = -1;
         m_dragBone = -1;
-        m_poseDragging = false;
         m_dirty = false;
         m_nameBuf[0] = 0;
     }
@@ -474,7 +263,6 @@ namespace pe
         m_bones = snapshot.bones;
         m_presetName = snapshot.preset;
         m_locks = snapshot.locks;
-        m_lockBend.clear();
         m_pins = snapshot.pins;
         m_selected = std::min(snapshot.selected, static_cast<int>(m_bones.size()) - 1);
         m_dragBone = -1;
@@ -781,7 +569,9 @@ namespace pe
         MeasuredLandmarks landmarks;
         const bool useLandmarks = preset.landmarks.valid() && RigPresetLibrary::MeasureBiped(m_rigVerts, bounds, landmarks);
         std::vector<FittedRigPresetBone> fitted;
-        if (!RigPresetLibrary::Fit(preset, bounds, shellNames, fitted, error, useLandmarks ? &landmarks : nullptr))
+        std::vector<FittedRigPresetLock> fittedLocks;
+        if (!RigPresetLibrary::Fit(preset, bounds, shellNames, fitted, error, useLandmarks ? &landmarks : nullptr,
+                                   &fittedLocks))
             return false;
 
         ClearDocument();
@@ -800,6 +590,8 @@ namespace pe
             bone.rigid = source.rigid;
             bone.spline = source.spline;
             bone.shell = source.shell;
+            bone.swingLimitDegrees = source.swingLimitDegrees;
+            bone.twistLimitDegrees = source.twistLimitDegrees;
             m_bones.push_back(std::move(bone));
             if (!preset.bones[i].shellPatterns.empty() && source.shell.empty())
                 unmatched.push_back(source.name);
@@ -832,6 +624,20 @@ namespace pe
                 snapJoint(bone.head, bone.headRadius);
                 snapJoint(bone.tail, bone.tailRadius);
             }
+        }
+        m_pins = preset.pins;
+        for (const FittedRigPresetLock &source : fittedLocks)
+        {
+            const int bone = FindBone(source.bone);
+            if (bone < 0)
+                continue;
+            RigLock lock;
+            lock.bone = source.bone;
+            lock.target = source.target;
+            lock.anchor = source.hasAnchor ? source.anchor : m_bones[bone].tail;
+            lock.reach = source.reach;
+            lock.enabled = source.enabled;
+            m_locks.push_back(std::move(lock));
         }
         m_selected = m_bones.empty() ? -1 : 0;
         m_dirty = true;
@@ -985,6 +791,8 @@ namespace pe
             bone["rigid"] = b.rigid;
             bone["spline"] = b.spline;
             bone["shell"] = b.shell;
+            if (b.swingLimitDegrees > 0.f || b.twistLimitDegrees > 0.f)
+                bone["limit"] = {{"swing_degrees", b.swingLimitDegrees}, {"twist_degrees", b.twistLimitDegrees}};
             bones.push_back(bone);
         }
         j["bones"] = bones;
@@ -1088,6 +896,20 @@ namespace pe
                 b.rigid = jb.value("rigid", false);
                 b.spline = jb.value("spline", false);
                 b.shell = jb.value("shell", "");
+                if (jb.contains("limit"))
+                {
+                    const nlohmann::json &limit = jb["limit"];
+                    if (!limit.is_object() || !limit.contains("swing_degrees") ||
+                        !limit["swing_degrees"].is_number() || !limit.contains("twist_degrees") ||
+                        !limit["twist_degrees"].is_number())
+                        throw std::runtime_error("limit must contain numeric swing_degrees and twist_degrees");
+                    b.swingLimitDegrees = limit["swing_degrees"].get<float>();
+                    b.twistLimitDegrees = limit["twist_degrees"].get<float>();
+                    if (!std::isfinite(b.swingLimitDegrees) || !std::isfinite(b.twistLimitDegrees) ||
+                        b.swingLimitDegrees < 0.f || b.swingLimitDegrees > 180.f ||
+                        b.twistLimitDegrees < 0.f || b.twistLimitDegrees > 180.f)
+                        throw std::runtime_error("limit degrees must be finite numbers from 0 to 180");
+                }
                 anyShell |= jb.contains("shell");
                 loadedBones.push_back(std::move(b));
                 parents.push_back(jb.value("parent", ""));
@@ -1225,55 +1047,25 @@ namespace pe
                 state["snap_mode"] = m_snapMode;
                 state["mirror_x"] = m_mirrorX;
                 state["heat"] = m_heat;
-                state["mode"] = m_mode == Mode::Pose ? "pose" : "edit";
-                state["pose_selected"] = m_poseSelected;
                 state["joint_blend"] = m_jointBlend;
                 state["weights_dirty"] = m_weightDirty;
                 state["weight_undo"] = m_weightUndo.size();
                 state["weight_redo"] = m_weightRedo.size();
-                state["onion_bones"] = m_onionBones;
-                state["onion_previous"] = m_onionPrevious;
-                state["onion_next"] = m_onionNext;
-                state["motion_trail"] = m_motionTrail;
-                state["motion_trail_previous"] = m_trailPrevious;
-                state["motion_trail_next"] = m_trailNext;
-                state["two_bone_ik"] = m_twoBoneIk;
-                state["ik_bone"] = m_ikBone;
-                state["ik_target"] = FromVec3(m_ikTarget);
-                state["ik_pole"] = FromVec3(m_ikPole);
-                const AnimationReferenceFrames::Config &reference = m_referenceSequence.config;
-                const char *referenceSource = reference.source == AnimationReferenceFrames::Source::Directory ? "directory"
-                                              : reference.source == AnimationReferenceFrames::Source::Pattern ? "pattern"
-                                                                                                              : "files";
-                state["reference"] = {{"loaded", !m_referenceSequence.frames.empty()},
-                                      {"path", m_referencePath.generic_string()},
-                                      {"frames", m_referenceSequence.frames.size()},
-                                      {"source", referenceSource},
-                                      {"source_fps", reference.sourceFps},
-                                      {"timeline_offset_seconds", reference.timelineOffsetSeconds},
-                                      {"playback", reference.playback == AnimationReferenceFrames::Playback::Loop ? "loop" : "clamp"},
-                                      {"opacity", reference.opacity},
-                                      {"scale", reference.scale},
-                                      {"offset", {reference.offset.x, reference.offset.y}},
-                                      {"flip_x", reference.flipX},
-                                      {"flip_y", reference.flipY},
-                                      {"current_frame", m_referenceFrameIndex}};
-                if (m_gui)
-                    if (AnimationTimeline *timeline = m_gui->GetWidget<AnimationTimeline>())
-                        state["auto_key"] = timeline->AutoKey();
                 state["shells"] = nlohmann::json::parse(ShellsJson());
                 state["target"] = m_model ? m_model->GetLabel() : "";
                 return ok(state);
             }
             if (action == "rig.mode")
             {
-                const std::string mode = args.value("mode", "edit");
-                if (mode != "edit" && mode != "pose")
-                    return fail("unknown rig mode: " + mode + " (edit|pose)");
-                if (mode == "pose" && (!m_model || !m_model->HasSkeleton()))
-                    return fail("pose mode requires a baked skeleton");
-                SetMode(mode == "pose" ? Mode::Pose : Mode::Edit);
-                return ok({{"mode", mode}});
+                AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
+                if (!timeline)
+                    return fail("Animation Timeline is not available");
+                const std::string mode = args.value("mode", "rig");
+                if (mode != "rig" && mode != "edit" && mode != "animate" && mode != "pose")
+                    return fail("mode must be rig|edit|animate|pose");
+                *timeline->GetOpen() = true;
+                timeline->SetRigMode(mode == "rig" || mode == "edit");
+                return ok({{"mode", timeline->RigMode() ? "rig" : "animate"}});
             }
             if (action == "rig.shapes")
             {
@@ -1309,20 +1101,15 @@ namespace pe
                 m_heatDirty = true;
                 return ok({{"mode", modes[m_heat]}});
             }
-            if (action == "rig.reference_load")
+            if (action == "rig.reference_load" || action == "rig.reference_clear" || action == "rig.pin" ||
+                action == "rig.grab" || action == "rig.lock")
             {
-                const std::string path = args.value("path", "");
-                if (path.empty())
-                    return fail("path to a .reference.json manifest is required");
-                std::string error;
-                if (!LoadReference(PathFromUtf8(path), error))
-                    return fail(error);
-                return ok({{"path", m_referencePath.generic_string()}, {"frames", m_referenceSequence.frames.size()}});
-            }
-            if (action == "rig.reference_clear")
-            {
-                ClearReference();
-                return ok();
+                AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
+                if (!timeline)
+                    return fail("Animation Timeline is not available");
+                *timeline->GetOpen() = true;
+                timeline->SetRigMode(false);
+                return timeline->HandleAction("timeline." + action.substr(4), argsJson);
             }
             if (!m_model)
                 return fail("no target model: select a node of a .pemesh model first");
@@ -1349,13 +1136,16 @@ namespace pe
                 AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
                 AnimationTimeline::ViewportPose pose;
                 if (!timeline || !timeline->GetViewportPose(m_model, pose))
-                    return fail("weight strokes require the model's current Animation Timeline pose");
+                {
+                    pose.node = m_rootNode;
+                    pose.boneTransforms = RestBoneTransforms(m_model->GetSkeleton());
+                }
 
                 const Skeleton &skeleton = m_model->GetSkeleton();
                 const nlohmann::json &boneValue = args.contains("bone") ? args["bone"] : nlohmann::json();
                 const int bone = boneValue.is_number_integer() ? boneValue.get<int>()
                                  : boneValue.is_string()       ? skeleton.GetBoneIndex(boneValue.get<std::string>())
-                                                               : m_poseSelected;
+                                                               : SelectedSkeletonBone();
                 if (bone < 0 || bone >= skeleton.GetBoneCount())
                     return fail("unknown weight-stroke bone");
                 if (!args.contains("center") || !args["center"].is_array() || args["center"].size() != 3)
@@ -1406,7 +1196,9 @@ namespace pe
                     return fail("could not map the model weight streams into the Scene stores");
                 }
                 UploadWeights(renderer->GetScene());
-                m_poseSelected = bone;
+                const int authored = FindBone(skeleton.bones[bone].name);
+                if (authored >= 0)
+                    m_selected = authored;
                 m_weightDirty = true;
                 return ok({{"bone", stroke.bone},
                            {"mode", mode},
@@ -1466,11 +1258,11 @@ namespace pe
                 const vec3 rotate = ToVec3(args.value("rotate", nlohmann::json()), vec3(0.f));
                 const nlohmann::json &sj = args.value("scale", nlohmann::json());
                 const vec3 scale = sj.is_number() ? vec3(sj.get<float>()) : ToVec3(sj, vec3(1.f));
-                const std::string pivot = args.value("pivot", "feet");
-                const int pivotMode = pivot == "centre" || pivot == "center" ? 1 : pivot == "origin" ? 2
-                                                                                                     : 0;
+                vec3 pivot(0.f);
+                if (args.contains("pivot") && !StrictVec3(args["pivot"], pivot))
+                    return fail("pivot must be [x, y, z]");
                 PushUndo();
-                TransformRig(m_undo.back().bones, move, rotate, scale, pivotMode);
+                TransformRig(m_undo.back().bones, move, rotate, scale, pivot);
                 return ok();
             }
             if (action == "rig.add")
@@ -1584,171 +1376,6 @@ namespace pe
                     return fail(error);
                 return ok({{"path", outPath}, {"note", m_bakeNote}});
             }
-            if (action == "rig.pin" || action == "rig.grab")
-            {
-                if (!m_model || !m_model->HasSkeleton())
-                    return fail("the model has no skeleton");
-                const Skeleton &skeleton = m_model->GetSkeleton();
-                const std::string name = args.value("bone", "");
-                const int bone = skeleton.GetBoneIndex(name);
-                if (bone < 0)
-                    return fail("unknown bone: " + name);
-                if (action == "rig.pin")
-                {
-                    const bool want = args.value("pinned", !IsPinned(name));
-                    if (want != IsPinned(name))
-                        TogglePin(name);
-                    return ok({{"bone", name}, {"pinned", IsPinned(name)}, {"pins", m_pins}});
-                }
-                RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
-                AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
-                if (!renderer || !timeline || !args.contains("target"))
-                    return fail("rig.grab needs target[3], the renderer and the Animation Timeline");
-                *timeline->GetOpen() = true; // a closed Timeline resolves next frame; the retry then has a pose
-                if (timeline->HasPendingRequests())
-                    return fail("the Timeline has queued requests (frame/pose/clip); retry after the next frame");
-                vec3 target;
-                if (!StrictVec3(args["target"], target))
-                    return fail("target must be three finite numbers");
-                float gap = 0.f;
-                bool keyed = false;
-                if (!GrabTo(renderer->GetScene(), bone, target, &gap, true, &keyed))
-                    return fail("nothing grabbed: the clip must be active in the Timeline and the bone needs a parent");
-                // A one-shot grab commits like a mouse release: the grabbed bone's own lock reapplies
-                // (locks always win) and the reported gap is measured on the final pose. An at-target
-                // no-op keyed nothing, so there is nothing to re-solve either.
-                if (keyed && SolveLocks(renderer->GetScene()))
-                {
-                    AnimationTimeline::ViewportPose pose;
-                    std::vector<vec3> heads, tails;
-                    if (timeline->GetViewportPose(m_model, pose) &&
-                        static_cast<int>(pose.boneTransforms.size()) == skeleton.GetBoneCount())
-                    {
-                        PoseTails(skeleton, pose.boneTransforms, heads, tails);
-                        gap = glm::distance(tails[bone], target);
-                    }
-                }
-                nlohmann::json chain = nlohmann::json::array();
-                for (int b = bone; b >= 0 && skeleton.bones[b].parentIndex >= 0; b = skeleton.bones[b].parentIndex)
-                {
-                    if (b != bone && IsPinned(skeleton.bones[b].name))
-                        break;
-                    chain.push_back(skeleton.bones[b].name);
-                }
-                return ok({{"bone", name}, {"gap", gap}, {"chain", chain}});
-            }
-            if (action == "rig.lock")
-            {
-                const std::string op = args.value("op", "list");
-                // gap = tail-to-anchor distance at the Timeline's current pose (agents assert "held" on it).
-                AnimationTimeline::ViewportPose currentPose;
-                std::vector<vec3> poseHeads, poseTails;
-                if (AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
-                    timeline && m_model && m_model->HasSkeleton() && timeline->GetViewportPose(m_model, currentPose) &&
-                    static_cast<int>(currentPose.boneTransforms.size()) == m_model->GetSkeleton().GetBoneCount())
-                    PoseTails(m_model->GetSkeleton(), currentPose.boneTransforms, poseHeads, poseTails);
-                auto lockJson = [&](int i)
-                {
-                    const RigLock &lock = m_locks[i];
-                    int root, mid, target;
-                    std::string why;
-                    vec3 anchor;
-                    const bool valid = m_model && m_model->HasSkeleton() &&
-                                       LockChain(lock, m_model->GetSkeleton(), root, mid, target, &why);
-                    nlohmann::json j{{"index", i},
-                                     {"bone", lock.bone},
-                                     {"target", lock.target},
-                                     {"anchor", {lock.anchor.x, lock.anchor.y, lock.anchor.z}},
-                                     {"reach", lock.reach},
-                                     {"enabled", lock.enabled},
-                                     {"valid", valid},
-                                     {"why", why}};
-                    if (valid && !poseTails.empty() &&
-                        LockAnchorPosed(lock, m_model->GetSkeleton(), currentPose.boneTransforms, anchor))
-                    {
-                        j["gap"] = glm::distance(anchor, poseTails[mid]);
-                        j["tail"] = {poseTails[mid].x, poseTails[mid].y, poseTails[mid].z};
-                        j["anchor_posed"] = {anchor.x, anchor.y, anchor.z};
-                        j["root"] = {poseHeads[root].x, poseHeads[root].y, poseHeads[root].z};
-                        j["mid"] = {poseHeads[mid].x, poseHeads[mid].y, poseHeads[mid].z};
-                    }
-                    return j;
-                };
-                auto lockIndex = [&](int &index)
-                {
-                    index = args.value("index", -1);
-                    if (index < 0 && args.contains("bone") && args["bone"].is_string())
-                        for (int i = 0; i < static_cast<int>(m_locks.size()); i++)
-                            if (m_locks[i].bone == args["bone"].get<std::string>())
-                                index = i;
-                    return index >= 0 && index < static_cast<int>(m_locks.size());
-                };
-                if (op == "list")
-                {
-                    nlohmann::json locks = nlohmann::json::array();
-                    for (int i = 0; i < static_cast<int>(m_locks.size()); i++)
-                        locks.push_back(lockJson(i));
-                    return ok({{"locks", locks}});
-                }
-                if (op == "add")
-                {
-                    std::string bone = args.value("bone", "");
-                    if (bone.empty() && m_model && m_model->HasSkeleton() && m_poseSelected >= 0 &&
-                        m_poseSelected < m_model->GetSkeleton().GetBoneCount())
-                        bone = m_model->GetSkeleton().bones[m_poseSelected].name;
-                    const bool hasAnchor = args.contains("anchor");
-                    vec3 anchor(0.f);
-                    if (hasAnchor && !StrictVec3(args["anchor"], anchor))
-                        return fail("anchor must be three finite numbers");
-                    std::string error;
-                    const int added = AddLock(bone, args.value("target", ""), args.value("reach", 1.f),
-                                              hasAnchor ? &anchor : nullptr, error);
-                    return added < 0 ? fail(error) : ok({{"lock", lockJson(added)}});
-                }
-                int index;
-                if (op == "remove" || op == "set")
-                {
-                    if (!lockIndex(index))
-                        return fail("unknown lock: give index or bone");
-                    PushUndo(true);
-                    m_lockBend.clear();
-                    m_dirty = true;
-                    if (op == "remove")
-                    {
-                        m_locks.erase(m_locks.begin() + index);
-                        return ok({{"locks", m_locks.size()}});
-                    }
-                    RigLock &lock = m_locks[index];
-                    if (args.contains("target"))
-                        lock.target = args.value("target", "");
-                    if (args.contains("anchor") && !StrictVec3(args["anchor"], lock.anchor))
-                        return fail("anchor must be three finite numbers");
-                    lock.reach = std::clamp(args.value("reach", lock.reach), 0.3f, 1.f);
-                    lock.enabled = args.value("enabled", lock.enabled);
-                    return ok({{"lock", lockJson(index)}});
-                }
-                RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
-                AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
-                if (!renderer || !timeline)
-                    return fail("renderer or Animation Timeline not available");
-                *timeline->GetOpen() = true; // a closed Timeline resolves next frame; the retry then has a pose
-                if (timeline->HasPendingRequests())
-                    return fail("the Timeline has queued requests (frame/pose/clip); retry after the next frame");
-                if (op == "solve")
-                {
-                    if (!SolveLocks(renderer->GetScene(), -1, true))
-                        return fail("nothing solved: locks need the clip active in the Timeline and valid chains");
-                    return ok({{"status", m_status}});
-                }
-                if (op == "bake")
-                {
-                    std::string status;
-                    const bool done = BakeLocks(renderer->GetScene(), status);
-                    m_status = status;
-                    return done ? ok({{"status", status}}) : fail(status);
-                }
-                return fail("unknown lock op: list|add|remove|set|solve|bake");
-            }
             return fail("unknown rig action");
         }
         catch (const std::exception &exception)
@@ -1760,82 +1387,11 @@ namespace pe
     // -------------------------------------------------------------------------
     // panel
     // -------------------------------------------------------------------------
-    // Drop any in-flight pose interaction (grab, gizmo drag, IK gizmos, reach drag) without keying:
-    // mode/tool switches and target changes must never leave a half-done edit armed.
-    void RigEditor::AbortPoseEdits()
+    void RigEditor::DrawPanel(Scene &scene)
     {
-        m_grabBone = -1;
-        m_grabPushed = false;
-        m_ikBone = -1;
-        m_ikDragging = false;
-        m_ikDirty = false;
-        m_reachDragging = false;
-        m_reachPushed = false;
-        if (m_poseDragging && m_gui)
-            if (AnimationTimeline *timeline = m_gui->GetWidget<AnimationTimeline>())
-                timeline->EndViewportRotate();
-        m_poseDragging = false;
-    }
-
-    void RigEditor::SetMode(Mode mode)
-    {
-        if (mode == Mode::Pose && (!m_model || !m_model->HasSkeleton()))
-            return;
-        if (m_mode == mode)
-            return;
-        AbortPoseEdits();
-        m_mode = mode;
-        // Edit Rig edits rest data: show the rest pose so the document bones sit on the mesh they describe.
-        if (mode != Mode::Pose && m_gui && m_model && m_model->HasSkeleton())
-            if (AnimationTimeline *timeline = m_gui->GetWidget<AnimationTimeline>())
-                timeline->RequestRestPose();
-        // Pose mode needs the Timeline resolved (it owns the evaluated pose and key writes).
-        if (mode == Mode::Pose && m_gui)
-            if (AnimationTimeline *timeline = m_gui->GetWidget<AnimationTimeline>())
-            {
-                *timeline->GetOpen() = true;
-                m_poseEditSerial = timeline->PoseEditSerial(); // older pose edits are not ours to solve
-            }
-        m_status.clear();
-        if (mode != Mode::Pose || !m_gui)
-            return;
-
-        AnimationTimeline *timeline = m_gui->GetWidget<AnimationTimeline>();
-        if (!timeline)
-            return;
-        *timeline->GetOpen() = true;
-        const Skeleton &skeleton = m_model->GetSkeleton();
-        if (m_selected >= 0 && m_selected < static_cast<int>(m_bones.size()))
-            m_poseSelected = skeleton.GetBoneIndex(m_bones[m_selected].name);
-        if (m_poseSelected < 0 && skeleton.GetBoneCount() > 0)
-            m_poseSelected = 0;
-        if (m_poseSelected >= 0)
-            timeline->RequestBone(skeleton.bones[m_poseSelected].name);
-    }
-
-    void RigEditor::Update()
-    {
-        if (!m_open)
-            return;
-        ImGui::SetNextWindowSize(ImVec2(560.f, 440.f), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSizeConstraints(ImVec2(480.f, 320.f), ImVec2(std::numeric_limits<float>::max(), std::numeric_limits<float>::max()));
-        if (!ImGui::Begin(m_name.c_str(), &m_open))
-        {
-            ImGui::End();
-            return;
-        }
-        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
-        if (!renderer)
-        {
-            ImGui::End();
-            return;
-        }
-        Scene &scene = renderer->GetScene();
-        ResolveTarget(scene);
         if (!m_model)
         {
             ImGui::TextDisabled("Select a node of a loaded model (.pemesh) in the Hierarchy to rig it.");
-            ImGui::End();
             return;
         }
 
@@ -1847,58 +1403,25 @@ namespace pe
         ImGui::TextDisabled("%d shells   %d bones   %s", shellCount, static_cast<int>(m_bones.size()),
                             m_model->HasSkeleton() ? "has skeleton" : "unrigged");
         ImGui::SameLine(0.f, 18.f);
-        if (ImGui::RadioButton("Edit Rig", m_mode == Mode::Edit))
-            SetMode(Mode::Edit);
-        ui::ItemTooltip("Author bones and influence shapes over the model, then Bake them into a skeleton.");
-        ImGui::SameLine();
-        ImGui::BeginDisabled(!m_model->HasSkeleton());
-        if (ImGui::RadioButton("Pose", m_mode == Mode::Pose))
-            SetMode(Mode::Pose);
-        ImGui::EndDisabled();
-        ui::ItemTooltip(m_model->HasSkeleton() ? "Pose the baked skeleton directly in the viewport."
-                                               : "Bake or load a model with a skeleton first.",
-                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::TextDisabled("Bind + Weights");
 
         const ImGuiIO &io = ImGui::GetIO();
-        if (m_mode == Mode::Pose)
-        {
-            if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && io.KeyCtrl && !io.WantTextInput && m_gui)
-            {
-                if (AnimationTimeline *timeline = m_gui->GetWidget<AnimationTimeline>())
-                {
-                    if (ImGui::IsKeyPressed(ImGuiKey_Z, false))
-                    {
-                        if (m_jointBlend)
-                            WeightUndo(scene, io.KeyShift);
-                        else
-                            timeline->StepViewportUndo(scene, io.KeyShift);
-                    }
-                    if (ImGui::IsKeyPressed(ImGuiKey_Y, false))
-                    {
-                        if (m_jointBlend)
-                            WeightUndo(scene, true);
-                        else
-                            timeline->StepViewportUndo(scene, true);
-                    }
-                }
-            }
-            ImGui::Separator();
-            DrawPosePanel(scene);
-            ImGui::TextDisabled("%s", m_status.empty() ? "Viewport: drag a tail dot to pull the limb (padlocks pin where the pull stops), or click a bone and drag its rings. Each drag is one Timeline undo step." : m_status.c_str());
-            // Lock / pin / reach edits are document edits, and Pose mode returns before the Edit-mode
-            // autosave below: save here too, or closing / hot-reloading in Pose mode loses them.
-            if (m_dirty && !ImGui::IsAnyItemActive() && !RigJsonPath().empty())
-                SaveJson(nullptr, true);
-            ImGui::End();
-            return;
-        }
-
         if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && io.KeyCtrl && !io.WantTextInput)
         {
             if (ImGui::IsKeyPressed(ImGuiKey_Z, false))
-                io.KeyShift ? Redo() : Undo();
+            {
+                if (m_jointBlend)
+                    WeightUndo(scene, io.KeyShift);
+                else
+                    io.KeyShift ? Redo() : Undo();
+            }
             if (ImGui::IsKeyPressed(ImGuiKey_Y, false))
-                Redo();
+            {
+                if (m_jointBlend)
+                    WeightUndo(scene, true);
+                else
+                    Redo();
+            }
         }
         DrawToolbar();
         ImGui::Separator();
@@ -1932,6 +1455,7 @@ namespace pe
         ImGui::BeginChild("##rig_props", ImVec2(0.f, paneHeight), ImGuiChildFlags_Borders);
         DrawRigTransform();
         DrawBoneProperties();
+        DrawJointBlendPanel(scene);
         ImGui::EndChild();
 
         // Autosave: the rig.json beside the model is the document, so an editor restart or scene
@@ -1943,390 +1467,6 @@ namespace pe
             UpdateHeatMap(scene);
 
         ImGui::TextDisabled("%s", m_status.empty() ? "Viewport: drag joints, Shift-drag a head to move the bone, drag the middle to move the bone; X/Y/Z lock an axis, Shift = precision, Ctrl = snap; Ctrl+Z undo" : m_status.c_str());
-        ImGui::End();
-    }
-
-    void RigEditor::DrawPosePanel(Scene &scene)
-    {
-        AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
-        if (!timeline)
-        {
-            ImGui::TextDisabled("Animation Timeline is not available.");
-            return;
-        }
-
-        bool autoKey = timeline->AutoKey();
-        if (ImGui::Checkbox("Auto Key", &autoKey))
-            timeline->SetAutoKey(autoKey);
-        ui::ItemTooltip("On: insert or overwrite the current-frame rotation key. Off: only overwrite an existing rotation key.");
-        ui::SameLineIfFits(ui::CheckboxWidth("Mirror X"));
-        ImGui::Checkbox("Mirror X", &m_mirrorX);
-        ui::ItemTooltip("Rotate the .L/.R counterpart geometrically across the rig X plane in the same undo step.");
-        ui::SameLineIfFits(ui::ButtonWidth("Pose Undo"), 18.f);
-        if (ImGui::Button("Pose Undo"))
-            timeline->StepViewportUndo(scene, false);
-        ui::ItemTooltip("Undo the last viewport pose drag; one drag is one step.");
-        ui::SameLineIfFits(ui::ButtonWidth("Pose Redo"));
-        if (ImGui::Button("Pose Redo"))
-            timeline->StepViewportUndo(scene, true);
-        ui::ItemTooltip("Redo the last undone viewport pose drag.");
-        ui::SameLineIfFits(ui::CheckboxWidth("Rotate") + ui::CheckboxWidth("Move") + ui::CheckboxWidth("Both"), 18.f);
-        ImGui::RadioButton("Rotate", &m_poseGizmo, 0);
-        ui::ItemTooltip("Viewport gizmo rotates the selected bone.");
-        ImGui::SameLine();
-        ImGui::RadioButton("Move", &m_poseGizmo, 1);
-        ui::ItemTooltip("Viewport gizmo moves the selected bone (keys its location; locked hands follow).");
-        ImGui::SameLine();
-        ImGui::RadioButton("Both", &m_poseGizmo, 2);
-        ui::ItemTooltip("Move and rotate handles together.");
-
-        const Skeleton &skeleton = m_model->GetSkeleton();
-        const float kStepperWidth = ImGui::GetFontSize() * 4.f;
-        if (m_poseSelected >= skeleton.GetBoneCount())
-            m_poseSelected = -1;
-        ImGui::Separator();
-        ImGui::Checkbox("Onion Bones", &m_onionBones);
-        ui::ItemTooltip("Draw the skeleton at the surrounding displayed frames as faded ghosts.");
-        if (m_onionBones)
-        {
-            ui::SameLineIfFits(kStepperWidth);
-            ImGui::SetNextItemWidth(kStepperWidth);
-            ImGui::DragInt("-##onion_previous", &m_onionPrevious, 0.1f, 0, 12);
-            ui::ItemTooltip("Ghost frames drawn before the playhead.");
-            ui::SameLineIfFits(kStepperWidth);
-            ImGui::SetNextItemWidth(kStepperWidth);
-            ImGui::DragInt("+##onion_next", &m_onionNext, 0.1f, 0, 12);
-            ui::ItemTooltip("Ghost frames drawn after the playhead.");
-        }
-        ui::SameLineIfFits(ui::CheckboxWidth("Motion Trail"), 18.f);
-        ImGui::Checkbox("Motion Trail", &m_motionTrail);
-        ui::ItemTooltip("Draw the selected bone's origin across the surrounding frames as a path.");
-        if (m_motionTrail)
-        {
-            ui::SameLineIfFits(kStepperWidth);
-            ImGui::SetNextItemWidth(kStepperWidth);
-            ImGui::DragInt("-##trail_previous", &m_trailPrevious, 0.1f, 0, 60);
-            ui::ItemTooltip("Trail samples taken before the playhead.");
-            ui::SameLineIfFits(kStepperWidth);
-            ImGui::SetNextItemWidth(kStepperWidth);
-            ImGui::DragInt("+##trail_next", &m_trailNext, 0.1f, 0, 60);
-            ui::ItemTooltip("Trail samples taken after the playhead.");
-        }
-        const int ikMid = m_poseSelected >= 0 && m_poseSelected < skeleton.GetBoneCount()
-                              ? skeleton.bones[m_poseSelected].parentIndex
-                              : -1;
-        const bool hasIkChain = ikMid >= 0 && ikMid < skeleton.GetBoneCount() &&
-                                skeleton.bones[ikMid].parentIndex >= 0;
-        ImGui::BeginDisabled(!hasIkChain);
-        if (ImGui::Checkbox("Two-Bone IK", &m_twoBoneIk))
-        {
-            m_ikBone = -1;
-            m_ikDragging = false;
-            m_ikDirty = false;
-            m_grabBone = -1; // the grab block is skipped while a tool owns the mouse: never leave one armed
-            m_grabPushed = false;
-            if (m_twoBoneIk)
-            {
-                m_jointBlend = false;
-                if (m_poseDragging)
-                {
-                    timeline->EndViewportRotate();
-                    m_poseDragging = false;
-                }
-                if (m_weightDragging)
-                {
-                    if (m_weightStrokeChanged)
-                        UploadWeights(scene);
-                    m_weightDragging = false;
-                    m_weightStrokeChanged = false;
-                    m_weightHasLastCenter = false;
-                }
-            }
-        }
-        ImGui::EndDisabled();
-        ui::ItemTooltip(hasIkChain ? "Selected bone is the tip; its parent and grandparent form the two solved links."
-                                   : "Select a tip bone with both a parent and grandparent.",
-                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-        if (!hasIkChain)
-            m_twoBoneIk = false;
-        if (m_twoBoneIk)
-        {
-            ui::SameLineIfFits(ui::ButtonWidth("Reset IK Target"));
-            if (ImGui::SmallButton("Reset IK Target"))
-                m_ikBone = -1;
-            ui::ItemTooltip("Snap the target and pole gizmos back onto the current pose.");
-        }
-
-        auto showMotionResult = [&](const char *label, const std::string &result)
-        {
-            const nlohmann::json response = nlohmann::json::parse(result, nullptr, false);
-            if (response.is_discarded())
-                m_status = std::string(label) + " failed: invalid response";
-            else if (response.contains("error"))
-                m_status = std::string(label) + " failed: " + response.value("error", "unknown error");
-            else
-                m_status = std::string(label) + " applied in memory; use Timeline Save to persist.";
-        };
-        ImGui::BeginDisabled(m_poseSelected < 0 || m_poseSelected >= skeleton.GetBoneCount());
-        if (ImGui::Button("Plant From Here"))
-            showMotionResult("Plant From Here",
-                             timeline->HandleAction("timeline.motion.stabilize_world",
-                                                    nlohmann::json{{"bone", skeleton.bones[m_poseSelected].name}}.dump()));
-        ui::ItemTooltip("Stabilize the selected bone's world position from the current frame through clip end.");
-        ui::SameLineIfFits(ui::ButtonWidth("Spring Selected Chain"));
-        if (ImGui::Button("Spring Selected Chain"))
-        {
-            const std::vector<std::string> chain = SelectedSpringChain();
-            if (chain.size() < 2)
-                m_status = "Spring Selected Chain needs a contiguous selected/direct-child chain of at least two bones.";
-            else
-                showMotionResult("Spring Selected Chain",
-                                 timeline->HandleAction("timeline.motion.spring_bake",
-                                                        nlohmann::json{{"bones", chain}}.dump()));
-        }
-        ui::ItemTooltip("Bake follow-through on the selected chain; a unique spline child is preferred at forks.");
-        ui::SameLineIfFits(ui::ButtonWidth("Breakdown 50%"));
-        if (ImGui::Button("Breakdown 50%"))
-            showMotionResult("Breakdown",
-                             timeline->HandleAction("timeline.motion.breakdown",
-                                                    nlohmann::json{{"bone", skeleton.bones[m_poseSelected].name},
-                                                                   {"bias", 0.5f}}
-                                                        .dump()));
-        ImGui::EndDisabled();
-        ui::ItemTooltip("Write one complete pose for the selected bone halfway between its surrounding keys. Needs a selected bone.",
-                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-
-        if (ImGui::CollapsingHeader("Reference Sequence"))
-        {
-            ImGui::SetNextItemWidth(std::max(ImGui::GetFontSize() * 11.f,
-                                             ImGui::GetContentRegionAvail().x - ui::ButtonWidth("Browse Load Clear")));
-            ImGui::InputText("##reference_path", m_referencePathBuffer.data(), m_referencePathBuffer.size());
-            ui::ItemTooltip("Manifest v1: source_fps, timeline_offset_seconds, playback clamp|loop, opacity, scale, offset, flip_x, flip_y, and exactly one source: files, directory, or pattern.");
-            ui::SameLineIfFits(ui::ButtonWidth("Browse##reference"));
-            if (ImGui::Button("Browse##reference") && m_gui)
-                if (FileSelector *selector = m_gui->GetWidget<FileSelector>())
-                    selector->OpenSelection([this](const std::string &path)
-                                            {
-                                                std::string error;
-                                                m_status = LoadReference(PathFromUtf8(path), error)
-                                                               ? "Loaded reference sequence."
-                                                               : error;
-                                                return error.empty(); },
-                                            {".json"}, Path::Assets);
-            ui::ItemTooltip("Pick a .reference.json manifest under Assets.");
-            ui::SameLineIfFits(ui::ButtonWidth("Load##reference"));
-            if (ImGui::Button("Load##reference"))
-            {
-                std::string error;
-                m_status = LoadReference(PathFromUtf8(m_referencePathBuffer.data()), error)
-                               ? "Loaded reference sequence."
-                               : error;
-            }
-            ui::ItemTooltip("Load the manifest named in the path field.");
-            ui::SameLineIfFits(ui::ButtonWidth("Clear##reference"));
-            ImGui::BeginDisabled(m_referenceSequence.frames.empty());
-            if (ImGui::Button("Clear##reference"))
-            {
-                ClearReference();
-                m_status = "Reference sequence cleared.";
-            }
-            ImGui::EndDisabled();
-            ui::ItemTooltip("Drop the sequence and release its cached frame texture.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-            if (!m_referenceSequence.frames.empty())
-            {
-                AnimationReferenceFrames::Config &reference = m_referenceSequence.config;
-                ImGui::SliderFloat("Opacity##reference", &reference.opacity, 0.f, 1.f, "%.2f");
-                ui::ItemTooltip("How strongly the reference image is blended over the rendered scene.");
-                ImGui::DragFloat("Scale##reference", &reference.scale, 0.01f, 0.05f, 5.f, "%.2f");
-                ui::ItemTooltip("Uniform scale of the reference image in the viewport.");
-                ImGui::DragFloat2("Offset px##reference", &reference.offset.x, 1.f, -4096.f, 4096.f, "%.0f");
-                ui::ItemTooltip("Pixel offset of the reference image in the viewport.");
-                ImGui::Checkbox("Flip X##reference", &reference.flipX);
-                ui::ItemTooltip("Mirror the reference image horizontally.");
-                ui::SameLineIfFits(ui::CheckboxWidth("Flip Y##reference"));
-                ImGui::Checkbox("Flip Y##reference", &reference.flipY);
-                ui::ItemTooltip("Mirror the reference image vertically.");
-                ImGui::SameLine();
-                ImGui::TextDisabled("%d frames @ %.2f fps", static_cast<int>(m_referenceSequence.frames.size()),
-                                    reference.sourceFps);
-                ui::ItemTooltip("Frames resolved from the manifest, and the source rate they are sampled at.");
-            }
-        }
-        ImGui::Separator();
-        if (ImGui::Checkbox("Joint Blend", &m_jointBlend))
-        {
-            if (m_jointBlend)
-            {
-                m_twoBoneIk = false;
-                m_ikBone = -1;
-                m_ikDragging = false;
-                m_ikDirty = false;
-            }
-            m_grabBone = -1; // the grab block is skipped while a tool owns the mouse: never leave one armed
-            m_grabPushed = false;
-            if (m_jointBlend && m_poseDragging)
-            {
-                timeline->EndViewportRotate();
-                m_poseDragging = false;
-            }
-            if (!m_jointBlend && m_weightDragging)
-            {
-                if (m_weightStrokeChanged)
-                    UploadWeights(scene);
-                m_weightDragging = false;
-                m_weightStrokeChanged = false;
-                m_weightHasLastCenter = false;
-            }
-            m_status = m_jointBlend ? "Joint Blend: paint the selected bone on the posed mesh." : "Joint Blend off.";
-        }
-        ui::ItemTooltip("Paint actual skin weights at the current pose. GPU weights upload once when the drag ends.");
-        if (m_jointBlend)
-        {
-            const char *selectedName = m_poseSelected >= 0 && m_poseSelected < skeleton.GetBoneCount()
-                                           ? skeleton.bones[m_poseSelected].name.c_str()
-                                           : "(select a bone)";
-            ImGui::SameLine();
-            ImGui::TextDisabled("%s", selectedName);
-            if (ImGui::RadioButton("Add", m_weightMode == RigWeightStroke::Mode::Add))
-                m_weightMode = RigWeightStroke::Mode::Add;
-            ui::ItemTooltip("Raise the selected bone's weight under the brush; the other influences give way.");
-            ui::SameLineIfFits(ui::CheckboxWidth("Erase"));
-            if (ImGui::RadioButton("Erase", m_weightMode == RigWeightStroke::Mode::Erase))
-                m_weightMode = RigWeightStroke::Mode::Erase;
-            ui::ItemTooltip("Lower the selected bone's weight under the brush and hand it back to its neighbours.");
-            ui::SameLineIfFits(ui::CheckboxWidth("Smooth"));
-            if (ImGui::RadioButton("Smooth", m_weightMode == RigWeightStroke::Mode::Smooth))
-                m_weightMode = RigWeightStroke::Mode::Smooth;
-            ui::ItemTooltip("Average the selected bone's weight with its rest-space neighbours to relax a hard seam.");
-            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 11.f);
-            ImGui::DragFloat("Radius", &m_weightRadius, 0.002f, kMinRadius, std::max(ModelHeight(), kMinRadius), "%.3f");
-            ui::ItemTooltip("Brush radius in model units, measured on the posed mesh; the mouse wheel resizes it over the mesh.");
-            ui::SameLineIfFits(ui::LabelledItemWidth(ImGui::GetFontSize() * 9.f, "Strength"));
-            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 9.f);
-            ImGui::SliderFloat("Strength", &m_weightStrength, 0.f, 1.f, "%.2f");
-            ui::ItemTooltip("How much weight one stroke sample moves at the brush centre; Shift+wheel adjusts it over the mesh.");
-            ImGui::BeginDisabled(m_weightUndo.empty());
-            if (ImGui::Button("Weight Undo"))
-                WeightUndo(scene, false);
-            ImGui::EndDisabled();
-            ui::ItemTooltip("Undo one Joint Blend drag.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-            ui::SameLineIfFits(ui::ButtonWidth("Weight Redo"));
-            ImGui::BeginDisabled(m_weightRedo.empty());
-            if (ImGui::Button("Weight Redo"))
-                WeightUndo(scene, true);
-            ImGui::EndDisabled();
-            ui::ItemTooltip("Redo one Joint Blend drag.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-            ui::SameLineIfFits(ui::ButtonWidth("Save Weights *"));
-            if (ImGui::Button(m_weightDirty ? "Save Weights *" : "Save Weights"))
-            {
-                std::string error;
-                m_status = SaveWeights(error) ? "Saved weights to " + m_model->GetFilePath().filename().generic_string()
-                                              : error;
-            }
-            ui::ItemTooltip("Explicitly overwrite the current .pemesh. Weight strokes never autosave.");
-            ImGui::Separator();
-        }
-        DrawLocksPanel(scene, timeline);
-        ImGui::TextDisabled("Pose Bones");
-        // Never squashed by the controls above: at least 12 rows, else the window scrolls; leaves the status line.
-        const float bonesMin = ImGui::GetTextLineHeightWithSpacing() * 12.f;
-        const float bonesAvail = ImGui::GetContentRegionAvail().y - ImGui::GetFrameHeightWithSpacing();
-        ImGui::BeginChild("##pose_bones", ImVec2(0.f, std::max(bonesAvail, bonesMin)), ImGuiChildFlags_Borders);
-        ui::PushCompactTree();
-        DrawPoseBoneTree(skeleton, -1, 0);
-        ui::PopCompactTree();
-        ImGui::EndChild();
-    }
-
-    void RigEditor::DrawPoseBoneTree(const Skeleton &skeleton, int parent, int depth)
-    {
-        for (int i = 0; i < skeleton.GetBoneCount(); i++)
-        {
-            if (skeleton.bones[i].parentIndex != parent)
-                continue;
-            bool hasChildren = false;
-            for (int child = 0; child < skeleton.GetBoneCount(); child++)
-                hasChildren = hasChildren || skeleton.bones[child].parentIndex == i;
-            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
-            if (!hasChildren)
-                flags |= ImGuiTreeNodeFlags_Leaf;
-            if (i == m_poseSelected)
-                flags |= ImGuiTreeNodeFlags_Selected;
-            const bool open = ImGui::TreeNodeEx(reinterpret_cast<void *>(static_cast<intptr_t>(i)), flags, "%s",
-                                                skeleton.bones[i].name.c_str());
-            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
-            {
-                m_poseSelected = i;
-                if (m_gui)
-                    if (AnimationTimeline *timeline = m_gui->GetWidget<AnimationTimeline>())
-                        timeline->RequestBone(skeleton.bones[i].name);
-            }
-            if (open)
-            {
-                if (hasChildren && depth < 64)
-                    DrawPoseBoneTree(skeleton, i, depth + 1);
-                ImGui::TreePop();
-            }
-        }
-    }
-
-    std::vector<std::string> RigEditor::SelectedSpringChain() const
-    {
-        std::vector<std::string> result;
-        if (!m_model || m_poseSelected < 0 || m_poseSelected >= m_model->GetSkeleton().GetBoneCount())
-            return result;
-        const Skeleton &skeleton = m_model->GetSkeleton();
-        auto isSpline = [&](int bone)
-        {
-            const int authored = bone >= 0 && bone < skeleton.GetBoneCount() ? FindBone(skeleton.bones[bone].name) : -1;
-            return authored >= 0 && m_bones[authored].spline;
-        };
-        auto children = [&](int parent)
-        {
-            std::vector<int> found;
-            for (int bone = 0; bone < skeleton.GetBoneCount(); bone++)
-                if (skeleton.bones[bone].parentIndex == parent)
-                    found.push_back(bone);
-            return found;
-        };
-
-        int current = m_poseSelected;
-        const std::vector<int> direct = children(current);
-        if (!isSpline(current))
-        {
-            std::vector<int> splineChildren;
-            for (int child : direct)
-                if (isSpline(child))
-                    splineChildren.push_back(child);
-            if (splineChildren.size() == 1)
-                current = splineChildren[0];
-        }
-
-        for (int guard = 0; guard < skeleton.GetBoneCount(); guard++)
-        {
-            result.push_back(skeleton.bones[current].name);
-            const std::vector<int> next = children(current);
-            if (next.empty())
-                break;
-            int child = next.size() == 1 ? next[0] : -1;
-            if (child < 0)
-            {
-                for (int candidate : next)
-                    if (isSpline(candidate))
-                    {
-                        if (child >= 0)
-                        {
-                            child = -1;
-                            break;
-                        }
-                        child = candidate;
-                    }
-            }
-            if (child < 0)
-                break;
-            current = child;
-        }
-        return result;
     }
 
     void RigEditor::DrawToolbar()
@@ -2543,19 +1683,10 @@ namespace pe
     }
 
     void RigEditor::TransformRig(std::span<const RigBone> base, const vec3 &move, const vec3 &rotateDegrees,
-                                 const vec3 &scale, int pivotMode)
+                                 const vec3 &scale, const vec3 &pivot)
     {
         if (base.size() != m_bones.size())
             return;
-        vec3 lo(std::numeric_limits<float>::max()), hi = -lo;
-        for (const RigBone &b : base)
-        {
-            lo = glm::min(lo, glm::min(b.head, b.tail));
-            hi = glm::max(hi, glm::max(b.head, b.tail));
-        }
-        const vec3 centre = (lo + hi) * 0.5f;
-        const vec3 pivot = pivotMode == 0 ? vec3(centre.x, lo.y, centre.z) : pivotMode == 1 ? centre
-                                                                                            : vec3(0.f);
         const mat4 rotation = glm::mat4_cast(quat(glm::radians(rotateDegrees)));
         const mat4 m = glm::translate(mat4(1.f), move + pivot) * rotation * glm::scale(mat4(1.f), scale) *
                        glm::translate(mat4(1.f), -pivot);
@@ -2577,9 +1708,13 @@ namespace pe
     {
         if (m_bones.empty() || !ImGui::CollapsingHeader("Rig Transform", ImGuiTreeNodeFlags_DefaultOpen))
             return;
-        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 6.f);
-        ImGui::Combo("Pivot", &m_xformPivot, "Feet\0Centre\0Origin\0");
-        ui::ItemTooltip("Point the rig rotates and scales around: the bottom centre of all bones, their centre, or the rig origin.");
+        ImGui::SetNextItemWidth(-ImGui::GetFontSize() * 10.f);
+        ImGui::DragFloat3("Pivot", &m_xformPivot.x, 0.005f, 0.f, 0.f, "%.3f");
+        ui::ItemTooltip("Rig-space point to rotate and scale around (X right, Y up, Z forward).");
+        ImGui::SameLine();
+        if (ImGui::Button("Reset"))
+            m_xformPivot = vec3(0.f);
+        ui::ItemTooltip("Reset the transform pivot to the rig origin.");
         auto field = [&](const char *label, vec3 &value, float speed, const char *format, const char *tip)
         {
             ImGui::SetNextItemWidth(-ImGui::GetFontSize() * 4.f);
@@ -2707,6 +1842,49 @@ namespace pe
             ImGui::EndCombo();
         }
         ui::ItemTooltip("Part owned outright by this bone: every vertex of that mesh follows it fully; the shape then only reaches other parts");
+
+        ImGui::SeparatorText("Pose Constraints");
+        bool pinned = std::find(m_pins.begin(), m_pins.end(), b.name) != m_pins.end();
+        if (ImGui::Checkbox("Puppet Pin", &pinned))
+        {
+            PushUndo(true);
+            if (pinned)
+                m_pins.push_back(b.name);
+            else
+                std::erase(m_pins, b.name);
+            m_dirty = true;
+        }
+        ui::ItemTooltip("Puppet chains stop before this bone. The Animation Timeline uses this bind constraint while posing.");
+
+        m_dirty |= ImGui::DragFloat("Swing limit", &b.swingLimitDegrees, 1.f, 0.f, 180.f, "%.0f deg");
+        undoOnActivate();
+        b.swingLimitDegrees = std::clamp(b.swingLimitDegrees, 0.f, 180.f);
+        ui::ItemTooltip("Bind-frame swing cone around local +Y. Zero is unrestricted.");
+        m_dirty |= ImGui::DragFloat("Twist limit", &b.twistLimitDegrees, 1.f, 0.f, 180.f, "%.0f deg");
+        undoOnActivate();
+        b.twistLimitDegrees = std::clamp(b.twistLimitDegrees, 0.f, 180.f);
+        ui::ItemTooltip("Bind-frame twist around local +Y. Zero is unrestricted.");
+
+        const auto fixedLock = std::find_if(m_locks.begin(), m_locks.end(), [&](const RigLock &lock)
+                                            { return lock.bone == b.name && lock.target.empty(); });
+        const bool hasOtherLock = std::any_of(m_locks.begin(), m_locks.end(), [&](const RigLock &lock)
+                                              { return lock.bone == b.name && !lock.target.empty(); });
+        bool restLocked = fixedLock != m_locks.end();
+        ImGui::BeginDisabled(hasOtherLock);
+        if (ImGui::Checkbox("Rest Lock", &restLocked))
+        {
+            PushUndo(true);
+            if (restLocked)
+                m_locks.push_back({b.name, "", b.tail, 1.f, true});
+            else
+                m_locks.erase(std::find_if(m_locks.begin(), m_locks.end(), [&](const RigLock &lock)
+                                           { return lock.bone == b.name && lock.target.empty(); }));
+            m_dirty = true;
+        }
+        ImGui::EndDisabled();
+        ui::ItemTooltip(hasOtherLock ? "This bone already has a target lock; remove it in the Animation Timeline first."
+                                     : "Plant this bone at its authored rest tail. The lock is stored in the rig sidecar.",
+                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         if (m_mirrorX)
             SyncMirror(m_selected);
         ImGui::TextDisabled("Length %.3f", glm::length(b.tail - b.head));
@@ -2736,6 +1914,76 @@ namespace pe
             }
             ui::ItemTooltip("Put this bone's head exactly on its parent's tail (Blender: Connect); from then on the parent's tail drags it along");
         }
+    }
+
+    int RigEditor::SelectedSkeletonBone() const
+    {
+        if (!m_model || !m_model->HasSkeleton() || m_selected < 0 || m_selected >= static_cast<int>(m_bones.size()))
+            return -1;
+        return m_model->GetSkeleton().GetBoneIndex(m_bones[m_selected].name);
+    }
+
+    void RigEditor::DrawJointBlendPanel(Scene &scene)
+    {
+        if (!m_model->HasSkeleton())
+            return;
+        ImGui::SeparatorText("Weights");
+        if (ImGui::Checkbox("Joint Blend", &m_jointBlend))
+        {
+            if (m_jointBlend && SelectedSkeletonBone() < 0)
+                for (int i = 0; i < static_cast<int>(m_bones.size()); i++)
+                    if (m_model->GetSkeleton().GetBoneIndex(m_bones[i].name) >= 0)
+                    {
+                        m_selected = i;
+                        break;
+                    }
+            if (!m_jointBlend && m_weightDragging)
+            {
+                if (m_weightStrokeChanged)
+                    UploadWeights(scene);
+                m_weightDragging = false;
+                m_weightStrokeChanged = false;
+                m_weightHasLastCenter = false;
+            }
+            m_status = m_jointBlend ? "Joint Blend: paint the selected bind bone on the Timeline pose."
+                                    : "Joint Blend off.";
+        }
+        ui::ItemTooltip("Paint actual skin weights on the current Animation Timeline pose. GPU weights upload once when the drag ends.");
+        if (!m_jointBlend)
+            return;
+
+        const int selectedBone = SelectedSkeletonBone();
+        const Skeleton &skeleton = m_model->GetSkeleton();
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", selectedBone >= 0 ? skeleton.bones[selectedBone].name.c_str() : "(select a bind bone)");
+        if (ImGui::RadioButton("Add", m_weightMode == RigWeightStroke::Mode::Add))
+            m_weightMode = RigWeightStroke::Mode::Add;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Erase", m_weightMode == RigWeightStroke::Mode::Erase))
+            m_weightMode = RigWeightStroke::Mode::Erase;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Smooth", m_weightMode == RigWeightStroke::Mode::Smooth))
+            m_weightMode = RigWeightStroke::Mode::Smooth;
+        ImGui::DragFloat("Radius##joint_blend", &m_weightRadius, 0.002f, kMinRadius,
+                         std::max(ModelHeight(), kMinRadius), "%.3f");
+        ImGui::SliderFloat("Strength##joint_blend", &m_weightStrength, 0.f, 1.f, "%.2f");
+        ImGui::BeginDisabled(m_weightUndo.empty());
+        if (ImGui::Button("Weight Undo"))
+            WeightUndo(scene, false);
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(m_weightRedo.empty());
+        if (ImGui::Button("Weight Redo"))
+            WeightUndo(scene, true);
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button(m_weightDirty ? "Save Weights *" : "Save Weights"))
+        {
+            std::string error;
+            m_status = SaveWeights(error) ? "Saved weights to " + m_model->GetFilePath().filename().generic_string()
+                                          : error;
+        }
+        ui::ItemTooltip("Explicitly overwrite the current .pemesh. Weight strokes never autosave.");
     }
 
     // -------------------------------------------------------------------------
@@ -3669,7 +2917,8 @@ namespace pe
             return;
         ReadWeights(weights);
         const Skeleton &skeleton = m_model->GetSkeleton();
-        if (m_poseSelected < 0 || m_poseSelected >= skeleton.GetBoneCount())
+        const int selectedBone = SelectedSkeletonBone();
+        if (selectedBone < 0 || selectedBone >= skeleton.GetBoneCount())
             return;
 
         ImDrawList *drawList = ImGui::GetWindowDrawList();
@@ -3679,7 +2928,7 @@ namespace pe
         {
             float weight = 0.f;
             for (int k = 0; k < 4; k++)
-                if (weights[i].joints[k] == static_cast<uint32_t>(m_poseSelected))
+                if (weights[i].joints[k] == static_cast<uint32_t>(selectedBone))
                     weight += weights[i].weights[k];
             ImVec2 screen;
             if (!project(posedVertices[i], screen))
@@ -3767,7 +3016,7 @@ namespace pe
                 (!m_weightHasLastCenter || glm::length(hit - m_weightLastCenter) >= m_weightRadius * 0.08f))
             {
                 RigWeightStroke::Stroke stroke;
-                stroke.bone = skeleton.bones[m_poseSelected].name;
+                stroke.bone = skeleton.bones[selectedBone].name;
                 stroke.center = hit;
                 stroke.radius = m_weightRadius;
                 stroke.strength = m_weightStrength;
@@ -3812,1064 +3061,18 @@ namespace pe
         active = m_weightDragging;
     }
 
-    void RigEditor::DrawIkViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize,
-                                   const mat4 &rootWorld, std::span<const mat4> boneTransforms,
-                                   const std::function<bool(const vec3 &, ImVec2 &)> &project, bool &hovered,
-                                   bool &active)
-    {
-        AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
-        if (!timeline || !camera || !m_model)
-            return;
-        const Skeleton &skeleton = m_model->GetSkeleton();
-        const int tip = m_poseSelected;
-        const int mid = tip >= 0 && tip < skeleton.GetBoneCount() ? skeleton.bones[tip].parentIndex : -1;
-        const int root = mid >= 0 && mid < skeleton.GetBoneCount() ? skeleton.bones[mid].parentIndex : -1;
-        if (root < 0 || root >= skeleton.GetBoneCount() || static_cast<int>(boneTransforms.size()) != skeleton.GetBoneCount())
-        {
-            m_twoBoneIk = false;
-            m_status = "Two-Bone IK needs a selected tip with a parent and grandparent.";
-            return;
-        }
-
-        const vec3 rootPosition = vec3(boneTransforms[root][3]);
-        const vec3 midPosition = vec3(boneTransforms[mid][3]);
-        const vec3 tipPosition = vec3(boneTransforms[tip][3]);
-        if (m_ikBone != tip)
-        {
-            m_ikBone = tip;
-            m_ikTarget = tipPosition;
-            vec3 bend;
-            BendDirection(rootPosition, midPosition, tipPosition, nullptr, bend);
-            m_ikPole = midPosition + bend * std::max(glm::length(tipPosition - rootPosition) * 0.5f, 0.05f);
-            m_ikDragging = false;
-            m_ikDirty = false;
-        }
-
-        ImDrawList *drawList = ImGui::GetWindowDrawList();
-        ImGuizmo::SetOrthographic(camera->IsOrthographic());
-        ImGuizmo::SetDrawlist(drawList);
-        ImGuizmo::SetRect(imageMin.x, imageMin.y, imageSize.x, imageSize.y);
-        mat4 handedness(1.f);
-        handedness[2][2] = -1.f;
-        const mat4 viewRH = handedness * camera->GetView() * handedness;
-        const float nearPlane = std::max(camera->GetNearPlane(), 0.001f), farPlane = 1000.f;
-        mat4 projectionRH;
-        if (camera->IsOrthographic())
-        {
-            const float halfHeight = std::max(camera->GetOrthographicSize(), 0.001f) * 0.5f;
-            const float halfWidth = halfHeight * camera->GetAspect();
-            projectionRH = glm::orthoRH_NO(-halfWidth, halfWidth, -halfHeight, halfHeight, nearPlane, farPlane);
-        }
-        else
-            projectionRH = glm::perspectiveRH_NO(camera->Fovy(), camera->GetAspect(), nearPlane, farPlane);
-        projectionRH[1][1] *= -1.f;
-
-        const bool rightMouse = ImGui::IsMouseDown(ImGuiMouseButton_Right) && ImGui::IsWindowFocused();
-        ImGuizmo::Enable(!rightMouse);
-        mat4 targetWorldRH = handedness * (rootWorld * glm::translate(mat4(1.f), m_ikTarget)) * handedness;
-        ImGuizmo::PushID("RigIkTarget");
-        const bool targetChanged = ImGuizmo::Manipulate(glm::value_ptr(viewRH), glm::value_ptr(projectionRH),
-                                                        ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
-                                                        glm::value_ptr(targetWorldRH));
-        const bool targetHovered = ImGuizmo::IsOver();
-        const bool targetActive = ImGuizmo::IsUsing();
-        ImGuizmo::PopID();
-        if (targetChanged)
-        {
-            const mat4 world = handedness * targetWorldRH * handedness;
-            m_ikTarget = vec3(glm::inverse(rootWorld) * world[3]);
-        }
-
-        mat4 poleWorldRH = handedness * (rootWorld * glm::translate(mat4(1.f), m_ikPole)) * handedness;
-        ImGuizmo::PushID("RigIkPole");
-        const bool poleChanged = ImGuizmo::Manipulate(glm::value_ptr(viewRH), glm::value_ptr(projectionRH),
-                                                      ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
-                                                      glm::value_ptr(poleWorldRH));
-        const bool poleHovered = ImGuizmo::IsOver();
-        const bool poleActive = ImGuizmo::IsUsing();
-        ImGuizmo::PopID();
-        if (poleChanged)
-        {
-            const mat4 world = handedness * poleWorldRH * handedness;
-            m_ikPole = vec3(glm::inverse(rootWorld) * world[3]);
-        }
-        ImGuizmo::Enable(true);
-
-        const bool gizmoActive = targetActive || poleActive;
-        if (gizmoActive)
-            m_ikDragging = true;
-        m_ikDirty = m_ikDirty || targetChanged || poleChanged;
-        hovered = hovered || targetHovered || poleHovered;
-        active = gizmoActive || m_ikDragging;
-
-        const AnimationPoseTools::TwoBoneIkInput input{rootPosition, midPosition, tipPosition, m_ikTarget, m_ikPole};
-        const AnimationPoseTools::TwoBoneIkResult result = AnimationPoseTools::SolveTwoBoneIk(input);
-        if (result)
-        {
-            ImVec2 rootPoint, midPoint, tipPoint, targetPoint, polePoint;
-            const bool rootVisible = project(rootPosition, rootPoint);
-            const bool midVisible = project(result.solvedMidPosition, midPoint);
-            const bool tipVisible = project(result.solvedTipPosition, tipPoint);
-            const bool targetVisible = project(m_ikTarget, targetPoint);
-            const bool poleVisible = project(m_ikPole, polePoint);
-            if (rootVisible && midVisible)
-                drawList->AddLine(rootPoint, midPoint, IM_COL32(255, 214, 70, 255), 4.f);
-            if (midVisible && tipVisible)
-                drawList->AddLine(midPoint, tipPoint, IM_COL32(255, 214, 70, 255), 4.f);
-            if (rootVisible)
-                drawList->AddCircleFilled(rootPoint, 4.f, IM_COL32(255, 214, 70, 255), 12);
-            if (midVisible)
-                drawList->AddCircleFilled(midPoint, 4.f, IM_COL32(255, 214, 70, 255), 12);
-            if (tipVisible)
-                drawList->AddCircleFilled(tipPoint, 5.f, IM_COL32(255, 214, 70, 255), 12);
-            if (midVisible && poleVisible)
-                drawList->AddLine(midPoint, polePoint, IM_COL32(150, 255, 190, 155), 1.5f);
-            if (targetVisible)
-                drawList->AddText({targetPoint.x + 8.f, targetPoint.y + 8.f}, IM_COL32(255, 214, 70, 255),
-                                  result.targetClamped ? "IK Target (clamped)" : "IK Target");
-            if (poleVisible)
-                drawList->AddText({polePoint.x + 8.f, polePoint.y + 8.f}, IM_COL32(150, 255, 190, 255), "Pole");
-            if (result.targetClamped && tipVisible && targetVisible)
-                drawList->AddLine(tipPoint, targetPoint, IM_COL32(255, 90, 90, 220), 2.f);
-        }
-
-        if (m_ikDragging && !gizmoActive)
-        {
-            if (m_ikDirty)
-            {
-                if (!result)
-                {
-                    const char *reason = result.status == AnimationPoseTools::TwoBoneIkStatus::DegenerateUpperBone
-                                             ? "upper link has zero length"
-                                         : result.status == AnimationPoseTools::TwoBoneIkStatus::DegenerateLowerBone
-                                             ? "lower link has zero length"
-                                             : "input is not finite";
-                    m_status = std::string("Two-Bone IK failed: ") + reason + ".";
-                }
-                else
-                {
-                    const quat rootRotation = result.rootGlobalDelta * RotationOf(boneTransforms[root]);
-                    const quat midRotation = result.midGlobalDelta * result.rootGlobalDelta * RotationOf(boneTransforms[mid]);
-                    const std::array<AnimationTimeline::GlobalBoneRotation, 2> rotations = {
-                        AnimationTimeline::GlobalBoneRotation{root, rootRotation},
-                        AnimationTimeline::GlobalBoneRotation{mid, midRotation},
-                    };
-                    if (timeline->KeyViewportGlobalRotations(scene, m_model, rotations))
-                    {
-                        m_status = result.targetClamped
-                                       ? "Two-Bone IK keyed as one edit; target was outside chain reach and was clamped."
-                                       : "Two-Bone IK keyed as one edit at the current frame.";
-                        SolveLocks(scene); // the tip's own lock reapplies too: locks always win, like a grab release
-                    }
-                    else
-                        m_status = "Two-Bone IK keys were rejected; select a valid active clip target.";
-                }
-            }
-            m_ikDragging = false;
-            m_ikDirty = false;
-            active = false;
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // locks
-    // -------------------------------------------------------------------------
-    void RigEditor::PoseTails(const Skeleton &skeleton, std::span<const mat4> boneTransforms, std::vector<vec3> &heads,
-                              std::vector<vec3> &tails, std::vector<vec3> *restTailsOut) const
-    {
-        const int boneCount = skeleton.GetBoneCount();
-        const mat4 invSkeletonRoot = glm::inverse(skeleton.rootTransform);
-        std::vector<vec3> restHeads(boneCount), restTails(boneCount);
-        heads.resize(boneCount);
-        tails.resize(boneCount);
-        for (int i = 0; i < boneCount; i++)
-        {
-            restHeads[i] = vec3((invSkeletonRoot * glm::inverse(skeleton.bones[i].offsetMatrix))[3]);
-            heads[i] = vec3(boneTransforms[i][3]);
-        }
-        for (int i = 0; i < boneCount; i++)
-        {
-            const int authored = FindBone(skeleton.bones[i].name);
-            if (authored >= 0)
-                restTails[i] = m_bones[authored].tail;
-            else
-            {
-                vec3 children(0.f);
-                int childCount = 0;
-                for (int child = 0; child < boneCount; child++)
-                    if (skeleton.bones[child].parentIndex == i)
-                        children += restHeads[child], childCount++;
-                if (childCount > 0)
-                    restTails[i] = children / static_cast<float>(childCount);
-                else if (skeleton.bones[i].parentIndex >= 0)
-                    restTails[i] = restHeads[i] + (restHeads[i] - restHeads[skeleton.bones[i].parentIndex]) * 0.5f;
-                else
-                    restTails[i] = restHeads[i] + vec3(0.f, ModelHeight() * 0.1f, 0.f);
-            }
-            const mat4 bind = invSkeletonRoot * glm::inverse(skeleton.bones[i].offsetMatrix);
-            tails[i] = vec3(boneTransforms[i] * glm::inverse(bind) * vec4(restTails[i], 1.f));
-        }
-        if (restTailsOut)
-            *restTailsOut = std::move(restTails);
-    }
-
-    bool RigEditor::LockChain(const RigLock &lock, const Skeleton &skeleton, int &root, int &mid, int &target,
-                              std::string *why) const
-    {
-        mid = skeleton.GetBoneIndex(lock.bone);
-        root = mid >= 0 ? skeleton.bones[mid].parentIndex : -1;
-        target = lock.target.empty() ? -1 : skeleton.GetBoneIndex(lock.target);
-        const char *reason = mid < 0                              ? "unknown bone"
-                             : root < 0                           ? "the bone has no parent to bend"
-                             : !lock.target.empty() && target < 0 ? "unknown target"
-                                                                  : nullptr;
-        for (int b = target; !reason && b >= 0; b = skeleton.bones[b].parentIndex)
-            if (b == mid || b == root)
-                reason = "the target moves with this chain";
-        if (reason && why)
-            *why = reason;
-        return !reason;
-    }
-
-    bool RigEditor::LockAnchorPosed(const RigLock &lock, const Skeleton &skeleton, std::span<const mat4> boneTransforms,
-                                    vec3 &out) const
-    {
-        if (lock.target.empty())
-        {
-            out = lock.anchor;
-            return true;
-        }
-        const int target = skeleton.GetBoneIndex(lock.target);
-        if (target < 0 || target >= static_cast<int>(boneTransforms.size()))
-            return false;
-        const mat4 bind = glm::inverse(skeleton.rootTransform) * glm::inverse(skeleton.bones[target].offsetMatrix);
-        out = vec3(boneTransforms[target] * glm::inverse(bind) * vec4(lock.anchor, 1.f));
-        return true;
-    }
-
-    int RigEditor::AddLock(const std::string &bone, const std::string &target, float reach, const vec3 *anchor,
-                           std::string &error)
-    {
-        if (!m_model || !m_model->HasSkeleton())
-        {
-            error = "the model has no skeleton to lock";
-            return -1;
-        }
-        const Skeleton &skeleton = m_model->GetSkeleton();
-        const int boneCount = skeleton.GetBoneCount();
-        RigLock lock;
-        lock.bone = bone;
-        lock.target = target;
-        lock.reach = std::clamp(reach, 0.3f, 1.f);
-        int root, mid, targetIndex;
-        if (!LockChain(lock, skeleton, root, mid, targetIndex, &error))
-            return -1;
-        for (const RigLock &existing : m_locks)
-            if (existing.bone == bone)
-            {
-                error = "the bone already has a lock; edit or remove it first";
-                return -1;
-            }
-        if (anchor)
-            lock.anchor = *anchor;
-        else
-        {
-            // Pin the tail where it is now: the Timeline pose when there is one, else the rest pose.
-            AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
-            AnimationTimeline::ViewportPose pose;
-            if (!timeline || !timeline->GetViewportPose(m_model, pose) ||
-                static_cast<int>(pose.boneTransforms.size()) != boneCount)
-            {
-                pose.boneTransforms.resize(boneCount);
-                for (int i = 0; i < boneCount; i++)
-                    pose.boneTransforms[i] = glm::inverse(skeleton.rootTransform) * glm::inverse(skeleton.bones[i].offsetMatrix);
-            }
-            std::vector<vec3> heads, tails;
-            PoseTails(skeleton, pose.boneTransforms, heads, tails);
-            if (targetIndex >= 0)
-            {
-                const mat4 bind = glm::inverse(skeleton.rootTransform) * glm::inverse(skeleton.bones[targetIndex].offsetMatrix);
-                lock.anchor = vec3(bind * glm::inverse(pose.boneTransforms[targetIndex]) * vec4(tails[mid], 1.f));
-            }
-            else
-                lock.anchor = tails[mid];
-        }
-        PushUndo(true);
-        m_locks.push_back(std::move(lock));
-        m_lockBend.clear();
-        m_dirty = true;
-        return static_cast<int>(m_locks.size()) - 1;
-    }
-
-    void RigEditor::SolveLockRotations(const Skeleton &skeleton, std::span<const mat4> boneTransforms, int skipBone,
-                                       std::vector<LockSolve> &out)
-    {
-        out.clear();
-        if (m_lockBend.size() != m_locks.size())
-            m_lockBend.assign(m_locks.size(), vec3(0.f));
-        std::vector<vec3> heads, tails;
-        PoseTails(skeleton, boneTransforms, heads, tails);
-        std::vector<char> used(skeleton.GetBoneCount(), 0);
-        for (int i = 0; i < static_cast<int>(m_locks.size()); i++)
-        {
-            const RigLock &lock = m_locks[i];
-            int root, mid, target;
-            vec3 anchor;
-            if (!lock.enabled || !LockChain(lock, skeleton, root, mid, target) || mid == skipBone || root == skipBone ||
-                !LockAnchorPosed(lock, skeleton, boneTransforms, anchor))
-                continue;
-            // ponytail: locks sharing a bone solve from the same pose and would overwrite each other in
-            // the keyed result; the first lock wins deterministically. Sequential re-posed solves are the upgrade.
-            if (used[root] || used[mid])
-                continue;
-            const vec3 rootPos = heads[root], midPos = heads[mid], tipPos = tails[mid];
-            const float reach = std::clamp(lock.reach, 0.3f, 1.f) *
-                                (glm::distance(rootPos, midPos) + glm::distance(midPos, tipPos));
-            LockSolve solve;
-            solve.lock = i;
-            solve.root = root;
-            solve.mid = mid;
-            vec3 goal = anchor;
-            const vec3 toAnchor = anchor - rootPos;
-            const float distance = glm::length(toAnchor);
-            if (distance > reach && distance > 1e-6f)
-            {
-                goal = rootPos + toAnchor * (reach / distance);
-                solve.clamped = true;
-            }
-            vec3 bend;
-            BendDirection(rootPos, midPos, tipPos, &m_lockBend[i], bend);
-            const vec3 pole = midPos + bend * std::max(glm::distance(rootPos, tipPos) * 0.5f, 0.05f);
-            const AnimationPoseTools::TwoBoneIkResult result =
-                AnimationPoseTools::SolveTwoBoneIk({rootPos, midPos, tipPos, goal, pole});
-            if (!result)
-                continue;
-            used[root] = used[mid] = 1; // claimed only by a solve that actually lands
-            solve.clamped = solve.clamped || result.targetClamped;
-            solve.rootRotation = result.rootGlobalDelta * RotationOf(boneTransforms[root]);
-            solve.midRotation = result.midGlobalDelta * result.rootGlobalDelta * RotationOf(boneTransforms[mid]);
-            out.push_back(solve);
-        }
-    }
-
-    bool RigEditor::SolveLocks(Scene &scene, int skipBone, bool pushUndo, float frame)
-    {
-        AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
-        if (!timeline || !m_model || !m_model->HasSkeleton() || m_locks.empty())
-            return false;
-        const Skeleton &skeleton = m_model->GetSkeleton();
-        AnimationTimeline::ViewportPose pose;
-        const bool sampled = frame >= 0.f ? timeline->SampleViewportPoseAtFrame(m_model, frame, pose)
-                                          : timeline->GetViewportPose(m_model, pose);
-        if (!sampled || static_cast<int>(pose.boneTransforms.size()) != skeleton.GetBoneCount())
-            return false;
-        std::vector<LockSolve> solves;
-        SolveLockRotations(skeleton, pose.boneTransforms, skipBone, solves);
-        if (solves.empty())
-            return false;
-        std::vector<AnimationTimeline::GlobalBoneRotation> rotations;
-        std::string outOfReach;
-        for (const LockSolve &solve : solves)
-        {
-            rotations.push_back({solve.root, solve.rootRotation});
-            rotations.push_back({solve.mid, solve.midRotation});
-            if (solve.clamped)
-                outOfReach += (outOfReach.empty() ? "" : ", ") + m_locks[solve.lock].bone;
-        }
-        // pushUndo rides Key's own success path: a rejected batch costs no undo step and no snapshot.
-        if (!timeline->KeyViewportGlobalRotations(scene, m_model, rotations, frame, pushUndo))
-            return false;
-        m_status = outOfReach.empty() ? "Locks held (" + std::to_string(solves.size()) + ")."
-                                      : "Locks solved; out of reach: " + outOfReach + ".";
-        return true;
-    }
-
-    bool RigEditor::BakeLocks(Scene &scene, std::string &status)
-    {
-        AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
-        float endFrame = 0.f;
-        if (!timeline || !m_model || !m_model->HasSkeleton() || !timeline->GetClipEndFrame(m_model, endFrame))
-        {
-            status = "Bake Locks needs the model's clip active in the Animation Timeline.";
-            return false;
-        }
-        if (m_locks.empty())
-        {
-            status = "No locks to bake.";
-            return false;
-        }
-        const Skeleton &skeleton = m_model->GetSkeleton();
-        m_lockBend.clear();
-        // Sample every frame from the clip as it is now: keying frame N must not feed the poses solved
-        // for the frames after it (sparse clips would interpolate from the fresh lock keys and drift).
-        std::vector<AnimationTimeline::ViewportPose> poses;
-        // <= endFrame with float fuzz only: a 48.6-frame clip must not get a key at frame 49; capped so a
-        // runaway End field cannot pre-sample poses for a million frames.
-        const int lastBakeFrame = std::min(static_cast<int>(endFrame + 1e-3f), 20000);
-        for (int frame = 0; frame <= lastBakeFrame; frame++)
-        {
-            AnimationTimeline::ViewportPose pose;
-            if (!timeline->SampleViewportPoseAtFrame(m_model, static_cast<float>(frame), pose) ||
-                static_cast<int>(pose.boneTransforms.size()) != skeleton.GetBoneCount())
-                break;
-            poses.push_back(std::move(pose));
-        }
-        bool pushed = false;
-        int frames = 0, clamped = 0;
-        std::vector<LockSolve> solves;
-        std::vector<AnimationTimeline::GlobalBoneRotation> rotations;
-        for (int frame = 0; frame < static_cast<int>(poses.size()); frame++)
-        {
-            SolveLockRotations(skeleton, poses[frame].boneTransforms, -1, solves);
-            if (solves.empty())
-                continue;
-            rotations.clear();
-            for (const LockSolve &solve : solves)
-            {
-                rotations.push_back({solve.root, solve.rootRotation});
-                rotations.push_back({solve.mid, solve.midRotation});
-                clamped += solve.clamped ? 1 : 0;
-            }
-            if (timeline->KeyViewportGlobalRotations(scene, m_model, rotations, static_cast<float>(frame), !pushed))
-            {
-                pushed = true; // the first landed frame carries the whole bake's undo snapshot
-                frames++;
-            }
-        }
-        status = "Baked locks on " + std::to_string(frames) + " frames (" + std::to_string(clamped) +
-                 " out of reach); Timeline Save persists them.";
-        if (static_cast<int>(endFrame + 1e-3f) > lastBakeFrame)
-            status += " Capped at 20000 frames.";
-        return frames > 0;
-    }
-
-    void RigEditor::DrawLocksPanel(Scene &scene, AnimationTimeline *timeline)
-    {
-        const Skeleton &skeleton = m_model->GetSkeleton();
-        const float kReachWidth = ImGui::GetFontSize() * 5.f;
-        ImGui::Separator();
-        ImGui::TextDisabled("Locks");
-        ui::ItemTooltip("Pin a bone's tail to a point on another bone (a hand on the shovel) or to a fixed rig-space point (a "
-                        "planted foot). The bone and its parent bend to keep the pin after every pose edit; Reach caps how "
-                        "far they may straighten. Lock keys are written even with Auto Key off.");
-        for (int i = 0; i < static_cast<int>(m_locks.size()); i++)
-        {
-            RigLock &lock = m_locks[i];
-            ImGui::PushID(i);
-            bool enabled = lock.enabled;
-            if (ImGui::Checkbox("##lock_enabled", &enabled))
-            {
-                PushUndo(true);
-                lock.enabled = enabled;
-                m_dirty = true;
-            }
-            ui::ItemTooltip("Solve this lock.");
-            int root, mid, target;
-            std::string why;
-            const bool valid = LockChain(lock, skeleton, root, mid, target, &why);
-            ImGui::SameLine();
-            ImGui::TextDisabled("%s -> %s%s%s", lock.bone.c_str(), lock.target.empty() ? "rig space" : lock.target.c_str(),
-                                valid ? "" : " (", valid ? "" : (why + ")").c_str());
-            ui::SameLineIfFits(ui::LabelledItemWidth(kReachWidth, "Reach") + ui::ButtonWidth("X"));
-            ImGui::SetNextItemWidth(kReachWidth);
-            float reach = lock.reach;
-            const bool reachChanged = ImGui::SliderFloat("Reach", &reach, 0.3f, 1.f, "%.2f");
-            const bool reachReleased = ImGui::IsItemDeactivated();
-            ui::ItemTooltip("Fraction of the straight bone pair the tail may reach; below 1 keeps the joint from locking out.");
-            if (reachChanged)
-            {
-                if (!m_reachDragging) // one undo pair per drag, and only when the value really changes
-                {
-                    PushUndo(true);
-                    m_reachDragging = true;
-                    m_reachPushed = false;
-                }
-                lock.reach = reach;
-                m_dirty = true;
-                if (SolveLocks(scene, -1, !m_reachPushed)) // the Timeline undo lands with the first real solve
-                    m_reachPushed = true;
-            }
-            if (reachReleased)
-                m_reachDragging = false;
-            ImGui::SameLine();
-            if (ImGui::SmallButton("X"))
-            {
-                PushUndo(true);
-                m_locks.erase(m_locks.begin() + i);
-                m_lockBend.clear();
-                m_dirty = true;
-                ImGui::PopID();
-                break;
-            }
-            ui::ItemTooltip("Remove this lock (keys already written stay).");
-            ImGui::PopID();
-        }
-
-        const bool haveBone = m_poseSelected >= 0 && m_poseSelected < skeleton.GetBoneCount();
-        if (m_lockTarget >= skeleton.GetBoneCount())
-            m_lockTarget = -1;
-        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 9.f);
-        if (ImGui::BeginCombo("##lock_target", m_lockTarget < 0 ? "Rig space" : skeleton.bones[m_lockTarget].name.c_str()))
-        {
-            if (ImGui::Selectable("Rig space", m_lockTarget < 0))
-                m_lockTarget = -1;
-            for (int i = 0; i < skeleton.GetBoneCount(); i++)
-                if (i != m_poseSelected && ImGui::Selectable(skeleton.bones[i].name.c_str(), m_lockTarget == i))
-                    m_lockTarget = i;
-            ImGui::EndCombo();
-        }
-        ui::ItemTooltip("What the selected bone's tail is pinned to: a bone it rides on, or a fixed point in rig space.");
-        ui::SameLineIfFits(kReachWidth);
-        ImGui::SetNextItemWidth(kReachWidth);
-        ImGui::SliderFloat("##lock_reach", &m_lockReach, 0.3f, 1.f, "Reach %.2f");
-        ui::ItemTooltip("Reach limit for the new lock.");
-        ui::SameLineIfFits(ui::ButtonWidth("Add Lock"));
-        ImGui::BeginDisabled(!haveBone);
-        if (ImGui::Button("Add Lock"))
-        {
-            std::string error;
-            const int added = AddLock(skeleton.bones[m_poseSelected].name,
-                                      m_lockTarget < 0 ? "" : skeleton.bones[m_lockTarget].name, m_lockReach, nullptr, error);
-            m_status = added >= 0 ? "Locked " + m_locks[added].bone + " where its tail is now." : "Add Lock failed: " + error;
-        }
-        ImGui::EndDisabled();
-        ui::ItemTooltip(haveBone ? "Pin the selected bone's tail where it is now." : "Select a bone in the Pose Bones tree first.",
-                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-        ImGui::BeginDisabled(m_locks.empty());
-        if (ImGui::Button("Solve Locks"))
-        {
-            if (!SolveLocks(scene, -1, true))
-                m_status = "Nothing to solve: locks need the clip active in the Timeline and a valid chain.";
-        }
-        ui::ItemTooltip("Re-solve every enabled lock at the current frame (after scrubbing to a frame without lock keys).",
-                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-        ui::SameLineIfFits(ui::ButtonWidth("Bake Locks To Clip"));
-        if (ImGui::Button("Bake Locks To Clip"))
-            BakeLocks(scene, m_status);
-        ui::ItemTooltip("Solve every enabled lock on every frame of the active clip (mocap hands onto the shovel, feet onto the "
-                        "floor) as one undo step.",
-                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-        ImGui::EndDisabled();
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Rig Undo"))
-            Undo();
-        ui::ItemTooltip("Undo the last rig document edit: a lock, pin or reach change (bone geometry is untouched in Pose mode).");
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Rig Redo"))
-            Redo();
-        ui::ItemTooltip("Redo the last undone rig document edit.");
-        ImGui::Separator();
-    }
-
-    // -------------------------------------------------------------------------
-    // grab + pins
-    // -------------------------------------------------------------------------
-    namespace
-    {
-        quat RotationBetween(const vec3 &from, const vec3 &to)
-        {
-            const float lengths = glm::length(from) * glm::length(to);
-            if (lengths <= 1e-12f)
-                return quat(1.f, 0.f, 0.f, 0.f);
-            const float cosine = std::clamp(glm::dot(from, to) / lengths, -1.f, 1.f);
-            if (cosine > 1.f - 1e-6f)
-                return quat(1.f, 0.f, 0.f, 0.f);
-            if (cosine < -1.f + 1e-6f)
-            {
-                const vec3 f = glm::normalize(from);
-                const vec3 axis = std::abs(f.x) < 0.9f ? glm::normalize(glm::cross(f, vec3(1.f, 0.f, 0.f)))
-                                                       : glm::normalize(glm::cross(f, vec3(0.f, 1.f, 0.f)));
-                return glm::angleAxis(glm::pi<float>(), axis);
-            }
-            return glm::normalize(glm::angleAxis(std::acos(cosine), glm::normalize(glm::cross(from, to))));
-        }
-    } // namespace
-
-    bool RigEditor::IsPinned(const std::string &bone) const
-    {
-        return std::find(m_pins.begin(), m_pins.end(), bone) != m_pins.end();
-    }
-
-    void RigEditor::TogglePin(const std::string &bone)
-    {
-        PushUndo(true);
-        const auto at = std::find(m_pins.begin(), m_pins.end(), bone);
-        if (at == m_pins.end())
-            m_pins.push_back(bone);
-        else
-            m_pins.erase(at);
-        m_dirty = true;
-    }
-
-    void RigEditor::GrabSolve(const Skeleton &skeleton, std::span<const mat4> boneTransforms, int bone, const vec3 &target,
-                              std::vector<std::pair<int, quat>> &out) const
-    {
-        out.clear();
-        if (bone < 0 || bone >= skeleton.GetBoneCount() || static_cast<int>(boneTransforms.size()) != skeleton.GetBoneCount())
-            return;
-        std::vector<vec3> heads, tails;
-        PoseTails(skeleton, boneTransforms, heads, tails);
-        // chain[0] = the grabbed bone, then its ancestors up to (excluding) the first pin or the skeleton root
-        std::vector<int> chain;
-        for (int b = bone; b >= 0 && skeleton.bones[b].parentIndex >= 0; b = skeleton.bones[b].parentIndex)
-        {
-            if (b != bone && IsPinned(skeleton.bones[b].name))
-                break;
-            chain.push_back(b);
-        }
-        if (chain.empty())
-            return;
-        std::vector<vec3> pivots(chain.size());
-        std::vector<quat> deltas(chain.size(), quat(1.f, 0.f, 0.f, 0.f));
-        for (size_t k = 0; k < chain.size(); k++)
-            pivots[k] = heads[chain[k]];
-        vec3 effector = tails[bone];
-        // ponytail: CCD with stiffer parents (hand and forearm free, shoulder 0.35, torso and beyond 0.2 per pass) gives
-        // "arm first, then shoulder, then torso" without joint limits; add per-bone limits if poses start folding wrong.
-        auto weight = [](size_t k)
-        { return k < 2 ? 1.f : k == 2 ? 0.35f
-                                      : 0.2f; };
-        for (int pass = 0; pass < 16; pass++)
-        {
-            if (glm::distance(effector, target) < 1e-4f)
-                break;
-            for (size_t k = 0; k < chain.size(); k++)
-            {
-                const vec3 pivot = pivots[k];
-                const vec3 have = effector - pivot, want = target - pivot;
-                if (glm::dot(have, have) < 1e-10f || glm::dot(want, want) < 1e-10f)
-                    continue;
-                quat q = RotationBetween(have, want);
-                const float w = weight(k);
-                if (w < 1.f)
-                    q = glm::normalize(glm::slerp(quat(1.f, 0.f, 0.f, 0.f), q, w));
-                for (size_t j = 0; j <= k; j++)
-                {
-                    deltas[j] = q * deltas[j];
-                    if (j < k)
-                        pivots[j] = pivot + q * (pivots[j] - pivot);
-                }
-                effector = pivot + q * (effector - pivot);
-            }
-        }
-        for (size_t k = 0; k < chain.size(); k++)
-            if (std::abs(deltas[k].w) < 1.f - 1e-6f) // identity deltas key nothing: a still click must not freeze the chain
-                out.emplace_back(chain[k], glm::normalize(deltas[k] * RotationOf(boneTransforms[chain[k]])));
-    }
-
-    bool RigEditor::GrabTo(Scene &scene, int bone, const vec3 &target, float *gap, bool pushUndo, bool *keyedOut)
-    {
-        AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
-        if (!timeline || !m_model || !m_model->HasSkeleton())
-            return false;
-        const Skeleton &skeleton = m_model->GetSkeleton();
-        AnimationTimeline::ViewportPose pose;
-        if (!timeline->GetViewportPose(m_model, pose) ||
-            static_cast<int>(pose.boneTransforms.size()) != skeleton.GetBoneCount())
-            return false;
-        std::vector<std::pair<int, quat>> solved;
-        GrabSolve(skeleton, pose.boneTransforms, bone, target, solved);
-        if (solved.empty())
-        {
-            // Every delta was identity: the tail already sits on the target (a still click, or an agent
-            // re-grabbing the same point). Nothing to key, but the grab itself is satisfied.
-            std::vector<vec3> heads, tails;
-            PoseTails(skeleton, pose.boneTransforms, heads, tails);
-            const bool atTarget = bone >= 0 && bone < static_cast<int>(tails.size()) &&
-                                  glm::distance(tails[bone], target) < std::max(ModelHeight(), 0.1f) * 0.01f;
-            if (atTarget && gap)
-                *gap = glm::distance(tails[bone], target);
-            return atTarget;
-        }
-        std::vector<AnimationTimeline::GlobalBoneRotation> rotations;
-        for (const auto &[b, rotation] : solved)
-            rotations.push_back({b, rotation});
-        // pushUndo rides Key's own success path: a rejected batch costs no undo step and no snapshot.
-        if (!timeline->KeyViewportGlobalRotations(scene, m_model, rotations, -1.f, pushUndo))
-            return false;
-        if (keyedOut)
-            *keyedOut = true;
-        SolveLocks(scene, bone);
-        if (gap && timeline->GetViewportPose(m_model, pose))
-        {
-            std::vector<vec3> heads, tails;
-            PoseTails(skeleton, pose.boneTransforms, heads, tails);
-            *gap = glm::distance(tails[bone], target);
-        }
-        return true;
-    }
-
-    void RigEditor::DrawPadlock(ImDrawList *drawList, const ImVec2 &centre, bool closed, ImU32 colour)
-    {
-        const float s = 4.f; // half width of the body
-        drawList->AddRectFilled({centre.x - s, centre.y}, {centre.x + s, centre.y + s * 1.5f}, colour, 1.f);
-        const ImVec2 arcCentre = closed ? ImVec2(centre.x, centre.y) : ImVec2(centre.x + s * 0.6f, centre.y - s * 0.4f);
-        drawList->PathArcTo(arcCentre, s * 0.65f, glm::pi<float>(), glm::two_pi<float>(), 10);
-        drawList->PathStroke(colour, 0, 1.5f);
-    }
-
-    void RigEditor::DrawPoseViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize,
-                                     bool &hovered, bool &active)
-    {
-        hovered = false;
-        active = false;
-        AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
-        if (!timeline || !m_model || !camera || !m_model->HasSkeleton())
-            return;
-
-        // Pose-bar / timeline.pose edits land in the Timeline; their locks are solved here, once per edit.
-        if (timeline->PoseEditSerial() != m_poseEditSerial)
-        {
-            m_poseEditSerial = timeline->PoseEditSerial();
-            if (m_grabBone < 0 && !m_poseDragging)
-                // Keys the frame the pose edit targeted (timeline.pose frame=N), not the playhead; an
-                // in-flight drag re-solves on release instead, never fighting the mouse mid-frame.
-                SolveLocks(scene, -1, false, timeline->PoseEditFrame());
-        }
-        AnimationTimeline::ViewportPose pose;
-        if (!timeline->GetViewportPose(m_model, pose))
-        {
-            m_status = "Pose is waiting for the Animation Timeline target.";
-            return;
-        }
-        const Skeleton &skeleton = m_model->GetSkeleton();
-        const int boneCount = skeleton.GetBoneCount();
-        if (boneCount <= 0 || static_cast<int>(pose.boneTransforms.size()) != boneCount)
-            return;
-        if (m_poseSelected < 0 || m_poseSelected >= boneCount)
-            m_poseSelected = 0;
-
-        NodeId *poseNode = pose.node && scene.IsNodeAlive(pose.node) ? pose.node : m_rootNode;
-        if (!poseNode || !scene.IsNodeAlive(poseNode))
-            return;
-        const mat4 rootWorld = scene.GetWorldMatrix(poseNode);
-        const mat4 invRootWorld = glm::inverse(rootWorld);
-        const mat4 viewProj = camera->GetProjectionNoJitter() * camera->GetView();
-        const mat4 invSkeletonRoot = glm::inverse(skeleton.rootTransform);
-        ImDrawList *drawList = ImGui::GetWindowDrawList();
-        const ImVec2 mouse = ImGui::GetMousePos();
-
-        auto project = [&](const vec3 &rig, ImVec2 &out)
-        {
-            const vec3 world = vec3(rootWorld * vec4(rig, 1.f));
-            return ProjectWorldToViewportRect(world, viewProj, imageMin.x, imageMin.y, imageSize.x, imageSize.y, out.x, out.y);
-        };
-        auto pointSegmentDistance = [](const ImVec2 &p, const ImVec2 &a, const ImVec2 &b)
-        {
-            const ImVec2 ab(b.x - a.x, b.y - a.y);
-            const float lengthSq = ab.x * ab.x + ab.y * ab.y;
-            const float t = lengthSq > 1e-6f ? std::clamp(((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / lengthSq, 0.f, 1.f) : 0.f;
-            const float dx = p.x - (a.x + ab.x * t), dy = p.y - (a.y + ab.y * t);
-            return std::sqrt(dx * dx + dy * dy);
-        };
-
-        std::vector<vec3> restTails, poseHeads, poseTails;
-        std::vector<ImVec2> headScreen(boneCount), tailScreen(boneCount);
-        std::vector<char> visible(boneCount, 0);
-        PoseTails(skeleton, pose.boneTransforms, poseHeads, poseTails, &restTails);
-        for (int i = 0; i < boneCount; i++)
-            visible[i] = project(poseHeads[i], headScreen[i]) && project(poseTails[i], tailScreen[i]);
-
-        // The reference belongs above the rendered scene but below every rig aid, so bones and gizmos stay legible.
-        DrawReferenceOverlay(timeline, imageMin, imageSize);
-
-        if (m_onionBones)
-        {
-            for (int frameOffset = -m_onionPrevious; frameOffset <= m_onionNext; ++frameOffset)
-            {
-                if (frameOffset == 0)
-                    continue;
-                AnimationTimeline::ViewportPose ghost;
-                if (!timeline->SampleViewportPose(m_model, static_cast<float>(frameOffset), ghost) ||
-                    static_cast<int>(ghost.boneTransforms.size()) != boneCount)
-                    continue;
-                const int range = frameOffset < 0 ? std::max(m_onionPrevious, 1) : std::max(m_onionNext, 1);
-                const float fade = 1.f - 0.65f * static_cast<float>(std::abs(frameOffset) - 1) /
-                                             static_cast<float>(range);
-                const int alpha = static_cast<int>(std::clamp(fade, 0.2f, 1.f) * 105.f);
-                const ImU32 color = frameOffset < 0 ? IM_COL32(80, 170, 255, alpha)
-                                                    : IM_COL32(255, 100, 110, alpha);
-                for (int bone = 0; bone < boneCount; ++bone)
-                {
-                    const mat4 bind = invSkeletonRoot * glm::inverse(skeleton.bones[bone].offsetMatrix);
-                    const vec3 head = vec3(ghost.boneTransforms[bone][3]);
-                    const vec3 tail = vec3(ghost.boneTransforms[bone] * glm::inverse(bind) * vec4(restTails[bone], 1.f));
-                    ImVec2 headPoint, tailPoint;
-                    if (!project(head, headPoint) || !project(tail, tailPoint))
-                        continue;
-                    drawList->AddLine(headPoint, tailPoint, color, bone == m_poseSelected ? 2.f : 1.f);
-                    drawList->AddCircleFilled(headPoint, bone == m_poseSelected ? 2.5f : 1.5f, color, 8);
-                }
-            }
-        }
-
-        if (m_motionTrail && m_poseSelected >= 0 && m_poseSelected < boneCount)
-        {
-            bool havePrevious = false;
-            ImVec2 previous;
-            for (int frameOffset = -m_trailPrevious; frameOffset <= m_trailNext; ++frameOffset)
-            {
-                AnimationTimeline::ViewportPose trailPose;
-                ImVec2 point;
-                if (!timeline->SampleViewportPose(m_model, static_cast<float>(frameOffset), trailPose) ||
-                    static_cast<int>(trailPose.boneTransforms.size()) != boneCount ||
-                    !project(vec3(trailPose.boneTransforms[m_poseSelected][3]), point))
-                {
-                    havePrevious = false;
-                    continue;
-                }
-                const ImU32 color = frameOffset == 0 ? kBoneSelCol : IM_COL32(255, 255, 255, 145);
-                if (havePrevious)
-                    drawList->AddLine(previous, point, IM_COL32(255, 255, 255, 120), 1.5f);
-                drawList->AddCircleFilled(point, frameOffset == 0 ? 4.f : 2.5f, color, 10);
-                previous = point;
-                havePrevious = true;
-            }
-        }
-
-        int hoveredBone = -1;
-        float nearest = 8.f;
-        const bool mouseInImage = mouse.x >= imageMin.x && mouse.y >= imageMin.y && mouse.x <= imageMin.x + imageSize.x &&
-                                  mouse.y <= imageMin.y + imageSize.y;
-        for (int i = 0; i < boneCount; i++)
-        {
-            if (!visible[i])
-                continue;
-            if (mouseInImage)
-            {
-                const float distance = pointSegmentDistance(mouse, headScreen[i], tailScreen[i]);
-                if (distance < nearest)
-                    nearest = distance, hoveredBone = i;
-            }
-            const bool selected = i == m_poseSelected;
-            const ImU32 color = selected ? kBoneSelCol : kBoneCol;
-            drawList->AddLine(headScreen[i], tailScreen[i], IM_COL32(0, 0, 0, 180), selected ? 7.f : 4.f);
-            drawList->AddLine(headScreen[i], tailScreen[i], color, selected ? 4.f : 2.f);
-            drawList->AddCircleFilled(headScreen[i], selected ? 5.f : 3.f, color, 12);
-            if (selected)
-                drawList->AddText({headScreen[i].x + 8.f, headScreen[i].y - 18.f}, kBoneSelCol, skeleton.bones[i].name.c_str());
-        }
-        for (const RigLock &lock : m_locks)
-        {
-            int root, mid, target;
-            vec3 anchor;
-            ImVec2 anchorScreen;
-            if (!lock.enabled || !LockChain(lock, skeleton, root, mid, target) ||
-                !LockAnchorPosed(lock, skeleton, pose.boneTransforms, anchor) || !project(anchor, anchorScreen))
-                continue;
-            const bool held = glm::distance(anchor, poseTails[mid]) <= std::max(ModelHeight(), 0.1f) * 0.01f;
-            const ImU32 color = held ? kLockCol : IM_COL32(255, 90, 90, 230);
-            if (!held && visible[mid])
-                drawList->AddLine(tailScreen[mid], anchorScreen, color, 2.f);
-            drawList->AddNgon(anchorScreen, 7.f, IM_COL32(0, 0, 0, 200), 4, 4.f);
-            drawList->AddNgon(anchorScreen, 7.f, color, 4, 2.f);
-            if (!held)
-                drawList->AddText({anchorScreen.x + 9.f, anchorScreen.y + 6.f}, color, "out of reach");
-        }
-
-        // Grab handles (tail dots) and pin padlocks beside every head: pull a tail and the chain bends up to
-        // the first pinned bone; click a padlock to pin / unpin. Plain Pose mode only (IK / Joint Blend own the mouse).
-        if (!m_jointBlend && !m_twoBoneIk)
-        {
-            const bool gizmoBusy = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
-            int hoveredTail = -1, hoveredPin = -1;
-            float nearestTail = 9.f, nearestPin = 8.f;
-            auto pinPos = [&](int i)
-            { return ImVec2(headScreen[i].x - 12.f, headScreen[i].y - 12.f); };
-            for (int i = 0; i < boneCount && mouseInImage && m_grabBone < 0 && !gizmoBusy; i++)
-            {
-                // Only what is drawn is pickable: root bones show no tail dot or padlock.
-                if (!visible[i] || skeleton.bones[i].parentIndex < 0)
-                    continue;
-                const float dTail = std::hypot(mouse.x - tailScreen[i].x, mouse.y - tailScreen[i].y);
-                if (dTail < nearestTail)
-                    nearestTail = dTail, hoveredTail = i;
-                const ImVec2 pin = pinPos(i);
-                const float dPin = std::hypot(mouse.x - pin.x, mouse.y - pin.y);
-                if (dPin < nearestPin)
-                    nearestPin = dPin, hoveredPin = i;
-            }
-            for (int i = 0; i < boneCount; i++)
-            {
-                if (!visible[i] || skeleton.bones[i].parentIndex < 0)
-                    continue;
-                const bool pinned = IsPinned(skeleton.bones[i].name);
-                DrawPadlock(drawList, pinPos(i), pinned,
-                            pinned            ? IM_COL32(255, 170, 40, 255)
-                            : i == hoveredPin ? IM_COL32(255, 255, 255, 230)
-                                              : IM_COL32(255, 255, 255, 70));
-                const bool grabbing = i == m_grabBone;
-                drawList->AddCircleFilled(tailScreen[i], grabbing || i == hoveredTail ? 5.f : 3.f,
-                                          grabbing ? IM_COL32(255, 170, 40, 255) : i == hoveredTail ? IM_COL32(255, 255, 255, 255)
-                                                                                                    : IM_COL32(255, 255, 255, 120),
-                                          12);
-            }
-            if (hoveredPin >= 0)
-                ui::TooltipText(IsPinned(skeleton.bones[hoveredPin].name) ? "Pinned: pulls from its children stop here. Click to unpin."
-                                                                          : "Click to pin: pulls from its children stop here.");
-            else if (hoveredTail >= 0)
-                ui::TooltipText("Drag to pull the limb; the chain bends up to the first pinned bone.");
-            if (hoveredPin >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-            {
-                TogglePin(skeleton.bones[hoveredPin].name);
-                hovered = true;
-                return;
-            }
-
-            vec3 rayOrigin(0.f), rayDir(0.f);
-            const bool haveRay = imageSize.x > 0.f && imageSize.y > 0.f &&
-                                 camera->BuildWorldRayFromNdc((mouse.x - imageMin.x) / imageSize.x * 2.f - 1.f,
-                                                              (mouse.y - imageMin.y) / imageSize.y * 2.f - 1.f, rayOrigin, rayDir);
-            if (m_grabBone < 0 && hoveredTail >= 0 && haveRay && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-            {
-                vec3 hit;
-                m_grabPlanePoint = vec3(rootWorld * vec4(poseTails[hoveredTail], 1.f));
-                if (RayPlane(rayOrigin, rayDir, m_grabPlanePoint, camera->GetFront(), hit))
-                {
-                    m_grabBone = hoveredTail;
-                    m_grabOffset = poseTails[hoveredTail] - vec3(invRootWorld * vec4(hit, 1.f));
-                    m_poseSelected = hoveredTail;
-                    m_grabPushed = false; // the Timeline undo lands with the first real grab key
-                    timeline->RequestBone(skeleton.bones[hoveredTail].name);
-                }
-            }
-            if (m_grabBone >= 0)
-            {
-                hovered = true;
-                active = true;
-                vec3 hit;
-                if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) || m_grabBone >= boneCount)
-                {
-                    if (m_grabPushed)
-                        SolveLocks(scene); // the grabbed bone's own lock waited for the release
-                    m_grabBone = -1;
-                    active = false;
-                }
-                else if (haveRay && RayPlane(rayOrigin, rayDir, m_grabPlanePoint, camera->GetFront(), hit))
-                {
-                    float gap = 0.f;
-                    bool keyed = false;
-                    if (GrabTo(scene, m_grabBone, vec3(invRootWorld * vec4(hit, 1.f)) + m_grabOffset, &gap, !m_grabPushed,
-                               &keyed))
-                    {
-                        m_grabPushed = m_grabPushed || keyed;
-                        m_status = gap > std::max(ModelHeight(), 0.1f) * 0.01f ? "Grab: chain cannot reach (pin further up, or pull less)."
-                                                                               : "Grab keyed at the current frame.";
-                    }
-                }
-                return;
-            }
-            hovered = hovered || hoveredTail >= 0 || hoveredPin >= 0;
-            if (hoveredTail >= 0 || hoveredPin >= 0)
-                hoveredBone = -1; // the click belongs to the handle, not the bone under it
-        }
-
-        if (m_jointBlend)
-        {
-            DrawJointBlendViewport(scene, camera, imageMin, imageSize, rootWorld, pose.boneTransforms, project, hovered,
-                                   active);
-            return;
-        }
-        if (m_twoBoneIk)
-        {
-            hovered = hoveredBone >= 0;
-            DrawIkViewport(scene, camera, imageMin, imageSize, rootWorld, pose.boneTransforms, project, hovered, active);
-            return;
-        }
-
-        ImGuizmo::SetOrthographic(camera->IsOrthographic());
-        ImGuizmo::SetDrawlist(drawList);
-        ImGuizmo::SetRect(imageMin.x, imageMin.y, imageSize.x, imageSize.y);
-        mat4 handedness(1.f);
-        handedness[2][2] = -1.f;
-        const mat4 viewRH = handedness * camera->GetView() * handedness;
-        const float nearPlane = std::max(camera->GetNearPlane(), 0.001f), farPlane = 1000.f;
-        mat4 projectionRH;
-        if (camera->IsOrthographic())
-        {
-            const float halfHeight = std::max(camera->GetOrthographicSize(), 0.001f) * 0.5f;
-            const float halfWidth = halfHeight * camera->GetAspect();
-            projectionRH = glm::orthoRH_NO(-halfWidth, halfWidth, -halfHeight, halfHeight, nearPlane, farPlane);
-        }
-        else
-            projectionRH = glm::perspectiveRH_NO(camera->Fovy(), camera->GetAspect(), nearPlane, farPlane);
-        projectionRH[1][1] *= -1.f;
-
-        const bool canRotate = timeline->CanViewportRotate(m_model, m_poseSelected, m_poseGizmo != 1, m_poseGizmo != 0);
-        const bool rightMouse = ImGui::IsMouseDown(ImGuiMouseButton_Right) && ImGui::IsWindowFocused();
-        ImGuizmo::Enable(canRotate && !rightMouse);
-        mat4 worldRH = handedness * (rootWorld * pose.boneTransforms[m_poseSelected]) * handedness;
-        const ImGuizmo::OPERATION operation = m_poseGizmo == 1   ? ImGuizmo::TRANSLATE
-                                              : m_poseGizmo == 2 ? ImGuizmo::OPERATION(ImGuizmo::TRANSLATE | ImGuizmo::ROTATE)
-                                                                 : ImGuizmo::ROTATE;
-        const bool changed = ImGuizmo::Manipulate(glm::value_ptr(viewRH), glm::value_ptr(projectionRH), operation,
-                                                  ImGuizmo::LOCAL, glm::value_ptr(worldRH));
-        const bool gizmoHovered = ImGuizmo::IsOver();
-        const bool gizmoActive = ImGuizmo::IsUsing();
-        ImGuizmo::Enable(true);
-        hovered = hoveredBone >= 0 || gizmoHovered;
-        active = gizmoActive || m_poseDragging;
-
-        if (changed)
-        {
-            if (!m_poseDragging)
-                m_poseDragging =
-                    timeline->BeginViewportRotate(scene, m_model, m_poseSelected, m_poseGizmo != 1, m_poseGizmo != 0);
-            if (m_poseDragging)
-            {
-                const mat4 world = handedness * worldRH * handedness;
-                const mat4 rigTransform = invRootWorld * world;
-                int mirrorBone = -1;
-                if (m_mirrorX)
-                {
-                    const std::string mirrorName = MirrorName(skeleton.bones[m_poseSelected].name);
-                    if (!mirrorName.empty())
-                        mirrorBone = skeleton.GetBoneIndex(mirrorName);
-                }
-                timeline->UpdateViewportRotate(scene, m_model, m_poseSelected, rigTransform, mirrorBone,
-                                               m_poseGizmo != 1, m_poseGizmo != 0);
-                m_status = m_mirrorX && mirrorBone >= 0 ? "Pose rotation keyed with mirrored counterpart."
-                                                        : "Pose rotation keyed at the current frame.";
-                SolveLocks(scene, m_poseSelected);
-            }
-        }
-        if (m_poseDragging && !gizmoActive)
-        {
-            SolveLocks(scene); // the dragged bone's own locks, skipped during the drag
-            timeline->EndViewportRotate();
-            m_poseDragging = false;
-            active = false;
-        }
-
-        if (hoveredBone >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !gizmoHovered && !gizmoActive)
-        {
-            m_poseSelected = hoveredBone;
-            timeline->RequestBone(skeleton.bones[hoveredBone].name);
-            m_status.clear();
-        }
-        if (!canRotate && gizmoHovered)
-            ui::TooltipText("Enable Auto Key, or add a rotation key at this frame first.");
-    }
-
     void RigEditor::DrawViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize, bool &hovered,
                                  bool &active)
     {
         hovered = false;
         active = false;
-        if (!m_open)
-            return;
         ResolveTarget(scene);
         if (!m_model || !m_rootNode || !camera || !scene.IsNodeAlive(m_rootNode))
             return;
-        if (m_mode == Mode::Pose)
-        {
-            DrawPoseViewport(scene, camera, imageMin, imageSize, hovered, active);
-            return;
-        }
         if (m_bones.empty())
             return;
         // Selecting a bone here (or in the tree) also makes it the Timeline's active bone, so the pose bar
-        // edits the bone under the cursor. Runs here because this draws even when the widget's tab is hidden.
+        // edits the bone under the cursor.
         if (m_selected != m_syncedSelected)
         {
             m_syncedSelected = m_selected;
@@ -4878,7 +3081,20 @@ namespace pe
                     timeline->RequestBone(m_bones[m_selected].name);
         }
 
-        const mat4 rootWorld = scene.GetWorldMatrix(m_rootNode);
+        AnimationTimeline::ViewportPose jointBlendPose;
+        NodeId *viewportRoot = m_rootNode;
+        if (m_jointBlend)
+        {
+            AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
+            if (!timeline || !timeline->GetViewportPose(m_model, jointBlendPose))
+            {
+                jointBlendPose.node = m_rootNode;
+                jointBlendPose.boneTransforms = RestBoneTransforms(m_model->GetSkeleton());
+            }
+            if (jointBlendPose.node && scene.IsNodeAlive(jointBlendPose.node))
+                viewportRoot = jointBlendPose.node;
+        }
+        const mat4 rootWorld = scene.GetWorldMatrix(viewportRoot);
         const mat4 invRootWorld = glm::inverse(rootWorld);
         const float rigScale = std::max(glm::length(vec3(rootWorld[0])), 1e-5f);
         const mat4 viewProj = camera->GetProjectionNoJitter() * camera->GetView();
@@ -4893,6 +3109,12 @@ namespace pe
             const vec3 world = vec3(rootWorld * vec4(rig, 1.f));
             return ProjectWorldToViewportRect(world, viewProj, imageMin.x, imageMin.y, imageSize.x, imageSize.y, out.x, out.y);
         };
+        if (m_jointBlend)
+        {
+            DrawJointBlendViewport(scene, camera, imageMin, imageSize, rootWorld, jointBlendPose.boneTransforms, project,
+                                   hovered, active);
+            return;
+        }
         auto screenRadius = [&](const vec3 &rig, float radius, const ImVec2 &center) -> float
         {
             const vec3 world = vec3(rootWorld * vec4(rig, 1.f)) + camRight * (radius * rigScale);
