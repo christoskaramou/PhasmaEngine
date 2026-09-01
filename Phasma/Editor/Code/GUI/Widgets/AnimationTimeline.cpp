@@ -499,7 +499,13 @@ namespace pe
         NodeId *node = m_animatedNodes.empty() ? m_targetNode : m_animatedNodes[0];
         AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
         const AnimationNodeState *state = anim && node ? anim->GetAnimationState(node) : nullptr;
-        if (m_restDisplayed && frameOffset == 0.f)
+        // The mesh skins identity whenever the node carries no evaluated joint matrices: Rest Pose display,
+        // or a freshly loaded scene nobody has scrubbed yet (no animation state exists). Mirror the Scene
+        // upload fallback here or the overlay points sit in a clip pose the mesh is not in.
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        const bool unposed = !node || !renderer || !renderer->GetScene().IsNodeAlive(node) ||
+                             renderer->GetScene().GetNodeRuntime(node).jointMatrices.empty();
+        if ((m_restDisplayed || unposed) && frameOffset == 0.f)
         {
             // Rest Pose display: the mesh skins identity, so hand the overlay the matching rest transforms.
             const Skeleton &skeleton = model->GetSkeleton();
