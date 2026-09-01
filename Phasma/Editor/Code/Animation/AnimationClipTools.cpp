@@ -16,6 +16,7 @@ namespace pe::AnimationClipTools
         constexpr double kMaxSpringSubsteps = 4096.0;
         constexpr double kMaxSpringWorkItems = 10000000.0;
         constexpr size_t kMaxSimplifyComparisons = 5000000;
+        constexpr size_t kMaxTweenSamples = 4096;
 
         bool Finite(const vec3 &value)
         {
@@ -499,6 +500,72 @@ namespace pe::AnimationClipTools
                 return rotation;
             return SafeNormalized(glm::angleAxis(angle, rotationVector / angle) * rotation);
         }
+
+        template <typename Key>
+        bool HasKeyAt(const std::vector<Key> &keys, float time, float tolerance)
+        {
+            return std::any_of(keys.begin(), keys.end(), [time, tolerance](const Key &key)
+                               { return std::abs(key.time - time) <= tolerance; });
+        }
+
+        // One curve's share of a tween. SampleClip keys what the curve already plays at each interior
+        // frame; RebuildFromEnds pins the two ends, drops the interior and re-keys it from that pair.
+        template <typename Key, typename Sample, typename Mix>
+        size_t TweenKeys(std::vector<Key> &keys, float startTime, float endTime, float stepTicks, TweenMode mode,
+                         Sample sample, Mix mix)
+        {
+            if (keys.empty())
+                return 0;
+            using Value = decltype(sample(keys, startTime));
+            // Ticks per frame can be large (assimp clips run at 1000 ticks/s), so the "is this the same
+            // key" window follows the frame step instead of a fixed tick epsilon.
+            const float tolerance = std::max(kEpsilon, stepTicks * 0.001f);
+            const float span = endTime - startTime;
+            const Value startValue = sample(keys, startTime);
+            const Value endValue = sample(keys, endTime);
+            const AnimationInterpolation blend = InterpolationAt(keys, startTime);
+
+            // Every sample is taken before anything is written: a key inserted mid-loop would otherwise
+            // change the curve the later frames sample. Interior times sit on the clip's own frame grid, so
+            // an unsnapped or fractional interval still keys whole frames.
+            std::vector<std::pair<float, Value>> samples;
+            std::vector<AnimationInterpolation> modes;
+            const float first = std::ceil((startTime + tolerance) / stepTicks) * stepTicks;
+            for (size_t step = 0; step < kMaxTweenSamples; ++step)
+            {
+                const float time = first + stepTicks * static_cast<float>(step);
+                if (time >= endTime - tolerance)
+                    break;
+                samples.push_back({time,
+                                   mode == TweenMode::SampleClip
+                                       ? sample(keys, time)
+                                       : mix(startValue, endValue, CurveFactor(blend, (time - startTime) / span))});
+                // Baked keys play back straight - the samples already carry the easing, and a Smooth key
+                // would make the evaluator ease an eased curve a second time. A stepped segment keeps its
+                // hold so it still jumps on its own key.
+                const AnimationInterpolation source = mode == TweenMode::SampleClip ? InterpolationAt(keys, time) : blend;
+                modes.push_back(source == AnimationInterpolation::Stepped ? AnimationInterpolation::Stepped
+                                                                          : AnimationInterpolation::Linear);
+            }
+            if (samples.empty())
+                return 0;
+
+            size_t writes = 0;
+            if (mode == TweenMode::RebuildFromEnds)
+            {
+                // The ends anchor the rebuilt halves, so pin them to the pose the curve already shows there
+                // (the value does not change) before the interior goes.
+                if (!HasKeyAt(keys, startTime, tolerance))
+                    writes += UpsertKey(keys, startTime, startValue, modes.front());
+                if (!HasKeyAt(keys, endTime, tolerance))
+                    writes += UpsertKey(keys, endTime, endValue, InterpolationAt(keys, endTime));
+                std::erase_if(keys, [&](const Key &key)
+                              { return key.time > startTime + tolerance && key.time < endTime - tolerance; });
+            }
+            for (size_t i = 0; i < samples.size(); i++)
+                writes += UpsertKey(keys, samples[i].first, samples[i].second, modes[i]);
+            return writes;
+        }
     } // namespace
 
     bool Analysis::Has(IssueType type) const
@@ -791,6 +858,50 @@ namespace pe::AnimationClipTools
                                     value,
                                     InterpolationAt(channel.scaleKeys, 0.0f));
             }
+        }
+        return writes;
+    }
+
+    size_t TweenInterval(AnimationClip &clip,
+                         float startTime,
+                         float endTime,
+                         float stepTicks,
+                         TweenMode mode,
+                         std::span<const int> boneIndices,
+                         ChannelMask channels)
+    {
+        if (!std::isfinite(startTime) || !std::isfinite(endTime) || !std::isfinite(stepTicks) ||
+            stepTicks <= kEpsilon || endTime - startTime <= stepTicks + kEpsilon ||
+            static_cast<double>(endTime - startTime) / stepTicks > static_cast<double>(kMaxTweenSamples))
+            return 0;
+
+        size_t writes = 0;
+        for (AnimationChannel &channel : clip.channels)
+        {
+            if (!BoneSelected(boneIndices, channel.boneIndex))
+                continue;
+            // Each track is independent: a NaN on rotation must not skip a finite location curve.
+            if (HasChannel(channels, ChannelMask::Position) && FiniteKeys(channel.positionKeys))
+                writes += TweenKeys(
+                    channel.positionKeys, startTime, endTime, stepTicks, mode,
+                    [](const std::vector<PositionKey> &keys, float time)
+                    { return AnimationEvaluator::InterpolatePosition(keys, time); },
+                    [](const vec3 &a, const vec3 &b, float factor)
+                    { return glm::mix(a, b, factor); });
+            if (HasChannel(channels, ChannelMask::Rotation) && FiniteKeys(channel.rotationKeys))
+                writes += TweenKeys(
+                    channel.rotationKeys, startTime, endTime, stepTicks, mode,
+                    [](const std::vector<RotationKey> &keys, float time)
+                    { return AnimationEvaluator::InterpolateRotation(keys, time); },
+                    [](const quat &a, const quat &b, float factor)
+                    { return ShortestSlerp(a, b, factor); });
+            if (HasChannel(channels, ChannelMask::Scale) && FiniteKeys(channel.scaleKeys))
+                writes += TweenKeys(
+                    channel.scaleKeys, startTime, endTime, stepTicks, mode,
+                    [](const std::vector<ScaleKey> &keys, float time)
+                    { return AnimationEvaluator::InterpolateScale(keys, time); },
+                    [](const vec3 &a, const vec3 &b, float factor)
+                    { return glm::mix(a, b, factor); });
         }
         return writes;
     }

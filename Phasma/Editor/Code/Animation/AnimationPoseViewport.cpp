@@ -1049,7 +1049,9 @@ namespace pe
                 rotations.push_back({solve.mid, solve.midRotation});
                 clamped += solve.clamped ? 1 : 0;
             }
-            if (timeline->KeyViewportGlobalRotations(scene, m_model, rotations, static_cast<float>(frame), !pushed))
+            // A bake writes every frame itself; interval mode must not rebuild the in-betweens behind it.
+            if (timeline->KeyViewportGlobalRotations(scene, m_model, rotations, static_cast<float>(frame), !pushed,
+                                                     false))
             {
                 pushed = true; // the first landed frame carries the whole bake's undo snapshot
                 frames++;

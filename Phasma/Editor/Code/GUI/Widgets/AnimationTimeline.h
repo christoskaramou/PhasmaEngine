@@ -1,5 +1,6 @@
 #pragma once
 #include "GUI/Widget.h"
+#include "Animation/AnimationClipTools.h"
 #include "Animation/AnimationTypes.h"
 #include "imgui/imgui.h"
 
@@ -98,8 +99,10 @@ namespace pe
         };
         // Keys every supplied rig-space global rotation at the current frame (frame < 0) or at frame. pushUndo = false
         // when the caller's edit already took the undo snapshot (a drag, PushViewportUndo, a Timeline pose edit).
+        // userPose = false for batch writes such as Bake Locks: interval mode must not rebuild the in-betweens
+        // around every frame a bake touches.
         bool KeyViewportGlobalRotations(Scene &scene, ModelAsset *model, std::span<const GlobalBoneRotation> rotations,
-                                        float frame = -1.f, bool pushUndo = true);
+                                        float frame = -1.f, bool pushUndo = true, bool userPose = true);
         bool PushViewportUndo(ModelAsset *model);
         // Bumps on pose-bar / timeline.pose edits only (never on undo/redo or viewport keying).
         uint32_t PoseEditSerial() const { return m_poseEditSerial; }
@@ -186,6 +189,9 @@ namespace pe
         {
             AnimationClip clip;
             int clipIndex = -1;
+            // The interval the keys were edited with, so undoing a slide or scale puts the band back too.
+            float intervalStart = 0.f;
+            float intervalEnd = -1.f;
         };
 
         // A visible F-curve: one component of one channel type of one bone.
@@ -232,6 +238,8 @@ namespace pe
         // --- clip edits (all go through PushUndo) ---
         void PushUndo(AnimationClip &clip);
         void PushUndoSnapshot(const AnimationClip &snapshot);
+        // Interval slide / scale push the band they started from, not the one the drag left behind.
+        void PushUndoSnapshot(const AnimationClip &snapshot, float intervalStart, float intervalEnd);
         void Undo(AnimationClip &clip);
         void Redo(AnimationClip &clip);
         void ResetEditState();
@@ -257,6 +265,18 @@ namespace pe
         void CopySelectedKeys(const AnimationClip &clip);
         void PasteKeys(AnimationClip &clip, float atFrame, bool keepTimes);
         void InsertKeyframe(AnimationClip &clip, const Skeleton &skeleton, int bone, float frame);
+        // --- interval: a span of frames the tools treat as one object (Cascadeur-style) ---
+        bool HasInterval() const { return m_intervalEnd >= m_intervalStart + 1.f; }
+        void ClearInterval();
+        std::vector<int> IntervalBones() const; // selected bones, or empty = every keyed bone
+        size_t TweenBones(AnimationClip &clip, std::span<const int> bones, float startFrame, float endFrame, int everyN,
+                          AnimationClipTools::TweenMode mode);
+        // Moves every key inside [fromFrame, toFrame]: t' = pivot + (t - pivot) * factor + delta, in frames,
+        // clamped to the clip. Returns the keys touched.
+        size_t RemapKeyTimes(AnimationClip &clip, float fromFrame, float toFrame, float pivot, float factor, float delta);
+        // Interval mode: a pose keyed strictly inside the interval becomes the new extreme and both
+        // halves are rebuilt from it. No-op without an interval or on its endpoints.
+        size_t RetweenAroundFrame(AnimationClip &clip, std::span<const int> bones, float frame);
         // Writes (or overwrites) the Loc/Rot/Scale keys of a channel at a time in ticks.
         void SetPoseKey(AnimationClip &clip, int channelIdx, float time, const vec3 &pos, const quat &rot, const vec3 &scl);
         void RestPoseAll(Scene &scene, AnimationSystem *anim);
@@ -284,8 +304,11 @@ namespace pe
                            float currentFrame);
         void DrawChannelRegion(const Skeleton &skeleton, const AnimationClip &clip, const ImVec2 &origin,
                                const ImVec2 &size);
-        void DrawRuler(Scene &scene, AnimationSystem *anim, const AnimationClip &clip, float currentFrame,
+        void DrawRuler(Scene &scene, AnimationSystem *anim, AnimationClip &clip, float currentFrame,
                        const ImVec2 &origin, const ImVec2 &size);
+        // Interval band + its ruler gestures. Returns true while a band drag owns the mouse (no scrub).
+        bool DrawInterval(Scene &scene, AnimationSystem *anim, AnimationClip &clip, float currentFrame,
+                          const ImVec2 &origin, const ImVec2 &size, bool hovered);
         void DrawKeyArea(Scene &scene, AnimationSystem *anim, const Skeleton &skeleton, AnimationClip &clip,
                          float currentFrame, const ImVec2 &origin, const ImVec2 &size);
         void DrawGraphEditor(Scene &scene, AnimationSystem *anim, const Skeleton &skeleton, AnimationClip &clip,
@@ -390,6 +413,17 @@ namespace pe
         float m_modalFactor = 1.f;
         std::vector<float> m_modalOrigTimes;
         AnimationClip m_modalSnapshot;
+
+        // --- state: interval ---
+        float m_intervalStart = 0.f;
+        float m_intervalEnd = -1.f; // < start + 1 frame = no interval
+        int m_intervalDrag = 0;     // 1 slide body, 2 left edge, 3 right edge, 4 alt-drag create
+        bool m_intervalScale = false;
+        float m_intervalGrab = 0.f; // frame under the cursor when the drag began
+        float m_intervalDragStart = 0.f;
+        float m_intervalDragEnd = 0.f;
+        AnimationClip m_intervalSnapshot; // pre-drag key times: slide and scale rebuild from it
+        std::string m_tweenStatus;        // what the last Tween wrote, beside the button
 
         // --- state: pending programmatic requests ---
         float m_pendingFrame = -1.f;
