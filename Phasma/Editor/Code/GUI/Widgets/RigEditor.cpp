@@ -61,6 +61,16 @@ namespace pe
             return transforms;
         }
 
+        vec3 SkinRigPoint(const mat4 &posed, const mat4 &bind, const vec3 &p)
+        {
+            return vec3(posed * glm::inverse(bind) * vec4(p, 1.f));
+        }
+
+        vec3 UnskinRigPoint(const mat4 &posed, const mat4 &bind, const vec3 &p)
+        {
+            return vec3(bind * glm::inverse(posed) * vec4(p, 1.f));
+        }
+
         nlohmann::ordered_json FromVec3(const vec3 &v)
         {
             return nlohmann::ordered_json::array({v.x, v.y, v.z});
@@ -1947,7 +1957,10 @@ namespace pe
         ImGui::Indent();
         const int selectedBone = SelectedSkeletonBone();
         const Skeleton &skeleton = m_model->GetSkeleton();
-        ImGui::TextDisabled("%s", selectedBone >= 0 ? skeleton.bones[selectedBone].name.c_str() : "(select a bind bone)");
+        if (selectedBone >= 0)
+            ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.35f, 1.f), "%s", skeleton.bones[selectedBone].name.c_str());
+        else
+            ImGui::TextColored(ImVec4(1.f, 0.6f, 0.15f, 1.f), "(select a bind bone)");
         if (ImGui::RadioButton("Add", m_weightMode == RigWeightStroke::Mode::Add))
             m_weightMode = RigWeightStroke::Mode::Add;
         ImGui::SameLine();
@@ -3074,19 +3087,17 @@ namespace pe
                     timeline->RequestBone(m_bones[m_selected].name);
         }
 
-        AnimationTimeline::ViewportPose jointBlendPose;
+        AnimationTimeline::ViewportPose viewportPose;
         NodeId *viewportRoot = m_rootNode;
-        if (m_jointBlend)
+        AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
+        if (!timeline || !timeline->GetViewportPose(m_model, viewportPose))
         {
-            AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
-            if (!timeline || !timeline->GetViewportPose(m_model, jointBlendPose))
-            {
-                jointBlendPose.node = m_rootNode;
-                jointBlendPose.boneTransforms = RestBoneTransforms(m_model->GetSkeleton());
-            }
-            if (jointBlendPose.node && scene.IsNodeAlive(jointBlendPose.node))
-                viewportRoot = jointBlendPose.node;
+            viewportPose.node = m_rootNode;
+            if (m_model->HasSkeleton())
+                viewportPose.boneTransforms = RestBoneTransforms(m_model->GetSkeleton());
         }
+        if (viewportPose.node && scene.IsNodeAlive(viewportPose.node))
+            viewportRoot = viewportPose.node;
         const mat4 rootWorld = scene.GetWorldMatrix(viewportRoot);
         const mat4 invRootWorld = glm::inverse(rootWorld);
         const float rigScale = std::max(glm::length(vec3(rootWorld[0])), 1e-5f);
@@ -3104,9 +3115,36 @@ namespace pe
         };
         if (m_jointBlend)
         {
-            DrawJointBlendViewport(scene, camera, imageMin, imageSize, rootWorld, jointBlendPose.boneTransforms, project,
+            DrawJointBlendViewport(scene, camera, imageMin, imageSize, rootWorld, viewportPose.boneTransforms, project,
                                    hovered, active);
             return;
+        }
+        const bool haveSkeleton = m_model->HasSkeleton();
+        const std::vector<mat4> restXforms = haveSkeleton ? RestBoneTransforms(m_model->GetSkeleton()) : std::vector<mat4>{};
+        auto skinned = [&](int bone, const vec3 &bindPt) -> vec3
+        {
+            if (!haveSkeleton || bone < 0 || bone >= static_cast<int>(m_bones.size()))
+                return bindPt;
+            const int si = m_model->GetSkeleton().GetBoneIndex(m_bones[bone].name);
+            if (si < 0 || si >= static_cast<int>(viewportPose.boneTransforms.size()) || si >= static_cast<int>(restXforms.size()))
+                return bindPt;
+            return SkinRigPoint(viewportPose.boneTransforms[si], restXforms[si], bindPt);
+        };
+        auto unskinned = [&](int bone, const vec3 &posedPt) -> vec3
+        {
+            if (!haveSkeleton || bone < 0 || bone >= static_cast<int>(m_bones.size()))
+                return posedPt;
+            const int si = m_model->GetSkeleton().GetBoneIndex(m_bones[bone].name);
+            if (si < 0 || si >= static_cast<int>(viewportPose.boneTransforms.size()) || si >= static_cast<int>(restXforms.size()))
+                return posedPt;
+            return UnskinRigPoint(viewportPose.boneTransforms[si], restXforms[si], posedPt);
+        };
+        const int nBones = static_cast<int>(m_bones.size());
+        std::vector<vec3> dispHead(nBones), dispTail(nBones);
+        for (int i = 0; i < nBones; i++)
+        {
+            dispHead[i] = skinned(i, m_bones[i].head);
+            dispTail[i] = skinned(i, m_bones[i].tail);
         }
         auto screenRadius = [&](const vec3 &rig, float radius, const ImVec2 &center) -> float
         {
@@ -3117,12 +3155,12 @@ namespace pe
             return std::abs(edge.x - center.x);
         };
 
-        // pass 1: shapes + bones
+        // pass 1: shapes + bones (skinned to the Timeline pose so capsules sit on the posed mesh)
         for (int i = 0; i < static_cast<int>(m_bones.size()); i++)
         {
             const RigBone &b = m_bones[i];
             ImVec2 hs, ts;
-            if (!project(b.head, hs) || !project(b.tail, ts))
+            if (!project(dispHead[i], hs) || !project(dispTail[i], ts))
                 continue;
             const bool selected = i == m_selected;
             const ImU32 boneCol = m_heat == 2 ? BoneColor(i) : selected ? kBoneSelCol
@@ -3130,7 +3168,7 @@ namespace pe
                                                                                                            : kBoneCol);
             if (m_showShapes && b.shell.empty())
             {
-                const float rh = screenRadius(b.head, b.headRadius, hs), rt = screenRadius(b.tail, b.tailRadius, ts);
+                const float rh = screenRadius(dispHead[i], b.headRadius, hs), rt = screenRadius(dispTail[i], b.tailRadius, ts);
                 const ImU32 col = m_heat == 2 ? (boneCol & 0x00FFFFFF) | (selected ? 0x90000000 : 0x50000000) : selected ? kShapeSelCol
                                                                                                                          : kShapeCol;
                 dl->AddCircle(hs, rh, col, 32, selected ? 2.5f : 1.f);
@@ -3164,8 +3202,8 @@ namespace pe
             const int n = static_cast<int>(chain.size());
             std::vector<vec3> st(n + 1);
             for (int k = 0; k < n; k++)
-                st[k] = m_bones[chain[k]].head;
-            st[n] = m_bones[chain[n - 1]].tail;
+                st[k] = dispHead[chain[k]];
+            st[n] = dispTail[chain[n - 1]];
             std::vector<ImVec2> pts;
             for (int s = 0; s < n; s++)
             {
@@ -3211,7 +3249,7 @@ namespace pe
         {
             RigBone &b = m_bones[i];
             ImVec2 hs, ts;
-            if (!project(b.head, hs) || !project(b.tail, ts))
+            if (!project(dispHead[i], hs) || !project(dispTail[i], ts))
                 continue;
             const bool selected = i == m_selected;
             const ImVec2 d(ts.x - hs.x, ts.y - hs.y);
@@ -3226,8 +3264,8 @@ namespace pe
             Handle handles[5] = {
                 {0, hs, true},
                 {1, ts, true},
-                {2, {hs.x + n.x * screenRadius(b.head, b.headRadius, hs), hs.y + n.y * screenRadius(b.head, b.headRadius, hs)}, selected && m_showShapes && b.shell.empty()},
-                {3, {ts.x + n.x * screenRadius(b.tail, b.tailRadius, ts), ts.y + n.y * screenRadius(b.tail, b.tailRadius, ts)}, selected && m_showShapes && b.shell.empty()},
+                {2, {hs.x + n.x * screenRadius(dispHead[i], b.headRadius, hs), hs.y + n.y * screenRadius(dispHead[i], b.headRadius, hs)}, selected && m_showShapes && b.shell.empty()},
+                {3, {ts.x + n.x * screenRadius(dispTail[i], b.tailRadius, ts), ts.y + n.y * screenRadius(dispTail[i], b.tailRadius, ts)}, selected && m_showShapes && b.shell.empty()},
                 {4, {(hs.x + ts.x) * 0.5f, (hs.y + ts.y) * 0.5f}, len > 24.f},
             };
             ImGui::PushID(i);
@@ -3251,8 +3289,8 @@ namespace pe
                     m_dragBone = i;
                     m_dragHandle = h.id;
                     m_dragHasPrev = false;
-                    const vec3 anchor = h.id == 1 || h.id == 3 ? b.tail : h.id == 4 ? (b.head + b.tail) * 0.5f
-                                                                                    : b.head;
+                    const vec3 anchor = h.id == 1 || h.id == 3 ? dispTail[i] : h.id == 4 ? (dispHead[i] + dispTail[i]) * 0.5f
+                                                                                         : dispHead[i];
                     m_dragPlanePoint = vec3(rootWorld * vec4(anchor, 1.f));
                 }
                 if (h.id == 2 || h.id == 3)
@@ -3283,7 +3321,7 @@ namespace pe
                         {
                             m_dragPrevHit = hit;
                             m_dragHasPrev = true;
-                            m_dragFree = h.id == 1 ? b.tail : b.head;
+                            m_dragFree = h.id == 1 ? dispTail[i] : dispHead[i];
                         }
                         vec3 delta = vec3(invRootWorld * vec4(hit - m_dragPrevHit, 0.f));
                         m_dragPrevHit = hit;
@@ -3311,7 +3349,8 @@ namespace pe
                             m_dragFree += delta;
                             vec3 target = m_dragFree;
                             vec3 snapPoint;
-                            if (snapping && SnapTarget(target, i, h.id, invRootWorld, rayOrigin, rayDir, project, mouse, snapPoint))
+                            if (snapping && SnapTarget(target, i, h.id, invRootWorld, rayOrigin, rayDir, project, mouse, snapPoint,
+                                                       dispHead, dispTail))
                             {
                                 target = snapPoint;
                                 ImVec2 sp;
@@ -3319,13 +3358,14 @@ namespace pe
                                     dl->AddCircle(sp, 9.f, kHandleHotCol, 16, 2.f);
                             }
                             if (h.id == 0)
-                                b.head = target;
+                                b.head = unskinned(i, target);
                             else if (h.id == 1)
-                                MoveTail(i, target);
+                                MoveTail(i, unskinned(i, target));
                             else
                             {
-                                const vec3 move = target - b.head;
-                                b.head = target;
+                                const vec3 newHead = unskinned(i, target);
+                                const vec3 move = newHead - b.head;
+                                b.head = newHead;
                                 MoveTail(i, b.tail + move);
                             }
                         }
@@ -3335,7 +3375,7 @@ namespace pe
                         if (axisLock >= 0)
                         {
                             // axis guide through the dragged point
-                            const vec3 anchor = h.id == 1 ? b.tail : b.head;
+                            const vec3 anchor = h.id == 1 ? dispTail[i] : dispHead[i];
                             vec3 axis(0.f);
                             axis[axisLock] = 1.f;
                             ImVec2 a0, a1;
@@ -3364,7 +3404,8 @@ namespace pe
     // armature Volume snap). Increment: 0.01 grid.
     bool RigEditor::SnapTarget(const vec3 &target, int bone, int handle, const mat4 &invRootWorld, const vec3 &rayOrigin,
                                const vec3 &rayDir, const std::function<bool(const vec3 &, ImVec2 &)> &project,
-                               const ImVec2 &mouse, vec3 &out) const
+                               const ImVec2 &mouse, vec3 &out, std::span<const vec3> dispHeads,
+                               std::span<const vec3> dispTails) const
     {
         if (m_snapMode == 3)
         {
@@ -3373,6 +3414,16 @@ namespace pe
         }
         if (m_snapMode == 1 || m_snapMode == 2)
         {
+            // ponytail: bind-space mesh; skip while the overlay is posed so a rest hit does not jump a posed joint
+            if (dispHeads.size() == m_bones.size())
+            {
+                for (size_t i = 0; i < dispHeads.size(); i++)
+                {
+                    const vec3 d = dispHeads[i] - m_bones[i].head;
+                    if (glm::dot(d, d) > 1e-6f)
+                        return false;
+                }
+            }
             const vec3 o = vec3(invRootWorld * vec4(rayOrigin, 1.f));
             const vec3 d = glm::normalize(vec3(invRootWorld * vec4(rayDir, 0.f)));
             float tEnter, tExit;
@@ -3399,15 +3450,19 @@ namespace pe
                 found = true;
             }
         };
+        const bool posed = dispHeads.size() == m_bones.size() && dispTails.size() == m_bones.size();
         for (int i = 0; i < static_cast<int>(m_bones.size()); i++)
         {
             if (i == bone)
                 continue;
-            consider(m_bones[i].head);
-            consider(m_bones[i].tail);
+            consider(posed ? dispHeads[i] : m_bones[i].head);
+            consider(posed ? dispTails[i] : m_bones[i].tail);
         }
         if (handle == 0 && m_bones[bone].parent >= 0)
-            consider(m_bones[m_bones[bone].parent].tail);
+        {
+            const int parent = m_bones[bone].parent;
+            consider(posed ? dispTails[parent] : m_bones[parent].tail);
+        }
         return found;
     }
 } // namespace pe

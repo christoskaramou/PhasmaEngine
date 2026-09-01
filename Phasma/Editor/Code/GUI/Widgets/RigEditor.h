@@ -136,7 +136,7 @@ namespace pe
         bool RayModel(const vec3 &origin, const vec3 &dir, float &tEnter, float &tExit) const;
         bool SnapTarget(const vec3 &target, int bone, int handle, const mat4 &invRootWorld, const vec3 &rayOrigin,
                         const vec3 &rayDir, const std::function<bool(const vec3 &, ImVec2 &)> &project, const ImVec2 &mouse,
-                        vec3 &out) const;
+                        vec3 &out, std::span<const vec3> dispHeads = {}, std::span<const vec3> dispTails = {}) const;
         void DrawBoneTree(int parent, int depth);
         void DrawBoneProperties();
         void DrawJointBlendPanel(Scene &scene);
