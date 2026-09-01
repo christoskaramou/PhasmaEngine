@@ -54,6 +54,8 @@ namespace pe
                              vec3 &out) const;
         int AddLock(const std::string &bone, const std::string &target, float reach, const vec3 *anchor,
                     std::string &error);
+        bool CaptureLockAnchor(RigLock &lock);
+        void HoldPosedBone(int bone);
         void SolveLockRotations(const Skeleton &skeleton, std::span<const mat4> boneTransforms, int skipBone,
                                 int skipMirrorBone, std::vector<LockSolve> &out);
         bool SolveLocks(Scene &scene, int skipBone = -1, bool pushUndo = false, float frame = -1.f,
@@ -102,6 +104,7 @@ namespace pe
         bool m_grabPushed = false;
         vec3 m_grabPlanePoint = vec3(0.f), m_grabOffset = vec3(0.f);
         std::vector<vec3> m_lockBend;
+        bool m_autoLock = true; // hold every bone posed by hand where it was left
         int m_lockTarget = -1;
         float m_lockReach = 1.f;
         bool m_reachDragging = false;

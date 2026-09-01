@@ -3768,12 +3768,19 @@ namespace pe
             ImGuiIO &io = ImGui::GetIO();
             if (io.KeyCtrl)
             {
-                if (!io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Z, false) && !io.KeyShift)
+                // The Animation Timeline (and the Rig panel inside it) keep their own keyframe/rig undo stacks and
+                // claim Ctrl+Z / Ctrl+Y while focused. Their handlers run later in this same frame, so without this
+                // one keypress also pops the scene stack and silently reverts an unrelated edit.
+                ImGuiWindow *nav = ImGui::GetCurrentContext()->NavWindow;
+                AnimationTimeline *undoOwner = GetWidget<AnimationTimeline>();
+                const bool ownedByWidget = nav && nav->RootWindow && undoOwner && !ImGui::IsAnyItemActive() &&
+                                           nav->RootWindow->Name == undoOwner->GetName();
+                if (!io.WantTextInput && !ownedByWidget && ImGui::IsKeyPressed(ImGuiKey_Z, false) && !io.KeyShift)
                 {
                     if (undoRedoRS && undoRedo.CanUndo())
                         undoRedo.Undo(undoRedoRS->GetScene());
                 }
-                if (!io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Y, false))
+                if (!io.WantTextInput && !ownedByWidget && ImGui::IsKeyPressed(ImGuiKey_Y, false))
                 {
                     if (undoRedoRS && undoRedo.CanRedo())
                         undoRedo.Redo(undoRedoRS->GetScene());

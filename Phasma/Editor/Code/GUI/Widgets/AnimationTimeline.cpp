@@ -275,29 +275,30 @@ namespace pe
         const float wheel = io.MouseWheel;
         if (wheel != 0.f)
         {
-            if (io.KeyCtrl) // scroll frames
+            // Dope sheet and ruler: Ctrl+wheel zooms, and a plain wheel belongs to the window's own
+            // scrollbar (Update drives it). The Graph Editor keeps Blender's view2d wheel set.
+            if (!graph)
+            {
+                if (io.KeyCtrl)
+                    ZoomRange(m_viewStart, m_viewEnd, PxToFrame(mouse.x), wheel > 0.f ? 0.8f : 1.25f, kMinViewFrames);
+            }
+            else if (io.KeyCtrl) // scroll frames
             {
                 const float df = -wheel * span * 0.1f;
                 m_viewStart += df;
                 m_viewEnd += df;
             }
-            else if (io.KeyShift) // scroll rows / values
+            else if (io.KeyShift) // scroll values
             {
-                if (graph)
-                {
-                    const float dv = wheel * vspan * 0.1f;
-                    m_curveMin += dv;
-                    m_curveMax += dv;
-                }
-                else
-                    m_scrollY -= wheel * m_rowHeight * 3.f;
+                const float dv = wheel * vspan * 0.1f;
+                m_curveMin += dv;
+                m_curveMax += dv;
             }
             else // zoom around the cursor
             {
                 const float factor = wheel > 0.f ? 0.8f : 1.25f;
                 ZoomRange(m_viewStart, m_viewEnd, PxToFrame(mouse.x), factor, kMinViewFrames);
-                if (graph)
-                    ZoomRange(m_curveMin, m_curveMax, PxToValue(mouse.y), factor, 1e-4f);
+                ZoomRange(m_curveMin, m_curveMax, PxToValue(mouse.y), factor, 1e-4f);
             }
         }
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle))
@@ -313,14 +314,12 @@ namespace pe
                 const float df = io.MouseDelta.x * span / std::max(m_keyWidth, 1.f);
                 m_viewStart -= df;
                 m_viewEnd -= df;
-                if (graph)
+                if (graph) // the dope sheet shows every row, so a middle-drag only moves time there
                 {
                     const float dv = io.MouseDelta.y * vspan / std::max(m_curveHeight, 1.f);
                     m_curveMin += dv;
                     m_curveMax += dv;
                 }
-                else
-                    m_scrollY -= io.MouseDelta.y;
             }
         }
     }
@@ -3481,12 +3480,18 @@ namespace pe
     {
         const ImVec2 origin = ImGui::GetCursorScreenPos();
         const ImVec2 avail = ImGui::GetContentRegionAvail();
-        const ImVec2 size(avail.x, std::max(avail.y - m_statusHeight, 40.f));
-
         BuildRows(skeleton);
+        m_contentHeight = m_rows.size() * m_rowHeight;
+        // Every channel row is drawn: the window's own scrollbar carries the whole panel, so the sheet has no
+        // inner vertical scroller and never hides a bone. The pose bar and the Pose Locks stack above it must
+        // not squash it either, hence the row floor.
+        m_scrollY = 0.f;
+        const float minBody = m_rulerHeight + m_rowHeight * kMinBodyRows + m_hScrollHeight;
+        const ImVec2 size(avail.x, std::max({avail.y - m_statusHeight, minBody,
+                                             m_rulerHeight + m_contentHeight + m_hScrollHeight}));
+
         m_keyLeft = origin.x + m_channelWidth;
         m_keyWidth = std::max(size.x - m_channelWidth - kRightMargin, 10.f);
-        m_contentHeight = m_rows.size() * m_rowHeight;
         if (m_fitPending)
         {
             const float durationFrames = ToFrame(clip.duration);
@@ -3505,7 +3510,6 @@ namespace pe
         DrawRuler(scene, anim, clip, currentFrame, {m_keyLeft, origin.y}, {body.x - m_channelWidth, m_rulerHeight});
         DrawKeyArea(scene, anim, skeleton, clip, currentFrame, {m_keyLeft, origin.y + m_rulerHeight}, {body.x - m_channelWidth, body.y - m_rulerHeight});
         DrawChannelRegion(skeleton, clip, origin, {m_channelWidth, body.y});
-        DrawVScrollbar({origin.x + m_channelWidth, origin.y}, {body.x - m_channelWidth, body.y}, m_contentHeight);
         DrawHScrollbar({origin.x, origin.y + body.y}, {size.x, m_hScrollHeight}, ToFrame(clip.duration));
         ImGui::SetCursorScreenPos({origin.x, origin.y + size.y});
     }
@@ -4025,7 +4029,8 @@ namespace pe
     {
         const ImVec2 origin = ImGui::GetCursorScreenPos();
         const ImVec2 avail = ImGui::GetContentRegionAvail();
-        const ImVec2 size(avail.x, std::max(avail.y - m_statusHeight, 40.f));
+        const float minBody = m_rulerHeight + m_rowHeight * kMinBodyRows + m_hScrollHeight;
+        const ImVec2 size(avail.x, std::max(avail.y - m_statusHeight, minBody));
 
         BuildRows(skeleton);
         m_keyLeft = origin.x + m_channelWidth + m_axisWidth;
@@ -4185,7 +4190,8 @@ namespace pe
         ImGui::EndDisabled();
         ui::ItemTooltip("Bake the in-between frames of the interval (Alt-drag the ruler to mark one) for the "
                         "selected bones, or every keyed bone when none are selected. The selected bone must already "
-                        "have keys; Tween will not invent a curve. Keys what the clip already plays; the ends stay put.");
+                        "have keys; Tween will not invent a curve. Keys what the clip already plays; the ends stay put.",
+                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         if (!m_tweenStatus.empty())
         {
             ImGui::SameLine();
@@ -4309,9 +4315,17 @@ namespace pe
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0.f, 0.f});
         // Target resolution and the timeline.* request drains below run even while this window is a
         // hidden docked tab: agent actions depend on m_editModel. Playback does not retain ownership.
-        const bool visible = ImGui::Begin(m_name.c_str(), &m_open, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        // The window keeps its own right-edge scrollbar (the whole panel scrolls, header to status bar) but
+        // never takes the wheel: the wheel belongs to the key / curve areas for zoom.
+        const bool visible = ImGui::Begin(m_name.c_str(), &m_open, ImGuiWindowFlags_NoScrollWithMouse);
         ImGui::PopStyleVar();
         m_visible = visible;
+
+        // The wheel over the panel scrolls the panel. NoScrollWithMouse keeps ImGui from doing this on its
+        // own, so Ctrl+wheel reaches the timeline as zoom instead of scrolling the window at the same time.
+        if (visible && !ImGui::GetIO().KeyCtrl && ImGui::GetIO().MouseWheel != 0.f && ImGui::IsWindowHovered())
+            ImGui::SetScrollY(std::clamp(ImGui::GetScrollY() - ImGui::GetIO().MouseWheel * m_rowHeight * 3.f, 0.f,
+                                         ImGui::GetScrollMaxY()));
 
         const float lineHeight = ImGui::GetTextLineHeight();
         m_rowHeight = std::round(lineHeight + 6.f);

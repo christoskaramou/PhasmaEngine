@@ -42,6 +42,7 @@ namespace pe
         vec3 anchor = vec3(0.f); // rig-space rest point on the target (or the fixed point)
         float reach = 1.f;       // ponytail: the only limit is reach (0.3..1); per-joint angle cones are the upgrade
         bool enabled = true;
+        bool automatic = false; // captured by posing a bone by hand: session state, never written to rig.json
     };
 
     // Rig Editor: authors and bakes a skeleton + per-bone influence capsules, and adjusts ordinary
