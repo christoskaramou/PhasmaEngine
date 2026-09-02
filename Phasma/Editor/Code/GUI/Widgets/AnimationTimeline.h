@@ -2,6 +2,7 @@
 #include "GUI/Widget.h"
 #include "Animation/AnimationClipTools.h"
 #include "Animation/AnimationTypes.h"
+#include "GUI/Widgets/RigEditor.h"
 #include "imgui/imgui.h"
 
 #include <array>
@@ -111,10 +112,19 @@ namespace pe
         // The bone whose Location carries the body: the shallowest bone with Location keys (mocap hips under a
         // keyless control root), else the skeleton root; -1 without a clip.
         int LocationBone(ModelAsset *model) const;
+        // Seconds per frame of the active clip (0 without one) and the ballistic g knob, for the physics bakes.
+        float FrameSeconds(ModelAsset *model) const;
+        float Gravity() const { return m_gravity; }
         // Bumps on pose-bar / timeline.pose edits only (never on undo/redo or viewport keying).
         uint32_t PoseEditSerial() const { return m_poseEditSerial; }
-        // Frame the last pose edit targeted (< 0 = the playhead): lock re-solves key there, not at the playhead.
-        float PoseEditFrame() const { return m_poseEditFrame; }
+        // The last pose edit, grouped by the frame it targeted (< 0 = the playhead): lock re-solves key there, and
+        // a foot lifted by posing its own leg releases its plant at that frame.
+        struct PoseEdit
+        {
+            float frame = -1.f;
+            std::vector<int> bones;
+        };
+        const std::vector<PoseEdit> &PoseEdits() const { return m_poseEdits; }
         bool CanViewportRotate(ModelAsset *model, int bone, bool rotate = true, bool translate = false) const;
         bool BeginViewportRotate(Scene &scene, ModelAsset *model, int bone, bool rotate = true,
                                  bool translate = false);
@@ -199,6 +209,8 @@ namespace pe
             // The interval the keys were edited with, so undoing a slide or scale puts the band back too.
             float intervalStart = 0.f;
             float intervalEnd = -1.f;
+            // Session holds and plants, and which authored plants yielded: a drag that lifted a foot undoes its plant.
+            std::vector<RigLock> locks;
         };
 
         // A visible F-curve: one component of one channel type of one bone.
@@ -450,7 +462,7 @@ namespace pe
         int m_viewportRotateBone = -1;
         float m_viewportRotateTime = 0.f;
         uint32_t m_poseEditSerial = 0;
-        float m_poseEditFrame = -1.f;
+        std::vector<PoseEdit> m_poseEdits;
         std::string m_pendingBone;
         bool m_pendingSave = false;
         int m_pendingPlay = -1; // 0 pause, 1 play, 2 play reverse

@@ -32,6 +32,10 @@ namespace pe
                           bool &active);
         std::string HandleAction(Scene &scene, const std::string &action, const std::string &argsJson);
         void Abort();
+        // Session lock state for the Timeline's undo: the holds and plants posing created and which authored
+        // plants yielded to them. Authored locks themselves belong to the rig document and its own undo.
+        std::vector<RigLock> LockSnapshot() const { return m_locks; }
+        void RestoreSessionLocks(const std::vector<RigLock> &snapshot);
 
     private:
         struct LockSolve
@@ -58,11 +62,21 @@ namespace pe
                     std::string &error);
         bool CaptureLockAnchor(RigLock &lock);
         void HoldPosedBone(int bone);
+        // Auto contact: the floor is the lowest rest tail of the contact bones (feet / toes, authored plants).
+        float Ground() const;
+        bool IsContactBone(const Skeleton &skeleton, int bone, float ground) const;
+        void EraseLock(size_t index);
+        void AppendLock(RigLock lock);
+        bool Planted(const RigLock &lock, float ground) const;
+        void UpdateContacts(const Skeleton &skeleton, std::span<const mat4> boneTransforms, std::span<const int> edited);
         bool CentreOfMass(const Skeleton &skeleton, std::span<const mat4> boneTransforms, vec3 &out) const;
         bool SupportCentre(vec3 &out) const;
         bool IsSupport(const Skeleton &skeleton, int bone) const;
         void BeginBalance();
-        bool ApplyBalance(Scene &scene);
+        // The bone whose rotation counter-leans the upper body: the Location carrier when no foot hangs under it,
+        // else its heaviest foot-free child (a mocap spine); -1 when the rig has no such trunk.
+        int LeanBone(const Skeleton &skeleton) const;
+        bool ApplyBalance(Scene &scene, int draggedBone, int mirrorBone);
 
     public:
         // Interval bake of the same prior: on every grounded frame the centre of mass is brought over the feet in
@@ -73,7 +87,7 @@ namespace pe
         void SolveLockRotations(const Skeleton &skeleton, std::span<const mat4> boneTransforms, int skipBone,
                                 int skipMirrorBone, std::vector<LockSolve> &out);
         bool SolveLocks(Scene &scene, int skipBone = -1, bool pushUndo = false, float frame = -1.f,
-                        int skipMirrorBone = -1);
+                        int skipMirrorBone = -1, std::span<const int> editedBones = {});
         bool BakeLocks(Scene &scene, std::string &status);
         bool IsPinned(const std::string &bone) const;
         void TogglePin(const std::string &bone);
@@ -121,8 +135,10 @@ namespace pe
         bool m_autoLock = true; // hold every bone posed by hand where it was left
         bool m_balance = true;  // a drag keeps the centre of mass over the ground point it started on
         bool m_balanceHaveReference = false;
-        vec3 m_balanceReference = vec3(0.f); // rig-space centre of mass when the drag began
-        std::string m_balanceNote;           // why the last drag could not balance
+        vec3 m_balanceReference = vec3(0.f);      // rig-space centre of mass when the drag began
+        std::string m_balanceNote;                // why the last drag could not balance
+        int m_balanceLeanBone = -1;               // trunk bone the drag counter-leans, chosen when the drag begins
+        glm::vec2 m_balanceLean = glm::vec2(0.f); // counter-lean applied by this drag: rotation vector about the floor axes, radians
         int m_lockTarget = -1;
         float m_lockReach = 1.f;
         bool m_reachDragging = false;

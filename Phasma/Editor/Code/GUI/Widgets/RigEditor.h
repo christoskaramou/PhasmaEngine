@@ -44,6 +44,7 @@ namespace pe
         float reach = 1.f;       // ponytail: the only limit is reach (0.3..1); per-joint angle cones are the upgrade
         bool enabled = true;
         bool automatic = false; // captured by posing a bone by hand: session state, never written to rig.json
+        bool lifted = false;    // an authored plant whose foot was lifted: yields to the session, never written or solved
     };
 
     // Rig Editor: authors and bakes a skeleton + per-bone influence capsules, and adjusts ordinary

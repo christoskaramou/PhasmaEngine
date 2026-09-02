@@ -966,6 +966,16 @@ namespace pe
         return best;
     }
 
+    float AnimationTimeline::FrameSeconds(ModelAsset *model) const
+    {
+        if (!model || model != m_editModel || m_selectedClip < 0 ||
+            m_selectedClip >= static_cast<int>(model->GetAnimations().size()))
+            return 0.f;
+        const AnimationClip &clip = model->GetAnimations()[m_selectedClip];
+        const float frameTicks = m_frameTicks > 0.f ? m_frameTicks : DetectFrameTicks(clip);
+        return clip.ticksPerSecond > 0.f && frameTicks > 0.f ? frameTicks / clip.ticksPerSecond : 0.f;
+    }
+
     bool AnimationTimeline::StepViewportUndo(Scene &scene, bool redo)
     {
         // rig.bake can free m_editModel before the next Update re-resolves it: only trust the pointer
@@ -1610,7 +1620,8 @@ namespace pe
 
     void AnimationTimeline::PushUndoSnapshot(const AnimationClip &snapshot, float intervalStart, float intervalEnd)
     {
-        m_undo.push_back({snapshot, m_selectedClip, intervalStart, intervalEnd});
+        m_undo.push_back({snapshot, m_selectedClip, intervalStart, intervalEnd,
+                          m_poseViewport ? m_poseViewport->LockSnapshot() : std::vector<RigLock>{}});
         if (static_cast<int>(m_undo.size()) > kMaxUndo)
             m_undo.erase(m_undo.begin());
         m_redo.clear();
@@ -1621,10 +1632,13 @@ namespace pe
     {
         if (m_undo.empty() || m_undo.back().clipIndex != m_selectedClip)
             return;
-        m_redo.push_back({clip, m_selectedClip, m_intervalStart, m_intervalEnd});
+        m_redo.push_back({clip, m_selectedClip, m_intervalStart, m_intervalEnd,
+                          m_poseViewport ? m_poseViewport->LockSnapshot() : std::vector<RigLock>{}});
         clip = m_undo.back().clip;
         m_intervalStart = m_undo.back().intervalStart;
         m_intervalEnd = m_undo.back().intervalEnd;
+        if (m_poseViewport)
+            m_poseViewport->RestoreSessionLocks(m_undo.back().locks);
         m_undo.pop_back();
         SelClear();
         m_dirty = true;
@@ -1634,10 +1648,13 @@ namespace pe
     {
         if (m_redo.empty() || m_redo.back().clipIndex != m_selectedClip)
             return;
-        m_undo.push_back({clip, m_selectedClip, m_intervalStart, m_intervalEnd});
+        m_undo.push_back({clip, m_selectedClip, m_intervalStart, m_intervalEnd,
+                          m_poseViewport ? m_poseViewport->LockSnapshot() : std::vector<RigLock>{}});
         clip = m_redo.back().clip;
         m_intervalStart = m_redo.back().intervalStart;
         m_intervalEnd = m_redo.back().intervalEnd;
+        if (m_poseViewport)
+            m_poseViewport->RestoreSessionLocks(m_redo.back().locks);
         m_redo.pop_back();
         SelClear();
         m_dirty = true;
@@ -4339,7 +4356,7 @@ namespace pe
                 SetPoseKey(clip, c, time, bindPos + bindRot * loc, glm::normalize(bindRot * quat(glm::radians(m_poseEuler))), bindScl * sclRel);
                 m_dirty = true;
                 ++m_poseEditSerial;
-                m_poseEditFrame = -1.f;
+                m_poseEdits = {{-1.f, {bone}}};
                 RetweenAroundFrame(clip, poseBones, std::round(currentFrame));
                 ReevaluatePose(scene, anim);
             }
@@ -4349,7 +4366,7 @@ namespace pe
                 PushUndo(clip);
                 InsertKeyframe(clip, skeleton, bone, std::round(currentFrame)); // retweens the interval itself
                 ++m_poseEditSerial;
-                m_poseEditFrame = -1.f;
+                m_poseEdits = {{-1.f, {bone}}};
                 ReevaluatePose(scene, anim);
             }
             ui::ItemTooltip("Key the bone's current pose at this frame (I).");
@@ -4360,7 +4377,7 @@ namespace pe
                 SetPoseKey(clip, EnsureChannel(clip, bone), time, bindPos, bindRot, bindScl);
                 m_poseEuler = vec3(0.f);
                 ++m_poseEditSerial;
-                m_poseEditFrame = -1.f;
+                m_poseEdits = {{-1.f, {bone}}};
                 RetweenAroundFrame(clip, poseBones, std::round(currentFrame));
                 ReevaluatePose(scene, anim);
             }
@@ -4425,8 +4442,11 @@ namespace pe
         ImGui::Checkbox("Body", &m_ballisticBody);
         ui::ItemTooltip("Throw the body's centre of mass instead of the root: on every frame the root is moved so the "
                         "mass of the posed limbs and carried props follows the arc (tucking the legs drops the hips, "
-                        "swinging the shovel forward pulls the body after it). Masses come from the rig's capsules and "
-                        "owned parts. Airborne spans only - on the ground the feet would move with the root.",
+                        "swinging the shovel forward pulls the body after it), and the root turns against the limbs so "
+                        "the body's angular momentum stays what it was - an arm thrown forward tips the body back where "
+                        "the throw happens; both ends keep their rotation, so a swing spread evenly over the whole "
+                        "flight shows nothing. Masses come from the rig's capsules and owned parts. Airborne spans "
+                        "only - on the ground the feet would move with the root.",
                         ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         ImGui::SameLine();
         if (ImGui::Button("Spring"))
@@ -4456,11 +4476,12 @@ namespace pe
             m_tweenStatus = status;
         }
         ui::ItemTooltip("Stand the body over its feet on every grounded frame of the interval: the root shifts so the "
-                        "centre of mass sits over the feet touching the ground, and each planted foot is bent back to "
-                        "where the frame had it - the hip sway over the stance foot a walk needs. Feet are the bones "
-                        "named foot / toe or holding a planted lock; contact is read from the clip. The interval ends "
-                        "keep their keys, airborne frames follow their grounded neighbours (throw those with Ballistic "
-                        "or Body). Bake it after the poses.",
+                        "zero-moment point - the centre of mass, led by its acceleration (h/g) - sits over the feet "
+                        "touching the ground, and each planted foot is bent back to where the frame had it - the hip "
+                        "sway over the stance foot a walk needs; a body that stops short settles onto its heels. Feet "
+                        "are the bones named foot / toe or holding a planted lock; contact is read from the clip; g is "
+                        "the Ballistic knob. The interval ends keep their keys, airborne frames follow their grounded "
+                        "neighbours (throw those with Ballistic or Body). Bake it after the poses.",
                         ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         ImGui::EndDisabled();
         if (!m_tweenStatus.empty())
@@ -4845,7 +4866,7 @@ namespace pe
         if (!m_pendingPoses.empty())
         {
             PushUndo(clip);
-            m_poseEditFrame = m_pendingPoses.back().frame; // < 0 = playhead; the lock re-solve keys there
+            std::vector<PoseEdit> edits; // one group per frame (< 0 = playhead); the lock re-solve keys there
             std::vector<int> posedBones;
             float posedFrame = std::round(currentFrame);
             for (const PendingPose &pp : m_pendingPoses)
@@ -4868,9 +4889,16 @@ namespace pe
                 SetPoseKey(clip, ci, time, pos, rot, scl);
                 posedBones.push_back(b);
                 posedFrame = pp.frame >= 0.f ? pp.frame : std::round(currentFrame);
+                const float group = pp.frame >= 0.f ? pp.frame : -1.f;
+                auto edit = std::find_if(edits.begin(), edits.end(), [&](const PoseEdit &e)
+                                         { return e.frame == group; });
+                if (edit == edits.end())
+                    edit = edits.insert(edits.end(), {group, {}});
+                edit->bones.push_back(b);
             }
             m_pendingPoses.clear();
             ++m_poseEditSerial;
+            m_poseEdits = edits;
             RetweenAroundFrame(clip, posedBones, posedFrame);
             ReevaluatePose(scene, anim);
         }

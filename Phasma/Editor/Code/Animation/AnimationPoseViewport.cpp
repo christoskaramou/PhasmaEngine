@@ -118,6 +118,7 @@ namespace pe
         m_grabBone = -1;
         m_grabPushed = false;
         m_balanceHaveReference = false;
+        m_balanceLean = glm::vec2(0.f);
         m_ikBone = -1;
         m_ikDragging = false;
         m_ikDirty = false;
@@ -154,7 +155,8 @@ namespace pe
         {
             m_poseEditSerial = m_timeline.PoseEditSerial();
             if (m_grabBone < 0 && !m_poseDragging)
-                SolveLocks(scene, -1, false, m_timeline.PoseEditFrame());
+                for (const AnimationTimeline::PoseEdit &edit : m_timeline.PoseEdits())
+                    SolveLocks(scene, -1, false, edit.frame, -1, edit.bones);
         }
 
         const Skeleton &skeleton = m_model->GetSkeleton();
@@ -347,6 +349,7 @@ namespace pe
                 vec3 target;
                 if (!StrictVec3(args["target"], target))
                     return fail("target must be three finite numbers");
+                target.y = std::max(target.y, Ground()); // the floor is solid; the gap is measured to where the pull stops
                 float gap = 0.f;
                 bool keyed = false;
                 bool limited = false;
@@ -355,9 +358,11 @@ namespace pe
                 m_balanceHaveReference = false;
                 if (!grabbed)
                     return fail("nothing grabbed: the clip must be active in the Timeline and the bone needs a parent");
-                // A one-shot grab commits like a mouse release: the grabbed bone's own lock reapplies
-                // (locks always win) and the reported gap is measured on the final pose. An at-target
-                // no-op keyed nothing, so there is nothing to re-solve either.
+                // A one-shot grab commits like a mouse release: the bone keeps its point (a foot set down plants),
+                // then the locks reapply (locks always win) and the reported gap is measured on the final pose.
+                // An at-target no-op keyed nothing, so there is nothing to hold or re-solve either.
+                if (keyed)
+                    HoldPosedBone(bone);
                 if (keyed && SolveLocks(renderer->GetScene()))
                 {
                     AnimationTimeline::ViewportPose pose;
@@ -369,8 +374,6 @@ namespace pe
                         gap = glm::distance(tails[bone], target);
                     }
                 }
-                if (keyed)
-                    HoldPosedBone(bone); // a one-shot grab releases like the mouse: the bone keeps its point
                 nlohmann::json chain = nlohmann::json::array();
                 for (int b = bone; b >= 0 && skeleton.bones[b].parentIndex >= 0; b = skeleton.bones[b].parentIndex)
                 {
@@ -399,6 +402,10 @@ namespace pe
                         state["bone_position"] = {pose.boneTransforms[bone][3].x, pose.boneTransforms[bone][3].y,
                                                   pose.boneTransforms[bone][3].z};
                 }
+                state["lean_degrees"] = glm::degrees(glm::length(m_balanceLean)); // the last drag's counter-lean
+                if (m_model->HasSkeleton())
+                    if (const int lean = LeanBone(m_model->GetSkeleton()); lean >= 0)
+                        state["lean_bone"] = m_model->GetSkeleton().bones[lean].name;
                 return ok(state);
             }
             if (action == "timeline.lock")
@@ -411,6 +418,7 @@ namespace pe
                     timeline && m_model && m_model->HasSkeleton() && timeline->GetViewportPose(m_model, currentPose) &&
                     static_cast<int>(currentPose.boneTransforms.size()) == m_model->GetSkeleton().GetBoneCount())
                     PoseTails(m_model->GetSkeleton(), currentPose.boneTransforms, poseHeads, poseTails);
+                const float floorLevel = Ground();
                 auto lockJson = [&](int i)
                 {
                     const RigLock &lock = m_locks[i];
@@ -425,6 +433,9 @@ namespace pe
                                      {"anchor", {lock.anchor.x, lock.anchor.y, lock.anchor.z}},
                                      {"reach", lock.reach},
                                      {"enabled", lock.enabled},
+                                     {"automatic", lock.automatic},
+                                     {"lifted", lock.lifted},
+                                     {"planted", Planted(lock, floorLevel)},
                                      {"valid", valid},
                                      {"why", why}};
                     if (valid && !poseTails.empty() &&
@@ -489,6 +500,8 @@ namespace pe
                         return fail("anchor must be three finite numbers");
                     lock.reach = std::clamp(args.value("reach", lock.reach), 0.3f, 1.f);
                     lock.enabled = args.value("enabled", lock.enabled);
+                    if (args.value("enabled", false))
+                        lock.lifted = false; // re-armed by hand
                     return ok({{"lock", lockJson(index)}});
                 }
                 RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
@@ -1060,27 +1073,48 @@ namespace pe
         const Skeleton &skeleton = m_model->GetSkeleton();
         if (bone < 0 || bone >= skeleton.GetBoneCount())
             return;
+        const float ground = Ground(), tolerance = std::max(ModelHeight(), 0.1f) * 0.03f;
         auto hold = [&](const std::string &name)
         {
-            for (RigLock &existing : m_locks)
-                if (existing.bone == name)
+            auto authored = std::find_if(m_locks.begin(), m_locks.end(), [&](const RigLock &l)
+                                         { return !l.automatic && l.bone == name; });
+            const bool contact = IsContactBone(skeleton, skeleton.GetBoneIndex(name), ground);
+            if (authored != m_locks.end() && (!authored->target.empty() || !contact))
+            {
+                // a hand on the shovel, or a rig-space pin the user added on a hand: the authored lock follows the
+                // bone and is re-captured where it was left
+                if (CaptureLockAnchor(*authored))
                 {
-                    if (CaptureLockAnchor(existing))
-                    {
-                        m_lockBend.clear();
-                        m_dirty = m_dirty || !existing.automatic; // a hand-made lock moved: the rig document changed
-                    }
-                    return;
+                    m_lockBend.clear();
+                    m_dirty = true;
                 }
+                return;
+            }
             RigLock lock;
             lock.bone = name;
             lock.reach = m_lockReach;
             lock.automatic = true;
             int root, mid, target;
-            if (!m_autoLock || !LockChain(lock, skeleton, root, mid, target) || !CaptureLockAnchor(lock))
+            if (!LockChain(lock, skeleton, root, mid, target) || !CaptureLockAnchor(lock))
                 return; // no two-bone chain above it: nothing to hold the point with
-            m_locks.push_back(std::move(lock));
-            m_lockBend.clear();
+            const bool onFloor = contact && lock.anchor.y <= ground + tolerance;
+            if (onFloor)
+                lock.anchor.y = ground; // a foot set down plants on the floor exactly
+            auto session = std::find_if(m_locks.begin(), m_locks.end(), [&](const RigLock &l)
+                                        { return l.automatic && l.bone == name; });
+            // a plant always holds; in the air Hold Posed decides, except a hold that already exists on a hand
+            const bool keep = onFloor || m_autoLock || (session != m_locks.end() && !contact);
+            if (authored != m_locks.end())
+                authored->lifted = true; // an authored plant yields to the session; its rest anchor is never rewritten
+            if (!keep)
+            {
+                if (session != m_locks.end())
+                    EraseLock(static_cast<size_t>(session - m_locks.begin())); // Hold Posed off: a lifted foot is free
+            }
+            else if (session != m_locks.end())
+                session->anchor = lock.anchor; // the bend memory stays: only the anchor moved
+            else
+                AppendLock(std::move(lock));
         };
         hold(skeleton.bones[bone].name);
         if (m_mirrorX)
@@ -1088,6 +1122,173 @@ namespace pe
             const std::string mirror = MirrorName(skeleton.bones[bone].name);
             if (!mirror.empty() && mirror != skeleton.bones[bone].name && skeleton.GetBoneIndex(mirror) >= 0)
                 hold(mirror); // the mirrored counterpart was posed too
+        }
+    }
+
+    namespace
+    {
+        bool FootName(std::string name)
+        {
+            std::transform(name.begin(), name.end(), name.begin(), [](unsigned char ch)
+                           { return static_cast<char>(std::tolower(ch)); });
+            return name.find("foot") != std::string::npos || name.find("toe") != std::string::npos;
+        }
+    } // namespace
+
+    // The floor: the lowest rest tail of the bones named foot / toe; without any, the lowest authored plant (hooves,
+    // paws); without those, the lowest rest tail of all.
+    // ponytail: one flat floor at rest-foot height; a scene collider under each foot is the upgrade.
+    float AnimationPoseViewport::Ground() const
+    {
+        if (!m_model || !m_model->HasSkeleton())
+            return 0.f;
+        const Skeleton &skeleton = m_model->GetSkeleton();
+        const int boneCount = skeleton.GetBoneCount();
+        std::vector<mat4> bind(boneCount);
+        for (int i = 0; i < boneCount; i++)
+            bind[i] = glm::inverse(skeleton.rootTransform) * glm::inverse(skeleton.bones[i].offsetMatrix);
+        std::vector<vec3> heads, tails;
+        PoseTails(skeleton, bind, heads, tails);
+        constexpr float none = std::numeric_limits<float>::max();
+        float named = none, anchored = none, any = none;
+        for (int i = 0; i < boneCount; i++)
+        {
+            any = std::min(any, tails[i].y);
+            if (skeleton.bones[i].parentIndex >= 0 && FootName(skeleton.bones[i].name))
+                named = std::min(named, tails[i].y);
+        }
+        for (const RigLock &lock : m_locks)
+            if (!lock.automatic && lock.target.empty())
+                anchored = std::min(anchored, lock.anchor.y);
+        return named < none ? named : anchored < none ? anchored
+                                  : any < none        ? any
+                                                      : 0.f;
+    }
+
+    // A bone that meets the floor: named foot / toe, or given an authored plant that stands on the floor (a hoof, a
+    // paw). A rig-space lock the user added on a hand in the air is a pin, not a foot.
+    bool AnimationPoseViewport::IsContactBone(const Skeleton &skeleton, int bone, float ground) const
+    {
+        if (bone < 0 || bone >= skeleton.GetBoneCount() || skeleton.bones[bone].parentIndex < 0)
+            return false;
+        if (FootName(skeleton.bones[bone].name))
+            return true;
+        const float tolerance = std::max(ModelHeight(), 0.1f) * 0.03f;
+        return std::any_of(m_locks.begin(), m_locks.end(), [&](const RigLock &lock)
+                           { return !lock.automatic && lock.target.empty() && lock.bone == skeleton.bones[bone].name &&
+                                    std::abs(lock.anchor.y - ground) <= tolerance; });
+    }
+
+    // m_lockBend runs parallel to m_locks (the bend each two-bone solve last chose, so a straight knee does not
+    // flip); a plant coming or going must not wipe the other legs' memory.
+    void AnimationPoseViewport::EraseLock(size_t index)
+    {
+        if (m_lockBend.size() == m_locks.size())
+            m_lockBend.erase(m_lockBend.begin() + static_cast<std::ptrdiff_t>(index));
+        m_locks.erase(m_locks.begin() + static_cast<std::ptrdiff_t>(index));
+    }
+
+    void AnimationPoseViewport::AppendLock(RigLock lock)
+    {
+        if (m_lockBend.size() == m_locks.size())
+            m_lockBend.push_back(vec3(0.f));
+        m_locks.push_back(std::move(lock));
+    }
+
+    void AnimationPoseViewport::RestoreSessionLocks(const std::vector<RigLock> &snapshot)
+    {
+        std::erase_if(m_locks, [](const RigLock &lock)
+                      { return lock.automatic; });
+        for (RigLock &lock : m_locks)
+        {
+            const auto was = std::find_if(snapshot.begin(), snapshot.end(), [&](const RigLock &s)
+                                          { return !s.automatic && s.bone == lock.bone && s.target == lock.target; });
+            if (was != snapshot.end())
+                lock.lifted = was->lifted;
+        }
+        for (const RigLock &lock : snapshot)
+            if (lock.automatic)
+                m_locks.push_back(lock);
+        m_lockBend.clear();
+    }
+
+    // A fixed-anchor lock standing on the floor: a planted foot, or a hand put down on it. Holds in the air and
+    // authored plants that yielded to the session are not supports.
+    bool AnimationPoseViewport::Planted(const RigLock &lock, float ground) const
+    {
+        return lock.enabled && !lock.lifted && lock.target.empty() &&
+               std::abs(lock.anchor.y - ground) <= std::max(ModelHeight(), 0.1f) * 0.03f;
+    }
+
+    // Auto contact (Cascadeur's automatic fulcrums): posing a leg lifts its foot off its plant and sets it down
+    // again when the foot meets the floor. Only an edit inside the foot's own limb - the foot and its single-child
+    // ancestors up to the hips - changes contact; a body or arm edit keeps every plant and the leg bends to keep
+    // it. The pre-solve pose decides: a foot the edit carried above the tolerance releases, a foot it brought down
+    // to the floor plants where it touched, snapped to floor height so the solve lands it exactly. Authored plants
+    // yield through `lifted` (session state) rather than being rewritten; a hold the user placed in the air is not
+    // a contact and stays.
+    void AnimationPoseViewport::UpdateContacts(const Skeleton &skeleton, std::span<const mat4> boneTransforms,
+                                               std::span<const int> edited)
+    {
+        const int boneCount = skeleton.GetBoneCount();
+        if (static_cast<int>(boneTransforms.size()) != boneCount ||
+            std::none_of(edited.begin(), edited.end(), [](int b)
+                         { return b >= 0; }))
+            return;
+        const float ground = Ground(), tolerance = std::max(ModelHeight(), 0.1f) * 0.03f;
+        std::vector<int> childCount(boneCount, 0);
+        for (int i = 0; i < boneCount; i++)
+            if (skeleton.bones[i].parentIndex >= 0)
+                childCount[skeleton.bones[i].parentIndex]++;
+        std::vector<vec3> heads, tails;
+        PoseTails(skeleton, boneTransforms, heads, tails);
+        for (int foot = 0; foot < boneCount; foot++)
+        {
+            if (!IsContactBone(skeleton, foot, ground))
+                continue;
+            bool inLimb = false;
+            for (int b = foot; b >= 0 && !inLimb;)
+            {
+                inLimb = std::find(edited.begin(), edited.end(), b) != edited.end();
+                const int parent = skeleton.bones[b].parentIndex;
+                b = parent >= 0 && childCount[parent] == 1 ? parent : -1;
+            }
+            if (!inLimb)
+                continue;
+            const std::string &name = skeleton.bones[foot].name;
+            auto session = std::find_if(m_locks.begin(), m_locks.end(), [&](const RigLock &l)
+                                        { return l.automatic && l.bone == name; });
+            auto authored = std::find_if(m_locks.begin(), m_locks.end(), [&](const RigLock &l)
+                                         { return !l.automatic && l.target.empty() && l.bone == name; });
+            const bool sessionPlanted = session != m_locks.end() && Planted(*session, ground);
+            const bool authoredPlanted = authored != m_locks.end() && Planted(*authored, ground);
+            if (tails[foot].y > ground + tolerance)
+            {
+                if (authoredPlanted)
+                    authored->lifted = true;
+                if (sessionPlanted)
+                    EraseLock(static_cast<size_t>(session - m_locks.begin()));
+                continue;
+            }
+            if (sessionPlanted || authoredPlanted)
+                continue; // standing where it stands
+            const vec3 anchor(tails[foot].x, ground, tails[foot].z);
+            if (session != m_locks.end())
+                session->anchor = anchor; // a hold in the air came down: it plants where it touched
+            else
+            {
+                RigLock lock;
+                lock.bone = name;
+                lock.reach = m_lockReach;
+                lock.anchor = anchor;
+                lock.automatic = true;
+                int root, mid, target;
+                if (!LockChain(lock, skeleton, root, mid, target))
+                    continue;
+                if (authored != m_locks.end())
+                    authored->lifted = true; // the session plant replaces the rest plant
+                AppendLock(std::move(lock));
+            }
         }
     }
 
@@ -1105,7 +1306,8 @@ namespace pe
             const RigLock &lock = m_locks[i];
             int root, mid, target;
             vec3 anchor;
-            if (!lock.enabled || !LockChain(lock, skeleton, root, mid, target) || mid == skipBone || root == skipBone ||
+            if (!lock.enabled || lock.lifted || !LockChain(lock, skeleton, root, mid, target) || mid == skipBone ||
+                root == skipBone ||
                 mid == skipMirrorBone || root == skipMirrorBone ||
                 !LockAnchorPosed(lock, skeleton, boneTransforms, anchor))
                 continue;
@@ -1143,16 +1345,23 @@ namespace pe
         }
     }
 
-    bool AnimationPoseViewport::SolveLocks(Scene &scene, int skipBone, bool pushUndo, float frame, int skipMirrorBone)
+    bool AnimationPoseViewport::SolveLocks(Scene &scene, int skipBone, bool pushUndo, float frame, int skipMirrorBone,
+                                           std::span<const int> editedBones)
     {
         AnimationTimeline *timeline = &m_timeline;
-        if (!timeline || !m_model || !m_model->HasSkeleton() || m_locks.empty())
+        if (!timeline || !m_model || !m_model->HasSkeleton())
             return false;
         const Skeleton &skeleton = m_model->GetSkeleton();
         AnimationTimeline::ViewportPose pose;
         const bool sampled = frame >= 0.f ? timeline->SampleViewportPoseAtFrame(m_model, frame, pose)
                                           : timeline->GetViewportPose(m_model, pose);
         if (!sampled || static_cast<int>(pose.boneTransforms.size()) != skeleton.GetBoneCount())
+            return false;
+        std::vector<int> edited(editedBones.begin(), editedBones.end());
+        edited.push_back(skipBone);
+        edited.push_back(skipMirrorBone);
+        UpdateContacts(skeleton, pose.boneTransforms, edited); // the edit may have lifted or set down a foot
+        if (m_locks.empty())
             return false;
         std::vector<LockSolve> solves;
         SolveLockRotations(skeleton, pose.boneTransforms, skipBone, skipMirrorBone, solves);
@@ -1242,6 +1451,7 @@ namespace pe
         const float kReachWidth = ImGui::GetFontSize() * 5.f;
         ImGui::Separator();
         ImGui::TextDisabled("Locks");
+        const float floorLevel = Ground();
         ui::ItemTooltip("Pin a bone's tail to a point on another bone (a hand on the shovel) or to a fixed rig-space point (a "
                         "planted foot). The bone and its parent bend to keep the pin after every pose edit; Reach caps how "
                         "far they may straighten. Lock keys are written even with Auto Key off.");
@@ -1249,20 +1459,24 @@ namespace pe
         {
             RigLock &lock = m_locks[i];
             ImGui::PushID(i);
-            bool enabled = lock.enabled;
+            bool enabled = lock.enabled && !lock.lifted; // a plant that yielded to posing shows unticked
             if (ImGui::Checkbox("##lock_enabled", &enabled))
             {
                 PushUndo(true);
+                m_dirty = m_dirty || lock.enabled != enabled;
                 lock.enabled = enabled;
-                m_dirty = true;
+                lock.lifted = false; // one tick re-arms it at its rest anchor
             }
-            ui::ItemTooltip("Solve this lock.");
+            ui::ItemTooltip("Solve this lock. A plant that yielded to posing shows unticked; tick it to re-arm it at its "
+                            "rest anchor.");
             int root, mid, target;
             std::string why;
             const bool valid = LockChain(lock, skeleton, root, mid, target, &why);
             ImGui::SameLine();
-            ImGui::TextDisabled("%s -> %s%s%s%s", lock.bone.c_str(),
-                                lock.target.empty() ? "rig space" : lock.target.c_str(), lock.automatic ? " (held)" : "",
+            ImGui::TextDisabled("%s -> %s%s%s%s", lock.bone.c_str(), lock.target.empty() ? "rig space" : lock.target.c_str(),
+                                lock.automatic ? (Planted(lock, floorLevel) ? " (planted)" : " (held)")
+                                : lock.lifted  ? " (lifted)"
+                                               : "",
                                 valid ? "" : " (", valid ? "" : (why + ")").c_str());
 
             ui::SameLineIfFits(ui::LabelledItemWidth(kReachWidth, "Reach") + ui::ButtonWidth("X"));
@@ -1322,14 +1536,17 @@ namespace pe
         ImGui::Checkbox("Hold Posed", &m_autoLock);
         ui::ItemTooltip("Every bone you pose by hand keeps the point you left it at: it gets a lock there, so posing "
                         "the rest of the body pulls the chain around instead of dragging it away. Re-dragging a held "
-                        "bone carries its lock along. These holds are session state and are not saved to the rig.");
+                        "bone carries its lock along. These holds are session state and are not saved to the rig. Feet "
+                        "plant themselves: a foot set down on the floor holds there, a foot lifted by posing its own leg "
+                        "comes free, and a foot you drag into the air is held like any other bone.");
         ui::SameLineIfFits(ui::CheckboxWidth("Balance"));
         ImGui::Checkbox("Balance", &m_balance);
         ui::ItemTooltip(m_balanceNote.empty()
                             ? "While you drag, the hips shift so the body's centre of mass keeps the ground point it "
                               "started on: pull a hand forward and the body settles back instead of toppling; planted "
                               "feet re-solve. The shift is keyed on the bone that carries the body's Location. Dragging "
-                              "a planted foot is a step and is not balanced; typed pose-bar values are not balanced."
+                              "a planted foot is a step and is not balanced; typed pose-bar values are not balanced. The "
+                              "trunk counter-leans first (up to 15 degrees per drag), then the hips take the rest."
                             : m_balanceNote.c_str());
         ui::SameLineIfFits(ui::ButtonWidth("Add Lock"));
         ImGui::BeginDisabled(!haveBone);
@@ -1422,14 +1639,14 @@ namespace pe
         return true;
     }
 
-    // Where the body stands: the fixed rig-space anchors of the enabled authored locks (planted feet); a Hold
-    // Posed lock is a hand left in the air, not a support.
+    // Where the body stands: the anchors of the locks planted on the floor; a hold in the air is not a support.
     bool AnimationPoseViewport::SupportCentre(vec3 &out) const
     {
         vec3 sum(0.f);
         int count = 0;
+        const float ground = Ground();
         for (const RigLock &lock : m_locks)
-            if (lock.enabled && lock.target.empty() && !lock.automatic)
+            if (Planted(lock, ground))
                 sum += lock.anchor, count++;
         if (count == 0)
             return false;
@@ -1441,8 +1658,9 @@ namespace pe
     {
         if (bone < 0 || bone >= skeleton.GetBoneCount())
             return false;
+        const float ground = Ground();
         for (const RigLock &lock : m_locks)
-            if (lock.enabled && lock.target.empty() && !lock.automatic && lock.bone == skeleton.bones[bone].name)
+            if (Planted(lock, ground) && lock.bone == skeleton.bones[bone].name)
                 return true;
         return false;
     }
@@ -1450,6 +1668,8 @@ namespace pe
     void AnimationPoseViewport::BeginBalance()
     {
         m_balanceHaveReference = false;
+        m_balanceLean = glm::vec2(0.f);
+        m_balanceLeanBone = m_model && m_model->HasSkeleton() ? LeanBone(m_model->GetSkeleton()) : -1;
         m_balanceNote.clear();
         AnimationTimeline::ViewportPose pose;
         if (m_balance && m_model && m_model->HasSkeleton() && m_timeline.GetViewportPose(m_model, pose))
@@ -1457,22 +1677,54 @@ namespace pe
     }
 
     // Balance: the drag keeps the centre of mass over the ground point it had when the drag began, so a hand
-    // pulled forward sends the hips back instead of toppling the body. The shift lands on the bone that carries the
-    // body's Location (the hips on a mocap rig, else the skeleton root) and the planted-foot locks re-solve after it.
-    // ponytail: pure horizontal shift; a torso counter-lean is the upgrade.
-    bool AnimationPoseViewport::ApplyBalance(Scene &scene)
+    // pulled forward tips the body back instead of toppling it. The trunk (LeanBone) counter-leans first, then the
+    // rest of the shift lands on the bone that carries the body's Location (the hips on a mocap rig, else the
+    // skeleton root); the planted-foot locks re-solve after it.
+    int AnimationPoseViewport::LeanBone(const Skeleton &skeleton) const
+    {
+        const int carrier = m_timeline.LocationBone(m_model);
+        const int boneCount = skeleton.GetBoneCount();
+        if (carrier < 0 || carrier >= boneCount)
+            return -1;
+        std::vector<float> masses;
+        std::vector<vec3> centres;
+        BodyMasses(skeleton, masses, centres);
+        const float ground = Ground();
+        std::vector<float> subtreeMass(boneCount, 0.f);
+        std::vector<char> subtreeFoot(boneCount, 0);
+        for (int i = 0; i < boneCount; i++)
+        {
+            const bool foot = IsContactBone(skeleton, i, ground);
+            for (int b = i, guard = 0; b >= 0 && guard < boneCount; b = skeleton.bones[b].parentIndex, guard++)
+            {
+                subtreeMass[b] += masses[i];
+                subtreeFoot[b] |= foot;
+            }
+        }
+        if (!subtreeFoot[carrier])
+            return carrier;
+        int best = -1;
+        for (int i = 0; i < boneCount; i++)
+            if (skeleton.bones[i].parentIndex == carrier && !subtreeFoot[i] && (best < 0 || subtreeMass[i] > subtreeMass[best]))
+                best = i;
+        return best;
+    }
+
+    bool AnimationPoseViewport::ApplyBalance(Scene &scene, int draggedBone, int mirrorBone)
     {
         AnimationTimeline *timeline = &m_timeline;
         if (!m_balanceHaveReference || !m_model || !m_model->HasSkeleton())
             return false;
         const Skeleton &skeleton = m_model->GetSkeleton();
+        const int boneCount = skeleton.GetBoneCount();
         AnimationTimeline::ViewportPose pose;
         vec3 com;
         if (!timeline->GetViewportPose(m_model, pose) || !CentreOfMass(skeleton, pose.boneTransforms, com))
             return false;
         vec3 shift = m_balanceReference - com;
         shift.y = 0.f;
-        if (glm::length(shift) < std::max(ModelHeight(), 0.1f) * 1e-4f)
+        const float height = std::max(ModelHeight(), 0.1f);
+        if (glm::length(shift) < height * 1e-4f)
             return false;
         const int bone = timeline->LocationBone(m_model);
         if (bone < 0)
@@ -1481,6 +1733,63 @@ namespace pe
         {
             m_balanceNote = "Balance needs Auto Key, or a Location key on " + skeleton.bones[bone].name + " at this frame.";
             return false;
+        }
+        // Counter-lean first: the trunk tilts away from the pull about its own base, up to 15 degrees per drag,
+        // and only the remainder slides the hips. Dragging the trunk itself is the user's lean and gets no counter.
+        // ponytail: one trunk bone, a fixed cap; a per-preset lean budget and a bend spread over the spine are the upgrade.
+        const int lean = m_balanceLeanBone;
+        if (lean >= 0 && lean < boneCount && lean != draggedBone && lean != mirrorBone &&
+            timeline->CanViewportRotate(m_model, lean, true, false))
+        {
+            std::vector<float> masses;
+            std::vector<vec3> centres;
+            BodyMasses(skeleton, masses, centres);
+            const mat4 invRoot = glm::inverse(skeleton.rootTransform);
+            vec3 upperSum(0.f);
+            float upperMass = 0.f, totalMass = 0.f;
+            for (int i = 0; i < boneCount; i++)
+            {
+                totalMass += masses[i];
+                int b = i, guard = 0;
+                while (b >= 0 && b != lean && guard++ < boneCount)
+                    b = skeleton.bones[b].parentIndex;
+                if (b != lean)
+                    continue;
+                const mat4 bind = invRoot * glm::inverse(skeleton.bones[i].offsetMatrix);
+                upperSum += masses[i] * vec3(pose.boneTransforms[i] * glm::inverse(bind) * vec4(centres[i], 1.f));
+                upperMass += masses[i];
+            }
+            const vec3 pivot = vec3(pose.boneTransforms[lean][3]);
+            const float lever = upperMass > 1e-8f ? upperSum.y / upperMass - pivot.y : 0.f;
+            if (lever > height * 0.05f && totalMass > 1e-8f)
+            {
+                const float error = glm::length(shift);
+                const vec3 direction = shift / error;
+                // a tilt of theta about cross(up, d) carries the upper centre lever*sin(theta) along d
+                const float theta = std::asin(std::clamp(error * totalMass / (upperMass * lever), -1.f, 1.f));
+                const vec3 axis = glm::normalize(glm::cross(vec3(0.f, 1.f, 0.f), direction));
+                glm::vec2 wanted = m_balanceLean + glm::vec2(axis.x, axis.z) * theta;
+                const float cap = glm::radians(15.f);
+                if (glm::length(wanted) > cap)
+                    wanted *= cap / glm::length(wanted);
+                const glm::vec2 delta = wanted - m_balanceLean;
+                if (const float angle = glm::length(delta); angle > 1e-5f)
+                {
+                    const quat turn = glm::angleAxis(angle, glm::normalize(vec3(delta.x, 0.f, delta.y)));
+                    const std::array<AnimationTimeline::GlobalBoneRotation, 1> rotation = {
+                        AnimationTimeline::GlobalBoneRotation{lean, turn * RotationOf(pose.boneTransforms[lean])}};
+                    if (timeline->KeyViewportGlobalRotations(scene, m_model, rotation, -1.f, false))
+                    {
+                        m_balanceLean = wanted;
+                        if (!timeline->GetViewportPose(m_model, pose) || !CentreOfMass(skeleton, pose.boneTransforms, com))
+                            return true;
+                        shift = m_balanceReference - com;
+                        shift.y = 0.f;
+                        if (glm::length(shift) < height * 1e-4f)
+                            return true;
+                    }
+                }
+            }
         }
         if (!timeline->KeyViewportPosition(scene, m_model, bone, vec3(pose.boneTransforms[bone][3]) + shift))
             return false;
@@ -1538,15 +1847,18 @@ namespace pe
     } // namespace
 
     // Interval bake of the balance prior (the grounded half of AutoPhysics): every frame whose feet touch the
-    // ground gets the skeleton root shifted so the centre of mass stands over the hull of the feet in contact,
+    // ground gets the skeleton root shifted so the zero-moment point stands over the hull of the feet in contact,
     // and each contact foot is re-planted to where the frame had it with the two-bone solve, so a walk gains
     // the hip sway over the stance foot nobody keys by hand. Contact comes from the clip itself (a foot within
     // 3% of the height above the lowest foot in the span), never from the rest-anchor locks, which would pin
-    // the swing foot. The interval ends keep zero shift, so a keyless root holds still outside the band;
-    // airborne interior frames take the shift interpolated from their grounded neighbours.
-    // ponytail: static balance (the centre of mass itself, no acceleration term - hand-keyed clips ripple, and
-    // (h/g)*a turns a 1 cm key wobble into a 20 cm shove); the zero-moment point on a smoothed trajectory is the
-    // upgrade. Flight physics stays with Ballistic / Body.
+    // the swing foot. The zero-moment point is com - (h/g)·a on a centre of mass smoothed over ~0.1 s (hand-keyed
+    // clips ripple, and (h/g)·a would turn a 1 cm key wobble into a decimetre of shove), with the offset capped at
+    // half the centre's height, so a body that stops short leans back onto its heels and one that pushes off
+    // leans ahead of its feet instead of being shoved over them on every frame. The acceleration is read from the
+    // source clip only - the shift's own acceleration is not fed back (preview control over the shift is the
+    // upgrade). Re-planting the legs moves mass, so each frame takes a second, local correction for what the
+    // re-plant moved. The interval ends keep zero shift, so a keyless root holds still outside the band; airborne
+    // interior frames take the shift interpolated from their grounded neighbours. Flight stays with Ballistic / Body.
     bool AnimationPoseViewport::BakeBalance(Scene &scene, float startFrame, float endFrame, std::string &status, std::string *report)
     {
         AnimationTimeline *timeline = &m_timeline;
@@ -1568,20 +1880,38 @@ namespace pe
             if (skeleton.bones[i].parentIndex < 0)
                 root = i;
         std::vector<int> feet;
+        const float floorLevel = Ground();
         for (int i = 0; i < boneCount; i++)
         {
             std::string name = skeleton.bones[i].name;
             std::transform(name.begin(), name.end(), name.begin(), [](unsigned char ch)
                            { return static_cast<char>(std::tolower(ch)); });
-            const bool locked = std::any_of(m_locks.begin(), m_locks.end(), [&](const RigLock &lock)
-                                            { return lock.target.empty() && !lock.automatic && lock.bone == skeleton.bones[i].name; });
-            if (skeleton.bones[i].parentIndex >= 0 && (locked || name.find("foot") != std::string::npos || name.find("toe") != std::string::npos))
+            const bool planted = std::any_of(m_locks.begin(), m_locks.end(), [&](const RigLock &lock)
+                                             { return Planted(lock, floorLevel) && lock.bone == skeleton.bones[i].name; });
+            if (skeleton.bones[i].parentIndex >= 0 && (planted || name.find("foot") != std::string::npos || name.find("toe") != std::string::npos))
                 feet.push_back(i);
         }
         if (root < 0 || feet.empty())
         {
             status = "Balance bake needs feet: a bone named foot / toe, or one with a planted lock.";
             return false;
+        }
+        // The Location carrier moves the body when every foot hangs from it (mocap hips under a keyless control
+        // root); on a rig whose legs hang from the skeleton root beside the carrier (the farmer's body), or when a
+        // posed leg happens to own the only Location keys, the root moves instead - shifting the carrier would
+        // shear the belt or walk one leg away.
+        if (const int carrier = timeline->LocationBone(m_model); carrier >= 0 && carrier < boneCount)
+        {
+            bool aboveAll = true;
+            for (int foot : feet)
+            {
+                int b = foot;
+                while (b >= 0 && b != carrier)
+                    b = skeleton.bones[b].parentIndex;
+                aboveAll = aboveAll && b == carrier;
+            }
+            if (aboveAll)
+                root = carrier;
         }
 
         std::vector<AnimationTimeline::ViewportPose> poses;
@@ -1609,29 +1939,72 @@ namespace pe
                 return false;
             }
             for (int foot : feet)
-                ground = std::min({ground, heads[f][foot].y, tails[f][foot].y});
+                ground = std::min(ground, tails[f][foot].y);
         }
         const float height = std::max(ModelHeight(), 0.1f);
         const float tolerance = height * 0.03f;
+        const float dt = timeline->FrameSeconds(m_model), gravity = std::max(timeline->Gravity(), 0.01f);
+        // contact by the tail, the plant point auto contact uses too; the centre's height is measured from the
+        // lowest contact tail of the frame, so a step down a stair does not inflate (h/g)·a
         std::vector<std::vector<int>> contact(count);
+        std::vector<std::vector<glm::vec2>> support(count);
+        std::vector<float> floorAt(count, std::numeric_limits<float>::max());
+        for (int f = 0; f < count; f++)
+        {
+            for (int foot : feet)
+                if (tails[f][foot].y <= ground + tolerance)
+                {
+                    contact[f].push_back(foot);
+                    support[f].emplace_back(heads[f][foot].x, heads[f][foot].z);
+                    support[f].emplace_back(tails[f][foot].x, tails[f][foot].z);
+                    floorAt[f] = std::min(floorAt[f], tails[f][foot].y);
+                }
+            if (contact[f].empty())
+                floorAt[f] = ground;
+            // a toe under a planted foot rides the foot's solve: two solves on one leg would overwrite each other
+            const std::vector<int> all = contact[f];
+            std::erase_if(contact[f], [&](int c)
+                          {
+                              for (int b = skeleton.bones[c].parentIndex; b >= 0; b = skeleton.bones[b].parentIndex)
+                                  if (std::find(all.begin(), all.end(), b) != all.end())
+                                      return true;
+                              return false; });
+        }
+        // (h/g)·a of the source clip: where the zero-moment point sits from the centre. N [1 2 1] passes smooth the
+        // centre with sigma ~ sqrt(N / 2) frames; aim for ~0.1 s.
+        std::vector<glm::vec2> offset(count, glm::vec2(0.f));
+        float maxZmp = 0.f;
+        if (dt > 0.f)
+        {
+            const int comPasses = std::clamp(static_cast<int>(std::lround(2.f * (0.1f / dt) * (0.1f / dt))), 1, 64);
+            std::vector<vec3> smooth = com;
+            for (int p = 0; p < comPasses; p++)
+            {
+                std::vector<vec3> next = smooth;
+                for (int f = 1; f < count - 1; f++)
+                    next[f] = smooth[f - 1] * 0.25f + smooth[f] * 0.5f + smooth[f + 1] * 0.25f;
+                smooth.swap(next);
+            }
+            for (int f = 1; f < count - 1; f++)
+            {
+                const vec3 a = (smooth[f + 1] - smooth[f] * 2.f + smooth[f - 1]) / (dt * dt);
+                const float h = std::max(com[f].y - floorAt[f], 0.f);
+                offset[f] = glm::vec2(a.x, a.z) * (h / gravity);
+                if (const float len = glm::length(offset[f]); len > 0.5f * h && len > 1e-8f)
+                    offset[f] *= 0.5f * h / len;
+                maxZmp = std::max(maxZmp, glm::length(offset[f]));
+            }
+        }
         std::vector<glm::vec2> shift(count, glm::vec2(0.f));
         std::vector<char> grounded(count, 0);
         int outsideBefore = 0;
         for (int f = 0; f < count; f++)
         {
-            std::vector<glm::vec2> support;
-            for (int foot : feet)
-                if (std::min(heads[f][foot].y, tails[f][foot].y) <= ground + tolerance)
-                {
-                    contact[f].push_back(foot);
-                    support.emplace_back(heads[f][foot].x, heads[f][foot].z);
-                    support.emplace_back(tails[f][foot].x, tails[f][foot].z);
-                }
             if (contact[f].empty())
                 continue;
             grounded[f] = 1;
-            const glm::vec2 stand(com[f].x, com[f].z);
-            shift[f] = HullClamp(support, stand) - stand;
+            const glm::vec2 stand(com[f].x - offset[f].x, com[f].z - offset[f].y); // the zero-moment point
+            shift[f] = HullClamp(support[f], stand) - stand;
             outsideBefore += glm::length(shift[f]) > height * 1e-4f;
         }
         shift[0] = shift[count - 1] = glm::vec2(0.f); // the interval ends keep what they show
@@ -1648,9 +2021,9 @@ namespace pe
             const float t = static_cast<float>(f - before) / static_cast<float>(after - before);
             shift[f] = glm::mix(shift[before], shift[after], t);
         }
-        // Static balance is discontinuous where a foot leaves the ground: the stance jumps from the pair to one
-        // foot in a frame. Weight transfer takes a few frames, so the shift trajectory is smoothed with the ends
-        // held. ponytail: three [1 2 1] passes; an anticipation model that shifts before the lift is the upgrade.
+        // Balance is discontinuous where a foot leaves the ground: the stance jumps from the pair to one foot in
+        // a frame. Weight transfer takes a few frames, so the shift trajectory is smoothed with the ends held.
+        // ponytail: three [1 2 1] passes; an anticipation model that shifts before the lift is the upgrade.
         for (int pass = 0; pass < 3; pass++)
         {
             std::vector<glm::vec2> smooth = shift;
@@ -1661,33 +2034,15 @@ namespace pe
 
         bool pushed = false;
         int frames = 0, airborne = 0, refused = 0, clamped = 0;
-        float maxShift = 0.f, maxDelta = 0.f;
+        float maxShift = 0.f, maxDelta = 0.f, residual = 0.f;
         std::vector<AnimationTimeline::GlobalBoneRotation> rotations;
-        for (int f = 1; f < count - 1; f++)
+        // the shift carried the contact feet along: bend each leg so its foot lands where the frame had it
+        auto replant = [&](int f, AnimationTimeline::ViewportPose &shifted, bool tally)
         {
-            maxDelta = std::max(maxDelta, glm::length(shift[f] - shift[f - 1]));
-            if (glm::length(shift[f]) < height * 1e-4f)
-                continue;
             const int frame = first + f;
-            if (!pushed)
-            {
-                timeline->PushViewportUndo(m_model); // one undo step for the whole bake
-                pushed = true;
-            }
-            const vec3 position = vec3(poses[f].boneTransforms[root][3]) + vec3(shift[f].x, 0.f, shift[f].y);
-            if (!timeline->KeyViewportPosition(scene, m_model, root, position, static_cast<float>(frame), false))
-            {
-                refused++;
-                continue;
-            }
-            frames++;
-            airborne += !contact[f].empty() ? 0 : 1;
-            maxShift = std::max(maxShift, glm::length(shift[f]));
-            // the shift carried the contact feet along: bend each leg so its foot lands where the frame had it
-            AnimationTimeline::ViewportPose shifted;
             if (contact[f].empty() || !timeline->SampleViewportPoseAtFrame(m_model, static_cast<float>(frame), shifted) ||
                 static_cast<int>(shifted.boneTransforms.size()) != boneCount)
-                continue;
+                return false;
             std::vector<vec3> newHeads, newTails;
             PoseTails(skeleton, shifted.boneTransforms, newHeads, newTails);
             rotations.clear();
@@ -1700,14 +2055,52 @@ namespace pe
                 const vec3 pole = midPos + bend * std::max(glm::distance(rootPos, tipPos) * 0.5f, 0.05f);
                 const AnimationPoseTools::TwoBoneIkResult result =
                     AnimationPoseTools::SolveTwoBoneIk({rootPos, midPos, tipPos, tails[f][foot], pole});
+                clamped += tally && (!result || result.targetClamped) ? 1 : 0;
                 if (!result)
                     continue;
-                clamped += result.targetClamped ? 1 : 0;
                 rotations.push_back({leg, result.rootGlobalDelta * RotationOf(shifted.boneTransforms[leg])});
                 rotations.push_back({foot, result.midGlobalDelta * result.rootGlobalDelta * RotationOf(shifted.boneTransforms[foot])});
             }
-            if (!rotations.empty())
-                timeline->KeyViewportGlobalRotations(scene, m_model, rotations, static_cast<float>(frame), false, false);
+            if (rotations.empty())
+                return false;
+            timeline->KeyViewportGlobalRotations(scene, m_model, rotations, static_cast<float>(frame), false, false);
+            return timeline->SampleViewportPoseAtFrame(m_model, static_cast<float>(frame), shifted) &&
+                   static_cast<int>(shifted.boneTransforms.size()) == boneCount;
+        };
+        for (int f = 1; f < count - 1; f++)
+        {
+            maxDelta = std::max(maxDelta, glm::length(shift[f] - shift[f - 1]));
+            if (glm::length(shift[f]) < height * 1e-4f)
+                continue;
+            const int frame = first + f;
+            if (!pushed)
+            {
+                timeline->PushViewportUndo(m_model); // one undo step for the whole bake
+                pushed = true;
+            }
+            const vec3 wanted = com[f] + vec3(shift[f].x, 0.f, shift[f].y);
+            vec3 position = vec3(poses[f].boneTransforms[root][3]) + vec3(shift[f].x, 0.f, shift[f].y);
+            if (!timeline->KeyViewportPosition(scene, m_model, root, position, static_cast<float>(frame), false))
+            {
+                refused++;
+                continue;
+            }
+            frames++;
+            airborne += !contact[f].empty() ? 0 : 1;
+            maxShift = std::max(maxShift, glm::length(shift[f]));
+            // the re-planted legs moved mass: shift the root once more by what they moved the centre, re-plant again
+            AnimationTimeline::ViewportPose shifted;
+            vec3 after;
+            if (!replant(f, shifted, true) || !CentreOfMass(skeleton, shifted.boneTransforms, after))
+                continue;
+            vec3 delta = after - wanted;
+            delta.y = 0.f;
+            residual = std::max(residual, glm::length(delta));
+            if (glm::length(delta) < height * 1e-4f)
+                continue;
+            position -= delta;
+            if (timeline->KeyViewportPosition(scene, m_model, root, position, static_cast<float>(frame), false))
+                replant(f, shifted, false);
         }
         // a root the bake just gave a Location curve would hold its last interior key past the band: pin both
         // ends to the position they showed, so the clip outside the interval stays where it was
@@ -1727,6 +2120,10 @@ namespace pe
                                      {"refused", refused},
                                      {"max_shift", maxShift},
                                      {"max_shift_delta", maxDelta},
+                                     {"zmp_max", maxZmp},
+                                     {"residual", residual},
+                                     {"passes", 2},
+                                     {"frame_seconds", dt},
                                      {"ground", ground},
                                      {"carrier", skeleton.bones[root].name}}
                           .dump();
@@ -1872,6 +2269,14 @@ namespace pe
         if (!timeline || !m_model || !m_model->HasSkeleton())
             return false;
         const Skeleton &skeleton = m_model->GetSkeleton();
+        vec3 floored;
+        if (targetTail)
+        {
+            // the floor is solid: no tail is pulled below it, so a foot dragged down stops on the ground and plants
+            floored = *targetTail;
+            floored.y = std::max(floored.y, Ground());
+            targetTail = &floored;
+        }
         int mirrorBone = -1;
         if (m_mirrorX)
         {
@@ -1965,7 +2370,7 @@ namespace pe
             // each shift carries the handle off its target and the re-solve moves the mass again; a torso lean
             // recovers only a quarter of the error per round on a top-heavy rig, so a one-shot grab gets several
             // (an interactive drag converges across frames anyway; ApplyBalance stops the loop once it is under 0.1 mm)
-            for (int round = 0; round < 8 && ApplyBalance(scene); round++)
+            for (int round = 0; round < 8 && ApplyBalance(scene, bone, mirrorBone); round++)
                 solveAndKey(false);
         if (limitedOut)
             *limitedOut = limited;
@@ -2005,7 +2410,8 @@ namespace pe
             if (m_grabBone < 0 && !m_poseDragging)
                 // Keys the frame the pose edit targeted (timeline.pose frame=N), not the playhead; an
                 // in-flight drag re-solves on release instead, never fighting the mouse mid-frame.
-                SolveLocks(scene, -1, false, timeline->PoseEditFrame());
+                for (const AnimationTimeline::PoseEdit &edit : timeline->PoseEdits())
+                    SolveLocks(scene, -1, false, edit.frame, -1, edit.bones);
         }
         AnimationTimeline::ViewportPose pose;
         if (!timeline->GetViewportPose(m_model, pose))
