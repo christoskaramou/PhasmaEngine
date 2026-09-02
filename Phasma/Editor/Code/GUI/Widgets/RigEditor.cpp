@@ -355,6 +355,17 @@ namespace pe
             shell.points = points;
             const vec3 ext = shell.aabbMax - shell.aabbMin;
             shell.volume = ext.x * ext.y * ext.z;
+            // divergence theorem over the part's triangles: exact for a closed part, |.| guards the winding
+            const std::vector<uint32_t> &indices = m_model->GetIndices();
+            float signedVolume = 0.f;
+            for (uint32_t k = mesh->indexOffset; k + 2 < mesh->indexOffset + mesh->indicesCount && k + 2 < indices.size(); k += 3)
+            {
+                const uint32_t a = indices[k], b = indices[k + 1], c = indices[k + 2];
+                if (a >= mesh->verticesCount || b >= mesh->verticesCount || c >= mesh->verticesCount)
+                    continue;
+                signedVolume += glm::dot(points[a], glm::cross(points[b], points[c]));
+            }
+            shell.meshVolume = std::abs(signedVolume) / 6.f;
             out.push_back(shell);
         }
     }

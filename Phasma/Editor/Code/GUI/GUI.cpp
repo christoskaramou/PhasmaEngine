@@ -1001,6 +1001,8 @@ namespace pe
         addAction("timeline.pin", "Animation Timeline: Pin / Unpin A Bone So Puppet Drag Stops There (args: bone, pinned bool; omit pinned to toggle)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.grab", "Animation Timeline: Puppet-Drag A Bone Tail To A Rig-Space Point Through The Limited Chain (args: bone, target[3])", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.lock", "Animation Timeline: Use A Rig Lock (args: op list|add|remove|set|solve|bake, bone, target, anchor[3], reach 0.3-1, enabled, index)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.balance", "Animation Timeline: Balance On Drag - The Hips Shift So The Centre Of Mass Keeps Its Ground Point (args: enabled bool; returns enabled, com[3], support[3], bone)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.balance_bake", "Animation Timeline: Bake Balance Over The Interval - Root Shifted Over The Feet In Contact On Every Grounded Frame, Feet Re-Planted (args: start_frame, end_frame; defaults to the marked interval)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.interval", "Animation Timeline: Set Or Clear The Edit Interval (args: start, end frames; end below start + 1 clears)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.interval_slide", "Animation Timeline: Slide The Interval And Every Key Inside It (args: delta_frames)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.interval_scale", "Animation Timeline: Scale The Interval And Every Key Inside It (args: factor, pivot_frame)", "Timeline", "command", hasTimeline, false, false);

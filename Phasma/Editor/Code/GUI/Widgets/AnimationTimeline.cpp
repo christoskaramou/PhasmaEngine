@@ -901,6 +901,71 @@ namespace pe
         m_viewportRotateBone = -1;
     }
 
+    bool AnimationTimeline::KeyViewportPosition(Scene &scene, ModelAsset *model, int bone, const vec3 &rigPosition, float frame,
+                                                bool userPose)
+    {
+        if (!model || model != m_editModel || m_selectedClip < 0 ||
+            m_selectedClip >= static_cast<int>(model->GetAnimations().size()) || bone < 0 ||
+            bone >= model->GetSkeleton().GetBoneCount())
+            return false;
+        const Skeleton &skeleton = model->GetSkeleton();
+        AnimationClip &clip = model->GetMutableAnimations()[m_selectedClip];
+        if (m_frameTicks <= 0.f)
+            m_frameTicks = DetectFrameTicks(clip);
+        NodeId *node = m_animatedNodes.empty() ? m_targetNode : m_animatedNodes[0];
+        AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
+        const AnimationNodeState *state = anim && node ? anim->GetAnimationState(node) : nullptr;
+        const float time = ToTicks(std::round(frame >= 0.f ? frame : state ? ToFrame(state->time)
+                                                                           : 0.f));
+        int channel = ChannelForBone(clip, bone);
+        if (channel < 0 ? !m_autoKey : !m_autoKey && FindKeyAtTime(clip.channels[channel].positionKeys, time) < 0)
+            return false; // the Move gizmo's rule: a Location key needs Auto Key or a key at this frame
+        std::vector<mat4> joints;
+        AnimationEvaluator::EvaluatePose(clip, skeleton, time, joints);
+        if (joints.size() != skeleton.bones.size())
+            return false;
+        const BoneInfo &info = skeleton.bones[bone];
+        mat4 desiredGlobal = joints[bone] * glm::inverse(info.offsetMatrix);
+        desiredGlobal[3] = skeleton.rootTransform * vec4(rigPosition, 1.f);
+        const mat4 parentGlobal = info.parentIndex >= 0
+                                      ? joints[info.parentIndex] * glm::inverse(skeleton.bones[info.parentIndex].offsetMatrix)
+                                      : mat4(1.f);
+        const mat4 localBone = glm::inverse(info.intermediatePrefix) * glm::inverse(parentGlobal) * desiredGlobal;
+        if (channel < 0)
+            channel = EnsureChannel(clip, bone);
+        SetPositionKey(clip, channel, time, vec3(localBone[3]));
+        if (userPose)
+            RetweenAroundFrame(clip, std::vector<int>{bone}, ToFrame(time));
+        m_dirty = true;
+        if (anim)
+            ReevaluatePose(scene, anim);
+        return true;
+    }
+
+    int AnimationTimeline::LocationBone(ModelAsset *model) const
+    {
+        if (!model || model != m_editModel || m_selectedClip < 0 ||
+            m_selectedClip >= static_cast<int>(model->GetAnimations().size()))
+            return -1;
+        const Skeleton &skeleton = model->GetSkeleton();
+        auto depth = [&](int bone)
+        {
+            int result = 0;
+            for (int guard = 0; guard < skeleton.GetBoneCount() && bone >= 0; ++guard, ++result)
+                bone = skeleton.bones[bone].parentIndex;
+            return result;
+        };
+        int best = -1, bestDepth = std::numeric_limits<int>::max();
+        for (const AnimationChannel &channel : model->GetAnimations()[m_selectedClip].channels)
+            if (!channel.positionKeys.empty() && channel.boneIndex >= 0 && channel.boneIndex < skeleton.GetBoneCount() &&
+                depth(channel.boneIndex) < bestDepth)
+                bestDepth = depth(channel.boneIndex), best = channel.boneIndex;
+        for (int i = 0; best < 0 && i < skeleton.GetBoneCount(); i++)
+            if (skeleton.bones[i].parentIndex < 0)
+                best = i;
+        return best;
+    }
+
     bool AnimationTimeline::StepViewportUndo(Scene &scene, bool redo)
     {
         // rig.bake can free m_editModel before the next Update re-resolves it: only trust the pointer
@@ -988,7 +1053,7 @@ namespace pe
             }
 
             if (action == "timeline.grab" || action == "timeline.pin" || action == "timeline.lock" ||
-                action == "timeline.reference_load" || action == "timeline.reference_clear")
+                action == "timeline.balance" || action == "timeline.reference_load" || action == "timeline.reference_clear")
                 return PoseViewport(*m_rigEditor)->HandleAction(scene, action, argsJson);
             if (model->GetAnimations().empty())
                 return fail("the selected rig has no animation clip");
@@ -1390,6 +1455,26 @@ namespace pe
                 const size_t written = BakeBallistic(skeleton, clip, bone, gravity, body);
                 commit(before, written);
                 return ok({{"bone", skeleton.bones[bone].name}, {"keys_written", written}, {"gravity", gravity}, {"body", body}});
+            }
+            if (action == "timeline.balance_bake")
+            {
+                float start = m_intervalStart, end = m_intervalEnd;
+                if (args.contains("start_frame") || args.contains("end_frame"))
+                {
+                    start = args.value("start_frame", 0.f);
+                    end = args.value("end_frame", ToFrame(clip.duration));
+                    if (!std::isfinite(start) || !std::isfinite(end) || start < 0.f || end > ToFrame(clip.duration) + kFrameEps ||
+                        end < start + 1.f)
+                        return fail("start_frame / end_frame must lie inside the clip, at least one frame apart");
+                }
+                else if (!HasInterval())
+                    return fail("mark an interval first (timeline.interval), or pass start_frame / end_frame");
+                std::string status, report;
+                if (!PoseViewport(*m_rigEditor)->BakeBalance(scene, start, end, status, &report))
+                    return fail(status);
+                nlohmann::json result = nlohmann::json::parse(report);
+                result["status"] = status;
+                return ok(result);
             }
             if (action == "timeline.motion.spring_bake")
             {
@@ -4362,6 +4447,20 @@ namespace pe
                         "loose arm). Select the chain root to tip, or one bone to take its whole tail; the ends keep "
                         "their keys. Bake it last - posing a chain bone inside the interval rebuilds its curve from the "
                         "ends. timeline.motion.spring_bake has the stiffness, damping and drag knobs.",
+                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::SameLine();
+        if (ImGui::Button("Balance"))
+        {
+            std::string status;
+            PoseViewport(*m_rigEditor)->BakeBalance(scene, m_intervalStart, m_intervalEnd, status);
+            m_tweenStatus = status;
+        }
+        ui::ItemTooltip("Stand the body over its feet on every grounded frame of the interval: the root shifts so the "
+                        "centre of mass sits over the feet touching the ground, and each planted foot is bent back to "
+                        "where the frame had it - the hip sway over the stance foot a walk needs. Feet are the bones "
+                        "named foot / toe or holding a planted lock; contact is read from the clip. The interval ends "
+                        "keep their keys, airborne frames follow their grounded neighbours (throw those with Ballistic "
+                        "or Body). Bake it after the poses.",
                         ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         ImGui::EndDisabled();
         if (!m_tweenStatus.empty())

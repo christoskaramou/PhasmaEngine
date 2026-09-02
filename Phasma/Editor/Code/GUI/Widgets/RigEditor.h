@@ -79,7 +79,8 @@ namespace pe
             float halfLength = 0.f;
             float radius = 0.f;
             vec3 aabbMin = vec3(0.f), aabbMax = vec3(0.f);
-            float volume = 0.f;
+            float volume = 0.f;       // bounds volume (auto preset ranks shells by it)
+            float meshVolume = 0.f;   // enclosed volume of the part's triangles in rig space (its mass for balance)
             std::vector<vec3> points; // rig-space vertices (auto preset re-measures blobs)
         };
 
