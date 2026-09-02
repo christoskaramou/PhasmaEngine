@@ -211,8 +211,12 @@ namespace pe::AnimationClipTools
     // of mass, not the root, follows the arc between where it sits at the two ends: tucked limbs drop the root, a
     // heavy prop swung forward pulls the body after it. Only the mass under the moved bone counts - a control root
     // above the hips or a separate prop root is not part of the thrown body. Root rule, channel creation and end
-    // handling as BallisticInterval. Airborne spans only - on the ground the feet move with the root.
-    // ponytail: linear momentum only; the body turning against a swing (angular momentum) is the upgrade.
+    // handling as BallisticInterval. Airborne spans only - on the ground the feet move with the root. Angular
+    // momentum too: the root turns against the limbs so the thrown body's momentum about its centre stays what
+    // it was, with the net turn removed as a ramp so both ends keep their rotation (a uniform swing shows
+    // nothing; a swing that starts and stops turns the body where it happens). Rotation keys are written on the
+    // root only when the counter-turn is non-zero; a uniform swing leaves the rotation curve alone.
+    // ponytail: point masses and a scalar inertia about the momentum axis; the full tensor is the upgrade.
     size_t BallisticBodyInterval(AnimationClip &clip,
                                  const Skeleton &skeleton,
                                  int rootBone,

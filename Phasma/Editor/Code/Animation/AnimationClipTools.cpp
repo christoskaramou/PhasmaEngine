@@ -1021,74 +1021,172 @@ namespace pe::AnimationClipTools
         if (!std::isfinite(totalMass) || totalMass <= kEpsilon)
             return 0;
 
-        AnimationChannel *channel = nullptr;
-        for (AnimationChannel &candidate : clip.channels)
-            if (candidate.boneIndex == rootBone)
-                channel = &candidate;
-        const std::vector<PositionKey> none;
-        const std::vector<PositionKey> &source = channel ? channel->positionKeys : none;
-        if (!FiniteKeys(source))
-            return 0;
-        auto rootAt = [&](float time)
-        { return source.empty() ? restPosition : AnimationEvaluator::InterpolatePosition(source, time); };
-        const vec3 startRoot = rootAt(startTime), endRoot = rootAt(endTime);
-        const AnimationInterpolation endBlend = InterpolationAt(source, endTime);
         const float tolerance = std::max(kEpsilon, stepTicks * 0.001f);
         const float flight = (endTime - startTime) / clip.ticksPerSecond;
 
         // Mass centres ride the posed bones in rig space (the skeleton with its root transform removed, where the
         // rest centres are given). The root's Location key reaches rig space through its parent and its prefix,
-        // so that linear map is what turns a wanted centre-of-mass shift into a key delta.
+        // so that linear map is what turns a wanted centre-of-mass shift into a key delta, and its rotation is
+        // what turns a wanted turn of the body into a rotation key.
         const mat4 invRoot = glm::inverse(skeleton.rootTransform);
+        struct Frame
+        {
+            float time = 0.f;
+            vec3 centre = vec3(0.f), rootHead = vec3(0.f);
+            quat rootGlobal = quat(1.f, 0.f, 0.f, 0.f), keyRotation = quat(1.f, 0.f, 0.f, 0.f);
+            mat3 keyToRig = mat3(1.f);
+            std::vector<vec3> centres; // per bone, thrown bones only meaningful
+        };
         std::vector<mat4> globals;
-        auto centreOfMass = [&](float time, vec3 &centre, mat3 &keyToRig)
+        auto sample = [&](float time, Frame &frame)
         {
             SampleGlobalTransforms(clip, skeleton, time, globals);
             if (static_cast<int>(globals.size()) != boneCount)
                 return false;
+            frame.time = time;
+            frame.centres.assign(boneCount, vec3(0.f));
             vec3 sum(0.f);
             for (int i = 0; i < boneCount; ++i)
             {
                 if (!thrown[i] || boneMasses[i] <= 0.f)
                     continue;
                 const mat4 restToPosed = invRoot * globals[i] * skeleton.bones[i].offsetMatrix * skeleton.rootTransform;
-                sum += boneMasses[i] * vec3(restToPosed * vec4(restCentres[i], 1.f));
+                frame.centres[i] = vec3(restToPosed * vec4(restCentres[i], 1.f));
+                sum += boneMasses[i] * frame.centres[i];
             }
-            centre = sum / totalMass;
+            frame.centre = sum / totalMass;
             const int parent = skeleton.bones[rootBone].parentIndex;
-            keyToRig = mat3(invRoot * (parent >= 0 ? globals[parent] : mat4(1.f)) * skeleton.bones[rootBone].intermediatePrefix);
-            const float det = glm::determinant(keyToRig);
-            return Finite(centre) && std::isfinite(det) && std::abs(det) > kEpsilon;
+            const mat4 keyToRig4 = invRoot * (parent >= 0 ? globals[parent] : mat4(1.f)) * skeleton.bones[rootBone].intermediatePrefix;
+            frame.keyToRig = mat3(keyToRig4);
+            frame.keyRotation = MatrixRotation(keyToRig4);
+            frame.rootHead = vec3((invRoot * globals[rootBone])[3]);
+            frame.rootGlobal = MatrixRotation(invRoot * globals[rootBone]);
+            const float det = glm::determinant(frame.keyToRig);
+            return Finite(frame.centre) && Finite(frame.rootHead) && std::isfinite(det) && std::abs(det) > kEpsilon;
         };
-        vec3 startCentre, endCentre;
-        mat3 unused;
-        if (!centreOfMass(startTime, startCentre, unused) || !centreOfMass(endTime, endCentre, unused))
+        // Every sample is taken from the untouched source before anything is written: the two ends and the frame
+        // grid between them (the ends feed the velocity differences and stay pinned).
+        std::vector<Frame> frames(1);
+        if (!sample(startTime, frames.front()))
             return 0;
-        // ponytail: rig space is Y-up like the rest of the editor; a Z-up rig needs the axis exposed.
-        const float launch = (endCentre.y - startCentre.y) / flight + 0.5f * gravity * flight;
-
-        // Every sample is taken from the untouched source before anything is written.
-        std::vector<std::pair<float, vec3>> samples;
         const float first = std::ceil((startTime + tolerance) / stepTicks) * stepTicks;
         for (size_t step = 0; step < kMaxTweenSamples; ++step)
         {
             const float time = first + stepTicks * static_cast<float>(step);
             if (time >= endTime - tolerance)
                 break;
-            const float elapsed = (time - startTime) / clip.ticksPerSecond;
-            vec3 target = glm::mix(startCentre, endCentre, (time - startTime) / (endTime - startTime));
+            Frame frame;
+            if (!sample(time, frame))
+                return 0;
+            frames.push_back(std::move(frame));
+        }
+        Frame last;
+        if (frames.size() < 2 || !sample(endTime, last))
+            return 0;
+        frames.push_back(std::move(last));
+        const int n = static_cast<int>(frames.size());
+        const vec3 startCentre = frames.front().centre, endCentre = frames.back().centre;
+        // ponytail: rig space is Y-up like the rest of the editor; a Z-up rig needs the axis exposed.
+        const float launch = (endCentre.y - startCentre.y) / flight + 0.5f * gravity * flight;
+
+        // Angular momentum: in the air nothing can turn the body but its own limbs, so the angular momentum of
+        // the thrown masses about their centre stays what it was. Each interior frame measures the momentum the
+        // source poses carry (point masses, central differences on the grid) and the root turns against it at
+        // -L / I, I being the body's inertia about that axis; the net turn over the flight is then removed as a
+        // linear ramp so both ends keep their authored rotation - only a swing that is not uniform in time shows,
+        // and it shows where the swing happens. ponytail: point masses and a scalar inertia; rod inertias and the
+        // full tensor are the upgrade.
+        std::vector<vec3> turn(n, vec3(0.f));
+        vec3 previousOmega(0.f);
+        for (int k = 1; k < n; ++k)
+        {
+            const int mid = std::min(k, n - 2);
+            const Frame &a = frames[mid - 1], &b = frames[mid], &c = frames[mid + 1];
+            const float span = (c.time - a.time) / clip.ticksPerSecond;
+            vec3 momentum(0.f);
+            if (span > kEpsilon)
+            {
+                const vec3 centreVelocity = (c.centre - a.centre) / span;
+                for (int i = 0; i < boneCount; ++i)
+                    if (thrown[i] && boneMasses[i] > 0.f)
+                        momentum += boneMasses[i] * glm::cross(b.centres[i] - b.centre,
+                                                               (c.centres[i] - a.centres[i]) / span - centreVelocity);
+            }
+            vec3 omega(0.f);
+            if (const float magnitude = glm::length(momentum); magnitude > kEpsilon)
+            {
+                const vec3 axis = momentum / magnitude;
+                float inertia = 0.f;
+                for (int i = 0; i < boneCount; ++i)
+                    if (thrown[i] && boneMasses[i] > 0.f)
+                    {
+                        const vec3 r = b.centres[i] - b.centre;
+                        const vec3 perpendicular = r - axis * glm::dot(r, axis);
+                        inertia += boneMasses[i] * glm::dot(perpendicular, perpendicular);
+                    }
+                if (inertia > kEpsilon)
+                    omega = -momentum / inertia;
+            }
+            // trapezoid rule: the momentum was measured at the frames, the turn accrues between them
+            turn[k] = turn[k - 1] + (k == 1 ? omega : (previousOmega + omega) * 0.5f) *
+                                        ((frames[k].time - frames[k - 1].time) / clip.ticksPerSecond);
+            previousOmega = omega;
+        }
+        const vec3 net = turn[n - 1];
+        for (int k = 1; k < n - 1; ++k)
+            turn[k] -= net * ((frames[k].time - startTime) / (endTime - startTime));
+        if (!Finite(net))
+            return 0;
+
+        AnimationChannel *channel = nullptr;
+        for (AnimationChannel &candidate : clip.channels)
+            if (candidate.boneIndex == rootBone)
+                channel = &candidate;
+        const std::vector<PositionKey> none;
+        const std::vector<RotationKey> noneRotation;
+        const std::vector<PositionKey> &source = channel ? channel->positionKeys : none;
+        const std::vector<RotationKey> &sourceRotation = channel ? channel->rotationKeys : noneRotation;
+        if (!FiniteKeys(source) || !FiniteKeys(sourceRotation))
+            return 0;
+        auto rootAt = [&](float time)
+        { return source.empty() ? restPosition : AnimationEvaluator::InterpolatePosition(source, time); };
+        vec3 bindPosition, bindScale;
+        quat bindRotation;
+        AnimationEvaluator::BindPose(skeleton.bones[rootBone], bindPosition, bindRotation, bindScale);
+        auto rotationAt = [&](float time)
+        { return sourceRotation.empty() ? bindRotation : AnimationEvaluator::InterpolateRotation(sourceRotation, time); };
+        const vec3 startRoot = rootAt(startTime), endRoot = rootAt(endTime);
+        const quat startRotation = rotationAt(startTime), endRotation = rotationAt(endTime);
+        const AnimationInterpolation endBlend = InterpolationAt(source, endTime);
+        const AnimationInterpolation endRotationBlend = InterpolationAt(sourceRotation, endTime);
+
+        std::vector<std::pair<float, vec3>> samples;
+        std::vector<std::pair<float, quat>> turns;
+        quat previous = startRotation;
+        bool turned = false;
+        for (int k = 1; k < n - 1; ++k)
+        {
+            const Frame &frame = frames[k];
+            const float elapsed = (frame.time - startTime) / clip.ticksPerSecond;
+            vec3 target = glm::mix(startCentre, endCentre, (frame.time - startTime) / (endTime - startTime));
             target.y = startCentre.y + launch * elapsed - 0.5f * gravity * elapsed * elapsed;
-            vec3 centre;
-            mat3 keyToRig;
-            if (!centreOfMass(time, centre, keyToRig))
+            const float angle = glm::length(turn[k]);
+            const quat rotation = angle > kEpsilon ? glm::angleAxis(angle, turn[k] / angle) : quat(1.f, 0.f, 0.f, 0.f);
+            // the turn is about the centre of mass: turning the root about its own head needs the head carried round
+            const vec3 arm = frame.rootHead - frame.centre;
+            const vec3 value = rootAt(frame.time) + glm::inverse(frame.keyToRig) * ((target - frame.centre) + (rotation * arm - arm));
+            const quat key = SameHemisphere(previous, SafeNormalized(glm::conjugate(frame.keyRotation) * rotation * frame.rootGlobal));
+            if (!Finite(value) || !Finite(key))
                 return 0;
-            const vec3 value = rootAt(time) + glm::inverse(keyToRig) * (target - centre);
-            if (!Finite(value))
-                return 0;
-            samples.push_back({time, value});
+            samples.push_back({frame.time, value});
+            turned = turned || angle > kEpsilon;
+            turns.push_back({frame.time, key});
+            previous = key;
         }
         if (samples.empty())
             return 0;
+        if (!turned)
+            turns.clear(); // nothing turned: the rotation curve is not touched
 
         if (!channel)
         {
@@ -1104,6 +1202,24 @@ namespace pe::AnimationClipTools
                       { return key.time > startTime + tolerance && key.time < endTime - tolerance; });
         for (const auto &[time, value] : samples)
             writes += UpsertKey(keys, time, value, AnimationInterpolation::Linear);
+        if (!turns.empty())
+        {
+            std::vector<RotationKey> &rotations = channel->rotationKeys;
+            writes += UpsertKey(rotations, startTime, startRotation, AnimationInterpolation::Linear);
+            if (!HasKeyAt(rotations, endTime, tolerance))
+                writes += UpsertKey(rotations, endTime, SameHemisphere(previous, endRotation), endRotationBlend);
+            std::erase_if(rotations, [&](const RotationKey &key)
+                          { return key.time > startTime + tolerance && key.time < endTime - tolerance; });
+            for (const auto &[time, value] : turns)
+                writes += UpsertKey(rotations, time, value, AnimationInterpolation::Linear);
+            // the sign stays continuous into and out of the interval: from the start key to the end of the curve
+            const size_t from = static_cast<size_t>(
+                std::lower_bound(rotations.begin(), rotations.end(), startTime - tolerance, [](const RotationKey &key, float t)
+                                 { return key.time < t; }) -
+                rotations.begin());
+            for (size_t key = std::max<size_t>(from, 1); key < rotations.size(); ++key)
+                rotations[key].value = SameHemisphere(rotations[key - 1].value, rotations[key].value);
+        }
         return writes;
     }
 
