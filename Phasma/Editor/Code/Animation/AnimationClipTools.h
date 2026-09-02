@@ -245,6 +245,18 @@ namespace pe::AnimationClipTools
                               bool wrap,
                               ChannelMask channels = ChannelMask::All);
 
+    // Turns one stride into a cycle: the poses inside [startTime, endTime] are pasted, mirrored across X with .L/.R
+    // swapped, onto the span that follows (the clip grows to endTime + (endTime - startTime)); the carrier's
+    // Location keys in the new half are offset so its travel continues where the first half left off; the loop
+    // closes on the interval's start pose (rotation and scale) at the new end. Returns keys written, 0 when refused.
+    // ponytail: a treadmill wants timeline.motion.stabilize_world afterwards; travel along X reverses in the mirror.
+    size_t CycleInterval(AnimationClip &clip,
+                         const Skeleton &skeleton,
+                         int carrierBone,
+                         float startTime,
+                         float endTime,
+                         float stepTicks);
+
     // Samples sourceTime before writing, reflects global rig-space transforms across X, then solves target local TRS.
     // In-place pastes are safe. Conventional .L/.R channels swap; center channels optionally mirror onto themselves.
     size_t PasteMirroredPose(AnimationClip &clip,

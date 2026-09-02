@@ -1521,6 +1521,101 @@ namespace pe::AnimationClipTools
         return writes;
     }
 
+    size_t CycleInterval(AnimationClip &clip,
+                         const Skeleton &skeleton,
+                         int carrierBone,
+                         float startTime,
+                         float endTime,
+                         float stepTicks)
+    {
+        if (!std::isfinite(startTime) || !std::isfinite(endTime) || !std::isfinite(stepTicks) || stepTicks <= kEpsilon ||
+            startTime < 0.f || endTime - startTime <= stepTicks + kEpsilon ||
+            static_cast<double>(endTime - startTime) / stepTicks > static_cast<double>(kMaxTweenSamples) ||
+            clip.ticksPerSecond <= kEpsilon)
+            return 0;
+        for (const AnimationChannel &channel : clip.channels)
+            if (!FiniteKeys(channel.positionKeys) || !FiniteKeys(channel.rotationKeys) || !FiniteKeys(channel.scaleKeys))
+                return 0;
+        const float tolerance = std::max(kEpsilon, stepTicks * 0.001f);
+        const float span = endTime - startTime;
+        const float newEnd = endTime + span;
+        const AnimationClip source = clip;
+        // the paste clamps its target to the duration, so the clip grows first; the seam is read from the source
+        // before the mirrored copy lands on it
+        clip.duration = std::max(clip.duration, newEnd);
+        const AnimationChannel *carrier = carrierBone >= 0 ? FindChannel(source, carrierBone) : nullptr;
+        const bool travels = carrier && !carrier->positionKeys.empty();
+        const vec3 seam = travels ? AnimationEvaluator::InterpolatePosition(carrier->positionKeys, endTime) : vec3(0.f);
+        // the seam keeps the stride's end pose (a symmetric stride ends on the mirrored start anyway; an
+        // asymmetric one must not have its last segment rewritten), so the mirrored half starts one frame after it
+        std::vector<float> offsets;
+        for (size_t step = 1; step < kMaxTweenSamples; ++step)
+        {
+            const float t = static_cast<float>(step) * stepTicks;
+            if (t >= span - tolerance)
+                break;
+            offsets.push_back(t);
+        }
+        offsets.push_back(span);
+        // pasted from the end down: every source time is at or before the seam and every target after it, so no
+        // pasted key is ever read back as a source
+        size_t writes = 0;
+        for (size_t i = offsets.size(); i-- > 0;)
+            writes += PasteMirroredPose(clip, skeleton, startTime + offsets[i], endTime + offsets[i], {}, true, ChannelMask::All);
+        if (writes == 0)
+        {
+            clip = source; // the duration grew before the pastes: nothing written, nothing kept
+            return 0;
+        }
+        // the loop closes on the pose the stride started from
+        for (const AnimationChannel &from : source.channels)
+        {
+            AnimationChannel *to = nullptr;
+            for (AnimationChannel &candidate : clip.channels)
+                if (candidate.boneIndex == from.boneIndex)
+                    to = &candidate;
+            if (!to)
+                continue;
+            if (!from.rotationKeys.empty())
+            {
+                quat value = AnimationEvaluator::InterpolateRotation(from.rotationKeys, startTime);
+                if (!to->rotationKeys.empty())
+                {
+                    // the neighbour is the key at or before the new end - the clip may run on past it
+                    const auto *previous = &to->rotationKeys.front();
+                    for (const auto &key : to->rotationKeys)
+                        if (key.time <= newEnd + tolerance)
+                            previous = &key;
+                    value = SameHemisphere(previous->value, value);
+                }
+                writes += UpsertKey(to->rotationKeys, newEnd, value, InterpolationAt(from.rotationKeys, startTime));
+            }
+            if (!from.scaleKeys.empty())
+                writes += UpsertKey(to->scaleKeys, newEnd, AnimationEvaluator::InterpolateScale(from.scaleKeys, startTime),
+                                    InterpolationAt(from.scaleKeys, startTime));
+        }
+        // the body keeps travelling: the mirrored half continues from where the stride ended, so every pasted
+        // carrier key is offset by the seam minus the mirrored start (read from a scratch paste, the seam itself
+        // is never rewritten)
+        if (travels)
+        {
+            AnimationClip scratch = source;
+            scratch.duration = clip.duration;
+            const int carrierIndices[] = {carrierBone};
+            PasteMirroredPose(scratch, skeleton, startTime, endTime, carrierIndices, true, ChannelMask::Position);
+            const AnimationChannel *mirrored = FindChannel(scratch, carrierBone);
+            const vec3 offset = mirrored && !mirrored->positionKeys.empty()
+                                    ? seam - AnimationEvaluator::InterpolatePosition(mirrored->positionKeys, endTime)
+                                    : vec3(0.f);
+            for (AnimationChannel &channel : clip.channels)
+                if (channel.boneIndex == carrierBone)
+                    for (PositionKey &key : channel.positionKeys)
+                        if (key.time > endTime + tolerance && key.time <= newEnd + tolerance)
+                            key.value += offset;
+        }
+        return writes;
+    }
+
     SpringBakeResult BakeSecondarySpring(AnimationClip &clip,
                                          const Skeleton &skeleton,
                                          std::span<const int> orderedBoneIndices,

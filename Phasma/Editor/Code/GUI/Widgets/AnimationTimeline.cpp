@@ -955,10 +955,33 @@ namespace pe
                 bone = skeleton.bones[bone].parentIndex;
             return result;
         };
+        // a bone above some feet but not all - a posed leg that happens to own Location keys - carries a limb, not
+        // the body
+        std::vector<int> feet;
+        for (int i = 0; i < skeleton.GetBoneCount(); i++)
+        {
+            std::string name = skeleton.bones[i].name;
+            std::transform(name.begin(), name.end(), name.begin(), [](unsigned char ch)
+                           { return static_cast<char>(std::tolower(ch)); });
+            if (skeleton.bones[i].parentIndex >= 0 && (name.find("foot") != std::string::npos || name.find("toe") != std::string::npos))
+                feet.push_back(i);
+        }
+        auto carriesBody = [&](int bone)
+        {
+            int above = 0;
+            for (int foot : feet)
+            {
+                int b = foot;
+                for (int guard = 0; b >= 0 && b != bone && guard < skeleton.GetBoneCount(); ++guard)
+                    b = skeleton.bones[b].parentIndex;
+                above += b == bone;
+            }
+            return above == 0 || above == static_cast<int>(feet.size());
+        };
         int best = -1, bestDepth = std::numeric_limits<int>::max();
         for (const AnimationChannel &channel : model->GetAnimations()[m_selectedClip].channels)
             if (!channel.positionKeys.empty() && channel.boneIndex >= 0 && channel.boneIndex < skeleton.GetBoneCount() &&
-                depth(channel.boneIndex) < bestDepth)
+                depth(channel.boneIndex) < bestDepth && carriesBody(channel.boneIndex))
                 bestDepth = depth(channel.boneIndex), best = channel.boneIndex;
         for (int i = 0; best < 0 && i < skeleton.GetBoneCount(); i++)
             if (skeleton.bones[i].parentIndex < 0)
@@ -1485,6 +1508,26 @@ namespace pe
                 nlohmann::json result = nlohmann::json::parse(report);
                 result["status"] = status;
                 return ok(result);
+            }
+            if (action == "timeline.cycle")
+            {
+                float start = m_intervalStart, end = m_intervalEnd;
+                if (args.contains("start_frame") || args.contains("end_frame"))
+                {
+                    start = args.value("start_frame", 0.f);
+                    end = args.value("end_frame", ToFrame(clip.duration));
+                    if (!std::isfinite(start) || !std::isfinite(end) || start < 0.f || end > ToFrame(clip.duration) + kFrameEps ||
+                        end < start + 2.f)
+                        return fail("start_frame / end_frame must lie inside the clip, at least two frames apart");
+                }
+                else if (!HasInterval())
+                    return fail("mark an interval first (timeline.interval), or pass start_frame / end_frame");
+                const AnimationClip before = clip;
+                const size_t changed = CycleInterval(clip, skeleton, LocationBone(m_editModel), ToTicks(start), ToTicks(end), ToTicks(1.f));
+                if (changed == 0)
+                    return fail("nothing cycled: the interval needs keyed bones and at least two frames");
+                commit(before, changed);
+                return ok({{"keys_written", changed}, {"end_frame", ToFrame(clip.duration)}});
             }
             if (action == "timeline.motion.spring_bake")
             {
@@ -4477,11 +4520,27 @@ namespace pe
         }
         ui::ItemTooltip("Stand the body over its feet on every grounded frame of the interval: the root shifts so the "
                         "zero-moment point - the centre of mass, led by its acceleration (h/g) - sits over the feet "
-                        "touching the ground, and each planted foot is bent back to where the frame had it - the hip "
+                        "still down through the next 0.1 s (the weight leaves a foot before the foot leaves the floor), "
+                        "and each planted foot is bent back to where the frame had it - the hip "
                         "sway over the stance foot a walk needs; a body that stops short settles onto its heels. Feet "
                         "are the bones named foot / toe or holding a planted lock; contact is read from the clip; g is "
                         "the Ballistic knob. The interval ends keep their keys, airborne frames follow their grounded "
                         "neighbours (throw those with Ballistic or Body). Bake it after the poses.",
+                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::SameLine();
+        if (ImGui::Button("Cycle"))
+        {
+            const nlohmann::json result = nlohmann::json::parse(HandleAction("timeline.cycle", "{}"));
+            m_tweenStatus = result.value("ok", false)
+                                ? "Cycled: the action now runs to frame " +
+                                      std::to_string(static_cast<int>(std::lround(result.value("end_frame", 0.f)))) + "."
+                                : "Cycle wrote nothing: " + result.value("error", std::string("unknown error")) + ".";
+        }
+        ui::ItemTooltip("Turn one stride into a full cycle: the interval is mirrored (.L and .R swapped, X flipped) onto the "
+                        "frames after it, replacing any keys already there; the action grows to fit, the body keeps "
+                        "travelling where the stride left off, and the loop closes on the interval's start pose (rotation "
+                        "and scale - the travel goes on). For a treadmill cycle run Stabilize World in the Motion Doctor "
+                        "afterwards.",
                         ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         ImGui::EndDisabled();
         if (!m_tweenStatus.empty())
