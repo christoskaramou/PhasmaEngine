@@ -1004,7 +1004,7 @@ namespace pe
         addAction("timeline.interval", "Animation Timeline: Set Or Clear The Edit Interval (args: start, end frames; end below start + 1 clears)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.interval_slide", "Animation Timeline: Slide The Interval And Every Key Inside It (args: delta_frames)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.interval_scale", "Animation Timeline: Scale The Interval And Every Key Inside It (args: factor, pivot_frame)", "Timeline", "command", hasTimeline, false, false);
-        addAction("timeline.ballistic", "Animation Timeline: Replace The Interval's Root Path With A Gravity Arc (args: bone, gravity)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.ballistic", "Animation Timeline: Replace The Interval's Root Path With A Gravity Arc (args: bone, gravity, body = throw the centre of mass and correct the root per frame)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.tween", "Animation Timeline: Key What The Clip Plays At Each Interior Frame Of The Interval (ends and existing in-betweens are kept; args: bones, every_n)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.analyze", "Motion Doctor: Analyze Quaternion Flips, Pops, Jitter, Loop Seam, Root Drift And Selected-Bone Sliding (optional bone)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.fix_quaternions", "Motion Doctor: Fix Quaternion Hemisphere Flips", "Timeline", "command", hasTimeline, false, false);
@@ -1014,7 +1014,7 @@ namespace pe
         addAction("timeline.motion.breakdown", "Motion Doctor: Insert A Biased Breakdown Pose (bone or active bone; optional frame and bias 0..1)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.mirror_pose", "Motion Doctor: Paste Mirrored Pose (optional bones, source_frame, target_frame, include_center, channels)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.offset_bone", "Motion Doctor: Offset Bone Keys In Time (bone or bones, delta_frames, wrap, channels)", "Timeline", "command", hasTimeline, false, false);
-        addAction("timeline.motion.spring_bake", "Motion Doctor: Bake Spring Follow-Through (ordered bones chain; optional spring settings)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.motion.spring_bake", "Motion Doctor: Bake Spring Follow-Through (ordered bones chain; optional start_frame, end_frame and spring settings)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.world_drift", "Motion Doctor: Measure A Bone's World Drift (bone; optional frame range and sampling)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.stabilize_world", "Motion Doctor: Stabilize A Bone In World Space (bone; optional compensation bone, frame range and sampling)", "Timeline", "command", hasTimeline, false, false);
         RigEditor *rig = timeline ? &timeline->Rig() : nullptr;

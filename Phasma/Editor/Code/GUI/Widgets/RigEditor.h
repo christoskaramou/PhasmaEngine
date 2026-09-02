@@ -1,6 +1,7 @@
 #pragma once
 #include "GUI/Widget.h"
 #include "Animation/AnimationTypes.h"
+#include "Animation/GeodesicBind.h"
 #include "Animation/RigPresetLibrary.h"
 #include "Animation/RigWeightStroke.h"
 #include "imgui/imgui.h"
@@ -126,7 +127,9 @@ namespace pe
         static float CapsuleInfluence(const RigBone &b, const vec3 &p, float &signedDistance);
         int ShellOwner(const std::string &nodeName) const;
         bool Bake(Scene &scene, std::string &error, std::string &outPath);
-        void ComputeVertexWeights(const vec3 &p, int owner, int joints[4], float weights[4]) const;
+        void ComputeVertexWeights(const vec3 &p, int owner, int joints[4], float weights[4],
+                                  const GeodesicBind::VertexWeights *geodesic = nullptr) const;
+        void BuildGeodesic();
         static ImU32 BoneColor(int index);
         void UpdateHeatMap(Scene &scene);
         void RestoreHeatMap(Scene &scene);
@@ -197,6 +200,9 @@ namespace pe
         std::vector<uint32_t> m_rigTris;
         std::vector<int> m_rigTriMesh; // model mesh index per triangle (Volume snap pairs hits per shell)
         std::vector<ShellInfo> m_shellCache;
+        bool m_geodesic = true;     // document: unowned parts bind along the surface (rig.json "geodesic")
+        GeodesicBind::Result m_geo; // rebuilt at bake and heat refresh only
+        std::string m_geoNote;      // bones whose capsule holds no surface
         std::vector<RigPreset> m_projectPresets;
         std::vector<std::string> m_projectPresetErrors;
         std::string m_presetName; // preset the current bones came from; empty = hand-edited (Custom)

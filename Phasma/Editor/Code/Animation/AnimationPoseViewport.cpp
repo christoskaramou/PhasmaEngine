@@ -799,6 +799,44 @@ namespace pe
     // -------------------------------------------------------------------------
     // locks
     // -------------------------------------------------------------------------
+    // Mass proxy per skeleton bone for the centre-of-mass bake: the authored capsule's volume, the owned part's
+    // capsule for a shell bone (its own shape is unused, and the hand that carries the shovel weighs the shovel),
+    // and a thin capsule of the bone's length for a bone the rig document does not know. Centres are rest
+    // midpoints in rig space - the frame PoseTails derives - or the owned part's centroid.
+    void AnimationPoseViewport::BodyMasses(const Skeleton &skeleton, std::vector<float> &masses, std::vector<vec3> &restCentres) const
+    {
+        const int boneCount = skeleton.GetBoneCount();
+        const mat4 invRoot = glm::inverse(skeleton.rootTransform);
+        std::vector<mat4> rest(boneCount);
+        for (int i = 0; i < boneCount; i++)
+            rest[i] = invRoot * glm::inverse(skeleton.bones[i].offsetMatrix);
+        std::vector<vec3> heads, tails;
+        PoseTails(skeleton, rest, heads, tails, nullptr);
+        masses.assign(boneCount, 0.f);
+        restCentres.assign(boneCount, vec3(0.f));
+        auto capsule = [](float radius, float length)
+        { return glm::pi<float>() * radius * radius * (length + 4.f / 3.f * radius); };
+        for (int i = 0; i < boneCount; i++)
+        {
+            const float length = std::max(glm::length(tails[i] - heads[i]), 1e-4f);
+            masses[i] = capsule(length * 0.1f, length);
+            restCentres[i] = (heads[i] + tails[i]) * 0.5f;
+            const int authored = FindBone(skeleton.bones[i].name);
+            if (authored < 0)
+                continue;
+            const RigBone &bone = m_bones[authored];
+            masses[i] = capsule((bone.headRadius + bone.tailRadius) * 0.5f, length);
+            if (bone.shell.empty())
+                continue;
+            for (const RigEditor::ShellInfo &shell : m_rig.m_shellCache)
+                if (shell.name == bone.shell)
+                {
+                    masses[i] = capsule(shell.radius, shell.halfLength * 2.f);
+                    restCentres[i] = shell.centroid;
+                }
+        }
+    }
+
     void AnimationPoseViewport::PoseTails(const Skeleton &skeleton, std::span<const mat4> boneTransforms, std::vector<vec3> &heads,
                                           std::vector<vec3> &tails, std::vector<vec3> *restTailsOut) const
     {
