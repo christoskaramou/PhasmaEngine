@@ -26,6 +26,8 @@ namespace pe
         ~AnimationPoseViewport();
 
         void DrawControls(Scene &scene);
+        // Mass proxy per skeleton bone and its rig-space rest centre for the centre-of-mass ballistic bake.
+        void BodyMasses(const Skeleton &skeleton, std::vector<float> &masses, std::vector<vec3> &restCentres) const;
         void DrawViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize, bool &hovered,
                           bool &active);
         std::string HandleAction(Scene &scene, const std::string &action, const std::string &argsJson);

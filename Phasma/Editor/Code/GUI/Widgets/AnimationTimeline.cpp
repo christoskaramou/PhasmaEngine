@@ -1385,12 +1385,11 @@ namespace pe
                 const float gravity = args.value("gravity", m_gravity);
                 if (!std::isfinite(gravity) || gravity < 0.f)
                     return fail("gravity must be finite and not negative");
+                const bool body = args.value("body", m_ballisticBody);
                 const AnimationClip before = clip;
-                const size_t written = AnimationClipTools::BallisticInterval(
-                    clip, bone, BindTranslation(skeleton.bones[bone]), ToTicks(m_intervalStart),
-                    ToTicks(m_intervalEnd), ToTicks(1.f), gravity);
+                const size_t written = BakeBallistic(skeleton, clip, bone, gravity, body);
                 commit(before, written);
-                return ok({{"bone", skeleton.bones[bone].name}, {"keys_written", written}, {"gravity", gravity}});
+                return ok({{"bone", skeleton.bones[bone].name}, {"keys_written", written}, {"gravity", gravity}, {"body", body}});
             }
             if (action == "timeline.motion.spring_bake")
             {
@@ -1412,10 +1411,25 @@ namespace pe
                     settings.endpointMode = SpringEndpointMode::Cyclic;
                 else if (endpoint != "preserve")
                     return fail("unknown endpoint (free|preserve|cyclic)");
+                if (args.contains("start_frame") || args.contains("end_frame"))
+                {
+                    const float startFrame = args.value("start_frame", 0.f);
+                    const float endFrame = args.value("end_frame", ToFrame(clip.duration));
+                    if (!std::isfinite(startFrame) || !std::isfinite(endFrame) || startFrame < 0.f ||
+                        endFrame > ToFrame(clip.duration) + kFrameEps || endFrame < startFrame + 1.f)
+                        return fail("start_frame/end_frame must span at least one frame inside the clip");
+                    settings.startTime = ToTicks(startFrame);
+                    settings.endTime = ToTicks(endFrame);
+                }
                 const AnimationClip before = clip;
                 const SpringBakeResult baked = BakeSecondarySpring(clip, skeleton, bones, settings);
                 if (!baked)
-                    return fail("spring bake failed with status " + std::to_string(static_cast<int>(baked.status)));
+                {
+                    static const char *reasons[] = {"", "the chain is empty", "the clip has no usable duration",
+                                                    "the spring settings or frame range are out of bounds (Cyclic needs the whole clip)",
+                                                    "the chain names an unknown bone", "the bones must be a directly parented chain, root to tip"};
+                    return fail(std::string("spring bake failed: ") + reasons[static_cast<int>(baked.status)]);
+                }
                 commit(before, baked.keysWritten);
                 return ok({{"bones_baked", baked.bonesBaked},
                            {"keys_written", baked.keysWritten},
@@ -2907,6 +2921,41 @@ namespace pe
         return bones; // empty = every keyed bone, like the Motion Doctor tools
     }
 
+    // One entry for the button and the action: the root's own arc, or the centre-of-mass arc with the root
+    // corrected per frame from the rig's mass model.
+    size_t AnimationTimeline::BakeBallistic(const Skeleton &skeleton, AnimationClip &clip, int bone, float gravity, bool body)
+    {
+        const vec3 rest = BindTranslation(skeleton.bones[bone]);
+        const float start = ToTicks(m_intervalStart), end = ToTicks(m_intervalEnd), step = ToTicks(1.f);
+        if (!body)
+            return AnimationClipTools::BallisticInterval(clip, bone, rest, start, end, step, gravity);
+        std::vector<float> masses;
+        std::vector<vec3> centres;
+        PoseViewport(*m_rigEditor)->BodyMasses(skeleton, masses, centres);
+        return AnimationClipTools::BallisticBodyInterval(clip, skeleton, bone, rest, masses, centres, start, end, step, gravity);
+    }
+
+    // The chain the pose-bar Spring bakes: the selected bones (the action orders them root to tip), or the active
+    // bone alone. One bone extends down through single-child descendants, so the root of a tail takes the whole tail.
+    std::vector<int> AnimationTimeline::SpringChain(const Skeleton &skeleton) const
+    {
+        std::vector<int> chain = IntervalBones();
+        if (chain.empty() && m_activeBone >= 0 && m_activeBone < skeleton.GetBoneCount())
+            chain.push_back(m_activeBone);
+        if (chain.size() == 1)
+            while (static_cast<int>(chain.size()) < skeleton.GetBoneCount())
+            {
+                int only = -1, count = 0;
+                for (int i = 0; i < skeleton.GetBoneCount(); i++)
+                    if (skeleton.bones[i].parentIndex == chain.back())
+                        only = i, count++;
+                if (count != 1)
+                    break;
+                chain.push_back(only);
+            }
+        return chain; // the bake refuses a chain that is not directly parented
+    }
+
     // The arc is root translation. A requested bone qualifies only when it is a root itself or already owns a
     // Location curve (mocap rigs keep translation on Hips under a keyless control root); posing never gives a
     // child one, so baking an arc there would invent the curve the pose tools refuse to create.
@@ -4262,17 +4311,13 @@ namespace pe
         {
             const int bone = BallisticBone(skeleton, clip, m_activeBone);
             const AnimationClip before = clip;
-            const size_t written =
-                bone < 0 ? 0
-                         : AnimationClipTools::BallisticInterval(clip, bone, BindTranslation(skeleton.bones[bone]),
-                                                                 ToTicks(m_intervalStart), ToTicks(m_intervalEnd),
-                                                                 ToTicks(1.f), m_gravity);
+            const size_t written = bone < 0 ? 0 : BakeBallistic(skeleton, clip, bone, m_gravity, m_ballisticBody);
             if (written > 0)
             {
                 PushUndoSnapshot(before);
                 ReevaluatePose(scene, anim);
                 m_tweenStatus = "Ballistic wrote " + std::to_string(written) + " keys on " +
-                                skeleton.bones[bone].name + ".";
+                                skeleton.bones[bone].name + (m_ballisticBody ? " (centre of mass)." : ".");
             }
             else
                 m_tweenStatus = bone < 0
@@ -4290,6 +4335,33 @@ namespace pe
         ImGui::DragFloat("##ballistic_gravity", &m_gravity, 0.05f, 0.f, 200.f, "g %.2f");
         ui::ItemTooltip("Gravity for the ballistic bake, in rig units per second squared. 9.81 is life-sized; "
                         "raise it for a snappier, more animated fall.",
+                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::SameLine();
+        ImGui::Checkbox("Body", &m_ballisticBody);
+        ui::ItemTooltip("Throw the body's centre of mass instead of the root: on every frame the root is moved so the "
+                        "mass of the posed limbs and carried props follows the arc (tucking the legs drops the hips, "
+                        "swinging the shovel forward pulls the body after it). Masses come from the rig's capsules and "
+                        "owned parts. Airborne spans only - on the ground the feet would move with the root.",
+                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::SameLine();
+        if (ImGui::Button("Spring"))
+        {
+            nlohmann::json chain = nlohmann::json::array();
+            for (int b : SpringChain(skeleton))
+                chain.push_back(skeleton.bones[b].name);
+            const nlohmann::json result = nlohmann::json::parse(HandleAction(
+                "timeline.motion.spring_bake",
+                nlohmann::json{{"bones", chain}, {"start_frame", m_intervalStart}, {"end_frame", m_intervalEnd}}.dump()));
+            m_tweenStatus = result.value("ok", false)
+                                ? "Spring wrote " + std::to_string(result.value("keys_written", 0)) + " keys on " +
+                                      std::to_string(result.value("bones_baked", 0)) + " bones."
+                                : "Spring wrote nothing: " + result.value("error", std::string("unknown error")) + ".";
+        }
+        ui::ItemTooltip("Follow-through: simulate the selected bones as a damped spring chain that lags and overshoots "
+                        "what they are keyed to do, and bake the interval's interior frames from it (a scarf, a tail, a "
+                        "loose arm). Select the chain root to tip, or one bone to take its whole tail; the ends keep "
+                        "their keys. Bake it last - posing a chain bone inside the interval rebuilds its curve from the "
+                        "ends. timeline.motion.spring_bake has the stiffness, damping and drag knobs.",
                         ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         ImGui::EndDisabled();
         if (!m_tweenStatus.empty())

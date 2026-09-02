@@ -250,6 +250,9 @@ namespace pe
         m_locks.clear();
         m_pins.clear();
         m_presetName.clear();
+        m_geodesic = true;
+        m_geo = {};
+        m_geoNote.clear();
         m_selected = -1;
         m_dragBone = -1;
         m_dirty = false;
@@ -788,6 +791,7 @@ namespace pe
         nlohmann::ordered_json j;
         j["version"] = kRigJsonVersion;
         j["model"] = m_model ? m_model->GetFilePath().filename().generic_string() : "";
+        j["geodesic"] = m_geodesic;
         nlohmann::ordered_json bones = nlohmann::ordered_json::array();
         for (const RigBone &b : m_bones)
         {
@@ -974,6 +978,8 @@ namespace pe
                         b.shell = sh.name;
         ClearDocument();
         m_bones = std::move(loadedBones);
+        if (j.contains("geodesic") && j["geodesic"].is_boolean())
+            m_geodesic = j["geodesic"].get<bool>();
         try
         {
             if (j.contains("locks") && j["locks"].is_array())
@@ -1435,6 +1441,8 @@ namespace pe
             }
         }
         DrawToolbar();
+        if (!m_model)
+            return; // the Bake button just swapped the model out; the panel re-targets next frame
         ImGui::Separator();
 
         const float bottom = ImGui::GetFrameHeightWithSpacing() + 4.f;
@@ -1648,6 +1656,18 @@ namespace pe
         if (ImGui::Combo("Heat", &m_heat, "Off\0Selected\0All\0"))
             m_heatDirty = true;
         ui::ItemTooltip("Weight heat map on the mesh: Selected = grey to orange by the selected bone's weight, All = every bone's colour blended by weight");
+        ui::SameLineIfFits(ui::CheckboxWidth("Geodesic"));
+        if (ImGui::Checkbox("Geodesic", &m_geodesic))
+        {
+            m_dirty = true;
+            m_heatDirty = true;
+        }
+        ui::ItemTooltip(m_geoNote.empty()
+                            ? "Bind unowned parts along the mesh surface: each bone claims the surface its capsule sits inside, "
+                              "distance travels over the skin (a hand resting on a hip stays a hand), seams blend within about "
+                              "one radius of the thinner bone, only bones within two hierarchy steps blend. Rigid capsules still "
+                              "claim what they contain. Off = plain capsule blend."
+                            : m_geoNote.c_str());
     }
 
     void RigEditor::DrawBoneTree(int parent, int depth)
@@ -2029,6 +2049,7 @@ namespace pe
         // heat colours live in the scene copy that is about to be replaced
         m_heat = 0;
         RestoreHeatMap(scene);
+        BuildGeodesic();
 
         // rig-space matrix of every node BEFORE any local is reset
         std::vector<mat4> toRig(nodeCount);
@@ -2082,7 +2103,7 @@ namespace pe
                 }
                 int joints[4];
                 float weights[4];
-                ComputeVertexWeights(p, owner, joints, weights);
+                ComputeVertexWeights(p, owner, joints, weights, m_geo.At(mesh->vertexOffset + v));
                 float sum = 0.f;
                 for (int k = 0; k < 4; k++)
                 {
@@ -2194,6 +2215,8 @@ namespace pe
             if (stripped > 0)
                 m_bakeNote = " Stripped " + std::to_string(stripped) + " channel(s) of removed bones.";
         }
+        if (!m_geoNote.empty())
+            m_bakeNote += " " + m_geoNote;
 
         std::filesystem::path out = m_model->GetFilePath();
         std::string stem = out.stem().generic_string();
@@ -2285,6 +2308,35 @@ namespace pe
                 m_rigTriMesh.push_back(meshIndex);
             }
         }
+    }
+
+    // Geodesic bind table for the unowned parts, from the rig-space cache. Runs at bake and at each heat
+    // refresh (drag end), never per frame; a rig whose every part is owned skips it.
+    void RigEditor::BuildGeodesic()
+    {
+        m_geo = {};
+        m_geoNote.clear();
+        if (!m_geodesic || !m_model || m_bones.empty())
+            return;
+        bool unowned = false;
+        for (int n = 0; n < m_model->GetNodeCount() && !unowned; n++)
+            unowned = m_model->GetNodeMesh(n) >= 0 && ShellOwner(m_model->GetNodeName(n)) < 0;
+        if (!unowned)
+            return;
+        std::vector<GeodesicBind::Bone> bones(m_bones.size());
+        for (size_t i = 0; i < m_bones.size(); i++)
+        {
+            const RigBone &b = m_bones[i];
+            bones[i] = {b.head, b.tail, b.headRadius, b.tailRadius, b.parent, b.rigid, b.spline};
+        }
+        m_geo = GeodesicBind::Solve(m_rigVerts, m_rigTris, bones, ModelHeight());
+        std::string missing;
+        for (size_t i = 0; i < m_bones.size(); i++)
+            if (m_geo.seedCount[i] == 0)
+                missing += (missing.empty() ? "" : ", ") + m_bones[i].name;
+        if (!missing.empty())
+            m_geoNote = "Geodesic: no mesh surface inside the capsule of " + missing +
+                        " (no region; move or widen the capsule, or leave it for a control bone).";
     }
 
     bool RigEditor::BuildPosedVertices(std::span<const mat4> boneTransforms, std::vector<vec3> &out) const
@@ -2502,10 +2554,6 @@ namespace pe
         return -1;
     }
 
-    // Joints/weights for one rig-space point (the bake writes exactly this into the vertices): a part
-    // owned by a bone (`owner` = ShellOwner of the vertex's node) belongs to it outright; otherwise a
-    // rigid capsule claims the point (deepest wins), soft capsules blend and normalise to <= 4
-    // influences, and a point outside every capsule follows the nearest one.
     // The maximal run of spline bones through `bone`: up to the first link, then down the first spline child of each link.
     void RigEditor::ChainOf(int bone, std::vector<int> &chain) const
     {
@@ -2598,7 +2646,13 @@ namespace pe
         return prev;
     }
 
-    void RigEditor::ComputeVertexWeights(const vec3 &p, int owner, int joints[4], float weights[4]) const
+    // Joints/weights for one rig-space point (the bake writes exactly this into the vertices), first rule
+    // that holds: a part owned by a bone (`owner` = ShellOwner of the vertex's node) belongs to it outright;
+    // a rigid capsule claims the point (deepest wins - the capsule override); the geodesic table, when the
+    // caller looked the vertex up in it, gives the surface-aware blend; else soft capsules blend and
+    // normalise to <= 4 influences, and a point outside every capsule follows the nearest one.
+    void RigEditor::ComputeVertexWeights(const vec3 &p, int owner, int joints[4], float weights[4],
+                                         const GeodesicBind::VertexWeights *geodesic) const
     {
         for (int k = 0; k < 4; k++)
         {
@@ -2617,6 +2671,29 @@ namespace pe
             joints[0] = owner;
             weights[0] = 1.f;
             return;
+        }
+        if (geodesic && geodesic->label >= 0 && geodesic->label < static_cast<int>(m_bones.size()))
+        {
+            bool rigidClaim = false;
+            for (const RigBone &b : m_bones)
+            {
+                float sd;
+                rigidClaim = rigidClaim || (b.rigid && CapsuleInfluence(b, p, sd) > 0.f);
+            }
+            if (!rigidClaim)
+            {
+                if (m_bones[geodesic->label].spline)
+                {
+                    ChainWeights(geodesic->label, p, joints, weights);
+                    return;
+                }
+                for (int k = 0; k < 4; k++)
+                {
+                    joints[k] = std::clamp(geodesic->joints[k], 0, static_cast<int>(m_bones.size()) - 1);
+                    weights[k] = geodesic->weights[k];
+                }
+                return;
+            }
         }
         int rigidBest = -1, nearest = 0;
         float rigidDepth = 0.f, nearestDist = std::numeric_limits<float>::max();
@@ -2735,6 +2812,7 @@ namespace pe
             return;
         }
 
+        BuildGeodesic();
         const bool firstPass = m_heatBackup.empty();
         const mat4 invRoot = glm::inverse(scene.GetWorldMatrix(m_rootNode));
         const vec3 orange(1.f, 0.55f, 0.15f), grey(0.55f);
@@ -2762,7 +2840,7 @@ namespace pe
                     const vec3 p = vec3(toRig * vec4(vert.position[0], vert.position[1], vert.position[2], 1.f));
                     int joints[4];
                     float weights[4];
-                    ComputeVertexWeights(p, owner, joints, weights);
+                    ComputeVertexWeights(p, owner, joints, weights, m_geo.Find(p));
                     vec3 c(0.f);
                     if (m_heat == 1)
                     {

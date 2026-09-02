@@ -15,6 +15,7 @@ namespace pe::AnimationClipTools
         constexpr float kMaxSpringDrag = 10.0f;
         constexpr double kMaxSpringSubsteps = 4096.0;
         constexpr double kMaxSpringWorkItems = 10000000.0;
+        constexpr size_t kMaxSpringSamples = 100000;
         constexpr size_t kMaxSimplifyComparisons = 5000000;
         constexpr size_t kMaxTweenSamples = 4096;
 
@@ -984,6 +985,128 @@ namespace pe::AnimationClipTools
         return writes;
     }
 
+    size_t BallisticBodyInterval(AnimationClip &clip,
+                                 const Skeleton &skeleton,
+                                 int rootBone,
+                                 const vec3 &restPosition,
+                                 std::span<const float> boneMasses,
+                                 std::span<const vec3> restCentres,
+                                 float startTime,
+                                 float endTime,
+                                 float stepTicks,
+                                 float gravity)
+    {
+        const int boneCount = skeleton.GetBoneCount();
+        if (rootBone < 0 || rootBone >= boneCount || static_cast<int>(boneMasses.size()) != boneCount ||
+            static_cast<int>(restCentres.size()) != boneCount || !std::isfinite(startTime) || !std::isfinite(endTime) ||
+            !std::isfinite(stepTicks) || !std::isfinite(gravity) || gravity < 0.f || !Finite(restPosition) ||
+            stepTicks <= kEpsilon || clip.ticksPerSecond <= kEpsilon || endTime - startTime <= stepTicks + kEpsilon ||
+            static_cast<double>(endTime - startTime) / stepTicks > static_cast<double>(kMaxTweenSamples))
+            return 0;
+        // Only the mass hanging under the moved bone is the thrown body: a control root above the hips or a
+        // separate prop root does not move with it and is left out, which also keeps the one-pass correction exact.
+        std::vector<char> thrown(boneCount, 0);
+        float totalMass = 0.f;
+        for (int i = 0; i < boneCount; ++i)
+        {
+            if (!std::isfinite(boneMasses[i]) || boneMasses[i] < 0.f || !Finite(restCentres[i]))
+                return 0;
+            int bone = i;
+            for (int depth = 0; bone >= 0 && bone != rootBone && depth < boneCount; ++depth)
+                bone = skeleton.bones[bone].parentIndex;
+            thrown[i] = bone == rootBone;
+            if (thrown[i])
+                totalMass += boneMasses[i];
+        }
+        if (!std::isfinite(totalMass) || totalMass <= kEpsilon)
+            return 0;
+
+        AnimationChannel *channel = nullptr;
+        for (AnimationChannel &candidate : clip.channels)
+            if (candidate.boneIndex == rootBone)
+                channel = &candidate;
+        const std::vector<PositionKey> none;
+        const std::vector<PositionKey> &source = channel ? channel->positionKeys : none;
+        if (!FiniteKeys(source))
+            return 0;
+        auto rootAt = [&](float time)
+        { return source.empty() ? restPosition : AnimationEvaluator::InterpolatePosition(source, time); };
+        const vec3 startRoot = rootAt(startTime), endRoot = rootAt(endTime);
+        const AnimationInterpolation endBlend = InterpolationAt(source, endTime);
+        const float tolerance = std::max(kEpsilon, stepTicks * 0.001f);
+        const float flight = (endTime - startTime) / clip.ticksPerSecond;
+
+        // Mass centres ride the posed bones in rig space (the skeleton with its root transform removed, where the
+        // rest centres are given). The root's Location key reaches rig space through its parent and its prefix,
+        // so that linear map is what turns a wanted centre-of-mass shift into a key delta.
+        const mat4 invRoot = glm::inverse(skeleton.rootTransform);
+        std::vector<mat4> globals;
+        auto centreOfMass = [&](float time, vec3 &centre, mat3 &keyToRig)
+        {
+            SampleGlobalTransforms(clip, skeleton, time, globals);
+            if (static_cast<int>(globals.size()) != boneCount)
+                return false;
+            vec3 sum(0.f);
+            for (int i = 0; i < boneCount; ++i)
+            {
+                if (!thrown[i] || boneMasses[i] <= 0.f)
+                    continue;
+                const mat4 restToPosed = invRoot * globals[i] * skeleton.bones[i].offsetMatrix * skeleton.rootTransform;
+                sum += boneMasses[i] * vec3(restToPosed * vec4(restCentres[i], 1.f));
+            }
+            centre = sum / totalMass;
+            const int parent = skeleton.bones[rootBone].parentIndex;
+            keyToRig = mat3(invRoot * (parent >= 0 ? globals[parent] : mat4(1.f)) * skeleton.bones[rootBone].intermediatePrefix);
+            const float det = glm::determinant(keyToRig);
+            return Finite(centre) && std::isfinite(det) && std::abs(det) > kEpsilon;
+        };
+        vec3 startCentre, endCentre;
+        mat3 unused;
+        if (!centreOfMass(startTime, startCentre, unused) || !centreOfMass(endTime, endCentre, unused))
+            return 0;
+        // ponytail: rig space is Y-up like the rest of the editor; a Z-up rig needs the axis exposed.
+        const float launch = (endCentre.y - startCentre.y) / flight + 0.5f * gravity * flight;
+
+        // Every sample is taken from the untouched source before anything is written.
+        std::vector<std::pair<float, vec3>> samples;
+        const float first = std::ceil((startTime + tolerance) / stepTicks) * stepTicks;
+        for (size_t step = 0; step < kMaxTweenSamples; ++step)
+        {
+            const float time = first + stepTicks * static_cast<float>(step);
+            if (time >= endTime - tolerance)
+                break;
+            const float elapsed = (time - startTime) / clip.ticksPerSecond;
+            vec3 target = glm::mix(startCentre, endCentre, (time - startTime) / (endTime - startTime));
+            target.y = startCentre.y + launch * elapsed - 0.5f * gravity * elapsed * elapsed;
+            vec3 centre;
+            mat3 keyToRig;
+            if (!centreOfMass(time, centre, keyToRig))
+                return 0;
+            const vec3 value = rootAt(time) + glm::inverse(keyToRig) * (target - centre);
+            if (!Finite(value))
+                return 0;
+            samples.push_back({time, value});
+        }
+        if (samples.empty())
+            return 0;
+
+        if (!channel)
+        {
+            channel = &clip.channels.emplace_back();
+            channel->boneIndex = rootBone;
+        }
+        std::vector<PositionKey> &keys = channel->positionKeys;
+        size_t writes = 0;
+        writes += UpsertKey(keys, startTime, startRoot, AnimationInterpolation::Linear);
+        if (!HasKeyAt(keys, endTime, tolerance))
+            writes += UpsertKey(keys, endTime, endRoot, endBlend);
+        std::erase_if(keys, [&](const PositionKey &key)
+                      { return key.time > startTime + tolerance && key.time < endTime - tolerance; });
+        for (const auto &[time, value] : samples)
+            writes += UpsertKey(keys, time, value, AnimationInterpolation::Linear);
+        return writes;
+    }
+
     size_t Smooth(AnimationClip &clip, const SmoothSettings &settings, std::span<const int> boneIndices)
     {
         const bool invalidStart = std::isnan(settings.startTime) ||
@@ -1299,6 +1422,18 @@ namespace pe::AnimationClipTools
             result.status = SpringBakeStatus::InvalidClipTiming;
             return result;
         }
+        // The bake covers [rangeStart, rangeEnd] in ticks: the whole clip by default, or the Timeline's interval.
+        // A partial range keeps every key outside it, so Cyclic - which closes the clip's own seam - is refused there.
+        const float rangeStart = settings.startTime;
+        const float rangeEnd = settings.endTime < 0.0f ? clip.duration : settings.endTime;
+        const bool wholeClip = rangeStart <= kEpsilon && rangeEnd >= clip.duration - kEpsilon;
+        if (!std::isfinite(rangeStart) || !std::isfinite(rangeEnd) || rangeStart < 0.0f ||
+            rangeEnd > clip.duration + kEpsilon || rangeEnd - rangeStart <= kEpsilon ||
+            (!wholeClip && settings.endpointMode == SpringEndpointMode::Cyclic))
+        {
+            result.status = SpringBakeStatus::InvalidSettings;
+            return result;
+        }
         if (!std::isfinite(settings.framesPerSecond) || !std::isfinite(settings.frameStep) ||
             !std::isfinite(settings.stiffness) || !std::isfinite(settings.damping) ||
             !std::isfinite(settings.response) || !std::isfinite(settings.drag) ||
@@ -1332,20 +1467,25 @@ namespace pe::AnimationClipTools
             }
         }
 
-        const double durationSeconds = static_cast<double>(clip.duration) / clip.ticksPerSecond;
-        const double requestedIntervals = std::ceil(durationSeconds * settings.framesPerSecond /
-                                                    settings.frameStep);
-        if (!std::isfinite(durationSeconds) || durationSeconds <= 0.0 || !std::isfinite(requestedIntervals) ||
-            requestedIntervals > 100000.0)
+        // Samples sit on the frame grid the settings describe: the first grid frame past the range start, then
+        // every step, and the range end itself last, so an interval keys the frames Tween would.
+        const float stepTicks = clip.ticksPerSecond / settings.framesPerSecond * settings.frameStep;
+        const float tolerance = std::max(kEpsilon, stepTicks * 0.001f);
+        std::vector<float> sampleTimes;
+        const double first = std::ceil((rangeStart + tolerance) / stepTicks) * stepTicks;
+        for (double time = first; time < rangeEnd - tolerance; time += stepTicks)
         {
-            result.status = SpringBakeStatus::InvalidSettings;
-            return result;
+            if (sampleTimes.size() >= kMaxSpringSamples)
+            {
+                result.status = SpringBakeStatus::InvalidSettings;
+                return result;
+            }
+            sampleTimes.push_back(static_cast<float>(time));
         }
-        const size_t intervals = std::max<size_t>(static_cast<size_t>(requestedIntervals), 1);
-        const float stepTicks = clip.duration / static_cast<float>(intervals);
-        const double stepSecondsDouble = durationSeconds / static_cast<double>(intervals);
+        sampleTimes.push_back(rangeEnd);
+        const double stepSecondsDouble = static_cast<double>(stepTicks) / clip.ticksPerSecond;
         const double requestedSubsteps = std::ceil(stepSecondsDouble * 120.0);
-        const double workItems = static_cast<double>(intervals) * std::max(requestedSubsteps, 1.0) *
+        const double workItems = static_cast<double>(sampleTimes.size()) * std::max(requestedSubsteps, 1.0) *
                                  static_cast<double>(settings.cyclicWarmupCycles + 1) * orderedBoneIndices.size();
         if (!std::isfinite(stepSecondsDouble) || stepSecondsDouble <= 0.0 ||
             stepSecondsDouble > std::numeric_limits<float>::max() || !std::isfinite(requestedSubsteps) ||
@@ -1356,8 +1496,10 @@ namespace pe::AnimationClipTools
             return result;
         }
         const size_t substeps = std::max<size_t>(static_cast<size_t>(requestedSubsteps), 1);
-        const float stepSeconds = static_cast<float>(stepSecondsDouble);
-        const float substepSeconds = stepSeconds / static_cast<float>(substeps);
+        auto secondsBefore = [&](size_t sample)
+        {
+            return (sampleTimes[sample] - (sample == 0 ? rangeStart : sampleTimes[sample - 1])) / clip.ticksPerSecond;
+        };
 
         struct SpringState
         {
@@ -1368,48 +1510,62 @@ namespace pe::AnimationClipTools
 
         // Keep source evaluation independent from the channels replaced by the bake.
         const AnimationClip source = clip;
-        std::vector<quat> startTargets;
-        SampleGlobalRotations(source, skeleton, 0.0f, startTargets);
-        if (startTargets.size() != skeleton.bones.size() ||
-            !std::all_of(startTargets.begin(), startTargets.end(), [](const quat &rotation)
-                         { return Finite(rotation); }))
+        auto finiteTargets = [&](const std::vector<quat> &targets)
+        {
+            return targets.size() == skeleton.bones.size() &&
+                   std::all_of(targets.begin(), targets.end(), [](const quat &rotation)
+                               { return Finite(rotation); });
+        };
+        // The chain starts on the source pose at the range start with no angular velocity of its own; the target
+        // velocity history comes from one step earlier, so the first sample already sees the source moving.
+        std::vector<quat> startTargets, leadTargets, currentTargets;
+        SampleGlobalRotations(source, skeleton, rangeStart, startTargets);
+        SampleGlobalRotations(source, skeleton, std::max(0.0f, rangeStart - stepTicks), leadTargets);
+        if (!finiteTargets(startTargets) || !finiteTargets(leadTargets))
         {
             result.status = SpringBakeStatus::InvalidSettings;
             return result;
         }
-        std::vector<quat> previousTargets = startTargets;
-        std::vector<quat> currentTargets;
+        std::vector<quat> previousTargets = leadTargets;
         std::vector<SpringState> states(orderedBoneIndices.size());
         for (size_t i = 0; i < states.size(); ++i)
-            states[i].worldRotation = startTargets[orderedBoneIndices[i]];
-
-        auto advance = [&](float targetTime)
         {
-            SampleGlobalRotations(source, skeleton, targetTime, currentTargets);
-            if (currentTargets.size() != skeleton.bones.size() ||
-                !std::all_of(currentTargets.begin(), currentTargets.end(), [](const quat &rotation)
-                             { return Finite(rotation); }))
+            const int parentIndex = skeleton.bones[orderedBoneIndices[i]].parentIndex;
+            states[i].worldRotation = startTargets[orderedBoneIndices[i]];
+            if (parentIndex >= 0)
+                states[i].parentTargetVelocity = WorldRotationVector(leadTargets[parentIndex], startTargets[parentIndex]) /
+                                                 static_cast<float>(stepSecondsDouble);
+        }
+
+        auto advance = [&](float targetTime, float seconds)
+        {
+            if (!std::isfinite(seconds) || seconds <= 0.0f)
                 return false;
+            SampleGlobalRotations(source, skeleton, targetTime, currentTargets);
+            if (!finiteTargets(currentTargets))
+                return false;
+            const size_t steps = std::clamp<size_t>(static_cast<size_t>(std::ceil(seconds * 120.0f)), 1, substeps);
+            const float substepSeconds = seconds / static_cast<float>(steps);
             for (size_t i = 0; i < states.size(); ++i)
             {
                 const int boneIndex = orderedBoneIndices[i];
                 const int parentIndex = skeleton.bones[boneIndex].parentIndex;
                 const vec3 targetVelocity = WorldRotationVector(previousTargets[boneIndex],
                                                                 currentTargets[boneIndex]) /
-                                            stepSeconds;
+                                            seconds;
                 const vec3 parentVelocity = parentIndex >= 0
                                                 ? WorldRotationVector(previousTargets[parentIndex],
                                                                       currentTargets[parentIndex]) /
-                                                      stepSeconds
+                                                      seconds
                                                 : vec3(0.0f);
-                const vec3 parentAcceleration = (parentVelocity - states[i].parentTargetVelocity) / stepSeconds;
+                const vec3 parentAcceleration = (parentVelocity - states[i].parentTargetVelocity) / seconds;
                 states[i].parentTargetVelocity = parentVelocity;
                 const float depthResponse = settings.response / (1.0f + settings.drag * static_cast<float>(i));
                 if (!Finite(targetVelocity) || !Finite(parentVelocity) || !Finite(parentAcceleration) ||
                     !std::isfinite(depthResponse))
                     return false;
 
-                for (size_t substep = 0; substep < substeps; ++substep)
+                for (size_t substep = 0; substep < steps; ++substep)
                 {
                     const vec3 error = WorldRotationVector(states[i].worldRotation, currentTargets[boneIndex]);
                     const vec3 acceleration = settings.stiffness * error +
@@ -1439,21 +1595,21 @@ namespace pe::AnimationClipTools
         {
             for (int cycle = 0; cycle < settings.cyclicWarmupCycles; ++cycle)
             {
-                previousTargets = startTargets;
-                for (size_t sample = 1; sample <= intervals; ++sample)
-                    if (!advance(sample == intervals ? clip.duration : stepTicks * static_cast<float>(sample)))
+                previousTargets = leadTargets;
+                for (size_t sample = 0; sample < sampleTimes.size(); ++sample)
+                    if (!advance(sampleTimes[sample], secondsBefore(sample)))
                     {
                         result.status = SpringBakeStatus::InvalidSettings;
                         return result;
                     }
             }
-            previousTargets = startTargets;
+            previousTargets = leadTargets;
             result.maxAngularLagDegrees = 0.0f;
         }
 
         std::vector<std::vector<RotationKey>> bakedKeys(orderedBoneIndices.size());
         for (std::vector<RotationKey> &keys : bakedKeys)
-            keys.reserve(intervals + 1);
+            keys.reserve(sampleTimes.size() + 1);
 
         auto appendKeys = [&](float time, const std::vector<quat> &targetGlobals)
         {
@@ -1478,15 +1634,14 @@ namespace pe::AnimationClipTools
             return true;
         };
 
-        if (!appendKeys(0.0f, startTargets))
+        if (!appendKeys(rangeStart, startTargets))
         {
             result.status = SpringBakeStatus::InvalidSettings;
             return result;
         }
-        for (size_t sample = 1; sample <= intervals; ++sample)
+        for (size_t sample = 0; sample < sampleTimes.size(); ++sample)
         {
-            const float time = sample == intervals ? clip.duration : stepTicks * static_cast<float>(sample);
-            if (!advance(time) || !appendKeys(time, currentTargets))
+            if (!advance(sampleTimes[sample], secondsBefore(sample)) || !appendKeys(sampleTimes[sample], currentTargets))
             {
                 result.status = SpringBakeStatus::InvalidSettings;
                 return result;
@@ -1497,11 +1652,8 @@ namespace pe::AnimationClipTools
         {
             if (settings.endpointMode == SpringEndpointMode::PreserveSource)
             {
-                bakedKeys[i].front().value = SampleLocalRotation(source, skeleton, orderedBoneIndices[i], 0.0f);
-                bakedKeys[i].back().value = SampleLocalRotation(source,
-                                                                skeleton,
-                                                                orderedBoneIndices[i],
-                                                                clip.duration);
+                bakedKeys[i].front().value = SampleLocalRotation(source, skeleton, orderedBoneIndices[i], rangeStart);
+                bakedKeys[i].back().value = SampleLocalRotation(source, skeleton, orderedBoneIndices[i], rangeEnd);
             }
             else if (settings.endpointMode == SpringEndpointMode::Cyclic)
             {
@@ -1520,11 +1672,37 @@ namespace pe::AnimationClipTools
         for (size_t i = 0; i < bakedKeys.size(); ++i)
         {
             AnimationChannel &channel = FindOrAddChannel(clip, orderedBoneIndices[i]);
-            channel.rotationKeys = std::move(bakedKeys[i]);
-            result.keysWritten += channel.rotationKeys.size();
+            std::vector<RotationKey> &keys = channel.rotationKeys;
+            if (wholeClip)
+            {
+                keys = std::move(bakedKeys[i]);
+                result.keysWritten += keys.size();
+                continue;
+            }
+            // A partial range replaces only its interior: the keys outside stay, and the seam keys land with the
+            // values the source shows there. The hemisphere pass then runs from the last key before the range to the
+            // end of the curve so the sign stays continuous into and out of the bake (a sign is not a rotation).
+            std::erase_if(keys, [&](const RotationKey &key)
+                          { return key.time > rangeStart + tolerance && key.time < rangeEnd - tolerance; });
+            // The start key is rewritten Linear like Ballistic (interpolation is outgoing); the end key is only
+            // inserted when the curve has none there, with the mode the source played into it, so an existing one
+            // keeps its value and mode and the segment after the range plays as before.
+            const AnimationChannel *sourceChannel = FindChannel(source, orderedBoneIndices[i]);
+            const std::vector<RotationKey> noKeys;
+            const std::vector<RotationKey> &sourceKeys = sourceChannel ? sourceChannel->rotationKeys : noKeys;
+            for (size_t key = 0; key + 1 < bakedKeys[i].size(); ++key)
+                result.keysWritten += UpsertKey(keys, bakedKeys[i][key].time, bakedKeys[i][key].value,
+                                                bakedKeys[i][key].interpolation);
+            if (!HasKeyAt(keys, rangeEnd, tolerance))
+                result.keysWritten += UpsertKey(keys, rangeEnd, bakedKeys[i].back().value, InterpolationAt(sourceKeys, rangeEnd));
+            size_t from = 0;
+            while (from < keys.size() && keys[from].time < rangeStart - tolerance)
+                ++from;
+            for (size_t key = std::max<size_t>(from, 1); key < keys.size(); ++key)
+                keys[key].value = SameHemisphere(keys[key - 1].value, keys[key].value);
         }
         result.bonesBaked = orderedBoneIndices.size();
-        result.sampleCount = intervals + 1;
+        result.sampleCount = sampleTimes.size() + 1;
         result.sampleStepTicks = stepTicks;
         return result;
     }

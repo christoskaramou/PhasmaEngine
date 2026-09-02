@@ -106,6 +106,10 @@ namespace pe::AnimationClipTools
         float drag = 0.02f;      // Parent acceleration inertia, increasing toward the chain tip.
         SpringEndpointMode endpointMode = SpringEndpointMode::PreserveSource;
         int cyclicWarmupCycles = 2;
+        // Clip ticks. The whole clip by default; the Timeline passes its interval. A partial range keeps every
+        // key outside it and cannot be Cyclic.
+        float startTime = 0.0f;
+        float endTime = -1.0f; // < 0 = clip end
     };
 
     enum class SpringBakeStatus : uint8_t
@@ -201,6 +205,25 @@ namespace pe::AnimationClipTools
                              float stepTicks,
                              float gravity = 9.81f);
 
+    // Full-body companion to BallisticInterval: the same arc, but for the body's centre of mass. Every interior
+    // frame samples the source pose, weighs each bone's mass centre (a rig-space rest centre carried by the posed
+    // bone; masses from the caller - capsule volumes in the editor) and re-keys the root's Location so the centre
+    // of mass, not the root, follows the arc between where it sits at the two ends: tucked limbs drop the root, a
+    // heavy prop swung forward pulls the body after it. Only the mass under the moved bone counts - a control root
+    // above the hips or a separate prop root is not part of the thrown body. Root rule, channel creation and end
+    // handling as BallisticInterval. Airborne spans only - on the ground the feet move with the root.
+    // ponytail: linear momentum only; the body turning against a swing (angular momentum) is the upgrade.
+    size_t BallisticBodyInterval(AnimationClip &clip,
+                                 const Skeleton &skeleton,
+                                 int rootBone,
+                                 const vec3 &restPosition,
+                                 std::span<const float> boneMasses,
+                                 std::span<const vec3> restCentres,
+                                 float startTime,
+                                 float endTime,
+                                 float stepTicks,
+                                 float gravity = 9.81f);
+
     // Smooths interior selected keys and preserves the first and last selected key on every curve.
     size_t Smooth(AnimationClip &clip,
                   const SmoothSettings &settings,
@@ -230,6 +253,8 @@ namespace pe::AnimationClipTools
 
     // Bakes a directly parented, root-to-tip secondary chain as ordinary local rotation keys. The source clip is
     // sampled before any channel is replaced. Cyclic mode warms the spring to steady state and closes the pose seam.
+    // Samples sit on the frame grid the settings describe; over a partial range the chain starts on the source
+    // pose at the range start with no angular velocity, the interior is re-keyed and both ends keep the source.
     SpringBakeResult BakeSecondarySpring(AnimationClip &clip,
                                          const Skeleton &skeleton,
                                          std::span<const int> orderedBoneIndices,
