@@ -2782,13 +2782,18 @@ namespace pe
         const ImVec2 mouse = ImGui::GetMousePos();
         const bool hovered = ImGui::IsMouseHoveringRect(origin, {origin.x + size.x, origin.y + size.y}) && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
         const bool ctrl = ImGui::GetIO().KeyCtrl;
+        // The panel is as tall as its content now and the window scrolls it, so the widget rect reaches well
+        // past the screen: rows are culled against what is actually visible (PushClipRect already intersected
+        // this with the window), not against the rect, or every row of a big rig is emitted every frame.
+        const float viewTop = std::max(dl->GetClipRectMin().y, origin.y + m_rulerHeight);
+        const float viewBottom = dl->GetClipRectMax().y;
 
         for (int r = 0; r < static_cast<int>(m_rows.size()); r++)
         {
             const Row &row = m_rows[r];
             const float y0 = rowTop + r * m_rowHeight;
             const float y1 = y0 + m_rowHeight;
-            if (y1 < origin.y + m_rulerHeight || y0 > origin.y + size.y)
+            if (y1 < viewTop || y0 > viewBottom)
                 continue;
             ImU32 bg;
             if (row.bone < 0)
@@ -3166,12 +3171,15 @@ namespace pe
         const bool hovered = ImGui::IsMouseHoveringRect(origin, end) && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
         const ImGuiIO &io = ImGui::GetIO();
 
+        // Same as the channel region: cull against the visible band, not the full-height widget rect.
+        const float viewTop = dl->GetClipRectMin().y, viewBottom = dl->GetClipRectMax().y;
+
         // row backgrounds
         for (int r = 0; r < static_cast<int>(m_rows.size()); r++)
         {
             const Row &row = m_rows[r];
             const float y0 = rowTop + r * m_rowHeight, y1 = y0 + m_rowHeight;
-            if (y1 < origin.y || y0 > end.y)
+            if (y1 < viewTop || y0 > viewBottom)
                 continue;
             ImU32 bg = 0;
             if (row.bone < 0)
@@ -3202,7 +3210,7 @@ namespace pe
         }
 
         // glyphs
-        BuildGlyphs(skeleton, clip, origin.x, rowTop, origin.y, end.y);
+        BuildGlyphs(skeleton, clip, origin.x, rowTop, viewTop, viewBottom);
         int hoveredGlyph = -1;
         if (hovered && m_modal == Modal::None)
         {
@@ -3744,11 +3752,13 @@ namespace pe
         const bool hovered = ImGui::IsMouseHoveringRect(origin, {origin.x + size.x, origin.y + size.y}) && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
         const bool ctrl = ImGui::GetIO().KeyCtrl;
         float y = origin.y + m_rulerHeight - m_scrollY;
+        const float viewTop = std::max(dl->GetClipRectMin().y, origin.y + m_rulerHeight);
+        const float viewBottom = dl->GetClipRectMax().y;
 
         // bones
         for (int b = 0; b < skeleton.GetBoneCount(); b++, y += m_rowHeight)
         {
-            if (y + m_rowHeight < origin.y + m_rulerHeight || y > origin.y + size.y)
+            if (y + m_rowHeight < viewTop || y > viewBottom)
                 continue;
             const bool sel = m_boneSelected[b];
             dl->AddRectFilled({origin.x, y}, {origin.x + size.x, y + m_rowHeight}, sel ? (b == m_activeBone ? bl::kRowActive : bl::kRowSelected) : ((b & 1) ? bl::kGroupRowAlt : bl::kGroupRow));
