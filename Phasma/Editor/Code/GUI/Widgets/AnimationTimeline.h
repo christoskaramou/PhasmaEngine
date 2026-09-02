@@ -104,6 +104,13 @@ namespace pe
         bool KeyViewportGlobalRotations(Scene &scene, ModelAsset *model, std::span<const GlobalBoneRotation> rotations,
                                         float frame = -1.f, bool pushUndo = true, bool userPose = true);
         bool PushViewportUndo(ModelAsset *model);
+        // Keys one bone's Location so its head sits at rigPosition (rig space) at the frame, rotation kept;
+        // takes no undo snapshot of its own (it rides the batch that preceded it) and retweens like a user pose.
+        bool KeyViewportPosition(Scene &scene, ModelAsset *model, int bone, const vec3 &rigPosition, float frame = -1.f,
+                                 bool userPose = true);
+        // The bone whose Location carries the body: the shallowest bone with Location keys (mocap hips under a
+        // keyless control root), else the skeleton root; -1 without a clip.
+        int LocationBone(ModelAsset *model) const;
         // Bumps on pose-bar / timeline.pose edits only (never on undo/redo or viewport keying).
         uint32_t PoseEditSerial() const { return m_poseEditSerial; }
         // Frame the last pose edit targeted (< 0 = the playhead): lock re-solves key there, not at the playhead.

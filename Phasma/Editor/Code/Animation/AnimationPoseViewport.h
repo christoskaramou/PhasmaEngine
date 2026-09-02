@@ -58,6 +58,18 @@ namespace pe
                     std::string &error);
         bool CaptureLockAnchor(RigLock &lock);
         void HoldPosedBone(int bone);
+        bool CentreOfMass(const Skeleton &skeleton, std::span<const mat4> boneTransforms, vec3 &out) const;
+        bool SupportCentre(vec3 &out) const;
+        bool IsSupport(const Skeleton &skeleton, int bone) const;
+        void BeginBalance();
+        bool ApplyBalance(Scene &scene);
+
+    public:
+        // Interval bake of the same prior: on every grounded frame the centre of mass is brought over the feet in
+        // contact. report receives a JSON summary. Airborne spans belong to Ballistic / Body.
+        bool BakeBalance(Scene &scene, float startFrame, float endFrame, std::string &status, std::string *report = nullptr);
+
+    private:
         void SolveLockRotations(const Skeleton &skeleton, std::span<const mat4> boneTransforms, int skipBone,
                                 int skipMirrorBone, std::vector<LockSolve> &out);
         bool SolveLocks(Scene &scene, int skipBone = -1, bool pushUndo = false, float frame = -1.f,
@@ -107,6 +119,10 @@ namespace pe
         vec3 m_grabPlanePoint = vec3(0.f), m_grabOffset = vec3(0.f);
         std::vector<vec3> m_lockBend;
         bool m_autoLock = true; // hold every bone posed by hand where it was left
+        bool m_balance = true;  // a drag keeps the centre of mass over the ground point it started on
+        bool m_balanceHaveReference = false;
+        vec3 m_balanceReference = vec3(0.f); // rig-space centre of mass when the drag began
+        std::string m_balanceNote;           // why the last drag could not balance
         int m_lockTarget = -1;
         float m_lockReach = 1.f;
         bool m_reachDragging = false;
