@@ -45,6 +45,7 @@ namespace pe
         bool enabled = true;
         bool automatic = false; // captured by posing a bone by hand: session state, never written to rig.json
         bool lifted = false;    // an authored plant whose foot was lifted: yields to the session, never written or solved
+        bool heel = false;      // a session plant holding the heel (under the ankle at floor height) instead of the tail
     };
 
     // Rig Editor: authors and bakes a skeleton + per-bone influence capsules, and adjusts ordinary

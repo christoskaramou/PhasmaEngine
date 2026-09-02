@@ -71,8 +71,13 @@ namespace pe
         void UpdateContacts(const Skeleton &skeleton, std::span<const mat4> boneTransforms, std::span<const int> edited);
         bool CentreOfMass(const Skeleton &skeleton, std::span<const mat4> boneTransforms, vec3 &out) const;
         bool SupportCentre(vec3 &out) const;
-        bool IsSupport(const Skeleton &skeleton, int bone) const;
-        void BeginBalance();
+        // The heel of a foot bone (under the ankle at the toe's rest height, carried by the bone); foot names only.
+        bool HeelPoint(const Skeleton &skeleton, std::span<const mat4> boneTransforms, int bone,
+                       std::span<const vec3> restTails, vec3 &out) const;
+        // The point of a contact bone that meets the floor: its tail, or its heel when that is lower.
+        vec3 ContactPoint(const Skeleton &skeleton, std::span<const mat4> boneTransforms, int bone,
+                          std::span<const vec3> tails, std::span<const vec3> restTails, bool &heel) const;
+        void BeginBalance(int bone = -1);
         // The bone whose rotation counter-leans the upper body: the Location carrier when no foot hangs under it,
         // else its heaviest foot-free child (a mocap spine); -1 when the rig has no such trunk.
         int LeanBone(const Skeleton &skeleton) const;
