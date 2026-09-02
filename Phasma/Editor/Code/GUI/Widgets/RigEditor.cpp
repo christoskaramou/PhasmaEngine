@@ -356,12 +356,12 @@ namespace pe
         }
     }
 
+    // Reads the shell cache (built with the model): callers run every frame, and a fresh CollectShells
+    // is a full vertex sweep with a PCA per part.
     float RigEditor::ModelHeight() const
     {
-        std::vector<ShellInfo> shells;
-        CollectShells(shells);
         float lo = std::numeric_limits<float>::max(), hi = -lo;
-        for (const ShellInfo &s : shells)
+        for (const ShellInfo &s : m_shellCache)
         {
             lo = std::min(lo, s.aabbMin.y);
             hi = std::max(hi, s.aabbMax.y);
