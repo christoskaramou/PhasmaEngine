@@ -906,6 +906,84 @@ namespace pe::AnimationClipTools
         return writes;
     }
 
+    size_t BallisticInterval(AnimationClip &clip,
+                             int boneIndex,
+                             const vec3 &restPosition,
+                             float startTime,
+                             float endTime,
+                             float stepTicks,
+                             float gravity)
+    {
+        if (boneIndex < 0 || !std::isfinite(startTime) || !std::isfinite(endTime) || !std::isfinite(stepTicks) ||
+            !std::isfinite(gravity) || gravity < 0.f || !Finite(restPosition) || stepTicks <= kEpsilon ||
+            clip.ticksPerSecond <= kEpsilon || endTime - startTime <= stepTicks + kEpsilon ||
+            static_cast<double>(endTime - startTime) / stepTicks > static_cast<double>(kMaxTweenSamples))
+            return 0;
+
+        // The clip is not touched until every sample is known good - a refused bake must leave it alone,
+        // including the channel it would have had to create.
+        AnimationChannel *channel = nullptr;
+        for (AnimationChannel &candidate : clip.channels)
+            if (candidate.boneIndex == boneIndex)
+                channel = &candidate;
+        const std::vector<PositionKey> none;
+        const std::vector<PositionKey> &source = channel ? channel->positionKeys : none;
+        if (!FiniteKeys(source))
+            return 0;
+
+        // An empty curve plays the bind translation, so that is where the arc launches from and lands.
+        const vec3 startValue =
+            source.empty() ? restPosition : AnimationEvaluator::InterpolatePosition(source, startTime);
+        const vec3 endValue = source.empty() ? restPosition : AnimationEvaluator::InterpolatePosition(source, endTime);
+        // Read while the curve is still the source one: rewriting the start key Linear would otherwise hand
+        // the inserted end key its own mode instead of the mode the segment really plays there.
+        const AnimationInterpolation endBlend = InterpolationAt(source, endTime);
+        const float tolerance = std::max(kEpsilon, stepTicks * 0.001f);
+        const float flight = (endTime - startTime) / clip.ticksPerSecond; // seconds in the air
+        // The up velocity that lands exactly on the end value: y1 = y0 + v0*T - g*T*T/2.
+        // ponytail: rig space is Y-up like the rest of the editor; a Z-up rig needs the axis exposed.
+        const float launch = (endValue.y - startValue.y) / flight + 0.5f * gravity * flight;
+
+        // Every sample is taken before anything is written, exactly like the tween bake.
+        std::vector<std::pair<float, vec3>> samples;
+        const float first = std::ceil((startTime + tolerance) / stepTicks) * stepTicks;
+        for (size_t step = 0; step < kMaxTweenSamples; ++step)
+        {
+            const float time = first + stepTicks * static_cast<float>(step);
+            if (time >= endTime - tolerance)
+                break;
+            const float elapsed = (time - startTime) / clip.ticksPerSecond;
+            vec3 value = glm::mix(startValue, endValue, (time - startTime) / (endTime - startTime));
+            value.y = startValue.y + launch * elapsed - 0.5f * gravity * elapsed * elapsed;
+            if (!Finite(value)) // a large enough gravity overflows the parabola
+                return 0;
+            samples.push_back({time, value});
+        }
+        if (samples.empty())
+            return 0;
+
+        if (!channel)
+        {
+            channel = &clip.channels.emplace_back();
+            channel->boneIndex = boneIndex;
+        }
+        std::vector<PositionKey> &keys = channel->positionKeys;
+
+        size_t writes = 0;
+        // The ends anchor the arc: without keys there, the segments outside the interval would re-aim at the
+        // first and last interior sample instead of at the pose the clip already shows. Interpolation is
+        // outgoing, so the start key is rewritten Linear even when it already existed: a Smooth or Stepped one
+        // would ease or hold the first segment of a curve that is meant to be pure gravity.
+        writes += UpsertKey(keys, startTime, startValue, AnimationInterpolation::Linear);
+        if (!HasKeyAt(keys, endTime, tolerance))
+            writes += UpsertKey(keys, endTime, endValue, endBlend);
+        std::erase_if(keys, [&](const PositionKey &key)
+                      { return key.time > startTime + tolerance && key.time < endTime - tolerance; });
+        for (const auto &[time, value] : samples)
+            writes += UpsertKey(keys, time, value, AnimationInterpolation::Linear);
+        return writes;
+    }
+
     size_t Smooth(AnimationClip &clip, const SmoothSettings &settings, std::span<const int> boneIndices)
     {
         const bool invalidStart = std::isnan(settings.startTime) ||

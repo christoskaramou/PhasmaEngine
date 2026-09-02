@@ -269,6 +269,7 @@ namespace pe
         bool HasInterval() const { return m_intervalEnd >= m_intervalStart + 1.f; }
         void ClearInterval();
         std::vector<int> IntervalBones() const; // selected bones, or empty = every keyed bone
+        int BallisticBone(const Skeleton &skeleton, const AnimationClip &clip, int requested) const;
         size_t TweenBones(AnimationClip &clip, std::span<const int> bones, float startFrame, float endFrame, int everyN,
                           AnimationClipTools::TweenMode mode);
         // Moves every key inside [fromFrame, toFrame]: t' = pivot + (t - pivot) * factor + delta, in frames,
@@ -423,7 +424,8 @@ namespace pe
         float m_intervalDragStart = 0.f;
         float m_intervalDragEnd = 0.f;
         AnimationClip m_intervalSnapshot; // pre-drag key times: slide and scale rebuild from it
-        std::string m_tweenStatus;        // what the last Tween wrote, beside the button
+        std::string m_tweenStatus;        // what the last Tween or Ballistic bake wrote, beside the button
+        float m_gravity = 9.81f;          // rig units per second squared for the ballistic bake
 
         // --- state: pending programmatic requests ---
         float m_pendingFrame = -1.f;

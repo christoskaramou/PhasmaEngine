@@ -80,6 +80,16 @@ namespace pe
     {
         constexpr float kFrameEps = 1e-3f;
 
+        // What the evaluator plays for a channel with no Location keys: the bind translation with the
+        // intermediate prefix removed, which is not the same as localBindTransform on an imported rig.
+        vec3 BindTranslation(const BoneInfo &bone)
+        {
+            vec3 position, scale;
+            quat rotation;
+            AnimationEvaluator::BindPose(bone, position, rotation, scale);
+            return position;
+        }
+
         bool ChannelKeyed(const AnimationChannel &channel)
         {
             return !channel.positionKeys.empty() || !channel.rotationKeys.empty() || !channel.scaleKeys.empty();
@@ -1354,6 +1364,33 @@ namespace pe
                                                   channelMask());
                 commit(before, changed);
                 return ok({{"bones", bones.size()}, {"keys_touched", changed}});
+            }
+            if (action == "timeline.ballistic")
+            {
+                if (!HasInterval())
+                    return fail("mark an interval first (timeline.interval)");
+                // The button falls back to the root, but a bone named in the request is honoured or refused -
+                // a typo must never quietly bake the arc onto a different curve.
+                int bone = m_activeBone;
+                if (args.contains("bone"))
+                {
+                    bone = boneArg();
+                    if (bone < 0 || bone != BallisticBone(skeleton, clip, bone))
+                        return fail("bone must be a root bone or already carry position keys");
+                }
+                else
+                    bone = BallisticBone(skeleton, clip, bone);
+                if (bone < 0)
+                    return fail("ballistic needs a root bone, or one that already has position keys");
+                const float gravity = args.value("gravity", m_gravity);
+                if (!std::isfinite(gravity) || gravity < 0.f)
+                    return fail("gravity must be finite and not negative");
+                const AnimationClip before = clip;
+                const size_t written = AnimationClipTools::BallisticInterval(
+                    clip, bone, BindTranslation(skeleton.bones[bone]), ToTicks(m_intervalStart),
+                    ToTicks(m_intervalEnd), ToTicks(1.f), gravity);
+                commit(before, written);
+                return ok({{"bone", skeleton.bones[bone].name}, {"keys_written", written}, {"gravity", gravity}});
             }
             if (action == "timeline.motion.spring_bake")
             {
@@ -2865,6 +2902,25 @@ namespace pe
         return bones; // empty = every keyed bone, like the Motion Doctor tools
     }
 
+    // The arc is root translation. A requested bone qualifies only when it is a root itself or already owns a
+    // Location curve (mocap rigs keep translation on Hips under a keyless control root); posing never gives a
+    // child one, so baking an arc there would invent the curve the pose tools refuse to create.
+    int AnimationTimeline::BallisticBone(const Skeleton &skeleton, const AnimationClip &clip, int requested) const
+    {
+        const int boneCount = skeleton.GetBoneCount();
+        if (requested >= 0 && requested < boneCount &&
+            (skeleton.bones[requested].parentIndex < 0 ||
+             std::any_of(clip.channels.begin(), clip.channels.end(), [requested](const AnimationChannel &channel)
+                         { return channel.boneIndex == requested && !channel.positionKeys.empty(); })))
+            return requested;
+        // A selected arm or hand carries no translation, so the arc belongs to the root instead of failing:
+        // in the Timeline you almost always have a child bone active.
+        for (int i = 0; i < boneCount; i++)
+            if (skeleton.bones[i].parentIndex < 0)
+                return i;
+        return -1;
+    }
+
     size_t AnimationTimeline::TweenBones(AnimationClip &clip, std::span<const int> bones, float startFrame,
                                          float endFrame, int everyN, AnimationClipTools::TweenMode mode)
     {
@@ -4187,11 +4243,45 @@ namespace pe
             m_tweenStatus = written > 0 ? "Tween wrote " + std::to_string(written) + " keys."
                                         : TweenEmptyReason(skeleton, clip, bones);
         }
-        ImGui::EndDisabled();
         ui::ItemTooltip("Bake the in-between frames of the interval (Alt-drag the ruler to mark one) for the "
                         "selected bones, or every keyed bone when none are selected. The selected bone must already "
                         "have keys; Tween will not invent a curve. Keys what the clip already plays; the ends stay put.",
                         ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::SameLine();
+        if (ImGui::Button("Ballistic"))
+        {
+            const int bone = BallisticBone(skeleton, clip, m_activeBone);
+            const AnimationClip before = clip;
+            const size_t written =
+                bone < 0 ? 0
+                         : AnimationClipTools::BallisticInterval(clip, bone, BindTranslation(skeleton.bones[bone]),
+                                                                 ToTicks(m_intervalStart), ToTicks(m_intervalEnd),
+                                                                 ToTicks(1.f), m_gravity);
+            if (written > 0)
+            {
+                PushUndoSnapshot(before);
+                ReevaluatePose(scene, anim);
+                m_tweenStatus = "Ballistic wrote " + std::to_string(written) + " keys on " +
+                                skeleton.bones[bone].name + ".";
+            }
+            else
+                m_tweenStatus = bone < 0
+                                    ? "Ballistic needs the root bone, or one that already has Location keys."
+                                    : "Ballistic wrote nothing: this interval and gravity make no usable arc.";
+        }
+        ui::ItemTooltip("Throw the root through the interval instead of sliding it: the in-between frames follow "
+                        "gravity from the launch speed the two ends imply, while the horizontal path stays straight. "
+                        "The ends themselves are kept. Acts on the selected bone when it carries the translation, "
+                        "otherwise on the skeleton root. Posing this bone again inside the same interval rebuilds "
+                        "its curve from the ends, which flattens the arc - bake it last.",
+                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 3.5f);
+        ImGui::DragFloat("##ballistic_gravity", &m_gravity, 0.05f, 0.f, 200.f, "g %.2f");
+        ui::ItemTooltip("Gravity for the ballistic bake, in rig units per second squared. 9.81 is life-sized; "
+                        "raise it for a snappier, more animated fall.",
+                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::EndDisabled();
         if (!m_tweenStatus.empty())
         {
             ImGui::SameLine();
