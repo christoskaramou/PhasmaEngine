@@ -1004,6 +1004,7 @@ namespace pe
         addAction("timeline.interval", "Animation Timeline: Set Or Clear The Edit Interval (args: start, end frames; end below start + 1 clears)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.interval_slide", "Animation Timeline: Slide The Interval And Every Key Inside It (args: delta_frames)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.interval_scale", "Animation Timeline: Scale The Interval And Every Key Inside It (args: factor, pivot_frame)", "Timeline", "command", hasTimeline, false, false);
+        addAction("timeline.ballistic", "Animation Timeline: Replace The Interval's Root Path With A Gravity Arc (args: bone, gravity)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.tween", "Animation Timeline: Key What The Clip Plays At Each Interior Frame Of The Interval (ends and existing in-betweens are kept; args: bones, every_n)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.analyze", "Motion Doctor: Analyze Quaternion Flips, Pops, Jitter, Loop Seam, Root Drift And Selected-Bone Sliding (optional bone)", "Timeline", "command", hasTimeline, false, false);
         addAction("timeline.motion.fix_quaternions", "Motion Doctor: Fix Quaternion Hemisphere Flips", "Timeline", "command", hasTimeline, false, false);

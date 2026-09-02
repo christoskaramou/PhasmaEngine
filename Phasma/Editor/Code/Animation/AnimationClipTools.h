@@ -185,6 +185,22 @@ namespace pe::AnimationClipTools
                          std::span<const int> boneIndices = {},
                          ChannelMask channels = ChannelMask::All);
 
+    // Replaces the interval's interior on one bone's Location curve with a ballistic arc: the horizontal
+    // components keep the straight line between the two ends while rig Y follows gravity from the launch
+    // velocity those ends imply. Both ends are keyed with the values the curve already shows there, so the
+    // segments outside the interval keep playing what they played. Unlike TweenInterval this DOES create the
+    // curve when the bone has none - the arc is the curve being authored, not an accidental constant - and
+    // restPosition then stands in for the missing keys the way the evaluator's bind fallback does. Translation
+    // bones only: the caller passes a root, or a bone that already owns a Location curve (mocap hips under a
+    // keyless control root), and never an arbitrary child - posing refuses to give those a Location curve.
+    size_t BallisticInterval(AnimationClip &clip,
+                             int boneIndex,
+                             const vec3 &restPosition,
+                             float startTime,
+                             float endTime,
+                             float stepTicks,
+                             float gravity = 9.81f);
+
     // Smooths interior selected keys and preserves the first and last selected key on every curve.
     size_t Smooth(AnimationClip &clip,
                   const SmoothSettings &settings,
