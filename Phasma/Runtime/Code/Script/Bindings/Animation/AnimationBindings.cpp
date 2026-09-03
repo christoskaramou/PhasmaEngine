@@ -58,6 +58,20 @@ namespace pe
                         as->SetSpeed(h.nodeId, speed);
                 });
 
+                // Root motion: a clip whose travel the Animator extracted moves this node as it plays (default on).
+                anim.set_function("set_root_motion", [](SceneNodeHandle &h, bool enabled) {
+                    auto *as = GetGlobalSystem<AnimationSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (as && scene && h.IsValid(*scene))
+                        as->SetRootMotion(h.nodeId, enabled);
+                });
+
+                anim.set_function("get_root_motion", [](SceneNodeHandle &h) -> bool {
+                    auto *as = GetGlobalSystem<AnimationSystem>();
+                    Scene *scene = GetActiveScene();
+                    return as && scene && h.IsValid(*scene) && as->GetRootMotion(h.nodeId);
+                });
+
                 anim.set_function("is_playing", [](SceneNodeHandle &h) -> bool {
                     auto *as = GetGlobalSystem<AnimationSystem>();
                     Scene *scene = GetActiveScene();
@@ -87,6 +101,54 @@ namespace pe
                             return makeClipTable(ts, empty);
                         return makeClipTable(ts, scene->GetAnimationClipsForNode(h.nodeId));
                     }));
+
+                // Ruler markers of a clip (1-based index or name; none = the clip playing) as {name, time} with time
+                // in seconds, and the playhead in seconds, so a script fires footsteps or hits on them.
+                anim.set_function("get_markers", [](SceneNodeHandle &h, sol::optional<sol::object> clipArg, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
+                    sol::table t = lua.create_table();
+                    auto *as = GetGlobalSystem<AnimationSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (!scene || !h.IsValid(*scene))
+                        return t;
+                    const auto &clips = scene->GetAnimationClipsForNode(h.nodeId);
+                    int index = as ? as->GetCurrentClip(h.nodeId) : -1;
+                    if (clipArg && clipArg->is<int>())
+                        index = clipArg->as<int>() - 1;
+                    else if (clipArg && clipArg->is<std::string>())
+                    {
+                        const std::string name = clipArg->as<std::string>();
+                        index = -1;
+                        for (int i = 0; i < static_cast<int>(clips.size()); i++)
+                            if (clips[i].name == name)
+                                index = i;
+                    }
+                    if (index < 0 || index >= static_cast<int>(clips.size()))
+                        return t;
+                    const AnimationClip &clip = clips[index];
+                    const float ticksPerSecond = clip.ticksPerSecond > 0.f ? clip.ticksPerSecond : 25.f;
+                    int n = 0;
+                    for (const ClipMarker &marker : clip.markers)
+                    {
+                        sol::table entry = lua.create_table();
+                        entry["name"] = marker.name;
+                        entry["time"] = marker.time / ticksPerSecond;
+                        t[++n] = entry;
+                    }
+                    return t;
+                });
+
+                anim.set_function("get_time", [](SceneNodeHandle &h) -> float {
+                    auto *as = GetGlobalSystem<AnimationSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (!as || !scene || !h.IsValid(*scene))
+                        return 0.f;
+                    const int index = as->GetCurrentClip(h.nodeId);
+                    const auto &clips = scene->GetAnimationClipsForNode(h.nodeId);
+                    if (index < 0 || index >= static_cast<int>(clips.size()) || clips[index].ticksPerSecond <= 0.f)
+                        return 0.f;
+                    return as->GetPlaybackTime(h.nodeId) / clips[index].ticksPerSecond;
+                });
 
                 anim.set_function("get_joint_count", sol::overload(
                     []() -> int {

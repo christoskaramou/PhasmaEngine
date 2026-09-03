@@ -62,6 +62,13 @@ namespace pe
         }
         void ResolveTarget(Scene &scene);
         void DrawPanel(Scene &scene);
+        bool IsDirty() const { return m_dirty || m_weightDirty; }
+        bool DocumentDirty() const { return m_dirty; }
+        bool WeightDirty() const { return m_weightDirty; }
+        const std::string &PresetName() const { return m_presetName; } // empty = hand-edited (Custom)
+        float LeanBudgetDegrees() const;                               // the preset's counter-lean cap for balance; a hand-made rig gets the humanoid's
+        bool SaveDocument(std::string *error = nullptr) { return SaveJson(error); }
+        void MarkModelSaved() { m_weightDirty = false; }
 
         // rig.* editor actions (agent route). Returns a JSON result string.
         std::string HandleAction(const std::string &action, const std::string &argsJson);

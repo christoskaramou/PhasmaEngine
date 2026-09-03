@@ -175,6 +175,16 @@ namespace pe
         ImGui::SameLine();
         ImGui::Checkbox("Mirror X##pose", &m_mirrorX);
         ui::ItemTooltip("Solve the .L/.R counterpart chain in the same Timeline undo step.");
+        ui::SameLineIfFits(ui::CheckboxWidth("Auto Key"));
+        bool autoKey = m_timeline.AutoKey();
+        if (ImGui::Checkbox("Auto Key", &autoKey))
+            m_timeline.SetAutoKey(autoKey);
+        ui::ItemTooltip("Every viewport or pose-bar edit keys the current frame. Off: only bones already keyed at "
+                        "this frame take the edit; press Key to add one.");
+        ui::SameLineIfFits(ui::CheckboxWidth("Bone Names"));
+        bool boneNames = m_timeline.ShowBoneNames();
+        if (ImGui::Checkbox("Bone Names", &boneNames))
+            m_timeline.SetShowBoneNames(boneNames);
 
         const float stepperWidth = ImGui::GetFontSize() * 4.f;
         ImGui::Checkbox("Onion Bones", &m_onionBones);
@@ -1865,11 +1875,13 @@ namespace pe
             m_balanceNote = "Balance needs Auto Key, or a Location key on " + skeleton.bones[bone].name + " at this frame.";
             return false;
         }
-        // Counter-lean first: the trunk tilts away from the pull about its own base, up to 15 degrees per drag,
-        // and only the remainder slides the hips. Dragging the trunk itself is the user's lean and gets no counter.
-        // ponytail: one trunk bone, a fixed cap; a per-preset lean budget and a bend spread over the spine are the upgrade.
+        // Counter-lean first: the trunk tilts away from the pull about its own base, up to the preset's lean budget
+        // per drag (15 degrees for a biped, a few for a quadruped, none for a serpent or a prop), and only the
+        // remainder slides the hips. Dragging the trunk itself is the user's lean and gets no counter.
+        // ponytail: one trunk bone; a bend spread over the spine is the upgrade.
         const int lean = m_balanceLeanBone;
-        if (lean >= 0 && lean < boneCount && lean != draggedBone && lean != mirrorBone &&
+        const float cap = glm::radians(m_rig.LeanBudgetDegrees());
+        if (cap > 0.f && lean >= 0 && lean < boneCount && lean != draggedBone && lean != mirrorBone &&
             timeline->CanViewportRotate(m_model, lean, true, false))
         {
             std::vector<float> masses;
@@ -1900,7 +1912,6 @@ namespace pe
                 const float theta = std::asin(std::clamp(error * totalMass / (upperMass * lever), -1.f, 1.f));
                 const vec3 axis = glm::normalize(glm::cross(vec3(0.f, 1.f, 0.f), direction));
                 glm::vec2 wanted = m_balanceLean + glm::vec2(axis.x, axis.z) * theta;
-                const float cap = glm::radians(15.f);
                 if (glm::length(wanted) > cap)
                     wanted *= cap / glm::length(wanted);
                 const glm::vec2 delta = wanted - m_balanceLean;
@@ -2736,8 +2747,9 @@ namespace pe
             drawList->AddLine(headScreen[i], tailScreen[i], IM_COL32(0, 0, 0, 180), selected ? 7.f : 4.f);
             drawList->AddLine(headScreen[i], tailScreen[i], color, selected ? 4.f : 2.f);
             drawList->AddCircleFilled(headScreen[i], selected ? 5.f : 3.f, color, 12);
-            if (selected)
-                drawList->AddText({headScreen[i].x + 8.f, headScreen[i].y - 18.f}, kBoneSelCol, skeleton.bones[i].name.c_str());
+            if (selected || m_timeline.ShowBoneNames())
+                drawList->AddText({headScreen[i].x + 8.f, headScreen[i].y - 18.f}, selected ? kBoneSelCol : color,
+                                  skeleton.bones[i].name.c_str());
         }
         for (const RigLock &lock : m_locks)
         {

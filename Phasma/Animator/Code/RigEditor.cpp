@@ -557,6 +557,12 @@ namespace pe
         m_projectPresets = RigPresetLibrary::LoadProjectPresets(&m_projectPresetErrors);
     }
 
+    float RigEditor::LeanBudgetDegrees() const
+    {
+        const RigPreset *preset = m_presetName.empty() ? nullptr : FindPreset(m_presetName);
+        return preset ? preset->leanBudgetDegrees : 15.f;
+    }
+
     const RigPreset *RigEditor::FindPreset(std::string_view idOrName) const
     {
         const std::string needle = ToLower(std::string(idOrName));
@@ -843,7 +849,9 @@ namespace pe
                 *error = "the model has no file path";
             return false;
         }
-        std::ofstream out(path, std::ios::binary);
+        std::filesystem::path temp = path;
+        temp += ".tmp";
+        std::ofstream out(temp, std::ios::binary | std::ios::trunc);
         if (!out)
         {
             if (error)
@@ -851,6 +859,24 @@ namespace pe
             return false;
         }
         out << DocumentJson() << '\n';
+        out.flush();
+        out.close();
+        if (!out)
+        {
+            std::error_code ec;
+            std::filesystem::remove(temp, ec);
+            if (error)
+                *error = "failed while writing " + path.generic_string();
+            return false;
+        }
+        if (!FileSystem::ReplaceFile(temp, path))
+        {
+            std::error_code ec;
+            std::filesystem::remove(temp, ec);
+            if (error)
+                *error = "could not replace " + path.generic_string();
+            return false;
+        }
         m_dirty = false;
         if (!quiet)
             m_status = "Saved " + path.filename().generic_string();
@@ -1081,6 +1107,7 @@ namespace pe
                 state["weight_redo"] = m_weightRedo.size();
                 state["shells"] = nlohmann::json::parse(ShellsJson());
                 state["target"] = m_model ? m_model->GetLabel() : "";
+                state["lean_budget_degrees"] = LeanBudgetDegrees();
                 return ok(state);
             }
             if (action == "rig.mode")
@@ -2216,13 +2243,23 @@ namespace pe
         else if (!m_model->GetAnimations().empty() && newBones.size() < previousBones.size())
         {
             // Shrunk skeleton, same leading bones: only the removed bones' channels are garbage.
-            size_t stripped = 0;
+            size_t stripped = 0, rootTracks = 0;
             for (AnimationClip &animation : m_model->GetMutableAnimations())
+            {
                 stripped += std::erase_if(animation.channels, [&](const AnimationChannel &channel)
                                           { return channel.boneIndex < 0 ||
                                                    channel.boneIndex >= static_cast<int>(newBones.size()); });
-            if (stripped > 0)
+                if (!animation.rootMotion.Empty() &&
+                    animation.rootMotion.boneIndex >= static_cast<int>(newBones.size()))
+                {
+                    animation.rootMotion = {};
+                    ++rootTracks;
+                }
+            }
+            if (stripped > 0 || rootTracks > 0)
                 m_bakeNote = " Stripped " + std::to_string(stripped) + " channel(s) of removed bones.";
+            if (rootTracks > 0)
+                m_bakeNote += " Dropped " + std::to_string(rootTracks) + " root-motion track(s).";
         }
         if (!m_geoNote.empty())
             m_bakeNote += " " + m_geoNote;
@@ -2235,15 +2272,36 @@ namespace pe
         out.replace_filename(stem + suffix + ".pemesh");
         const std::string document = DocumentJson();
         const bool written = ModelAssetCooked::WriteToFile(m_model, out);
-        if (written)
+        if (!written)
         {
-            std::filesystem::path json = out;
-            json.replace_extension(".rig.json");
-            std::ofstream f(json, std::ios::binary | std::ios::trunc);
-            f << document;
+            m_weightDirty = true;
+            scene.UpdateGeometryBuffers();
+            renderer->ResetTAAHistory();
+            error = "failed to write " + out.generic_string();
+            return false;
         }
+        std::filesystem::path json = out;
+        json.replace_extension(".rig.json");
+        std::filesystem::path jsonTemp = json;
+        jsonTemp += ".tmp";
+        std::ofstream f(jsonTemp, std::ios::binary | std::ios::trunc);
+        f << document;
+        f.flush();
+        f.close();
+        if (!f || !FileSystem::ReplaceFile(jsonTemp, json))
+        {
+            std::error_code ec;
+            std::filesystem::remove(jsonTemp, ec);
+            m_dirty = true;
+            m_weightDirty = true;
+            scene.UpdateGeometryBuffers();
+            renderer->ResetTAAHistory();
+            error = "failed to write " + json.generic_string();
+            return false;
+        }
+        m_weightDirty = false;
 
-        // the in-memory asset is rewritten either way: drop it and let the scene swap decide the target
+        // Both files are durable: replace the in-memory asset with the just-written model.
         ModelAsset *old = m_model;
         NodeId *oldRoot = m_rootNode;
         const mat4 oldLocal = scene.IsNodeAlive(oldRoot) ? scene.GetLocalMatrix(oldRoot) : mat4(1.f);
@@ -2258,12 +2316,6 @@ namespace pe
         if (scene.IsNodeAlive(oldRoot))
             scene.DeleteNode(oldRoot); // the whole rig subtree, including empty group nodes a scene load left unregistered
         scene.RemoveModel(old);
-        if (!written)
-        {
-            scene.UpdateGeometryBuffers();
-            error = "failed to write " + out.generic_string();
-            return false;
-        }
         ModelAsset *rigged = ModelAsset::Load(out);
         if (!rigged)
         {

@@ -1,9 +1,12 @@
 #pragma once
 #include <filesystem>
+#include <vector>
 
 namespace pe
 {
     class ModelAsset;
+    struct Skeleton;
+    struct AnimationClip;
 
     // Cooked-mesh (".pemesh") pipeline.
     //
@@ -23,7 +26,11 @@ namespace pe
 
         // Player/editor: load a cooked ".pemesh" into a fresh ModelAsset (Assimp-free, GPU ready).
         // Returns nullptr on a missing/invalid/incompatible file.
-        static ModelAsset *Load(const std::filesystem::path &file);
+        static ModelAsset *Load(const std::filesystem::path &file) { return Load(file, false); }
+
+        // The skeleton and clips of a cooked file without touching the GPU: the editor swaps clips into a live
+        // model when the Animator re-saves it. Returns false on a missing/invalid/incompatible file.
+        static bool ReadAnimations(const std::filesystem::path &file, Skeleton &skeleton, std::vector<AnimationClip> &clips);
 
         // Editor/cook side: serialize a ModelAsset's GPU-ready CPU data and referenced material
         // textures to a ".pemesh" file. The ModelAsset may come from any producer
@@ -33,5 +40,9 @@ namespace pe
         static bool WriteToFile(const ModelAsset *model, const std::filesystem::path &file);
 
         static bool IsCookedPath(const std::filesystem::path &file);
+
+    private:
+        // cpuOnly stops after the tables: streams, skeleton and clips parsed, no materials or buffers uploaded.
+        static ModelAsset *Load(const std::filesystem::path &file, bool cpuOnly);
     };
 } // namespace pe
