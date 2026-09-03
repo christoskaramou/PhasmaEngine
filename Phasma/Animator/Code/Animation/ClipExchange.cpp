@@ -449,7 +449,7 @@ namespace pe::ClipExchange
     // ---------------------------------------------------------------------------------------------------------
     // cooked files and the cook tool
     // ---------------------------------------------------------------------------------------------------------
-    std::filesystem::path CookToTemp(const std::filesystem::path &source, std::string &error)
+    bool CookModel(const std::filesystem::path &source, const std::filesystem::path &output, std::string &error)
     {
         const std::filesystem::path exeDir(reinterpret_cast<const char8_t *>(Path::Executable.c_str()));
 #if defined(PE_WIN32)
@@ -461,31 +461,33 @@ namespace pe::ClipExchange
         if (!std::filesystem::exists(exe, ec))
         {
             error = "PhasmaCook is not beside the executable; build the PhasmaCook target to import source models";
-            return {};
+            return false;
         }
-        const std::filesystem::path tempDir = std::filesystem::temp_directory_path(ec);
+        if (source.empty() || output.empty() || !std::filesystem::exists(source, ec) || ec)
+        {
+            error = "source model does not exist";
+            return false;
+        }
+        if (source.lexically_normal() == output.lexically_normal())
+        {
+            error = "source and cooked output must be different files";
+            return false;
+        }
+        if (!ModelAssetCooked::IsCookedPath(output))
+        {
+            error = "cooked model output must end in .pemesh";
+            return false;
+        }
+        if (!output.parent_path().empty())
+            std::filesystem::create_directories(output.parent_path(), ec);
         if (ec)
         {
-            error = "cannot locate the temporary directory";
-            return {};
+            error = "cannot create the output directory";
+            return false;
         }
-#if defined(PE_WIN32)
-        const unsigned long processId = GetCurrentProcessId();
-#else
-        const unsigned long processId = static_cast<unsigned long>(getpid());
-#endif
-        const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-        const std::filesystem::path staging =
-            tempDir / ("phasma_animator_import_" + std::to_string(processId) + "_" + std::to_string(stamp));
-        if (!std::filesystem::create_directory(staging, ec) || ec)
-        {
-            error = "cannot create a private temporary import directory";
-            return {};
-        }
-        const std::filesystem::path out = staging / "import.pemesh";
         bool ok = false, timedOut = false;
 #if defined(PE_WIN32)
-        std::wstring cmd = L"\"" + exe.wstring() + L"\" \"" + source.wstring() + L"\" \"" + out.wstring() + L"\"";
+        std::wstring cmd = L"\"" + exe.wstring() + L"\" \"" + source.wstring() + L"\" \"" + output.wstring() + L"\"";
         std::vector<wchar_t> buffer(cmd.begin(), cmd.end());
         buffer.push_back(L'\0');
         STARTUPINFOW si{};
@@ -494,9 +496,8 @@ namespace pe::ClipExchange
         if (!CreateProcessW(exe.wstring().c_str(), buffer.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr,
                             nullptr, &si, &pi))
         {
-            std::filesystem::remove_all(staging, ec);
             error = "could not start PhasmaCook";
-            return {};
+            return false;
         }
         const DWORD waitResult = WaitForSingleObject(pi.hProcess, 120000);
         timedOut = waitResult == WAIT_TIMEOUT;
@@ -512,13 +513,12 @@ namespace pe::ClipExchange
         CloseHandle(pi.hThread);
         ok = waitResult == WAIT_OBJECT_0 && exitCode == 0;
 #else
-        const std::string exeStr = exe.string(), sourceStr = source.string(), outStr = out.string();
+        const std::string exeStr = exe.string(), sourceStr = source.string(), outStr = output.string();
         const pid_t pid = fork();
         if (pid < 0)
         {
-            std::filesystem::remove_all(staging, ec);
             error = "could not start PhasmaCook";
-            return {};
+            return false;
         }
         if (pid == 0)
         {
@@ -540,11 +540,41 @@ namespace pe::ClipExchange
         }
         ok = waitResult == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
 #endif
-        if (!ok || !std::filesystem::exists(out, ec))
+        if (!ok || !std::filesystem::exists(output, ec))
         {
-            std::filesystem::remove_all(staging, ec);
             error = timedOut ? "PhasmaCook timed out while importing " + source.filename().string()
                              : "PhasmaCook could not import " + source.filename().string();
+            return false;
+        }
+        return true;
+    }
+
+    std::filesystem::path CookToTemp(const std::filesystem::path &source, std::string &error)
+    {
+        std::error_code ec;
+        const std::filesystem::path tempDir = std::filesystem::temp_directory_path(ec);
+        if (ec)
+        {
+            error = "cannot locate the temporary directory";
+            return {};
+        }
+#if defined(PE_WIN32)
+        const unsigned long processId = GetCurrentProcessId();
+#else
+        const unsigned long processId = static_cast<unsigned long>(getpid());
+#endif
+        const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+        const std::filesystem::path staging =
+            tempDir / ("phasma_animator_import_" + std::to_string(processId) + "_" + std::to_string(stamp));
+        if (!std::filesystem::create_directory(staging, ec) || ec)
+        {
+            error = "cannot create a private temporary import directory";
+            return {};
+        }
+        const std::filesystem::path out = staging / "import.pemesh";
+        if (!CookModel(source, out, error))
+        {
+            std::filesystem::remove_all(staging, ec);
             return {};
         }
         return out;

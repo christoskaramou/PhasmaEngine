@@ -121,6 +121,10 @@ namespace pe
         m_ikBone = -1;
         m_ikDragging = false;
         m_ikDirty = false;
+        m_splineBone = -1;
+        m_splineDragging = false;
+        m_splineDirty = false;
+        m_gizmoLatched = false;
         m_reachDragging = false;
         m_reachPushed = false;
         if (m_poseDragging && m_poseDirect)
@@ -140,6 +144,29 @@ namespace pe
         m_poseEditSerial = m_timeline.PoseEditSerial();
         m_lastModel = m_model;
         m_status.clear();
+    }
+
+    bool AnimationPoseViewport::SplineChain(const Skeleton &skeleton, int selected, std::vector<int> &chain) const
+    {
+        chain.clear();
+        if (selected < 0 || selected >= skeleton.GetBoneCount())
+            return false;
+        const int authored = FindBone(skeleton.bones[selected].name);
+        if (authored < 0 || authored >= static_cast<int>(m_bones.size()) || !m_bones[authored].spline)
+            return false;
+        std::vector<int> authoredChain;
+        m_rig.ChainOf(authored, authoredChain);
+        for (int bone : authoredChain)
+        {
+            const int mapped = skeleton.GetBoneIndex(m_bones[bone].name);
+            if (mapped < 0)
+            {
+                chain.clear();
+                return false;
+            }
+            chain.push_back(mapped);
+        }
+        return !chain.empty();
     }
 
     void AnimationPoseViewport::DrawControls(Scene &scene)
@@ -224,6 +251,8 @@ namespace pe
         {
             Abort();
             m_twoBoneIk = twoBoneIk;
+            if (m_twoBoneIk)
+                m_splineIk = false;
         }
         ImGui::EndDisabled();
         ui::ItemTooltip(hasIkChain ? "Selected Timeline bone is the tip; its parent and grandparent form the solved links."
@@ -236,6 +265,77 @@ namespace pe
             ImGui::SameLine();
             if (ImGui::SmallButton("Reset IK Target"))
                 m_ikBone = -1;
+        }
+
+        std::vector<int> splineChain;
+        const bool hasSplineChain = m_rig.Planar2D() && SplineChain(skeleton, m_poseSelected, splineChain);
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!hasSplineChain);
+        bool splineIk = m_splineIk;
+        if (ImGui::Checkbox("Spline IK", &splineIk))
+        {
+            Abort();
+            m_splineIk = splineIk;
+            if (m_splineIk)
+                m_twoBoneIk = false;
+        }
+        ImGui::EndDisabled();
+        ui::ItemTooltip(hasSplineChain ? "Pull the selected planar spline chain by its tip with bend, stretch and width controls."
+                                       : "2D Plane mode and a selected spline-chain bone are required.",
+                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        if (!hasSplineChain)
+            m_splineIk = false;
+        if (m_splineIk)
+        {
+            if (m_splineBone != splineChain.front())
+            {
+                AnimationTimeline::ViewportPose pose;
+                std::vector<vec3> heads, tails;
+                if (m_timeline.GetViewportPose(m_model, pose) &&
+                    static_cast<int>(pose.boneTransforms.size()) == skeleton.GetBoneCount())
+                {
+                    PoseTails(skeleton, pose.boneTransforms, heads, tails);
+                    m_splineTarget = tails[splineChain.back()];
+                }
+                m_splineBone = splineChain.front();
+                m_splineInfluences.assign(splineChain.size(), 1.f);
+                m_splineWidths.assign(splineChain.size(), 1.f);
+            }
+            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 7.f);
+            ImGui::SliderFloat("Max Bend##spline", &m_splineMaxBendDegrees, 5.f, 180.f, "%.0f deg");
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Left##spline", m_splineBendSign > 0.f))
+                m_splineBendSign = 1.f;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Right##spline", m_splineBendSign < 0.f))
+                m_splineBendSign = -1.f;
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 6.f);
+            ImGui::SliderFloat("Stretch##spline", &m_splineMaxStretch, 1.f, 3.f, "%.2fx");
+            if (ImGui::TreeNode("Joint Shape##spline"))
+            {
+                for (size_t i = 0; i < splineChain.size(); ++i)
+                {
+                    ImGui::PushID(static_cast<int>(i));
+                    ImGui::TextDisabled("%s", skeleton.bones[splineChain[i]].name.c_str());
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 6.f);
+                    ImGui::SliderFloat("Bend", &m_splineInfluences[i], 0.f, 2.f, "%.2f");
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 6.f);
+                    ImGui::SliderFloat("Width", &m_splineWidths[i], 0.05f, 3.f, "%.2f");
+                    ImGui::PopID();
+                }
+                ImGui::TreePop();
+            }
+            if (ImGui::SmallButton("Apply Spline Shape"))
+            {
+                AnimationPoseTools::PlanarSplineIkResult result;
+                m_status = ApplySplineIk(scene, m_poseSelected, m_splineTarget, true, &result)
+                               ? "Spline IK shape keyed at the current frame."
+                               : "Spline IK could not key the active clip.";
+            }
+            ui::ItemTooltip("Key the current bend influence, width and stretch settings without moving the target.");
         }
 
         if (ImGui::CollapsingHeader("Reference Sequence##timeline_pose"))
@@ -332,6 +432,72 @@ namespace pe
             if (!m_model)
                 return fail("no target model: select a node of a .pemesh model first");
 
+            if (action == "timeline.spline_ik")
+            {
+                if (!m_rig.Planar2D())
+                    return fail("spline IK requires 2D Plane mode");
+                const Skeleton &skeleton = m_model->GetSkeleton();
+                const nlohmann::json &boneValue = args.contains("bone") ? args["bone"] : nlohmann::json();
+                const int bone = boneValue.is_number_integer()
+                                     ? boneValue.get<int>()
+                                 : boneValue.is_string() ? skeleton.GetBoneIndex(boneValue.get<std::string>())
+                                                         : m_poseSelected;
+                std::vector<int> chain;
+                if (!SplineChain(skeleton, bone, chain))
+                    return fail("bone must belong to a spline chain");
+                if (!args.contains("target") || !args["target"].is_array() ||
+                    (args["target"].size() != 2 && args["target"].size() != 3) ||
+                    !std::all_of(args["target"].begin(), args["target"].end(),
+                                 [](const nlohmann::json &value)
+                                 { return value.is_number(); }))
+                    return fail("target must be two or three finite numbers in rig space");
+                vec3 target(args["target"][0].get<float>(), args["target"][1].get<float>(),
+                            args["target"].size() == 3 ? args["target"][2].get<float>() : 0.f);
+                if (!std::isfinite(target.x) || !std::isfinite(target.y) || !std::isfinite(target.z))
+                    return fail("target must contain finite numbers");
+                m_splineMaxBendDegrees = args.value("max_bend_degrees", m_splineMaxBendDegrees);
+                m_splineBendSign = args.value("bend_sign", m_splineBendSign) < 0.f ? -1.f : 1.f;
+                m_splineMaxStretch = args.value("max_stretch", m_splineMaxStretch);
+                if (!std::isfinite(m_splineMaxBendDegrees) || m_splineMaxBendDegrees < 5.f ||
+                    m_splineMaxBendDegrees > 180.f || !std::isfinite(m_splineMaxStretch) ||
+                    m_splineMaxStretch < 1.f || m_splineMaxStretch > 3.f)
+                    return fail("max_bend_degrees must be 5..180 and max_stretch must be 1..3");
+                auto readScales = [&](const char *name, std::vector<float> &values, float minimum, float maximum)
+                {
+                    values.assign(chain.size(), 1.f);
+                    if (!args.contains(name))
+                        return true;
+                    const nlohmann::json &array = args[name];
+                    if (!array.is_array() || array.size() != chain.size())
+                        return false;
+                    for (size_t i = 0; i < array.size(); ++i)
+                    {
+                        if (!array[i].is_number())
+                            return false;
+                        values[i] = array[i].get<float>();
+                        if (!std::isfinite(values[i]) || values[i] < minimum || values[i] > maximum)
+                            return false;
+                    }
+                    return true;
+                };
+                if (!readScales("bend_influences", m_splineInfluences, 0.f, 2.f))
+                    return fail("bend_influences must have one value in 0..2 per spline bone");
+                if (!readScales("width_scales", m_splineWidths, 0.05f, 3.f))
+                    return fail("width_scales must have one value in 0.05..3 per spline bone");
+                AnimationPoseTools::PlanarSplineIkResult result;
+                if (!ApplySplineIk(scene, bone, target, true, &result))
+                    return fail("spline IK could not key the active clip");
+                const float gap = glm::distance(result.stations.back(), vec2(target));
+                nlohmann::json names = nlohmann::json::array();
+                for (int member : chain)
+                    names.push_back(skeleton.bones[member].name);
+                return ok({{"chain", names},
+                           {"gap", gap},
+                           {"stretch", result.stretchScale},
+                           {"bend_degrees", glm::degrees(result.bendRadians)},
+                           {"clamped", result.targetClamped}});
+            }
+
             if (action == "timeline.pin" || action == "timeline.grab")
             {
                 if (!m_model || !m_model->HasSkeleton())
@@ -357,11 +523,13 @@ namespace pe
                 vec3 target;
                 if (!StrictVec3(args["target"], target))
                     return fail("target must be three finite numbers");
-                target.y = std::max(target.y, Ground()); // the floor is solid; the gap is measured to where the pull stops
+                if (!m_rig.Planar2D())
+                    target.y = std::max(target.y, Ground()); // the floor is solid; the gap is measured to where the pull stops
                 float gap = 0.f;
                 bool keyed = false;
                 bool limited = false;
-                BeginBalance(bone); // a one-shot grab balances like a drag: from the pose it started on
+                if (!m_rig.Planar2D())
+                    BeginBalance(bone); // a one-shot grab balances like a drag: from the pose it started on
                 const bool grabbed = PuppetTo(renderer->GetScene(), bone, &target, nullptr, &gap, true, &keyed, &limited);
                 m_balanceHaveReference = false;
                 if (!grabbed)
@@ -393,6 +561,8 @@ namespace pe
             }
             if (action == "timeline.balance")
             {
+                if (m_rig.Planar2D())
+                    return fail("balance is not available in 2D Plane mode");
                 if (args.contains("enabled"))
                     m_balance = args.value("enabled", m_balance);
                 nlohmann::json state{{"enabled", m_balance}, {"note", m_balanceNote}};
@@ -698,6 +868,171 @@ namespace pe
                                              IM_COL32(255, 255, 255, static_cast<int>(config.opacity * 255.f)));
     }
 
+    bool AnimationPoseViewport::ApplySplineIk(Scene &scene, int selected, const vec3 &target, bool pushUndo,
+                                              AnimationPoseTools::PlanarSplineIkResult *outResult)
+    {
+        if (!m_model || !m_model->HasSkeleton() || !m_rig.Planar2D())
+            return false;
+        const Skeleton &skeleton = m_model->GetSkeleton();
+        std::vector<int> chain;
+        if (!SplineChain(skeleton, selected, chain))
+            return false;
+        AnimationTimeline::ViewportPose pose;
+        if (!m_timeline.GetViewportPose(m_model, pose) ||
+            static_cast<int>(pose.boneTransforms.size()) != skeleton.GetBoneCount())
+            return false;
+
+        std::vector<vec3> heads, tails;
+        PoseTails(skeleton, pose.boneTransforms, heads, tails);
+        AnimationPoseTools::PlanarSplineIkInput input;
+        input.stations.reserve(chain.size() + 1);
+        for (int bone : chain)
+            input.stations.emplace_back(heads[bone]);
+        input.stations.emplace_back(tails[chain.back()]);
+        input.target = vec2(target);
+        input.maxBendRadians = glm::radians(m_splineMaxBendDegrees);
+        input.bendSign = m_splineBendSign;
+        input.maxStretchScale = m_splineMaxStretch;
+        input.bendInfluences = m_splineInfluences;
+        const AnimationPoseTools::PlanarSplineIkResult result = AnimationPoseTools::SolvePlanarSplineIk(input);
+        if (outResult)
+            *outResult = result;
+        if (!result || result.segmentAngles.size() != chain.size())
+            return false;
+
+        if (m_splineWidths.size() != chain.size())
+            m_splineWidths.assign(chain.size(), 1.f);
+        std::vector<AnimationTimeline::GlobalBoneTransform> transforms;
+        transforms.reserve(chain.size());
+        for (size_t i = 0; i < chain.size(); ++i)
+        {
+            vec3 bindPosition, bindScale;
+            quat bindRotation;
+            AnimationEvaluator::BindPose(skeleton.bones[chain[i]], bindPosition, bindRotation, bindScale);
+            const vec2 y(std::cos(result.segmentAngles[i]), std::sin(result.segmentAngles[i]));
+            const float width = std::clamp(m_splineWidths[i], 0.05f, 3.f);
+            mat4 transform(1.f);
+            transform[0] = vec4(y.y * bindScale.x * width, -y.x * bindScale.x * width, 0.f, 0.f);
+            transform[1] = vec4(y.x * bindScale.y * result.stretchScale,
+                                y.y * bindScale.y * result.stretchScale, 0.f, 0.f);
+            transform[2] = vec4(0.f, 0.f, bindScale.z, 0.f);
+            transform[3] = vec4(result.stations[i].x, result.stations[i].y, heads[chain[i]].z, 1.f);
+            transforms.push_back({chain[i], transform});
+        }
+        return m_timeline.KeyViewportGlobalTransforms(scene, m_model, transforms, -1.f, pushUndo);
+    }
+
+    void AnimationPoseViewport::DrawSplineIkViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin,
+                                                     const ImVec2 &imageSize, const mat4 &rootWorld,
+                                                     std::span<const mat4> boneTransforms,
+                                                     const std::function<bool(const vec3 &, ImVec2 &)> &project,
+                                                     bool &hovered, bool &active)
+    {
+        const Skeleton &skeleton = m_model->GetSkeleton();
+        std::vector<int> chain;
+        if (!SplineChain(skeleton, m_poseSelected, chain) ||
+            static_cast<int>(boneTransforms.size()) != skeleton.GetBoneCount())
+        {
+            m_splineIk = false;
+            return;
+        }
+        std::vector<vec3> heads, tails;
+        PoseTails(skeleton, boneTransforms, heads, tails);
+        if (m_splineBone != chain.front())
+        {
+            m_splineBone = chain.front();
+            m_splineTarget = tails[chain.back()];
+            m_splineInfluences.assign(chain.size(), 1.f);
+            m_splineWidths.assign(chain.size(), 1.f);
+            m_splineDragging = m_splineDirty = false;
+        }
+
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        ImGuizmo::SetOrthographic(camera->IsOrthographic());
+        ImGuizmo::SetDrawlist(drawList);
+        ImGuizmo::SetRect(imageMin.x, imageMin.y, imageSize.x, imageSize.y);
+        mat4 handedness(1.f);
+        handedness[2][2] = -1.f;
+        const mat4 viewRH = handedness * camera->GetView() * handedness;
+        const float nearPlane = std::max(camera->GetNearPlane(), 0.001f), farPlane = 1000.f;
+        mat4 projectionRH;
+        if (camera->IsOrthographic())
+        {
+            const float halfHeight = std::max(camera->GetOrthographicSize(), 0.001f) * 0.5f;
+            const float halfWidth = halfHeight * camera->GetAspect();
+            projectionRH = glm::orthoRH_NO(-halfWidth, halfWidth, -halfHeight, halfHeight, nearPlane, farPlane);
+        }
+        else
+            projectionRH = glm::perspectiveRH_NO(camera->Fovy(), camera->GetAspect(), nearPlane, farPlane);
+        projectionRH[1][1] *= -1.f;
+
+        mat4 targetWorldRH = handedness * (rootWorld * glm::translate(mat4(1.f), m_splineTarget)) * handedness;
+        ImGuizmo::PushID("RigSplineTarget");
+        const ImGuizmo::OPERATION operation =
+            ImGuizmo::OPERATION(ImGuizmo::TRANSLATE_X | ImGuizmo::TRANSLATE_Y);
+        const bool changed = ImGuizmo::Manipulate(glm::value_ptr(viewRH), glm::value_ptr(projectionRH), operation,
+                                                  ImGuizmo::WORLD, glm::value_ptr(targetWorldRH));
+        const bool gizmoHovered = ImGuizmo::IsOver();
+        const bool gizmoActive = ImGuizmo::IsUsing();
+        ImGuizmo::PopID();
+        if (changed)
+        {
+            const mat4 world = handedness * targetWorldRH * handedness;
+            const vec3 moved = vec3(glm::inverse(rootWorld) * world[3]);
+            m_splineTarget = vec3(moved.x, moved.y, heads[chain.front()].z);
+            m_splineDirty = true;
+        }
+        if (gizmoActive)
+            m_splineDragging = true;
+        hovered = hovered || gizmoHovered;
+        active = gizmoActive || m_splineDragging;
+
+        AnimationPoseTools::PlanarSplineIkInput input;
+        for (int bone : chain)
+            input.stations.emplace_back(heads[bone]);
+        input.stations.emplace_back(tails[chain.back()]);
+        input.target = vec2(m_splineTarget);
+        input.bendInfluences = m_splineInfluences;
+        input.maxBendRadians = glm::radians(m_splineMaxBendDegrees);
+        input.bendSign = m_splineBendSign;
+        input.maxStretchScale = m_splineMaxStretch;
+        const AnimationPoseTools::PlanarSplineIkResult result = AnimationPoseTools::SolvePlanarSplineIk(input);
+        if (result)
+        {
+            ImVec2 previous;
+            bool havePrevious = false;
+            for (const vec2 &station : result.stations)
+            {
+                ImVec2 point;
+                if (!project(vec3(station, heads[chain.front()].z), point))
+                {
+                    havePrevious = false;
+                    continue;
+                }
+                if (havePrevious)
+                    drawList->AddLine(previous, point, IM_COL32(255, 214, 70, 255), 4.f);
+                drawList->AddCircleFilled(point, 4.f, IM_COL32(255, 214, 70, 255), 12);
+                previous = point;
+                havePrevious = true;
+            }
+        }
+
+        if (m_splineDragging && !gizmoActive)
+        {
+            if (m_splineDirty)
+            {
+                AnimationPoseTools::PlanarSplineIkResult keyed;
+                if (ApplySplineIk(scene, m_poseSelected, m_splineTarget, true, &keyed))
+                    m_status = keyed.targetClamped ? "Spline IK keyed; target was clamped to bend/stretch reach."
+                                                   : "Spline IK keyed at the current frame.";
+                else
+                    m_status = "Spline IK could not key the active clip.";
+            }
+            m_splineDragging = m_splineDirty = false;
+            active = false;
+        }
+    }
+
     void AnimationPoseViewport::DrawIkViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize,
                                                const mat4 &rootWorld, std::span<const mat4> boneTransforms,
                                                const std::function<bool(const vec3 &, ImVec2 &)> &project, bool &hovered,
@@ -717,15 +1052,23 @@ namespace pe
             return;
         }
 
-        const vec3 rootPosition = vec3(boneTransforms[root][3]);
-        const vec3 midPosition = vec3(boneTransforms[mid][3]);
-        const vec3 tipPosition = vec3(boneTransforms[tip][3]);
+        vec3 rootPosition = vec3(boneTransforms[root][3]);
+        vec3 midPosition = vec3(boneTransforms[mid][3]);
+        vec3 tipPosition = vec3(boneTransforms[tip][3]);
+        if (m_rig.Planar2D())
+            midPosition.z = tipPosition.z = rootPosition.z;
         if (m_ikBone != tip)
         {
             m_ikBone = tip;
             m_ikTarget = tipPosition;
             vec3 bend;
             BendDirection(rootPosition, midPosition, tipPosition, nullptr, bend);
+            if (m_rig.Planar2D())
+            {
+                const vec2 chain(tipPosition - rootPosition);
+                const vec2 direction = glm::length(chain) > 1e-6f ? glm::normalize(chain) : vec2(0.f, 1.f);
+                bend = vec3(-direction.y, direction.x, 0.f);
+            }
             m_ikPole = midPosition + bend * std::max(glm::length(tipPosition - rootPosition) * 0.5f, 0.05f);
             m_ikDragging = false;
             m_ikDirty = false;
@@ -754,8 +1097,11 @@ namespace pe
         ImGuizmo::Enable(!rightMouse);
         mat4 targetWorldRH = handedness * (rootWorld * glm::translate(mat4(1.f), m_ikTarget)) * handedness;
         ImGuizmo::PushID("RigIkTarget");
+        const ImGuizmo::OPERATION translateOperation =
+            m_rig.Planar2D() ? ImGuizmo::OPERATION(ImGuizmo::TRANSLATE_X | ImGuizmo::TRANSLATE_Y)
+                             : ImGuizmo::TRANSLATE;
         const bool targetChanged = ImGuizmo::Manipulate(glm::value_ptr(viewRH), glm::value_ptr(projectionRH),
-                                                        ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
+                                                        translateOperation, ImGuizmo::WORLD,
                                                         glm::value_ptr(targetWorldRH));
         const bool targetHovered = ImGuizmo::IsOver();
         const bool targetActive = ImGuizmo::IsUsing();
@@ -764,12 +1110,14 @@ namespace pe
         {
             const mat4 world = handedness * targetWorldRH * handedness;
             m_ikTarget = vec3(glm::inverse(rootWorld) * world[3]);
+            if (m_rig.Planar2D())
+                m_ikTarget.z = rootPosition.z;
         }
 
         mat4 poleWorldRH = handedness * (rootWorld * glm::translate(mat4(1.f), m_ikPole)) * handedness;
         ImGuizmo::PushID("RigIkPole");
         const bool poleChanged = ImGuizmo::Manipulate(glm::value_ptr(viewRH), glm::value_ptr(projectionRH),
-                                                      ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
+                                                      translateOperation, ImGuizmo::WORLD,
                                                       glm::value_ptr(poleWorldRH));
         const bool poleHovered = ImGuizmo::IsOver();
         const bool poleActive = ImGuizmo::IsUsing();
@@ -778,6 +1126,8 @@ namespace pe
         {
             const mat4 world = handedness * poleWorldRH * handedness;
             m_ikPole = vec3(glm::inverse(rootWorld) * world[3]);
+            if (m_rig.Planar2D())
+                m_ikPole.z = rootPosition.z;
         }
         ImGuizmo::Enable(true);
 
@@ -1109,7 +1459,7 @@ namespace pe
             auto authored = std::find_if(m_locks.begin(), m_locks.end(), [&](const RigLock &l)
                                          { return !l.automatic && l.bone == name; });
             const int index = skeleton.GetBoneIndex(name);
-            const bool contact = IsContactBone(skeleton, index, ground);
+            const bool contact = !m_rig.Planar2D() && IsContactBone(skeleton, index, ground);
             if (authored != m_locks.end() && (!authored->target.empty() || !contact))
             {
                 // a hand on the shovel, or a rig-space pin the user added on a hand: the authored lock follows the
@@ -1416,6 +1766,8 @@ namespace pe
             const bool heelPlant = lock.heel && HeelPoint(skeleton, boneTransforms, mid, restTails, heel);
             if (heelPlant)
                 goal = anchor - (heel - tipPos); // the heel lands on the anchor: the tail goes where that puts it
+            if (m_rig.Planar2D())
+                goal.z = rootPos.z;
             const vec3 toAnchor = goal - rootPos;
             const float distance = glm::length(toAnchor);
             if (distance > reach && distance > 1e-6f)
@@ -1425,6 +1777,15 @@ namespace pe
             }
             vec3 bend;
             BendDirection(rootPos, midPos, tipPos, &m_lockBend[i], bend);
+            if (m_rig.Planar2D())
+            {
+                const vec2 chain(tipPos - rootPos);
+                const float length = glm::length(chain);
+                bend = length > 1e-6f ? vec3(-chain.y / length, chain.x / length, 0.f) : vec3(1.f, 0.f, 0.f);
+                if (glm::dot(vec2(midPos - rootPos), vec2(bend)) < 0.f)
+                    bend = -bend;
+                m_lockBend[i] = bend;
+            }
             const vec3 pole = midPos + bend * std::max(glm::distance(rootPos, tipPos) * 0.5f, 0.05f);
             AnimationPoseTools::TwoBoneIkResult result =
                 AnimationPoseTools::SolveTwoBoneIk({rootPos, midPos, tipPos, goal, pole});
@@ -1456,7 +1817,8 @@ namespace pe
         std::vector<int> edited(editedBones.begin(), editedBones.end());
         edited.push_back(skipBone);
         edited.push_back(skipMirrorBone);
-        UpdateContacts(skeleton, pose.boneTransforms, edited); // the edit may have lifted or set down a foot
+        if (!m_rig.Planar2D())
+            UpdateContacts(skeleton, pose.boneTransforms, edited); // the edit may have lifted or set down a foot
         if (m_locks.empty())
             return false;
         std::vector<LockSolve> solves;
@@ -1646,15 +2008,18 @@ namespace pe
                         "plant themselves: a foot set down on the floor holds there, a foot lifted by posing its own leg "
                         "comes free, and a foot you drag into the air is held like any other bone. A planted foot posed "
                         "toes-up stands on its heel; ticking a rest plant back on drops the session plant that replaced it.");
-        ui::SameLineIfFits(ui::CheckboxWidth("Balance"));
-        ImGui::Checkbox("Balance", &m_balance);
-        ui::ItemTooltip(m_balanceNote.empty()
-                            ? "While you drag, the hips shift so the body's centre of mass keeps the ground point it "
-                              "started on: pull a hand forward and the body settles back instead of toppling; planted "
-                              "feet re-solve. The shift is keyed on the bone that carries the body's Location. Dragging "
-                              "a planted foot is a step and is not balanced; typed pose-bar values are not balanced. The "
-                              "trunk counter-leans first (up to 15 degrees per drag), then the hips take the rest."
-                            : m_balanceNote.c_str());
+        if (!m_rig.Planar2D())
+        {
+            ui::SameLineIfFits(ui::CheckboxWidth("Balance"));
+            ImGui::Checkbox("Balance", &m_balance);
+            ui::ItemTooltip(m_balanceNote.empty()
+                                ? "While you drag, the hips shift so the body's centre of mass keeps the ground point it "
+                                  "started on: pull a hand forward and the body settles back instead of toppling; planted "
+                                  "feet re-solve. The shift is keyed on the bone that carries the body's Location. Dragging "
+                                  "a planted foot is a step and is not balanced; typed pose-bar values are not balanced. The "
+                                  "trunk counter-leans first (up to 15 degrees per drag), then the hips take the rest."
+                                : m_balanceNote.c_str());
+        }
         ui::SameLineIfFits(ui::ButtonWidth("Add Lock"));
         ImGui::BeginDisabled(!haveBone);
         if (ImGui::Button("Add Lock"))
@@ -1793,6 +2158,8 @@ namespace pe
         m_balanceLean = glm::vec2(0.f);
         m_balanceLeanBone = m_model && m_model->HasSkeleton() ? LeanBone(m_model->GetSkeleton()) : -1;
         m_balanceNote.clear();
+        if (m_rig.Planar2D())
+            return;
         AnimationTimeline::ViewportPose pose;
         if (!m_balance || !m_model || !m_model->HasSkeleton() || !m_timeline.GetViewportPose(m_model, pose))
             return;
@@ -2388,7 +2755,9 @@ namespace pe
         for (size_t k = 0; k < chain.size(); k++)
             pivots[k] = heads[chain[k]];
         vec3 effector = tails[bone];
-        const vec3 target = targetTail ? *targetTail : effector;
+        vec3 target = targetTail ? *targetTail : effector;
+        if (m_rig.Planar2D())
+            target.z = effector.z;
         auto weight = [](size_t k)
         { return k < 2 ? 1.f : k == 2 ? 0.35f
                                       : 0.2f; };
@@ -2412,7 +2781,16 @@ namespace pe
         for (int pass = 0; pass < 24; ++pass)
         {
             if (targetRotation)
-                rotateJoint(0, glm::normalize(*targetRotation));
+            {
+                quat requested = glm::normalize(*targetRotation);
+                if (m_rig.Planar2D())
+                {
+                    const float angle = std::atan2(2.f * (requested.w * requested.z + requested.x * requested.y),
+                                                   1.f - 2.f * (requested.y * requested.y + requested.z * requested.z));
+                    requested = glm::angleAxis(angle, vec3(0.f, 0.f, 1.f));
+                }
+                rotateJoint(0, requested);
+            }
             if (glm::distance(effector, target) < 1e-4f)
                 break;
             for (size_t k = targetRotation ? 1 : 0; k < chain.size(); ++k)
@@ -2420,14 +2798,31 @@ namespace pe
                 const vec3 have = effector - pivots[k], want = target - pivots[k];
                 if (glm::dot(have, have) < 1e-10f || glm::dot(want, want) < 1e-10f)
                     continue;
-                quat delta = RotationBetween(have, want);
+                quat delta;
+                if (m_rig.Planar2D())
+                {
+                    const vec2 have2(have), want2(want);
+                    const float cross = have2.x * want2.y - have2.y * want2.x;
+                    delta = glm::angleAxis(std::atan2(cross, glm::dot(have2, want2)), vec3(0.f, 0.f, 1.f));
+                }
+                else
+                    delta = RotationBetween(have, want);
                 if (weight(k) < 1.f)
                     delta = glm::normalize(glm::slerp(quat(1.f, 0.f, 0.f, 0.f), delta, weight(k)));
                 rotateJoint(k, glm::normalize(delta * rotations[chain[k]]));
             }
         }
         if (targetRotation)
-            rotateJoint(0, glm::normalize(*targetRotation)); // selected bone absorbs the last orientation residual
+        {
+            quat requested = glm::normalize(*targetRotation);
+            if (m_rig.Planar2D())
+            {
+                const float angle = std::atan2(2.f * (requested.w * requested.z + requested.x * requested.y),
+                                               1.f - 2.f * (requested.y * requested.y + requested.z * requested.z));
+                requested = glm::angleAxis(angle, vec3(0.f, 0.f, 1.f));
+            }
+            rotateJoint(0, requested); // selected bone absorbs the last orientation residual
+        }
         for (size_t k = 0; k < chain.size(); k++)
             if (std::abs(glm::dot(rotations[chain[k]], original[chain[k]])) < 1.f - 1e-6f)
                 out.emplace_back(chain[k], rotations[chain[k]]);
@@ -2450,7 +2845,8 @@ namespace pe
         {
             // the floor is solid: no tail is pulled below it, so a foot dragged down stops on the ground and plants
             floored = *targetTail;
-            floored.y = std::max(floored.y, floorLevel);
+            if (!m_rig.Planar2D())
+                floored.y = std::max(floored.y, floorLevel);
             targetTail = &floored;
         }
         int mirrorBone = -1;
@@ -2474,6 +2870,12 @@ namespace pe
             if (!timeline->GetViewportPose(m_model, pose) ||
                 static_cast<int>(pose.boneTransforms.size()) != skeleton.GetBoneCount())
                 return Pass::Refused;
+            if (m_rig.Planar2D() && targetTail)
+            {
+                std::vector<vec3> heads, tails;
+                PoseTails(skeleton, pose.boneTransforms, heads, tails);
+                floored.z = tails[bone].z;
+            }
             std::vector<std::pair<int, quat>> solved;
             bool limitedNow = false;
             PuppetSolve(skeleton, pose.boneTransforms, bone, targetTail, targetRotation, solved, limitedNow);
@@ -2545,7 +2947,7 @@ namespace pe
         bool underFoot = false;
         for (int foot = 0; targetTail && foot < skeleton.GetBoneCount() && !underFoot; foot++)
         {
-            if (!IsContactBone(skeleton, foot, floorLevel))
+            if (m_rig.Planar2D() || !IsContactBone(skeleton, foot, floorLevel))
                 continue;
             int b = foot;
             while (b >= 0 && b != bone && b != mirrorBone)
@@ -2580,7 +2982,7 @@ namespace pe
                 if (solveAndKey(false) != Pass::Keyed)
                     break;
             }
-        if (m_balance && m_balanceHaveReference)
+        if (!m_rig.Planar2D() && m_balance && m_balanceHaveReference)
             // each shift carries the handle off its target and the re-solve moves the mass again; a torso lean
             // recovers only a quarter of the error per round on a top-heavy rig, so a one-shot grab gets several
             // (an interactive drag converges across frames anyway; ApplyBalance stops the loop once it is under 0.1 mm)
@@ -2612,6 +3014,25 @@ namespace pe
     {
         hovered = false;
         active = false;
+        // ImGuizmo abandons a rotate or scale drag the moment the cursor leaves its own window: HandleRotation
+        // and HandleScale bail on !mbMouseOver (HandleTranslation does not, which is why only rotation froze),
+        // and that early-out also skips their mouse-release check, so the gizmo never lets go. The drag stalls
+        // over a panel, keeps its stale angle origin, and jumps when the cursor comes back. Handing it whatever
+        // window the cursor is over - only while a drag is already in flight, so a click on a window in front of
+        // the viewport still cannot reach a gizmo behind it - lets a drag live and end anywhere on screen.
+        ImGuizmo::SetAlternativeWindow(ImGuizmo::IsUsingAny() ? ImGui::GetCurrentContext()->HoveredWindow : nullptr);
+        // A release with the cursor off every ImGui window - another display, outside the app - has no window to
+        // hand over, so the same early-out keeps the gizmo latched and it applies the whole accumulated angle when
+        // the cursor comes back. Enable(false) is ImGuizmo's own way to drop a drag; re-enable in the same breath
+        // so the IK and spline paths, which return before the pose path's own Enable calls, are not left disabled.
+        // ponytail: the drag still stops tracking while the cursor is outside the application window; it only ends
+        // cleanly. Writing ImGui's HoveredWindow would keep it live, at the cost of poking another library's state.
+        if (ImGuizmo::IsUsingAny() && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            ImGuizmo::Enable(false);
+            ImGuizmo::Enable(true);
+        }
+
         SyncTarget(scene);
         AnimationTimeline *timeline = &m_timeline;
         if (!timeline || !m_model || !camera || !m_model->HasSkeleton())
@@ -2649,7 +3070,6 @@ namespace pe
         const mat4 invSkeletonRoot = glm::inverse(skeleton.rootTransform);
         ImDrawList *drawList = ImGui::GetWindowDrawList();
         const ImVec2 mouse = ImGui::GetMousePos();
-
         auto project = [&](const vec3 &rig, ImVec2 &out)
         {
             const vec3 world = vec3(rootWorld * vec4(rig, 1.f));
@@ -2732,11 +3152,18 @@ namespace pe
         float nearest = 8.f;
         const bool mouseInImage = mouse.x >= imageMin.x && mouse.y >= imageMin.y && mouse.x <= imageMin.x + imageSize.x &&
                                   mouse.y <= imageMin.y + imageSize.y;
+        // ImGuizmo leaves its own centre a dead zone in Rotate, and the handle stands on the selected bone's head:
+        // the bone's segment starts on that pixel, a connected parent's segment and tail dot end on it. A click
+        // there would pick whichever has the lower index - usually the parent - and jump the selection out from
+        // under the handle being aimed at, so the gizmo owns its centre.
+        const bool overGizmoCentre = mouseInImage && !m_twoBoneIk && !m_splineIk && visible[m_poseSelected] &&
+                                     std::hypot(mouse.x - headScreen[m_poseSelected].x,
+                                                mouse.y - headScreen[m_poseSelected].y) < 12.f;
         for (int i = 0; i < boneCount; i++)
         {
             if (!visible[i])
                 continue;
-            if (mouseInImage)
+            if (mouseInImage && !overGizmoCentre)
             {
                 const float distance = pointSegmentDistance(mouse, headScreen[i], tailScreen[i]);
                 if (distance < nearest)
@@ -2774,9 +3201,9 @@ namespace pe
 
         // Puppet handles (tail dots) and pin padlocks beside every head: pull a tail and the chain bends up to
         // the first pinned bone; click a padlock to pin / unpin. The IK tool owns the mouse while enabled.
-        if (!m_twoBoneIk)
+        if (!m_twoBoneIk && !m_splineIk)
         {
-            const bool gizmoBusy = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
+            const bool gizmoBusy = ImGuizmo::IsOver() || ImGuizmo::IsUsing() || overGizmoCentre;
             int hoveredTail = -1, hoveredPin = -1;
             float nearestTail = 9.f, nearestPin = 8.f;
             auto pinPos = [&](int i)
@@ -2829,7 +3256,10 @@ namespace pe
             {
                 vec3 hit;
                 m_grabPlanePoint = vec3(rootWorld * vec4(poseTails[hoveredTail], 1.f));
-                if (RayPlane(rayOrigin, rayDir, m_grabPlanePoint, camera->GetFront(), hit))
+                const vec3 dragNormal = m_rig.Planar2D()
+                                            ? glm::normalize(mat3(rootWorld) * vec3(0.f, 0.f, 1.f))
+                                            : camera->GetFront();
+                if (RayPlane(rayOrigin, rayDir, m_grabPlanePoint, dragNormal, hit))
                 {
                     m_grabBone = hoveredTail;
                     m_grabOffset = poseTails[hoveredTail] - vec3(invRootWorld * vec4(hit, 1.f));
@@ -2855,20 +3285,27 @@ namespace pe
                     m_balanceHaveReference = false;
                     active = false;
                 }
-                else if (haveRay && RayPlane(rayOrigin, rayDir, m_grabPlanePoint, camera->GetFront(), hit))
+                else
                 {
-                    float gap = 0.f;
-
-                    bool keyed = false;
-                    bool limited = false;
-                    const vec3 target = vec3(invRootWorld * vec4(hit, 1.f)) + m_grabOffset;
-                    if (PuppetTo(scene, m_grabBone, &target, nullptr, &gap, !m_grabPushed, &keyed, &limited))
+                    const vec3 dragNormal = m_rig.Planar2D()
+                                                ? glm::normalize(mat3(rootWorld) * vec3(0.f, 0.f, 1.f))
+                                                : camera->GetFront();
+                    if (haveRay && RayPlane(rayOrigin, rayDir, m_grabPlanePoint, dragNormal, hit))
                     {
-                        m_grabPushed = m_grabPushed || keyed;
-                        m_status = limited ? "Puppet Drag keyed; joint limit reached."
-                                   : gap > std::max(ModelHeight(), 0.1f) * 0.01f
-                                       ? "Puppet Drag: chain cannot reach (pin further up, or pull less)."
-                                       : "Puppet Drag keyed at the current frame.";
+                        float gap = 0.f;
+                        bool keyed = false;
+                        bool limited = false;
+                        vec3 target = vec3(invRootWorld * vec4(hit, 1.f)) + m_grabOffset;
+                        if (m_rig.Planar2D())
+                            target.z = poseTails[m_grabBone].z;
+                        if (PuppetTo(scene, m_grabBone, &target, nullptr, &gap, !m_grabPushed, &keyed, &limited))
+                        {
+                            m_grabPushed = m_grabPushed || keyed;
+                            m_status = limited ? "Puppet Drag keyed; joint limit reached."
+                                       : gap > std::max(ModelHeight(), 0.1f) * 0.01f
+                                           ? "Puppet Drag: chain cannot reach (pin further up, or pull less)."
+                                           : "Puppet Drag keyed at the current frame.";
+                        }
                     }
                 }
                 return;
@@ -2882,6 +3319,13 @@ namespace pe
         {
             hovered = hoveredBone >= 0;
             DrawIkViewport(scene, camera, imageMin, imageSize, rootWorld, pose.boneTransforms, project, hovered, active);
+            return;
+        }
+        if (m_splineIk)
+        {
+            hovered = hoveredBone >= 0;
+            DrawSplineIkViewport(scene, camera, imageMin, imageSize, rootWorld, pose.boneTransforms, project, hovered,
+                                 active);
             return;
         }
 
@@ -2909,12 +3353,31 @@ namespace pe
                                    : timeline->CanViewportRotate(m_model, m_poseSelected, true, false);
         const bool rightMouse = ImGui::IsMouseDown(ImGuiMouseButton_Right) && ImGui::IsWindowFocused();
         ImGuizmo::Enable(canRotate && !rightMouse);
-        const mat4 handleRig = glm::translate(mat4(1.f), poseTails[m_poseSelected]) *
-                               glm::mat4_cast(RotationOf(pose.boneTransforms[m_poseSelected]));
+        // The handle owns its own frame for the whole drag. Feeding the achieved pose back would move it
+        // under the cursor: the puppet solver only approximates what the handle asks for (joint limits,
+        // locks, balance, a chain that cannot reach), and this ImGuizmo applies a PER-FRAME delta to the
+        // matrix it is handed, measuring the angle against that matrix's own screen position. So a handle
+        // that lags the request shifts the reference every frame and the rotation jumps. Latched, the
+        // gizmo tracks the mouse exactly and the rig follows it; on release it snaps to the real pose.
+        // It stands on the bone's HEAD, the joint the bone actually pivots about. Anchored on the tail the
+        // rotation rings circled a point the bone never turns around, so the mouse angle and the swing
+        // disagreed by the length of the bone.
+        const mat4 handleRig = m_gizmoLatched ? m_gizmoHandle
+                                              : glm::translate(mat4(1.f), poseHeads[m_poseSelected]) *
+                                                    glm::mat4_cast(RotationOf(pose.boneTransforms[m_poseSelected]));
+        // Where the tail rides on that handle: the bone's own tail offset in its own frame, which stays put
+        // through the drag (it is the rest tail scaled), so the tail the solver aims at is carried by the
+        // requested rotation instead of fighting a target pinned where the gizmo used to sit.
+        const vec3 tailOffset = glm::inverse(RotationOf(pose.boneTransforms[m_poseSelected])) *
+                                (poseTails[m_poseSelected] - poseHeads[m_poseSelected]);
         mat4 worldRH = handedness * (rootWorld * handleRig) * handedness;
-        const ImGuizmo::OPERATION operation = m_poseGizmo == 1   ? ImGuizmo::TRANSLATE
-                                              : m_poseGizmo == 2 ? ImGuizmo::OPERATION(ImGuizmo::TRANSLATE | ImGuizmo::ROTATE)
-                                                                 : ImGuizmo::ROTATE;
+        const ImGuizmo::OPERATION translate =
+            m_rig.Planar2D() ? ImGuizmo::OPERATION(ImGuizmo::TRANSLATE_X | ImGuizmo::TRANSLATE_Y)
+                             : ImGuizmo::TRANSLATE;
+        const ImGuizmo::OPERATION rotate = m_rig.Planar2D() ? ImGuizmo::ROTATE_Z : ImGuizmo::ROTATE;
+        const ImGuizmo::OPERATION operation = m_poseGizmo == 1   ? translate
+                                              : m_poseGizmo == 2 ? ImGuizmo::OPERATION(translate | rotate)
+                                                                 : rotate;
         const bool changed = ImGuizmo::Manipulate(glm::value_ptr(viewRH), glm::value_ptr(projectionRH), operation,
                                                   ImGuizmo::LOCAL, glm::value_ptr(worldRH));
         const bool gizmoHovered = ImGuizmo::IsOver();
@@ -2923,10 +3386,13 @@ namespace pe
         hovered = hoveredBone >= 0 || gizmoHovered;
         active = gizmoActive || m_poseDragging;
 
+        // Carry whatever the gizmo now holds into the next frame, whether or not the mouse moved this one.
+        m_gizmoHandle = invRootWorld * (handedness * worldRH * handedness);
+        m_gizmoLatched = gizmoActive;
+
         if (changed)
         {
-            const mat4 world = handedness * worldRH * handedness;
-            const mat4 requested = invRootWorld * world;
+            const mat4 requested = m_gizmoHandle;
             int mirrorBone = -1;
             if (m_mirrorX)
             {
@@ -2947,8 +3413,7 @@ namespace pe
                     const mat4 current = pose.boneTransforms[m_poseSelected];
                     const vec3 scale(glm::length(vec3(current[0])), glm::length(vec3(current[1])),
                                      glm::length(vec3(current[2])));
-                    const vec3 position = vec3(current[3]) +
-                                          (m_poseGizmo != 0 ? vec3(requested[3]) - poseTails[m_poseSelected] : vec3(0.f));
+                    const vec3 position = m_poseGizmo != 0 ? vec3(requested[3]) : vec3(current[3]);
                     const quat rotation = m_poseGizmo != 1 ? RotationOf(requested) : RotationOf(current);
                     const mat4 transform = glm::translate(mat4(1.f), position) * glm::mat4_cast(rotation) *
                                            glm::scale(mat4(1.f), scale);
@@ -2966,7 +3431,10 @@ namespace pe
                     m_posePushed = false;
                     BeginBalance(m_poseSelected);
                 }
-                const vec3 targetTail = m_poseGizmo == 0 ? poseTails[m_poseSelected] : vec3(requested[3]);
+                vec3 targetTail = m_poseGizmo == 0 ? poseTails[m_poseSelected]
+                                                   : vec3(requested[3]) + RotationOf(requested) * tailOffset;
+                if (m_rig.Planar2D())
+                    targetTail.z = poseTails[m_poseSelected].z;
                 const quat targetRotation = RotationOf(requested);
                 const quat *rotationTarget = m_poseGizmo == 1 ? nullptr : &targetRotation;
                 float gap = 0.f;

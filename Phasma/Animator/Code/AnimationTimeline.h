@@ -143,12 +143,20 @@ namespace pe
             int bone = -1;
             quat rotation = quat(1.f, 0.f, 0.f, 0.f); // Skeleton rig-space global rotation.
         };
+        struct GlobalBoneTransform
+        {
+            int bone = -1;
+            mat4 transform = mat4(1.f); // Skeleton rig-space global transform.
+        };
         // Keys every supplied rig-space global rotation at the current frame (frame < 0) or at frame. pushUndo = false
         // when the caller's edit already took the undo snapshot (a drag, PushViewportUndo, a Timeline pose edit).
         // userPose = false for batch writes such as Bake Locks: interval mode must not rebuild the in-betweens
         // around every frame a bake touches.
         bool KeyViewportGlobalRotations(Scene &scene, ModelAsset *model, std::span<const GlobalBoneRotation> rotations,
                                         float frame = -1.f, bool pushUndo = true, bool userPose = true);
+        bool KeyViewportGlobalTransforms(Scene &scene, ModelAsset *model,
+                                         std::span<const GlobalBoneTransform> transforms, float frame = -1.f,
+                                         bool pushUndo = true, bool userPose = true);
         bool PushViewportUndo(ModelAsset *model);
         // Keys one bone's Location so its head sits at rigPosition (rig space) at the frame, rotation kept;
         // takes no undo snapshot of its own (it rides the batch that preceded it) and retweens like a user pose.

@@ -3,6 +3,7 @@
 #include "API/RHI.h"
 #include "API/Swapchain.h"
 #include "AnimationTimeline.h"
+#include "Animation/ClipExchange.h"
 #include "Camera/Camera.h"
 #include "GUI/Backends/GUIBackend.h"
 #include "GUI/GUIState.h"
@@ -697,6 +698,26 @@ namespace pe
 #endif
     }
 
+    void AnimatorApp::ImportModelDialog()
+    {
+        std::string source;
+        if (!PickFile("Import source model",
+                      "Models (*.gltf;*.glb;*.fbx;*.dae;*.obj)\0*.gltf;*.glb;*.fbx;*.dae;*.obj\0All files\0*.*\0",
+                      source))
+            return;
+        std::string output;
+        if (!PickSaveFile("Save cooked model", "Cooked model (*.pemesh)\0*.pemesh\0", "pemesh", output))
+            return;
+        std::string error;
+        if (!ClipExchange::CookModel(source, output, error))
+        {
+            m_notice = error;
+            m_showNotice = true;
+            return;
+        }
+        RequestOpen(output);
+    }
+
     void AnimatorApp::RunClipAction(const char *action, const std::filesystem::path &path)
     {
         const nlohmann::json response =
@@ -752,6 +773,9 @@ namespace pe
                 if (ImGui::MenuItem("Open .pemesh...", "Ctrl+O"))
                     OpenDialog();
                 ui::ItemTooltip("Open a cooked model. Dropping a .pemesh on the window opens it too.");
+                if (ImGui::MenuItem("Import Model..."))
+                    ImportModelDialog();
+                ui::ItemTooltip("Cook a glTF, GLB, FBX, DAE or OBJ into a .pemesh and open it. Flat meshes enter 2D Plane mode automatically.");
                 if (ImGui::BeginMenu("Recent", !m_recent.empty()))
                 {
                     std::filesystem::path pick;
@@ -926,14 +950,16 @@ namespace pe
         {
             ImGui::SetNextItemWidth(ImGui::GetFontSize() * 40.f);
             ImGui::InputText("##animator_open_path", m_openBuffer, sizeof(m_openBuffer));
-            if (ImGui::Button("Open"))
+            ImGui::Dummy({0.f, ImGui::GetFontSize() * 0.5f});
+            ui::DialogButtonRow({"Open", "Cancel"});
+            if (ImGui::Button("Open", ui::DialogButtonSize("Open")))
             {
                 const std::string path = m_openBuffer;
                 ImGui::CloseCurrentPopup();
                 RequestOpen(path);
             }
             ImGui::SameLine();
-            if (ImGui::Button("Cancel"))
+            if (ImGui::Button("Cancel", ui::DialogButtonSize("Cancel")))
                 ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
         }
@@ -952,8 +978,10 @@ namespace pe
                                                   m_clipPathBuffer,
                                                   sizeof(m_clipPathBuffer),
                                                   ImGuiInputTextFlags_EnterReturnsTrue);
-            if ((ImGui::Button(m_clipPopupAction == "timeline.import" ? "Import" : "Export") || entered) &&
-                m_clipPathBuffer[0])
+            const char *confirm = m_clipPopupAction == "timeline.import" ? "Import" : "Export";
+            ImGui::Dummy({0.f, ImGui::GetFontSize() * 0.5f});
+            ui::DialogButtonRow({confirm, "Cancel"});
+            if ((ImGui::Button(confirm, ui::DialogButtonSize(confirm)) || entered) && m_clipPathBuffer[0])
             {
                 const std::string action = m_clipPopupAction;
                 const std::string path = m_clipPathBuffer;
@@ -961,7 +989,7 @@ namespace pe
                 RunClipAction(action.c_str(), path);
             }
             ImGui::SameLine();
-            if (ImGui::Button("Cancel"))
+            if (ImGui::Button("Cancel", ui::DialogButtonSize("Cancel")))
                 ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
         }
@@ -978,7 +1006,9 @@ namespace pe
             if (ImGui::Begin("PhasmaAnimator message", &m_showNotice, ImGuiWindowFlags_AlwaysAutoResize))
             {
                 ImGui::TextWrapped("%s", m_notice.c_str());
-                if (ImGui::Button("OK"))
+                ImGui::Dummy({0.f, ImGui::GetFontSize() * 0.5f});
+                ui::DialogButtonRow({"OK"});
+                if (ImGui::Button("OK", ui::DialogButtonSize("OK")))
                     m_showNotice = false;
             }
             ImGui::End();
@@ -996,22 +1026,27 @@ namespace pe
             if (!s_error.empty())
                 ImGui::TextColored(ImVec4(1.f, 0.5f, 0.4f, 1.f), "%s", s_error.c_str());
             bool proceed = false;
-            if (ImGui::Button("Save"))
+            ImGui::Dummy({0.f, ImGui::GetFontSize() * 0.5f});
+            ui::DialogButtonRow({"Save", "Discard", "Cancel"});
+            if (ImGui::Button("Save", ui::DialogButtonSize("Save")))
             {
                 s_error.clear();
                 proceed = SaveAll(&s_error);
             }
+            ui::ItemTooltip("Write the clips and the rig document, then continue.");
             ImGui::SameLine();
-            if (ImGui::Button("Discard"))
+            if (ImGui::Button("Discard", ui::DialogButtonSize("Discard")))
                 proceed = true;
+            ui::ItemTooltip("Continue and lose every unsaved clip and rig change.");
             ImGui::SameLine();
-            if (ImGui::Button("Cancel"))
+            if (ImGui::Button("Cancel", ui::DialogButtonSize("Cancel")))
             {
                 s_error.clear();
                 m_pendingOpen.clear();
                 m_pendingQuit = false;
                 ImGui::CloseCurrentPopup();
             }
+            ui::ItemTooltip("Stay on this model and keep the changes.");
             if (proceed)
             {
                 s_error.clear();
@@ -1042,55 +1077,127 @@ namespace pe
             const bool entered = ImGui::InputText("Name", m_bookmarkName, sizeof(m_bookmarkName),
                                                   ImGuiInputTextFlags_EnterReturnsTrue);
             OrbitView view;
-            if ((ImGui::Button("Add") || entered) && m_bookmarkName[0] && m_timeline->GetOrbitView(view))
+            ImGui::Dummy({0.f, ImGui::GetFontSize() * 0.5f});
+            ui::DialogButtonRow({"Add", "Cancel"});
+            if ((ImGui::Button("Add", ui::DialogButtonSize("Add")) || entered) && m_bookmarkName[0] &&
+                m_timeline->GetOrbitView(view))
             {
                 m_bookmarks.push_back({m_bookmarkName, view});
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
-            if (ImGui::Button("Cancel"))
+            if (ImGui::Button("Cancel", ui::DialogButtonSize("Cancel")))
                 ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
         }
 
         if (m_showHotkeys)
         {
-            ImGui::SetNextWindowSize({ImGui::GetFontSize() * 44.f, 0.f}, ImGuiCond_FirstUseEver);
-            if (ImGui::Begin("Hotkeys", &m_showHotkeys, ImGuiWindowFlags_AlwaysAutoResize))
+            // One row per shortcut, grouped by where you are when you press it. The chord column is a fixed
+            // width measured over the whole sheet, so the sections stay aligned with one table each.
+            static const struct
             {
-                static const struct
+                const char *section; // nullptr continues the section above
+                const char *chord;
+                const char *action;
+            } kSheet[] = {
+                {"Files", "Ctrl+O", "Open a cooked .pemesh model"},
+                {nullptr, "Ctrl+S", "Save the clips and the rig document"},
+                {nullptr, "Drop a file", "Dropping a .pemesh on the window opens it"},
+
+                {"Viewport", "RMB drag", "Orbit the camera"},
+                {nullptr, "MMB drag", "Pan the camera"},
+                {nullptr, "Wheel", "Zoom in and out"},
+                {nullptr, "F", "Frame the character"},
+                {nullptr, "Ctrl+Space", "Maximize the viewport"},
+                {nullptr, "Click an axis", "Look along that axis of the corner gizmo"},
+
+                {"Posing", "Drag a bone tail", "Pose the chain: Rotate, Move or Both"},
+                {nullptr, "Ctrl+C", "Copy the pose (with the viewport hovered)"},
+                {nullptr, "Ctrl+V", "Paste the pose"},
+                {nullptr, "Ctrl+Shift+V", "Paste the pose flipped onto the .L / .R twin"},
+                {nullptr, "Mirror X", "Solve the counterpart chain in the same undo step"},
+                {nullptr, "Auto Key", "Key every viewport and pose-bar edit"},
+
+                {"Playback", "Space", "Play or pause"},
+                {nullptr, "Shift+Ctrl+Space", "Play in reverse"},
+                {nullptr, "Left / Right", "Jump to the previous or next key"},
+
+                {"Dope Sheet: keys", "G", "Move the selected keys"},
+                {nullptr, "S", "Scale them around the playhead"},
+                {nullptr, "X / Delete", "Delete them"},
+                {nullptr, "Shift+D", "Duplicate them"},
+                {nullptr, "I", "Insert a key at the playhead"},
+                {nullptr, "A / Alt+A", "Select all or none"},
+                {nullptr, "Ctrl+C / Ctrl+V", "Copy and paste keys, into any action of the rig"},
+                {nullptr, "Enter / Esc", "Confirm or cancel the edit in flight"},
+
+                {"Dope Sheet: view", "Home", "Frame every key"},
+                {nullptr, "Numpad .", "Frame the selected keys"},
+                {nullptr, "Numpad + / -", "Zoom in and out"},
+                {nullptr, "Wheel", "Zoom"},
+                {nullptr, "Ctrl / Shift + wheel", "Scroll horizontally or vertically"},
+                {nullptr, "MMB drag", "Pan"},
+                {nullptr, "Ctrl+MMB drag", "Zoom"},
+                {nullptr, "Esc", "Clear the marked interval"},
+
+                {"Markers", "M", "Mark the playhead"},
+                {nullptr, "Right-click the ruler", "Add, rename, jump to or delete a marker"},
+
+                {"Undo", "Ctrl+Z", "Undo: the keys in Animate, the rig document in Rig"},
+                {nullptr, "Ctrl+Y / Ctrl+Shift+Z", "Redo"},
+            };
+
+            const float fontSize = ImGui::GetFontSize();
+            const ImGuiStyle &style = ImGui::GetStyle();
+            // Both columns are sized from the text, so nothing is silently clipped at the default size
+            // and the sheet reads the same at every font scale and theme.
+            float chordWidth = 0.f, actionWidth = 0.f;
+            for (const auto &row : kSheet)
+            {
+                chordWidth = std::max(chordWidth, ImGui::CalcTextSize(row.chord).x);
+                actionWidth = std::max(actionWidth, ImGui::CalcTextSize(row.action).x);
+            }
+            const float sheetWidth = chordWidth + actionWidth + style.ItemSpacing.x * 2.f +
+                                     style.CellPadding.x * 4.f + style.WindowPadding.x * 2.f +
+                                     style.ScrollbarSize;
+            ImGui::SetNextWindowSize({sheetWidth, fontSize * 40.f}, ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSizeConstraints({fontSize * 20.f, fontSize * 8.f}, {FLT_MAX, FLT_MAX});
+            if (ImGui::Begin("Hotkeys", &m_showHotkeys))
+            {
+                const ImVec4 chordColour = ImGui::GetStyleColorVec4(ImGuiCol_CheckMark); // the theme's accent
+
+                ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, {style.CellPadding.x, style.ItemSpacing.y * 0.75f});
+                for (size_t i = 0; i < IM_ARRAYSIZE(kSheet);)
                 {
-                    const char *section;
-                    const char *keys;
-                } kSheet[] = {
-                    {"Files", "Ctrl+O open .pemesh   Ctrl+S save clips and rig   drop a .pemesh on the window"},
-                    {"Viewport", "RMB drag orbit   MMB drag pan   wheel zoom   F frame the character   Ctrl+Space "
-                                 "maximize   click an axis arrow to look along it"},
-                    {"Playback", "Space play / pause   Shift+Ctrl+Space play reverse   Left / Right previous / next key"},
-                    {"Keys", "G move   S scale   X / Delete delete   Shift+D duplicate   I insert key   A / Alt+A "
-                             "select all / none   Ctrl+C / Ctrl+V copy / paste   Enter / Esc confirm / cancel"},
-                    {"View", "Home frame all   Numpad . frame selected   Numpad + / - zoom   wheel zoom   Ctrl / "
-                             "Shift + wheel scroll   MMB pan   Ctrl+MMB zoom   Esc clear the interval"},
-                    {"Markers", "M mark the playhead   right-click the ruler to add, rename, jump to or delete one"},
-                    {"Undo", "Ctrl+Z undo   Ctrl+Y / Ctrl+Shift+Z redo (keys in Animate, the rig document in Rig)"},
-                    {"Pose", "drag a bone tail (Rotate / Move / Both)   Mirror X mirrors onto the .L / .R twin   "
-                             "Auto Key keys every edit   Ctrl+C / Ctrl+V over the viewport copy / paste the pose   "
-                             "Ctrl+Shift+V pastes it flipped"},
-                };
-                if (ImGui::BeginTable("##hotkeys", 2, ImGuiTableFlags_SizingFixedFit))
-                {
-                    for (const auto &row : kSheet)
+                    const char *section = kSheet[i].section;
+                    ImGui::SeparatorText(section);
+                    if (ImGui::BeginTable(section, 2,
+                                          ImGuiTableFlags_RowBg | ImGuiTableFlags_NoSavedSettings |
+                                              ImGuiTableFlags_PadOuterX))
                     {
-                        ImGui::TableNextRow();
-                        ImGui::TableNextColumn();
-                        ImGui::TextDisabled("%s", row.section);
-                        ImGui::TableNextColumn();
-                        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 40.f);
-                        ImGui::TextUnformatted(row.keys);
-                        ImGui::PopTextWrapPos();
+                        ImGui::TableSetupColumn("chord", ImGuiTableColumnFlags_WidthFixed, chordWidth);
+                        ImGui::TableSetupColumn("action", ImGuiTableColumnFlags_WidthStretch);
+                        do
+                        {
+                            ImGui::TableNextRow();
+                            ImGui::TableNextColumn();
+                            // right-aligned, so the chords and the actions read as two clean columns
+                            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + chordWidth -
+                                                 ImGui::CalcTextSize(kSheet[i].chord).x);
+                            ImGui::TextColored(chordColour, "%s", kSheet[i].chord);
+                            ImGui::TableNextColumn();
+                            ImGui::TextUnformatted(kSheet[i].action);
+                            ++i;
+                        }
+                        while (i < IM_ARRAYSIZE(kSheet) && !kSheet[i].section);
+                        ImGui::EndTable();
                     }
-                    ImGui::EndTable();
+                    else
+                        for (++i; i < IM_ARRAYSIZE(kSheet) && !kSheet[i].section; ++i)
+                            ; // the table is clipped away: step over its rows or the outer loop never moves
                 }
+                ImGui::PopStyleVar();
             }
             ImGui::End();
         }
@@ -1251,6 +1358,22 @@ namespace pe
                                          {"name", m_scene.GetNodeName(root)}});
                 return ok({{"path", m_modelPath.generic_string()}, {"model_roots", roots}});
             }
+            if (action == "animator.import_model")
+            {
+                const std::filesystem::path source = args.value("path", args.value("source", std::string()));
+                if (source.empty())
+                    return fail("path is required");
+                std::filesystem::path output = args.value("output", std::string());
+                if (output.empty())
+                {
+                    output = source;
+                    output.replace_extension(".pemesh");
+                }
+                std::string error;
+                if (!ClipExchange::CookModel(source, output, error) || !OpenModel(output, &error))
+                    return fail(error);
+                return ok({{"source", source.generic_string()}, {"path", output.generic_string()}});
+            }
             if (action == "animator.new" || action == "file.new_scene")
             {
                 m_timeline->DropTarget();
@@ -1331,6 +1454,11 @@ namespace pe
                 if (args.contains("visible"))
                     SetGroundVisible(args.value("visible", true));
                 return ok({{"visible", m_ground}});
+            }
+            if (action == "animator.hotkeys")
+            {
+                m_showHotkeys = args.value("show", !m_showHotkeys);
+                return ok({{"show", m_showHotkeys}});
             }
             if (action == "animator.bookmark")
             {

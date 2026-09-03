@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Animation/AnimationReferenceFrames.h"
+#include "Animation/AnimationPoseTools.h"
 #include "Animation/AnimationTypes.h"
 #include "RigEditor.h"
 #include "imgui/imgui.h"
@@ -52,6 +53,13 @@ namespace pe
         void DrawIkViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize,
                             const mat4 &rootWorld, std::span<const mat4> boneTransforms,
                             const std::function<bool(const vec3 &, ImVec2 &)> &project, bool &hovered, bool &active);
+        void DrawSplineIkViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize,
+                                  const mat4 &rootWorld, std::span<const mat4> boneTransforms,
+                                  const std::function<bool(const vec3 &, ImVec2 &)> &project, bool &hovered,
+                                  bool &active);
+        bool SplineChain(const Skeleton &skeleton, int selected, std::vector<int> &chain) const;
+        bool ApplySplineIk(Scene &scene, int selected, const vec3 &target, bool pushUndo,
+                           AnimationPoseTools::PlanarSplineIkResult *outResult = nullptr);
         void PoseTails(const Skeleton &skeleton, std::span<const mat4> boneTransforms, std::vector<vec3> &heads,
                        std::vector<vec3> &tails, std::vector<vec3> *restTails = nullptr) const;
         bool LockChain(const RigLock &lock, const Skeleton &skeleton, int &root, int &mid, int &target,
@@ -133,6 +141,8 @@ namespace pe
         bool m_poseDirect = false;
         bool m_posePushed = false;
         int m_poseGizmo = 0;
+        bool m_gizmoLatched = false;    // a drag is in flight: the gizmo keeps its own frame, not the posed one
+        mat4 m_gizmoHandle = mat4(1.f); // rig-space handle the gizmo last held
         int m_grabBone = -1;
         bool m_grabPushed = false;
         vec3 m_grabPlanePoint = vec3(0.f), m_grabOffset = vec3(0.f);
@@ -161,6 +171,16 @@ namespace pe
         vec3 m_ikPole = vec3(0.f);
         bool m_ikDragging = false;
         bool m_ikDirty = false;
+        bool m_splineIk = false;
+        int m_splineBone = -1;
+        vec3 m_splineTarget = vec3(0.f);
+        bool m_splineDragging = false;
+        bool m_splineDirty = false;
+        float m_splineMaxBendDegrees = 60.f;
+        float m_splineBendSign = 1.f;
+        float m_splineMaxStretch = 1.5f;
+        std::vector<float> m_splineInfluences;
+        std::vector<float> m_splineWidths;
 
         std::filesystem::path m_referencePath;
         AnimationReferenceFrames::Sequence m_referenceSequence;

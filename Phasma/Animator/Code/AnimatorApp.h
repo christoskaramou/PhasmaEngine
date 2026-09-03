@@ -66,6 +66,7 @@ namespace pe
         void DrawOverlay(CommandBuffer *cmd, Image *displayRT);
         void PollCommandFile();
         void OpenDialog();
+        void ImportModelDialog();
         void ImportClipDialog();
         void ExportClipDialog();
         void RunClipAction(const char *action, const std::filesystem::path &path);

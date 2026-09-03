@@ -20,7 +20,8 @@ namespace pe
         constexpr uint32_t kLegacyVersion = 3;
         constexpr uint32_t kInterpolationVersion = 4;
         constexpr uint32_t kMarkerVersion = 6;
-        constexpr uint32_t kVersion = kMarkerVersion;
+        constexpr uint32_t kPlanarSplineVersion = 7;
+        constexpr uint32_t kVersion = kPlanarSplineVersion;
         constexpr int kTextureSlotCount = 5;
 
         bool ValidSkeletonHierarchy(const Skeleton &skeleton)
@@ -695,10 +696,13 @@ namespace pe
             }
         }
 
-        // Skeleton table (v3+): rootTransform + bones. boneNameToIndex is rebuilt from names on load.
+        // Skeleton table (v3+): rootTransform + bones. v7 adds the planar flag and per-bone spline metadata.
+        // boneNameToIndex is rebuilt from names on load.
         if (header.boneCount > 0)
         {
             w.Raw(&skeleton.rootTransform, sizeof(float) * 16);
+            const uint8_t planar2D = skeleton.planar2D ? 1 : 0;
+            w.Pod(planar2D);
             for (const BoneInfo &bone : skeleton.bones)
             {
                 w.String(bone.name);
@@ -707,6 +711,9 @@ namespace pe
                 w.Raw(&bone.offsetMatrix, sizeof(float) * 16);
                 w.Raw(&bone.localBindTransform, sizeof(float) * 16);
                 w.Raw(&bone.intermediatePrefix, sizeof(float) * 16);
+                w.Pod(bone.length);
+                const uint8_t spline = bone.spline ? 1 : 0;
+                w.Pod(spline);
             }
         }
 
@@ -947,7 +954,7 @@ namespace pe
                 }
         }
 
-        // Skeleton (v3): rebuild m_skeleton; boneNameToIndex is derived from bone names.
+        // Skeleton (v3): rebuild m_skeleton; boneNameToIndex is derived from bone names. v7 carries planar splines.
         if (header.boneCount > 0)
         {
             if (!r.Raw(&model->m_skeleton.rootTransform, sizeof(float) * 16))
@@ -955,6 +962,17 @@ namespace pe
                 PE_WARN("[ModelAssetCooked] Truncated skeleton header: %s", pathStr.c_str());
                 delete model;
                 return nullptr;
+            }
+            if (header.version >= kPlanarSplineVersion)
+            {
+                uint8_t planar2D = 0;
+                if (!r.Pod(planar2D) || planar2D > 1)
+                {
+                    PE_WARN("[ModelAssetCooked] Invalid planar skeleton flag: %s", pathStr.c_str());
+                    delete model;
+                    return nullptr;
+                }
+                model->m_skeleton.planar2D = planar2D != 0;
             }
             model->m_skeleton.bones.resize(header.boneCount);
             model->m_skeleton.boneNameToIndex.clear();
@@ -970,6 +988,18 @@ namespace pe
                     PE_WARN("[ModelAssetCooked] Truncated bone table: %s", pathStr.c_str());
                     delete model;
                     return nullptr;
+                }
+                if (header.version >= kPlanarSplineVersion)
+                {
+                    uint8_t spline = 0;
+                    if (!r.Pod(bone.length) || !r.Pod(spline) || spline > 1 || !std::isfinite(bone.length) ||
+                        bone.length < 0.f)
+                    {
+                        PE_WARN("[ModelAssetCooked] Invalid planar spline bone: %s", pathStr.c_str());
+                        delete model;
+                        return nullptr;
+                    }
+                    bone.spline = spline != 0;
                 }
                 bone.parentIndex = parentIndex;
                 model->m_skeleton.boneNameToIndex[bone.name] = static_cast<int>(i);

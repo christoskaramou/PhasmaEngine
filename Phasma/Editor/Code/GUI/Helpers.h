@@ -60,6 +60,18 @@ namespace pe::ui
         return ImVec2(std::max(ImGui::GetFontSize() * minEm, ButtonWidth(label)), 0.f);
     }
 
+    // Right-align a dialog's action row, then draw each button with DialogButtonSize(label, minEm) and SameLine.
+    // Call it once with every label in the row, before the first button.
+    inline void DialogButtonRow(std::initializer_list<const char *> labels, float minEm = 6.f)
+    {
+        float width = ImGui::GetStyle().ItemSpacing.x * std::max<int>(static_cast<int>(labels.size()) - 1, 0);
+        for (const char *label : labels)
+            width += DialogButtonSize(label, minEm).x;
+        const float avail = ImGui::GetContentRegionAvail().x;
+        if (avail > width)
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - width);
+    }
+
     inline float CheckboxWidth(const char *label)
     {
         return ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(label, nullptr, true).x;

@@ -43,6 +43,40 @@ namespace pe::AnimationPoseTools
 
     TwoBoneIkResult SolveTwoBoneIk(const TwoBoneIkInput &input);
 
+    enum class PlanarSplineIkStatus : uint8_t
+    {
+        Success,
+        NonFiniteInput,
+        NotEnoughStations,
+        DegenerateChain
+    };
+
+    struct PlanarSplineIkInput
+    {
+        std::vector<vec2> stations; // chain heads followed by the final tail, in rig space
+        vec2 target = vec2(0.f);
+        std::vector<float> bendInfluences; // one per segment, default 1, clamped to 0..2
+        float maxBendRadians = glm::pi<float>() / 3.f;
+        float bendSign = 1.f;
+        float maxStretchScale = 1.5f;
+        int iterations = 12;
+    };
+
+    struct PlanarSplineIkResult
+    {
+        PlanarSplineIkStatus status = PlanarSplineIkStatus::Success;
+        std::vector<vec2> stations;
+        std::vector<float> segmentAngles;
+        float stretchScale = 1.f;
+        float bendRadians = 0.f;
+        float bendSign = 1.f;
+        bool targetClamped = false;
+
+        explicit operator bool() const { return status == PlanarSplineIkStatus::Success; }
+    };
+
+    PlanarSplineIkResult SolvePlanarSplineIk(const PlanarSplineIkInput &input);
+
     enum class BreakdownStatus : uint8_t
     {
         Success,

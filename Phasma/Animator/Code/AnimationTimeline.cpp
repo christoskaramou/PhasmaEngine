@@ -89,6 +89,14 @@ namespace pe
     {
         constexpr float kFrameEps = 1e-3f;
 
+        quat PlanarZRotation(const quat &rotation)
+        {
+            const quat q = glm::normalize(rotation);
+            const float angle = std::atan2(2.f * (q.w * q.z + q.x * q.y),
+                                           1.f - 2.f * (q.y * q.y + q.z * q.z));
+            return glm::angleAxis(angle, vec3(0.f, 0.f, 1.f));
+        }
+
         // What the evaluator plays for a channel with no Location keys: the bind translation with the
         // intermediate prefix removed, which is not the same as localBindTransform on an imported rig.
         vec3 BindTranslation(const BoneInfo &bone)
@@ -653,7 +661,9 @@ namespace pe
             if (edit.bone < 0 || edit.bone >= skeleton.GetBoneCount() || !std::isfinite(lengthSquared) ||
                 lengthSquared <= 1e-8f)
                 return false;
-            desiredRotations[edit.bone] = glm::normalize(edit.rotation);
+            desiredRotations[edit.bone] = m_rigEditor && m_rigEditor->Planar2D()
+                                              ? PlanarZRotation(edit.rotation)
+                                              : glm::normalize(edit.rotation);
             requested[edit.bone] = 1;
         }
 
@@ -776,6 +786,141 @@ namespace pe
         return true;
     }
 
+    bool AnimationTimeline::KeyViewportGlobalTransforms(Scene &scene, ModelAsset *model,
+                                                        std::span<const GlobalBoneTransform> transforms, float frame,
+                                                        bool pushUndo, bool userPose)
+    {
+        if (!model || model != m_editModel || transforms.empty() || m_selectedClip < 0 ||
+            m_selectedClip >= static_cast<int>(model->GetAnimations().size()))
+            return false;
+
+        const Skeleton &skeleton = model->GetSkeleton();
+        std::vector<mat4> desired(skeleton.GetBoneCount(), mat4(1.f));
+        std::vector<char> requested(skeleton.GetBoneCount(), 0);
+        for (const GlobalBoneTransform &edit : transforms)
+        {
+            if (edit.bone < 0 || edit.bone >= skeleton.GetBoneCount())
+                return false;
+            for (int column = 0; column < 4; ++column)
+                for (int row = 0; row < 4; ++row)
+                    if (!std::isfinite(edit.transform[column][row]))
+                        return false;
+            desired[edit.bone] = edit.transform;
+            requested[edit.bone] = 1;
+        }
+
+        auto depth = [&](int bone)
+        {
+            int result = 0;
+            for (int guard = 0; guard < skeleton.GetBoneCount() && bone >= 0; ++guard)
+            {
+                bone = skeleton.bones[bone].parentIndex;
+                ++result;
+            }
+            return result;
+        };
+        std::vector<int> hierarchy(skeleton.GetBoneCount());
+        std::iota(hierarchy.begin(), hierarchy.end(), 0);
+        std::stable_sort(hierarchy.begin(), hierarchy.end(), [&](int left, int right)
+                         { return depth(left) < depth(right); });
+
+        AnimationClip &clip = model->GetMutableAnimations()[m_selectedClip];
+        if (m_frameTicks <= 0.f)
+            m_frameTicks = DetectFrameTicks(clip);
+        NodeId *node = m_animatedNodes.empty() ? m_targetNode : m_animatedNodes[0];
+        AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
+        const AnimationNodeState *state = anim && node ? anim->GetAnimationState(node) : nullptr;
+        const float time = ToTicks(std::round(frame >= 0.f ? frame : state ? ToFrame(state->time)
+                                                                           : 0.f));
+
+        std::vector<mat4> joints;
+        AnimationEvaluator::EvaluatePose(clip, skeleton, time, joints);
+        if (joints.size() != skeleton.bones.size())
+            return false;
+        std::vector<mat4> finalGlobals(joints.size());
+        for (size_t bone = 0; bone < joints.size(); ++bone)
+            finalGlobals[bone] = joints[bone] * glm::inverse(skeleton.bones[bone].offsetMatrix);
+
+        struct LocalTransform
+        {
+            int bone = -1;
+            vec3 position = vec3(0.f);
+            quat rotation = quat(1.f, 0.f, 0.f, 0.f);
+            vec3 scale = vec3(1.f);
+        };
+        std::vector<LocalTransform> solved;
+        solved.reserve(transforms.size());
+        const bool planar = m_rigEditor && m_rigEditor->Planar2D();
+        for (int boneIndex : hierarchy)
+        {
+            const BoneInfo &bone = skeleton.bones[boneIndex];
+            const mat4 parentGlobal = bone.parentIndex >= 0 ? finalGlobals[bone.parentIndex] : mat4(1.f);
+            if (requested[boneIndex])
+            {
+                mat4 wanted = desired[boneIndex];
+                if (planar)
+                {
+                    const quat rotation = PlanarZRotation(glm::quat_cast(mat3(glm::normalize(vec3(wanted[0])),
+                                                                              glm::normalize(vec3(wanted[1])),
+                                                                              glm::normalize(vec3(wanted[2])))));
+                    const vec3 scale(glm::length(vec3(wanted[0])), glm::length(vec3(wanted[1])),
+                                     glm::length(vec3(wanted[2])));
+                    wanted = glm::translate(mat4(1.f), vec3(wanted[3])) * glm::mat4_cast(rotation) *
+                             glm::scale(mat4(1.f), scale);
+                }
+                const mat4 desiredGlobal = skeleton.rootTransform * wanted;
+                const mat4 localBone = glm::inverse(bone.intermediatePrefix) * glm::inverse(parentGlobal) * desiredGlobal;
+                const vec3 scale(glm::length(vec3(localBone[0])), glm::length(vec3(localBone[1])),
+                                 glm::length(vec3(localBone[2])));
+                if (scale.x <= 1e-8f || scale.y <= 1e-8f || scale.z <= 1e-8f)
+                    return false;
+                const quat rotation = glm::normalize(glm::quat_cast(mat3(vec3(localBone[0]) / scale.x,
+                                                                         vec3(localBone[1]) / scale.y,
+                                                                         vec3(localBone[2]) / scale.z)));
+                solved.push_back({boneIndex, vec3(localBone[3]), rotation, scale});
+                finalGlobals[boneIndex] = desiredGlobal;
+            }
+            else
+            {
+                vec3 position, scale;
+                quat rotation;
+                const int channel = ChannelForBone(clip, boneIndex);
+                if (channel >= 0)
+                    AnimationEvaluator::SampleChannel(clip.channels[channel], bone, time, position, rotation, scale);
+                else
+                    AnimationEvaluator::BindPose(bone, position, rotation, scale);
+                finalGlobals[boneIndex] = parentGlobal * bone.intermediatePrefix *
+                                          glm::translate(mat4(1.f), position) * glm::mat4_cast(rotation) *
+                                          glm::scale(mat4(1.f), scale);
+            }
+        }
+
+        const AnimationClip before = clip;
+        std::vector<int> keyed;
+        keyed.reserve(solved.size());
+        for (LocalTransform &transform : solved)
+        {
+            const int channel = EnsureChannel(clip, transform.bone);
+            const auto &keys = clip.channels[channel].rotationKeys;
+            const auto next = std::lower_bound(keys.begin(), keys.end(), time,
+                                               [](const RotationKey &key, float keyTime)
+                                               { return key.time < keyTime; });
+            if (next != keys.begin() && glm::dot(std::prev(next)->value, transform.rotation) < 0.f)
+                transform.rotation = -transform.rotation;
+            SetPoseKey(clip, channel, time, transform.position, transform.rotation, transform.scale);
+            keyed.push_back(transform.bone);
+        }
+        if (userPose)
+            RetweenAroundFrame(clip, keyed, ToFrame(time));
+        if (pushUndo)
+            PushUndoSnapshot(before);
+        m_dirty = true;
+        SelClear();
+        if (anim)
+            ReevaluatePose(scene, anim);
+        return true;
+    }
+
     bool AnimationTimeline::CanViewportRotate(ModelAsset *model, int bone, bool rotate, bool translate) const
     {
         if (!model || model != m_editModel || bone < 0 || bone >= model->GetSkeleton().GetBoneCount() ||
@@ -850,7 +995,19 @@ namespace pe
             if (targetBone < 0 || targetBone >= skeleton.GetBoneCount())
                 return false;
             const BoneInfo &info = skeleton.bones[targetBone];
-            const mat4 desiredGlobal = skeleton.rootTransform * rigTransform;
+            mat4 constrained = rigTransform;
+            if (m_rigEditor && m_rigEditor->Planar2D())
+            {
+                const vec3 currentPosition(rigTransforms[targetBone][3]);
+                const vec3 scale(glm::length(vec3(constrained[0])), glm::length(vec3(constrained[1])),
+                                 glm::length(vec3(constrained[2])));
+                vec3 position(constrained[3]);
+                position.z = currentPosition.z;
+                constrained = glm::translate(mat4(1.f), position) *
+                              glm::mat4_cast(PlanarZRotation(rotationOf(constrained))) *
+                              glm::scale(mat4(1.f), scale);
+            }
+            const mat4 desiredGlobal = skeleton.rootTransform * constrained;
             const mat4 local = info.parentIndex >= 0 && info.parentIndex < static_cast<int>(globalTransforms.size())
                                    ? glm::inverse(globalTransforms[info.parentIndex]) * desiredGlobal
                                    : desiredGlobal;
@@ -934,7 +1091,10 @@ namespace pe
             return false;
         const BoneInfo &info = skeleton.bones[bone];
         mat4 desiredGlobal = joints[bone] * glm::inverse(info.offsetMatrix);
-        desiredGlobal[3] = skeleton.rootTransform * vec4(rigPosition, 1.f);
+        vec3 constrainedPosition = rigPosition;
+        if (m_rigEditor && m_rigEditor->Planar2D())
+            constrainedPosition.z = vec3(glm::inverse(skeleton.rootTransform) * desiredGlobal[3]).z;
+        desiredGlobal[3] = skeleton.rootTransform * vec4(constrainedPosition, 1.f);
         const mat4 parentGlobal = info.parentIndex >= 0
                                       ? joints[info.parentIndex] * glm::inverse(skeleton.bones[info.parentIndex].offsetMatrix)
                                       : mat4(1.f);
@@ -1127,6 +1287,7 @@ namespace pe
             }
 
             if (action == "timeline.grab" || action == "timeline.pin" || action == "timeline.lock" ||
+                action == "timeline.spline_ik" ||
                 action == "timeline.balance" || action == "timeline.reference_load" || action == "timeline.reference_clear")
                 return PoseViewport(*m_rigEditor)->HandleAction(scene, action, argsJson);
             if (action == "timeline.import")
@@ -1430,6 +1591,8 @@ namespace pe
             }
             if (action == "timeline.generate")
             {
+                if (m_rigEditor && m_rigEditor->Planar2D())
+                    return fail("gait generation is not available in 2D Plane mode");
                 GaitSettings settings;
                 const std::string gait = args.value("gait", "walk");
                 if (gait == "run")
@@ -1848,6 +2011,8 @@ namespace pe
             }
             if (action == "timeline.ballistic")
             {
+                if (m_rigEditor && m_rigEditor->Planar2D())
+                    return fail("ballistic baking is not available in 2D Plane mode");
                 if (!HasInterval())
                     return fail("mark an interval first (timeline.interval)");
                 // The button falls back to the root, but a bone named in the request is honoured or refused -
@@ -1874,6 +2039,8 @@ namespace pe
             }
             if (action == "timeline.balance_bake")
             {
+                if (m_rigEditor && m_rigEditor->Planar2D())
+                    return fail("balance baking is not available in 2D Plane mode");
                 float start = m_intervalStart, end = m_intervalEnd;
                 if (args.contains("start_frame") || args.contains("end_frame"))
                 {
@@ -3239,6 +3406,20 @@ namespace pe
         ImGui::SetCursorScreenPos({ImGui::GetCursorScreenPos().x, y});
         if (ImGui::RadioButton("Animate", !m_rigMode))
             m_rigMode = false;
+        ImGui::SameLine();
+        ImGui::SetCursorScreenPos({ImGui::GetCursorScreenPos().x, y});
+        bool planar2D = m_rigEditor->Planar2D();
+        if (ImGui::Checkbox("2D Plane", &planar2D))
+        {
+            m_rigEditor->SetPlanar2D(planar2D);
+            if (planar2D)
+            {
+                RequestView(vec3(0.f, 0.f, -1.f), true);
+                SetOrthographic(true);
+                SetTurntable(false);
+            }
+        }
+        ui::ItemTooltip("Constrain posing and IK to the model's XY plane. Enabled automatically for zero-depth meshes.");
         ImGui::SetCursorScreenPos({start.x, start.y + m_headerHeight});
     }
 
@@ -3605,19 +3786,22 @@ namespace pe
         if (ImGui::Button("Offset Selected Bones"))
             run("timeline.motion.offset_bone", {{"delta_frames", m_motionOffsetFrames}});
         ui::ItemTooltip("Slide the selected bones' keys in time, so a chain stops moving in mechanical lockstep.");
-        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.f);
-        ImGui::Combo("##gait", &m_gait, "Walk\0Run\0");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.f);
-        ImGui::InputInt("Frames##gait", &m_gaitFrames);
-        m_gaitFrames = std::clamp(m_gaitFrames, 4, 4096);
-        ImGui::SameLine();
-        if (ImGui::Button("Generate Cycle"))
-            run("timeline.generate", {{"gait", m_gait == 1 ? "run" : "walk"}, {"frames", m_gaitFrames}});
-        ui::ItemTooltip("Write a new looping walk or run action from the rig's bone names (thigh / shin / foot, upper_arm / "
-                        "forearm / hand, hips / spine / head): legs and arms swing, the pelvis sways and twists, the body bobs, "
-                        "and the travel goes to the root-motion track so it plays in place. Feet slide: plant them with the "
-                        "contact tools or Balance afterwards. timeline.generate has amplitude and stride.");
+        if (!m_rigEditor->Planar2D())
+        {
+            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.f);
+            ImGui::Combo("##gait", &m_gait, "Walk\0Run\0");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.f);
+            ImGui::InputInt("Frames##gait", &m_gaitFrames);
+            m_gaitFrames = std::clamp(m_gaitFrames, 4, 4096);
+            ImGui::SameLine();
+            if (ImGui::Button("Generate Cycle"))
+                run("timeline.generate", {{"gait", m_gait == 1 ? "run" : "walk"}, {"frames", m_gaitFrames}});
+            ui::ItemTooltip("Write a new looping walk or run action from the rig's bone names (thigh / shin / foot, upper_arm / "
+                            "forearm / hand, hips / spine / head): legs and arms swing, the pelvis sways and twists, the body bobs, "
+                            "and the travel goes to the root-motion track so it plays in place. Feet slide: plant them with the "
+                            "contact tools or Balance afterwards. timeline.generate has amplitude and stride.");
+        }
         {
             const auto &clips = m_editModel->GetAnimations();
             if (m_layerClip < 0 || m_layerClip >= static_cast<int>(clips.size()) || m_layerClip == m_selectedClip)
@@ -5275,9 +5459,37 @@ namespace pe
                 active |= ImGui::IsItemActive();
                 ui::ItemTooltip(tip);
             };
-            field("Loc", "##poseloc", &loc.x, 0.002f, 0.f, 0.f, "%.3f", "Location offset from the bind pose, in the bone's own rest frame (Y along the bone).");
-            field("Rot", "##poserot", &m_poseEuler.x, 0.5f, 0.f, 0.f, "%.1f", "Rotation (XYZ Euler, degrees) in the bone's own rest frame: Y = twist along the bone, X / Z = bends.");
-            field("Scale", "##posescl", &sclRel.x, 0.01f, 0.001f, 100.f, "%.3f", "Scale relative to the bind pose.");
+            if (m_rigEditor->Planar2D())
+            {
+                loc.z = 0.f;
+                m_poseEuler.x = m_poseEuler.y = 0.f;
+                sclRel.z = 1.f;
+                auto planarField = [&](const char *label, const char *id, float *value, int components, float speed,
+                                       float lo, float hi, const char *format, const char *tip)
+                {
+                    ImGui::SameLine(0.f, 12.f);
+                    ImGui::TextDisabled("%s", label);
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(ImGui::GetFontSize() * (components == 1 ? 5.f : 10.f));
+                    changed |= components == 1 ? ImGui::DragFloat(id, value, speed, lo, hi, format)
+                                               : ImGui::DragFloat2(id, value, speed, lo, hi, format);
+                    activated |= ImGui::IsItemActivated();
+                    active |= ImGui::IsItemActive();
+                    ui::ItemTooltip(tip);
+                };
+                planarField("Loc XY", "##poseloc", &loc.x, 2, 0.002f, 0.f, 0.f, "%.3f",
+                            "Location offset in the model plane.");
+                planarField("Rot Z", "##poserot", &m_poseEuler.z, 1, 0.5f, 0.f, 0.f, "%.1f",
+                            "Rotation about the model plane's Z axis.");
+                planarField("Scale XY", "##posescl", &sclRel.x, 2, 0.01f, 0.001f, 100.f, "%.3f",
+                            "Scale in the model plane; spline X scale controls width.");
+            }
+            else
+            {
+                field("Loc", "##poseloc", &loc.x, 0.002f, 0.f, 0.f, "%.3f", "Location offset from the bind pose, in the bone's own rest frame (Y along the bone).");
+                field("Rot", "##poserot", &m_poseEuler.x, 0.5f, 0.f, 0.f, "%.1f", "Rotation (XYZ Euler, degrees) in the bone's own rest frame: Y = twist along the bone, X / Z = bends.");
+                field("Scale", "##posescl", &sclRel.x, 0.01f, 0.001f, 100.f, "%.3f", "Scale relative to the bind pose.");
+            }
             m_poseEditing = active;
             if (activated)
                 PushUndo(clip);
@@ -5339,46 +5551,49 @@ namespace pe
                         "selected bones, or every keyed bone when none are selected. The selected bone must already "
                         "have keys; Tween will not invent a curve. Keys what the clip already plays; the ends stay put.",
                         ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-        ImGui::SameLine();
-        if (ImGui::Button("Ballistic"))
+        if (!m_rigEditor->Planar2D())
         {
-            const int bone = BallisticBone(skeleton, clip, m_activeBone);
-            const AnimationClip before = clip;
-            const size_t written = bone < 0 ? 0 : BakeBallistic(skeleton, clip, bone, m_gravity, m_ballisticBody);
-            if (written > 0)
+            ImGui::SameLine();
+            if (ImGui::Button("Ballistic"))
             {
-                PushUndoSnapshot(before);
-                ReevaluatePose(scene, anim);
-                m_tweenStatus = "Ballistic wrote " + std::to_string(written) + " keys on " +
-                                skeleton.bones[bone].name + (m_ballisticBody ? " (centre of mass)." : ".");
+                const int bone = BallisticBone(skeleton, clip, m_activeBone);
+                const AnimationClip before = clip;
+                const size_t written = bone < 0 ? 0 : BakeBallistic(skeleton, clip, bone, m_gravity, m_ballisticBody);
+                if (written > 0)
+                {
+                    PushUndoSnapshot(before);
+                    ReevaluatePose(scene, anim);
+                    m_tweenStatus = "Ballistic wrote " + std::to_string(written) + " keys on " +
+                                    skeleton.bones[bone].name + (m_ballisticBody ? " (centre of mass)." : ".");
+                }
+                else
+                    m_tweenStatus = bone < 0
+                                        ? "Ballistic needs the root bone, or one that already has Location keys."
+                                        : "Ballistic wrote nothing: this interval and gravity make no usable arc.";
             }
-            else
-                m_tweenStatus = bone < 0
-                                    ? "Ballistic needs the root bone, or one that already has Location keys."
-                                    : "Ballistic wrote nothing: this interval and gravity make no usable arc.";
+            ui::ItemTooltip("Throw the root through the interval instead of sliding it: the in-between frames follow "
+                            "gravity from the launch speed the two ends imply, while the horizontal path stays straight. "
+                            "The ends themselves are kept. Acts on the selected bone when it carries the translation, "
+                            "otherwise on the skeleton root. Posing this bone again inside the same interval rebuilds "
+                            "its curve from the ends, which flattens the arc - bake it last.",
+                            ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 3.5f);
+            ImGui::DragFloat("##ballistic_gravity", &m_gravity, 0.05f, 0.f, 200.f, "g %.2f");
+            ui::ItemTooltip("Gravity for the ballistic bake, in rig units per second squared. 9.81 is life-sized; "
+                            "raise it for a snappier, more animated fall.",
+                            ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+            ImGui::SameLine();
+            ImGui::Checkbox("Body", &m_ballisticBody);
+            ui::ItemTooltip("Throw the body's centre of mass instead of the root: on every frame the root is moved so the "
+                            "mass of the posed limbs and carried props follows the arc (tucking the legs drops the hips, "
+                            "swinging the shovel forward pulls the body after it), and the root turns against the limbs so "
+                            "the body's angular momentum stays what it was - an arm thrown forward tips the body back where "
+                            "the throw happens; both ends keep their rotation, so a swing spread evenly over the whole "
+                            "flight shows nothing. Masses come from the rig's capsules and owned parts. Airborne spans "
+                            "only - on the ground the feet would move with the root.",
+                            ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         }
-        ui::ItemTooltip("Throw the root through the interval instead of sliding it: the in-between frames follow "
-                        "gravity from the launch speed the two ends imply, while the horizontal path stays straight. "
-                        "The ends themselves are kept. Acts on the selected bone when it carries the translation, "
-                        "otherwise on the skeleton root. Posing this bone again inside the same interval rebuilds "
-                        "its curve from the ends, which flattens the arc - bake it last.",
-                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 3.5f);
-        ImGui::DragFloat("##ballistic_gravity", &m_gravity, 0.05f, 0.f, 200.f, "g %.2f");
-        ui::ItemTooltip("Gravity for the ballistic bake, in rig units per second squared. 9.81 is life-sized; "
-                        "raise it for a snappier, more animated fall.",
-                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-        ImGui::SameLine();
-        ImGui::Checkbox("Body", &m_ballisticBody);
-        ui::ItemTooltip("Throw the body's centre of mass instead of the root: on every frame the root is moved so the "
-                        "mass of the posed limbs and carried props follows the arc (tucking the legs drops the hips, "
-                        "swinging the shovel forward pulls the body after it), and the root turns against the limbs so "
-                        "the body's angular momentum stays what it was - an arm thrown forward tips the body back where "
-                        "the throw happens; both ends keep their rotation, so a swing spread evenly over the whole "
-                        "flight shows nothing. Masses come from the rig's capsules and owned parts. Airborne spans "
-                        "only - on the ground the feet would move with the root.",
-                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         ImGui::SameLine();
         if (ImGui::Button("Spring"))
         {
@@ -5399,22 +5614,25 @@ namespace pe
                         "their keys. Bake it last - posing a chain bone inside the interval rebuilds its curve from the "
                         "ends. timeline.motion.spring_bake has the stiffness, damping and drag knobs.",
                         ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-        ImGui::SameLine();
-        if (ImGui::Button("Balance"))
+        if (!m_rigEditor->Planar2D())
         {
-            std::string status;
-            PoseViewport(*m_rigEditor)->BakeBalance(scene, m_intervalStart, m_intervalEnd, status);
-            m_tweenStatus = status;
+            ImGui::SameLine();
+            if (ImGui::Button("Balance"))
+            {
+                std::string status;
+                PoseViewport(*m_rigEditor)->BakeBalance(scene, m_intervalStart, m_intervalEnd, status);
+                m_tweenStatus = status;
+            }
+            ui::ItemTooltip("Stand the body over its feet on every grounded frame of the interval: the root shifts so the "
+                            "zero-moment point - the centre of mass, led by its acceleration (h/g) - sits over the feet "
+                            "still down through the next 0.1 s (the weight leaves a foot before the foot leaves the floor), "
+                            "and each planted foot is bent back to where the frame had it - the hip "
+                            "sway over the stance foot a walk needs; a body that stops short settles onto its heels. Feet "
+                            "are the bones named foot / toe or holding a planted lock; contact is read from the clip; g is "
+                            "the Ballistic knob. The interval ends keep their keys, airborne frames follow their grounded "
+                            "neighbours (throw those with Ballistic or Body). Bake it after the poses.",
+                            ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         }
-        ui::ItemTooltip("Stand the body over its feet on every grounded frame of the interval: the root shifts so the "
-                        "zero-moment point - the centre of mass, led by its acceleration (h/g) - sits over the feet "
-                        "still down through the next 0.1 s (the weight leaves a foot before the foot leaves the floor), "
-                        "and each planted foot is bent back to where the frame had it - the hip "
-                        "sway over the stance foot a walk needs; a body that stops short settles onto its heels. Feet "
-                        "are the bones named foot / toe or holding a planted lock; contact is read from the clip; g is "
-                        "the Ballistic knob. The interval ends keep their keys, airborne frames follow their grounded "
-                        "neighbours (throw those with Ballistic or Body). Bake it after the poses.",
-                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
         ImGui::SameLine();
         if (ImGui::Button("Cycle"))
         {
@@ -5834,7 +6052,12 @@ namespace pe
                 if (gizmo.clicked) // Blender's rule: the camera goes to that axis's side and looks back
                     RequestView(-gizmo.direction, false);
                 bool hovered = false, active = false;
-                if (gizmo.hovered || gizmo.active)
+                // A drag already in flight owns the mouse: parking it would hand ImGuizmo and the puppet grab a
+                // cursor at -FLT_MAX and fling the bone when the drag swung over the corner. Entering the
+                // orientation gizmo takes a fresh click, so a button already down cannot belong to it.
+                const bool dragInFlight =
+                    ImGui::IsMouseDown(ImGuiMouseButton_Left) && !ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+                if ((gizmo.hovered || gizmo.active) && !dragInFlight)
                 {
                     // the gizmo owns the mouse: the overlay draws with it parked off-screen (its clicks are hit-gated)
                     ImGuiIO &io = ImGui::GetIO();
@@ -5987,6 +6210,12 @@ namespace pe
         {
             DropPendingRequests(); // requests were aimed at the previous character
             m_clipboard.clear();   // key entries index that rig's bones; the pose clipboard carries by name
+            if (m_rigEditor->Planar2D())
+            {
+                RequestView(vec3(0.f, 0.f, -1.f), true);
+                SetOrthographic(true);
+                SetTurntable(false);
+            }
         }
         if (model != m_lastModel || static_cast<int>(model->GetAnimations().size()) != m_lastClipCount)
         {
@@ -6163,6 +6392,14 @@ namespace pe
                     rot = glm::normalize(bindRot * quat(glm::radians(pp.rot)));
                 if (pp.mask & 4)
                     scl = bindScl * pp.scl;
+                if (m_rigEditor->Planar2D())
+                {
+                    vec3 localOffset = glm::inverse(bindRot) * (pos - bindPos);
+                    localOffset.z = 0.f;
+                    pos = bindPos + bindRot * localOffset;
+                    rot = glm::normalize(bindRot * PlanarZRotation(glm::inverse(bindRot) * rot));
+                    scl.z = bindScl.z;
+                }
                 SetPoseKey(clip, ci, time, pos, rot, scl);
                 posedBones.push_back(b);
                 posedFrame = pp.frame >= 0.f ? pp.frame : std::round(currentFrame);
