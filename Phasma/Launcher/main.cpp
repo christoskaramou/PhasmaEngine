@@ -43,6 +43,7 @@ namespace
     constexpr const char *kLaunchArgumentsKey = "launch_arguments";
     constexpr const char *k_editorLaunchTarget = "PhasmaEditor";
     constexpr const char *k_playerLaunchTarget = "PhasmaPlayer";
+    constexpr const char *k_animatorLaunchTarget = "PhasmaAnimator";
     constexpr size_t kSettingsTextBufferSize = 64 * 1024;
     constexpr size_t kLaunchArgumentsBufferSize = 2048;
 
@@ -99,6 +100,15 @@ namespace
         return std::filesystem::path(pe::Path::Root) / "PhasmaPlayer.exe";
 #else
         return std::filesystem::path(pe::Path::Root) / "PhasmaPlayer";
+#endif
+    }
+
+    std::filesystem::path AnimatorExecutablePath()
+    {
+#if defined(PE_WIN32)
+        return std::filesystem::path(pe::Path::Root) / "PhasmaAnimator.exe";
+#else
+        return std::filesystem::path(pe::Path::Root) / "PhasmaAnimator";
 #endif
     }
 
@@ -687,6 +697,7 @@ namespace
     {
         Editor,
         Player,
+        Animator,
         Sample
     };
 
@@ -843,6 +854,7 @@ namespace
         std::vector<LaunchTarget> targets;
         targets.push_back({k_editorLaunchTarget, "Phasma Editor", EditorExecutablePath(), LaunchTargetKind::Editor});
         targets.push_back({k_playerLaunchTarget, "Phasma Player", PlayerExecutablePath(), LaunchTargetKind::Player});
+        targets.push_back({k_animatorLaunchTarget, "Phasma Animator", AnimatorExecutablePath(), LaunchTargetKind::Animator});
 
         std::vector<LaunchTarget> sampleTargets;
         std::vector<std::string> seenNames;
@@ -2786,7 +2798,7 @@ namespace
                     runIndex = 0;
                 RenderHelpLabel("Run",
                                 "Selects the executable to start. Editor opens the project for editing, Player runs its "
-                                "startup scene.");
+                                "startup scene, Animator opens the last .pemesh it had (or --open <model>).");
                 ImGui::SameLine(kFieldX);
                 ImGui::SetNextItemWidth(kFieldWidth);
                 if (!targets.empty() && ImGui::BeginCombo("##run_target", targets[runIndex].label.c_str()))
@@ -2821,6 +2833,7 @@ namespace
                     ImGui::SetTooltip("Available parameters:\n"
                                       "Common: --api <vulkan|dx12>, --display <index>, --screen <index>\n"
                                       "Player: --profiler[=<port>], --profiler-port <port>\n"
+                                      "Animator: --open <model.pemesh>\n"
                                       "Quotes preserve spaces.");
             }
 

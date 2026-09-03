@@ -1,0 +1,935 @@
+#include "AnimatorApp.h"
+#include "API/Image.h"
+#include "API/RHI.h"
+#include "API/Swapchain.h"
+#include "AnimationTimeline.h"
+#include "Camera/Camera.h"
+#include "GUI/Backends/GUIBackend.h"
+#include "GUI/GUIState.h"
+#include "GUI/Helpers.h"
+#include "Project/ProjectSelection.h"
+#include "Scene/ModelAsset.h"
+#include "Scene/ModelAssetCooked.h"
+#include "Scene/SceneAccess.h"
+#include "Scene/SceneHost.h"
+#include "Scene/SceneRuntimeHooks.h"
+#include "Scene/SelectionManager.h"
+#include "Systems/AnimationSystem.h"
+#include "Systems/AudioSystem.h"
+#include "Systems/Physics2DSystem.h"
+#include "Systems/PhysicsSystem.h"
+#include "Terrain/TerrainSystem.h"
+#include "Voxel/VoxelSystem.h"
+#include "Window/WindowEvents.h"
+#include "imgui/ImGuizmo.h"
+#include "imgui/imgui.h"
+#include "imgui/imgui_impl_sdl2.h"
+
+#include <nlohmann/json.hpp>
+#if defined(PE_WIN32)
+#include <SDL_syswm.h>
+#include <commdlg.h>
+#include <windows.h>
+#endif
+
+namespace pe
+{
+    AnimatorApp *AnimatorApp::s_instance = nullptr;
+
+    RuntimeSceneRenderer *GetAnimatorRenderer()
+    {
+        return AnimatorApp::Instance() ? &AnimatorApp::Instance()->Renderer() : nullptr;
+    }
+
+    namespace
+    {
+        constexpr size_t kLogLines = 400;
+
+        const char *LogLevelName(LogType type)
+        {
+            return type == LogType::Error ? "error" : type == LogType::Warn ? "warn"
+                                                                            : "info";
+        }
+
+        std::string ActionResult(const nlohmann::json &j)
+        {
+            return j.dump();
+        }
+    } // namespace
+
+    namespace
+    {
+        constexpr struct
+        {
+            const char *name;
+            GUIStyle style;
+        } kStyles[] = {{"Classic", GUIStyle::Classic}, {"Dark", GUIStyle::Dark}, {"Light", GUIStyle::Light}, {"Modern", GUIStyle::Modern}, {"Unity", GUIStyle::Unity}, {"Unreal", GUIStyle::Unreal}};
+
+        const char *StyleName(GUIStyle style)
+        {
+            for (const auto &entry : kStyles)
+                if (entry.style == style)
+                    return entry.name;
+            return kStyles[4].name;
+        }
+
+        bool StyleByName(std::string name, GUIStyle &out)
+        {
+            for (char &c : name)
+                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            for (const auto &entry : kStyles)
+            {
+                std::string candidate = entry.name;
+                for (char &c : candidate)
+                    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                if (candidate == name)
+                {
+                    out = entry.style;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // the theme picks its font too, the way the editor pushes one per style every frame
+        void ApplyStyle(GUIStyle style)
+        {
+            GUIState::s_guiStyle = style;
+            ui::ApplyTheme(style);
+            ImFont *font = GUIState::s_fontClassic;
+            switch (style)
+            {
+            case GUIStyle::Dark:
+                font = GUIState::s_fontDark;
+                break;
+            case GUIStyle::Light:
+                font = GUIState::s_fontLight;
+                break;
+            case GUIStyle::Modern:
+                font = GUIState::s_fontModern;
+                break;
+            case GUIStyle::Unity:
+                font = GUIState::s_fontUnity;
+                break;
+            case GUIStyle::Unreal:
+                font = GUIState::s_fontUnreal;
+                break;
+            case GUIStyle::Classic:
+                break;
+            }
+            ImGui::GetIO().FontDefault = font;
+        }
+
+        void SetFontScale(float scale)
+        {
+            ImGui::GetIO().FontGlobalScale = std::clamp(scale, 0.5f, 2.5f); // the editor's range
+        }
+    } // namespace
+
+    AnimatorApp::AnimatorApp(int argc, char *argv[]) : m_renderer(m_scene)
+    {
+        s_instance = this;
+        Path::Init();
+        if (Path::EditorAssets.empty())
+        {
+            const std::string beside = Path::Executable + "EditorAssets/";
+            if (std::filesystem::exists(beside))
+                Path::EditorAssets = beside; // the editor's fonts, shipped beside both programs
+        }
+        // The active project's Assets (rig presets, models) like the editor and the player.
+        const ProjectSelection project = ResolveProjectSelection();
+        ApplyProjectSelectionAssetsRoot(project);
+        PE_INFO("[Animator] Active assets root: %s", Path::Assets.c_str());
+
+        Log::Attach(
+            [this](const std::string &message, LogType type)
+            {
+                std::lock_guard lock(m_logMutex);
+                m_log.push_back({type, message});
+                if (m_log.size() > kLogLines)
+                    m_log.pop_front();
+            });
+
+        SetActiveSceneGetter(ActiveScene);
+        SetSceneRuntimeHooks(CreateDefaultSceneRuntimeHooks());
+        SceneHostCallbacks sceneHost{};
+        sceneHost.beforeMutation = WaitSceneMutation;
+        SetSceneHostCallbacks(sceneHost);
+        CameraRuntimeCallbacks cameraHooks = CreateDefaultCameraRuntimeCallbacks();
+        cameraHooks.getAspect = ViewportAspect;
+        SetCameraRuntimeCallbacks(cameraHooks);
+
+        // The runtime's scene hooks reach every system the player has, so the animator creates the same set.
+        CreateGlobalSystem<AnimationSystem>()->Init(nullptr);
+#ifdef PE_PHYSICS
+        CreateGlobalSystem<PhysicsSystem>()->Init(nullptr);
+#endif
+#ifdef PE_PHYSICS2D
+        CreateGlobalSystem<Physics2DSystem>()->Init(nullptr);
+#endif
+#ifdef PE_AUDIO
+        CreateGlobalSystem<AudioSystem>()->Init(nullptr);
+#endif
+        CreateGlobalSystem<voxel::VoxelSystem>()->Init(nullptr);
+        CreateGlobalSystem<terrain::TerrainSystem>()->Init(nullptr);
+        // ponytail: the ImGui overlay is drawn into the display target at window resolution, so that target must be
+        // window-sized; a scaled one clips the UI and the viewport image at the scale. Full-res is right for one
+        // character anyway. Drawing the overlay after the upscale blit would lift this.
+        Settings::Get<SceneSettings>().render_scale = 1.f;
+        m_renderer.SetRuntimeSettingsForced(false);
+        m_renderer.SetOverlay([this](CommandBuffer *cmd, Image *displayRT)
+                              { DrawOverlay(cmd, displayRT); });
+        m_renderer.Init(nullptr);
+        ResetScene();
+
+        ImGui::CreateContext();
+        ImGuiIO &io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        io.ConfigFlags |= ImGuiConfigFlags_IsSRGB;
+        GUIBackend::ConfigureIO();
+        ImGui::StyleColorsClassic();
+        m_attachment.image = m_renderer.GetDisplayRT();
+        m_attachment.loadOp = PE_LOAD_OP_LOAD;
+        GUIBackend::Init(&m_attachment);
+        // the editor's fonts per theme: Inter (Unity, Dark), Roboto (Unreal), Open Sans (Light, Modern)
+        GUIState::s_fontClassic = io.Fonts->AddFontDefault();
+        auto loadFont = [&](const char *file, float size)
+        {
+            const std::string path = Path::EditorAssets + "Fonts/" + file;
+            return std::filesystem::exists(path) ? io.Fonts->AddFontFromFileTTF(path.c_str(), size)
+                                                 : GUIState::s_fontClassic;
+        };
+        GUIState::s_fontUnity = GUIState::s_fontDark = loadFont("Inter-Regular.ttf", 15.f);
+        GUIState::s_fontUnreal = loadFont("Roboto-Regular.ttf", 15.f);
+        GUIState::s_fontLight = GUIState::s_fontModern = loadFont("OpenSans-Regular.ttf", 17.f);
+        GUIBackend::CreateFontsTexture();
+        ApplyStyle(GUIStyle::Unity);
+
+        m_timeline = std::make_unique<AnimationTimeline>();
+        m_timeline->Init(this);
+        LoadConfig(argc, argv);
+    }
+
+    AnimatorApp::~AnimatorApp()
+    {
+        m_renderer.WaitAllFramesCommands();
+        RHII.WaitDeviceIdle();
+        SaveConfig();
+        m_timeline.reset(); // releases its reference-frame texture through the backend below
+        if (GUIState::s_viewportTextureId)
+            GUIBackend::ReleaseImageTexture(GUIState::s_viewportTextureId);
+        Image::Destroy(GUIState::s_sceneViewImage);
+        GUIBackend::Shutdown();
+        ImGui::DestroyContext();
+        m_renderer.Destroy();
+        ThreadPool::GUI.WaitIdle();
+        ThreadPool::General.WaitIdle();
+        DestroyGlobalSystems();
+        ModelAsset::DestroyDefaults();
+        Context::Remove();
+        SetCameraRuntimeCallbacks({});
+        SetSceneHostCallbacks({});
+        SetSceneRuntimeHooks({});
+        SetActiveSceneGetter(nullptr);
+        s_instance = nullptr;
+    }
+
+    Scene *AnimatorApp::ActiveScene()
+    {
+        return s_instance ? &s_instance->m_scene : nullptr;
+    }
+
+    void AnimatorApp::WaitSceneMutation()
+    {
+        if (s_instance)
+            s_instance->m_renderer.WaitAllFramesCommands();
+    }
+
+    float AnimatorApp::ViewportAspect()
+    {
+        // the camera projects at the Timeline's viewport region, so the whole render fills it and pick rays land
+        const float region = AnimationTimeline::RegionAspect();
+        if (region > 0.f)
+            return region;
+        return RHII.GetHeight() > 0 ? static_cast<float>(RHII.GetWidth()) / static_cast<float>(RHII.GetHeight())
+                                    : 16.f / 9.f;
+    }
+
+    // -------------------------------------------------------------------------
+    // scene + model
+    // -------------------------------------------------------------------------
+    void AnimatorApp::ResetScene()
+    {
+        m_renderer.WaitAllFramesCommands();
+        SelectionManager::Instance().ClearSelection();
+        m_scene.NewScene();
+        if (m_scene.GetCameras().empty())
+        {
+            Camera *camera = m_scene.AddCamera();
+            m_scene.SetActiveCamera(camera);
+            camera->SetPosition(vec3(0.f, 1.f, -3.f));
+            camera->SetEuler(vec3(0.f));
+            camera->Update();
+        }
+        m_scene.CreateDirectionalLight();
+        Settings::Get<SceneSettings>().draw_grid = true;
+        Settings::Get<SceneSettings>().render_scale = 1.f;
+        m_scene.MarkDirty();
+        m_modelPath.clear();
+        m_modelRoots.clear();
+    }
+
+    bool AnimatorApp::OpenModel(const std::filesystem::path &pemesh, std::string *error)
+    {
+        std::error_code ec;
+        const std::filesystem::path path = std::filesystem::absolute(pemesh, ec);
+        if (!std::filesystem::exists(path, ec) || !ModelAssetCooked::IsCookedPath(path))
+        {
+            if (error)
+                *error = "not a .pemesh file: " + pemesh.generic_string();
+            return false;
+        }
+        ModelAsset *model = ModelAsset::Load(path);
+        if (!model)
+        {
+            if (error)
+                *error = "failed to load " + path.generic_string();
+            return false;
+        }
+        m_timeline->DropTarget();
+        ResetScene(); // one character at a time: the previous model goes with its scene
+        const SceneNodeHandle handle = m_scene.AddModelDeferred(model);
+        m_scene.UpdateGeometryBuffers();
+        m_scene.MarkDirty();
+        m_modelRoots = m_scene.GetModelRootNodes(model);
+        if (m_modelRoots.empty() && handle.nodeId)
+            m_modelRoots.push_back(handle.nodeId);
+        if (!m_modelRoots.empty())
+            SelectionManager::Instance().Select(m_modelRoots.front()); // the Timeline follows the selection
+        m_modelPath = path;
+        SaveConfig();
+        PE_INFO("[Animator] Opened %s", path.generic_string().c_str());
+        return true;
+    }
+
+    // -------------------------------------------------------------------------
+    // config: the last model and the viewport share, beside the executable
+    // -------------------------------------------------------------------------
+    std::filesystem::path AnimatorApp::ConfigPath() const
+    {
+        return std::filesystem::path(Path::Executable) / "animator_config.json";
+    }
+
+    void AnimatorApp::LoadConfig(int argc, char *argv[])
+    {
+        std::filesystem::path open;
+        for (int i = 1; i + 1 < argc; i++)
+            if (std::string_view(argv[i]) == "--open")
+                open = argv[i + 1];
+        std::ifstream in(ConfigPath());
+        if (in)
+        {
+            const nlohmann::json j = nlohmann::json::parse(in, nullptr, false);
+            if (j.is_object())
+            {
+                if (open.empty() && j.contains("last_model") && j["last_model"].is_string())
+                    open = j["last_model"].get<std::string>();
+                if (j.contains("viewport_share") && j["viewport_share"].is_number())
+                    m_timeline->SetViewportShare(j["viewport_share"].get<float>());
+                GUIStyle style;
+                if (j.contains("style") && j["style"].is_string() && StyleByName(j["style"].get<std::string>(), style))
+                    ApplyStyle(style);
+                if (j.contains("font_scale") && j["font_scale"].is_number())
+                    SetFontScale(j["font_scale"].get<float>());
+            }
+        }
+        std::string error;
+        if (!open.empty() && !OpenModel(open, &error))
+            PE_WARN("[Animator] %s", error.c_str());
+    }
+
+    void AnimatorApp::SaveConfig() const
+    {
+        nlohmann::json j;
+        j["last_model"] = m_modelPath.generic_string();
+        j["viewport_share"] = m_timeline ? m_timeline->ViewportShare() : 0.6f;
+        j["style"] = StyleName(GUIState::s_guiStyle);
+        j["font_scale"] = ImGui::GetIO().FontGlobalScale;
+        std::ofstream out(ConfigPath());
+        if (out)
+            out << j.dump(2) << '\n';
+    }
+
+    // -------------------------------------------------------------------------
+    // frame
+    // -------------------------------------------------------------------------
+    bool AnimatorApp::WindowRenderable() const
+    {
+        SDL_Window *window = RHII.GetWindow();
+        return window && !IsWindowMinimized(window) && GetWindowDrawableExtent(window).IsValid();
+    }
+
+    bool AnimatorApp::ProcessEvents()
+    {
+        SDL_Window *window = RHII.GetWindow();
+        SDL_Event event{};
+        while (SDL_PollEvent(&event))
+        {
+            ImGui_ImplSDL2_ProcessEvent(&event);
+            if (event.type == SDL_QUIT)
+                return false;
+            if (event.type == SDL_DROPFILE && event.drop.file)
+            {
+                const std::string dropped = event.drop.file;
+                SDL_free(event.drop.file);
+                std::string error;
+                if (!OpenModel(dropped, &error))
+                    PE_WARN("[Animator] %s", error.c_str());
+            }
+            if (IsRuntimeWindowEventFor(event, window) &&
+                (IsRuntimeWindowDisplayChangedEvent(event) || IsRuntimeWindowResizeEvent(event)))
+                m_resizePending = true;
+        }
+        EventSystem::QueuedEvent queued;
+        while (EventSystem::PollEvent(queued))
+        {
+            const EventType *type = std::get_if<EventType>(&queued.key);
+            if (!type)
+                continue;
+            if (*type == EventType::Quit)
+                return false;
+            if (*type == EventType::Resize)
+                m_resizePending = true;
+            else if (*type == EventType::CompileShaders)
+            {
+                std::optional<size_t> hash;
+                if (queued.payload.has_value() && queued.payload.type() == typeid(size_t))
+                    hash = std::any_cast<size_t>(queued.payload);
+                m_renderer.PollShaders(hash);
+                CommandBuffer::ClearCache();
+            }
+        }
+        return true;
+    }
+
+    void AnimatorApp::ApplyPendingResize()
+    {
+        SDL_Window *window = RHII.GetWindow();
+        const WindowDrawableExtent extent = GetWindowDrawableExtent(window);
+        const bool changed = extent.IsValid() && (extent.width != static_cast<int>(RHII.GetWidth()) ||
+                                                  extent.height != static_cast<int>(RHII.GetHeight()));
+        if ((!m_resizePending && !changed) || !WindowRenderable() || !extent.IsValid())
+            return;
+        m_renderer.Resize(static_cast<uint32_t>(extent.width), static_cast<uint32_t>(extent.height));
+        m_resizePending = false;
+    }
+
+    bool AnimatorApp::Frame()
+    {
+        RHII.NextFrame();
+        FrameTimer::Instance().Tick();
+        Profiler::BeginFrame();
+        struct ProfilerFrame
+        {
+            ~ProfilerFrame() { Profiler::EndFrame(); }
+        } profilerFrame;
+
+        m_renderer.WaitPreviousFrameCommands();
+        bool presentationReady = true;
+        if (WindowRenderable())
+        {
+            try
+            {
+                if (Swapchain *swapchain = RHII.GetSwapchain())
+                    presentationReady = swapchain->WaitForNextFrame();
+            }
+            catch (const SwapchainOutOfDateError &)
+            {
+                m_resizePending = true;
+                presentationReady = false;
+            }
+        }
+        if (!presentationReady)
+        {
+            const bool keepRunning = ProcessEvents();
+            ApplyPendingResize();
+            SDL_Delay(1);
+            return keepRunning;
+        }
+        if (!ProcessEvents())
+            return false;
+        ApplyPendingResize();
+        if (!WindowRenderable())
+        {
+            SDL_Delay(16);
+            return true;
+        }
+        PollCommandFile();
+        if (m_quit)
+            return false;
+        EnsureSceneTexture();
+
+        GUIBackend::NewFrame();
+        ImGui::NewFrame();
+        ImGuizmo::BeginFrame();
+        UpdateGlobalSystems();
+        DrawShell();
+        ImGui::Render();
+
+        m_renderer.Update();
+        m_renderer.Draw();
+        FrameTimer::Instance().CountCpuTotalStamp();
+        return !m_quit;
+    }
+
+    // -------------------------------------------------------------------------
+    // shell: the menu bar and the Timeline under it
+    // -------------------------------------------------------------------------
+    void AnimatorApp::OpenDialog()
+    {
+        std::string picked;
+        if (PickFile("Open .pemesh", "Cooked model (*.pemesh)\0*.pemesh\0All files\0*.*\0", picked))
+        {
+            std::string error;
+            if (!OpenModel(picked, &error))
+                PE_WARN("[Animator] %s", error.c_str());
+            return;
+        }
+#if !defined(PE_WIN32)
+        m_openPopupPending = true; // no native dialog: a path field
+#endif
+    }
+
+    void AnimatorApp::DrawShell()
+    {
+        const ImGuiIO &io = ImGui::GetIO();
+        if (ImGui::BeginMainMenuBar())
+        {
+            if (ImGui::BeginMenu("File"))
+            {
+                if (ImGui::MenuItem("Open .pemesh...", "Ctrl+O"))
+                    OpenDialog();
+                ui::ItemTooltip("Open a cooked model. Dropping a .pemesh on the window opens it too.");
+                if (ImGui::MenuItem("Save", "Ctrl+S", false, m_timeline->HasTarget()))
+                    m_timeline->RequestSave();
+                ui::ItemTooltip("Write the clips back into the model's .pemesh.");
+                ImGui::Separator();
+                if (ImGui::MenuItem("Exit"))
+                    m_quit = true;
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Layout"))
+            {
+                if (ImGui::BeginMenu("Style"))
+                {
+                    for (const auto &entry : kStyles)
+                        if (ImGui::MenuItem(entry.name, nullptr, GUIState::s_guiStyle == entry.style))
+                            ApplyStyle(entry.style);
+                    ImGui::EndMenu();
+                }
+                if (ImGui::BeginMenu("Font Size"))
+                {
+                    const float scale = io.FontGlobalScale;
+                    if (ImGui::MenuItem("Small", nullptr, scale < 0.95f))
+                        SetFontScale(0.85f);
+                    if (ImGui::MenuItem("Medium", nullptr, scale >= 0.95f && scale < 1.15f))
+                        SetFontScale(1.f);
+                    if (ImGui::MenuItem("Large", nullptr, scale >= 1.15f && scale < 1.35f))
+                        SetFontScale(1.25f);
+                    if (ImGui::MenuItem("Extra Large", nullptr, scale >= 1.35f))
+                        SetFontScale(1.5f);
+                    ImGui::EndMenu();
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Reset Layout"))
+                    m_timeline->SetViewportShare(0.6f);
+                ui::ItemTooltip("The viewport back to 60% of the window.");
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("View"))
+            {
+                Camera *camera = m_scene.GetCameras().empty() ? nullptr : m_scene.GetActiveCamera();
+                const bool target = m_timeline->HasTarget();
+                if (ImGui::MenuItem("Frame Character", "F", false, target))
+                    m_timeline->RequestFrameView();
+                ui::ItemTooltip("Fit the character in the viewport.");
+                if (ImGui::MenuItem("Reset Camera", nullptr, false, target))
+                    m_timeline->ResetView();
+                ui::ItemTooltip("The front view from slightly above, framed.");
+                ImGui::Separator();
+                static const struct
+                {
+                    const char *name;
+                    vec3 look; // the direction the camera looks along (Blender's views: Right = camera at +X)
+                } kViews[] = {{"Front", vec3(0.f, 0.f, -1.f)}, {"Back", vec3(0.f, 0.f, 1.f)}, {"Right", vec3(-1.f, 0.f, 0.f)}, {"Left", vec3(1.f, 0.f, 0.f)}, {"Top", vec3(0.f, -1.f, 0.f)}, {"Bottom", vec3(0.f, 1.f, 0.f)}};
+                for (const auto &view : kViews)
+                    if (ImGui::MenuItem(view.name, nullptr, false, target))
+                        m_timeline->RequestView(view.look, false);
+                ImGui::Separator();
+                const bool ortho = camera && camera->IsOrthographic();
+                if (ImGui::MenuItem("Orthographic", nullptr, ortho, camera != nullptr))
+                    m_timeline->SetOrthographic(!ortho);
+                ImGui::MenuItem("Grid", nullptr, &Settings::Get<SceneSettings>().draw_grid);
+                ImGui::MenuItem("Axis Gizmo", nullptr, &GUIState::s_useOrientationGizmo);
+                ui::ItemTooltip("The axis arrows in the viewport corner; click one to look along it.");
+                ImGui::EndMenu();
+            }
+            const std::string label = m_modelPath.empty()
+                                          ? std::string("No model: File > Open .pemesh, or drop one on the window")
+                                          : m_modelPath.filename().string();
+            const float labelWidth = ImGui::CalcTextSize(label.c_str()).x;
+            // SetCursorPosX, not SameLine(x): SameLine adds the menu bar's group offset and pushed the label off the edge
+            ImGui::SetCursorPosX(
+                std::max(ImGui::GetCursorPosX(), ImGui::GetWindowContentRegionMax().x - labelWidth - 16.f));
+            ImGui::TextDisabled("%s", label.c_str());
+            ImGui::EndMainMenuBar();
+        }
+        if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_O, false) && !ImGui::IsAnyItemActive())
+            OpenDialog();
+
+        if (m_openPopupPending)
+        {
+            ImGui::OpenPopup("Open .pemesh");
+            m_openPopupPending = false;
+        }
+        if (ImGui::BeginPopupModal("Open .pemesh", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 40.f);
+            ImGui::InputText("##animator_open_path", m_openBuffer, sizeof(m_openBuffer));
+            if (ImGui::Button("Open"))
+            {
+                std::string error;
+                if (OpenModel(m_openBuffer, &error))
+                    ImGui::CloseCurrentPopup();
+                else
+                    PE_WARN("[Animator] %s", error.c_str());
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel"))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
+        const ImGuiViewport *viewport = ImGui::GetMainViewport();
+        m_timeline->Update(viewport->WorkPos, viewport->WorkSize);
+    }
+
+    // -------------------------------------------------------------------------
+    // the scene image behind the Timeline's viewport, and the ImGui pass over the scene
+    // -------------------------------------------------------------------------
+    void *AnimatorApp::RegisterImageTexture(Image *image)
+    {
+        return GUIBackend::RegisterImageTexture(image);
+    }
+
+    void AnimatorApp::ReleaseImageTexture(void *&texture)
+    {
+        GUIBackend::ReleaseImageTexture(texture);
+    }
+
+    bool AnimatorApp::EnsureSceneTexture()
+    {
+        Image *displayRT = m_renderer.GetDisplayRT();
+        if (!displayRT)
+            return false;
+        Image *&image = GUIState::s_sceneViewImage;
+        if (!image || image->GetWidth() != displayRT->GetWidth() || image->GetHeight() != displayRT->GetHeight())
+        {
+            m_renderer.WaitAllFramesCommands();
+            if (GUIState::s_viewportTextureId)
+                GUIBackend::ReleaseImageTexture(GUIState::s_viewportTextureId);
+            Image::Destroy(image);
+            image = m_renderer.CreateFSSampledImage(false);
+        }
+        if (!image || !image->HasSRV())
+            return false;
+        if (!GUIState::s_viewportTextureId)
+            GUIState::s_viewportTextureId = GUIBackend::RegisterImageTexture(image);
+        return GUIState::s_viewportTextureId != nullptr;
+    }
+
+    void AnimatorApp::DrawOverlay(CommandBuffer *cmd, Image *displayRT)
+    {
+        m_attachment.image = displayRT;
+        const ImDrawData *drawData = ImGui::GetDrawData();
+        if (!drawData || drawData->TotalVtxCount <= 0)
+            return;
+        Image *sceneImage = GUIState::s_sceneViewImage;
+        if (sceneImage && sceneImage->GetWidth() == displayRT->GetWidth() &&
+            sceneImage->GetHeight() == displayRT->GetHeight())
+        {
+            // the scene as rendered this frame, sampled by the viewport image drawn in the pass below
+            cmd->CopyImage(displayRT, sceneImage);
+            ImageBarrierInfo barrier{};
+            barrier.image = sceneImage;
+            barrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
+            barrier.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
+            cmd->ImageBarrier(barrier);
+        }
+        cmd->BeginPass(1, &m_attachment, "Animator GUI", true);
+        GUIBackend::RenderDrawData(cmd);
+        cmd->EndPass();
+    }
+
+    // -------------------------------------------------------------------------
+    // file picker
+    // -------------------------------------------------------------------------
+    bool AnimatorApp::PickFile(const char *title, const char *filter, std::string &outPath)
+    {
+#if defined(PE_WIN32)
+        char fileName[MAX_PATH] = {};
+        OPENFILENAMEA dialog{};
+        dialog.lStructSize = sizeof(dialog);
+        SDL_SysWMinfo info{};
+        SDL_VERSION(&info.version);
+        if (SDL_GetWindowWMInfo(RHII.GetWindow(), &info))
+            dialog.hwndOwner = info.info.win.window;
+        dialog.lpstrTitle = title;
+        dialog.lpstrFilter = filter;
+        dialog.lpstrFile = fileName;
+        dialog.nMaxFile = static_cast<DWORD>(sizeof(fileName));
+        const std::string initialDir = m_modelPath.empty() ? Path::Assets : m_modelPath.parent_path().string();
+        dialog.lpstrInitialDir = initialDir.c_str();
+        dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+        if (!GetOpenFileNameA(&dialog))
+            return false;
+        outPath = fileName;
+        return true;
+#else
+        (void)title;
+        (void)filter;
+        (void)outPath;
+        return false;
+#endif
+    }
+
+    // -------------------------------------------------------------------------
+    // actions: the command file (tests) and the menu share them
+    // -------------------------------------------------------------------------
+    std::string AnimatorApp::HandleAction(const std::string &action, const std::string &argsJson)
+    {
+        nlohmann::json args = nlohmann::json::parse(argsJson.empty() ? "{}" : argsJson, nullptr, false);
+        if (!args.is_object())
+            args = nlohmann::json::object();
+        auto ok = [&](nlohmann::json extra = nlohmann::json::object())
+        {
+            extra["ok"] = true;
+            extra["action"] = action;
+            return extra.dump();
+        };
+        auto fail = [&](const std::string &message)
+        {
+            return ActionResult({{"error", message}, {"action", action}});
+        };
+        try
+        {
+            if (action == "animator.open")
+            {
+                std::string error;
+                if (!OpenModel(args.value("path", ""), &error))
+                    return fail(error);
+                nlohmann::json roots = nlohmann::json::array();
+                for (NodeId *root : m_modelRoots)
+                    if (root && m_scene.IsNodeAlive(root))
+                        roots.push_back({{"id", "node:0:" + std::to_string(root->index)},
+                                         {"name", m_scene.GetNodeName(root)}});
+                return ok({{"path", m_modelPath.generic_string()}, {"model_roots", roots}});
+            }
+            if (action == "animator.new" || action == "file.new_scene")
+            {
+                m_timeline->DropTarget();
+                ResetScene();
+                return ok();
+            }
+            if (action == "animator.screenshot")
+            {
+                const std::string path = args.value("path", (std::filesystem::path(Path::Executable) / "animator.png").generic_string());
+                m_renderer.RequestScreenshot(path);
+                return ok({{"path", path}});
+            }
+            if (action == "animator.log")
+            {
+                const int count = std::max(1, args.value("count", 20));
+                const std::string level = args.value("level", "");
+                nlohmann::json entries = nlohmann::json::array();
+                std::lock_guard lock(m_logMutex);
+                for (auto it = m_log.rbegin(); it != m_log.rend() && static_cast<int>(entries.size()) < count; ++it)
+                    if (level.empty() || level == LogLevelName(it->type))
+                        entries.push_back({{"level", LogLevelName(it->type)}, {"message", it->message}});
+                return ok({{"entries", entries}, {"total", m_log.size()}});
+            }
+            if (action == "animator.state")
+            {
+                const Camera *camera = m_scene.GetCameras().empty() ? nullptr : m_scene.GetActiveCamera();
+                nlohmann::json state = {{"model", m_modelPath.generic_string()},
+                                        {"has_target", m_timeline->HasTarget()},
+                                        {"viewport", m_timeline->ViewportShare()},
+                                        {"style", StyleName(GUIState::s_guiStyle)},
+                                        {"font_scale", ImGui::GetIO().FontGlobalScale}};
+                if (camera)
+                {
+                    const vec3 p = camera->GetPosition();
+                    state["camera"] = {p.x, p.y, p.z};
+                }
+                return ok(state);
+            }
+            if (action == "layout.style")
+            {
+                GUIStyle style;
+                if (!StyleByName(args.value("name", ""), style))
+                    return fail("unknown style: " + args.value("name", ""));
+                ApplyStyle(style);
+                return ok({{"style", StyleName(style)}});
+            }
+            if (action == "layout.font_scale")
+            {
+                SetFontScale(args.value("scale", 1.f));
+                return ok({{"font_scale", ImGui::GetIO().FontGlobalScale}});
+            }
+            if (action == "animator.exit")
+            {
+                m_quit = true;
+                return ok();
+            }
+            // Pose aliases select the Animate panel.
+            if (action == "rig.reference_load" || action == "rig.reference_clear" || action == "rig.pin" ||
+                action == "rig.grab" || action == "rig.lock")
+            {
+                m_timeline->SetRigMode(false);
+                return m_timeline->HandleAction("timeline." + action.substr(4), argsJson);
+            }
+            if (action.rfind("rig.", 0) == 0)
+            {
+                m_timeline->SetRigMode(true);
+                return m_timeline->Rig().HandleAction(action, argsJson);
+            }
+            if (action.rfind("timeline.", 0) == 0)
+            {
+                AnimationTimeline *timeline = m_timeline.get();
+                timeline->SetRigMode(false);
+                if (action == "timeline.mode")
+                {
+                    const std::string mode = args.value("mode", "dope");
+                    timeline->SetGraphMode(mode == "graph" || mode == "graph_editor" || mode == "curves");
+                    return ok();
+                }
+                if (action == "timeline.frame")
+                {
+                    timeline->RequestFrame(args.value("frame", 0.0f));
+                    return ok();
+                }
+                if (action == "timeline.bone")
+                {
+                    timeline->RequestBone(args.value("bone", ""));
+                    return ok();
+                }
+                if (action == "timeline.save")
+                {
+                    timeline->RequestSave();
+                    return ok();
+                }
+                if (action == "timeline.play")
+                {
+                    timeline->RequestPlay(args.value("play", true), args.value("reverse", false));
+                    return ok();
+                }
+                if (action == "timeline.undo")
+                    return timeline->StepViewportUndo(m_scene, args.value("redo", false)) ? ok()
+                                                                                          : fail("nothing to undo");
+                if (action == "timeline.clip")
+                {
+                    AnimationTimeline::PendingClip clip;
+                    clip.name = args.value("name", "");
+                    clip.end = args.value("end", -1.f);
+                    clip.fps = args.value("fps", -1.f);
+                    timeline->RequestClip(clip);
+                    return ok();
+                }
+                if (action == "timeline.pose")
+                {
+                    AnimationTimeline::PendingPose pose;
+                    pose.bone = args.value("bone", "");
+                    if (pose.bone.empty())
+                        return fail("bone is required");
+                    pose.frame = args.value("frame", -1.f);
+                    auto readVec = [&](const char *key, vec3 &out, int bit)
+                    {
+                        if (!args.contains(key) || !args[key].is_array() || args[key].size() != 3 ||
+                            !std::all_of(args[key].begin(), args[key].end(),
+                                         [](const nlohmann::json &c)
+                                         { return c.is_number(); }))
+                            return;
+                        const vec3 v(args[key][0].get<float>(), args[key][1].get<float>(), args[key][2].get<float>());
+                        if (!std::isfinite(v.x) || !std::isfinite(v.y) || !std::isfinite(v.z))
+                            return;
+                        out = v;
+                        pose.mask |= bit;
+                    };
+                    readVec("loc", pose.loc, 1);
+                    readVec("rot", pose.rot, 2);
+                    readVec("scale", pose.scl, 4);
+                    if (pose.mask == 0)
+                        return fail("give loc[3], rot[3] or scale[3] (three finite numbers each)");
+                    timeline->RequestPose(pose);
+                    return ok();
+                }
+                if (action == "timeline.rest")
+                {
+                    timeline->RequestRestPose();
+                    return ok();
+                }
+                return timeline->HandleAction(action, argsJson);
+            }
+            return fail("unknown action: " + action);
+        }
+        catch (const std::exception &e)
+        {
+            return fail(std::string("invalid action arguments: ") + e.what());
+        }
+    }
+
+    void AnimatorApp::PollCommandFile()
+    {
+        // ponytail: a file beside the executable instead of a server; tests write animator_command.json (one
+        // {action,args} or a list) and read animator_result.json back
+        const std::filesystem::path command = std::filesystem::path(Path::Executable) / "animator_command.json";
+        const std::filesystem::path result = std::filesystem::path(Path::Executable) / "animator_result.json";
+        std::error_code ec;
+        if (!std::filesystem::exists(command, ec))
+            return;
+        std::string text;
+        {
+            std::ifstream in(command, std::ios::binary);
+            text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        }
+        nlohmann::json requests = nlohmann::json::parse(text, nullptr, false);
+        // a file still being written (or held by a scanner) reads empty or short: leave it for the next frame
+        static int s_unreadableFrames = 0;
+        if (requests.is_discarded() && ++s_unreadableFrames < 120)
+            return;
+        s_unreadableFrames = 0;
+        std::filesystem::remove(command, ec);
+        if (requests.is_object())
+            requests = nlohmann::json::array({requests});
+        nlohmann::json results = nlohmann::json::array();
+        if (requests.is_array())
+        {
+            for (const nlohmann::json &request : requests)
+            {
+                const std::string action = request.is_object() ? request.value("action", "") : "";
+                const std::string args = request.is_object() && request.contains("args") ? request["args"].dump() : "{}";
+                nlohmann::json parsed = nlohmann::json::parse(HandleAction(action, args), nullptr, false);
+                results.push_back(parsed.is_discarded() ? nlohmann::json{{"error", "unparseable result"}} : parsed);
+            }
+        }
+        else
+            results.push_back({{"error", "animator_command.json is not JSON"}});
+        const std::filesystem::path temp = result.string() + ".tmp";
+        {
+            std::ofstream out(temp, std::ios::binary);
+            out << results.dump();
+        }
+        std::filesystem::rename(temp, result, ec);
+    }
+} // namespace pe

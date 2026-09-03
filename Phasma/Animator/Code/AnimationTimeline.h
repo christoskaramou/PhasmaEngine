@@ -1,8 +1,7 @@
 #pragma once
-#include "GUI/Widget.h"
 #include "Animation/AnimationClipTools.h"
 #include "Animation/AnimationTypes.h"
-#include "GUI/Widgets/RigEditor.h"
+#include "RigEditor.h"
 #include "imgui/imgui.h"
 
 #include <array>
@@ -17,6 +16,7 @@ namespace pe
     class ModelAsset;
     class AnimationSystem;
     class AnimationPoseViewport;
+    class AnimatorApp;
     class RigEditor;
 
     enum class KeyType
@@ -52,17 +52,33 @@ namespace pe
 
     // Blender-style animation editor: Dope Sheet / Action Editor (+ Graph Editor) with a timeline
     // header. Edits the selected model's AnimationClips in place; Save writes the .pemesh back.
-    class AnimationTimeline : public Widget
+    class AnimationTimeline
     {
     public:
         AnimationTimeline();
-        ~AnimationTimeline() override;
-        void Init(GUI *gui) override;
-        void Update() override;
+        ~AnimationTimeline();
+        void Init(AnimatorApp *app);
+        // The whole panel as one fixed window at pos / size: the viewport on top, the Rig / Animate editors below.
+        void Update(const ImVec2 &pos, const ImVec2 &size);
+        bool HasTarget() const { return m_editModel != nullptr; }
+        float ViewportShare() const { return m_viewportShare; }
+        void SetViewportShare(float share) { m_viewportShare = std::clamp(share, 0.f, 0.9f); }
+        // View requests, applied on the next viewport draw: look along a world direction (the axis gizmo, the View
+        // menu), optionally framing the character; Reset is the front view from slightly above, framed.
+        void RequestFrameView() { m_viewFramePending = true; }
+        void RequestView(const vec3 &direction, bool frame)
+        {
+            if (glm::length(direction) > 1e-5f)
+                m_viewSnap = glm::normalize(direction);
+            m_viewFramePending = m_viewFramePending || frame;
+        }
+        void ResetView() { RequestView(vec3(0.f, -std::sin(0.2f), -std::cos(0.2f)), true); }
+        void SetOrthographic(bool ortho) { m_orthoPending = ortho; }
+        // Aspect of the viewport region drawn this frame (0 = none): the camera projects at it.
+        static float RegionAspect() { return s_regionAspect; }
         void SetRigMode(bool rig) { m_rigMode = rig; }
         bool RigMode() const { return m_rigMode; }
         RigEditor &Rig() { return *m_rigEditor; }
-
         // Programmatic route for editor actions (timeline.*): applied on the next Update.
         void SetGraphMode(bool graph);
         void RequestFrame(float frame) { m_pendingFrame = frame; }
@@ -484,6 +500,27 @@ namespace pe
         std::unique_ptr<RigEditor> m_rigEditor;
         bool m_rigMode = false;
         bool m_visible = false;
+
+        // Own viewport above the editors: the scene image with the pose overlay and an orbit camera around the
+        // character (right-drag orbits, middle-drag pans, the wheel zooms, F frames).
+        void DrawSceneViewport(Scene &scene);
+        void OrbitInput(Scene &scene, Camera *camera, bool hovered);
+        bool TargetBounds(Scene &scene, vec3 &centre, float &radius) const;
+        void TakeCamera(Scene &scene, Camera *camera);
+        void FrameTarget(Scene &scene, Camera *camera);
+        void ApplyOrbit(Scene &scene, Camera *camera);
+        float m_viewportShare = 0.6f; // share of the window height the viewport takes; 0 hides it
+        bool m_viewportDrawn = false;
+        bool m_viewFramePending = false;
+        ModelAsset *m_framedModel = nullptr; // the character framed on its own when it became the target
+        int m_orbitDrag = 0;                 // 1 = right-drag orbit, 2 = middle-drag pan
+        bool m_cameraOwned = false;          // the orbit was initialised from the camera
+        vec3 m_orbitTarget = vec3(0.f);
+        float m_orbitDistance = 2.f, m_orbitYaw = 0.f, m_orbitPitch = 0.f;
+        std::optional<vec3> m_viewSnap;     // look along this on the next draw
+        std::optional<bool> m_orthoPending; // projection switch on the next draw
+        static inline float s_regionAspect = 0.f;
+        AnimatorApp *m_app = nullptr;
 
         // Layout derived from the current font each frame (Update), so a scaled editor font never clips rows or labels.
         float m_rowHeight = 20.f;

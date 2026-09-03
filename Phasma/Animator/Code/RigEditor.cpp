@@ -1,14 +1,14 @@
 #include "RigEditor.h"
 #include "AnimationTimeline.h"
 #include "Camera/Camera.h"
-#include "GUI/GUI.h"
+#include "AnimatorApp.h"
 #include "GUI/Helpers.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/ModelAssetCooked.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
-#include "Systems/RendererSystem.h"
+#include "Render/RuntimeSceneRenderer.h"
 #include "imgui/imgui.h"
 #include <nlohmann/json.hpp>
 
@@ -1047,7 +1047,7 @@ namespace pe
             const nlohmann::json args = nlohmann::json::parse(argsJson.empty() ? "{}" : argsJson, nullptr, false);
             if (args.is_discarded() || !args.is_object())
                 return R"({"error":"invalid args json"})";
-            if (RendererSystem *renderer = GetGlobalSystem<RendererSystem>())
+            if (RuntimeSceneRenderer *renderer = GetAnimatorRenderer())
                 ResolveTarget(renderer->GetScene());
             auto ok = [&](nlohmann::json extra = nlohmann::json::object())
             {
@@ -1085,13 +1085,12 @@ namespace pe
             }
             if (action == "rig.mode")
             {
-                AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
+                AnimationTimeline *timeline = m_timeline;
                 if (!timeline)
                     return fail("Animation Timeline is not available");
                 const std::string mode = args.value("mode", "rig");
                 if (mode != "rig" && mode != "edit" && mode != "animate" && mode != "pose")
                     return fail("mode must be rig|edit|animate|pose");
-                *timeline->GetOpen() = true;
                 timeline->SetRigMode(mode == "rig" || mode == "edit");
                 return ok({{"mode", timeline->RigMode() ? "rig" : "animate"}});
             }
@@ -1132,10 +1131,9 @@ namespace pe
             if (action == "rig.reference_load" || action == "rig.reference_clear" || action == "rig.pin" ||
                 action == "rig.grab" || action == "rig.lock")
             {
-                AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
+                AnimationTimeline *timeline = m_timeline;
                 if (!timeline)
                     return fail("Animation Timeline is not available");
-                *timeline->GetOpen() = true;
                 timeline->SetRigMode(false);
                 return timeline->HandleAction("timeline." + action.substr(4), argsJson);
             }
@@ -1149,7 +1147,7 @@ namespace pe
             }
             if (action == "rig.weight_undo" || action == "rig.weight_redo")
             {
-                RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+                RuntimeSceneRenderer *renderer = GetAnimatorRenderer();
                 if (!renderer)
                     return fail("renderer not available");
                 const bool redo = action == "rig.weight_redo";
@@ -1161,7 +1159,7 @@ namespace pe
             {
                 if (!m_model->HasSkeleton())
                     return fail("weight strokes require a baked skeleton");
-                AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
+                AnimationTimeline *timeline = m_timeline;
                 AnimationTimeline::ViewportPose pose;
                 if (!timeline || !timeline->GetViewportPose(m_model, pose))
                 {
@@ -1213,7 +1211,7 @@ namespace pe
                 if (result.affectedVertices == 0)
                     return ok({{"affected", 0}, {"skipped_spline", result.skippedSplineVertices}});
 
-                RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+                RuntimeSceneRenderer *renderer = GetAnimatorRenderer();
                 if (!renderer)
                     return fail("renderer not available");
                 PushWeightUndo();
@@ -1396,7 +1394,7 @@ namespace pe
             }
             if (action == "rig.bake")
             {
-                RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+                RuntimeSceneRenderer *renderer = GetAnimatorRenderer();
                 if (!renderer)
                     return fail("renderer not available");
                 std::string error, outPath;
@@ -1638,7 +1636,7 @@ namespace pe
         if (ImGui::Button("Bake"))
         {
             std::string error, outPath;
-            RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+            RuntimeSceneRenderer *renderer = GetAnimatorRenderer();
             if (renderer && Bake(renderer->GetScene(), error, outPath))
                 m_status = "Baked " + std::filesystem::path(outPath).filename().generic_string() + m_bakeNote;
             else
@@ -2036,7 +2034,7 @@ namespace pe
     // leg keeps its rig-space meaning), Z = X x Y. Pose rotations and locations are expressed in this frame.
     bool RigEditor::Bake(Scene &scene, std::string &error, std::string &outPath)
     {
-        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        RuntimeSceneRenderer *renderer = GetAnimatorRenderer();
         if (!renderer || !m_model || !m_rootNode || !scene.IsNodeAlive(m_rootNode))
         {
             error = "no target model: select a node of a .pemesh model first";
@@ -2252,7 +2250,7 @@ namespace pe
         m_model = nullptr;
         m_rootNode = nullptr;
         ClearDocument();
-        if (AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr)
+        if (AnimationTimeline *timeline = m_timeline)
             timeline->DropTarget(); // the ModelAsset the Timeline resolved is about to be freed
         m_heatBackup.clear();
         BuildCaches();
@@ -2466,7 +2464,7 @@ namespace pe
 
     void RigEditor::UploadWeights(Scene &scene)
     {
-        if (RendererSystem *renderer = GetGlobalSystem<RendererSystem>())
+        if (RuntimeSceneRenderer *renderer = GetAnimatorRenderer())
         {
             renderer->WaitAllFramesCommands();
             scene.UpdateGeometryBuffers();
@@ -2813,7 +2811,7 @@ namespace pe
     {
         m_heatDirty = false;
         m_heatSelected = m_selected;
-        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        RuntimeSceneRenderer *renderer = GetAnimatorRenderer();
         std::vector<Vertex> &store = scene.GetVertexStore();
         if (!renderer)
             return;
@@ -2888,7 +2886,7 @@ namespace pe
             if (index < store.size())
                 std::memcpy(store[index].color, &color.x, sizeof(float) * 4);
         m_heatBackup.clear();
-        if (RendererSystem *renderer = GetGlobalSystem<RendererSystem>())
+        if (RuntimeSceneRenderer *renderer = GetAnimatorRenderer())
         {
             renderer->WaitAllFramesCommands();
             scene.UpdateGeometryBuffers();
@@ -3172,14 +3170,14 @@ namespace pe
         if (m_selected != m_syncedSelected)
         {
             m_syncedSelected = m_selected;
-            if (m_selected >= 0 && m_selected < static_cast<int>(m_bones.size()) && m_gui)
-                if (AnimationTimeline *timeline = m_gui->GetWidget<AnimationTimeline>())
+            if (m_selected >= 0 && m_selected < static_cast<int>(m_bones.size()) && m_timeline)
+                if (AnimationTimeline *timeline = m_timeline)
                     timeline->RequestBone(m_bones[m_selected].name);
         }
 
         AnimationTimeline::ViewportPose viewportPose;
         NodeId *viewportRoot = m_rootNode;
-        AnimationTimeline *timeline = m_gui ? m_gui->GetWidget<AnimationTimeline>() : nullptr;
+        AnimationTimeline *timeline = m_timeline;
         if (!timeline || !timeline->GetViewportPose(m_model, viewportPose))
         {
             viewportPose.node = m_rootNode;

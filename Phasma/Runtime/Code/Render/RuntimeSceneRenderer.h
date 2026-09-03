@@ -25,7 +25,14 @@ namespace pe
         void PollShaders(std::optional<size_t> hash = std::nullopt);
         void WaitPreviousFrameCommands();
         void WaitAllFramesCommands();
+        void ResetTAAHistory();
         void SetRuntimeUi(RuntimeUiSystem *runtimeUi) { m_runtimeUi = runtimeUi; }
+        // A host UI drawn into the display target after the scene (PhasmaAnimator's ImGui shell). While one is set
+        // the frame always goes through the display target and a blit, never straight into the swapchain image.
+        using Overlay = std::function<void(CommandBuffer *cmd, Image *displayRT)>;
+        void SetOverlay(Overlay overlay) { m_overlay = std::move(overlay); }
+        // The player forces the editor overlays (grid, AABBs) off every frame; a tool host keeps its own settings.
+        void SetRuntimeSettingsForced(bool forced) { m_forceRuntimeSettings = forced; }
 
         Scene &GetScene() override { return m_scene; }
         const SkyBox &GetSkyBox() const override { return m_sceneRenderer.GetSkyBox(); }
@@ -66,6 +73,8 @@ namespace pe
         Scene &m_scene;
         SceneRendererCore m_sceneRenderer;
         RuntimeUiSystem *m_runtimeUi = nullptr;
+        Overlay m_overlay;
+        bool m_forceRuntimeSettings = true;
         bool m_screenshotRequested = false;
         bool m_initialized = false;
         uint64_t m_scriptRenderPassesRevision = 0;

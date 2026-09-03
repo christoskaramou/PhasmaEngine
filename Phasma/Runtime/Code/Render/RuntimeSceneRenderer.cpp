@@ -1,4 +1,5 @@
 #include "Render/RuntimeSceneRenderer.h"
+#include "RenderPasses/TAAPass.h"
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/Queue.h"
@@ -51,6 +52,8 @@ namespace pe
 
     void RuntimeSceneRenderer::ApplyRuntimeRenderSettings()
     {
+        if (!m_forceRuntimeSettings)
+            return;
         auto &settings = Settings::Get<SceneSettings>();
 
         // Editor overlays, not standalone player output. selection_outline is deliberately NOT
@@ -173,6 +176,12 @@ namespace pe
         m_sceneRenderer.WaitAllFrameCommands();
     }
 
+    void RuntimeSceneRenderer::ResetTAAHistory()
+    {
+        if (auto *taaPass = static_cast<TAAPass *>(m_sceneRenderer.GetSceneRenderGraphPassComponents().taa))
+            taaPass->RequestHistoryReset();
+    }
+
     void RuntimeSceneRenderer::RequestScreenshot(std::string path)
     {
         m_sceneRenderer.SetScreenshotPath(std::move(path));
@@ -205,7 +214,7 @@ namespace pe
             m_sceneRenderer.SetRenderPassScene(m_scene);
         }
 
-        const bool directPresent = CanDirectPresentToSwapchain(m_sceneRenderer);
+        const bool directPresent = !m_overlay && CanDirectPresentToSwapchain(m_sceneRenderer);
         if (directPresent)
             m_sceneRenderer.SetFrameDisplayOverride(RHII.GetSwapchain()->GetImage(imageIndex));
 
@@ -217,6 +226,8 @@ namespace pe
         if (m_runtimeUi)
             m_runtimeUi->Render(cmd, displayRT);
         m_sceneRenderer.ExecuteDeferredRenderGraph(cmd);
+        if (m_overlay)
+            m_overlay(cmd, displayRT);
         if (directPresent)
         {
             ImageBarrierInfo barrier{};

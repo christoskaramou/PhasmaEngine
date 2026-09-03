@@ -67,6 +67,7 @@ option(PE_BUILD_EDITOR "Build the editor host and editor module" ${PE_DESKTOP_TA
 option(PE_BUILD_LAUNCHER "Build the desktop launcher" ${PE_DESKTOP_TARGETS_DEFAULT})
 option(PE_BUILD_MCP "Build the MCP server library" ${PE_DESKTOP_TARGETS_DEFAULT})
 option(PE_BUILD_PLAYER "Build the standalone player host" ON)
+option(PE_BUILD_ANIMATOR "Build PhasmaAnimator, the standalone animation program" ${PE_DESKTOP_TARGETS_DEFAULT})
 option(PE_BUILD_EXPORTER "Build the desktop game export helper" ${PE_DESKTOP_TARGETS_DEFAULT})
 option(PE_BUILD_PROFILER "Build the live PhasmaProfiler viewer" ${PE_DESKTOP_TARGETS_DEFAULT})
 option(PE_LAUNCHER_DEPENDS_ON_CHILD_TARGETS "Make PhasmaLauncher build PhasmaEditor and PhasmaPlayer first" OFF)
@@ -338,6 +339,9 @@ if(PE_BUILD_PLAYER)
     # Standalone player host over PhasmaRuntime.
     add_subdirectory(Phasma/Player)
 endif()
+if(PE_BUILD_ANIMATOR)
+    add_subdirectory(Phasma/Animator)
+endif()
 
 if(PE_BUILD_PROFILER AND NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
     add_subdirectory(Phasma/Profiler)
@@ -563,6 +567,9 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
     if(TARGET PhasmaPlayer)
         add_dependencies(PhasmaPlayer PhasmaRuntimeAssets)
     endif()
+    if(TARGET PhasmaAnimator)
+        add_dependencies(PhasmaAnimator PhasmaRuntimeAssets)
+    endif()
 
     # Copy the bundled super-minimal default project into the build so the launcher always
     # opens to a valid, launchable project (used as the fallback when no user project is set).
@@ -585,6 +592,9 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
     endif()
     if(TARGET PhasmaPlayer)
         add_dependencies(PhasmaPlayer PhasmaDefaultProject)
+    endif()
+    if(TARGET PhasmaAnimator)
+        add_dependencies(PhasmaAnimator PhasmaDefaultProject)
     endif()
 
     # Project Assets are NOT copied into the build. Provide an empty writable Assets/ as the
@@ -612,6 +622,9 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
     if(TARGET PhasmaPlayer)
         add_dependencies(PhasmaPlayer PhasmaProjectSeed)
     endif()
+    if(TARGET PhasmaAnimator)
+        add_dependencies(PhasmaAnimator PhasmaProjectSeed)
+    endif()
 endif()
 
 if(PE_BUILD_EDITOR)
@@ -630,6 +643,9 @@ add_custom_command(
 add_custom_target(PhasmaEditorAssets ALL DEPENDS "${EDITOR_ASSETS_COPY_STAMP}")
 if(TARGET PhasmaEditor)
     add_dependencies(PhasmaEditor PhasmaEditorAssets)
+endif()
+if(TARGET PhasmaAnimator)
+    add_dependencies(PhasmaAnimator PhasmaEditorAssets) # the fonts
 endif()
 endif()
 
@@ -655,7 +671,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
             COMMENT "[Phasma] Bundling SwiftShader CPU Vulkan ICD"
         )
         add_custom_target(PhasmaSwiftShader ALL DEPENDS "${SWIFTSHADER_COPY_STAMP}")
-        foreach(pe_runtime_target PhasmaEditor PhasmaPlayer PhasmaLauncher)
+        foreach(pe_runtime_target PhasmaEditor PhasmaPlayer PhasmaAnimator PhasmaLauncher)
             if(TARGET ${pe_runtime_target})
                 add_dependencies(${pe_runtime_target} PhasmaSwiftShader)
             endif()

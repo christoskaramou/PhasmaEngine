@@ -1,5 +1,4 @@
 #pragma once
-#include "GUI/Widget.h"
 #include "Animation/AnimationTypes.h"
 #include "Animation/GeodesicBind.h"
 #include "Animation/RigPresetLibrary.h"
@@ -11,6 +10,7 @@ namespace pe
     struct NodeId;
     class AnimationPoseViewport;
     class AnimationTimeline;
+    class AnimatorApp;
     class Scene;
     class Camera;
     class Image;
@@ -51,10 +51,15 @@ namespace pe
     // Rig Editor: authors and bakes a skeleton + per-bone influence capsules, and adjusts ordinary
     // joint blends directly on a posed mesh. The rig document lives beside the
     // .pemesh; baked weight edits stay in memory until explicitly saved to that .pemesh.
-    class RigEditor : public Widget
+    class RigEditor
     {
     public:
-        RigEditor() : Widget("Rig Editor") { m_open = false; }
+        RigEditor() = default;
+        void Init(AnimatorApp *app, AnimationTimeline *timeline)
+        {
+            m_app = app;
+            m_timeline = timeline;
+        }
         void ResolveTarget(Scene &scene);
         void DrawPanel(Scene &scene);
 
@@ -62,7 +67,7 @@ namespace pe
         std::string HandleAction(const std::string &action, const std::string &argsJson);
         std::string ProjectPresetsJson();
 
-        // Viewport overlay + drag handles; called by SceneView inside the viewport clip rect.
+        // Viewport overlay + drag handles; the Timeline calls it inside its viewport clip rect.
         void DrawViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize, bool &hovered,
                           bool &active);
         NodeId *GetRootNode() const { return m_rootNode; }
@@ -70,6 +75,8 @@ namespace pe
 
     private:
         friend class AnimationPoseViewport;
+        AnimatorApp *m_app = nullptr;
+        AnimationTimeline *m_timeline = nullptr;
 
         struct ShellInfo
         {

@@ -9,6 +9,7 @@
 !/Phasma/Editor/
 !/Phasma/MCP/
 !/Phasma/Player/
+!/Phasma/Animator/
 !/Phasma/Cook/
 !/Phasma/Launcher/
 !/Phasma/Runtime/
@@ -358,6 +359,7 @@ Projects/*/Assets/Agent/
 # Tracked validation and MCP tools
 !/tools/
 /tools/*
+!/tools/animator_client.py
 !/tools/precommit_validate.py
 !/tools/editor_stress.py
 !/tools/compare_snapshots.py
