@@ -66,7 +66,7 @@ PhasmaEngine is a Vulkan and DirectX 12 3D engine for learning graphics techniqu
 * Named editor actions invokable without mouse input (agents/automation)
 
 ### Animator (PhasmaAnimator)
-* The standalone animation program: open a cooked `.pemesh`, rig it (presets, capsules, weights, bake) and animate it (Blender-style dope sheet and graph editor, puppet drag, locks, foot contact, balance, ballistic and cycle bakes, Motion Doctor) in one window with its own orbit-camera viewport
+* The standalone animation program: open a cooked `.pemesh`, rig it (presets, capsules, weights, bake) and animate it (Blender-style dope sheet and graph editor, puppet drag, locks, foot contact, balance, ballistic and cycle bakes, Motion Doctor, pose clipboard and library, ruler markers, clip layering, generated walk / run cycles, BVH / glTF import, glTF export, root-motion extraction) in one window with its own orbit-camera viewport
 * No scenes, scripts or server: `animator_config.json` remembers the last model; `animator_command.json` drives it for automation
 * Build target `PhasmaAnimator` (`PE_BUILD_ANIMATOR`); run `PhasmaAnimator --api vulkan --open <model.pemesh>` or pick **Phasma Animator** in the launcher's Run dropdown
 

@@ -3,7 +3,10 @@
 #include "Animation/AnimationEvaluator.h"
 #include "Animation/AnimationPoseViewport.h"
 #include "Animation/AnimationPoseTools.h"
+#include "Animation/ClipExchange.h"
+#include "Animation/RigPresetLibrary.h"
 #include "API/Image.h"
+#include "Base/FileSystem.h"
 #include "Camera/Camera.h"
 #include "AnimatorApp.h"
 #include "GUI/GUIState.h"
@@ -68,6 +71,8 @@ namespace pe
         constexpr ImU32 kKeyHover = IM_COL32(255, 255, 255, 255);
         constexpr ImU32 kInterval = IM_COL32(255, 170, 60, 40);
         constexpr ImU32 kIntervalEdge = IM_COL32(255, 190, 90, 215);
+        constexpr ImU32 kMarker = IM_COL32(120, 200, 255, 230);
+        constexpr ImU32 kMarkerLine = IM_COL32(120, 200, 255, 70);
         constexpr ImU32 kBoxSelect = IM_COL32(255, 255, 255, 180);
         constexpr ImU32 kBoxSelectFill = IM_COL32(255, 255, 255, 18);
         constexpr ImU32 kIcon = IM_COL32(220, 220, 220, 255);
@@ -496,6 +501,7 @@ namespace pe
             if (state && state->clipIndex == m_selectedClip)
                 continue;
             anim->PlayAnimation(scene, node, m_selectedClip, m_loop);
+            anim->SetRootMotion(node, false); // the character stays put in here; the trajectory overlay shows the travel
             anim->SetPaused(node, true);
             anim->SetSpeed(node, m_speed);
             anim->SetPlaybackTime(scene, node, ToTicks(keepFrame));
@@ -1059,12 +1065,20 @@ namespace pe
                     Settings::Get<SceneSettings>().draw_grid = args.value("grid", true);
                 if (args.contains("gizmo"))
                     GUIState::s_useOrientationGizmo = args.value("gizmo", true);
+                if (args.contains("turntable"))
+                    m_turntable = args.value("turntable", false);
+                if (args.contains("bone_names"))
+                    m_boneNames = args.value("bone_names", false);
+                if (args.value("maximize", false))
+                    ToggleMaximize();
                 const Camera *camera = scene.GetCameras().empty() ? nullptr : scene.GetActiveCamera();
                 return ok({{"viewport", m_viewportShare},
                            {"camera_owned", m_cameraOwned},
                            {"orthographic", camera && camera->IsOrthographic()},
                            {"grid", Settings::Get<SceneSettings>().draw_grid},
-                           {"gizmo", GUIState::s_useOrientationGizmo}});
+                           {"gizmo", GUIState::s_useOrientationGizmo},
+                           {"turntable", m_turntable},
+                           {"bone_names", m_boneNames}});
             }
             if (m_targetNode && !scene.IsNodeAlive(m_targetNode))
                 m_targetNode = nullptr;
@@ -1115,6 +1129,75 @@ namespace pe
             if (action == "timeline.grab" || action == "timeline.pin" || action == "timeline.lock" ||
                 action == "timeline.balance" || action == "timeline.reference_load" || action == "timeline.reference_clear")
                 return PoseViewport(*m_rigEditor)->HandleAction(scene, action, argsJson);
+            if (action == "timeline.import")
+            {
+                const std::filesystem::path path = args.value("path", "");
+                if (path.empty())
+                    return fail("path is required");
+                ClipExchange::ImportedRig importedRig;
+                std::string error;
+                if (!ClipExchange::LoadRig(path, importedRig, error))
+                    return fail(error);
+                if (importedRig.clips.empty())
+                    return fail("the source contains no animation clips");
+
+                const std::string wanted = args.value("clip", "");
+                auto &targetClips = model->GetMutableAnimations();
+                std::vector<AnimationClip> stagedClips;
+                nlohmann::json imported = nlohmann::json::array();
+                size_t keysWritten = 0, matchedBones = 0;
+                for (const AnimationClip &source : importedRig.clips)
+                {
+                    if (!wanted.empty() && source.name != wanted)
+                        continue;
+                    AnimationClip retargeted;
+                    ClipExchange::RetargetReport report;
+                    ClipExchange::RetargetClip(source, importedRig.skeleton, model->GetSkeleton(), retargeted, report);
+                    if (!report.error.empty())
+                        return fail((source.name.empty() ? path.filename().string() : source.name) + ": " + report.error);
+                    if (report.keysWritten == 0)
+                        continue;
+                    std::string base = retargeted.name.empty() ? path.stem().string() : retargeted.name;
+                    std::string name = base;
+                    auto nameUsed = [&]
+                    {
+                        return std::any_of(targetClips.begin(), targetClips.end(), [&](const AnimationClip &clip)
+                                           { return clip.name == name; }) ||
+                               std::any_of(stagedClips.begin(), stagedClips.end(), [&](const AnimationClip &clip)
+                                           { return clip.name == name; });
+                    };
+                    for (int suffix = 1; nameUsed();
+                         ++suffix)
+                        name = base + "." + std::to_string(suffix);
+                    retargeted.name = name;
+                    stagedClips.push_back(std::move(retargeted));
+                    imported.push_back({{"name", name},
+                                        {"matched_bones", report.matchedBones},
+                                        {"keys_written", report.keysWritten},
+                                        {"unmatched_target", report.unmatchedTarget.size()},
+                                        {"unmatched_source", report.unmatchedSource.size()}});
+                    keysWritten += report.keysWritten;
+                    matchedBones = std::max(matchedBones, report.matchedBones);
+                }
+                if (stagedClips.empty())
+                    return fail(wanted.empty() ? "no source animation matched the current rig by bone name"
+                                               : "source clip not found or it matched no animated bones: " + wanted);
+                m_selectedClip = static_cast<int>(targetClips.size());
+                targetClips.insert(targetClips.end(), std::make_move_iterator(stagedClips.begin()),
+                                   std::make_move_iterator(stagedClips.end()));
+                ResetEditState();
+                m_lastClipCount = static_cast<int>(targetClips.size());
+                m_frameTicks = DetectFrameTicks(targetClips[m_selectedClip]);
+                m_dirty = true;
+                SetFrame(scene, anim, 0.f);
+                return ok({{"path", path.generic_string()},
+                           {"clips", imported},
+                           {"clips_imported", imported.size()},
+                           {"matched_bones", matchedBones},
+                           {"keys_written", keysWritten},
+                           {"summary", "Imported " + std::to_string(imported.size()) + " clip(s), " +
+                                           std::to_string(keysWritten) + " keys."}});
+            }
             if (model->GetAnimations().empty())
                 return fail("the selected rig has no animation clip");
 
@@ -1135,6 +1218,18 @@ namespace pe
             const float sampledFrame = state ? ToFrame(state->time) : 0.f;
             const float currentFrame = std::isfinite(sampledFrame) ? sampledFrame : 0.f;
             const float durationFrames = ToFrame(clip.duration);
+
+            if (action == "timeline.export")
+            {
+                std::filesystem::path path = args.value("path", "");
+                if (path.empty())
+                    return fail("path is required");
+                path.replace_extension(".gltf");
+                std::string error;
+                if (!ClipExchange::WriteGltf(path, skeleton, clip, error))
+                    return fail(error);
+                return ok({{"path", path.generic_string()}, {"clip", clip.name}, {"summary", "Exported " + clip.name + "."}});
+            }
 
             auto parseBone = [&](const nlohmann::json &value) -> int
             {
@@ -1269,6 +1364,224 @@ namespace pe
                 ReevaluatePose(scene, anim);
             };
 
+            if (action == "timeline.pose_library")
+            {
+                const std::string op = args.value("op", "list");
+                const std::filesystem::path path = PoseLibraryPath(args.value("dir", ""));
+                std::vector<LibraryPose> poses;
+                std::string error;
+                if (!LoadPoseLibrary(path, poses, error))
+                    return fail(error);
+                auto list = [&]()
+                {
+                    nlohmann::json names = nlohmann::json::array();
+                    for (const LibraryPose &pose : poses)
+                        names.push_back({{"name", pose.name}, {"bones", pose.bones.size()}});
+                    return ok({{"path", path.generic_string()}, {"poses", names}});
+                };
+                if (op == "list")
+                    return list();
+                const std::string name = args.value("name", "");
+                if (name.empty())
+                    return fail("name is required");
+                const auto found = std::find_if(poses.begin(), poses.end(), [&](const LibraryPose &p)
+                                                { return p.name == name; });
+                if (op == "save")
+                {
+                    std::vector<int> bones = bonesArg(false);
+                    if (bones.empty())
+                        bones = PoseBones(skeleton);
+                    const float frame = args.value("frame", currentFrame);
+                    if (!std::isfinite(frame) || frame < 0.f || frame > durationFrames)
+                        return fail("frame must be inside the clip range");
+                    LibraryPose pose;
+                    pose.name = name;
+                    CopyPose(clip, skeleton, frame, bones, pose.bones);
+                    if (found != poses.end())
+                        *found = std::move(pose);
+                    else
+                        poses.push_back(std::move(pose));
+                    if (!SavePoseLibrary(path, poses, error))
+                        return fail(error);
+                    m_libraryPath.clear(); // the popup reloads
+                    return list();
+                }
+                if (found == poses.end())
+                    return fail("no pose named " + name);
+                if (op == "apply")
+                {
+                    const float frame = args.value("frame", currentFrame);
+                    if (!std::isfinite(frame) || frame < 0.f || frame > durationFrames)
+                        return fail("frame must be inside the clip range");
+                    const size_t bones = PastePose(scene, anim, clip, skeleton, frame, found->bones, args.value("flipped", false));
+                    if (bones == 0)
+                        return fail("no bone of that pose exists on this rig");
+                    return ok({{"bones", bones}, {"frame", std::round(frame)}});
+                }
+                if (op == "remove")
+                {
+                    poses.erase(found);
+                    if (!SavePoseLibrary(path, poses, error))
+                        return fail(error);
+                    m_libraryPath.clear();
+                    return list();
+                }
+                return fail("unknown pose_library op: list|save|apply|remove");
+            }
+            if (action == "timeline.generate")
+            {
+                GaitSettings settings;
+                const std::string gait = args.value("gait", "walk");
+                if (gait == "run")
+                    settings.gait = Gait::Run;
+                else if (gait != "walk")
+                    return fail("gait must be walk or run");
+                settings.frames = args.value("frames", settings.gait == Gait::Run ? 16 : 24);
+                settings.ticksPerFrame = m_frameTicks;
+                settings.amplitude = args.value("amplitude", 1.f);
+                settings.stride = args.value("stride", -1.f);
+                settings.rootMotion = args.value("root_motion", true);
+                AnimationClip generated;
+                generated.ticksPerSecond = clip.ticksPerSecond;
+                GaitReport report;
+                if (!GenerateGait(skeleton, settings, generated, report))
+                    return fail(report.error.empty() ? "nothing generated" : report.error);
+                std::string name = args.value("name", gait == "run" ? "Run" : "Walk");
+                auto &clips = model->GetMutableAnimations();
+                auto taken = [&](const std::string &candidate)
+                {
+                    return std::any_of(clips.begin(), clips.end(), [&](const AnimationClip &c)
+                                       { return c.name == candidate; });
+                };
+                for (int suffix = 1; taken(name); suffix++)
+                    name = args.value("name", gait == "run" ? "Run" : "Walk") + "." + std::to_string(suffix);
+                generated.name = name;
+                clips.push_back(std::move(generated));
+                m_selectedClip = static_cast<int>(clips.size()) - 1;
+                ResetEditState();
+                m_lastClipCount = static_cast<int>(clips.size());
+                m_frameTicks = DetectFrameTicks(clips[m_selectedClip]);
+                m_dirty = true;
+                SetFrame(scene, anim, 0.f);
+                nlohmann::json roles = nlohmann::json::object();
+                for (const auto &[role, bone] : report.roles)
+                    roles[role] = bone;
+                return ok({{"clip", name},
+                           {"keys_written", report.keysWritten},
+                           {"stride", report.stride},
+                           {"frames", settings.frames},
+                           {"roles", roles},
+                           {"summary", "Generated " + name + ": " + std::to_string(report.roles.size()) + " bones, stride " +
+                                           std::to_string(report.stride)}});
+            }
+            if (action == "timeline.marker")
+            {
+                const std::string op = args.value("op", "list");
+                auto list = [&]()
+                {
+                    nlohmann::json markers = nlohmann::json::array();
+                    for (int i = 0; i < static_cast<int>(clip.markers.size()); i++)
+                        markers.push_back({{"index", i},
+                                           {"frame", std::round(ToFrame(clip.markers[i].time))},
+                                           {"name", clip.markers[i].name}});
+                    return ok({{"markers", markers}});
+                };
+                const float frame = args.value("frame", currentFrame);
+                if (!std::isfinite(frame) || frame < 0.f || frame > durationFrames)
+                    return fail("frame must be inside the clip range");
+                const int existing = args.contains("index") ? args.value("index", -1) : MarkerAtFrame(clip, std::round(frame));
+                if (op == "list")
+                    return list();
+                if (op == "add")
+                {
+                    AddMarker(clip, frame, args.value("name", ""));
+                    return list();
+                }
+                if (existing < 0 || existing >= static_cast<int>(clip.markers.size()))
+                    return fail("no marker at that frame (pass frame or index)");
+                if (op == "remove")
+                {
+                    PushUndo(clip);
+                    clip.markers.erase(clip.markers.begin() + existing);
+                    m_dirty = true;
+                    return list();
+                }
+                if (op == "rename")
+                {
+                    const std::string name = args.value("name", "");
+                    if (name.empty())
+                        return fail("name is required");
+                    PushUndo(clip);
+                    clip.markers[existing].name = name;
+                    m_dirty = true;
+                    return list();
+                }
+                return fail("unknown marker op: list|add|remove|rename");
+            }
+            if (action == "timeline.layer")
+            {
+                const std::string name = args.value("clip", "");
+                const auto &clips = model->GetAnimations();
+                int index = -1;
+                for (int i = 0; i < static_cast<int>(clips.size()); i++)
+                    if (clips[i].name == name && i != m_selectedClip)
+                        index = i;
+                if (index < 0)
+                    return fail("clip must name another action of this model");
+                float start = HasInterval() ? m_intervalStart : 0.f, end = HasInterval() ? m_intervalEnd : durationFrames;
+                if (args.contains("start_frame") || args.contains("end_frame"))
+                {
+                    start = args.value("start_frame", 0.f);
+                    end = args.value("end_frame", durationFrames);
+                    if (!std::isfinite(start) || !std::isfinite(end) || start < 0.f || end > durationFrames + kFrameEps ||
+                        end < start)
+                        return fail("start_frame / end_frame must lie inside the clip");
+                }
+                LayerSettings settings;
+                settings.startTime = ToTicks(start);
+                settings.endTime = ToTicks(end);
+                settings.stepTicks = ToTicks(1.f);
+                settings.sourceOffset = ToTicks(args.value("offset_frames", 0.f));
+                settings.weight = args.value("weight", 1.f);
+                if (!std::isfinite(settings.weight) || settings.weight <= 0.f || settings.weight > 1.f)
+                    return fail("weight must be in (0, 1]");
+                settings.additive = args.value("additive", false);
+                // the selected bones, else every bone the source keys (the active bone alone would starve a body layer)
+                const std::vector<int> bones = args.contains("bones") ? bonesArg(false) : IntervalBones();
+                settings.boneIndices = bones;
+                settings.channels = channelMask();
+                const AnimationClip source = clips[index]; // the target lives beside it in the same vector
+                const AnimationClip before = clip;
+                const size_t changed = LayerClip(clip, source, skeleton, settings);
+                if (changed == 0)
+                    return fail("nothing layered: the source keys none of the chosen bones over this span");
+                commit(before, changed);
+                return ok({{"keys_written", changed}, {"clip", name}, {"start_frame", start}, {"end_frame", end}});
+            }
+            if (action == "timeline.pose_copy")
+            {
+                std::vector<int> bones = bonesArg(false);
+                if (bones.empty())
+                    bones = PoseBones(skeleton);
+                const float frame = args.value("frame", currentFrame);
+                if (!std::isfinite(frame) || frame < 0.f || frame > durationFrames)
+                    return fail("frame must be inside the clip range");
+                CopyPose(clip, skeleton, frame, bones, m_poseClipboard);
+                return ok({{"bones", m_poseClipboard.size()}, {"frame", std::round(frame)}});
+            }
+            if (action == "timeline.pose_paste")
+            {
+                if (m_poseClipboard.empty())
+                    return fail("the pose clipboard is empty: timeline.pose_copy first");
+                const float frame = args.value("frame", currentFrame);
+                if (!std::isfinite(frame) || frame < 0.f || frame > durationFrames)
+                    return fail("frame must be inside the clip range");
+                const size_t bones =
+                    PastePose(scene, anim, clip, skeleton, frame, m_poseClipboard, args.value("flipped", false));
+                if (bones == 0)
+                    return fail("no clipboard bone exists on this rig");
+                return ok({{"bones", bones}, {"frame", std::round(frame)}});
+            }
             if (action == "timeline.interval")
             {
                 const float start = args.value("start", 0.f);
@@ -1352,7 +1665,8 @@ namespace pe
                                          {"loop_velocity_seams", m_motionIssueCounts[2]},
                                          {"root_drift", m_motionIssueCounts[3]},
                                          {"jitter", m_motionIssueCounts[4]},
-                                         {"redundant_keys", m_motionIssueCounts[5]}};
+                                         {"redundant_keys", m_motionIssueCounts[5]},
+                                         {"root_motion_extracted", !clip.rootMotion.Empty()}};
                 const int bone = boneArg();
                 if (args.contains("bone") && (bone < 0 || bone >= skeleton.GetBoneCount()))
                     return fail("unknown bone");
@@ -1368,6 +1682,48 @@ namespace pe
                         result["selected_bone_world_drift"] = drift.maxDrift;
                 }
                 return ok(result);
+            }
+            if (action == "timeline.motion.root_extract")
+            {
+                if (!clip.rootMotion.Empty())
+                    return fail("root motion is already extracted; bake it before extracting again");
+                const int bone = args.contains("bone") ? boneArg() : LocationBone(model);
+                if (bone < 0 || bone >= skeleton.GetBoneCount())
+                    return fail("root extraction needs a Location carrier, or pass bone");
+                auto channel = std::find_if(clip.channels.begin(), clip.channels.end(), [&](const AnimationChannel &candidate)
+                                            { return candidate.boneIndex == bone; });
+                if (channel == clip.channels.end() || channel->positionKeys.size() < 2)
+                    return fail("the root Location curve needs at least two keys");
+                const bool vertical = args.value("vertical", false);
+                vec3 travel = channel->positionKeys.back().value - channel->positionKeys.front().value;
+                if (!vertical)
+                    travel.y = 0.f;
+                const AnimationClip before = clip;
+                const size_t changed = ExtractRootMotion(clip, bone, vertical);
+                if (changed == 0)
+                    return fail("the selected bone has no extractable travel");
+                commit(before, changed);
+                return ok({{"bone", skeleton.bones[bone].name},
+                           {"keys_written", changed},
+                           {"vertical", vertical},
+                           {"travel", {travel.x, travel.y, travel.z}}});
+            }
+            if (action == "timeline.motion.root_bake")
+            {
+                if (clip.rootMotion.Empty())
+                    return fail("this clip has no extracted root motion");
+                const int bone = clip.rootMotion.boneIndex;
+                if (bone < 0 || bone >= skeleton.GetBoneCount())
+                    return fail("the extracted root-motion bone is not in this rig");
+                const vec3 travel = clip.rootMotion.positionKeys.back().value - clip.rootMotion.positionKeys.front().value;
+                const AnimationClip before = clip;
+                const size_t changed = BakeRootMotion(clip);
+                if (changed == 0)
+                    return fail("the extracted root motion could not be baked");
+                commit(before, changed);
+                return ok({{"bone", skeleton.bones[bone].name},
+                           {"keys_written", changed},
+                           {"travel", {travel.x, travel.y, travel.z}}});
             }
             if (action == "timeline.motion.fix_quaternions")
             {
@@ -1749,11 +2105,20 @@ namespace pe
         m_tabResumeRestPose = false;
         m_ownershipSceneGeneration = ~uint32_t{0};
         ResetEditState();
+        m_clipboard.clear();
         DropPendingRequests();
         m_editModel = nullptr;
         m_targetNode = nullptr;
         m_lastModel = nullptr;
         m_animatedNodes.clear();
+        m_framedModel = nullptr;
+        m_cameraOwned = false;
+        m_viewSnap.reset();
+        m_orthoPending.reset();
+        m_viewPending.reset();
+        m_viewFramePending = false;
+        m_orbitDrag = 0;
+        m_dirty = false;
     }
 
     void AnimationTimeline::ResetEditState()
@@ -1761,17 +2126,16 @@ namespace pe
         m_undo.clear();
         m_redo.clear();
         SelClear();
-        m_clipboard.clear();
         m_modal = Modal::None;
         m_boxSelecting = false;
         m_pressOnKey = false;
         EndViewportRotate();
-        m_dirty = false;
         m_fitPending = true;
         m_frameTicks = 0.f; // re-detect the frame grid for the new clip
         m_boneExpanded.clear();
         m_boneSelected.clear();
         m_activeBone = -1;
+        m_rootMotionBone = -1;
         ClearInterval(); // frames from the previous clip mean nothing in this one
     }
 
@@ -2080,7 +2444,7 @@ namespace pe
             const AnimationChannel &chan = clip.channels[ref.channelIdx];
             ClipboardEntry e;
             e.type = ref.type;
-            e.channelIdx = ref.channelIdx;
+            e.bone = chan.boneIndex;
             e.absTime = KeyTime(clip, ref);
             e.relTime = e.absTime - earliest;
             e.interpolation = KeyInterpolation(clip, ref);
@@ -2116,26 +2480,140 @@ namespace pe
         const float atTicks = ToTicks(atFrame);
         for (const ClipboardEntry &e : m_clipboard)
         {
-            if (e.channelIdx < 0 || e.channelIdx >= static_cast<int>(clip.channels.size()))
+            if (e.bone < 0)
                 continue;
-            AnimationChannel &chan = clip.channels[e.channelIdx];
+            const int ci = EnsureChannel(clip, e.bone); // another action of the rig may have no curve for it yet
+            AnimationChannel &chan = clip.channels[ci];
             const float t = keepTimes ? e.absTime : std::max(0.f, atTicks + e.relTime);
             switch (e.type)
             {
             case KeyType::Position:
                 chan.positionKeys.push_back({t, e.posValue, e.interpolation});
-                SelAdd({e.channelIdx, KeyType::Position, static_cast<int>(chan.positionKeys.size()) - 1});
+                SelAdd({ci, KeyType::Position, static_cast<int>(chan.positionKeys.size()) - 1});
                 break;
             case KeyType::Rotation:
                 chan.rotationKeys.push_back({t, e.rotValue, e.interpolation});
-                SelAdd({e.channelIdx, KeyType::Rotation, static_cast<int>(chan.rotationKeys.size()) - 1});
+                SelAdd({ci, KeyType::Rotation, static_cast<int>(chan.rotationKeys.size()) - 1});
                 break;
             case KeyType::Scale:
                 chan.scaleKeys.push_back({t, e.sclValue, e.interpolation});
-                SelAdd({e.channelIdx, KeyType::Scale, static_cast<int>(chan.scaleKeys.size()) - 1});
+                SelAdd({ci, KeyType::Scale, static_cast<int>(chan.scaleKeys.size()) - 1});
                 break;
             }
         }
+    }
+
+    std::vector<int> AnimationTimeline::PoseBones(const Skeleton &skeleton) const
+    {
+        std::vector<int> bones;
+        for (int b = 0; b < static_cast<int>(m_boneSelected.size()); b++)
+            if (m_boneSelected[b])
+                bones.push_back(b);
+        if (bones.empty() && m_activeBone >= 0 && m_activeBone < skeleton.GetBoneCount())
+            bones.push_back(m_activeBone);
+        if (bones.empty())
+            for (int b = 0; b < skeleton.GetBoneCount(); b++)
+                bones.push_back(b);
+        return bones;
+    }
+
+    void AnimationTimeline::CopyPose(const AnimationClip &clip, const Skeleton &skeleton, float frame,
+                                     std::span<const int> bones, std::vector<PoseEntry> &out) const
+    {
+        out.clear();
+        const float time = ToTicks(std::round(frame));
+        for (int bone : bones)
+        {
+            if (bone < 0 || bone >= skeleton.GetBoneCount())
+                continue;
+            const BoneInfo &info = skeleton.bones[bone];
+            vec3 pos, scl, bindPos, bindScl;
+            quat rot, bindRot;
+            AnimationEvaluator::BindPose(info, bindPos, bindRot, bindScl);
+            const int ci = ChannelForBone(clip, bone);
+            if (ci >= 0)
+                AnimationEvaluator::SampleChannel(clip.channels[ci], info, time, pos, rot, scl);
+            else
+                pos = bindPos, rot = bindRot, scl = bindScl;
+            out.push_back({info.name, glm::inverse(bindRot) * (pos - bindPos), glm::normalize(glm::inverse(bindRot) * rot),
+                           scl / bindScl});
+        }
+    }
+
+    size_t AnimationTimeline::PastePose(Scene &scene, AnimationSystem *anim, AnimationClip &clip, const Skeleton &skeleton,
+                                        float frame, std::span<const PoseEntry> entries, bool flipped)
+    {
+        frame = std::round(frame);
+        const float time = ToTicks(frame);
+        auto findBone = [&](const std::string &name)
+        {
+            for (int b = 0; b < skeleton.GetBoneCount(); b++)
+                if (skeleton.bones[b].name == name)
+                    return b;
+            return -1;
+        };
+        auto key = [&](AnimationClip &into, int bone, const PoseEntry &e)
+        {
+            const BoneInfo &info = skeleton.bones[bone];
+            vec3 bindPos, bindScl;
+            quat bindRot;
+            AnimationEvaluator::BindPose(info, bindPos, bindRot, bindScl);
+            SetPoseKey(into, EnsureChannel(into, bone), time, bindPos + bindRot * e.loc, glm::normalize(bindRot * e.rot),
+                       bindScl * e.scl);
+        };
+        std::vector<int> bones;
+        std::vector<const PoseEntry *> matched;
+        for (const PoseEntry &e : entries)
+            if (const int bone = findBone(e.bone); bone >= 0)
+            {
+                bones.push_back(bone);
+                matched.push_back(&e);
+            }
+        if (bones.empty())
+            return 0;
+        PushUndo(clip);
+        std::vector<int> written;
+        if (!flipped)
+        {
+            for (size_t i = 0; i < bones.size(); i++)
+                key(clip, bones[i], *matched[i]);
+            written = bones;
+        }
+        else
+        {
+            // The mirror tool reflects a pose that is in a clip: stage the paste in a scratch copy, reflect it there
+            // and take only the twins' keys (a centre bone is its own twin), so the copied side stays as it was.
+            AnimationClip scratch = clip;
+            for (size_t i = 0; i < bones.size(); i++)
+                key(scratch, bones[i], *matched[i]);
+            AnimationClipTools::PasteMirroredPose(scratch, skeleton, time, time, bones, true,
+                                                  AnimationClipTools::ChannelMask::All);
+            for (int bone : bones)
+            {
+                std::string twinName = skeleton.bones[bone].name; // the tool's own .L / .R rule
+                if (twinName.ends_with(".L"))
+                    twinName.replace(twinName.size() - 2, 2, ".R");
+                else if (twinName.ends_with(".R"))
+                    twinName.replace(twinName.size() - 2, 2, ".L");
+                const int twin = findBone(twinName);
+                const int ci = twin >= 0 ? ChannelForBone(scratch, twin) : -1;
+                if (ci < 0)
+                    continue;
+                vec3 pos, scl;
+                quat rot;
+                AnimationEvaluator::SampleChannel(scratch.channels[ci], skeleton.bones[twin], time, pos, rot, scl);
+                SetPoseKey(clip, EnsureChannel(clip, twin), time, pos, rot, scl);
+                written.push_back(twin);
+            }
+        }
+        std::sort(written.begin(), written.end());
+        written.erase(std::unique(written.begin(), written.end()), written.end());
+        m_dirty = true;
+        ++m_poseEditSerial;
+        m_poseEdits = {{frame, written}};
+        RetweenAroundFrame(clip, written, frame);
+        ReevaluatePose(scene, anim);
+        return written.size();
     }
 
     // Blender "Insert Keyframe" (I): keys the bone's current (evaluated) Loc/Rot/Scl at the frame.
@@ -2214,6 +2692,207 @@ namespace pe
         eraseAt(chan.positionKeys);
         eraseAt(chan.rotationKeys);
         eraseAt(chan.scaleKeys);
+    }
+
+    std::filesystem::path AnimationTimeline::PoseLibraryPath(const std::string &dirOverride) const
+    {
+        std::string preset = m_rigEditor ? m_rigEditor->PresetName() : std::string();
+        if (preset.empty())
+            preset = "custom";
+        for (char &c : preset)
+            c = std::isalnum(static_cast<unsigned char>(c)) ? static_cast<char>(std::tolower(static_cast<unsigned char>(c))) : '_';
+        const std::filesystem::path dir =
+            dirOverride.empty() ? RigPresetLibrary::ProjectPresetDirectory() / "Poses" : std::filesystem::path(dirOverride);
+        return dir / (preset + ".poses.json");
+    }
+
+    bool AnimationTimeline::LoadPoseLibrary(const std::filesystem::path &path, std::vector<LibraryPose> &out,
+                                            std::string &error) const
+    {
+        out.clear();
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec))
+            return true; // an empty library
+        std::ifstream in(path);
+        const nlohmann::json doc = nlohmann::json::parse(in, nullptr, false);
+        if (!doc.is_object() || !doc.contains("poses") || !doc["poses"].is_array())
+        {
+            error = "not a pose library: " + path.generic_string();
+            return false;
+        }
+        for (const nlohmann::json &pose : doc["poses"])
+        {
+            if (!pose.is_object() || !pose.contains("bones") || !pose["bones"].is_object())
+                continue;
+            LibraryPose entry;
+            entry.name = pose.value("name", "");
+            for (const auto &[bone, trs] : pose["bones"].items())
+            {
+                auto vec = [&](const char *key, int n, float *dst)
+                {
+                    if (!trs.contains(key) || !trs[key].is_array() || static_cast<int>(trs[key].size()) != n)
+                        return;
+                    for (int i = 0; i < n; i++)
+                        dst[i] = trs[key][i].get<float>();
+                };
+                PoseEntry e;
+                e.bone = bone;
+                float rot[4] = {1.f, 0.f, 0.f, 0.f};
+                vec("loc", 3, &e.loc.x);
+                vec("rot", 4, rot);
+                vec("scl", 3, &e.scl.x);
+                e.rot = glm::normalize(quat(rot[0], rot[1], rot[2], rot[3]));
+                entry.bones.push_back(e);
+            }
+            if (!entry.name.empty() && !entry.bones.empty())
+                out.push_back(std::move(entry));
+        }
+        return true;
+    }
+
+    bool AnimationTimeline::SavePoseLibrary(const std::filesystem::path &path, std::span<const LibraryPose> poses,
+                                            std::string &error) const
+    {
+        nlohmann::json doc{{"version", 1}, {"preset", m_rigEditor ? m_rigEditor->PresetName() : ""}};
+        nlohmann::json list = nlohmann::json::array();
+        for (const LibraryPose &pose : poses)
+        {
+            nlohmann::json bones = nlohmann::json::object();
+            for (const PoseEntry &e : pose.bones)
+                bones[e.bone] = {{"loc", {e.loc.x, e.loc.y, e.loc.z}},
+                                 {"rot", {e.rot.w, e.rot.x, e.rot.y, e.rot.z}},
+                                 {"scl", {e.scl.x, e.scl.y, e.scl.z}}};
+            list.push_back({{"name", pose.name}, {"bones", bones}});
+        }
+        doc["poses"] = list;
+        std::error_code ec;
+        std::filesystem::create_directories(path.parent_path(), ec);
+        std::filesystem::path temp = path;
+        temp += ".tmp";
+        {
+            std::ofstream out(temp, std::ios::trunc);
+            if (!out)
+            {
+                error = "cannot write " + temp.generic_string();
+                return false;
+            }
+            out << doc.dump(1, '\t') << '\n';
+        }
+        if (!FileSystem::ReplaceFile(temp, path))
+        {
+            error = "cannot replace " + path.generic_string();
+            return false;
+        }
+        return true;
+    }
+
+    void AnimationTimeline::DrawPoseLibrary(Scene &scene, AnimationSystem *anim, const Skeleton &skeleton,
+                                            AnimationClip &clip, float currentFrame)
+    {
+        ImGui::SetNextWindowSize({ImGui::GetFontSize() * 24.f, 0.f}, ImGuiCond_Appearing);
+        if (!ImGui::BeginPopup("Pose Library##timeline"))
+            return;
+        const std::filesystem::path path = PoseLibraryPath();
+        if (path != m_libraryPath || ImGui::IsWindowAppearing())
+        {
+            m_libraryPath = path;
+            std::string error;
+            if (!LoadPoseLibrary(path, m_library, error))
+                m_libraryStatus = error;
+            m_librarySelected = -1;
+        }
+        ImGui::TextDisabled("%s", path.filename().generic_string().c_str());
+        ui::ItemTooltip(path.generic_string().c_str());
+        if (ImGui::BeginListBox("##poses", {-1.f, ImGui::GetTextLineHeightWithSpacing() * 6.f}))
+        {
+            for (int i = 0; i < static_cast<int>(m_library.size()); i++)
+            {
+                char label[96];
+                snprintf(label, sizeof(label), "%s  (%zu bones)", m_library[i].name.c_str(), m_library[i].bones.size());
+                if (ImGui::Selectable(label, i == m_librarySelected, ImGuiSelectableFlags_AllowDoubleClick))
+                {
+                    m_librarySelected = i;
+                    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                        PastePose(scene, anim, clip, skeleton, currentFrame, m_library[i].bones, false);
+                }
+            }
+            ImGui::EndListBox();
+        }
+        ui::ItemTooltip("Double-click applies a pose at the playhead.");
+        const bool picked = m_librarySelected >= 0 && m_librarySelected < static_cast<int>(m_library.size());
+        auto save = [&]()
+        {
+            std::string error;
+            if (SavePoseLibrary(m_libraryPath, m_library, error))
+                m_libraryStatus = "Saved " + std::to_string(m_library.size()) + " pose(s).";
+            else
+                m_libraryStatus = error;
+        };
+        ImGui::BeginDisabled(!picked);
+        if (ImGui::Button("Apply"))
+            PastePose(scene, anim, clip, skeleton, currentFrame, m_library[m_librarySelected].bones, false);
+        ui::ItemTooltip("Key the pose at the playhead on every bone it names.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::SameLine();
+        if (ImGui::Button("Apply Flipped"))
+            PastePose(scene, anim, clip, skeleton, currentFrame, m_library[m_librarySelected].bones, true);
+        ui::ItemTooltip("Key the pose mirrored across X, each bone on its .L / .R twin.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        ImGui::SameLine();
+        if (ImGui::Button("Delete"))
+        {
+            m_library.erase(m_library.begin() + m_librarySelected);
+            m_librarySelected = -1;
+            save();
+        }
+        ImGui::EndDisabled();
+        ImGui::Separator();
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 11.f);
+        const bool entered = ImGui::InputTextWithHint("##posename", "pose name", m_libraryName, sizeof(m_libraryName),
+                                                      ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::SameLine();
+        if ((ImGui::Button("Save Current Pose") || entered) && m_libraryName[0])
+        {
+            LibraryPose pose;
+            pose.name = m_libraryName;
+            CopyPose(clip, skeleton, currentFrame, PoseBones(skeleton), pose.bones);
+            const auto same = std::find_if(m_library.begin(), m_library.end(), [&](const LibraryPose &p)
+                                           { return p.name == pose.name; });
+            if (same != m_library.end())
+                *same = std::move(pose);
+            else
+                m_library.push_back(std::move(pose));
+            save();
+        }
+        ui::ItemTooltip("Store the selected bones' pose at the playhead (every bone when none is selected) under this name; the same name overwrites.");
+        if (!m_libraryStatus.empty())
+            ImGui::TextDisabled("%s", m_libraryStatus.c_str());
+        ImGui::EndPopup();
+    }
+
+    int AnimationTimeline::MarkerAtFrame(const AnimationClip &clip, float frame) const
+    {
+        for (int i = 0; i < static_cast<int>(clip.markers.size()); i++)
+            if (std::abs(ToFrame(clip.markers[i].time) - frame) < kFrameEps)
+                return i;
+        return -1;
+    }
+
+    int AnimationTimeline::AddMarker(AnimationClip &clip, float frame, const std::string &name)
+    {
+        frame = std::clamp(std::round(frame), 0.f, ToFrame(clip.duration));
+        const int existing = MarkerAtFrame(clip, frame);
+        if (existing >= 0)
+            return existing;
+        PushUndo(clip);
+        ClipMarker marker;
+        marker.time = ToTicks(frame);
+        marker.name = name.empty() ? "F" + std::to_string(static_cast<int>(frame)) : name;
+        const auto at = std::lower_bound(clip.markers.begin(), clip.markers.end(), marker.time,
+                                         [](const ClipMarker &m, float t)
+                                         { return m.time < t; });
+        const int index = static_cast<int>(at - clip.markers.begin());
+        clip.markers.insert(at, marker);
+        m_dirty = true;
+        return index;
     }
 
     void AnimationTimeline::CollectKeyTimes(const AnimationClip &clip, std::vector<float> &out) const
@@ -2773,7 +3452,12 @@ namespace pe
         if (ImGui::Button("Motion Doctor"))
             ImGui::OpenPopup("Motion Doctor##timeline");
         ui::ItemTooltip("Analyze and clean animation curves, mirror poses, bake follow-through, and stabilize a bone in world position.");
+        ImGui::SameLine();
+        if (ImGui::Button("Poses"))
+            ImGui::OpenPopup("Pose Library##timeline");
+        ui::ItemTooltip("Named poses shared by every model rigged from this preset: save the current pose, apply one (or its mirror) at the playhead.");
         DrawMotionDoctor();
+        DrawPoseLibrary(scene, anim, model->GetSkeleton(), clip, currentFrame);
 
         // Save / undo (right side of the second row)
         ImGui::SameLine(std::max(ImGui::GetCursorPosX() + 14.f, w - 212.f));
@@ -2797,13 +3481,14 @@ namespace pe
         ImGui::SameLine();
         const bool canSave = ModelAssetCooked::IsCookedPath(model->GetFilePath());
         ImGui::BeginDisabled(!canSave);
-        if (ImGui::Button(m_dirty ? "Save *" : "Save"))
+        if (ImGui::Button(IsDirty() ? "Save *" : "Save"))
         {
-            if (ModelAssetCooked::WriteToFile(model, model->GetFilePath()))
-                m_dirty = false;
+            std::string error;
+            if (!m_app->SaveAll(&error))
+                PE_WARN("[Animator] %s", error.c_str());
         }
         ImGui::EndDisabled();
-        ui::ItemTooltip(canSave ? "Write the clips back into the model's .pemesh (Ctrl+S)."
+        ui::ItemTooltip(canSave ? "Write clips to the .pemesh and rig edits to its rig document (Ctrl+S)."
                                 : "Model was not loaded from a .pemesh; cook it first to save clips.");
 
         ImGui::PopStyleVar(2);
@@ -2853,6 +3538,57 @@ namespace pe
             run("timeline.motion.mirror_pose");
         ui::ItemTooltip("Mirror the current pose across the rig X plane onto the current frame, swapping .L and .R bones.");
 
+        AnimationClip &clip = m_editModel->GetMutableAnimations()[m_selectedClip];
+        const Skeleton &skeleton = m_editModel->GetSkeleton();
+        auto carriesLocation = [&](int bone)
+        {
+            return std::any_of(clip.channels.begin(), clip.channels.end(), [&](const AnimationChannel &channel)
+                               { return channel.boneIndex == bone && channel.positionKeys.size() >= 2; });
+        };
+        if (!clip.rootMotion.Empty())
+            m_rootMotionBone = clip.rootMotion.boneIndex;
+        else if (!carriesLocation(m_rootMotionBone))
+            m_rootMotionBone = LocationBone(m_editModel);
+        const char *carrierName = m_rootMotionBone >= 0 && m_rootMotionBone < skeleton.GetBoneCount()
+                                      ? skeleton.bones[m_rootMotionBone].name.c_str()
+                                      : "No Location carrier";
+        ImGui::BeginDisabled(!clip.rootMotion.Empty());
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 13.f);
+        if (ImGui::BeginCombo("Root carrier", carrierName))
+        {
+            for (const AnimationChannel &channel : clip.channels)
+                if (channel.boneIndex >= 0 && channel.boneIndex < skeleton.GetBoneCount() &&
+                    channel.positionKeys.size() >= 2)
+                {
+                    const bool selected = channel.boneIndex == m_rootMotionBone;
+                    if (ImGui::Selectable(skeleton.bones[channel.boneIndex].name.c_str(), selected))
+                        m_rootMotionBone = channel.boneIndex;
+                    if (selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+            ImGui::EndCombo();
+        }
+        ImGui::Checkbox("Include vertical", &m_rootMotionVertical);
+        ImGui::BeginDisabled(m_rootMotionBone < 0);
+        if (ImGui::Button("Extract Root Travel"))
+            run("timeline.motion.root_extract",
+                {{"bone", skeleton.bones[m_rootMotionBone].name}, {"vertical", m_rootMotionVertical}});
+        ImGui::EndDisabled();
+        ImGui::EndDisabled();
+        ui::ItemTooltip("Move horizontal travel out of the Location carrier so the action plays in place. The .pemesh keeps the extracted track.");
+        ImGui::SameLine();
+        ImGui::BeginDisabled(clip.rootMotion.Empty());
+        if (ImGui::Button("Bake Root Travel"))
+            run("timeline.motion.root_bake");
+        ImGui::EndDisabled();
+        ui::ItemTooltip("Put the extracted travel back into the bone Location curve so the character moves through the scene again.");
+        if (!clip.rootMotion.Empty())
+        {
+            const vec3 delta = clip.rootMotion.positionKeys.back().value - clip.rootMotion.positionKeys.front().value;
+            ImGui::TextDisabled("Loop delta  X %.3f  Y %.3f  Z %.3f  (%.3f)", delta.x, delta.y, delta.z,
+                                glm::length(delta));
+        }
+
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 13.f);
         ImGui::SliderFloat("Breakdown bias", &m_breakdownBias, 0.f, 1.f, "%.2f");
         ui::ItemTooltip("Where the breakdown sits between the surrounding keys: 0 is the previous pose, 1 the next.");
@@ -2869,6 +3605,59 @@ namespace pe
         if (ImGui::Button("Offset Selected Bones"))
             run("timeline.motion.offset_bone", {{"delta_frames", m_motionOffsetFrames}});
         ui::ItemTooltip("Slide the selected bones' keys in time, so a chain stops moving in mechanical lockstep.");
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.f);
+        ImGui::Combo("##gait", &m_gait, "Walk\0Run\0");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.f);
+        ImGui::InputInt("Frames##gait", &m_gaitFrames);
+        m_gaitFrames = std::clamp(m_gaitFrames, 4, 4096);
+        ImGui::SameLine();
+        if (ImGui::Button("Generate Cycle"))
+            run("timeline.generate", {{"gait", m_gait == 1 ? "run" : "walk"}, {"frames", m_gaitFrames}});
+        ui::ItemTooltip("Write a new looping walk or run action from the rig's bone names (thigh / shin / foot, upper_arm / "
+                        "forearm / hand, hips / spine / head): legs and arms swing, the pelvis sways and twists, the body bobs, "
+                        "and the travel goes to the root-motion track so it plays in place. Feet slide: plant them with the "
+                        "contact tools or Balance afterwards. timeline.generate has amplitude and stride.");
+        {
+            const auto &clips = m_editModel->GetAnimations();
+            if (m_layerClip < 0 || m_layerClip >= static_cast<int>(clips.size()) || m_layerClip == m_selectedClip)
+            {
+                m_layerClip = -1;
+                for (int i = 0; i < static_cast<int>(clips.size()) && m_layerClip < 0; i++)
+                    if (i != m_selectedClip)
+                        m_layerClip = i;
+            }
+            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 13.f);
+            if (ImGui::BeginCombo("Layer source", m_layerClip >= 0 ? clips[m_layerClip].name.c_str() : "No other action"))
+            {
+                for (int i = 0; i < static_cast<int>(clips.size()); i++)
+                    if (i != m_selectedClip && ImGui::Selectable(clips[i].name.c_str(), i == m_layerClip))
+                        m_layerClip = i;
+                ImGui::EndCombo();
+            }
+            ui::ItemTooltip("Another action of this model to blend or add onto the active one.");
+            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 6.f);
+            ImGui::SliderFloat("Weight##layer", &m_layerWeight, 0.f, 1.f, "%.2f");
+            ImGui::SameLine();
+            ImGui::Checkbox("Additive", &m_layerAdditive);
+            ui::ItemTooltip("Add the source's offset from its bind pose on top of the active action (a breathing or "
+                            "sway layer) instead of blending the pose toward it.");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.f);
+            ImGui::InputInt("Offset##layer", &m_layerOffset);
+            ui::ItemTooltip("Source frame playing at the start of the span; a shorter source loops over it.");
+            ImGui::SameLine();
+            ImGui::BeginDisabled(m_layerClip < 0);
+            if (ImGui::Button("Layer Onto Active"))
+                run("timeline.layer", {{"clip", clips[m_layerClip].name},
+                                       {"weight", m_layerWeight},
+                                       {"additive", m_layerAdditive},
+                                       {"offset_frames", m_layerOffset}});
+            ImGui::EndDisabled();
+            ui::ItemTooltip("Bake the source onto the active action over the interval (or the whole action) for the "
+                            "selected bones, or every bone the source keys.",
+                            ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+        }
         ImGui::SetNextItemWidth(-1.f);
         ImGui::InputTextWithHint("##springchain",
                                  "ordered chain: scarf.01, scarf.02, scarf.03",
@@ -3195,6 +3984,8 @@ namespace pe
             remap(channel.rotationKeys);
             remap(channel.scaleKeys);
         }
+        if (!clip.rootMotion.Empty())
+            remap(clip.rootMotion.positionKeys);
         return touched;
     }
 
@@ -3344,6 +4135,27 @@ namespace pe
         }
         dl->AddLine({origin.x, origin.y + size.y - 0.5f}, {origin.x + size.x, origin.y + size.y - 0.5f}, bl::kRowLine);
 
+        // scrub: press in the ruler, drag anywhere
+        const bool hovered = ImGui::IsMouseHoveringRect(origin, {origin.x + size.x, origin.y + size.y}) &&
+                             ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+
+        // markers: a flag at the ruler's foot with its name; the one under the mouse lights up
+        m_markerHover = -1;
+        for (int i = 0; i < static_cast<int>(clip.markers.size()); i++)
+        {
+            const float x = FrameToPx(ToFrame(clip.markers[i].time));
+            if (x < origin.x - 60.f || x > origin.x + size.x + 60.f)
+                continue;
+            const bool underMouse = hovered && std::abs(ImGui::GetMousePos().x - x) <= 6.f;
+            if (underMouse)
+                m_markerHover = i;
+            const ImU32 colour = underMouse ? bl::kKeyFillSel : bl::kMarker;
+            const float foot = origin.y + size.y - 1.f;
+            dl->AddLine({x, origin.y}, {x, foot - 7.f}, bl::kMarkerLine);
+            dl->AddTriangleFilled({x - 5.f, foot}, {x + 5.f, foot}, {x, foot - 7.f}, colour);
+            dl->AddText({x + 6.f, foot - ImGui::GetFontSize() - 1.f}, colour, clip.markers[i].name.c_str());
+        }
+
         // playhead badge
         {
             const float x = FrameToPx(currentFrame);
@@ -3356,8 +4168,42 @@ namespace pe
         }
         dl->PopClipRect();
 
-        // scrub: press in the ruler, drag anywhere
-        const bool hovered = ImGui::IsMouseHoveringRect(origin, {origin.x + size.x, origin.y + size.y}) && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+        if (hovered && m_modal == Modal::None && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        {
+            m_markerContext = m_markerHover;
+            m_markerFrame = std::clamp(SnapFrame(PxToFrame(ImGui::GetMousePos().x)), 0.f, ToFrame(clip.duration));
+            if (m_markerContext >= 0)
+                snprintf(m_markerBuf, sizeof(m_markerBuf), "%s", clip.markers[m_markerContext].name.c_str());
+            ImGui::OpenPopup("##rulerContext");
+        }
+        if (ImGui::BeginPopup("##rulerContext"))
+        {
+            if (m_markerContext >= 0 && m_markerContext < static_cast<int>(clip.markers.size()))
+            {
+                ImGui::TextDisabled("Marker at frame %d", static_cast<int>(std::round(ToFrame(clip.markers[m_markerContext].time))));
+                ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.f);
+                if (ImGui::InputText("##markername", m_markerBuf, sizeof(m_markerBuf), ImGuiInputTextFlags_EnterReturnsTrue) &&
+                    m_markerBuf[0])
+                {
+                    PushUndo(clip);
+                    clip.markers[m_markerContext].name = m_markerBuf;
+                    m_dirty = true;
+                    ImGui::CloseCurrentPopup();
+                }
+                ui::ItemTooltip("Rename (Enter).");
+                if (ImGui::MenuItem("Jump To Marker"))
+                    SetFrame(scene, anim, ToFrame(clip.markers[m_markerContext].time));
+                if (ImGui::MenuItem("Delete Marker"))
+                {
+                    PushUndo(clip);
+                    clip.markers.erase(clip.markers.begin() + m_markerContext);
+                    m_dirty = true;
+                }
+            }
+            else if (ImGui::MenuItem("Add Marker", "M"))
+                AddMarker(clip, m_markerFrame);
+            ImGui::EndPopup();
+        }
         const bool intervalDrag = DrawInterval(scene, anim, clip, currentFrame, origin, size, hovered);
         if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && m_modal == Modal::None && !intervalDrag)
             m_scrubbing = true;
@@ -3648,7 +4494,6 @@ namespace pe
     void AnimationTimeline::HandleHotkeys(Scene &scene, AnimationSystem *anim, const Skeleton &skeleton, AnimationClip &clip,
                                           float currentFrame)
     {
-        (void)skeleton;
         if (!HotkeysAllowed() || m_modal != Modal::None)
             return;
         const ImGuiIO &io = ImGui::GetIO();
@@ -3713,12 +4558,25 @@ namespace pe
             BeginModal(Modal::Grab, clip, mouseFrame);
         }
         if (ctrl && ImGui::IsKeyPressed(ImGuiKey_C, false))
-            CopySelectedKeys(clip);
-        if (ctrl && ImGui::IsKeyPressed(ImGuiKey_V, false) && !m_clipboard.empty())
         {
-            PasteKeys(clip, std::round(currentFrame), false);
-            SortAndRemapSelection(clip);
-            ReevaluatePose(scene, anim);
+            if (m_viewportHovered) // Blender pose mode: over the character it is the pose, not the keys
+                CopyPose(clip, skeleton, currentFrame, PoseBones(skeleton), m_poseClipboard);
+            else
+                CopySelectedKeys(clip);
+        }
+        if (ctrl && ImGui::IsKeyPressed(ImGuiKey_V, false))
+        {
+            if (m_viewportHovered)
+            {
+                if (!m_poseClipboard.empty())
+                    PastePose(scene, anim, clip, skeleton, currentFrame, m_poseClipboard, shift);
+            }
+            else if (!m_clipboard.empty())
+            {
+                PasteKeys(clip, std::round(currentFrame), false);
+                SortAndRemapSelection(clip);
+                ReevaluatePose(scene, anim);
+            }
         }
         if (ImGui::IsKeyPressed(ImGuiKey_I, false))
         {
@@ -3740,6 +4598,8 @@ namespace pe
                 ReevaluatePose(scene, anim);
             }
         }
+        if (!ctrl && !alt && ImGui::IsKeyPressed(ImGuiKey_M, false))
+            AddMarker(clip, std::round(currentFrame)); // Blender: M marks the playhead; right-click the ruler to name it
         if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Z, false))
         {
             shift ? Redo(clip) : Undo(clip);
@@ -3752,8 +4612,9 @@ namespace pe
         }
         if (ctrl && ImGui::IsKeyPressed(ImGuiKey_S, false) && m_editModel && ModelAssetCooked::IsCookedPath(m_editModel->GetFilePath()))
         {
-            if (ModelAssetCooked::WriteToFile(m_editModel, m_editModel->GetFilePath()))
-                m_dirty = false;
+            std::string error;
+            if (!m_app->SaveAll(&error))
+                PE_WARN("[Animator] %s", error.c_str());
         }
     }
 
@@ -4640,7 +5501,55 @@ namespace pe
         if (m_rigMode)
             m_rigEditor->DrawViewport(scene, camera, imageMin, imageSize, hovered, active);
         else
+        {
             DrawPoseViewport(scene, camera, imageMin, imageSize, hovered, active);
+            DrawRootMotionTrajectory(scene, camera, imageMin, imageSize);
+        }
+    }
+
+    void AnimationTimeline::DrawRootMotionTrajectory(Scene &scene, Camera *camera, const ImVec2 &imageMin,
+                                                     const ImVec2 &imageSize)
+    {
+        if (!camera || !m_editModel || !m_editModel->HasSkeleton() || m_selectedClip < 0 ||
+            m_selectedClip >= static_cast<int>(m_editModel->GetAnimations().size()))
+            return;
+        const AnimationClip &clip = m_editModel->GetAnimations()[m_selectedClip];
+        const int bone = clip.rootMotion.boneIndex;
+        const Skeleton &skeleton = m_editModel->GetSkeleton();
+        if (clip.rootMotion.Empty() || bone < 0 || bone >= skeleton.GetBoneCount())
+            return;
+        ViewportPose pose;
+        if (!GetViewportPose(m_editModel, pose) || !pose.node || !scene.IsNodeAlive(pose.node) ||
+            bone >= static_cast<int>(pose.boneTransforms.size()))
+            return;
+        const int parent = skeleton.bones[bone].parentIndex;
+        if (parent >= static_cast<int>(pose.boneTransforms.size()))
+            return;
+        const mat4 parentTransform = parent >= 0 ? pose.boneTransforms[parent] : mat4(1.f);
+        const mat3 travelToRig(parentTransform * skeleton.bones[bone].intermediatePrefix);
+        const vec3 anchor = vec3(pose.boneTransforms[bone][3]);
+        const vec3 origin = clip.rootMotion.positionKeys.front().value;
+        const mat4 world = scene.GetWorldMatrix(pose.node);
+        const mat4 viewProjection = camera->GetProjectionNoJitter() * camera->GetView();
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        ImVec2 previous;
+        bool havePrevious = false;
+        for (const PositionKey &key : clip.rootMotion.positionKeys)
+        {
+            const vec3 point = vec3(world * vec4(anchor + travelToRig * (key.value - origin), 1.f));
+            ImVec2 screen;
+            if (!ProjectWorldToViewportRect(point, viewProjection, imageMin.x, imageMin.y, imageSize.x, imageSize.y,
+                                            screen.x, screen.y))
+            {
+                havePrevious = false;
+                continue;
+            }
+            if (havePrevious)
+                drawList->AddLine(previous, screen, IM_COL32(255, 180, 40, 230), 2.f);
+            drawList->AddCircleFilled(screen, 2.5f, IM_COL32(255, 210, 80, 255));
+            previous = screen;
+            havePrevious = true;
+        }
     }
 
     bool AnimationTimeline::DrawPoseViewport(Scene &scene, Camera *camera, const ImVec2 &imageMin,
@@ -4728,6 +5637,53 @@ namespace pe
             rs->ResetTAAHistory();
     }
 
+    bool AnimationTimeline::GetOrbitView(OrbitView &out) const
+    {
+        if (m_viewPending)
+        {
+            out = *m_viewPending;
+            return true;
+        }
+        if (!m_cameraOwned)
+            return false;
+        out.target = m_orbitTarget;
+        out.distance = m_orbitDistance;
+        out.yaw = m_orbitYaw;
+        out.pitch = m_orbitPitch;
+        auto *rs = GetAnimatorRenderer();
+        const Camera *camera = rs && !rs->GetScene().GetCameras().empty() ? rs->GetScene().GetActiveCamera() : nullptr;
+        out.orthographic = camera && camera->IsOrthographic();
+        out.orthographicSize = camera ? camera->GetOrthographicSize() : 1.f;
+        return true;
+    }
+
+    void AnimationTimeline::ToggleMaximize()
+    {
+        if (m_viewportShare < 0.89f)
+        {
+            m_shareBeforeMax = m_viewportShare;
+            m_viewportShare = 0.9f;
+        }
+        else
+            m_viewportShare = std::clamp(m_shareBeforeMax, 0.f, 0.88f);
+    }
+
+    bool AnimationTimeline::IsDirty() const
+    {
+        return m_dirty || (m_rigEditor && m_rigEditor->IsDirty());
+    }
+
+    bool AnimationTimeline::SaveClips()
+    {
+        if (!m_editModel || !ModelAssetCooked::IsCookedPath(m_editModel->GetFilePath()))
+            return false;
+        if (!ModelAssetCooked::WriteToFile(m_editModel, m_editModel->GetFilePath()))
+            return false;
+        m_dirty = false;
+        m_rigEditor->MarkModelSaved();
+        return true;
+    }
+
     void AnimationTimeline::OrbitInput(Scene &scene, Camera *camera, bool hovered)
     {
         const ImGuiIO &io = ImGui::GetIO();
@@ -4741,13 +5697,29 @@ namespace pe
             (m_orbitDrag == 2 && !ImGui::IsMouseDown(ImGuiMouseButton_Middle)))
             m_orbitDrag = 0;
         const float wheel = hovered ? io.MouseWheel : 0.f;
-        const bool frame = m_viewFramePending ||
-                           (hovered && !io.KeyCtrl && !ImGui::IsAnyItemActive() && ImGui::IsKeyPressed(ImGuiKey_F, false));
+        bool frame = m_viewFramePending ||
+                     (hovered && !io.KeyCtrl && !ImGui::IsAnyItemActive() && ImGui::IsKeyPressed(ImGuiKey_F, false));
         m_viewFramePending = false;
-        if (m_orbitDrag == 0 && wheel == 0.f && !frame && !m_viewSnap && !m_orthoPending)
+        const bool applyView = m_viewPending && m_editModel; // waits for the character it was saved with
+        if (m_orbitDrag == 0 && wheel == 0.f && !frame && !m_viewSnap && !m_orthoPending && !applyView)
             return;
         if (!m_cameraOwned)
             TakeCamera(scene, camera);
+        if (applyView)
+        {
+            // a remembered or bookmarked view wins over the auto-frame of a freshly opened character
+            m_orbitTarget = m_viewPending->target;
+            m_orbitDistance = std::max(m_viewPending->distance, 0.05f);
+            m_orbitYaw = m_viewPending->yaw;
+            m_orbitPitch = m_viewPending->pitch;
+            camera->SetOrthographic(m_viewPending->orthographic);
+            if (m_viewPending->orthographic)
+                camera->SetOrthographicSize(std::max(m_viewPending->orthographicSize, 0.001f));
+            m_viewPending.reset();
+            frame = false;
+            if (auto *rs = GetAnimatorRenderer())
+                rs->ResetTAAHistory();
+        }
         if (m_viewSnap)
         {
             // the same convention as TakeCamera; a straight-down / up look keeps the yaw
@@ -4813,6 +5785,7 @@ namespace pe
 
     void AnimationTimeline::DrawSceneViewport(Scene &scene)
     {
+        m_viewportHovered = false;
         Camera *camera = scene.GetActiveCamera();
         // the scene image is shared with the Viewport; with that window closed (the animator) it is made here
         Image *sceneImage = m_app && m_app->EnsureSceneTexture() ? GUIState::s_sceneViewImage : nullptr;
@@ -4822,7 +5795,7 @@ namespace pe
         {
             // the animator's fresh look at a new character: framed from a little above, wherever the camera stood
             m_framedModel = m_editModel;
-            if (m_editModel)
+            if (m_editModel && !m_viewPending) // a remembered view is applied by OrbitInput instead
             {
                 if (!m_cameraOwned)
                     TakeCamera(scene, camera);
@@ -4874,7 +5847,15 @@ namespace pe
                     DrawViewport(scene, camera, imageMin, imageSize, hovered, active);
                 drawList->PopClipRect();
                 m_viewportDrawn = true;
-                OrbitInput(scene, camera, imageHovered || hovered);
+                m_viewportHovered = imageHovered || hovered;
+                OrbitInput(scene, camera, m_viewportHovered);
+                if (m_turntable && m_orbitDrag == 0 && m_editModel)
+                {
+                    if (!m_cameraOwned)
+                        TakeCamera(scene, camera);
+                    m_orbitYaw += ImGui::GetIO().DeltaTime * 0.6f;
+                    ApplyOrbit(scene, camera);
+                }
             }
             ImGui::EndChild();
         }
@@ -5003,7 +5984,10 @@ namespace pe
             return;
         }
         if (model != m_lastModel)
+        {
             DropPendingRequests(); // requests were aimed at the previous character
+            m_clipboard.clear();   // key entries index that rig's bones; the pose clipboard carries by name
+        }
         if (model != m_lastModel || static_cast<int>(model->GetAnimations().size()) != m_lastClipCount)
         {
             ResetEditState();
@@ -5212,8 +6196,9 @@ namespace pe
         if (m_pendingSave)
         {
             m_pendingSave = false;
-            if (ModelAssetCooked::IsCookedPath(model->GetFilePath()) && ModelAssetCooked::WriteToFile(model, model->GetFilePath()))
-                m_dirty = false;
+            std::string error;
+            if (!m_app->SaveAll(&error))
+                PE_WARN("[Animator] %s", error.c_str());
         }
 
         if (!visible)

@@ -16,6 +16,8 @@ namespace pe
         float speed = 1.0f;
         bool playing = false;
         bool loop = true;
+        bool rootMotion = true;  // a clip with extracted travel (clip.rootMotion) moves the node as it plays
+        float motionTime = 0.0f; // clip time the travel was last applied at
     };
 
     class AnimationSystem : public ISystem
@@ -44,6 +46,11 @@ namespace pe
 
         // Change loop flag without resetting time.
         void SetLoop(NodeId *node, bool loop);
+
+        // Root motion: the travel the Animator extracted from a clip (clip.rootMotion) is applied to the node the
+        // clip plays on, one delta per update, in the node's own space; off, the clip plays in place. On by default.
+        void SetRootMotion(NodeId *node, bool enabled);
+        bool GetRootMotion(const NodeId *node) const;
 
         // Read-only access to animation state for UI. Returns nullptr if node has no state.
         const AnimationNodeState *GetAnimationState(const NodeId *node) const;

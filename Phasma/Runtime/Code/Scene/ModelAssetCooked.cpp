@@ -18,8 +18,30 @@ namespace pe
         // any future struct-layout change so a stale cooked file fails loudly instead of corrupting.
         constexpr char kMagic[4] = {'P', 'E', 'M', 'S'};
         constexpr uint32_t kLegacyVersion = 3;
-        constexpr uint32_t kVersion = 4;
+        constexpr uint32_t kInterpolationVersion = 4;
+        constexpr uint32_t kMarkerVersion = 6;
+        constexpr uint32_t kVersion = kMarkerVersion;
         constexpr int kTextureSlotCount = 5;
+
+        bool ValidSkeletonHierarchy(const Skeleton &skeleton)
+        {
+            const int count = skeleton.GetBoneCount();
+            for (int i = 0; i < count; ++i)
+            {
+                const int parent = skeleton.bones[i].parentIndex;
+                if (parent < -1 || parent >= count || parent == i)
+                    return false;
+            }
+            for (int i = 0; i < count; ++i)
+            {
+                int bone = skeleton.bones[i].parentIndex;
+                for (int depth = 0; bone >= 0 && depth < count; ++depth)
+                    bone = skeleton.bones[bone].parentIndex;
+                if (bone >= 0)
+                    return false;
+            }
+            return true;
+        }
 
         static_assert(static_cast<int>(TextureType::Emissive) + 1 == kTextureSlotCount);
 
@@ -361,7 +383,8 @@ namespace pe
                                              const std::string &imageName,
                                              const std::filesystem::path &outputDir,
                                              const std::string &stem,
-                                             std::unordered_map<std::string, std::string> &written)
+                                             std::unordered_map<std::string, std::string> &written,
+                                             bool &ok)
         {
             // An embedded texture shared across slots/materials is written once.
             auto cached = written.find(imageName);
@@ -384,6 +407,13 @@ namespace pe
 
             std::error_code ec;
             std::filesystem::create_directories(dstPath.parent_path(), ec);
+            if (ec)
+            {
+                PE_WARN("[ModelAssetCooked] Failed to create embedded texture directory '%s': %s",
+                        PathToUtf8String(dstPath.parent_path()).c_str(), ec.message().c_str());
+                ok = false;
+                return {};
+            }
 
             FileSystem out(PathToUtf8String(dstPath), std::ios::out | std::ios::trunc | std::ios::binary);
             if (!out.IsOpen())
@@ -393,7 +423,14 @@ namespace pe
                 written[imageName] = {};
                 return {};
             }
-            out.Write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+            if (!out.Write(reinterpret_cast<const char *>(bytes.data()), bytes.size()) || !out.Flush())
+            {
+                PE_WARN("[ModelAssetCooked] Failed while writing embedded texture '%s'",
+                        PathToUtf8String(dstPath).c_str());
+                std::filesystem::remove(dstPath, ec);
+                ok = false;
+                return {};
+            }
 
             const std::string rel = relPath.generic_string();
             written[imageName] = rel;
@@ -421,7 +458,7 @@ namespace pe
             {
                 // Embedded textures carry their aiScene index in the resource id ("*N"); the display
                 // name is empty. Use the id so the model can recover the original encoded bytes.
-                return SerializeEmbeddedTexture(model, image->GetResourceId(), outputDir, stem, embeddedWritten);
+                return SerializeEmbeddedTexture(model, image->GetResourceId(), outputDir, stem, embeddedWritten, ok);
             }
 
             std::filesystem::path texturePath = NormalizeExistingPath(PathFromUtf8String(imageName));
@@ -549,6 +586,12 @@ namespace pe
         const std::vector<std::unique_ptr<Material>> &materials = model->GetOwnedMaterials();
         const Skeleton &skeleton = model->GetSkeleton();
         const std::vector<AnimationClip> &animations = model->GetAnimations();
+        if (!ValidSkeletonHierarchy(skeleton))
+        {
+            PE_WARN("[ModelAssetCooked] Refusing to write an invalid skeleton hierarchy: %s",
+                    PathToUtf8String(path).c_str());
+            return false;
+        }
         const std::filesystem::path sourceDir = model->GetFilePath().empty()
                                                     ? std::filesystem::path()
                                                     : NormalizeExistingPath(model->GetFilePath().parent_path());
@@ -667,9 +710,9 @@ namespace pe
             }
         }
 
-        // Animation table (v4): one clip per entry, each with per-bone TRS keyframe channels and an
-        // outgoing interpolation mode per key. Vertex joint indices/weights are already in the cooked
-        // PBR vertex stream.
+        // Animation table (v6): one clip per entry, each with per-bone TRS keyframe channels, an outgoing
+        // interpolation mode per key, optional extracted root travel and the ruler markers. Vertex joint
+        // indices/weights are already in the cooked PBR vertex stream.
         for (const AnimationClip &clip : animations)
         {
             w.String(clip.name);
@@ -685,24 +728,63 @@ namespace pe
                 WriteKeys(w, channel.rotationKeys);
                 WriteKeys(w, channel.scaleKeys);
             }
+            const bool hasRootMotion = !clip.rootMotion.Empty();
+            int32_t rootMotionBone = hasRootMotion ? clip.rootMotion.boneIndex : -1;
+            w.Pod(rootMotionBone);
+            const std::vector<PositionKey> noRootMotion;
+            WriteKeys(w, hasRootMotion ? clip.rootMotion.positionKeys : noRootMotion);
+            uint32_t markerCount = static_cast<uint32_t>(clip.markers.size());
+            w.Pod(markerCount);
+            for (const ClipMarker &marker : clip.markers)
+            {
+                w.Pod(marker.time);
+                w.String(marker.name);
+            }
         }
 
         auto pathU8 = path.u8string();
         std::string pathStr(reinterpret_cast<const char *>(pathU8.c_str()));
-        FileSystem out(pathStr, std::ios::out | std::ios::trunc | std::ios::binary);
+        std::filesystem::path tempPath = path;
+        tempPath += ".tmp";
+        FileSystem out(PathToUtf8String(tempPath), std::ios::out | std::ios::trunc | std::ios::binary);
         if (!out.IsOpen())
         {
-            PE_WARN("[ModelAssetCooked] Failed to open for write: %s", pathStr.c_str());
+            PE_WARN("[ModelAssetCooked] Failed to open temporary file for write: %s", pathStr.c_str());
             return false;
         }
-        out.Write(reinterpret_cast<const char *>(w.bytes.data()), w.bytes.size());
+        if (!out.Write(reinterpret_cast<const char *>(w.bytes.data()), w.bytes.size()) || !out.Flush())
+        {
+            out.Close();
+            std::filesystem::remove(tempPath, ec);
+            PE_WARN("[ModelAssetCooked] Failed while writing: %s", pathStr.c_str());
+            return false;
+        }
+        out.Close();
+        if (!FileSystem::ReplaceFile(tempPath, path))
+        {
+            std::filesystem::remove(tempPath, ec);
+            PE_WARN("[ModelAssetCooked] Failed to replace cooked model: %s", pathStr.c_str());
+            return false;
+        }
         PE_INFO("[ModelAssetCooked] Cooked %u meshes, %zu verts, %zu indices, %u materials, %u bones, %u clips -> %s (%zu bytes)",
                 header.meshCount, vertices.size(), indices.size(), header.materialCount, header.boneCount,
                 header.clipCount, pathStr.c_str(), w.bytes.size());
         return true;
     }
 
-    ModelAsset *ModelAssetCooked::Load(const std::filesystem::path &file)
+    bool ModelAssetCooked::ReadAnimations(const std::filesystem::path &file, Skeleton &skeleton,
+                                          std::vector<AnimationClip> &clips)
+    {
+        ModelAsset *model = Load(file, true);
+        if (!model)
+            return false;
+        skeleton = model->m_skeleton;
+        clips = std::move(model->m_animations);
+        delete model;
+        return true;
+    }
+
+    ModelAsset *ModelAssetCooked::Load(const std::filesystem::path &file, bool cpuOnly)
     {
         if (!AssetFileExists(file))
         {
@@ -732,7 +814,7 @@ namespace pe
             PE_WARN("[ModelAssetCooked] Bad magic for %s", pathStr.c_str());
             return nullptr;
         }
-        if (header.version != kLegacyVersion && header.version != kVersion)
+        if (header.version < kLegacyVersion || header.version > kVersion)
         {
             PE_WARN("[ModelAssetCooked] Unsupported version (got v%u, supported v%u-v%u) for %s; re-cook required",
                     header.version, kLegacyVersion, kVersion, pathStr.c_str());
@@ -892,9 +974,15 @@ namespace pe
                 bone.parentIndex = parentIndex;
                 model->m_skeleton.boneNameToIndex[bone.name] = static_cast<int>(i);
             }
+            if (!ValidSkeletonHierarchy(model->m_skeleton))
+            {
+                PE_WARN("[ModelAssetCooked] Invalid skeleton hierarchy: %s", pathStr.c_str());
+                delete model;
+                return nullptr;
+            }
         }
 
-        // Animation table: v3 keys load as Linear; v4 also restores each key's interpolation mode.
+        // Animation table: v3 keys load as Linear; v4 restores interpolation; v5 adds extracted root travel; v6 markers.
         model->m_animations.resize(header.clipCount);
         for (uint32_t i = 0; i < header.clipCount; i++)
         {
@@ -922,7 +1010,47 @@ namespace pe
                 }
                 channel.boneIndex = boneIndex;
             }
+            if (header.version > kInterpolationVersion)
+            {
+                int32_t rootMotionBone = -1;
+                if (!r.Pod(rootMotionBone) || !ReadKeys(r, header.version, clip.rootMotion.positionKeys))
+                {
+                    PE_WARN("[ModelAssetCooked] Truncated root motion track: %s", pathStr.c_str());
+                    delete model;
+                    return nullptr;
+                }
+                clip.rootMotion.boneIndex = rootMotionBone;
+                if (rootMotionBone < -1 || (rootMotionBone < 0 && !clip.rootMotion.positionKeys.empty()) ||
+                    (rootMotionBone >= 0 && clip.rootMotion.positionKeys.empty()) ||
+                    rootMotionBone >= static_cast<int32_t>(header.boneCount))
+                {
+                    PE_WARN("[ModelAssetCooked] Invalid root motion track: %s", pathStr.c_str());
+                    delete model;
+                    return nullptr;
+                }
+            }
+            if (header.version >= kMarkerVersion)
+            {
+                uint32_t markerCount = 0;
+                if (!r.Pod(markerCount) || markerCount > (r.size - r.cursor) / (sizeof(float) + sizeof(uint32_t)))
+                {
+                    PE_WARN("[ModelAssetCooked] Truncated marker table: %s", pathStr.c_str());
+                    delete model;
+                    return nullptr;
+                }
+                clip.markers.resize(markerCount);
+                for (ClipMarker &marker : clip.markers)
+                    if (!r.Pod(marker.time) || !r.String(marker.name) || !std::isfinite(marker.time))
+                    {
+                        PE_WARN("[ModelAssetCooked] Invalid marker: %s", pathStr.c_str());
+                        delete model;
+                        return nullptr;
+                    }
+            }
         }
+
+        if (cpuOnly)
+            return model;
 
         Queue *queue = RHII.GetMainQueue();
         if (!queue)

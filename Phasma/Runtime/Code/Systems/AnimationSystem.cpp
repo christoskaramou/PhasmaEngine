@@ -259,6 +259,39 @@ namespace pe
         SetEnabled(true);
     }
 
+    namespace
+    {
+        // The travel between the last applied clip time and the new one (through the loop seam when the clip
+        // wrapped), taken from the carrier's channel space to rig space - the node's own space, where the skinning
+        // lives - through its parent's bind global and its prefix, then into the node's parent space by the
+        // node's basis. The pose keeps playing in place; only the node moves.
+        void ApplyRootMotion(Scene &scene, AnimationNodeState &state, const AnimationClip &clip,
+                             const Skeleton &skeleton, int wrapped)
+        {
+            const RootMotionTrack &track = clip.rootMotion;
+            auto at = [&](float time)
+            { return AnimationEvaluator::InterpolatePosition(track.positionKeys, time); };
+            vec3 delta;
+            if (wrapped > 0)
+                delta = (at(clip.duration) - at(state.motionTime)) + (at(state.time) - at(0.0f));
+            else if (wrapped < 0)
+                delta = (at(0.0f) - at(state.motionTime)) + (at(state.time) - at(clip.duration));
+            else
+                delta = at(state.time) - at(state.motionTime);
+            state.motionTime = state.time;
+            if (glm::dot(delta, delta) < 1e-14f || !std::isfinite(glm::dot(delta, delta)))
+                return;
+            const BoneInfo &bone = skeleton.bones[track.boneIndex];
+            const mat4 parentBind =
+                bone.parentIndex >= 0 ? glm::inverse(skeleton.bones[bone.parentIndex].offsetMatrix) : mat4(1.0f);
+            const vec3 rigDelta =
+                mat3(glm::inverse(skeleton.rootTransform) * parentBind * bone.intermediatePrefix) * delta;
+            mat4 local = scene.GetLocalMatrix(state.nodeId);
+            local[3] += vec4(mat3(local) * rigDelta, 0.0f);
+            scene.SetLocalMatrix(state.nodeId, local);
+        }
+    } // namespace
+
     void AnimationSystem::Update()
     {
         Scene *scene = GetActiveScene();
@@ -293,10 +326,14 @@ namespace pe
 
             state.time += dt * state.speed * clip.ticksPerSecond;
 
+            int wrapped = 0; // +1 the loop ran past the end, -1 past the start
             if (state.time >= clip.duration)
             {
                 if (state.loop)
+                {
                     state.time = std::fmod(state.time, clip.duration);
+                    wrapped = 1;
+                }
                 else
                 {
                     state.time = clip.duration;
@@ -306,13 +343,20 @@ namespace pe
             else if (state.time < 0.0f) // reverse playback
             {
                 if (state.loop)
+                {
                     state.time = clip.duration + std::fmod(state.time, clip.duration);
+                    wrapped = -1;
+                }
                 else
                 {
                     state.time = 0.0f;
                     state.playing = false;
                 }
             }
+            if (state.rootMotion && !clip.rootMotion.Empty() && clip.rootMotion.boneIndex < skeleton.GetBoneCount())
+                ApplyRootMotion(*scene, state, clip, skeleton, wrapped);
+            else
+                state.motionTime = state.time;
 
             NodeRuntime &rt = scene->GetNodeRuntime(state.nodeId);
             AnimationEvaluator::EvaluatePose(clip, skeleton, state.time, rt.jointMatrices);
@@ -379,8 +423,25 @@ namespace pe
         auto &state = m_states[it->second];
         state.clipIndex = clipIndex;
         state.time = 0.0f;
+        state.motionTime = 0.0f;
         state.loop = loop;
         state.playing = true;
+    }
+
+    void AnimationSystem::SetRootMotion(NodeId *node, bool enabled)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it != m_nodeToIndex.end())
+        {
+            m_states[it->second].rootMotion = enabled;
+            m_states[it->second].motionTime = m_states[it->second].time; // never catch up on travel skipped while off
+        }
+    }
+
+    bool AnimationSystem::GetRootMotion(const NodeId *node) const
+    {
+        auto it = m_nodeToIndex.find(node);
+        return it != m_nodeToIndex.end() && m_states[it->second].rootMotion;
     }
 
     void AnimationSystem::PlayAnimation(Scene &scene, NodeId *node, const std::string &clipName, bool loop)
@@ -465,7 +526,8 @@ namespace pe
 
         const AnimationClip &clip = clips[state.clipIndex];
         state.time = std::clamp(timeTicks, 0.f, clip.duration);
-        state.playing = false; // pause during scrub
+        state.motionTime = state.time; // a scrub teleports the pose, never the node
+        state.playing = false;         // pause during scrub
 
         const Skeleton &skeleton = scene.GetSkeletonForNode(state.nodeId);
         if (!skeleton.bones.empty())

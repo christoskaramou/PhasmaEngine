@@ -444,13 +444,15 @@ namespace pe
         }
 
         RigPreset MakeBuiltIn(const char *id, const char *name, const char *description, std::span<const BuiltInBone> bones,
-                              const RigPresetLandmarks &landmarks = {}, bool puppetDefaults = false)
+                              const RigPresetLandmarks &landmarks = {}, bool puppetDefaults = false,
+                              float leanBudgetDegrees = 15.f)
         {
             RigPreset preset;
             preset.id = id;
             preset.name = name;
             preset.description = description;
             preset.landmarks = landmarks;
+            preset.leanBudgetDegrees = leanBudgetDegrees;
             for (const BuiltInBone &b : bones)
                 PushBone(preset, b, false);
             for (const BuiltInBone &b : bones)
@@ -497,7 +499,7 @@ namespace pe
                 bones.push_back({tibia.c_str(), femur.c_str(), {0.75f, 0.80f, z + fan}, {0.95f, 0.35f, z + fan * 1.5f}, 0.03f, 0.02f, ""});
                 bones.push_back({tarsus.c_str(), tibia.c_str(), {0.95f, 0.35f, z + fan * 1.5f}, {0.98f, 0.f, z + fan * 1.7f}, 0.02f, 0.01f, ""});
             }
-            return MakeBuiltIn(id, name, description, bones);
+            return MakeBuiltIn(id, name, description, bones, {}, false, 0.f); // legs on every side: no trunk to lean
         }
 
         // Landmark measurement: Y slices of the point cloud, each split into X blobs at gaps, the blob nearest the
@@ -562,19 +564,27 @@ namespace pe
                         kBipedLandmarks, true),
             MakeBuiltIn("biped_tail", "Biped + Tail", "Humanoid with a three-link spline tail; lizardfolk, demons, kobolds.",
                         kBipedTail, kBipedLandmarks, true),
-            MakeBuiltIn("quadruped", "Quadruped", "Four legs, articulated neck and a spline tail; +Z forward.", kQuadruped),
-            MakeBuiltIn("centaur", "Centaur", "Quadruped body carrying a humanoid torso, arms and head.", kCentaur),
-            MakeBuiltIn("bird", "Bird", "Body, three-link neck, beak, tail, folded wings and backwards-knee legs with toes.", kBird),
+            MakeBuiltIn("quadruped", "Quadruped", "Four legs, articulated neck and a spline tail; +Z forward.", kQuadruped, {},
+                        false, 5.f),
+            MakeBuiltIn("centaur", "Centaur", "Quadruped body carrying a humanoid torso, arms and head.", kCentaur, {}, false,
+                        10.f),
+            MakeBuiltIn("bird", "Bird", "Body, three-link neck, beak, tail, folded wings and backwards-knee legs with toes.", kBird,
+                        {}, false, 8.f),
             MakeArthropod("insect", "Insect", "Thorax, abdomen, head, mandibles and three fanned leg pairs.", 3),
             MakeArthropod("spider", "Spider", "Thorax, abdomen, head, mandibles and four fanned leg pairs.", 4),
-            MakeBuiltIn("serpent", "Serpent", "Head on a ten-link spline; also tentacles, ropes and vines.", kSerpent),
-            MakeBuiltIn("fish", "Fish", "Lateral five-link body spline with tail, dorsal, anal and pectoral fins.", kFish),
-            MakeBuiltIn("floating", "Floating Caster", "Legless caster: hover root, arms with spell attachments, two robe trails.", kFloating),
-            MakeBuiltIn("prop_hinge", "Prop: Hinge", "Fixed base and one door or lid panel hinged on the left edge.", kHinge),
-            MakeBuiltIn("prop_chest", "Prop: Chest", "Box body with a lid hinged along the back edge.", kChest),
-            MakeBuiltIn("prop_flag", "Prop: Flag", "Pole with a four-link cloth spline.", kFlag),
-            MakeBuiltIn("prop_pendulum", "Prop: Pendulum", "Pivot, rod and bob.", kPendulum),
-            MakeBuiltIn("prop_bounce", "Prop: Bounce", "Root and a squash-and-stretch body for a bouncing pickup.", kBounce),
+            MakeBuiltIn("serpent", "Serpent", "Head on a ten-link spline; also tentacles, ropes and vines.", kSerpent, {}, false,
+                        0.f),
+            MakeBuiltIn("fish", "Fish", "Lateral five-link body spline with tail, dorsal, anal and pectoral fins.", kFish, {},
+                        false, 0.f),
+            MakeBuiltIn("floating", "Floating Caster", "Legless caster: hover root, arms with spell attachments, two robe trails.",
+                        kFloating, {}, false, 10.f),
+            MakeBuiltIn("prop_hinge", "Prop: Hinge", "Fixed base and one door or lid panel hinged on the left edge.", kHinge, {},
+                        false, 0.f),
+            MakeBuiltIn("prop_chest", "Prop: Chest", "Box body with a lid hinged along the back edge.", kChest, {}, false, 0.f),
+            MakeBuiltIn("prop_flag", "Prop: Flag", "Pole with a four-link cloth spline.", kFlag, {}, false, 0.f),
+            MakeBuiltIn("prop_pendulum", "Prop: Pendulum", "Pivot, rod and bob.", kPendulum, {}, false, 0.f),
+            MakeBuiltIn("prop_bounce", "Prop: Bounce", "Root and a squash-and-stretch body for a bouncing pickup.", kBounce, {},
+                        false, 0.f),
         };
         return presets;
     }
@@ -672,6 +682,15 @@ namespace pe
         if (!ReadString(root, "id", loaded.id, error) || !ReadString(root, "name", loaded.name, error) ||
             !ReadString(root, "description", loaded.description, error, false))
             return false;
+        if (const auto lean = root.find("lean_budget_degrees"); lean != root.end())
+        {
+            if (!lean->is_number() || lean->get<float>() < 0.f || lean->get<float>() > 90.f)
+            {
+                error = "'lean_budget_degrees' must be a number between 0 and 90";
+                return false;
+            }
+            loaded.leanBudgetDegrees = lean->get<float>();
+        }
 
         const auto bonesIt = root.find("bones");
         if (bonesIt == root.end() || !bonesIt->is_array() || bonesIt->empty())

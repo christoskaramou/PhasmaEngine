@@ -58,11 +58,31 @@ namespace pe
         std::vector<ScaleKey> scaleKeys;
     };
 
+    // Travel removed from one bone's Location curve. The regular pose stays in place while this is present;
+    // baking the track puts the travel back into the bone. Runtime pose evaluation intentionally ignores it.
+    struct RootMotionTrack
+    {
+        int boneIndex = -1;
+        std::vector<PositionKey> positionKeys;
+
+        bool Empty() const { return boneIndex < 0 || positionKeys.empty(); }
+    };
+
+    // A named frame on the clip's ruler: a footstep, a hit frame, a phase boundary. Scripts read them through
+    // animation.get_markers; playback itself never acts on them.
+    struct ClipMarker
+    {
+        float time = 0.0f; // clip ticks
+        std::string name;
+    };
+
     struct AnimationClip
     {
         std::string name;
         float duration = 0.0f;
         float ticksPerSecond = 25.0f;
         std::vector<AnimationChannel> channels;
+        RootMotionTrack rootMotion;
+        std::vector<ClipMarker> markers;
     };
 } // namespace pe

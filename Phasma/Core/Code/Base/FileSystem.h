@@ -18,9 +18,11 @@ namespace pe
         std::string ReadAll();
         std::vector<uint8_t> ReadAllBytes();
         std::string ReadLine();
-        void Write(const std::string &data);
-        void Write(const char *data, size_t size);
+        bool Write(const std::string &data);
+        bool Write(const char *data, size_t size);
+        bool Flush();
         void Close();
+        static bool ReplaceFile(const std::filesystem::path &source, const std::filesystem::path &target);
 
     private:
         inline std::iostream &Stream() { return m_fromPack ? static_cast<std::iostream &>(m_memStream) : m_fstream; }

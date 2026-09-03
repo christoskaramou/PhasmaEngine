@@ -65,6 +65,7 @@ namespace pe
         std::vector<std::string> pins;
         std::vector<RigPresetLock> locks;
         RigPresetLandmarks landmarks;
+        float leanBudgetDegrees = 15.f; // how far the trunk may counter-lean to keep balance; 0 = never leans
     };
 
     // A RigPresetBone fitted to one model. Coordinates are in the target model's rig space and

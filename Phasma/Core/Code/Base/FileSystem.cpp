@@ -1,6 +1,10 @@
 #include "FileSystem.h"
 #include "GamePack.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace pe
 {
     FileSystem::FileSystem(const std::string &file, std::ios_base::openmode mode)
@@ -79,19 +83,40 @@ namespace pe
         return line;
     }
 
-    void FileSystem::Write(const std::string &data)
+    bool FileSystem::Write(const std::string &data)
     {
         m_fstream.write(data.data(), data.size());
+        return static_cast<bool>(m_fstream);
     }
 
-    void FileSystem::Write(const char *data, size_t size)
+    bool FileSystem::Write(const char *data, size_t size)
     {
         m_fstream.write(data, size);
+        return static_cast<bool>(m_fstream);
+    }
+
+    bool FileSystem::Flush()
+    {
+        if (!m_fstream.is_open())
+            return false;
+        m_fstream.flush();
+        return static_cast<bool>(m_fstream);
     }
 
     void FileSystem::Close()
     {
         if (m_fstream.is_open())
             m_fstream.close();
+    }
+
+    bool FileSystem::ReplaceFile(const std::filesystem::path &source, const std::filesystem::path &target)
+    {
+#ifdef _WIN32
+        return MoveFileExW(source.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE;
+#else
+        std::error_code ec;
+        std::filesystem::rename(source, target, ec);
+        return !ec;
+#endif
     }
 } // namespace pe

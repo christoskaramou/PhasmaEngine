@@ -43,11 +43,30 @@ namespace pe
         KeyType type = KeyType::Position;
         float relTime = 0.f; // ticks, relative to the earliest copied key
         float absTime = 0.f; // ticks
-        int channelIdx = -1;
+        int bone = -1;       // skeleton bone, so the keys paste into any action of the rig
         vec3 posValue = {};
         quat rotValue = {1.f, 0.f, 0.f, 0.f};
         vec3 sclValue = {1.f, 1.f, 1.f};
         AnimationInterpolation interpolation = AnimationInterpolation::Linear;
+    };
+
+    // One bone of a copied pose relative to its bind pose (the pose bar's Loc / Rot / Scale), keyed by name so it
+    // pastes into any action, flipped onto the .L / .R twin, or onto another model rigged with the same preset.
+    struct PoseEntry
+    {
+        std::string bone;
+        vec3 loc = vec3(0.f);
+        quat rot = quat(1.f, 0.f, 0.f, 0.f);
+        vec3 scl = vec3(1.f);
+    };
+
+    // The orbit camera's state: remembered per model, bookmarked, and restored on the next viewport draw.
+    struct OrbitView
+    {
+        vec3 target = vec3(0.f);
+        float distance = 2.f, yaw = 0.f, pitch = 0.f;
+        bool orthographic = false;
+        float orthographicSize = 1.f;
     };
 
     // Blender-style animation editor: Dope Sheet / Action Editor (+ Graph Editor) with a timeline
@@ -74,6 +93,16 @@ namespace pe
         }
         void ResetView() { RequestView(vec3(0.f, -std::sin(0.2f), -std::cos(0.2f)), true); }
         void SetOrthographic(bool ortho) { m_orthoPending = ortho; }
+        bool GetOrbitView(OrbitView &out) const; // false until the orbit owns the camera
+        void SetOrbitView(const OrbitView &view) { m_viewPending = view; }
+        void ToggleMaximize();
+        bool Turntable() const { return m_turntable; }
+        void SetTurntable(bool on) { m_turntable = on; }
+        bool ShowBoneNames() const { return m_boneNames; }
+        void SetShowBoneNames(bool on) { m_boneNames = on; }
+        // Clips or rig document edited since the last save; SaveClips writes the clips back into the .pemesh.
+        bool IsDirty() const;
+        bool SaveClips();
         // Aspect of the viewport region drawn this frame (0 = none): the camera projects at it.
         static float RegionAspect() { return s_regionAspect; }
         void SetRigMode(bool rig) { m_rigMode = rig; }
@@ -300,6 +329,25 @@ namespace pe
         void CopySelectedKeys(const AnimationClip &clip);
         void PasteKeys(AnimationClip &clip, float atFrame, bool keepTimes);
         void InsertKeyframe(AnimationClip &clip, const Skeleton &skeleton, int bone, float frame);
+        // Pose clipboard: the bones sampled at the frame (selected bones, else the active one, else every bone);
+        // paste keys them at a frame like a pose-bar edit, flipped = each bone lands mirrored on its .L / .R twin.
+        std::vector<int> PoseBones(const Skeleton &skeleton) const;
+        void CopyPose(const AnimationClip &clip, const Skeleton &skeleton, float frame, std::span<const int> bones,
+                      std::vector<PoseEntry> &out) const;
+        size_t PastePose(Scene &scene, AnimationSystem *anim, AnimationClip &clip, const Skeleton &skeleton, float frame,
+                         std::span<const PoseEntry> entries, bool flipped);
+        // Pose library: named PoseEntry sets per rig preset, <dir>/<preset>.poses.json (dir = the project's
+        // RigPresets/Poses unless overridden); shared by every model rigged from that preset.
+        struct LibraryPose
+        {
+            std::string name;
+            std::vector<PoseEntry> bones;
+        };
+        std::filesystem::path PoseLibraryPath(const std::string &dirOverride = {}) const;
+        bool LoadPoseLibrary(const std::filesystem::path &path, std::vector<LibraryPose> &out, std::string &error) const;
+        bool SavePoseLibrary(const std::filesystem::path &path, std::span<const LibraryPose> poses, std::string &error) const;
+        void DrawPoseLibrary(Scene &scene, AnimationSystem *anim, const Skeleton &skeleton, AnimationClip &clip,
+                             float currentFrame);
         // --- interval: a span of frames the tools treat as one object (Cascadeur-style) ---
         bool HasInterval() const { return m_intervalEnd >= m_intervalStart + 1.f; }
         void ClearInterval();
@@ -323,6 +371,9 @@ namespace pe
         void SetPositionKey(AnimationClip &clip, int channelIdx, float time, const vec3 &pos);
         bool SampleViewportPoseTicks(ModelAsset *model, float ticks, ViewportPose &out) const;
         void DeleteKeyframesAtFrame(AnimationClip &clip, int bone, float frame);
+        // Ruler markers (part of the clip, so undo and Save carry them). Add keeps one marker per frame.
+        int MarkerAtFrame(const AnimationClip &clip, float frame) const;
+        int AddMarker(AnimationClip &clip, float frame, const std::string &name = {});
         void CollectKeyTimes(const AnimationClip &clip, std::vector<float> &out) const;
         bool NextKeyFrame(const AnimationClip &clip, float from, bool forward, float &out) const;
 
@@ -375,6 +426,7 @@ namespace pe
                          float visibleTop, float visibleBottom);
         void DrawClipPopups(Scene &scene, AnimationSystem *anim, ModelAsset *model);
         AnimationPoseViewport *PoseViewport(RigEditor &rig);
+        void DrawRootMotionTrajectory(Scene &scene, Camera *camera, const ImVec2 &imageMin, const ImVec2 &imageSize);
 
         // --- state: target ---
         NodeId *m_targetNode = nullptr;
@@ -419,6 +471,7 @@ namespace pe
         std::vector<Glyph> m_glyphs;
         std::vector<KeyRef> m_glyphRefs;
         std::vector<ClipboardEntry> m_clipboard;
+        std::vector<PoseEntry> m_poseClipboard;
         std::vector<UndoEntry> m_undo;
         std::vector<UndoEntry> m_redo;
         bool m_boxSelecting = false;
@@ -495,7 +548,24 @@ namespace pe
         std::string m_motionStatus;
         char m_springChainBuf[256] = {};
         int m_motionOffsetFrames = 1;
+        int m_rootMotionBone = -1;
+        bool m_rootMotionVertical = false;
         float m_breakdownBias = 0.5f;
+        std::vector<LibraryPose> m_library; // the Poses popup's cached file
+        std::filesystem::path m_libraryPath;
+        int m_librarySelected = -1;
+        char m_libraryName[64] = {};
+        std::string m_libraryStatus;
+        int m_gait = 0; // Motion Doctor Generate: 0 walk, 1 run
+        int m_gaitFrames = 24;
+        int m_layerClip = -1; // Motion Doctor Layer: the source action
+        float m_layerWeight = 1.f;
+        bool m_layerAdditive = false;
+        int m_layerOffset = 0;
+        int m_markerHover = -1;   // marker under the mouse on the ruler this frame
+        int m_markerContext = -1; // marker the ruler context menu opened on (-1 = empty ruler)
+        float m_markerFrame = 0.f;
+        char m_markerBuf[64] = {};
         std::unique_ptr<AnimationPoseViewport> m_poseViewport;
         std::unique_ptr<RigEditor> m_rigEditor;
         bool m_rigMode = false;
@@ -511,14 +581,19 @@ namespace pe
         void ApplyOrbit(Scene &scene, Camera *camera);
         float m_viewportShare = 0.6f; // share of the window height the viewport takes; 0 hides it
         bool m_viewportDrawn = false;
+        bool m_viewportHovered = false; // Ctrl+C / Ctrl+V over the viewport copy and paste the pose, not keys
         bool m_viewFramePending = false;
         ModelAsset *m_framedModel = nullptr; // the character framed on its own when it became the target
         int m_orbitDrag = 0;                 // 1 = right-drag orbit, 2 = middle-drag pan
         bool m_cameraOwned = false;          // the orbit was initialised from the camera
         vec3 m_orbitTarget = vec3(0.f);
         float m_orbitDistance = 2.f, m_orbitYaw = 0.f, m_orbitPitch = 0.f;
-        std::optional<vec3> m_viewSnap;     // look along this on the next draw
-        std::optional<bool> m_orthoPending; // projection switch on the next draw
+        std::optional<vec3> m_viewSnap;         // look along this on the next draw
+        std::optional<bool> m_orthoPending;     // projection switch on the next draw
+        std::optional<OrbitView> m_viewPending; // a remembered or bookmarked view, applied on the next draw
+        float m_shareBeforeMax = 0.6f;
+        bool m_turntable = false;
+        bool m_boneNames = false;
         static inline float s_regionAspect = 0.f;
         AnimatorApp *m_app = nullptr;
 

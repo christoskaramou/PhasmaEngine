@@ -816,6 +816,69 @@ namespace pe::AnimationClipTools
         return flips;
     }
 
+    size_t ExtractRootMotion(AnimationClip &clip, int boneIndex, bool includeVertical)
+    {
+        if (!clip.rootMotion.Empty())
+            return 0;
+        auto channel = std::find_if(clip.channels.begin(), clip.channels.end(), [&](const AnimationChannel &candidate)
+                                    { return candidate.boneIndex == boneIndex; });
+        if (channel == clip.channels.end() || channel->positionKeys.size() < 2 || !FiniteKeys(channel->positionKeys))
+            return 0;
+
+        const vec3 origin = AnimationEvaluator::InterpolatePosition(channel->positionKeys, 0.f);
+        std::vector<PositionKey> motion;
+        motion.reserve(channel->positionKeys.size());
+        float maxTravel = 0.f;
+        for (const PositionKey &key : channel->positionKeys)
+        {
+            vec3 travel = key.value - origin;
+            if (!includeVertical)
+                travel.y = 0.f;
+            maxTravel = std::max(maxTravel, glm::length(travel));
+            motion.push_back({key.time, travel, key.interpolation});
+        }
+        if (maxTravel <= kEpsilon)
+            return 0;
+
+        for (size_t i = 0; i < channel->positionKeys.size(); ++i)
+            channel->positionKeys[i].value -= motion[i].value;
+        clip.rootMotion.boneIndex = boneIndex;
+        clip.rootMotion.positionKeys = std::move(motion);
+        return channel->positionKeys.size();
+    }
+
+    size_t BakeRootMotion(AnimationClip &clip)
+    {
+        if (clip.rootMotion.Empty() || !FiniteKeys(clip.rootMotion.positionKeys))
+            return 0;
+        auto channel = std::find_if(clip.channels.begin(), clip.channels.end(), [&](const AnimationChannel &candidate)
+                                    { return candidate.boneIndex == clip.rootMotion.boneIndex; });
+        if (channel == clip.channels.end() || channel->positionKeys.empty() || !FiniteKeys(channel->positionKeys))
+            return 0;
+
+        const std::vector<PositionKey> pose = channel->positionKeys;
+        std::vector<float> times;
+        times.reserve(pose.size() + clip.rootMotion.positionKeys.size());
+        for (const PositionKey &key : pose)
+            times.push_back(key.time);
+        for (const PositionKey &key : clip.rootMotion.positionKeys)
+            times.push_back(key.time);
+        std::sort(times.begin(), times.end());
+        times.erase(std::unique(times.begin(), times.end(), [](float a, float b)
+                                { return std::abs(a - b) <= kEpsilon; }),
+                    times.end());
+
+        channel->positionKeys.clear();
+        channel->positionKeys.reserve(times.size());
+        for (float time : times)
+            channel->positionKeys.push_back({time,
+                                             AnimationEvaluator::InterpolatePosition(pose, time) +
+                                                 AnimationEvaluator::InterpolatePosition(clip.rootMotion.positionKeys, time),
+                                             InterpolationAt(pose, time)});
+        clip.rootMotion = {};
+        return channel->positionKeys.size();
+    }
+
     size_t MakeCyclic(AnimationClip &clip, ChannelMask channels)
     {
         if (!std::isfinite(clip.duration) || clip.duration <= kEpsilon)
@@ -1036,7 +1099,20 @@ namespace pe::AnimationClipTools
             quat rootGlobal = quat(1.f, 0.f, 0.f, 0.f), keyRotation = quat(1.f, 0.f, 0.f, 0.f);
             mat3 keyToRig = mat3(1.f);
             std::vector<vec3> centres; // per bone, thrown bones only meaningful
+            std::vector<vec3> axes;    // per bone, the rod's direction in rig space (its rest head -> mass centre)
         };
+        // Each bone is a thin rod from its rest head through its mass centre: length and rest direction once
+        std::vector<float> rodLength(boneCount, 0.f);
+        std::vector<vec3> rodRest(boneCount, vec3(0.f, 1.f, 0.f));
+        for (int i = 0; i < boneCount; ++i)
+        {
+            const vec3 restHead = vec3((invRoot * glm::inverse(skeleton.bones[i].offsetMatrix))[3]);
+            const vec3 half = restCentres[i] - restHead;
+            const float length = glm::length(half);
+            rodLength[i] = 2.f * length;
+            if (length > kEpsilon)
+                rodRest[i] = half / length;
+        }
         std::vector<mat4> globals;
         auto sample = [&](float time, Frame &frame)
         {
@@ -1045,6 +1121,7 @@ namespace pe::AnimationClipTools
                 return false;
             frame.time = time;
             frame.centres.assign(boneCount, vec3(0.f));
+            frame.axes.assign(boneCount, vec3(0.f, 1.f, 0.f));
             vec3 sum(0.f);
             for (int i = 0; i < boneCount; ++i)
             {
@@ -1052,6 +1129,9 @@ namespace pe::AnimationClipTools
                     continue;
                 const mat4 restToPosed = invRoot * globals[i] * skeleton.bones[i].offsetMatrix * skeleton.rootTransform;
                 frame.centres[i] = vec3(restToPosed * vec4(restCentres[i], 1.f));
+                const vec3 axis = mat3(restToPosed) * rodRest[i];
+                if (const float length = glm::length(axis); length > kEpsilon)
+                    frame.axes[i] = axis / length;
                 sum += boneMasses[i] * frame.centres[i];
             }
             frame.centre = sum / totalMass;
@@ -1091,11 +1171,13 @@ namespace pe::AnimationClipTools
 
         // Angular momentum: in the air nothing can turn the body but its own limbs, so the angular momentum of
         // the thrown masses about their centre stays what it was. Each interior frame measures the momentum the
-        // source poses carry (point masses, central differences on the grid) and the root turns against it at
-        // -L / I, I being the body's inertia about that axis; the net turn over the flight is then removed as a
-        // linear ramp so both ends keep their authored rotation - only a swing that is not uniform in time shows,
-        // and it shows where the swing happens. ponytail: point masses and a scalar inertia; rod inertias and the
-        // full tensor are the upgrade.
+        // source poses carry - the mass centres orbiting the body centre (central differences on the grid) plus
+        // every rod spinning about its own centre (m l^2 / 12 for a thin rod, its direction change per frame) - and
+        // the root turns against it at -J^-1 L, J being the body's inertia tensor about its centre (point masses
+        // plus the rods' own tensors); the net turn over the flight is then removed as a linear ramp so both ends
+        // keep their authored rotation - only a swing that is not uniform in time shows, and it shows where the
+        // swing happens. ponytail: rods, not capsules; the spin of a rod about its own axis is invisible to the
+        // direction and weighs nothing here.
         std::vector<vec3> turn(n, vec3(0.f));
         vec3 previousOmega(0.f);
         for (int k = 1; k < n; ++k)
@@ -1104,28 +1186,27 @@ namespace pe::AnimationClipTools
             const Frame &a = frames[mid - 1], &b = frames[mid], &c = frames[mid + 1];
             const float span = (c.time - a.time) / clip.ticksPerSecond;
             vec3 momentum(0.f);
+            mat3 tensor(0.f);
             if (span > kEpsilon)
             {
                 const vec3 centreVelocity = (c.centre - a.centre) / span;
                 for (int i = 0; i < boneCount; ++i)
                     if (thrown[i] && boneMasses[i] > 0.f)
-                        momentum += boneMasses[i] * glm::cross(b.centres[i] - b.centre,
-                                                               (c.centres[i] - a.centres[i]) / span - centreVelocity);
-            }
-            vec3 omega(0.f);
-            if (const float magnitude = glm::length(momentum); magnitude > kEpsilon)
-            {
-                const vec3 axis = momentum / magnitude;
-                float inertia = 0.f;
-                for (int i = 0; i < boneCount; ++i)
-                    if (thrown[i] && boneMasses[i] > 0.f)
                     {
                         const vec3 r = b.centres[i] - b.centre;
-                        const vec3 perpendicular = r - axis * glm::dot(r, axis);
-                        inertia += boneMasses[i] * glm::dot(perpendicular, perpendicular);
+                        const float rod = boneMasses[i] * rodLength[i] * rodLength[i] / 12.f;
+                        momentum += boneMasses[i] * glm::cross(r, (c.centres[i] - a.centres[i]) / span - centreVelocity);
+                        momentum += rod * glm::cross(a.axes[i], c.axes[i]) / span; // the rod's own turn rate
+                        tensor += boneMasses[i] * (glm::dot(r, r) * mat3(1.f) - glm::outerProduct(r, r));
+                        tensor += rod * (mat3(1.f) - glm::outerProduct(b.axes[i], b.axes[i]));
                     }
-                if (inertia > kEpsilon)
-                    omega = -momentum / inertia;
+            }
+            vec3 omega(0.f);
+            if (const float det = glm::determinant(tensor); std::isfinite(det) && std::abs(det) > kEpsilon * kEpsilon * kEpsilon)
+            {
+                omega = -(glm::inverse(tensor) * momentum);
+                if (!Finite(omega))
+                    omega = vec3(0.f);
             }
             // trapezoid rule: the momentum was measured at the frames, the turn accrues between them
             turn[k] = turn[k - 1] + (k == 1 ? omega : (previousOmega + omega) * 0.5f) *
@@ -1327,21 +1408,384 @@ namespace pe::AnimationClipTools
             return 0;
         const auto channel = std::find_if(clip.channels.begin(), clip.channels.end(), [boneIndex](const AnimationChannel &candidate)
                                           { return candidate.boneIndex == boneIndex; });
-        if (channel == clip.channels.end())
+        const bool offsetRootMotion = HasChannel(channels, ChannelMask::Position) &&
+                                      clip.rootMotion.boneIndex == boneIndex && !clip.rootMotion.Empty();
+        if (channel == clip.channels.end() && !offsetRootMotion)
             return 0;
-        if ((HasChannel(channels, ChannelMask::Position) && !FiniteKeys(channel->positionKeys)) ||
-            (HasChannel(channels, ChannelMask::Rotation) && !FiniteKeys(channel->rotationKeys)) ||
-            (HasChannel(channels, ChannelMask::Scale) && !FiniteKeys(channel->scaleKeys)))
+        if ((channel != clip.channels.end() && HasChannel(channels, ChannelMask::Position) &&
+             !FiniteKeys(channel->positionKeys)) ||
+            (channel != clip.channels.end() && HasChannel(channels, ChannelMask::Rotation) &&
+             !FiniteKeys(channel->rotationKeys)) ||
+            (channel != clip.channels.end() && HasChannel(channels, ChannelMask::Scale) &&
+             !FiniteKeys(channel->scaleKeys)) ||
+            (offsetRootMotion && !FiniteKeys(clip.rootMotion.positionKeys)))
             return 0;
 
         size_t touched = 0;
-        if (HasChannel(channels, ChannelMask::Position))
+        if (channel != clip.channels.end() && HasChannel(channels, ChannelMask::Position))
             touched += OffsetTimes(channel->positionKeys, deltaTime, clip.duration, wrap);
-        if (HasChannel(channels, ChannelMask::Rotation))
+        if (channel != clip.channels.end() && HasChannel(channels, ChannelMask::Rotation))
             touched += OffsetTimes(channel->rotationKeys, deltaTime, clip.duration, wrap);
-        if (HasChannel(channels, ChannelMask::Scale))
+        if (channel != clip.channels.end() && HasChannel(channels, ChannelMask::Scale))
             touched += OffsetTimes(channel->scaleKeys, deltaTime, clip.duration, wrap);
+        if (offsetRootMotion)
+            touched += OffsetTimes(clip.rootMotion.positionKeys, deltaTime, clip.duration, wrap);
         return touched;
+    }
+
+    namespace
+    {
+        // Bone role lookup by name: strip a side suffix, glob the base against the preset's aliases.
+        bool GaitGlob(std::string_view pattern, std::string_view text)
+        {
+            size_t p = 0, t = 0, star = std::string_view::npos, retry = 0;
+            while (t < text.size())
+            {
+                if (p < pattern.size() && (pattern[p] == '?' || std::tolower(static_cast<unsigned char>(pattern[p])) ==
+                                                                    std::tolower(static_cast<unsigned char>(text[t]))))
+                    ++p, ++t;
+                else if (p < pattern.size() && pattern[p] == '*')
+                    star = p++, retry = t;
+                else if (star != std::string_view::npos)
+                    p = star + 1, t = ++retry;
+                else
+                    return false;
+            }
+            while (p < pattern.size() && pattern[p] == '*')
+                ++p;
+            return p == pattern.size();
+        }
+
+        // "thigh.L" -> {"thigh", 'L'}; a name without a side suffix keeps side 0.
+        std::pair<std::string, char> GaitSide(const std::string &name)
+        {
+            static const char *suffixes[] = {".L", ".R", "_L", "_R", ".l", ".r", "_l", "_r"};
+            for (const char *suffix : suffixes)
+                if (name.size() > 2 && name.compare(name.size() - 2, 2, suffix) == 0)
+                    return {name.substr(0, name.size() - 2), static_cast<char>(std::toupper(static_cast<unsigned char>(suffix[1])))};
+            return {name, 0};
+        }
+
+        int GaitRole(const Skeleton &skeleton, std::span<const char *const> patterns, char side, std::vector<char> &taken)
+        {
+            for (const char *pattern : patterns)
+                for (int i = 0; i < skeleton.GetBoneCount(); i++)
+                {
+                    if (taken[i])
+                        continue;
+                    const auto [base, boneSide] = GaitSide(skeleton.bones[i].name);
+                    if (boneSide == side && GaitGlob(pattern, base))
+                    {
+                        taken[i] = 1;
+                        return i;
+                    }
+                }
+            return -1;
+        }
+    } // namespace
+
+    bool GenerateGait(const Skeleton &skeleton, const GaitSettings &settings, AnimationClip &out, GaitReport &report)
+    {
+        report = {};
+        const int boneCount = skeleton.GetBoneCount();
+        if (boneCount == 0 || settings.frames < 4 || settings.frames > 4096 || settings.ticksPerFrame <= kEpsilon ||
+            !std::isfinite(settings.amplitude) || settings.amplitude <= 0.0f)
+        {
+            report.error = "needs a skeleton, 4..4096 frames and a positive amplitude";
+            return false;
+        }
+        std::vector<char> taken(boneCount, 0);
+        static constexpr const char *kHips[] = {"hips", "pelvis", "*hip*", "*pelvis*"};
+        static constexpr const char *kSpine[] = {"spine", "body", "*spine*", "*torso*", "*body*"};
+        static constexpr const char *kChest[] = {"chest", "*chest*", "*ribcage*"};
+        static constexpr const char *kNeck[] = {"neck", "*neck*"};
+        static constexpr const char *kHead[] = {"head", "*head*"};
+        static constexpr const char *kShoulder[] = {"shoulder", "*shoulder*", "*clavicle*"};
+        static constexpr const char *kUpperArm[] = {"upper_arm", "*upper*arm*", "*upperarm*", "*arm*"};
+        static constexpr const char *kForearm[] = {"forearm", "*forearm*", "*lower*arm*", "*lowerarm*"};
+        static constexpr const char *kHand[] = {"hand", "*hand*"};
+        static constexpr const char *kThigh[] = {"thigh", "*thigh*", "*upper*leg*", "*upperleg*", "*leg*"};
+        static constexpr const char *kShin[] = {"shin", "*shin*", "*calf*", "*lower*leg*", "*lowerleg*"};
+        static constexpr const char *kFoot[] = {"foot", "*foot*", "*boot*"};
+        static constexpr const char *kToe[] = {"toe", "*toe*"};
+        auto role = [&](const char *label, std::span<const char *const> patterns, char side)
+        {
+            const int bone = GaitRole(skeleton, patterns, side, taken);
+            if (bone >= 0)
+                report.roles.push_back({side ? std::string(label) + "." + side : std::string(label), skeleton.bones[bone].name});
+            return bone;
+        };
+        // limbs first so "*body*" cannot swallow "upper_body_armor.L"-style parts before the arms are found
+        struct Side
+        {
+            int shoulder, upperArm, forearm, hand, thigh, shin, foot, toe;
+        } sides[2];
+        for (int s = 0; s < 2; s++)
+        {
+            const char side = s == 0 ? 'L' : 'R';
+            sides[s].thigh = role("thigh", kThigh, side);
+            sides[s].shin = role("shin", kShin, side);
+            sides[s].foot = role("foot", kFoot, side);
+            sides[s].toe = role("toe", kToe, side);
+            sides[s].shoulder = role("shoulder", kShoulder, side);
+            sides[s].upperArm = role("upper_arm", kUpperArm, side);
+            sides[s].forearm = role("forearm", kForearm, side);
+            sides[s].hand = role("hand", kHand, side);
+        }
+        const int hips = role("hips", kHips, 0);
+        const int spine = role("spine", kSpine, 0);
+        const int chest = role("chest", kChest, 0);
+        const int neck = role("neck", kNeck, 0);
+        const int head = role("head", kHead, 0);
+        // the hips carry the body when the rig names them (mocap: hips under a keyless control root), else the root
+        int carrier = hips;
+        for (int i = 0; i < boneCount && carrier < 0; i++)
+            if (skeleton.bones[i].parentIndex < 0)
+                carrier = i;
+        const int pelvis = carrier; // the bone that sways and twists
+        if (sides[0].thigh < 0 && sides[1].thigh < 0 && sides[0].upperArm < 0 && sides[1].upperArm < 0)
+        {
+            report.error = "no leg or arm bones found by name (thigh / leg / upper_arm with a .L / .R side)";
+            return false;
+        }
+
+        // rig-space bind globals: a swing about a rig axis becomes a local delta in the bone's own bind frame
+        AnimationClip bind;
+        std::vector<mat4> bindGlobals;
+        SampleGlobalTransforms(bind, skeleton, 0.0f, bindGlobals);
+        const mat4 inverseRoot = glm::inverse(skeleton.rootTransform);
+        std::vector<quat> rigRotation(boneCount);
+        std::vector<vec3> rigPosition(boneCount);
+        float top = -std::numeric_limits<float>::max(), bottom = std::numeric_limits<float>::max();
+        for (int i = 0; i < boneCount; i++)
+        {
+            const mat4 rig = inverseRoot * bindGlobals[i];
+            rigRotation[i] = MatrixRotation(rig);
+            rigPosition[i] = vec3(rig[3]);
+            top = std::max(top, rigPosition[i].y);
+            bottom = std::min(bottom, rigPosition[i].y);
+        }
+        const float height = std::max(top - bottom, kEpsilon);
+        float legLength = 0.0f;
+        for (const Side &side : sides)
+            if (side.thigh >= 0)
+            {
+                const int low = side.toe >= 0 ? side.toe : side.foot >= 0 ? side.foot
+                                                       : side.shin >= 0   ? side.shin
+                                                                          : -1;
+                legLength = std::max(legLength, low >= 0 ? glm::distance(rigPosition[side.thigh], rigPosition[low])
+                                                         : height * 0.45f);
+            }
+        if (legLength <= kEpsilon)
+            legLength = height * 0.45f;
+
+        const bool run = settings.gait == Gait::Run;
+        const float a = settings.amplitude;
+        // degrees; the run leans in, lifts the knees and pumps the arms harder
+        const float thighSwing = (run ? 42.0f : 27.0f) * a, kneeBend = (run ? 85.0f : 45.0f) * a;
+        const float footPitch = (run ? 30.0f : 18.0f) * a, armSwing = (run ? 38.0f : 22.0f) * a;
+        const float elbowRest = run ? 70.0f : 15.0f, elbowSwing = (run ? 20.0f : 18.0f) * a;
+        const float hipSway = 3.0f * a, hipTwist = (run ? 7.0f : 5.0f) * a, spineLean = run ? 12.0f : 2.0f;
+        const float bob = height * (run ? 0.035f : 0.018f) * a;
+        const float stride = settings.stride >= 0.0f ? settings.stride
+                                                     : 4.0f * legLength * std::sin(glm::radians(thighSwing)) * (run ? 1.25f : 0.9f);
+        report.stride = stride;
+
+        out.channels.clear();
+        out.rootMotion = {};
+        out.markers.clear();
+        out.duration = settings.ticksPerFrame * static_cast<float>(settings.frames);
+        if (out.ticksPerSecond <= 0.0f)
+            out.ticksPerSecond = 24.0f * settings.ticksPerFrame;
+        size_t &writes = report.keysWritten;
+        // a rig-space swing about `axis` (degrees) keyed as the bone's local rotation at `time`
+        auto keyRigSwing = [&](int bone, float time, const vec3 &axisDegrees)
+        {
+            if (bone < 0)
+                return;
+            const BoneInfo &info = skeleton.bones[bone];
+            vec3 bindPosition, bindScale;
+            quat bindRotation;
+            AnimationEvaluator::BindPose(info, bindPosition, bindRotation, bindScale);
+            const quat swing = quat(glm::radians(axisDegrees)); // XYZ Euler in rig space
+            const quat delta = glm::conjugate(rigRotation[bone]) * swing * rigRotation[bone];
+            AnimationChannel &channel = FindOrAddChannel(out, bone);
+            quat value = SafeNormalized(bindRotation * delta);
+            if (!channel.rotationKeys.empty())
+                value = SameHemisphere(channel.rotationKeys.back().value, value);
+            writes += UpsertKey(channel.rotationKeys, time, value, AnimationInterpolation::Linear);
+        };
+        auto keyRigOffset = [&](int bone, float time, const vec3 &rigOffset)
+        {
+            if (bone < 0)
+                return;
+            const BoneInfo &info = skeleton.bones[bone];
+            vec3 bindPosition, bindScale;
+            quat bindRotation;
+            AnimationEvaluator::BindPose(info, bindPosition, bindRotation, bindScale);
+            const int parent = info.parentIndex;
+            const vec3 local = parent >= 0 ? glm::conjugate(rigRotation[parent]) * rigOffset : rigOffset;
+            writes += UpsertKey(FindOrAddChannel(out, bone).positionKeys, time, bindPosition + local,
+                                AnimationInterpolation::Linear);
+        };
+        for (int frame = 0; frame <= settings.frames; frame++)
+        {
+            const float time = settings.ticksPerFrame * static_cast<float>(frame);
+            const float phase = glm::two_pi<float>() * static_cast<float>(frame % settings.frames) / static_cast<float>(settings.frames);
+            for (int s = 0; s < 2; s++)
+            {
+                const float p = phase + (s == 0 ? 0.0f : glm::pi<float>()); // left leads
+                const float sinP = std::sin(p), cosP = std::cos(p);
+                // legs: forward at p = 0 (heel strike), knee folds through the swing (p in pi..2pi)
+                const float swingLift = std::max(0.0f, -sinP);
+                keyRigSwing(sides[s].thigh, time, {-thighSwing * cosP, 0.0f, 0.0f});
+                keyRigSwing(sides[s].shin, time, {kneeBend * swingLift * swingLift + (run ? 15.0f : 6.0f) * std::max(0.0f, sinP), 0.0f, 0.0f});
+                // foot: toe down through push-off (p near pi), toe up at heel strike
+                keyRigSwing(sides[s].foot, time, {footPitch * std::max(0.0f, std::sin(p - glm::half_pi<float>())) - footPitch * 0.4f * std::max(0.0f, cosP), 0.0f, 0.0f});
+                keyRigSwing(sides[s].toe, time, {footPitch * 0.5f * std::max(0.0f, std::sin(p - glm::half_pi<float>())), 0.0f, 0.0f});
+                // arms: opposite to the same-side leg; the elbow folds a little more as the arm comes forward
+                keyRigSwing(sides[s].upperArm, time, {armSwing * cosP, 0.0f, 0.0f});
+                keyRigSwing(sides[s].forearm, time, {-(elbowRest + elbowSwing * (0.5f - 0.5f * cosP)), 0.0f, 0.0f});
+                keyRigSwing(sides[s].hand, time, {-5.0f * a * cosP, 0.0f, 0.0f});
+                keyRigSwing(sides[s].shoulder, time, {0.0f, 0.0f, (s == 0 ? -1.0f : 1.0f) * 2.0f * a * cosP});
+            }
+            // pelvis: sway over the stance foot, twist the leading hip forward; the spine, chest and head counter it
+            const float twist = -hipTwist * std::cos(phase), sway = hipSway * std::sin(phase);
+            keyRigSwing(pelvis, time, {0.0f, twist, sway});
+            keyRigSwing(spine, time, {-spineLean, -twist * 0.6f, -sway * 0.5f});
+            keyRigSwing(chest, time, {0.0f, -twist * 0.4f, -sway * 0.5f});
+            keyRigSwing(neck, time, {spineLean * 0.5f, 0.0f, 0.0f});
+            keyRigSwing(head, time, {spineLean * 0.5f, 0.0f, 0.0f});
+            // the body is lowest at each heel strike and highest over the stance leg: two bobs per cycle
+            const float lift = -bob * std::cos(2.0f * phase);
+            const float travel = stride * static_cast<float>(frame) / static_cast<float>(settings.frames);
+            keyRigOffset(carrier, time, settings.rootMotion ? vec3(0.0f, lift, 0.0f) : vec3(0.0f, lift, travel));
+            if (settings.rootMotion && carrier >= 0)
+            {
+                const int parent = skeleton.bones[carrier].parentIndex;
+                const vec3 local = parent >= 0 ? glm::conjugate(rigRotation[parent]) * vec3(0.0f, 0.0f, travel)
+                                               : vec3(0.0f, 0.0f, travel);
+                writes += UpsertKey(out.rootMotion.positionKeys, time, local, AnimationInterpolation::Linear);
+            }
+        }
+        if (settings.rootMotion && carrier >= 0)
+            out.rootMotion.boneIndex = std::abs(stride) > kEpsilon ? carrier : -1;
+        if (out.rootMotion.boneIndex < 0)
+            out.rootMotion.positionKeys.clear();
+        return writes > 0;
+    }
+
+    size_t LayerClip(AnimationClip &target, const AnimationClip &source, const Skeleton &skeleton,
+                     const LayerSettings &settings)
+    {
+        if (&target == &source || !std::isfinite(settings.stepTicks) || settings.stepTicks <= kEpsilon ||
+            !std::isfinite(settings.weight) || settings.weight <= 0.0f || !std::isfinite(target.duration))
+            return 0;
+        const float start = std::max(settings.startTime, 0.0f);
+        const float end = settings.endTime < 0.0f ? target.duration : std::min(settings.endTime, target.duration);
+        if (!std::isfinite(start) || !std::isfinite(end) || end < start - kEpsilon)
+            return 0;
+        const float weight = std::min(settings.weight, 1.0f);
+        const float tolerance = std::max(kEpsilon, settings.stepTicks * 0.001f);
+        auto sourceTime = [&](float time)
+        {
+            float mapped = settings.sourceOffset + (time - start);
+            if (source.duration > kEpsilon)
+            {
+                mapped = std::fmod(mapped, source.duration);
+                if (mapped < 0.0f)
+                    mapped += source.duration;
+            }
+            return std::max(mapped, 0.0f);
+        };
+
+        struct Bake
+        {
+            int bone = -1;
+            bool position = false, rotation = false, scale = false;
+            std::vector<float> times;
+            std::vector<vec3> positions, scales;
+            std::vector<quat> rotations;
+        };
+        std::vector<Bake> bakes;
+        for (const AnimationChannel &sourceChannel : source.channels)
+        {
+            if (sourceChannel.boneIndex < 0 || sourceChannel.boneIndex >= skeleton.GetBoneCount() ||
+                !BoneSelected(settings.boneIndices, sourceChannel.boneIndex))
+                continue;
+            Bake bake;
+            bake.bone = sourceChannel.boneIndex;
+            bake.position = HasChannel(settings.channels, ChannelMask::Position) && !sourceChannel.positionKeys.empty();
+            bake.rotation = HasChannel(settings.channels, ChannelMask::Rotation) && !sourceChannel.rotationKeys.empty();
+            bake.scale = HasChannel(settings.channels, ChannelMask::Scale) && !sourceChannel.scaleKeys.empty();
+            if (!bake.position && !bake.rotation && !bake.scale)
+                continue;
+            const BoneInfo &bone = skeleton.bones[bake.bone];
+            vec3 bindPosition, bindScale;
+            quat bindRotation;
+            AnimationEvaluator::BindPose(bone, bindPosition, bindRotation, bindScale);
+            const AnimationChannel *targetChannel = FindChannel(target, bake.bone);
+            for (size_t step = 0; step < kMaxTweenSamples; ++step)
+            {
+                const float time = start + settings.stepTicks * static_cast<float>(step);
+                if (time > end + tolerance)
+                    break;
+                vec3 position = bindPosition, scale = bindScale;
+                quat rotation = bindRotation;
+                if (targetChannel)
+                    AnimationEvaluator::SampleChannel(*targetChannel, bone, time, position, rotation, scale);
+                vec3 sourcePosition, sourceScale;
+                quat sourceRotation;
+                AnimationEvaluator::SampleChannel(sourceChannel, bone, sourceTime(time), sourcePosition, sourceRotation,
+                                                  sourceScale);
+                if (settings.additive)
+                {
+                    position += weight * (sourcePosition - bindPosition);
+                    // the source's offset from its bind, in the bone's own frame, applied after the target's pose
+                    const quat delta = SafeNormalized(glm::conjugate(SafeNormalized(bindRotation)) * sourceRotation);
+                    rotation = SafeNormalized(rotation * ShortestSlerp(quat(1.0f, 0.0f, 0.0f, 0.0f), delta, weight));
+                    for (int axis = 0; axis < 3; ++axis)
+                        if (std::abs(bindScale[axis]) > kEpsilon)
+                            scale[axis] *= 1.0f + weight * (sourceScale[axis] / bindScale[axis] - 1.0f);
+                }
+                else
+                {
+                    position = glm::mix(position, sourcePosition, weight);
+                    rotation = ShortestSlerp(rotation, sourceRotation, weight);
+                    scale = glm::mix(scale, sourceScale, weight);
+                }
+                if (!Finite(position) || !Finite(rotation) || !Finite(scale))
+                    return 0;
+                bake.times.push_back(time);
+                bake.positions.push_back(position);
+                bake.rotations.push_back(rotation);
+                bake.scales.push_back(scale);
+            }
+            if (!bake.times.empty())
+                bakes.push_back(std::move(bake));
+        }
+
+        size_t writes = 0;
+        for (const Bake &bake : bakes)
+        {
+            AnimationChannel &channel = FindOrAddChannel(target, bake.bone);
+            auto replace = [&](auto &keys, const auto &values, bool enabled)
+            {
+                if (!enabled)
+                    return;
+                std::erase_if(keys, [&](const auto &key)
+                              { return key.time > start - tolerance && key.time < end + tolerance; });
+                for (size_t i = 0; i < bake.times.size(); ++i)
+                    writes += UpsertKey(keys, bake.times[i], values[i], AnimationInterpolation::Linear);
+            };
+            replace(channel.positionKeys, bake.positions, bake.position);
+            replace(channel.rotationKeys, bake.rotations, bake.rotation);
+            replace(channel.scaleKeys, bake.scales, bake.scale);
+            for (size_t key = 1; bake.rotation && key < channel.rotationKeys.size(); ++key)
+                channel.rotationKeys[key].value =
+                    SameHemisphere(channel.rotationKeys[key - 1].value, channel.rotationKeys[key].value);
+        }
+        return writes;
     }
 
     size_t PasteMirroredPose(AnimationClip &clip,
@@ -1536,6 +1980,8 @@ namespace pe::AnimationClipTools
         for (const AnimationChannel &channel : clip.channels)
             if (!FiniteKeys(channel.positionKeys) || !FiniteKeys(channel.rotationKeys) || !FiniteKeys(channel.scaleKeys))
                 return 0;
+        if (!clip.rootMotion.Empty() && !FiniteKeys(clip.rootMotion.positionKeys))
+            return 0;
         const float tolerance = std::max(kEpsilon, stepTicks * 0.001f);
         const float span = endTime - startTime;
         const float newEnd = endTime + span;
@@ -1612,6 +2058,20 @@ namespace pe::AnimationClipTools
                     for (PositionKey &key : channel.positionKeys)
                         if (key.time > endTime + tolerance && key.time <= newEnd + tolerance)
                             key.value += offset;
+        }
+        if (!source.rootMotion.Empty())
+        {
+            const vec3 rootStart = AnimationEvaluator::InterpolatePosition(source.rootMotion.positionKeys, startTime);
+            const vec3 rootSeam = AnimationEvaluator::InterpolatePosition(source.rootMotion.positionKeys, endTime);
+            for (float offset : offsets)
+            {
+                const float sourceTime = startTime + offset;
+                writes += UpsertKey(clip.rootMotion.positionKeys,
+                                    endTime + offset,
+                                    rootSeam + AnimationEvaluator::InterpolatePosition(source.rootMotion.positionKeys, sourceTime) -
+                                        rootStart,
+                                    InterpolationAt(source.rootMotion.positionKeys, sourceTime));
+            }
         }
         return writes;
     }

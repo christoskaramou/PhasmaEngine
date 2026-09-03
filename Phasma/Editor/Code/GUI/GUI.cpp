@@ -20,6 +20,7 @@
 #include "IconsFontAwesome.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/ModelAssetCooked.h"
+#include "Scene/SceneAccess.h"
 #include "Scene/Scene.h"
 #include "Systems/RendererSystem.h"
 #include "Widgets/CameraWidget.h"
@@ -108,6 +109,57 @@ namespace pe
             char buf[32];
             std::strftime(buf, sizeof(buf), "%H:%M:%S", &tm);
             return buf;
+        }
+
+        // Clip hot reload: a .pemesh the Animator re-saved swaps its clips into the live model when the skeleton on
+        // disk still matches (bone names and parents), so new actions play without a scene reload. Geometry,
+        // materials and a changed skeleton still need the scene reloaded.
+        std::unordered_map<ModelAsset *, std::filesystem::file_time_type> s_modelStamps;
+        double s_modelStampsNext = 0.0;
+
+        void RefreshModelClips(double now)
+        {
+            if (now < s_modelStampsNext)
+                return;
+            s_modelStampsNext = now + 2.0;
+            Scene *scene = GetActiveScene();
+            if (!scene)
+                return;
+            std::unordered_map<ModelAsset *, std::filesystem::file_time_type> alive;
+            for (ModelAsset *model : scene->GetModels())
+            {
+                if (!model || !ModelAssetCooked::IsCookedPath(model->GetFilePath()))
+                    continue;
+                std::error_code ec;
+                const auto stamp = std::filesystem::last_write_time(model->GetFilePath(), ec);
+                if (ec)
+                    continue;
+                const auto seen = s_modelStamps.find(model);
+                alive[model] = stamp;
+                if (seen == s_modelStamps.end() || seen->second == stamp)
+                    continue;
+                const std::string path = model->GetFilePath().generic_string();
+                Skeleton skeleton;
+                std::vector<AnimationClip> clips;
+                if (!ModelAssetCooked::ReadAnimations(model->GetFilePath(), skeleton, clips))
+                {
+                    PE_WARN("[Editor] %s changed on disk but could not be read; clips kept", path.c_str());
+                    continue;
+                }
+                const Skeleton &live = model->GetSkeleton();
+                bool same = skeleton.GetBoneCount() == live.GetBoneCount();
+                for (int i = 0; same && i < live.GetBoneCount(); i++)
+                    same = skeleton.bones[i].name == live.bones[i].name &&
+                           skeleton.bones[i].parentIndex == live.bones[i].parentIndex;
+                if (!same)
+                {
+                    PE_WARN("[Editor] %s changed its skeleton on disk; reload the scene to pick it up", path.c_str());
+                    continue;
+                }
+                model->GetMutableAnimations() = std::move(clips);
+                PE_INFO("[Editor] Reloaded %zu clip(s) from %s", model->GetAnimations().size(), path.c_str());
+            }
+            s_modelStamps.swap(alive);
         }
 
         void RefreshModuleBuild(double now)
@@ -2785,6 +2837,7 @@ namespace pe
 
         // Module build stamp — right-aligned, left of MCP; orange when a newer DLL is on disk
         RefreshModuleBuild(ImGui::GetTime());
+        RefreshModelClips(ImGui::GetTime());
         if (s_moduleBuild.valid)
         {
             const std::string text = s_moduleBuild.stale

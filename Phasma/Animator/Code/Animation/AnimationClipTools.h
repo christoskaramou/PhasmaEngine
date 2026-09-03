@@ -164,6 +164,12 @@ namespace pe::AnimationClipTools
     // Returns the number of quaternion keys negated into the preceding key's hemisphere.
     size_t FixQuaternionHemisphereFlips(AnimationClip &clip);
 
+    // Moves the selected bone's Location travel into clip.rootMotion, leaving the pose in place. Horizontal-only
+    // extraction preserves the vertical bounce of a walk/run. BakeRootMotion reverses it, including after either
+    // curve was edited independently. Both return the number of Location keys written, or zero when unavailable.
+    size_t ExtractRootMotion(AnimationClip &clip, int boneIndex, bool includeVertical = false);
+    size_t BakeRootMotion(AnimationClip &clip);
+
     // Writes the pose at time zero to clip.duration. Existing end keys are replaced; missing end keys are inserted.
     size_t MakeCyclic(AnimationClip &clip, ChannelMask channels = ChannelMask::All);
 
@@ -256,6 +262,56 @@ namespace pe::AnimationClipTools
                          float startTime,
                          float endTime,
                          float stepTicks);
+
+    enum class Gait : uint8_t
+    {
+        Walk,
+        Run
+    };
+
+    struct GaitSettings
+    {
+        Gait gait = Gait::Walk;
+        int frames = 24; // one full cycle (two steps); the last frame repeats the first
+        float ticksPerFrame = 1.0f;
+        float amplitude = 1.0f; // scales every swing angle and the bob
+        float stride = -1.0f;   // rig units travelled per cycle along +Z; < 0 = from the leg length and swing
+        bool rootMotion = true; // travel goes to clip.rootMotion (in place); false = the carrier's Location curve
+    };
+
+    struct GaitReport
+    {
+        std::vector<std::pair<std::string, std::string>> roles; // role -> bone name
+        size_t keysWritten = 0;
+        float stride = 0.0f;
+        std::string error;
+    };
+
+    // Writes a looping walk / run cycle into `out` from the rig's bone names: hips / spine / chest / neck / head and
+    // per-side shoulder, upper arm, forearm, hand, thigh, shin, foot, toe found by the preset naming (thigh.L, *leg*.r,
+    // upper_arm_R ...). Legs and arms swing about the rig X axis, the pelvis sways and twists, the spine and head
+    // counter it, the carrier bobs; missing roles are skipped. Assumes the presets' frame: +Y up, +Z forward, .L at +X.
+    // ponytail: feet slide (no planting) - run the contact tools or Balance after; a rig facing +X gets a sideways gait.
+    bool GenerateGait(const Skeleton &skeleton, const GaitSettings &settings, AnimationClip &out, GaitReport &report);
+
+    struct LayerSettings
+    {
+        // Target clip ticks: the span rewritten (endTime < 0 = clip end), sampled every stepTicks from startTime.
+        float startTime = 0.0f;
+        float endTime = -1.0f;
+        float stepTicks = 1.0f;
+        float sourceOffset = 0.0f;             // source ticks playing at startTime; a shorter source wraps over the span
+        float weight = 1.0f;                   // 0..1
+        bool additive = false;                 // add the source's offset from its bind pose on top of the target, else blend toward it
+        std::span<const int> boneIndices = {}; // empty = every bone the source keys
+        ChannelMask channels = ChannelMask::All;
+    };
+    // Blends or adds `source` onto `target` (both keyed on `skeleton`) frame by frame. Both clips are sampled before
+    // anything is written; the target's keys inside the span are replaced by Linear keys of the mix, and only curves
+    // the source has are touched. Returns keys written, 0 when refused (the same clip, an empty span, weight <= 0).
+    // ponytail: no blend-in / blend-out ramp at the span ends; add one when a partial layer needs to ease.
+    size_t LayerClip(AnimationClip &target, const AnimationClip &source, const Skeleton &skeleton,
+                     const LayerSettings &settings = {});
 
     // Samples sourceTime before writing, reflects global rig-space transforms across X, then solves target local TRS.
     // In-place pastes are safe. Conventional .L/.R channels swap; center channels optionally mirror onto themselves.

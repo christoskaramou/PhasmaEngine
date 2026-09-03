@@ -10,6 +10,7 @@
 #include "Project/ProjectSelection.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/ModelAssetCooked.h"
+#include "Scene/Primitives.h"
 #include "Scene/SceneAccess.h"
 #include "Scene/SceneHost.h"
 #include "Scene/SceneRuntimeHooks.h"
@@ -123,6 +124,34 @@ namespace pe
         void SetFontScale(float scale)
         {
             ImGui::GetIO().FontGlobalScale = std::clamp(scale, 0.5f, 2.5f); // the editor's range
+        }
+
+        nlohmann::json ViewJson(const OrbitView &v)
+        {
+            return {{"target", {v.target.x, v.target.y, v.target.z}}, {"distance", v.distance}, {"yaw", v.yaw}, {"pitch", v.pitch}, {"ortho", v.orthographic}, {"ortho_size", v.orthographicSize}};
+        }
+
+        bool ViewFromJson(const nlohmann::json &j, OrbitView &v)
+        {
+            if (!j.is_object() || !j.contains("target") || !j["target"].is_array() || j["target"].size() != 3)
+                return false;
+            if (!std::all_of(j["target"].begin(), j["target"].end(), [](const nlohmann::json &value)
+                             { return value.is_number(); }) ||
+                (j.contains("distance") && !j["distance"].is_number()) ||
+                (j.contains("yaw") && !j["yaw"].is_number()) ||
+                (j.contains("pitch") && !j["pitch"].is_number()) ||
+                (j.contains("ortho") && !j["ortho"].is_boolean()) ||
+                (j.contains("ortho_size") && !j["ortho_size"].is_number()))
+                return false;
+            v.target = vec3(j["target"][0].get<float>(), j["target"][1].get<float>(), j["target"][2].get<float>());
+            v.distance = j.value("distance", 2.f);
+            v.yaw = j.value("yaw", 0.f);
+            v.pitch = j.value("pitch", 0.f);
+            v.orthographic = j.value("ortho", false);
+            v.orthographicSize = j.value("ortho_size", 1.f);
+            return std::isfinite(v.target.x) && std::isfinite(v.target.y) && std::isfinite(v.target.z) &&
+                   std::isfinite(v.distance) && v.distance > 0.f && std::isfinite(v.yaw) && std::isfinite(v.pitch) &&
+                   std::isfinite(v.orthographicSize) && v.orthographicSize > 0.f;
         }
     } // namespace
 
@@ -262,6 +291,8 @@ namespace pe
     {
         m_renderer.WaitAllFramesCommands();
         SelectionManager::Instance().ClearSelection();
+        if (!m_modelPath.empty())
+            m_grid = Settings::Get<SceneSettings>().draw_grid;
         m_scene.NewScene();
         if (m_scene.GetCameras().empty())
         {
@@ -272,8 +303,9 @@ namespace pe
             camera->Update();
         }
         m_scene.CreateDirectionalLight();
-        Settings::Get<SceneSettings>().draw_grid = true;
+        Settings::Get<SceneSettings>().draw_grid = m_grid;
         Settings::Get<SceneSettings>().render_scale = 1.f;
+        EnsureGround();
         m_scene.MarkDirty();
         m_modelPath.clear();
         m_modelRoots.clear();
@@ -296,6 +328,9 @@ namespace pe
                 *error = "failed to load " + path.generic_string();
             return false;
         }
+        OrbitView previousView;
+        if (!m_modelPath.empty() && m_timeline->GetOrbitView(previousView))
+            m_views[m_modelPath.generic_string()] = previousView;
         m_timeline->DropTarget();
         ResetScene(); // one character at a time: the previous model goes with its scene
         const SceneNodeHandle handle = m_scene.AddModelDeferred(model);
@@ -304,9 +339,21 @@ namespace pe
         m_modelRoots = m_scene.GetModelRootNodes(model);
         if (m_modelRoots.empty() && handle.nodeId)
             m_modelRoots.push_back(handle.nodeId);
+        // Stand it on the floor: the lowest point of the meshes goes to the ground plane, so the feet the contact
+        // tools plant are the feet on the visible floor. Rig space is node-local, so nothing the tools measure moves.
+        float lowest = std::numeric_limits<float>::max();
+        for (int i = 0; i < model->GetNodeCount(); i++)
+            if (model->GetNodeMesh(i) >= 0)
+                lowest = std::min(lowest, model->GetNodeWorldBoundingBox(i).min.y);
+        if (std::isfinite(lowest) && lowest < std::numeric_limits<float>::max() && std::abs(lowest) > 1e-4f)
+            for (NodeId *root : m_modelRoots)
+                m_scene.SetLocalMatrix(root, glm::translate(mat4(1.f), vec3(0.f, -lowest, 0.f)) * m_scene.GetLocalMatrix(root));
         if (!m_modelRoots.empty())
             SelectionManager::Instance().Select(m_modelRoots.front()); // the Timeline follows the selection
         m_modelPath = path;
+        RememberRecent(path);
+        if (auto it = m_views.find(path.generic_string()); it != m_views.end())
+            m_timeline->SetOrbitView(it->second); // where this character was last looked at
         SaveConfig();
         PE_INFO("[Animator] Opened %s", path.generic_string().c_str());
         return true;
@@ -341,6 +388,36 @@ namespace pe
                     ApplyStyle(style);
                 if (j.contains("font_scale") && j["font_scale"].is_number())
                     SetFontScale(j["font_scale"].get<float>());
+                if (j.contains("recent") && j["recent"].is_array())
+                    for (const auto &entry : j["recent"])
+                        if (entry.is_string() && m_recent.size() < 8)
+                            m_recent.emplace_back(entry.get<std::string>());
+                if (j.contains("bookmarks") && j["bookmarks"].is_array())
+                    for (const auto &entry : j["bookmarks"])
+                    {
+                        Bookmark bookmark;
+                        if (entry.is_object() && entry.contains("name") && entry["name"].is_string() &&
+                            ViewFromJson(entry, bookmark.view))
+                        {
+                            bookmark.name = entry["name"].get<std::string>();
+                            m_bookmarks.push_back(bookmark);
+                        }
+                    }
+                if (j.contains("views") && j["views"].is_object())
+                    for (const auto &[key, value] : j["views"].items())
+                    {
+                        OrbitView view;
+                        if (ViewFromJson(value, view))
+                            m_views[key] = view;
+                    }
+                m_grid = j.contains("grid") && j["grid"].is_boolean() ? j["grid"].get<bool>() : true;
+                Settings::Get<SceneSettings>().draw_grid = m_grid;
+                GUIState::s_useOrientationGizmo =
+                    j.contains("gizmo") && j["gizmo"].is_boolean() ? j["gizmo"].get<bool>() : true;
+                SetGroundVisible(j.contains("ground") && j["ground"].is_boolean() ? j["ground"].get<bool>() : true);
+                m_timeline->SetShowBoneNames(j.contains("bone_names") && j["bone_names"].is_boolean()
+                                                 ? j["bone_names"].get<bool>()
+                                                 : false);
             }
         }
         std::string error;
@@ -348,16 +425,139 @@ namespace pe
             PE_WARN("[Animator] %s", error.c_str());
     }
 
-    void AnimatorApp::SaveConfig() const
+    void AnimatorApp::SaveConfig()
     {
+        OrbitView view;
+        if (!m_modelPath.empty() && m_timeline && m_timeline->GetOrbitView(view))
+            m_views[m_modelPath.generic_string()] = view;
         nlohmann::json j;
         j["last_model"] = m_modelPath.generic_string();
         j["viewport_share"] = m_timeline ? m_timeline->ViewportShare() : 0.6f;
         j["style"] = StyleName(GUIState::s_guiStyle);
         j["font_scale"] = ImGui::GetIO().FontGlobalScale;
+        j["recent"] = nlohmann::json::array();
+        for (const std::filesystem::path &path : m_recent)
+            j["recent"].push_back(path.generic_string());
+        j["bookmarks"] = nlohmann::json::array();
+        for (const Bookmark &bookmark : m_bookmarks)
+        {
+            nlohmann::json entry = ViewJson(bookmark.view);
+            entry["name"] = bookmark.name;
+            j["bookmarks"].push_back(entry);
+        }
+        j["views"] = nlohmann::json::object();
+        for (const auto &[key, value] : m_views)
+            if (m_views.size() <= 32 || std::find(m_recent.begin(), m_recent.end(), std::filesystem::path(key)) != m_recent.end())
+                j["views"][key] = ViewJson(value);
+        j["grid"] = Settings::Get<SceneSettings>().draw_grid;
+        j["gizmo"] = GUIState::s_useOrientationGizmo;
+        j["ground"] = m_ground;
+        j["bone_names"] = m_timeline && m_timeline->ShowBoneNames();
         std::ofstream out(ConfigPath());
         if (out)
             out << j.dump(2) << '\n';
+    }
+
+    void AnimatorApp::RememberRecent(const std::filesystem::path &path)
+    {
+        m_recent.erase(std::remove(m_recent.begin(), m_recent.end(), path), m_recent.end());
+        m_recent.insert(m_recent.begin(), path);
+        if (m_recent.size() > 8)
+            m_recent.resize(8);
+    }
+
+    // -------------------------------------------------------------------------
+    // unsaved changes, saving, the title
+    // -------------------------------------------------------------------------
+    void AnimatorApp::RequestOpen(const std::filesystem::path &pemesh)
+    {
+        if (m_timeline && m_timeline->IsDirty())
+        {
+            m_pendingOpen = pemesh;
+            m_pendingQuit = false;
+            m_promptPending = true;
+            return;
+        }
+        std::string error;
+        if (!OpenModel(pemesh, &error))
+            PE_WARN("[Animator] %s", error.c_str());
+    }
+
+    void AnimatorApp::RequestQuit()
+    {
+        if (m_timeline && m_timeline->IsDirty())
+        {
+            m_pendingOpen.clear();
+            m_pendingQuit = true;
+            m_promptPending = true;
+            return;
+        }
+        m_quit = true;
+    }
+
+    bool AnimatorApp::SaveAll(std::string *error)
+    {
+        if (!m_timeline)
+            return false;
+        if (m_timeline->Rig().WeightDirty() && !m_timeline->HasTarget())
+        {
+            if (error)
+                *error = "the edited skin weights no longer have a model target";
+            return false;
+        }
+        if (m_timeline->HasTarget() && !m_timeline->SaveClips())
+        {
+            if (error)
+                *error = "the clips could not be written to " + m_modelPath.generic_string();
+            return false;
+        }
+        if (m_timeline->Rig().DocumentDirty() && !m_timeline->Rig().SaveDocument(error))
+            return false;
+        return true;
+    }
+
+    void AnimatorApp::UpdateTitle()
+    {
+        std::string title = "PhasmaAnimator";
+        if (!m_modelPath.empty())
+            title += " - " + m_modelPath.filename().string();
+        if (m_timeline && m_timeline->IsDirty())
+            title += " *";
+        if (title != m_title)
+        {
+            m_title = title;
+            if (SDL_Window *window = RHII.GetWindow())
+                SDL_SetWindowTitle(window, m_title.c_str());
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // the ground plane: a flat receiver under the origin, so the character throws a shadow and the feet read
+    // -------------------------------------------------------------------------
+    void AnimatorApp::EnsureGround()
+    {
+        m_groundNode = nullptr;
+        ModelAsset *plane = Primitives::CreatePlane(40.f, 40.f);
+        if (!plane)
+            return;
+        const SceneNodeHandle handle = m_scene.AddModelDeferred(plane); // the route the script primitives take
+        m_groundNode = handle.nodeId;
+        if (!m_groundNode)
+            return;
+        // a hair under the grid lines, so the two never fight for the same depth
+        m_scene.SetLocalMatrix(m_groundNode, glm::translate(mat4(1.f), vec3(0.f, -0.005f, 0.f)));
+        m_scene.SetNodeRenderVisible(m_groundNode, m_ground);
+        m_scene.UpdateGeometryBuffers();
+    }
+
+    void AnimatorApp::SetGroundVisible(bool visible)
+    {
+        m_ground = visible;
+        if (m_groundNode && m_scene.IsNodeAlive(m_groundNode))
+        {
+            m_scene.SetNodeRenderVisible(m_groundNode, visible);
+            m_scene.MarkDirty();
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -377,14 +577,12 @@ namespace pe
         {
             ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT)
-                return false;
+                RequestQuit(); // the close button asks about unsaved changes like File > Exit
             if (event.type == SDL_DROPFILE && event.drop.file)
             {
                 const std::string dropped = event.drop.file;
                 SDL_free(event.drop.file);
-                std::string error;
-                if (!OpenModel(dropped, &error))
-                    PE_WARN("[Animator] %s", error.c_str());
+                RequestOpen(dropped);
             }
             if (IsRuntimeWindowEventFor(event, window) &&
                 (IsRuntimeWindowDisplayChangedEvent(event) || IsRuntimeWindowResizeEvent(event)))
@@ -397,7 +595,7 @@ namespace pe
             if (!type)
                 continue;
             if (*type == EventType::Quit)
-                return false;
+                RequestQuit();
             if (*type == EventType::Resize)
                 m_resizePending = true;
             else if (*type == EventType::CompileShaders)
@@ -454,7 +652,7 @@ namespace pe
             const bool keepRunning = ProcessEvents();
             ApplyPendingResize();
             SDL_Delay(1);
-            return keepRunning;
+            return keepRunning && !m_quit;
         }
         if (!ProcessEvents())
             return false;
@@ -462,7 +660,7 @@ namespace pe
         if (!WindowRenderable())
         {
             SDL_Delay(16);
-            return true;
+            return !m_quit;
         }
         PollCommandFile();
         if (m_quit)
@@ -474,6 +672,7 @@ namespace pe
         ImGuizmo::BeginFrame();
         UpdateGlobalSystems();
         DrawShell();
+        UpdateTitle();
         ImGui::Render();
 
         m_renderer.Update();
@@ -490,13 +689,56 @@ namespace pe
         std::string picked;
         if (PickFile("Open .pemesh", "Cooked model (*.pemesh)\0*.pemesh\0All files\0*.*\0", picked))
         {
-            std::string error;
-            if (!OpenModel(picked, &error))
-                PE_WARN("[Animator] %s", error.c_str());
+            RequestOpen(picked);
             return;
         }
 #if !defined(PE_WIN32)
         m_openPopupPending = true; // no native dialog: a path field
+#endif
+    }
+
+    void AnimatorApp::RunClipAction(const char *action, const std::filesystem::path &path)
+    {
+        const nlohmann::json response =
+            nlohmann::json::parse(HandleAction(action, nlohmann::json({{"path", path.generic_string()}}).dump()),
+                                  nullptr,
+                                  false);
+        if (!response.is_object())
+            m_notice = "Clip exchange returned an invalid response.";
+        else if (response.value("ok", false))
+            m_notice = response.value("summary", std::string("Done."));
+        else
+            m_notice = response.value("error", std::string("Clip exchange failed."));
+        m_showNotice = true;
+    }
+
+    void AnimatorApp::ImportClipDialog()
+    {
+        std::string picked;
+        if (PickFile("Import clip",
+                     "Motion clips (*.bvh;*.gltf;*.glb;*.fbx;*.dae;*.pemesh)\0*.bvh;*.gltf;*.glb;*.fbx;*.dae;*.pemesh\0All files\0*.*\0",
+                     picked))
+        {
+            RunClipAction("timeline.import", picked);
+            return;
+        }
+#if !defined(PE_WIN32)
+        m_clipPopupAction = "timeline.import";
+        m_clipPopupPending = true;
+#endif
+    }
+
+    void AnimatorApp::ExportClipDialog()
+    {
+        std::string picked;
+        if (PickSaveFile("Export active clip", "glTF 2.0 (*.gltf)\0*.gltf\0", "gltf", picked))
+        {
+            RunClipAction("timeline.export", picked);
+            return;
+        }
+#if !defined(PE_WIN32)
+        m_clipPopupAction = "timeline.export";
+        m_clipPopupPending = true;
 #endif
     }
 
@@ -510,12 +752,56 @@ namespace pe
                 if (ImGui::MenuItem("Open .pemesh...", "Ctrl+O"))
                     OpenDialog();
                 ui::ItemTooltip("Open a cooked model. Dropping a .pemesh on the window opens it too.");
+                if (ImGui::BeginMenu("Recent", !m_recent.empty()))
+                {
+                    std::filesystem::path pick;
+                    for (const std::filesystem::path &path : m_recent)
+                        if (ImGui::MenuItem(path.filename().string().c_str()))
+                            pick = path;
+                    ImGui::EndMenu();
+                    if (!pick.empty())
+                        RequestOpen(pick);
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Import Clip...", nullptr, false, m_timeline->HasTarget()))
+                    ImportClipDialog();
+                ui::ItemTooltip("Retarget clips from BVH, glTF or another supported motion file onto this rig by bone name.");
+                if (ImGui::MenuItem("Export Active Clip...", nullptr, false, m_timeline->HasTarget()))
+                    ExportClipDialog();
+                ui::ItemTooltip("Write the active action and skeleton as glTF 2.0. Extracted root travel is baked into the export.");
+                ImGui::Separator();
                 if (ImGui::MenuItem("Save", "Ctrl+S", false, m_timeline->HasTarget()))
-                    m_timeline->RequestSave();
-                ui::ItemTooltip("Write the clips back into the model's .pemesh.");
+                {
+                    std::string error;
+                    if (!SaveAll(&error))
+                    {
+                        m_notice = error;
+                        m_showNotice = true;
+                    }
+                }
+                ui::ItemTooltip("Write clips to the .pemesh and rig edits to its rig document.");
                 ImGui::Separator();
                 if (ImGui::MenuItem("Exit"))
-                    m_quit = true;
+                    RequestQuit();
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Edit"))
+            {
+                const bool target = m_timeline->HasTarget();
+                if (ImGui::MenuItem("Undo", "Ctrl+Z", false, target))
+                    HandleAction("timeline.undo", "{}");
+                if (ImGui::MenuItem("Redo", "Ctrl+Y", false, target))
+                    HandleAction("timeline.undo", R"({"redo":true})");
+                ImGui::Separator();
+                if (ImGui::MenuItem("Copy Pose", "Ctrl+C in viewport", false, target))
+                    HandleAction("timeline.pose_copy", "{}");
+                ui::ItemTooltip("Copy the selected bones' pose at the current frame (every bone when none is selected).");
+                if (ImGui::MenuItem("Paste Pose", "Ctrl+V in viewport", false, target))
+                    HandleAction("timeline.pose_paste", "{}");
+                ui::ItemTooltip("Key the copied pose at the current frame, in this or any other action of the rig.");
+                if (ImGui::MenuItem("Paste Pose Flipped", "Ctrl+Shift+V in viewport", false, target))
+                    HandleAction("timeline.pose_paste", R"({"flipped":true})");
+                ui::ItemTooltip("Key the copied pose mirrored across X: each bone lands on its .L / .R twin.");
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Layout"))
@@ -569,9 +855,50 @@ namespace pe
                 const bool ortho = camera && camera->IsOrthographic();
                 if (ImGui::MenuItem("Orthographic", nullptr, ortho, camera != nullptr))
                     m_timeline->SetOrthographic(!ortho);
-                ImGui::MenuItem("Grid", nullptr, &Settings::Get<SceneSettings>().draw_grid);
+                m_grid = Settings::Get<SceneSettings>().draw_grid;
+                if (ImGui::MenuItem("Grid", nullptr, &m_grid))
+                    Settings::Get<SceneSettings>().draw_grid = m_grid;
+                if (ImGui::MenuItem("Ground", nullptr, m_ground))
+                    SetGroundVisible(!m_ground);
+                ui::ItemTooltip("A flat plane under the origin: the character's shadow lands on it.");
                 ImGui::MenuItem("Axis Gizmo", nullptr, &GUIState::s_useOrientationGizmo);
                 ui::ItemTooltip("The axis arrows in the viewport corner; click one to look along it.");
+                if (ImGui::MenuItem("Bone Names", nullptr, m_timeline->ShowBoneNames()))
+                    m_timeline->SetShowBoneNames(!m_timeline->ShowBoneNames());
+                if (ImGui::MenuItem("Turntable", nullptr, m_timeline->Turntable()))
+                    m_timeline->SetTurntable(!m_timeline->Turntable());
+                ui::ItemTooltip("Slowly orbit the character; a right or middle drag pauses it.");
+                if (ImGui::MenuItem("Maximize Viewport", "Ctrl+Space"))
+                    m_timeline->ToggleMaximize();
+                ImGui::Separator();
+                if (ImGui::BeginMenu("Bookmarks"))
+                {
+                    OrbitView current;
+                    const bool haveView = m_timeline->GetOrbitView(current);
+                    if (ImGui::MenuItem("Add Bookmark...", nullptr, false, haveView))
+                        m_bookmarkPromptPending = true;
+                    if (!m_bookmarks.empty())
+                        ImGui::Separator();
+                    int remove = -1;
+                    for (int i = 0; i < static_cast<int>(m_bookmarks.size()); i++)
+                    {
+                        ImGui::PushID(i);
+                        if (ImGui::MenuItem(m_bookmarks[i].name.c_str()))
+                            m_timeline->SetOrbitView(m_bookmarks[i].view);
+                        ui::ItemTooltip("Right-click removes it.");
+                        if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                            remove = i;
+                        ImGui::PopID();
+                    }
+                    if (remove >= 0)
+                        m_bookmarks.erase(m_bookmarks.begin() + remove);
+                    ImGui::EndMenu();
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Help"))
+            {
+                ImGui::MenuItem("Hotkeys", nullptr, &m_showHotkeys);
                 ImGui::EndMenu();
             }
             const std::string label = m_modelPath.empty()
@@ -586,6 +913,9 @@ namespace pe
         }
         if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_O, false) && !ImGui::IsAnyItemActive())
             OpenDialog();
+        if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Space, false) && !ImGui::IsAnyItemActive())
+            m_timeline->ToggleMaximize();
+        DrawPrompts();
 
         if (m_openPopupPending)
         {
@@ -598,11 +928,37 @@ namespace pe
             ImGui::InputText("##animator_open_path", m_openBuffer, sizeof(m_openBuffer));
             if (ImGui::Button("Open"))
             {
-                std::string error;
-                if (OpenModel(m_openBuffer, &error))
-                    ImGui::CloseCurrentPopup();
-                else
-                    PE_WARN("[Animator] %s", error.c_str());
+                const std::string path = m_openBuffer;
+                ImGui::CloseCurrentPopup();
+                RequestOpen(path);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel"))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
+        if (m_clipPopupPending)
+        {
+            ImGui::OpenPopup("Clip path");
+            m_clipPopupPending = false;
+            m_clipPathBuffer[0] = '\0';
+        }
+        if (ImGui::BeginPopupModal("Clip path", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextUnformatted(m_clipPopupAction == "timeline.import" ? "Source motion file" : "Output .gltf");
+            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 40.f);
+            const bool entered = ImGui::InputText("##animator_clip_path",
+                                                  m_clipPathBuffer,
+                                                  sizeof(m_clipPathBuffer),
+                                                  ImGuiInputTextFlags_EnterReturnsTrue);
+            if ((ImGui::Button(m_clipPopupAction == "timeline.import" ? "Import" : "Export") || entered) &&
+                m_clipPathBuffer[0])
+            {
+                const std::string action = m_clipPopupAction;
+                const std::string path = m_clipPathBuffer;
+                ImGui::CloseCurrentPopup();
+                RunClipAction(action.c_str(), path);
             }
             ImGui::SameLine();
             if (ImGui::Button("Cancel"))
@@ -612,6 +968,132 @@ namespace pe
 
         const ImGuiViewport *viewport = ImGui::GetMainViewport();
         m_timeline->Update(viewport->WorkPos, viewport->WorkSize);
+    }
+
+    void AnimatorApp::DrawPrompts()
+    {
+        if (m_showNotice)
+        {
+            ImGui::SetNextWindowSize({ImGui::GetFontSize() * 32.f, 0.f}, ImGuiCond_Appearing);
+            if (ImGui::Begin("PhasmaAnimator message", &m_showNotice, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                ImGui::TextWrapped("%s", m_notice.c_str());
+                if (ImGui::Button("OK"))
+                    m_showNotice = false;
+            }
+            ImGui::End();
+        }
+
+        if (m_promptPending)
+        {
+            ImGui::OpenPopup("Unsaved changes");
+            m_promptPending = false;
+        }
+        if (ImGui::BeginPopupModal("Unsaved changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            static std::string s_error;
+            ImGui::Text("%s has unsaved clip or rig changes.", m_modelPath.filename().string().c_str());
+            if (!s_error.empty())
+                ImGui::TextColored(ImVec4(1.f, 0.5f, 0.4f, 1.f), "%s", s_error.c_str());
+            bool proceed = false;
+            if (ImGui::Button("Save"))
+            {
+                s_error.clear();
+                proceed = SaveAll(&s_error);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Discard"))
+                proceed = true;
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel"))
+            {
+                s_error.clear();
+                m_pendingOpen.clear();
+                m_pendingQuit = false;
+                ImGui::CloseCurrentPopup();
+            }
+            if (proceed)
+            {
+                s_error.clear();
+                ImGui::CloseCurrentPopup();
+                if (m_pendingQuit)
+                    m_quit = true;
+                else if (!m_pendingOpen.empty())
+                {
+                    std::string error;
+                    if (!OpenModel(m_pendingOpen, &error))
+                        PE_WARN("[Animator] %s", error.c_str());
+                }
+                m_pendingOpen.clear();
+                m_pendingQuit = false;
+            }
+            ImGui::EndPopup();
+        }
+
+        if (m_bookmarkPromptPending)
+        {
+            ImGui::OpenPopup("Add Bookmark");
+            m_bookmarkPromptPending = false;
+            snprintf(m_bookmarkName, sizeof(m_bookmarkName), "View %d", static_cast<int>(m_bookmarks.size()) + 1);
+        }
+        if (ImGui::BeginPopupModal("Add Bookmark", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 18.f);
+            const bool entered = ImGui::InputText("Name", m_bookmarkName, sizeof(m_bookmarkName),
+                                                  ImGuiInputTextFlags_EnterReturnsTrue);
+            OrbitView view;
+            if ((ImGui::Button("Add") || entered) && m_bookmarkName[0] && m_timeline->GetOrbitView(view))
+            {
+                m_bookmarks.push_back({m_bookmarkName, view});
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel"))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
+        if (m_showHotkeys)
+        {
+            ImGui::SetNextWindowSize({ImGui::GetFontSize() * 44.f, 0.f}, ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("Hotkeys", &m_showHotkeys, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                static const struct
+                {
+                    const char *section;
+                    const char *keys;
+                } kSheet[] = {
+                    {"Files", "Ctrl+O open .pemesh   Ctrl+S save clips and rig   drop a .pemesh on the window"},
+                    {"Viewport", "RMB drag orbit   MMB drag pan   wheel zoom   F frame the character   Ctrl+Space "
+                                 "maximize   click an axis arrow to look along it"},
+                    {"Playback", "Space play / pause   Shift+Ctrl+Space play reverse   Left / Right previous / next key"},
+                    {"Keys", "G move   S scale   X / Delete delete   Shift+D duplicate   I insert key   A / Alt+A "
+                             "select all / none   Ctrl+C / Ctrl+V copy / paste   Enter / Esc confirm / cancel"},
+                    {"View", "Home frame all   Numpad . frame selected   Numpad + / - zoom   wheel zoom   Ctrl / "
+                             "Shift + wheel scroll   MMB pan   Ctrl+MMB zoom   Esc clear the interval"},
+                    {"Markers", "M mark the playhead   right-click the ruler to add, rename, jump to or delete one"},
+                    {"Undo", "Ctrl+Z undo   Ctrl+Y / Ctrl+Shift+Z redo (keys in Animate, the rig document in Rig)"},
+                    {"Pose", "drag a bone tail (Rotate / Move / Both)   Mirror X mirrors onto the .L / .R twin   "
+                             "Auto Key keys every edit   Ctrl+C / Ctrl+V over the viewport copy / paste the pose   "
+                             "Ctrl+Shift+V pastes it flipped"},
+                };
+                if (ImGui::BeginTable("##hotkeys", 2, ImGuiTableFlags_SizingFixedFit))
+                {
+                    for (const auto &row : kSheet)
+                    {
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::TextDisabled("%s", row.section);
+                        ImGui::TableNextColumn();
+                        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 40.f);
+                        ImGui::TextUnformatted(row.keys);
+                        ImGui::PopTextWrapPos();
+                    }
+                    ImGui::EndTable();
+                }
+            }
+            ImGui::End();
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -704,6 +1186,37 @@ namespace pe
 #endif
     }
 
+    bool AnimatorApp::PickSaveFile(const char *title, const char *filter, const char *extension, std::string &outPath)
+    {
+#if defined(PE_WIN32)
+        char fileName[MAX_PATH] = {};
+        OPENFILENAMEA dialog{};
+        dialog.lStructSize = sizeof(dialog);
+        SDL_SysWMinfo info{};
+        SDL_VERSION(&info.version);
+        if (SDL_GetWindowWMInfo(RHII.GetWindow(), &info))
+            dialog.hwndOwner = info.info.win.window;
+        dialog.lpstrTitle = title;
+        dialog.lpstrFilter = filter;
+        dialog.lpstrDefExt = extension;
+        dialog.lpstrFile = fileName;
+        dialog.nMaxFile = static_cast<DWORD>(sizeof(fileName));
+        const std::string initialDir = m_modelPath.empty() ? Path::Assets : m_modelPath.parent_path().string();
+        dialog.lpstrInitialDir = initialDir.c_str();
+        dialog.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+        if (!GetSaveFileNameA(&dialog))
+            return false;
+        outPath = fileName;
+        return true;
+#else
+        (void)title;
+        (void)filter;
+        (void)extension;
+        (void)outPath;
+        return false;
+#endif
+    }
+
     // -------------------------------------------------------------------------
     // actions: the command file (tests) and the menu share them
     // -------------------------------------------------------------------------
@@ -727,6 +1240,8 @@ namespace pe
             if (action == "animator.open")
             {
                 std::string error;
+                if (args.value("save", false) && !SaveAll(&error))
+                    return fail(error);
                 if (!OpenModel(args.value("path", ""), &error))
                     return fail(error);
                 nlohmann::json roots = nlohmann::json::array();
@@ -766,7 +1281,16 @@ namespace pe
                                         {"has_target", m_timeline->HasTarget()},
                                         {"viewport", m_timeline->ViewportShare()},
                                         {"style", StyleName(GUIState::s_guiStyle)},
-                                        {"font_scale", ImGui::GetIO().FontGlobalScale}};
+                                        {"font_scale", ImGui::GetIO().FontGlobalScale},
+                                        {"dirty", m_timeline->IsDirty()},
+                                        {"ground", m_ground},
+                                        {"turntable", m_timeline->Turntable()},
+                                        {"bone_names", m_timeline->ShowBoneNames()},
+                                        {"recent", m_recent.size()},
+                                        {"bookmarks", m_bookmarks.size()}};
+                OrbitView view;
+                if (m_timeline->GetOrbitView(view))
+                    state["view"] = ViewJson(view);
                 if (camera)
                 {
                     const vec3 p = camera->GetPosition();
@@ -789,8 +1313,49 @@ namespace pe
             }
             if (action == "animator.exit")
             {
-                m_quit = true;
+                std::string error;
+                if (args.value("save", false) && !SaveAll(&error))
+                    return fail(error);
+                m_quit = true; // the command file never prompts: probes end here right after posing
                 return ok();
+            }
+            if (action == "animator.save")
+            {
+                std::string error;
+                if (!SaveAll(&error))
+                    return fail(error);
+                return ok();
+            }
+            if (action == "animator.ground")
+            {
+                if (args.contains("visible"))
+                    SetGroundVisible(args.value("visible", true));
+                return ok({{"visible", m_ground}});
+            }
+            if (action == "animator.bookmark")
+            {
+                const std::string name = args.value("name", "");
+                if (name.empty())
+                    return fail("bookmark needs a name");
+                if (args.value("apply", false))
+                {
+                    for (const Bookmark &bookmark : m_bookmarks)
+                        if (bookmark.name == name)
+                        {
+                            m_timeline->SetOrbitView(bookmark.view);
+                            return ok({{"applied", name}});
+                        }
+                    return fail("unknown bookmark: " + name);
+                }
+                OrbitView view;
+                if (!m_timeline->GetOrbitView(view))
+                    return fail("the orbit does not own the camera yet");
+                m_bookmarks.erase(std::remove_if(m_bookmarks.begin(), m_bookmarks.end(),
+                                                 [&](const Bookmark &b)
+                                                 { return b.name == name; }),
+                                  m_bookmarks.end());
+                m_bookmarks.push_back({name, view});
+                return ok({{"added", name}, {"count", m_bookmarks.size()}});
             }
             // Pose aliases select the Animate panel.
             if (action == "rig.reference_load" || action == "rig.reference_clear" || action == "rig.pin" ||
