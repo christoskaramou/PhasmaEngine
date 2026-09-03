@@ -200,6 +200,7 @@ namespace pe
                 m_rootNode = nullptr;
                 ClearDocument();
                 BuildCaches();
+                m_planar2D = false;
                 m_status = "No model selected: select a node of a .pemesh model";
             }
             return;
@@ -230,6 +231,7 @@ namespace pe
         m_rootNode = root;
         ClearDocument();
         BuildCaches();
+        m_planar2D = m_planarDetected; // a rig file's own planar_2d wins over the guess, in LoadJson below
         ReloadProjectPresets();
         std::string error;
         if (LoadJson(&error))
@@ -262,7 +264,7 @@ namespace pe
     void RigEditor::PushUndo(bool keepPreset)
     {
         m_heatDirty = true;
-        m_undo.push_back({m_bones, m_selected, m_presetName, m_locks, m_pins});
+        m_undo.push_back({m_bones, m_selected, m_presetName, m_locks, m_pins, m_planar2D});
         if (!keepPreset)
             m_presetName.clear();
         if (static_cast<int>(m_undo.size()) > kMaxUndo)
@@ -277,6 +279,7 @@ namespace pe
         m_presetName = snapshot.preset;
         m_locks = snapshot.locks;
         m_pins = snapshot.pins;
+        m_planar2D = snapshot.planar2D;
         m_selected = std::min(snapshot.selected, static_cast<int>(m_bones.size()) - 1);
         m_dragBone = -1;
         m_dirty = true;
@@ -286,7 +289,7 @@ namespace pe
     {
         if (m_undo.empty())
             return;
-        m_redo.push_back({m_bones, m_selected, m_presetName, m_locks, m_pins});
+        m_redo.push_back({m_bones, m_selected, m_presetName, m_locks, m_pins, m_planar2D});
         Restore(m_undo.back());
         m_undo.pop_back();
     }
@@ -295,9 +298,30 @@ namespace pe
     {
         if (m_redo.empty())
             return;
-        m_undo.push_back({m_bones, m_selected, m_presetName, m_locks, m_pins});
+        m_undo.push_back({m_bones, m_selected, m_presetName, m_locks, m_pins, m_planar2D});
         Restore(m_redo.back());
         m_redo.pop_back();
+    }
+
+    void RigEditor::SetPlanar2D(bool enabled)
+    {
+        if (m_planar2D == enabled)
+            return;
+        PushUndo(true);
+        m_planar2D = enabled;
+        m_dirty = true;
+        if (enabled)
+            for (RigBone &bone : m_bones)
+            {
+                bone.head.z = m_planarDepth;
+                bone.tail.z = m_planarDepth;
+            }
+        if (enabled && m_timeline)
+        {
+            m_timeline->RequestView(vec3(0.f, 0.f, -1.f), true);
+            m_timeline->SetOrthographic(true);
+            m_timeline->SetTurntable(false);
+        }
     }
 
     mat4 RigEditor::ModelNodeWorld(int nodeIndex) const
@@ -387,6 +411,7 @@ namespace pe
     {
         ClearDocument();
         const Skeleton &skeleton = m_model->GetSkeleton();
+        m_planar2D = m_planar2D || skeleton.planar2D;
         const mat4 invRoot = glm::inverse(skeleton.rootTransform);
         const float height = ModelHeight();
         m_bones.resize(skeleton.bones.size());
@@ -397,6 +422,7 @@ namespace pe
             m_bones[i].parent = bone.parentIndex;
             m_bones[i].head = vec3((invRoot * glm::inverse(bone.offsetMatrix))[3]);
             m_bones[i].headRadius = m_bones[i].tailRadius = height * 0.05f;
+            m_bones[i].spline = bone.spline;
         }
         for (size_t i = 0; i < m_bones.size(); i++)
         {
@@ -413,6 +439,12 @@ namespace pe
             RigBone &b = m_bones[i];
             if (count > 0)
                 b.tail = sum / static_cast<float>(count);
+            else if (skeleton.bones[i].length > 1e-6f)
+            {
+                const mat4 rest = invRoot * glm::inverse(skeleton.bones[i].offsetMatrix);
+                const vec3 y = glm::normalize(vec3(rest[1]));
+                b.tail = b.head + y * skeleton.bones[i].length;
+            }
             else if (b.parent >= 0 && glm::length(b.head - m_bones[b.parent].head) > 1e-5f)
                 b.tail = b.head + (b.head - m_bones[b.parent].head) * 0.5f;
             else
@@ -809,6 +841,7 @@ namespace pe
         j["version"] = kRigJsonVersion;
         j["model"] = m_model ? m_model->GetFilePath().filename().generic_string() : "";
         j["geodesic"] = m_geodesic;
+        j["planar_2d"] = m_planar2D;
         nlohmann::ordered_json bones = nlohmann::ordered_json::array();
         for (const RigBone &b : m_bones)
         {
@@ -1013,8 +1046,18 @@ namespace pe
                 for (const ShellInfo &sh : m_shellCache)
                     if (sh.name == b.name)
                         b.shell = sh.name;
+        const bool detectedPlanar2D = m_planar2D;
         ClearDocument();
         m_bones = std::move(loadedBones);
+        m_planar2D = j.contains("planar_2d") && j["planar_2d"].is_boolean()
+                         ? j["planar_2d"].get<bool>()
+                         : detectedPlanar2D;
+        if (m_planar2D)
+            for (RigBone &bone : m_bones)
+            {
+                bone.head.z = m_planarDepth;
+                bone.tail.z = m_planarDepth;
+            }
         if (j.contains("geodesic") && j["geodesic"].is_boolean())
             m_geodesic = j["geodesic"].get<bool>();
         try
@@ -1120,6 +1163,12 @@ namespace pe
                     return fail("mode must be rig|edit|animate|pose");
                 timeline->SetRigMode(mode == "rig" || mode == "edit");
                 return ok({{"mode", timeline->RigMode() ? "rig" : "animate"}});
+            }
+            if (action == "rig.planar")
+            {
+                const bool enabled = args.value("enabled", m_planar2D);
+                SetPlanar2D(enabled);
+                return ok({{"enabled", m_planar2D}});
             }
             if (action == "rig.shapes")
             {
@@ -1328,6 +1377,8 @@ namespace pe
                 RigBone &b = m_bones[bone];
                 b.head = ToVec3(args.value("head", nlohmann::json()), b.head);
                 b.tail = ToVec3(args.value("tail", nlohmann::json()), b.tail);
+                if (m_planar2D)
+                    b.head.z = b.tail.z = m_planarDepth;
                 b.headRadius = std::max(args.value("radius_head", b.headRadius), kMinRadius);
                 b.tailRadius = std::max(args.value("radius_tail", b.tailRadius), kMinRadius);
                 b.rigid = args.value("rigid", b.rigid);
@@ -1390,6 +1441,11 @@ namespace pe
                     b.head = ToVec3(args["head"], b.head);
                 if (args.contains("tail"))
                     MoveTail(index, ToVec3(args["tail"], b.tail));
+                if (m_planar2D)
+                {
+                    b.head.z = m_planarDepth;
+                    MoveTail(index, vec3(b.tail.x, b.tail.y, m_planarDepth));
+                }
                 if (args.contains("radius_head"))
                     b.headRadius = std::max(args.value("radius_head", b.headRadius), kMinRadius);
                 if (args.contains("radius_tail"))
@@ -1704,6 +1760,11 @@ namespace pe
                               "one radius of the thinner bone, only bones within two hierarchy steps blend. Rigid capsules still "
                               "claim what they contain. Off = plain capsule blend."
                             : m_geoNote.c_str());
+        ui::SameLineIfFits(ui::CheckboxWidth("2D Plane"));
+        bool planar2D = m_planar2D;
+        if (ImGui::Checkbox("2D Plane", &planar2D))
+            SetPlanar2D(planar2D);
+        ui::ItemTooltip("Keep animation in the model's XY plane: Z-only rotation, XY-only movement, planar IK and spline playback. Flat models enable this automatically.");
     }
 
     void RigEditor::DrawBoneTree(int parent, int depth)
@@ -1754,14 +1815,21 @@ namespace pe
     {
         if (base.size() != m_bones.size())
             return;
-        const mat4 rotation = glm::mat4_cast(quat(glm::radians(rotateDegrees)));
-        const mat4 m = glm::translate(mat4(1.f), move + pivot) * rotation * glm::scale(mat4(1.f), scale) *
-                       glm::translate(mat4(1.f), -pivot);
-        const float radiusScale = (std::abs(scale.x) + std::abs(scale.y) + std::abs(scale.z)) / 3.f;
+        const vec3 appliedMove = m_planar2D ? vec3(move.x, move.y, 0.f) : move;
+        const vec3 appliedRotation = m_planar2D ? vec3(0.f, 0.f, rotateDegrees.z) : rotateDegrees;
+        const vec3 appliedScale = m_planar2D ? vec3(scale.x, scale.y, 1.f) : scale;
+        const vec3 appliedPivot = m_planar2D ? vec3(pivot.x, pivot.y, m_planarDepth) : pivot;
+        const mat4 rotation = glm::mat4_cast(quat(glm::radians(appliedRotation)));
+        const mat4 m = glm::translate(mat4(1.f), appliedMove + appliedPivot) * rotation *
+                       glm::scale(mat4(1.f), appliedScale) * glm::translate(mat4(1.f), -appliedPivot);
+        const float radiusScale = m_planar2D ? (std::abs(scale.x) + std::abs(scale.y)) * 0.5f
+                                             : (std::abs(scale.x) + std::abs(scale.y) + std::abs(scale.z)) / 3.f;
         for (size_t i = 0; i < base.size(); ++i)
         {
             m_bones[i].head = vec3(m * vec4(base[i].head, 1.f));
             m_bones[i].tail = vec3(m * vec4(base[i].tail, 1.f));
+            if (m_planar2D)
+                m_bones[i].head.z = m_bones[i].tail.z = m_planarDepth;
             m_bones[i].headRadius = std::max(base[i].headRadius * radiusScale, kMinRadius);
             m_bones[i].tailRadius = std::max(base[i].tailRadius * radiusScale, kMinRadius);
         }
@@ -1776,7 +1844,10 @@ namespace pe
         if (m_bones.empty() || !ImGui::CollapsingHeader("Rig Transform", ImGuiTreeNodeFlags_DefaultOpen))
             return;
         ImGui::SetNextItemWidth(-ImGui::GetFontSize() * 10.f);
-        ImGui::DragFloat3("Pivot", &m_xformPivot.x, 0.005f, 0.f, 0.f, "%.3f");
+        if (m_planar2D)
+            ImGui::DragFloat2("Pivot XY", &m_xformPivot.x, 0.005f, 0.f, 0.f, "%.3f");
+        else
+            ImGui::DragFloat3("Pivot", &m_xformPivot.x, 0.005f, 0.f, 0.f, "%.3f");
         ui::ItemTooltip("Rig-space point to rotate and scale around (X right, Y up, Z forward).");
         ImGui::SameLine();
         if (ImGui::Button("Reset"))
@@ -1785,7 +1856,14 @@ namespace pe
         auto field = [&](const char *label, vec3 &value, float speed, const char *format, const char *tip)
         {
             ImGui::SetNextItemWidth(-ImGui::GetFontSize() * 4.f);
-            const bool changed = ImGui::DragFloat3(label, &value.x, speed, 0.f, 0.f, format);
+            bool changed = false;
+            if (!m_planar2D)
+                changed = ImGui::DragFloat3(label, &value.x, speed, 0.f, 0.f, format);
+            else if (std::string_view(label) == "Rotate")
+                changed = ImGui::DragFloat("Rotate Z", &value.z, speed, 0.f, 0.f, format);
+            else
+                changed = ImGui::DragFloat2(std::string_view(label) == "Move" ? "Move XY" : "Scale XY", &value.x,
+                                            speed, 0.f, 0.f, format);
             if (ImGui::IsItemActivated())
             {
                 PushUndo();
@@ -1865,10 +1943,12 @@ namespace pe
             if (ImGui::IsItemActivated())
                 PushUndo();
         };
-        m_dirty |= ImGui::DragFloat3("Head", &b.head.x, step, 0.f, 0.f, "%.3f");
+        m_dirty |= m_planar2D ? ImGui::DragFloat2("Head XY", &b.head.x, step, 0.f, 0.f, "%.3f")
+                              : ImGui::DragFloat3("Head", &b.head.x, step, 0.f, 0.f, "%.3f");
         undoOnActivate();
         vec3 tail = b.tail;
-        const bool tailEdited = ImGui::DragFloat3("Tail", &tail.x, step, 0.f, 0.f, "%.3f");
+        const bool tailEdited = m_planar2D ? ImGui::DragFloat2("Tail XY", &tail.x, step, 0.f, 0.f, "%.3f")
+                                           : ImGui::DragFloat3("Tail", &tail.x, step, 0.f, 0.f, "%.3f");
         undoOnActivate();
         if (tailEdited)
             MoveTail(m_selected, tail);
@@ -2204,11 +2284,29 @@ namespace pe
             const RigBone &b = m_bones[i];
             vec3 y = b.tail - b.head;
             y = glm::length(y) > 1e-6f ? glm::normalize(y) : vec3(0.f, 1.f, 0.f);
-            vec3 x = vec3(1.f, 0.f, 0.f) - y * y.x;
-            if (glm::length(x) < 1e-3f)
-                x = glm::cross(y, vec3(0.f, 0.f, 1.f));
-            x = glm::normalize(x);
-            const vec3 z = glm::cross(x, y);
+            vec3 x, z;
+            if (m_planar2D)
+            {
+                y.z = 0.f; // authored joints are flattened, but a stray depth would tilt the frame out of plane
+                y = glm::length(vec2(y)) > 1e-6f ? glm::normalize(y) : vec3(0.f, 1.f, 0.f);
+                // A planar bind frame is a pure rotation about +Z, for every bone direction. The general
+                // branch below picks x = normalize((1,0,0) - y*y.x), which works out to sign(y.y)*(y.y,-y.x,0)
+                // with z = (0,0,sign(y.y)): a bone whose tail hangs below its head would come out turned a half
+                // turn about its own axis, mirroring a flat part across its centreline. Everything downstream of
+                // 2D Plane mode reads a planar pose as Rz alone - the evaluator's spline tangent frames, the
+                // spline IK transforms, the Z-only pose constraint and the pose bar's Rot Z - so the frames the
+                // bake writes have to be Rz too.
+                x = vec3(y.y, -y.x, 0.f);
+                z = vec3(0.f, 0.f, 1.f); // == cross(x, y): right-handed, and independent of the bone direction
+            }
+            else
+            {
+                x = vec3(1.f, 0.f, 0.f) - y * y.x;
+                if (glm::length(x) < 1e-3f)
+                    x = glm::cross(y, vec3(0.f, 0.f, 1.f));
+                x = glm::normalize(x);
+                z = glm::cross(x, y);
+            }
             restGlobal[i] = glm::translate(mat4(1.f), b.head) * mat4(mat3(x, y, z));
         }
         for (int i = 0; i < boneCount; i++)
@@ -2220,10 +2318,13 @@ namespace pe
             bone.localBindTransform = (b.parent >= 0 ? glm::inverse(restGlobal[b.parent]) : mat4(1.f)) * restGlobal[i];
             bone.offsetMatrix = glm::inverse(restGlobal[i]);
             bone.intermediatePrefix = mat4(1.f);
+            bone.length = glm::length(b.tail - b.head);
+            bone.spline = b.spline;
             skeleton.boneNameToIndex[bone.name] = i;
             skeleton.bones.push_back(bone);
         }
         skeleton.rootTransform = mat4(1.f);
+        skeleton.planar2D = m_planar2D;
 
         // Clip channels reference bones by index: clips authored for a different skeleton would read
         // garbage bones on the new one (exploded poses). The old list staying a prefix of the new one
@@ -2368,6 +2469,25 @@ namespace pe
                     m_rigTris.push_back(mesh->vertexOffset + indices[mesh->indexOffset + k + c]);
                 m_rigTriMesh.push_back(meshIndex);
             }
+        }
+        // Cache output only: whether this mesh is flat, never the mode itself. The caches are rebuilt on
+        // every bake and re-select, and the mode is a document field the rig file or the user owns - writing
+        // it here would drop a hand-enabled 2D Plane on the next rebuild.
+        m_planarDetected = false;
+        m_planarDepth = 0.f;
+        if (!m_rigVerts.empty())
+        {
+            vec3 minimum(std::numeric_limits<float>::max());
+            vec3 maximum(std::numeric_limits<float>::lowest());
+            for (const vec3 &vertex : m_rigVerts)
+            {
+                minimum = glm::min(minimum, vertex);
+                maximum = glm::max(maximum, vertex);
+            }
+            const vec3 extent = maximum - minimum;
+            const float planarTolerance = std::max(1e-5f, std::max(extent.x, extent.y) * 1e-4f);
+            m_planarDepth = (minimum.z + maximum.z) * 0.5f;
+            m_planarDetected = extent.z <= planarTolerance;
         }
     }
 
@@ -2635,8 +2755,7 @@ namespace pe
 
     // Catmull-Rom curve-station weights (the skinned_strip_2d rule): stations are the chain heads plus the last
     // tail; the closest polyline point gives the segment and t, the 4 surrounding joints get the cubic basis.
-    // ponytail: joint frames are the plain FK rotations; add 3D tangent-frame smoothing in AnimationSystem
-    // (the strip's WriteSmoothStripJointMatrices, lifted to 3D) if a concave bend looks chunky.
+    // Planar rigs reconstruct centred tangent frames in AnimationEvaluator; ordinary 3D spline chains keep FK frames.
     void RigEditor::ChainWeights(int bone, const vec3 &p, int joints[4], float weights[4]) const
     {
         std::vector<int> chain;
@@ -3245,6 +3364,7 @@ namespace pe
         const mat4 invView = glm::inverse(camera->GetView());
         const vec3 camRight = glm::normalize(vec3(invView[0]));
         const vec3 camFront = camera->GetFront();
+        const vec3 dragNormal = m_planar2D ? glm::normalize(mat3(rootWorld) * vec3(0.f, 0.f, 1.f)) : camFront;
         const ImGuiIO &io = ImGui::GetIO();
         ImDrawList *dl = ImGui::GetWindowDrawList();
 
@@ -3443,7 +3563,11 @@ namespace pe
                 {
                     dl->AddCircle(h.pos, 7.f, kHandleHotCol, 16, 1.5f);
                     if (itemHovered)
-                        ui::TooltipText(h.id == 0 ? "Drag: move head (X/Y/Z lock, Shift fine, Ctrl snap)" : "Drag: move tail (X/Y/Z lock, Shift fine, Ctrl snap)");
+                        ui::TooltipText(m_planar2D
+                                            ? (h.id == 0 ? "Drag: move head in XY (Shift fine, Ctrl snap)"
+                                                         : "Drag: move tail in XY (Shift fine, Ctrl snap)")
+                                            : (h.id == 0 ? "Drag: move head (X/Y/Z lock, Shift fine, Ctrl snap)"
+                                                         : "Drag: move tail (X/Y/Z lock, Shift fine, Ctrl snap)"));
                 }
                 else if (h.id == 4 && (itemHovered || itemActive))
                 {
@@ -3455,7 +3579,7 @@ namespace pe
                 if (itemActive && m_dragBone == i && m_dragHandle == h.id && haveRay && ImGui::IsMouseDown(ImGuiMouseButton_Left))
                 {
                     vec3 hit;
-                    if (RayPlane(rayOrigin, rayDir, m_dragPlanePoint, camFront, hit))
+                    if (RayPlane(rayOrigin, rayDir, m_dragPlanePoint, dragNormal, hit))
                     {
                         if (!m_dragHasPrev)
                         {
@@ -3464,6 +3588,8 @@ namespace pe
                             m_dragFree = h.id == 1 ? dispTail[i] : dispHead[i];
                         }
                         vec3 delta = vec3(invRootWorld * vec4(hit - m_dragPrevHit, 0.f));
+                        if (m_planar2D)
+                            delta.z = 0.f;
                         m_dragPrevHit = hit;
                         if (io.KeyShift)
                             delta *= 0.1f;
@@ -3497,13 +3623,26 @@ namespace pe
                                 if (project(snapPoint, sp))
                                     dl->AddCircle(sp, 9.f, kHandleHotCol, 16, 2.f);
                             }
+                            if (m_planar2D)
+                                target.z = m_planarDepth;
                             if (h.id == 0)
+                            {
                                 b.head = unskinned(i, target);
+                                if (m_planar2D)
+                                    b.head.z = m_planarDepth;
+                            }
                             else if (h.id == 1)
-                                MoveTail(i, unskinned(i, target));
+                            {
+                                vec3 moved = unskinned(i, target);
+                                if (m_planar2D)
+                                    moved.z = m_planarDepth;
+                                MoveTail(i, moved);
+                            }
                             else
                             {
-                                const vec3 newHead = unskinned(i, target);
+                                vec3 newHead = unskinned(i, target);
+                                if (m_planar2D)
+                                    newHead.z = m_planarDepth;
                                 const vec3 move = newHead - b.head;
                                 b.head = newHead;
                                 MoveTail(i, b.tail + move);

@@ -2,6 +2,82 @@
 
 namespace pe
 {
+    namespace
+    {
+        mat4 PlanarSplineFrame(const mat4 &source, const vec2 &tangent)
+        {
+            const float tangentLength = glm::length(tangent);
+            if (tangentLength <= 1e-6f)
+                return source;
+
+            const vec2 y = tangent / tangentLength;
+            const vec3 scale(glm::length(vec3(source[0])), glm::length(vec3(source[1])),
+                             glm::length(vec3(source[2])));
+            mat4 frame(1.f);
+            frame[0] = vec4(y.y * scale.x, -y.x * scale.x, 0.f, 0.f);
+            frame[1] = vec4(y.x * scale.y, y.y * scale.y, 0.f, 0.f);
+            frame[2] = vec4(0.f, 0.f, scale.z, 0.f);
+            frame[3] = source[3];
+            return frame;
+        }
+
+        // Re-frames each planar spline link from a CENTRED tangent through its neighbours, so a chain
+        // bends as one smooth curve instead of in rigid parts. The bake gives a planar rig pure Rz bind
+        // frames, so rebuilding the frame from the tangent alone reproduces the rest pose exactly.
+        // ponytail: the tail this draws is not the FK tail the puppet solver aims with, so a plain drag
+        // on a spline chain lands near the handle rather than on it (measured ~2x the reachable minimum
+        // on a two-link chain). Spline IK writes the stations themselves and is exact; make the puppet
+        // solver iterate against the smoothed tail if that approximation ever matters.
+        void SmoothPlanarSplines(const Skeleton &skeleton, std::vector<mat4> &globalTransforms)
+        {
+            const int boneCount = skeleton.GetBoneCount();
+            static thread_local std::vector<int> chain;
+            for (int first = 0; first < boneCount; ++first)
+            {
+                if (!skeleton.bones[first].spline)
+                    continue;
+                const int parent = skeleton.bones[first].parentIndex;
+                if (parent >= 0 && parent < boneCount && skeleton.bones[parent].spline)
+                    continue;
+
+                chain.clear();
+                for (int bone = first; bone >= 0;)
+                {
+                    chain.push_back(bone);
+                    int child = -1;
+                    for (int candidate = 0; candidate < boneCount; ++candidate)
+                        if (skeleton.bones[candidate].spline && skeleton.bones[candidate].parentIndex == bone)
+                        {
+                            child = candidate;
+                            break;
+                        }
+                    bone = child;
+                }
+
+                for (size_t i = 0; i < chain.size(); ++i)
+                {
+                    const int bone = chain[i];
+                    const vec2 here(globalTransforms[bone][3]);
+                    vec2 before = here, after = here;
+                    if (i > 0)
+                        before = vec2(globalTransforms[chain[i - 1]][3]);
+                    if (i + 1 < chain.size())
+                        after = vec2(globalTransforms[chain[i + 1]][3]);
+                    else
+                    {
+                        const vec3 yAxis(globalTransforms[bone][1]);
+                        const float scaleY = glm::length(yAxis);
+                        const vec2 direction(yAxis);
+                        if (scaleY > 1e-6f && glm::length(direction) > 1e-6f)
+                            after += glm::normalize(direction) * skeleton.bones[bone].length * scaleY;
+                    }
+                    const vec2 tangent = i == 0 ? after - here : after - before;
+                    globalTransforms[bone] = PlanarSplineFrame(globalTransforms[bone], tangent);
+                }
+            }
+        }
+    } // namespace
+
     template <typename T>
     int AnimationEvaluator::FindKeyIndex(const std::vector<AnimationKey<T>> &keys, float time)
     {
@@ -177,6 +253,9 @@ namespace pe
             if (progress == 0)
                 break;
         }
+
+        if (skeleton.planar2D)
+            SmoothPlanarSplines(skeleton, globalTransforms);
 
         for (int i = 0; i < boneCount; i++)
             outMatrices[i] = globalTransforms[i] * skeleton.bones[i].offsetMatrix;

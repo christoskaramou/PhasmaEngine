@@ -17,6 +17,11 @@ namespace pe::AnimationPoseTools
             return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
         }
 
+        bool Finite(const vec2 &value)
+        {
+            return std::isfinite(value.x) && std::isfinite(value.y);
+        }
+
         bool Finite(const quat &value)
         {
             return std::isfinite(value.w) && std::isfinite(value.x) && std::isfinite(value.y) &&
@@ -166,6 +171,116 @@ namespace pe::AnimationPoseTools
         result.rootGlobalDelta = RotationBetween(upper, result.solvedMidPosition - input.rootPosition);
         const vec3 inheritedLower = result.rootGlobalDelta * lower;
         result.midGlobalDelta = RotationBetween(inheritedLower, result.solvedTipPosition - result.solvedMidPosition);
+        return result;
+    }
+
+    PlanarSplineIkResult SolvePlanarSplineIk(const PlanarSplineIkInput &input)
+    {
+        constexpr float pi = 3.14159265358979323846f;
+        PlanarSplineIkResult result;
+        if (!Finite(input.target) || !std::isfinite(input.maxBendRadians) ||
+            !std::isfinite(input.bendSign) || !std::isfinite(input.maxStretchScale) ||
+            std::any_of(input.stations.begin(), input.stations.end(), [](const vec2 &station)
+                        { return !Finite(station); }))
+        {
+            result.status = PlanarSplineIkStatus::NonFiniteInput;
+            return result;
+        }
+        if (input.stations.size() < 2)
+        {
+            result.status = PlanarSplineIkStatus::NotEnoughStations;
+            return result;
+        }
+
+        const int segmentCount = static_cast<int>(input.stations.size()) - 1;
+        std::vector<float> lengths(segmentCount), influences(segmentCount, 1.f);
+        float totalLength = 0.f, influenceSum = 0.f, maxInfluence = 0.f;
+        for (int i = 0; i < segmentCount; ++i)
+        {
+            lengths[i] = glm::length(input.stations[i + 1] - input.stations[i]);
+            if (lengths[i] <= kEpsilon)
+            {
+                result.status = PlanarSplineIkStatus::DegenerateChain;
+                return result;
+            }
+            totalLength += lengths[i];
+            if (i < static_cast<int>(input.bendInfluences.size()) &&
+                std::isfinite(input.bendInfluences[i]))
+                influences[i] = std::clamp(input.bendInfluences[i], 0.f, 2.f);
+            influenceSum += influences[i];
+            maxInfluence = std::max(maxInfluence, influences[i]);
+        }
+
+        const vec2 root = input.stations.front();
+        const vec2 targetVector = input.target - root;
+        const float targetDistance = glm::length(targetVector);
+        const float maxStretch = std::clamp(input.maxStretchScale, 1.f, 3.f);
+        result.stretchScale = std::clamp(targetDistance / totalLength, 1.f, maxStretch);
+        const float stretchedLength = totalLength * result.stretchScale;
+        const float solveDistance = std::clamp(targetDistance, totalLength * 0.15f, stretchedLength);
+        result.targetClamped = std::abs(targetDistance - solveDistance) > kEpsilon;
+        result.bendSign = input.bendSign < -0.5f ? -1.f : 1.f;
+        const float centerlineThreshold = std::max(totalLength * 0.02f, kEpsilon);
+        if (targetVector.x > centerlineThreshold)
+            result.bendSign = -1.f;
+        else if (targetVector.x < -centerlineThreshold)
+            result.bendSign = 1.f;
+
+        auto safeDirection = [](const vec2 &value, const vec2 &fallback)
+        {
+            const float length = glm::length(value);
+            return length > kEpsilon ? value / length : fallback;
+        };
+        const vec2 targetDirection = safeDirection(targetVector, vec2(0.f, 1.f));
+        result.segmentAngles.assign(segmentCount, std::atan2(targetDirection.y, targetDirection.x));
+
+        if (segmentCount > 1 && targetDistance < stretchedLength - kEpsilon && influenceSum > kEpsilon)
+        {
+            auto chordForBend = [&](float bend)
+            {
+                vec2 chord(0.f);
+                float accumulated = 0.f;
+                for (int i = 0; i < segmentCount; ++i)
+                {
+                    const float segmentBend = bend * influences[i];
+                    const float angle = accumulated + segmentBend * 0.5f;
+                    chord += lengths[i] * result.stretchScale * vec2(std::cos(angle), std::sin(angle));
+                    accumulated += segmentBend;
+                }
+                return chord;
+            };
+
+            const float requestedMaxBend = std::clamp(input.maxBendRadians, pi / 36.f, pi);
+            const float physicalMax = std::max(2.f * pi / influenceSum - 0.0001f, 0.f);
+            const float arcMax = (pi * 5.f / 3.f) / influenceSum;
+            const float localMax = maxInfluence > kEpsilon ? requestedMaxBend / maxInfluence : requestedMaxBend;
+            float low = 0.f, high = std::min({requestedMaxBend, physicalMax, arcMax, localMax});
+            for (int iteration = 0; iteration < std::clamp(input.iterations, 1, 64); ++iteration)
+            {
+                const float mid = (low + high) * 0.5f;
+                if (glm::length(chordForBend(mid)) > solveDistance)
+                    low = mid;
+                else
+                    high = mid;
+            }
+            result.bendRadians = high * result.bendSign;
+            const vec2 chord = chordForBend(result.bendRadians);
+            const float startAngle = std::atan2(targetDirection.y, targetDirection.x) - std::atan2(chord.y, chord.x);
+            float accumulated = 0.f;
+            for (int i = 0; i < segmentCount; ++i)
+            {
+                const float segmentBend = result.bendRadians * influences[i];
+                result.segmentAngles[i] = startAngle + accumulated + segmentBend * 0.5f;
+                accumulated += segmentBend;
+            }
+        }
+
+        result.stations.resize(segmentCount + 1);
+        result.stations[0] = root;
+        for (int i = 0; i < segmentCount; ++i)
+            result.stations[i + 1] = result.stations[i] +
+                                     lengths[i] * result.stretchScale *
+                                         vec2(std::cos(result.segmentAngles[i]), std::sin(result.segmentAngles[i]));
         return result;
     }
 

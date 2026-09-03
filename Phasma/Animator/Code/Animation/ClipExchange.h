@@ -13,6 +13,8 @@ namespace pe::ClipExchange
 
     // Reads a BVH (offsets become the bind locals, no prefix; one clip named after the file, ticks = frames).
     bool LoadBvh(const std::filesystem::path &path, ImportedRig &out, std::string &error);
+    // Runs the cook tool beside the Animator without opening a window. output is a durable .pemesh chosen by the caller.
+    bool CookModel(const std::filesystem::path &source, const std::filesystem::path &output, std::string &error);
     // Cooks a source model (glTF / GLB / FBX / OBJ ...) through PhasmaCook.exe beside the executable into a temp
     // .pemesh and returns that path; empty with the error when the tool is missing or fails.
     std::filesystem::path CookToTemp(const std::filesystem::path &source, std::string &error);

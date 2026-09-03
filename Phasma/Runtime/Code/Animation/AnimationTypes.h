@@ -9,6 +9,8 @@ namespace pe
         mat4 offsetMatrix = mat4(1.f);
         mat4 localBindTransform = mat4(1.f);
         mat4 intermediatePrefix = mat4(1.f);
+        float length = 0.f; // bind length along local +Y; used by planar spline tangent reconstruction
+        bool spline = false;
     };
 
     struct Skeleton
@@ -20,6 +22,7 @@ namespace pe
         // the shader's worldMatrix can apply it instead, allowing user transforms to
         // affect skinned meshes.
         mat4 rootTransform = mat4(1.f);
+        bool planar2D = false;
 
         int GetBoneIndex(const std::string &name) const
         {

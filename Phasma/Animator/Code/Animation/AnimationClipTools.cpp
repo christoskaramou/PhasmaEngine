@@ -1692,9 +1692,14 @@ namespace pe::AnimationClipTools
             float mapped = settings.sourceOffset + (time - start);
             if (source.duration > kEpsilon)
             {
-                mapped = std::fmod(mapped, source.duration);
-                if (mapped < 0.0f)
-                    mapped += source.duration;
+                const float wrapped = std::fmod(mapped, source.duration);
+                // A shorter source repeats, but landing exactly on its end must read the END, not fold back
+                // onto frame 0: a source the same length as the target would otherwise lose its last frame,
+                // and the layer would leave the target's final key untouched. A cyclic source reads the same
+                // value either way.
+                mapped = wrapped < 0.0f                             ? wrapped + source.duration
+                         : wrapped <= kEpsilon && mapped > kEpsilon ? source.duration
+                                                                    : wrapped;
             }
             return std::max(mapped, 0.0f);
         };

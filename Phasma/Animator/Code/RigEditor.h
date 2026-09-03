@@ -65,6 +65,8 @@ namespace pe
         bool IsDirty() const { return m_dirty || m_weightDirty; }
         bool DocumentDirty() const { return m_dirty; }
         bool WeightDirty() const { return m_weightDirty; }
+        bool Planar2D() const { return m_planar2D; }
+        void SetPlanar2D(bool enabled);
         const std::string &PresetName() const { return m_presetName; } // empty = hand-edited (Custom)
         float LeanBudgetDegrees() const;                               // the preset's counter-lean cap for balance; a hand-made rig gets the humanoid's
         bool SaveDocument(std::string *error = nullptr) { return SaveJson(error); }
@@ -107,6 +109,7 @@ namespace pe
             std::string preset;
             std::vector<RigLock> locks;
             std::vector<std::string> pins;
+            bool planar2D = false;
         };
 
         void ClearDocument();
@@ -217,9 +220,12 @@ namespace pe
         std::vector<uint32_t> m_rigTris;
         std::vector<int> m_rigTriMesh; // model mesh index per triangle (Volume snap pairs hits per shell)
         std::vector<ShellInfo> m_shellCache;
-        bool m_geodesic = true;     // document: unowned parts bind along the surface (rig.json "geodesic")
-        GeodesicBind::Result m_geo; // rebuilt at bake and heat refresh only
-        std::string m_geoNote;      // bones whose capsule holds no surface
+        bool m_geodesic = true;        // document: unowned parts bind along the surface (rig.json "geodesic")
+        bool m_planar2D = false;       // document: constrain authoring to XY and smooth spline chains in that plane
+        bool m_planarDetected = false; // BuildCaches: this mesh is flat (the default for m_planar2D, never a write to it)
+        float m_planarDepth = 0.f;     // detected mesh plane in rig space
+        GeodesicBind::Result m_geo;    // rebuilt at bake and heat refresh only
+        std::string m_geoNote;         // bones whose capsule holds no surface
         std::vector<RigPreset> m_projectPresets;
         std::vector<std::string> m_projectPresetErrors;
         std::string m_presetName; // preset the current bones came from; empty = hand-edited (Custom)
