@@ -3,17 +3,22 @@
 #include "Animation/AnimationEvaluator.h"
 #include "Animation/AnimationPoseViewport.h"
 #include "Animation/AnimationPoseTools.h"
-#include "GUI/GUI.h"
+#include "API/Image.h"
+#include "Camera/Camera.h"
+#include "AnimatorApp.h"
+#include "GUI/GUIState.h"
 #include "GUI/Helpers.h"
-#include "GUI/Widgets/RigEditor.h"
+#include "GUI/OrientationGizmo.h"
+#include "RigEditor.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/ModelAssetCooked.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
 #include "Systems/AnimationSystem.h"
-#include "Systems/RendererSystem.h"
+#include "Render/RuntimeSceneRenderer.h"
 #include "imgui/imgui.h"
+#include "imgui/imgui_internal.h"
 
 #include <nlohmann/json.hpp>
 
@@ -21,18 +26,17 @@
 
 namespace pe
 {
-    AnimationTimeline::AnimationTimeline() : Widget("Animation Timeline")
+    AnimationTimeline::AnimationTimeline()
     {
-        m_open = false;
         m_rigEditor = std::make_unique<RigEditor>();
     }
 
     AnimationTimeline::~AnimationTimeline() = default;
 
-    void AnimationTimeline::Init(GUI *gui)
+    void AnimationTimeline::Init(AnimatorApp *app)
     {
-        Widget::Init(gui);
-        m_rigEditor->Init(gui);
+        m_app = app;
+        m_rigEditor->Init(app, this);
     }
 
     // Blender (4.x) Dope Sheet / Timeline palette.
@@ -226,7 +230,7 @@ namespace pe
 
         bool HotkeysAllowed()
         {
-            return ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) && !ImGui::IsAnyItemActive();
+            return ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsAnyItemActive();
         }
 
         template <typename K>
@@ -285,8 +289,8 @@ namespace pe
         const float wheel = io.MouseWheel;
         if (wheel != 0.f)
         {
-            // Dope sheet and ruler: Ctrl+wheel zooms, and a plain wheel belongs to the window's own
-            // scrollbar (Update drives it). The Graph Editor keeps Blender's view2d wheel set.
+            // Dope sheet and ruler: Ctrl+wheel zooms, and a plain wheel belongs to the editors child's own
+            // scrollbar (ImGui drives it). The Graph Editor keeps Blender's view2d wheel set.
             if (!graph)
             {
                 if (io.KeyCtrl)
@@ -516,8 +520,6 @@ namespace pe
         if (playing)
             for (NodeId *node : m_animatedNodes)
                 anim->SetPaused(node, false);
-        if (m_gui)
-            m_gui->NotifyChange();
     }
 
     bool AnimationTimeline::GetViewportPose(ModelAsset *model, ViewportPose &out) const
@@ -558,7 +560,7 @@ namespace pe
         // The mesh skins identity whenever the node carries no evaluated joint matrices: Rest Pose display,
         // or a freshly loaded scene nobody has scrubbed yet (no animation state exists). Mirror the Scene
         // upload fallback here or the overlay points sit in a clip pose the mesh is not in.
-        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        RuntimeSceneRenderer *renderer = GetAnimatorRenderer();
         const bool unposed = !node || !renderer || !renderer->GetScene().IsNodeAlive(node) ||
                              renderer->GetScene().GetNodeRuntime(node).jointMatrices.empty();
         if ((m_restDisplayed || unposed) && frameOffset == 0.f)
@@ -1034,11 +1036,36 @@ namespace pe
 
         try
         {
-            RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+            RuntimeSceneRenderer *renderer = GetAnimatorRenderer();
             AnimationSystem *anim = GetGlobalSystem<AnimationSystem>();
             if (!renderer || !anim)
                 return fail("animation system not available");
             Scene &scene = renderer->GetScene();
+            if (action == "timeline.view")
+            {
+                if (args.contains("viewport"))
+                    m_viewportShare = std::clamp(args.value("viewport", 0.f), 0.f, 0.9f);
+                if (args.value("frame", false))
+                    m_viewFramePending = true; // framed on the next draw of the viewport
+                if (args.value("reset", false))
+                    ResetView();
+                if (args.contains("look") && args["look"].is_array() && args["look"].size() == 3)
+                    RequestView(vec3(args["look"][0].get<float>(), args["look"][1].get<float>(),
+                                     args["look"][2].get<float>()),
+                                false);
+                if (args.contains("ortho"))
+                    SetOrthographic(args.value("ortho", false));
+                if (args.contains("grid"))
+                    Settings::Get<SceneSettings>().draw_grid = args.value("grid", true);
+                if (args.contains("gizmo"))
+                    GUIState::s_useOrientationGizmo = args.value("gizmo", true);
+                const Camera *camera = scene.GetCameras().empty() ? nullptr : scene.GetActiveCamera();
+                return ok({{"viewport", m_viewportShare},
+                           {"camera_owned", m_cameraOwned},
+                           {"orthographic", camera && camera->IsOrthographic()},
+                           {"grid", Settings::Get<SceneSettings>().draw_grid},
+                           {"gizmo", GUIState::s_useOrientationGizmo}});
+            }
             if (m_targetNode && !scene.IsNodeAlive(m_targetNode))
                 m_targetNode = nullptr;
             std::erase_if(m_animatedNodes, [&](NodeId *node)
@@ -3631,7 +3658,7 @@ namespace pe
         if (ImGui::IsKeyPressed(ImGuiKey_Escape) && HasInterval())
             ClearInterval();
 
-        if (ImGui::IsKeyPressed(ImGuiKey_Space, false))
+        if (ImGui::IsKeyPressed(ImGuiKey_Space, false) && (!ctrl || shift)) // Ctrl+Space alone maximizes
         {
             if (ctrl && shift)
             {
@@ -3740,7 +3767,7 @@ namespace pe
         const ImVec2 avail = ImGui::GetContentRegionAvail();
         BuildRows(skeleton);
         m_contentHeight = m_rows.size() * m_rowHeight;
-        // Every channel row is drawn: the window's own scrollbar carries the whole panel, so the sheet has no
+        // Every channel row is drawn: the editors child's scrollbar carries the whole panel, so the sheet has no
         // inner vertical scroller and never hides a bone. The pose bar and the Pose Locks stack above it must
         // not squash it either, hence the row floor.
         m_scrollY = 0.f;
@@ -4569,8 +4596,6 @@ namespace pe
             scene.MarkNodeDirty(node);
         }
         m_restDisplayed = true;
-        if (m_gui)
-            m_gui->NotifyChange();
     }
 
     void AnimationTimeline::EnforcePlaybackOwnership(Scene &scene, AnimationSystem *anim, bool ownsTarget)
@@ -4623,7 +4648,7 @@ namespace pe
     {
         hovered = false;
         active = false;
-        if (!m_open || !m_gui)
+        if (!m_app)
             return false;
         if (!m_editModel || !m_editModel->HasSkeleton())
             return false;
@@ -4635,48 +4660,248 @@ namespace pe
     }
 
     // -------------------------------------------------------------------------
+    // own viewport: the scene image, the pose overlay, an orbit camera, maximize
+    // -------------------------------------------------------------------------
+    bool AnimationTimeline::TargetBounds(Scene &scene, vec3 &centre, float &radius) const
+    {
+        // the posed joints in world space, padded for the flesh around them: the node's mesh box is not posed
+        ViewportPose pose;
+        if (!m_editModel || !m_editModel->HasSkeleton() || !GetViewportPose(m_editModel, pose))
+            return false;
+        NodeId *node = pose.node && scene.IsNodeAlive(pose.node) ? pose.node : m_targetNode;
+        if (!node || !scene.IsNodeAlive(node) || pose.boneTransforms.empty())
+            return false;
+        const mat4 world = scene.GetWorldMatrix(node);
+        vec3 lo(std::numeric_limits<float>::max()), hi(-std::numeric_limits<float>::max());
+        for (const mat4 &bone : pose.boneTransforms)
+        {
+            const vec3 head = vec3(world * bone[3]);
+            lo = glm::min(lo, head);
+            hi = glm::max(hi, head);
+        }
+        // centred on the character's own column, not the box: a held tool must not pull the origin off centre
+        const vec3 boxCentre = (lo + hi) * 0.5f;
+        centre = vec3(world[3].x, boxCentre.y, world[3].z);
+        radius = glm::length(hi - lo) * 0.5f * 1.3f + glm::length(boxCentre - centre);
+        return std::isfinite(centre.x) && std::isfinite(centre.y) && std::isfinite(centre.z) && std::isfinite(radius) &&
+               radius > 1e-3f;
+    }
+
+    // The camera's own convention (ApplyCameraOrientationFromDirection): pitch = -asin(front.y), yaw = atan2(front.x, front.z).
+    void AnimationTimeline::ApplyOrbit(Scene &scene, Camera *camera)
+    {
+        const vec3 front(std::cos(m_orbitPitch) * std::sin(m_orbitYaw), -std::sin(m_orbitPitch),
+                         std::cos(m_orbitPitch) * std::cos(m_orbitYaw));
+        camera->SetPosition(m_orbitTarget - front * m_orbitDistance);
+        camera->SetEuler(vec3(m_orbitPitch, m_orbitYaw, 0.f));
+        camera->Update(); // the once-per-frame previous-matrix roll guard inside makes this safe from GUI code
+        scene.MarkDirty();
+    }
+
+    void AnimationTimeline::TakeCamera(Scene &scene, Camera *camera)
+    {
+        // the orbit starts from where the camera stands
+        m_cameraOwned = true;
+        float radius = 0.f;
+        if (!TargetBounds(scene, m_orbitTarget, radius))
+            m_orbitTarget = camera->GetPosition() + camera->GetFront() * 2.f;
+        const vec3 toTarget = m_orbitTarget - camera->GetPosition();
+        m_orbitDistance = std::max(glm::length(toTarget), 0.05f);
+        const vec3 front = toTarget / m_orbitDistance;
+        m_orbitPitch = -std::asin(std::clamp(front.y, -1.f, 1.f));
+        m_orbitYaw = std::abs(front.x) > 1e-5f || std::abs(front.z) > 1e-5f ? std::atan2(front.x, front.z)
+                                                                            : camera->GetEuler().y;
+        if (auto *rs = GetAnimatorRenderer())
+            rs->ResetTAAHistory();
+    }
+
+    void AnimationTimeline::FrameTarget(Scene &scene, Camera *camera)
+    {
+        float radius = 0.f;
+        if (!TargetBounds(scene, m_orbitTarget, radius))
+            return;
+        if (camera->IsOrthographic())
+            camera->SetOrthographicSize(std::max(radius * 2.5f, 0.001f));
+        const float fovy = std::max(camera->Fovy(), glm::radians(1.f));
+        m_orbitDistance = std::max(radius / std::tan(fovy * 0.5f) * 1.25f, camera->GetNearPlane() + radius);
+        if (auto *rs = GetAnimatorRenderer())
+            rs->ResetTAAHistory();
+    }
+
+    void AnimationTimeline::OrbitInput(Scene &scene, Camera *camera, bool hovered)
+    {
+        const ImGuiIO &io = ImGui::GetIO();
+        if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+            m_orbitDrag = 1;
+        else if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
+            m_orbitDrag = 2;
+        if (hovered && (ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle)))
+            ImGui::SetWindowFocus(); // a right-click alone never moves focus: F and the hotkeys must follow the drag
+        if ((m_orbitDrag == 1 && !ImGui::IsMouseDown(ImGuiMouseButton_Right)) ||
+            (m_orbitDrag == 2 && !ImGui::IsMouseDown(ImGuiMouseButton_Middle)))
+            m_orbitDrag = 0;
+        const float wheel = hovered ? io.MouseWheel : 0.f;
+        const bool frame = m_viewFramePending ||
+                           (hovered && !io.KeyCtrl && !ImGui::IsAnyItemActive() && ImGui::IsKeyPressed(ImGuiKey_F, false));
+        m_viewFramePending = false;
+        if (m_orbitDrag == 0 && wheel == 0.f && !frame && !m_viewSnap && !m_orthoPending)
+            return;
+        if (!m_cameraOwned)
+            TakeCamera(scene, camera);
+        if (m_viewSnap)
+        {
+            // the same convention as TakeCamera; a straight-down / up look keeps the yaw
+            const vec3 look = *m_viewSnap;
+            m_viewSnap.reset();
+            m_orbitPitch = -std::asin(std::clamp(look.y, -1.f, 1.f)); // exact top / bottom; the first drag clamps
+            if (std::abs(look.x) > 1e-5f || std::abs(look.z) > 1e-5f)
+                m_orbitYaw = std::atan2(look.x, look.z);
+            if (auto *rs = GetAnimatorRenderer())
+                rs->ResetTAAHistory();
+        }
+        if (m_orthoPending)
+        {
+            camera->SetOrthographic(*m_orthoPending);
+            m_orthoPending.reset();
+            // the framing carries over: the orthographic height is the perspective frustum's height at the target
+            camera->SetOrthographicSize(std::max(2.f * m_orbitDistance * std::tan(camera->Fovy() * 0.5f), 0.001f));
+        }
+        if (frame)
+            FrameTarget(scene, camera);
+        // ponytail: one sign convention - a drag to the right carries the camera round to the character's right and
+        // a drag up tilts the view up (the user's call); flip kOrbitSense if it reads the other way
+        constexpr float kOrbitSense = 1.f, kOrbitSpeed = 0.006f;
+        if (m_orbitDrag == 1)
+        {
+            m_orbitYaw -= io.MouseDelta.x * kOrbitSpeed * kOrbitSense;
+            m_orbitPitch = std::clamp(m_orbitPitch + io.MouseDelta.y * kOrbitSpeed * kOrbitSense, -1.5f, 1.5f);
+        }
+        else if (m_orbitDrag == 2)
+        {
+            const float step = m_orbitDistance * 0.002f;
+            m_orbitTarget -= camera->GetRight() * (io.MouseDelta.x * step);
+            m_orbitTarget += camera->GetUp() * (io.MouseDelta.y * step);
+        }
+        if (wheel != 0.f)
+        {
+            if (camera->IsOrthographic())
+                camera->SetOrthographicSize(std::max(camera->GetOrthographicSize() * std::pow(0.9f, wheel), 0.001f));
+            else
+                m_orbitDistance = std::clamp(m_orbitDistance * std::pow(0.9f, wheel), 0.05f, 1000.f);
+        }
+        ApplyOrbit(scene, camera);
+    }
+
+    // Horizontal drag bar between two stacked children: it moves topHeight by the mouse delta and keeps both
+    // panes at least min tall.
+    static void SplitterH(const char *id, float &topHeight, float minTop, float minBottom, float totalHeight,
+                          float width, float thickness = 6.f)
+    {
+        ImGui::InvisibleButton(id, ImVec2(width, thickness));
+        if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+        if (ImGui::IsItemActive())
+            topHeight += ImGui::GetIO().MouseDelta.y;
+        topHeight = std::clamp(topHeight, minTop, std::max(minTop, totalHeight - thickness - minBottom));
+        const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
+        const float y = (min.y + max.y) * 0.5f;
+        ImGui::GetWindowDrawList()->AddLine(ImVec2(min.x, y), ImVec2(max.x, y),
+                                            ImGui::GetColorU32(ImGui::IsItemActive()    ? ImGuiCol_SeparatorActive
+                                                               : ImGui::IsItemHovered() ? ImGuiCol_SeparatorHovered
+                                                                                        : ImGuiCol_Separator));
+    }
+
+    void AnimationTimeline::DrawSceneViewport(Scene &scene)
+    {
+        Camera *camera = scene.GetActiveCamera();
+        // the scene image is shared with the Viewport; with that window closed (the animator) it is made here
+        Image *sceneImage = m_app && m_app->EnsureSceneTexture() ? GUIState::s_sceneViewImage : nullptr;
+        if (!camera || !sceneImage || !GUIState::s_viewportTextureId || sceneImage->GetHeight() == 0)
+            return;
+        if (m_editModel != m_framedModel)
+        {
+            // the animator's fresh look at a new character: framed from a little above, wherever the camera stood
+            m_framedModel = m_editModel;
+            if (m_editModel)
+            {
+                if (!m_cameraOwned)
+                    TakeCamera(scene, camera);
+                m_orbitPitch = 0.2f;
+                m_viewFramePending = true;
+            }
+        }
+        const float windowHeight = ImGui::GetWindowSize().y;
+        const float width = ImGui::GetContentRegionAvail().x;
+        const float minBelow = m_headerHeight * 4.f; // the editors keep room for the header, a ruler and a few rows
+        float height = std::clamp(std::round(windowHeight * m_viewportShare), 0.f, std::max(0.f, windowHeight - minBelow));
+        if (height > 0.f)
+        {
+            ImGui::BeginChild("##anim_viewport", {width, height}, ImGuiChildFlags_None,
+                              ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            const ImVec2 panelMin = ImGui::GetCursorScreenPos(), panel = ImGui::GetContentRegionAvail();
+            ImDrawList *drawList = ImGui::GetWindowDrawList();
+            if (panel.x > 0.f && panel.y > 0.f)
+            {
+                drawList->AddRectFilled(panelMin, {panelMin.x + panel.x, panelMin.y + panel.y}, IM_COL32(0, 0, 0, 255));
+                // the camera projects at this region's aspect (AnimatorApp::ViewportAspect reads it), so the whole
+                // render fills the region and every pick ray lands
+                s_regionAspect = panel.x / panel.y;
+                const float aspect = s_regionAspect;
+                const ImVec2 imageSize = panel.x / panel.y > aspect ? ImVec2(std::floor(panel.y * aspect), panel.y)
+                                                                    : ImVec2(panel.x, std::floor(panel.x / aspect));
+                ImGui::SetCursorScreenPos({panelMin.x + std::floor((panel.x - imageSize.x) * 0.5f),
+                                           panelMin.y + std::floor((panel.y - imageSize.y) * 0.5f)});
+                ImGui::Image((ImTextureID)(intptr_t)GUIState::s_viewportTextureId, imageSize);
+                const ImVec2 imageMin = ImGui::GetItemRectMin();
+                const bool imageHovered = ImGui::IsItemHovered();
+                drawList->PushClipRect(imageMin, {imageMin.x + imageSize.x, imageMin.y + imageSize.y}, true);
+                ui::OrientationGizmoResult gizmo;
+                if (GUIState::s_useOrientationGizmo)
+                    gizmo = ui::DrawOrientationGizmo(camera, imageMin, imageSize);
+                if (gizmo.clicked) // Blender's rule: the camera goes to that axis's side and looks back
+                    RequestView(-gizmo.direction, false);
+                bool hovered = false, active = false;
+                if (gizmo.hovered || gizmo.active)
+                {
+                    // the gizmo owns the mouse: the overlay draws with it parked off-screen (its clicks are hit-gated)
+                    ImGuiIO &io = ImGui::GetIO();
+                    const ImVec2 mouse = io.MousePos;
+                    io.MousePos = {-FLT_MAX, -FLT_MAX};
+                    DrawViewport(scene, camera, imageMin, imageSize, hovered, active);
+                    io.MousePos = mouse;
+                }
+                else
+                    DrawViewport(scene, camera, imageMin, imageSize, hovered, active);
+                drawList->PopClipRect();
+                m_viewportDrawn = true;
+                OrbitInput(scene, camera, imageHovered || hovered);
+            }
+            ImGui::EndChild();
+        }
+        SplitterH("##anim_viewport_split", height, 0.f, minBelow, windowHeight, width);
+        m_viewportShare = windowHeight > 0.f ? height / windowHeight : m_viewportShare;
+    }
+
+    // -------------------------------------------------------------------------
     // main
     // -------------------------------------------------------------------------
-    void AnimationTimeline::Update()
+    void AnimationTimeline::Update(const ImVec2 &pos, const ImVec2 &size)
     {
-        if (!m_open)
-        {
-            m_visible = false;
-            auto *rs = GetGlobalSystem<RendererSystem>();
-            auto *anim = GetGlobalSystem<AnimationSystem>();
-            if (rs && anim)
-            {
-                Scene &scene = rs->GetScene();
-                if (!m_tabSuspended)
-                {
-                    m_tabSuspended = true;
-                    m_tabResumePlaying = IsPlaying(anim);
-                    m_tabResumeRestPose = m_restDisplayed;
-                    RestPoseAll(scene, anim);
-                    EnforcePlaybackOwnership(scene, anim, false);
-                }
-                else if (m_ownershipSceneGeneration != scene.GetGeneration())
-                    EnforcePlaybackOwnership(scene, anim, false);
-                m_ownershipSceneGeneration = scene.GetGeneration();
-            }
-            return;
-        }
-
-        ImGui::SetNextWindowSize({1360, 360}, ImGuiCond_FirstUseEver);
+        m_viewportDrawn = false;
+        s_regionAspect = 0.f;
+        // One fixed window under the menu bar: the viewport child on top, the drag bar, then the editors in their own
+        // scrolling child (header to status bar). ImGui hands the wheel to the hovered child and never scrolls on
+        // Ctrl+wheel, which stays with the key / curve areas as zoom.
+        ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(size, ImGuiCond_Always);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0.f, 0.f});
-        // Target resolution and the timeline.* request drains below run even while this window is a
-        // hidden docked tab: agent actions depend on m_editModel. Playback does not retain ownership.
-        // The window keeps its own right-edge scrollbar (the whole panel scrolls, header to status bar) but
-        // never takes the wheel: the wheel belongs to the key / curve areas for zoom.
-        const bool visible = ImGui::Begin(m_name.c_str(), &m_open, ImGuiWindowFlags_NoScrollWithMouse);
+        const bool visible = ImGui::Begin("Animation Timeline", nullptr,
+                                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
+                                              ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                                              ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+                                              ImGuiWindowFlags_NoBringToFrontOnFocus);
         ImGui::PopStyleVar();
         m_visible = visible;
-
-        // The wheel over the panel scrolls the panel. NoScrollWithMouse keeps ImGui from doing this on its
-        // own, so Ctrl+wheel reaches the timeline as zoom instead of scrolling the window at the same time.
-        if (visible && !ImGui::GetIO().KeyCtrl && ImGui::GetIO().MouseWheel != 0.f && ImGui::IsWindowHovered())
-            ImGui::SetScrollY(std::clamp(ImGui::GetScrollY() - ImGui::GetIO().MouseWheel * m_rowHeight * 3.f, 0.f,
-                                         ImGui::GetScrollMaxY()));
 
         const float lineHeight = ImGui::GetTextLineHeight();
         m_rowHeight = std::round(lineHeight + 6.f);
@@ -4686,16 +4911,23 @@ namespace pe
         m_hScrollHeight = std::round(std::max(14.f, lineHeight));
         m_axisWidth = std::round(ImGui::CalcTextSize("-0.000").x + 12.f);
         m_channelWidth = std::round(std::max(210.f, ImGui::CalcTextSize("ForearmHand.R.001").x + 90.f));
+        auto *rs = GetAnimatorRenderer();
+        auto *anim = GetGlobalSystem<AnimationSystem>();
+        if (visible && rs && anim)
+            DrawSceneViewport(rs->GetScene()); // the character on top, the editors below
+        ImGui::BeginChild("##anim_editors");
+        auto endWindow = []
+        {
+            ImGui::EndChild();
+            ImGui::End();
+        };
         if (visible)
             DrawPanelMode();
-
-        auto *rs = GetGlobalSystem<RendererSystem>();
-        auto *anim = GetGlobalSystem<AnimationSystem>();
         if (!rs || !anim)
         {
             if (visible)
                 ImGui::TextDisabled("  Animation system not available.");
-            ImGui::End();
+            endWindow();
             return;
         }
         Scene &scene = rs->GetScene();
@@ -4703,7 +4935,9 @@ namespace pe
         auto drawRigPanel = [&]()
         {
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {8.f, 8.f});
-            ImGui::BeginChild("##rig_panel", {}, ImGuiChildFlags_AlwaysUseWindowPadding);
+            // tall enough to work in when the viewport takes most of the window: the editors child scrolls the rest
+            ImGui::BeginChild("##rig_panel", {0.f, std::max(ImGui::GetContentRegionAvail().y, m_rowHeight * 16.f)},
+                              ImGuiChildFlags_AlwaysUseWindowPadding);
             m_rigEditor->DrawPanel(scene);
             ImGui::EndChild();
             ImGui::PopStyleVar();
@@ -4765,7 +4999,7 @@ namespace pe
                     ImGui::TextDisabled(m_targetNode ? "  The selected model has no skeleton (bake a rig first)."
                                                      : "  No model selected: select a node of a rigged model in the hierarchy.");
             }
-            ImGui::End();
+            endWindow();
             return;
         }
         if (model != m_lastModel)
@@ -4789,7 +5023,7 @@ namespace pe
         if (clips.empty() && !visible && !m_pendingClipSet && m_pendingPoses.empty())
         {
             DropPendingRequests();
-            ImGui::End();
+            endWindow();
             return;
         }
         if (clips.empty())
@@ -4987,13 +5221,13 @@ namespace pe
             // Pose/agent requests may have reevaluated or started the newly resolved target above.
             if (!m_restDisplayed || IsPlaying(anim))
                 RestPoseAll(scene, anim);
-            ImGui::End();
+            endWindow();
             return;
         }
 
         if (DrawHeader(scene, anim, model, clip, currentFrame, !m_rigMode))
         {
-            ImGui::End();
+            endWindow();
             return;
         }
         if (m_rigMode)
@@ -5017,7 +5251,7 @@ namespace pe
                 ClearInterval(); // the Animate hotkey path never runs here, and the ruler is shared
             ImGui::SetCursorScreenPos({rulerOrigin.x, rulerOrigin.y + m_rulerHeight});
             drawRigPanel();
-            ImGui::End();
+            endWindow();
             return;
         }
         DrawPoseBar(scene, anim, skeleton, clip, currentFrame);
@@ -5030,6 +5264,6 @@ namespace pe
         DrawStatusBar(skeleton, clip);
         HandleHotkeys(scene, anim, skeleton, clip, currentFrame);
 
-        ImGui::End();
+        endWindow();
     }
 } // namespace pe

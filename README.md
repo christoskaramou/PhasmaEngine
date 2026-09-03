@@ -65,6 +65,11 @@ PhasmaEngine is a Vulkan and DirectX 12 3D engine for learning graphics techniqu
 * Editor module C++ hot reload (PhasmaEditorModule.dll)
 * Named editor actions invokable without mouse input (agents/automation)
 
+### Animator (PhasmaAnimator)
+* The standalone animation program: open a cooked `.pemesh`, rig it (presets, capsules, weights, bake) and animate it (Blender-style dope sheet and graph editor, puppet drag, locks, foot contact, balance, ballistic and cycle bakes, Motion Doctor) in one window with its own orbit-camera viewport
+* No scenes, scripts or server: `animator_config.json` remembers the last model; `animator_command.json` drives it for automation
+* Build target `PhasmaAnimator` (`PE_BUILD_ANIMATOR`); run `PhasmaAnimator --api vulkan --open <model.pemesh>` or pick **Phasma Animator** in the launcher's Run dropdown
+
 ### MCP Integration
 
 PhasmaEngine has no in-engine LLM. Instead, PhasmaEditor runs an in-process MCP (Model Context Protocol) HTTP server at `http://127.0.0.1:8765/mcp`, letting **external** AI clients control the engine directly.
@@ -126,7 +131,7 @@ The manifest tells the editor and player which assets folder to use and, optiona
 }
 ```
 
-The easiest setup is through `PhasmaLauncher`: open the **Project** picker, select a project root that contains `phasma_project.json` (or select an `Assets` folder for older manifest-free projects), then choose a startup scene from `Assets/Scenes` if one is not already set by the manifest. The launcher writes the selection to `phasma_settings.json` next to the executable, and both `PhasmaEditor` and `PhasmaPlayer` use that active project assets root on launch.
+The easiest setup is through `PhasmaLauncher`: open the **Project** picker, select a project root that contains `phasma_project.json` (or select an `Assets` folder for older manifest-free projects), then choose a startup scene from `Assets/Scenes` if one is not already set by the manifest. The launcher writes the selection to `phasma_settings.json` next to the executable, and `PhasmaEditor`, `PhasmaPlayer` and `PhasmaAnimator` use that active project assets root on launch.
 
 If you run the editor or player directly, create or edit the executable-local `phasma_settings.json` yourself:
 

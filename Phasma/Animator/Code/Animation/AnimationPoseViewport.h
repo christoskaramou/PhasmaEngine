@@ -2,7 +2,7 @@
 
 #include "Animation/AnimationReferenceFrames.h"
 #include "Animation/AnimationTypes.h"
-#include "GUI/Widgets/RigEditor.h"
+#include "RigEditor.h"
 #include "imgui/imgui.h"
 
 #include <array>

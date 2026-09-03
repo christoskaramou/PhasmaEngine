@@ -6,13 +6,12 @@
 #include "Animation/AnimationEvaluator.h"
 #include "Animation/AnimationPoseTools.h"
 #include "Camera/Camera.h"
-#include "GUI/GUI.h"
+#include "AnimatorApp.h"
 #include "GUI/Helpers.h"
-#include "GUI/Widgets/AnimationTimeline.h"
-#include "GUI/Widgets/FileSelector.h"
+#include "AnimationTimeline.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
-#include "Systems/RendererSystem.h"
+#include "Render/RuntimeSceneRenderer.h"
 #include "imgui/ImGuizmo.h"
 
 #include <nlohmann/json.hpp>
@@ -237,16 +236,16 @@ namespace pe
             ui::ItemTooltip("Path to a *.reference.json manifest. Load draws its frames behind the viewport at the "
                             "playhead's time, so you can pose against filmed footage. Browse picks one under Assets.");
             ImGui::SameLine();
-            if (ImGui::Button("Browse##timeline_reference") && m_timeline.m_gui)
-                if (FileSelector *selector = m_timeline.m_gui->GetWidget<FileSelector>())
-                    selector->OpenSelection([this](const std::string &path)
-                                            {
-                                                std::string error;
-                                                m_status = LoadReference(PathFromUtf8(path), error)
-                                                               ? "Loaded reference sequence."
-                                                               : error;
-                                                return error.empty(); },
-                                            {".json"}, Path::Assets);
+            if (ImGui::Button("Browse##timeline_reference") && m_timeline.m_app)
+            {
+                std::string path;
+                if (m_timeline.m_app->PickFile("Reference sequence", "Reference (*.json)\0*.json\0All files\0*.*\0",
+                                               path))
+                {
+                    std::string error;
+                    m_status = LoadReference(PathFromUtf8(path), error) ? "Loaded reference sequence." : error;
+                }
+            }
             ImGui::SameLine();
             if (ImGui::Button("Load##timeline_reference"))
             {
@@ -339,11 +338,10 @@ namespace pe
                         TogglePin(name);
                     return ok({{"bone", name}, {"pinned", IsPinned(name)}, {"pins", m_pins}});
                 }
-                RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+                RuntimeSceneRenderer *renderer = GetAnimatorRenderer();
                 AnimationTimeline *timeline = &m_timeline;
                 if (!renderer || !timeline || !args.contains("target"))
                     return fail("timeline.grab needs target[3], the renderer and the Animation Timeline");
-                *timeline->GetOpen() = true; // a closed Timeline resolves next frame; the retry then has a pose
                 if (timeline->HasPendingRequests())
                     return fail("the Timeline has queued requests (frame/pose/clip); retry after the next frame");
                 vec3 target;
@@ -521,11 +519,10 @@ namespace pe
                     }
                     return ok({{"lock", state}});
                 }
-                RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+                RuntimeSceneRenderer *renderer = GetAnimatorRenderer();
                 AnimationTimeline *timeline = &m_timeline;
                 if (!renderer || !timeline)
                     return fail("renderer or Animation Timeline not available");
-                *timeline->GetOpen() = true; // a closed Timeline resolves next frame; the retry then has a pose
                 if (timeline->HasPendingRequests())
                     return fail("the Timeline has queued requests (frame/pose/clip); retry after the next frame");
                 if (op == "solve")
@@ -564,10 +561,10 @@ namespace pe
             return;
         }
         if (drainRendererFrames)
-            if (RendererSystem *renderer = GetGlobalSystem<RendererSystem>())
+            if (RuntimeSceneRenderer *renderer = GetAnimatorRenderer())
                 renderer->WaitAllFramesCommands();
-        if (m_referenceTexture && m_timeline.m_gui)
-            m_timeline.m_gui->ReleaseImageTexture(m_referenceTexture);
+        if (m_referenceTexture && m_timeline.m_app)
+            m_timeline.m_app->ReleaseImageTexture(m_referenceTexture);
         m_referenceTexture = nullptr;
         Image::Destroy(m_referenceImage);
         m_referenceFrameIndex = -1;
@@ -631,7 +628,7 @@ namespace pe
             return m_referenceImage && m_referenceTexture;
 
         Queue *queue = RHII.GetMainQueue();
-        if (!queue || !m_timeline.m_gui)
+        if (!queue || !m_timeline.m_app)
         {
             error = "reference image upload is unavailable";
             return false;
@@ -649,7 +646,7 @@ namespace pe
             error = "failed to load reference frame " + lookup.path.filename().generic_string();
             return false;
         }
-        void *texture = m_timeline.m_gui->RegisterImageTexture(image);
+        void *texture = m_timeline.m_app->RegisterImageTexture(image);
         if (!texture)
         {
             Image::Destroy(image);
