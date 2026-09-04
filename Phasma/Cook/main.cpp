@@ -67,7 +67,7 @@ namespace
         CookSession()
         {
             pe::RuntimeWindowDesc desc;
-            desc.title = "PhasmaCook";
+            desc.title = "Phasma Cook";
             desc.api = PE_GRAPHICS_API_VULKAN;
             desc.flags = SDL_WINDOW_HIDDEN; // no visible surface — cooking never presents a frame
             desc.showAfterCreate = false;

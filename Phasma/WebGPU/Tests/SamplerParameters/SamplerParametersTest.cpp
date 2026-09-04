@@ -506,7 +506,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "SamplerParametersTest";
-        desc.windowTitle = "PhasmaWebGPU Sampler Parameters";
+        desc.windowTitle = "Phasma WebGPU Sampler Parameters";
         desc.initialWidth = kInitialSize;
         desc.initialHeight = kInitialSize;
         return desc;

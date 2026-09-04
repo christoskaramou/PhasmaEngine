@@ -358,7 +358,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "GameOfLifeTest";
-        desc.windowTitle = "PhasmaWebGPU GameOfLife";
+        desc.windowTitle = "Phasma WebGPU GameOfLife";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

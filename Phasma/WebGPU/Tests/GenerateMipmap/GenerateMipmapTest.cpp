@@ -1313,7 +1313,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "GenerateMipmapTest";
-        desc.windowTitle = "PhasmaWebGPU Generate Mipmap";
+        desc.windowTitle = "Phasma WebGPU Generate Mipmap";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

@@ -668,7 +668,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "AlphaToCoverageEmulatorTest";
-        desc.windowTitle = "PhasmaWebGPU Alpha-to-Coverage Emulator";
+        desc.windowTitle = "Phasma WebGPU Alpha-to-Coverage Emulator";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

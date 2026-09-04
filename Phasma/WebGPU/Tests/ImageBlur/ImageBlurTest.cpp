@@ -606,7 +606,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "ImageBlurTest";
-        desc.windowTitle = "PhasmaWebGPU Image Blur";
+        desc.windowTitle = "Phasma WebGPU Image Blur";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         desc.requiredFeatures = {WGPUFeatureName_TextureFormatsTier2};

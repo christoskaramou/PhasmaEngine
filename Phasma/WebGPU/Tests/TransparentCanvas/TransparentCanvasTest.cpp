@@ -286,7 +286,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "TransparentCanvasTest";
-        desc.windowTitle = "PhasmaWebGPU Transparent Canvas";
+        desc.windowTitle = "Phasma WebGPU Transparent Canvas";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         // Upstream sets canvas alphaMode = 'premultiplied' so the page shows

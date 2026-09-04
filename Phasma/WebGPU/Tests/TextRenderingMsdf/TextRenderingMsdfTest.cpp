@@ -1070,7 +1070,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "TextRenderingMsdfTest";
-        desc.windowTitle = "PhasmaWebGPU TextRenderingMsdf";
+        desc.windowTitle = "Phasma WebGPU TextRenderingMsdf";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

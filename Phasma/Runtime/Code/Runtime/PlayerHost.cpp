@@ -876,7 +876,7 @@ namespace pe
             CoreEventSession events;
 
             RuntimeWindowDesc windowDesc;
-            windowDesc.title = "PhasmaPlayer";
+            windowDesc.title = "Phasma Player";
             windowDesc.api = api;
             windowDesc.displayIndex = displayIndex;
 #if !defined(PE_WIN32)

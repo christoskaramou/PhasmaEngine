@@ -2352,7 +2352,7 @@ namespace pe
         // Set Window Title
         auto updateTitle = [&]()
         {
-            std::string title = "PhasmaEngine";
+            std::string title = "Phasma Engine";
             title += " - Device: " + GetGpuName();
             title += " - API: " + std::string(PeGraphicsApiName(m_api));
             title += " - Present Mode: " + std::string(PresentModeToString(effectiveMode));

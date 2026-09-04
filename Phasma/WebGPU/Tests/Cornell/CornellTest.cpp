@@ -1455,7 +1455,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "CornellTest";
-        desc.windowTitle = "PhasmaWebGPU Cornell";
+        desc.windowTitle = "Phasma WebGPU Cornell";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         // Lightmap + HDR framebuffer are rgba16float + storage-binding:

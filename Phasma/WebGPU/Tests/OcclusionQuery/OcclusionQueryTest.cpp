@@ -568,7 +568,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "OcclusionQueryTest";
-        desc.windowTitle = "PhasmaWebGPU Occlusion Query";
+        desc.windowTitle = "Phasma WebGPU Occlusion Query";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

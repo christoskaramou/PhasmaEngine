@@ -269,7 +269,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "AnimometerTest";
-        desc.windowTitle = "PhasmaWebGPU Animometer - 20000 tris";
+        desc.windowTitle = "Phasma WebGPU Animometer - 20000 tris";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

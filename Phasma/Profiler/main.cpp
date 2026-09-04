@@ -1985,7 +1985,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    SDL_Window *window = SDL_CreateWindow("PhasmaProfiler",
+    SDL_Window *window = SDL_CreateWindow("Phasma Profiler",
                                           SDL_WINDOWPOS_CENTERED,
                                           SDL_WINDOWPOS_CENTERED,
                                           1280,
@@ -2115,7 +2115,7 @@ int main(int argc, char *argv[])
         const ImGuiViewport *viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
-        ImGui::Begin("PhasmaProfiler", nullptr,
+        ImGui::Begin("Phasma Profiler", nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
 
         ImGui::TextColored(kAccent, "PHASMA");

@@ -540,7 +540,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "PointsTest";
-        desc.windowTitle = "PhasmaWebGPU Points";
+        desc.windowTitle = "Phasma WebGPU Points";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

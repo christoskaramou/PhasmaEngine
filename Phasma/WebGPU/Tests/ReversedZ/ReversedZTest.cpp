@@ -541,7 +541,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "ReversedZTest";
-        desc.windowTitle = "PhasmaWebGPU ReversedZ";
+        desc.windowTitle = "Phasma WebGPU ReversedZ";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

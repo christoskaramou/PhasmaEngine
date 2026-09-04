@@ -1004,7 +1004,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "RenderBundlesTest";
-        desc.windowTitle = "PhasmaWebGPU Render Bundles";
+        desc.windowTitle = "Phasma WebGPU Render Bundles";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

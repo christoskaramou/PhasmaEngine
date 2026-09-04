@@ -314,7 +314,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "ComputeBoidsTest";
-        desc.windowTitle = "PhasmaWebGPU Compute Boids - 1500 particles";
+        desc.windowTitle = "Phasma WebGPU Compute Boids - 1500 particles";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         desc.forcePresentMode = true;

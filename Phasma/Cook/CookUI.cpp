@@ -540,7 +540,7 @@ namespace pe
             return 1;
         }
 
-        SDL_Window *window = SDL_CreateWindow("PhasmaCook", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        SDL_Window *window = SDL_CreateWindow("Phasma Cook", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                               940, 660, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
         if (!window)
         {
@@ -598,7 +598,7 @@ namespace pe
 
             ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
             ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize, ImGuiCond_Always);
-            ImGui::Begin("PhasmaCook", nullptr,
+            ImGui::Begin("Phasma Cook", nullptr,
                          ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                              ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
             DrawUI(st, exePath);

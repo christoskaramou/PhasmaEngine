@@ -640,7 +640,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "ShadowMappingTest";
-        desc.windowTitle = "PhasmaWebGPU Shadow Mapping";
+        desc.windowTitle = "Phasma WebGPU Shadow Mapping";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

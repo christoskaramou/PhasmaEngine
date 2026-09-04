@@ -856,7 +856,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "DeferredTest";
-        desc.windowTitle = "PhasmaWebGPU Deferred Rendering";
+        desc.windowTitle = "Phasma WebGPU Deferred Rendering";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

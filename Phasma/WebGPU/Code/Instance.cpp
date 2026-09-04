@@ -44,7 +44,7 @@ namespace
 
                 uint32_t windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_VULKAN;
                 s_standaloneWindow =
-                    SDL_CreateWindow("PhasmaWebGPU", 0, 0, 64, 64, windowFlags);
+                    SDL_CreateWindow("Phasma WebGPU", 0, 0, 64, 64, windowFlags);
                 if (!s_standaloneWindow)
                     return;
 
