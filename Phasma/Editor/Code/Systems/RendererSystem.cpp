@@ -5,7 +5,7 @@
 #include "API/RHI.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
-#include "Project/ProjectSelection.h"
+#include "Base/Path.h"
 #include "RenderPasses/TAAPass.h"
 #include "Render/ScriptRenderPasses.h"
 #include "UI/RuntimeUi.h"
@@ -30,15 +30,8 @@ namespace pe
             return runtimeUi && runtimeUi->IsInitialized();
         }
 
-        void DispatchWindowTitle()
+        void AppendWindowTitleSuffix(std::string &title, PePresentMode presentMode)
         {
-            const Swapchain *swapchain = RHII.GetSwapchain();
-            const Surface *surface = RHII.GetSurface();
-            const PePresentMode presentMode = swapchain ? swapchain->GetPresentMode()
-                                              : surface ? surface->GetPresentMode()
-                                                        : PE_PRESENT_MODE_FIFO;
-
-            std::string title = "Phasma Editor";
             title += " - Device: " + RHII.GetGpuName();
             title += " - API: " + std::string(PeGraphicsApiName(RHII.GetApi()));
             title += " - Present Mode: " + std::string(RHII.PresentModeToString(presentMode));
@@ -51,13 +44,24 @@ namespace pe
 #elif PE_RELWITHDEBINFO
             title += " - RelWithDebInfo";
 #endif
-            const std::string projectPath = ResolveProjectSelection().project.root.generic_string();
-            if (!projectPath.empty())
-                title += " - Project: " + projectPath;
-
-            EventSystem::DispatchEvent(EventType::SetWindowTitle, title);
+            Path::Init();
+            if (!Path::Project.empty())
+                title += " - Project: " + Path::Project;
         }
     } // namespace
+
+    void RendererSystem::RefreshWindowTitle()
+    {
+        const Swapchain *swapchain = RHII.GetSwapchain();
+        const Surface *surface = RHII.GetSurface();
+        const PePresentMode presentMode = swapchain ? swapchain->GetPresentMode()
+                                          : surface ? surface->GetPresentMode()
+                                                    : PE_PRESENT_MODE_FIFO;
+
+        std::string title = "Phasma Editor";
+        AppendWindowTitleSuffix(title, presentMode);
+        EventSystem::DispatchEvent(EventType::SetWindowTitle, title);
+    }
 
     void RendererSystem::Init(CommandBuffer *cmd)
     {
@@ -65,7 +69,7 @@ namespace pe
 
         const bool isDx12 = UsesDx12RenderOrchestration();
 
-        DispatchWindowTitle();
+        RefreshWindowTitle();
 
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *initCmd = cmd;
@@ -459,7 +463,7 @@ namespace pe
         surface->SetPresentMode(Settings::Get<SceneSettings>().preferred_present_mode);
         Settings::Get<SceneSettings>().preferred_present_mode = surface->GetPresentMode();
         RHII.CreateSwapchain(surface);
-        DispatchWindowTitle();
+        RefreshWindowTitle();
 
         m_sceneRenderer.CreateRenderTargets(hasRTGeom);
 

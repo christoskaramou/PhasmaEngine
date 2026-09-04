@@ -132,6 +132,7 @@ namespace pe
     void ApplyProjectSelectionAssetsRoot(const ProjectSelection &selection)
     {
         Path::Init();
+        Path::Project = selection.project.root.empty() ? std::string{} : selection.project.root.generic_string();
         const std::filesystem::path assetsRoot = ProjectSelectionAssetsRoot(selection);
         if (!assetsRoot.empty())
             Path::Assets = EnsureTrailingSlash(assetsRoot);

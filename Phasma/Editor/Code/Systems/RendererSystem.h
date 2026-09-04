@@ -60,6 +60,7 @@ namespace pe
         void Init(CommandBuffer *cmd) override;
         void Update() override;
         void Destroy() override;
+        static void RefreshWindowTitle();
         void Draw();
         void DrawPlatformWindows();
         void LateCatchUpForScriptMutations();
