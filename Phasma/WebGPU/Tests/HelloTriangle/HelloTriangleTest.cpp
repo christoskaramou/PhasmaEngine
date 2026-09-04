@@ -88,7 +88,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "HelloTriangleTest";
-        desc.windowTitle = "PhasmaWebGPU Hello Triangle";
+        desc.windowTitle = "Phasma WebGPU Hello Triangle";
         desc.initialWidth = 1280;
         desc.initialHeight = 720;
         return desc;

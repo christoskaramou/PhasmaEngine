@@ -421,7 +421,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "CamerasTest";
-        desc.windowTitle = "PhasmaWebGPU Cameras";
+        desc.windowTitle = "Phasma WebGPU Cameras";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

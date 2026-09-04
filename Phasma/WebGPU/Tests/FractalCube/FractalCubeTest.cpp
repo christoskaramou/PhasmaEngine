@@ -357,7 +357,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "FractalCubeTest";
-        desc.windowTitle = "PhasmaWebGPU FractalCube";
+        desc.windowTitle = "Phasma WebGPU FractalCube";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         desc.surfaceUsage =

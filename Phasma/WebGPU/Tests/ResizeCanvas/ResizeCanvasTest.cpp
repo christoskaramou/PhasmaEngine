@@ -208,7 +208,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "ResizeCanvasTest";
-        desc.windowTitle = "PhasmaWebGPU Resize Canvas";
+        desc.windowTitle = "Phasma WebGPU Resize Canvas";
         desc.initialWidth = kInitialWidth;
         desc.initialHeight = kInitialHeight;
         desc.windowFlags = SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE;

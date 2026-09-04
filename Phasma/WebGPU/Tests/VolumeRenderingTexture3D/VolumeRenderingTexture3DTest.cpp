@@ -521,7 +521,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "VolumeRenderingTexture3DTest";
-        desc.windowTitle = "PhasmaWebGPU Volume Rendering - Texture 3D";
+        desc.windowTitle = "Phasma WebGPU Volume Rendering - Texture 3D";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

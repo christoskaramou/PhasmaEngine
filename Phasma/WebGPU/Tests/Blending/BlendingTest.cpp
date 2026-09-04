@@ -528,7 +528,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "BlendingTest";
-        desc.windowTitle = "PhasmaWebGPU Blending";
+        desc.windowTitle = "Phasma WebGPU Blending";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

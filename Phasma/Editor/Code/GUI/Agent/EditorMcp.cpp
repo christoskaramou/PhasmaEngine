@@ -44,7 +44,7 @@ namespace pe
     {
         pmcp::ServerConfig serverCfg;
         serverCfg.name = "phasmaeditor-tools";
-        serverCfg.title = "PhasmaEditor Tools";
+        serverCfg.title = "Phasma Editor Tools";
         serverCfg.version = "0.1.0";
         serverCfg.instructions = "Use tools/list and tools/call to inspect and interact with the running PhasmaEditor instance.";
         serverCfg.log = &RouteLog;

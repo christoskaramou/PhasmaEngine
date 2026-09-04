@@ -344,7 +344,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "InstancedCubeTest";
-        desc.windowTitle = "PhasmaWebGPU InstancedCube";
+        desc.windowTitle = "Phasma WebGPU InstancedCube";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

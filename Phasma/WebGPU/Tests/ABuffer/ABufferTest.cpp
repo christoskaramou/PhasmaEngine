@@ -847,7 +847,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "ABufferTest";
-        desc.windowTitle = "PhasmaWebGPU A-Buffer";
+        desc.windowTitle = "Phasma WebGPU A-Buffer";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

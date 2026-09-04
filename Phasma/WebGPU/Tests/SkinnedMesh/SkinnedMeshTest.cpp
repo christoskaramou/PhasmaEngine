@@ -1620,7 +1620,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "SkinnedMeshTest";
-        desc.windowTitle = "PhasmaWebGPU Skinned Mesh";
+        desc.windowTitle = "Phasma WebGPU Skinned Mesh";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

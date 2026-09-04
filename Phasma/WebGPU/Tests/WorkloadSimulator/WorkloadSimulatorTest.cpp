@@ -377,7 +377,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "WorkloadSimulatorTest";
-        desc.windowTitle = "PhasmaWebGPU WorkloadSimulator";
+        desc.windowTitle = "Phasma WebGPU WorkloadSimulator";
         desc.initialWidth = kCanvasSize;
         desc.initialHeight = kCanvasSize;
         desc.alphaMode = WGPUCompositeAlphaMode_Opaque;

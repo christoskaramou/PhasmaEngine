@@ -1054,7 +1054,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "StencilMaskTest";
-        desc.windowTitle = "PhasmaWebGPU Stencil Mask";
+        desc.windowTitle = "Phasma WebGPU Stencil Mask";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

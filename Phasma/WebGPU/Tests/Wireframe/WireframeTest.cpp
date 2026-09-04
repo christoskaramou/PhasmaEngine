@@ -993,7 +993,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "WireframeTest";
-        desc.windowTitle = "PhasmaWebGPU Wireframe";
+        desc.windowTitle = "Phasma WebGPU Wireframe";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

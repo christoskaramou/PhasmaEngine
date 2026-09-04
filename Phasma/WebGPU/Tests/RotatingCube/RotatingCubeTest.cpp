@@ -285,7 +285,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "RotatingCubeTest";
-        desc.windowTitle = "PhasmaWebGPU Rotating Cube";
+        desc.windowTitle = "Phasma WebGPU Rotating Cube";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

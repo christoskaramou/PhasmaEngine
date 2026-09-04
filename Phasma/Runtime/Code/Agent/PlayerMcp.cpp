@@ -209,7 +209,7 @@ namespace pe
     {
         pmcp::ServerConfig serverCfg;
         serverCfg.name = "phasmaplayer-tools";
-        serverCfg.title = "PhasmaPlayer Tools";
+        serverCfg.title = "Phasma Player Tools";
         serverCfg.version = "0.1.0";
         serverCfg.instructions = "Drive and inspect the running PhasmaPlayer: execute_lua, take_screenshot, "
                                  "get_state, plus any tools the game registered via mcp.register_tool.";

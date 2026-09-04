@@ -463,7 +463,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "TimestampQueryTest";
-        desc.windowTitle = "PhasmaWebGPU Timestamp Query";
+        desc.windowTitle = "Phasma WebGPU Timestamp Query";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         desc.requiredFeatures = {WGPUFeatureName_TimestampQuery};

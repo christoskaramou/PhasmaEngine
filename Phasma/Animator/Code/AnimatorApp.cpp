@@ -531,7 +531,7 @@ namespace pe
 
     void AnimatorApp::UpdateTitle()
     {
-        std::string title = "PhasmaAnimator";
+        std::string title = "Phasma Animator";
         if (!m_modelPath.empty())
             title += " - " + m_modelPath.filename().string();
         if (m_timeline && m_timeline->IsDirty())
@@ -1015,7 +1015,7 @@ namespace pe
         if (m_showNotice)
         {
             ImGui::SetNextWindowSize({ImGui::GetFontSize() * 32.f, 0.f}, ImGuiCond_Appearing);
-            if (ImGui::Begin("PhasmaAnimator message", &m_showNotice, ImGuiWindowFlags_AlwaysAutoResize))
+            if (ImGui::Begin("Phasma Animator message", &m_showNotice, ImGuiWindowFlags_AlwaysAutoResize))
             {
                 ImGui::TextWrapped("%s", m_notice.c_str());
                 ImGui::Dummy({0.f, ImGui::GetFontSize() * 0.5f});

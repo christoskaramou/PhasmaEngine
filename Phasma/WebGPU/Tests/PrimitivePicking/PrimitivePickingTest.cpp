@@ -830,7 +830,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "PrimitivePickingTest";
-        desc.windowTitle = "PhasmaWebGPU Primitive Picking";
+        desc.windowTitle = "Phasma WebGPU Primitive Picking";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         desc.requiredFeatures = {WGPUFeatureName_PrimitiveIndex};

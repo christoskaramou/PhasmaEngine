@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
         pe::RuntimeSdlSession sdl;
         pe::EventSystem::Init();
         pe::RuntimeWindowDesc windowDesc;
-        windowDesc.title = "PhasmaAnimator";
+        windowDesc.title = "Phasma Animator";
         windowDesc.api = apiSelection.api;
         windowDesc.displayIndex = displayIndex;
         windowDesc.flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;

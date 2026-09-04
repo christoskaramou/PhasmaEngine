@@ -428,7 +428,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "BitonicSortTest";
-        desc.windowTitle = "PhasmaWebGPU BitonicSort";
+        desc.windowTitle = "Phasma WebGPU BitonicSort";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

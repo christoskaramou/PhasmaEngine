@@ -359,7 +359,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "PristineGridTest";
-        desc.windowTitle = "PhasmaWebGPU Pristine Grid";
+        desc.windowTitle = "Phasma WebGPU Pristine Grid";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;

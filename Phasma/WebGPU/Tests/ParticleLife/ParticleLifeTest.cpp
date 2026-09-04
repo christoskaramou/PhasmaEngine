@@ -980,7 +980,7 @@ namespace
     {
         pwgpu::test::SampleAppDesc desc{};
         desc.sampleName = "ParticleLifeTest";
-        desc.windowTitle = "PhasmaWebGPU ParticleLife (countingSort)";
+        desc.windowTitle = "Phasma WebGPU ParticleLife (countingSort)";
         desc.initialWidth = kWidth;
         desc.initialHeight = kHeight;
         return desc;
