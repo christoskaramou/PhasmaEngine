@@ -1,5 +1,6 @@
 #include "Runtime/RuntimeHost.h"
 #include "API/RHI.h"
+#include "Base/WindowIcon.h"
 
 #include <cstring>
 
@@ -89,6 +90,8 @@ namespace pe
                                     windowFlags);
         if (!m_window)
             PE_ERROR("[SDL] %s", SDL_GetError());
+
+        SetPhasmaWindowIcon(m_window);
 
         if (desc.showAfterCreate)
             SDL_ShowWindow(m_window);

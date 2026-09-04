@@ -1,6 +1,7 @@
 // PhasmaProfiler — live viewer for ProfilerStreamServer (Player --profiler).
 #include "Base/Path.h"
 #include "Base/ProfilerStream.h"
+#include "Base/WindowIcon.h"
 
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
@@ -1997,6 +1998,7 @@ int main(int argc, char *argv[])
         SDL_Quit();
         return 1;
     }
+    pe::SetPhasmaWindowIcon(window);
 
     SDL_SetWindowMinimumSize(window, 900, 620);
     SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);

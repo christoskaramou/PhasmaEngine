@@ -1,5 +1,6 @@
 #include "API/GraphicsApiSelection.h"
 #include "API/RHI.h"
+#include "Base/WindowIcon.h"
 #include "Project/ProjectSelection.h"
 #include "Runtime/RuntimeStartup.h"
 
@@ -2702,6 +2703,7 @@ namespace
             SDL_Quit();
             return LauncherDialogResult::Error;
         }
+        pe::SetPhasmaWindowIcon(window);
 
         SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
         if (!renderer)

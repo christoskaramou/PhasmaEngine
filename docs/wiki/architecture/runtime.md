@@ -188,7 +188,7 @@ The Android Gradle player is the packaged exception: its staging task copies the
 
 The build no longer copies project content. CMake copies only `RuntimeAssets/` and `EditorAssets/` (copy-on-change), creates an empty writable `Assets/` next to the executable as a fallback, and seeds a dev `phasma_settings.json` pinned to the sibling `PhasmaProjects/Sample` project only when none exists — so a rebuild never clobbers a user's chosen project or their saved scenes. Engine shaders and default scripts are watched for hot reload from `Path::RuntimeAssets`; the project's `Shaders`/`Scripts` are watched additionally when the project assets root differs from the runtime root.
 
-`EditorAssets/Icons/pescene_icon.png` and `pemesh_icon.png` are the distinct FileBrowser icons for engine-authored scenes and cooked meshes. Each has a matching multi-resolution `.ico` for its Windows shell file type.
+`EditorAssets/Icons/pescene_icon.png` and `pemesh_icon.png` are the distinct FileBrowser icons for engine-authored scenes and cooked meshes. Each has a matching multi-resolution `.ico` for its Windows shell file type. Every desktop Phasma executable with an SDL window (Editor, Animator, Cook, Launcher, Player, and Profiler) applies `RuntimeAssets/Icons/phasma_icon.bmp` through the shared core window-icon helper on Windows and Linux; the matching Windows resource embeds a multi-resolution icon in each `.exe` for Explorer.
 
 ## Scene Prefabs
 
