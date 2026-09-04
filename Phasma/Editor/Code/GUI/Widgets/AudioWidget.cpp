@@ -82,11 +82,6 @@ namespace pe
         if (ImGui::SmallButton("Stop"))
             as->StopSource(node);
         ui::ItemTooltip("Stop the editor preview for this source.");
-
-        ImGui::Spacing();
-        if (ImGui::SmallButton("Remove Audio"))
-            as->RemoveSource(node);
-        ui::ItemTooltip("Remove the audio source component from this node.");
     }
 } // namespace pe
 

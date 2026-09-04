@@ -41,6 +41,40 @@ namespace pe::ui
         ImGui::EndTooltip();
     }
 
+    // Square icon button. The glyph is centred on its own bounding box, not on CalcTextSize: the icon font
+    // is merged with GlyphMinAdvanceX, which pads the advance without moving the glyph, so centring on the
+    // advance leans every icon left.
+    inline bool CenteredIconButton(const char *id, const char *icon, const ImVec2 &size)
+    {
+        const bool clicked = ImGui::InvisibleButton(id, size);
+        const ImU32 buttonColor = ImGui::GetColorU32(ImGui::IsItemActive()    ? ImGuiCol_ButtonActive
+                                                     : ImGui::IsItemHovered() ? ImGuiCol_ButtonHovered
+                                                                              : ImGuiCol_Button);
+        const ImVec2 min = ImGui::GetItemRectMin();
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(min, ImGui::GetItemRectMax(), buttonColor, ImGui::GetStyle().FrameRounding);
+
+        ImFont *font = ImGui::GetFont();
+        unsigned int codepoint = 0;
+        ImTextCharFromUtf8(&codepoint, icon, icon + strlen(icon));
+        const ImFontGlyph *glyph = codepoint ? font->FindGlyph(static_cast<ImWchar>(codepoint)) : nullptr;
+
+        ImVec2 pos;
+        if (glyph)
+        {
+            const float s = ImGui::GetFontSize() / font->FontSize;
+            pos = ImVec2(min.x + (size.x - (glyph->X1 - glyph->X0) * s) * 0.5f - glyph->X0 * s,
+                         min.y + (size.y - (glyph->Y1 - glyph->Y0) * s) * 0.5f - glyph->Y0 * s);
+        }
+        else
+        {
+            const ImVec2 textSize = ImGui::CalcTextSize(icon);
+            pos = ImVec2(min.x + (size.x - textSize.x) * 0.5f, min.y + (size.y - textSize.y) * 0.5f);
+        }
+        drawList->AddText(pos, ImGui::GetColorU32(ImGuiCol_Text), icon);
+        return clicked;
+    }
+
     inline void ItemTooltip(const char *text, ImGuiHoveredFlags flags = ImGuiHoveredFlags_DelayShort)
     {
         if (ImGui::IsItemHovered(flags))
