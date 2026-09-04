@@ -5,6 +5,7 @@
 #include "API/RHI.h"
 #include "API/Surface.h"
 #include "API/Swapchain.h"
+#include "Project/ProjectSelection.h"
 #include "RenderPasses/TAAPass.h"
 #include "Render/ScriptRenderPasses.h"
 #include "UI/RuntimeUi.h"
@@ -37,7 +38,7 @@ namespace pe
                                               : surface ? surface->GetPresentMode()
                                                         : PE_PRESENT_MODE_FIFO;
 
-            std::string title = "PhasmaEngine";
+            std::string title = "Phasma Editor";
             title += " - Device: " + RHII.GetGpuName();
             title += " - API: " + std::string(PeGraphicsApiName(RHII.GetApi()));
             title += " - Present Mode: " + std::string(RHII.PresentModeToString(presentMode));
@@ -50,6 +51,9 @@ namespace pe
 #elif PE_RELWITHDEBINFO
             title += " - RelWithDebInfo";
 #endif
+            const std::string projectPath = ResolveProjectSelection().project.root.generic_string();
+            if (!projectPath.empty())
+                title += " - Project: " + projectPath;
 
             EventSystem::DispatchEvent(EventType::SetWindowTitle, title);
         }

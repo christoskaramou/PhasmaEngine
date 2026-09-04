@@ -238,7 +238,7 @@ int main(int argc, char *argv[])
         pe::RuntimeSdlSession sdl;
 
         pe::RuntimeWindowDesc windowDesc;
-        windowDesc.title = "PhasmaEditor";
+        windowDesc.title = "Phasma Editor";
         windowDesc.api = api;
         windowDesc.displayIndex = displayIndex;
         windowDesc.flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
@@ -256,6 +256,15 @@ int main(int argc, char *argv[])
         windowDesc.pumpEventsAfterCreate = true;
         windowDesc.logDisplaySelection = true;
         pe::RuntimeWindow window(windowDesc);
+        if (SDL_Surface *icon = SDL_LoadBMP((pe::Path::EditorAssets + "Icons/phasma_editor_icon.bmp").c_str()))
+        {
+            SDL_SetWindowIcon(window.Get(), icon);
+            SDL_FreeSurface(icon);
+        }
+        else
+        {
+            PE_WARN("Failed to load the editor window icon: %s", SDL_GetError());
+        }
 
         pe::RuntimeRhiSession rhi(window.Get(), api, false);
 #if !defined(PE_WIN32)

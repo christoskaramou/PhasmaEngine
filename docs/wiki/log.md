@@ -1,5 +1,10 @@
 # PhasmaEngine Wiki Log
 
+## 2026-09-04
+
+- PhasmaEditor now has a native application icon: SDL applies it to the editor window/taskbar on Windows and Linux, and the Windows executable embeds the matching multi-resolution icon (`architecture/runtime.md`).
+- Editor window title is `Phasma Editor` plus the active project folder path (`architecture/rendering.md`).
+
 ## 2026-09-03
 
 - PhasmaAnimator: every dialog's buttons are a right-aligned row of uniformly wide buttons under a spacer, matching PhasmaEditor's confirm dialogs, via a new `ui::DialogButtonRow` in the shared `GUI/Helpers.h` (`architecture/animator.md`).
