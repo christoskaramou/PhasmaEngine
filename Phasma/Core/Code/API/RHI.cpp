@@ -2365,6 +2365,9 @@ namespace pe
 #elif PE_RELWITHDEBINFO
             title += " - RelWithDebInfo";
 #endif
+            Path::Init();
+            if (!Path::Project.empty())
+                title += " - Project: " + Path::Project;
 
             EventSystem::DispatchEvent(EventType::SetWindowTitle, title);
         };

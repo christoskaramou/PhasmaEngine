@@ -14,6 +14,7 @@ namespace pe
         inline static std::string Root;
         inline static std::string Executable;
         inline static std::string Assets;
+        inline static std::string Project;
         inline static std::string RuntimeAssets;
         inline static std::string EditorAssets;
 
