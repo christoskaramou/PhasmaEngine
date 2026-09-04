@@ -178,28 +178,6 @@ namespace pe
             }
         }
 
-        bool DrawCenteredIconButton(const char *id, const char *icon, const ImVec2 &size)
-        {
-            const bool clicked = ImGui::InvisibleButton(id, size);
-            const bool hovered = ImGui::IsItemHovered();
-            const bool active = ImGui::IsItemActive();
-            const ImVec2 min = ImGui::GetItemRectMin();
-            const ImVec2 max = ImGui::GetItemRectMax();
-            const ImGuiStyle &style = ImGui::GetStyle();
-
-            ImDrawList *drawList = ImGui::GetWindowDrawList();
-            const ImU32 buttonColor = ImGui::GetColorU32(active    ? ImGuiCol_ButtonActive
-                                                         : hovered ? ImGuiCol_ButtonHovered
-                                                                   : ImGuiCol_Button);
-            drawList->AddRectFilled(min, max, buttonColor, style.FrameRounding);
-
-            const ImVec2 iconSize = ImGui::CalcTextSize(icon);
-            const ImVec2 iconPos(min.x + (size.x - iconSize.x) * 0.5f,
-                                 min.y + (size.y - iconSize.y) * 0.5f - 1.0f);
-            drawList->AddText(iconPos, ImGui::GetColorU32(ImGuiCol_Text), icon);
-            return clicked;
-        }
-
     } // namespace
 
     void Properties::Update()
@@ -352,13 +330,6 @@ namespace pe
 
             ImGui::Dummy(ImVec2(0.f, 2.f));
 
-            if (refs.size() == 1)
-            {
-                if (ImGui::SmallButton("Remove Mesh Component"))
-                    scene.SetMeshRef(node, -1);
-                ui::ItemTooltip("Remove the mesh component from this node.");
-            }
-
             if (ImGui::SmallButton("+ Add Mesh"))
                 ImGui::OpenPopup("AddMeshPopup");
             ui::ItemTooltip("Attach an additional primitive mesh to this node.");
@@ -399,10 +370,6 @@ namespace pe
                     se->OpenScript(node, scriptPath);
             }
             ui::ItemTooltip("Open this node's Lua script in the script editor.");
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Remove##Script"))
-                scene.SetNodeScript(node, "");
-            ui::ItemTooltip("Detach the Lua script from this node.");
 
             ImGui::Spacing();
             int runMode = static_cast<int>(scene.GetNodeScriptRunMode(node));
@@ -545,14 +512,6 @@ namespace pe
                     markRuntimeUiChanged();
                 }
                 ui::ItemTooltip("Add editable Runtime UI widget data to this node.");
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Remove Runtime UI"))
-                {
-                    scene.RemoveComponentFlag(node, Component_RuntimeUi);
-                    if (m_gui)
-                        m_gui->NotifyChange();
-                }
-                ui::ItemTooltip("Remove the Runtime UI tag from this node.");
                 return;
             }
 
@@ -713,15 +672,6 @@ namespace pe
                 markRuntimeUiChanged();
             if (ImGui::Checkbox("Bring To Front", &uiComponent->bringToFront))
                 markRuntimeUiChanged();
-
-            ImGui::Spacing();
-            if (ImGui::SmallButton("Remove Runtime UI"))
-            {
-                scene.RemoveComponentFlag(node, Component_RuntimeUi);
-                if (m_gui)
-                    m_gui->NotifyChange();
-            }
-            ui::ItemTooltip("Remove the Runtime UI tag from this node.");
         };
 
         auto drawSpriteComponent = [&](NodeId *node)
@@ -874,14 +824,6 @@ namespace pe
             {
                 ImGui::TextDisabled("No sprite clips loaded.");
             }
-
-            if (ImGui::SmallButton("Remove Sprite Component"))
-            {
-                scene.ClearSpriteComponent(node);
-                if (m_gui)
-                    m_gui->NotifyChange();
-            }
-            ui::ItemTooltip("Remove the sprite authoring tag. The mesh and material remain unchanged.");
         };
 
         auto drawAnimationRuntime = [&](NodeId *node) -> bool
@@ -1220,20 +1162,41 @@ namespace pe
             return true;
         };
 
-        auto drawAddComponentButton = [&](NodeId *node)
+        // Add/Remove bar. Drawn right under Node Info + Transform so both stay reachable
+        // without scrolling past every component section.
+        auto drawComponentBar = [&](NodeId *node)
         {
-            uint32_t flags = scene.GetComponentFlags(node);
+            const uint32_t flags = scene.GetComponentFlags(node);
+            uint32_t removable = flags & (Component_Mesh | Component_Script | Component_RuntimeUi | Component_Sprite);
+#ifdef PE_AUDIO
+            removable |= flags & Component_Audio;
+#endif
+#ifdef PE_PHYSICS
+            removable |= flags & Component_Physics;
+#endif
+#ifdef PE_PHYSICS2D
+            removable |= flags & Component_Physics2D;
+#endif
 
             ImGui::Dummy(ImVec2(0.f, 4.f));
             ImGui::Separator();
 
-            float btnWidth = ImGui::GetContentRegionAvail().x * 0.6f;
-            float offset = (ImGui::GetContentRegionAvail().x - btnWidth) * 0.5f;
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
+            const float btnSize = ImGui::GetFrameHeight();
+            const float gap = ImGui::GetStyle().ItemSpacing.x;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
+                                 (ImGui::GetContentRegionAvail().x - btnSize * 2.f - gap) * 0.5f);
 
-            if (ImGui::Button("+ Add Component", ImVec2(btnWidth, 0.f)))
+            if (ui::CenteredIconButton("##AddComponent", ICON_FA_PLUS, ImVec2(btnSize, btnSize)))
                 ImGui::OpenPopup("AddComponentPopup");
             ui::ItemTooltip("Open the menu of components that can be added to this node.");
+
+            ImGui::SameLine(0.f, gap);
+            ImGui::BeginDisabled(removable == 0);
+            if (ui::CenteredIconButton("##RemoveComponent", ICON_FA_MINUS, ImVec2(btnSize, btnSize)))
+                ImGui::OpenPopup("RemoveComponentPopup");
+            ImGui::EndDisabled();
+            ui::ItemTooltip("Remove one of the components currently on this node.",
+                            ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
 
             if (ImGui::BeginPopup("AddComponentPopup"))
             {
@@ -1344,6 +1307,97 @@ namespace pe
 
                 ImGui::EndPopup();
             }
+
+            // Mirrors the add menu: only the components actually on this node are listed.
+            if (ImGui::BeginPopup("RemoveComponentPopup"))
+            {
+                auto notifyChanged = [&]()
+                {
+                    if (m_gui)
+                        m_gui->NotifyChange();
+                };
+
+#ifdef PE_AUDIO
+                if (flags & Component_Audio)
+                {
+                    if (ImGui::MenuItem("Audio Source"))
+                    {
+                        if (auto *as = GetGlobalSystem<AudioSystem>())
+                            as->RemoveSource(node);
+                        notifyChanged();
+                    }
+                    ui::ItemTooltip("Remove the audio source component from this node.");
+                }
+#endif
+
+                if (flags & Component_Script)
+                {
+                    if (ImGui::MenuItem("Lua Script"))
+                    {
+                        scene.SetNodeScript(node, "");
+                        notifyChanged();
+                    }
+                    ui::ItemTooltip("Detach the Lua script from this node.");
+                }
+
+                if (flags & Component_Mesh)
+                {
+                    if (ImGui::MenuItem("Mesh"))
+                    {
+                        scene.SetMeshRef(node, -1);
+                        notifyChanged();
+                    }
+                    ui::ItemTooltip("Remove every mesh slot from this node.");
+                }
+
+#ifdef PE_PHYSICS
+                if (flags & Component_Physics)
+                {
+                    if (ImGui::MenuItem("Physics Body"))
+                    {
+                        if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                            ps->RemoveBody(node);
+                        notifyChanged();
+                    }
+                    ui::ItemTooltip("Remove the 3D physics body from this node.");
+                }
+#endif
+
+#ifdef PE_PHYSICS2D
+                if (flags & Component_Physics2D)
+                {
+                    if (ImGui::MenuItem("Physics2D Body"))
+                    {
+                        if (auto *physics2d = GetGlobalSystem<Physics2DSystem>())
+                            physics2d->RemoveBody(node);
+                        notifyChanged();
+                    }
+                    ui::ItemTooltip("Remove the 2D physics body from this node.");
+                }
+#endif
+
+                if (flags & Component_RuntimeUi)
+                {
+                    if (ImGui::MenuItem("Runtime UI"))
+                    {
+                        scene.RemoveComponentFlag(node, Component_RuntimeUi);
+                        notifyChanged();
+                    }
+                    ui::ItemTooltip("Remove the Runtime UI tag from this node.");
+                }
+
+                if (flags & Component_Sprite)
+                {
+                    if (ImGui::MenuItem("Sprite"))
+                    {
+                        scene.ClearSpriteComponent(node);
+                        notifyChanged();
+                    }
+                    ui::ItemTooltip("Remove the sprite authoring tag. The mesh and material remain unchanged.");
+                }
+
+                ImGui::EndPopup();
+            }
         };
 
         auto drawSkyboxComponent = [&](NodeId *node)
@@ -1385,7 +1439,7 @@ namespace pe
 
                 ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.5f, 0.5f));
                 ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
-                if (DrawCenteredIconButton("##Browse", ICON_FA_FOLDER, ImVec2(buttonSize, buttonSize)))
+                if (ui::CenteredIconButton("##Browse", ICON_FA_FOLDER, ImVec2(buttonSize, buttonSize)))
                 {
                     if (auto *fs = m_gui ? m_gui->GetWidget<FileSelector>() : nullptr)
                     {
@@ -1418,7 +1472,7 @@ namespace pe
                 ui::ItemTooltip("Clear the skybox texture and use the solid-color fallback.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
 
                 ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
-                if (DrawCenteredIconButton("##Default", ICON_FA_ROTATE_LEFT, ImVec2(buttonSize, buttonSize)))
+                if (ui::CenteredIconButton("##Default", ICON_FA_ROTATE_LEFT, ImVec2(buttonSize, buttonSize)))
                     applyPath(SceneSettings::DefaultSkyboxPath);
                 ui::ItemTooltip("Restore the engine's default skybox path.");
                 ImGui::PopStyleVar();
@@ -1482,6 +1536,41 @@ namespace pe
 
             // Transform is always shown for scene objects with spatial meaning
             drawTransform();
+
+            // Components built into the node type sit above the bar; everything the bar can add or
+            // remove sits below it.
+            if (flags & Component_Camera)
+            {
+                ImGui::Separator();
+                Camera *cam = scene.GetCameraForNode(node);
+                if (cam)
+                {
+                    if (auto *w = m_gui->GetWidget<CameraWidget>())
+                        w->DrawEmbed(cam);
+                }
+            }
+
+            if (flags & Component_Light)
+            {
+                ImGui::Separator();
+                auto [lt, idx] = scene.GetLightForNode(node);
+                if (idx >= 0)
+                {
+                    const bool lightOpen = ImGui::CollapsingHeader("Light Component", ImGuiTreeNodeFlags_DefaultOpen);
+                    ui::ItemTooltip("Edit the light attached to this node.");
+                    if (lightOpen)
+                    {
+                        ImGui::Indent(8.f);
+                        if (auto *w = m_gui->GetWidget<LightWidget>())
+                            w->DrawEmbed(&scene, lt, idx);
+                        ImGui::Unindent(8.f);
+                    }
+                }
+            }
+
+            drawComponentBar(node);
+            // A menu action may have added or removed a component this frame — re-read before the sections.
+            flags = scene.GetComponentFlags(node);
 
             if (flags & Component_TriggerZone)
             {
@@ -2277,30 +2366,6 @@ namespace pe
                 }
             }
 
-            // Camera component
-            if (flags & Component_Camera)
-            {
-                ImGui::Separator();
-                Camera *cam = scene.GetCameraForNode(node);
-                if (cam)
-                {
-                    if (auto *w = m_gui->GetWidget<CameraWidget>())
-                        w->DrawEmbed(cam);
-                }
-            }
-
-            // Light component
-            if (flags & Component_Light)
-            {
-                ImGui::Separator();
-                auto [lt, idx] = scene.GetLightForNode(node);
-                if (idx >= 0)
-                {
-                    if (auto *w = m_gui->GetWidget<LightWidget>())
-                        w->DrawEmbed(&scene, lt, idx);
-                }
-            }
-
 #ifdef PE_PHYSICS
             // Physics component
             if (flags & Component_Physics)
@@ -2366,8 +2431,6 @@ namespace pe
                 }
             }
 
-            if (!(flags & Component_Skybox))
-                drawAddComponentButton(node);
             break;
         }
         case SelectionType::Mesh:

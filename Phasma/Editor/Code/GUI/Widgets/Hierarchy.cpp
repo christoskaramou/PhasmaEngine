@@ -101,28 +101,6 @@ namespace pe
         return scene.NodeUsesSkinnedStrip2D(node);
     }
 
-    static bool DrawCenteredIconButton(const char *id, const char *icon, const ImVec2 &size)
-    {
-        const bool clicked = ImGui::InvisibleButton(id, size);
-        const bool hovered = ImGui::IsItemHovered();
-        const bool active = ImGui::IsItemActive();
-        const ImVec2 min = ImGui::GetItemRectMin();
-        const ImVec2 max = ImGui::GetItemRectMax();
-        const ImGuiStyle &style = ImGui::GetStyle();
-
-        ImDrawList *drawList = ImGui::GetWindowDrawList();
-        const ImU32 buttonColor = ImGui::GetColorU32(active    ? ImGuiCol_ButtonActive
-                                                     : hovered ? ImGuiCol_ButtonHovered
-                                                               : ImGuiCol_Button);
-        drawList->AddRectFilled(min, max, buttonColor, style.FrameRounding);
-
-        const ImVec2 iconSize = ImGui::CalcTextSize(icon);
-        const ImVec2 iconPos(min.x + (size.x - iconSize.x) * 0.5f,
-                             min.y + (size.y - iconSize.y) * 0.5f - 1.0f);
-        drawList->AddText(iconPos, ImGui::GetColorU32(ImGuiCol_Text), icon);
-        return clicked;
-    }
-
     Hierarchy::Hierarchy() : Widget("Hierarchy")
     {
     }
@@ -609,7 +587,7 @@ namespace pe
                 ImGui::PopStyleColor();
 
                 ImGui::TableNextColumn();
-                if (DrawCenteredIconButton("##SceneSettings", ICON_FA_GEAR, ImVec2(btnSize, btnSize)))
+                if (ui::CenteredIconButton("##SceneSettings", ICON_FA_GEAR, ImVec2(btnSize, btnSize)))
                     createSceneSettings();
                 ui::ItemTooltip("Open scene settings.");
 

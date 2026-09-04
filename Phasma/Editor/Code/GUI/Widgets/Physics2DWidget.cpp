@@ -146,16 +146,6 @@ namespace pe
         noteEdit(ImGui::InputInt("Group Index", &edit.groupIndex));
         ui::ItemTooltip("Optional Box2D group override for always-collide or never-collide pairs.");
 
-        ImGui::Spacing();
-        if (ImGui::SmallButton("Remove Physics2D"))
-        {
-            physics->RemoveBody(node);
-            if (m_gui)
-                m_gui->NotifyChange();
-            return;
-        }
-        ui::ItemTooltip("Remove the 2D physics body from this node.");
-
         if (!changed && !rebuildNow)
             return;
 

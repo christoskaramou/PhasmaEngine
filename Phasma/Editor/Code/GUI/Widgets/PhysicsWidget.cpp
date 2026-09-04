@@ -95,11 +95,6 @@ namespace pe
         ui::ItemTooltip("Surface resistance applied when this body contacts another.");
         ImGui::DragFloat("Restitution", &desc->restitution, 0.01f, 0.0f, 1.0f);
         ui::ItemTooltip("Bounciness applied during collisions.");
-
-        ImGui::Spacing();
-        if (ImGui::SmallButton("Remove Physics"))
-            ps->RemoveBody(node);
-        ui::ItemTooltip("Remove the 3D physics body from this node.");
     }
 } // namespace pe
 
