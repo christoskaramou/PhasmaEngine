@@ -2,7 +2,7 @@
 
 ## 2026-09-04
 
-- PhasmaEditor now has a native application icon: SDL applies it to the editor window/taskbar on Windows and Linux, and the Windows executable embeds the matching multi-resolution icon (`architecture/runtime.md`).
+- Every desktop Phasma executable with an SDL window now shares the native Phasma application icon on Windows and Linux; Windows also embeds the matching multi-resolution icon in each `.exe` (`architecture/runtime.md`).
 - Host window titles use a space after Phasma (`Phasma Editor`, `Phasma Player`, `Phasma Animator`, `Phasma Profiler`, `Phasma Cook`, `Phasma Engine`, `Phasma WebGPU`).
 - Editor window title is `Phasma Editor` plus the active project folder path, refreshed from the applied project root (`architecture/rendering.md`).
 

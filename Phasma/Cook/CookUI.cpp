@@ -11,6 +11,7 @@
 
 #include "Base/Log.h"
 #include "Base/Path.h"
+#include "Base/WindowIcon.h"
 
 #include <SDL.h>
 #include <imgui.h>
@@ -548,6 +549,7 @@ namespace pe
             SDL_Quit();
             return 1;
         }
+        SetPhasmaWindowIcon(window);
 
         SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
         if (!renderer)
