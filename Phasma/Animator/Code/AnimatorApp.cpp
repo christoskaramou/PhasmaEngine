@@ -304,6 +304,18 @@ namespace pe
             camera->Update();
         }
         m_scene.CreateDirectionalLight();
+        // The scene default aims the sun straight down, which is right for a world and wrong for a
+        // character stage: a flat cutout part faces the camera, so N.L is ~0 and 2D art reads as a grey
+        // silhouette lit by sky alone. Aim the key down and into the screen, the way a character
+        // previewer does, so a cutout puppet and a 3D hero both show their own colour.
+        if (!m_scene.GetDirectionalLights().empty())
+        {
+            SceneDirectionalLight &key = m_scene.GetDirectionalLights().front();
+            const quat aim = quat(radians(vec3(-150.f, -20.f, 0.f)));
+            key.rotation = {aim.x, aim.y, aim.z, aim.w};
+            if (key.nodeId)
+                m_scene.SetLocalMatrix(key.nodeId, glm::translate(mat4(1.f), vec3(key.position)) * glm::mat4_cast(aim));
+        }
         Settings::Get<SceneSettings>().draw_grid = m_grid;
         Settings::Get<SceneSettings>().render_scale = 1.f;
         EnsureGround();
