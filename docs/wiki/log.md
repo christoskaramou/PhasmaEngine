@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-09-05
+
+- PhasmaAnimator reference sequence has a Show checkbox (and `timeline.reference_enable`) that hides the overlay without unloading the manifest (`architecture/animator.md`).
+
 ## 2026-09-04
 
 - Every desktop Phasma executable with an SDL window now shares the native Phasma application icon on Windows and Linux; Windows also embeds the matching multi-resolution icon in each `.exe` (`architecture/runtime.md`).

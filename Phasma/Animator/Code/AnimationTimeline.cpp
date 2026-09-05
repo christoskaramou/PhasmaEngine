@@ -1288,7 +1288,8 @@ namespace pe
 
             if (action == "timeline.grab" || action == "timeline.pin" || action == "timeline.lock" ||
                 action == "timeline.spline_ik" ||
-                action == "timeline.balance" || action == "timeline.reference_load" || action == "timeline.reference_clear")
+                action == "timeline.balance" || action == "timeline.reference_load" ||
+                action == "timeline.reference_clear" || action == "timeline.reference_enable")
                 return PoseViewport(*m_rigEditor)->HandleAction(scene, action, argsJson);
             if (action == "timeline.import")
             {
