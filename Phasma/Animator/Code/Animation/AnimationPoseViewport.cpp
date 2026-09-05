@@ -340,8 +340,15 @@ namespace pe
 
         if (ImGui::CollapsingHeader("Reference Sequence##timeline_pose"))
         {
-            ImGui::SetNextItemWidth(std::max(ImGui::GetFontSize() * 11.f,
-                                             ImGui::GetContentRegionAvail().x - ui::ButtonWidth("Browse Load Clear")));
+            const bool haveReference = !m_referenceSequence.frames.empty();
+            ImGui::BeginDisabled(!haveReference);
+            ImGui::Checkbox("Show##timeline_reference", &m_referenceEnabled);
+            ui::ItemTooltip("Draw the loaded sequence behind the viewport. Uncheck to hide it without unloading.");
+            ImGui::EndDisabled();
+
+            const float pathWidth = ImGui::GetFontSize() * 14.f;
+            const float valueWidth = ImGui::GetFontSize() * 8.f;
+            ImGui::SetNextItemWidth(pathWidth);
             ImGui::InputText("##timeline_reference_path", m_referencePathBuffer.data(), m_referencePathBuffer.size());
             ui::ItemTooltip("Path to a *.reference.json manifest. Load draws its frames behind the viewport at the "
                             "playhead's time, so you can pose against filmed footage. Browse picks one under Assets.");
@@ -365,18 +372,21 @@ namespace pe
                                : error;
             }
             ImGui::SameLine();
-            ImGui::BeginDisabled(m_referenceSequence.frames.empty());
+            ImGui::BeginDisabled(!haveReference);
             if (ImGui::Button("Clear##timeline_reference"))
             {
                 ClearReference();
                 m_status = "Reference sequence cleared.";
             }
             ImGui::EndDisabled();
-            if (!m_referenceSequence.frames.empty())
+            if (haveReference)
             {
                 AnimationReferenceFrames::Config &reference = m_referenceSequence.config;
+                ImGui::SetNextItemWidth(valueWidth);
                 ImGui::SliderFloat("Opacity##timeline_reference", &reference.opacity, 0.f, 1.f, "%.2f");
+                ImGui::SetNextItemWidth(valueWidth);
                 ImGui::DragFloat("Scale##timeline_reference", &reference.scale, 0.01f, 0.05f, 5.f, "%.2f");
+                ImGui::SetNextItemWidth(valueWidth);
                 ImGui::DragFloat2("Offset px##timeline_reference", &reference.offset.x, 1.f, -4096.f, 4096.f, "%.0f");
                 ImGui::Checkbox("Flip X##timeline_reference", &reference.flipX);
                 ImGui::SameLine();
@@ -428,6 +438,14 @@ namespace pe
             {
                 ClearReference();
                 return ok();
+            }
+            if (action == "timeline.reference_enable")
+            {
+                if (args.contains("enabled"))
+                    m_referenceEnabled = args.value("enabled", m_referenceEnabled);
+                return ok({{"enabled", m_referenceEnabled},
+                           {"frames", m_referenceSequence.frames.size()},
+                           {"path", m_referencePath.generic_string()}});
             }
             if (!m_model)
                 return fail("no target model: select a node of a .pemesh model first");
@@ -642,12 +660,14 @@ namespace pe
                                 index = i;
                     return index >= 0 && index < static_cast<int>(m_locks.size());
                 };
+                if (args.contains("hold_posed"))
+                    m_autoLock = args.value("hold_posed", m_autoLock);
                 if (op == "list")
                 {
                     nlohmann::json locks = nlohmann::json::array();
                     for (int i = 0; i < static_cast<int>(m_locks.size()); i++)
                         locks.push_back(lockJson(i));
-                    return ok({{"locks", locks}});
+                    return ok({{"locks", locks}, {"hold_posed", m_autoLock}});
                 }
                 if (op == "add")
                 {
@@ -755,6 +775,7 @@ namespace pe
         ReleaseReferenceImage(true);
         m_referencePath.clear();
         m_referenceSequence = {};
+        m_referenceEnabled = true;
         m_referencePathBuffer.fill(0);
     }
 
@@ -786,6 +807,7 @@ namespace pe
         ClearReference();
         m_referencePath = path;
         m_referenceSequence = std::move(sequence);
+        m_referenceEnabled = true;
         std::snprintf(m_referencePathBuffer.data(), m_referencePathBuffer.size(), "%s", Utf8Path(path).c_str());
         return true;
     }
@@ -844,6 +866,8 @@ namespace pe
 
     void AnimationPoseViewport::DrawReferenceOverlay(AnimationTimeline *timeline, const ImVec2 &imageMin, const ImVec2 &imageSize)
     {
+        if (!m_referenceEnabled)
+            return;
         std::string error;
         if (!UpdateReferenceImage(timeline, error))
         {

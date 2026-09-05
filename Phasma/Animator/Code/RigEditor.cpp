@@ -1204,8 +1204,8 @@ namespace pe
                 m_heatDirty = true;
                 return ok({{"mode", modes[m_heat]}});
             }
-            if (action == "rig.reference_load" || action == "rig.reference_clear" || action == "rig.pin" ||
-                action == "rig.grab" || action == "rig.lock")
+            if (action == "rig.reference_load" || action == "rig.reference_clear" ||
+                action == "rig.reference_enable" || action == "rig.pin" || action == "rig.grab" || action == "rig.lock")
             {
                 AnimationTimeline *timeline = m_timeline;
                 if (!timeline)

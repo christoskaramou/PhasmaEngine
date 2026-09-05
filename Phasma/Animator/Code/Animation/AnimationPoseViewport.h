@@ -184,6 +184,7 @@ namespace pe
 
         std::filesystem::path m_referencePath;
         AnimationReferenceFrames::Sequence m_referenceSequence;
+        bool m_referenceEnabled = true;
         int m_referenceFrameIndex = -1;
         Image *m_referenceImage = nullptr;
         void *m_referenceTexture = nullptr;
