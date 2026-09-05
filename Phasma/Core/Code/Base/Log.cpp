@@ -5,9 +5,11 @@ namespace pe
     std::vector<std::pair<std::string, LogType>> Log::s_earlyLogs;
     FILE *Log::s_file = nullptr;
 
-    std::mutex &GetLogMutex()
+    // Recursive: callbacks run under the lock (they are not internally synchronized, e.g. Console::AddLog)
+    // and a callback that logs must not deadlock.
+    std::recursive_mutex &GetLogMutex()
     {
-        static std::mutex mutex;
+        static std::recursive_mutex mutex;
         return mutex;
     }
 
@@ -15,7 +17,7 @@ namespace pe
     {
         Path::Init();
 
-        std::lock_guard<std::mutex> lock(GetLogMutex());
+        std::lock_guard<std::recursive_mutex> lock(GetLogMutex());
         if (!s_file)
         {
             std::string logPath = Path::Root + "PhasmaEngine.log";
@@ -29,7 +31,7 @@ namespace pe
 
     void Log::Attach(Callback cb)
     {
-        std::lock_guard<std::mutex> lock(GetLogMutex());
+        std::lock_guard<std::recursive_mutex> lock(GetLogMutex());
         s_callbacks.push_back(cb);
 
         // Replay early logs to this new callback
@@ -43,7 +45,7 @@ namespace pe
     {
         Path::Init();
 
-        std::lock_guard<std::mutex> lock(GetLogMutex());
+        std::lock_guard<std::recursive_mutex> lock(GetLogMutex());
 
         std::string prefix = "";
         std::string colorCodeCout = "";
@@ -69,7 +71,10 @@ namespace pe
 
         // Console Output (with ANSI colors if supported, or just text)
         // Windows CMD supports ANSI since Win10 sometimes, but let's stick to simple cout for now or simple codes.
-        std::cout << colorCodeCout << finalMsg << resetCodeCout << std::endl;
+        // No per-line stdout flush: every line is flushed to the log file below; console flush on errors only.
+        std::cout << colorCodeCout << finalMsg << resetCodeCout << '\n';
+        if (type == LogType::Error)
+            std::cout.flush();
 
         // File Output
         if (s_file)
@@ -123,7 +128,7 @@ namespace pe
 
     void Log::ClearCallbacks()
     {
-        std::lock_guard<std::mutex> lock(GetLogMutex());
+        std::lock_guard<std::recursive_mutex> lock(GetLogMutex());
         s_callbacks.clear();
     }
 } // namespace pe

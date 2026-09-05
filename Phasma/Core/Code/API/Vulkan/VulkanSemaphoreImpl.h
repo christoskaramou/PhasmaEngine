@@ -24,7 +24,7 @@ namespace pe
         Semaphore *m_owner{};
         vk::Semaphore m_apiHandle{};
         bool m_timeline{false};
-        uint64_t m_lastCompleted{0};
+        std::atomic<uint64_t> m_lastCompleted{0};
     };
 
     inline vk::Semaphore GetVulkanSemaphore(Semaphore *s)

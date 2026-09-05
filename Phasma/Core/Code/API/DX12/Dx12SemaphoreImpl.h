@@ -12,7 +12,7 @@ namespace pe
     struct Dx12SemaphoreImpl final : public Semaphore::Impl
     {
         Dx12SemaphoreImpl(Semaphore *owner, bool timeline, const std::string &name);
-        ~Dx12SemaphoreImpl() override;
+        ~Dx12SemaphoreImpl() override = default;
 
         static Dx12SemaphoreImpl *From(Semaphore *s) { return static_cast<Dx12SemaphoreImpl *>(s->m_impl); }
         static const Dx12SemaphoreImpl *From(const Semaphore *s) { return static_cast<const Dx12SemaphoreImpl *>(s->m_impl); }
@@ -33,11 +33,13 @@ namespace pe
 
         Semaphore *m_owner{};
         Microsoft::WRL::ComPtr<ID3D12Fence> m_fence;
-        HANDLE m_event{nullptr};
         bool m_timeline{false};
-        uint64_t m_lastCompleted{0};
+        std::atomic<uint64_t> m_lastCompleted{0};
         uint64_t m_queueSignalValue{0};
     };
+
+    // Blocks until fence >= value. Safe for concurrent waiters on the same fence.
+    bool Dx12WaitFence(ID3D12Fence *fence, uint64_t value, DWORD timeoutMs);
 
     inline ID3D12Fence *GetDx12Fence(Semaphore *s)
     {

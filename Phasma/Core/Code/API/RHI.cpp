@@ -2438,6 +2438,9 @@ namespace pe
         // Only DX12 (Vulkan has inline vkCmdFillBuffer) and only the values the arena/cull fill with (0/1).
         if (GetApi() != PE_GRAPHICS_API_DX12 || value > 1u)
             return nullptr;
+        // FillBuffer records from any thread; the first call creates + uploads the source.
+        static std::mutex s_fillSourceMutex;
+        std::lock_guard<std::mutex> lock(s_fillSourceMutex);
         Buffer *&src = (value == 0u) ? m_dx12FillZero : m_dx12FillOne;
         if (src)
             return src;

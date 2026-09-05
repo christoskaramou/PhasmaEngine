@@ -975,6 +975,27 @@ namespace pe
         return new VulkanImageImpl(owner, externalImage);
     }
 
+    namespace
+    {
+        bool SameTrackState(const ImageTrackInfo &a, const ImageTrackInfo &b)
+        {
+            return a.layout == b.layout && a.stageFlags == b.stageFlags &&
+                   a.accessMask == b.accessMask && a.queueFamilyId == b.queueFamilyId;
+        }
+
+        // A range barrier uses one oldLayout/srcAccess for every subresource, so it is only valid when
+        // the tracked state is uniform across the range (e.g. after alternating per-mip SRV/UAV barriers).
+        bool HasUniformTrackState(Image &image, const ImageTrackInfo &ref,
+                                  uint32_t baseLayer, uint32_t layers, uint32_t baseMip, uint32_t mips)
+        {
+            for (uint32_t i = 0; i < layers; i++)
+                for (uint32_t j = 0; j < mips; j++)
+                    if (!SameTrackState(image.GetCurrentInfo(baseLayer + i, baseMip + j), ref))
+                        return false;
+            return true;
+        }
+    } // namespace
+
     void Image_Barrier_Vulkan(CommandBuffer *cmd, const ImageBarrierInfo &info)
     {
         PE_ERROR_IF(!info.image, "Image::Barrier: no image specified.");
@@ -985,6 +1006,22 @@ namespace pe
         uint32_t mipLevels = info.mipLevels ? info.mipLevels : image.GetMipLevels();
         uint32_t arrayLayers = info.arrayLayers ? info.arrayLayers : image.GetArrayLayers();
         const ImageTrackInfo &oldInfo = image.GetCurrentInfo(info.baseArrayLayer, info.baseMipLevel);
+
+        if (!HasUniformTrackState(image, oldInfo, info.baseArrayLayer, arrayLayers, info.baseMipLevel, mipLevels))
+        {
+            // Mixed states: one barrier per subresource so each transition starts from its real state.
+            ImageBarrierInfo single = info;
+            single.mipLevels = 1;
+            single.arrayLayers = 1;
+            for (uint32_t i = 0; i < arrayLayers; i++)
+                for (uint32_t j = 0; j < mipLevels; j++)
+                {
+                    single.baseArrayLayer = info.baseArrayLayer + i;
+                    single.baseMipLevel = info.baseMipLevel + j;
+                    Image_Barrier_Vulkan(cmd, single);
+                }
+            return;
+        }
 
         bool requestRead = IsReadOnlyAccess(info.accessMask);
         bool previousRead = IsReadOnlyAccess(oldInfo.accessMask);
@@ -1085,6 +1122,12 @@ namespace pe
                 uint32_t arrayLayers = info.arrayLayers ? info.arrayLayers : image->GetArrayLayers();
 
                 const ImageTrackInfo &oldInfo = image->GetCurrentInfo(info.baseArrayLayer, info.baseMipLevel);
+
+                if (!HasUniformTrackState(*image, oldInfo, info.baseArrayLayer, arrayLayers, info.baseMipLevel, mipLevels))
+                {
+                    Image_Barrier_Vulkan(cmd, info); // splits per subresource; sync2 lands in the same pending batch
+                    continue;
+                }
 
                 bool requestRead = IsReadOnlyAccess(info.accessMask);
                 bool previousRead = IsReadOnlyAccess(oldInfo.accessMask);

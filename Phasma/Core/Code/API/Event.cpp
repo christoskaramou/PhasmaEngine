@@ -65,6 +65,9 @@ namespace pe
         m_infoImage.dstStage = dstStage;
         m_infoImage.dstAccess = dstAccess;
 
+        // Batched barriers must land before the event signal, not after it.
+        VulkanCommandBufferImpl::From(cmd)->FlushBarriers();
+
         if (RHII.GetCaps().sync2)
         {
             vk::ImageMemoryBarrier2 barrier{};

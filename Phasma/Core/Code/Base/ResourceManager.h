@@ -42,28 +42,21 @@ namespace pe
         template <typename T, typename... Args>
         ResourceHandle<T> Load(const std::string &id, Args &&...args)
         {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            auto typeIdx = std::type_index(typeid(T));
+            if (ResourceHandle<T> existing = Find<T>(id))
+                return existing;
 
-            auto &cache = m_resources[typeIdx];
-            auto it = cache.find(id);
-
-            if (it != cache.end())
-            {
-                std::shared_ptr<Resource> res = it->second.lock();
-                if (res)
-                {
-                    return ResourceHandle<T>(std::static_pointer_cast<T>(res));
-                }
-            }
-
-            // Not found or expired, create new
+            // Load outside the lock: loads are slow (shader compiles, GPU uploads), may nest Load/Find,
+            // and must not stall other threads. A concurrent loader of the same id wins on insert.
             std::shared_ptr<T> newResource = std::make_shared<T>(std::forward<Args>(args)...);
             newResource->SetResourceId(id);
             newResource->Load();
 
-            cache[id] = newResource; // Store weak_ptr
+            std::lock_guard<std::mutex> lock(m_mutex);
+            std::weak_ptr<Resource> &entry = m_resources[std::type_index(typeid(T))][id];
+            if (std::shared_ptr<Resource> res = entry.lock())
+                return ResourceHandle<T>(std::static_pointer_cast<T>(res));
 
+            entry = newResource; // Store weak_ptr
             return ResourceHandle<T>(newResource);
         }
 

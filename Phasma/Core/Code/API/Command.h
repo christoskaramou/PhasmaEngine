@@ -213,7 +213,8 @@ namespace pe
         }
         void FixupLoadOpAttachmentWriteAccess();
 
-        // Resources
+        // Resources (shared by every recording thread; guarded by s_cacheMutex)
+        inline static std::mutex s_cacheMutex{};
         inline static std::unordered_map<size_t, RenderPass *> s_renderPasses{};
         inline static std::unordered_map<size_t, Framebuffer *> s_framebuffers{};
         inline static std::unordered_map<size_t, Pipeline *> s_pipelines{};

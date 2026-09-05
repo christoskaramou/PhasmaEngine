@@ -104,6 +104,8 @@ namespace pe
         }
     }
 
+    // Call only once the GPU is done with the allocation (today: exclusively from CommandBuffer after-wait
+    // callbacks). Allocate() hands an unused buffer out immediately; delaySerial only paces RemoveUnused().
     void StagingManager::SetUnused(const StagingAllocation &allocation)
     {
         std::lock_guard<std::mutex> lock(m_mutex);

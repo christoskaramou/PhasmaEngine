@@ -59,6 +59,12 @@ namespace pe
 
     uint32_t Dx12DescriptorHeap::Allocate()
     {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return AllocateLocked();
+    }
+
+    uint32_t Dx12DescriptorHeap::AllocateLocked()
+    {
         uint32_t slot = 0;
         bool foundFreeSlot = false;
         while (!m_freeList.empty())
@@ -89,10 +95,13 @@ namespace pe
     uint32_t Dx12DescriptorHeap::AllocateRange(uint32_t count)
     {
         PE_ERROR_IF(count == 0, "Dx12DescriptorHeap(%s): cannot allocate an empty range", HeapTypeName(m_type));
+        std::lock_guard<std::mutex> lock(m_mutex);
         if (count == 1)
-            return Allocate();
+            return AllocateLocked();
 
-        for (uint32_t first = 0; first + count <= m_nextSlot; ++first)
+        // ponytail: first-fit scan from a low-water hint instead of slot 0; a size-class free list is the
+        // upgrade if range allocation ever shows in a profile.
+        for (uint32_t first = m_rangeSearchStart; first + count <= m_nextSlot; ++first)
         {
             bool free = true;
             for (uint32_t i = 0; i < count; ++i)
@@ -108,6 +117,8 @@ namespace pe
             if (!free)
                 continue;
 
+            if (first == m_rangeSearchStart)
+                m_rangeSearchStart = first + count;
             for (uint32_t i = 0; i < count; ++i)
                 m_allocated[first + i] = 1;
             return first;
@@ -128,18 +139,26 @@ namespace pe
 
     void Dx12DescriptorHeap::Free(uint32_t slot)
     {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        FreeLocked(slot);
+    }
+
+    void Dx12DescriptorHeap::FreeLocked(uint32_t slot)
+    {
         ValidateSlot(slot);
         PE_ERROR_IF(m_allocated[slot] == 0, "Dx12DescriptorHeap(%s): slot %u is already free", HeapTypeName(m_type), slot);
         m_allocated[slot] = 0;
         m_freeList.push_back(slot);
+        m_rangeSearchStart = std::min(m_rangeSearchStart, slot);
     }
 
     void Dx12DescriptorHeap::FreeRange(uint32_t firstSlot, uint32_t count)
     {
         PE_ERROR_IF(count == 0, "Dx12DescriptorHeap(%s): cannot free an empty range", HeapTypeName(m_type));
+        std::lock_guard<std::mutex> lock(m_mutex);
         if (count == 1)
         {
-            Free(firstSlot);
+            FreeLocked(firstSlot);
             return;
         }
 
@@ -152,6 +171,9 @@ namespace pe
             PE_ERROR_IF(m_allocated[slot] == 0, "Dx12DescriptorHeap(%s): slot %u is already free", HeapTypeName(m_type), slot);
             m_allocated[slot] = 0;
         }
+        // Not pushed to m_freeList: ranges are re-taken through the hint scan, which would leave the
+        // entries stale and grow the list every frame (transient blit descriptors).
+        m_rangeSearchStart = std::min(m_rangeSearchStart, firstSlot);
     }
 
     D3D12_CPU_DESCRIPTOR_HANDLE Dx12DescriptorHeap::GetCpuHandle(uint32_t slot) const

@@ -271,7 +271,7 @@ namespace pe
         SDL_Window *m_window;
         Surface *m_surface;
         Swapchain *m_swapchain;
-        uint32_t m_frameCounter;
+        std::atomic<uint32_t> m_frameCounter{0}; // read by AddToDeletionQueue from loader threads
         StagingManager *m_stagingManager;
         Buffer *m_dx12FillZero = nullptr; // GPU-native DX12 FillBuffer sources (see GetDx12FillSource)
         Buffer *m_dx12FillOne = nullptr;

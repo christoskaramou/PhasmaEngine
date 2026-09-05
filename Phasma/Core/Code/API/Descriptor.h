@@ -121,6 +121,7 @@ namespace pe
         {
             static size_t count = 0;
             size_t hash = DescriptorLayout::CalculateHash(bindingInfos, stage, pushDescriptor);
+            std::lock_guard<std::mutex> lock(s_layoutMutex);
             auto it = DescriptorLayout::s_descriptorLayouts.find(hash);
             if (it == DescriptorLayout::s_descriptorLayouts.end())
             {
@@ -136,6 +137,7 @@ namespace pe
 
         inline static void ClearCache()
         {
+            std::lock_guard<std::mutex> lock(s_layoutMutex);
             for (auto &[hash, layout] : s_descriptorLayouts)
                 DescriptorLayout::Destroy(layout);
             s_descriptorLayouts.clear();
@@ -151,6 +153,7 @@ namespace pe
                          bool pushDescriptor);
         ~DescriptorLayout();
 
+        inline static std::mutex s_layoutMutex{};
         inline static std::unordered_map<size_t, DescriptorLayout *> s_descriptorLayouts{};
 
         Impl *m_impl{};
