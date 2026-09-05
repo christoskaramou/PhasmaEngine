@@ -1,4 +1,5 @@
 #include "API/DX12/Dx12RhiImpl.h"
+#include "API/DX12/Dx12SemaphoreImpl.h"
 
 #include <D3D12MemAlloc.h>
 
@@ -601,13 +602,6 @@ namespace pe
             return false;
         }
 
-        m_fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-        if (!m_fenceEvent)
-        {
-            PE_ERROR("Dx12RhiImpl::Init: CreateEvent for fence failed");
-            return false;
-        }
-
         return true;
     }
 
@@ -618,11 +612,7 @@ namespace pe
 
         const uint64_t target = ++m_fenceValue;
         m_graphicsQueue->Signal(m_frameFence.Get(), target);
-        if (m_frameFence->GetCompletedValue() < target)
-        {
-            m_frameFence->SetEventOnCompletion(target, m_fenceEvent);
-            WaitForSingleObject(m_fenceEvent, INFINITE);
-        }
+        Dx12WaitFence(m_frameFence.Get(), target, INFINITE);
     }
 
     void Dx12RhiImpl::Shutdown()
@@ -634,11 +624,6 @@ namespace pe
             m_infoQueueCallbackCookie = 0;
         }
         m_infoQueueCallback.Reset();
-        if (m_fenceEvent)
-        {
-            CloseHandle(m_fenceEvent);
-            m_fenceEvent = nullptr;
-        }
         if (m_d3d12Allocator)
         {
             m_d3d12Allocator->Release();

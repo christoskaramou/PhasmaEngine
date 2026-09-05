@@ -14,6 +14,8 @@ namespace pe
 
         static_assert(kDownsamplerSpirv_len == sizeof(kDownsamplerSpirv));
         static_assert(kDownsamplerDxil_len == sizeof(kDownsamplerDxil));
+
+        std::vector<DescriptorBindingInfo> s_bindingInfos;
     } // namespace
 
     void Downsampler::Init()
@@ -27,7 +29,13 @@ namespace pe
         std::lock_guard<std::mutex> guard(s_dispatchMutex);
 
         SetInputImage(image);
-        UpdateDescriptorSet();
+
+        // One set per dispatch: a shared ring gets re-written while an unsubmitted or in-flight cmd
+        // still references the slot. The GPU reads the set when this cmd executes, so free it after its wait.
+        Descriptor *dSet = Descriptor::Create(s_bindingInfos, PE_SHADER_STAGE_COMPUTE, false, "Downsample_descriptor");
+        UpdateDescriptorSet(*dSet);
+        cmd->AddAfterWaitCallback([dSet]() mutable
+                                  { Descriptor::Destroy(dSet); });
 
         uvec2 groupCount = SpdSetup();
 
@@ -49,7 +57,7 @@ namespace pe
 
         cmd->ImageBarrier(barrier);
         cmd->BindPipeline(*s_passInfo, false);
-        cmd->BindDescriptors(1, &s_DSet[s_currentIndex]);
+        cmd->BindDescriptors(1, &dSet);
         cmd->SetConstants(s_pushConstants);
         cmd->PushConstants();
         cmd->Dispatch(groupCount.x, groupCount.y, s_image->GetArrayLayers());
@@ -62,10 +70,7 @@ namespace pe
     void Downsampler::Destroy()
     {
         for (uint32_t i = 0; i < MAX_DESCRIPTORS_PER_CMD; i++)
-        {
-            Descriptor::Destroy(s_DSet[i]);
             Buffer::Destroy(s_atomicCounter[i]);
-        }
 
         s_passInfo.reset();
     }
@@ -89,19 +94,19 @@ namespace pe
 
     void Downsampler::CreateUniforms()
     {
-        std::vector<DescriptorBindingInfo> bindingInfos(3);
-        bindingInfos[0].binding = 0;
-        bindingInfos[0].type = PE_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        bindingInfos[0].imageLayout = PE_IMAGE_LAYOUT_GENERAL;
-        bindingInfos[0].count = 13;
+        s_bindingInfos.assign(3, {});
+        s_bindingInfos[0].binding = 0;
+        s_bindingInfos[0].type = PE_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        s_bindingInfos[0].imageLayout = PE_IMAGE_LAYOUT_GENERAL;
+        s_bindingInfos[0].count = 13;
 
-        bindingInfos[1].binding = 13;
-        bindingInfos[1].type = PE_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        bindingInfos[1].imageLayout = PE_IMAGE_LAYOUT_GENERAL;
+        s_bindingInfos[1].binding = 13;
+        s_bindingInfos[1].type = PE_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        s_bindingInfos[1].imageLayout = PE_IMAGE_LAYOUT_GENERAL;
 
-        bindingInfos[2].binding = 14;
-        bindingInfos[2].type = PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        bindingInfos[2].structuredStride = sizeof(s_counter);
+        s_bindingInfos[2].binding = 14;
+        s_bindingInfos[2].type = PE_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        s_bindingInfos[2].structuredStride = sizeof(s_counter);
 
         for (uint32_t i = 0; i < MAX_DESCRIPTORS_PER_CMD; i++)
         {
@@ -111,8 +116,6 @@ namespace pe
                 .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY,
                 .name = "Downsample_storage_buffer_" + std::to_string(i),
             });
-
-            s_DSet[i] = Descriptor::Create(bindingInfos, PE_SHADER_STAGE_COMPUTE, false, "Downsample_descriptor_" + std::to_string(i));
         }
     }
 
@@ -131,14 +134,13 @@ namespace pe
         s_image = image;
     }
 
-    void Downsampler::UpdateDescriptorSet()
+    void Downsampler::UpdateDescriptorSet(Descriptor &dSet)
     {
         int mips = static_cast<int>(s_image->GetMipLevels());
         std::vector<ImageView *> views(mips);
         for (int i = 0; i < mips; i++)
             views[i] = s_image->GetUAV(i);
 
-        Descriptor &dSet = *s_DSet[s_currentIndex];
         dSet.SetImageViews(0, views);
         if (mips >= 7)
             dSet.SetImageView(13, s_image->GetUAV(6));

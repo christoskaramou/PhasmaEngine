@@ -18,6 +18,13 @@ namespace pe
             return s_tracked;
         }
 
+        // Shaders are created on loader threads and destroyed on the main thread.
+        std::mutex &TrackedShadersMutex()
+        {
+            static std::mutex s_mutex;
+            return s_mutex;
+        }
+
         Descriptor *GetDescriptorSafely(const std::vector<Descriptor *> &descriptors, size_t index)
         {
             return (index < descriptors.size()) ? descriptors[index] : nullptr;
@@ -161,7 +168,10 @@ namespace pe
         shader->m_impl = CreateShaderImpl(shader, desc, needsCompile);
         shader->m_reflection.Init(shader);
 
-        TrackedShaders().push_back(shader);
+        {
+            std::lock_guard<std::mutex> lock(TrackedShadersMutex());
+            TrackedShaders().push_back(shader);
+        }
         return shader;
     }
 
@@ -202,7 +212,10 @@ namespace pe
         }
 
         shader->m_reflection.Init(shader);
-        TrackedShaders().push_back(shader);
+        {
+            std::lock_guard<std::mutex> lock(TrackedShadersMutex());
+            TrackedShaders().push_back(shader);
+        }
         return shader;
     }
 
@@ -211,14 +224,18 @@ namespace pe
         if (!shader)
             return;
 
-        auto &tracked = TrackedShaders();
-        tracked.erase(std::remove(tracked.begin(), tracked.end(), shader), tracked.end());
+        {
+            std::lock_guard<std::mutex> lock(TrackedShadersMutex());
+            auto &tracked = TrackedShaders();
+            tracked.erase(std::remove(tracked.begin(), tracked.end(), shader), tracked.end());
+        }
         delete shader;
         shader = nullptr;
     }
 
     std::vector<Shader *> Shader::GetHandles()
     {
+        std::lock_guard<std::mutex> lock(TrackedShadersMutex());
         return TrackedShaders();
     }
 

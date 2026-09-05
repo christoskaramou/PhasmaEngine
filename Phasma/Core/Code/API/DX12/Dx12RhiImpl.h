@@ -62,8 +62,7 @@ namespace pe
         Microsoft::WRL::ComPtr<ID3D12Fence> m_frameFence;
         Microsoft::WRL::ComPtr<ID3D12InfoQueue1> m_infoQueueCallback;
         DWORD m_infoQueueCallbackCookie = 0;
-        HANDLE m_fenceEvent = nullptr;
-        uint64_t m_fenceValue = 0;
+        std::atomic<uint64_t> m_fenceValue{0};
         D3D12_RAYTRACING_TIER m_rayTracingTier = D3D12_RAYTRACING_TIER_NOT_SUPPORTED;
         std::string m_adapterName;
         RHI::Caps m_caps{};

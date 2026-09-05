@@ -18,7 +18,39 @@ namespace pe
                 return INFINITE - 1;
             return static_cast<DWORD>(ms);
         }
+
+        struct ThreadFenceEvent
+        {
+            HANDLE handle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+            ~ThreadFenceEvent()
+            {
+                if (handle)
+                    CloseHandle(handle);
+            }
+        };
     } // namespace
+
+    bool Dx12WaitFence(ID3D12Fence *fence, uint64_t value, DWORD timeoutMs)
+    {
+        // One event per waiting thread: a shared auto-reset event lets a lower fence value wake a
+        // waiter registered for a higher one. Re-check after every wake so a stale registration
+        // (timed-out wait) can only cost a spurious loop iteration, never an early return.
+        // GetCompletedValue() reports UINT64_MAX after device removal, which ends the wait.
+        thread_local ThreadFenceEvent event;
+        PE_ERROR_IF(!event.handle, "Dx12WaitFence: CreateEvent failed");
+        while (fence->GetCompletedValue() < value)
+        {
+            HRESULT hr = fence->SetEventOnCompletion(value, event.handle);
+            if (FAILED(hr))
+            {
+                PE_ERROR("Dx12WaitFence: SetEventOnCompletion failed (0x%08X)", static_cast<unsigned>(hr));
+                return false;
+            }
+            if (WaitForSingleObject(event.handle, timeoutMs) != WAIT_OBJECT_0)
+                return fence->GetCompletedValue() >= value;
+        }
+        return true;
+    }
 
     Dx12SemaphoreImpl::Dx12SemaphoreImpl(Semaphore *owner, bool timeline, const std::string &name)
         : m_owner{owner},
@@ -34,9 +66,6 @@ namespace pe
         HRESULT hr = rhi->GetDevice()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence));
         PE_ERROR_IF(FAILED(hr), "Dx12SemaphoreImpl: CreateFence failed (0x%08X)", static_cast<unsigned>(hr));
 
-        m_event = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-        PE_ERROR_IF(!m_event, "Dx12SemaphoreImpl: CreateEvent failed");
-
         if (!name.empty() && m_fence)
         {
             std::wstring wname(name.begin(), name.end());
@@ -44,71 +73,32 @@ namespace pe
         }
     }
 
-    Dx12SemaphoreImpl::~Dx12SemaphoreImpl()
-    {
-        if (m_event)
-        {
-            CloseHandle(m_event);
-            m_event = nullptr;
-        }
-    }
-
     void Dx12SemaphoreImpl::Wait(uint64_t value)
     {
         PE_ERROR_IF(!m_timeline, "Semaphore::Wait() called on non-timeline semaphore!");
 
-        if (value <= m_lastCompleted)
+        // m_lastCompleted is a monotone-ish cache: a lower store only costs an extra fence read.
+        if (value <= m_lastCompleted.load(std::memory_order_relaxed))
             return;
 
-        if (m_fence->GetCompletedValue() >= value)
-        {
-            m_lastCompleted = value;
-            return;
-        }
-
-        HRESULT hr = m_fence->SetEventOnCompletion(value, m_event);
-        if (FAILED(hr))
-        {
-            PE_ERROR("[Semaphore] SetEventOnCompletion failed (0x%08X)", static_cast<unsigned>(hr));
-            return;
-        }
-
-        DWORD waitResult = WaitForSingleObject(m_event, INFINITE);
-        if (waitResult == WAIT_OBJECT_0)
-        {
-            m_lastCompleted = value;
-        }
+        if (Dx12WaitFence(m_fence.Get(), value, INFINITE))
+            m_lastCompleted.store(value, std::memory_order_relaxed);
         else
-        {
             PE_ERROR("[Semaphore] Failed to wait for timeline semaphore!");
-        }
     }
 
     bool Dx12SemaphoreImpl::WaitTimeout(uint64_t value, uint64_t timeoutNS)
     {
         PE_ERROR_IF(!m_timeline, "Semaphore::WaitTimeout() called on non-timeline semaphore!");
 
-        if (value <= m_lastCompleted)
+        if (value <= m_lastCompleted.load(std::memory_order_relaxed))
             return true;
 
-        if (m_fence->GetCompletedValue() >= value)
-        {
-            m_lastCompleted = value;
-            return true;
-        }
-
-        HRESULT hr = m_fence->SetEventOnCompletion(value, m_event);
-        if (FAILED(hr))
+        if (!Dx12WaitFence(m_fence.Get(), value, NsToTimeoutMs(timeoutNS)))
             return false;
 
-        DWORD waitResult = WaitForSingleObject(m_event, NsToTimeoutMs(timeoutNS));
-        if (waitResult == WAIT_OBJECT_0)
-        {
-            m_lastCompleted = value;
-            return true;
-        }
-
-        return false;
+        m_lastCompleted.store(value, std::memory_order_relaxed);
+        return true;
     }
 
     void Dx12SemaphoreImpl::Signal(uint64_t value)

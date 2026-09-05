@@ -158,6 +158,7 @@ namespace pe
             hash.Combine(static_cast<uint32_t>(attachment.stencilStoreOp));
         }
 
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
         auto it = s_renderPasses.find(hash);
         if (it != s_renderPasses.end())
         {
@@ -198,6 +199,7 @@ namespace pe
             hash.Combine(reinterpret_cast<std::intptr_t>(view));
         }
 
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
         auto it = s_framebuffers.find(hash);
         if (it != s_framebuffers.end())
         {
@@ -246,23 +248,27 @@ namespace pe
 
         hash.Combine(passInfo.GetHash());
 
-        auto it = s_pipelines.find(hash);
-        if (it != s_pipelines.end())
         {
-            return it->second;
+            std::lock_guard<std::mutex> lock(s_cacheMutex);
+            auto it = s_pipelines.find(hash);
+            if (it != s_pipelines.end())
+                return it->second;
         }
-        else
-        {
-            PE_PROFILE_SCOPE("Cmd CreatePipeline");
-            Pipeline *newPipeline = Pipeline::Create(renderPass, passInfo);
-            s_pipelines[hash] = newPipeline;
 
-            return newPipeline;
-        }
+        // Create outside the lock (pipeline compile); a concurrent creator of the same hash wins on insert.
+        PE_PROFILE_SCOPE("Cmd CreatePipeline");
+        Pipeline *newPipeline = Pipeline::Create(renderPass, passInfo);
+
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
+        auto [it, inserted] = s_pipelines.try_emplace(hash, newPipeline);
+        if (!inserted)
+            Pipeline::Destroy(newPipeline);
+        return it->second;
     }
 
     void CommandBuffer::ClearFramebufferCache()
     {
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
         for (auto &[hash, framebuffer] : s_framebuffers)
         {
             Framebuffer::Destroy(framebuffer);
@@ -272,13 +278,14 @@ namespace pe
 
     void CommandBuffer::ClearCache()
     {
+        ClearFramebufferCache();
+
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
         for (auto &[hash, renderPass] : s_renderPasses)
         {
             RenderPass::Destroy(renderPass);
         }
         s_renderPasses.clear();
-
-        ClearFramebufferCache();
 
         for (auto &[hash, pipeline] : s_pipelines)
         {

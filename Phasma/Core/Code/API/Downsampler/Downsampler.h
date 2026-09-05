@@ -16,16 +16,17 @@ namespace pe
     private:
         static void UpdatePassInfo();
         static void CreateUniforms();
-        static void UpdateDescriptorSet();
+        static void UpdateDescriptorSet(Descriptor &dSet);
         static uvec2 SpdSetup();
         static void SetInputImage(Image *image);
         static void ResetInputImage();
 
         inline static std::mutex s_dispatchMutex{};
         inline static std::shared_ptr<PassInfo> s_passInfo{};
-        inline static const uint32_t MAX_DESCRIPTORS_PER_CMD = 100; // Downsampler is not reusable within a command recording, needs multiple descriptors
+        // Atomic-counter ring. Each dispatch zeroes its counter in-cmd behind a buffer barrier, so reuse is
+        // GPU-ordered on the queue; the descriptor set is per dispatch (destroyed after the cmd's wait).
+        inline static const uint32_t MAX_DESCRIPTORS_PER_CMD = 100;
         inline static uint32_t s_currentIndex{};
-        inline static Descriptor *s_DSet[MAX_DESCRIPTORS_PER_CMD]{};
         inline static Image *s_image = nullptr; // max 12 mips/views
         inline static uint32_t s_counter[6]{};
         inline static Buffer *s_atomicCounter[MAX_DESCRIPTORS_PER_CMD]{};
