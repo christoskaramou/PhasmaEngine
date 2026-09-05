@@ -511,6 +511,8 @@ namespace pe
             // bounding box (local)
             bool bbInit = false;
             vec3 bbMin(0.f), bbMax(0.f);
+            // Static vertices must bypass skinning in scenes that also contain animated meshes.
+            const float defaultWeight = mesh->mNumBones > 0 ? 1.f : 0.f;
 
             for (unsigned int v = 0; v < mesh->mNumVertices; v++)
             {
@@ -566,8 +568,8 @@ namespace pe
                     FillVertexTangent(vertex, 1.0f, 0.0f, 0.0f, 1.0f);
                 }
 
-                FillVertexJointsWeights(vertex, 0, 0, 0, 0, 1.f, 0.f, 0.f, 0.f);
-                FillVertexJointsWeights(positionUvVertex, 0, 0, 0, 0, 1.f, 0.f, 0.f, 0.f);
+                FillVertexJointsWeights(vertex, 0, 0, 0, 0, defaultWeight, 0.f, 0.f, 0.f);
+                FillVertexJointsWeights(positionUvVertex, 0, 0, 0, 0, defaultWeight, 0.f, 0.f, 0.f);
 
                 // Fill temp buffers
                 meshVertices.push_back(vertex);
