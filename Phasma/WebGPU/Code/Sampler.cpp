@@ -17,8 +17,12 @@ extern "C"
             return;
         if (sampler->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
-            if (sampler->sampler)
-                pe::Sampler::Destroy(sampler->sampler);
+            if (pe::Sampler *native = sampler->sampler)
+            {
+                sampler->sampler = nullptr;
+                pwgpu::DeferDestroy(sampler->device, [native]() mutable
+                                    { pe::Sampler::Destroy(native); });
+            }
             if (sampler->device)
                 wgpuDeviceRelease(sampler->device);
             delete sampler;

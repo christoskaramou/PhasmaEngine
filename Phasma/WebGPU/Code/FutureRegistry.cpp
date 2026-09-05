@@ -150,21 +150,32 @@ namespace pwgpu
 
         if (timeoutNS > 0)
         {
+            // WaitAny returns as soon as ANY listed future is done: wait on the
+            // earliest queue serial, or poll every pending CPU future.
             bool hasCPU = false;
             bool hasQueue = false;
+            bool anyDone = false;
             WGPUQueueImpl *firstQueue = nullptr;
             bool mixedQueues = false;
-            uint64_t maxWaitSerial = 0;
+            uint64_t minWaitSerial = UINT64_MAX;
+            std::vector<std::shared_future<void>> cpuWaits;
             {
                 std::lock_guard<std::mutex> lock(m_mutex);
                 for (size_t i = 0; i < count; ++i)
                 {
                     auto it = m_futures.find(infos[i].future.id);
-                    if (it == m_futures.end())
+                    if (it == m_futures.end() || it->second.completed)
+                    {
+                        anyDone = true;
                         continue;
+                    }
                     const auto &tf = it->second;
                     if (tf.timeline == FutureTimeline::CPU)
+                    {
                         hasCPU = true;
+                        if (tf.cpuFuture.valid())
+                            cpuWaits.push_back(tf.cpuFuture);
+                    }
                     else
                     {
                         hasQueue = true;
@@ -172,8 +183,7 @@ namespace pwgpu
                             firstQueue = tf.queue;
                         else if (tf.queue != firstQueue)
                             mixedQueues = true;
-                        if (tf.waitSerial > maxWaitSerial)
-                            maxWaitSerial = tf.waitSerial;
+                        minWaitSerial = std::min(minWaitSerial, tf.waitSerial);
                     }
                 }
             }
@@ -181,30 +191,34 @@ namespace pwgpu
             if ((hasCPU && hasQueue) || mixedQueues)
                 return WGPUWaitStatus_Error;
 
-            if (hasQueue && firstQueue)
+            if (anyDone)
+            {
+                // Nothing to wait for.
+            }
+            else if (hasQueue && firstQueue)
             {
                 pe::Semaphore *sem = firstQueue->GetSemaphore();
-                if (sem && maxWaitSerial > 0)
-                    sem->WaitTimeout(maxWaitSerial, timeoutNS);
+                if (sem && minWaitSerial > 0 && minWaitSerial != UINT64_MAX)
+                    sem->WaitTimeout(minWaitSerial, timeoutNS);
             }
-            else if (hasCPU)
+            else if (!cpuWaits.empty())
             {
-                std::shared_future<void> cpuWait;
+                // ponytail: 1ms round-robin poll; a shared condition variable if
+                // CPU-timeline waits ever become hot.
+                const auto deadline =
+                    std::chrono::steady_clock::now() + std::chrono::nanoseconds(timeoutNS);
+                bool ready = false;
+                while (!ready && std::chrono::steady_clock::now() < deadline)
                 {
-                    std::lock_guard<std::mutex> lock2(m_mutex);
-                    for (size_t i = 0; i < count; ++i)
+                    for (auto &f : cpuWaits)
                     {
-                        auto it = m_futures.find(infos[i].future.id);
-                        if (it != m_futures.end() && !it->second.completed &&
-                            it->second.cpuFuture.valid())
+                        if (f.wait_for(std::chrono::milliseconds(1)) == std::future_status::ready)
                         {
-                            cpuWait = it->second.cpuFuture;
+                            ready = true;
                             break;
                         }
                     }
                 }
-                if (cpuWait.valid())
-                    cpuWait.wait_for(std::chrono::nanoseconds(timeoutNS));
             }
         }
 

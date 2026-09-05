@@ -153,15 +153,25 @@ struct WGPUDeviceImpl
         PeBackendHandle commandPool = 0;
         uint64_t serial = 0;
     };
+    struct PendingDeleter
+    {
+        uint64_t serial = 0;
+        std::function<void()> fn;
+    };
     std::vector<PendingTextureDeletion> pendingTextureDeletions;
     std::vector<PendingDescriptorBufferSlice> pendingDescriptorBufferSlices;
     std::vector<PendingVulkanCommandPoolDeletion> pendingVulkanCommandPoolDeletions;
+    std::vector<PendingDeleter> pendingDeleters;
     std::mutex pendingResourceDeletionsMutex;
 
     WGPUDeviceImpl() : lostFuture(lostPromise.get_future().share()) {}
 
     void reportError(WGPUErrorType type, WGPUStringView message);
     void ReclaimCompletedDeferredResources();
+    // Runs fn once every submission recorded so far has completed on the GPU
+    // (immediately when nothing is in flight). Native objects a submitted command
+    // buffer may still reference go through here instead of a direct Destroy.
+    void DeferDestroy(std::function<void()> fn);
 };
 
 namespace pwgpu
@@ -184,5 +194,13 @@ namespace pwgpu
             return false;
         pe::Semaphore *sem = device->queue->GetSemaphore();
         return sem && sem->GetValue() < serial;
+    }
+
+    inline void DeferDestroy(WGPUDeviceImpl *device, std::function<void()> fn)
+    {
+        if (device)
+            device->DeferDestroy(std::move(fn));
+        else if (fn)
+            fn();
     }
 } // namespace pwgpu

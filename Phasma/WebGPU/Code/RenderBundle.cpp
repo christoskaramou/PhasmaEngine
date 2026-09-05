@@ -982,7 +982,10 @@ extern "C"
         if (!EncoderOpen(rbe, "wgpuRenderBundleEncoderDraw"))
             return;
         if (!rbe->pipeline)
+        {
+            rbe->invalid = true;
             return;
+        }
         if (!ValidateBindGroupCompat(rbe))
             return;
         if (!ValidateDrawVertexState(rbe->pipeline->vertexBufferLayouts, rbe->boundVertexBuffers,
@@ -1025,7 +1028,10 @@ extern "C"
             return;
         }
         if (!rbe->pipeline)
+        {
+            rbe->invalid = true;
             return;
+        }
         if (!ValidateBindGroupCompat(rbe))
             return;
         if (!ValidateDrawVertexState(rbe->pipeline->vertexBufferLayouts, rbe->boundVertexBuffers,
@@ -1098,7 +1104,10 @@ extern "C"
         }
 
         if (!rbe->pipeline)
+        {
+            rbe->invalid = true;
             return;
+        }
         if (!ValidateBindGroupCompat(rbe))
             return;
         if (!ValidateDrawBindPresence(rbe->pipeline->vertexBufferLayouts, rbe->boundVertexBuffers))
@@ -1175,7 +1184,10 @@ extern "C"
         }
 
         if (!rbe->pipeline)
+        {
+            rbe->invalid = true;
             return;
+        }
         if (!ValidateBindGroupCompat(rbe))
             return;
         if (!ValidateDrawBindPresence(rbe->pipeline->vertexBufferLayouts, rbe->boundVertexBuffers))

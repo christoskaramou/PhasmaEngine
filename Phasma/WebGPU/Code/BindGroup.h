@@ -6,6 +6,7 @@
 
 struct WGPUDeviceImpl;
 struct WGPUTextureViewImpl;
+struct WGPUSamplerImpl;
 
 struct WGPUBindGroupLayoutEntryResolved
 {
@@ -65,8 +66,11 @@ struct WGPUBindGroupImpl
     bool invalid = false;
     bool invalidFromDestroyedResource = false; // §3.3 — defer to queue.submit
 
+    // textureUses / bufferUses / retainedSamplers each hold a reference on the
+    // bound object, released in wgpuBindGroupRelease.
     std::vector<WGPUBindGroupTextureUse> textureUses;
     std::vector<WGPUBindGroupBufferUse> bufferUses;
+    std::vector<WGPUSamplerImpl *> retainedSamplers;
     std::vector<pe::Sampler *> ownedSamplers;
 
     struct DynamicBinding

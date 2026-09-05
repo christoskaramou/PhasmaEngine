@@ -32,6 +32,51 @@ namespace
             return WGPUPresentMode_Fifo;
         }
     }
+
+    PePresentMode WGPUPresentModeToPe(WGPUPresentMode mode)
+    {
+        switch (mode)
+        {
+        case WGPUPresentMode_Immediate:
+            return PE_PRESENT_MODE_IMMEDIATE;
+        case WGPUPresentMode_Mailbox:
+            return PE_PRESENT_MODE_MAILBOX;
+        case WGPUPresentMode_FifoRelaxed:
+            return PE_PRESENT_MODE_FIFO_RELAXED;
+        default:
+            return PE_PRESENT_MODE_FIFO;
+        }
+    }
+
+    // RebuildSwapchain()/RecreateSurface() destroy and recreate the pe objects.
+    void RefreshNativeSurface(WGPUSurfaceImpl *surface)
+    {
+        if (!surface->rhi)
+            return;
+        surface->surface = surface->rhi->GetSurface();
+        surface->swapchain = surface->rhi->GetSwapchain();
+    }
+
+    // The RHI creates no swapchain for a WebGPU-owned window and a live one never follows the
+    // window size or present mode; mirrors RuntimeSceneRenderer::Resize.
+    void RebuildSwapchain(WGPUSurfaceImpl *surface, const WGPUSurfaceConfiguration *config)
+    {
+        pe::RHI *rhi = surface->rhi;
+        pe::Surface *native = rhi->GetSurface();
+        if (!native->IsPresentable())
+            return;
+
+        rhi->WaitDeviceIdle();
+        pe::Swapchain *old = rhi->GetSwapchain();
+        pe::Swapchain::Destroy(old);
+        delete surface->acquireSemaphore;
+        surface->acquireSemaphore = new pe::Semaphore(false, "wgpu_acquire");
+
+        native->SetActualExtent({0, 0, config->width, config->height});
+        native->SetPresentMode(WGPUPresentModeToPe(config->presentMode));
+        rhi->CreateSwapchain(native);
+        RefreshNativeSurface(surface);
+    }
 } // namespace
 
 extern "C"
@@ -87,6 +132,7 @@ extern "C"
             return;
         }
 
+        RefreshNativeSurface(surface);
         if (surface->surface)
         {
             WGPUTextureFormat nativeFmt = pwgpu::FromVkFormat(static_cast<VkFormat>(pe::ToVkFormat(surface->surface->GetFormat())));
@@ -97,33 +143,20 @@ extern "C"
             }
         }
 
-        if (surface->surface && config->presentMode != WGPUPresentMode_Fifo)
-        {
-            PePresentMode peMode = PE_PRESENT_MODE_FIFO;
-            switch (config->presentMode)
-            {
-            case WGPUPresentMode_Immediate:
-                peMode = PE_PRESENT_MODE_IMMEDIATE;
-                break;
-            case WGPUPresentMode_Mailbox:
-                peMode = PE_PRESENT_MODE_MAILBOX;
-                break;
-            case WGPUPresentMode_FifoRelaxed:
-                peMode = PE_PRESENT_MODE_FIFO_RELAXED;
-                break;
-            default:
-                break;
-            }
-            pe::GetRHI().ChangePresentMode(peMode);
-            surface->swapchain = pe::GetRHI().GetSwapchain();
-        }
-
         if (surface->currentTexture)
         {
             wgpuTextureRelease(surface->currentTexture);
             surface->currentTexture = nullptr;
         }
         surface->currentImageIndex = UINT32_MAX;
+
+        if (surface->surface && surface->rhi)
+        {
+            const WGPUSurfaceConfiguration &prev = surface->configuration;
+            if (!surface->swapchain || prev.presentMode != config->presentMode ||
+                prev.width != config->width || prev.height != config->height)
+                RebuildSwapchain(surface, config);
+        }
 
         if (surface->device != config->device)
         {
@@ -248,6 +281,9 @@ extern "C"
             return;
         }
 
+        RefreshNativeSurface(surface);
+        if (surface->swapchain && !surface->acquireSemaphore)
+            surface->acquireSemaphore = new pe::Semaphore(false, "wgpu_acquire");
         if (!surface->swapchain || !surface->acquireSemaphore)
         {
             surfaceTexture->texture = nullptr;
@@ -355,6 +391,7 @@ extern "C"
             return WGPUStatus_Error;
         }
 
+        RefreshNativeSurface(surface);
         if (surface->device && surface->device->peQueue && surface->swapchain)
         {
             pe::Image *swapImage =
@@ -381,8 +418,15 @@ extern "C"
                 cmd->Return();
             }
 
-            surface->device->peQueue->Present(
-                surface->swapchain, surface->currentImageIndex, nullptr);
+            try
+            {
+                surface->device->peQueue->Present(
+                    surface->swapchain, surface->currentImageIndex, nullptr);
+            }
+            catch (const pe::SwapchainOutOfDateError &)
+            {
+                // The next configure rebuilds the swapchain; the frame is dropped.
+            }
         }
 
         wgpuTextureRelease(surface->currentTexture);

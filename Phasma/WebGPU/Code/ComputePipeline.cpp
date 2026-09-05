@@ -21,7 +21,12 @@ extern "C"
         if (cp->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
             if (cp->device && cp->device->rhi && cp->backendPipeline != 0)
-                pwgpu::DestroyWebGPUPipelineBackend(cp->device, cp->backendPipeline);
+            {
+                WGPUDeviceImpl *dev = cp->device;
+                const PeBackendHandle backend = cp->backendPipeline;
+                dev->DeferDestroy([dev, backend]()
+                                  { pwgpu::DestroyWebGPUPipelineBackend(dev, backend); });
+            }
             if (cp->layout)
                 wgpuPipelineLayoutRelease(cp->layout);
             WGPUDeviceImpl *dev = cp->device;

@@ -27,8 +27,6 @@ namespace pwgpu
     QueryBackendResult CreateWebGPUQuerySetBackend(WGPUDeviceImpl *device,
                                                    WGPUQueryType type,
                                                    uint32_t count);
-    void DestroyWebGPUQuerySetBackend(WGPUQuerySetImpl *querySet);
-
     bool ResetWebGPUQuerySet(pe::CommandBuffer *cmd,
                              WGPUQuerySetImpl *querySet,
                              uint32_t firstQuery,

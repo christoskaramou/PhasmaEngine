@@ -763,8 +763,23 @@ void WGPUDeviceImpl::ReclaimCompletedDeferredResources()
     std::vector<WGPUTextureImpl *> releaseAfter;
     std::vector<WGPUDescriptorBufferState::FreeSlice> slicesToFree;
     std::vector<PeBackendHandle> commandPoolsToDestroy;
+    std::vector<std::function<void()>> deletersToRun;
     {
         std::lock_guard<std::mutex> lock(pendingResourceDeletionsMutex);
+        auto delIt = pendingDeleters.begin();
+        while (delIt != pendingDeleters.end())
+        {
+            if (delIt->serial <= completed)
+            {
+                deletersToRun.push_back(std::move(delIt->fn));
+                delIt = pendingDeleters.erase(delIt);
+            }
+            else
+            {
+                ++delIt;
+            }
+        }
+
         auto it = pendingTextureDeletions.begin();
         while (it != pendingTextureDeletions.end())
         {
@@ -808,6 +823,8 @@ void WGPUDeviceImpl::ReclaimCompletedDeferredResources()
             }
         }
     }
+    for (auto &fn : deletersToRun)
+        fn();
     for (const auto &slice : slicesToFree)
         pwgpu::FreeDescriptorBufferSlice(this, slice.offset, slice.size);
     if (pe::GetRHI().GetApi() == PE_GRAPHICS_API_VULKAN)
@@ -822,6 +839,20 @@ void WGPUDeviceImpl::ReclaimCompletedDeferredResources()
     }
     for (auto *tex : releaseAfter)
         wgpuTextureRelease(tex);
+}
+
+void WGPUDeviceImpl::DeferDestroy(std::function<void()> fn)
+{
+    if (!fn)
+        return;
+    const uint64_t serial = queue ? queue->lastSubmissionSerial.load() : 0;
+    if (!pwgpu::IsQueueSerialPending(this, serial))
+    {
+        fn();
+        return;
+    }
+    std::lock_guard<std::mutex> lock(pendingResourceDeletionsMutex);
+    pendingDeleters.push_back({serial, std::move(fn)});
 }
 
 extern "C"
@@ -1209,13 +1240,10 @@ extern "C"
         if (!peUsage)
             peUsage = PE_BUFFER_USAGE_TRANSFER_SRC;
 
-        const bool dx12MappedStorageNeedsStaging =
-            pe::GetRHI().GetApi() == PE_GRAPHICS_API_DX12 &&
-            mappedAtCreation &&
-            (usage & WGPUBufferUsage_Storage) != 0;
+        // mappedAtCreation without MAP_* usage stays device-local: the initial
+        // contents go through shadowData and a staged upload at unmap().
         const bool needsHostAccess =
-            (usage & (WGPUBufferUsage_MapRead | WGPUBufferUsage_MapWrite)) != 0 ||
-            (mappedAtCreation && !dx12MappedStorageNeedsStaging);
+            (usage & (WGPUBufferUsage_MapRead | WGPUBufferUsage_MapWrite)) != 0;
 
         if (!needsHostAccess)
             peUsage |= PE_BUFFER_USAGE_TRANSFER_DST;
@@ -2756,12 +2784,15 @@ extern "C"
                     default:
                         break;
                     }
+                    wgpuBufferAddRef(entry.buffer);
                     bg->bufferUses.push_back({entry.buffer, bufKind});
                     if (le.buffer.hasDynamicOffset)
                         bg->dynamicBindings.push_back({entry.binding, entry.buffer, offset, size});
                 }
                 else if (le.sampler.type != WGPUSamplerBindingType_BindingNotUsed && entry.sampler)
                 {
+                    wgpuSamplerAddRef(entry.sampler);
+                    bg->retainedSamplers.push_back(entry.sampler);
                     if (entry.sampler->sampler)
                         bg->descriptor->SetSampler(entry.binding, entry.sampler->sampler);
                     if (bg->descriptorBufferValid)
@@ -2775,6 +2806,7 @@ extern "C"
                     if (bg->descriptorBufferValid)
                         descriptorBufferWritesOk &=
                             WriteDescriptorBufferBinding(bg, le, entry);
+                    wgpuTextureViewAddRef(entry.textureView);
                     bg->textureUses.push_back({entry.textureView, pwgpu::SubresourceUsageKind::Sampled});
                 }
                 else if (le.storageTexture.access != WGPUStorageTextureAccess_BindingNotUsed && entry.textureView)
@@ -2789,6 +2821,7 @@ extern "C"
                                 : (le.storageTexture.access == WGPUStorageTextureAccess_ReadWrite)
                                     ? pwgpu::SubresourceUsageKind::ReadWriteStorage
                                     : pwgpu::SubresourceUsageKind::WriteOnlyStorage;
+                    wgpuTextureViewAddRef(entry.textureView);
                     bg->textureUses.push_back({entry.textureView, kind});
                 }
                 else if (le.hasExternalTexture && entry.textureView)
@@ -2804,6 +2837,7 @@ extern "C"
                     if (bg->descriptorBufferValid)
                         descriptorBufferWritesOk &=
                             WriteDescriptorBufferBinding(bg, le, entry, sampler);
+                    wgpuTextureViewAddRef(entry.textureView);
                     bg->textureUses.push_back(
                         {entry.textureView, pwgpu::SubresourceUsageKind::Sampled});
                 }
@@ -4741,6 +4775,11 @@ extern "C"
         enc->device = device;
         if (descriptor && descriptor->label.data)
             enc->label = pwgpu::ToString(descriptor->label);
+        if (!device->peQueue)
+        {
+            enc->invalid = true;
+            return enc;
+        }
 
         // Acquire a pe::CommandBuffer from the device's queue and begin recording.
         pe::CommandBuffer *cmd = device->peQueue->AcquireCommandBuffer();

@@ -227,8 +227,24 @@ namespace
     {
         if (reopen)
             attachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        if (preserveAfterScope)
+        // eNone marks a read-only attachment and must stay eNone.
+        if (preserveAfterScope && attachment.storeOp == vk::AttachmentStoreOp::eDontCare)
             attachment.storeOp = vk::AttachmentStoreOp::eStore;
+    }
+
+    // Vulkan dynamic rendering forbids barriers and query-pool resets inside the
+    // scope, so mid-pass bind-group barriers / occlusion resets end it; the next
+    // draw-scope command reopens with loadOp=Load. DX12 records into an
+    // OMSetRenderTargets pass where barriers are legal, so nothing to suspend.
+    void SuspendRendering(WGPURenderPassEncoder rpe)
+    {
+        if (!rpe || !rpe->renderingActive)
+            return;
+        if (pe::GetRHI().GetApi() == PE_GRAPHICS_API_DX12)
+            return;
+        pe::GetVulkanCommandBuffer(rpe->cmd).endRendering();
+        rpe->renderingActive = false;
+        rpe->renderingActiveUsesSecondaryContents = false;
     }
 
     PeStoreOp ToPeStoreOp(WGPURenderPassAttachmentStoreOp op)
@@ -365,6 +381,12 @@ namespace
             return;
         }
 
+        // ponytail: whether this scope is the last one is unknown at beginRendering
+        // (a later setBindGroup/beginOcclusionQuery may suspend it), so storeOp
+        // Discard is always upgraded to Store. Free on desktop; costs tile
+        // write-back on tilers. Upgrade path: record the pass, replay with the
+        // real storeOp on the final scope.
+        constexpr bool preserveAfterScope = true;
         std::vector<vk::RenderingAttachmentInfo> colorAttachments;
         colorAttachments.reserve(rpe->deferredColorAttachments.size());
         for (const auto &attachment : rpe->deferredColorAttachments)
@@ -372,7 +394,7 @@ namespace
             colorAttachments.push_back(ToVkRenderingAttachment(attachment));
             AdjustRenderingAttachmentForScope(colorAttachments.back(),
                                               rpe->renderingScopeWasOpened,
-                                              secondaryContents);
+                                              preserveAfterScope);
         }
 
         vk::RenderingAttachmentInfo depthAttachment{};
@@ -381,7 +403,7 @@ namespace
             depthAttachment = ToVkRenderingAttachment(rpe->deferredDepthAtt);
             AdjustRenderingAttachmentForScope(depthAttachment,
                                               rpe->renderingScopeWasOpened,
-                                              secondaryContents);
+                                              preserveAfterScope);
         }
         vk::RenderingAttachmentInfo stencilAttachment{};
         if (rpe->deferredHasStencil)
@@ -389,7 +411,7 @@ namespace
             stencilAttachment = ToVkRenderingAttachment(rpe->deferredStencilAtt);
             AdjustRenderingAttachmentForScope(stencilAttachment,
                                               rpe->renderingScopeWasOpened,
-                                              secondaryContents);
+                                              preserveAfterScope);
         }
 
         vk::RenderingInfo renderingInfo{};
@@ -406,6 +428,7 @@ namespace
         if (rpe->deferredHasStencil)
             renderingInfo.pStencilAttachment = &stencilAttachment;
 
+        pwgpu::FlushPendingBarriers(rpe->cmd);
         pe::GetVulkanCommandBuffer(rpe->cmd).beginRendering(renderingInfo);
         rpe->renderingActive = true;
         rpe->renderingActiveUsesSecondaryContents = secondaryContents;
@@ -557,6 +580,83 @@ namespace
             AppendBufferUsageBarrier(entry.first, entry.second, bufferBarriers);
     }
 
+    void AppendBindGroupBarriers(WGPUBindGroupImpl *bg,
+                                 std::vector<pe::ImageBarrierInfo> &imageBarriers,
+                                 std::vector<pe::BufferBarrierInfo> &bufferBarriers)
+    {
+        for (const auto &use : bg->textureUses)
+        {
+            if (!use.view || !use.view->texture || !use.view->texture->image)
+                continue;
+
+            pe::ImageBarrierInfo barrier{};
+            barrier.image = use.view->texture->image;
+            barrier.stageFlags = PE_STAGE_ALL_GRAPHICS;
+            barrier.accessMask = TextureAccessForUsage(use.kind);
+            barrier.layout = TextureLayoutForUsage(use.kind);
+            barrier.baseMipLevel = use.view->baseMipLevel;
+            barrier.mipLevels = use.view->mipLevelCount;
+            barrier.baseArrayLayer = use.view->baseArrayLayer;
+            barrier.arrayLayers = use.view->arrayLayerCount;
+            imageBarriers.push_back(barrier);
+        }
+
+        for (const auto &use : bg->bufferUses)
+        {
+            if (!use.buffer || !use.buffer->peBuffer)
+                continue;
+
+            pe::BufferBarrierInfo barrier{};
+            barrier.buffer = use.buffer->peBuffer;
+            barrier.stageMask = PE_STAGE_ALL_GRAPHICS;
+            barrier.accessMask = BufferAccessForUsage(use.kind);
+            bufferBarriers.push_back(barrier);
+        }
+    }
+
+    // Mirrors the skip rules of the backend barrier recorders (same state, or
+    // read-after-read) against the resource track info they update, so a
+    // rebinding that needs no barrier does not suspend the rendering scope.
+    bool BindGroupNeedsBarriers(WGPUBindGroupImpl *bg)
+    {
+        for (const auto &use : bg->textureUses)
+        {
+            if (!use.view || !use.view->texture || !use.view->texture->image)
+                continue;
+            pe::Image *image = use.view->texture->image;
+            const PeImageLayout layout = TextureLayoutForUsage(use.kind);
+            const PeAccessFlags access = TextureAccessForUsage(use.kind);
+            const bool is3D = use.view->texture->dimension == WGPUTextureDimension_3D;
+            const uint32_t baseLayer = is3D ? 0u : use.view->baseArrayLayer;
+            const uint32_t layerCount = is3D ? 1u : use.view->arrayLayerCount;
+            for (uint32_t layer = baseLayer; layer < baseLayer + layerCount; ++layer)
+            {
+                for (uint32_t mip = use.view->baseMipLevel;
+                     mip < use.view->baseMipLevel + use.view->mipLevelCount; ++mip)
+                {
+                    const pe::ImageTrackInfo &cur = image->GetCurrentInfo(layer, mip);
+                    const bool sameState = cur.layout == layout &&
+                                           cur.stageFlags == PE_STAGE_ALL_GRAPHICS &&
+                                           cur.accessMask == access;
+                    if (!(sameState && IsReadOnlyAccess(access)))
+                        return true;
+                }
+            }
+        }
+        for (const auto &use : bg->bufferUses)
+        {
+            if (!use.buffer || !use.buffer->peBuffer)
+                continue;
+            const pe::BufferTrackInfo &cur = use.buffer->peBuffer->GetTrackInfo();
+            const PeAccessFlags access = BufferAccessForUsage(use.kind);
+            const bool sameState = cur.stageMask == PE_STAGE_ALL_GRAPHICS &&
+                                   cur.accessMask == access;
+            if (!(sameState && IsReadOnlyAccess(access)))
+                return true;
+        }
+        return false;
+    }
+
     void CollectBindGroupBarriers(WGPURenderPassEncoder rpe,
                                   std::vector<pe::ImageBarrierInfo> &imageBarriers,
                                   std::vector<pe::BufferBarrierInfo> &bufferBarriers)
@@ -574,34 +674,7 @@ namespace
             if (!bg || bg->invalid)
                 continue;
 
-            for (const auto &use : bg->textureUses)
-            {
-                if (!use.view || !use.view->texture || !use.view->texture->image)
-                    continue;
-
-                pe::ImageBarrierInfo barrier{};
-                barrier.image = use.view->texture->image;
-                barrier.stageFlags = PE_STAGE_ALL_GRAPHICS;
-                barrier.accessMask = TextureAccessForUsage(use.kind);
-                barrier.layout = TextureLayoutForUsage(use.kind);
-                barrier.baseMipLevel = use.view->baseMipLevel;
-                barrier.mipLevels = use.view->mipLevelCount;
-                barrier.baseArrayLayer = use.view->baseArrayLayer;
-                barrier.arrayLayers = use.view->arrayLayerCount;
-                imageBarriers.push_back(barrier);
-            }
-
-            for (const auto &use : bg->bufferUses)
-            {
-                if (!use.buffer || !use.buffer->peBuffer)
-                    continue;
-
-                pe::BufferBarrierInfo barrier{};
-                barrier.buffer = use.buffer->peBuffer;
-                barrier.stageMask = PE_STAGE_ALL_GRAPHICS;
-                barrier.accessMask = BufferAccessForUsage(use.kind);
-                bufferBarriers.push_back(barrier);
-            }
+            AppendBindGroupBarriers(bg, imageBarriers, bufferBarriers);
         }
     }
 } // namespace
@@ -629,12 +702,16 @@ extern "C"
                 wgpuRenderBundleRelease(rb);
             for (auto *v : rpe->retainedViews)
                 wgpuTextureViewRelease(v);
+            for (auto *buf : rpe->usedBuffers)
+                wgpuBufferRelease(buf);
             for (auto *sv : rpe->ownedSliceViews)
                 pe::ImageView::Destroy(sv);
             if (rpe->timestampQuerySet)
                 wgpuQuerySetRelease(rpe->timestampQuerySet);
             if (rpe->occlusionQuerySet)
                 wgpuQuerySetRelease(rpe->occlusionQuerySet);
+            if (rpe->parent)
+                wgpuCommandEncoderRelease(rpe->parent);
             delete rpe;
         }
     }
@@ -864,6 +941,23 @@ extern "C"
             }
         }
 
+        // Groups bound after the rendering scope opened missed the deferred barrier
+        // batch; emit theirs now, outside the scope.
+        // ponytail: a query begun in this scope must end in it, so a bind while an
+        // occlusion query is active keeps the scope and skips the barrier.
+        if (group && rpe->bindGroupBarriersEmitted && !rpe->occlusionQueryActive &&
+            BindGroupNeedsBarriers(group))
+        {
+            std::vector<pe::ImageBarrierInfo> imageBarriers;
+            std::vector<pe::BufferBarrierInfo> bufferBarriers;
+            AppendBindGroupBarriers(group, imageBarriers, bufferBarriers);
+            SuspendRendering(rpe);
+            if (!bufferBarriers.empty())
+                rpe->cmd->BufferBarriers(bufferBarriers);
+            if (!imageBarriers.empty())
+                rpe->cmd->ImageBarriers(imageBarriers);
+        }
+
         if (!rpe->pipeline || !rpe->pipeline->layout)
             return;
 
@@ -958,6 +1052,7 @@ extern "C"
         // Destroyed buffer defers to queue.submit() per spec.
         if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
         {
+            wgpuBufferAddRef(buffer);
             rpe->usedBuffers.push_back(buffer);
             return;
         }
@@ -968,6 +1063,7 @@ extern "C"
             pwgpu::BindWebGPUVertexBuffer(
                 rpe->cmd, buffer->peBuffer, static_cast<size_t>(offset), slot, 1,
                 &rpe->bindingCache);
+        wgpuBufferAddRef(buffer);
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -1041,6 +1137,7 @@ extern "C"
 
         if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
         {
+            wgpuBufferAddRef(buffer);
             rpe->usedBuffers.push_back(buffer);
             return;
         }
@@ -1048,6 +1145,7 @@ extern "C"
         pwgpu::BindWebGPUIndexBuffer(
             rpe->cmd, buffer->peBuffer, static_cast<size_t>(offset), pwgpu::ToPeIndexType(format),
             &rpe->bindingCache);
+        wgpuBufferAddRef(buffer);
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -1057,7 +1155,11 @@ extern "C"
         if (!RenderingActive(rpe, "wgpuRenderPassEncoderDraw"))
             return;
         if (!rpe->pipeline || rpe->bindingStateInvalidated)
+        {
+            ReportPassValidation(rpe, "draw: no render pipeline is set");
+            rpe->invalid = true;
             return;
+        }
         if (!ValidateBindGroupCompat(rpe))
             return;
         if (!ValidateDrawVertexState(rpe->pipeline->vertexBufferLayouts, rpe->boundVertexBuffers,
@@ -1091,7 +1193,11 @@ extern "C"
             return;
         }
         if (!rpe->pipeline || rpe->bindingStateInvalidated)
+        {
+            ReportPassValidation(rpe, "draw: no render pipeline is set");
+            rpe->invalid = true;
             return;
+        }
         if (!ValidateBindGroupCompat(rpe))
             return;
         if (!ValidateDrawVertexState(rpe->pipeline->vertexBufferLayouts, rpe->boundVertexBuffers,
@@ -1172,7 +1278,11 @@ extern "C"
         }
 
         if (!rpe->pipeline || rpe->bindingStateInvalidated)
+        {
+            ReportPassValidation(rpe, "draw: no render pipeline is set");
+            rpe->invalid = true;
             return;
+        }
         if (!ValidateBindGroupCompat(rpe))
             return;
         if (!ValidateDrawBindPresence(rpe->pipeline->vertexBufferLayouts, rpe->boundVertexBuffers))
@@ -1182,6 +1292,7 @@ extern "C"
         }
         if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
         {
+            wgpuBufferAddRef(buffer);
             rpe->usedBuffers.push_back(buffer);
             return;
         }
@@ -1189,6 +1300,7 @@ extern "C"
         rpe->drawCount++;
         OpenRenderingIfNeeded(rpe);
         rpe->cmd->DrawIndirect(buffer->peBuffer, static_cast<size_t>(offset), 1, PE_DRAW_INDIRECT_COMMAND_SIZE);
+        wgpuBufferAddRef(buffer);
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -1260,7 +1372,11 @@ extern "C"
         }
 
         if (!rpe->pipeline || rpe->bindingStateInvalidated)
+        {
+            ReportPassValidation(rpe, "draw: no render pipeline is set");
+            rpe->invalid = true;
             return;
+        }
         if (!ValidateBindGroupCompat(rpe))
             return;
         if (!ValidateDrawBindPresence(rpe->pipeline->vertexBufferLayouts, rpe->boundVertexBuffers))
@@ -1270,6 +1386,7 @@ extern "C"
         }
         if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
         {
+            wgpuBufferAddRef(buffer);
             rpe->usedBuffers.push_back(buffer);
             return;
         }
@@ -1278,6 +1395,7 @@ extern "C"
         OpenRenderingIfNeeded(rpe);
         rpe->cmd->DrawIndexedIndirect(buffer->peBuffer, static_cast<size_t>(offset), 1,
                                       PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
+        wgpuBufferAddRef(buffer);
         rpe->usedBuffers.push_back(buffer);
     }
 
@@ -1375,13 +1493,15 @@ extern "C"
 
         // Pool is host-reset at createQuerySet (when hostQueryReset is available), but slots
         // written by prior submits are left "available" and re-begin violates VUID-vkCmdBeginQuery-None-00807.
-        // Reset the full pool range once per pass on the first beginQuery, before
-        // vkCmdBeginRendering opens (vkCmdResetQueryPool is forbidden inside a pass).
+        // Reset the full pool range once per pass on the first beginQuery, outside the
+        // rendering scope (vkCmdResetQueryPool is forbidden inside a pass); a scope
+        // already opened by earlier draws is suspended for it.
         // A pass that binds occlusionQuerySet but never calls beginQuery emits no
         // reset, preserving prior-submission slot data (multi_resolve CTS semantics).
-        if (isFirstQueryThisPass && !rpe->renderingActive &&
+        if (isFirstQueryThisPass &&
             rpe->occlusionQuerySet->backendQueryPool != 0 && rpe->occlusionQuerySet->count > 0)
         {
+            SuspendRendering(rpe);
             pwgpu::ResetWebGPUQuerySet(rpe->cmd, rpe->occlusionQuerySet,
                                        0, rpe->occlusionQuerySet->count);
         }
@@ -1564,9 +1684,7 @@ extern "C"
         {
             pe::GetVulkanCommandBuffer(rpe->cmd).executeCommands(
                 static_cast<uint32_t>(nativeBundles.size()), nativeBundles.data());
-            pe::GetVulkanCommandBuffer(rpe->cmd).endRendering();
-            rpe->renderingActive = false;
-            rpe->renderingActiveUsesSecondaryContents = false;
+            SuspendRendering(rpe);
         }
 
         rpe->pipeline = nullptr;

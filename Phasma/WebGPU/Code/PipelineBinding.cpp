@@ -6,6 +6,7 @@
 #include "Device.h"
 #include "PipelineLayout.h"
 #include "RenderPipeline.h"
+#include "Utils.h"
 
 #include "API/Buffer.h"
 #include "API/RHI.h"
@@ -532,6 +533,12 @@ namespace pwgpu
         }
     }
 
+    void FlushPendingBarriers(pe::CommandBuffer *cmd)
+    {
+        if (cmd && pe::GetRHI().GetApi() == PE_GRAPHICS_API_VULKAN)
+            pe::VulkanCommandBufferImpl::From(cmd)->FlushBarriers();
+    }
+
     bool DispatchWebGPUCompute(pe::CommandBuffer *cmd, uint32_t x, uint32_t y, uint32_t z)
     {
         if (!cmd)
@@ -540,6 +547,7 @@ namespace pwgpu
         switch (pe::GetRHI().GetApi())
         {
         case PE_GRAPHICS_API_VULKAN:
+            FlushPendingBarriers(cmd);
             pe::GetVulkanCommandBuffer(cmd).dispatch(x, y, z);
             return true;
         case PE_GRAPHICS_API_DX12:
