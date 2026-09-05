@@ -10,6 +10,7 @@
 #include "Device.h"
 #include "Texture.h"
 #include "Utils.h"
+#include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 
@@ -195,8 +196,12 @@ extern "C"
                 wgpuComputePipelineRelease(p);
             for (auto *bg : cpe->retainedBindGroups)
                 wgpuBindGroupRelease(bg);
+            for (auto *buf : cpe->usedBuffers)
+                wgpuBufferRelease(buf);
             if (cpe->timestampQuerySet)
                 wgpuQuerySetRelease(cpe->timestampQuerySet);
+            if (cpe->parent)
+                wgpuCommandEncoderRelease(cpe->parent);
             delete cpe;
         }
     }
@@ -619,6 +624,7 @@ extern "C"
         }
         if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
         {
+            wgpuBufferAddRef(buffer);
             cpe->usedBuffers.push_back(buffer);
             return;
         }
@@ -626,10 +632,24 @@ extern "C"
         if (!ValidateBindGroupCompat(cpe))
             return;
 
+        // ponytail: pe::CommandBuffer has no DispatchIndirect; DX12 needs an indirect
+        // command signature path before this can be neutral. Fail the pass instead of
+        // recording through the Vulkan handle on another backend.
+        if (pe::GetRHI().GetApi() != PE_GRAPHICS_API_VULKAN)
+        {
+            ReportPassValidation(cpe,
+                                 "wgpuComputePassEncoderDispatchWorkgroupsIndirect: not supported on "
+                                 "this backend");
+            cpe->invalid = true;
+            return;
+        }
+
         ValidateDispatchUsageScope(cpe, buffer);
         EmitDispatchResourceBarriers(cpe, buffer);
 
+        pwgpu::FlushPendingBarriers(cpe->cmd);
         pe::GetVulkanCommandBuffer(cpe->cmd).dispatchIndirect(pe::GetVulkanBuffer(buffer->peBuffer), offset);
+        wgpuBufferAddRef(buffer);
         cpe->usedBuffers.push_back(buffer);
     }
 

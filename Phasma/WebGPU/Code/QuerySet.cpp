@@ -2,6 +2,7 @@
 #include "QueryCommands.h"
 #include "Device.h"
 #include "Utils.h"
+#include "API/QueryPool.h"
 
 extern "C" void wgpuDeviceAddRef(WGPUDevice);
 extern "C" void wgpuDeviceRelease(WGPUDevice);
@@ -22,7 +23,12 @@ extern "C"
         if (qs->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
             if (qs->backendQueryPool != 0 && qs->device && qs->device->rhi)
-                pwgpu::DestroyWebGPUQuerySetBackend(qs);
+            {
+                pe::QueryPool *pool = qs->backendQueryPool;
+                qs->backendQueryPool = nullptr;
+                qs->device->DeferDestroy([pool]() mutable
+                                         { pe::QueryPool::Destroy(pool); });
+            }
             if (qs->device)
                 wgpuDeviceRelease(qs->device);
             delete qs;

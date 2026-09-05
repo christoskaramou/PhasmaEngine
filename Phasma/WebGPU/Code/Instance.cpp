@@ -203,6 +203,7 @@ extern "C"
         if (!rhi)
             return nullptr;
         auto *surf = new WGPUSurfaceImpl();
+        surf->rhi = rhi;
         surf->surface = rhi->GetSurface();
         surf->swapchain = rhi->GetSwapchain();
         if (descriptor && descriptor->label.data)

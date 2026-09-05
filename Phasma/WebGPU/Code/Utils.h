@@ -5,8 +5,17 @@
 
 struct WGPUDeviceImpl;
 
+namespace pe
+{
+    class CommandBuffer;
+}
+
 namespace pwgpu
 {
+    // PhasmaCore queues Vulkan barriers until its next GPU-work command flushes them;
+    // direct vk calls (beginRendering, dispatch, copies, clears) bypass that and must
+    // flush first or the barriers land after the work they guard.
+    void FlushPendingBarriers(pe::CommandBuffer *cmd);
 
     inline std::string ToString(WGPUStringView sv)
     {

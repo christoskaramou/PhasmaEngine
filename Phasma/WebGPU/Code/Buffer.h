@@ -38,6 +38,8 @@ struct WGPUBufferImpl
     std::vector<std::pair<uint64_t, uint64_t>> mappedSubRanges;
 
     WGPUBufferMapCallbackInfo pendingCallback{};
+    // Bumped on every mapAsync; a map future only resolves the map it started.
+    uint64_t mapGeneration = 0;
     uint64_t pendingOffset = 0;
     uint64_t pendingSize = 0;
     WGPUMapMode pendingMode = WGPUMapMode_None;

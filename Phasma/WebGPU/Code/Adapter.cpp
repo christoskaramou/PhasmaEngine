@@ -741,7 +741,7 @@ extern "C"
                                                      dev->deviceLostCallbackInfo.userdata1,
                                                      dev->deviceLostCallbackInfo.userdata2);
             }
-            return inst->futures.NextId();
+            return inst ? inst->futures.NextId() : WGPUFuture{0};
         }
 
         dev->queue = new WGPUQueueImpl();
@@ -749,7 +749,7 @@ extern "C"
         dev->queue->peQueue = dev->peQueue;
 
         if (!inst || !callbackInfo.callback)
-            return inst->futures.NextId();
+            return inst ? inst->futures.NextId() : WGPUFuture{0};
 
         auto cb = callbackInfo.callback;
         auto u1 = callbackInfo.userdata1;

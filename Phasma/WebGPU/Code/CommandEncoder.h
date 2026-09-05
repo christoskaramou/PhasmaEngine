@@ -32,6 +32,16 @@ struct RetainedResources
     std::vector<WGPUTextureImpl *> usedTextures; // textures touched by this command encoder
     std::vector<pe::ImageView *> nativeImageViews;
 
+    void UseBuffer(WGPUBufferImpl *buffer)
+    {
+        wgpuBufferAddRef(buffer);
+        usedBuffers.push_back(buffer);
+    }
+    void UseTexture(WGPUTextureImpl *texture)
+    {
+        wgpuTextureAddRef(texture);
+        usedTextures.push_back(texture);
+    }
     void MergeFrom(RetainedResources &other);
     void ReleaseAll();
 };
@@ -63,3 +73,13 @@ struct WGPUCommandEncoderImpl
     std::string deferredErrorMessage;
     bool deferredResourceError = false; // §3.3 destroyed resource — fires at submit
 };
+
+namespace pwgpu
+{
+    // §23.x: layout parameters and offset + requiredBytesInCopy vs. bufferSize,
+    // overflow-safe. Shared by the encoder copies and queue.writeTexture.
+    bool ValidateBufferCopyLayout(uint64_t bufferSize, uint64_t offset,
+                                  uint32_t bytesPerRow, uint32_t rowsPerImage,
+                                  const WGPUExtent3D &copySize,
+                                  uint32_t footprint, uint32_t blockW, uint32_t blockH);
+} // namespace pwgpu

@@ -3,6 +3,7 @@
 #include "Buffer.h"
 #include "Device.h"
 #include "QuerySet.h"
+#include "Utils.h"
 
 #include "API/Command.h"
 #include "API/QueryPool.h"
@@ -102,14 +103,6 @@ namespace pwgpu
         return result;
     }
 
-    void DestroyWebGPUQuerySetBackend(WGPUQuerySetImpl *querySet)
-    {
-        if (!querySet || !querySet->backendQueryPool)
-            return;
-
-        pe::QueryPool::Destroy(querySet->backendQueryPool); // also nulls the pointer
-    }
-
     bool ResetWebGPUQuerySet(pe::CommandBuffer *cmd,
                              WGPUQuerySetImpl *querySet,
                              uint32_t firstQuery,
@@ -179,6 +172,7 @@ namespace pwgpu
         {
         case PE_GRAPHICS_API_VULKAN:
         {
+            pwgpu::FlushPendingBarriers(cmd);
             pe::GetVulkanCommandBuffer(cmd).fillBuffer(
                 pe::GetVulkanBuffer(dst->peBuffer), dstOffset,
                 static_cast<uint64_t>(queryCount) * sizeof(uint64_t), 0u);

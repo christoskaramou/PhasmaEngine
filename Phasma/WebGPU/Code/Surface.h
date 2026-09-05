@@ -14,6 +14,9 @@ struct WGPUSurfaceImpl
     std::atomic<uint32_t> refCount{1};
     std::string label;
     WGPUDeviceImpl *device = nullptr;
+    pe::RHI *rhi = nullptr;
+    // Cached from rhi; configure and RecreateSurface() replace them, so they
+    // are refreshed before every use.
     pe::Surface *surface = nullptr;
     pe::Swapchain *swapchain = nullptr;
     pe::Semaphore *acquireSemaphore = nullptr;

@@ -156,10 +156,22 @@ extern "C"
             ReleaseDescriptorBufferSlice(bg);
             if (bg->layout)
                 wgpuBindGroupLayoutRelease(bg->layout);
-            for (pe::Sampler *sampler : bg->ownedSamplers)
-                pe::Sampler::Destroy(sampler);
-            if (bg->descriptor)
-                pe::Descriptor::Destroy(bg->descriptor);
+            {
+                std::vector<pe::Sampler *> samplers = std::move(bg->ownedSamplers);
+                pe::Descriptor *descriptor = bg->descriptor;
+                bg->descriptor = nullptr;
+                pwgpu::DeferDestroy(bg->device, [samplers, descriptor]() mutable
+                                    {
+                                        for (pe::Sampler *sampler : samplers)
+                                            pe::Sampler::Destroy(sampler);
+                                        pe::Descriptor::Destroy(descriptor); });
+            }
+            for (auto &use : bg->bufferUses)
+                wgpuBufferRelease(use.buffer);
+            for (auto &use : bg->textureUses)
+                wgpuTextureViewRelease(use.view);
+            for (auto *sampler : bg->retainedSamplers)
+                wgpuSamplerRelease(sampler);
             WGPUDeviceImpl *dev = bg->device;
             delete bg;
             if (dev)

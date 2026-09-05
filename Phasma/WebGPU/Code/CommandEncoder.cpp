@@ -69,12 +69,18 @@ void RetainedResources::ReleaseAll()
         wgpuRenderBundleRelease(rb);
     for (auto *view : nativeImageViews)
         pe::ImageView::Destroy(view);
+    for (auto *buf : usedBuffers)
+        wgpuBufferRelease(buf);
+    for (auto *tex : usedTextures)
+        wgpuTextureRelease(tex);
     renderPipelines.clear();
     computePipelines.clear();
     bindGroups.clear();
     querySets.clear();
     textureViews.clear();
     renderBundles.clear();
+    usedBuffers.clear();
+    usedTextures.clear();
     nativeImageViews.clear();
 }
 
@@ -168,6 +174,13 @@ namespace
         {
             std::string msg = std::string(apiName) + ": a pass is currently open on this encoder";
             ReportEncoderValidation(enc, msg.c_str());
+            enc->invalid = true;
+            return false;
+        }
+        // Encoders created invalid never acquired a command buffer; the error was
+        // already reported at creation.
+        if (!enc->cmd)
+        {
             enc->invalid = true;
             return false;
         }
@@ -313,7 +326,10 @@ namespace
         }
         return true;
     }
+} // namespace
 
+namespace pwgpu
+{
     // Mirrors W3C "validating linear texture data" (§7.3.2) and CTS
     // dataBytesForCopyOrOverestimate. Layout-parameter validity (bytesPerRow
     // present when required, rowsPerImage >= heightInBlocks when provided) is
@@ -405,6 +421,11 @@ namespace
             return false;
         return required <= bufferSize;
     }
+} // namespace pwgpu
+
+namespace
+{
+    using pwgpu::ValidateBufferCopyLayout;
 
     bool IsDSCopyAspectMethodSupported(WGPUTextureFormat fmt, WGPUTextureAspect aspect, bool isT2B)
     {
@@ -542,6 +563,7 @@ extern "C"
             pwgpu::FireSyncValidation(enc->device, "beginRenderPass: encoder is already finished");
             auto *rpe = new WGPURenderPassEncoderImpl();
             rpe->parent = enc;
+            wgpuCommandEncoderAddRef(enc);
             rpe->device = enc->device;
             rpe->invalid = true;
             rpe->wasOpened = false;
@@ -553,9 +575,23 @@ extern "C"
             enc->invalid = true;
             auto *rpe = new WGPURenderPassEncoderImpl();
             rpe->parent = enc;
+            wgpuCommandEncoderAddRef(enc);
             rpe->device = enc->device;
             rpe->invalid = true;
             rpe->wasOpened = false;
+            return rpe;
+        }
+        if (!enc->cmd)
+        {
+            // Encoder was created invalid (error already reported); hand back an
+            // invalid pass that records nothing.
+            enc->invalid = true;
+            auto *rpe = new WGPURenderPassEncoderImpl();
+            rpe->parent = enc;
+            wgpuCommandEncoderAddRef(enc);
+            rpe->device = enc->device;
+            rpe->invalid = true;
+            enc->hasOpenPass = true;
             return rpe;
         }
         if (!descriptor)
@@ -564,6 +600,7 @@ extern "C"
             enc->invalid = true;
             auto *rpe = new WGPURenderPassEncoderImpl();
             rpe->parent = enc;
+            wgpuCommandEncoderAddRef(enc);
             rpe->device = enc->device;
             rpe->invalid = true;
             return rpe;
@@ -575,6 +612,7 @@ extern "C"
             enc->invalid = true;
             auto *rpe = new WGPURenderPassEncoderImpl();
             rpe->parent = enc;
+            wgpuCommandEncoderAddRef(enc);
             rpe->device = enc->device;
             rpe->invalid = true;
             enc->hasOpenPass = true;
@@ -591,6 +629,7 @@ extern "C"
             }
             auto *rpe = new WGPURenderPassEncoderImpl();
             rpe->parent = enc;
+            wgpuCommandEncoderAddRef(enc);
             rpe->device = enc->device;
             rpe->invalid = true;
             rpe->deferredResourceError = true;
@@ -611,6 +650,7 @@ extern "C"
             enc->invalid = true;
             auto *rpe = new WGPURenderPassEncoderImpl();
             rpe->parent = enc;
+            wgpuCommandEncoderAddRef(enc);
             rpe->device = enc->device;
             rpe->invalid = true;
             return rpe;
@@ -633,6 +673,7 @@ extern "C"
                 enc->invalid = true;
                 auto *rpe = new WGPURenderPassEncoderImpl();
                 rpe->parent = enc;
+                wgpuCommandEncoderAddRef(enc);
                 rpe->device = enc->device;
                 rpe->invalid = true;
                 return rpe;
@@ -961,6 +1002,7 @@ extern "C"
         auto *rpe = new WGPURenderPassEncoderImpl();
         rpe->cmd = enc->cmd;
         rpe->parent = enc;
+        wgpuCommandEncoderAddRef(enc);
         rpe->device = enc->device;
         rpe->attachmentWidth = attachW;
         rpe->attachmentHeight = attachH;
@@ -1331,21 +1373,26 @@ extern "C"
             if (!ca.view || !ca.view->texture || !ca.view->texture->image)
                 continue;
             auto *view = ca.view;
-            uint32_t baseLayer = (view->dimension == WGPUTextureViewDimension_3D &&
-                                  ca.depthSlice != WGPU_DEPTH_SLICE_UNDEFINED)
-                                     ? ca.depthSlice
-                                     : view->baseArrayLayer;
-            uint32_t layerCount = (view->dimension == WGPUTextureViewDimension_3D &&
-                                   ca.depthSlice != WGPU_DEPTH_SLICE_UNDEFINED)
-                                      ? 1u
-                                      : view->arrayLayerCount;
+            // A 3D subresource is the whole mip level (one tracking entry at layer 0),
+            // matching createTexture's MarkRangeUninitialized keying.
+            const bool is3D = view->dimension == WGPUTextureViewDimension_3D;
+            uint32_t baseLayer = is3D ? 0u : view->baseArrayLayer;
+            uint32_t layerCount = is3D ? 1u : view->arrayLayerCount;
             std::vector<uint8_t> aspects = {pwgpu::kAspectColor};
 
+            const bool uninitialized =
+                pwgpu::RangeHasAnyUninitialized(view->texture, view->baseMipLevel, 1,
+                                                baseLayer, layerCount, aspects);
+            if (is3D && uninitialized)
+            {
+                // Rendering touches one depth slice; the other slices of the mip must
+                // still read zero, so clear the whole mip before the pass opens.
+                pwgpu::LazyInitViewRangeOnEncoder(enc->cmd, view->texture, view->baseMipLevel, 1,
+                                                  0, 1, aspects);
+            }
             // Pre-pass: convert loadOp=Load to Clear(0) when subresource is uninitialized
             // so the discard-then-load test pattern reads zero per spec.
-            if (ca.loadOp == WGPULoadOp_Load &&
-                pwgpu::RangeHasAnyUninitialized(view->texture, view->baseMipLevel, 1,
-                                                baseLayer, layerCount, aspects))
+            else if (ca.loadOp == WGPULoadOp_Load && uninitialized)
             {
                 colorAttachments[i].loadOp = PE_LOAD_OP_CLEAR;
                 colorAttachments[i].hasClearColor = true;
@@ -1448,6 +1495,7 @@ extern "C"
             pwgpu::FireSyncValidation(enc->device, "beginComputePass: encoder is already finished");
             auto *cpe = new WGPUComputePassEncoderImpl();
             cpe->parent = enc;
+            wgpuCommandEncoderAddRef(enc);
             cpe->device = enc->device;
             cpe->invalid = true;
             cpe->wasOpened = false;
@@ -1459,9 +1507,21 @@ extern "C"
             enc->invalid = true;
             auto *cpe = new WGPUComputePassEncoderImpl();
             cpe->parent = enc;
+            wgpuCommandEncoderAddRef(enc);
             cpe->device = enc->device;
             cpe->invalid = true;
             cpe->wasOpened = false;
+            return cpe;
+        }
+        if (!enc->cmd)
+        {
+            enc->invalid = true;
+            auto *cpe = new WGPUComputePassEncoderImpl();
+            cpe->parent = enc;
+            wgpuCommandEncoderAddRef(enc);
+            cpe->device = enc->device;
+            cpe->invalid = true;
+            enc->hasOpenPass = true;
             return cpe;
         }
         auto makeInvalidComputePass = [&](const char *msg) -> WGPUComputePassEncoder
@@ -1470,6 +1530,7 @@ extern "C"
             enc->invalid = true;
             auto *cpe = new WGPUComputePassEncoderImpl();
             cpe->parent = enc;
+            wgpuCommandEncoderAddRef(enc);
             cpe->device = enc->device;
             cpe->invalid = true;
             enc->hasOpenPass = true;
@@ -1491,6 +1552,7 @@ extern "C"
         auto *cpe = new WGPUComputePassEncoderImpl();
         cpe->cmd = enc->cmd;
         cpe->parent = enc;
+        wgpuCommandEncoderAddRef(enc);
         cpe->device = enc->device;
         if (descriptor)
         {
@@ -1663,8 +1725,8 @@ extern "C"
         }
         if (!src->peBuffer || !dst->peBuffer)
         {
-            enc->retained.usedBuffers.push_back(src);
-            enc->retained.usedBuffers.push_back(dst);
+            enc->retained.UseBuffer(src);
+            enc->retained.UseBuffer(dst);
             return;
         }
 
@@ -1691,8 +1753,8 @@ extern "C"
             dstTrack.accessMask = PE_ACCESS_TRANSFER_WRITE;
         }
 
-        enc->retained.usedBuffers.push_back(src);
-        enc->retained.usedBuffers.push_back(dst);
+        enc->retained.UseBuffer(src);
+        enc->retained.UseBuffer(dst);
     }
 
     void wgpuCommandEncoderClearBuffer(WGPUCommandEncoder enc,
@@ -1767,19 +1829,19 @@ extern "C"
 
         if (buffer->internalState == BufferInternalState::Destroyed || !buffer->peBuffer)
         {
-            enc->retained.usedBuffers.push_back(buffer);
+            enc->retained.UseBuffer(buffer);
             return;
         }
 
         if (clearSize == 0)
         {
-            enc->retained.usedBuffers.push_back(buffer);
+            enc->retained.UseBuffer(buffer);
             return;
         }
 
         enc->cmd->FillBuffer(buffer->peBuffer, static_cast<size_t>(offset),
                              static_cast<size_t>(clearSize), 0);
-        enc->retained.usedBuffers.push_back(buffer);
+        enc->retained.UseBuffer(buffer);
     }
 
     void wgpuCommandEncoderCopyBufferToTexture(WGPUCommandEncoder enc,
@@ -1831,8 +1893,8 @@ extern "C"
         }
         if (!dst->texture->image || !src->buffer->peBuffer)
         {
-            enc->retained.usedBuffers.push_back(src->buffer);
-            enc->retained.usedTextures.push_back(dst->texture);
+            enc->retained.UseBuffer(src->buffer);
+            enc->retained.UseTexture(dst->texture);
             return;
         }
         if (!(src->buffer->usage & WGPUBufferUsage_CopySrc))
@@ -1912,8 +1974,8 @@ extern "C"
 
         if (copySize->width == 0 || copySize->height == 0 || copySize->depthOrArrayLayers == 0)
         {
-            enc->retained.usedBuffers.push_back(src->buffer);
-            enc->retained.usedTextures.push_back(dst->texture);
+            enc->retained.UseBuffer(src->buffer);
+            enc->retained.UseTexture(dst->texture);
             return;
         }
 
@@ -1973,6 +2035,7 @@ extern "C"
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 
+        pwgpu::FlushPendingBarriers(enc->cmd);
         pe::GetVulkanCommandBuffer(enc->cmd).copyBufferToImage2(copyInfo);
 
         // §23.x: post-copy the touched (mip, [baseLayer..baseLayer+layerCount)) range is
@@ -1982,9 +2045,9 @@ extern "C"
                                     dstBaseLayer, dstLayerCount, dstAspects);
 
         if (src->buffer)
-            enc->retained.usedBuffers.push_back(src->buffer);
+            enc->retained.UseBuffer(src->buffer);
         if (dst->texture)
-            enc->retained.usedTextures.push_back(dst->texture);
+            enc->retained.UseTexture(dst->texture);
     }
 
     void wgpuCommandEncoderCopyTextureToBuffer(WGPUCommandEncoder enc,
@@ -2036,8 +2099,8 @@ extern "C"
         }
         if (!src->texture->image || !dst->buffer->peBuffer)
         {
-            enc->retained.usedBuffers.push_back(dst->buffer);
-            enc->retained.usedTextures.push_back(src->texture);
+            enc->retained.UseBuffer(dst->buffer);
+            enc->retained.UseTexture(src->texture);
             return;
         }
         if (!(src->texture->usage & WGPUTextureUsage_CopySrc))
@@ -2117,8 +2180,8 @@ extern "C"
 
         if (copySize->width == 0 || copySize->height == 0 || copySize->depthOrArrayLayers == 0)
         {
-            enc->retained.usedBuffers.push_back(dst->buffer);
-            enc->retained.usedTextures.push_back(src->texture);
+            enc->retained.UseBuffer(dst->buffer);
+            enc->retained.UseTexture(src->texture);
             return;
         }
 
@@ -2174,11 +2237,12 @@ extern "C"
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 
+        pwgpu::FlushPendingBarriers(enc->cmd);
         pe::GetVulkanCommandBuffer(enc->cmd).copyImageToBuffer2(copyInfo);
         if (dst->buffer)
-            enc->retained.usedBuffers.push_back(dst->buffer);
+            enc->retained.UseBuffer(dst->buffer);
         if (src->texture)
-            enc->retained.usedTextures.push_back(src->texture);
+            enc->retained.UseTexture(src->texture);
     }
 
     void wgpuCommandEncoderCopyTextureToTexture(WGPUCommandEncoder enc,
@@ -2219,8 +2283,8 @@ extern "C"
         }
         if (!src->texture->image || !dst->texture->image)
         {
-            enc->retained.usedTextures.push_back(src->texture);
-            enc->retained.usedTextures.push_back(dst->texture);
+            enc->retained.UseTexture(src->texture);
+            enc->retained.UseTexture(dst->texture);
             return;
         }
         if (!(src->texture->usage & WGPUTextureUsage_CopySrc))
@@ -2343,8 +2407,8 @@ extern "C"
 
         if (copySize->width == 0 || copySize->height == 0 || copySize->depthOrArrayLayers == 0)
         {
-            enc->retained.usedTextures.push_back(src->texture);
-            enc->retained.usedTextures.push_back(dst->texture);
+            enc->retained.UseTexture(src->texture);
+            enc->retained.UseTexture(dst->texture);
             return;
         }
 
@@ -2392,8 +2456,8 @@ extern "C"
             enc->cmd->CopyImage(src->texture->image, dst->texture->image);
             pwgpu::MarkRangeInitialized(dst->texture, dst->mipLevel, 1,
                                         dstBaseLayer, dstLayerCount, dstAspects);
-            enc->retained.usedTextures.push_back(src->texture);
-            enc->retained.usedTextures.push_back(dst->texture);
+            enc->retained.UseTexture(src->texture);
+            enc->retained.UseTexture(dst->texture);
             return;
         }
 
@@ -2442,6 +2506,7 @@ extern "C"
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 
+        pwgpu::FlushPendingBarriers(enc->cmd);
         pe::GetVulkanCommandBuffer(enc->cmd).copyImage2(copyInfo);
 
         // §23.x: dst (mip, [baseLayer..baseLayer+layerCount)) is fully initialized after
@@ -2451,9 +2516,9 @@ extern "C"
                                     dstBaseLayer, dstLayerCount, dstAspects);
 
         if (src->texture)
-            enc->retained.usedTextures.push_back(src->texture);
+            enc->retained.UseTexture(src->texture);
         if (dst->texture)
-            enc->retained.usedTextures.push_back(dst->texture);
+            enc->retained.UseTexture(dst->texture);
     }
 
     void wgpuCommandEncoderResolveQuerySet(WGPUCommandEncoder enc,
@@ -2518,7 +2583,7 @@ extern "C"
 
         wgpuQuerySetAddRef(querySet);
         enc->retained.querySets.push_back(querySet);
-        enc->retained.usedBuffers.push_back(dst);
+        enc->retained.UseBuffer(dst);
 
         // Destroyed resources defer to queue.submit() per spec.
         if (querySet->destroyed || querySet->backendQueryPool == 0 ||

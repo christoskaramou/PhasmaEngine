@@ -432,6 +432,11 @@ extern "C"
                     if (use.buffer)
                         use.buffer->lastUsageSerial.store(serial, std::memory_order_release);
                 }
+                for (auto &use : bg->textureUses)
+                {
+                    if (use.view && use.view->texture)
+                        use.view->texture->lastUsageSerial.store(serial, std::memory_order_release);
+                }
             };
 
             for (auto *buf : cb->retained.usedBuffers)
@@ -552,10 +557,17 @@ extern "C"
             backing = buffer->peBuffer;
         }
 
-        if (buffer->hostVisible)
+        // A host-visible buffer still in flight takes the staged GPU copy instead of
+        // stalling the CPU on its last submission.
+        // ponytail: DX12 upload heaps cannot be copy destinations, so that backend
+        // keeps the wait.
+        const uint64_t lastUsage = buffer->lastUsageSerial.load(std::memory_order_acquire);
+        const bool busy = queue && pwgpu::IsQueueSerialPending(queue->device, lastUsage);
+        const bool canStage = queue && queue->peQueue &&
+                              pe::GetRHI().GetApi() == PE_GRAPHICS_API_VULKAN;
+        if (buffer->hostVisible && !(busy && canStage))
         {
-            const uint64_t lastUsage = buffer->lastUsageSerial.load(std::memory_order_acquire);
-            if (lastUsage != 0 && queue)
+            if (busy)
             {
                 pe::Semaphore *sem = queue->GetSemaphore();
                 if (sem && sem->GetValue() < lastUsage)
@@ -798,19 +810,9 @@ extern "C"
                 fail("rowsPerImage is below minimum for writeSize");
                 return;
             }
-            uint64_t bpr = bprProvided ? dataLayout->bytesPerRow : minBytesPerRow;
-            uint64_t rpi = rpiProvided ? dataLayout->rowsPerImage : heightInBlocks;
-            uint64_t bytesPerImage = bpr * rpi;
-            uint64_t bytesInLastImage = (heightInBlocks > 0)
-                                            ? bpr * (heightInBlocks - 1) + minBytesPerRow
-                                            : 0;
-            uint64_t requiredBytesInCopy = 0;
-            if (depth > 1)
-                requiredBytesInCopy += bytesPerImage * (depth - 1);
-            if (depth > 0)
-                requiredBytesInCopy += bytesInLastImage;
-            uint64_t required = dataLayout->offset + requiredBytesInCopy;
-            if (required > dataSize)
+            if (!pwgpu::ValidateBufferCopyLayout(dataSize, dataLayout->offset,
+                                                 dataLayout->bytesPerRow, dataLayout->rowsPerImage,
+                                                 *writeSize, footprint, blockW, blockH))
             {
                 fail("dataSize is smaller than required copy bytes");
                 return;
@@ -993,6 +995,7 @@ extern "C"
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
 
+        pwgpu::FlushPendingBarriers(cmd);
         pe::GetVulkanCommandBuffer(cmd).copyBufferToImage2(copyInfo);
 
         // §23.x: dst (mip, [baseLayer..baseLayer+layerCount)) is fully initialized after

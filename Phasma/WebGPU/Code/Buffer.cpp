@@ -99,16 +99,13 @@ extern "C"
             if (buffer->peBuffer &&
                 buffer->internalState != BufferInternalState::Destroyed)
             {
-                const uint64_t lastUsage = buffer->lastUsageSerial.load(std::memory_order_acquire);
-                if (lastUsage != 0 && buffer->device && buffer->device->queue)
-                {
-                    pe::Semaphore *sem = buffer->device->queue->GetSemaphore();
-                    if (sem && sem->GetValue() < lastUsage)
-                        sem->WaitTimeout(lastUsage, UINT64_MAX);
-                }
-                if (buffer->hostVisible)
-                    buffer->peBuffer->Unmap();
-                pe::Buffer::Destroy(buffer->peBuffer);
+                pe::Buffer *native = buffer->peBuffer;
+                const bool unmap = buffer->hostVisible;
+                pwgpu::DeferDestroy(buffer->device, [native, unmap]() mutable
+                                    {
+                                        if (unmap)
+                                            native->Unmap();
+                                        pe::Buffer::Destroy(native); });
             }
             WGPUDevice dev = buffer->device;
             if (dev)
@@ -138,19 +135,15 @@ extern "C"
 
         {
             std::lock_guard<std::mutex> lock(buffer->stateMutex);
-            if (buffer->peBuffer)
+            if (pe::Buffer *native = buffer->peBuffer)
             {
-                const uint64_t lastUsage = buffer->lastUsageSerial.load(std::memory_order_acquire);
-                if (lastUsage != 0 && buffer->device && buffer->device->queue)
-                {
-                    pe::Semaphore *sem = buffer->device->queue->GetSemaphore();
-                    if (sem && sem->GetValue() < lastUsage)
-                        sem->WaitTimeout(lastUsage, UINT64_MAX);
-                }
-                if (buffer->hostVisible)
-                    buffer->peBuffer->Unmap();
-                pe::Buffer::Destroy(buffer->peBuffer);
                 buffer->peBuffer = nullptr;
+                const bool unmap = buffer->hostVisible;
+                pwgpu::DeferDestroy(buffer->device, [native, unmap]() mutable
+                                    {
+                                        if (unmap)
+                                            native->Unmap();
+                                        pe::Buffer::Destroy(native); });
             }
         }
     }
@@ -193,7 +186,8 @@ extern "C"
             else if ((rangeSize % 4) != 0)
                 errorText = "getMappedRange size must be a multiple of 4";
             else if (offset < buffer->mappedOffset ||
-                     offset + rangeSize > buffer->mappedOffset + buffer->mappedSize)
+                     offset > buffer->mappedOffset + buffer->mappedSize ||
+                     rangeSize > buffer->mappedOffset + buffer->mappedSize - offset)
                 errorText = "getMappedRange range is outside the mapped region";
             else
             {
@@ -211,11 +205,16 @@ extern "C"
                     errorText = "getMappedRange overlaps a previously returned range";
                 else
                 {
+                    // A zero-length range still needs a non-null pointer (device-local
+                    // buffers have no host memory and no shadow data at size 0).
+                    static uint8_t s_emptyMappedRange[1];
                     uint8_t *data = nullptr;
                     if (buffer->peBuffer)
                         data = static_cast<uint8_t *>(buffer->peBuffer->Data());
                     if (!data && !buffer->shadowData.empty())
                         data = buffer->shadowData.data();
+                    if (!data && rangeSize == 0)
+                        data = s_emptyMappedRange;
                     result = data ? data + offset : nullptr;
                     if (result)
                         buffer->mappedSubRanges.push_back({offset, offset + rangeSize});
@@ -252,7 +251,8 @@ extern "C"
             { /* alignment error — silent */
             }
             else if (offset < buffer->mappedOffset ||
-                     offset + size > buffer->mappedOffset + buffer->mappedSize)
+                     offset > buffer->mappedOffset + buffer->mappedSize ||
+                     size > buffer->mappedOffset + buffer->mappedSize - offset)
             { /* range error — silent */
             }
             else
@@ -293,7 +293,8 @@ extern "C"
             { /* alignment error — silent */
             }
             else if (offset < buffer->mappedOffset ||
-                     offset + size > buffer->mappedOffset + buffer->mappedSize)
+                     offset > buffer->mappedOffset + buffer->mappedSize ||
+                     size > buffer->mappedOffset + buffer->mappedSize - offset)
             { /* range error — silent */
             }
             else
@@ -371,6 +372,7 @@ extern "C"
         bool earlyReject = false;
         const char *earlyRejectMsg = nullptr;
         const char *validationError = nullptr;
+        uint64_t mapGen = 0;
         {
             std::lock_guard<std::mutex> lock(buffer->stateMutex);
 
@@ -394,7 +396,7 @@ extern "C"
                     validationError = "mapAsync offset must be a multiple of 8";
                 else if ((rangeSize % 4) != 0)
                     validationError = "mapAsync size must be a multiple of 4";
-                else if (offset + rangeSize > buffer->size)
+                else if (rangeSize > buffer->size - offset)
                     validationError = "mapAsync range out of bounds";
                 else if (mode == WGPUMapMode_None ||
                          (mode & ~(WGPUMapMode_Read | WGPUMapMode_Write)) != 0)
@@ -410,6 +412,7 @@ extern "C"
 
                 buffer->mapState = WGPUBufferMapState_Pending;
                 buffer->internalState = BufferInternalState::Unavailable;
+                mapGen = ++buffer->mapGeneration;
                 buffer->pendingCallback = callbackInfo;
                 buffer->pendingOffset = offset;
                 buffer->pendingSize = rangeSize;
@@ -457,7 +460,7 @@ extern "C"
                 deferredMode = WGPUCallbackMode_AllowProcessEvents;
             return inst->futures.TrackEvent(
                 deferredMode,
-                [cb, u1, u2, captured, bufferLifeGuard]()
+                [cb, u1, u2, captured, bufferLifeGuard, mapGen]()
                 {
                     WGPUBufferImpl *buffer = bufferLifeGuard.get();
                     bool fireCallback = false;
@@ -465,14 +468,14 @@ extern "C"
                         std::lock_guard<std::mutex> lock(buffer->stateMutex);
                         // Only transition Pending → Unmapped and fire the
                         // user's callback if this future still owns the
-                        // pending map (userdata1 match). unmap()/destroy()
+                        // pending map (generation match). unmap()/destroy()
                         // may have already cleared the pending state and
                         // synchronously delivered an Aborted callback —
                         // firing again here would invoke the JS callback
                         // twice on the same mapAsync() promise and corrupt
                         // the binding.
                         if (buffer->mapState == WGPUBufferMapState_Pending &&
-                            buffer->pendingCallback.userdata1 == u1)
+                            buffer->mapGeneration == mapGen)
                         {
                             buffer->mapState = WGPUBufferMapState_Unmapped;
                             buffer->pendingCallback = {};
@@ -508,7 +511,7 @@ extern "C"
 
         return inst->futures.TrackEvent(
             successMode,
-            [cb, u1, u2, bufferLifeGuard]()
+            [cb, u1, u2, bufferLifeGuard, mapGen]()
             {
                 WGPUBufferImpl *buffer = bufferLifeGuard.get();
                 WGPUMapAsyncStatus status = WGPUMapAsyncStatus_Error;
@@ -519,7 +522,7 @@ extern "C"
                     {
                         return;
                     }
-                    if (buffer->pendingCallback.userdata1 != u1)
+                    if (buffer->mapGeneration != mapGen)
                     {
                         return;
                     }

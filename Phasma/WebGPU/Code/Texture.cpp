@@ -290,6 +290,7 @@ namespace pwgpu
         copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
         copyInfo.regionCount = static_cast<uint32_t>(regions.size());
         copyInfo.pRegions = regions.data();
+        pwgpu::FlushPendingBarriers(cmd);
         pe::GetVulkanCommandBuffer(cmd).copyBufferToImage2(copyInfo);
 
         cmd->AddAfterWaitCallback([alloc = std::move(alloc)]() mutable
@@ -413,6 +414,7 @@ namespace pwgpu
             ranges.push_back(r);
         }
 
+        pwgpu::FlushPendingBarriers(cmd);
         if (IsDepthStencilFormat(tex->format))
         {
             vk::ClearDepthStencilValue dsValue{0.0f, 0u};
@@ -651,14 +653,10 @@ extern "C"
         {
             if (texture->image && !texture->destroyed && !texture->isSwapchain)
             {
-                const uint64_t lastUsage = texture->lastUsageSerial.load(std::memory_order_acquire);
-                if (lastUsage != 0 && texture->device && texture->device->queue)
-                {
-                    pe::Semaphore *sem = texture->device->queue->GetSemaphore();
-                    if (sem && sem->GetValue() < lastUsage)
-                        sem->WaitTimeout(lastUsage, UINT64_MAX);
-                }
-                pe::Image::Destroy(texture->image);
+                pe::Image *image = texture->image;
+                texture->image = nullptr;
+                pwgpu::DeferDestroy(texture->device, [image]() mutable
+                                    { pe::Image::Destroy(image); });
             }
             if (texture->device)
                 wgpuDeviceRelease(texture->device);
@@ -1236,16 +1234,21 @@ extern "C"
             return;
         if (view->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
         {
-            if (view->texture)
+            WGPUTextureImpl *texture = view->texture;
+            if (texture)
             {
-                std::lock_guard<std::mutex> lock(view->texture->childViewsMutex);
-                auto &cv = view->texture->childViews;
+                std::lock_guard<std::mutex> lock(texture->childViewsMutex);
+                auto &cv = texture->childViews;
                 cv.erase(std::remove(cv.begin(), cv.end(), view), cv.end());
             }
-            pwgpu::DestroyNativeImageViews(view);
-            if (view->texture)
-                wgpuTextureRelease(view->texture);
-            delete view;
+            // Submitted command buffers and descriptor sets may still reference the
+            // native views; the texture stays alive until they are destroyed.
+            pwgpu::DeferDestroy(texture ? texture->device : nullptr, [view, texture]()
+                                {
+                                    pwgpu::DestroyNativeImageViews(view);
+                                    if (texture)
+                                        wgpuTextureRelease(texture);
+                                    delete view; });
         }
     }
 
