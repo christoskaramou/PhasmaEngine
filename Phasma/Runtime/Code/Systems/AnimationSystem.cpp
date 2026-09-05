@@ -261,6 +261,33 @@ namespace pe
 
     namespace
     {
+        void EvaluateState(Scene &scene, const AnimationNodeState &state)
+        {
+            const auto &clips = scene.GetAnimationClipsForNode(state.nodeId);
+            const Skeleton &skeleton = scene.GetSkeletonForNode(state.nodeId);
+            if (state.clipIndex < 0 || state.clipIndex >= static_cast<int>(clips.size()) || skeleton.bones.empty())
+                return;
+            NodeRuntime &rt = scene.GetNodeRuntime(state.nodeId);
+            AnimationEvaluator::EvaluatePose(clips[state.clipIndex], skeleton, state.time, rt.jointMatrices);
+            const auto &layer = state.layer;
+            if (layer.clipIndex >= 0 && layer.clipIndex < static_cast<int>(clips.size()))
+            {
+                static thread_local std::vector<mat4> overlay;
+                AnimationEvaluator::EvaluatePose(clips[layer.clipIndex], skeleton, layer.time, overlay);
+                // Copy complete rig-space poses: an attacking torso must not drag the base clip's feet.
+                // Include the entire arm/prop group in the mask to preserve an authored two-hand grip.
+                for (int bone : layer.bones)
+                    if (bone >= 0 && bone < static_cast<int>(rt.jointMatrices.size()))
+                        rt.jointMatrices[bone] = overlay[bone];
+            }
+            if (scene.NodeUsesSkinnedStrip2D(state.nodeId))
+            {
+                const auto *strip = scene.GetSkinnedStrip2DState(state.nodeId);
+                SmoothExistingStripJointMatrices(skeleton, rt.jointMatrices, strip ? &strip->widthScales : nullptr);
+            }
+            scene.MarkNodeDirty(state.nodeId);
+        }
+
         // The travel between the last applied clip time and the new one (through the loop seam when the clip
         // wrapped), taken from the carrier's channel space to rig space - the node's own space, where the skinning
         // lives - through its parent's bind global and its prefix, then into the node's parent space by the
@@ -358,16 +385,25 @@ namespace pe
             else
                 state.motionTime = state.time;
 
-            NodeRuntime &rt = scene->GetNodeRuntime(state.nodeId);
-            AnimationEvaluator::EvaluatePose(clip, skeleton, state.time, rt.jointMatrices);
-            if (scene->NodeUsesSkinnedStrip2D(state.nodeId))
+            auto &layer = state.layer;
+            if (layer.clipIndex >= 0 && layer.clipIndex < static_cast<int>(clips.size()))
             {
-                const NodeSkinnedStrip2DComponent *stripState = scene->GetSkinnedStrip2DState(state.nodeId);
-                SmoothExistingStripJointMatrices(skeleton,
-                                                 rt.jointMatrices,
-                                                 stripState ? &stripState->widthScales : nullptr);
+                const auto &overlay = clips[layer.clipIndex];
+                const double duration = overlay.ticksPerSecond > 0.f ? overlay.duration / overlay.ticksPerSecond : 0.;
+                if (duration > 0. && std::isfinite(duration))
+                {
+                    layer.elapsed += static_cast<double>(dt) * layer.speed;
+                    if (!layer.loop)
+                        layer.elapsed = std::clamp(layer.elapsed, 0., duration);
+                    double time = layer.loop ? std::fmod(layer.elapsed, duration) : layer.elapsed;
+                    if (time < 0.)
+                        time += duration;
+                    layer.time = static_cast<float>(time * overlay.ticksPerSecond);
+                }
+                else
+                    layer = {};
             }
-            scene->MarkNodeDirty(state.nodeId);
+            EvaluateState(*scene, state);
         }
     }
 
@@ -426,6 +462,64 @@ namespace pe
         state.motionTime = 0.0f;
         state.loop = loop;
         state.playing = true;
+    }
+
+    bool AnimationSystem::PlayLayer(Scene &scene, NodeId *node, const std::string &clipName,
+                                    const std::vector<std::string> &bones, bool loop, float speed)
+    {
+        if (!node || !scene.IsNodeAlive(node) || !std::isfinite(speed) || bones.empty())
+            return false;
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end() || m_states[it->second].nodeRevision != node->revision)
+            return false;
+        const auto &skeleton = scene.GetSkeletonForNode(node);
+        if (skeleton.planar2D || scene.NodeUsesSkinnedStrip2D(node))
+            return false;
+        const auto &clips = scene.GetAnimationClipsForNode(node);
+        AnimationLayerState layer;
+        for (int i = 0; i < static_cast<int>(clips.size()); ++i)
+            if (clips[i].name == clipName)
+                layer.clipIndex = i;
+        if (layer.clipIndex < 0)
+            return false;
+        const auto &clip = clips[layer.clipIndex];
+        if (!std::isfinite(clip.duration) || clip.duration <= 0.f ||
+            !std::isfinite(clip.ticksPerSecond) || clip.ticksPerSecond <= 0.f)
+            return false;
+        for (const auto &name : bones)
+        {
+            int index = -1;
+            for (int i = 0; i < skeleton.GetBoneCount(); ++i)
+                if (skeleton.bones[i].name == name)
+                    index = i;
+            if (index < 0)
+                return false;
+            if (std::find(layer.bones.begin(), layer.bones.end(), index) == layer.bones.end())
+                layer.bones.push_back(index);
+        }
+        layer.loop = loop;
+        layer.speed = speed;
+        m_states[it->second].layer = std::move(layer);
+        EvaluateState(scene, m_states[it->second]);
+        return true;
+    }
+
+    bool AnimationSystem::SetLayerSpeed(NodeId *node, float speed)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end() || m_states[it->second].layer.clipIndex < 0 || !std::isfinite(speed))
+            return false;
+        m_states[it->second].layer.speed = speed;
+        return true;
+    }
+
+    void AnimationSystem::StopLayer(Scene &scene, NodeId *node)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (!node || !scene.IsNodeAlive(node) || it == m_nodeToIndex.end())
+            return;
+        m_states[it->second].layer = {};
+        EvaluateState(scene, m_states[it->second]);
     }
 
     void AnimationSystem::SetRootMotion(NodeId *node, bool enabled)
@@ -490,7 +584,7 @@ namespace pe
     void AnimationSystem::SetSpeed(NodeId *node, float speed)
     {
         auto it = m_nodeToIndex.find(node);
-        if (it == m_nodeToIndex.end())
+        if (it == m_nodeToIndex.end() || !std::isfinite(speed))
             return;
         m_states[it->second].speed = speed;
     }
@@ -529,20 +623,7 @@ namespace pe
         state.motionTime = state.time; // a scrub teleports the pose, never the node
         state.playing = false;         // pause during scrub
 
-        const Skeleton &skeleton = scene.GetSkeletonForNode(state.nodeId);
-        if (!skeleton.bones.empty())
-        {
-            NodeRuntime &rt = scene.GetNodeRuntime(state.nodeId);
-            AnimationEvaluator::EvaluatePose(clip, skeleton, state.time, rt.jointMatrices);
-            if (scene.NodeUsesSkinnedStrip2D(state.nodeId))
-            {
-                const NodeSkinnedStrip2DComponent *stripState = scene.GetSkinnedStrip2DState(state.nodeId);
-                SmoothExistingStripJointMatrices(skeleton,
-                                                 rt.jointMatrices,
-                                                 stripState ? &stripState->widthScales : nullptr);
-            }
-            scene.MarkNodeDirty(state.nodeId);
-        }
+        EvaluateState(scene, state);
     }
 
     void AnimationSystem::SetPaused(NodeId *node, bool paused)

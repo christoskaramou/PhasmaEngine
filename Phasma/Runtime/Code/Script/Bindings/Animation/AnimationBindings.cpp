@@ -58,6 +58,63 @@ namespace pe
                         as->SetSpeed(h.nodeId, speed);
                 });
 
+                anim.set_function("play_layer", [](SceneNodeHandle &h, const std::string &clip,
+                                                     sol::table mask, sol::optional<bool> loop,
+                                                     sol::optional<float> speed) -> bool {
+                    auto *as = GetGlobalSystem<AnimationSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (!as || !scene || !h.IsValid(*scene) || mask.size() > static_cast<size_t>(scene->GetJointCountForNode(h.nodeId)))
+                        return false;
+                    std::vector<std::string> bones;
+                    for (size_t i = 1; i <= mask.size(); ++i)
+                    {
+                        sol::object name = mask.get<sol::object>(i);
+                        if (!name.is<std::string>())
+                            return false;
+                        bones.push_back(name.as<std::string>());
+                    }
+                    return as->PlayLayer(*scene, h.nodeId, clip, bones, loop.value_or(true), speed.value_or(1.f));
+                });
+
+                anim.set_function("set_layer_speed", [](SceneNodeHandle &h, float speed) -> bool {
+                    auto *as = GetGlobalSystem<AnimationSystem>();
+                    Scene *scene = GetActiveScene();
+                    return as && scene && h.IsValid(*scene) && as->SetLayerSpeed(h.nodeId, speed);
+                });
+
+                anim.set_function("stop_layer", [](SceneNodeHandle &h) {
+                    auto *as = GetGlobalSystem<AnimationSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (as && scene && h.IsValid(*scene))
+                        as->StopLayer(*scene, h.nodeId);
+                });
+
+                anim.set_function("get_layer_state", [](SceneNodeHandle &h, sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
+                    sol::table result = lua.create_table();
+                    result["active"] = false;
+                    auto *as = GetGlobalSystem<AnimationSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (!as || !scene || !h.IsValid(*scene))
+                        return result;
+                    const auto *state = as->GetAnimationState(h.nodeId);
+                    const auto &clips = scene->GetAnimationClipsForNode(h.nodeId);
+                    if (!state || state->layer.clipIndex < 0 || state->layer.clipIndex >= static_cast<int>(clips.size()))
+                        return result;
+                    const auto &layer = state->layer;
+                    const auto &clip = clips[layer.clipIndex];
+                    result["active"] = true;
+                    result["clip"] = clip.name;
+                    result["time"] = layer.time / clip.ticksPerSecond;
+                    result["elapsed"] = layer.elapsed;
+                    result["duration"] = clip.duration / clip.ticksPerSecond;
+                    result["speed"] = layer.speed;
+                    result["loop"] = layer.loop;
+                    result["playing"] = state->playing && layer.speed != 0.f &&
+                        (layer.loop || (layer.speed > 0.f ? layer.time < clip.duration : layer.time > 0.f));
+                    return result;
+                });
+
                 // Root motion: a clip whose travel the Animator extracted moves this node as it plays (default on).
                 anim.set_function("set_root_motion", [](SceneNodeHandle &h, bool enabled) {
                     auto *as = GetGlobalSystem<AnimationSystem>();
