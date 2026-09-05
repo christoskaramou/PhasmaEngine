@@ -7,6 +7,16 @@ namespace pe
     struct NodeId;
     class Scene;
 
+    struct AnimationLayerState
+    {
+        int clipIndex = -1;
+        float time = 0.0f;
+        double elapsed = 0.0; // unwrapped clip seconds, for marker crossings across loops
+        float speed = 1.0f;
+        bool loop = true;
+        std::vector<int> bones;
+    };
+
     struct AnimationNodeState
     {
         NodeId *nodeId = nullptr;
@@ -18,6 +28,7 @@ namespace pe
         bool loop = true;
         bool rootMotion = true;  // a clip with extracted travel (clip.rootMotion) moves the node as it plays
         float motionTime = 0.0f; // clip time the travel was last applied at
+        AnimationLayerState layer;
     };
 
     class AnimationSystem : public ISystem
@@ -34,6 +45,11 @@ namespace pe
         void StopAnimation(NodeId *node);
         void RemoveAnimation(NodeId *node);
         void SetSpeed(NodeId *node, float speed);
+        // One rig-space override layer. Unselected bones keep the base pose, even below a selected parent.
+        bool PlayLayer(Scene &scene, NodeId *node, const std::string &clipName,
+                       const std::vector<std::string> &bones, bool loop = true, float speed = 1.0f);
+        bool SetLayerSpeed(NodeId *node, float speed);
+        void StopLayer(Scene &scene, NodeId *node);
         bool IsPlaying(const NodeId *node) const;
         int GetCurrentClip(const NodeId *node) const;
         float GetPlaybackTime(const NodeId *node) const;
