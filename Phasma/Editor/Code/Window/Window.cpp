@@ -360,12 +360,10 @@ namespace pe
                 case EventType::PrimitiveAttachedToNode:
                 {
                     auto req = std::any_cast<Scene::PrimitiveAttachRequest>(event.payload);
+                    // AttachPrimitiveToNode marks geometry or instances dirty itself; the next frame's
+                    // FlushPendingGpuWork uploads it (drained only when real geometry was appended).
                     if (req.node && req.model)
-                    {
-                        rendererSystem->WaitAllFramesCommands();
                         rendererSystem->GetScene().AttachPrimitiveToNode(req.node, req.model);
-                        rendererSystem->GetScene().UpdateGeometryBuffers();
-                    }
                     break;
                 }
                 case EventType::SetRenderMode:

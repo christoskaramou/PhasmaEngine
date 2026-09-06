@@ -219,6 +219,7 @@ namespace pe
             m_sceneRenderer.SetFrameDisplayOverride(RHII.GetSwapchain()->GetImage(imageIndex));
 
         cmd->Begin();
+        m_scene.RecordPendingInstanceUploads(cmd);
         m_scene.RecordPendingTextureUploads(cmd);
         m_scene.RecordPendingUvUploads(cmd);
         m_sceneRenderer.ExecuteRenderGraph(cmd);

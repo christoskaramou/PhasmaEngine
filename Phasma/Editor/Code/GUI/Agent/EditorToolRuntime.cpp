@@ -2756,7 +2756,6 @@ namespace pe
                     if (model)
                     {
                         sc.AttachPrimitiveToNode(node, model);
-                        sc.SetGeometryDirty();
                         int meshCount = static_cast<int>(sc.GetNodeCache(node).meshRefs->meshRefs.size());
                         state->result = JsonObj({{"ok", "true"}, {"mesh_count", std::to_string(meshCount)}});
                     }

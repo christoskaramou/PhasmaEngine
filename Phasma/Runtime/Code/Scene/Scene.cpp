@@ -21,23 +21,20 @@
 
 namespace pe
 {
-    namespace
+    bool Scene::CanSharePrimitiveGeometry(const ModelAsset *model)
     {
-        bool CanSharePrimitiveGeometry(const ModelAsset *model)
-        {
-            return model && model->IsPrimitive() && !model->HasSkeleton() && !model->HasAnimations() &&
-                   model->GetNodeCount() == 1 && model->GetMeshInfoCount() == 1 && model->GetNodeMesh(0) == 0;
-        }
+        return model && model->IsPrimitive() && !model->HasSkeleton() && !model->HasAnimations() &&
+               model->GetNodeCount() == 1 && model->GetMeshInfoCount() == 1 && model->GetNodeMesh(0) == 0;
+    }
 
-        std::string PrimitiveGeometryKey(const ModelAsset &model)
-        {
-            std::ostringstream key;
-            key << model.GetPrimitiveType() << ':' << model.GetPrimitiveParamCount();
-            const vec4 &p = model.GetPrimitiveParams();
-            key << std::setprecision(9) << ':' << p.x << ':' << p.y << ':' << p.z << ':' << p.w;
-            return key.str();
-        }
-    } // namespace
+    std::string Scene::PrimitiveGeometryKey(const ModelAsset &model)
+    {
+        std::ostringstream key;
+        key << model.GetPrimitiveType() << ':' << model.GetPrimitiveParamCount();
+        const vec4 &p = model.GetPrimitiveParams();
+        key << std::setprecision(9) << ':' << p.x << ':' << p.y << ':' << p.z << ':' << p.w;
+        return key.str();
+    }
 
     std::vector<uint32_t> Scene::s_aabbIndices = {
         0, 1, 1, 2, 2, 3, 3, 0,
@@ -643,9 +640,16 @@ namespace pe
             m_particleManager->Update();
     }
 
+    bool Scene::RtBuildsWanted() const
+    {
+        // Acceleration structures only matter while a render mode traces rays; in Raster mode the
+        // dirty flags stay set so switching modes later flushes them.
+        return RHII.GetCaps().rayTracing && Settings::Get<SceneSettings>().render_mode != RenderMode::Raster;
+    }
+
     bool Scene::HasPendingRenderUpdate() const
     {
-        const bool rtDirty = RHII.GetCaps().rayTracing && (m_blasDirty || m_tlasDirty);
+        const bool rtDirty = RtBuildsWanted() && (m_blasDirty || m_tlasDirty);
         return m_nodesDirty || m_geometryDirty || m_instancesDirty || m_materialDirty || m_texturesDirty || rtDirty;
     }
 
@@ -667,17 +671,6 @@ namespace pe
         cmd->Wait();
         cmd->Return();
         // m_blasDirty is set inside UploadBuffers() when rtSupport is true
-    }
-
-    void Scene::UpdateRasterInstances()
-    {
-        CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
-        cmd->Begin();
-        RebuildRasterInstances(cmd);
-        cmd->End();
-        RHII.GetMainQueue()->Submit(1, &cmd, nullptr, nullptr);
-        cmd->Wait();
-        cmd->Return();
     }
 
     void Scene::UpdateTextures()
@@ -931,9 +924,9 @@ namespace pe
             mesh.skinned = false;
             mesh.boundingBox = sourceMesh->boundingBox;
             mesh.aabbColor = sourceMesh->aabbColor;
+            mesh.refCount = 0;
             meshIndex = AddMesh(std::move(mesh));
-            if (RHII.GetCaps().rayTracing)
-                m_blasDirty = true;
+            AliasOrDirtyBlas(meshIndex, cacheIt->second.meshIndex);
         }
         else
         {
@@ -2105,12 +2098,12 @@ namespace pe
 
     void Scene::FlushPendingGpuWork()
     {
-        const bool rtSupport = RHII.GetCaps().rayTracing;
-        if (!rtSupport)
+        if (!RHII.GetCaps().rayTracing)
         {
             m_blasDirty = false;
             m_tlasDirty = false;
         }
+        const bool rtSupport = RtBuildsWanted();
 
         const bool anyDirty = m_geometryDirty || m_instancesDirty || m_materialDirty ||
                               m_texturesDirty || (rtSupport && (m_blasDirty || m_tlasDirty));
@@ -2119,6 +2112,7 @@ namespace pe
 
         if (m_geometryDirty)
         {
+            PE_PROFILE_SCOPE("Scene Geometry Upload");
             // Clear GpuPending flag BEFORE upload so these nodes are included
             for (uint32_t i = 0; i < GetNodeCount(); i++)
                 m_nodeRuntime[i].gpuPending = false;
@@ -2134,11 +2128,14 @@ namespace pe
         }
         else if (m_instancesDirty)
         {
-            // Mesh refs changed but geometry data is unchanged — rebuild raster instance data only
+            PE_PROFILE_SCOPE("Scene Instance Rebuild");
+            // Mesh refs changed but geometry data is unchanged — rebuild raster instance data only.
+            // No command buffer: the GPU copies land at the front of the next frame's cmd
+            // (RecordPendingInstanceUploads), so this never waits on the queue.
             for (uint32_t i = 0; i < GetNodeCount(); i++)
                 m_nodeRuntime[i].gpuPending = false;
 
-            UpdateRasterInstances();
+            RebuildRasterInstances(nullptr);
 
             m_instancesDirty = false;
             if (m_texturesDirty)
@@ -2167,6 +2164,7 @@ namespace pe
         // RT flush — independent of raster path
         if (rtSupport)
         {
+            PE_PROFILE_SCOPE("Scene RT Rebuild");
             if (m_blasDirty)
             {
                 // Full BLAS + TLAS rebuild (geometry buffer changed)

@@ -253,6 +253,7 @@ namespace pe
             PE_PROFILE_SCOPE("Record Cmd Begin");
             cmd->Begin();
         }
+        m_scene.RecordPendingInstanceUploads(cmd);
         m_scene.RecordPendingTextureUploads(cmd);
         m_scene.RecordPendingUvUploads(cmd);
         {

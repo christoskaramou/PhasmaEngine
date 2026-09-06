@@ -82,9 +82,26 @@ namespace pe
         };
     } // namespace
 
+    // Case-insensitive substring test without the per-row ToLower() allocation.
+    static bool ContainsCI(const std::string &value, const char *needle)
+    {
+        const size_t n = std::strlen(needle);
+        if (value.size() < n)
+            return false;
+        for (size_t i = 0; i + n <= value.size(); ++i)
+        {
+            size_t k = 0;
+            while (k < n && std::tolower(static_cast<unsigned char>(value[i + k])) == needle[k])
+                ++k;
+            if (k == n)
+                return true;
+        }
+        return false;
+    }
+
     static bool ContainsSpriteMarker(const std::string &value)
     {
-        return value.find("sprite") != std::string::npos || value.find("atlas") != std::string::npos;
+        return ContainsCI(value, "sprite") || ContainsCI(value, "atlas");
     }
 
     static bool IsSpriteHierarchyNode(Scene &scene, NodeId *node, const std::string &nodeName, uint32_t componentFlags)
@@ -92,10 +109,10 @@ namespace pe
         if (componentFlags & Component_Sprite)
             return true;
 
-        if (ContainsSpriteMarker(ToLower(nodeName)))
+        if (ContainsSpriteMarker(nodeName))
             return true;
 
-        if ((componentFlags & Component_Script) && ContainsSpriteMarker(ToLower(scene.GetNodeScriptPath(node))))
+        if ((componentFlags & Component_Script) && ContainsSpriteMarker(scene.GetNodeScriptPath(node)))
             return true;
 
         return scene.NodeUsesSkinnedStrip2D(node);
@@ -806,14 +823,25 @@ namespace pe
 
             // --- Scene Nodes ---
             // Recursive draw node
+            // Rows scrolled out of view are replaced by a same-height Dummy when nothing can be
+            // interacting with them: leaf or collapsed, not selected / rename / expand target, no popup
+            // open, no drag in flight. Open parents still recurse so visible children draw. ImGui has
+            // no clipper for trees, and thousands of root rows otherwise pay the full per-row work.
+            const bool anyPopupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+            const bool dragActive = ImGui::GetDragDropPayload() != nullptr;
+            const float rowHeight = ImGui::GetFrameHeight();
+            NodeId *const selectedNodeForCull =
+                selection.GetSelectionType() == SelectionType::Node ? selection.GetSelectedNode() : nullptr;
+
             auto DrawNode = [&](auto &&self, NodeId *node) -> void
             {
                 const std::string &nodeName = scene.GetNodeName(node);
-                auto children = scene.GetChildren(node);
+                const auto &children = scene.GetChildren(node);
                 bool hasChildren = !children.empty();
 
                 // Auto-expand parents
-                if (m_nodesToExpand.find(node) != m_nodesToExpand.end())
+                const bool expandRequested = m_nodesToExpand.find(node) != m_nodesToExpand.end();
+                if (expandRequested)
                 {
                     ImGui::SetNextItemOpen(true);
                 }
@@ -821,6 +849,21 @@ namespace pe
                 bool isLeaf = !hasChildren;
 
                 uintptr_t uniqueId = reinterpret_cast<uintptr_t>(node);
+
+                if (!anyPopupOpen && !dragActive && !expandRequested && node != selectedNodeForCull &&
+                    node != m_nodeToExpand && node != s_renameNode &&
+                    !ImGui::IsRectVisible(ImVec2(1.0f, rowHeight)))
+                {
+                    // TreeNodeEx stores its open state under the id it computes after our PushID(node).
+                    ImGui::PushID(node);
+                    const bool open = hasChildren && ImGui::GetStateStorage()->GetInt(ImGui::GetID((void *)uniqueId), 0) != 0;
+                    ImGui::PopID();
+                    if (!open)
+                    {
+                        ImGui::Dummy(ImVec2(0.0f, rowHeight));
+                        return;
+                    }
+                }
 
                 // Choose icon based on component flags
                 uint32_t nodeCompFlags = scene.GetComponentFlags(node);
@@ -847,26 +890,22 @@ namespace pe
                 else
                     icon = ICON_FA_VECTOR_SQUARE;
 
-                std::string displayName = nodeName;
+                const char *mainCameraSuffix = "";
                 if (nodeCompFlags & Component_Camera)
                 {
                     Camera *thisCam = scene.GetCameraForNode(node);
                     if (thisCam && thisCam == scene.GetActiveCamera())
-                        displayName += " (Main)";
+                        mainCameraSuffix = " (Main)";
                 }
 
-                // Look up script error for this node
-                std::string scriptError;
+                // Look up script error for this node (points into the instance; stable for this frame)
+                const std::string *scriptError = nullptr;
                 if (nodeCompFlags & Component_Script)
                 {
                     if (auto *ss = GetGlobalSystem<ScriptSystem>())
-                        if (auto *inst = ss->FindNodeInstance(node))
-                            scriptError = inst->lastError;
+                        if (auto *inst = ss->FindNodeInstance(node); inst && !inst->lastError.empty())
+                            scriptError = &inst->lastError;
                 }
-
-                std::string displayNodeName = std::string(icon) + "  " + displayName;
-                if (!scriptError.empty())
-                    displayNodeName += "  " ICON_FA_TRIANGLE_EXCLAMATION;
                 const bool nodeEnabled = scene.IsNodeEnabled(node);
                 const bool hierarchyEnabled = scene.IsNodeHierarchyEnabled(node);
 
@@ -900,7 +939,8 @@ namespace pe
 
                 if (!hierarchyEnabled)
                     ImGui::PushStyleColor(ImGuiCol_Text, HierarchyStyle::TextDisabled);
-                bool nodeOpen = ImGui::TreeNodeEx((void *)uniqueId, nodeFlags, "%s", displayNodeName.c_str());
+                bool nodeOpen = ImGui::TreeNodeEx((void *)uniqueId, nodeFlags, "%s  %s%s%s", icon, nodeName.c_str(), mainCameraSuffix,
+                                                  scriptError ? "  " ICON_FA_TRIANGLE_EXCLAMATION : "");
                 const bool nodeHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
                 if (!hierarchyEnabled)
                     ImGui::PopStyleColor();
@@ -1062,9 +1102,9 @@ namespace pe
                 }
                 if (nodeHovered)
                 {
-                    if (!scriptError.empty())
+                    if (scriptError)
                     {
-                        std::string tooltip = "Script error:\n" + scriptError;
+                        std::string tooltip = "Script error:\n" + *scriptError;
                         ui::TooltipText(tooltip.c_str());
                     }
                     else if (nodeCompFlags & Component_RuntimeUi)

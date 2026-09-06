@@ -431,7 +431,7 @@ namespace pe
             result.quadHeight = NormalizedDimension(frameHeight, frameWidth);
 
             NodeId *node = scene.CreateNode(DefaultNodeName(asset, options), parent);
-            scene.AttachPrimitiveToNode(node, Primitives::CreateQuad(result.quadWidth, result.quadHeight));
+            scene.AttachPrimitiveToNode(node, Primitives::CreateQuad(result.quadWidth, result.quadHeight), /*shareGeometry=*/false);
             result.node = node;
 
             if (frame)

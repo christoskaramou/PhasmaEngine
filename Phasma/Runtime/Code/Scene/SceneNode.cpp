@@ -35,6 +35,7 @@ namespace pe
             c.skybox = entity->CreateComponent<NodeSkyboxTag>();
             const auto &settings = Settings::Get<SceneSettings>();
             c.skybox->path = settings.skybox_path;
+            m_skyboxNode = node;
         }
         if ((flag & Component_RuntimeUi) && !c.runtimeUi)
             c.runtimeUi = entity->CreateComponent<NodeRuntimeUiTag>();
@@ -43,13 +44,22 @@ namespace pe
         if ((flag & Component_Sprite) && !c.sprite)
             c.sprite = entity->CreateComponent<NodeSpriteComponent>();
         if ((flag & Component_SceneSettings) && !c.sceneSettings)
+        {
             c.sceneSettings = entity->CreateComponent<NodeSceneSettingsTag>();
+            m_sceneSettingsNode = node;
+        }
         if ((flag & Component_TriggerZone) && !c.triggerZone)
             c.triggerZone = entity->CreateComponent<NodeTriggerZoneTag>();
         if ((flag & Component_VoxelWorld) && !c.voxelWorld)
+        {
             c.voxelWorld = entity->CreateComponent<NodeVoxelWorldTag>();
+            m_voxelWorldNode = node;
+        }
         if ((flag & Component_Terrain) && !c.terrain)
+        {
             c.terrain = entity->CreateComponent<NodeTerrainTag>();
+            m_terrainNode = node;
+        }
     }
 
     void Scene::RemoveComponentFlag(NodeId *node, uint32_t flag)
@@ -126,6 +136,31 @@ namespace pe
             entity->RemoveComponent<NodeTerrainTag>();
             c.terrain = nullptr;
         }
+        ForgetSingletonNode(node);
+    }
+
+    void Scene::ForgetSingletonNode(const NodeId *node)
+    {
+        // Rare path (the singleton itself loses its tag or dies): rescan once so a duplicate tag,
+        // if any, takes over — the per-frame getters stay O(1).
+        auto rescan = [this, node](NodeId *&slot, auto member)
+        {
+            if (slot != node)
+                return;
+            slot = nullptr;
+            for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
+            {
+                if (m_nodeIds[i] != node && m_nodeComponentCache[i].*member)
+                {
+                    slot = m_nodeIds[i];
+                    break;
+                }
+            }
+        };
+        rescan(m_skyboxNode, &NodeComponentCache::skybox);
+        rescan(m_sceneSettingsNode, &NodeComponentCache::sceneSettings);
+        rescan(m_voxelWorldNode, &NodeComponentCache::voxelWorld);
+        rescan(m_terrainNode, &NodeComponentCache::terrain);
     }
 
     NodeId *Scene::CreateNode(const std::string &name, NodeId *parent)
@@ -195,31 +230,17 @@ namespace pe
 
         // Null out material pointers on meshes so stale entries in m_meshes
         // don't dereference freed Materials after the owning model is deleted.
-        // Only null if no other node still references each mesh.
+        // Only null if no other node still references each mesh (Mesh::refCount).
         for (int meshRef : cache.meshRefs->meshRefs)
         {
             if (meshRef < 0 || meshRef >= static_cast<int>(m_meshes.size()))
                 continue;
 
-            bool otherRef = false;
-            for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); i++)
+            Mesh &mesh = m_meshes[meshRef];
+            if (mesh.refCount > 0)
+                mesh.refCount--;
+            if (mesh.refCount == 0)
             {
-                if (i == idx)
-                    continue;
-                for (int mr : m_nodeComponentCache[i].meshRefs->meshRefs)
-                {
-                    if (mr == meshRef)
-                    {
-                        otherRef = true;
-                        break;
-                    }
-                }
-                if (otherRef)
-                    break;
-            }
-            if (!otherRef)
-            {
-                Mesh &mesh = m_meshes[meshRef];
                 DestroyMaterialInstance(mesh);
 
                 Material *material = mesh.material;
@@ -328,6 +349,9 @@ namespace pe
             settings.skybox_path.clear();
             RefreshSceneSky();
         }
+        ForgetSingletonNode(node);
+        if (!cache.script->path.empty())
+            ++m_scriptAttachGeneration; // ScriptSystem drops the instance on its next reconcile
         RemoveSceneAnimation(node);
 
         for (auto modelRootIt = m_modelRootNodes.begin(); modelRootIt != m_modelRootNodes.end();)
@@ -562,10 +586,7 @@ namespace pe
 
     NodeId *Scene::GetSkyboxNode() const
     {
-        for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
-            if (m_nodeComponentCache[i].skybox)
-                return m_nodeIds[i];
-        return nullptr;
+        return m_skyboxNode;
     }
 
     NodeSkyboxTag *Scene::GetSkyboxForNode(const NodeId *node) const
@@ -678,10 +699,7 @@ namespace pe
 
     NodeId *Scene::GetVoxelWorldNode() const
     {
-        for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
-            if (m_nodeComponentCache[i].voxelWorld && IsNodeAlive(m_nodeIds[i]))
-                return m_nodeIds[i];
-        return nullptr;
+        return m_voxelWorldNode;
     }
 
     NodeVoxelWorldTag *Scene::GetVoxelWorldForNode(const NodeId *node) const
@@ -704,10 +722,7 @@ namespace pe
 
     NodeId *Scene::GetTerrainNode() const
     {
-        for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
-            if (m_nodeComponentCache[i].terrain && IsNodeAlive(m_nodeIds[i]))
-                return m_nodeIds[i];
-        return nullptr;
+        return m_terrainNode;
     }
 
     NodeTerrainTag *Scene::GetTerrainForNode(const NodeId *node) const
@@ -867,10 +882,7 @@ namespace pe
 
     NodeId *Scene::GetSceneSettingsNode() const
     {
-        for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
-            if (m_nodeComponentCache[i].sceneSettings)
-                return m_nodeIds[i];
-        return nullptr;
+        return m_sceneSettingsNode;
     }
 
     void Scene::EnsureSceneSettingsNodeFromSettings(bool markDirty)
@@ -888,9 +900,15 @@ namespace pe
     {
         auto &refs = m_nodeComponentCache[node->index].meshRefs->meshRefs;
         bool changed = !refs.empty() || meshIndex >= 0;
+        for (int mr : refs)
+            if (mr >= 0 && mr < static_cast<int>(m_meshes.size()) && m_meshes[mr].refCount > 0)
+                m_meshes[mr].refCount--;
         refs.clear();
         if (IsValidMeshIndex(meshIndex))
+        {
             refs.push_back(meshIndex);
+            m_meshes[meshIndex].refCount++;
+        }
         m_nodeRuntime[node->index].hasUniformData =
             IsValidMeshIndex(meshIndex) && m_meshes[meshIndex].indexCount > 0;
         if (changed)
@@ -906,6 +924,7 @@ namespace pe
         if (!IsValidMeshIndex(meshIndex))
             return;
         m_nodeComponentCache[node->index].meshRefs->meshRefs.push_back(meshIndex);
+        m_meshes[meshIndex].refCount++;
         if (m_meshes[meshIndex].indexCount > 0)
             m_nodeRuntime[node->index].hasUniformData = true;
         m_instancesDirty = true;
@@ -919,7 +938,13 @@ namespace pe
         auto it = std::remove(refs.begin(), refs.end(), meshIndex);
         if (it != refs.end())
         {
+            const uint32_t removed = static_cast<uint32_t>(refs.end() - it);
             refs.erase(it, refs.end());
+            if (meshIndex >= 0 && meshIndex < static_cast<int>(m_meshes.size()))
+            {
+                Mesh &mesh = m_meshes[meshIndex];
+                mesh.refCount = mesh.refCount > removed ? mesh.refCount - removed : 0;
+            }
             // Recompute drawable flag after removal
             bool hasDrawable = false;
             for (int mr : refs)
@@ -1135,23 +1160,58 @@ namespace pe
         m_dirty = true;
     }
 
-    void Scene::AttachPrimitiveToNode(NodeId *node, ModelAsset *primitiveModel)
+    void Scene::AttachPrimitiveToNode(NodeId *node, ModelAsset *primitiveModel, bool shareGeometry)
     {
         const bool keepModel = primitiveModel->HasSkeleton() || primitiveModel->HasAnimations();
 
-        int sourceIndex = static_cast<int>(m_sources.size());
-        SceneSource source;
-        source.filePath = primitiveModel->GetFilePath();
-        source.primitiveType = primitiveModel->GetPrimitiveType();
-        source.primitiveParams = primitiveModel->GetPrimitiveParams();
-        source.primitiveParamCount = primitiveModel->GetPrimitiveParamCount();
-        if (keepModel)
-            source.modelId = primitiveModel->GetId();
-        m_sources.push_back(std::move(source));
+        // Plain primitives share one copy of their geometry across every node attaching the same
+        // shape+params (same cache AddPrimitiveDeferred uses): a new Mesh entry with its own material
+        // over the cached vertex/index ranges, so a spawn dirties the raster instances only. Anything
+        // that appends real geometry owns the geometry-dirty flag here, not in the callers.
+        int meshIndex = -1;
+        const std::string cacheKey =
+            shareGeometry && CanSharePrimitiveGeometry(primitiveModel) ? PrimitiveGeometryKey(*primitiveModel) : std::string();
+        auto cacheIt = cacheKey.empty() ? m_primitiveGeometryCache.end() : m_primitiveGeometryCache.find(cacheKey);
+        if (cacheIt != m_primitiveGeometryCache.end() && IsValidMeshIndex(cacheIt->second.meshIndex) &&
+            cacheIt->second.sourceIndex >= 0 && cacheIt->second.sourceIndex < static_cast<int>(m_sources.size()))
+        {
+            const MeshInfo *sourceMesh = primitiveModel->GetMeshInfo(0);
+            const int sourceMeshIndex = cacheIt->second.meshIndex;
+            Mesh mesh = m_meshes[sourceMeshIndex];
+            mesh.renderType = sourceMesh->renderType;
+            mesh.material = sourceMesh->material;
+            mesh.materialInstance = nullptr;
+            mesh.skinned = false;
+            mesh.boundingBox = sourceMesh->boundingBox;
+            mesh.aabbColor = sourceMesh->aabbColor;
+            mesh.refCount = 0;
+            meshIndex = AddMesh(std::move(mesh));
+            if (static_cast<int>(m_meshSourceInfos.size()) <= meshIndex)
+                m_meshSourceInfos.resize(meshIndex + 1);
+            m_meshSourceInfos[meshIndex] = {cacheIt->second.sourceIndex, 0};
+            AliasOrDirtyBlas(meshIndex, sourceMeshIndex);
+        }
+        else
+        {
+            int sourceIndex = static_cast<int>(m_sources.size());
+            SceneSource source;
+            source.filePath = primitiveModel->GetFilePath();
+            source.primitiveType = primitiveModel->GetPrimitiveType();
+            source.primitiveParams = primitiveModel->GetPrimitiveParams();
+            source.primitiveParamCount = primitiveModel->GetPrimitiveParamCount();
+            if (keepModel)
+                source.modelId = primitiveModel->GetId();
+            m_sources.push_back(std::move(source));
 
-        std::vector<int> meshMap = AddModelGeometry(primitiveModel, sourceIndex);
-        if (!meshMap.empty() && meshMap[0] >= 0)
-            AddMeshRef(node, meshMap[0]);
+            std::vector<int> meshMap = AddModelGeometry(primitiveModel, sourceIndex);
+            if (!meshMap.empty())
+                meshIndex = meshMap[0];
+            if (!cacheKey.empty() && meshIndex >= 0)
+                m_primitiveGeometryCache[cacheKey] = {meshIndex, sourceIndex};
+            m_geometryDirty = true;
+        }
+        if (meshIndex >= 0)
+            AddMeshRef(node, meshIndex);
 
         if (keepModel)
         {
@@ -1460,6 +1520,7 @@ namespace pe
 
     void Scene::DestroyAllNodeEntities()
     {
+        m_skyboxNode = m_sceneSettingsNode = m_voxelWorldNode = m_terrainNode = nullptr;
         Context *ctx = Context::Get();
         for (NodeId *id : m_nodeIds)
         {

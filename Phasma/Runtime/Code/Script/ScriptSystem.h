@@ -235,9 +235,9 @@ namespace pe
         std::vector<NodeScriptInstance> m_zoneScriptInstances{};        // zone Script-section scripts
         std::vector<NodeScriptInstance> m_zonePhysicsScriptInstances{}; // zone Physics-section scripts
         // Snapshot used to skip ReconcileNodeInstances when script membership is unchanged.
+        // Scene bumps the script generation on every attach/clear and on deleting a scripted node.
         uint32_t m_lastReconcileSceneGen = 0;
-        uint32_t m_lastReconcileScriptGen = 0;
-        uint32_t m_lastReconcileNodeCount = UINT32_MAX; // force first reconcile
+        uint32_t m_lastReconcileScriptGen = UINT32_MAX; // force first reconcile
         std::vector<RegisteredScriptUpdate> m_registeredUpdates{};
         std::vector<PendingAsyncLoad> m_pendingAsyncLoads;
         std::vector<PendingSceneLoad> m_pendingSceneLoads;

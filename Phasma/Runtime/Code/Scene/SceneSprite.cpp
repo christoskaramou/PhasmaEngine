@@ -705,14 +705,30 @@ namespace pe
             return false;
         }
 
+        // A sprite rewrites its quad's UVs in place, so the mesh must own its vertex range: un-share
+        // when another live mesh uses the same range, or when this mesh is the primitive cache's
+        // source (later cache hits would inherit this sprite's UVs; the cache entry is dropped so the
+        // next plain quad appends fresh default geometry).
         Mesh &mesh = m_meshes[meshIndex];
-        for (int i = 0; i < static_cast<int>(m_meshes.size()); ++i)
+        bool sharedRange = false;
+        for (auto cacheIt = m_primitiveGeometryCache.begin(); cacheIt != m_primitiveGeometryCache.end();)
+        {
+            if (cacheIt->second.meshIndex == meshIndex)
+            {
+                sharedRange = true;
+                cacheIt = m_primitiveGeometryCache.erase(cacheIt);
+            }
+            else
+                ++cacheIt;
+        }
+        for (int i = 0; i < static_cast<int>(m_meshes.size()) && !sharedRange; ++i)
         {
             const Mesh &other = m_meshes[i];
-            if (i == meshIndex || !other.live || other.vertexOffset != mesh.vertexOffset ||
-                other.positionsOffset != mesh.positionsOffset)
-                continue;
-
+            sharedRange = i != meshIndex && other.live && other.vertexOffset == mesh.vertexOffset &&
+                          other.positionsOffset == mesh.positionsOffset;
+        }
+        if (sharedRange)
+        {
             std::array<Vertex, 4> vertices;
             std::array<PositionUvVertex, 4> positions;
             std::copy_n(m_vertexStore.begin() + mesh.vertexOffset, 4, vertices.begin());
@@ -722,7 +738,6 @@ namespace pe
             m_vertexStore.insert(m_vertexStore.end(), vertices.begin(), vertices.end());
             m_positionUvStore.insert(m_positionUvStore.end(), positions.begin(), positions.end());
             m_geometryDirty = true;
-            break;
         }
 
         NodeSpriteComponent &sprite = GetOrCreateSpriteComponent(node);
@@ -1000,7 +1015,7 @@ namespace pe
             return nullptr;
         }
 
-        AttachPrimitiveToNode(node, Primitives::CreateQuad(qw, qh));
+        AttachPrimitiveToNode(node, Primitives::CreateQuad(qw, qh), /*shareGeometry=*/false);
         NodeSpriteComponent &sprite = GetOrCreateSpriteComponent(node);
         sprite.quadWidth = qw;
         sprite.quadHeight = qh;

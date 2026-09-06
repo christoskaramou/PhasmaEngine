@@ -302,11 +302,31 @@ namespace pe
 
         bool hasSkeleton = GetMaxJointCount() > 0;
 
+        // Sprite quads never enter the TLAS (BuildTLASFromInstances skips the sprite mesh slot), so
+        // their private per-sprite geometry gets no BLAS either: 2000 sprites otherwise cost 2000
+        // BLAS builds on every geometry upload.
+        std::vector<bool> spriteMesh(m_meshes.size(), false);
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
+        {
+            const NodeSpriteComponent *sprite = m_nodeComponentCache[i].sprite;
+            if (!sprite)
+                continue;
+            const auto &refs = m_nodeComponentCache[i].meshRefs->meshRefs;
+            if (sprite->meshSlot >= 0 && sprite->meshSlot < static_cast<int>(refs.size()) &&
+                IsValidMeshIndex(refs[sprite->meshSlot]))
+                spriteMesh[refs[sprite->meshSlot]] = true;
+        }
+
+        // Meshes over the same vertex/index ranges with the same opacity class (shared primitive
+        // geometry) get one BLAS; the duplicates alias it in m_blasByMesh after the build loop.
+        std::map<std::tuple<uint32_t, uint32_t, uint32_t, uint32_t, bool>, int> firstMeshByGeometry;
+        std::vector<std::pair<int, int>> blasAliases; // (duplicate mesh, first mesh)
+
         for (int meshIndex = 0; meshIndex < static_cast<int>(m_meshes.size()); meshIndex++)
         {
             const Mesh &mesh = m_meshes[meshIndex];
             if (!mesh.live || mesh.indexCount == 0 || mesh.renderType == RenderType::Lines ||
-                mesh.renderType == RenderType::SpriteOutline)
+                mesh.renderType == RenderType::SpriteOutline || spriteMesh[meshIndex])
                 continue;
             if (hasSkeleton && mesh.skinned)
                 continue;
@@ -316,6 +336,12 @@ namespace pe
             const bool isTransparent = mesh.renderType == RenderType::AlphaCut ||
                                        mesh.renderType == RenderType::AlphaBlend ||
                                        mesh.renderType == RenderType::Transmission;
+            const auto geometryKey = std::make_tuple(mesh.vertexOffset, mesh.vertexCount, mesh.indexOffset, mesh.indexCount, isTransparent);
+            if (auto [firstIt, inserted] = firstMeshByGeometry.emplace(geometryKey, meshIndex); !inserted)
+            {
+                blasAliases.emplace_back(meshIndex, firstIt->second);
+                continue;
+            }
 
             if (IsVulkanSceneRayTracing())
             {
@@ -434,6 +460,24 @@ namespace pe
 
             currentOffset += req.resultSize;
         }
+        for (const auto &[duplicate, first] : blasAliases)
+            m_blasByMesh[duplicate] = m_blasByMesh[first];
+    }
+
+    void Scene::AliasOrDirtyBlas(int meshIndex, int sourceMeshIndex)
+    {
+        if (!RHII.GetCaps().rayTracing || meshIndex < 0)
+            return;
+        // A geometry-sharing copy traces through the source mesh's BLAS as long as both sit in the
+        // same opacity class (the BLAS bakes opaque vs any-hit); otherwise fall back to a full rebuild.
+        auto rtTransparent = [](RenderType t)
+        { return t == RenderType::AlphaCut || t == RenderType::AlphaBlend || t == RenderType::Transmission; };
+        auto blasIt = m_blasByMesh.find(sourceMeshIndex);
+        if (blasIt != m_blasByMesh.end() && IsValidMeshIndex(sourceMeshIndex) &&
+            rtTransparent(m_meshes[sourceMeshIndex].renderType) == rtTransparent(m_meshes[meshIndex].renderType))
+            m_blasByMesh[meshIndex] = blasIt->second;
+        else
+            m_blasDirty = true;
     }
 
     void Scene::BuildTLASFromInstances(CommandBuffer *cmd)

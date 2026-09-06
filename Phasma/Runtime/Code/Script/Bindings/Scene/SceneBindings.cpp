@@ -401,10 +401,7 @@ namespace pe
                     else if (type == "torus") model = Primitives::CreateTorus();
                     else if (type == "skinned_strip_2d") model = Primitives::CreateSkinnedStrip2D();
                     if (model)
-                    {
                         sc->AttachPrimitiveToNode(h.nodeId, model);
-                        sc->SetGeometryDirty();
-                    }
                 });
 
                 scene.set_function("attach_polyline", [](SceneNodeHandle h, sol::table pointsTable, sol::optional<float> width, sol::optional<vec3> normal, sol::optional<bool> closed) {
@@ -424,10 +421,7 @@ namespace pe
                                                                          normal.value_or(vec3(0.0f, 1.0f, 0.0f)),
                                                                          closed.value_or(true));
                     if (model)
-                    {
                         sc->AttachPrimitiveToNode(h.nodeId, model);
-                        sc->SetGeometryDirty();
-                    }
                 });
 
                 // attach_lines(node, {vec3...}, closed): hardware line strip drawn by
@@ -447,10 +441,7 @@ namespace pe
                     }
                     ModelAsset *model = Primitives::CreatePolyline(points, closed.value_or(true));
                     if (model)
-                    {
                         sc->AttachPrimitiveToNode(h.nodeId, model);
-                        sc->SetGeometryDirty();
-                    }
                 });
 
                 scene.set_function("add_directional_light", []() {

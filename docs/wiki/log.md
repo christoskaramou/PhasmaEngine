@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-09-06
+
+- Node spawn/despawn no longer drains the GPU: primitives attached to nodes share cached geometry, the instance-only rebuild keeps fitting buffers and records its uploads in the frame command buffer, mesh refcounts replace the delete-time reference scan, BLASes are shared across geometry-sharing meshes and skipped in Raster mode, singleton nodes are cached, and the Hierarchy widget culls off-screen rows (`architecture/runtime.md`). Verified with `tools/node_churn_perf.py` (untracked): 2000 quads churning 20 spawn + 20 delete per frame went 120 ms to 9 ms in the Vulkan editor; Vulkan validation and the DX12 debug layer report nothing during churn or a 200-spawn burst; sponza stays alive in the editor and PhasmaPlayer on both APIs. Sprite spawns: 2000 Lua-created sprites churning 20 per frame measure 27 ms in both Hybrid and Raster (HEAD: 28 ms, but HEAD never uploaded those quads); sprite meshes are skipped in `BuildAllBLASes` because the TLAS never references them.
+
 ## 2026-09-05
 
 - PhasmaAnimator reference sequence has a Show checkbox (and `timeline.reference_enable`) that hides the overlay without unloading the manifest (`architecture/animator.md`).
