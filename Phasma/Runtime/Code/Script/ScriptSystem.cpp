@@ -875,13 +875,11 @@ namespace pe
         if (!scene)
         {
             m_lastReconcileSceneGen = 0;
-            m_lastReconcileScriptGen = 0;
-            m_lastReconcileNodeCount = UINT32_MAX;
+            m_lastReconcileScriptGen = UINT32_MAX;
             return;
         }
         m_lastReconcileSceneGen = scene->GetGeneration();
         m_lastReconcileScriptGen = scene->GetScriptAttachGeneration();
-        m_lastReconcileNodeCount = scene->GetNodeCount();
     }
 
     void ScriptSystem::ReconcileNodeInstances()
@@ -1671,9 +1669,10 @@ namespace pe
 
         // Reconcile per-node script instances with the scene. Skip the full node
         // scan when script membership + scene identity are unchanged (ATH combat
-        // creates hundreds of non-script nodes every second).
+        // creates hundreds of non-script nodes every second; those never bump the
+        // script generation, so they no longer trigger a rescan).
         Scene *activeScene = GetActiveScene();
-        const bool needReconcile = !activeScene || activeScene->GetGeneration() != m_lastReconcileSceneGen || activeScene->GetScriptAttachGeneration() != m_lastReconcileScriptGen || activeScene->GetNodeCount() != m_lastReconcileNodeCount;
+        const bool needReconcile = !activeScene || activeScene->GetGeneration() != m_lastReconcileSceneGen || activeScene->GetScriptAttachGeneration() != m_lastReconcileScriptGen;
         if (needReconcile)
             ReconcileNodeInstances();
 

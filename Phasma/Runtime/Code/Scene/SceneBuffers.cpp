@@ -19,6 +19,43 @@ namespace pe
         return mesh.renderType != RenderType::Lines && mesh.renderType != RenderType::SpriteOutline;
     }
 
+    // Keep a GPU buffer across instance rebuilds while it still fits; otherwise retire it through the
+    // deletion queue and create one at the requested size. Steady-state spawns allocate nothing.
+    static Buffer *EnsureBuffer(Buffer *buffer, const BufferDesc &desc)
+    {
+        if (buffer && buffer->Size() >= desc.size)
+            return buffer;
+        if (buffer)
+            RHII.AddToDeletionQueue([b = buffer]()
+                                    { Buffer *old = b; Buffer::Destroy(old); });
+        return Buffer::Create(desc);
+    }
+
+    // One buffer per swapchain image: rebuilt on an image-count change, else each element is kept
+    // while it fits.
+    static void EnsureBufferRing(std::vector<Buffer *> &ring, uint32_t count, const std::string &name, size_t size,
+                                 PeBufferUsageFlags usage, PeMemoryUsage memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED)
+    {
+        if (ring.size() != count)
+        {
+            for (Buffer *buffer : ring)
+                if (buffer)
+                    RHII.AddToDeletionQueue([b = buffer]()
+                                            { Buffer *old = b; Buffer::Destroy(old); });
+            ring.assign(count, nullptr);
+        }
+        for (uint32_t i = 0; i < count; ++i)
+            ring[i] = EnsureBuffer(ring[i], {.size = size, .usage = usage, .memoryUsage = memoryUsage, .name = name + std::to_string(i)});
+    }
+
+    static size_t RoundUpPow2(size_t value)
+    {
+        size_t p = 1;
+        while (p < value)
+            p <<= 1;
+        return p;
+    }
+
     // A node counts as selected when it, or any ancestor, is selected. Selection is otherwise a
     // strict per-node test, so selecting a model root outlined nothing and selecting a parent whose
     // detail meshes hang off child nodes outlined only the parent's own mesh.
@@ -122,25 +159,12 @@ namespace pe
         // last geometry rebuild, so the outline stays on the previously selected mesh. Republish the
         // mirror ONLY when the selected set changed: this runs every frame and a per-frame device
         // copy+wait would stall the cull hot path.
+        // mirror ONLY when the selected set changed, and through the frame command buffer
+        // (RecordPendingInstanceUploads) rather than a Submit+Wait on the cull hot path.
         if (m_meshConstantsDevice && offset > 0 && selectionSignature != m_meshSelectionMirrorSignature)
         {
             m_meshSelectionMirrorSignature = selectionSignature;
-            Queue *queue = RHII.GetMainQueue();
-            CommandBuffer *cmd = queue->AcquireCommandBuffer();
-            cmd->Begin();
-            cmd->CopyBuffer(m_meshConstants, m_meshConstantsDevice, offset, 0, 0);
-            BufferBarrierInfo barrier{};
-            barrier.buffer = m_meshConstantsDevice;
-            barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
-            barrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
-            barrier.offset = 0;
-            barrier.size = offset;
-            cmd->BufferBarrier(barrier);
-            m_meshConstantsDevice->GetTrackInfo() = barrier;
-            cmd->End();
-            queue->Submit(1, &cmd, nullptr, nullptr);
-            cmd->Wait();
-            queue->ReturnCommandBuffer(cmd);
+            m_pendingMeshConstantsMirror = true;
         }
     }
 
@@ -156,6 +180,7 @@ namespace pe
         UpdateImageViews();
         CreateMaterialTable();
         CreateMeshConstants(cmd);
+        RecordPendingInstanceUploads(cmd);
 
         MemoryBarrierInfo geometryUploadBarrier{};
         geometryUploadBarrier.srcStageMask = PE_STAGE_TRANSFER;
@@ -349,43 +374,33 @@ namespace pe
             (RHII.GetApi() == PE_GRAPHICS_API_DX12 ? PE_BUFFER_USAGE_TRANSFER_SRC : PE_BUFFER_USAGE_NONE);
         const bool useStorageDeviceMirror = RHII.GetApi() == PE_GRAPHICS_API_DX12;
 
+        // Pow2 headroom so spawns that still fit reuse the ring in place: UpdateUniformData only ever
+        // writes the current frame's copy, so no in-flight frame sees a half-written table.
+        const size_t allocSize = RoundUpPow2(storageSize);
         for (uint32_t i = 0; i < m_storages.size(); i++)
         {
-            auto &storage = m_storages[i];
-            if (storage)
-            {
-                RHII.AddToDeletionQueue([b = storage]()
-                                        { Buffer* buf = b; Buffer::Destroy(buf); });
-                storage = nullptr;
-            }
-
-            auto &storageDevice = m_storagesDevice[i];
-            if (storageDevice)
-            {
-                RHII.AddToDeletionQueue([b = storageDevice]()
-                                        { Buffer* buf = b; Buffer::Destroy(buf); });
-                storageDevice = nullptr;
-            }
-
-            storage = Buffer::Create({
-                .size = storageSize,
+            // Per-node matrix table is CPU-written every frame and read by the GPU culling/depth/
+            // GBuffer passes. Keep it device-local (ReBAR / DX12 GPU upload heap) so the culling
+            // pass reads matrices from VRAM instead of paying a cold per-frame PCIe read of all N
+            // matrices (the DX12 CullingPass cost driver vs Vulkan, which already lands it in BAR).
+            const BufferDesc storageDesc{
+                .size = allocSize,
                 .usage = storageUsage,
-                // Per-node matrix table is CPU-written every frame and read by the GPU culling/depth/
-                // GBuffer passes. Keep it device-local (ReBAR / DX12 GPU upload heap) so the culling
-                // pass reads matrices from VRAM instead of paying a cold per-frame PCIe read of all N
-                // matrices (the DX12 CullingPass cost driver vs Vulkan, which already lands it in BAR).
                 .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT_DEVICE,
                 .name = "storage_Geometry_buffer_" + std::to_string(i),
-            });
+            };
+            m_storages[i] = EnsureBuffer(m_storages[i], storageDesc);
 
             if (useStorageDeviceMirror)
             {
-                storageDevice = Buffer::Create({
-                    .size = storageSize,
+                // UploadDynamicUniforms copies the whole ring slot, so the mirror matches the source size.
+                const BufferDesc mirrorDesc{
+                    .size = m_storages[i]->Size(),
                     .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
                     .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY,
                     .name = "storageDevice_Geometry_buffer_" + std::to_string(i),
-                });
+                };
+                m_storagesDevice[i] = EnsureBuffer(m_storagesDevice[i], mirrorDesc);
             }
         }
     }
@@ -399,7 +414,8 @@ namespace pe
     void Scene::CreateIndirectBuffers(CommandBuffer *cmd)
     {
         uint32_t indirectCount = 0;
-        std::vector<PeDrawIndexedIndirectCommand> indirectCommands;
+        std::vector<PeDrawIndexedIndirectCommand> &indirectCommands = m_pendingIndirectCommands;
+        indirectCommands.clear();
         indirectCommands.reserve(m_meshCount);
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
@@ -440,61 +456,46 @@ namespace pe
         while (m_indirectCapacity < std::max(1u, indirectCount))
             m_indirectCapacity <<= 1;
 
-        const uint32_t indirectBufferCount = std::max(1u, indirectCount);
-        m_indirectAll = Buffer::Create({
-            .size = indirectBufferCount * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
-            // TRANSFER_SRC: ReserveArenaCapacity copies the existing draws out of this buffer when it
-            // regrows for arena headroom (Vulkan validates copy-source usage; DX12 does not).
+        // Every buffer below is kept while it still fits (EnsureBuffer), so an instance-only rebuild
+        // allocates nothing in the steady state. GPU content (indirect commands, visibility seed) is
+        // recorded by RecordPendingInstanceUploads: with the caller's drained cmd on the geometry path,
+        // else at the front of the next frame's command buffer.
+        const uint32_t swapCount = RHII.GetSwapchainImageCount();
+        const size_t indirectBytes = static_cast<size_t>(m_indirectCapacity) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
+        const PeBufferUsageFlags indirectUsage =
+            PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST;
+        const PeBufferUsageFlags counterUsage =
+            PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST;
+
+        // TRANSFER_SRC: ReserveArenaCapacity copies the existing draws out of this buffer when it
+        // regrows for arena headroom (Vulkan validates copy-source usage; DX12 does not).
+        const BufferDesc indirectAllDesc{
+            .size = indirectBytes,
             .usage = PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_STORAGE_BUFFER |
                      PE_BUFFER_USAGE_VERTEX_BUFFER |
                      PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_TRANSFER_SRC,
             .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
             .name = "indirect_Geometry_buffer_all",
-        });
-        if (indirectCount > 0)
-            cmd->CopyBufferStaged(m_indirectAll, indirectCommands.data(), indirectCommands.size() * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE, 0);
-
-        if (indirectCount > 0)
-        {
-            BufferBarrierInfo indirectBarrierInfo{};
-            indirectBarrierInfo.buffer = m_indirectAll;
-            indirectBarrierInfo.stageMask = PE_STAGE_DRAW_INDIRECT | PE_STAGE_COMPUTE_SHADER;
-            indirectBarrierInfo.accessMask = PE_ACCESS_INDIRECT_COMMAND_READ | PE_ACCESS_SHADER_READ;
-            indirectBarrierInfo.size = indirectCount * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
-            indirectBarrierInfo.offset = 0;
-            cmd->BufferBarrier(indirectBarrierInfo);
-        }
-
-        auto createFilteredIndirect = [&](const std::string &name)
-        {
-            std::vector<Buffer *> vec(RHII.GetSwapchainImageCount());
-            for (uint32_t i = 0; i < vec.size(); ++i)
-            {
-                vec[i] = Buffer::Create({
-                    .size = m_indirectCapacity * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
-                    .usage = PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
-                    .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
-                    .name = name + std::to_string(i),
-                });
-            }
-            return vec;
         };
+        m_indirectAll = EnsureBuffer(m_indirectAll, indirectAllDesc);
+        m_pendingIndirectUpload = true;
 
-        m_cullingCountersBuffers.resize(RHII.GetSwapchainImageCount());
-        for (uint32_t i = 0; i < m_cullingCountersBuffers.size(); ++i)
-        {
-            m_cullingCountersBuffers[i] = Buffer::Create({
-                .size = 9 * sizeof(uint32_t), // 8 base buckets + terrain (index 8)
-                .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
-                .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
-                .name = "culling_counters_" + std::to_string(i),
-            });
-        }
+        EnsureBufferRing(m_cullingCountersBuffers, swapCount, "culling_counters_",
+                         9 * sizeof(uint32_t), counterUsage); // 8 base buckets + terrain (index 8)
 
         // LOD params UBO (CullingCS binding 16): refilled each frame from SceneSettings in UpdateLodUniforms.
-        m_lodUniforms.resize(RHII.GetSwapchainImageCount());
-        for (uint32_t i = 0; i < m_lodUniforms.size(); ++i)
+        if (m_lodUniforms.size() != swapCount)
         {
+            for (Buffer *buffer : m_lodUniforms)
+                if (buffer)
+                    RHII.AddToDeletionQueue([b = buffer]()
+                                            { Buffer *old = b; Buffer::Destroy(old); });
+            m_lodUniforms.assign(swapCount, nullptr);
+        }
+        for (uint32_t i = 0; i < swapCount; ++i)
+        {
+            if (m_lodUniforms[i])
+                continue;
             m_lodUniforms[i] = Buffer::Create({
                 .size = RHII.AlignUniform(sizeof(LodUBOData)),
                 .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER,
@@ -507,91 +508,114 @@ namespace pe
             m_lodUniforms[i]->Unmap();
         }
 
-        m_indirectOpaqueSS = createFilteredIndirect("indirect_OpaqueSS_");
-        m_indirectAlphaCutSS = createFilteredIndirect("indirect_AlphaCutSS_");
-        m_indirectOpaqueDS = createFilteredIndirect("indirect_OpaqueDS_");
-        m_indirectAlphaCutDS = createFilteredIndirect("indirect_AlphaCutDS_");
-        m_indirectAlphaBlend = createFilteredIndirect("indirect_AlphaBlend_");
-        m_indirectTransmission = createFilteredIndirect("indirect_Transmission_");
-        m_indirectSelected = createFilteredIndirect("indirect_Selected_");
-        m_indirectVoxels = createFilteredIndirect("indirect_Voxels_");
-        m_indirectTerrain = createFilteredIndirect("indirect_Terrain_");
-        m_shadowIndirectRegular = createFilteredIndirect("shadow_indirect_regular_");
-        m_shadowIndirectVoxels = createFilteredIndirect("shadow_indirect_voxels_");
+        EnsureBufferRing(m_indirectOpaqueSS, swapCount, "indirect_OpaqueSS_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_indirectAlphaCutSS, swapCount, "indirect_AlphaCutSS_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_indirectOpaqueDS, swapCount, "indirect_OpaqueDS_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_indirectAlphaCutDS, swapCount, "indirect_AlphaCutDS_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_indirectAlphaBlend, swapCount, "indirect_AlphaBlend_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_indirectTransmission, swapCount, "indirect_Transmission_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_indirectSelected, swapCount, "indirect_Selected_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_indirectVoxels, swapCount, "indirect_Voxels_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_indirectTerrain, swapCount, "indirect_Terrain_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_shadowIndirectRegular, swapCount, "shadow_indirect_regular_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_shadowIndirectVoxels, swapCount, "shadow_indirect_voxels_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_shadowCullCounters, swapCount, "shadow_cull_counters_", 2 * sizeof(uint32_t), counterUsage);
 
-        m_shadowCullCounters.resize(RHII.GetSwapchainImageCount());
-        for (uint32_t i = 0; i < m_shadowCullCounters.size(); ++i)
-        {
-            m_shadowCullCounters[i] = Buffer::Create({
-                .size = 2 * sizeof(uint32_t),
-                .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
-                .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
-                .name = "shadow_cull_counters_" + std::to_string(i),
-            });
-        }
-
-        auto createSortKeyBuffer = [&](const std::string &name)
-        {
-            std::vector<Buffer *> vec(RHII.GetSwapchainImageCount());
-            for (uint32_t i = 0; i < vec.size(); ++i)
-            {
-                vec[i] = Buffer::Create({
-                    .size = m_indirectCapacity * sizeof(float),
-                    .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
-                    .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
-                    .name = name + std::to_string(i),
-                });
-            }
-            return vec;
-        };
-        m_sortKeysAlphaBlend = createSortKeyBuffer("sortKeys_AlphaBlend_");
-        m_sortKeysTransmission = createSortKeyBuffer("sortKeys_Transmission_");
+        const size_t sortKeyBytes = static_cast<size_t>(m_indirectCapacity) * sizeof(float);
+        EnsureBufferRing(m_sortKeysAlphaBlend, swapCount, "sortKeys_AlphaBlend_", sortKeyBytes,
+                         PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST);
+        EnsureBufferRing(m_sortKeysTransmission, swapCount, "sortKeys_Transmission_", sortKeyBytes,
+                         PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST);
 
         // --- Two-phase Hi-Z occlusion (opaque-only A/B indirect sets + per-set counters + a
-        // persistent per-draw visibility flag). Recreated on every geometry/draw-index rebuild,
-        // which re-seeds visibility (draw indices are reassigned here, so stale bits are invalid).
-        auto createOccCounters = [&](const std::string &name)
-        {
-            std::vector<Buffer *> vec(RHII.GetSwapchainImageCount());
-            for (uint32_t i = 0; i < vec.size(); ++i)
-                vec[i] = Buffer::Create({
-                    .size = 7 * sizeof(uint32_t),
-                    .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
-                    .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
-                    .name = name + std::to_string(i),
-                });
-            return vec;
-        };
-        m_occCountersA = createOccCounters("occ_countersA_");
-        m_occCountersB = createOccCounters("occ_countersB_");
-        m_occOpaqueSSA = createFilteredIndirect("occ_OpaqueSSA_");
-        m_occAlphaCutSSA = createFilteredIndirect("occ_AlphaCutSSA_");
-        m_occOpaqueDSA = createFilteredIndirect("occ_OpaqueDSA_");
-        m_occAlphaCutDSA = createFilteredIndirect("occ_AlphaCutDSA_");
-        m_occOpaqueSSB = createFilteredIndirect("occ_OpaqueSSB_");
-        m_occAlphaCutSSB = createFilteredIndirect("occ_AlphaCutSSB_");
-        m_occOpaqueDSB = createFilteredIndirect("occ_OpaqueDSB_");
-        m_occAlphaCutDSB = createFilteredIndirect("occ_AlphaCutDSB_");
+        // persistent per-draw visibility flag). Re-seeded on every draw-index rebuild (draw indices
+        // are reassigned here, so stale bits are invalid).
+        EnsureBufferRing(m_occCountersA, swapCount, "occ_countersA_", 7 * sizeof(uint32_t), counterUsage);
+        EnsureBufferRing(m_occCountersB, swapCount, "occ_countersB_", 7 * sizeof(uint32_t), counterUsage);
+        EnsureBufferRing(m_occOpaqueSSA, swapCount, "occ_OpaqueSSA_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_occAlphaCutSSA, swapCount, "occ_AlphaCutSSA_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_occOpaqueDSA, swapCount, "occ_OpaqueDSA_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_occAlphaCutDSA, swapCount, "occ_AlphaCutDSA_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_occOpaqueSSB, swapCount, "occ_OpaqueSSB_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_occAlphaCutSSB, swapCount, "occ_AlphaCutSSB_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_occOpaqueDSB, swapCount, "occ_OpaqueDSB_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_occAlphaCutDSB, swapCount, "occ_AlphaCutDSB_", indirectBytes, indirectUsage);
 
-        // Persistent per-draw visibility (1 = visible last frame). Seed to 1 so the first frame
-        // after a rebuild draws everything in phase 1 (full pyramid) and phase 2 finds nothing new.
-        m_visibility = Buffer::Create({
-            .size = m_indirectCapacity * sizeof(uint32_t),
-            // TRANSFER_SRC: ReserveArenaCapacity copies the live visibility bits out when it regrows.
+        // TRANSFER_SRC: ReserveArenaCapacity copies the live visibility bits out when it regrows.
+        const BufferDesc visibilityDesc{
+            .size = static_cast<size_t>(m_indirectCapacity) * sizeof(uint32_t),
             .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST | PE_BUFFER_USAGE_TRANSFER_SRC,
             .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY_DEDICATED,
             .name = "occ_visibility",
-        });
-        cmd->FillBuffer(m_visibility, 0, m_indirectCapacity * sizeof(uint32_t), 1u);
+        };
+        m_visibility = EnsureBuffer(m_visibility, visibilityDesc);
+        m_pendingVisibilitySeed = true;
+        (void)cmd; // GPU copies are recorded by the caller through RecordPendingInstanceUploads
+    }
+
+    void Scene::RecordPendingInstanceUploads(CommandBuffer *cmd)
+    {
+        if (!cmd || (!m_pendingIndirectUpload && !m_pendingVisibilitySeed && !m_pendingMeshConstantsMirror))
+            return;
+
+        // The rewritten buffers may still be read by the previous frame's cull/draws on this queue:
+        // order the copies after everything already submitted. (DX12's legacy path turns this into a
+        // global UAV barrier and its staged copies transition their destination.)
+        MemoryBarrierInfo before{};
+        before.srcStageMask = PE_STAGE_ALL_COMMANDS;
+        before.srcAccessMask = PE_ACCESS_MEMORY_READ | PE_ACCESS_MEMORY_WRITE;
+        before.dstStageMask = PE_STAGE_TRANSFER;
+        before.dstAccessMask = PE_ACCESS_TRANSFER_WRITE;
+        cmd->MemoryBarrier(before);
+
+        if (m_pendingIndirectUpload && m_indirectAll && !m_pendingIndirectCommands.empty())
         {
-            BufferBarrierInfo vb{};
-            vb.buffer = m_visibility;
-            vb.stageMask = PE_STAGE_COMPUTE_SHADER;
-            vb.accessMask = PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE;
-            vb.size = m_indirectCapacity * sizeof(uint32_t);
-            vb.offset = 0;
-            cmd->BufferBarrier(vb);
+            const size_t bytes = m_pendingIndirectCommands.size() * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
+            cmd->CopyBufferStaged(m_indirectAll, m_pendingIndirectCommands.data(), bytes, 0);
+            BufferBarrierInfo barrier{};
+            barrier.buffer = m_indirectAll;
+            barrier.stageMask = PE_STAGE_DRAW_INDIRECT | PE_STAGE_COMPUTE_SHADER;
+            barrier.accessMask = PE_ACCESS_INDIRECT_COMMAND_READ | PE_ACCESS_SHADER_READ;
+            barrier.size = bytes;
+            barrier.offset = 0;
+            cmd->BufferBarrier(barrier);
         }
+
+        if (m_pendingVisibilitySeed && m_visibility)
+        {
+            // Seed to 1 so the first frame after a rebuild draws everything in phase 1 (full pyramid)
+            // and phase 2 finds nothing new.
+            const size_t bytes = static_cast<size_t>(m_indirectCapacity) * sizeof(uint32_t);
+            cmd->FillBuffer(m_visibility, 0, bytes, 1u);
+            BufferBarrierInfo barrier{};
+            barrier.buffer = m_visibility;
+            barrier.stageMask = PE_STAGE_COMPUTE_SHADER;
+            barrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE;
+            barrier.size = bytes;
+            barrier.offset = 0;
+            cmd->BufferBarrier(barrier);
+        }
+
+        if (m_pendingMeshConstantsMirror && m_meshConstants && m_meshConstantsDevice)
+        {
+            // DX12: publish the CPU-written constants into the GPU-cached DEFAULT mirror the cull/depth/
+            // GBuffer passes read instead of the slow GPU_UPLOAD heap.
+            const size_t bytes = std::min(m_meshConstants->Size(), m_meshConstantsDevice->Size());
+            cmd->CopyBuffer(m_meshConstants, m_meshConstantsDevice, bytes, 0, 0);
+            BufferBarrierInfo barrier{};
+            barrier.buffer = m_meshConstantsDevice;
+            barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
+            barrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
+            barrier.offset = 0;
+            barrier.size = bytes;
+            cmd->BufferBarrier(barrier);
+            m_meshConstantsDevice->GetTrackInfo() = barrier;
+        }
+
+        m_pendingIndirectUpload = false;
+        m_pendingVisibilitySeed = false;
+        m_pendingMeshConstantsMirror = false;
+        m_pendingIndirectCommands.clear();
     }
 
     void Scene::UpdateImageViews()
@@ -1201,22 +1225,12 @@ namespace pe
         m_meshConstants->Flush(offset, 0);
         m_meshConstants->Unmap();
 
-        // DX12: publish the CPU-written constants into the GPU-cached DEFAULT mirror. Geometry rebuilds
-        // run with frames idle (WaitAllFramesCommands), and the buffer is read-only afterwards, so a
-        // single (unringed) device buffer copied once here is safe; the cull/depth/GBuffer passes then
-        // read cached VRAM instead of the slow GPU_UPLOAD heap.
+        // DX12: the GPU-cached DEFAULT mirror is republished by RecordPendingInstanceUploads (with the
+        // caller's cmd on the geometry path, else at the front of the next frame's command buffer).
+        // The mirror is a fresh buffer here, so in-flight frames keep reading the previous one.
+        (void)cmd;
         if (m_meshConstantsDevice)
-        {
-            cmd->CopyBuffer(m_meshConstants, m_meshConstantsDevice, m_meshConstants->Size(), 0, 0);
-            BufferBarrierInfo barrier{};
-            barrier.buffer = m_meshConstantsDevice;
-            barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
-            barrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
-            barrier.offset = 0;
-            barrier.size = m_meshConstants->Size();
-            cmd->BufferBarrier(barrier);
-            m_meshConstantsDevice->GetTrackInfo() = barrier;
-        }
+            m_pendingMeshConstantsMirror = true;
         // The mirror was just recreated; force UpdateMeshSelectionFlags to republish the selection next
         // frame regardless of whether the selected set changed (ComputeMeshConstants doesn't bake it).
         m_meshSelectionMirrorSignature = ~0ull;
@@ -1225,6 +1239,11 @@ namespace pe
 
     void Scene::DestroyBuffers()
     {
+        m_pendingIndirectUpload = false;
+        m_pendingVisibilitySeed = false;
+        m_pendingMeshConstantsMirror = false;
+        m_pendingIndirectCommands.clear();
+
         if (m_buffer)
         {
             RHII.AddToDeletionQueue([b = m_buffer]()
@@ -1351,79 +1370,10 @@ namespace pe
     }
     void Scene::RebuildRasterInstances(CommandBuffer *cmd)
     {
-        for (auto &storage : m_storages)
-        {
-            if (storage)
-            {
-                RHII.AddToDeletionQueue([b = storage]()
-                                        { Buffer *buf = b; Buffer::Destroy(buf); });
-                storage = nullptr;
-            }
-        }
-        for (auto &storageDevice : m_storagesDevice)
-        {
-            if (storageDevice)
-            {
-                RHII.AddToDeletionQueue([b = storageDevice]()
-                                        { Buffer *buf = b; Buffer::Destroy(buf); });
-                storageDevice = nullptr;
-            }
-        }
-        auto destroyBufferVecEager = [](std::vector<Buffer *> &vec)
-        {
-            for (auto &buf : vec)
-            {
-                if (buf)
-                {
-                    RHII.AddToDeletionQueue([b = buf]()
-                                            { Buffer *fb = b; Buffer::Destroy(fb); });
-                    buf = nullptr;
-                }
-            }
-        };
-
-        destroyBufferVecEager(m_cullingCountersBuffers);
-        destroyBufferVecEager(m_lodUniforms);
-        destroyBufferVecEager(m_indirectOpaqueSS);
-        destroyBufferVecEager(m_indirectAlphaCutSS);
-        destroyBufferVecEager(m_indirectOpaqueDS);
-        destroyBufferVecEager(m_indirectAlphaCutDS);
-        destroyBufferVecEager(m_indirectAlphaBlend);
-        destroyBufferVecEager(m_indirectTransmission);
-        destroyBufferVecEager(m_indirectSelected);
-        destroyBufferVecEager(m_indirectVoxels);
-        destroyBufferVecEager(m_indirectTerrain);
-        destroyBufferVecEager(m_shadowIndirectRegular);
-        destroyBufferVecEager(m_shadowIndirectVoxels);
-        destroyBufferVecEager(m_shadowCullCounters);
-        destroyBufferVecEager(m_sortKeysAlphaBlend);
-        destroyBufferVecEager(m_sortKeysTransmission);
-        // Two-phase occlusion A/B sets + the persistent visibility flag are recreated by
-        // CreateIndirectBuffers below; destroy the previous generation here or they leak on every
-        // instance-only rebuild (mirrors the DestroyBuffers teardown).
-        destroyBufferVecEager(m_occCountersA);
-        destroyBufferVecEager(m_occCountersB);
-        destroyBufferVecEager(m_occOpaqueSSA);
-        destroyBufferVecEager(m_occAlphaCutSSA);
-        destroyBufferVecEager(m_occOpaqueDSA);
-        destroyBufferVecEager(m_occAlphaCutDSA);
-        destroyBufferVecEager(m_occOpaqueSSB);
-        destroyBufferVecEager(m_occAlphaCutSSB);
-        destroyBufferVecEager(m_occOpaqueDSB);
-        destroyBufferVecEager(m_occAlphaCutDSB);
-        if (m_visibility)
-        {
-            RHII.AddToDeletionQueue([b = m_visibility]()
-                                    { Buffer *buf = b; Buffer::Destroy(buf); });
-            m_visibility = nullptr;
-        }
-        if (m_indirectAll)
-        {
-            RHII.AddToDeletionQueue([b = m_indirectAll]()
-                                    { Buffer *buf = b; Buffer::Destroy(buf); });
-            m_indirectAll = nullptr;
-        }
-
+        // Instance-only rebuild: buffers that still fit are rewritten in place and the GPU copies go
+        // through RecordPendingInstanceUploads (now, when the caller passes a drained cmd; otherwise
+        // at the front of the next frame's command buffer, with no Submit+Wait). Only the host-visible
+        // mesh-constants / material buffers are recreated, so in-flight frames keep their old copies.
         m_meshCount = 0;
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
@@ -1446,6 +1396,8 @@ namespace pe
         UpdateImageViews();
         CreateMaterialTable();
         CreateMeshConstants(cmd);
+        if (cmd)
+            RecordPendingInstanceUploads(cmd);
     }
 
     int Scene::ReserveArenaCapacity(uint32_t vtxHeadroomBytes, uint32_t idxHeadroomBytes,
@@ -1512,14 +1464,11 @@ namespace pe
             while (newCap < needed)
                 newCap <<= 1;
 
-            // m_indirectAll is created EXACT-sized to m_meshCount by CreateIndirectBuffers (it is
-            // not m_indirectCapacity-padded like the filtered/occlusion buffers). So it must ALWAYS
-            // be regrown to newCap here, even when newCap == m_indirectCapacity (the common case when
-            // the scene already has enough draws that pow2(meshCount) already covers the new draws —
-            // m_indirectCapacity is then unchanged, but m_indirectAll is still only meshCount*stride
-            // and an append at slot meshCount would overrun it). The filtered/occlusion/visibility/
-            // mesh-constants buffers are m_indirectCapacity-sized and only need regrowth when newCap
-            // actually exceeds the old capacity.
+            // m_indirectAll is m_indirectCapacity-sized by CreateIndirectBuffers and kept across
+            // instance rebuilds while it fits, so regrow it only when newCap does not fit. Mesh
+            // constants below are still EXACT-sized to m_meshCount and use the same size guard.
+            if (!m_indirectAll ||
+                static_cast<uint64_t>(m_indirectAll->Size()) < uint64_t(newCap) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE)
             {
                 Buffer *newIndAll = Buffer::Create({
                     .size = newCap * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
@@ -1646,10 +1595,10 @@ namespace pe
                 m_indirectCapacity = newCap;
             }
 
-            // Grow mesh constants (+ DX12 device mirror) UNCONDITIONALLY to newCap. Like
-            // m_indirectAll, these are created EXACT-sized to m_meshCount by CreateMeshConstants,
-            // not m_indirectCapacity-padded — so an append at slot m_meshCount overruns them unless
-            // they are regrown here even when newCap == m_indirectCapacity.
+            // Grow mesh constants (+ DX12 device mirror) to newCap whenever they do not fit. They are
+            // created EXACT-sized to m_meshCount by CreateMeshConstants, not m_indirectCapacity-padded,
+            // so an append at slot m_meshCount overruns them unless they are regrown here even when
+            // newCap == m_indirectCapacity.
             if (m_meshConstants && static_cast<uint32_t>(m_meshConstants->Size() / sizeof(Mesh_Constants)) < newCap)
             {
                 const size_t newMcSize = newCap * sizeof(Mesh_Constants);

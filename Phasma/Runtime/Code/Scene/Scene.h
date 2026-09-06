@@ -126,7 +126,6 @@ namespace pe
         void Update();
         void UpdateCameraRenderState();
         void UpdateGeometryBuffers();
-        void UpdateRasterInstances(); // creates cmd, calls RebuildRasterInstances, submits
         void UpdateTextures();
         bool UpdateDirtyMaterials();                          // returns true when a material update must retry next frame
         MaterialInstance *CreateMaterialInstance(Mesh &mesh); // creates instance from mesh's shared material
@@ -230,7 +229,8 @@ namespace pe
         const NodeSkinnedStrip2DComponent *GetSkinnedStrip2DState(const NodeId *node) const;
         NodeSkinnedStrip2DComponent &GetOrCreateSkinnedStrip2DState(NodeId *node);
         void ClearSkinnedStrip2DState(NodeId *node);
-        void AttachPrimitiveToNode(NodeId *node, ModelAsset *primitiveModel);
+        // shareGeometry=false gives the node private vertices (sprites rewrite their quad UVs in place).
+        void AttachPrimitiveToNode(NodeId *node, ModelAsset *primitiveModel, bool shareGeometry = true);
         NodeId *CreateSkyboxNode(NodeId *parent = nullptr, bool markDirty = true);
         NodeId *GetSkyboxNode() const;
         NodeSkyboxTag *GetSkyboxForNode(const NodeId *node) const;
@@ -446,6 +446,9 @@ namespace pe
         void SetMaterialDirty() { m_materialDirty = true; }
         void SetTexturesDirty() { m_texturesDirty = true; }
         void FlushPendingGpuWork();
+        // GPU side of an instance-only rebuild (indirect commands, visibility seed, DX12 mesh-constants
+        // mirror), recorded at the front of the frame command buffer instead of a Submit+Wait.
+        void RecordPendingInstanceUploads(CommandBuffer *cmd);
         void RecordPendingUvUploads(CommandBuffer *cmd);
         bool TryBindCachedTexture(int meshIndex, int textureSlot, const ResourceHandle<Image> &image);
         void RecordPendingTextureUploads(CommandBuffer *cmd);
@@ -751,13 +754,15 @@ namespace pe
         // One mesh's Mesh_Constants, derived from the current Mesh/material/node state. Shared by the
         // full rebuild (CreateMeshConstants) and the in-place streamed update (UpdateStreamedMesh).
         Mesh_Constants ComputeMeshConstants(uint32_t nodeIndex, int meshIndex) const;
-        void RebuildRasterInstances(CommandBuffer *cmd); // rebuild instance data without geometry buffer
+        void RebuildRasterInstances(CommandBuffer *cmd); // rebuild instance data without geometry buffer; cmd may be null (GPU work deferred)
+        bool RtBuildsWanted() const;                     // RT caps present and render_mode uses ray tracing
 
         // Ray tracing (SceneRayTracing.cpp)
-        void BuildAccelerationStructures(CommandBuffer *cmd); // full BLAS+TLAS rebuild
-        void BuildAllBLASes(CommandBuffer *cmd);              // only BLAS build, populates m_blasByMesh
-        void BuildTLASFromInstances(CommandBuffer *cmd);      // only TLAS build, uses m_blasByMesh
-        void RebuildTLASOnly();                               // creates cmd, rebuilds TLAS, submits
+        void AliasOrDirtyBlas(int meshIndex, int sourceMeshIndex); // geometry-sharing copy reuses the source BLAS
+        void BuildAccelerationStructures(CommandBuffer *cmd);      // full BLAS+TLAS rebuild
+        void BuildAllBLASes(CommandBuffer *cmd);                   // only BLAS build, populates m_blasByMesh
+        void BuildTLASFromInstances(CommandBuffer *cmd);           // only TLAS build, uses m_blasByMesh
+        void RebuildTLASOnly();                                    // creates cmd, rebuilds TLAS, submits
         void RetireTLASUpdateInstanceBuffers();
         size_t RTInstanceDescSize() const;
         Buffer *CreateRTInstanceBuffer(const std::string &name) const;
@@ -768,10 +773,13 @@ namespace pe
         void UpdateNodeMatrix(NodeId *node);
         void DestroyAllNodeEntities();
         void RetireAllNodeIds();
+        void ForgetSingletonNode(const NodeId *node);
 
         // Model geometry
         std::vector<int> AddModelGeometry(ModelAsset *model, int sourceIndex);
         SceneNodeHandle AddPrimitiveDeferred(ModelAsset *model);
+        static bool CanSharePrimitiveGeometry(const ModelAsset *model);
+        static std::string PrimitiveGeometryKey(const ModelAsset &model);
 
         // --- Private variables ---
         PerFrameData m_frameData{};
@@ -925,6 +933,18 @@ namespace pe
         std::vector<NodeRuntime> m_nodeRuntime;
         std::vector<NodeId *> m_freeNodeIds;
         std::vector<NodeId *> m_retiredNodeIds;
+        // Singleton authoring nodes, kept by Add/RemoveComponentFlag + DeleteNode so the Get*Node()
+        // lookups never scan the node array.
+        NodeId *m_skyboxNode = nullptr;
+        NodeId *m_sceneSettingsNode = nullptr;
+        NodeId *m_voxelWorldNode = nullptr;
+        NodeId *m_terrainNode = nullptr;
+
+        // Instance-rebuild GPU work waiting for the next frame command buffer (RecordPendingInstanceUploads).
+        std::vector<PeDrawIndexedIndirectCommand> m_pendingIndirectCommands;
+        bool m_pendingIndirectUpload = false;
+        bool m_pendingVisibilitySeed = false;
+        bool m_pendingMeshConstantsMirror = false;
 
         // Indexed access helpers
         int MeshRefAt(uint32_t index) const

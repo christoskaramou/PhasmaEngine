@@ -380,6 +380,7 @@ namespace pe
 
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
+        scene.RecordPendingInstanceUploads(cmd); // an instance rebuild this frame may not have reached the GPU yet
 
         RecordObjectIdPass(cmd, cache, scene, depth, frame, "ObjectIdPass");
 
@@ -564,6 +565,7 @@ namespace pe
 
             CommandBuffer *cmd = queue->AcquireCommandBuffer();
             cmd->Begin();
+            scene.RecordPendingInstanceUploads(cmd);
             RecordObjectIdPass(cmd, cache, scene, depth, frame, "ObjectIdPickPass");
             // CopyImageToBuffer inserts its own COLOR_ATTACHMENT -> TRANSFER_SRC barrier internally
             // (Vulkan Image::CopyToBuffer / DX12 TransitionForCopy), so no explicit barrier needed.

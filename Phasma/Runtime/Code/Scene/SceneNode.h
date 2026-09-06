@@ -63,6 +63,7 @@ namespace pe
 
         bool skinned = false;
         bool live = true;
+        uint32_t refCount = 0; // nodes referencing this mesh; kept by Set/Add/RemoveMeshRef and DeleteNode
 
         // Discrete LODs: index ranges into the shared index buffer (all share this mesh's vertexOffset,
         // since meshopt produces a subset of the same vertices). lods[0] = full detail; lodCount==1 means
