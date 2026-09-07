@@ -6,7 +6,6 @@
 #include "WGPULimits.h"
 #include "API/RHI.h"
 #include "API/Vulkan/VulkanRhiImpl.h"
-#include <SDL.h>
 
 namespace
 {

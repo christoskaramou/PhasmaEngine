@@ -18,12 +18,6 @@
 #include "Script/Bindings/Lerp/Tween.h"
 #include "UI/RuntimeUi.h"
 
-#include <algorithm>
-#include <cctype>
-#include <chrono>
-#include <cstdlib>
-#include <unordered_set>
-
 namespace pe
 {
     namespace

@@ -1,5 +1,9 @@
 # PhasmaEngine Wiki Log
 
+## 2026-09-07
+
+- WSL/Dozen editor and launcher boot: the solid-color skybox fallback uses a Vulkan transfer clear of all cube faces instead of per-face `vkCmdCopyBufferToImage` (Dozen reports `minImageTransferGranularity (0,0,0)` and rejects a 1x1x1 copy into a 6-face cube). DX12 keeps a packed 6-layer upload. PhasmaLauncher auto-detects WSL and prefers X11/GLX/OpenGL so SDL does not fall through Mesa DRI3/EGL to `swrast`. Vulkan hosts stay on SDL's default driver (Wayland on WSLg) so Dozen can bind the `wl_surface`; shown windows are not created `HIDDEN`, and WSL creation size is clamped instead of maximizing a spanned display. A missing `/mnt/shared_memory` is logged — that is WSLg COPY MODE (taskbar ghost, `[WARN:COPY MODE]` title), fixed with `wsl --shutdown` from Windows. Windows, native Linux, and Android keep their previous paths (`architecture/rendering.md`, `architecture/runtime.md`).
+
 ## 2026-09-06
 
 - Node spawn/despawn no longer drains the GPU: primitives attached to nodes share cached geometry, the instance-only rebuild keeps fitting buffers and records its uploads in the frame command buffer, mesh refcounts replace the delete-time reference scan, BLASes are shared across geometry-sharing meshes and skipped in Raster mode, singleton nodes are cached, and the Hierarchy widget culls off-screen rows (`architecture/runtime.md`). Verified with `tools/node_churn_perf.py` (untracked): 2000 quads churning 20 spawn + 20 delete per frame went 120 ms to 9 ms in the Vulkan editor; Vulkan validation and the DX12 debug layer report nothing during churn or a 200-spawn burst; sponza stays alive in the editor and PhasmaPlayer on both APIs. Sprite spawns: 2000 Lua-created sprites churning 20 per frame measure 27 ms in both Hybrid and Raster (HEAD: 28 ms, but HEAD never uploaded those quads); sprite meshes are skipped in `BuildAllBLASes` because the TLAS never references them.

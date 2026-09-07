@@ -10,27 +10,12 @@
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
-#include <SDL.h>
-#include <algorithm>
-#include <array>
-#include <chrono>
-#include <cctype>
 #include <cfloat>
 #include <cstring>
 #include <cmath>
-#include <cstdio>
 #include <ctime>
-#include <deque>
-#include <filesystem>
-#include <fstream>
 #include <iomanip>
-#include <limits>
 #include <numeric>
-#include <sstream>
-#include <string>
-#include <string_view>
-#include <unordered_map>
-#include <vector>
 
 namespace
 {

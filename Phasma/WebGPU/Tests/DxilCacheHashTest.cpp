@@ -1,7 +1,5 @@
 #include "DxilCacheHash.h"
 
-#include <SDL.h>
-
 int main(int /*argc*/, char * /*argv*/[])
 {
 #if defined(PE_WIN32)

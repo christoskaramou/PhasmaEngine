@@ -7,10 +7,6 @@ extern "C"
 #include "lua.h"
 }
 
-#include <fstream>
-#include <iostream>
-#include <unordered_set>
-
 namespace
 {
     struct Options

@@ -1,13 +1,6 @@
 #include "Animation/AnimationReferenceFrames.h"
 
-#include <algorithm>
-#include <cctype>
 #include <cmath>
-#include <cstdint>
-#include <fstream>
-#include <limits>
-#include <string_view>
-#include <utility>
 
 #include <nlohmann/json.hpp>
 

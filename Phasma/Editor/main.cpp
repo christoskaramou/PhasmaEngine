@@ -3,7 +3,6 @@
 #include "Runtime/RuntimeHost.h"
 
 #if defined(PE_LINUX)
-#include <dlfcn.h>
 static constexpr const char *k_moduleName = "libPhasmaEditorModule.so";
 static constexpr const char *k_versionedModulePrefix = "libPhasmaEditorModule_";
 static constexpr const char *k_versionedModuleSuffix = ".so";

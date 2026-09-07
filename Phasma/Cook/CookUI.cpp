@@ -13,21 +13,8 @@
 #include "Base/Path.h"
 #include "Base/WindowIcon.h"
 
-#include <SDL.h>
 #include <imgui.h>
 #include <imgui_impl_sdl2.h>
-
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cstdio>
-#include <filesystem>
-#include <fstream>
-#include <mutex>
-#include <string>
-#include <thread>
-#include <utility>
-#include <vector>
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -40,7 +27,6 @@
 #else
 #include <cerrno>
 #include <sys/wait.h>
-#include <unistd.h>
 #endif
 
 namespace

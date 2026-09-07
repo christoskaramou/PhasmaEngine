@@ -2,14 +2,13 @@
 #include "API/RHI.h"
 #include "Base/WindowIcon.h"
 #include "Project/ProjectSelection.h"
+#include "Runtime/RuntimeHost.h"
 #include "Runtime/RuntimeStartup.h"
 
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
 #include "rapidjson/ostreamwrapper.h"
 #include "rapidjson/prettywriter.h"
-
-#include <cstring>
 
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
@@ -26,9 +25,7 @@
 #include <shlobj.h>
 #include "SDL_syswm.h"
 #else
-#include <sys/types.h>
 #include <sys/wait.h>
-#include <unistd.h>
 #endif
 
 namespace
@@ -2678,6 +2675,7 @@ namespace
                                          std::string &error)
     {
         (void)targetIndex;
+        pe::ApplyWslSdlVideoHints();
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
         {
             error = std::string("[SDL] launcher init failed: ") + SDL_GetError();

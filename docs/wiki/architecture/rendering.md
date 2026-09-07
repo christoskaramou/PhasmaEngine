@@ -31,6 +31,10 @@ DX12 scaled image blits use the shader path rather than `CopyTextureRegion`. Its
 - A cached `Pipeline` must treat the source `PassInfo` as construction-only state. Runtime command recording should use immutable metadata copied into `Pipeline` at creation time, such as pipeline type and push-constant ranges, instead of reading through the original `PassInfo` reference.
 - Vulkan descriptor auto-binding must still run when rebinding resources for the same cached pipeline. Skipping descriptor binds just because the pipeline object is already current can leave stale descriptor sets in place for repeated transient passes.
 
+## Solid-Color Skybox Fallback
+
+When no HDR path is configured, `SkyBox::LoadSolidColor()` builds a 1x1 cubemap. On Vulkan that fill is a transfer clear of all six faces (`vkCmdClearColorImage`), not six `vkCmdCopyBufferToImage` regions. Some ICDs (Mesa Dozen on WSL) report `minImageTransferGranularity = (0,0,0)`, which requires a whole-subresource copy; a per-face 1x1x1 copy then fails `VUID-vkCmdCopyBufferToImage-imageOffset-07738`. A clear is legal on every Vulkan queue, including Android. DX12 has no matching clear without an RTV, so it keeps a packed 6-layer buffer upload. The HDR equirect-to-cubemap path is compute and is unchanged.
+
 ## Skybox Runtime Reload
 
 Runtime `skybox.load(...)` exercises this path: `SkyBox::LoadSkyBox()` loads an equirect HDR, dispatches `EquirectangularToCubemap.hlsl` into cubemap mip 0, then dispatches `PrefilterCubemap.hlsl` through another transient compute `PassInfo` to fill roughness-filtered mips for IBL. Startup and runtime reloads should both produce nonzero cubemap memory; a black cubemap after runtime reload points first at descriptor/pipeline binding and transient-pass lifetime.

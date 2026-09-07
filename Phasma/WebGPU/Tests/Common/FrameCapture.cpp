@@ -1,6 +1,5 @@
 #include "FrameCapture.h"
 
-#include <SDL.h>
 #include <cstring>
 
 namespace pwgpu::test

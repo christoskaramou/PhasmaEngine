@@ -40,7 +40,6 @@
 #else
 #include <cerrno>
 #include <sys/wait.h>
-#include <unistd.h>
 #endif
 
 using namespace pmcp;

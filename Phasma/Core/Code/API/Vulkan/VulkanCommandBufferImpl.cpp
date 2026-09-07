@@ -166,7 +166,7 @@ namespace pe
             range.baseMipLevel = 0;
             range.levelCount = 1;
             range.baseArrayLayer = 0;
-            range.layerCount = 1;
+            range.layerCount = image->GetArrayLayers();
 
             BeginDebugRegion("Clear Color: " + image->m_name);
             m_apiHandle.clearColorImage(pe::GetVulkanImage(image), vk::ImageLayout::eTransferDstOptimal, &clearValue, 1, &range);

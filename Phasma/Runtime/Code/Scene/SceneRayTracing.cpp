@@ -7,7 +7,6 @@
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vertex.h"
 
-#include <algorithm>
 #include <cstring>
 
 #if defined(PE_WIN32)

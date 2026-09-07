@@ -13,12 +13,8 @@
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui.h"
 
-#include <algorithm>
 #include <cmath>
-#include <fstream>
 #include <iomanip>
-#include <limits>
-#include <unordered_set>
 
 namespace pe
 {

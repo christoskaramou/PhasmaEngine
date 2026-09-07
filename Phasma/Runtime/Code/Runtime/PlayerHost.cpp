@@ -33,7 +33,6 @@
 #if defined(PE_PLAYER_MCP)
 #include "Agent/PlayerMcp.h"
 #include <nlohmann/json.hpp>
-#include <fstream>
 #endif
 
 #if defined(PE_ANDROID)

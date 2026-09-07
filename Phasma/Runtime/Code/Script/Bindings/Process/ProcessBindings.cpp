@@ -4,11 +4,9 @@
 #if defined(PE_WIN32)
 #include <windows.h>
 #else
-#include <fcntl.h>
 #include <signal.h>
 #include <sys/prctl.h>
 #include <sys/wait.h>
-#include <unistd.h>
 #endif
 
 namespace pe

@@ -57,14 +57,12 @@
 #include "UndoRedo.h"
 #include <nlohmann/json.hpp>
 #include "imgui/imgui_internal.h"
-#include <algorithm>
 
 #if defined(PE_WIN32)
 #include <windows.h>
 #else
 #include <cerrno>
 #include <sys/wait.h>
-#include <unistd.h>
 #endif
 
 namespace pe

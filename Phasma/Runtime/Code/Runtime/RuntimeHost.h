@@ -2,8 +2,6 @@
 
 #include "API/RHITypes.h"
 
-
-
 namespace pe
 {
     struct RuntimeWindowDesc
@@ -17,6 +15,9 @@ namespace pe
         bool pumpEventsAfterCreate = true;
         bool logDisplaySelection = false;
     };
+
+    [[nodiscard]] bool IsWslEnvironment();
+    void ApplyWslSdlVideoHints();
 
     [[nodiscard]] bool TryParseRuntimeDisplayIndex(const char *value, int &displayIndex);
     [[nodiscard]] bool TryParseRuntimeDisplayIndexArg(int argc,

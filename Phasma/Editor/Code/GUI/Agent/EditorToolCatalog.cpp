@@ -5,9 +5,6 @@
 #include "Phasma/MCP/Utils.h"
 #include "Phasma/MCP/Codebase/BM25Index.h"
 
-#include <optional>
-#include <sstream>
-
 #if defined(PE_WIN32)
 #include <windows.h>
 #endif

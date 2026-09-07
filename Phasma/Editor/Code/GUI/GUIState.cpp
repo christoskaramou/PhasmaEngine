@@ -7,7 +7,6 @@
 
 #if !defined(_WIN32)
 #include <sys/wait.h>
-#include <unistd.h>
 #endif
 
 namespace

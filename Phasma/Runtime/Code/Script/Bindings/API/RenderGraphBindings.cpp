@@ -5,8 +5,6 @@
 #include "Render/SceneRendererHost.h"
 #include "Render/ScriptRenderPasses.h"
 
-#include <memory>
-
 namespace pe
 {
     static constexpr int kScriptRenderPassMaxErrors = 3;

@@ -5,7 +5,6 @@
 #include "API/Sampler.h"
 #include "API/Swapchain.h"
 
-#include <algorithm>
 #include <cmath>
 
 namespace pe

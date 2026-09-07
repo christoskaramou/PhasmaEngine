@@ -7,9 +7,6 @@
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui.h"
 
-#include <algorithm>
-#include <cctype>
-
 namespace pe
 {
     namespace

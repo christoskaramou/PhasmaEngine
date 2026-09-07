@@ -8,7 +8,6 @@
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12ImageViewImpl.h"
 #endif
-#include <SDL.h>
 
 // clang-format off
 static const uint32_t kDoubleShaderSpirv[] = {

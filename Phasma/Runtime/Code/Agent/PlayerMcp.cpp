@@ -8,13 +8,6 @@
 #include "ECS/Context.h"
 #include "Script/ScriptSystem.h"
 
-#include <atomic>
-#include <chrono>
-#include <condition_variable>
-#include <filesystem>
-#include <mutex>
-#include <thread>
-
 namespace pe
 {
     namespace

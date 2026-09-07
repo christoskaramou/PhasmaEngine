@@ -2,8 +2,6 @@
 #include "Base/Log.h"
 #include "Base/Path.h"
 
-#include <SDL.h>
-
 namespace pe
 {
     void SetPhasmaWindowIcon(SDL_Window *window)

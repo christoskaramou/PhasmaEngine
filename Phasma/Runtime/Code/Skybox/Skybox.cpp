@@ -274,10 +274,28 @@ namespace pe
 
         m_cubeMap->CreateSRV(PE_IMAGE_VIEW_TYPE_CUBE);
         m_cubeMap->SetSampler(CreateSkyboxSampler(name + "_Sampler"));
+        m_cubeMap->SetClearColor(color);
 
-        std::array<float, 4> pixel = {color.x, color.y, color.z, color.w};
-        for (uint32_t i = 0; i < m_cubeMap->GetArrayLayers(); ++i)
-            cmd->CopyDataToImageStaged(m_cubeMap, pixel.data(), sizeof(float) * pixel.size(), i, 1);
+        // Dozen (and any queue with minImageTransferGranularity 0) rejects
+        // per-face vkCmdCopyBufferToImage into a cube. A transfer clear of
+        // all layers is legal on every Vulkan device; DX12 has no RTV here
+        // so it keeps a packed 6-layer copy.
+        if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
+        {
+            cmd->ClearColors({m_cubeMap});
+        }
+        else
+        {
+            std::array<float, 24> pixels{};
+            for (uint32_t i = 0; i < 6; ++i)
+            {
+                pixels[i * 4 + 0] = color.x;
+                pixels[i * 4 + 1] = color.y;
+                pixels[i * 4 + 2] = color.z;
+                pixels[i * 4 + 3] = color.w;
+            }
+            cmd->CopyDataToImageStaged(m_cubeMap, pixels.data(), sizeof(pixels), 0, 6);
+        }
 
         TransitionSkyboxToShaderRead(cmd, m_cubeMap);
     }

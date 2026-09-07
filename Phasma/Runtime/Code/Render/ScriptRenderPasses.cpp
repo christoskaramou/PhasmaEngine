@@ -1,8 +1,5 @@
 #include "Render/ScriptRenderPasses.h"
 
-#include <algorithm>
-#include <utility>
-
 namespace pe
 {
     namespace

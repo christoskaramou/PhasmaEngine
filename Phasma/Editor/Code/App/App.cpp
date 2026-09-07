@@ -42,8 +42,6 @@
 
 #include <nlohmann/json.hpp>
 
-#include <vector>
-
 namespace pe
 {
     namespace

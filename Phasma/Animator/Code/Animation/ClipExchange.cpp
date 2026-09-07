@@ -11,8 +11,6 @@
 #else
 #include <csignal>
 #include <sys/wait.h>
-#include <thread>
-#include <unistd.h>
 #endif
 
 namespace pe::ClipExchange

@@ -17,8 +17,6 @@
 #include "ShadowPass.h"
 #include "Skybox/Skybox.h"
 
-#include <algorithm>
-
 namespace pe
 {
     namespace
