@@ -5,9 +5,7 @@
 #include "Phasma/MCP/Utils.h"
 #include "Phasma/MCP/Codebase/BM25Index.h"
 
-#if defined(PE_WIN32)
-#include <windows.h>
-#endif
+#include "Base/Process.h"
 
 namespace pe
 {
@@ -42,98 +40,11 @@ namespace pe
             return false;
         }
 
-        std::string ShellQuoteWindows(const std::string &arg)
-        {
-            std::string out = "\"";
-            for (char c : arg)
-            {
-                if (c == '"')
-                    out += "\\\"";
-                else
-                    out += c;
-            }
-            if (!arg.empty() && arg.back() == '\\')
-                out += '\\';
-            out += "\"";
-            return out;
-        }
-
-        std::string ShellQuotePosix(const std::string &arg)
-        {
-            std::string out = "'";
-            for (char c : arg)
-            {
-                if (c == '\'')
-                    out += "'\\''";
-                else
-                    out += c;
-            }
-            out += "'";
-            return out;
-        }
-
-        std::optional<std::string> RunProcessCapture(const std::string &commandLine)
-        {
-#if defined(PE_WIN32)
-            SECURITY_ATTRIBUTES sa{};
-            sa.nLength = sizeof(sa);
-            sa.bInheritHandle = TRUE;
-
-            HANDLE readPipe = nullptr;
-            HANDLE writePipe = nullptr;
-            if (!CreatePipe(&readPipe, &writePipe, &sa, 0))
-                return std::nullopt;
-            SetHandleInformation(readPipe, HANDLE_FLAG_INHERIT, 0);
-
-            STARTUPINFOA si{};
-            si.cb = sizeof(si);
-            si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
-            si.hStdOutput = writePipe;
-            si.hStdError = writePipe;
-            si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-            si.wShowWindow = SW_HIDE;
-
-            PROCESS_INFORMATION pi{};
-            std::vector<char> cmd(commandLine.begin(), commandLine.end());
-            cmd.push_back('\0');
-            if (!CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr, nullptr, &si,
-                                &pi))
-            {
-                CloseHandle(readPipe);
-                CloseHandle(writePipe);
-                return std::nullopt;
-            }
-
-            CloseHandle(writePipe);
-            std::string output;
-            char buffer[4096];
-            DWORD read = 0;
-            while (ReadFile(readPipe, buffer, sizeof(buffer), &read, nullptr) && read > 0)
-                output.append(buffer, buffer + read);
-
-            WaitForSingleObject(pi.hProcess, INFINITE);
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
-            CloseHandle(readPipe);
-            return output;
-#else
-            FILE *pipe = popen(commandLine.c_str(), "r");
-            if (!pipe)
-                return std::nullopt;
-            std::string output;
-            char buffer[4096];
-            while (fgets(buffer, sizeof(buffer), pipe))
-                output += buffer;
-            pclose(pipe);
-            return output;
-#endif
-        }
-
         CallToolResult GrepProjectWithRg(const std::filesystem::path &searchPath, const std::string &projectRoot,
                                          const std::string &pattern, const std::string &globFilter, bool useRegex,
                                          bool caseSensitive, int maxResults)
         {
-            std::vector<std::string> args = {"rg", "--json", "--max-count", std::to_string(maxResults),
+            std::vector<std::string> args = {"--json", "--max-count", std::to_string(maxResults),
                                              "--glob", "!.git", "--glob", "!build", "--glob", "!build-*"};
             if (!caseSensitive)
                 args.push_back("-i");
@@ -148,25 +59,15 @@ namespace pe
             args.push_back(pattern);
             args.push_back(searchPath.string());
 
-            std::string commandLine;
-            for (size_t i = 0; i < args.size(); ++i)
-            {
-                if (i > 0)
-                    commandLine += ' ';
-#if defined(PE_WIN32)
-                commandLine += ShellQuoteWindows(args[i]);
-#else
-                commandLine += ShellQuotePosix(args[i]);
-#endif
-            }
-
-            const std::optional<std::string> captured = RunProcessCapture(commandLine);
-            if (!captured)
+            ProcessOptions options;
+            options.captureOutput = true;
+            const ProcessResult rg = RunProcess("rg", args, options);
+            if (!rg.started)
                 return CallToolResult::Error("rg not available or failed to run");
 
             nlohmann::json matches = nlohmann::json::array();
             int count = 0;
-            std::istringstream stream(*captured);
+            std::istringstream stream(rg.output);
             std::string line;
             while (std::getline(stream, line))
             {

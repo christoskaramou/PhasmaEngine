@@ -28,18 +28,7 @@
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
 #include "stb_image.h"
-
-#if defined(PE_WIN32)
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#else
-#include <sys/wait.h>
-#endif
+#include "Base/Process.h"
 
 using namespace pmcp;
 
@@ -511,12 +500,6 @@ namespace pe
             return std::filesystem::path(Path::Assets) / p;
         }
 
-        static std::string PathUtf8(const std::filesystem::path &path)
-        {
-            const auto u8 = path.u8string();
-            return std::string(reinterpret_cast<const char *>(u8.c_str()), u8.size());
-        }
-
         static std::filesystem::path U8Path(const std::string &utf8)
         {
             return std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));
@@ -816,45 +799,8 @@ namespace pe
             if (!std::filesystem::exists(exe, ec))
                 return false;
 
-#if defined(PE_WIN32)
-            std::wstring cmd = L"\"" + exe.wstring() + L"\" \"--batch\" \"" + manifest.wstring() + L"\"";
-            std::vector<wchar_t> cmdBuf(cmd.begin(), cmd.end());
-            cmdBuf.push_back(L'\0');
-
-            STARTUPINFOW si{};
-            si.cb = sizeof(si);
-            PROCESS_INFORMATION pi{};
-            if (!CreateProcessW(exe.wstring().c_str(), cmdBuf.data(), nullptr, nullptr, FALSE,
-                                CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
-                return false;
-
-            WaitForSingleObject(pi.hProcess, INFINITE);
-            DWORD exitCode = 1;
-            GetExitCodeProcess(pi.hProcess, &exitCode);
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
-            return exitCode == 0;
-#else
-            std::string exeStr = exe.string();
-            std::string manifestStr = manifest.string();
-            std::array<char *, 4> argv = {exeStr.data(), const_cast<char *>("--batch"), manifestStr.data(), nullptr};
-            const pid_t pid = fork();
-            if (pid < 0)
-                return false;
-            if (pid == 0)
-            {
-                execv(exeStr.c_str(), argv.data());
-                _exit(127);
-            }
-            int status = 0;
-            int rc = 0;
-            do
-            {
-                rc = waitpid(pid, &status, 0);
-            }
-            while (rc < 0 && errno == EINTR);
-            return rc >= 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0;
-#endif
+            const ProcessResult result = RunProcess(exe, {"--batch", PathUtf8(manifest)});
+            return result.started && result.exitCode == 0;
         }
 
         struct ImportJob

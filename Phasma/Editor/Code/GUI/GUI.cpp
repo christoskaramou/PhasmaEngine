@@ -57,12 +57,7 @@
 #include "UndoRedo.h"
 #include <nlohmann/json.hpp>
 #include "imgui/imgui_internal.h"
-
-#if defined(PE_WIN32)
-#include <windows.h>
-#else
-#include <sys/wait.h>
-#endif
+#include "Base/Process.h"
 
 namespace pe
 {
@@ -1617,15 +1612,6 @@ namespace pe
         ImGui::EndMenu();
     }
 
-    // UTF-8-safe path display. std::filesystem::path::string()/generic_string() THROW on Windows when a
-    // path contains characters with no mapping in the active ANSI code page (e.g. "Unicode❤♻Test");
-    // u8string() always succeeds. Use this for any path that goes into a log/format string.
-    static std::string PathUtf8(const std::filesystem::path &p)
-    {
-        const auto u8 = p.u8string();
-        return std::string(reinterpret_cast<const char *>(u8.c_str()), u8.size());
-    }
-
     // Incremental import: skip a verbatim copy when the destination already mirrors the source
     // (exists, identical size, and not older). Name + size + mtime identity check.
     static bool CopyTargetUpToDate(const std::filesystem::path &src, const std::filesystem::path &dst)
@@ -1689,59 +1675,16 @@ namespace pe
             return false;
         }
 
-#if defined(PE_WIN32)
-        // Wide, quoted command line so Unicode paths reach PhasmaCook intact.
-        std::wstring cmd = L"\"" + exe.wstring() + L"\"";
+        std::vector<std::string> argv;
         for (const std::filesystem::path &arg : args)
-            cmd += L" \"" + arg.wstring() + L"\"";
-        std::vector<wchar_t> cmdBuf(cmd.begin(), cmd.end());
-        cmdBuf.push_back(L'\0');
-
-        STARTUPINFOW si{};
-        si.cb = sizeof(si);
-        PROCESS_INFORMATION pi{};
-        if (!CreateProcessW(exe.wstring().c_str(), cmdBuf.data(), nullptr, nullptr, FALSE,
-                            CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
+            argv.push_back(PathUtf8(arg));
+        const ProcessResult result = RunProcess(exe, argv);
+        if (!result.started)
         {
-            PE_WARN("[Import] Failed to launch PhasmaCook (error %lu)", static_cast<unsigned long>(GetLastError()));
+            PE_WARN("[Import] Failed to launch PhasmaCook");
             return false;
         }
-        WaitForSingleObject(pi.hProcess, INFINITE);
-        DWORD exitCode = 1;
-        GetExitCodeProcess(pi.hProcess, &exitCode);
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-        return exitCode == 0;
-#else
-        std::vector<std::string> argStrings;
-        argStrings.push_back(exe.string());
-        for (const std::filesystem::path &arg : args)
-            argStrings.push_back(arg.string());
-        std::vector<char *> argv;
-        for (std::string &s : argStrings)
-            argv.push_back(s.data());
-        argv.push_back(nullptr);
-
-        const pid_t pid = fork();
-        if (pid < 0)
-        {
-            PE_WARN("[Import] fork failed launching PhasmaCook");
-            return false;
-        }
-        if (pid == 0)
-        {
-            execv(argStrings[0].c_str(), argv.data());
-            _exit(127);
-        }
-        int status = 0;
-        int rc;
-        do
-        {
-            rc = waitpid(pid, &status, 0);
-        }
-        while (rc < 0 && errno == EINTR);
-        return rc >= 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0;
-#endif
+        return result.exitCode == 0;
     }
 
     int GUI::CookModelsToPemesh(const std::vector<std::pair<std::filesystem::path, std::filesystem::path>> &jobs)

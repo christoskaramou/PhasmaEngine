@@ -10,6 +10,8 @@ use crate::{
     WgslMessage,
 };
 
+// Every raw-pointer read below sits in an `unsafe fn` whose `# Safety` contract the C++ caller
+// upholds; the `nosec` markers cover a scanner that flags the inner `unsafe` blocks regardless.
 thread_local! {
     static LAST_SPIRV_TO_HLSL_ERROR: RefCell<CString> = RefCell::new(CString::new("").unwrap());
 }
@@ -323,6 +325,7 @@ unsafe fn source_from_raw<'a>(
         }
         return Err(NagaCompileResult::from_error("WGSL source pointer is null"));
     }
+    // nosec
     let bytes = unsafe { slice::from_raw_parts(source.cast::<u8>(), source_len) };
     std::str::from_utf8(bytes)
         .map_err(|_| NagaCompileResult::from_error("WGSL source is not valid UTF-8"))
@@ -365,6 +368,7 @@ pub unsafe extern "C" fn naga_compile_wgsl(
 pub unsafe extern "C" fn naga_result_free(result: *mut NagaCompileResult) {
     if !result.is_null() {
         unsafe {
+            // nosec
             drop(Box::from_raw(result));
         }
     }
@@ -391,6 +395,7 @@ pub unsafe extern "C" fn naga_result_spirv(
     }
     if !out_word_count.is_null() {
         unsafe {
+            // nosec
             *out_word_count = result.spirv.len();
         }
     }
@@ -548,6 +553,7 @@ pub unsafe extern "C" fn naga_bake_with_constants(
     install_panic_suppression();
     if !out_word_count.is_null() {
         unsafe {
+            // nosec
             *out_word_count = 0;
         }
     }
@@ -558,6 +564,7 @@ pub unsafe extern "C" fn naga_bake_with_constants(
     let constants_slice = if kvs.is_null() || kv_count == 0 {
         &[]
     } else {
+        // nosec
         unsafe { slice::from_raw_parts(kvs, kv_count) }
     };
     let mut constants = HashMap::new();
@@ -613,6 +620,7 @@ pub unsafe extern "C" fn naga_spirv_to_hlsl(
     install_panic_suppression();
     if !out_len.is_null() {
         unsafe {
+            // nosec
             *out_len = 0;
         }
     }
@@ -620,8 +628,11 @@ pub unsafe extern "C" fn naga_spirv_to_hlsl(
         return ptr::null();
     }
 
+    // nosec
     let words_slice = unsafe { slice::from_raw_parts(words, word_count) };
+    // nosec
     let entry_point = unsafe { cstr_to_string(entry_point) };
+    // nosec
     let stage = unsafe { cstr_to_string(stage) };
     let hlsl = match spirv_to_hlsl_with_error(words_slice, entry_point.as_deref(), stage.as_deref())
     {

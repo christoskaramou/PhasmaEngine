@@ -1,53 +1,32 @@
 #include "GUIState.h"
+#include "Base/Process.h"
 
 #if defined(_WIN32)
 #include <windows.h>
 #include <shellapi.h>
 #endif
 
-#if !defined(_WIN32)
-#include <sys/wait.h>
-#endif
-
 namespace
 {
-#if !defined(_WIN32)
-    void OpenExternalPathPosix(const std::string &path)
+    // "open" would run these instead of viewing them. Reveal in File Manager still reaches them.
+    bool RefusesToOpen(const std::filesystem::path &path)
     {
-        if (path.empty())
-            return;
-
-        // Only open paths that exist on disk to prevent command injection
-        if (!std::filesystem::exists(path))
-            return;
-
-        // Resolve to a canonical absolute path to prevent path traversal
-        std::error_code ec;
-        auto canonical = std::filesystem::canonical(path, ec);
-        if (ec)
-            return;
-
-        std::string safePath = canonical.string();
-
-#if defined(__APPLE__)
-        const char *opener = "open";
+#if defined(_WIN32)
+        std::string ext = pe::PathUtf8(path.extension());
+        for (char &c : ext)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        static constexpr const char *kRunsOnOpen[] = {".exe", ".com", ".scr", ".pif", ".bat", ".cmd", ".ps1",
+                                                      ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".msc",
+                                                      ".msi", ".msp", ".hta", ".cpl", ".lnk", ".url", ".reg"};
+        for (const char *runs : kRunsOnOpen)
+            if (ext == runs)
+                return true;
+        return false;
 #else
-        const char *opener = "xdg-open";
+        return path.extension() == ".desktop" ||
+               (std::filesystem::is_regular_file(path) && access(path.c_str(), X_OK) == 0);
 #endif
-
-        pid_t pid = fork();
-        if (pid == 0)
-        {
-            execlp(opener, opener, safePath.c_str(), static_cast<char *>(nullptr));
-            _exit(127);
-        }
-        if (pid > 0)
-        {
-            int status = 0;
-            waitpid(pid, &status, 0);
-        }
     }
-#endif
 } // namespace
 
 namespace pe
@@ -87,27 +66,30 @@ namespace pe
         if (absPath.empty())
             return;
 
-        // Only open paths that exist on disk to prevent command injection
-        if (!std::filesystem::exists(absPath))
-            return;
-
-        // Resolve to canonical absolute path to prevent path traversal
+        // Only an existing path, made canonical: nothing relative and nothing that is not on disk.
         std::error_code ec;
-        auto canonical = std::filesystem::canonical(absPath, ec);
+        const std::filesystem::path canonical =
+            std::filesystem::canonical(std::filesystem::path(reinterpret_cast<const char8_t *>(absPath.c_str())), ec);
         if (ec)
             return;
+        if (RefusesToOpen(canonical))
+        {
+            PE_WARN("[Editor] Not opening executable content %s; use Reveal in File Manager", PathUtf8(canonical).c_str());
+            return;
+        }
 
-#if defined(_WIN32)
-        std::string pathCopy = canonical.string();
-        ThreadPool::GUI.Enqueue([pathCopy]()
+        ThreadPool::GUI.Enqueue([canonical]()
                                 {
-                                    std::filesystem::path path(reinterpret_cast<const char8_t *>(pathCopy.c_str()));
-                                    ShellExecuteW(nullptr, L"open", path.wstring().c_str(), nullptr, nullptr, SW_SHOW); });
+#if defined(_WIN32)
+                                    // Verb "open" on one canonical, existing, non-executable file or folder.
+                                    // nosec
+                                    ShellExecuteW(nullptr, L"open", canonical.wstring().c_str(), nullptr, nullptr, SW_SHOW);
+#elif defined(__APPLE__)
+                                    RunProcess("open", {PathUtf8(canonical)});
 #else
-        std::string pathCopy = absPath;
-        ThreadPool::GUI.Enqueue([pathCopy]()
-                                { OpenExternalPathPosix(pathCopy); });
+                                    RunProcess("xdg-open", {PathUtf8(canonical)});
 #endif
+                                });
     }
 
     void GUIState::UpdateAssetPreview(AssetPreviewType type, const std::string &label, const std::string &fullPath)

@@ -13,6 +13,7 @@
 #include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
+#include "Base/Process.h"
 #if defined(PE_WIN32)
 #include <windows.h>
 #include <shellapi.h>
@@ -667,11 +668,7 @@ namespace pe
 
     void FileBrowser::OpenWithSystem(const std::filesystem::path &path)
     {
-#if defined(PE_WIN32)
-        ShellExecuteW(nullptr, L"open", path.wstring().c_str(), nullptr, nullptr, SW_SHOW);
-#elif defined(PE_LINUX)
-        GUIState::OpenExternalPath(path.string());
-#endif
+        GUIState::OpenExternalPath(PathUtf8(path));
     }
 
     void FileBrowser::OpenInFileManager(const std::filesystem::path &path)
@@ -679,17 +676,20 @@ namespace pe
 #if defined(PE_WIN32)
         if (std::filesystem::is_regular_file(path))
         {
-            // Open Explorer with the file selected
+            // Fixed executable, one quoted file path as its argument: Explorer with the file selected.
             std::wstring params = L"/select,\"" + path.wstring() + L"\"";
+            // nosec
             ShellExecuteW(nullptr, L"open", L"explorer.exe", params.c_str(), nullptr, SW_SHOW);
         }
-        else
+        else if (std::filesystem::is_directory(path))
         {
-            ShellExecuteW(nullptr, L"open", path.wstring().c_str(), nullptr, nullptr, SW_SHOW);
+            // The "explore" verb only ever opens a folder; it does nothing for a file.
+            // nosec
+            ShellExecuteW(nullptr, L"explore", path.wstring().c_str(), nullptr, nullptr, SW_SHOW);
         }
 #elif defined(PE_LINUX)
         const auto target = std::filesystem::is_directory(path) ? path : path.parent_path();
-        GUIState::OpenExternalPath(target.string());
+        GUIState::OpenExternalPath(PathUtf8(target));
 #endif
     }
 

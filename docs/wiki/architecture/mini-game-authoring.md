@@ -261,11 +261,11 @@ forward roadmap.
    default **Empty** template is created natively in C++ — the `phasma_project.json`
    manifest via `ProjectConfig::WriteManifest`, plus a minimal camera + sun startup
    scene — with no external dependency. Other templates (currently **Topdown
-   mini-game**) shell out to `new_game.py`; that shell-out is cross-platform
-   (CreateProcess on Windows, `fork`/`exec` on Linux/WSL, mirroring the launcher's
-   existing process-launch split) and finds `tools/new_game.py` by walking up from
-   the launcher executable, so it needs Python on `PATH` and the engine tree
-   reachable.
+   mini-game**) run `new_game.py` through `pe::RunProcess` (`Base/Process.h`, the
+   engine's single child-process helper: an argv, never a shell; CreateProcess with
+   an explicit application path on Windows, `fork`/`exec` on Linux/WSL) and find
+   `tools/new_game.py` by walking up from the launcher executable, so they need
+   Python on `PATH` and the engine tree reachable.
 
 ### Deltas from the proposal above
 

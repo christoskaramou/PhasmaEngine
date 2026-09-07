@@ -4,13 +4,9 @@
 #include "Scene/ModelAsset.h"
 #include "Scene/ModelAssetCooked.h"
 
-#include <nlohmann/json.hpp>
+#include "Base/Process.h"
 
-#if defined(PE_WIN32)
-#include <windows.h>
-#else
-#include <sys/wait.h>
-#endif
+#include <nlohmann/json.hpp>
 
 namespace pe::ClipExchange
 {
@@ -482,65 +478,18 @@ namespace pe::ClipExchange
             error = "cannot create the output directory";
             return false;
         }
-        bool ok = false, timedOut = false;
-#if defined(PE_WIN32)
-        std::wstring cmd = L"\"" + exe.wstring() + L"\" \"" + source.wstring() + L"\" \"" + output.wstring() + L"\"";
-        std::vector<wchar_t> buffer(cmd.begin(), cmd.end());
-        buffer.push_back(L'\0');
-        STARTUPINFOW si{};
-        si.cb = sizeof(si);
-        PROCESS_INFORMATION pi{};
-        if (!CreateProcessW(exe.wstring().c_str(), buffer.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr,
-                            nullptr, &si, &pi))
+        ProcessOptions options;
+        options.timeoutMs = 120000;
+        const ProcessResult run = RunProcess(exe, {PathUtf8(source), PathUtf8(output)}, options);
+        if (!run.started)
         {
             error = "could not start PhasmaCook";
             return false;
         }
-        const DWORD waitResult = WaitForSingleObject(pi.hProcess, 120000);
-        timedOut = waitResult == WAIT_TIMEOUT;
-        if (timedOut)
+        if (run.exitCode != 0 || !std::filesystem::exists(output, ec))
         {
-            TerminateProcess(pi.hProcess, 1);
-            WaitForSingleObject(pi.hProcess, 5000);
-        }
-        DWORD exitCode = 1;
-        if (waitResult == WAIT_OBJECT_0)
-            GetExitCodeProcess(pi.hProcess, &exitCode);
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-        ok = waitResult == WAIT_OBJECT_0 && exitCode == 0;
-#else
-        const std::string exeStr = exe.string(), sourceStr = source.string(), outStr = output.string();
-        const pid_t pid = fork();
-        if (pid < 0)
-        {
-            error = "could not start PhasmaCook";
-            return false;
-        }
-        if (pid == 0)
-        {
-            execl(exeStr.c_str(), exeStr.c_str(), sourceStr.c_str(), outStr.c_str(), nullptr);
-            _exit(127);
-        }
-        int status = 0;
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::minutes(2);
-        pid_t waitResult = 0;
-        while ((waitResult = waitpid(pid, &status, WNOHANG)) == 0 && std::chrono::steady_clock::now() < deadline)
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        if (waitResult == 0)
-            waitResult = waitpid(pid, &status, WNOHANG);
-        timedOut = waitResult == 0;
-        if (timedOut)
-        {
-            kill(pid, SIGKILL);
-            waitpid(pid, &status, 0);
-        }
-        ok = waitResult == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
-#endif
-        if (!ok || !std::filesystem::exists(output, ec))
-        {
-            error = timedOut ? "PhasmaCook timed out while importing " + source.filename().string()
-                             : "PhasmaCook could not import " + source.filename().string();
+            error = run.timedOut ? "PhasmaCook timed out while importing " + source.filename().string()
+                                 : "PhasmaCook could not import " + source.filename().string();
             return false;
         }
         return true;

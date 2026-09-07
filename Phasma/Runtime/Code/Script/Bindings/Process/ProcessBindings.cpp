@@ -1,5 +1,6 @@
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
+#include "Base/Process.h"
 
 #if defined(PE_WIN32)
 #include <windows.h>
@@ -86,13 +87,15 @@ namespace pe
                 si.hStdError = childOut; // one pipe for both: a second one is a classic deadlock
                 si.wShowWindow = SW_HIDE;
 
-                std::wstring cmd = L"\"" + exe.wstring() + L"\"";
+                std::wstring cmd = QuoteWindowsArg(exe.wstring());
                 for (const std::string &a : args)
-                    cmd += L" " + std::wstring(a.begin(), a.end());
+                    cmd += L' ' + QuoteWindowsArg(std::filesystem::path(reinterpret_cast<const char8_t *>(a.c_str())).wstring());
                 std::vector<wchar_t> cmdBuf(cmd.begin(), cmd.end());
                 cmdBuf.push_back(L'\0');
 
                 PROCESS_INFORMATION pi{};
+                // Explicit application path under Assets/, CRT-quoted argv, no shell.
+                // nosec
                 BOOL ok = CreateProcessW(exe.wstring().c_str(), cmdBuf.data(), nullptr, nullptr, TRUE,
                                          CREATE_NO_WINDOW, nullptr, exe.parent_path().wstring().c_str(), &si, &pi);
                 // The child owns these now; the parent must let go or reads never terminate.
@@ -151,6 +154,8 @@ namespace pe
                     for (std::string &a : argv)
                         raw.push_back(a.data());
                     raw.push_back(nullptr);
+                    // A real argv into an executable under Assets/; no shell.
+                    // nosec
                     execv(exe.c_str(), raw.data());
                     _exit(127);
                 }
@@ -325,7 +330,7 @@ namespace pe
                     std::filesystem::path exe = ResolveAssetsPath(path);
                     if (!IsUnderAssets(exe))
                         return {false, sol::make_object(lua, "path is outside Assets/")};
-                    if (!std::filesystem::exists(exe))
+                    if (!std::filesystem::is_regular_file(exe))
                         return {false, sol::make_object(lua, "not found: " + exe.string())};
 
                     std::vector<std::string> args;

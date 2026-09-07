@@ -16,17 +16,7 @@
 #include <imgui.h>
 #include <imgui_impl_sdl2.h>
 
-#if defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#else
-#include <sys/wait.h>
-#endif
+#include "Base/Process.h"
 
 namespace
 {
@@ -141,50 +131,11 @@ namespace
     // in the (hidden) child process; the UI itself stays pure SDL_Renderer.
     bool RunPhasmaCook(const std::filesystem::path &exe, const std::vector<std::filesystem::path> &args)
     {
-#if defined(_WIN32)
-        std::wstring cmd = L"\"" + exe.wstring() + L"\"";
+        std::vector<std::string> argv;
         for (const std::filesystem::path &a : args)
-            cmd += L" \"" + a.wstring() + L"\"";
-        std::vector<wchar_t> buf(cmd.begin(), cmd.end());
-        buf.push_back(L'\0');
-        STARTUPINFOW si{};
-        si.cb = sizeof(si);
-        PROCESS_INFORMATION pi{};
-        if (!CreateProcessW(exe.wstring().c_str(), buf.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
-                            nullptr, nullptr, &si, &pi))
-            return false;
-        WaitForSingleObject(pi.hProcess, INFINITE);
-        DWORD code = 1;
-        GetExitCodeProcess(pi.hProcess, &code);
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-        return code == 0;
-#else
-        std::vector<std::string> strings;
-        strings.push_back(exe.string());
-        for (const std::filesystem::path &a : args)
-            strings.push_back(a.string());
-        std::vector<char *> argv;
-        for (std::string &s : strings)
-            argv.push_back(s.data());
-        argv.push_back(nullptr);
-        const pid_t pid = fork();
-        if (pid < 0)
-            return false;
-        if (pid == 0)
-        {
-            execv(strings[0].c_str(), argv.data());
-            _exit(127);
-        }
-        int status = 0;
-        int rc;
-        do
-        {
-            rc = waitpid(pid, &status, 0);
-        }
-        while (rc < 0 && errno == EINTR);
-        return rc >= 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0;
-#endif
+            argv.push_back(PathUtf8(a));
+        const pe::ProcessResult result = pe::RunProcess(exe, argv);
+        return result.started && result.exitCode == 0;
     }
 
     // --- cook queue + UI state --------------------------------------------------------------------

@@ -1,5 +1,6 @@
 #include "API/GraphicsApiSelection.h"
 #include "API/RHI.h"
+#include "Base/Process.h"
 #include "Base/WindowIcon.h"
 #include "Project/ProjectSelection.h"
 #include "Runtime/RuntimeHost.h"
@@ -1045,39 +1046,6 @@ namespace
         return true;
     }
 
-#if defined(PE_WIN32)
-    std::string QuoteCommandLineArg(const std::string &arg)
-    {
-        if (!arg.empty() && arg.find_first_of(" \t\"") == std::string::npos)
-            return arg;
-
-        std::string quoted = "\"";
-        size_t slashCount = 0;
-        for (char ch : arg)
-        {
-            if (ch == '\\')
-            {
-                ++slashCount;
-            }
-            else if (ch == '"')
-            {
-                quoted.append(slashCount * 2 + 1, '\\');
-                quoted.push_back(ch);
-                slashCount = 0;
-            }
-            else
-            {
-                quoted.append(slashCount, '\\');
-                slashCount = 0;
-                quoted.push_back(ch);
-            }
-        }
-        quoted.append(slashCount * 2, '\\');
-        quoted.push_back('"');
-        return quoted;
-    }
-#endif
-
     bool SetLaunchEnvironmentFlag(const char *name, bool enabled, std::string &error)
     {
         const char *value = enabled ? "1" : "0";
@@ -1160,103 +1128,22 @@ namespace
             return false;
         arguments.insert(arguments.end(), extraArguments.begin(), extraArguments.end());
 
-#if defined(PE_WIN32)
-        std::string commandLine = QuoteCommandLineArg(executablePath.string());
-        for (const std::string &argument : arguments)
-            commandLine += " " + QuoteCommandLineArg(argument);
-
-        STARTUPINFOA startupInfo{};
-        startupInfo.cb = sizeof(startupInfo);
-        PROCESS_INFORMATION processInfo{};
-        std::string mutableCommandLine = commandLine;
-        const std::string workingDirectory = std::filesystem::path(pe::Path::Root).string();
-        if (!CreateProcessA(nullptr,
-                            mutableCommandLine.data(),
-                            nullptr,
-                            nullptr,
-                            FALSE,
-                            0,
-                            nullptr,
-                            workingDirectory.c_str(),
-                            &startupInfo,
-                            &processInfo))
+        pe::ProcessOptions options;
+        options.workingDirectory = std::filesystem::path(reinterpret_cast<const char8_t *>(pe::Path::Root.c_str()));
+        options.detach = true;
+        if (!pe::RunProcess(executablePath, arguments, options).started)
         {
-            error = "Could not launch " + executablePath.string() + ": " + std::to_string(GetLastError());
+            error = "Could not launch " + executablePath.string();
             return false;
-        }
-
-        CloseHandle(processInfo.hThread);
-        CloseHandle(processInfo.hProcess);
-
-        if (playerProfiler)
-        {
-            const std::filesystem::path profilerPath = ProfilerExecutablePath().lexically_normal();
-            if (std::filesystem::exists(profilerPath))
-            {
-                STARTUPINFOA profilerStartup{};
-                profilerStartup.cb = sizeof(profilerStartup);
-                PROCESS_INFORMATION profilerInfo{};
-                std::string profilerCommand = QuoteCommandLineArg(profilerPath.string());
-                if (CreateProcessA(nullptr,
-                                   profilerCommand.data(),
-                                   nullptr,
-                                   nullptr,
-                                   FALSE,
-                                   0,
-                                   nullptr,
-                                   workingDirectory.c_str(),
-                                   &profilerStartup,
-                                   &profilerInfo))
-                {
-                    CloseHandle(profilerInfo.hThread);
-                    CloseHandle(profilerInfo.hProcess);
-                }
-            }
-        }
-        return true;
-#else
-        const pid_t pid = fork();
-        if (pid < 0)
-        {
-            error = "Could not fork launcher process";
-            return false;
-        }
-        if (pid == 0)
-        {
-            const std::filesystem::path workingDirectory = pe::Path::Root;
-            if (!workingDirectory.empty() && chdir(workingDirectory.c_str()) != 0)
-                _exit(127);
-            std::vector<std::string> argumentStorage;
-            argumentStorage.reserve(arguments.size() + 1);
-            argumentStorage.push_back(executablePath.filename().string());
-            argumentStorage.insert(argumentStorage.end(), arguments.begin(), arguments.end());
-            std::vector<char *> argv;
-            argv.reserve(argumentStorage.size() + 1);
-            for (std::string &argument : argumentStorage)
-                argv.push_back(argument.data());
-            argv.push_back(nullptr);
-            execv(executablePath.c_str(), argv.data());
-            _exit(127);
         }
 
         if (playerProfiler)
         {
             const std::filesystem::path profilerPath = ProfilerExecutablePath().lexically_normal();
             if (std::filesystem::exists(profilerPath))
-            {
-                const pid_t profilerPid = fork();
-                if (profilerPid == 0)
-                {
-                    const std::filesystem::path workingDirectory = pe::Path::Root;
-                    if (!workingDirectory.empty() && chdir(workingDirectory.c_str()) != 0)
-                        _exit(127);
-                    execl(profilerPath.c_str(), profilerPath.filename().c_str(), nullptr);
-                    _exit(127);
-                }
-            }
+                pe::RunProcess(profilerPath, {}, options);
         }
         return true;
-#endif
     }
 
     // Locate tools/new_game.py by walking up from the launcher executable. Dev
@@ -1306,73 +1193,26 @@ namespace
         }
 
 #if defined(PE_WIN32)
-        const std::string commandLine =
-            std::string("python ") + QuoteCommandLineArg(script.string()) +
-            " --name " + QuoteCommandLineArg(name) +
-            " --template " + QuoteCommandLineArg(templateName) +
-            " --dir " + QuoteCommandLineArg(projectsDir);
-
-        STARTUPINFOA startupInfo{};
-        startupInfo.cb = sizeof(startupInfo);
-        PROCESS_INFORMATION processInfo{};
-        std::string mutableCommandLine = commandLine;
-        if (!CreateProcessA(nullptr,
-                            mutableCommandLine.data(),
-                            nullptr,
-                            nullptr,
-                            FALSE,
-                            CREATE_NO_WINDOW,
-                            nullptr,
-                            nullptr,
-                            &startupInfo,
-                            &processInfo))
+        const std::filesystem::path python = "python";
+#else
+        const std::filesystem::path python = "python3";
+#endif
+        pe::ProcessOptions options;
+        options.timeoutMs = 120000;
+        const pe::ProcessResult result = pe::RunProcess(
+            python, {pe::PathUtf8(script), "--name", name, "--template", templateName, "--dir", projectsDir}, options);
+        if (!result.started)
         {
-            error = "Could not run python (is it on PATH?): " + std::to_string(GetLastError());
+            error = "Could not run " + python.string() + " (is it on PATH?)";
             return false;
         }
-
-        WaitForSingleObject(processInfo.hProcess, 120000);
-        DWORD exitCode = 1;
-        GetExitCodeProcess(processInfo.hProcess, &exitCode);
-        CloseHandle(processInfo.hThread);
-        CloseHandle(processInfo.hProcess);
-        if (exitCode != 0)
+        if (result.exitCode != 0)
         {
-            error = "new_game.py failed (exit " + std::to_string(exitCode) +
+            error = "new_game.py failed (exit " + std::to_string(result.exitCode) +
                     "); check the name/folder and that Python is installed.";
             return false;
         }
         return true;
-#else
-        const pid_t pid = fork();
-        if (pid < 0)
-        {
-            error = "Could not fork generator process";
-            return false;
-        }
-        if (pid == 0)
-        {
-            // NOAIKIDO: fixed executable and argv are passed directly; no shell command is constructed.
-            execlp("python3",
-                   "python3",
-                   script.c_str(),
-                   "--name",
-                   name.c_str(),
-                   "--template",
-                   templateName.c_str(),
-                   "--dir",
-                   projectsDir.c_str(),
-                   nullptr);
-            _exit(127);
-        }
-        int status = 0;
-        if (waitpid(pid, &status, 0) < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
-        {
-            error = "new_game.py failed; check the name/folder and that python3 is installed.";
-            return false;
-        }
-        return true;
-#endif
     }
 
     // A minimal but valid startup scene for a blank project: one perspective
