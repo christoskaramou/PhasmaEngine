@@ -3,8 +3,6 @@
 #include "Project/Detail/ProjectHelpers.h"
 #include "rapidjson/document.h"
 
-#include <system_error>
-
 namespace pe
 {
     namespace

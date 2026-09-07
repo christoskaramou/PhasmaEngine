@@ -14,8 +14,6 @@
 #include "dxcapi.h"
 #endif
 
-#include <exception>
-
 namespace pwgpu
 {
     namespace

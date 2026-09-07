@@ -18,9 +18,6 @@
 #include "../SampleShaderUtils.h"
 #include "TeapotMesh.h"
 
-#include <cmath>
-#include <cstring>
-
 namespace
 {
     constexpr uint32_t kWidth = 1280;

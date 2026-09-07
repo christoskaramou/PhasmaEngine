@@ -1,7 +1,5 @@
 #include "Animation/AnimationReferenceFrames.h"
 
-#include <cmath>
-
 #include <nlohmann/json.hpp>
 
 namespace pe::AnimationReferenceFrames

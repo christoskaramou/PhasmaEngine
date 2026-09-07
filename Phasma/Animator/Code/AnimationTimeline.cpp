@@ -25,8 +25,6 @@
 
 #include <nlohmann/json.hpp>
 
-#include <numeric>
-
 namespace pe
 {
     AnimationTimeline::AnimationTimeline()

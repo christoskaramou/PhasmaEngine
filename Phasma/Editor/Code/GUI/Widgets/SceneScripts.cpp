@@ -2,7 +2,6 @@
 #include "GUI/Helpers.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
-#include <cstring>
 
 namespace pe
 {

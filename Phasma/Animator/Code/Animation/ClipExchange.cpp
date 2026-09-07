@@ -9,7 +9,6 @@
 #if defined(PE_WIN32)
 #include <windows.h>
 #else
-#include <csignal>
 #include <sys/wait.h>
 #endif
 

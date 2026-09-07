@@ -13,9 +13,6 @@
 #include "imgui/ImGuizmo.h"
 #include "imgui/imgui.h"
 
-#include <cmath>
-#include <iomanip>
-
 namespace pe
 {
     namespace

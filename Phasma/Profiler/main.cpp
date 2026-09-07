@@ -10,13 +10,6 @@
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
-#include <cfloat>
-#include <cstring>
-#include <cmath>
-#include <ctime>
-#include <iomanip>
-#include <numeric>
-
 namespace
 {
     constexpr size_t kMaxFrameHistory = 1800;

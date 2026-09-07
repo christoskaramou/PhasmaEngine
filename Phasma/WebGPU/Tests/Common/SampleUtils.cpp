@@ -1,7 +1,5 @@
 #include "SampleUtils.h"
 
-#include <cstring>
-
 namespace pwgpu::test
 {
     namespace

@@ -34,7 +34,6 @@
 #include <windows.h>
 #include <shellapi.h> // CommandLineToArgvW
 #else
-#include <cstring>
 #endif
 
 namespace

@@ -3,7 +3,6 @@
 #include "Base/Base.h"
 #include "Base/Path.h"
 
-#include <cmath>
 #include <nlohmann/json.hpp>
 
 namespace pe

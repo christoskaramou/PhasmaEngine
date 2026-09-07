@@ -7,8 +7,6 @@
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vertex.h"
 
-#include <cstring>
-
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12AccelerationStructure.h"
 #undef MemoryBarrier

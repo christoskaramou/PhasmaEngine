@@ -2,9 +2,6 @@
 #include "../Common/SampleUtils.h"
 #include "../SampleShaderUtils.h"
 
-
-#include <cmath>
-
 namespace
 {
     constexpr uint32_t kSampleCount = 4;

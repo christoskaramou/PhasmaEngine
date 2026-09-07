@@ -13,7 +13,6 @@
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12ImageViewImpl.h"
 #endif
-#include <cstring>
 
 namespace pwgpu
 {

@@ -2,8 +2,6 @@
 #include "API/RHI.h"
 #include "Base/WindowIcon.h"
 
-#include <cstring>
-
 namespace pe
 {
     bool IsWslEnvironment()

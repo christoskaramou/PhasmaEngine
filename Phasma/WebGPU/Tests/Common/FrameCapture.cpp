@@ -1,7 +1,5 @@
 #include "FrameCapture.h"
 
-#include <cstring>
-
 namespace pwgpu::test
 {
     uint32_t AlignTo(uint32_t value, uint32_t alignment)

@@ -11,9 +11,6 @@
 #define _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING
 #include "rapidjson/document.h"
 
-#include <cmath>
-#include <cstring>
-
 namespace
 {
     constexpr uint32_t kWidth = 1280;

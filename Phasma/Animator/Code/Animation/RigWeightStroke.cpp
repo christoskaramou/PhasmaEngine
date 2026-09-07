@@ -1,7 +1,5 @@
 #include "RigWeightStroke.h"
 
-#include <cmath>
-
 namespace pe::RigWeightStroke
 {
     namespace

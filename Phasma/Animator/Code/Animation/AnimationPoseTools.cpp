@@ -2,8 +2,6 @@
 
 #include "Animation/AnimationEvaluator.h"
 
-#include <cmath>
-
 namespace pe::AnimationPoseTools
 {
     namespace

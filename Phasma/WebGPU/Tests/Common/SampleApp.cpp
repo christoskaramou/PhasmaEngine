@@ -6,8 +6,6 @@
 #include "API/GraphicsApiSelection.h"
 #include "API/RHI.h"
 
-#include <cstring>
-
 namespace
 {
     template <typename T>

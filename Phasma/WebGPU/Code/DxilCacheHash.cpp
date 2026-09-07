@@ -1,8 +1,5 @@
 #include "DxilCacheHash.h"
 
-#include <cstring>
-#include <iomanip>
-
 namespace pwgpu
 {
     DxilCacheSha256::DxilCacheSha256()

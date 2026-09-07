@@ -25,7 +25,6 @@
 #include "WGPULimits.h"
 #include "Wgsl.h"
 #include "Utils.h"
-#include <cmath>
 
 namespace
 {

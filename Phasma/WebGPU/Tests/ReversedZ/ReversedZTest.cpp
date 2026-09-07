@@ -3,10 +3,6 @@
 #include "../Common/SampleUtils.h"
 #include "../SampleShaderUtils.h"
 
-
-#include <cmath>
-#include <cstring>
-
 // Port of webgpu-samples reversedZ. Simplified to the "color" mode only:
 // two viewports side-by-side rendering the same scene with different depth
 // buffer modes (standard vs reversed-Z) so precision behavior far from the

@@ -8,7 +8,6 @@
 #include "Camera/Camera.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
-#include <bit>
 
 namespace pe
 {

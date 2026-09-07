@@ -1,8 +1,5 @@
 #include "Render/ScreenshotWriter.h"
 
-#include <ctime>
-#include <cstring>
-
 namespace pe
 {
     namespace

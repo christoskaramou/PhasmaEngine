@@ -6,12 +6,8 @@
 #include "../Common/SampleUtils.h"
 #include "../SampleShaderUtils.h"
 
-
 #define _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING
 #include "rapidjson/document.h"
-
-#include <cmath>
-#include <cstring>
 
 // 1:1 C++ port of webgpu-samples/sample/textRenderingMsdf.
 // Inlines the msdfText.ts helper classes (MsdfFont / MsdfText / MsdfTextRenderer)

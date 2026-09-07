@@ -61,7 +61,6 @@
 #if defined(PE_WIN32)
 #include <windows.h>
 #else
-#include <cerrno>
 #include <sys/wait.h>
 #endif
 

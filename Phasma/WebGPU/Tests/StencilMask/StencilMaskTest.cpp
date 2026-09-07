@@ -4,9 +4,6 @@
 #include "../SampleShaderUtils.h"
 #include "Primitives.h"
 
-#include <cmath>
-#include <cstring>
-
 namespace
 {
     constexpr uint32_t kWidth = 1280;

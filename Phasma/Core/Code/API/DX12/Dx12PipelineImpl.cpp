@@ -9,8 +9,6 @@
 #include "API/RHI.h"
 #include "API/Reflection.h"
 
-#include <cstring>
-
 namespace pe
 {
     namespace

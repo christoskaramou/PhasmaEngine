@@ -25,7 +25,6 @@
 #endif
 #include <windows.h>
 #else
-#include <cerrno>
 #include <sys/wait.h>
 #endif
 
