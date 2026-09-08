@@ -245,7 +245,8 @@ uint WaveAppend(uint counterIndex, bool emit)
 
     // Per-instance render-visible flag (NodeGpuData byte offset 128, after the two matrices).
     // Cleared by node:set_visible(false) to cull this draw cheaply — no instance/TLAS rebuild.
-    if (NodeData.Load(constants.meshDataOffset + 128u) == 0u)
+    uint2 nodeVisibility = NodeData.Load2(constants.meshDataOffset + 128u);
+    if (nodeVisibility.x == 0u)
         return;
 
     float3 localMin = float3(constants.aabbMinX, constants.aabbMinY, constants.aabbMinZ);
@@ -254,6 +255,13 @@ uint WaveAppend(uint counterIndex, bool emit)
     float4x4 worldMatrix = LoadMatrix(constants.meshDataOffset);
     float3 aabbMin, aabbMax;
     TransformAABB(localMin, localMax, worldMatrix, aabbMin, aabbMax);
+    // Skinned instances publish their current world bounds in the same per-frame buffer as the pose.
+    uint skinBoundsOffset = nodeVisibility.y;
+    if (skinBoundsOffset != 0u)
+    {
+        aabbMin = asfloat(NodeData.Load3(skinBoundsOffset));
+        aabbMax = asfloat(NodeData.Load3(skinBoundsOffset + 16u));
+    }
 
     // Discrete LOD: pick a level by camera distance to the world AABB center and override this draw's
     // index range. Applies to every variant (frustum, occlusion, phase1/2) since they all emit `cmd`.

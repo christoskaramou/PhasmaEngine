@@ -1206,6 +1206,14 @@ namespace pe
             r.size = sizeof(NodeGpuData);
             r.offset = rt.dataOffset;
             nodeRanges.push_back(r);
+            if (rt.gpuData.skinBoundsOffset)
+            {
+                BufferRange bounds{};
+                bounds.data = rt.skinBoundsGpu;
+                bounds.size = sizeof(rt.skinBoundsGpu);
+                bounds.offset = rt.gpuData.skinBoundsOffset;
+                nodeRanges.push_back(bounds);
+            }
 
             const bool skinned = NodeHasSkinnedMesh(m_nodeIds[i]);
             int jointCount = skinned ? GetJointCountForNode(m_nodeIds[i]) : 0;

@@ -6,6 +6,8 @@ file(GLOB PHASMA_ANIMATOR_IMGUI_SOURCES CONFIGURE_DEPENDS "${PE_EDITOR_THIRD_PAR
 set(PHASMA_ANIMATOR_SHARED_EDITOR_SOURCES
     "${CMAKE_SOURCE_DIR}/Phasma/Editor/Code/GUI/Backends/GUIBackend.cpp"
     "${CMAKE_SOURCE_DIR}/Phasma/Editor/Code/GUI/GUIState.cpp"
+    "${CMAKE_SOURCE_DIR}/Phasma/Editor/Code/GUI/Widgets/SceneSettingsControls.cpp"
+    "${CMAKE_SOURCE_DIR}/Phasma/Editor/Code/GUI/Widgets/PostProcessControls.cpp"
     "${CMAKE_SOURCE_DIR}/Phasma/Editor/Code/Scene/SelectionManager.cpp"
 )
 if(WIN32)

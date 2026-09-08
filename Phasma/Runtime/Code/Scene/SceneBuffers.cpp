@@ -170,6 +170,12 @@ namespace pe
 
     void Scene::UploadBuffers(CommandBuffer *cmd)
     {
+        // Geometry and painted weights may have changed since the previous upload.
+        for (auto &runtime : m_meshRuntimes)
+            runtime.skinBounds.joints.clear();
+        for (NodeId *node : m_nodeIds)
+            if (NodeHasSkinnedMesh(node))
+                MarkNodeDirty(node);
         DestroyBuffers();
         CreateGeometryBuffer();
         CopyIndices(cmd);
@@ -340,6 +346,7 @@ namespace pe
         {
             m_nodeRuntime[i].hasUniformData = false;
             m_nodeRuntime[i].dataOffset = static_cast<size_t>(-1);
+            m_nodeRuntime[i].gpuData.skinBoundsOffset = 0u;
 
             if (m_nodeRuntime[i].gpuPending || !IsNodeHierarchyEnabled(m_nodeIds[i]))
                 continue;
@@ -363,6 +370,11 @@ namespace pe
             if (jointCount <= 0 && skinned)
                 jointCount = maxJointCount;
             size_t nodeDataSize = sizeof(NodeGpuData) + jointCount * sizeof(mat4);
+            if (jointCount > 0)
+            {
+                m_nodeRuntime[i].gpuData.skinBoundsOffset = static_cast<uint32_t>(storageSize + nodeDataSize);
+                nodeDataSize += sizeof(m_nodeRuntime[i].skinBoundsGpu);
+            }
             storageSize += nodeDataSize;
         }
 
@@ -2356,6 +2368,11 @@ namespace pe
         b.stageMask = PE_STAGE_VERTEX_INPUT;
         if (vertexCopyCount > 0)
         {
+            if (mesh.skinned)
+            {
+                m_meshRuntimes[meshIndex].skinBounds.joints.clear();
+                MarkNodeDirty(node);
+            }
             const size_t vOff = m_verticesOffset + static_cast<size_t>(mesh.vertexOffset) * sizeof(Vertex);
             cmd->CopyBufferStaged(m_buffer, m_vertexStore.data() + mesh.vertexOffset,
                                   static_cast<size_t>(vertexCopyCount) * sizeof(Vertex), vOff);

@@ -1,6 +1,7 @@
 #include "AnimatorApp.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#include "API/Surface.h"
 #include "API/Swapchain.h"
 #include "AnimationTimeline.h"
 #include "Animation/ClipExchange.h"
@@ -202,9 +203,6 @@ namespace pe
 #endif
         CreateGlobalSystem<voxel::VoxelSystem>()->Init(nullptr);
         CreateGlobalSystem<terrain::TerrainSystem>()->Init(nullptr);
-        // ponytail: the ImGui overlay is drawn into the display target at window resolution, so that target must be
-        // window-sized; a scaled one clips the UI and the viewport image at the scale. Full-res is right for one
-        // character anyway. Drawing the overlay after the upscale blit would lift this.
         Settings::Get<SceneSettings>().render_scale = 1.f;
         m_renderer.SetRuntimeSettingsForced(false);
         m_renderer.SetOverlay([this](CommandBuffer *cmd, Image *displayRT)
@@ -317,7 +315,6 @@ namespace pe
                 m_scene.SetLocalMatrix(key.nodeId, glm::translate(mat4(1.f), vec3(key.position)) * glm::mat4_cast(aim));
         }
         Settings::Get<SceneSettings>().draw_grid = m_grid;
-        Settings::Get<SceneSettings>().render_scale = 1.f;
         EnsureGround();
         m_scene.MarkDirty();
         m_modelPath.clear();
@@ -611,6 +608,21 @@ namespace pe
                 RequestQuit();
             if (*type == EventType::Resize)
                 m_resizePending = true;
+            else if (*type == EventType::PresentMode)
+                m_resizePending = true;
+            else if (*type == EventType::DynamicRendering && queued.payload.type() == typeid(bool))
+            {
+                m_renderer.WaitAllFramesCommands();
+                Settings::Get<SceneSettings>().dynamic_rendering =
+                    std::any_cast<bool>(queued.payload) && RHII.GetCaps().dynamicRendering;
+            }
+            else if (*type == EventType::SetRenderMode && queued.payload.type() == typeid(RenderMode))
+            {
+                m_renderer.WaitAllFramesCommands();
+                Settings::Get<SceneSettings>().render_mode = ClampRenderModeToRayTracingSupport(
+                    std::any_cast<RenderMode>(queued.payload), RHII.GetCaps().rayTracing);
+                m_renderer.ResetTAAHistory();
+            }
             else if (*type == EventType::CompileShaders)
             {
                 std::optional<size_t> hash;
@@ -629,8 +641,16 @@ namespace pe
         const WindowDrawableExtent extent = GetWindowDrawableExtent(window);
         const bool changed = extent.IsValid() && (extent.width != static_cast<int>(RHII.GetWidth()) ||
                                                   extent.height != static_cast<int>(RHII.GetHeight()));
-        if ((!m_resizePending && !changed) || !WindowRenderable() || !extent.IsValid())
+        if ((!m_resizePending && !changed && !m_pendingShadowQuality) || !WindowRenderable() || !extent.IsValid())
             return;
+        if (m_pendingShadowQuality)
+        {
+            m_renderer.WaitAllFramesCommands();
+            auto &gs = Settings::Get<SceneSettings>();
+            gs.shadow_map_size = m_pendingShadowQuality->first;
+            gs.num_cascades = m_pendingShadowQuality->second;
+            m_pendingShadowQuality.reset();
+        }
         m_renderer.Resize(static_cast<uint32_t>(extent.width), static_cast<uint32_t>(extent.height));
         m_resizePending = false;
     }
@@ -932,6 +952,17 @@ namespace pe
                 }
                 ImGui::EndMenu();
             }
+            if (ImGui::BeginMenu("Settings"))
+            {
+                const char *tabs[] = {"Rendering", "Post Processing", "Environment & Camera"};
+                for (int i = 0; i < IM_ARRAYSIZE(tabs); ++i)
+                    if (ImGui::MenuItem(tabs[i]))
+                    {
+                        m_showSettings = true;
+                        m_settingsTab = i;
+                    }
+                ImGui::EndMenu();
+            }
             if (ImGui::BeginMenu("Help"))
             {
                 ImGui::MenuItem("Hotkeys", nullptr, &m_showHotkeys);
@@ -952,6 +983,7 @@ namespace pe
         if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Space, false) && !ImGui::IsAnyItemActive())
             m_timeline->ToggleMaximize();
         DrawPrompts();
+        DrawSettings();
 
         if (m_openPopupPending)
         {
@@ -1432,6 +1464,80 @@ namespace pe
                     state["camera"] = {p.x, p.y, p.z};
                 }
                 return ok(state);
+            }
+            if (action == "animator.settings")
+            {
+                auto &gs = Settings::Get<SceneSettings>();
+                const float scale = ClampRenderScale(args.value("render_scale", gs.render_scale));
+                const bool taa = args.value("taa", gs.taa);
+                const bool fxaa = args.value("fxaa", gs.fxaa);
+                const bool blur = args.value("motion_blur", gs.motion_blur);
+                const float blurStrength = args.value("motion_blur_strength", gs.motion_blur_strength);
+                const int blurSamples = args.value("motion_blur_samples", gs.motion_blur_samples);
+                const bool dynamicRendering = args.value("dynamic_rendering", gs.dynamic_rendering);
+                const int renderMode = args.value("render_mode", static_cast<int>(gs.render_mode));
+                const int shadowSize = args.value("shadow_map_size", static_cast<int>(gs.shadow_map_size));
+                const int cascades = args.value("num_cascades", static_cast<int>(gs.num_cascades));
+                if (!std::isfinite(blurStrength) || blurStrength < 0.f || blurStrength > 1.f ||
+                    blurSamples < 2 || blurSamples > 32 || renderMode < 0 || renderMode > 2 ||
+                    cascades < 1 || cascades > 4 || (shadowSize != 512 && shadowSize != 1024 && shadowSize != 2048 && shadowSize != 4096))
+                    return fail("invalid preview quality setting");
+                PePresentMode presentMode = gs.preferred_present_mode;
+                if (args.contains("present_mode"))
+                {
+                    const std::string name = args.at("present_mode").get<std::string>();
+                    const auto &supported = RHII.GetSurface()->GetSupportedPresentModes();
+                    const auto mode = std::find_if(supported.begin(), supported.end(), [&](PePresentMode candidate)
+                                                   { return name == RHII.PresentModeToString(candidate); });
+                    if (mode == supported.end())
+                        return fail("unsupported present mode: " + name);
+                    presentMode = *mode;
+                }
+                if (args.contains("show"))
+                    m_showSettings = args.at("show").get<bool>();
+                if (args.contains("tab"))
+                {
+                    const std::string tab = args.at("tab").get<std::string>();
+                    if (tab != "rendering" && tab != "post_processing" && tab != "environment")
+                        return fail("tab must be rendering, post_processing or environment");
+                    m_settingsTab = tab == "rendering" ? 0 : tab == "post_processing" ? 1
+                                                                                      : 2;
+                    m_showSettings = true;
+                }
+                if (gs.preferred_present_mode != presentMode)
+                {
+                    gs.preferred_present_mode = presentMode;
+                    EventSystem::PushEvent(EventType::PresentMode);
+                }
+                if (gs.dynamic_rendering != dynamicRendering)
+                    EventSystem::PushEvent(EventType::DynamicRendering, dynamicRendering);
+                if (static_cast<int>(gs.render_mode) != renderMode)
+                    EventSystem::PushEvent(EventType::SetRenderMode, static_cast<RenderMode>(renderMode));
+                if (gs.shadow_map_size != static_cast<uint32_t>(shadowSize) || gs.num_cascades != static_cast<uint32_t>(cascades))
+                    m_pendingShadowQuality = {static_cast<uint32_t>(shadowSize), static_cast<uint32_t>(cascades)};
+                if (gs.render_scale != scale || gs.taa != taa || gs.fxaa != fxaa || gs.motion_blur != blur ||
+                    gs.motion_blur_strength != blurStrength || gs.motion_blur_samples != blurSamples)
+                    m_renderer.ResetTAAHistory();
+                gs.render_scale = scale;
+                gs.taa = taa;
+                gs.fxaa = fxaa;
+                gs.motion_blur = blur;
+                gs.motion_blur_strength = blurStrength;
+                gs.motion_blur_samples = blurSamples;
+                return ok({{"show", m_showSettings},
+                           {"present_mode", RHII.PresentModeToString(RHII.GetSurface()->GetPresentMode())},
+                           {"render_scale", gs.render_scale},
+                           {"render_mode", static_cast<int>(gs.render_mode)},
+                           {"dynamic_rendering", gs.dynamic_rendering},
+                           {"taa", gs.taa},
+                           {"fxaa", gs.fxaa},
+                           {"motion_blur", gs.motion_blur},
+                           {"motion_blur_strength", gs.motion_blur_strength},
+                           {"motion_blur_samples", gs.motion_blur_samples},
+                           {"shadow_map_size", gs.shadow_map_size},
+                           {"num_cascades", gs.num_cascades},
+                           {"display_size", {m_renderer.GetDisplayRT()->GetWidth(), m_renderer.GetDisplayRT()->GetHeight()}},
+                           {"scene_size", {m_renderer.GetViewportRT()->GetWidth(), m_renderer.GetViewportRT()->GetHeight()}}});
             }
             if (action == "layout.style")
             {

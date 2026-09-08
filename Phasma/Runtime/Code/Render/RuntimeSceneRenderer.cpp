@@ -83,7 +83,7 @@ namespace pe
                 initCmd->Begin();
             }
 
-            m_sceneRenderer.CreateRenderTargets(false, true);
+            m_sceneRenderer.CreateRenderTargets(false, !m_overlay);
             m_sceneRenderer.LoadSky(initCmd);
 
             m_sceneRenderer.CreateRenderPassComponents(SupportsRayTracingPass(), initCmd);
@@ -333,9 +333,9 @@ namespace pe
         return m_sceneRenderer.GetDepthStencilTarget(hash);
     }
 
-    Image *RuntimeSceneRenderer::CreateFSSampledImage(bool)
+    Image *RuntimeSceneRenderer::CreateFSSampledImage(bool useRenderTargetScale)
     {
-        return m_sceneRenderer.CreateFSSampledImage("RuntimeFSSampledImage", true);
+        return m_sceneRenderer.CreateFSSampledImage("RuntimeFSSampledImage", useRenderTargetScale);
     }
 
     void RuntimeSceneRenderer::Resize(uint32_t width, uint32_t height, bool recreateSurface)
@@ -361,7 +361,7 @@ namespace pe
         Settings::Get<SceneSettings>().preferred_present_mode = surface->GetPresentMode();
         RHII.CreateSwapchain(surface);
 
-        m_sceneRenderer.CreateRenderTargets(hasRTGeom, true);
+        m_sceneRenderer.CreateRenderTargets(hasRTGeom, !m_overlay);
         const bool isDx12 = UsesDx12RenderOrchestration();
         const PeBarrierSync semaphoreStageFlags = isDx12 ? PE_STAGE_NONE : PE_STAGE_ALL_COMMANDS;
         m_sceneRenderer.CreateFrameResources(RHII.GetSwapchainImageCount(),
@@ -383,7 +383,7 @@ namespace pe
         RHII.WaitDeviceIdle();
         WaitAllFramesCommands();
         const bool hasRTGeom = SupportsRayTracingPass() && m_scene.GetTLAS() != nullptr;
-        m_sceneRenderer.CreateRenderTargets(hasRTGeom, true);
+        m_sceneRenderer.CreateRenderTargets(hasRTGeom, !m_overlay);
         m_sceneRenderer.ResizeRenderPassComponents(RHII.GetWidth(), RHII.GetHeight(), hasRTGeom);
         BuildRenderGraph();
     }

@@ -103,7 +103,8 @@ uint WaveAppend(uint counterIndex, bool emit)
         return;
 
     Mesh_Constants constants = MeshConstants[idx];
-    if (NodeData.Load(constants.meshDataOffset + 128u) == 0u)
+    uint2 nodeVisibility = NodeData.Load2(constants.meshDataOffset + 128u);
+    if (nodeVisibility.x == 0u)
         return;
 
     float3 localMin = float3(constants.aabbMinX, constants.aabbMinY, constants.aabbMinZ);
@@ -112,6 +113,12 @@ uint WaveAppend(uint counterIndex, bool emit)
     float4x4 worldMatrix = LoadMatrix(constants.meshDataOffset);
     float3 aabbMin, aabbMax;
     TransformAABB(localMin, localMax, worldMatrix, aabbMin, aabbMax);
+    uint skinBoundsOffset = nodeVisibility.y;
+    if (skinBoundsOffset != 0u)
+    {
+        aabbMin = asfloat(NodeData.Load3(skinBoundsOffset));
+        aabbMax = asfloat(NodeData.Load3(skinBoundsOffset + 16u));
+    }
 
     if (!AABBInFrustum(aabbMin, aabbMax))
         return;

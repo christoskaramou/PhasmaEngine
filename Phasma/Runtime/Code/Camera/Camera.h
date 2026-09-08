@@ -49,6 +49,7 @@ namespace pe
         const std::array<Plane, 6> &GetFrustumPlanes() const { return m_frustum; }
         void Destroy() override;
         inline mat4 GetView() const { return m_view; }
+        inline mat4 GetPreviousView() const { return m_previousView; }
         inline mat4 GetProjection() const { return m_projection; }
         inline mat4 GetProjectionNoJitter() const { return m_projectionNoJitter; }
         inline mat4 GetViewProjection() const { return m_viewProjection; }

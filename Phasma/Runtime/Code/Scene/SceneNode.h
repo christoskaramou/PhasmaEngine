@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Animation/SkinnedBounds.h"
+
 namespace pe
 {
     class Entity;
@@ -99,7 +101,7 @@ namespace pe
         // the skinned-joint tail (uploaded at dataOffset + sizeof(NodeGpuData)) stays 16-byte
         // aligned; shaders read joints at MESH_DATA_SIZE = sizeof(NodeGpuData) = 144 (keep in sync).
         uint32_t renderVisible = 1u;
-        uint32_t pad0 = 0u;
+        uint32_t skinBoundsOffset = 0u; // optional world AABB after the joint tail; 0 for static nodes
         uint32_t pad1 = 0u;
         uint32_t pad2 = 0u;
     };
@@ -118,6 +120,7 @@ namespace pe
         uint8_t dirtyUniforms = 0;   // bitmask per swapchain frame (max 8); replaces vector<bool>
 
         std::vector<mat4> jointMatrices;
+        vec4 skinBoundsGpu[2]{};
     };
 
     // Image view indices and material GPU index (per mesh)
@@ -125,6 +128,7 @@ namespace pe
     {
         uint32_t imageViewIndices[5] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
         uint32_t materialGpuIndex = 0xFFFFFFFF;
+        SkinnedBounds skinBounds;
     };
     // Transform an AABB by a matrix (8-corner method)
     inline AABB TransformAabb(const AABB &local, const mat4 &m)

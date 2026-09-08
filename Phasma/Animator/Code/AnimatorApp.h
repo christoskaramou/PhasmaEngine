@@ -62,6 +62,7 @@ namespace pe
         bool WindowRenderable() const;
         void ApplyPendingResize();
         void DrawShell();
+        void DrawSettings();
         void DrawPrompts(); // the unsaved-changes and bookmark-name modals, the Hotkeys window
         void DrawOverlay(CommandBuffer *cmd, Image *displayRT);
         void PollCommandFile();
@@ -96,6 +97,9 @@ namespace pe
         bool m_promptPending = false;
         bool m_bookmarkPromptPending = false;
         bool m_showHotkeys = false;
+        bool m_showSettings = false;
+        int m_settingsTab = -1;
+        std::optional<std::pair<uint32_t, uint32_t>> m_pendingShadowQuality;
         bool m_grid = true;
         bool m_ground = true;
         NodeId *m_groundNode = nullptr;

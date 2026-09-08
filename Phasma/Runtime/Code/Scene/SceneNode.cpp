@@ -1464,14 +1464,25 @@ namespace pe
         if (prevWorld == mat4(1.f) && rt.gpuData.previousWorldMatrix == mat4(1.f))
             rt.gpuData.previousWorldMatrix = rt.gpuData.worldMatrix;
 
-        // Update world AABB — union of all mesh bounding boxes
+        // Update world AABB from the same root-corrected joint matrices uploaded to the vertex shaders.
         const auto &refs = m_nodeComponentCache[idx].meshRefs->meshRefs;
+        const Skeleton *skeleton = rt.jointMatrices.empty() ? nullptr : &GetSkeletonForNode(node);
+        const bool posed = skeleton && skeleton->bones.size() == rt.jointMatrices.size();
+        const mat4 skinBasis = posed ? rt.gpuData.worldMatrix * glm::inverse(skeleton->rootTransform) : rt.gpuData.worldMatrix;
         bool aabbInit = false;
         for (int meshIdx : refs)
         {
             if (meshIdx < 0)
                 continue;
             AABB meshAABB = TransformAabb(m_meshes[meshIdx].boundingBox, rt.gpuData.worldMatrix);
+            if (posed && m_meshes[meshIdx].skinned)
+            {
+                const Mesh &mesh = m_meshes[meshIdx];
+                SkinnedBounds &bounds = m_meshRuntimes[meshIdx].skinBounds;
+                if (bounds.joints.size() != rt.jointMatrices.size())
+                    bounds.Build(std::span<const Vertex>(m_vertexStore).subspan(mesh.vertexOffset, mesh.vertexCount), rt.jointMatrices.size());
+                meshAABB = bounds.Pose(rt.jointMatrices, skinBasis, rt.gpuData.worldMatrix);
+            }
             if (!aabbInit)
             {
                 rt.worldAABB = meshAABB;
@@ -1484,6 +1495,11 @@ namespace pe
             }
         }
 
+        if (aabbInit)
+        {
+            rt.skinBoundsGpu[0] = vec4(rt.worldAABB.min, 0.f);
+            rt.skinBoundsGpu[1] = vec4(rt.worldAABB.max, 0.f);
+        }
         rt.dirty = false;
 
         // Mark uniforms dirty for all frames

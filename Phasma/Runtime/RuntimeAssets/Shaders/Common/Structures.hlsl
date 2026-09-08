@@ -16,9 +16,9 @@ struct PushConstants_MotionBlur
 {
     float oneOverDelta;
     float strength;
-    float2 projJitter;
     int samples;
     float blend; // volume blend factor (0..1): lerp the blurred result back toward the sharp input
+    float4x4 skyReprojection;
 };
 
 struct PushConstants_Shadows

@@ -74,6 +74,17 @@ namespace pe
         auto &gSettings = ActivePostProcessProfile();
         Camera *camera = GetActiveScene()->GetActiveCamera();
 
+        // Lighting uses a perspective sky ray even for orthographic cameras. Remove
+        // translation and projection jitter: neither moves an infinitely distant sky.
+        const float tanHalfFovY = tan(camera->Fovy() * 0.5f);
+        mat4 skyProjection(0.f);
+        skyProjection[0][0] = 1.f / (camera->GetAspect() * tanHalfFovY);
+        skyProjection[1][1] = 1.f / tanHalfFovY;
+        skyProjection[2][3] = 1.f;
+        skyProjection[3][2] = 1.f;
+        const mat4 skyReprojection = skyProjection * mat4(mat3(camera->GetPreviousView())) *
+                                     mat4(mat3(camera->GetInvView())) * inverse(skyProjection);
+
         ImageBarrierInfo frameBarrier{};
         frameBarrier.image = m_frameImage;
         frameBarrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -90,9 +101,9 @@ namespace pe
         cmd->SetScissor(0, 0, m_displayRT->GetWidth(), m_displayRT->GetHeight());
         cmd->SetConstantAt(0, 1.0f / (static_cast<float>(FrameTimer::Instance().GetDelta()) + FLT_EPSILON));
         cmd->SetConstantAt(1, gSettings.motion_blur_strength);
-        cmd->SetConstantAt(2, camera->GetProjJitter());
-        cmd->SetConstantAt(4, gSettings.motion_blur_samples);
-        cmd->SetConstantAt(5, ActivePostProcessBlend().motion_blur);
+        cmd->SetConstantAt(2, gSettings.motion_blur_samples);
+        cmd->SetConstantAt(3, ActivePostProcessBlend().motion_blur);
+        cmd->SetConstantAt(4, skyReprojection);
         cmd->PushConstants();
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();

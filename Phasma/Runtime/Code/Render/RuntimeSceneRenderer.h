@@ -28,7 +28,8 @@ namespace pe
         void ResetTAAHistory();
         void SetRuntimeUi(RuntimeUiSystem *runtimeUi) { m_runtimeUi = runtimeUi; }
         // A host UI drawn into the display target after the scene (PhasmaAnimator's ImGui shell). While one is set
-        // the frame always goes through the display target and a blit, never straight into the swapchain image.
+        // before Init, the display target stays window-sized regardless of render scale. The frame always goes
+        // through that target and a blit, never straight into the swapchain image.
         using Overlay = std::function<void(CommandBuffer *cmd, Image *displayRT)>;
         void SetOverlay(Overlay overlay) { m_overlay = std::move(overlay); }
         // The player forces the editor overlays (grid, AABBs) off every frame; a tool host keeps its own settings.

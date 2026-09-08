@@ -17,9 +17,9 @@ namespace pe
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
 
-        // Pre-TAA color target (render-scale), so the grid sits under the selection outline and
-        // matches the render-scale depth it samples (was "display": full-res over render-scale depth).
-        m_viewportRT = rs->GetRenderTarget("viewport");
+        // An analytic overlay after post-processing: it has no mesh velocity for TAA/blur and
+        // must retain pixel-sized lines when the scene is rendered below native resolution.
+        m_viewportRT = rs->GetDisplayRT();
         m_depthRT = rs->GetDepthStencilTarget("depthStencil");
         m_scene = nullptr;
 
@@ -42,11 +42,14 @@ namespace pe
         m_passInfo->cullMode = PE_CULL_MODE_NONE;
 
         // Blending (Alpha Blend)
+        m_passInfo->blendEnable = true;
         m_passInfo->colorBlendAttachments = {BlendState::Default};
         m_passInfo->colorBlendAttachments[0].blendEnable = true;
         m_passInfo->colorBlendAttachments[0].srcColorBlendFactor = PE_BLEND_FACTOR_SRC_ALPHA;
         m_passInfo->colorBlendAttachments[0].dstColorBlendFactor = PE_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         m_passInfo->colorBlendAttachments[0].colorBlendOp = PE_BLEND_OP_ADD;
+        m_passInfo->colorBlendAttachments[0].srcAlphaBlendFactor = PE_BLEND_FACTOR_ZERO;
+        m_passInfo->colorBlendAttachments[0].dstAlphaBlendFactor = PE_BLEND_FACTOR_ONE;
 
         m_passInfo->colorFormats = {m_viewportRT->GetFormat()};
         m_passInfo->depthTestEnable = false;

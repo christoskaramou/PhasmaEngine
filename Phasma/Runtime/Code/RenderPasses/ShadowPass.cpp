@@ -447,7 +447,16 @@ namespace pe
 
     void ShadowPass::Resize(uint32_t width, uint32_t height)
     {
-        // PE_ERROR("Not implemented");
+        const auto &gs = Settings::Get<SceneSettings>();
+        if (m_textures.size() == gs.num_cascades && !m_textures.empty() &&
+            m_textures.front()->GetWidth() == gs.shadow_map_size &&
+            m_uniforms.size() == RHII.GetSwapchainImageCount())
+            return;
+        Scene *scene = m_scene;
+        Destroy();
+        Init();
+        CreateUniforms(nullptr);
+        m_scene = scene;
     }
 
     std::array<vec4, 6> ShadowPass::ExtractFrustumPlanes(const mat4 &M)

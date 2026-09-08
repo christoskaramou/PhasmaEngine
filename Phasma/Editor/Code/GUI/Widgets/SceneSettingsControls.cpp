@@ -64,7 +64,7 @@ namespace pe
                     EventSystem::PushEvent(EventType::PresentMode);
                     changed = true;
                 }
-                ui::ItemTooltip("Scene present mode — saved with the scene; overrides editor_config / PE_PRESENT_MODE.");
+                ui::ItemTooltip("Presentation mode for the current preview or scene.");
                 if (isSelected)
                     ImGui::SetItemDefaultFocus();
             }
@@ -72,9 +72,11 @@ namespace pe
         }
         ui::ItemTooltip("Swapchain present mode from scene settings (FIFO, mailbox, immediate, …).");
 
-        static bool dynamic_rendering = gSettings.dynamic_rendering;
+        bool dynamic_rendering = gSettings.dynamic_rendering;
+        ImGui::BeginDisabled(!RHII.GetCaps().dynamicRendering);
         if (Track(ImGui::Checkbox("Dynamic Rendering", &dynamic_rendering)))
             EventSystem::PushEvent(EventType::DynamicRendering, dynamic_rendering);
+        ImGui::EndDisabled();
         ui::ItemTooltip("Toggle Vulkan dynamic rendering path when supported.");
 
         {

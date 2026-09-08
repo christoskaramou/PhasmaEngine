@@ -84,7 +84,7 @@ namespace pe
             {SceneRenderGraphPassId::ColorGrading, 1950, "ColorGrading", &SceneRenderGraphPassComponents::colorGrading},
             {SceneRenderGraphPassId::DOF, 2000, "DOF", &SceneRenderGraphPassComponents::dof},
             {SceneRenderGraphPassId::MotionBlur, 2100, "MotionBlur", &SceneRenderGraphPassComponents::motionBlur},
-            {SceneRenderGraphPassId::Grid, 1240, "Grid", &SceneRenderGraphPassComponents::grid},
+            {SceneRenderGraphPassId::Grid, 2200, "Grid", &SceneRenderGraphPassComponents::grid},
             {SceneRenderGraphPassId::Particle, 2300, "Particle", &SceneRenderGraphPassComponents::particle},
             // Before TAA (1300): the temporal resolve de-jitters the outline with the scene.
             {SceneRenderGraphPassId::SelectionOutline, 1250, "SelectionOutline",
