@@ -1,5 +1,6 @@
 #pragma once
 #include "API/Pipeline.h"
+#include "Scene/MaterialReflection.h"
 
 namespace pe
 {
@@ -24,6 +25,10 @@ namespace pe
         const std::unordered_map<std::string, PassVariant> &GetVariants() const { return m_variants; }
 
     private:
+        friend MaterialLayout ReflectMaterialLayout(const PassInfoAsset &passInfo);
+        mutable std::mutex m_materialLayoutMutex;
+        mutable std::optional<size_t> m_materialLayoutHash;
+        mutable MaterialLayout m_materialLayout;
         std::string m_name;
         std::filesystem::path m_filePath;
         std::unordered_map<std::string, PassVariant> m_variants;

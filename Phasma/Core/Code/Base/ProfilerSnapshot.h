@@ -2,6 +2,7 @@
 
 namespace pe
 {
+    class Image;
     struct ProfilerFrameSample
     {
         float frameMs = 0.f;
@@ -14,6 +15,7 @@ namespace pe
     // In-memory profiler frame for live stream or disk dump. Gather only — no UI.
     struct ProfilerSnapshot
     {
+        std::string metadataJson = "{}";
         float fps = 0.f;
         float frameMs = 0.f;
         float cpuTotalMs = 0.f;
@@ -40,7 +42,10 @@ namespace pe
         std::vector<ProfilerFrameSample> frameHistory;
 
         // Pulls current Core/RHI metrics. gpuSamples are caller-owned (e.g. drained AfterCommandWait).
-        static ProfilerSnapshot Gather(std::vector<GpuTimerSample> gpuSamples = {});
+        static ProfilerSnapshot Gather(std::vector<GpuTimerSample> gpuSamples = {},
+                                       const std::filesystem::path &scenePath = {}, Image *viewport = nullptr);
+
+        static std::string CaptureMetadata(const std::filesystem::path &scenePath, Image *viewport = nullptr);
 
         // Compact single-line JSON (safe for length-prefixed stream frames).
         std::string ToJson() const;

@@ -85,6 +85,7 @@ namespace pe
 
     bool PassInfoAsset::LoadFromFile(const std::filesystem::path &path)
     {
+        std::lock_guard<std::mutex> lock(m_materialLayoutMutex);
         m_filePath = path;
 
         FileSystem file(path.string(), std::ios::in | std::ios::binary);
@@ -105,6 +106,7 @@ namespace pe
 
         m_name = ReadString(document, "name", path.stem().string());
         m_variants.clear();
+        m_materialLayoutHash.reset();
 
         for (auto it = document.MemberBegin(); it != document.MemberEnd(); ++it)
         {

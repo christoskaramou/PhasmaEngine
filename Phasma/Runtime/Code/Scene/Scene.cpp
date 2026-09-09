@@ -2,6 +2,7 @@
 #include <meshoptimizer.h> // meshopt_simplify for mesh LOD generation
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
+#include "Scene/MeshLod.h"
 #include "Scene/SceneRuntimeHooks.h"
 #include "Script/ScriptRuntimeHooks.h"
 #include "Camera/Camera.h"
@@ -766,33 +767,43 @@ namespace pe
             mesh.renderType = mi->renderType;
             mesh.material = mi->material;
             mesh.skinned = mi->skinned;
+            mesh.lodEnabled = !mesh.skinned; // Skinned assets opt in after validating their animated silhouettes.
 
             // Build discrete LODs: meshopt_simplify yields reduced index sets that index the SAME
             // vertices (subset), so every level shares mesh.vertexOffset; we append each to the shared
-            // index store and record its range. lods[0] is the full-detail range. Skinned meshes are
-            // skipped (joint-weighted simplification would need attribute-aware collapse). Distance-based
-            // level pick + index-range swap happens on the GPU in CullingCS.
+            // index store and record its range. Skinned levels retain the original weights and use a
+            // dense skin-weight metric to protect deformation boundaries. Main/shadow culling picks LOD.
             mesh.lodIndexOffset[0] = mesh.indexOffset;
             mesh.lodIndexCount[0] = mesh.indexCount;
             mesh.lodCount = 1;
             const uint32_t wantLods = std::clamp(Settings::Get<SceneSettings>().lod_count, 1u, Mesh::kMaxLods);
             const uint32_t baseIdxCount = mesh.indexCount;
-            if (wantLods > 1 && baseIdxCount >= 256 && !mesh.skinned && mi->verticesCount > 0)
+            if (wantLods > 1 && baseIdxCount >= 256 && mi->verticesCount > 0)
             {
                 const uint32_t *baseIndices = srcIndices.data() + mi->indexOffset; // 0-based within this mesh
                 const float *positions = reinterpret_cast<const float *>(srcVerts.data() + mi->vertexOffset);
                 const size_t vtxCount = mi->verticesCount;
+                std::vector<float> skinAttributes, skinWeights;
+                const bool canSimplify = !mesh.skinned ||
+                                         BuildSkinningLodAttributes({srcVerts.data() + mi->vertexOffset, vtxCount},
+                                                                    model->GetJointCount(), skinAttributes, skinWeights);
                 static constexpr float kRatios[Mesh::kMaxLods] = {1.0f, 0.5f, 0.25f, 0.12f};
                 std::vector<uint32_t> simplified(baseIdxCount);
                 uint32_t prevCount = baseIdxCount;
-                for (uint32_t lod = 1; lod < wantLods; ++lod)
+                for (uint32_t lod = 1; canSimplify && lod < wantLods; ++lod)
                 {
                     size_t target = (static_cast<size_t>(baseIdxCount * kRatios[lod]) / 3) * 3; // whole tris
                     if (target < 12)
                         break;
                     float err = 0.0f;
-                    size_t resCount = meshopt_simplify(simplified.data(), baseIndices, baseIdxCount, positions,
-                                                       vtxCount, sizeof(Vertex), target, 0.1f, 0, &err);
+                    size_t resCount = mesh.skinned
+                                          ? meshopt_simplifyWithAttributes(simplified.data(), baseIndices, baseIdxCount,
+                                                                           positions, vtxCount, sizeof(Vertex),
+                                                                           skinAttributes.data(), skinWeights.size() * sizeof(float),
+                                                                           skinWeights.data(), skinWeights.size(), nullptr,
+                                                                           target, 0.01f, 0, &err)
+                                          : meshopt_simplify(simplified.data(), baseIndices, baseIdxCount, positions,
+                                                             vtxCount, sizeof(Vertex), target, 0.1f, 0, &err);
                     if (resCount == 0 || resCount >= static_cast<size_t>(prevCount * 0.95f))
                         break; // no meaningful reduction past this level
                     uint32_t off = static_cast<uint32_t>(m_indexStore.size());

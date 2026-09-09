@@ -202,6 +202,16 @@ Scene nodes can carry a lightweight `Component_Prefab` marker through `NodePrefa
 
 The editor surface is host-owned. FileBrowser recognizes `.peprefab` files and shows the dedicated prefab icon, Hierarchy drag-drop instantiates a prefab at the root or under the hovered node, right-clicking a hierarchy node can save the whole subtree as a prefab, and dropping a hierarchy node into a FileBrowser folder prompts for a prefab file in that folder. Prefab Viewer is the asset-side editor: it opens `.peprefab` files directly, displays the prefab-internal tree, edits names/enabled state/local transforms, adds/removes/reparents items, authors generated primitive and cooked `.pemesh` mesh references, adds/removes common component payloads, saves the asset, and can instantiate the prefab into the active scene without using the scene hierarchy as the editing surface.
 
+Material layouts are cached on the owning `PassInfoAsset` across instance rebuilds.
+`ReflectMaterialLayout` keys that cache with `ShaderCache`'s resolved source content
+(including recursive includes, global defines, stage and backend), plus the material
+buffer name and annotation. Reloading a pass clears its cached key. The cache retains
+one layout per pass asset and still checks source content on rebuild, so shader edits
+cannot retain stale field offsets; cache hits avoid creating GPU shaders and reflecting
+their resources again. Purely visual leaf meshes can use `node:set_visible()` to update
+the render flag without dirtying the instance/material tables. This flag does not
+disable child nodes, scripts, physics or animation.
+
 ## Scene Scripts
 
 A scene can own Lua script references directly, persisted as a top-level `scene_scripts` object in the `.pescene` and applied on load. This is the scene-scoped counterpart to the directory-scanned `Scripts/Player` auto-load: it lets one scene declare exactly which gameplay scripts run when it plays and which named action entry points it exposes, without relying on file placement or a boot-script dispatcher. The manifest is `SceneScriptManifest` (`Phasma/Runtime/Code/Scene/SceneScriptManifest.h`), held on `Scene` and serialized next to global settings in both `SaveScene` and `TakeSnapshot`, so it survives editor play→stop snapshot/restore for free.

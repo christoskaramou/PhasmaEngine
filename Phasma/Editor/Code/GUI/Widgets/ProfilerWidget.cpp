@@ -1,6 +1,7 @@
 #include "ProfilerWidget.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#include "Base/ProfilerSnapshot.h"
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
 #include "Systems/RendererSystem.h"
@@ -629,6 +630,11 @@ namespace pe
         const auto &gpu = m_data.gpu;
 
         fprintf(f, "{\n");
+        auto *renderer = GetGlobalSystem<RendererSystem>();
+        const std::string metadata = ProfilerSnapshot::CaptureMetadata(
+            renderer ? renderer->GetScene().GetScenePath() : std::filesystem::path{},
+            renderer ? renderer->GetViewportRT() : nullptr);
+        fprintf(f, "%.*s,\n", static_cast<int>(metadata.size() - 2), metadata.data() + 1);
         fprintf(f, "  \"timestamp\": \"%s\",\n", ts);
 
         // overview

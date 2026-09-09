@@ -259,6 +259,7 @@ namespace pe
             settings.AddMember("shadow_map_size", gSettings.shadow_map_size, allocator);
             settings.AddMember("num_cascades", gSettings.num_cascades, allocator);
             settings.AddMember("shadow_distance", gSettings.shadow_distance, allocator);
+            settings.AddMember("shadow_lod_bias", gSettings.shadow_lod_bias, allocator);
             settings.AddMember("shadow_cascade_lambda", gSettings.shadow_cascade_lambda, allocator);
             settings.AddMember("shadow_normal_bias", gSettings.shadow_normal_bias, allocator);
             settings.AddMember("shadow_fade_fraction", gSettings.shadow_fade_fraction, allocator);
@@ -441,6 +442,9 @@ namespace pe
                 gSettings.num_cascades = settings["num_cascades"].GetUint();
             if (settings.HasMember("shadow_distance"))
                 gSettings.shadow_distance = settings["shadow_distance"].GetFloat();
+            gSettings.shadow_lod_bias = settings.HasMember("shadow_lod_bias")
+                                            ? settings["shadow_lod_bias"].GetFloat()
+                                            : 1.f;
             if (settings.HasMember("shadow_cascade_lambda"))
                 gSettings.shadow_cascade_lambda = settings["shadow_cascade_lambda"].GetFloat();
             if (settings.HasMember("shadow_normal_bias"))
@@ -1717,7 +1721,7 @@ namespace pe
                 meshObj.AddMember("render_type", static_cast<int>(mesh.renderType), allocator);
                 if (mesh.lodShift != 0)
                     meshObj.AddMember("lod_shift", mesh.lodShift, allocator);
-                if (!mesh.lodEnabled)
+                if (mesh.lodEnabled != !mesh.skinned)
                     meshObj.AddMember("lod_enabled", mesh.lodEnabled, allocator);
                 if (mesh.lodBias != 1.0f)
                     meshObj.AddMember("lod_bias", mesh.lodBias, allocator);

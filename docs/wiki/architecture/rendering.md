@@ -2,6 +2,14 @@
 
 The render path is split between PhasmaRuntime's shared scene renderer and PhasmaCore's backend-neutral RHI wrappers. Code remains the source of truth; use this page for cross-cutting pitfalls that are easy to miss when reading one file at a time.
 
+## Skinned Mesh LODs
+
+`Scene::AddModel` generates index-only skinned LODs against the original vertex store. `Scene/MeshLod.h` converts each mesh section's positive bone influences into dense weights over a stable bone palette; numerical bone indices are never simplification attributes. The existing meshoptimizer library supports 16 attributes, so sections using more than 16 active bones, invalid weights/joints, or no positive influences retain only LOD0. The palette limit is per section, not per skeleton. Static mesh simplification is unchanged.
+
+Skinned simplification targets 50%, 25% and 12% of the original indices with a 0.01 combined position/skin-attribute error limit; the error limit can stop reduction early. Bone-weight attribute importance is 0.1. Original positions, normals, UVs, bone indices and weights are retained. This is not a bound on animated screen-space error, so skinned meshes default to `lod_enabled=false` and individual validated prefabs must opt in.
+
+Both main and shadow GPU culling already select the generated index ranges. Scene serialization now preserves `shadow_lod_bias`, with 1.0 as the fallback for older scenes, allowing a scene to choose coarser shadow geometry independently. No animation cadence, gameplay timing, or shader skinning algorithm changes are required. Index-only LODs reduce submitted geometry but retain the original vertex buffers in memory.
+
 ## Forward+ Light Culling
 
 Raster lighting uses `ForwardPlusLightCullingPass` before the opaque and transparent light passes when `SceneSettings::forward_plus` is enabled. The compute pass bins point and spot lights into 16x16 screen-space tiles, writing per-tile counts and compact index lists that `LightingPS.hlsl` consumes instead of looping over every local light for every pixel. Directional and area lights remain on the existing full-list paths.

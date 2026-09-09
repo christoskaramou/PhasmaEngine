@@ -142,12 +142,7 @@ namespace pe
         }
         shader->m_pathID = StringHash(path);
 
-        Hash definesHash;
-        for (const Define &def : m_globalDefines)
-        {
-            definesHash.CombineString(def.name);
-            definesHash.CombineString(def.value);
-        }
+        Hash definesHash(GetGlobalDefinesHash());
         for (const Define &def : desc.defines)
         {
             definesHash.CombineString(def.name);
@@ -250,6 +245,17 @@ namespace pe
             }
         }
         m_globalDefines.push_back({name, value});
+    }
+
+    size_t Shader::GetGlobalDefinesHash()
+    {
+        Hash hash;
+        for (const Define &def : m_globalDefines)
+        {
+            hash.CombineString(def.name);
+            hash.CombineString(def.value);
+        }
+        return hash;
     }
 
     std::vector<Descriptor *> Shader::ReflectPassDescriptors(const PassInfo &passInfo)

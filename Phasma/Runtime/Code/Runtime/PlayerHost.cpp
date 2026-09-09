@@ -531,7 +531,7 @@ namespace pe
                     FrameTimer::Instance().CountCpuTotalStamp();
                     profilerFrame.Close();
                     if (m_profilerStream)
-                        m_profilerStream->Tick();
+                        m_profilerStream->Tick(m_renderer.GetScene().GetScenePath(), m_renderer.GetViewportRT());
                     SDL_Delay(resizeReady ? 1 : 16);
                     return keepRunning;
                 }
@@ -553,7 +553,7 @@ namespace pe
                 {
                     profilerFrame.Close();
                     if (m_profilerStream)
-                        m_profilerStream->Tick();
+                        m_profilerStream->Tick(m_renderer.GetScene().GetScenePath(), m_renderer.GetViewportRT());
                     SDL_Delay(16);
                     return true;
                 }
@@ -593,7 +593,7 @@ namespace pe
                 FrameTimer::Instance().CountCpuTotalStamp();
                 profilerFrame.Close();
                 if (m_profilerStream)
-                    m_profilerStream->Tick();
+                    m_profilerStream->Tick(m_renderer.GetScene().GetScenePath(), m_renderer.GetViewportRT());
                 LogFrameRate();
                 return true;
             }

@@ -2,6 +2,7 @@
 #include "Base/Path.h"
 #include "Base/ProfilerStream.h"
 #include "Base/WindowIcon.h"
+#include "ProfilerAdvice.h"
 
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
@@ -289,6 +290,10 @@ namespace
 
     struct SessionData
     {
+        pe::ProfilerAdvice advice;
+        std::string adviceReport;
+        uint64_t advicePackets = 0;
+        int adviceTargetFps = 0;
         LiveFrame live;
         std::deque<FrameSample> history;
         std::unordered_map<std::string, ScopeStats> cpuStats;
@@ -342,6 +347,7 @@ namespace
 
         void Accept(LiveFrame frame, std::string json)
         {
+            advice.AddSnapshot(json);
             CaptureTrace(frame);
             for (FrameSample &sample : frame.frameBatch)
             {
@@ -1585,6 +1591,66 @@ namespace
         return SaveTextFile(path, csv.str()) ? "Saved " + path : "Failed to save " + path;
     }
 
+    void DrawAdviceTab(SessionData &session, int targetFps, std::string &notice)
+    {
+        ImGui::TextColored(kAccent, "Phasma AI v0.1");
+        ImGui::TextWrapped("Performance suggestions from a recent measurement window. Test one change at a time; no settings are applied.");
+        if (session.adviceReport.empty() || session.advicePackets != session.packets || session.adviceTargetFps != targetFps)
+        {
+            session.adviceReport = session.advice.Analyze(targetFps);
+            session.advicePackets = session.packets;
+            session.adviceTargetFps = targetFps;
+        }
+        rapidjson::Document report;
+        report.Parse(session.adviceReport.c_str());
+        if (!report.IsObject())
+            return;
+
+        ImGui::TextWrapped("%s", report["status"].GetString());
+        ImGui::TextDisabled("%u samples over %.1f seconds | target %d FPS", report["sample_count"].GetUint(),
+                            report["window_ms"].GetDouble() / 1000.0, targetFps);
+        if (ImGui::Button("Save advice report"))
+        {
+            const std::string path = TimestampedPath("advice", ".json");
+            notice = SaveTextFile(path, session.adviceReport) ? "Saved " + path : "Failed to save " + path;
+        }
+        ItemTooltip("Save the observations, suggested experiments, tradeoffs and capture context as JSON.");
+        if (report.HasMember("context"))
+        {
+            ImGui::SeparatorText("Capture context");
+            const auto &context = report["context"];
+            for (const auto &[key, label] : std::array<std::pair<const char *, const char *>, 5>{
+                     {{"scene_path", "Scene"}, {"gpu_name", "GPU"}, {"graphics_api", "Graphics API"}, {"present_mode", "Present mode"}, {"build_configuration", "Build"}}})
+            {
+                if (context.HasMember(key) && context[key].IsString())
+                    ImGui::TextWrapped("%s: %s", label, context[key].GetString());
+            }
+        }
+        if (report.HasMember("evidence"))
+        {
+            const auto &evidence = report["evidence"];
+            ImGui::SeparatorText("Measured medians");
+            ImGui::Text("Frame %.2f ms | budget %.2f ms", evidence["frame_median_ms"].GetDouble(), evidence["budget_ms"].GetDouble());
+            if (evidence["gpu_timing_valid"].GetBool())
+                ImGui::Text("GPU %.2f ms", evidence["gpu_median_ms"].GetDouble());
+            else
+                ImGui::TextDisabled("GPU timing unavailable or inconsistent");
+        }
+        for (const auto &item : report["recommendations"].GetArray())
+        {
+            ImGui::Separator();
+            ImGui::TextColored(kAccent, "%s", item["title"].GetString());
+            ImGui::TextWrapped("Why: %s", item["reason"].GetString());
+            ImGui::TextWrapped("Tradeoff: %s", item["tradeoff"].GetString());
+            ImGui::TextWrapped("Verify: %s", item["validation"].GetString());
+        }
+        if (report.HasMember("limitations"))
+        {
+            ImGui::Separator();
+            ImGui::TextWrapped("%s", report["limitations"].GetString());
+        }
+    }
+
     std::string SaveChromeTrace(const SessionData &session)
     {
         if (session.traceEvents.empty())
@@ -1939,15 +2005,20 @@ namespace
 
 int main(int argc, char *argv[])
 {
+    if (argc > 1 && std::strcmp(argv[1], "--advise") == 0)
+        return pe::RunProfilerAdviceCli(argc, argv);
     char host[64] = "127.0.0.1";
     int port = pe::ProfilerStreamServer::kDefaultPort;
+    bool openAdvisor = false;
     if (argc >= 2 && argv[1][0] != '-')
         std::snprintf(host, sizeof(host), "%s", argv[1]);
     if (argc >= 3 && argv[2][0] != '-')
         port = std::atoi(argv[2]);
     for (int i = 1; i < argc; ++i)
     {
-        if (std::strcmp(argv[i], "--host") == 0 && i + 1 < argc)
+        if (std::strcmp(argv[i], "--advisor") == 0)
+            openAdvisor = true;
+        else if (std::strcmp(argv[i], "--host") == 0 && i + 1 < argc)
             std::snprintf(host, sizeof(host), "%s", argv[++i]);
         else if (std::strncmp(argv[i], "--host=", 7) == 0)
             std::snprintf(host, sizeof(host), "%s", argv[i] + 7);
@@ -2029,7 +2100,7 @@ int main(int argc, char *argv[])
         pe::ProfilerRefreshRate::PerFrame,
     };
     int renderDocFrameCount = 1;
-    int requestedTab = -1;
+    int requestedTab = openAdvisor ? 5 : -1;
     int cpuView = 0;
     int gpuView = 0;
     int selectedCpu = -1;
@@ -2061,6 +2132,8 @@ int main(int argc, char *argv[])
         {
             if (client.Connect(host, port))
             {
+                session.advice = {};
+                session.adviceReport.clear();
                 status = "LIVE";
                 refreshRateDirty = true;
             }
@@ -2080,8 +2153,16 @@ int main(int argc, char *argv[])
             while (client.TryRecvFrame(json))
             {
                 LiveFrame frame;
-                if (!paused && ParseFrame(json, frame))
-                    session.Accept(std::move(frame), std::move(json));
+                if (!paused)
+                {
+                    if (ParseFrame(json, frame))
+                        session.Accept(std::move(frame), std::move(json));
+                    else
+                    {
+                        session.advice = {};
+                        session.adviceReport.clear();
+                    }
+                }
             }
             if (!client.IsConnected())
             {
@@ -2120,7 +2201,7 @@ int main(int argc, char *argv[])
             ImGui::SameLine(ImGui::GetWindowWidth() - controlsWidth);
         const int targetFps = targetFpsValues[targetFpsIndex];
         constexpr const char *budgetTooltip =
-            "Visualization target only: controls budget lines, timing bars, and heat colors.\n"
+            "Controls budget lines, timing bars, heat colors, and AI Advisor suggestions.\n"
             "It does not cap Player FPS or change profiler sampling.";
         ImGui::TextDisabled("Budget");
         ItemTooltip(budgetTooltip);
@@ -2159,13 +2240,14 @@ int main(int argc, char *argv[])
         const int pendingTab = requestedTab;
         if (ImGui::BeginTabBar("##profiler_tabs", ImGuiTabBarFlags_None))
         {
-            const char *tabNames[] = {"Overview", "CPU", "GPU", "Counters", "Session"};
+            const char *tabNames[] = {"Overview", "CPU", "GPU", "Counters", "Session", "AI Advisor"};
             const char *tabTooltips[] = {
                 "Live frame graph, frame/hitch navigation, selected-frame summary, composition, memory pressure, and current hotspots.",
                 "CPU scope hierarchy, rolling statistics, timeline, and aggregated inclusive/self timings.",
                 "GPU timestamp hierarchy, rolling statistics, timeline, and aggregated inclusive/self timings.",
                 "Current PE_PROFILE_COUNTER values and their recent trends.",
                 "Connection controls, retained-frame statistics, histogram, ranked budget misses, capture, and export.",
+                "Explainable performance suggestions and JSON reports. No settings are changed.",
             };
             for (int tab = 0; tab < IM_ARRAYSIZE(tabNames); ++tab)
             {
@@ -2185,6 +2267,8 @@ int main(int argc, char *argv[])
                                   sizeof(gpuFilter), gpuView, gpuZoomH, gpuZoomV, selectedGpu);
                 else if (tab == 3)
                     DrawCounters(session, counterFilter, sizeof(counterFilter));
+                else if (tab == 5)
+                    DrawAdviceTab(session, targetFps, notice);
                 else
                 {
                     bool requestReconnect = false;

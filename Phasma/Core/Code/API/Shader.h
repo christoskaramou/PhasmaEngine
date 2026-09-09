@@ -48,6 +48,7 @@ namespace pe
         static std::vector<Shader *> GetHandles();
 
         static void AddGlobalDefine(const std::string &name, const std::string &value);
+        static size_t GetGlobalDefinesHash();
         static std::vector<Descriptor *> ReflectPassDescriptors(const PassInfo &passInfo);
 
         const std::string &GetEntryName() const { return m_entryName; }

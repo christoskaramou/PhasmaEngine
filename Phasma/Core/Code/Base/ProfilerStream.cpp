@@ -312,7 +312,7 @@ namespace pe
         return true;
     }
 
-    void ProfilerStreamServer::Tick()
+    void ProfilerStreamServer::Tick(const std::filesystem::path &scenePath, Image *viewport)
     {
         if (!m_running.load())
             return;
@@ -371,7 +371,7 @@ namespace pe
         m_publishTimer.Start();
         m_firstPublish = false;
 
-        ProfilerSnapshot snapshot = ProfilerSnapshot::Gather(m_latestGpuSamples);
+        ProfilerSnapshot snapshot = ProfilerSnapshot::Gather(m_latestGpuSamples, scenePath, viewport);
         snapshot.frameHistory = std::move(m_pendingFrames);
         m_pendingFrames.clear();
         float sampledMs = 0.f;

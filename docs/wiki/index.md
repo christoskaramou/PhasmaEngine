@@ -14,6 +14,7 @@
 - `architecture/animator.md` — PhasmaAnimator: the standalone animation program (Timeline, Rig panel, pose tools)
 - `architecture/code-quality-performance.md` — ponytail hard rule: smallest correct diff, perf gates
 - `architecture/mini-game-authoring.md` — plan for faster MiniGameKit-driven small-game creation
+- `architecture/profiler-advisor.md` — Phasma AI v0.1 telemetry context, explainable suggestions, JSONL capture and advisor CLI
 - `architecture/rendering.md` — shared renderer/RHI notes and cached pipeline pitfalls
 - `architecture/runtime.md` — PhasmaRuntime and MyProject boundary
 - `architecture/terrain-system.md` — streamed isosurface terrain: in-place tile updates, overhangs, CSG sculpt, per-tile colliders

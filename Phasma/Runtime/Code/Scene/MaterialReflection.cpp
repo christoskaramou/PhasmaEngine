@@ -1,10 +1,11 @@
 #include "Scene/MaterialReflection.h"
 #include "Scene/Backends/MaterialReflectionBackend.h"
 #include "Scene/PassInfoAsset.h"
+#include "API/Shader.h"
 
 namespace pe
 {
-    MaterialLayout ReflectMaterialLayout(const PassInfoAsset &passInfo)
+    static MaterialLayout BuildMaterialLayout(const PassInfoAsset &passInfo)
     {
         MaterialLayout layout;
 
@@ -136,5 +137,38 @@ namespace pe
 
         layout.valid = !layout.fields.empty() || !layout.textureSlots.empty();
         return layout;
+    }
+
+    MaterialLayout ReflectMaterialLayout(const PassInfoAsset &passInfo)
+    {
+        std::lock_guard<std::mutex> lock(passInfo.m_materialLayoutMutex);
+        const PassVariant *surface = passInfo.GetVariant("surface");
+        if (!surface || !surface->HasShaders())
+            return {};
+
+        // Use the compiler's content key, including recursive includes, defines
+        // and backend. Hot reload and asset-root changes cannot reuse stale layouts.
+        Hash hash;
+        const size_t definesHash = Shader::GetGlobalDefinesHash();
+        const auto addStage = [&](const std::string &path, const char *entry, PeShaderStageFlags stage)
+        {
+            if (path.empty())
+                return;
+            Hash stageHash(definesHash);
+            stageHash.CombineValue(static_cast<uint32_t>(stage));
+            ShaderCache source;
+            source.Init(Path::ResolveAsset(path), entry, stageHash);
+            hash.Combine(source.GetHash());
+        };
+        addStage(surface->vertexShader, "mainVS", PE_SHADER_STAGE_VERTEX);
+        addStage(surface->fragmentShader, "mainPS", PE_SHADER_STAGE_FRAGMENT);
+        hash.CombineString(surface->materialBufferName);
+        hash.CombineString(surface->materialAnnotation);
+        if (!passInfo.m_materialLayoutHash || *passInfo.m_materialLayoutHash != static_cast<size_t>(hash))
+        {
+            passInfo.m_materialLayout = BuildMaterialLayout(passInfo);
+            passInfo.m_materialLayoutHash = hash;
+        }
+        return passInfo.m_materialLayout;
     }
 } // namespace pe

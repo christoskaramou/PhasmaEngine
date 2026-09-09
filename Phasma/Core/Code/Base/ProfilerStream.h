@@ -44,7 +44,7 @@ namespace pe
         // Call once per frame after Profiler::EndFrame() (and after WaitPreviousFrameCommands).
         // Publishes at the connected viewer's requested rate (4 Hz by default).
         // Enables GPU timing only while a client is connected.
-        void Tick();
+        void Tick(const std::filesystem::path &scenePath = {}, Image *viewport = nullptr);
 
     private:
         void AcceptLoop();

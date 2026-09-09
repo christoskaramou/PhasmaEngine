@@ -33,8 +33,7 @@ def compact_snapshot(frame, scope_threshold_ms):
     cpu = frame.get("cpu", {})
     gpu = frame.get("gpu", {})
     return {
-        "overview": frame.get("overview", {}),
-        "frame_history": frame.get("frame_history", []),
+        **frame,
         "cpu": {
             "total_ms": cpu.get("total_ms", 0.0),
             "scopes": [

@@ -4,7 +4,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message(STATUS "PhasmaProfiler = ${CMAKE_CURRENT_SOURCE_DIR}")
 
-add_executable(PhasmaProfiler "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
+add_executable(PhasmaProfiler "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/ProfilerAdvice.cpp")
 
 target_precompile_headers(PhasmaProfiler PRIVATE "${CMAKE_SOURCE_DIR}/Phasma/Core/pch/PhasmaPch.h")
 target_include_directories(PhasmaProfiler PRIVATE

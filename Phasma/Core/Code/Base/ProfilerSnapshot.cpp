@@ -1,6 +1,11 @@
 #include "Base/ProfilerSnapshot.h"
 #include "API/Debug.h"
+#include "API/Image.h"
 #include "API/RHI.h"
+#include "API/Swapchain.h"
+
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
 
 namespace pe
 {
@@ -38,9 +43,86 @@ namespace pe
         }
     } // namespace
 
-    ProfilerSnapshot ProfilerSnapshot::Gather(std::vector<GpuTimerSample> gpuSamples)
+    std::string ProfilerSnapshot::CaptureMetadata(const std::filesystem::path &scenePath, Image *viewport)
+    {
+        const auto now = std::chrono::system_clock::now().time_since_epoch();
+        static const std::string session = std::to_string(now.count());
+        const auto scene = scenePath.generic_u8string();
+        const SceneSettings &settings = Settings::Get<SceneSettings>();
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        writer.StartObject();
+        writer.Key("schema_version");
+        writer.Int(1);
+        writer.Key("capture_session");
+        writer.String(session.c_str());
+        writer.Key("capture_unix_ms");
+        writer.Int64(std::chrono::duration_cast<std::chrono::milliseconds>(now).count());
+        writer.Key("context");
+        writer.StartObject();
+        writer.Key("scene_path");
+        writer.String(reinterpret_cast<const char *>(scene.data()), static_cast<rapidjson::SizeType>(scene.size()));
+        writer.Key("graphics_api");
+        writer.String(PeGraphicsApiName(RHII.GetApi()));
+        writer.Key("gpu_name");
+        writer.String(RHII.GetGpuName().c_str());
+        writer.Key("platform");
+        writer.String(SDL_GetPlatform());
+        writer.Key("cpu_logical_cores");
+        writer.Int(SDL_GetCPUCount());
+        writer.Key("build_configuration");
+#if defined(PE_RELEASE)
+        writer.String("Release");
+#elif defined(PE_RELWITHDEBINFO)
+        writer.String("RelWithDebInfo");
+#else
+        writer.String("Debug/Other");
+#endif
+        writer.Key("present_mode");
+        writer.String(RHII.GetSwapchain() ? RHII.PresentModeToString(RHII.GetSwapchain()->GetPresentMode()) : "Unknown");
+        writer.Key("display_width");
+        writer.Uint(RHII.GetWidth());
+        writer.Key("display_height");
+        writer.Uint(RHII.GetHeight());
+        writer.Key("render_width");
+        writer.Uint(viewport ? viewport->GetWidth() : 0);
+        writer.Key("render_height");
+        writer.Uint(viewport ? viewport->GetHeight() : 0);
+        writer.Key("settings");
+        writer.StartObject();
+        writer.Key("render_scale");
+        writer.Double(settings.render_scale);
+        writer.Key("shadows");
+        writer.Bool(settings.shadows && SceneSettingsActive());
+        writer.Key("shadow_lod_bias");
+        writer.Double(settings.shadow_lod_bias);
+        writer.Key("shadow_map_size");
+        writer.Uint(settings.shadow_map_size);
+        writer.Key("num_cascades");
+        writer.Uint(settings.num_cascades);
+        writer.Key("shadow_distance");
+        writer.Double(settings.shadow_distance);
+        writer.Key("lod_enabled");
+        writer.Bool(settings.lod_enabled);
+        writer.Key("lod_bias");
+        writer.Double(settings.lod_bias);
+        writer.Key("frustum_culling");
+        writer.Bool(settings.frustum_culling);
+        writer.Key("occlusion_culling");
+        writer.Bool(settings.occlusion_culling);
+        writer.Key("forward_plus");
+        writer.Bool(settings.forward_plus);
+        writer.EndObject();
+        writer.EndObject();
+        writer.EndObject();
+        return {buffer.GetString(), buffer.GetSize()};
+    }
+
+    ProfilerSnapshot ProfilerSnapshot::Gather(std::vector<GpuTimerSample> gpuSamples,
+                                              const std::filesystem::path &scenePath, Image *viewport)
     {
         ProfilerSnapshot d;
+        d.metadataJson = CaptureMetadata(scenePath, viewport);
         const double dt = FrameTimer::Instance().GetDelta();
         d.fps = dt > 0.0 ? static_cast<float>(1.0 / dt) : 0.f;
         d.frameMs = Profiler::GetFrameTimeMs();
@@ -87,7 +169,10 @@ namespace pe
         out.reserve(4096 + cpuEntries.size() * 64 + gpuSamples.size() * 80);
 
         char num[256];
-        out += '{';
+        out += metadataJson;
+        out.pop_back();
+        if (out.size() > 1)
+            out += ',';
 
         out += "\"overview\":{";
         std::snprintf(num, sizeof(num), "\"fps\":%.1f,", fps);
