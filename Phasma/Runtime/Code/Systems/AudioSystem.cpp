@@ -178,6 +178,7 @@ namespace pe
 
     void AudioSystem::Update()
     {
+        PE_PROFILE_SCOPE("Audio System");
         if (!m_engine)
             return;
 
@@ -189,7 +190,7 @@ namespace pe
         for (auto &st : m_states)
             if (st.sound)
             {
-                ma_sound_set_volume(st.sound, st.desc.volume * m_sfxVolume);
+                ma_sound_set_volume(st.sound, st.desc.volume * (st.desc.ambient ? m_ambientVolume : m_sfxVolume));
                 ma_sound_set_pitch(st.sound, st.desc.pitch);
             }
 
@@ -348,6 +349,11 @@ namespace pe
         m_sfxVolume = v;
     }
 
+    void AudioSystem::SetAmbientVolume(float v)
+    {
+        m_ambientVolume = v;
+    }
+
     void AudioSystem::SetZoneAudio(NodeId *node, const AudioSourceDesc &desc, float gain)
     {
         // Drive the zone's OWN sound (separate registry from per-node Component_Audio). gain > 0 ->
@@ -381,7 +387,7 @@ namespace pe
             ma_sound_set_pitch(zs.sound, desc.pitch);
             ma_sound_set_looping(zs.sound, desc.loop ? MA_TRUE : MA_FALSE);
             ma_sound_set_spatialization_enabled(zs.sound, desc.spatial ? MA_TRUE : MA_FALSE);
-            ma_sound_set_volume(zs.sound, desc.volume * m_sfxVolume * gain);
+            ma_sound_set_volume(zs.sound, desc.volume * (desc.ambient ? m_ambientVolume : m_sfxVolume) * gain);
             if (!ma_sound_is_playing(zs.sound))
                 ma_sound_start(zs.sound);
         }
@@ -495,7 +501,7 @@ namespace pe
             }
         }
 
-        ma_sound_set_volume(state.sound, desc.volume * m_sfxVolume);
+        ma_sound_set_volume(state.sound, desc.volume * (desc.ambient ? m_ambientVolume : m_sfxVolume));
         ma_sound_set_pitch(state.sound, desc.pitch);
         ma_sound_set_looping(state.sound, desc.loop ? MA_TRUE : MA_FALSE);
         ma_sound_set_spatialization_enabled(state.sound, desc.spatial ? MA_TRUE : MA_FALSE);

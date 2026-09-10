@@ -135,16 +135,16 @@ namespace pe
             entity->RemoveComponent<NodeTerrainTag>();
             c.terrain = nullptr;
         }
-        ForgetSingletonNode(node);
+        ForgetSingletonNode(node, flag);
     }
 
-    void Scene::ForgetSingletonNode(const NodeId *node)
+    void Scene::ForgetSingletonNode(const NodeId *node, uint32_t flags)
     {
         // Rare path (the singleton itself loses its tag or dies): rescan once so a duplicate tag,
         // if any, takes over — the per-frame getters stay O(1).
-        auto rescan = [this, node](NodeId *&slot, auto member)
+        auto rescan = [this, node, flags](NodeId *&slot, auto member, uint32_t componentFlag)
         {
-            if (slot != node)
+            if (!(flags & componentFlag) || slot != node)
                 return;
             slot = nullptr;
             for (uint32_t i = 0; i < static_cast<uint32_t>(m_nodeIds.size()); ++i)
@@ -156,10 +156,10 @@ namespace pe
                 }
             }
         };
-        rescan(m_skyboxNode, &NodeComponentCache::skybox);
-        rescan(m_sceneSettingsNode, &NodeComponentCache::sceneSettings);
-        rescan(m_voxelWorldNode, &NodeComponentCache::voxelWorld);
-        rescan(m_terrainNode, &NodeComponentCache::terrain);
+        rescan(m_skyboxNode, &NodeComponentCache::skybox, Component_Skybox);
+        rescan(m_sceneSettingsNode, &NodeComponentCache::sceneSettings, Component_SceneSettings);
+        rescan(m_voxelWorldNode, &NodeComponentCache::voxelWorld, Component_VoxelWorld);
+        rescan(m_terrainNode, &NodeComponentCache::terrain, Component_Terrain);
     }
 
     NodeId *Scene::CreateNode(const std::string &name, NodeId *parent)

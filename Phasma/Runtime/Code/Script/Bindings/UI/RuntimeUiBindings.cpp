@@ -204,6 +204,13 @@ namespace pe
             result.desc.bringToFront = ReadBoolOption(options, "bring_to_front", result.desc.bringToFront);
             result.desc.noInput = ReadBoolOption(options, "no_input", result.desc.noInput);
             result.desc.cornerRadius = ReadFloatOption(options, "corner_radius", result.desc.cornerRadius);
+            auto readRadialCount = [&](const char *key) -> uint32_t
+            {
+                const float value = ReadFloatOption(options, key, 0.0f);
+                return std::isfinite(value) ? static_cast<uint32_t>(std::clamp(value, 0.0f, 64.0f)) : 0u;
+            };
+            result.desc.radialSegments = readRadialCount("radial_segments");
+            result.desc.radialFilled = readRadialCount("radial_filled");
             result.desc.fontScale = ReadFloatOption(options, "font_scale", result.desc.fontScale);
             result.desc.fit = ReadBoolOption(options, "fit", result.desc.fit);
             result.desc.fit = ReadBoolOption(options, "auto_size", result.desc.fit);

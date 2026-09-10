@@ -54,6 +54,11 @@ namespace pe
                         as->SetSFXVolume(v);
                 });
 
+                audio.set_function("set_ambient_volume", [](float v) {
+                    if (auto *as = GetGlobalSystem<AudioSystem>())
+                        as->SetAmbientVolume(v);
+                });
+
                 // Per-node sources
                 audio.set_function("add_source", [](SceneNodeHandle &h, const std::string &path, sol::optional<sol::table> params) {
                     auto *as = GetGlobalSystem<AudioSystem>();
@@ -71,6 +76,7 @@ namespace pe
                         if (p["loop"].valid()) desc.loop = p["loop"];
                         if (p["spatial"].valid()) desc.spatial = p["spatial"];
                         if (p["autoplay"].valid()) desc.autoplay = p["autoplay"];
+                        if (p["ambient"].valid()) desc.ambient = p["ambient"];
                         if (p["min_distance"].valid()) desc.minDistance = p["min_distance"];
                         if (p["max_distance"].valid()) desc.maxDistance = p["max_distance"];
                     }

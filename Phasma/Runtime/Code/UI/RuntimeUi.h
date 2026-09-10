@@ -121,6 +121,9 @@ namespace pe
         // Set it to half the smaller edge to draw a circle — there is no separate
         // circle primitive, and a rounded square IS one at that radius.
         float cornerRadius = -1.0f;
+        // Image-style fills can show discrete charges as clockwise pie slices.
+        uint32_t radialSegments = 0;
+        uint32_t radialFilled = 0;
         NodeId *node = nullptr;
         bool draggable = false;
         bool selected = false;
@@ -334,6 +337,8 @@ namespace pe
             bool bringToFront = false;
             bool noInput = false;
             float cornerRadius = -1.0f;
+            uint32_t radialSegments = 0;
+            uint32_t radialFilled = 0;
             float fontScale = 1.0f;
             RuntimeUiTextAlignH textAlignH = RuntimeUiTextAlignH::Default;
             RuntimeUiTextAlignV textAlignV = RuntimeUiTextAlignV::Default;

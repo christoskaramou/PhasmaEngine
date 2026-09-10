@@ -339,6 +339,7 @@ namespace pe
 
     void Scene::CreateStorageBuffers()
     {
+        PE_PROFILE_SCOPE("Scene Storage Buffers");
         size_t storageSize = sizeof(PerFrameData);
         const int maxJointCount = GetMaxJointCount();
 
@@ -425,6 +426,7 @@ namespace pe
 
     void Scene::CreateIndirectBuffers(CommandBuffer *cmd)
     {
+        PE_PROFILE_SCOPE("Scene Indirect Buffers");
         uint32_t indirectCount = 0;
         std::vector<PeDrawIndexedIndirectCommand> &indirectCommands = m_pendingIndirectCommands;
         indirectCommands.clear();
@@ -632,6 +634,7 @@ namespace pe
 
     void Scene::UpdateImageViews()
     {
+        PE_PROFILE_SCOPE("Scene Image Views");
         m_imageViews.clear();
         m_imageViews.reserve(m_imageStore.size());
 
@@ -742,6 +745,7 @@ namespace pe
 
     void Scene::CreateMaterialTable()
     {
+        PE_PROFILE_SCOPE("Scene Material Table");
         auto deferDestroy = [](Buffer *&buffer)
         {
             if (!buffer)
@@ -868,6 +872,7 @@ namespace pe
                 auto cacheIt = layoutCache.find(passId);
                 if (cacheIt == layoutCache.end())
                 {
+                    PE_PROFILE_SCOPE("Scene Material Reflection");
                     cacheIt = layoutCache.emplace(passId, ReflectMaterialLayout(*mat->passInfoAsset)).first;
                 }
                 const MaterialLayout &layout = cacheIt->second;
@@ -1148,6 +1153,7 @@ namespace pe
 
     void Scene::CreateMeshConstants(CommandBuffer *cmd)
     {
+        PE_PROFILE_SCOPE("Scene Mesh Constants");
         // Defer the old buffers' destruction: UploadBuffers can be driven OUTSIDE the render loop's
         // WaitAllFramesCommands guard (e.g. VoxelWorld::Create -> FlushPendingGpuWork), so an immediate
         // Buffer::Destroy here would free meshConstants while a prior frame's command buffer (GBuffer /

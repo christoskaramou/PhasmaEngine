@@ -763,6 +763,8 @@ namespace pe
         widget.bringToFront = desc.bringToFront;
         widget.noInput = desc.noInput;
         widget.cornerRadius = desc.cornerRadius;
+        widget.radialSegments = std::min(desc.radialSegments, 64u);
+        widget.radialFilled = std::min(desc.radialFilled, widget.radialSegments);
         widget.fontScale = desc.fontScale > 0.0f ? desc.fontScale : 1.0f;
         widget.textAlignH = desc.textAlignH;
         widget.textAlignV = desc.textAlignV;
@@ -1425,6 +1427,8 @@ namespace pe
                         // Same text proportions on desktop and Android: DPI is cancelled
                         // here, so do not reintroduce a platform readability bump.
                         quadDesc.cornerRadius = widget.cornerRadius;
+                        quadDesc.radialSegments = widget.radialSegments;
+                        quadDesc.radialFilled = widget.radialFilled;
                         quadDesc.fontScale = widget.fontScale / m_frameUiScale;
                         quadDesc.textScale = m_textScale;
                         quadDesc.textAlignH = widget.textAlignH;

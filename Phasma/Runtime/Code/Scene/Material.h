@@ -37,19 +37,26 @@ namespace pe
     // Variant type for shader-driven material parameters
     using MaterialParamValue = std::variant<float, vec2, vec3, vec4, int32_t, uint32_t>;
 
-    // Get byte size of a MaterialParamValue
+    // Shader fields exclude the SIMD padding of an aligned vec3.
     inline uint32_t GetParamValueSize(const MaterialParamValue &v)
     {
         return std::visit([](const auto &val) -> uint32_t
-                          { return sizeof(val); },
+                          {
+                              if constexpr (std::is_same_v<std::decay_t<decltype(val)>, vec3>)
+                                  return 3u * sizeof(float);
+                              else
+                                  return sizeof(val); },
                           v);
     }
 
     // Write a MaterialParamValue into a byte buffer at the given offset
     inline void WriteParamValue(std::vector<uint8_t> &buffer, uint32_t offset, const MaterialParamValue &v)
     {
+        const uint32_t size = GetParamValueSize(v);
+        if (offset > buffer.size() || size > buffer.size() - offset)
+            return;
         std::visit([&](const auto &val)
-                   { memcpy(buffer.data() + offset, &val, sizeof(val)); },
+                   { memcpy(buffer.data() + offset, &val, size); },
                    v);
     }
 

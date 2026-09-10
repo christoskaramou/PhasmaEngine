@@ -10,6 +10,15 @@
 
 - Phasma AI v0.1 adds shared profiler capture metadata, an AI Advisor tab and an offline JSONL advisor CLI. Suggestions carry measured reasons, tradeoffs and validation steps; no settings are applied (`architecture/profiler-advisor.md`).
 
+- Audio sources support an independent ambient volume group, selected with `ambient=true` and adjusted through `audio.set_ambient_volume`; scene and prefab serialization preserve it (`architecture/runtime.md`).
+- Material parameter packing copies the 12-byte shader payload of `vec3`, excluding desktop SIMD padding that could overwrite the following transmission or night-emission field. Standard PBR explicitly maps `nightEmissive` to `attenuationColor.w`, and instance GPU data inherits that parent flag (`architecture/runtime.md`).
+- Runtime image quads support bounded, antialiased charge slices through `radial_segments` and `radial_filled`, with no generated textures or placeholder accent rectangle (`architecture/runtime.md`).
+
+## 2026-09-08
+
+- Prefab instantiation reuses resident source geometry and textures while preserving per-instance materials and animation state; mutable sprite geometry remains private. Instance rebuilds refresh material tables once, and new CPU scopes separate prefab construction, material reflection, animation and audio costs (`architecture/runtime.md`).
+- Escape exits editor Play through the normal Stop lifecycle, even while paused or with the editor toolbar hidden. Stop restores the authoring scene and releases relative mouse capture; Play/Stop tooltips describe the shortcut (`architecture/runtime.md`).
+
 ## 2026-09-07
 
 - WSL/Dozen editor and launcher boot: the solid-color skybox fallback uses a Vulkan transfer clear of all cube faces instead of per-face `vkCmdCopyBufferToImage` (Dozen reports `minImageTransferGranularity (0,0,0)` and rejects a 1x1x1 copy into a 6-face cube). DX12 keeps a packed 6-layer upload. PhasmaLauncher auto-detects WSL and prefers X11/GLX/OpenGL so SDL does not fall through Mesa DRI3/EGL to `swrast`. Vulkan hosts stay on SDL's default driver (Wayland on WSLg) so Dozen can bind the `wl_surface`; shown windows are not created `HIDDEN`, and WSL creation size is clamped instead of maximizing a spanned display. A missing `/mnt/shared_memory` is logged — that is WSLg COPY MODE (taskbar ghost, `[WARN:COPY MODE]` title), fixed with `wsl --shutdown` from Windows. Windows, native Linux, and Android keep their previous paths (`architecture/rendering.md`, `architecture/runtime.md`).

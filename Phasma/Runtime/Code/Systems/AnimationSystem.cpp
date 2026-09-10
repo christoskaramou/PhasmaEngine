@@ -321,6 +321,7 @@ namespace pe
 
     void AnimationSystem::Update()
     {
+        PE_PROFILE_SCOPE("Animation System");
         Scene *scene = GetActiveScene();
         if (!scene)
             return;
@@ -329,6 +330,9 @@ namespace pe
         if (dt <= 0.0001f)
             return;
 
+        const AnimationNodeState *previousState = nullptr;
+        const Skeleton *previousSkeleton = nullptr;
+        const std::vector<AnimationClip> *previousClips = nullptr;
         for (auto &state : m_states)
         {
             if (!state.playing)
@@ -403,7 +407,22 @@ namespace pe
                 else
                     layer = {};
             }
-            EvaluateState(*scene, state);
+            // Sibling meshes often play the same rig. Reuse only an exact pose from this update;
+            // each node still advances its own clocks/root motion and dirties its own skinned bounds.
+            const bool strip = scene->NodeUsesSkinnedStrip2D(state.nodeId);
+            if (!strip && previousState && previousSkeleton == &skeleton && previousClips == &clips &&
+                previousState->clipIndex == state.clipIndex && previousState->time == state.time &&
+                previousState->layer.clipIndex == layer.clipIndex && previousState->layer.time == layer.time &&
+                previousState->layer.bones == layer.bones)
+            {
+                scene->GetNodeRuntime(state.nodeId).jointMatrices = scene->GetNodeRuntime(previousState->nodeId).jointMatrices;
+                scene->MarkNodeDirty(state.nodeId);
+            }
+            else
+                EvaluateState(*scene, state);
+            previousState = strip ? nullptr : &state;
+            previousSkeleton = &skeleton;
+            previousClips = &clips;
         }
     }
 
@@ -464,6 +483,25 @@ namespace pe
         state.playing = true;
     }
 
+    static bool ResolveLayerBones(const Skeleton &skeleton, const std::vector<std::string> &names,
+                                  std::vector<int> &bones)
+    {
+        if (names.empty())
+            return false;
+        for (const auto &name : names)
+        {
+            int index = -1;
+            for (int i = 0; i < skeleton.GetBoneCount(); ++i)
+                if (skeleton.bones[i].name == name)
+                    index = i;
+            if (index < 0)
+                return false;
+            if (std::find(bones.begin(), bones.end(), index) == bones.end())
+                bones.push_back(index);
+        }
+        return true;
+    }
+
     bool AnimationSystem::PlayLayer(Scene &scene, NodeId *node, const std::string &clipName,
                                     const std::vector<std::string> &bones, bool loop, float speed)
     {
@@ -486,17 +524,8 @@ namespace pe
         if (!std::isfinite(clip.duration) || clip.duration <= 0.f ||
             !std::isfinite(clip.ticksPerSecond) || clip.ticksPerSecond <= 0.f)
             return false;
-        for (const auto &name : bones)
-        {
-            int index = -1;
-            for (int i = 0; i < skeleton.GetBoneCount(); ++i)
-                if (skeleton.bones[i].name == name)
-                    index = i;
-            if (index < 0)
-                return false;
-            if (std::find(layer.bones.begin(), layer.bones.end(), index) == layer.bones.end())
-                layer.bones.push_back(index);
-        }
+        if (!ResolveLayerBones(skeleton, bones, layer.bones))
+            return false;
         layer.loop = loop;
         layer.speed = speed;
         m_states[it->second].layer = std::move(layer);
@@ -510,6 +539,25 @@ namespace pe
         if (it == m_nodeToIndex.end() || m_states[it->second].layer.clipIndex < 0 || !std::isfinite(speed))
             return false;
         m_states[it->second].layer.speed = speed;
+        return true;
+    }
+
+    bool AnimationSystem::SetLayerMask(Scene &scene, NodeId *node, const std::vector<std::string> &bones)
+    {
+        if (!node || !scene.IsNodeAlive(node))
+            return false;
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end())
+            return false;
+        auto &state = m_states[it->second];
+        if (state.nodeRevision != node->revision || state.layer.clipIndex < 0 ||
+            state.layer.clipIndex >= static_cast<int>(scene.GetAnimationClipsForNode(node).size()))
+            return false;
+        std::vector<int> resolved;
+        if (!ResolveLayerBones(scene.GetSkeletonForNode(node), bones, resolved))
+            return false;
+        state.layer.bones = std::move(resolved);
+        EvaluateState(scene, state);
         return true;
     }
 

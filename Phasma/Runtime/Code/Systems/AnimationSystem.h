@@ -49,6 +49,7 @@ namespace pe
         bool PlayLayer(Scene &scene, NodeId *node, const std::string &clipName,
                        const std::vector<std::string> &bones, bool loop = true, float speed = 1.0f);
         bool SetLayerSpeed(NodeId *node, float speed);
+        bool SetLayerMask(Scene &scene, NodeId *node, const std::vector<std::string> &bones);
         void StopLayer(Scene &scene, NodeId *node);
         bool IsPlaying(const NodeId *node) const;
         int GetCurrentClip(const NodeId *node) const;

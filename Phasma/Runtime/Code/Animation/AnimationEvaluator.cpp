@@ -81,12 +81,18 @@ namespace pe
     template <typename T>
     int AnimationEvaluator::FindKeyIndex(const std::vector<AnimationKey<T>> &keys, float time)
     {
-        for (int i = 0; i < static_cast<int>(keys.size()) - 1; i++)
+        // Short tracks scan cheaply; dense baked clips must not rescan from frame zero for every actor.
+        if (keys.size() <= 64)
         {
-            if (time < keys[i + 1].time)
-                return i;
+            for (int i = 0; i < static_cast<int>(keys.size()) - 1; i++)
+                if (time < keys[i + 1].time)
+                    return i;
+            return static_cast<int>(keys.size()) - 1;
         }
-        return static_cast<int>(keys.size()) - 1;
+        const auto next = std::upper_bound(keys.begin() + 1, keys.end(), time,
+                                           [](float value, const AnimationKey<T> &key)
+                                           { return value < key.time; });
+        return static_cast<int>(next - keys.begin()) - 1;
     }
 
     float AnimationEvaluator::ApplyInterpolation(AnimationInterpolation interpolation, float factor)

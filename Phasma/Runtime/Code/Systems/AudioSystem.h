@@ -42,9 +42,11 @@ namespace pe
         void SetMasterVolume(float v);
         void SetMusicVolume(float v);
         void SetSFXVolume(float v);
+        void SetAmbientVolume(float v);
         float GetMasterVolume() const { return m_masterVolume; }
         float GetMusicVolume() const { return m_musicVolume; }
         float GetSFXVolume() const { return m_sfxVolume; }
+        float GetAmbientVolume() const { return m_ambientVolume; }
         // Trigger-zone audio: drive a zone's OWN source (its NodeTriggerZoneTag::audioSource, separate
         // from the node's Component_Audio) by a 0..1 gain from the zone's distance blend. gain > 0 ->
         // ensure loaded + playing + scale volume; gain == 0 -> stop. Reloads if the file path changes.
@@ -94,6 +96,7 @@ namespace pe
         float m_masterVolume = 1.0f;
         float m_musicVolume = 1.0f;
         float m_sfxVolume = 1.0f;
+        float m_ambientVolume = 1.0f;
     };
 } // namespace pe
 

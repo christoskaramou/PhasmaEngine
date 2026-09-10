@@ -1161,7 +1161,32 @@ namespace pe
 
                 if (quad.visualStyle == RuntimeUiQuadVisualStyle::Image)
                 {
-                    if (quad.fillColor.a > 0.0f)
+                    if (quad.radialSegments > 0 && quad.fillColor.a > 0.0f)
+                    {
+                        const uint32_t segments = std::min(quad.radialSegments, 64u);
+                        const uint32_t filled = std::min(quad.radialFilled, segments);
+                        const float radius = std::min(size.x, size.y) * 0.5f;
+                        const ImVec2 center(pos.x + size.x * 0.5f, pos.y + size.y * 0.5f);
+                        if (radius > 0.0f && filled > 0)
+                        {
+                            if (segments == 1)
+                                drawList->AddCircleFilled(center, radius, fill);
+                            else
+                            {
+                                const float step = 2.0f * IM_PI / segments;
+                                const float gap = std::min(step * 0.10f, 1.5f / radius);
+                                const int arcSteps = std::max(3, static_cast<int>(64u / segments));
+                                for (uint32_t i = 0; i < filled; ++i)
+                                {
+                                    const float angle = -0.5f * IM_PI + i * step;
+                                    drawList->PathLineTo(center);
+                                    drawList->PathArcTo(center, radius, angle + gap, angle + step - gap, arcSteps);
+                                    drawList->PathFillConvex(fill);
+                                }
+                            }
+                        }
+                    }
+                    else if (quad.radialSegments == 0 && quad.fillColor.a > 0.0f)
                         drawSurface(fill, true);
                     if (quad.image)
                     {
@@ -1185,7 +1210,7 @@ namespace pe
                             }
                         }
                     }
-                    else if (quad.accentColor.a > 0.0f)
+                    else if (quad.radialSegments == 0 && quad.accentColor.a > 0.0f)
                     {
                         drawList->AddRectFilled(ImVec2(pos.x + pad, pos.y + pad),
                                                 ImVec2(max.x - pad, max.y - pad),

@@ -508,7 +508,7 @@ namespace pe
         float effectiveAlphaCutoff = (GetRenderType() == RenderType::AlphaCut) ? GetAlphaCutoff() : 0.0f;
         data.pbrParams = vec4(GetMetallic(), GetRoughness(), effectiveAlphaCutoff, GetOcclusionStrength());
         data.transmissionVolume = vec4(GetThicknessFactor(), GetAttenuationDistance(), GetIor(), 0.f);
-        data.attenuationColor = vec4(GetAttenuationColor(), 0.f);
+        data.attenuationColor = vec4(GetAttenuationColor(), m_parent->nightEmissive);
         return data;
     }
 

@@ -899,6 +899,8 @@ namespace pe
                     z->audioSource.loop = a["loop"].GetBool();
                 if (a.HasMember("spatial"))
                     z->audioSource.spatial = a["spatial"].GetBool();
+                if (a.HasMember("ambient"))
+                    z->audioSource.ambient = a["ambient"].GetBool();
             }
             // physics section
             if (zv.HasMember("physicsEnabled"))
@@ -1412,8 +1414,11 @@ namespace pe
                                              const rapidjson::Value &meshValue,
                                              const std::filesystem::path *relativeToDir)
         {
+            if (!meshValue.HasMember("textures") || !meshValue["textures"].IsObject())
+                return;
+
             ResetMaterialTexturesToDefaults(material);
-            if (!cmd || !meshValue.HasMember("textures") || !meshValue["textures"].IsObject())
+            if (!cmd)
                 return;
 
             const auto &texVal = meshValue["textures"];
@@ -1967,6 +1972,7 @@ namespace pe
                         audio.AddMember("loop", desc->loop, allocator);
                         audio.AddMember("spatial", desc->spatial, allocator);
                         audio.AddMember("autoplay", desc->autoplay, allocator);
+                        audio.AddMember("ambient", desc->ambient, allocator);
                         nodeObj.AddMember("audio", audio.Move(), allocator);
                     }
                 }
@@ -2011,6 +2017,7 @@ namespace pe
                         a.AddMember("max_distance", z.audioSource.maxDistance, allocator);
                         a.AddMember("loop", z.audioSource.loop, allocator);
                         a.AddMember("spatial", z.audioSource.spatial, allocator);
+                        a.AddMember("ambient", z.audioSource.ambient, allocator);
                         zObj.AddMember("audioSource", a.Move(), allocator);
                     }
                     // physics section
@@ -3285,6 +3292,8 @@ namespace pe
                         desc.spatial = av["spatial"].GetBool();
                     if (av.HasMember("autoplay"))
                         desc.autoplay = av["autoplay"].GetBool();
+                    if (av.HasMember("ambient"))
+                        desc.ambient = av["ambient"].GetBool();
                     AddSceneAudioSource(*this, node, desc);
                 }
 
@@ -3537,6 +3546,7 @@ namespace pe
 
     SceneNodeHandle Scene::InstantiatePrefab(const std::filesystem::path &file, NodeId *parent)
     {
+        PE_PROFILE_SCOPE("Prefab Instantiate");
         if (parent && !IsNodeAlive(parent))
             parent = nullptr;
 
@@ -3610,7 +3620,22 @@ namespace pe
         if (cmd)
             cmd->Begin();
 
+        const bool texturesWereDirty = m_texturesDirty;
+        bool addedGeometry = false;
+        std::vector<std::pair<int, int>> sharedGeometry;
+        std::vector<size_t> sourceModelIds;
         std::vector<std::vector<int>> sourceMeshMaps;
+        const bool mutablePrefabGeometry = std::any_of(d["nodes"].Begin(), d["nodes"].End(), [](const rapidjson::Value &node)
+                                                       { return node.HasMember("sprite") || node.HasMember("skinned_strip_2d"); });
+        std::unordered_set<int> spriteSources;
+        for (NodeId *node : m_nodeIds)
+        {
+            if (!GetSpriteComponent(node))
+                continue;
+            for (int meshIndex : m_nodeComponentCache[node->index].meshRefs->meshRefs)
+                if (meshIndex >= 0 && meshIndex < static_cast<int>(m_meshSourceInfos.size()))
+                    spriteSources.insert(m_meshSourceInfos[meshIndex].sourceIndex);
+        }
         if (d.HasMember("sources") && d["sources"].IsArray())
         {
             const auto &sourcesVal = d["sources"];
@@ -3618,35 +3643,118 @@ namespace pe
 
             for (rapidjson::SizeType si = 0; si < sourcesVal.Size(); si++)
             {
+                PE_PROFILE_SCOPE("Prefab Source");
                 const auto &sv = sourcesVal[si];
+                const bool primitive = sv.HasMember("primitive_type") && sv["primitive_type"].IsString();
+                uint32_t paramCount = 0;
+                const vec4 params = primitive ? ReadPrimitiveParams(sv, paramCount) : vec4(0.f);
+                const std::filesystem::path modelPath = !primitive && sv.HasMember("path")
+                                                            ? ResolveSerializedFilePath(sv["path"], &prefabDir)
+                                                            : std::filesystem::path();
+                int sourceIndex = -1;
                 ModelAsset *model = nullptr;
-                if (sv.HasMember("primitive_type") && sv["primitive_type"].IsString())
+                for (int i = 0; i < static_cast<int>(m_sources.size()); ++i)
                 {
-                    uint32_t paramCount = 0;
-                    vec4 params = ReadPrimitiveParams(sv, paramCount);
-                    model = CreatePrimitiveModelFromSource(sv["primitive_type"].GetString(), params, paramCount);
-                }
-                else if (sv.HasMember("path"))
-                {
-                    std::filesystem::path modelPath = ResolveSerializedFilePath(sv["path"], &prefabDir);
-                    if (!modelPath.empty() && !std::filesystem::is_directory(modelPath))
-                        model = ModelAsset::Load(modelPath);
+                    const SceneSource &source = m_sources[i];
+                    if (mutablePrefabGeometry || spriteSources.count(i) || source.primitiveType == "skinned_strip_2d")
+                        continue;
+                    const bool matches = primitive
+                                             ? source.primitiveType == sv["primitive_type"].GetString() &&
+                                                   source.primitiveParamCount == paramCount && source.primitiveParams == params
+                                             : !modelPath.empty() && !source.filePath.empty() &&
+                                                   std::filesystem::absolute(source.filePath).lexically_normal() ==
+                                                       std::filesystem::absolute(modelPath).lexically_normal();
+                    auto it = matches ? m_models.find(source.modelId) : m_models.end();
+                    if (it != m_models.end())
+                    {
+                        model = *it;
+                        sourceIndex = i;
+                        break;
+                    }
                 }
 
                 if (!model)
+                {
+                    if (primitive)
+                        model = CreatePrimitiveModelFromSource(sv["primitive_type"].GetString(), params, paramCount);
+                    else if (!modelPath.empty() && !std::filesystem::is_directory(modelPath))
+                        model = ModelAsset::Load(modelPath);
+                }
+                if (!model)
                     continue;
 
-                int sourceIndex = static_cast<int>(m_sources.size());
-                SceneSource source;
-                source.filePath = model->GetFilePath();
-                source.primitiveType = model->GetPrimitiveType();
-                source.primitiveParams = model->GetPrimitiveParams();
-                source.primitiveParamCount = model->GetPrimitiveParamCount();
-                source.modelId = model->GetId();
-                m_sources.push_back(std::move(source));
+                std::vector<int> geometry(model->GetMeshInfoCount(), -1);
+                if (sourceIndex >= 0)
+                {
+                    for (int i = 0; i < static_cast<int>(m_meshSourceInfos.size()); ++i)
+                    {
+                        const MeshSourceInfo &info = m_meshSourceInfos[i];
+                        if (info.sourceIndex == sourceIndex && IsValidMeshIndex(i) &&
+                            info.sourceMeshIndex >= 0 && info.sourceMeshIndex < static_cast<int>(geometry.size()))
+                            geometry[info.sourceMeshIndex] = i;
+                    }
+                }
+                else
+                {
+                    sourceIndex = static_cast<int>(m_sources.size());
+                    SceneSource source;
+                    source.filePath = model->GetFilePath();
+                    source.primitiveType = model->GetPrimitiveType();
+                    source.primitiveParams = model->GetPrimitiveParams();
+                    source.primitiveParamCount = model->GetPrimitiveParamCount();
+                    source.modelId = model->GetId();
+                    m_sources.push_back(std::move(source));
+                    m_models.insert(model->GetId(), model);
+                    ResetSkeletonCache();
+                }
+                sourceModelIds.push_back(model->GetId());
 
-                sourceMeshMaps[si] = AddModelGeometry(model, sourceIndex);
-                m_models.insert(model->GetId(), model);
+                auto &meshMap = sourceMeshMaps[si];
+                if (std::find(geometry.begin(), geometry.end(), -1) == geometry.end())
+                {
+                    meshMap.resize(geometry.size(), -1);
+                    for (int i = 0; i < static_cast<int>(geometry.size()); ++i)
+                    {
+                        Mesh mesh = m_meshes[geometry[i]];
+                        const MeshInfo *info = model->GetMeshInfo(i);
+                        mesh.material = info->material;
+                        mesh.materialInstance = nullptr;
+                        mesh.renderType = info->renderType;
+                        mesh.lodEnabled = !mesh.skinned;
+                        mesh.lodShift = 0;
+                        mesh.lodBias = 1.f;
+                        mesh.refCount = 0;
+                        const int meshIndex = AddMesh(std::move(mesh));
+                        meshMap[i] = meshIndex;
+                        if (static_cast<int>(m_meshSourceInfos.size()) <= meshIndex)
+                            m_meshSourceInfos.resize(meshIndex + 1);
+                        m_meshSourceInfos[meshIndex] = {sourceIndex, i};
+                        sharedGeometry.emplace_back(meshIndex, geometry[i]);
+                    }
+                }
+                else
+                {
+                    // A deleted source may have no surviving mesh ranges to alias.
+                    meshMap = AddModelGeometry(model, sourceIndex);
+                    addedGeometry = true;
+                }
+
+                // Geometry and cooked textures are resident; editable material state belongs to this instance.
+                std::unordered_map<Material *, Material *> materials;
+                for (int meshIndex : meshMap)
+                {
+                    if (!IsValidMeshIndex(meshIndex) || !m_meshes[meshIndex].material)
+                        continue;
+                    Mesh &mesh = m_meshes[meshIndex];
+                    auto [it, inserted] = materials.try_emplace(mesh.material, nullptr);
+                    if (inserted)
+                    {
+                        auto material = std::make_unique<Material>(*mesh.material);
+                        it->second = material.get();
+                        m_ownedMaterials.push_back(std::move(material));
+                    }
+                    mesh.material = it->second;
+                }
             }
         }
 
@@ -3725,6 +3833,11 @@ namespace pe
             }
         }
 
+        // The instance rebuild publishes resident images/materials without another queue wait.
+        m_texturesDirty = texturesWereDirty || addedGeometry || needsTextureUpload;
+        for (const auto &[meshIndex, sourceMeshIndex] : sharedGeometry)
+            AliasOrDirtyBlas(meshIndex, sourceMeshIndex);
+
         if (cmd)
         {
             cmd->End();
@@ -3783,6 +3896,16 @@ namespace pe
         if (rootIdx < 0 || rootIdx >= static_cast<int>(nodeMap.size()) || !nodeMap[rootIdx])
             rootIdx = nodeMap.empty() ? -1 : 0;
         NodeId *instanceRoot = rootIdx >= 0 ? nodeMap[rootIdx] : nullptr;
+        if (instanceRoot)
+        {
+            for (size_t modelId : sourceModelIds)
+            {
+                auto it = m_modelRootNodes.find(modelId);
+                if (it != m_modelRootNodes.end() &&
+                    std::find(it->second.begin(), it->second.end(), instanceRoot) == it->second.end())
+                    it->second.push_back(instanceRoot);
+            }
+        }
 
         for (rapidjson::SizeType ni = 0; ni < nodesVal.Size(); ni++)
         {
@@ -3988,6 +4111,8 @@ namespace pe
                 desc.spatial = av["spatial"].GetBool();
             if (av.HasMember("autoplay"))
                 desc.autoplay = av["autoplay"].GetBool();
+            if (av.HasMember("ambient"))
+                desc.ambient = av["ambient"].GetBool();
             AddSceneAudioSource(*this, node, desc);
         }
 
@@ -4004,12 +4129,10 @@ namespace pe
         }
         UpdateNodeMatrices();
 
-        m_geometryDirty = m_geometryDirty || !savedMeshToSceneMesh.empty();
+        m_geometryDirty = m_geometryDirty || addedGeometry;
         m_instancesDirty = true;
         m_materialDirty = true;
-        m_texturesDirty = true;
         m_dirty = true;
-        ResetSkeletonCache();
 
         for (NodeId *node : nodeMap)
         {
@@ -4544,6 +4667,8 @@ namespace pe
                             desc.spatial = av["spatial"].GetBool();
                         if (av.HasMember("autoplay"))
                             desc.autoplay = av["autoplay"].GetBool();
+                        if (av.HasMember("ambient"))
+                            desc.ambient = av["ambient"].GetBool();
                         if (!HasSceneAudioSource(node))
                             AddSceneAudioSource(*this, node, desc);
                         else if (auto *existing = GetSceneAudioSourceDesc(node))
@@ -4983,6 +5108,8 @@ namespace pe
                         desc.spatial = av["spatial"].GetBool();
                     if (av.HasMember("autoplay"))
                         desc.autoplay = av["autoplay"].GetBool();
+                    if (av.HasMember("ambient"))
+                        desc.ambient = av["ambient"].GetBool();
                     AddSceneAudioSource(*this, node, desc);
                 }
 

@@ -12,5 +12,6 @@ namespace pe
         bool loop = false;
         bool spatial = true;
         bool autoplay = false;
+        bool ambient = false;
     };
 } // namespace pe

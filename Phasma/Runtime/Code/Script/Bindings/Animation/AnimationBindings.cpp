@@ -24,6 +24,20 @@ namespace pe
         return values;
     }
 
+    static bool ReadBoneMask(const sol::table &mask, size_t jointCount, std::vector<std::string> &bones)
+    {
+        if (mask.size() > jointCount)
+            return false;
+        for (size_t i = 1; i <= mask.size(); ++i)
+        {
+            sol::object name = mask.get<sol::object>(i);
+            if (!name.is<std::string>())
+                return false;
+            bones.push_back(name.as<std::string>());
+        }
+        return true;
+    }
+
     static struct AnimationBindings
     {
         AnimationBindings()
@@ -63,17 +77,22 @@ namespace pe
                                                      sol::optional<float> speed) -> bool {
                     auto *as = GetGlobalSystem<AnimationSystem>();
                     Scene *scene = GetActiveScene();
-                    if (!as || !scene || !h.IsValid(*scene) || mask.size() > static_cast<size_t>(scene->GetJointCountForNode(h.nodeId)))
+                    if (!as || !scene || !h.IsValid(*scene))
                         return false;
                     std::vector<std::string> bones;
-                    for (size_t i = 1; i <= mask.size(); ++i)
-                    {
-                        sol::object name = mask.get<sol::object>(i);
-                        if (!name.is<std::string>())
-                            return false;
-                        bones.push_back(name.as<std::string>());
-                    }
+                    if (!ReadBoneMask(mask, scene->GetJointCountForNode(h.nodeId), bones))
+                        return false;
                     return as->PlayLayer(*scene, h.nodeId, clip, bones, loop.value_or(true), speed.value_or(1.f));
+                });
+
+                anim.set_function("set_layer_mask", [](SceneNodeHandle &h, sol::table mask) -> bool {
+                    auto *as = GetGlobalSystem<AnimationSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (!as || !scene || !h.IsValid(*scene))
+                        return false;
+                    std::vector<std::string> bones;
+                    return ReadBoneMask(mask, scene->GetJointCountForNode(h.nodeId), bones) &&
+                        as->SetLayerMask(*scene, h.nodeId, bones);
                 });
 
                 anim.set_function("set_layer_speed", [](SceneNodeHandle &h, float speed) -> bool {

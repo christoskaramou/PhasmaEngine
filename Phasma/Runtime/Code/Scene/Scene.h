@@ -773,7 +773,7 @@ namespace pe
         void UpdateNodeMatrix(NodeId *node);
         void DestroyAllNodeEntities();
         void RetireAllNodeIds();
-        void ForgetSingletonNode(const NodeId *node);
+        void ForgetSingletonNode(const NodeId *node, uint32_t flags = ~0u);
 
         // Model geometry
         std::vector<int> AddModelGeometry(ModelAsset *model, int sourceIndex);

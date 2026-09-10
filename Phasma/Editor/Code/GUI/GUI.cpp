@@ -12,6 +12,7 @@
 #include "Particles/ParticleManager.h"
 #include "Runtime/RuntimePlaySession.h"
 #include "Runtime/RuntimeStartup.h"
+#include "Script/Bindings/Input/InputState.h"
 #include "Script/ScriptRuntimeHooks.h"
 #include "Script/ScriptSystem.h"
 #include "Scene/SelectionManager.h"
@@ -3513,6 +3514,10 @@ namespace pe
         if (!m_initialized)
             return;
 
+        // Play hides the toolbar, so its exit shortcut must run before the render guard.
+        if (GUIState::s_playMode && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            Stop();
+
         if (!GUIState::s_playMode && !m_playModeSnapshot.empty())
             Stop();
         else if (GUIState::s_playMode && !m_restoreRenderAfterPlay)
@@ -3876,7 +3881,7 @@ namespace pe
             if (ImGui::Button(ICON_FA_STOP, ImVec2(buttonSize, buttonSize)))
                 Stop();
             ImGui::PopStyleColor();
-            ui::ItemTooltip("Stop play mode and restore the editor scene.");
+            ui::ItemTooltip("Stop play mode and restore the editor scene (Esc).");
 
             ImGui::SameLine();
 
@@ -3901,7 +3906,7 @@ namespace pe
             if (ImGui::Button(ICON_FA_PLAY, ImVec2(buttonSize, buttonSize)))
                 Play();
             ImGui::PopStyleColor();
-            ui::ItemTooltip("Enter play mode from the current scene.");
+            ui::ItemTooltip("Enter play mode from the current scene. Press Esc to return to the editor.");
         }
 
         ImGui::PopStyleVar();    // Pop FramePadding
@@ -3939,6 +3944,7 @@ namespace pe
         {
             StopRuntimePlaySession();
             SetScriptPlayMode(false);
+            InputState::SetRelativeMouse(false);
             if (m_restoreRenderAfterPlay)
             {
                 m_render = m_prePlayRender;

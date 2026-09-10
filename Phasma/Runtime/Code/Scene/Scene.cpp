@@ -2157,11 +2157,8 @@ namespace pe
             RebuildRasterInstances(nullptr);
 
             m_instancesDirty = false;
-            if (m_texturesDirty)
-            {
-                UpdateTextures();
-                m_texturesDirty = false;
-            }
+            // Instance rebuild already refreshed image views, material tables and mesh constants.
+            m_texturesDirty = false;
             if (m_materialDirty)
             {
                 m_materialDirty = UpdateDirtyMaterials();
