@@ -1182,20 +1182,19 @@ namespace pe
         range.offset = 0;
         m_storages[frame]->Copy(1, &range, true);
 
-        // Batch all dirty node GPU data uploads into a single Copy call.
-        // rt.gpuData lives inside m_nodeRuntime (stable address) — safe to take pointer.
-        // Joint matrices are computed into a pre-reserved scratch buffer so data()
-        // never moves while jointRanges pointers are being accumulated.
+        // Batch node data copies; joint palettes write directly to this frame's mapped buffer.
         static thread_local std::vector<BufferRange> nodeRanges;
-        static thread_local std::vector<BufferRange> jointRanges;
-        static thread_local std::vector<mat4> allJointMatrices;
+        struct JointPalette
+        {
+            const std::vector<mat4> *pose;
+            mat4 invRoot;
+            size_t offset, count;
+        };
+        static thread_local std::vector<JointPalette> palettes;
         nodeRanges.clear();
-        jointRanges.clear();
-        allJointMatrices.clear();
+        palettes.clear();
 
         const int maxJointCount = GetMaxJointCount();
-        if (maxJointCount > 0)
-            allJointMatrices.reserve(static_cast<size_t>(GetNodeCount()) * static_cast<size_t>(maxJointCount));
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
@@ -1235,46 +1234,60 @@ namespace pe
                 const Skeleton &skeleton = GetSkeletonForNode(m_nodeIds[i]);
                 const bool hasMatchingSkeleton = skeleton.GetBoneCount() == jointCount;
                 const mat4 invRoot = hasMatchingSkeleton ? glm::inverse(skeleton.rootTransform) : mat4(1.f);
-                size_t base = allJointMatrices.size();
-                allJointMatrices.resize(base + static_cast<size_t>(jointCount));
-                if (!rt.jointMatrices.empty() && static_cast<int>(rt.jointMatrices.size()) == jointCount)
-                {
-                    // Joint matrices from EvaluatePose include the skeleton hierarchy transforms
-                    // (via intermediatePrefix) which bake in the glTF root node rotation.
-                    // The shader does: boneTransform * worldMatrix, and the worldMatrix also
-                    // contains that root rotation, causing it to be double-applied.
-                    //
-                    // Fix: strip the baked-in root transform from joint matrices so the
-                    // shader's worldMatrix applies it instead.  This preserves correct
-                    // skeleton orientation while allowing user transforms (move/rotate/scale)
-                    // to affect skinned meshes.
-                    //
-                    // Math: uploadedJoint = inv(rootTransform) * skeletonPose
-                    // Shader: inv(rootTransform) * skeletonPose * worldMatrix
-                    //       = inv(R) * R * animatedPose * R * userTransform
-                    //       = animatedPose * R * userTransform   (correct: R once, userTransform once)
-                    for (int j = 0; j < jointCount; j++)
-                        allJointMatrices[base + j] = invRoot * rt.jointMatrices[j];
-                }
-                else
-                {
-                    for (int j = 0; j < jointCount; j++)
-                        allJointMatrices[base + j] = mat4(1.f);
-                }
-
-                BufferRange jr{};
-                jr.data = allJointMatrices.data() + base;
-                jr.size = static_cast<size_t>(jointCount) * sizeof(mat4);
-                jr.offset = rt.dataOffset + sizeof(NodeGpuData);
-                jointRanges.push_back(jr);
+                const size_t offset = rt.dataOffset + sizeof(NodeGpuData);
+                const size_t size = static_cast<size_t>(jointCount) * sizeof(mat4);
+                PE_ERROR_IF(offset > m_storages[frame]->Size() || size > m_storages[frame]->Size() - offset,
+                            "Scene joint palette exceeds its frame buffer");
+                palettes.push_back({static_cast<int>(rt.jointMatrices.size()) == jointCount ? &rt.jointMatrices : nullptr,
+                                    invRoot, offset, static_cast<size_t>(jointCount)});
             }
+        }
+
+        if (!palettes.empty())
+        {
+            PE_PROFILE_SCOPE("Joint Palette Preparation");
+            // Strip the skeleton's baked root transform before the shader applies worldMatrix.
+            // The frame's GPU fence was waited before reuse. Workers write disjoint mapped
+            // ranges and join before submission; no intermediate palette copy is needed.
+            auto *mapped = static_cast<uint8_t *>(m_storages[frame]->Data());
+            PE_ERROR_IF(!mapped, "Scene joint palette buffer is not mapped");
+            auto prepare = [jobs = std::span<const JointPalette>(palettes), mapped](size_t begin, size_t end)
+            {
+                for (size_t i = begin; i < end; ++i)
+                {
+                    const auto &palette = jobs[i];
+                    for (size_t j = 0; j < palette.count; ++j)
+                    {
+                        const mat4 matrix = palette.pose ? palette.invRoot * (*palette.pose)[j] : mat4(1.f);
+                        std::memcpy(mapped + palette.offset + j * sizeof(mat4), &matrix, sizeof(matrix));
+                    }
+                }
+            };
+            const size_t chunks = std::min({size_t(4), size_t(std::max(1u, std::thread::hardware_concurrency())),
+                                            std::max(size_t(1), palettes.size() / 128)});
+            std::vector<std::shared_future<void>> tasks;
+            tasks.reserve(chunks - 1);
+            try
+            {
+                for (size_t chunk = 1; chunk < chunks; ++chunk)
+                    tasks.push_back(ThreadPool::Update.Enqueue(prepare, palettes.size() * chunk / chunks,
+                                                               palettes.size() * (chunk + 1) / chunks));
+                prepare(0, palettes.size() / chunks);
+            }
+            catch (...)
+            {
+                for (auto &task : tasks)
+                    task.wait();
+                throw;
+            }
+            for (auto &task : tasks)
+                task.wait();
+            for (auto &task : tasks)
+                task.get();
         }
 
         if (!nodeRanges.empty())
             m_storages[frame]->Copy(static_cast<uint32_t>(nodeRanges.size()), nodeRanges.data(), true);
-
-        if (!jointRanges.empty())
-            m_storages[frame]->Copy(static_cast<uint32_t>(jointRanges.size()), jointRanges.data(), true);
     }
 
     void Scene::UploadDynamicUniforms(CommandBuffer *cmd)

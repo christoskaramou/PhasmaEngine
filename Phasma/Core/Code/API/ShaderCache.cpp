@@ -3,6 +3,27 @@
 
 namespace pe
 {
+    static std::string_view QuotedInclude(std::string_view line)
+    {
+        constexpr std::string_view whitespace = " \t\r\n\f\v";
+        line = line.substr(0, line.find("//"));
+        const auto first = line.find_first_not_of(whitespace);
+        if (first == std::string_view::npos)
+            return {};
+        line.remove_prefix(first);
+        if (!line.starts_with("#include"))
+            return {};
+        line.remove_prefix(8);
+        const auto quote = line.find_first_not_of(whitespace);
+        if (quote == std::string_view::npos || line[quote] != '"')
+            return {};
+        line.remove_prefix(quote + 1);
+        const auto end = line.find('"');
+        if (end == std::string_view::npos || end == 0 || line.find_first_not_of(whitespace, end + 1) != std::string_view::npos)
+            return {};
+        return line.substr(0, end);
+    }
+
     // Parse includes recursively and return the full code
     std::string ShaderCache::ParseShader(const std::string &sourcePath)
     {
@@ -25,12 +46,10 @@ namespace pe
             if (commentPos != std::string::npos)
                 line = line.substr(0, commentPos);
 
-            // Use regex to extract include filename
-            std::smatch match;
-            static const std::regex includeRegex(R"(^\s*#include\s*\"([^\"]+)\"\s*$)");
-            if (std::regex_search(line, match, includeRegex))
+            const std::string_view include = QuotedInclude(line);
+            if (!include.empty())
             {
-                std::string includeFile = match[1].str();
+                std::string includeFile(include);
                 std::filesystem::path includePath = path;
                 includePath.remove_filename();
                 std::string includeFileFull = (includePath / includeFile).string();

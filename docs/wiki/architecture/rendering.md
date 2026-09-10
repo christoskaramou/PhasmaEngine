@@ -10,6 +10,18 @@ Skinned simplification targets 50%, 25% and 12% of the original indices with a 0
 
 Both main and shadow GPU culling already select the generated index ranges. Scene serialization now preserves `shadow_lod_bias`, with 1.0 as the fallback for older scenes, allowing a scene to choose coarser shadow geometry independently. No animation cadence, gameplay timing, or shader skinning algorithm changes are required. Index-only LODs reduce submitted geometry but retain the original vertex buffers in memory.
 
+## Material Rebuilds
+
+Material-table rebuilds resolve each pass layout by its loaded `PassInfoAsset` identity within the rebuild, avoiding a resource-ID string allocation and string hash per mesh. Shader source checks still run: `ShaderCache::ParseShader` recognizes the existing quoted-include grammar directly rather than invoking a regex on every source line. Recursive expansion and content-based cache invalidation remain unchanged; 64 runtime HLSL sources produce byte-identical expanded text. These reduce rebuild overhead but do not make new instance creation incremental. Pooled ATH respawns avoid creation/rebuild work by reusing valid parked rigs.
+
+## Joint Palette Uploads
+
+`Scene::UpdateUniformData` writes root-corrected joint palettes directly into the current frame's mapped storage buffer, removing the full intermediate matrix array and its second copy. Node data and skinned bounds retain their batched copies. Missing poses still upload identity matrices, and each palette range is checked against the buffer size.
+
+At least 256 dirty palettes use up to four chunks on the existing Update pool, including the caller; smaller batches stay serial. Workers capture a span of the caller's palette descriptions and write disjoint byte ranges. The recycled frame's fence precedes these writes, and all jobs join before submission or error propagation. DX12 retains its existing upload-to-device-buffer copy. `Joint Palette Preparation` isolates the parallel work inside `Update Uniforms`.
+
+A controlled Release Vulkan test with 1,024 independently clocked ATH instances reduced uniform CPU time from 0.696 to 0.490 ms; DX12 reduced it from 0.660 to 0.471 ms. Total frame time stayed approximately 3.3 ms because that fixture was GPU-bound. A live 2,048-enemy sample reduced the same scope from 1.713 to 1.059 ms, but changing combat activity prevented a reliable overall frame-time improvement claim. CPU checks compare serial and parallel matrix bytes, fallback poses and guard ranges across batch boundaries; Vulkan validation and DX12 debug-layer crowd runs also cover the mapped-buffer path.
+
 ## Skinned Indirect Instancing
 
 `SceneSettings::skinned_instancing` groups visible skinned meshes that share an exact index range, vertex offset and raster bucket. Grouping runs inside the existing GPU culling wave after visibility and LOD selection, including both Hi-Z phases and each shadow cascade. Each instance still resolves its own mesh constants, transform, joints and material. Main-pass transparent and transmission draws keep their individual sorted commands; selection also keeps the original individual command.

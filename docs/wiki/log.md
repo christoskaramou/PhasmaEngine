@@ -1,6 +1,24 @@
 # PhasmaEngine Wiki Log
 
+## 2026-09-11
+
+- Recorded the unresolved 4,096-enemy CPU/frame regression alongside the validated crowd fixes. Removing separation-subtracted gait did not recover the baseline in an isolated comparison; attribution remains open (`architecture/runtime.md`).
+
 ## 2026-09-10
+
+- Standing ATH packed bodies no longer snap into a run clip when Farmer kills open a hole. Gait ignores this-frame crowd slides (`_sep_dx/_sep_dz`), so death-gap filling does not `animation.play("run")` from frame 0; real pursuit still starts the stride (`architecture/runtime.md`).
+
+- Prevented ATH native bodies from repeatedly restarting their standing/running pose during tiny crowd movements after Farmer shovel kills. Separate speed thresholds and a brief settling period retain the stride through short stops while attack clocks remain independent (`architecture/runtime.md`).
+
+- A second ATH jitter pass removes pursuit boosts from crowd pressure behind enemies when deaths open gaps, and limits recovery from crowd braking to 2 units/second squared. Applied separation is capped at 1 unit/second with gradual onset, obstacle corrections cannot amplify it, and ordinary pursuit arrives at the hero's exclusion boundary. Localized-death, transient-contact and melee-arrival checks supplement settled-crowd averages (`architecture/runtime.md`).
+
+- Fixed jitter after widening ATH crowd spacing: continuous pursuit braking replaces the stop/retry timer, and native/Lua separation average simultaneous contact corrections to avoid overshoot. Packed-crowd CPU regressions cover settling at 10–60 Hz without restoring pile-ups (`architecture/runtime.md`).
+
+- Reduced ATH native shovel work with shared impact samples and conservative bounds, retained all valid parked rigs for later waves, and added exact obstacle-clearance early-outs without reducing simulation cadence. A fixed 2,048-enemy Vulkan comparison reduced mean frame time 16.72 to 15.07 ms and p95 27.13 to 17.50 ms. Material rebuilds also avoid per-mesh pass-ID strings and shader-include regex parsing; first-time rig allocation still requires a full instance rebuild (`architecture/runtime.md`, `architecture/rendering.md`).
+
+- Native crowd separation resolves neighbors once per occupied cell and keeps input-ordered membership in the circle array. Identical-input CPU checks show a 13% dense-case gain at 2,048 bodies; live solver timing was neutral. New pose counters show roughly 66% exact mesh-pose reuse in the live crowd. An extra batch-read API experiment was discarded after slower CPU results (`architecture/runtime.md`).
+
+- Joint palettes write directly into the current frame's mapped buffer in up to four bounded jobs, removing the intermediate matrix copy. A fixed animated crowd reduced uniform CPU time by about 30%; live gameplay remains the larger CPU cost. ATH skips its redundant Lua separation grid when the native solver succeeds (`architecture/rendering.md`, `architecture/runtime.md`).
 
 - Fixed Vulkan FIFO crowd slowdown by pacing against the previous successful present while allowing one newer frame. A normal 1,024-enemy Player preview recovered from roughly 28 FPS to roughly 60 FPS; earlier uncapped crowd figures do not describe FIFO preview performance (`architecture/rendering.md`).
 

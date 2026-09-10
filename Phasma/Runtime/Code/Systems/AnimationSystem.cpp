@@ -379,6 +379,7 @@ namespace pe
         };
         std::vector<PoseJob> jobs;
         std::vector<std::pair<NodeId *, NodeId *>> copies;
+        size_t proceduralPoses = 0;
         jobs.reserve(m_states.size());
         std::optional<PoseKey> previousPose;
         for (auto &state : m_states)
@@ -472,12 +473,18 @@ namespace pe
             if (source)
                 copies.emplace_back(state.nodeId, source);
             else if (strip)
+            {
                 EvaluateState(*scene, state);
+                ++proceduralPoses;
+            }
             else
                 jobs.push_back({key, &scene->GetNodeRuntime(state.nodeId).jointMatrices});
             previousPose = strip ? std::nullopt : std::optional<PoseKey>(key);
         }
 
+        PE_PROFILE_COUNTER("Animation.UniquePoses", jobs.size());
+        PE_PROFILE_COUNTER("Animation.ReusedPoses", copies.size());
+        PE_PROFILE_COUNTER("Animation.ProceduralPoses", proceduralPoses);
         if (jobs.empty())
             return;
 

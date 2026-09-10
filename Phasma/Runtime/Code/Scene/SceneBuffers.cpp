@@ -739,7 +739,6 @@ namespace pe
                         }
                         mat->namedTextureIndices[name] = imagesMap[image];
                     }
-
                     MaterialInstance *inst = mesh.materialInstance;
                     if (inst)
                     {
@@ -875,7 +874,7 @@ namespace pe
         std::vector<ByteEntry> byteEntries;
         uint32_t totalBytes = 0;
 
-        std::unordered_map<std::string, MaterialLayout> layoutCache;
+        std::unordered_map<const PassInfoAsset *, MaterialLayout> layoutCache;
         {
             PE_PROFILE_SCOPE("Scene Material Byte Packing");
             for (uint32_t i = 0; i < GetNodeCount(); i++)
@@ -900,13 +899,13 @@ namespace pe
                         continue;
 
                     Material *mat = mesh.material;
-                    std::string passId = mat->passInfoAsset->GetResourceId();
+                    const PassInfoAsset *pass = mat->passInfoAsset.get();
 
-                    auto cacheIt = layoutCache.find(passId);
+                    auto cacheIt = layoutCache.find(pass);
                     if (cacheIt == layoutCache.end())
                     {
                         PE_PROFILE_SCOPE("Scene Material Reflection");
-                        cacheIt = layoutCache.emplace(passId, ReflectMaterialLayout(*mat->passInfoAsset)).first;
+                        cacheIt = layoutCache.emplace(pass, ReflectMaterialLayout(*pass)).first;
                     }
                     const MaterialLayout &layout = cacheIt->second;
 

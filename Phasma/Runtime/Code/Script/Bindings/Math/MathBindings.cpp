@@ -20,6 +20,8 @@ namespace pe
             {
                 double x, z, radius, id, sx = 0., sz = 0.;
                 bool fixed;
+                double weight = 0.;
+                size_t cell = 0, next = SIZE_MAX;
             };
             std::vector<Circle> circles;
             circles.reserve(count);
@@ -43,61 +45,88 @@ namespace pe
             if (!std::isfinite(cellSize))
                 return false;
             // Double cell coordinates avoid integer conversion overflow for script coordinates.
-            std::unordered_map<std::pair<double, double>, std::vector<size_t>, PairHash_um> cells;
+            struct Cell
+            {
+                std::pair<double, double> key;
+                size_t first = SIZE_MAX, last = SIZE_MAX;
+                std::array<size_t, 9> neighbors;
+            };
+            std::unordered_map<std::pair<double, double>, size_t, PairHash_um> cellIndices;
+            std::vector<Cell> cells;
+            cellIndices.reserve(circles.size());
             cells.reserve(circles.size());
             for (size_t i = 0; i < circles.size(); ++i)
             {
-                const auto &c = circles[i];
+                auto &c = circles[i];
                 const double x = std::floor(c.x / cellSize), z = std::floor(c.z / cellSize);
                 if (!std::isfinite(x) || !std::isfinite(z) || std::abs(x) > 1.e12 || std::abs(z) > 1.e12)
                     return false;
-                cells[{x, z}].push_back(i);
+                auto [it, inserted] = cellIndices.try_emplace({x, z}, cells.size());
+                if (inserted)
+                    cells.push_back({{x, z}});
+                c.cell = it->second;
+                auto &cell = cells[c.cell];
+                if (cell.last != SIZE_MAX)
+                    circles[cell.last].next = i;
+                else
+                    cell.first = i;
+                cell.last = i;
             }
-            for (auto &a : circles)
+            // Resolve neighbors once per occupied cell; retain input order within every cell.
+            for (auto &cell : cells)
             {
-                const double cx = std::floor(a.x / cellSize), cz = std::floor(a.z / cellSize);
+                size_t neighbor = 0;
                 for (int x = -1; x <= 1; ++x)
                     for (int z = -1; z <= 1; ++z)
                     {
-                        auto it = cells.find({cx + x, cz + z});
-                        if (it == cells.end())
+                        auto it = cellIndices.find({cell.key.first + x, cell.key.second + z});
+                        cell.neighbors[neighbor++] = it == cellIndices.end() ? SIZE_MAX : cells[it->second].first;
+                    }
+            }
+            PE_PROFILE_COUNTER("Crowd.SeparationBodies", circles.size());
+            PE_PROFILE_COUNTER("Crowd.SeparationCells", cells.size());
+            for (auto &a : circles)
+            {
+                for (size_t first : cells[a.cell].neighbors)
+                    for (size_t index = first; index != SIZE_MAX; index = circles[index].next)
+                    {
+                        auto &b = circles[index];
+                        if (b.id <= a.id || (a.fixed && b.fixed))
                             continue;
-                        for (size_t index : it->second)
+                        double dx = a.x - b.x, dz = a.z - b.z;
+                        const double distance2 = dx * dx + dz * dz;
+                        const double separation = std::max(minimumDistance, (a.radius + b.radius) * radiusFraction);
+                        if (distance2 >= separation * separation)
+                            continue;
+                        double distance = distance2 > 1.e-8 ? std::sqrt(distance2) : 0.;
+                        if (distance < 1.e-4)
                         {
-                            auto &b = circles[index];
-                            if (b.id <= a.id || (a.fixed && b.fixed))
-                                continue;
-                            double dx = a.x - b.x, dz = a.z - b.z;
-                            const double distance2 = dx * dx + dz * dz;
-                            const double separation = std::max(minimumDistance, (a.radius + b.radius) * radiusFraction);
-                            if (distance2 >= separation * separation)
-                                continue;
-                            double distance = distance2 > 1.e-8 ? std::sqrt(distance2) : 0.;
-                            if (distance < 1.e-4)
-                            {
-                                dx = 1.;
-                                dz = std::fmod(a.id + b.id, 2.) == 0. ? .35 : -.35;
-                                distance = 1.;
-                            }
-                            const double push = (separation - distance) * strength * .5 / distance;
-                            const double px = dx * push, pz = dz * push;
-                            if (!a.fixed)
-                            {
-                                a.sx += px * (b.fixed ? 2. : 1.);
-                                a.sz += pz * (b.fixed ? 2. : 1.);
-                            }
-                            if (!b.fixed)
-                            {
-                                b.sx -= px * (a.fixed ? 2. : 1.);
-                                b.sz -= pz * (a.fixed ? 2. : 1.);
-                            }
+                            dx = 1.;
+                            dz = std::fmod(a.id + b.id, 2.) == 0. ? .35 : -.35;
+                            distance = 1.;
+                        }
+                        const double push = (separation - distance) * strength * .5 / distance;
+                        const double px = dx * push, pz = dz * push;
+                        if (!a.fixed)
+                        {
+                            a.sx += px * (b.fixed ? 2. : 1.);
+                            a.sz += pz * (b.fixed ? 2. : 1.);
+                            a.weight += b.fixed ? 1. : .5;
+                        }
+                        if (!b.fixed)
+                        {
+                            b.sx -= px * (a.fixed ? 2. : 1.);
+                            b.sz -= pz * (a.fixed ? 2. : 1.);
+                            b.weight += a.fixed ? 1. : .5;
                         }
                     }
             }
             for (size_t i = 0; i < circles.size(); ++i)
             {
-                output.raw_set(i * 2 + 1, circles[i].sx);
-                output.raw_set(i * 2 + 2, circles[i].sz);
+                // Average simultaneous constraints so crowded bodies cannot overshoot each other.
+                const double weight = std::max(1., circles[i].weight);
+                output.raw_set(i * 2 + 1, circles[i].sx / weight);
+                output.raw_set(i * 2 + 2, circles[i].sz / weight);
             }
             return true;
         }
