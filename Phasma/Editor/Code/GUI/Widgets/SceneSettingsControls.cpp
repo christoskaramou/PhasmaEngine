@@ -172,6 +172,9 @@ namespace pe
             ui::ItemTooltip("Hi-Z slack as a FRACTION of occluder depth (0.002 = 0.2%). Higher = more conservative.");
             ImGui::Unindent(16.0f);
         }
+        Track(ImGui::Checkbox("Skinned Mesh Instancing", &gSettings.skinned_instancing));
+        ui::ItemTooltip("Batch repeated animated meshes while preserving individual poses and visibility. "
+                        "Compare profiler timings with this enabled and disabled for your scene.");
         Track(ImGui::Checkbox("Mesh LOD", &gSettings.lod_enabled));
         ui::ItemTooltip("Discrete mesh level-of-detail: the GPU cull pass swaps each mesh to a simpler index "
                         "set chosen by camera distance. Levels are generated at load via meshopt.");

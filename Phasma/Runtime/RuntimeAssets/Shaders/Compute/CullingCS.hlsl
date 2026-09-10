@@ -44,11 +44,13 @@ struct PushConstants
 [[vk::binding(16, 0)]] cbuffer LodUBO
 {
     uint lodEnabled;
-    uint lodPad0;
+    uint drawCapacity;
     float lodBias;
-    float lodPad1;
+    uint skinnedInstancing;
     float4 lodDistances;
 };
+
+#include "InstanceBatch.hlsl"
 
 float4x4 LoadMatrix(uint byteOffset)
 {
@@ -186,8 +188,19 @@ bool AABBOccluded(float3 aabbMin, float3 aabbMax)
 // Emit a passing OPAQUE draw into the phase output set (descriptor binds set A or B + its
 // counter). Transparents/selected are never occlusion-culled — the frustum Culling pass owns
 // those — so the phase variants only handle renderType 1/2 (opaque / alpha-cut, SS + DS).
-void EmitOpaque(DrawIndexedIndirectCommand cmd, uint type, bool doubleSided)
+void EmitOpaque(DrawIndexedIndirectCommand cmd, uint type, bool doubleSided, bool skinned)
 {
+    uint bucket = (type == 2u ? 1u : 0u) + (doubleSided ? 5u : 0u);
+#if defined(PHASE1)
+    uint instanceBase = drawCapacity * 2u;
+#else
+    uint instanceBase = drawCapacity * 3u;
+#endif
+    bool emit = BatchInstances(cmd, cmd.firstInstance, bucket,
+                               skinnedInstancing != 0u && skinned && (type == 1u || type == 2u),
+                               instanceBase, 9u);
+    if (!emit)
+        return;
     uint offset = 0;
     if (type == 1)
     {
@@ -291,7 +304,7 @@ uint WaveAppend(uint counterIndex, bool emit)
     if (Visibility[idx] == 0u)
         return;
     cmd.firstInstance = idx;
-    EmitOpaque(cmd, constants.renderType, (constants.editorFlags & 2) != 0);
+    EmitOpaque(cmd, constants.renderType, (constants.editorFlags & 2) != 0, skinBoundsOffset != 0u);
 #elif defined(PHASE2)
     if (isVoxel || isTerrain)
         return; // voxels/terrain use their frustum-only buckets, not the standard-pbr Hi-Z buckets.
@@ -308,7 +321,7 @@ uint WaveAppend(uint counterIndex, bool emit)
     if (visibleNow && wasVisible == 0u)
     {
         cmd.firstInstance = idx;
-        EmitOpaque(cmd, constants.renderType, (constants.editorFlags & 2) != 0);
+        EmitOpaque(cmd, constants.renderType, (constants.editorFlags & 2) != 0, skinBoundsOffset != 0u);
     }
 #else
     if (pc.enableFrustumCulling)
@@ -344,6 +357,17 @@ uint WaveAppend(uint counterIndex, bool emit)
     bool emitAlphaBlend = !isVoxel && !isTerrain && (type == 3);
     bool emitTransmission = !isVoxel && !isTerrain && (type == 4);
     bool emitSelected = !isVoxel && ((constants.editorFlags & 1) != 0);
+
+    DrawIndexedIndirectCommand selectedCmd = cmd;
+    uint bucket = (type == 2u ? 1u : 0u) + (doubleSided ? 5u : 0u);
+    bool emit = BatchInstances(cmd, idx, bucket,
+                               skinnedInstancing != 0u && skinBoundsOffset != 0u &&
+                               (emitOpaqueSS || emitOpaqueDS || emitAlphaCutSS || emitAlphaCutDS),
+                               drawCapacity, 9u);
+    emitOpaqueSS = emitOpaqueSS && emit;
+    emitOpaqueDS = emitOpaqueDS && emit;
+    emitAlphaCutSS = emitAlphaCutSS && emit;
+    emitAlphaCutDS = emitAlphaCutDS && emit;
 
     // One atomic per wave per non-empty bucket instead of one per visible lane (see WaveAppend).
     uint slot;
@@ -384,7 +408,7 @@ uint WaveAppend(uint counterIndex, bool emit)
 
     slot = WaveAppend(4, emitSelected);
     if (emitSelected)
-        IndirectSelectedOut[slot] = cmd;
+        IndirectSelectedOut[slot] = selectedCmd;
 
     slot = WaveAppend(7, emitVoxel);
     if (emitVoxel)

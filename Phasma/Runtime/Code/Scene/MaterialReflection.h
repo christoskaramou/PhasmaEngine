@@ -34,6 +34,7 @@ namespace pe
         std::vector<StructMemberInfo> structMembers;
         uint32_t totalByteSize = 0;
         bool valid = false;
+        size_t sourceHash = 0;
     };
 
     MaterialLayout ReflectMaterialLayout(const PassInfoAsset &passInfo);

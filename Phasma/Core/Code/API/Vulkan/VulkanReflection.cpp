@@ -282,7 +282,11 @@ namespace pe
             if (totalSize > 0 && reflectionType != ReflectionVariableType::None)
                 desc.format = GetAttributeFormat(totalSize, reflectionType);
             if (isInput)
+            {
                 desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
+                if (shader->GetShaderStage() == PE_SHADER_STAGE_VERTEX && desc.name == "in.var.PE_DRAW_ID")
+                    desc.binding = 1;
+            }
             return desc;
         };
 

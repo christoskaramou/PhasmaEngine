@@ -212,13 +212,28 @@ Material layouts are cached on the owning `PassInfoAsset` across instance rebuil
 buffer name and annotation. Reloading a pass clears its cached key. The cache retains
 one layout per pass asset and still checks source content on rebuild, so shader edits
 cannot retain stale field offsets; cache hits avoid creating GPU shaders and reflecting
-their resources again. Purely visual leaf meshes can use `node:set_visible()` to update
+their resources again. The content hash also guards each material's existing layout copy.
+Large material rebuilds pack immutable parameter/texture-index data in at most four
+chunks on the Update pool, with distinct output byte arrays. Offsets are assigned in
+the original traversal order and GPU uploads happen on the caller after every job
+finishes. Small rebuilds remain serial. Packing, reflection and upload scopes separate
+their costs. Purely visual leaf meshes can use `node:set_visible()` to update
 the render flag without dirtying the instance/material tables. This flag does not
 disable child nodes, scripts, physics or animation.
 
 ## Scene Scripts
 
+`ScriptSystem::Init` explicitly opens LuaJIT's JIT library before loading gameplay. Linking the VM without this initialization leaves the compiler disabled. Startup logs whether compiled execution is available; the `jit` global is then removed, preserving the restricted script library surface. Both editor and player use this shared initialization.
+
 Runtime profiling includes separate `Animation System` and `Audio System` CPU scopes, alongside physics, scripts, scene updates and GPU passes, so skeletal evaluation and main-thread audio maintenance can be measured independently. An instance rebuild refreshes image views, material tables and mesh constants together; `FlushPendingGpuWork` clears the texture dirty flag after that rebuild instead of repeating the same refresh through `UpdateTextures`.
+
+Crowd scripts can use `separate_circles(input, count, output, minimumDistance, radiusFraction, strength)` for a native spatial-hash separation batch. Input contains flat `{x, z, radius, fixed, id, ...}` entries with unique numeric IDs; output receives `{dx, dz, ...}` offsets. The function visits each overlapping unordered pair once, preserves fixed-body response and deterministic coincident splits, and returns false without writing output for invalid input. Values must be finite, radii/fraction/strength nonnegative, minimum distance positive, and cell coordinates within +/-1e12. Count ignores a scratch table's stale tail. Scripts still own hero contact, displacement limits, obstacles, and final movement. ATH retains its Lua solver as a fallback and rejects distant bodies before rebuilding hero-contact shapes. `Script Circle Separation` measures the native batch independently of those remaining rules.
+
+`scene.set_positions` and `scene.set_rotations` accept flat `{node, x, y, z, ...}` batches (rotation in degrees). `animation.set_speeds(updates, count, layer?)` accepts `{node, speed, ...}` and optionally targets the override layer. Invalid handles are skipped; count ignores stale entries. `animation.get_layer_time(node)` returns `(active, seconds)` without allocating the full `get_layer_state` table. ATH uses these surfaces for native presentation while keeping the same combat clocks. Batch transform and animation-speed CPU scopes make their costs visible.
+
+During each animation update, nodes with the same skeleton, clip table, base clip/time and override clip/time/bone mask reuse an exact evaluated pose, including non-adjacent instances. Every node still advances its own clocks/root motion and updates its own bounds. Procedural strips retain their individual evaluation. The cache ends with the update, so edited clips or reloaded scenes cannot retain an old pose. A controlled 1,024-instance crowd with 22 playback speeds reduced animation CPU time from 1.186 ms to 0.303 ms; independent attack clocks in live combat share fewer poses. Normal clip switches no longer write success logs on the frame path; rejected requests retain diagnostics.
+
+Unique crowd poses are evaluated in at most four chunks on the existing Update pool, including one chunk on the calling thread. Fewer than 256 unique poses stay serial. Workers only write distinct joint-matrix vectors; root motion, procedural strips, hierarchy dirtiness and exact-pose copies stay ordered on the caller. Every job completes before the scene publishes the poses. `Animation Evaluate Poses` isolates this work. CPU validation compared 6,144 parallel poses bit-for-bit with serial base/overlay composition, including sparse curves, all interpolation modes, reversed bone order and planar splines.
 
 Audio sources may opt into the ambient volume group with `audio.add_source(node, path, {ambient=true})`; existing sources default to SFX. `audio.set_ambient_volume(value)` controls that group independently of music and SFX, while master volume still applies. Per-node playback, live source updates and trigger-zone playback honor the selection. The `ambient` flag round-trips through scene saves, snapshots and prefab loads. ATH persists its Ambient Sounds menu value in the project settings and routes the farm loop to this group.
 

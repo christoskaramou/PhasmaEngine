@@ -433,6 +433,14 @@ namespace pe
         m_lua.globals()["_ENV"] = m_lua.globals();
 
 #ifdef PE_LUAJIT
+        // Linking LuaJIT alone leaves its compiler uninitialized. Keep compiler
+        // controls private while enabling compiled gameplay in every host.
+        m_lua.open_libraries(sol::lib::jit);
+        sol::function jitStatus = m_lua["jit"]["status"];
+        const bool jitEnabled = jitStatus();
+        PE_INFO("LuaJIT compiler: %s", jitEnabled ? "enabled" : "unavailable");
+        m_lua["jit"] = sol::nil;
+
         // LuaJIT's math.atan is 5.1 single-argument (a second arg is silently
         // ignored), but game scripts use the 5.3+ two-argument form for facing
         // and projectile yaw. Route the optional second arg to atan2; with one

@@ -242,12 +242,12 @@ namespace pe
                 {
                     hasDrawIdInput = true;
                     element.InputSlot = 1;
-                    element.AlignedByteOffset = offsetof(D3D12_DRAW_INDEXED_ARGUMENTS, StartInstanceLocation);
+                    element.AlignedByteOffset = 0;
                     element.InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA;
                     element.InstanceDataStepRate = 1;
                     if (m_vertexBindingStrides.size() < 2)
                         m_vertexBindingStrides.resize(2, 0u);
-                    m_vertexBindingStrides[1] = sizeof(D3D12_DRAW_INDEXED_ARGUMENTS);
+                    m_vertexBindingStrides[1] = sizeof(uint32_t);
                 }
                 else
                 {

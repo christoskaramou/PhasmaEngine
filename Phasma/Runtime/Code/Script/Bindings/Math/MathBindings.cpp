@@ -2,6 +2,107 @@
 
 namespace pe
 {
+    namespace
+    {
+        // Input: {x, z, radius, fixed, id, ...}; output: {dx, dz, ...}.
+        // Callers retain their collision response, displacement limits, and boundary rules.
+        bool SeparateCircles(sol::stack_table input, int count, sol::stack_table output,
+                             double minimumDistance, double radiusFraction, double strength)
+        {
+            PE_PROFILE_SCOPE("Script Circle Separation");
+            if (count < 0 || static_cast<size_t>(count) > input.size() / 5 ||
+                !std::isfinite(minimumDistance) || minimumDistance <= 0. ||
+                !std::isfinite(radiusFraction) || radiusFraction < 0. ||
+                !std::isfinite(strength) || strength < 0.)
+                return false;
+
+            struct Circle
+            {
+                double x, z, radius, id, sx = 0., sz = 0.;
+                bool fixed;
+            };
+            std::vector<Circle> circles;
+            circles.reserve(count);
+            double maxRadius = 0.;
+            for (int i = 0; i < count; ++i)
+            {
+                const size_t offset = static_cast<size_t>(i) * 5;
+                auto x = input.raw_get<sol::optional<double>>(offset + 1);
+                auto z = input.raw_get<sol::optional<double>>(offset + 2);
+                auto radius = input.raw_get<sol::optional<double>>(offset + 3);
+                auto fixed = input.raw_get<sol::optional<bool>>(offset + 4);
+                auto id = input.raw_get<sol::optional<double>>(offset + 5);
+                if (!x || !z || !radius || !fixed || !id ||
+                    !std::isfinite(*x) || !std::isfinite(*z) || !std::isfinite(*radius) ||
+                    *radius < 0. || !std::isfinite(*id))
+                    return false;
+                circles.push_back({*x, *z, *radius, *id, 0., 0., *fixed});
+                maxRadius = std::max(maxRadius, *radius);
+            }
+            const double cellSize = std::max(minimumDistance, maxRadius * 2. * radiusFraction);
+            if (!std::isfinite(cellSize))
+                return false;
+            // Double cell coordinates avoid integer conversion overflow for script coordinates.
+            std::unordered_map<std::pair<double, double>, std::vector<size_t>, PairHash_um> cells;
+            cells.reserve(circles.size());
+            for (size_t i = 0; i < circles.size(); ++i)
+            {
+                const auto &c = circles[i];
+                const double x = std::floor(c.x / cellSize), z = std::floor(c.z / cellSize);
+                if (!std::isfinite(x) || !std::isfinite(z) || std::abs(x) > 1.e12 || std::abs(z) > 1.e12)
+                    return false;
+                cells[{x, z}].push_back(i);
+            }
+            for (auto &a : circles)
+            {
+                const double cx = std::floor(a.x / cellSize), cz = std::floor(a.z / cellSize);
+                for (int x = -1; x <= 1; ++x)
+                    for (int z = -1; z <= 1; ++z)
+                    {
+                        auto it = cells.find({cx + x, cz + z});
+                        if (it == cells.end())
+                            continue;
+                        for (size_t index : it->second)
+                        {
+                            auto &b = circles[index];
+                            if (b.id <= a.id || (a.fixed && b.fixed))
+                                continue;
+                            double dx = a.x - b.x, dz = a.z - b.z;
+                            const double distance2 = dx * dx + dz * dz;
+                            const double separation = std::max(minimumDistance, (a.radius + b.radius) * radiusFraction);
+                            if (distance2 >= separation * separation)
+                                continue;
+                            double distance = distance2 > 1.e-8 ? std::sqrt(distance2) : 0.;
+                            if (distance < 1.e-4)
+                            {
+                                dx = 1.;
+                                dz = std::fmod(a.id + b.id, 2.) == 0. ? .35 : -.35;
+                                distance = 1.;
+                            }
+                            const double push = (separation - distance) * strength * .5 / distance;
+                            const double px = dx * push, pz = dz * push;
+                            if (!a.fixed)
+                            {
+                                a.sx += px * (b.fixed ? 2. : 1.);
+                                a.sz += pz * (b.fixed ? 2. : 1.);
+                            }
+                            if (!b.fixed)
+                            {
+                                b.sx -= px * (a.fixed ? 2. : 1.);
+                                b.sz -= pz * (a.fixed ? 2. : 1.);
+                            }
+                        }
+                    }
+            }
+            for (size_t i = 0; i < circles.size(); ++i)
+            {
+                output.raw_set(i * 2 + 1, circles[i].sx);
+                output.raw_set(i * 2 + 2, circles[i].sz);
+            }
+            return true;
+        }
+    } // namespace
+
     static struct MathBindings
     {
         MathBindings()
@@ -9,6 +110,7 @@ namespace pe
             ScriptSystem::AddBindings(
                 [](sol::state &lua)
                 {
+                lua.set_function("separate_circles", SeparateCircles);
                 // vec2 type
                 lua.new_usertype<vec2>("_vec2_type", sol::no_constructor,
                     "x", sol::property([](const vec2 &v) { return v.x; }, [](vec2 &v, float val) { v.x = val; }),

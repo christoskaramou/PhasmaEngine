@@ -1319,6 +1319,8 @@ namespace pe
         const auto &s = Settings::Get<SceneSettings>();
         LodUBOData ubo{};
         ubo.enabled = s.lod_enabled ? 1u : 0u;
+        ubo.drawCapacity = m_indirectCapacity;
+        ubo.skinnedInstancing = s.skinned_instancing ? 1u : 0u;
         ubo.bias = s.lod_bias > 0.0f ? s.lod_bias : 1.0f;
         ubo.distances[0] = s.lod_distances[0];
         ubo.distances[1] = s.lod_distances[1];
@@ -1365,7 +1367,7 @@ namespace pe
 
         {
             PE_PROFILE_SCOPE("Culling Fill Buffers");
-            cmd->FillBuffer(m_cullingCountersBuffers[frame], 0, 9 * sizeof(uint32_t), 0);
+            cmd->FillBuffer(m_cullingCountersBuffers[frame], 0, 10 * sizeof(uint32_t), 0);
             if (needsIndirectCountFallback)
             {
                 cmd->FillBuffer(m_indirectOpaqueSS[frame], 0, indirectSize, 0);
@@ -1402,7 +1404,7 @@ namespace pe
             return barrier;
         };
 
-        const uint64_t countersSize = 9 * sizeof(uint32_t);
+        const uint64_t countersSize = 10 * sizeof(uint32_t);
         {
             PE_PROFILE_SCOPE("Culling Compute Access Barriers");
             std::vector<BufferBarrierInfo> computeAccessBarriers;
@@ -1414,6 +1416,10 @@ namespace pe
                                                                   PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ,
                                                                   indirectAllSize));
             }
+            computeAccessBarriers.push_back(makeBufferBarrier(m_drawInstanceIds[frame],
+                                                              PE_STAGE_COMPUTE_SHADER,
+                                                              PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE,
+                                                              m_drawInstanceIds[frame]->Size()));
             computeAccessBarriers.push_back(makeBufferBarrier(m_cullingCountersBuffers[frame],
                                                               PE_STAGE_COMPUTE_SHADER,
                                                               PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE,
@@ -1494,6 +1500,7 @@ namespace pe
             set->SetBuffer(10, m_sortKeysAlphaBlend[frame]);
             set->SetBuffer(11, m_sortKeysTransmission[frame]);
             set->SetBuffer(12, GetUniforms(frame));
+            set->SetBuffer(19, m_drawInstanceIds[frame]);
             if (set->HasBinding(17))
                 set->SetBuffer(17, m_indirectVoxels[frame]);
             if (set->HasBinding(18))
@@ -1576,6 +1583,7 @@ namespace pe
                 ti.stageMask = PE_STAGE_COMPUTE_SHADER;
                 ti.accessMask = PE_ACCESS_SHADER_STORAGE_WRITE;
             };
+            recordComputeWrite(m_drawInstanceIds[frame]);
             recordComputeWrite(m_cullingCountersBuffers[frame]);
             recordComputeWrite(m_indirectOpaqueSS[frame]);
             recordComputeWrite(m_indirectAlphaCutSS[frame]);
@@ -1739,6 +1747,10 @@ namespace pe
                                                          countersSize));
             cmd->BufferBarriers(indirectBarriers);
         }
+        cmd->BufferBarrier(makeBufferBarrier(m_drawInstanceIds[frame],
+                                             PE_STAGE_VERTEX_INPUT,
+                                             PE_ACCESS_VERTEX_ATTRIBUTE_READ,
+                                             m_drawInstanceIds[frame]->Size()));
     }
 
     void Scene::DispatchCullingPhase(CommandBuffer *cmd, PassInfo *passInfo, CullPhase phase,
@@ -1749,7 +1761,7 @@ namespace pe
         const bool needsIndirectCountFallback = !RHII.GetCaps().indirectCount;
         const uint64_t indirectSize = static_cast<uint64_t>(m_indirectCapacity) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
         const uint64_t indirectAllSize = m_indirectAll ? static_cast<uint64_t>(m_indirectAll->Size()) : 0ull;
-        const uint64_t countersSize = 7 * sizeof(uint32_t);
+        const uint64_t countersSize = 10 * sizeof(uint32_t);
         const uint64_t visibilitySize = static_cast<uint64_t>(m_indirectCapacity) * sizeof(uint32_t);
 
         // Output set: phase 1 -> A (last-frame-visible), phase 2 -> B (newly-disoccluded). Opaque only.
@@ -1794,6 +1806,7 @@ namespace pe
                                                      PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_STORAGE_READ,
                                                      indirectAllSize));
             }
+            barriers.push_back(makeBufferBarrier(m_drawInstanceIds[frame], PE_STAGE_COMPUTE_SHADER, rw, m_drawInstanceIds[frame]->Size()));
             barriers.push_back(makeBufferBarrier(counters, PE_STAGE_COMPUTE_SHADER, rw, countersSize));
             barriers.push_back(makeBufferBarrier(opaqueSS, PE_STAGE_COMPUTE_SHADER, rw, indirectSize));
             barriers.push_back(makeBufferBarrier(alphaCutSS, PE_STAGE_COMPUTE_SHADER, rw, indirectSize));
@@ -1836,6 +1849,7 @@ namespace pe
             bind(10, m_sortKeysAlphaBlend[frame]);
             bind(11, m_sortKeysTransmission[frame]);
             bind(12, GetUniforms(frame));
+            bind(19, m_drawInstanceIds[frame]);
             if (hiZPyramid && occlusionData) // phase 2 (HIZ_OCCLUSION variant)
             {
                 if (set->HasBinding(13))
@@ -1904,6 +1918,7 @@ namespace pe
                 ti.stageMask = PE_STAGE_COMPUTE_SHADER;
                 ti.accessMask = PE_ACCESS_SHADER_STORAGE_WRITE;
             };
+            recordComputeWrite(m_drawInstanceIds[frame]);
             recordComputeWrite(counters);
             recordComputeWrite(opaqueSS);
             recordComputeWrite(alphaCutSS);
@@ -1916,7 +1931,11 @@ namespace pe
         {
             PE_PROFILE_SCOPE("OccCull Final Indirect Barriers");
             std::vector<BufferBarrierInfo> barriers;
-            barriers.reserve(5);
+            barriers.reserve(6);
+            barriers.push_back(makeBufferBarrier(m_drawInstanceIds[frame],
+                                                 PE_STAGE_VERTEX_INPUT,
+                                                 PE_ACCESS_VERTEX_ATTRIBUTE_READ,
+                                                 m_drawInstanceIds[frame]->Size()));
             auto addDrawBarrier = [&](Buffer *b)
             {
                 barriers.push_back(makeBufferBarrier(b, PE_STAGE_DRAW_INDIRECT, PE_ACCESS_INDIRECT_COMMAND_READ, indirectSize));
@@ -1939,7 +1958,7 @@ namespace pe
         const bool needsIndirectCountFallback = !RHII.GetCaps().indirectCount;
         const uint64_t indirectSize = static_cast<uint64_t>(m_indirectCapacity) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
         const uint64_t indirectAllSize = static_cast<uint64_t>(m_indirectAll->Size());
-        const uint64_t countersSize = 2 * sizeof(uint32_t);
+        const uint64_t countersSize = 3 * sizeof(uint32_t);
 
         auto makeBufferBarrier = [](Buffer *buffer, PeBarrierSync stageMask, PeBarrierAccess accessMask, uint64_t size)
         {
@@ -1974,6 +1993,7 @@ namespace pe
                                                      indirectAllSize));
             }
             const PeBarrierAccess rw = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE;
+            barriers.push_back(makeBufferBarrier(m_drawInstanceIds[frame], PE_STAGE_COMPUTE_SHADER, rw, m_drawInstanceIds[frame]->Size()));
             barriers.push_back(makeBufferBarrier(m_shadowCullCounters[frame], PE_STAGE_COMPUTE_SHADER, rw, countersSize));
             barriers.push_back(makeBufferBarrier(m_shadowIndirectRegular[frame], PE_STAGE_COMPUTE_SHADER, rw, indirectSize));
             barriers.push_back(makeBufferBarrier(m_shadowIndirectVoxels[frame], PE_STAGE_COMPUTE_SHADER, rw, indirectSize));
@@ -1993,6 +2013,7 @@ namespace pe
             set->SetBuffer(3, m_shadowIndirectRegular[frame]);
             set->SetBuffer(4, m_shadowIndirectVoxels[frame]);
             set->SetBuffer(12, GetUniforms(frame));
+            set->SetBuffer(19, m_drawInstanceIds[frame]);
             // LOD params (binding 16) so shadow casters pick the same distance-based LOD as the main pass.
             if (Buffer *lodUbo = UpdateLodUniforms(frame); lodUbo && set->HasBinding(16))
                 set->SetBuffer(16, lodUbo);
@@ -2037,6 +2058,7 @@ namespace pe
                 ti.stageMask = PE_STAGE_COMPUTE_SHADER;
                 ti.accessMask = PE_ACCESS_SHADER_STORAGE_WRITE;
             };
+            recordComputeWrite(m_drawInstanceIds[frame]);
             recordComputeWrite(m_shadowCullCounters[frame]);
             recordComputeWrite(m_shadowIndirectRegular[frame]);
             recordComputeWrite(m_shadowIndirectVoxels[frame]);
@@ -2045,7 +2067,11 @@ namespace pe
         {
             PE_PROFILE_SCOPE("ShadowCull Final Indirect Barriers");
             std::vector<BufferBarrierInfo> barriers;
-            barriers.reserve(3);
+            barriers.reserve(4);
+            barriers.push_back(makeBufferBarrier(m_drawInstanceIds[frame],
+                                                 PE_STAGE_VERTEX_INPUT,
+                                                 PE_ACCESS_VERTEX_ATTRIBUTE_READ,
+                                                 m_drawInstanceIds[frame]->Size()));
             barriers.push_back(makeBufferBarrier(m_shadowIndirectRegular[frame],
                                                  PE_STAGE_DRAW_INDIRECT,
                                                  PE_ACCESS_INDIRECT_COMMAND_READ,

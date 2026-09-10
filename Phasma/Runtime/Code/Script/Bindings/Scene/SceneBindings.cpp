@@ -33,7 +33,8 @@ namespace pe
                 // as a scratch table by callers; `count` is the number of node entries (the
                 // table may have a stale tail beyond count*4). Invalid/stale handles are
                 // skipped, so callers don't need a separate is_valid crossing per node.
-                scene.set_function("set_positions", [](sol::table t, int count) {
+                scene.set_function("set_positions", [](sol::stack_table t, int count) {
+                    PE_PROFILE_SCOPE("Script Batch Positions");
                     Scene *s = GetActiveScene();
                     if (!s) return;
                     for (int i = 0; i < count; i++)
@@ -53,7 +54,8 @@ namespace pe
 
                 // Same contract as set_positions; rotation is euler degrees, matching
                 // node:set_rotation (decompose local matrix, rebuild T*R*S).
-                scene.set_function("set_rotations", [](sol::table t, int count) {
+                scene.set_function("set_rotations", [](sol::stack_table t, int count) {
+                    PE_PROFILE_SCOPE("Script Batch Rotations");
                     Scene *s = GetActiveScene();
                     if (!s) return;
                     for (int i = 0; i < count; i++)

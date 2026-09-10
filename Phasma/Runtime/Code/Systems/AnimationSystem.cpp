@@ -261,14 +261,42 @@ namespace pe
 
     namespace
     {
-        void EvaluateState(Scene &scene, const AnimationNodeState &state)
+        struct PoseKey
         {
-            const auto &clips = scene.GetAnimationClipsForNode(state.nodeId);
-            const Skeleton &skeleton = scene.GetSkeletonForNode(state.nodeId);
-            if (state.clipIndex < 0 || state.clipIndex >= static_cast<int>(clips.size()) || skeleton.bones.empty())
-                return;
-            NodeRuntime &rt = scene.GetNodeRuntime(state.nodeId);
-            AnimationEvaluator::EvaluatePose(clips[state.clipIndex], skeleton, state.time, rt.jointMatrices);
+            const Skeleton *skeleton;
+            const std::vector<AnimationClip> *clips;
+            const AnimationNodeState *state;
+
+            bool operator==(const PoseKey &other) const
+            {
+                return skeleton == other.skeleton && clips == other.clips &&
+                       state->clipIndex == other.state->clipIndex && state->time == other.state->time &&
+                       state->layer.clipIndex == other.state->layer.clipIndex &&
+                       state->layer.time == other.state->layer.time && state->layer.bones == other.state->layer.bones;
+            }
+        };
+
+        struct PoseHash
+        {
+            size_t operator()(const PoseKey &key) const
+            {
+                Hash hash;
+                hash.Combine(reinterpret_cast<size_t>(key.skeleton));
+                hash.Combine(reinterpret_cast<size_t>(key.clips));
+                hash.Combine(key.state->clipIndex);
+                hash.Combine(key.state->time);
+                hash.Combine(key.state->layer.clipIndex);
+                hash.Combine(key.state->layer.time);
+                for (int bone : key.state->layer.bones)
+                    hash.Combine(bone);
+                return hash;
+            }
+        };
+
+        void EvaluateStatePose(const Skeleton &skeleton, const std::vector<AnimationClip> &clips,
+                               const AnimationNodeState &state, std::vector<mat4> &matrices)
+        {
+            AnimationEvaluator::EvaluatePose(clips[state.clipIndex], skeleton, state.time, matrices);
             const auto &layer = state.layer;
             if (layer.clipIndex >= 0 && layer.clipIndex < static_cast<int>(clips.size()))
             {
@@ -277,9 +305,19 @@ namespace pe
                 // Copy complete rig-space poses: an attacking torso must not drag the base clip's feet.
                 // Include the entire arm/prop group in the mask to preserve an authored two-hand grip.
                 for (int bone : layer.bones)
-                    if (bone >= 0 && bone < static_cast<int>(rt.jointMatrices.size()))
-                        rt.jointMatrices[bone] = overlay[bone];
+                    if (bone >= 0 && bone < static_cast<int>(matrices.size()))
+                        matrices[bone] = overlay[bone];
             }
+        }
+
+        void EvaluateState(Scene &scene, const AnimationNodeState &state)
+        {
+            const auto &clips = scene.GetAnimationClipsForNode(state.nodeId);
+            const Skeleton &skeleton = scene.GetSkeletonForNode(state.nodeId);
+            if (state.clipIndex < 0 || state.clipIndex >= static_cast<int>(clips.size()) || skeleton.bones.empty())
+                return;
+            NodeRuntime &rt = scene.GetNodeRuntime(state.nodeId);
+            EvaluateStatePose(skeleton, clips, state, rt.jointMatrices);
             if (scene.NodeUsesSkinnedStrip2D(state.nodeId))
             {
                 const auto *strip = scene.GetSkinnedStrip2DState(state.nodeId);
@@ -323,16 +361,26 @@ namespace pe
     {
         PE_PROFILE_SCOPE("Animation System");
         Scene *scene = GetActiveScene();
-        if (!scene)
+        if (!scene || m_states.empty())
             return;
 
         float dt = static_cast<float>(FrameTimer::Instance().GetDelta()) * Settings::Get<SceneSettings>().time_scale;
         if (dt <= 0.0001f)
             return;
 
-        const AnimationNodeState *previousState = nullptr;
-        const Skeleton *previousSkeleton = nullptr;
-        const std::vector<AnimationClip> *previousClips = nullptr;
+        // Keys refer only to states already advanced in this update. No pose survives the frame,
+        // so clip editing, scene reloads and independent attack clocks require no invalidation.
+        std::unordered_map<PoseKey, NodeId *, PoseHash> poses;
+        poses.reserve(m_states.size());
+        struct PoseJob
+        {
+            PoseKey key;
+            std::vector<mat4> *matrices;
+        };
+        std::vector<PoseJob> jobs;
+        std::vector<std::pair<NodeId *, NodeId *>> copies;
+        jobs.reserve(m_states.size());
+        std::optional<PoseKey> previousPose;
         for (auto &state : m_states)
         {
             if (!state.playing)
@@ -407,22 +455,73 @@ namespace pe
                 else
                     layer = {};
             }
-            // Sibling meshes often play the same rig. Reuse only an exact pose from this update;
-            // each node still advances its own clocks/root motion and dirties its own skinned bounds.
             const bool strip = scene->NodeUsesSkinnedStrip2D(state.nodeId);
-            if (!strip && previousState && previousSkeleton == &skeleton && previousClips == &clips &&
-                previousState->clipIndex == state.clipIndex && previousState->time == state.time &&
-                previousState->layer.clipIndex == layer.clipIndex && previousState->layer.time == layer.time &&
-                previousState->layer.bones == layer.bones)
+            const PoseKey key{&skeleton, &clips, &state};
+            NodeId *source = nullptr;
+            if (!strip)
             {
-                scene->GetNodeRuntime(state.nodeId).jointMatrices = scene->GetNodeRuntime(previousState->nodeId).jointMatrices;
-                scene->MarkNodeDirty(state.nodeId);
+                if (previousPose && *previousPose == key)
+                    source = previousPose->state->nodeId;
+                else
+                {
+                    auto [it, inserted] = poses.try_emplace(key, state.nodeId);
+                    if (!inserted)
+                        source = it->second;
+                }
             }
-            else
+            if (source)
+                copies.emplace_back(state.nodeId, source);
+            else if (strip)
                 EvaluateState(*scene, state);
-            previousState = strip ? nullptr : &state;
-            previousSkeleton = &skeleton;
-            previousClips = &clips;
+            else
+                jobs.push_back({key, &scene->GetNodeRuntime(state.nodeId).jointMatrices});
+            previousPose = strip ? std::nullopt : std::optional<PoseKey>(key);
+        }
+
+        if (jobs.empty())
+            return;
+
+        // Workers touch only distinct pose buffers. Scene hierarchy changes, root motion
+        // and shared-pose copies stay on the calling thread, after all evaluations finish.
+        auto evaluate = [&jobs](size_t begin, size_t end)
+        {
+            for (size_t i = begin; i < end; ++i)
+            {
+                const auto &job = jobs[i];
+                EvaluateStatePose(*job.key.skeleton, *job.key.clips, *job.key.state, *job.matrices);
+            }
+        };
+        {
+            PE_PROFILE_SCOPE("Animation Evaluate Poses");
+            // Small scenes stay serial; at most four chunks amortize scheduling for crowds.
+            const size_t chunks = std::min({size_t(4), size_t(std::max(1u, std::thread::hardware_concurrency())),
+                                            std::max(size_t(1), jobs.size() / 128)});
+            std::vector<std::shared_future<void>> tasks;
+            tasks.reserve(chunks - 1);
+            try
+            {
+                for (size_t chunk = 1; chunk < chunks; ++chunk)
+                    tasks.push_back(ThreadPool::Update.Enqueue(evaluate, jobs.size() * chunk / chunks,
+                                                               jobs.size() * (chunk + 1) / chunks));
+                evaluate(0, jobs.size() / chunks);
+            }
+            catch (...)
+            {
+                for (auto &task : tasks)
+                    task.wait();
+                throw;
+            }
+            for (auto &task : tasks)
+                task.wait();
+            for (auto &task : tasks)
+                task.get();
+        }
+        for (const auto &job : jobs)
+            scene->MarkNodeDirty(job.key.state->nodeId);
+        for (const auto &[node, source] : copies)
+        {
+            scene->GetNodeRuntime(node).jointMatrices = scene->GetNodeRuntime(source).jointMatrices;
+            scene->MarkNodeDirty(node);
         }
     }
 
@@ -447,17 +546,6 @@ namespace pe
                     scene.GetNodeName(node).c_str(), clipIndex, clips.size());
             return;
         }
-
-        const Skeleton &skeleton = scene.GetSkeletonForNode(node);
-        const char *clipName = clips[clipIndex].name.empty() ? "<unnamed>" : clips[clipIndex].name.c_str();
-        PE_INFO("[Animation] PlayAnimation node='%s' clipIndex=%d clip='%s' loop=%d skinned=%d bones=%zu clips=%zu",
-                scene.GetNodeName(node).c_str(),
-                clipIndex,
-                clipName,
-                loop ? 1 : 0,
-                scene.NodeHasSkinnedMesh(node) ? 1 : 0,
-                skeleton.bones.size(),
-                clips.size());
 
         auto it = m_nodeToIndex.find(node);
         if (it == m_nodeToIndex.end())

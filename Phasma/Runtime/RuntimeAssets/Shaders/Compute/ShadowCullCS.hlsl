@@ -21,9 +21,9 @@ struct DrawIndexedIndirectCommand
 [[vk::binding(16, 0)]] cbuffer LodUBO
 {
     uint lodEnabled;
-    uint lodPad0;
+    uint drawCapacity;
     float lodBias;
-    float lodPad1;
+    uint skinnedInstancing;
     float4 lodDistances;
 };
 
@@ -37,6 +37,8 @@ struct PushConstants
     float shadowLodBias; // extra coarsening on top of lodBias; <=0 disables LOD (full-res casters)
 };
 [[vk::push_constant]] PushConstants pc;
+
+#include "InstanceBatch.hlsl"
 
 float4x4 LoadMatrix(uint byteOffset)
 {
@@ -141,7 +143,10 @@ uint WaveAppend(uint counterIndex, bool emit)
     }
 
     const bool isVoxel = idx >= pc.arenaSlotBase;
-    const bool emitRegular = !isVoxel;
+    const bool batchLeader = BatchInstances(cmd, idx, 0u,
+                                            skinnedInstancing != 0u && skinBoundsOffset != 0u && !isVoxel,
+                                            drawCapacity * 4u, 2u);
+    const bool emitRegular = !isVoxel && batchLeader;
     const bool emitVoxel = isVoxel;
 
     uint slot;

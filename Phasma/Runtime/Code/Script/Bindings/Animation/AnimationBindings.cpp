@@ -72,6 +72,27 @@ namespace pe
                         as->SetSpeed(h.nodeId, speed);
                 });
 
+                // Flat {node, speed, ...} scratch table; layer selects the override clock.
+                anim.set_function("set_speeds", [](sol::stack_table updates, int count, sol::optional<bool> layer) {
+                    PE_PROFILE_SCOPE("Script Batch Animation Speeds");
+                    auto *as = GetGlobalSystem<AnimationSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (!as || !scene || count < 0 || static_cast<size_t>(count) > updates.size() / 2)
+                        return;
+                    for (int i = 0; i < count; ++i)
+                    {
+                        const size_t offset = static_cast<size_t>(i) * 2;
+                        auto node = updates.raw_get<sol::optional<SceneNodeHandle>>(offset + 1);
+                        auto speed = updates.raw_get<sol::optional<float>>(offset + 2);
+                        if (!node || !speed || !node->IsValid(*scene))
+                            continue;
+                        if (layer.value_or(false))
+                            as->SetLayerSpeed(node->nodeId, *speed);
+                        else
+                            as->SetSpeed(node->nodeId, *speed);
+                    }
+                });
+
                 anim.set_function("play_layer", [](SceneNodeHandle &h, const std::string &clip,
                                                      sol::table mask, sol::optional<bool> loop,
                                                      sol::optional<float> speed) -> bool {
@@ -106,6 +127,19 @@ namespace pe
                     Scene *scene = GetActiveScene();
                     if (as && scene && h.IsValid(*scene))
                         as->StopLayer(*scene, h.nodeId);
+                });
+
+                anim.set_function("get_layer_time", [](SceneNodeHandle &h) -> std::tuple<bool, float> {
+                    auto *as = GetGlobalSystem<AnimationSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (!as || !scene || !h.IsValid(*scene))
+                        return {false, 0.f};
+                    const auto *state = as->GetAnimationState(h.nodeId);
+                    const auto &clips = scene->GetAnimationClipsForNode(h.nodeId);
+                    if (!state || state->layer.clipIndex < 0 || state->layer.clipIndex >= static_cast<int>(clips.size()))
+                        return {false, 0.f};
+                    const auto &clip = clips[state->layer.clipIndex];
+                    return {true, state->layer.time / clip.ticksPerSecond};
                 });
 
                 anim.set_function("get_layer_state", [](SceneNodeHandle &h, sol::this_state ts) -> sol::table {

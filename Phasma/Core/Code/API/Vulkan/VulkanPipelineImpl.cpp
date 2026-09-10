@@ -224,6 +224,15 @@ namespace pe
         const std::vector<VertexInputBinding> neutralBindings = m_info.pVertShader->GetReflection().GetVertexBindings();
         const std::vector<VertexInputAttribute> neutralAttribs = m_info.pVertShader->GetReflection().GetVertexAttributes();
 
+        const auto &inputs = m_info.pVertShader->GetReflection().GetInputs();
+        const bool hasDrawIdInput = std::any_of(inputs.begin(), inputs.end(),
+                                                [](const ShaderInOutDesc &input)
+                                                { return input.name == "in.var.PE_DRAW_ID"; });
+        PE_ERROR_IF(hasDrawIdInput && std::any_of(inputs.begin(), inputs.end(),
+                                                  [](const ShaderInOutDesc &input)
+                                                  { return input.binding == 1 && input.name != "in.var.PE_DRAW_ID"; }),
+                    "PE_DRAW_ID reserves vertex input slot 1");
+
         std::vector<vk::VertexInputBindingDescription> vibds;
         vibds.reserve(neutralBindings.size());
         for (const VertexInputBinding &b : neutralBindings)
@@ -231,7 +240,7 @@ namespace pe
             vk::VertexInputBindingDescription d{};
             d.binding = b.binding;
             d.stride = b.stride;
-            d.inputRate = vk::VertexInputRate::eVertex;
+            d.inputRate = hasDrawIdInput && b.binding == 1 ? vk::VertexInputRate::eInstance : vk::VertexInputRate::eVertex;
             vibds.push_back(d);
         }
 

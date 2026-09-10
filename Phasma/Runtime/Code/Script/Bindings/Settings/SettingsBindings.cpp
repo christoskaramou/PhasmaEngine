@@ -21,6 +21,7 @@ namespace pe
         {"draw_aabbs", &SceneSettings::draw_aabbs},
         {"frustum_culling", &SceneSettings::frustum_culling},
         {"occlusion_culling", &SceneSettings::occlusion_culling},
+        {"skinned_instancing", &SceneSettings::skinned_instancing},
         {"lod_enabled", &SceneSettings::lod_enabled},
         {"randomize_lights", &SceneSettings::randomize_lights},
         {"physical_point_falloff", &SceneSettings::physical_point_falloff},

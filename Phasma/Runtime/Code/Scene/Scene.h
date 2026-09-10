@@ -750,6 +750,7 @@ namespace pe
         void CreateIndirectBuffers(CommandBuffer *cmd);
         void UpdateImageViews();
         void CreateMaterialTable();
+        void CreateDrawInstanceBuffers();
         void CreateMeshConstants(CommandBuffer *cmd);
         // One mesh's Mesh_Constants, derived from the current Mesh/material/node state. Shared by the
         // full rebuild (CreateMeshConstants) and the in-place streamed update (UpdateStreamedMesh).
@@ -794,6 +795,9 @@ namespace pe
         Buffer *m_voxelIndexBuf = nullptr;  // dedicated voxel index buffer (uint32)
         std::vector<Buffer *> m_storages;
         std::vector<Buffer *> m_storagesDevice;
+        // Identity IDs followed by frustum, Hi-Z A/B and reused shadow instance lists.
+        std::vector<Buffer *> m_drawInstanceIds;
+        bool m_pendingDrawInstanceUpload = false;
         std::vector<Buffer *> m_cullingCountersBuffers;
         std::vector<Buffer *> m_indirectOpaqueSS;
         std::vector<Buffer *> m_indirectAlphaCutSS;
@@ -818,9 +822,9 @@ namespace pe
         struct LodUBOData
         {
             uint32_t enabled = 0;
-            uint32_t pad0 = 0;
+            uint32_t drawCapacity = 0;
             float bias = 1.0f;
-            float pad1 = 0.0f;
+            uint32_t skinnedInstancing = 0;
             float distances[4] = {0.0f, 0.0f, 0.0f, 0.0f};
         };
         std::vector<Buffer *> m_lodUniforms;

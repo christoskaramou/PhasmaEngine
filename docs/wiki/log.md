@@ -2,6 +2,20 @@
 
 ## 2026-09-10
 
+- Fixed Vulkan FIFO crowd slowdown by pacing against the previous successful present while allowing one newer frame. A normal 1,024-enemy Player preview recovered from roughly 28 FPS to roughly 60 FPS; earlier uncapped crowd figures do not describe FIFO preview performance (`architecture/rendering.md`).
+
+- Fixed missing LuaJIT compiler initialization in the shared ScriptSystem and parallelized unique crowd pose evaluation through the existing Update pool. Compiler controls remain private and scene mutations remain ordered (`architecture/runtime.md`).
+
+- Crowd material rebuilds retain matching shader layouts and pack material bytes in parallel before ordered GPU publication. Separate packing/reflection/upload scopes expose spawn-frame costs (`architecture/runtime.md`).
+
+- Crowd CPU work now has native circle separation, batched animation speeds, allocation-free layer-time reads, and exact pose reuse across non-adjacent instances. Normal animation switches no longer emit a success log for every mesh (`architecture/runtime.md`).
+
+- Standalone display post-processing scratch images follow the player's Quality scale, fixing scaled image-copy failures; live scale transitions were checked on Vulkan and DX12 (`architecture/rendering.md`).
+
+- Optional skinned indirect instancing groups compatible visible draws inside GPU culling waves. Vulkan and DX12 share the per-instance draw-ID stream; scene settings and profiler metadata expose the option (`architecture/rendering.md`).
+
+- Clean 1,024-instance ATH comparisons found essentially neutral GPU time with instancing on/off, including Hi-Z; the option remains disabled by default (`architecture/rendering.md`).
+
 - Skinned meshes can generate index-only, bone-weight-aware LODs with a 16-active-bone limit per section and explicit prefab opt-in; unsupported sections keep LOD0. Scene files preserve the independent shadow LOD bias (`architecture/rendering.md`).
 
 - Material layout reflection is retained per pass asset across instance rebuilds, keyed by compiler source/include content, defines, stage, backend and material binding. Pass reload clears the key; cache hits avoid rebuilding reflection shaders (`architecture/runtime.md`).

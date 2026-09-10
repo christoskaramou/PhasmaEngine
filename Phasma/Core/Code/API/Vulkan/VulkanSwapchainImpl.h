@@ -26,6 +26,7 @@ namespace pe
         vk::SwapchainKHR m_swapchain;
         vk::Format m_vkFormat{vk::Format::eUndefined};
         uint64_t m_presentId = 0;
+        uint64_t m_lastSuccessfulPresentId = 0;
         uint64_t m_pendingPresentId = 0;
         bool m_presentWait = false;
         bool m_presentWait2 = false;

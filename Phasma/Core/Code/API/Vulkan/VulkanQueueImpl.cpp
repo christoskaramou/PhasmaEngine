@@ -217,7 +217,12 @@ namespace pe
             if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
                 PE_ERROR("[Queue] Failed to present swapchain image!");
             else if (presentWaitEnabled)
-                swapchainVk->m_pendingPresentId = presentId;
+            {
+                // Allow one newer present while pacing against the previous successful one.
+                // Waiting for the newest scanout serializes rendering with the display refresh.
+                swapchainVk->m_pendingPresentId = swapchainVk->m_lastSuccessfulPresentId;
+                swapchainVk->m_lastSuccessfulPresentId = presentId;
+            }
         }
         catch (vk::OutOfDateKHRError &)
         {

@@ -248,11 +248,9 @@ namespace pe
 
     void Scene::BindDrawIdBuffer(CommandBuffer *cmd) const
     {
-        if (RHII.GetApi() != PE_GRAPHICS_API_DX12)
-            return;
-
-        PE_ERROR_IF(!m_indirectAll, "Scene draw-ID buffer is not initialized");
-        cmd->BindVertexBuffer(m_indirectAll, 0, 1, 1);
+        Buffer *ids = m_drawInstanceIds[RHII.GetFrameIndex()];
+        PE_ERROR_IF(!ids, "Scene draw-ID buffer is not initialized");
+        cmd->BindVertexBuffer(ids, 0, 1, 1);
     }
 
     void Scene::CopyIndices(CommandBuffer *cmd)
@@ -495,7 +493,8 @@ namespace pe
         m_pendingIndirectUpload = true;
 
         EnsureBufferRing(m_cullingCountersBuffers, swapCount, "culling_counters_",
-                         9 * sizeof(uint32_t), counterUsage); // 8 base buckets + terrain (index 8)
+                         10 * sizeof(uint32_t), counterUsage); // 9 buckets + instance-ID allocator
+        CreateDrawInstanceBuffers();
 
         // LOD params UBO (CullingCS binding 16): refilled each frame from SceneSettings in UpdateLodUniforms.
         if (m_lodUniforms.size() != swapCount)
@@ -533,7 +532,7 @@ namespace pe
         EnsureBufferRing(m_indirectTerrain, swapCount, "indirect_Terrain_", indirectBytes, indirectUsage);
         EnsureBufferRing(m_shadowIndirectRegular, swapCount, "shadow_indirect_regular_", indirectBytes, indirectUsage);
         EnsureBufferRing(m_shadowIndirectVoxels, swapCount, "shadow_indirect_voxels_", indirectBytes, indirectUsage);
-        EnsureBufferRing(m_shadowCullCounters, swapCount, "shadow_cull_counters_", 2 * sizeof(uint32_t), counterUsage);
+        EnsureBufferRing(m_shadowCullCounters, swapCount, "shadow_cull_counters_", 3 * sizeof(uint32_t), counterUsage);
 
         const size_t sortKeyBytes = static_cast<size_t>(m_indirectCapacity) * sizeof(float);
         EnsureBufferRing(m_sortKeysAlphaBlend, swapCount, "sortKeys_AlphaBlend_", sortKeyBytes,
@@ -544,8 +543,8 @@ namespace pe
         // --- Two-phase Hi-Z occlusion (opaque-only A/B indirect sets + per-set counters + a
         // persistent per-draw visibility flag). Re-seeded on every draw-index rebuild (draw indices
         // are reassigned here, so stale bits are invalid).
-        EnsureBufferRing(m_occCountersA, swapCount, "occ_countersA_", 7 * sizeof(uint32_t), counterUsage);
-        EnsureBufferRing(m_occCountersB, swapCount, "occ_countersB_", 7 * sizeof(uint32_t), counterUsage);
+        EnsureBufferRing(m_occCountersA, swapCount, "occ_countersA_", 10 * sizeof(uint32_t), counterUsage);
+        EnsureBufferRing(m_occCountersB, swapCount, "occ_countersB_", 10 * sizeof(uint32_t), counterUsage);
         EnsureBufferRing(m_occOpaqueSSA, swapCount, "occ_OpaqueSSA_", indirectBytes, indirectUsage);
         EnsureBufferRing(m_occAlphaCutSSA, swapCount, "occ_AlphaCutSSA_", indirectBytes, indirectUsage);
         EnsureBufferRing(m_occOpaqueDSA, swapCount, "occ_OpaqueDSA_", indirectBytes, indirectUsage);
@@ -567,9 +566,19 @@ namespace pe
         (void)cmd; // GPU copies are recorded by the caller through RecordPendingInstanceUploads
     }
 
+    void Scene::CreateDrawInstanceBuffers()
+    {
+        // Identity IDs serve unbatched draws; frustum, Hi-Z A/B and shadows each own one segment.
+        PE_ERROR_IF(m_indirectCapacity > UINT32_MAX / 5u, "Scene instance-ID capacity overflow");
+        EnsureBufferRing(m_drawInstanceIds, RHII.GetSwapchainImageCount(), "draw_instance_ids_",
+                         static_cast<size_t>(m_indirectCapacity) * 5u * sizeof(uint32_t),
+                         PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_VERTEX_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST);
+        m_pendingDrawInstanceUpload = true;
+    }
+
     void Scene::RecordPendingInstanceUploads(CommandBuffer *cmd)
     {
-        if (!cmd || (!m_pendingIndirectUpload && !m_pendingVisibilitySeed && !m_pendingMeshConstantsMirror))
+        if (!cmd || (!m_pendingIndirectUpload && !m_pendingVisibilitySeed && !m_pendingMeshConstantsMirror && !m_pendingDrawInstanceUpload))
             return;
 
         // The rewritten buffers may still be read by the previous frame's cull/draws on this queue:
@@ -593,6 +602,23 @@ namespace pe
             barrier.size = bytes;
             barrier.offset = 0;
             cmd->BufferBarrier(barrier);
+        }
+
+        if (m_pendingDrawInstanceUpload)
+        {
+            std::vector<uint32_t> ids(m_indirectCapacity);
+            for (uint32_t i = 0; i < m_indirectCapacity; ++i)
+                ids[i] = i;
+            for (Buffer *buffer : m_drawInstanceIds)
+            {
+                cmd->CopyBufferStaged(buffer, ids.data(), ids.size() * sizeof(uint32_t), 0);
+                BufferBarrierInfo barrier{};
+                barrier.buffer = buffer;
+                barrier.stageMask = PE_STAGE_VERTEX_INPUT;
+                barrier.accessMask = PE_ACCESS_VERTEX_ATTRIBUTE_READ;
+                barrier.size = buffer->Size();
+                cmd->BufferBarrier(barrier);
+            }
         }
 
         if (m_pendingVisibilitySeed && m_visibility)
@@ -626,6 +652,7 @@ namespace pe
             m_meshConstantsDevice->GetTrackInfo() = barrier;
         }
 
+        m_pendingDrawInstanceUpload = false;
         m_pendingIndirectUpload = false;
         m_pendingVisibilitySeed = false;
         m_pendingMeshConstantsMirror = false;
@@ -758,78 +785,80 @@ namespace pe
         deferDestroy(m_materialTable);
 
         std::vector<MaterialGpuData> tableData;
-
-        for (auto &mat : m_ownedMaterials)
         {
-            mat->gpuIndex = 0xFFFFFFFF;
-            mat->gpuByteOffset = 0xFFFFFFFF;
-        }
-        for (auto *model : m_models)
-        {
-            for (auto &mat : model->GetOwnedMaterials())
+            PE_PROFILE_SCOPE("Scene Material GPU Packing");
+            for (auto &mat : m_ownedMaterials)
             {
                 mat->gpuIndex = 0xFFFFFFFF;
                 mat->gpuByteOffset = 0xFFFFFFFF;
             }
-        }
-
-        for (uint32_t i = 0; i < GetNodeCount(); i++)
-        {
-            if (!IsNodeHierarchyEnabled(m_nodeIds[i]))
-                continue;
-
-            for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
+            for (auto *model : m_models)
             {
-                if (!IsValidMeshIndex(meshIdx))
-                    continue;
-
-                Mesh &mesh = m_meshes[meshIdx];
-                if (mesh.indexCount == 0)
-                    continue;
-
-                MeshRuntime &meshRt = m_meshRuntimes[meshIdx];
-
-                if (mesh.materialInstance)
+                for (auto &mat : model->GetOwnedMaterials())
                 {
-                    meshRt.materialGpuIndex = static_cast<uint32_t>(tableData.size());
-                    tableData.push_back(mesh.materialInstance->BuildGpuData());
-                }
-                else if (mesh.material)
-                {
-                    if (mesh.material->gpuIndex == 0xFFFFFFFF)
-                    {
-                        mesh.material->gpuIndex = static_cast<uint32_t>(tableData.size());
-                        tableData.push_back(mesh.material->BuildGpuData());
-                    }
-                    meshRt.materialGpuIndex = mesh.material->gpuIndex;
+                    mat->gpuIndex = 0xFFFFFFFF;
+                    mat->gpuByteOffset = 0xFFFFFFFF;
                 }
             }
+
+            for (uint32_t i = 0; i < GetNodeCount(); i++)
+            {
+                if (!IsNodeHierarchyEnabled(m_nodeIds[i]))
+                    continue;
+
+                for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
+                {
+                    if (!IsValidMeshIndex(meshIdx))
+                        continue;
+
+                    Mesh &mesh = m_meshes[meshIdx];
+                    if (mesh.indexCount == 0)
+                        continue;
+
+                    MeshRuntime &meshRt = m_meshRuntimes[meshIdx];
+
+                    if (mesh.materialInstance)
+                    {
+                        meshRt.materialGpuIndex = static_cast<uint32_t>(tableData.size());
+                        tableData.push_back(mesh.materialInstance->BuildGpuData());
+                    }
+                    else if (mesh.material)
+                    {
+                        if (mesh.material->gpuIndex == 0xFFFFFFFF)
+                        {
+                            mesh.material->gpuIndex = static_cast<uint32_t>(tableData.size());
+                            tableData.push_back(mesh.material->BuildGpuData());
+                        }
+                        meshRt.materialGpuIndex = mesh.material->gpuIndex;
+                    }
+                }
+            }
+
+            if (tableData.empty())
+            {
+                MaterialGpuData defaultMat{};
+                defaultMat.baseColorFactor = vec4(1.f);
+                defaultMat.emissiveTransmission = vec4(0.f);
+                defaultMat.pbrParams = vec4(0.f, 1.f, 0.5f, 1.f);
+                tableData.push_back(defaultMat);
+            }
+
+            m_materialTable = Buffer::Create({
+                .size = tableData.size() * sizeof(MaterialGpuData),
+                .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+                .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+                .name = "Scene_materialTable",
+            });
+
+            m_materialTable->Map();
+            BufferRange range{};
+            range.data = tableData.data();
+            range.offset = 0;
+            range.size = tableData.size() * sizeof(MaterialGpuData);
+            m_materialTable->Copy(1, &range, true);
+            m_materialTable->Flush(range.size, 0);
+            m_materialTable->Unmap();
         }
-
-        if (tableData.empty())
-        {
-            MaterialGpuData defaultMat{};
-            defaultMat.baseColorFactor = vec4(1.f);
-            defaultMat.emissiveTransmission = vec4(0.f);
-            defaultMat.pbrParams = vec4(0.f, 1.f, 0.5f, 1.f);
-            tableData.push_back(defaultMat);
-        }
-
-        m_materialTable = Buffer::Create({
-            .size = tableData.size() * sizeof(MaterialGpuData),
-            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
-            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
-            .name = "Scene_materialTable",
-        });
-
-        m_materialTable->Map();
-        BufferRange range{};
-        range.data = tableData.data();
-        range.offset = 0;
-        range.size = tableData.size() * sizeof(MaterialGpuData);
-        m_materialTable->Copy(1, &range, true);
-        m_materialTable->Flush(range.size, 0);
-        m_materialTable->Unmap();
 
         deferDestroy(m_materialByteBuffer);
         m_materialByteBufferUsed = 0;
@@ -839,81 +868,119 @@ namespace pe
             uint32_t *offsetDst;
             uint32_t *sizeDst;
             std::vector<uint8_t> data;
+            const Material *material;
+            const MaterialInstance *instance;
+            const MaterialLayout *layout;
         };
         std::vector<ByteEntry> byteEntries;
         uint32_t totalBytes = 0;
 
         std::unordered_map<std::string, MaterialLayout> layoutCache;
-
-        for (uint32_t i = 0; i < GetNodeCount(); i++)
-            for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
-                if (IsValidMeshIndex(meshIdx) && m_meshes[meshIdx].materialInstance)
-                {
-                    m_meshes[meshIdx].materialInstance->gpuByteOffset = 0xFFFFFFFF;
-                    m_meshes[meshIdx].materialInstance->gpuByteSize = 0;
-                }
-
-        for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            if (!IsNodeHierarchyEnabled(m_nodeIds[i]))
-                continue;
+            PE_PROFILE_SCOPE("Scene Material Byte Packing");
+            for (uint32_t i = 0; i < GetNodeCount(); i++)
+                for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
+                    if (IsValidMeshIndex(meshIdx) && m_meshes[meshIdx].materialInstance)
+                    {
+                        m_meshes[meshIdx].materialInstance->gpuByteOffset = 0xFFFFFFFF;
+                        m_meshes[meshIdx].materialInstance->gpuByteSize = 0;
+                    }
 
-            for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
+            for (uint32_t i = 0; i < GetNodeCount(); i++)
             {
-                if (!IsValidMeshIndex(meshIdx))
-                    continue;
-                Mesh &mesh = m_meshes[meshIdx];
-                if (mesh.indexCount == 0 || !mesh.material || !mesh.material->passInfoAsset)
+                if (!IsNodeHierarchyEnabled(m_nodeIds[i]))
                     continue;
 
-                Material *mat = mesh.material;
-                std::string passId = mat->passInfoAsset->GetResourceId();
-
-                auto cacheIt = layoutCache.find(passId);
-                if (cacheIt == layoutCache.end())
+                for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
                 {
-                    PE_PROFILE_SCOPE("Scene Material Reflection");
-                    cacheIt = layoutCache.emplace(passId, ReflectMaterialLayout(*mat->passInfoAsset)).first;
-                }
-                const MaterialLayout &layout = cacheIt->second;
-
-                mat->cachedLayout = layout;
-
-                if (!layout.valid || layout.structMembers.empty())
-                    continue;
-
-                if (mesh.materialInstance)
-                {
-                    MaterialInstance *inst = mesh.materialInstance;
-                    if (inst->gpuByteOffset != 0xFFFFFFFF)
+                    if (!IsValidMeshIndex(meshIdx))
+                        continue;
+                    Mesh &mesh = m_meshes[meshIdx];
+                    if (mesh.indexCount == 0 || !mesh.material || !mesh.material->passInfoAsset)
                         continue;
 
-                    std::vector<uint8_t> byteData = inst->BuildByteAddressData(layout.structMembers, layout.textureSlots, layout.totalByteSize);
-                    if (byteData.empty())
+                    Material *mat = mesh.material;
+                    std::string passId = mat->passInfoAsset->GetResourceId();
+
+                    auto cacheIt = layoutCache.find(passId);
+                    if (cacheIt == layoutCache.end())
+                    {
+                        PE_PROFILE_SCOPE("Scene Material Reflection");
+                        cacheIt = layoutCache.emplace(passId, ReflectMaterialLayout(*mat->passInfoAsset)).first;
+                    }
+                    const MaterialLayout &layout = cacheIt->second;
+
+                    // Retain the per-material layout until shader content/defines change.
+                    if (!mat->cachedLayout.valid || mat->cachedLayout.sourceHash != layout.sourceHash)
+                        mat->cachedLayout = layout;
+
+                    if (!layout.valid || layout.structMembers.empty())
                         continue;
 
-                    inst->gpuByteSize = static_cast<uint32_t>(byteData.size());
-                    inst->gpuByteOffset = totalBytes;
-                    totalBytes += (static_cast<uint32_t>(byteData.size()) + 3u) & ~3u;
-                    byteEntries.push_back({&inst->gpuByteOffset, &inst->gpuByteSize, std::move(byteData)});
-                }
-                else
-                {
-                    if (mat->gpuByteOffset != 0xFFFFFFFF)
-                        continue;
+                    if (mesh.materialInstance)
+                    {
+                        MaterialInstance *inst = mesh.materialInstance;
+                        if (inst->gpuByteOffset != 0xFFFFFFFF)
+                            continue;
 
-                    std::vector<uint8_t> byteData = mat->BuildByteAddressData(layout.structMembers, layout.textureSlots, layout.totalByteSize);
-                    if (byteData.empty())
-                        continue;
+                        inst->gpuByteOffset = 0; // gathered; final offsets follow byte packing
+                        byteEntries.push_back({&inst->gpuByteOffset, &inst->gpuByteSize, {}, mat, inst, &layout});
+                    }
+                    else
+                    {
+                        if (mat->gpuByteOffset != 0xFFFFFFFF)
+                            continue;
 
-                    mat->gpuByteSize = static_cast<uint32_t>(byteData.size());
-                    mat->gpuByteOffset = totalBytes;
-                    totalBytes += (static_cast<uint32_t>(byteData.size()) + 3u) & ~3u;
-                    byteEntries.push_back({&mat->gpuByteOffset, &mat->gpuByteSize, std::move(byteData)});
+                        mat->gpuByteOffset = 0;
+                        byteEntries.push_back({&mat->gpuByteOffset, &mat->gpuByteSize, {}, mat, nullptr, &layout});
+                    }
                 }
             }
+            // Parameter and texture-index reads are immutable here. Workers produce
+            // private byte arrays; offsets and GPU buffers are published only after joining.
+            auto pack = [&byteEntries](size_t begin, size_t end)
+            {
+                for (size_t i = begin; i < end; ++i)
+                {
+                    auto &entry = byteEntries[i];
+                    const auto &layout = *entry.layout;
+                    entry.data = entry.instance ? entry.instance->BuildByteAddressData(layout.structMembers, layout.textureSlots, layout.totalByteSize)
+                                                : entry.material->BuildByteAddressData(layout.structMembers, layout.textureSlots, layout.totalByteSize);
+                }
+            };
+            if (!byteEntries.empty())
+            {
+                PE_PROFILE_SCOPE("Scene Material Byte Evaluation");
+                const size_t chunks = std::min({size_t(4), size_t(std::max(1u, std::thread::hardware_concurrency())),
+                                                std::max(size_t(1), byteEntries.size() / 128)});
+                std::vector<std::shared_future<void>> tasks;
+                tasks.reserve(chunks - 1);
+                try
+                {
+                    for (size_t chunk = 1; chunk < chunks; ++chunk)
+                        tasks.push_back(ThreadPool::Update.Enqueue(pack, byteEntries.size() * chunk / chunks,
+                                                                   byteEntries.size() * (chunk + 1) / chunks));
+                    pack(0, byteEntries.size() / chunks);
+                }
+                catch (...)
+                {
+                    for (auto &task : tasks)
+                        task.wait();
+                    throw;
+                }
+                for (auto &task : tasks)
+                    task.wait();
+                for (auto &task : tasks)
+                    task.get();
+            }
+            for (auto &entry : byteEntries)
+            {
+                *entry.sizeDst = static_cast<uint32_t>(entry.data.size());
+                *entry.offsetDst = entry.data.empty() ? 0xFFFFFFFF : totalBytes;
+                totalBytes += (*entry.sizeDst + 3u) & ~3u;
+            }
         }
-
+        PE_PROFILE_SCOPE("Scene Material Byte Upload");
         if (totalBytes == 0)
             totalBytes = 4;
 
@@ -929,6 +996,8 @@ namespace pe
             m_materialByteBuffer->Map();
             for (const auto &entry : byteEntries)
             {
+                if (entry.data.empty())
+                    continue;
                 BufferRange br{};
                 br.data = const_cast<uint8_t *>(entry.data.data());
                 br.offset = *entry.offsetDst;
@@ -1257,6 +1326,7 @@ namespace pe
 
     void Scene::DestroyBuffers()
     {
+        m_pendingDrawInstanceUpload = false;
         m_pendingIndirectUpload = false;
         m_pendingVisibilitySeed = false;
         m_pendingMeshConstantsMirror = false;
@@ -1302,6 +1372,7 @@ namespace pe
             }
         };
 
+        destroyBufferVec(m_drawInstanceIds);
         destroyBufferVec(m_cullingCountersBuffers);
         destroyBufferVec(m_lodUniforms);
         destroyBufferVec(m_indirectOpaqueSS);
@@ -1611,6 +1682,7 @@ namespace pe
                 }
 
                 m_indirectCapacity = newCap;
+                CreateDrawInstanceBuffers();
             }
 
             // Grow mesh constants (+ DX12 device mirror) to newCap whenever they do not fit. They are

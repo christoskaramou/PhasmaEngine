@@ -102,6 +102,8 @@ namespace pe
         writer.Uint(settings.num_cascades);
         writer.Key("shadow_distance");
         writer.Double(settings.shadow_distance);
+        writer.Key("skinned_instancing");
+        writer.Bool(settings.skinned_instancing);
         writer.Key("lod_enabled");
         writer.Bool(settings.lod_enabled);
         writer.Key("lod_bias");

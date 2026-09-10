@@ -335,7 +335,8 @@ namespace pe
 
     Image *RuntimeSceneRenderer::CreateFSSampledImage(bool useRenderTargetScale)
     {
-        return m_sceneRenderer.CreateFSSampledImage("RuntimeFSSampledImage", useRenderTargetScale);
+        // Standalone output, including display post-processing, follows Quality.
+        return m_sceneRenderer.CreateFSSampledImage("RuntimeFSSampledImage", useRenderTargetScale || !m_overlay);
     }
 
     void RuntimeSceneRenderer::Resize(uint32_t width, uint32_t height, bool recreateSurface)

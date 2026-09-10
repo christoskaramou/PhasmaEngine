@@ -167,6 +167,7 @@ namespace pe
         if (!passInfo.m_materialLayoutHash || *passInfo.m_materialLayoutHash != static_cast<size_t>(hash))
         {
             passInfo.m_materialLayout = BuildMaterialLayout(passInfo);
+            passInfo.m_materialLayout.sourceHash = hash;
             passInfo.m_materialLayoutHash = hash;
         }
         return passInfo.m_materialLayout;

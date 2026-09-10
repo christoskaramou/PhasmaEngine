@@ -245,6 +245,7 @@ namespace pe
             settings.AddMember("frustum_culling", gSettings.frustum_culling, allocator);
             settings.AddMember("occlusion_culling", gSettings.occlusion_culling, allocator);
             settings.AddMember("occlusion_culling_bias", gSettings.occlusion_culling_bias, allocator);
+            settings.AddMember("skinned_instancing", gSettings.skinned_instancing, allocator);
             settings.AddMember("lod_enabled", gSettings.lod_enabled, allocator);
             settings.AddMember("lod_count", gSettings.lod_count, allocator);
             settings.AddMember("lod_bias", gSettings.lod_bias, allocator);
@@ -415,6 +416,9 @@ namespace pe
                 gSettings.occlusion_culling = settings["occlusion_culling"].GetBool();
             if (settings.HasMember("occlusion_culling_bias"))
                 gSettings.occlusion_culling_bias = settings["occlusion_culling_bias"].GetFloat();
+            gSettings.skinned_instancing = settings.HasMember("skinned_instancing")
+                                               ? settings["skinned_instancing"].GetBool()
+                                               : false;
             if (settings.HasMember("lod_enabled"))
                 gSettings.lod_enabled = settings["lod_enabled"].GetBool();
             if (settings.HasMember("lod_count"))

@@ -164,11 +164,7 @@ struct VS_INPUT_Depth
     float2 uv : TEXCOORD0;
     uint4 joints : BLENDINDICES;
     float4 weights : BLENDWEIGHT;
-#if defined(PE_DX12)
     uint id : PE_DRAW_ID;
-#else
-    uint id : SV_InstanceID;
-#endif
 };
 
 struct VS_INPUT_Gbuffer
@@ -180,11 +176,7 @@ struct VS_INPUT_Gbuffer
     float4 color : COLOR;
     uint4 joints : BLENDINDICES;
     float4 weights : BLENDWEIGHT;
-#if defined(PE_DX12)
     uint id : PE_DRAW_ID;
-#else
-    uint id : SV_InstanceID;
-#endif
 };
 
 float4 ApplyViewportYConvention(float4 position)

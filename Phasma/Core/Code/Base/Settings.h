@@ -149,6 +149,7 @@ namespace pe
         // it only affects newly loaded meshes. enabled/bias/distances are live (consumed by the cull shader):
         // the GPU picks a level by camera distance and swaps the draw's index range. distances are the world-
         // unit switch points LOD0->1, 1->2, 2->3; bias multiplies measured distance (>1 = switch sooner).
+        bool skinned_instancing = false;
         bool lod_enabled = true;
         uint32_t lod_count = 4;
         float lod_bias = 1.0f;
