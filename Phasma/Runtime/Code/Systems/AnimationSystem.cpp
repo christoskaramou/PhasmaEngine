@@ -272,7 +272,8 @@ namespace pe
                 return skeleton == other.skeleton && clips == other.clips &&
                        state->clipIndex == other.state->clipIndex && state->time == other.state->time &&
                        state->layer.clipIndex == other.state->layer.clipIndex &&
-                       state->layer.time == other.state->layer.time && state->layer.bones == other.state->layer.bones;
+                       state->layer.time == other.state->layer.time && state->layer.bones == other.state->layer.bones &&
+                       state->layer.anchorBone == other.state->layer.anchorBone;
             }
         };
 
@@ -287,6 +288,7 @@ namespace pe
                 hash.Combine(key.state->time);
                 hash.Combine(key.state->layer.clipIndex);
                 hash.Combine(key.state->layer.time);
+                hash.Combine(key.state->layer.anchorBone);
                 for (int bone : key.state->layer.bones)
                     hash.Combine(bone);
                 return hash;
@@ -302,11 +304,16 @@ namespace pe
             {
                 static thread_local std::vector<mat4> overlay;
                 AnimationEvaluator::EvaluatePose(clips[layer.clipIndex], skeleton, layer.time, overlay);
+                // Keep the attack group relative to a live base joint, such as a running pelvis.
+                const bool hasAnchor = layer.anchorBone >= 0 && layer.anchorBone < static_cast<int>(matrices.size());
+                const float determinant = hasAnchor ? glm::determinant(overlay[layer.anchorBone]) : 0.f;
+                const bool anchored = hasAnchor && std::isfinite(determinant) && std::abs(determinant) > 1e-8f;
+                const mat4 alignment = anchored ? matrices[layer.anchorBone] * glm::inverse(overlay[layer.anchorBone]) : mat4(1.f);
                 // Copy complete rig-space poses: an attacking torso must not drag the base clip's feet.
                 // Include the entire arm/prop group in the mask to preserve an authored two-hand grip.
                 for (int bone : layer.bones)
                     if (bone >= 0 && bone < static_cast<int>(matrices.size()))
-                        matrices[bone] = overlay[bone];
+                        matrices[bone] = anchored ? alignment * overlay[bone] : overlay[bone];
             }
         }
 
@@ -598,9 +605,10 @@ namespace pe
     }
 
     bool AnimationSystem::PlayLayer(Scene &scene, NodeId *node, const std::string &clipName,
-                                    const std::vector<std::string> &bones, bool loop, float speed)
+                                    const std::vector<std::string> &bones, bool loop, float speed, double startTimeSeconds,
+                                    const std::string &anchorBone)
     {
-        if (!node || !scene.IsNodeAlive(node) || !std::isfinite(speed) || bones.empty())
+        if (!node || !scene.IsNodeAlive(node) || !std::isfinite(speed) || !std::isfinite(startTimeSeconds) || bones.empty())
             return false;
         auto it = m_nodeToIndex.find(node);
         if (it == m_nodeToIndex.end() || m_states[it->second].nodeRevision != node->revision)
@@ -621,8 +629,20 @@ namespace pe
             return false;
         if (!ResolveLayerBones(skeleton, bones, layer.bones))
             return false;
+        if (!anchorBone.empty())
+        {
+            layer.anchorBone = skeleton.GetBoneIndex(anchorBone);
+            if (layer.anchorBone < 0)
+                return false;
+        }
         layer.loop = loop;
         layer.speed = speed;
+        const double duration = static_cast<double>(clip.duration) / clip.ticksPerSecond;
+        layer.elapsed = loop ? startTimeSeconds : std::clamp(startTimeSeconds, 0.0, duration);
+        double time = loop ? std::fmod(layer.elapsed, duration) : layer.elapsed;
+        if (time < 0.0)
+            time += duration;
+        layer.time = static_cast<float>(time * clip.ticksPerSecond);
         m_states[it->second].layer = std::move(layer);
         EvaluateState(scene, m_states[it->second]);
         return true;

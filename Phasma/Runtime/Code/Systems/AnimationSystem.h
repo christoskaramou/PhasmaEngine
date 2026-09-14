@@ -15,6 +15,7 @@ namespace pe
         float speed = 1.0f;
         bool loop = true;
         std::vector<int> bones;
+        int anchorBone = -1;
     };
 
     struct AnimationNodeState
@@ -46,8 +47,10 @@ namespace pe
         void RemoveAnimation(NodeId *node);
         void SetSpeed(NodeId *node, float speed);
         // One rig-space override layer. Unselected bones keep the base pose, even below a selected parent.
+        // A named anchor aligns the selected group to that bone in the base pose.
         bool PlayLayer(Scene &scene, NodeId *node, const std::string &clipName,
-                       const std::vector<std::string> &bones, bool loop = true, float speed = 1.0f);
+                       const std::vector<std::string> &bones, bool loop = true, float speed = 1.0f,
+                       double startTimeSeconds = 0.0, const std::string &anchorBone = {});
         bool SetLayerSpeed(NodeId *node, float speed);
         bool SetLayerMask(Scene &scene, NodeId *node, const std::vector<std::string> &bones);
         void StopLayer(Scene &scene, NodeId *node);

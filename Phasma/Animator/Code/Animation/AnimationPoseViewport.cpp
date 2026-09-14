@@ -516,6 +516,45 @@ namespace pe
                            {"clamped", result.targetClamped}});
             }
 
+            if (action == "timeline.pose_state")
+            {
+                if (!m_model || !m_model->HasSkeleton())
+                    return fail("the model has no skeleton");
+                if (m_timeline.HasPendingRequests())
+                    return fail("the Timeline has queued requests (frame/pose/clip); retry after the next frame");
+                const Skeleton &skeleton = m_model->GetSkeleton();
+                std::vector<int> selected;
+                if (args.contains("bones"))
+                {
+                    if (!args["bones"].is_array() || args["bones"].empty())
+                        return fail("bones must be a non-empty array of bone names");
+                    for (const auto &name : args["bones"])
+                    {
+                        const int bone = name.is_string() ? skeleton.GetBoneIndex(name.get<std::string>()) : -1;
+                        if (bone < 0)
+                            return fail("bones contains an unknown bone");
+                        selected.push_back(bone);
+                    }
+                }
+                else
+                    for (int i = 0; i < skeleton.GetBoneCount(); ++i)
+                        selected.push_back(i);
+                AnimationTimeline::ViewportPose pose;
+                if (!m_timeline.GetViewportPose(m_model, pose) || pose.boneTransforms.size() != skeleton.bones.size())
+                    return fail("no evaluated Timeline pose");
+                std::vector<vec3> heads, tails;
+                PoseTails(skeleton, pose.boneTransforms, heads, tails);
+                nlohmann::json bones = nlohmann::json::array();
+                for (int bone : selected)
+                {
+                    const vec3 rotation = glm::degrees(glm::eulerAngles(RotationOf(pose.boneTransforms[bone])));
+                    bones.push_back({{"name", skeleton.bones[bone].name},
+                                     {"head", {heads[bone].x, heads[bone].y, heads[bone].z}},
+                                     {"tail", {tails[bone].x, tails[bone].y, tails[bone].z}},
+                                     {"rotation", {rotation.x, rotation.y, rotation.z}}});
+                }
+                return ok({{"space", "rig"}, {"bones", bones}});
+            }
             if (action == "timeline.pin" || action == "timeline.grab")
             {
                 if (!m_model || !m_model->HasSkeleton())
@@ -534,21 +573,26 @@ namespace pe
                 }
                 RuntimeSceneRenderer *renderer = GetAnimatorRenderer();
                 AnimationTimeline *timeline = &m_timeline;
-                if (!renderer || !timeline || !args.contains("target"))
-                    return fail("timeline.grab needs target[3], the renderer and the Animation Timeline");
+                if (!renderer || !timeline || (!args.contains("target") && !args.contains("rotation")))
+                    return fail("timeline.grab needs target[3] or rotation[3], the renderer and the Animation Timeline");
                 if (timeline->HasPendingRequests())
                     return fail("the Timeline has queued requests (frame/pose/clip); retry after the next frame");
-                vec3 target;
-                if (!StrictVec3(args["target"], target))
+                vec3 target, angles;
+                if (args.contains("target") && !StrictVec3(args["target"], target))
                     return fail("target must be three finite numbers");
-                if (!m_rig.Planar2D())
+                if (args.contains("rotation") && !StrictVec3(args["rotation"], angles))
+                    return fail("rotation must be three finite Euler angles in rig-space degrees");
+                const vec3 *targetPoint = args.contains("target") ? &target : nullptr;
+                const quat rotation = args.contains("rotation") ? glm::normalize(quat(glm::radians(angles))) : quat(1.f, 0.f, 0.f, 0.f);
+                const quat *targetRotation = args.contains("rotation") ? &rotation : nullptr;
+                if (targetPoint && !m_rig.Planar2D())
                     target.y = std::max(target.y, Ground()); // the floor is solid; the gap is measured to where the pull stops
                 float gap = 0.f;
                 bool keyed = false;
                 bool limited = false;
                 if (!m_rig.Planar2D())
                     BeginBalance(bone); // a one-shot grab balances like a drag: from the pose it started on
-                const bool grabbed = PuppetTo(renderer->GetScene(), bone, &target, nullptr, &gap, true, &keyed, &limited);
+                const bool grabbed = PuppetTo(renderer->GetScene(), bone, targetPoint, targetRotation, &gap, true, &keyed, &limited);
                 m_balanceHaveReference = false;
                 if (!grabbed)
                     return fail("nothing grabbed: the clip must be active in the Timeline and the bone needs a parent");
@@ -557,7 +601,7 @@ namespace pe
                 // An at-target no-op keyed nothing, so there is nothing to hold or re-solve either.
                 if (keyed)
                     HoldPosedBone(bone);
-                if (keyed && SolveLocks(renderer->GetScene()))
+                if (keyed && SolveLocks(renderer->GetScene()) && targetPoint)
                 {
                     AnimationTimeline::ViewportPose pose;
                     std::vector<vec3> heads, tails;

@@ -1679,7 +1679,13 @@ namespace pe::AnimationClipTools
                      const LayerSettings &settings)
     {
         if (&target == &source || !std::isfinite(settings.stepTicks) || settings.stepTicks <= kEpsilon ||
-            !std::isfinite(settings.weight) || settings.weight <= 0.0f || !std::isfinite(target.duration))
+            !std::isfinite(settings.weight) || settings.weight <= 0.0f || !std::isfinite(target.duration) ||
+            !std::isfinite(source.duration) || !std::isfinite(settings.sourceOffset) ||
+            !std::isfinite(source.ticksPerSecond) || source.ticksPerSecond <= 0.f ||
+            !std::isfinite(target.ticksPerSecond) || target.ticksPerSecond <= 0.f)
+            return 0;
+        const float sourceTicksPerTargetTick = source.ticksPerSecond / target.ticksPerSecond;
+        if (!std::isfinite(sourceTicksPerTargetTick) || sourceTicksPerTargetTick <= 0.f)
             return 0;
         const float start = std::max(settings.startTime, 0.0f);
         const float end = settings.endTime < 0.0f ? target.duration : std::min(settings.endTime, target.duration);
@@ -1689,7 +1695,7 @@ namespace pe::AnimationClipTools
         const float tolerance = std::max(kEpsilon, settings.stepTicks * 0.001f);
         auto sourceTime = [&](float time)
         {
-            float mapped = settings.sourceOffset + (time - start);
+            float mapped = settings.sourceOffset + (time - start) * sourceTicksPerTargetTick;
             if (source.duration > kEpsilon)
             {
                 const float wrapped = std::fmod(mapped, source.duration);

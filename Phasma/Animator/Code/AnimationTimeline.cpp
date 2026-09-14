@@ -1284,7 +1284,7 @@ namespace pe
                 m_selectedClip = 0;
             }
 
-            if (action == "timeline.grab" || action == "timeline.pin" || action == "timeline.lock" ||
+            if (action == "timeline.grab" || action == "timeline.pose_state" || action == "timeline.pin" || action == "timeline.lock" ||
                 action == "timeline.spline_ik" ||
                 action == "timeline.balance" || action == "timeline.reference_load" ||
                 action == "timeline.reference_clear" || action == "timeline.reference_enable")
@@ -1378,6 +1378,16 @@ namespace pe
             const float sampledFrame = state ? ToFrame(state->time) : 0.f;
             const float currentFrame = std::isfinite(sampledFrame) ? sampledFrame : 0.f;
             const float durationFrames = ToFrame(clip.duration);
+
+            if (action == "timeline.info")
+            {
+                nlohmann::json names = nlohmann::json::array(), markers = nlohmann::json::array();
+                for (const AnimationClip &entry : model->GetAnimations())
+                    names.push_back(entry.name);
+                for (const ClipMarker &marker : clip.markers)
+                    markers.push_back({{"name", marker.name}, {"frame", ToFrame(marker.time)}, {"time", marker.time / clip.ticksPerSecond}});
+                return ok({{"clip", clip.name}, {"clips", names}, {"frame", currentFrame}, {"end_frame", durationFrames}, {"fps", clip.ticksPerSecond / m_frameTicks}, {"duration", clip.duration / clip.ticksPerSecond}, {"markers", markers}});
+            }
 
             if (action == "timeline.export")
             {
@@ -1523,6 +1533,24 @@ namespace pe
                 m_curveFitPending = true;
                 ReevaluatePose(scene, anim);
             };
+
+            if (action == "timeline.clip_copy")
+            {
+                const std::string source = args.value("source", "");
+                const auto &clips = model->GetAnimations();
+                const auto found = std::find_if(clips.begin(), clips.end(), [&](const AnimationClip &entry)
+                                                { return entry.name == source && &entry != &clip; });
+                if (found == clips.end())
+                    return fail("source must name another clip in this model");
+                const AnimationClip before = clip;
+                clip = *found;
+                clip.name = before.name;
+                m_frameTicks = DetectFrameTicks(clip);
+                commit(before, 1);
+                m_intervalStart = m_intervalEnd = -1.f;
+                SetFrame(scene, anim, 0.f);
+                return ok({{"clip", clip.name}, {"source", source}});
+            }
 
             if (action == "timeline.pose_library")
             {
@@ -1703,7 +1731,7 @@ namespace pe
                 settings.startTime = ToTicks(start);
                 settings.endTime = ToTicks(end);
                 settings.stepTicks = ToTicks(1.f);
-                settings.sourceOffset = ToTicks(args.value("offset_frames", 0.f));
+                settings.sourceOffset = ToTicks(args.value("offset_frames", 0.f)) * clips[index].ticksPerSecond / clip.ticksPerSecond;
                 settings.weight = args.value("weight", 1.f);
                 if (!std::isfinite(settings.weight) || settings.weight <= 0.f || settings.weight > 1.f)
                     return fail("weight must be in (0, 1]");
@@ -2227,6 +2255,7 @@ namespace pe
         m_redo.push_back({clip, m_selectedClip, m_intervalStart, m_intervalEnd,
                           m_poseViewport ? m_poseViewport->LockSnapshot() : std::vector<RigLock>{}});
         clip = m_undo.back().clip;
+        m_frameTicks = DetectFrameTicks(clip);
         m_intervalStart = m_undo.back().intervalStart;
         m_intervalEnd = m_undo.back().intervalEnd;
         if (m_poseViewport)
@@ -2243,6 +2272,7 @@ namespace pe
         m_undo.push_back({clip, m_selectedClip, m_intervalStart, m_intervalEnd,
                           m_poseViewport ? m_poseViewport->LockSnapshot() : std::vector<RigLock>{}});
         clip = m_redo.back().clip;
+        m_frameTicks = DetectFrameTicks(clip);
         m_intervalStart = m_redo.back().intervalStart;
         m_intervalEnd = m_redo.back().intervalEnd;
         if (m_poseViewport)
@@ -4169,6 +4199,15 @@ namespace pe
         }
         if (!clip.rootMotion.Empty())
             remap(clip.rootMotion.positionKeys);
+        // Events travel with their poses. Different events may intentionally share a frame.
+        for (ClipMarker &marker : clip.markers)
+            if (marker.time >= from - tolerance && marker.time <= to + tolerance)
+            {
+                marker.time = std::clamp(pivotTicks + (marker.time - pivotTicks) * factor + deltaTicks, 0.f, clip.duration);
+                ++touched;
+            }
+        std::stable_sort(clip.markers.begin(), clip.markers.end(), [](const ClipMarker &a, const ClipMarker &b)
+                         { return a.time < b.time; });
         return touched;
     }
 

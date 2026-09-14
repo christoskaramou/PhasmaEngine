@@ -1,6 +1,7 @@
 #include "Scene/SceneNodeHandle.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
+#include "Scene/SceneNode.h"
 #include "Script/ScriptSystem.h"
 #include "Systems/AnimationSystem.h"
 
@@ -95,7 +96,8 @@ namespace pe
 
                 anim.set_function("play_layer", [](SceneNodeHandle &h, const std::string &clip,
                                                      sol::table mask, sol::optional<bool> loop,
-                                                     sol::optional<float> speed) -> bool {
+                                                     sol::optional<float> speed, sol::optional<double> startTime,
+                                                     sol::optional<std::string> anchorBone) -> bool {
                     auto *as = GetGlobalSystem<AnimationSystem>();
                     Scene *scene = GetActiveScene();
                     if (!as || !scene || !h.IsValid(*scene))
@@ -103,7 +105,7 @@ namespace pe
                     std::vector<std::string> bones;
                     if (!ReadBoneMask(mask, scene->GetJointCountForNode(h.nodeId), bones))
                         return false;
-                    return as->PlayLayer(*scene, h.nodeId, clip, bones, loop.value_or(true), speed.value_or(1.f));
+                    return as->PlayLayer(*scene, h.nodeId, clip, bones, loop.value_or(true), speed.value_or(1.f), startTime.value_or(0.0), anchorBone.value_or(""));
                 });
 
                 anim.set_function("set_layer_mask", [](SceneNodeHandle &h, sol::table mask) -> bool {
@@ -163,9 +165,24 @@ namespace pe
                     result["duration"] = clip.duration / clip.ticksPerSecond;
                     result["speed"] = layer.speed;
                     result["loop"] = layer.loop;
+                    const auto &skeleton = scene->GetSkeletonForNode(h.nodeId);
+                    result["anchor"] = layer.anchorBone >= 0 && layer.anchorBone < static_cast<int>(skeleton.bones.size()) ? skeleton.bones[layer.anchorBone].name : "";
                     result["playing"] = state->playing && layer.speed != 0.f &&
                         (layer.loop || (layer.speed > 0.f ? layer.time < clip.duration : layer.time > 0.f));
                     return result;
+                });
+
+                // Current joint origin in rig space, before the node's world transform.
+                anim.set_function("get_bone_position", [](SceneNodeHandle &h, const std::string &name) -> sol::optional<vec3> {
+                    Scene *scene = GetActiveScene();
+                    if (!scene || !h.IsValid(*scene))
+                        return sol::nullopt;
+                    const auto &skeleton = scene->GetSkeletonForNode(h.nodeId);
+                    const int bone = skeleton.GetBoneIndex(name);
+                    const auto &matrices = scene->GetNodeRuntime(h.nodeId).jointMatrices;
+                    if (bone < 0 || bone >= static_cast<int>(matrices.size()))
+                        return sol::nullopt;
+                    return vec3((matrices[bone] * glm::inverse(skeleton.bones[bone].offsetMatrix))[3]);
                 });
 
                 // Root motion: a clip whose travel the Animator extracted moves this node as it plays (default on).
