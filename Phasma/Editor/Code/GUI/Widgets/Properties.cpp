@@ -369,7 +369,7 @@ namespace pe
                 if (auto *se = m_gui->GetWidget<ScriptEditor>())
                     se->OpenScript(node, scriptPath);
             }
-            ui::ItemTooltip("Open this node's Lua script in the script editor.");
+            ui::ItemTooltip("Open the script source for editing.");
 
             ImGui::Spacing();
             int runMode = static_cast<int>(scene.GetNodeScriptRunMode(node));
@@ -1243,6 +1243,36 @@ namespace pe
                         ui::ItemTooltip("Create a new Lua script and attach it to this node.");
                         ImGui::EndMenu();
                     }
+
+                    std::vector<std::string> cppScripts;
+                    if (auto *scripts = GetGlobalSystem<ScriptSystem>())
+                        cppScripts = scripts->ListCppNodeScripts();
+                    const bool cppMenuOpen = ImGui::BeginMenu("C++ Script");
+                    ui::ItemTooltip(cppScripts.empty() ? "Build/load PhasmaGame to make native scripts available."
+                                                       : "Attach a C++ script compiled into PhasmaGame.");
+                    if (cppMenuOpen)
+                    {
+                        if (ImGui::MenuItem("New C++ Script..."))
+                            if (auto *se = m_gui->GetWidget<ScriptEditor>())
+                                se->OpenNewCppScript(node);
+                        if (ImGui::MenuItem("Browse C++ Source..."))
+                            if (auto *fs = m_gui->GetWidget<FileSelector>())
+                                fs->OpenSelection([this, node](const std::string &path) -> bool
+                                                  {
+                                    if (auto *se = m_gui->GetWidget<ScriptEditor>())
+                                        se->ImportCppScript(node, path);
+                                    return true; }, {".cpp"});
+                        ImGui::Separator();
+                        for (const std::string &name : cppScripts)
+                        {
+                            auto *ss = GetGlobalSystem<ScriptSystem>();
+                            const auto source = ss->CppSourceFile("cpp:" + name);
+                            const auto label = source.empty() ? name : std::filesystem::path(source).filename().string();
+                            if (ImGui::MenuItem(label.c_str()))
+                                scene.SetNodeScript(node, source.empty() ? "cpp:" + name : source);
+                        }
+                        ImGui::EndMenu();
+                    }
                 }
 
                 if (!(flags & Component_Mesh))
@@ -1332,12 +1362,12 @@ namespace pe
 
                 if (flags & Component_Script)
                 {
-                    if (ImGui::MenuItem("Lua Script"))
+                    if (ImGui::MenuItem("Remove Script"))
                     {
                         scene.SetNodeScript(node, "");
                         notifyChanged();
                     }
-                    ui::ItemTooltip("Detach the Lua script from this node.");
+                    ui::ItemTooltip("Detach the script from this node without deleting its source file.");
                 }
 
                 if (flags & Component_Mesh)

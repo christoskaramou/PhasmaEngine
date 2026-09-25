@@ -65,6 +65,7 @@ target_link_libraries(PhasmaCook PRIVATE
     SDL2
     SDL2main
 )
+pe_link_project_native(PhasmaCook)
 if(TARGET assimp)
     target_link_libraries(PhasmaCook PRIVATE assimp)
 endif()

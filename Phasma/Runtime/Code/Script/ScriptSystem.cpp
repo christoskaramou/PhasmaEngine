@@ -1,4 +1,5 @@
 #include "ScriptSystem.h"
+#include "CppScript.h"
 #if defined(PE_PLAYER_MCP)
 #include "Agent/AgentToolRegistry.h"
 #endif
@@ -515,6 +516,8 @@ namespace pe
 
         LoadScripts();
 
+        m_cppScripts.Init();
+
         m_initialized = true;
     }
 
@@ -937,6 +940,9 @@ namespace pe
             const std::string &scriptPath = scene->GetNodeScriptPath(node);
             if (scriptPath.empty())
                 continue;
+            // Native scripts share scene references, but never enter the Lua loader.
+            if (IsCppScriptPath(scriptPath))
+                continue;
 
             if (existingNodeInstances.find(node) != existingNodeInstances.end())
                 continue;
@@ -1196,6 +1202,9 @@ namespace pe
     {
         if (!IsEditorHost())
             return;
+
+        if (!nowPlay)
+            m_cppScripts.StopPlay();
 
         for (auto &script : m_scripts)
         {
@@ -1782,6 +1791,8 @@ namespace pe
                 }
             }
         }
+
+        m_cppScripts.Update(dt);
     }
 
     void ScriptSystem::Destroy()
@@ -1789,6 +1800,12 @@ namespace pe
         if (!m_initialized)
             return;
 
+        m_cppScripts.Destroy();
+        DestroyLua();
+    }
+
+    void ScriptSystem::DestroyLua()
+    {
 #if defined(PE_PLAYER_MCP)
         // Drop script-registered MCP tools before the Lua state dies so their sol handles never dangle
         // (on Reload, scripts re-register from init()).
@@ -1859,7 +1876,9 @@ namespace pe
 
     void ScriptSystem::Reload()
     {
-        Destroy();
+        // A Lua reload must not unload PhasmaGame or reset C++ script state.
+        if (m_initialized)
+            DestroyLua();
         Init(nullptr);
         CallInit();
     }

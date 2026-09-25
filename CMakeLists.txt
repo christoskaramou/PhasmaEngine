@@ -75,6 +75,8 @@ option(PE_WEBGPU "Build PhasmaWebGPU WebGPU abstraction layer" ${PE_DESKTOP_TARG
 option(PE_ENABLE_ASSIMP "Enable Assimp-backed runtime model file loading" ${PE_ASSIMP_DEFAULT})
 option(PE_ENABLE_RUNTIME_SHADER_COMPILER "Enable runtime shader compilation from source files" ${PE_RUNTIME_SHADER_COMPILER_DEFAULT})
 option(PE_ENABLE_RENDERDOC_CAPTURE "Enable RenderDoc capture API integration" OFF)
+option(PE_PROJECT_NATIVE "Build C++ scripts (desktop live reload, Android linked into player)" OFF)
+include("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/ProjectNative/ProjectNative.cmake")
 
 set(PE_SDL2_INCLUDE_DIR "${PE_THIRD_PARTY_DIR}/SDL2")
 if(CMAKE_SYSTEM_NAME STREQUAL "Android")
@@ -330,6 +332,8 @@ endif()
 
 # Shared project/runtime contract used by editor today and future player hosts.
 add_subdirectory(Phasma/Runtime)
+pe_project_native_configure_runtime()
+pe_project_native_add_library()
 
 if(PE_BUILD_EXPORTER AND NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
     add_subdirectory(Phasma/Export)
@@ -452,6 +456,7 @@ elseif(MSVC)
 else()
     target_link_libraries(PhasmaEditorModule PRIVATE -Wl,--whole-archive PhasmaRuntime -Wl,--no-whole-archive)
 endif()
+pe_link_project_native(PhasmaEditorModule)
 if(PE_PHYSICS AND TARGET Jolt)
     target_link_libraries(PhasmaEditorModule PRIVATE Jolt)
 endif()
@@ -494,6 +499,7 @@ if(PE_CORE_LINK_DIRS)
     target_link_directories(PhasmaEditor PRIVATE ${PE_CORE_LINK_DIRS})
 endif()
 target_link_libraries(PhasmaEditor PRIVATE PhasmaCore PhasmaRuntime SDL2 SDL2main)
+pe_link_project_native(PhasmaEditor)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(PhasmaEditor PRIVATE dl)
     set_target_properties(PhasmaEditor PROPERTIES
@@ -518,6 +524,7 @@ if(PE_CORE_LINK_DIRS)
     target_link_directories(PhasmaLauncher PRIVATE ${PE_CORE_LINK_DIRS})
 endif()
 target_link_libraries(PhasmaLauncher PRIVATE PhasmaCore PhasmaRuntime SDL2 SDL2main)
+pe_link_project_native(PhasmaLauncher)
 target_sources(PhasmaLauncher PRIVATE
     "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/imgui.cpp"
     "${PE_EDITOR_THIRD_PARTY_DIR}/imgui/imgui_draw.cpp"

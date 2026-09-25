@@ -359,6 +359,14 @@ Projects/*/Assets/Agent/
 # Tracked validation and MCP tools
 !/tools/
 /tools/*
+!/tools/tests/
+/tools/tests/*
+!/tools/tests/native-scripts/
+/tools/tests/native-scripts/*
+!/tools/tests/native-scripts/CMakeLists.txt
+!/tools/tests/native-scripts/check.cpp
+!/tools/tests/native-scripts/module.cpp
+!/tools/tests/native-scripts/editor_smoke.py
 !/tools/animator_client.py
 !/tools/precommit_validate.py
 !/tools/editor_stress.py

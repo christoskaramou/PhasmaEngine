@@ -395,6 +395,16 @@ namespace pe
         {
             return s_keyboardCapturedByUi;
         }
+
+        bool IsKeyDown(const char *name)
+        {
+            if (!name || IsKeyboardCapturedByUi())
+                return false;
+            const SDL_Scancode sc = SDL_GetScancodeFromName(name);
+            if (sc == SDL_SCANCODE_UNKNOWN)
+                return false;
+            return SDL_GetKeyboardState(nullptr)[sc] != 0;
+        }
     } // namespace InputState
 
     static struct InputBindings
@@ -407,11 +417,7 @@ namespace pe
 
                 // Keyboard state
                 input.set_function("is_key_down", [](const std::string &keyName) -> bool {
-                    if (InputState::IsKeyboardCapturedByUi()) return false;
-                    SDL_Scancode sc = SDL_GetScancodeFromName(keyName.c_str());
-                    if (sc == SDL_SCANCODE_UNKNOWN) return false;
-                    const Uint8 *state = SDL_GetKeyboardState(nullptr);
-                    return state[sc] != 0;
+                    return InputState::IsKeyDown(keyName.c_str());
                 });
 
                 // Ignores UI keyboard capture. For the ONE reader that owns the

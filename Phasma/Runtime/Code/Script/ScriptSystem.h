@@ -6,6 +6,7 @@
 #include "Scene/SceneNodeHandle.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneHost.h"
+#include "CppScript.h"
 
 namespace pe
 {
@@ -138,7 +139,7 @@ namespace pe
         void Init(CommandBuffer *cmd) override;
         void Update() override;
         void Destroy() override;
-        void Reload();
+        void Reload(); // Lua only: C++ script modules and instances are kept
         void CallInit(InitScope scope = InitScope::AllScripts);
         void OnAppBackgrounded();
         std::vector<std::string> GetTestScriptPaths() const;
@@ -148,6 +149,8 @@ namespace pe
         bool IsInitialized() const { return m_initialized; }
         static bool IsTestScriptPath(const std::string &path);
         std::vector<std::string> ListLuaFunctions();
+        std::vector<std::string> ListCppNodeScripts() const { return m_cppScripts.ListNodeScripts(); }
+        std::string CppSourceFile(const std::string &path) const { return m_cppScripts.SourceFile(path); }
 
         // Execute Lua code and return captured output + return value
         std::string ExecuteLua(const std::string &code);
@@ -224,6 +227,7 @@ namespace pe
         void RefreshNodeInstanceBindings(NodeScriptInstance &inst);
         void InitializeNodeInstance(NodeScriptInstance &inst);
         void DestroyNodeInstance(NodeScriptInstance &inst);
+        void DestroyLua();
         // The node's Component_Script run mode (Player/Editor/Both) decides whether its
         // init/update/destroy lifecycle runs in the editor (edit mode) and/or in play/player.
         bool NodeInstanceRunsInEditor(const NodeScriptInstance &inst) const;
@@ -232,6 +236,7 @@ namespace pe
         sol::state m_lua{};
         std::vector<ScriptEntry> m_scripts{};
         std::vector<NodeScriptInstance> m_nodeInstances{};
+        CppScriptSystem m_cppScripts;
         std::vector<NodeScriptInstance> m_zoneScriptInstances{};        // zone Script-section scripts
         std::vector<NodeScriptInstance> m_zonePhysicsScriptInstances{}; // zone Physics-section scripts
         // Snapshot used to skip ReconcileNodeInstances when script membership is unchanged.

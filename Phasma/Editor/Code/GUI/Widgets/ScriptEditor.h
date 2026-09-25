@@ -1,10 +1,12 @@
 #pragma once
 #include "GUI/Widget.h"
+#include "Scene/SceneNodeHandle.h"
 #include "TextEditor.h"
 
 #include <functional>
 #include <string>
 #include <vector>
+#include <future>
 
 namespace pe
 {
@@ -16,7 +18,7 @@ namespace pe
         ScriptEditor();
         void Update() override;
 
-        // Open an existing .lua file attached to a node
+        // Open an existing Lua or C++ source file attached to a node
         void OpenScript(NodeId *node, const std::string &path);
 
         // Open a .lua file for in-place editing with NO node attach (used for trigger-zone scripts,
@@ -25,6 +27,8 @@ namespace pe
 
         // Create a new empty script for a node (name defaults to "Undefined")
         void OpenNewScript(NodeId *node);
+        void OpenNewCppScript(NodeId *node);
+        void ImportCppScript(NodeId *node, const std::string &path);
 
         // Create a new script for a node pre-filled with content (e.g. a trigger template) and a
         // suggested filename. The editor opens so the user can rename/review, then Save writes it
@@ -44,8 +48,10 @@ namespace pe
         void DrawFunctionBrowser();
         void RefreshFunctionList();
         void RebuildFunctionListText();
+        void BuildCppScripts();
+        void SetTargetNode(NodeId *node);
 
-        NodeId *m_targetNode = nullptr;
+        SceneNodeHandle m_targetNode;
         std::function<void(const std::string &)> m_onSavedPath; // set by OpenNewScriptForPath; fired in SaveScript
         char m_scriptNameBuf[256] = "Undefined";
         char m_functionFilterBuf[128] = "";
@@ -58,6 +64,9 @@ namespace pe
         bool m_modified = false;
         bool m_pendingFocusName = false;
         bool m_showFunctions = false;
+        bool m_isCpp = false;
+        std::string m_buildOutput;
+        std::future<std::string> m_build;
 
         TextEditor m_editor;
         float m_editorFontScale = 1.0f;

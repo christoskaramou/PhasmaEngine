@@ -182,6 +182,8 @@ namespace
             "PhasmaPlayer.exe",
             "PhasmaPlayer",
             "PhasmaCore.dll",
+            "PhasmaGame.dll",
+            "libPhasmaGame.so",
             "SDL2.dll",
             "shaderc_shared.dll",
             "dxcompiler.dll",

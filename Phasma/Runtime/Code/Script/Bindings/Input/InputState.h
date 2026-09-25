@@ -36,4 +36,5 @@ namespace pe::InputState
     void SetKeyboardCapturedByUi(bool captured);
     bool IsMouseCapturedByUi();
     bool IsKeyboardCapturedByUi();
+    bool IsKeyDown(const char *name);
 } // namespace pe::InputState

@@ -192,6 +192,8 @@ android {
                     "-DPE_BUILD_LAUNCHER=OFF",
                     "-DPE_BUILD_MCP=OFF",
                     "-DPE_BUILD_PLAYER=ON",
+                    "-DPE_PROJECT_NATIVE=${localProperty("PE_PROJECT_NATIVE") ?: "OFF"}",
+                    "-DPE_PROJECT_NATIVE_DIR=${localProperty("PE_PROJECT_NATIVE_DIR") ?: ""}",
                     "-DPE_WEBGPU=OFF",
                     "-DPE_ENABLE_ASSIMP=OFF",
                     "-DPE_ENABLE_RUNTIME_SHADER_COMPILER=OFF",
