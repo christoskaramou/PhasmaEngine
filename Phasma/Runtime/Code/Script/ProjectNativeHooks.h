@@ -55,7 +55,8 @@ namespace pe
         // Live hosts poll and stage shadow copies; other hosts load in place exactly once.
         bool Sync(const std::filesystem::path &source, bool liveReload);
         bool Poll(const std::filesystem::path &source);
-        bool Stage(const std::filesystem::path &source);
+        // With expectedArtifact, refuses (without counting an attempt) if the file is no longer that artifact.
+        bool Stage(const std::filesystem::path &source, const std::string *expectedArtifact = nullptr);
         bool Load(const std::filesystem::path &source);
         // Descriptors and callbacks must remain resident until Reset.
         bool StageLinked(const phasma::ScriptModule *api);
@@ -65,6 +66,7 @@ namespace pe
         const std::string &Error() const { return m_error; }
         // Warning from the last stage/load (PDB not isolated, reload disabled); empty when there is none.
         const std::string &Notice() const { return m_notice; }
+        uint64_t NoticeCount() const { return m_notices; } // every notice counts, identical text included
         CppScriptStatus Status() const;
 
     private:
@@ -83,12 +85,16 @@ namespace pe
         bool Open(const std::filesystem::path &path, bool ownsFile, std::string artifact);
         bool Validate(const phasma::ScriptModule *api);
         bool Reject(); // records a failed attempt; returns false
+        void SetNotice(std::string notice);
         Image m_active, m_candidate;
         std::string m_error, m_notice, m_rejection, m_attemptedArtifact;
-        uint64_t m_attempts = 0, m_commits = 0;
-        bool m_copyFailed = false;   // last shadow copy was refused (permissions): in-place fallback candidate
-        bool m_liveDisabled = false; // in-place fallback turned reload off for this session
-        bool m_livePolicy = false;   // the host asked for live reload on the last Sync
+        uint64_t m_attempts = 0, m_commits = 0, m_notices = 0;
+        bool m_copyFailed = false;    // last shadow copy was refused (permissions): in-place fallback candidate
+        bool m_liveDisabled = false;  // in-place fallback turned reload off for this session
+        bool m_livePolicy = false;    // the host asked for live reload on the last Sync
+        bool m_copyTransient = false; // last shadow copy failed for another reason: retried with backoff
+        std::chrono::milliseconds m_retryDelay{500};
+        std::chrono::steady_clock::time_point m_retryAt{};
         std::filesystem::file_time_type m_observed{}, m_attempted{};
         uintmax_t m_observedSize = 0, m_attemptedSize = 0;
         bool m_seen = false, m_tried = false;

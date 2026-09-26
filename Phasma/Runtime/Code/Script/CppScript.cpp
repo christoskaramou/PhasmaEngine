@@ -247,7 +247,6 @@ namespace pe
         m_module.Reset();
         m_handles.Clear();
         m_sceneGeneration = m_scriptGeneration = UINT32_MAX;
-        m_lastNotice.clear();
         m_initialized = false;
     }
 
@@ -374,9 +373,9 @@ namespace pe
         const bool liveReload = ProjectNativeModule::LiveReloadEnabled(IsEditorHost(), Path::Executable);
         // This runs between dispatches, never while module code is on the stack.
         const bool loaded = m_module.Sync(std::filesystem::path(Path::Executable) / ProjectNativeModule::ModuleFileName(), liveReload);
-        if (!m_module.Notice().empty() && m_module.Notice() != m_lastNotice)
+        if (m_module.NoticeCount() != m_loggedNotices && !m_module.Notice().empty()) // repeats are logged too
             Log::Warn("[CppScript] " + m_module.Notice());
-        m_lastNotice = m_module.Notice();
+        m_loggedNotices = m_module.NoticeCount();
         const auto status = m_module.Status();
         if (loaded)
         {

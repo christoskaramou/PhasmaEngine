@@ -469,7 +469,14 @@ static void CheckArtifactStatus(const char *good, const char *badAbi)
         Require(!module.Stage(game));
         status = module.Status();
         Require(status.attempts == 3 && status.error == error && status.attemptedArtifact == badAgain && badAgain != badId);
+
+        // Poll hands Stage the artifact it observed: a file that changed since is refused without an attempt,
+        // so a newer build is never loaded under an older build's record.
+        const std::string observedEarlier = badId;
+        Require(!module.Stage(game, &observedEarlier) && module.Error().find("changed") != std::string::npos);
+        Require(module.Status().attempts == 3 && module.Status().activeArtifact == goodId);
         module.Reset();
+        Require(module.Status().error.empty() && module.Error().empty()); // Reset clears diagnostics
     }
 
     pe::CppScriptStatus start, now;
@@ -510,13 +517,17 @@ static void CheckNonPermissionCopyFailure(const char *good)
     const size_t length = 250; // NAME_MAX is 255; the copy adds "_live_<pid>_<seq>"
 #endif
     const auto extension = std::filesystem::path(good).extension().string();
-    if (length > extension.size() + 1)
+    if (length <= extension.size() + 1)
+        std::puts("SKIP: non-permission copy failure (build folder path too long for the long-name case)");
+    else
     {
         const auto longGame = directory / (std::string(length - extension.size(), 'n') + extension);
         std::filesystem::copy_file(good, longGame);
         pe::ProjectNativeModule module;
         Require(!module.Sync(longGame, true));
-        for (int i = 0; i < 2; ++i)
+        // Polls at ~0.55 s: the first attempt fails, then retries follow the backoff (0.5 s, 1 s, 2 s ...)
+        // for the same artifact, so over ~3.3 s there are a few attempts but fewer than polls.
+        for (int i = 0; i < 6; ++i)
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(550));
             if (module.Sync(longGame, true)) // a load of any kind (a wrongful fallback included) becomes visible
@@ -529,15 +540,42 @@ static void CheckNonPermissionCopyFailure(const char *good)
         {
             Require(!status.active && status.liveReload && status.error.rfind("Copy failed", 0) == 0);
             Require(module.Notice().empty());
+            Require(status.attempts >= 3 && status.attempts <= 5); // retried without a new artifact, with backoff
         }
         module.Reset();
         std::filesystem::remove(longGame);
     }
+#if defined(_WIN32)
+    {
+        // A sharing violation (an antivirus scanning the new DLL, say) is retried for the same artifact and
+        // loads once the lock is released, without another build.
+        const auto locked = directory / ("PhasmaGame" + extension);
+        std::filesystem::copy_file(good, locked);
+        HANDLE handle = CreateFileW(locked.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        Require(handle != INVALID_HANDLE_VALUE);
+        pe::ProjectNativeModule module;
+        Require(!module.Sync(locked, true));
+        std::this_thread::sleep_for(std::chrono::milliseconds(550));
+        Require(!module.Sync(locked, true)); // copy fails while locked; not a permission error, so no fallback
+        Require(module.Status().error.rfind("Copy failed", 0) == 0 && module.Status().liveReload);
+        CloseHandle(handle);
+        bool loaded = false;
+        for (int i = 0; i < 8 && !loaded; ++i)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(550));
+            loaded = module.Sync(locked, true);
+        }
+        Require(loaded);
+        module.Commit();
+        Require(module.Status().active && module.Status().liveReload && module.Status().error.empty());
+        module.Reset();
+    }
+#endif
     std::filesystem::remove_all(directory);
 }
 
 // When no shadow copy can be made, the initial load runs in place with reload off; a running module is never replaced.
-static void CheckInPlaceFallback(const char *good)
+static void CheckInPlaceFallback(const char *good, const char *badAbi)
 {
     const auto directory = std::filesystem::path(good).parent_path() / "fallback_load";
     if (std::filesystem::exists(directory))
@@ -569,9 +607,10 @@ static void CheckInPlaceFallback(const char *good)
             std::this_thread::sleep_for(std::chrono::milliseconds(550));
             Require(!module.Sync(game, true)); // no polling or retries once disabled
         }
-        Require(module.Status().attempts == attempts);
+        Require(module.Status().attempts == attempts && module.NoticeCount() == 1);
         module.Reset();
-        Require(std::filesystem::exists(game)); // in-place loads never delete the build output
+        Require(std::filesystem::exists(game));                            // in-place loads never delete the build output
+        Require(module.Notice().empty() && module.Status().error.empty()); // Reset clears diagnostics
     }
     Require(SetFolderWritable(directory, true));
     {
@@ -583,7 +622,7 @@ static void CheckInPlaceFallback(const char *good)
         const auto running = module.Status().activeArtifact;
         Require(SetFolderWritable(directory, false));
         std::filesystem::last_write_time(game, std::filesystem::last_write_time(game) + std::chrono::seconds(2));
-        for (int i = 0; i < 3; ++i) // throttled poll, first sight of the new stamp, then the stage attempt
+        for (int i = 0; i < 3; ++i) // first sight of the new stamp, then the stage attempt (and one spare poll)
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(550));
             Require(!module.Sync(game, true)); // copy fails, but a running module is never replaced in place
@@ -593,6 +632,39 @@ static void CheckInPlaceFallback(const char *good)
         Require(module.Notice().find("live reload disabled") == std::string::npos);
         Require(SetFolderWritable(directory, true));
         module.Reset();
+    }
+    {
+        // A failed in-place load reports the copy error with the load error, and keeps polling: the next
+        // build then loads in place.
+        const auto rewrite = [&](const char *from, int seconds)
+        {
+            const auto bytes = ReadBytes(from);
+            std::ofstream(game, std::ios::binary | std::ios::trunc)
+                .write(reinterpret_cast<const char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            std::filesystem::last_write_time(game, std::filesystem::last_write_time(game) + std::chrono::seconds(seconds));
+        };
+        rewrite(badAbi, 4);
+        Require(SetFolderWritable(directory, false));
+        pe::ProjectNativeModule module;
+        Require(!module.Sync(game, true));
+        std::this_thread::sleep_for(std::chrono::milliseconds(550));
+        Require(!module.Sync(game, true));
+        auto status = module.Status();
+        Require(!status.active && status.liveReload);
+        Require(status.error.rfind("Shadow copy failed", 0) == 0 && status.error.find("in-place load failed") != std::string::npos);
+        rewrite(good, 8);
+        bool loaded = false;
+        for (int i = 0; i < 4 && !loaded; ++i)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(550));
+            loaded = module.Sync(game, true);
+        }
+        Require(loaded);
+        module.Commit();
+        status = module.Status();
+        Require(status.active && !status.liveReload && status.error.empty());
+        module.Reset();
+        Require(SetFolderWritable(directory, true));
     }
     std::filesystem::remove_all(directory);
 }
@@ -840,7 +912,7 @@ int main(int argc, char **argv)
     CheckLiveReloadPolicy(argv[1]);
     CheckPdbPatch(argv[1]);
     CheckArtifactStatus(argv[1], argv[3]);
-    CheckInPlaceFallback(argv[1]);
+    CheckInPlaceFallback(argv[1], argv[3]);
     CheckNonPermissionCopyFailure(argv[1]);
     Require(pe::ProjectNativeModule::ProcessAlive(SelfPid()) && pe::ProjectNativeModule::ProcessAlive(AlivePid));
     Require(!pe::ProjectNativeModule::ProcessAlive(DeadPid));
@@ -899,33 +971,55 @@ int main(int argc, char **argv)
     state = {};
     const auto live = std::filesystem::path(argv[1]).parent_path() /
                       ("live_input" + std::filesystem::path(argv[1]).extension().string());
-    // Shadow files of a killed process (or an older build's naming) are swept; another live process's stay.
+    // The sweep deletes only names the loader writes: this process's stale copies, a dead process's, and
+    // the legacy clock-tag format. Everything else stays, including names that merely share a prefix and
+    // names that are not representable in the ANSI code page (converting those throws on Windows).
     const auto dir = live.parent_path();
     const auto ext = live.extension().string();
     const auto self = Base36(SelfPid()), alive = Base36(AlivePid), dead = Base36(DeadPid);
-    for (const std::string &name : {"live_input_live_stale" + ext, std::string("live_input_live_stale.pdb"),
-                                    "live_input_live_" + dead + "_0" + ext, "PG~" + dead + ".0.pdb",
-                                    "live_input_live_" + self + "_zz" + ext, "PG~" + self + ".zz.pdb",
-                                    "live_input_live_" + alive + "_0" + ext, "PG~" + alive + ".0.pdb",
-                                    std::string("PG~notes.txt"), std::string("live_input_notes")})
-        std::ofstream(dir / name) << "shadow";
+    const std::string legacy = "live_input_live_1790000000000000000_0";
+#if defined(_WIN32)
+    const bool pdbSweep = true;
+#else
+    const bool pdbSweep = false; // PG~ PDB copies only exist on Windows
+#endif
+    const std::vector<std::string> swept = {"live_input_live_" + dead + "_0" + ext, "live_input_live_" + self + "_zz" + ext,
+                                            legacy + ext, legacy + ".pdb"};
+    const std::vector<std::string> sweptOnWindows = {"PG~" + dead + ".0.pdb", "PG~" + self + ".zz.pdb"};
+    const std::vector<std::string> kept = {"live_input_live_" + alive + "_0" + ext, "PG~" + alive + ".0.pdb",
+                                           "live_input_live_stale" + ext, "live_input_live_notes.txt",
+                                           "live_input_live_1_0" + ext + ".bak", "live_input_live_1_0_extra" + ext,
+                                           "live_input_live_" + dead + "_0.pdb", "live_input_live_Ab_0" + ext,
+                                           "PG~notes.pdb", "PG~1.pdb", "PG~.pdb", "PG~notes.txt", "live_input_notes"};
+    const std::vector<std::filesystem::path> unicode = {dir / std::filesystem::path(u8"live_input_live_\u65e5\u672c\U0001F642.txt"),
+                                                        dir / std::filesystem::path(u8"\u65e5\u672c\U0001F642" + std::u8string(u8".pdb"))};
+    for (const auto *names : {&swept, &sweptOnWindows, &kept})
+        for (const auto &name : *names)
+            std::ofstream(dir / name) << "shadow";
+    for (const auto &path : unicode)
+        std::ofstream(path) << "unicode";
     std::filesystem::copy_file(argv[1], live, std::filesystem::copy_options::overwrite_existing);
 #if defined(_MSC_VER)
     std::filesystem::copy_file(std::filesystem::path(argv[1]).replace_extension(".pdb"),
                                std::filesystem::path(live).replace_extension(".pdb"),
                                std::filesystem::copy_options::overwrite_existing);
 #endif
-    Require(module.Stage(live));
+    Require(module.Stage(live)); // must not throw on the Unicode names
     module.Commit();
-    for (const std::string &name : {"live_input_live_stale" + ext, std::string("live_input_live_stale.pdb"),
-                                    "live_input_live_" + dead + "_0" + ext, "PG~" + dead + ".0.pdb",
-                                    "live_input_live_" + self + "_zz" + ext, "PG~" + self + ".zz.pdb"})
+    for (const auto &name : swept)
         Require(!std::filesystem::exists(dir / name));
-    for (const std::string &name : {"live_input_live_" + alive + "_0" + ext, "PG~" + alive + ".0.pdb",
-                                    std::string("PG~notes.txt"), std::string("live_input_notes")})
+    for (const auto &name : sweptOnWindows)
+        Require(std::filesystem::exists(dir / name) != pdbSweep);
+    for (const auto *names : {&kept, &sweptOnWindows})
+        for (const auto &name : *names)
+        {
+            Require(names == &sweptOnWindows || std::filesystem::exists(dir / name));
+            std::filesystem::remove(dir / name);
+        }
+    for (const auto &path : unicode)
     {
-        Require(std::filesystem::exists(dir / name));
-        std::filesystem::remove(dir / name);
+        Require(std::filesystem::exists(path));
+        std::filesystem::remove(path); // before this test's own directory walks, which use ANSI names
     }
     {
         // This process's copy is tagged with its pid.
@@ -954,27 +1048,24 @@ int main(int argc, char **argv)
 #if defined(_WIN32)
     {
         // A CodeView path too short for the shadow PDB name is left alone, with a notice, and nothing leaks.
-        const auto tiny = dir / ("tiny" + ext);
+        // Its own folder: a second module in one process may sweep the first one's PDB copy.
+        const auto tinyDir = dir / "tiny_pdb";
+        std::filesystem::remove_all(tinyDir);
+        std::filesystem::create_directories(tinyDir);
+        const auto tiny = tinyDir / ("tiny" + ext);
         const auto image = MakePeImage(true, "a.pdb");
         std::ofstream(tiny, std::ios::binary).write(reinterpret_cast<const char *>(image.data()), static_cast<std::streamsize>(image.size()));
-        std::ofstream(dir / "tiny.pdb") << "pdb";
-        const auto shadows = [&]
-        {
-            size_t count = 0;
-            for (const auto &entry : std::filesystem::directory_iterator(dir))
-            {
-                const auto name = entry.path().filename().string();
-                count += name.rfind("tiny_live_", 0) == 0 || name.rfind("PG~", 0) == 0;
-            }
-            return count;
-        };
+        std::ofstream(tinyDir / "tiny.pdb") << "pdb";
         pe::ProjectNativeModule tinyModule;
-        Require(!tinyModule.Stage(tiny)); // synthetic image: never loadable
-        Require(tinyModule.Notice().find("PDB not isolated") != std::string::npos);
-        Require(tinyModule.Notice().find("too short") != std::string::npos);
-        Require(shadows() <= 1); // at most `module`'s own PDB copy; tiny's copy and PDB were removed
-        std::filesystem::remove(tiny);
-        std::filesystem::remove(dir / "tiny.pdb");
+        for (int i = 0; i < 2; ++i)
+        {
+            Require(!tinyModule.Stage(tiny)); // synthetic image: never loadable
+            Require(tinyModule.Notice().find("PDB not isolated") != std::string::npos);
+            Require(tinyModule.Notice().find("too short") != std::string::npos);
+        }
+        Require(tinyModule.NoticeCount() == 2); // repeated warnings are counted (and logged) every time
+        Require(CountEntries(tinyDir) == 2);    // only tiny and tiny.pdb: its copy and PDB copy were removed
+        std::filesystem::remove_all(tinyDir);
     }
 #endif
     void *instance = nullptr;
@@ -1031,5 +1122,5 @@ int main(int argc, char **argv)
     std::filesystem::remove(std::filesystem::path(live).replace_extension(".pdb"));
     for (const auto &entry : std::filesystem::directory_iterator(live.parent_path()))
         Require(entry.path().filename().string().find("_live_") == std::string::npos);
-    std::puts("PASS: script paths, source lookup, guard, handle table, TRS, detached task, controller, installed in-place load, live-reload policy, append-only ABI, PDB patch, artifact status, in-place fallback, non-permission copy failure, reload policy, shadow ownership, replacement, rejection, writable output, repeated reload, exceptions, stale-copy sweep, cleanup");
+    std::puts("PASS: script paths, source lookup, guard, handle table, TRS, detached task, controller, installed in-place load, live-reload policy, append-only ABI, PDB patch, artifact status, in-place fallback, non-permission copy failure and retry, reload policy, shadow ownership and foreign-file safety, replacement, rejection, writable output, repeated reload, exceptions, stale-copy sweep, cleanup");
 }

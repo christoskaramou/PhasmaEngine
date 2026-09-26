@@ -47,7 +47,7 @@ namespace pe
         uint64_t m_loggedAttempts = 0;
         uint32_t m_sceneGeneration = UINT32_MAX;
         uint32_t m_scriptGeneration = UINT32_MAX;
-        std::string m_lastNotice;
+        uint64_t m_loggedNotices = 0;
         bool m_initialized = false;
     };
 } // namespace pe

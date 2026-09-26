@@ -40,7 +40,7 @@ preserves a reflection as a negative X scale (not the originally mirrored axis);
 `engine.native_scripts_status()` and the Script Editor report whether a build's reload applied;
 the sample no longer registers a global script.
 
-Loader and status follow-up (2026-09-26, uncommitted; standalone check on Linux including an
+Loader and status follow-up (2026-09-26, commit `c3e08738`; standalone check on Linux including an
 unprivileged run, and on Windows with Clang with neither permission nor non-permission copy
 checks skipped; Windows Release engine build and editor smoke, including skipped destruction
 after a fault, passed with Clang): in
@@ -55,6 +55,26 @@ matches its verdict to its own build; `live_reload` reports the effective policy
 exported, in-place, static and fallback loads). Validation checks unique source names with the same
 separator-agnostic filename rule scenes use, and the editor smoke asserts that a faulted instance is
 never destroyed, on Stop or on module unload.
+
+Review verified 2026-09-26 at `c3e08738`: isolated Windows repros using the production
+[loader](../../../../Phasma/Runtime/Code/Script/ProjectNativeHooks.cpp) found three remaining
+edge cases. `SweepStaleShadows` converts every filename to the ANSI code page before filtering;
+an unrelated CJK/emoji filename throws on code page 1252 and propagates to the editor host's
+exit-on-exception handler. The sweep also deletes malformed names such as
+`PhasmaGame_live_notes.txt` and `PG~notes.pdb`. `Poll` records failed copy attempts as tried,
+so releasing a temporary sharing lock does not retry the unchanged artifact. The standalone
+suite still passes; these repros expose cases it does not cover.
+
+Follow-up fixes for those repros (2026-09-26; standalone check on Linux as root and
+unprivileged, and on Windows with Clang and with MSVC `cl.exe` with nothing skipped; Windows Release
+editor smoke passed with Clang): the sweep compares directory entries in the native encoding
+and deletes only fully validated shadow names (this process's stale or a dead process's
+`<stem>_live_<pid36>_<seq36>`, Windows-only `PG~<pid36>.<seq36>.pdb`, or the legacy clock-tagged
+format); any other name, prefix matches included, is kept. Non-permission copy failures are retried
+for the same artifact with backoff (0.5 s doubling to 30 s). `Stage` refuses a file that changed
+since `Poll` observed it, notices are counted so identical repeats are logged, `Reset` clears
+diagnostics, and a failed in-place fallback keeps the copy error in its message. Still unverified:
+debugger-attached rebuilds, a `cl.exe` engine build, and Android on a device.
 
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and

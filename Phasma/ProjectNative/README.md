@@ -111,11 +111,18 @@ timestamp/size to remain unchanged across two observations. They load a copy nam
 path is patched to it, so a debugger attached to the editor no longer locks the build PDB
 (LNK1201); if the name cannot fit the module's CodeView path, a warning is logged and the original
 PDB stays referenced. Shadow files are tagged with the owning process id: an editor and a Player
-sharing a build folder keep each other's files, and files of a process that is gone are swept on
+sharing a build folder keep each other's files, and only fully validated shadow names (this format, or
+the older clock-tagged `PhasmaGame_live_<clock>_<seq>` format) are ever deleted; any other file, even
+one sharing the prefix such as `PhasmaGame_live_notes.txt`, is left alone. Directory entries are
+compared in the platform's native encoding, so files whose names the ANSI code page cannot represent
+are safe too. Files of a process that is gone are swept on
 the next load. If the initial load's shadow copy is refused for permissions (access denied, read-only), the
 module is loaded in place and live reload is disabled for that session, with the reason logged.
-Other copy failures (disk full, sharing violations, over-long paths) stay ordinary failures and are
-retried on the next build, because loading in place would lock the build output on Windows. A
+Other copy failures (disk full, sharing violations, over-long paths) stay ordinary failures, because
+loading in place would lock the build output on Windows; they are retried for the same artifact with
+backoff (0.5 s doubling to 30 s), so a lock such as an antivirus scan of the new DLL clears without
+another build. A file that changes between the poll that observed it and the copy is not loaded under
+the old record; the next poll picks up the new artifact. A
 running module is never replaced through the fallback. The loader checks the entry point, ABI, descriptor kinds/modes, callbacks, and
 duplicate names before replacing anything. `PhasmaExport` ships `PhasmaGame.dll` /
 `libPhasmaGame.so` beside the exported player.

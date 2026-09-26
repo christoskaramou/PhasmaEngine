@@ -1,6 +1,7 @@
 #include "ProjectNativeHooks.h"
 #include "CppScriptPath.h"
 #include <SDL.h>
+#include <algorithm>
 #include <atomic>
 #include <cstring>
 #include <fstream>
@@ -39,27 +40,64 @@ namespace pe
             return text;
         }
 
-        // "<pid36><separator><seq36>" -> pid; false for other shapes (older builds' tags, foreign files).
-        bool ParseShadowPid(std::string_view tag, char separator, uint32_t &pid)
+        // Directory entries are compared in the platform's native encoding: converting an unrelated file's
+        // name to the ANSI code page throws on Windows. Shadow-name pieces are ASCII.
+        using NativeString = std::filesystem::path::string_type;
+        using NativeChar = NativeString::value_type;
+
+        NativeString Native(std::string_view ascii)
+        {
+            return NativeString(ascii.begin(), ascii.end());
+        }
+
+        std::string Utf8(const std::filesystem::path &path)
+        {
+            const auto text = path.u8string();
+            return std::string(reinterpret_cast<const char *>(text.data()), text.size());
+        }
+
+        std::string Identity(uintmax_t size, std::filesystem::file_time_type written)
+        {
+            return std::to_string(size) + ":" + std::to_string(written.time_since_epoch().count());
+        }
+
+        enum class ShadowTag
+        {
+            Foreign, // not a name this loader writes: never deleted
+            Legacy,  // "<clock>_<seq>" from builds before shadow files carried a pid
+            Pid,     // "<pid36><separator><seq36>"
+        };
+
+        // Validates a whole shadow tag, so only names the loader itself writes can ever be swept.
+        ShadowTag ClassifyShadowTag(const NativeString &tag, NativeChar separator, uint32_t &pid)
         {
             const size_t split = tag.find(separator);
-            if (split == 0 || split == std::string_view::npos || split + 1 == tag.size())
-                return false;
+            if (split == 0 || split == NativeString::npos || split + 1 == tag.size() ||
+                tag.find(separator, split + 1) != NativeString::npos)
+                return ShadowTag::Foreign;
             uint64_t value = 0;
+            bool overflow = false, decimal = true;
             for (size_t i = 0; i < tag.size(); ++i)
             {
-                const char c = tag[i];
-                const bool digit = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z');
-                if (i == split || (i > split && digit))
+                if (i == split)
                     continue;
-                if (!digit)
-                    return false;
-                value = value * 36 + static_cast<uint64_t>(c <= '9' ? c - '0' : c - 'a' + 10);
-                if (value > UINT32_MAX)
-                    return false;
+                const NativeChar c = tag[i];
+                const bool digit = c >= '0' && c <= '9', letter = c >= 'a' && c <= 'z';
+                if (!digit && !letter)
+                    return ShadowTag::Foreign;
+                decimal = decimal && digit;
+                if (i < split && !overflow)
+                {
+                    value = value * 36 + static_cast<uint64_t>(digit ? c - '0' : c - 'a' + 10);
+                    overflow = value > UINT32_MAX;
+                }
             }
-            pid = static_cast<uint32_t>(value);
-            return true;
+            if (!overflow)
+            {
+                pid = static_cast<uint32_t>(value);
+                return ShadowTag::Pid;
+            }
+            return decimal ? ShadowTag::Legacy : ShadowTag::Foreign; // legacy tags are a decimal clock count
         }
 
         constexpr std::string_view ShadowPdbPrefix = "PG~";
@@ -108,7 +146,7 @@ namespace pe
         const auto written = std::filesystem::last_write_time(file, ec);
         if (ec)
             return {};
-        return std::to_string(size) + ":" + std::to_string(written.time_since_epoch().count());
+        return Identity(size, written);
     }
 
     NativeReloadOutcome ProjectNativeModule::ClassifyReload(const CppScriptStatus &atBuildStart, const CppScriptStatus &now,
@@ -177,54 +215,81 @@ namespace pe
     {
         Close(m_candidate);
         Close(m_active);
-        m_seen = m_tried = m_copyFailed = m_liveDisabled = m_livePolicy = false;
-        m_nextPoll = {};
+        m_seen = m_tried = m_copyFailed = m_copyTransient = m_liveDisabled = m_livePolicy = false;
+        m_nextPoll = m_retryAt = {};
+        m_retryDelay = std::chrono::milliseconds(500);
+        m_error.clear();
+        m_notice.clear();
+        m_rejection.clear();
     }
 
-    // Other hosts sharing the build folder (an editor and a Player) keep their files; a killed process's go.
+    void ProjectNativeModule::SetNotice(std::string notice)
+    {
+        m_notice = std::move(notice);
+        ++m_notices;
+    }
+
+    // Only names this loader writes are candidates: other hosts sharing the build folder (an editor and a
+    // Player) keep their files, a killed process's files go, and anything else is left alone.
     void ProjectNativeModule::SweepStaleShadows(const std::filesystem::path &source) const
     {
-        const std::string dllPrefix = source.stem().string() + "_live_";
+        const NativeString dllPrefix = source.stem().native() + Native("_live_");
+        const auto extension = source.extension();
         const uint32_t self = CurrentPid();
         std::error_code ec;
         for (auto it = std::filesystem::directory_iterator(source.parent_path(), ec);
              !ec && it != std::filesystem::directory_iterator(); it.increment(ec))
         {
             const auto &path = it->path();
-            const std::string name = path.filename().string();
-            std::string_view tag;
-            char separator = '_';
-            if (name.rfind(dllPrefix, 0) == 0)
-                tag = std::string_view(name).substr(dllPrefix.size(), name.size() - dllPrefix.size() - path.extension().string().size());
-            else if (name.rfind(ShadowPdbPrefix, 0) == 0 && path.extension() == ".pdb")
+            const NativeString name = path.filename().native();
+            const bool pdb = path.extension() == ".pdb";
+            NativeString tag;
+            NativeChar separator = '_';
+            if (name.compare(0, dllPrefix.size(), dllPrefix) == 0 && (path.extension() == extension || pdb))
+                tag = name.substr(dllPrefix.size(), name.size() - dllPrefix.size() - path.extension().native().size());
+#if defined(_WIN32)
+            else if (pdb && name.compare(0, ShadowPdbPrefix.size(), Native(ShadowPdbPrefix)) == 0)
             {
-                tag = std::string_view(name).substr(ShadowPdbPrefix.size(), name.size() - ShadowPdbPrefix.size() - 4);
+                tag = name.substr(ShadowPdbPrefix.size(), name.size() - ShadowPdbPrefix.size() - 4);
                 separator = '.';
             }
+#endif
             else
                 continue;
             if (path == m_active.path || path == m_active.pdb)
                 continue;
             uint32_t pid = 0;
-            if (ParseShadowPid(tag, separator, pid) && pid != self && ProcessAlive(pid))
+            const ShadowTag kind = ClassifyShadowTag(tag, separator, pid);
+            if (kind == ShadowTag::Foreign)
+                continue;
+            if (pdb && separator == '_' && kind != ShadowTag::Legacy)
+                continue; // "<stem>_live_*.pdb" is only written by legacy builds
+            if (kind == ShadowTag::Pid && pid != self && ProcessAlive(pid))
                 continue;
             std::error_code ignored;
             std::filesystem::remove(path, ignored); // a copy another process has loaded stays locked on Windows
         }
     }
 
-    bool ProjectNativeModule::Stage(const std::filesystem::path &source)
+    bool ProjectNativeModule::Stage(const std::filesystem::path &source, const std::string *expectedArtifact)
     {
         Close(m_candidate);
         m_error.clear();
         m_notice.clear();
-        m_copyFailed = false;
+        m_copyFailed = m_copyTransient = false;
+        const std::string artifact = ArtifactIdentity(source);
+        if (expectedArtifact && artifact != *expectedArtifact)
+        {
+            // Not an attempt: the next poll observes the new artifact and stages that one.
+            m_error = "Build output changed after it was observed";
+            return false;
+        }
         static std::atomic<uint64_t> sequence{0};
         const std::string pid = Base36(CurrentPid()), seq = Base36(sequence++);
-        const std::string artifact = ArtifactIdentity(source);
         ++m_attempts;
         m_attemptedArtifact = artifact;
-        const auto path = source.parent_path() / (source.stem().string() + "_live_" + pid + "_" + seq + source.extension().string());
+        const auto path = source.parent_path() /
+                          (source.stem().native() + Native("_live_" + pid + "_" + seq) + source.extension().native());
         SweepStaleShadows(source);
         std::error_code ec;
         m_candidate.path = path;
@@ -234,6 +299,7 @@ namespace pe
         {
             m_error = "Copy failed: " + ec.message();
             m_copyFailed = PermissionError(ec);
+            m_copyTransient = !m_copyFailed;
             return Reject();
         }
         if (ArtifactIdentity(source) != artifact)
@@ -257,8 +323,8 @@ namespace pe
             return true; // nothing to isolate
         const auto warn = [&](const std::string &why)
         {
-            m_notice = "PDB not isolated (" + why + "); a debugger attached to this process may lock " +
-                       pdb.filename().string() + " and fail the next link";
+            SetNotice("PDB not isolated (" + why + "); a debugger attached to this process may lock " +
+                      Utf8(pdb.filename()) + " and fail the next link");
             return false;
         };
         // Short enough to fit where the linker wrote "<dir>/PhasmaGame.pdb"; unique per process and reload.
@@ -271,7 +337,7 @@ namespace pe
             std::ifstream in(image.path, std::ios::binary);
             bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
         }
-        if (PatchCodeViewPdbPath(bytes, copy.string()) || PatchCodeViewPdbPath(bytes, copy.filename().string()))
+        if (PatchCodeViewPdbPath(bytes, Utf8(copy)) || PatchCodeViewPdbPath(bytes, Utf8(copy.filename())))
         {
             std::ofstream out(image.path, std::ios::binary | std::ios::trunc);
             out.write(reinterpret_cast<const char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
@@ -281,7 +347,7 @@ namespace pe
         }
         std::filesystem::remove(copy, ec);
         image.pdb.clear();
-        return warn("the module has no CodeView record, or its PDB path is too short for " + copy.filename().string());
+        return warn("the module has no CodeView record, or its PDB path is too short for " + Utf8(copy.filename()));
     }
 
     bool ProjectNativeModule::PatchCodeViewPdbPath(std::vector<uint8_t> &image, std::string_view pdbPath)
@@ -366,7 +432,7 @@ namespace pe
         DWORD previousErrorMode = 0;
         const bool changedErrorMode = SetThreadErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX, &previousErrorMode) != 0;
 #endif
-        m_candidate.library = SDL_LoadObject(path.string().c_str());
+        m_candidate.library = SDL_LoadObject(Utf8(path).c_str()); // SDL takes UTF-8 on every platform
 #if defined(_WIN32)
         if (changedErrorMode)
             SetThreadErrorMode(previousErrorMode, nullptr);
@@ -461,10 +527,14 @@ namespace pe
             const std::string reason = m_error;
             m_copyFailed = false;
             if (!Load(source))
+            {
+                m_error = "Shadow copy failed (" + reason + ") and the in-place load failed: " + m_error;
+                m_rejection = m_error;
                 return false;
+            }
             m_liveDisabled = true;
-            m_notice = "Shadow copy failed (" + reason + "); loaded " + source.filename().string() +
-                       " in place, live reload disabled for this session";
+            SetNotice("Shadow copy failed (" + reason + "); loaded " + Utf8(source.filename()) +
+                      " in place, live reload disabled for this session");
             return true;
         }
         // Shipped hosts: no polling, no shadow copy (install folders may be read-only), one attempt.
@@ -492,13 +562,23 @@ namespace pe
             m_seen = true;
             m_observed = stamp;
             m_observedSize = size;
+            m_retryDelay = std::chrono::milliseconds(500);
             return false;
         }
-        if (m_tried && stamp == m_attempted && size == m_attemptedSize)
+        // A tried artifact waits for the next build, except after a transient copy failure (a sharing
+        // violation while an antivirus scans the new DLL, say): that is retried with backoff up to 30 s.
+        if (m_tried && stamp == m_attempted && size == m_attemptedSize && (!m_copyTransient || now < m_retryAt))
             return false;
         m_tried = true;
         m_attempted = stamp;
         m_attemptedSize = size;
-        return Stage(source);
+        const std::string observed = Identity(size, stamp);
+        const bool staged = Stage(source, &observed); // refuses a file that changed since this observation
+        if (m_copyTransient)
+        {
+            m_retryAt = now + m_retryDelay;
+            m_retryDelay = (std::min)(m_retryDelay * 2, std::chrono::milliseconds(30000));
+        }
+        return staged;
     }
 } // namespace pe
