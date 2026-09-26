@@ -9,7 +9,12 @@
 
 namespace phasma
 {
-    inline constexpr uint32_t ScriptAbiVersion = 4;
+    // Append-only ABI: new ScriptApi function pointers go at the end (bump ScriptAbiVersion); ScriptDesc
+    // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
+    // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
+    // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
+    inline constexpr uint32_t ScriptAbiVersion = 5;
+    inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
     {
@@ -81,7 +86,7 @@ namespace phasma
                     if (!state)
                         return 0;
                     *state = nullptr;
-                    if (!api || api->version != ScriptAbiVersion || api->size != sizeof(ScriptApi))
+                    if (!api || api->version < ScriptAbiVersion || api->size < sizeof(ScriptApi))
                         return 0;
                     try
                     {

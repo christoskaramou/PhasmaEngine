@@ -6,6 +6,8 @@
 #include "Scene/Primitives.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
+#include "Script/NativeScriptGuard.h"
+#include "Script/NativeTrs.h"
 #include "Script/ScriptRuntimeHooks.h"
 #include "Script/Bindings/Input/InputState.h"
 #include "Systems/AnimationSystem.h"
@@ -38,15 +40,10 @@ namespace pe
             return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
         }
 
-        // Rebuilds the local TRS, replacing rotation (degrees) or scale; same math as the Lua node bindings.
+        // Rebuilds the local TRS, replacing rotation (degrees) or scale.
         void SetLocalTrs(Scene &scene, NodeId *node, const vec3 *rotationDegrees, const vec3 *scale)
         {
-            const mat4 &m = scene.GetLocalMatrix(node);
-            const vec3 oldScale(glm::length(vec3(m[0])), glm::length(vec3(m[1])), glm::length(vec3(m[2])));
-            const quat rotation = rotationDegrees ? quat(glm::radians(*rotationDegrees))
-                                                  : glm::quat_cast(mat3(vec3(m[0]) / oldScale.x, vec3(m[1]) / oldScale.y, vec3(m[2]) / oldScale.z));
-            scene.SetLocalMatrix(node, glm::translate(mat4(1.0f), vec3(m[3])) * glm::mat4_cast(rotation) *
-                                           glm::scale(mat4(1.0f), scale ? *scale : oldScale));
+            scene.SetLocalMatrix(node, ReplaceTrs(scene.GetLocalMatrix(node), rotationDegrees, scale));
         }
 
         bool PlayTree(Scene &scene, AnimationSystem &animation, NodeId *node, const std::string &clip, bool loop)
@@ -64,20 +61,21 @@ namespace pe
             return played;
         }
 
-        void ScriptError(const char *name)
+        void ScriptError(const char *name, uint32_t fault = 0)
         {
-            Log::Error(std::string("[CppScript] callback failed; instance disabled: ") + name);
-        }
-
-        std::string ScriptKey(const std::string &path)
-        {
-            return path.rfind("cpp:", 0) == 0 ? path.substr(4) : std::filesystem::path(path).filename().string();
+            if (!fault)
+            {
+                Log::Error(std::string("[CppScript] callback failed; instance disabled: ") + name);
+                return;
+            }
+            char code[16];
+            std::snprintf(code, sizeof(code), "0x%08X", fault);
+            Log::Error(std::string("[CppScript] fault ") + code + " in " + name + "; instance disabled and its state leaked");
         }
 
         bool MatchesScript(const phasma::ScriptDesc &script, const std::string &path)
         {
-            return path == std::string("cpp:") + script.name ||
-                   (script.sourceFile && ScriptKey(path) == std::filesystem::path(script.sourceFile).filename().string());
+            return MatchesCppScript(path, script.name, script.sourceFile);
         }
     } // namespace
 
@@ -86,25 +84,24 @@ namespace pe
         Destroy();
     }
 
+    bool CppScriptSystem::LiveNode::operator()(const SceneNodeHandle &handle) const
+    {
+        Scene *scene = GetActiveScene();
+        return scene && handle.IsValid(*scene);
+    }
+
     phasma::Node CppScriptSystem::Handle(NodeId *node)
     {
         Scene *scene = GetActiveScene();
         if (!scene || !node || !scene->IsNodeAlive(node))
             return 0;
-        auto it = m_nodeHandles.find(node);
-        if (it != m_nodeHandles.end() && m_handles.at(it->second).IsValid(*scene))
-            return it->second;
-        const auto id = m_nextHandle++;
-        m_handles.emplace(id, scene->MakeHandle(node));
-        m_nodeHandles[node] = id;
-        return id;
+        return m_handles.Issue(node, scene->MakeHandle(node));
     }
 
     NodeId *CppScriptSystem::Resolve(phasma::Node handle)
     {
-        Scene *scene = GetActiveScene();
-        const auto it = m_handles.find(handle);
-        return scene && it != m_handles.end() && it->second.IsValid(*scene) ? it->second.nodeId : nullptr;
+        const SceneNodeHandle *node = m_handles.Resolve(handle);
+        return node ? node->nodeId : nullptr;
     }
 
     void CppScriptSystem::Init()
@@ -115,9 +112,15 @@ namespace pe
         m_initialized = true;
 #if defined(PE_PROJECT_NATIVE_STATIC)
         if (m_module.StageLinked(PhasmaGetScriptModule(phasma::ScriptAbiVersion)))
+        {
             m_module.Commit();
+            ++m_reloads;
+        }
         else
-            Log::Error("[CppScript] linked module rejected: " + m_module.Error());
+        {
+            m_lastError = m_module.Error();
+            Log::Error("[CppScript] linked module rejected: " + m_lastError);
+        }
 #endif
         m_api = {phasma::ScriptAbiVersion, sizeof(phasma::ScriptApi), this,
                  [](void *, const char *message) noexcept
@@ -189,8 +192,7 @@ namespace pe
                          NodeId *node = self->Resolve(handle);
                          if (!node) return 0;
                          GetActiveScene()->DeleteNode(node);
-                         self->m_handles.erase(handle);
-                         self->m_nodeHandles.erase(node);
+                         self->m_handles.MarkStale(); // the whole subtree died
                          return 1; });
                  },
                  [](void *ctx, phasma::Node handle, phasma::Vec3 value) noexcept -> uint32_t
@@ -227,11 +229,14 @@ namespace pe
 
     void CppScriptSystem::Stop(Instance &instance)
     {
-        // Even failed instances own state that must die while their module is loaded.
-        if (instance.started)
-            instance.script->destroy(instance.state);
+        // Even failed instances own state that must die while their module is loaded; faulted state is leaked.
+        uint32_t fault = 0;
+        if (instance.started && !instance.faulted)
+            GuardedDestroy(instance.script->destroy, instance.state, &fault);
+        if (fault)
+            ScriptError(instance.script->name, fault);
         instance.state = nullptr;
-        instance.started = instance.failed = false;
+        instance.started = instance.failed = instance.faulted = false;
     }
 
     void CppScriptSystem::ClearInstances()
@@ -245,8 +250,7 @@ namespace pe
     {
         ClearInstances();
         m_module.Reset();
-        m_handles.clear();
-        m_nodeHandles.clear();
+        m_handles.Clear();
         m_sceneGeneration = m_scriptGeneration = UINT32_MAX;
         m_lastError.clear();
         m_initialized = false;
@@ -269,6 +273,12 @@ namespace pe
                 if (module->scripts[i].sourceFile && MatchesScript(module->scripts[i], path))
                     return module->scripts[i].sourceFile;
         return {};
+    }
+
+    CppScriptStatus CppScriptSystem::Status() const
+    {
+        const auto *module = m_module.Active();
+        return {m_reloads, module != nullptr, module ? module->scriptCount : 0u, m_lastError};
     }
 
     bool CppScriptSystem::Eligible(const Instance &instance) const
@@ -308,8 +318,7 @@ namespace pe
         if (generation != m_sceneGeneration)
         {
             ClearInstances();
-            m_handles.clear();
-            m_nodeHandles.clear();
+            m_handles.Clear();
             m_sceneGeneration = generation;
             m_scriptGeneration = UINT32_MAX;
             if (const auto *module = m_module.Active())
@@ -347,7 +356,7 @@ namespace pe
                 {
                     scripts.emplace(module->scripts[i].name, &module->scripts[i]);
                     if (module->scripts[i].sourceFile)
-                        scripts.emplace(std::filesystem::path(module->scripts[i].sourceFile).filename().string(), &module->scripts[i]);
+                        scripts.emplace(CppSourceName(module->scripts[i].sourceFile), &module->scripts[i]);
                 }
         for (uint32_t i = 0; i < scene->GetNodeCount(); ++i)
         {
@@ -357,7 +366,7 @@ namespace pe
             const auto &path = scene->GetNodeScriptPath(node);
             if (!IsCppScriptPath(path))
                 continue;
-            const auto script = scripts.find(ScriptKey(path));
+            const auto script = scripts.find(CppScriptKey(path));
             if (script != scripts.end())
                 m_instances.push_back({script->second, scene->MakeHandle(node)});
         }
@@ -374,13 +383,14 @@ namespace pe
 #else
         constexpr const char *moduleName = "libPhasmaGame.so";
 #endif
-        // Only the editor live-reloads. Players load the installed module in place once.
-        const bool liveReload = IsEditorHost();
+        // Editors and build-folder Players live-reload; exported Players load the installed module in place once.
+        const bool liveReload = ProjectNativeModule::LiveReloadEnabled(IsEditorHost(), Path::Executable);
         // This runs between dispatches, never while module code is on the stack.
         if (m_module.Sync(std::filesystem::path(Path::Executable) / moduleName, liveReload))
         {
             ClearInstances();
             m_module.Commit();
+            ++m_reloads;
             m_sceneGeneration = UINT32_MAX;
             m_lastError.clear();
             Log::Info(liveReload ? "[CppScript] module reloaded; private script state reset" : "[CppScript] module loaded");
@@ -410,19 +420,24 @@ namespace pe
             {
                 const auto node = instance.script->kind == phasma::ScriptKind::Node ? Handle(instance.node.nodeId) : 0;
                 instance.started = true;
-                if (!instance.script->create(&m_api, node, &instance.state))
+                uint32_t fault = 0;
+                if (!GuardedCreate(instance.script->create, &m_api, node, &instance.state, &fault))
                 {
                     instance.failed = true;
-                    ScriptError(instance.script->name);
+                    instance.faulted = fault != 0;
+                    ScriptError(instance.script->name, fault);
                     continue;
                 }
             }
-            if (!instance.script->update(instance.state, dt))
+            uint32_t fault = 0;
+            if (!GuardedUpdate(instance.script->update, instance.state, dt, &fault))
             {
                 instance.failed = true;
-                ScriptError(instance.script->name);
+                instance.faulted = fault != 0;
+                ScriptError(instance.script->name, fault);
             }
         }
+        m_handles.Maintain();
 #endif
     }
 } // namespace pe

@@ -41,6 +41,20 @@ namespace pe
                     SetScriptPaused(paused);
                 });
 
+                // C++ script module state: {reloads, active, scripts, error}; error is the latest rejection.
+                engine.set_function("native_scripts_status", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
+                    CppScriptStatus status;
+                    if (auto *scripts = GetGlobalSystem<ScriptSystem>())
+                        status = scripts->CppScriptStatusSnapshot();
+                    sol::table t = lua.create_table();
+                    t["reloads"] = status.reloads;
+                    t["active"] = status.active;
+                    t["scripts"] = status.scriptCount;
+                    t["error"] = status.error;
+                    return t;
+                });
+
                 engine.set_function("quit", []() {
                     EventSystem::PushEvent(EventType::Quit);
                 });

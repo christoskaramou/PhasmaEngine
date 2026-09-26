@@ -23,6 +23,7 @@
 #include "Scene/SceneAccess.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SelectionManager.h"
+#include "Script/CppScriptPath.h"
 #include "Script/ScriptSystem.h"
 #include "ScriptEditor.h"
 #include "Systems/AnimationSystem.h"
@@ -1267,9 +1268,9 @@ namespace pe
                         {
                             auto *ss = GetGlobalSystem<ScriptSystem>();
                             const auto source = ss->CppSourceFile("cpp:" + name);
-                            const auto label = source.empty() ? name : std::filesystem::path(source).filename().string();
-                            if (ImGui::MenuItem(label.c_str()))
-                                scene.SetNodeScript(node, source.empty() ? "cpp:" + name : source);
+                            const auto label = source.empty() ? name : CppSourceName(source);
+                            if (ImGui::MenuItem(label.c_str())) // bare filename: scenes stay machine-independent
+                                scene.SetNodeScript(node, source.empty() ? "cpp:" + name : CppScriptReference(source));
                         }
                         ImGui::EndMenu();
                     }

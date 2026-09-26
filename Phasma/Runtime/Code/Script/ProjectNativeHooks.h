@@ -1,8 +1,11 @@
 #pragma once
 #include "ProjectNative.h"
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace pe
 {
@@ -14,7 +17,11 @@ namespace pe
         ~ProjectNativeModule();
         ProjectNativeModule(const ProjectNativeModule &) = delete;
         ProjectNativeModule &operator=(const ProjectNativeModule &) = delete;
-        // Live hosts (the editor) poll and stage shadow copies; other hosts load in place exactly once.
+        // Editors and build-folder Players (NativeScripts.json beside the executable; exports omit it) live-reload.
+        static bool LiveReloadEnabled(bool editorHost, const std::filesystem::path &executableDir);
+        // Rewrites every PE CodeView (RSDS) PDB path in place; false (image untouched) if malformed or it does not fit.
+        static bool PatchCodeViewPdbPath(std::vector<uint8_t> &image, std::string_view pdbPath);
+        // Live hosts poll and stage shadow copies; other hosts load in place exactly once.
         bool Sync(const std::filesystem::path &source, bool liveReload);
         bool Poll(const std::filesystem::path &source);
         bool Stage(const std::filesystem::path &source);
@@ -32,9 +39,11 @@ namespace pe
             void *library = nullptr;
             const phasma::ScriptModule *api = nullptr;
             std::filesystem::path path;
-            bool ownsFile = false; // shadow copies are deleted on close; in-place loads never are
+            bool ownsFile = false;     // shadow copies are deleted on close; in-place loads never are
+            std::filesystem::path pdb; // owned shadow PDB (Windows)
         };
         static void Close(Image &image);
+        static void StagePdb(const std::filesystem::path &source, Image &image);
         bool Open(const std::filesystem::path &path, bool ownsFile);
         bool Validate(const phasma::ScriptModule *api);
         Image m_active, m_candidate;

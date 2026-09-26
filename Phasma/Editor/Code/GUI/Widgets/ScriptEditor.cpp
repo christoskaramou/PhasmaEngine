@@ -4,6 +4,7 @@
 #include "GUI/Helpers.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
+#include "Script/CppScriptPath.h"
 #include "Script/ScriptSystem.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui.h"
@@ -25,6 +26,22 @@ namespace pe
                                    return std::tolower(static_cast<unsigned char>(a)) ==
                                           std::tolower(static_cast<unsigned char>(b));
                                }) != text.end();
+        }
+
+        // Scenes and descriptors name C++ sources by filename; find the file under the native sources folder.
+        std::string ResolveCppSource(const std::string &reference)
+        {
+            try
+            {
+                std::ifstream config(std::filesystem::path(Path::Executable) / "NativeScripts.json");
+                if (auto found = FindCppSource(nlohmann::json::parse(config).at("sources").get<std::string>(), reference); !found.empty())
+                    return found;
+            }
+            catch (const std::exception &)
+            {
+            }
+            std::error_code ec; // legacy absolute references and non-CMake builds (__FILE__ descriptors)
+            return std::filesystem::path(reference).is_absolute() && std::filesystem::is_regular_file(reference, ec) ? reference : std::string();
         }
     } // namespace
 
@@ -86,9 +103,11 @@ namespace pe
         std::string resolved = path;
         if (IsCppScriptPath(path))
         {
+            std::string source;
             if (auto *ss = GetGlobalSystem<ScriptSystem>())
-                if (const auto source = ss->CppSourceFile(path); !source.empty())
-                    resolved = source;
+                source = ss->CppSourceFile(path);
+            if (const auto found = ResolveCppSource(source.empty() ? path : source); !found.empty())
+                resolved = found;
         }
         if (!IsCppScriptPath(path))
             if (auto *ss = GetGlobalSystem<ScriptSystem>())
@@ -260,8 +279,8 @@ namespace pe
             if (auto *r = GetGlobalSystem<RendererSystem>())
             {
                 Scene &scene = r->GetScene();
-                if (m_targetNode.IsValid(scene))
-                    scene.SetNodeScript(m_targetNode.nodeId, outPath.string());
+                if (m_targetNode.IsValid(scene)) // C++ scripts attach by bare filename, never a machine path
+                    scene.SetNodeScript(m_targetNode.nodeId, m_isCpp ? CppScriptReference(outPath.string()) : outPath.string());
                 else
                     m_targetNode = {};
             }
@@ -349,12 +368,15 @@ PHASMA_NODE_SCRIPT(NewCppScript)
             const std::vector<std::string> args{"--build", config.at("build").get<std::string>(),
                                                 "--config", config.at("config").get<std::string>(), "--target", "PhasmaProjectNative", "--parallel", "2"};
             m_buildOutput = "Building C++ scripts...";
-            m_build = std::async(std::launch::async, [executable, args]
-                                 {
+            m_awaitingReload = false;
+            if (auto *ss = GetGlobalSystem<ScriptSystem>())
+                m_buildBaseline = ss->CppScriptStatusSnapshot();
+            m_build.Start([executable, args]
+                          {
                 ProcessOptions options;
                 options.captureOutput = true;
                 const auto result = RunProcess(executable, args, options);
-                return std::string(result.started && result.exitCode == 0 ? "Build succeeded. Live reload will apply it.\n" : "Build failed. Previous compiled code remains active.\n") + result.output; });
+                return std::make_pair(result.started && result.exitCode == 0, result.output); });
         }
         catch (const std::exception &e)
         {
@@ -362,19 +384,44 @@ PHASMA_NODE_SCRIPT(NewCppScript)
         }
     }
 
+    // Reports what live reload did with a successful build: applied, rejected, or not seen yet.
+    void ScriptEditor::PollReload()
+    {
+        auto *ss = GetGlobalSystem<ScriptSystem>();
+        const auto status = ss ? ss->CppScriptStatusSnapshot() : CppScriptStatus{};
+        std::string result;
+        if (status.reloads > m_buildBaseline.reloads)
+            result = "Reloaded: " + std::to_string(status.scriptCount) + " scripts";
+        else if (!status.error.empty() && status.error != m_buildBaseline.error)
+            result = "Build succeeded but the module was rejected: " + status.error + "; previous code still active";
+        else if (std::chrono::steady_clock::now() >= m_reloadDeadline)
+            result = "Build succeeded; no reload observed yet" + (status.error.empty() ? "" : " (last rejection: " + status.error + ")");
+        else
+            return;
+        m_awaitingReload = false;
+        m_buildOutput = result + "\n" + m_buildLog;
+        m_buildLog.clear();
+    }
+
     void ScriptEditor::Update()
     {
-        if (m_build.valid() && m_build.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+        if (m_build.Ready())
         {
             try
             {
-                m_buildOutput = m_build.get();
+                auto [succeeded, output] = m_build.Get();
+                m_buildLog = std::move(output);
+                m_awaitingReload = succeeded;
+                m_reloadDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+                m_buildOutput = (succeeded ? "Build succeeded. Waiting for live reload...\n" : "Build failed. Previous compiled code remains active.\n") + m_buildLog;
             }
             catch (const std::exception &e)
             {
                 m_buildOutput = e.what();
             }
         }
+        if (m_awaitingReload)
+            PollReload();
         if (!m_open)
             return;
 

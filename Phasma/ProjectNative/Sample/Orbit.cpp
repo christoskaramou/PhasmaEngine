@@ -8,8 +8,6 @@ namespace
     public:
         Orbit(const phasma::ScriptApi &api, phasma::Node node) : world(api), node(node)
         {
-            if (!node)
-                this->node = world.Find("ProjectNativeDemo");
             world.Log("Orbit instance created");
         }
         ~Orbit() { world.Log("Orbit instance destroyed"); }
@@ -30,7 +28,3 @@ namespace
 
 } // namespace
 PHASMA_NODE_SCRIPT(Orbit)
-namespace
-{
-    const bool globalOrbit = phasma::RegisterScript<Orbit>("DemoOrbit", __FILE__, phasma::ScriptKind::Global);
-}

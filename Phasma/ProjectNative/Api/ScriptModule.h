@@ -2,6 +2,11 @@
 #include "ProjectNative.h"
 #include <vector>
 
+// ProjectNative.cmake defines this per source as its bare filename; other builds fall back to __FILE__.
+#ifndef PHASMA_SOURCE_NAME
+#define PHASMA_SOURCE_NAME __FILE__
+#endif
+
 namespace phasma
 {
     // This registry lives entirely inside the game module.
@@ -21,8 +26,8 @@ namespace phasma
     }
 } // namespace phasma
 
-#define PHASMA_NODE_SCRIPT(Type)                                                      \
-    namespace                                                                         \
-    {                                                                                 \
-        const bool registered_##Type = phasma::RegisterScript<Type>(#Type, __FILE__); \
+#define PHASMA_NODE_SCRIPT(Type)                                                                \
+    namespace                                                                                   \
+    {                                                                                           \
+        const bool registered_##Type = phasma::RegisterScript<Type>(#Type, PHASMA_SOURCE_NAME); \
     }

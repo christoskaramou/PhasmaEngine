@@ -2,6 +2,8 @@
 #include <SDL.h>
 #include <atomic>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <unordered_set>
 #if defined(_WIN32)
 #include <windows.h>
@@ -14,15 +16,21 @@ namespace pe
         Reset();
     }
 
+    bool ProjectNativeModule::LiveReloadEnabled(bool editorHost, const std::filesystem::path &executableDir)
+    {
+        std::error_code ec;
+        return editorHost || std::filesystem::is_regular_file(executableDir / "NativeScripts.json", ec);
+    }
+
     void ProjectNativeModule::Close(Image &image)
     {
         if (image.library)
             SDL_UnloadObject(image.library);
+        std::error_code ec;
         if (image.ownsFile && !image.path.empty())
-        {
-            std::error_code ec;
             std::filesystem::remove(image.path, ec);
-        }
+        if (!image.pdb.empty())
+            std::filesystem::remove(image.pdb, ec);
         image = {};
     }
 
@@ -49,7 +57,8 @@ namespace pe
              !ec && it != std::filesystem::directory_iterator(); it.increment(ec))
         {
             std::error_code ignored;
-            if (it->path().filename().string().rfind(prefix, 0) == 0 && it->path() != m_active.path)
+            if (it->path().filename().string().rfind(prefix, 0) == 0 && it->path() != m_active.path &&
+                it->path() != m_active.pdb)
                 std::filesystem::remove(it->path(), ignored);
         }
         ec.clear();
@@ -62,7 +71,99 @@ namespace pe
             Close(m_candidate);
             return false;
         }
+#if defined(_WIN32)
+        StagePdb(source, m_candidate);
+#endif
         return Open(path, true);
+    }
+
+    // A debugger locks the PDB the loaded image names, so the next link of the original fails (LNK1201).
+    // Give the shadow copy its own PDB; if that fails the copy still loads, naming the original.
+    void ProjectNativeModule::StagePdb(const std::filesystem::path &source, Image &image)
+    {
+        std::error_code ec;
+        const auto pdb = std::filesystem::path(source).replace_extension(".pdb");
+        const auto copy = std::filesystem::path(image.path).replace_extension(".pdb");
+        if (!std::filesystem::is_regular_file(pdb, ec) ||
+            !std::filesystem::copy_file(pdb, copy, std::filesystem::copy_options::none, ec))
+            return;
+        image.pdb = copy;
+        std::vector<uint8_t> bytes;
+        {
+            std::ifstream in(image.path, std::ios::binary);
+            bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        }
+        if (PatchCodeViewPdbPath(bytes, copy.string()) || PatchCodeViewPdbPath(bytes, copy.filename().string()))
+        {
+            std::ofstream out(image.path, std::ios::binary | std::ios::trunc);
+            out.write(reinterpret_cast<const char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            return;
+        }
+        std::filesystem::remove(copy, ec);
+        image.pdb.clear();
+    }
+
+    bool ProjectNativeModule::PatchCodeViewPdbPath(std::vector<uint8_t> &image, std::string_view pdbPath)
+    {
+        const uint64_t size = image.size();
+        const auto has = [&](uint64_t offset, uint64_t bytes)
+        { return offset <= size && bytes <= size - offset; };
+        const auto u16 = [&](uint64_t at)
+        { return static_cast<uint32_t>(image[at] | image[at + 1] << 8); };
+        const auto u32 = [&](uint64_t at)
+        { return u16(at) | u16(at + 2) << 16; };
+        if (pdbPath.empty() || pdbPath.find('\0') != std::string_view::npos || !has(0, 0x40) || image[0] != 'M' ||
+            image[1] != 'Z')
+            return false;
+        // PE signature, COFF file header, optional header (PE32 or PE32+) with the debug data directory (index 6).
+        const uint64_t pe = u32(0x3C), optional = pe + 24;
+        if (!has(pe, 24) || std::memcmp(&image[pe], "PE\0\0", 4) != 0)
+            return false;
+        const uint64_t sectionCount = u16(pe + 6), optionalSize = u16(pe + 20);
+        if (optionalSize < 2 || !has(optional, optionalSize))
+            return false;
+        const uint32_t magic = u16(optional);
+        const uint64_t directories = magic == 0x20b ? 112 : magic == 0x10b ? 96
+                                                                           : 0;
+        if (!directories || optionalSize < directories + 7 * 8 || u32(optional + directories - 4) < 7)
+            return false;
+        const uint64_t debugRva = u32(optional + directories + 48), debugSize = u32(optional + directories + 52);
+        const uint64_t sections = optional + optionalSize;
+        if (!has(sections, sectionCount * 40))
+            return false;
+        uint64_t debug = UINT64_MAX;
+        for (uint64_t i = 0; i < sectionCount && debug == UINT64_MAX; ++i)
+        {
+            const uint64_t section = sections + i * 40, address = u32(section + 12);
+            if (debugRva >= address && debugRva - address < u32(section + 16))
+                debug = u32(section + 20) + (debugRva - address);
+        }
+        if (debug == UINT64_MAX || debugSize < 28 || !has(debug, debugSize))
+            return false;
+        // IMAGE_DEBUG_DIRECTORY entries of type CODEVIEW -> 'RSDS', GUID, age, NUL-terminated path.
+        // Validate every record before writing any.
+        std::vector<std::pair<uint64_t, uint64_t>> paths;
+        for (uint64_t entry = debug; entry + 28 <= debug + debugSize; entry += 28)
+        {
+            if (u32(entry + 12) != 2)
+                continue;
+            const uint64_t record = u32(entry + 24), recordSize = u32(entry + 16);
+            if (recordSize < 25 || !has(record, recordSize) || std::memcmp(&image[record], "RSDS", 4) != 0)
+                return false;
+            const auto *path = &image[record + 24];
+            const auto *end = static_cast<const uint8_t *>(std::memchr(path, 0, recordSize - 24));
+            if (!end || pdbPath.size() > static_cast<uint64_t>(end - path))
+                return false;
+            paths.emplace_back(record + 24, end - path);
+        }
+        if (paths.empty())
+            return false;
+        for (const auto &[offset, length] : paths)
+        {
+            std::memcpy(&image[offset], pdbPath.data(), pdbPath.size());
+            std::memset(&image[offset + pdbPath.size()], 0, length - pdbPath.size());
+        }
+        return true;
     }
 
     bool ProjectNativeModule::Load(const std::filesystem::path &source)
@@ -110,8 +211,8 @@ namespace pe
 
     bool ProjectNativeModule::Validate(const phasma::ScriptModule *api)
     {
-        if (!api || api->version != phasma::ScriptAbiVersion || api->size != sizeof(phasma::ScriptModule) ||
-            api->scriptCount > 4096 || (api->scriptCount && !api->scripts))
+        if (!api || api->version < phasma::ScriptAbiMinVersion || api->version > phasma::ScriptAbiVersion ||
+            api->size != sizeof(phasma::ScriptModule) || api->scriptCount > 4096 || (api->scriptCount && !api->scripts))
             m_error = "Incompatible script module ABI";
         else
         {

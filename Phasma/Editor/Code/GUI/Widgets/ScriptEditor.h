@@ -1,12 +1,15 @@
 #pragma once
 #include "GUI/Widget.h"
 #include "Scene/SceneNodeHandle.h"
+#include "Script/CppScript.h"
+#include "Script/DetachedTask.h"
 #include "TextEditor.h"
 
+#include <chrono>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
-#include <future>
 
 namespace pe
 {
@@ -49,6 +52,7 @@ namespace pe
         void RefreshFunctionList();
         void RebuildFunctionListText();
         void BuildCppScripts();
+        void PollReload();
         void SetTargetNode(NodeId *node);
 
         SceneNodeHandle m_targetNode;
@@ -66,7 +70,11 @@ namespace pe
         bool m_showFunctions = false;
         bool m_isCpp = false;
         std::string m_buildOutput;
-        std::future<std::string> m_build;
+        DetachedTask<std::pair<bool, std::string>> m_build; // never joined: quitting mid-build doesn't wait
+        CppScriptStatus m_buildBaseline;                    // module status when the build started
+        std::string m_buildLog;
+        std::chrono::steady_clock::time_point m_reloadDeadline;
+        bool m_awaitingReload = false;
 
         TextEditor m_editor;
         float m_editorFontScale = 1.0f;

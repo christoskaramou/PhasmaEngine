@@ -40,22 +40,34 @@ to generate exception-containing create/update/destroy callbacks for a C++ class
 The class constructor receives `(const phasma::ScriptApi &, phasma::Node)`, and
 implements `Update(double)`. Its destructor must not throw.
 
-Global scripts use Always / Editor / Play modes. Node scripts attach through
-source-file paths (`Orbit.cpp`) or legacy `cpp:Orbit` identifiers, using the node's
-Player / Editor / Both mode. Existing scene serialization stores this string unchanged.
+Global scripts use Always / Editor / Play modes. Node scripts attach by bare source filename
+(`Orbit.cpp`) or legacy `cpp:Orbit` identifiers, using the node's Player / Editor / Both mode.
+Scenes store only the filename, so they stay machine-independent; older scenes holding absolute
+paths (Windows or POSIX) still match by filename on every host.
 Every attachment gets its own module-owned C++ object. Play-only instances are destroyed
 before Stop restores the scene snapshot; they are recreated on the next Play.
 Paused play does not update or create instances.
 
 The API supports logging, finding nodes, creating cubes, validated node handles,
-local position reads/writes, and held-key input. `phasma::World::KeyDown("W")` uses
+local position reads/writes, held-key input, prefab instantiation, node (subtree) deletion,
+rotation/scale writes, and animation playback. `phasma::World::KeyDown("W")` uses
 the same UI-capture-aware input helper as Lua `input.is_key_down`; unknown/null key names
-return false. `phasma::World` provides C++ convenience methods. ABI version 3 adds source-file
-metadata; rebuild existing game modules against this header when updating the host.
-Grow this API through shared engine operations as gameplay needs arise; API layout changes
-require an ABI version bump. All calls are synchronous and on the main thread.
-A handle is opaque and must be validated; never retain engine pointers or schedule work that
-can outlive the module. Native code remains trusted process code, not a sandbox.
+return false. `phasma::World` provides C++ convenience methods. `SetRotation`/`SetScale`
+tolerate zero-scale axes and keep a mirror (reported as a negative X scale).
+All calls are synchronous and on the main thread.
+A handle is opaque and must be validated; handles of deleted nodes (whole subtrees) become
+invalid and are pruned. Never retain engine pointers or schedule work that can outlive the module.
+Native code remains trusted process code, not a sandbox.
+
+The ABI is append-only: new `ScriptApi` function pointers go at the end with a
+`ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` layouts are frozen. A module
+runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5) up to the
+current version. Modules built against ABI 4 or older need one rebuild.
+
+Descriptors carry only the source filename: `ProjectNative.cmake` defines `PHASMA_SOURCE_NAME`
+per source, so binaries (including APKs) contain no build-machine paths. Builds outside
+`ProjectNative.cmake` fall back to `__FILE__`; pass `PHASMA_SOURCE_NAME` rather than `__FILE__`
+when calling `phasma::RegisterScript` by hand.
 
 ## Editor authoring
 
@@ -63,26 +75,34 @@ Use node Properties → Add Component → C++ Script → New C++ Script or Brows
 New scripts are saved into the configured native source directory (the sample directory
 when `PE_PROJECT_NATIVE_DIR` is empty). Browsing an external source imports a copy there;
 existing files are never overwritten by import. Existing compiled scripts appear by filename.
-Edit Script opens the actual source with C++ highlighting. Save & Build saves in place and
-runs only the game-module target asynchronously; compiler output appears in the editor.
+Edit Script finds the source by filename under the `sources` folder recorded in
+`NativeScripts.json` and opens it with C++ highlighting. Save & Build saves in place and
+runs only the game-module target in the background (quitting the editor never waits for it);
+compiler output appears in the editor, followed by the live-reload result: reloaded with the
+script count, rejected with the loader's reason (previous code stays active), or not observed
+within 15 s. `engine.native_scripts_status()` returns `{reloads, active, scripts, error}` to
+Lua and MCP agents.
 The generated executable-adjacent `NativeScripts.json` records the local CMake build and
 source directory. This is a development-machine configuration, not a distributable asset.
-Files must have unique basenames and contain one registered node script each; serialized
-source references match by filename so an Android player does not need desktop source paths.
+Files must have unique basenames and contain one registered node script each.
 The template uses the chosen filename as its class name. Legacy `cpp:` references still work.
 
 ## Desktop reload
 
-Only the editor live-reloads. Other desktop hosts (Player, exported games) load the installed
-module in place once at startup: no polling, no shadow copy, and nothing is written next to the
+The editor and Players run from a build folder (`NativeScripts.json` beside the executable)
+live-reload. Exported games, which Export ships without that file, load the installed module in
+place once at startup: no polling, no shadow copy, and nothing is written next to the
 executable, so read-only install folders work. A missing or rejected module is reported once.
 Lua reloads (script saves, `reload_scripts()`) never unload the module or reset C++ script state.
 
-The editor polls the executable-adjacent module every 500 ms and requires its timestamp/size
-to remain unchanged across two observations. It loads a uniquely named copy so the build
-output remains writable on Windows. Copies left by killed processes are swept on the next load.
-`PhasmaExport` ships `PhasmaGame.dll` / `libPhasmaGame.so` beside the exported player. It checks the entry point, ABI, descriptor kinds/modes,
-callbacks, and duplicate names before replacing anything.
+Live-reloading hosts poll the executable-adjacent module every 500 ms and require its
+timestamp/size to remain unchanged across two observations. They load a uniquely named copy so
+the build output remains writable on Windows. When `PhasmaGame.pdb` exists, each copy gets its own
+`PhasmaGame_live_*.pdb` and the copy's CodeView path is patched to it, so a debugger attached to
+the editor no longer locks the build PDB (LNK1201). Copies left by killed processes are swept on
+the next load. The loader checks the entry point, ABI, descriptor kinds/modes, callbacks, and
+duplicate names before replacing anything. `PhasmaExport` ships `PhasmaGame.dll` /
+`libPhasmaGame.so` beside the exported player.
 
 A failed build or rejected module leaves the active code and objects running. A changed
 artifact is retried. After validation succeeds, between frame dispatches the host destroys
@@ -90,13 +110,16 @@ all old instances, unloads their DLL, switches descriptors, and recreates eligib
 Private C++ state resets; the scene stays in place. Constructor failures after acceptance
 disable that instance; this is not transactional rollback of gameplay side effects.
 
-Instances that fail create/update are disabled but still destroyed. No STL objects,
+Instances that fail create/update are disabled but still destroyed. On Windows (MSVC builds) a
+hardware fault in a script callback, such as an access violation or stack overflow, is contained:
+the instance is disabled, the fault code logged, and its state leaked rather than destroyed.
+Other platforms still crash. Game modules must use `/EHsc` (the CMake default) for this. No STL objects,
 exceptions, allocations requiring cross-module deletion, or mutable callback registries
 cross the boundary. Cleanup receives only the instance: cached handles can already be
 invalid after node deletion or scene replacement, so destructors must tolerate that.
 
-The sample orbits a node named `ProjectNativeDemo`, or any node assigned `cpp:Orbit`.
-It never auto-spawns a crowd into an existing project.
+The sample registers node scripts only (`Orbit.cpp`, `PlayerController.cpp`); attach them from
+Add Component → C++ Script. It registers no global script and never auto-spawns into a project.
 
 The same sample module registers `PlayerController`. Attach it to a node with
 `node:set_script("cpp:PlayerController", "player")`, enter Play, and use WASD.
@@ -115,8 +138,10 @@ ctest --test-dir build-native-script-check --output-on-failure
 ```
 
 The standalone test uses the production loader and actual DLLs. It covers replacement,
-ABI/descriptor/load rejection, writing over the build output while loaded, repeated reload,
-exception containment, and object/copy cleanup. It also exercises statically linked module
+ABI/descriptor/load rejection, append-only ABI compatibility, writing over the build output while
+loaded, repeated reload, exception and (on MSVC) hardware-fault containment, PDB path patching,
+the live-reload policy, script path/filename helpers, handle pruning, TRS math, background build
+tasks, and object/copy cleanup. It also exercises statically linked module
 validation, execution, cleanup, and reinitialization. It does not require the renderer.
 It checks that non-editor hosts load in place once without copying or polling.
 It also loads the real sample module against mock input/scene callbacks to check controller
@@ -130,5 +155,7 @@ python tools/tests/native-scripts/editor_smoke.py --binary-dir build-review-nati
 
 Enable `mcp` in that build's project `Assets/Agent/agent_config.json` first and leave port 8765 free.
 The smoke verifies real editor Play/Stop/re-Play, scene retention, live replacement, C++ state surviving
-a Lua reload, and ABI rejection.
+a Lua reload, ABI rejection and recovery through `engine.native_scripts_status()`, the scene API
+(prefab, rotation, scale, destroy, animation) against real engine state, and that a faulting
+script (`probe7`) leaves the editor and MCP session running.
 It uses unsaved test nodes and quits without saving the scene.

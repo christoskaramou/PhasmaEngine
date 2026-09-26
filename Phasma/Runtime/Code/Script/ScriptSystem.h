@@ -151,6 +151,7 @@ namespace pe
         std::vector<std::string> ListLuaFunctions();
         std::vector<std::string> ListCppNodeScripts() const { return m_cppScripts.ListNodeScripts(); }
         std::string CppSourceFile(const std::string &path) const { return m_cppScripts.SourceFile(path); }
+        CppScriptStatus CppScriptStatusSnapshot() const { return m_cppScripts.Status(); }
 
         // Execute Lua code and return captured output + return value
         std::string ExecuteLua(const std::string &code);
