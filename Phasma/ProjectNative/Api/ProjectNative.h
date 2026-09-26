@@ -13,7 +13,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 6;
+    inline constexpr uint32_t ScriptAbiVersion = 7;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -121,6 +121,18 @@ namespace phasma
         uint32_t (*getSurfaceSize)(void *, UiSurface *) noexcept;
         // False (zeroed) when the widget does not exist.
         uint32_t (*getWidgetState)(void *, const char *screen, const char *id, UiWidgetState *) noexcept;
+        // v7: input and animation timing. Mirrors Lua input.is_left_mouse_down; false while UI captures the mouse.
+        uint32_t (*isLeftMouseDown)(void *) noexcept;
+        // Animation playback speed on the node and every animated descendant; false if none animates.
+        uint32_t (*setAnimationSpeed)(void *, Node, float speed) noexcept;
+        // Writes the clip length in seconds into *out; false if node/clip missing or out null.
+        uint32_t (*getClipDuration)(void *, Node, const char *clip, float *out) noexcept;
+        // Mirrors node:set_visible (render visibility of this node only).
+        uint32_t (*setVisible)(void *, Node, uint32_t visible) noexcept;
+        // Mirrors animation.get_bone_position: the bone's model-space position from the last posed frame.
+        uint32_t (*getBonePosition)(void *, Node, const char *bone, Vec3 *out) noexcept;
+        // The root or its first descendant (depth-first) named exactly `name`, as a Lua get_children walk finds it; 0 if none.
+        Node (*findChild)(void *, Node root, const char *name) noexcept;
     };
     struct ScriptDesc
     {
@@ -202,6 +214,12 @@ namespace phasma
         bool RemoveWidget(const char *screen, const char *id) const { return m_api.removeWidget(m_api.context, screen, id) != 0; }
         bool SurfaceSize(UiSurface &surface) const { return m_api.getSurfaceSize(m_api.context, &surface) != 0; }
         bool WidgetState(const char *screen, const char *id, UiWidgetState &state) const { return m_api.getWidgetState(m_api.context, screen, id, &state) != 0; }
+        bool LeftMouseDown() const { return m_api.isLeftMouseDown(m_api.context) != 0; }
+        bool SetSpeed(Node node, float speed) const { return m_api.setAnimationSpeed(m_api.context, node, speed) != 0; }
+        bool GetClipDuration(Node node, const char *clip, float &seconds) const { return m_api.getClipDuration(m_api.context, node, clip, &seconds) != 0; }
+        bool SetVisible(Node node, bool visible) const { return m_api.setVisible(m_api.context, node, visible) != 0; }
+        bool BonePosition(Node node, const char *bone, Vec3 &position) const { return m_api.getBonePosition(m_api.context, node, bone, &position) != 0; }
+        Node FindChild(Node root, const char *name) const { return m_api.findChild(m_api.context, root, name); }
         bool Clicked(const char *screen, const char *id) const
         {
             UiWidgetState state{};

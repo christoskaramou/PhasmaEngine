@@ -62,6 +62,39 @@ namespace pe
             return played;
         }
 
+        bool SetSpeedTree(Scene &scene, AnimationSystem &animation, NodeId *node, float speed)
+        {
+            bool animated = animation.GetAnimationState(node) != nullptr;
+            animation.SetSpeed(node, speed);
+            for (NodeId *child : scene.GetChildren(node))
+                animated |= SetSpeedTree(scene, animation, child, speed);
+            return animated;
+        }
+
+        bool GetClipDurationTree(Scene &scene, NodeId *node, const std::string &clip, float &seconds)
+        {
+            for (const auto &candidate : scene.GetAnimationClipsForNode(node))
+                if (candidate.name == clip)
+                {
+                    seconds = candidate.duration / (candidate.ticksPerSecond > 0.0f ? candidate.ticksPerSecond : 25.0f);
+                    return true;
+                }
+            for (NodeId *child : scene.GetChildren(node))
+                if (GetClipDurationTree(scene, child, clip, seconds))
+                    return true;
+            return false;
+        }
+
+        NodeId *FindChildTree(Scene &scene, NodeId *node, const char *name)
+        {
+            if (scene.GetNodeName(node) == name)
+                return node;
+            for (NodeId *child : scene.GetChildren(node))
+                if (NodeId *found = FindChildTree(scene, child, name))
+                    return found;
+            return nullptr;
+        }
+
         void ScriptError(const char *name, uint32_t fault = 0)
         {
             if (!fault)
@@ -323,6 +356,58 @@ namespace pe
                          *state = {s.hovered, s.active, s.clicked, s.rightClicked, s.down, s.dragging, s.dragStarted,
                                    s.dragReleased, s.mouseX, s.mouseY, s.dragDeltaX, s.dragDeltaY};
                          return 1; });
+                 },
+                 [](void *) noexcept -> uint32_t
+                 { return GuardApi([]() -> uint32_t
+                                   { return InputState::IsLeftMouseDown(); }); },
+                 [](void *ctx, phasma::Node handle, float speed) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         auto *animation = GetGlobalSystem<AnimationSystem>();
+                         return node && std::isfinite(speed) && animation && SetSpeedTree(*GetActiveScene(), *animation, node, speed); });
+                 },
+                 [](void *ctx, phasma::Node handle, const char *clip, float *out) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         return node && clip && out && GetClipDurationTree(*GetActiveScene(), node, clip, *out); });
+                 },
+                 [](void *ctx, phasma::Node handle, uint32_t visible) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         if (!node) return 0;
+                         GetActiveScene()->SetNodeRenderVisible(node, visible != 0);
+                         return 1; });
+                 },
+                 [](void *ctx, phasma::Node handle, const char *boneName, phasma::Vec3 *out) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         if (!node || !boneName || !out) return 0;
+                         Scene *scene = GetActiveScene();
+                         // Same math as Lua animation.get_bone_position.
+                         const auto &skeleton = scene->GetSkeletonForNode(node);
+                         const int bone = skeleton.GetBoneIndex(boneName);
+                         const auto &matrices = scene->GetNodeRuntime(node).jointMatrices;
+                         if (bone < 0 || bone >= static_cast<int>(matrices.size())) return 0;
+                         const vec3 p((matrices[bone] * glm::inverse(skeleton.bones[bone].offsetMatrix))[3]);
+                         *out = {p.x, p.y, p.z};
+                         return 1; });
+                 },
+                 [](void *ctx, phasma::Node handle, const char *name) noexcept -> phasma::Node
+                 {
+                     return GuardApi([&]() -> phasma::Node
+                                     {
+                         auto *self = static_cast<CppScriptSystem *>(ctx);
+                         NodeId *root = self->Resolve(handle);
+                         if (!root || !name || !*name) return 0;
+                         return self->Handle(FindChildTree(*GetActiveScene(), root, name)); });
                  }};
     }
 

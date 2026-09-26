@@ -31,8 +31,8 @@ namespace
         }
         double elapsed = 0;
     };
-    // Drives the scene API (added in ABI v4) and the UI API (v6) against a real engine for editor_smoke.py. Publishes on
-    // its own node: x = bitmask of passed checks (16383 = all), y = stage (1 = instance up, 2 = instance destroyed).
+    // Drives the scene API (added in ABI v4), the UI API (v6), mouse input and animation speed (v7) against a real engine for editor_smoke.py. Publishes on
+    // its own node: x = bitmask of passed checks (262143 = all), y = stage (1 = instance up, 2 = instance destroyed).
     struct ApiProbe
     {
         phasma::World world;
@@ -71,6 +71,13 @@ namespace
                 Check(13, world.WidgetState("native.probe", "quad", state) && !state.clicked &&
                               !world.WidgetState("native.probe", "missing", state) && !state.hovered &&
                               !world.Clicked("native.probe", "quad"));
+                Check(14, !world.LeftMouseDown()); // the smoke editor runs hidden with no button held
+                float seconds = -1.0f;
+                Check(15, !world.SetSpeed(node, 2.0f) && !world.GetClipDuration(node, "Idle", seconds) && seconds == -1.0f);
+                Check(16, world.FindChild(node, "NativeApiProbe") == node && !world.FindChild(node, "missing") &&
+                              !world.FindChild(node, ""));
+                phasma::Vec3 bone{};
+                Check(17, world.SetVisible(node, false) && !world.SetVisible(0xDEAD, true) && !world.BonePosition(node, "Root", bone));
                 stage = 1;
             }
             else if (stage == 1 && world.Find("ApiProbeDestroy"))

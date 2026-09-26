@@ -89,6 +89,22 @@ node and empty-id rejection, widget state, removal, and clearing on Stop), a v5-
 running on the v6 host, and a project HUD drawn from a node script; the standalone check also
 passes with MSVC `cl.exe` against the v6 header.
 
+ABI 7 (2026-09-26) appends `isLeftMouseDown` (`World::LeftMouseDown`). Lua
+`input.is_left_mouse_down` and the native call share `InputState::IsLeftMouseDown` in
+[InputBindings.cpp](../../../../Phasma/Runtime/Code/Script/Bindings/Input/InputBindings.cpp), so UI
+mouse capture matches; held state only, no click edge. The `ApiProbe` bit 14 checks it reads false
+in the hidden smoke editor. The same version appends `setAnimationSpeed` / `getClipDuration` (`World::SetSpeed`,
+`World::GetClipDuration`). Both walk the subtree like `playAnimation` (`SetSpeedTree` /
+`GetClipDurationTree` in [CppScript.cpp](../../../../Phasma/Runtime/Code/Script/CppScript.cpp));
+speed goes through `AnimationSystem::SetSpeed`, duration is `clip.duration / ticksPerSecond`
+(25 when unset). `ApiProbe` bit 15 checks both reject an empty node. Version 7 also appends
+`setVisible` (`SetNodeRenderVisible`, as `node:set_visible`), `getBonePosition` (the
+`animation.get_bone_position` math: joint matrix times inverse offset, last posed frame) and `findChild`
+(depth-first by exact name, root included, standing in for a Lua `get_children` walk; child enumeration
+stays off the ABI). `ApiProbe` bits 16-17 check lookup, rejection and that the smoke sees the node hidden.
+`CppScript.cpp` and `InputBindings.cpp` also compile with MSVC `cl.exe` (2026-09-27, Release objects in the
+MSVC tree; no full `cl.exe` engine link).
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

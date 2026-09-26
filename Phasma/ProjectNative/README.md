@@ -74,6 +74,15 @@ invalid node handle, or with an empty screen or id, is rejected; out-of-range st
 fall back to the defaults. The calls return false without logging when no runtime UI is active, so
 they are safe every frame; `SetQuad` reloads an image only when its path changes.
 
+ABI 7 adds `LeftMouseDown()`, the same UI-capture-aware helper as Lua `input.is_left_mouse_down`:
+false while runtime/editor UI captures the mouse. It is a held state, not a click edge; track the
+previous frame for press/release. It also adds `SetSpeed(node, speed)` (playback rate on the node
+and every animated descendant; false when none animates) and `GetClipDuration(node, clip, seconds)` (clip length in seconds from the
+first node in the subtree that has the clip). Scale an attack clip to a cooldown with
+`SetSpeed(node, seconds / interval)`. `SetVisible(node, visible)` mirrors `node:set_visible` (this node only), `BonePosition(node, bone, out)`
+mirrors `animation.get_bone_position` (model space, last posed frame), and `FindChild(root, name)` returns
+the root or its first depth-first descendant with that exact name, as a Lua `get_children` walk finds it.
+
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are
 frozen. A module runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5)

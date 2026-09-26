@@ -405,6 +405,11 @@ namespace pe
                 return false;
             return SDL_GetKeyboardState(nullptr)[sc] != 0;
         }
+
+        bool IsLeftMouseDown()
+        {
+            return !IsMouseCapturedByUi() && (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
+        }
     } // namespace InputState
 
     static struct InputBindings
@@ -511,11 +516,7 @@ namespace pe
                     return (state & SDL_BUTTON(button)) != 0;
                 });
 
-                input.set_function("is_left_mouse_down", []() -> bool {
-                    if (InputState::IsMouseCapturedByUi()) return false;
-                    Uint32 state = SDL_GetMouseState(nullptr, nullptr);
-                    return (state & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
-                });
+                input.set_function("is_left_mouse_down", &InputState::IsLeftMouseDown);
 
                 input.set_function("is_right_mouse_down", []() -> bool {
                     if (InputState::IsMouseCapturedByUi()) return false;
