@@ -405,3 +405,5 @@ Phasma/Editor/Agent/agent_config.json
 .fetchcontent-ninja/
 .fetchcontent-vs/
 
+# Test pool: regression tests Jev picks after agent replies (see .testpool/catalog.json); local only, never committed
+/.testpool/
