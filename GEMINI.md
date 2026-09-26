@@ -2,20 +2,15 @@
 
 > Identical to `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `HERMES.md`, and `.github/copilot-instructions.md`. If you edit one, sync the other four.
 
-`INSTRUCTIONS.md` is a dispatcher pointing to code, MemPalace, and the wiki — read it to know where to look for what. `docs/wiki/index.md` is the synthesis layer; find pages with `bash docs/wiki/tools/search.sh "query"`.
+`INSTRUCTIONS.md` is a dispatcher pointing to live code and the wiki — read it to know where to look for what. `docs/wiki/index.md` is the synthesis layer; find pages with `bash docs/wiki/tools/search.sh "query"`.
 
 **Wiki sync:** before finishing a session that changed code a wiki page describes, update the page and run `bash docs/wiki/tools/lint.sh`.
 
-## MemPalace
+## Project knowledge — wiki only
 
-Primary memory and history (when MCP is configured). Use lowercase `phasmaengine` for new project memories.
+Use the project's `docs/wiki/index.md` as the single maintained project knowledge entry point. Search live source for implementation; consult focused wiki pages for decisions, architecture and pitfalls. Verify historical claims against current source. Record durable discoveries in the relevant wiki page with source references and a verification date; do not create routine session diaries.
 
-- At session start for architecture, handoff, or project-history work, load orientation with `mempalace_status`; use `mempalace wake-up --wing phasmaengine` when the CLI is available, then do targeted `mempalace_search` / `mempalace_kg_query`.
-- Search before answering architecture/context/past-decision questions; code and repo docs are still the source of truth for current implementation details.
-- Store durable verbatim handoffs, decisions, and discoveries with `mempalace_add_drawer`; journal session outcomes with `mempalace_diary_write`.
-- Use the knowledge graph for stable facts and relationships (`mempalace_kg_add` / `mempalace_kg_invalidate`) instead of burying them in prose-only drawers.
-- Use taxonomy/graph traversal tools (`mempalace_get_taxonomy`, `mempalace_graph_stats`, `mempalace_traverse`) when orienting across subsystems or reconciling multiple wings/rooms.
-- After large instruction/doc/history updates, refresh memory deliberately: dry-run `mempalace mine`, avoid build/generated/vendor trees, then `mempalace compress --wing phasmaengine`.
+MemPalace and Graphify are retired from the active workflow. Do not query, update, rebuild or recreate their stores or invoke their hooks. Historical archives are for explicit recovery only. Keep personal preferences in global instructions, not a second project memory database. Do not automatically read entire wiki pages or maintenance logs when a focused search is enough.
 
 ## Rules — commits & workflow
 
@@ -65,7 +60,7 @@ Default engine posture is ponytail **full**. Use `/ponytail lite|ultra` when the
 
 ## Rules — tools
 
-- **Use Grep / Glob for code lookups.** The codebase vector store is binary (`.bin` / VSTB) and not directly readable.
+- **Use Grep / Glob for code lookups.** Use live source and focused wiki excerpts.
 
 ## Rules — performance testing
 
@@ -100,16 +95,3 @@ Tail must show `Scene loaded from: Assets/Scenes/sponza.pescene` and a Gbuffer s
 ## Rules — DX12
 
 - **API conservatism.** When adding multi-backend abstractions, expose only what must be backend-agnostic. Everything else stays private to its backend implementation. The public RHI surface is the contract; the cost of adding to it is high, the cost of leaving it private is low.
-
-## graphify
-
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-
-When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
-
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

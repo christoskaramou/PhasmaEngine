@@ -16,19 +16,13 @@ Subdirectory `INSTRUCTIONS.md` files cascade on top of this root.
 
 - **Code quality & performance (hard rule)** → `AGENTS.md` (`Rules — code quality & performance (ponytail)`). Smallest correct diff, ponytail ladder, perf regression gates for hot paths. Default posture is ponytail **full** on every change.
 
-- **Non-obvious rules and gotchas live in MemPalace.** Search with `mempalace_search` for things like: PCH `<vector>` trap, GPU resource wrappers (`Buffer`/`Image`/`Sampler`), perf regression thresholds, hot-reload safe-window / ImGui forwarding, scripting MCP caveat (`ScriptSystem*` caching), `MaterialGpuData` 80-byte layout + IOR/transmission flush rule. Use lowercase `phasmaengine` for new project memories.
+- **Decisions, architecture, pitfalls and project history** → `docs/wiki/index.md`. Search focused pages; verify current behavior in source.
 
-- **Recent state and session history** → `mempalace_kg_timeline`, `mempalace_diary_read`.
+## Project knowledge — wiki only
 
-- **Synthesis pages** (architecture overviews, testing playbooks, pitfalls) → `docs/wiki/index.md`. Find with `bash docs/wiki/tools/search.sh "query"`.
+Use the project's `docs/wiki/index.md` as the single maintained project knowledge entry point. Search live source for implementation; consult focused wiki pages for decisions, architecture and pitfalls. Verify historical claims against current source. Record durable discoveries in the relevant wiki page with source references and a verification date; do not create routine session diaries.
 
-## MemPalace workflow
-
-- Start architecture, handoff, or project-history work with `mempalace_status`; use CLI `mempalace wake-up --wing phasmaengine` when available, then targeted `mempalace_search` / `mempalace_kg_query`.
-- Use `mempalace_add_drawer` for durable verbatim handoffs, decisions, and discoveries; use `mempalace_diary_write` at session end.
-- Use `mempalace_kg_add` / `mempalace_kg_invalidate` for stable facts and superseded relationships instead of hiding them in prose-only drawers.
-- Use taxonomy and graph tools (`mempalace_get_taxonomy`, `mempalace_graph_stats`, `mempalace_traverse`) when a task spans subsystems or wings.
-- After large instruction, doc, or history imports, dry-run `mempalace mine`, avoid build/generated/vendor trees, then refresh compressed recall with `mempalace compress --wing phasmaengine`.
+MemPalace and Graphify are retired from the active workflow. Do not query, update, rebuild or recreate their stores or invoke their hooks. Historical archives are for explicit recovery only. Keep personal preferences in global instructions, not a second project memory database. Do not automatically read entire wiki pages or maintenance logs when a focused search is enough.
 
 ## Wiki maintenance
 
