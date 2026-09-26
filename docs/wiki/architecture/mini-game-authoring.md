@@ -28,7 +28,7 @@ humans known slots to fill instead of rebuilding the runway every time.
 - Physics trigger callbacks are available through `physics.on_trigger_enter`
   and `physics.on_trigger_exit`.
 - Sibling project history exists under `PhasmaProjects`, including
-  `PhasmaSpace`; MemPalace also records AgainstTheHero prototype/foundation
+  `PhasmaSpace`; the project wiki also records AgainstTheHero prototype/foundation
   lessons.
 
 ## Recommendation
@@ -157,7 +157,7 @@ real mini-games.
 
 ### 7. Use Existing Game History
 
-Use MemPalace and sibling projects as seed material:
+Use the project wiki and sibling projects as seed material:
 
 - `PhasmaSpace` exists under `/mnt/c/Users/Christos/repos/PhasmaProjects`.
 - AgainstTheHero memory records a first PhasmaPlayer prototype, an isometric
@@ -166,23 +166,8 @@ Use MemPalace and sibling projects as seed material:
 - Warbound memory records the key performance rule: author pools in scenes, then
   enable/disable and update them at runtime.
 
-When a new mini-game starts, search MemPalace first for similar prototypes and
+When a new mini-game starts, search the project wiki first for similar prototypes and
 gotchas before writing fresh framework code.
-
-## Practical First Slice
-
-The fastest useful slice is:
-
-1. Add `tools/new_game.py` with `topdown`, `isometric`, and `card` templates.
-2. Add a small `gamekit` Lua folder copied into generated projects.
-3. Add one prefab pack with primitive actor, projectile, pickup, trigger, card,
-   and health bar.
-4. Add a smoke runner that launches `PhasmaPlayer`, waits briefly, and checks the
-   log for scene load and Lua errors.
-
-Expected result: simple mini-games should move from idea to playable loop in
-under an hour, because the session starts from a working player project rather
-than from raw engine setup.
 
 ## Slice 1 — Shipped (2026-06-19)
 

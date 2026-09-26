@@ -4,7 +4,8 @@
 
 - Root instructions: `../../INSTRUCTIONS.md`
 - Agent workflow: `../../AGENTS.md`
-- Current memory and handoffs: MemPalace wing `phasmaengine`
+- Durable decisions: `decisions/engineering-contracts.md`
+- Knowledge maintenance: `knowledge-workflow.md`
 
 ## Pages
 

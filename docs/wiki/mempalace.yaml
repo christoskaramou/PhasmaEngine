@@ -1,6 +1,0 @@
-wing: phasmaengine
-rooms:
-- name: scripts
-  description: Files from tools/
-- name: general
-  description: Files that don't fit other rooms
