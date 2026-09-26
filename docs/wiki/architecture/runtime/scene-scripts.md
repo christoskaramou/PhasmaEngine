@@ -12,7 +12,7 @@ owns a separate module-allocated instance. Stop destroys play-only instances bef
 restoration. Failed instances still receive destruction.
 
 The editor and build-folder players (`NativeScripts.json` beside the executable) poll the built
-DLL, load a uniquely named copy, and validate the ABI and immutable script descriptors before
+DLL, load a per-process shadow copy, and validate the ABI and immutable script descriptors before
 replacing active code; exported games load the installed module in place once.
 Lua reloads never unload the module or reset C++ state. Rejection preserves the old module and state.
 Acceptance destroys old instances before unloading, then recreates eligible instances against
@@ -29,15 +29,32 @@ overwrites camera nodes from the camera every frame. Lua and native scripts shar
 uses WASD for normalized local X/Z movement at 4 units/second; it has no physics or touch input.
 See [ProjectNative usage and contract](../../../../Phasma/ProjectNative/README.md).
 
-Review hardening (2026-09-26; standalone check and GCC compile on Linux only, not yet run on
-Windows): ABI v5 is append-only (`ScriptAbiMinVersion` 5, frozen descriptor/module layouts);
+Review hardening (2026-09-26, commit `59ac05eb`; standalone check and editor smoke passed on
+Windows with Clang): ABI v5 is append-only (`ScriptAbiMinVersion` 5, frozen descriptor/module layouts);
 Windows shadow copies get their own patched PDB; MSVC builds contain SEH faults in script
 callbacks (instance disabled, state leaked); scenes and descriptors name sources by bare filename
 (`PHASMA_SOURCE_NAME`, [CppScriptPath.h](../../../../Phasma/Runtime/Code/Script/CppScriptPath.h));
 [NativeHandleTable](../../../../Phasma/Runtime/Code/Script/NativeHandleTable.h) prunes dead handles;
-[NativeTrs](../../../../Phasma/Runtime/Code/Script/NativeTrs.h) keeps zero and mirrored scale safe;
+[NativeTrs](../../../../Phasma/Runtime/Code/Script/NativeTrs.h) keeps zero-scale axes finite and
+preserves a reflection as a negative X scale (not the originally mirrored axis);
 `engine.native_scripts_status()` and the Script Editor report whether a build's reload applied;
 the sample no longer registers a global script.
+
+Loader and status follow-up (2026-09-26, uncommitted; standalone check on Linux including an
+unprivileged run, and on Windows with Clang with neither permission nor non-permission copy
+checks skipped; Windows Release engine build and editor smoke, including skipped destruction
+after a fault, passed with Clang): in
+[ProjectNativeHooks](../../../../Phasma/Runtime/Code/Script/ProjectNativeHooks.cpp) shadow files are
+tagged with the owning process id (`PhasmaGame_live_<pid>_<seq>`, `PG~<pid>.<seq>.pdb`), so hosts
+sharing a build folder keep each other's files and only a dead process's files are swept. The PDB
+name is short enough to fit the linker's `PhasmaGame.pdb` path; when it cannot, a warning is logged.
+Only a permission refusal of the initial shadow copy falls back to an in-place load, which disables
+live reload for the session; other copy errors stay failures and a running module is never replaced.
+Status carries artifact identity (size and write time) and an attempt counter, so the Script Editor
+matches its verdict to its own build; `live_reload` reports the effective policy (false for
+exported, in-place, static and fallback loads). Validation checks unique source names with the same
+separator-agnostic filename rule scenes use, and the editor smoke asserts that a faulted instance is
+never destroyed, on Stop or on module unload.
 
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and

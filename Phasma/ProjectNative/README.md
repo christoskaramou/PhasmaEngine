@@ -53,7 +53,11 @@ local position reads/writes, held-key input, prefab instantiation, node (subtree
 rotation/scale writes, and animation playback. `phasma::World::KeyDown("W")` uses
 the same UI-capture-aware input helper as Lua `input.is_key_down`; unknown/null key names
 return false. `phasma::World` provides C++ convenience methods. `SetRotation`/`SetScale`
-tolerate zero-scale axes and keep a mirror (reported as a negative X scale).
+keep zero-scale axes finite. Only the node matrix is stored, so a reflection is always decomposed as
+a negative X scale, whichever axis was mirrored. For a Y- or Z-mirrored node the decomposed rotation
+carries a 180-degree turn, so `SetRotation` can change its orientation while keeping the reflection:
+setting rotation (0, 0, 0) on `diag(1, -3, 4)` yields `diag(-1, 3, 4)`. A later all-positive
+`SetScale` removes the reflection.
 All calls are synchronous and on the main thread.
 A handle is opaque and must be validated; handles of deleted nodes (whole subtrees) become
 invalid and are pruned. Never retain engine pointers or schedule work that can outlive the module.
@@ -78,10 +82,15 @@ existing files are never overwritten by import. Existing compiled scripts appear
 Edit Script finds the source by filename under the `sources` folder recorded in
 `NativeScripts.json` and opens it with C++ highlighting. Save & Build saves in place and
 runs only the game-module target in the background (quitting the editor never waits for it);
-compiler output appears in the editor, followed by the live-reload result: reloaded with the
-script count, rejected with the loader's reason (previous code stays active), or not observed
-within 15 s. `engine.native_scripts_status()` returns `{reloads, active, scripts, error}` to
-Lua and MCP agents.
+compiler output appears in the editor, followed by the live-reload result for the artifact that
+build produced: reloaded with the script count, already running (no-op build), rejected with the
+loader's reason (previous code stays active), or not observed within 15 s. The verdict is matched
+by artifact identity (build output size and write time), so a delayed earlier build is never
+credited to a later one. `engine.native_scripts_status()` returns `{reloads, attempts, active,
+live_reload, scripts, error, artifact, attempted}` to Lua and MCP agents; `attempts` counts every
+artifact tried, so a repeated rejection with an identical error is still visible, and `live_reload`
+is true only while this host polls and hot-swaps the module (false for exported and in-place
+loads, statically linked Android modules, and after the fallback below).
 The generated executable-adjacent `NativeScripts.json` records the local CMake build and
 source directory. This is a development-machine configuration, not a distributable asset.
 Files must have unique basenames and contain one registered node script each.
@@ -96,11 +105,18 @@ executable, so read-only install folders work. A missing or rejected module is r
 Lua reloads (script saves, `reload_scripts()`) never unload the module or reset C++ script state.
 
 Live-reloading hosts poll the executable-adjacent module every 500 ms and require its
-timestamp/size to remain unchanged across two observations. They load a uniquely named copy so
-the build output remains writable on Windows. When `PhasmaGame.pdb` exists, each copy gets its own
-`PhasmaGame_live_*.pdb` and the copy's CodeView path is patched to it, so a debugger attached to
-the editor no longer locks the build PDB (LNK1201). Copies left by killed processes are swept on
-the next load. The loader checks the entry point, ABI, descriptor kinds/modes, callbacks, and
+timestamp/size to remain unchanged across two observations. They load a copy named
+`PhasmaGame_live_<pid>_<seq>` so the build output remains writable on Windows. When
+`PhasmaGame.pdb` exists, each copy gets its own short `PG~<pid>.<seq>.pdb` and the copy's CodeView
+path is patched to it, so a debugger attached to the editor no longer locks the build PDB
+(LNK1201); if the name cannot fit the module's CodeView path, a warning is logged and the original
+PDB stays referenced. Shadow files are tagged with the owning process id: an editor and a Player
+sharing a build folder keep each other's files, and files of a process that is gone are swept on
+the next load. If the initial load's shadow copy is refused for permissions (access denied, read-only), the
+module is loaded in place and live reload is disabled for that session, with the reason logged.
+Other copy failures (disk full, sharing violations, over-long paths) stay ordinary failures and are
+retried on the next build, because loading in place would lock the build output on Windows. A
+running module is never replaced through the fallback. The loader checks the entry point, ABI, descriptor kinds/modes, callbacks, and
 duplicate names before replacing anything. `PhasmaExport` ships `PhasmaGame.dll` /
 `libPhasmaGame.so` beside the exported player.
 

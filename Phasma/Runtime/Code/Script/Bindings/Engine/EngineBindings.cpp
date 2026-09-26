@@ -41,7 +41,8 @@ namespace pe
                     SetScriptPaused(paused);
                 });
 
-                // C++ script module state: {reloads, active, scripts, error}; error is the latest rejection.
+                // C++ script module state. error is the latest rejection; attempts counts every artifact tried (so a
+                // repeated identical rejection is visible); artifact/attempted identify build outputs as "<size>:<mtime>".
                 engine.set_function("native_scripts_status", [](sol::this_state ts) -> sol::table {
                     sol::state_view lua(ts);
                     CppScriptStatus status;
@@ -52,6 +53,10 @@ namespace pe
                     t["active"] = status.active;
                     t["scripts"] = status.scriptCount;
                     t["error"] = status.error;
+                    t["attempts"] = status.attempts;
+                    t["artifact"] = status.activeArtifact;
+                    t["attempted"] = status.attemptedArtifact;
+                    t["live_reload"] = status.liveReload;
                     return t;
                 });
 

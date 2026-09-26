@@ -14,7 +14,8 @@ namespace pe
     };
 
     // Signed-scale decomposition of an affine matrix. A reflection (negative determinant) is carried
-    // by a negative x scale; zero-scale axes keep a valid rotation instead of producing NaN.
+    // by a negative x scale whichever axis was originally mirrored (a matrix cannot tell); zero-scale
+    // axes keep a valid rotation instead of producing NaN.
     inline LocalTrs DecomposeTrs(const glm::mat4 &m)
     {
         constexpr float epsilon = 1e-12f;

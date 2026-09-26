@@ -107,7 +107,7 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         call_tool(client, "invoke_editor_action", {"action": "play.stop"})
         wait_for(lambda: position("NativeNodeProbe") == 0)
 
-        # ABI v4 scene API against real engine state (ApiProbe in module.cpp; x = passed-check bits, y = stage).
+        # Scene API (added in ABI v4) against real engine state (ApiProbe in module.cpp; x = passed-check bits, y = stage).
         assert lua('local n=scene.add_empty_node("NativeApiProbe"); n:set_script("cpp:ApiProbe", "player"); '
                    'return "created"') == "created"
         call_tool(client, "invoke_editor_action", {"action": "play.start"})
@@ -131,7 +131,11 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         wait_for(lambda: status()["reloads"] > before["reloads"])
         assert status()["error"] == "", status()
 
-        # An access violation in a script is contained: the editor and this MCP session survive.
+        # An access violation in a script is contained: the editor and this MCP session survive, and the
+        # faulted instances are never destroyed (their state may be corrupt) - not on Stop, not on unload.
+        log = binary / "PhasmaEngine.log"
+        assert log.exists(), f"{log} is required to check fault handling"
+        offset = len(log.read_text(errors="replace"))
         before = status()
         shutil.copyfile(probes / "probe7.dll", game)
         wait_for(lambda: status()["reloads"] > before["reloads"])
@@ -141,11 +145,20 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         time.sleep(1)
         assert process.poll() is None and lua('return "alive"') == "alive"
         assert position("NativeReloadProbe") == 2  # probe7 faults before writing
-        log = binary / "PhasmaEngine.log"
-        if log.exists():
-            wait_for(lambda: "[CppScript] fault 0x" in log.read_text(errors="replace"), 10)
+        before = status()
+        shutil.copyfile(probes / "probe2.dll", game)  # unloading probe7 must skip the faulted destructors
+        wait_for(lambda: status()["reloads"] > before["reloads"])
+
+        def probe7_segment():
+            text = log.read_text(errors="replace")[offset:]
+            reloads = [i for i in range(len(text)) if text.startswith("[CppScript] module reloaded", i)]
+            return text[reloads[0]:reloads[1]] if len(reloads) >= 2 else None  # probe7 load .. probe2 load
+
+        segment = wait_for(probe7_segment, 10)
+        assert "[CppScript] fault 0x" in segment, segment
+        assert "[CppScript] destroy" not in segment, segment
         print("PASS: editor live replacement, scene retained, Lua reload keeps C++ state, rejected ABI retains code, "
-              "node Play/Stop/re-Play, reload status, v4 scene API, fault containment")
+              "node Play/Stop/re-Play, reload status, scene API, fault containment with destroy skipped")
     finally:
         try:
             if "client" in locals():

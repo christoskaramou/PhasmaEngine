@@ -8,14 +8,6 @@
 
 namespace pe
 {
-    struct CppScriptStatus
-    {
-        uint64_t reloads = 0;
-        bool active = false;
-        uint32_t scriptCount = 0;
-        std::string error;
-    };
-
     class CppScriptSystem
     {
     public:
@@ -52,10 +44,10 @@ namespace pe
         phasma::ScriptApi m_api{};
         std::vector<Instance> m_instances;
         NativeHandleTable<NodeId *, SceneNodeHandle, LiveNode> m_handles;
-        uint64_t m_reloads = 0;
+        uint64_t m_loggedAttempts = 0;
         uint32_t m_sceneGeneration = UINT32_MAX;
         uint32_t m_scriptGeneration = UINT32_MAX;
-        std::string m_lastError;
+        std::string m_lastNotice;
         bool m_initialized = false;
     };
 } // namespace pe

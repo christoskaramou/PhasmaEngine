@@ -8,6 +8,7 @@
 #include <chrono>
 #include <functional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -70,9 +71,10 @@ namespace pe
         bool m_showFunctions = false;
         bool m_isCpp = false;
         std::string m_buildOutput;
-        DetachedTask<std::pair<bool, std::string>> m_build; // never joined: quitting mid-build doesn't wait
-        CppScriptStatus m_buildBaseline;                    // module status when the build started
+        DetachedTask<std::tuple<bool, std::string, std::string>> m_build; // {succeeded, output, artifact}; never joined
+        CppScriptStatus m_buildBaseline;                                  // module status when the build started
         std::string m_buildLog;
+        std::string m_builtArtifact; // identity of the PhasmaGame this build produced
         std::chrono::steady_clock::time_point m_reloadDeadline;
         bool m_awaitingReload = false;
 

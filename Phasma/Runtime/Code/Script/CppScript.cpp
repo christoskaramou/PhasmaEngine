@@ -112,15 +112,10 @@ namespace pe
         m_initialized = true;
 #if defined(PE_PROJECT_NATIVE_STATIC)
         if (m_module.StageLinked(PhasmaGetScriptModule(phasma::ScriptAbiVersion)))
-        {
             m_module.Commit();
-            ++m_reloads;
-        }
         else
-        {
-            m_lastError = m_module.Error();
-            Log::Error("[CppScript] linked module rejected: " + m_lastError);
-        }
+            Log::Error("[CppScript] linked module rejected: " + m_module.Error());
+        m_loggedAttempts = m_module.Status().attempts;
 #endif
         m_api = {phasma::ScriptAbiVersion, sizeof(phasma::ScriptApi), this,
                  [](void *, const char *message) noexcept
@@ -252,7 +247,7 @@ namespace pe
         m_module.Reset();
         m_handles.Clear();
         m_sceneGeneration = m_scriptGeneration = UINT32_MAX;
-        m_lastError.clear();
+        m_lastNotice.clear();
         m_initialized = false;
     }
 
@@ -277,8 +272,7 @@ namespace pe
 
     CppScriptStatus CppScriptSystem::Status() const
     {
-        const auto *module = m_module.Active();
-        return {m_reloads, module != nullptr, module ? module->scriptCount : 0u, m_lastError};
+        return m_module.Status();
     }
 
     bool CppScriptSystem::Eligible(const Instance &instance) const
@@ -376,32 +370,26 @@ namespace pe
     {
 #if defined(PE_PROJECT_NATIVE)
 #if !defined(PE_PROJECT_NATIVE_STATIC)
-#if defined(_WIN32)
-        constexpr const char *moduleName = "PhasmaGame.dll";
-#elif defined(__APPLE__)
-        constexpr const char *moduleName = "libPhasmaGame.dylib";
-#else
-        constexpr const char *moduleName = "libPhasmaGame.so";
-#endif
         // Editors and build-folder Players live-reload; exported Players load the installed module in place once.
         const bool liveReload = ProjectNativeModule::LiveReloadEnabled(IsEditorHost(), Path::Executable);
         // This runs between dispatches, never while module code is on the stack.
-        if (m_module.Sync(std::filesystem::path(Path::Executable) / moduleName, liveReload))
+        const bool loaded = m_module.Sync(std::filesystem::path(Path::Executable) / ProjectNativeModule::ModuleFileName(), liveReload);
+        if (!m_module.Notice().empty() && m_module.Notice() != m_lastNotice)
+            Log::Warn("[CppScript] " + m_module.Notice());
+        m_lastNotice = m_module.Notice();
+        const auto status = m_module.Status();
+        if (loaded)
         {
             ClearInstances();
             m_module.Commit();
-            ++m_reloads;
             m_sceneGeneration = UINT32_MAX;
-            m_lastError.clear();
-            Log::Info(liveReload ? "[CppScript] module reloaded; private script state reset" : "[CppScript] module loaded");
+            Log::Info(status.liveReload && liveReload ? "[CppScript] module reloaded; private script state reset" : "[CppScript] module loaded");
         }
-        else if (!m_module.Error().empty() && m_module.Error() != m_lastError)
-        {
-            m_lastError = m_module.Error();
-            Log::Error(std::string(liveReload ? "[CppScript] replacement rejected; keeping current module: "
-                                              : "[CppScript] module rejected: ") +
-                       m_lastError);
-        }
+        else if (status.attempts != m_loggedAttempts && !m_module.Error().empty()) // every rejected attempt, even with an identical error
+            Log::Error(std::string(m_module.Active() ? "[CppScript] replacement rejected; keeping current module: "
+                                                     : "[CppScript] module rejected: ") +
+                       m_module.Error());
+        m_loggedAttempts = status.attempts;
 #endif
         if (!m_module.Active())
             return;

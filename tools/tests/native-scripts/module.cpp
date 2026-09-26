@@ -31,7 +31,7 @@ namespace
         }
         double elapsed = 0;
     };
-    // Drives the v4 scene API against a real engine for editor_smoke.py. Publishes on its own node:
+    // Drives the scene API (added in ABI v4) against a real engine for editor_smoke.py. Publishes on its own node:
     // x = bitmask of passed checks (255 = all), y = stage (1 = instance up, 2 = instance destroyed).
     struct ApiProbe
     {

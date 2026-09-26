@@ -371,12 +371,15 @@ PHASMA_NODE_SCRIPT(NewCppScript)
             m_awaitingReload = false;
             if (auto *ss = GetGlobalSystem<ScriptSystem>())
                 m_buildBaseline = ss->CppScriptStatusSnapshot();
-            m_build.Start([executable, args]
+            const auto module = std::filesystem::path(Path::Executable) / ProjectNativeModule::ModuleFileName();
+            m_build.Start([executable, args, module]
                           {
                 ProcessOptions options;
                 options.captureOutput = true;
                 const auto result = RunProcess(executable, args, options);
-                return std::make_pair(result.started && result.exitCode == 0, result.output); });
+                // Identify the artifact as the build left it, so reload status is matched to this build only.
+                return std::make_tuple(result.started && result.exitCode == 0, result.output,
+                                       ProjectNativeModule::ArtifactIdentity(module)); });
         }
         catch (const std::exception &e)
         {
@@ -384,20 +387,32 @@ PHASMA_NODE_SCRIPT(NewCppScript)
         }
     }
 
-    // Reports what live reload did with a successful build: applied, rejected, or not seen yet.
+    // Reports what live reload did with this build's artifact: applied, rejected, or not seen yet.
     void ScriptEditor::PollReload()
     {
         auto *ss = GetGlobalSystem<ScriptSystem>();
         const auto status = ss ? ss->CppScriptStatusSnapshot() : CppScriptStatus{};
+        const bool timedOut = std::chrono::steady_clock::now() >= m_reloadDeadline;
         std::string result;
-        if (status.reloads > m_buildBaseline.reloads)
-            result = "Reloaded: " + std::to_string(status.scriptCount) + " scripts";
-        else if (!status.error.empty() && status.error != m_buildBaseline.error)
-            result = "Build succeeded but the module was rejected: " + status.error + "; previous code still active";
-        else if (std::chrono::steady_clock::now() >= m_reloadDeadline)
-            result = "Build succeeded; no reload observed yet" + (status.error.empty() ? "" : " (last rejection: " + status.error + ")");
-        else
+        switch (ProjectNativeModule::ClassifyReload(m_buildBaseline, status, m_builtArtifact, timedOut))
+        {
+        case NativeReloadOutcome::Pending:
             return;
+        case NativeReloadOutcome::Current:
+            result = "Build succeeded; nothing changed, the running module is this build";
+            break;
+        case NativeReloadOutcome::Reloaded:
+            result = "Reloaded: " + std::to_string(status.scriptCount) + " scripts";
+            break;
+        case NativeReloadOutcome::Rejected:
+            result = "Build succeeded but this build was rejected (attempt " + std::to_string(status.attempts) +
+                     "): " + status.error + "; previous code still active";
+            break;
+        case NativeReloadOutcome::NotObserved:
+            result = !status.liveReload ? "Build succeeded; live reload is disabled for this session, restart to load it"
+                                        : "Build succeeded; no reload of this build observed yet";
+            break;
+        }
         m_awaitingReload = false;
         m_buildOutput = result + "\n" + m_buildLog;
         m_buildLog.clear();
@@ -409,8 +424,9 @@ PHASMA_NODE_SCRIPT(NewCppScript)
         {
             try
             {
-                auto [succeeded, output] = m_build.Get();
+                auto [succeeded, output, artifact] = m_build.Get();
                 m_buildLog = std::move(output);
+                m_builtArtifact = std::move(artifact);
                 m_awaitingReload = succeeded;
                 m_reloadDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
                 m_buildOutput = (succeeded ? "Build succeeded. Waiting for live reload...\n" : "Build failed. Previous compiled code remains active.\n") + m_buildLog;
