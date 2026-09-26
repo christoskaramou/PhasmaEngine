@@ -31,8 +31,8 @@ namespace
         }
         double elapsed = 0;
     };
-    // Drives the scene API (added in ABI v4) against a real engine for editor_smoke.py. Publishes on its own node:
-    // x = bitmask of passed checks (255 = all), y = stage (1 = instance up, 2 = instance destroyed).
+    // Drives the scene API (added in ABI v4) and the UI API (v6) against a real engine for editor_smoke.py. Publishes on
+    // its own node: x = bitmask of passed checks (16383 = all), y = stage (1 = instance up, 2 = instance destroyed).
     struct ApiProbe
     {
         phasma::World world;
@@ -53,11 +53,30 @@ namespace
                 Check(4, !world.Play(node, "Idle")); // an empty node has no clips
                 Check(5, world.SetRotation(node, {0, 30, 0}) && world.SetScale(node, {1, 2, 3}));
                 Check(6, !world.SetScale(node, {0, 1, 1}) && !world.Instantiate("Prefabs/missing.peprefab"));
+                phasma::UiSurface surface{};
+                Check(8, world.ShowScreen("native.probe") && world.SurfaceSize(surface) && surface.width > 0);
+                phasma::UiQuad quad;
+                quad.style = phasma::UiStyle::Text;
+                quad.body = "probe";
+                quad.width = quad.height = 64;
+                quad.node = node;
+                Check(9, world.SetQuad("native.probe", "quad", quad));
+                quad.style = static_cast<phasma::UiStyle>(99); // falls back to the default style
+                quad.node = 0;
+                Check(10, world.SetQuad("native.probe", "fallback", quad));
+                quad.node = 0xDEAD; // an unknown node handle rejects the quad
+                Check(11, !world.SetQuad("native.probe", "stale", quad) && !world.SetQuad("native.probe", "", quad));
+                phasma::UiWidgetState state{};
+                state.hovered = true;
+                Check(13, world.WidgetState("native.probe", "quad", state) && !state.clicked &&
+                              !world.WidgetState("native.probe", "missing", state) && !state.hovered &&
+                              !world.Clicked("native.probe", "quad"));
                 stage = 1;
             }
             else if (stage == 1 && world.Find("ApiProbeDestroy"))
             {
                 Check(7, world.Destroy(instance) && !world.Valid(instance) && !world.Destroy(instance));
+                Check(12, world.RemoveWidget("native.probe", "quad"));
                 stage = 2;
             }
             world.SetPosition(node, {static_cast<float>(passed), static_cast<float>(stage), 0});

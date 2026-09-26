@@ -11,6 +11,7 @@
 #include "Script/ScriptRuntimeHooks.h"
 #include "Script/Bindings/Input/InputState.h"
 #include "Systems/AnimationSystem.h"
+#include "UI/RuntimeUi.h"
 #include <cmath>
 #include <unordered_set>
 
@@ -219,6 +220,109 @@ namespace pe
                          NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
                          auto *animation = GetGlobalSystem<AnimationSystem>();
                          return node && clip && animation && PlayTree(*GetActiveScene(), *animation, node, clip, loop != 0); });
+                 },
+                 // UI calls run every frame: no active UI returns 0 without logging.
+                 [](void *, const char *screen, uint32_t visible, uint32_t overlay) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         RuntimeUiSystem *ui = GetActiveRuntimeUi();
+                         if (!ui || !screen || !*screen) return 0;
+                         ui->SetScreenOverlay(screen, overlay != 0);
+                         ui->SetScreenVisible(screen, visible != 0);
+                         return 1; });
+                 },
+                 [](void *ctx, const char *screen, const char *id, const phasma::UiQuad *q) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         RuntimeUiSystem *ui = GetActiveRuntimeUi();
+                         if (!ui || !screen || !*screen || !id || !*id || !q) return 0;
+                         const auto color = [](phasma::Color c) { return RuntimeUiColor{c.r, c.g, c.b, c.a}; };
+                         RuntimeUiQuadDesc d{};
+                         d.label = q->label;
+                         d.title = q->title;
+                         d.subtitle = q->subtitle;
+                         d.body = q->body;
+                         d.footer = q->footer;
+                         d.x = q->x;
+                         d.y = q->y;
+                         d.z = q->z;
+                         d.width = q->width;
+                         d.height = q->height;
+                         d.fillColor = color(q->fill);
+                         d.borderColor = color(q->border);
+                         d.accentColor = color(q->accent);
+                         d.textColor = color(q->textColor);
+                         d.imageTint = color(q->imageTint);
+                         d.backgroundImageTint = color(q->backgroundImageTint);
+                         d.imageColorize = q->imageColorize;
+                         d.useBackgroundTint = q->useBackgroundTint;
+                         d.imageWhiten = q->imageWhiten;
+                         d.cornerRadius = q->cornerRadius;
+                         d.radialSegments = q->radialSegments;
+                         d.radialFilled = q->radialFilled;
+                         d.draggable = q->draggable;
+                         d.selected = q->selected;
+                         d.visible = q->visible;
+                         d.bringToFront = q->bringToFront;
+                         d.noInput = q->noInput;
+                         d.fontScale = q->fontScale;
+                         d.fit = q->fit;
+                         d.textOffsetX = q->offsetX;
+                         d.textOffsetY = q->offsetY;
+                         d.textInsetRight = q->textInsetRight;
+                         // Out-of-range enums from a module fall back to the defaults.
+                         if (static_cast<uint32_t>(q->style) < static_cast<uint32_t>(RuntimeUiQuadVisualStyle::Count))
+                             d.visualStyle = static_cast<RuntimeUiQuadVisualStyle>(q->style);
+                         if (static_cast<uint32_t>(q->alignH) <= static_cast<uint32_t>(RuntimeUiTextAlignH::Right))
+                             d.textAlignH = static_cast<RuntimeUiTextAlignH>(q->alignH);
+                         if (static_cast<uint32_t>(q->alignV) <= static_cast<uint32_t>(RuntimeUiTextAlignV::Bottom))
+                             d.textAlignV = static_cast<RuntimeUiTextAlignV>(q->alignV);
+                         if (q->node)
+                         {
+                             NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(q->node);
+                             if (!node) return 0;
+                             GetActiveScene()->AddComponentFlag(node, Component_RuntimeUi);
+                             d.node = node;
+                         }
+                         ui->SetQuad(screen, id, d, q->image ? q->image : "");
+                         return 1; });
+                 },
+                 [](void *, const char *screen, const char *id) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         RuntimeUiSystem *ui = GetActiveRuntimeUi();
+                         if (!ui || !screen || !id) return 0;
+                         ui->RemoveWidget(screen, id);
+                         return 1; });
+                 },
+                 [](void *, phasma::UiSurface *surface) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (!surface) return 0;
+                         *surface = {};
+                         RuntimeUiSystem *ui = GetActiveRuntimeUi();
+                         if (!ui) return 0;
+                         ui->GetFrameSurfaceSize(surface->width, surface->height);
+                         surface->uiScale = ui->GetFrameUiScale();
+                         surface->safeValid = ui->GetFrameSafeArea(surface->safeX, surface->safeY, surface->safeWidth, surface->safeHeight);
+                         return surface->width > 0 && surface->height > 0; });
+                 },
+                 [](void *, const char *screen, const char *id, phasma::UiWidgetState *state) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (!state) return 0;
+                         *state = {};
+                         RuntimeUiSystem *ui = GetActiveRuntimeUi();
+                         RuntimeUiWidgetState s{};
+                         if (!ui || !screen || !id || !ui->GetWidgetState(screen, id, s)) return 0;
+                         *state = {s.hovered, s.active, s.clicked, s.rightClicked, s.down, s.dragging, s.dragStarted,
+                                   s.dragReleased, s.mouseX, s.mouseY, s.dragDeltaX, s.dragDeltaY};
+                         return 1; });
                  }};
     }
 

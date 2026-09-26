@@ -76,6 +76,19 @@ since `Poll` observed it, notices are counted so identical repeats are logged, `
 diagnostics, and a failed in-place fallback keeps the copy error in its message. Still unverified:
 debugger-attached rebuilds, a `cl.exe` engine build, and Android on a device.
 
+ABI 6 (2026-09-26) appends runtime UI to
+[`ScriptApi`](../../../../Phasma/ProjectNative/Api/ProjectNative.h): `showScreen`, `setQuad`
+(frozen `UiQuad` mirroring `runtime_ui.set_quad` options and `RuntimeUiQuadDesc` defaults),
+`removeWidget`, `getSurfaceSize` and `getWidgetState` (quad clicks; the Lua `consume_click` only
+sees Button widgets, so scripts read `get_state().clicked`); the host side lives in
+[`CppScript.cpp`](../../../../Phasma/Runtime/Code/Script/CppScript.cpp). The calls return 0 without
+logging when no runtime UI is active, because HUDs call them every frame. No `clear` call: Play Stop
+already runs `ClearAllScreens`, and a reloaded module redraws its own IDs. Verified with Clang on
+Windows: standalone check, editor smoke (the `ApiProbe` covers screen, quads, style fallback, stale
+node and empty-id rejection, widget state, removal, and clearing on Stop), a v5-built project module loading and
+running on the v6 host, and a project HUD drawn from a node script; the standalone check also
+passes with MSVC `cl.exe` against the v6 header.
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

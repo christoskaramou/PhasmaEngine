@@ -13,12 +13,70 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 5;
+    inline constexpr uint32_t ScriptAbiVersion = 6;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
     {
         float x, y, z;
+    };
+    struct Color
+    {
+        float r, g, b, a;
+    };
+    enum class UiStyle : uint32_t
+    {
+        Card,
+        Panel,
+        Text,
+        Button,
+        Image
+    };
+    enum class UiAlignH : uint32_t
+    {
+        Default,
+        Left,
+        Center,
+        Right
+    };
+    enum class UiAlignV : uint32_t
+    {
+        Default,
+        Top,
+        Middle,
+        Bottom
+    };
+    // Mirrors Lua runtime_ui.set_quad options, defaults included. Frozen layout (v6).
+    struct UiQuad
+    {
+        const char *image = nullptr; // asset-relative path
+        const char *label = nullptr, *title = nullptr, *subtitle = nullptr, *body = nullptr, *footer = nullptr;
+        Node node = 0; // anchors the quad to a scene node
+        float x = 0.0f, y = 0.0f, z = 0.0f, width = 0.0f, height = 0.0f;
+        Color fill{0.07f, 0.08f, 0.10f, 0.94f}, border{0.45f, 0.48f, 0.54f, 0.95f}, accent{0.96f, 0.74f, 0.22f, 1.0f};
+        Color textColor{0.92f, 0.93f, 0.94f, 1.0f}, imageTint{1.0f, 1.0f, 1.0f, 1.0f}, backgroundImageTint{1.0f, 1.0f, 1.0f, 1.0f};
+        float imageWhiten = -1.0f, cornerRadius = -1.0f; // negative keeps the theme default
+        float fontScale = 1.0f, offsetX = 0.0f, offsetY = 0.0f, textInsetRight = 0.0f;
+        uint32_t radialSegments = 0, radialFilled = 0; // clockwise charge slices, at most 64
+        UiStyle style = UiStyle::Card;
+        UiAlignH alignH = UiAlignH::Default;
+        UiAlignV alignV = UiAlignV::Default;
+        bool visible = true, noInput = false, bringToFront = false, fit = false;
+        bool selected = false, draggable = false, imageColorize = false, useBackgroundTint = false;
+    };
+    // Mirrors Lua runtime_ui.get_surface_size.
+    struct UiSurface
+    {
+        uint32_t width, height;
+        float uiScale;
+        float safeX, safeY, safeWidth, safeHeight;
+        uint32_t safeValid;
+    };
+    // Mirrors Lua runtime_ui.get_state. clicked holds for the frame of the click, on quads too.
+    struct UiWidgetState
+    {
+        bool hovered, active, clicked, rightClicked, down, dragging, dragStarted, dragReleased;
+        float mouseX, mouseY, dragDeltaX, dragDeltaY;
     };
     enum class ScriptKind : uint32_t
     {
@@ -55,6 +113,14 @@ namespace phasma
         uint32_t (*setScale)(void *, Node, Vec3) noexcept;
         // Plays the clip on the node and every animated descendant; false if none has it.
         uint32_t (*playAnimation)(void *, Node, const char *clip, uint32_t loop) noexcept;
+        // v6: runtime UI. Screens are created on first use and hidden; Play Stop clears them.
+        uint32_t (*showScreen)(void *, const char *screen, uint32_t visible, uint32_t overlay) noexcept;
+        uint32_t (*setQuad)(void *, const char *screen, const char *id, const UiQuad *) noexcept;
+        uint32_t (*removeWidget)(void *, const char *screen, const char *id) noexcept;
+        // False (zeroed) when no runtime UI is active or the surface is not sized yet.
+        uint32_t (*getSurfaceSize)(void *, UiSurface *) noexcept;
+        // False (zeroed) when the widget does not exist.
+        uint32_t (*getWidgetState)(void *, const char *screen, const char *id, UiWidgetState *) noexcept;
     };
     struct ScriptDesc
     {
@@ -131,6 +197,16 @@ namespace phasma
         bool SetRotation(Node node, Vec3 eulerDegrees) const { return m_api.setRotation(m_api.context, node, eulerDegrees) != 0; }
         bool SetScale(Node node, Vec3 value) const { return m_api.setScale(m_api.context, node, value) != 0; }
         bool Play(Node node, const char *clip, bool loop = true) const { return m_api.playAnimation(m_api.context, node, clip, loop) != 0; }
+        bool ShowScreen(const char *screen, bool visible = true, bool overlay = true) const { return m_api.showScreen(m_api.context, screen, visible, overlay) != 0; }
+        bool SetQuad(const char *screen, const char *id, const UiQuad &quad) const { return m_api.setQuad(m_api.context, screen, id, &quad) != 0; }
+        bool RemoveWidget(const char *screen, const char *id) const { return m_api.removeWidget(m_api.context, screen, id) != 0; }
+        bool SurfaceSize(UiSurface &surface) const { return m_api.getSurfaceSize(m_api.context, &surface) != 0; }
+        bool WidgetState(const char *screen, const char *id, UiWidgetState &state) const { return m_api.getWidgetState(m_api.context, screen, id, &state) != 0; }
+        bool Clicked(const char *screen, const char *id) const
+        {
+            UiWidgetState state{};
+            return WidgetState(screen, id, state) && state.clicked;
+        }
 
     private:
         const ScriptApi &m_api;

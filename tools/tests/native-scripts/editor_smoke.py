@@ -112,7 +112,9 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
                    'return "created"') == "created"
         call_tool(client, "invoke_editor_action", {"action": "play.start"})
         wait_for(lambda: position("NativeApiProbe", "y") == 1)
-        assert position("NativeApiProbe") == 127, position("NativeApiProbe")
+        assert position("NativeApiProbe") == 12159, position("NativeApiProbe")  # every check but the stage-2 ones
+        ui = 'return tostring(runtime_ui.get_state("native.probe", "%s") ~= nil)'
+        assert [lua(ui % id) for id in ("quad", "fallback", "stale")] == ["true", "true", "false"]
         assert lua('for _, e in ipairs(scene.get_entities()) do local p=e.node:get_position(); '
                    'if math.abs(p.x-100)<0.01 and math.abs(p.y-200)<0.01 and math.abs(p.z-300)<0.01 then '
                    'api_probe_instance=e.node; return "found" end end; return "missing"') == "found"
@@ -121,9 +123,11 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         assert near('scene.find_model("NativeApiProbe"):get_scale()', (1, 2, 3))
         assert lua('scene.add_empty_node("ApiProbeDestroy"); return "signalled"') == "signalled"
         wait_for(lambda: position("NativeApiProbe", "y") == 2)
-        assert position("NativeApiProbe") == 255, position("NativeApiProbe")
+        assert position("NativeApiProbe") == 16383, position("NativeApiProbe")
         assert lua('return tostring(api_probe_instance:is_valid())') == "false"
+        assert lua(ui % "quad") == "false"
         call_tool(client, "invoke_editor_action", {"action": "play.stop"})
+        wait_for(lambda: lua(ui % "fallback") == "false")  # Stop clears script screens
 
         # A valid module after a rejection reloads and clears the error.
         before = status()
@@ -158,7 +162,7 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         assert "[CppScript] fault 0x" in segment, segment
         assert "[CppScript] destroy" not in segment, segment
         print("PASS: editor live replacement, scene retained, Lua reload keeps C++ state, rejected ABI retains code, "
-              "node Play/Stop/re-Play, reload status, scene API, fault containment with destroy skipped")
+              "node Play/Stop/re-Play, reload status, scene API, UI API, fault containment with destroy skipped")
     finally:
         try:
             if "client" in locals():

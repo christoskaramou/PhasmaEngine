@@ -63,10 +63,21 @@ A handle is opaque and must be validated; handles of deleted nodes (whole subtre
 invalid and are pruned. Never retain engine pointers or schedule work that can outlive the module.
 Native code remains trusted process code, not a sandbox.
 
+ABI 6 adds runtime UI, mirroring Lua `runtime_ui`: `ShowScreen(screen, visible, overlay)`
+(`show` + `set_screen_overlay`), `SetQuad(screen, id, UiQuad)` (`set_quad`; `UiQuad` carries the
+same options and defaults, so a default `UiQuad` draws what an empty options table draws),
+`RemoveWidget` (`remove`), `SurfaceSize` (`get_surface_size`) and `WidgetState` (`get_state`;
+`Clicked` wraps it). `clicked` holds for the frame of the click and works on quads, unlike Lua
+`consume_click`, which only sees Button widgets. Screens are created on first use
+and start hidden; Play Stop clears them. Quad coordinates are surface pixels. A quad anchored to an
+invalid node handle, or with an empty screen or id, is rejected; out-of-range style/alignment values
+fall back to the defaults. The calls return false without logging when no runtime UI is active, so
+they are safe every frame; `SetQuad` reloads an image only when its path changes.
+
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
-`ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` layouts are frozen. A module
-runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5) up to the
-current version. Modules built against ABI 4 or older need one rebuild.
+`ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are
+frozen. A module runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5)
+up to the current version. Modules built against ABI 4 or older need one rebuild.
 
 Descriptors carry only the source filename: `ProjectNative.cmake` defines `PHASMA_SOURCE_NAME`
 per source, so binaries (including APKs) contain no build-machine paths. Builds outside
@@ -179,6 +190,7 @@ python tools/tests/native-scripts/editor_smoke.py --binary-dir build-review-nati
 Enable `mcp` in that build's project `Assets/Agent/agent_config.json` first and leave port 8765 free.
 The smoke verifies real editor Play/Stop/re-Play, scene retention, live replacement, C++ state surviving
 a Lua reload, ABI rejection and recovery through `engine.native_scripts_status()`, the scene API
-(prefab, rotation, scale, destroy, animation) against real engine state, and that a faulting
+(prefab, rotation, scale, destroy, animation) and UI API (screen, quads, fallback and rejection,
+widget state, removal, clearing on Stop) against real engine state, and that a faulting
 script (`probe7`) leaves the editor and MCP session running.
 It uses unsaved test nodes and quits without saving the scene.
