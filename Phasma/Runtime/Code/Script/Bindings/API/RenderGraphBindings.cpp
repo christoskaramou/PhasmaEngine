@@ -48,6 +48,9 @@ namespace pe
                     UnregisterScriptRenderPass(name);
                 });
 
+                // render_graph.has_pass(name): registered by Lua or a C++ script.
+                rg.set_function("has_pass", [](const std::string &name) { return FindScriptRenderPass(name) != nullptr; });
+
                 // render_graph.get_target(name) -> image ("viewport", "display",
                 // "depthStencil", ...). Resolve inside the pass callback each frame;
                 // render targets are recreated on resize, so never cache the result.

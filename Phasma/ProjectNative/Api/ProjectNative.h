@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 11;
+    inline constexpr uint32_t ScriptAbiVersion = 12;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -109,6 +109,17 @@ namespace phasma
         Vec3 velocity{}, gravity{};
         Color colorStart{}, colorEnd{};
     };
+    // A fullscreen shader pass over the scene's depth and normals, blended onto the viewport after the given
+    // render_graph order. The shader (an asset path) provides mainVS / mainPS and reads the depth at binding 0 and
+    // the normals at binding 1. Push constants: vec4 0 = (1/width, 1/height, max(minThickness, thicknessAt1080 *
+    // height / 1080), camera near), vec4 1 (offset 4) = params. Frozen layout (v12).
+    struct FullscreenPass
+    {
+        const char *shader = nullptr;
+        uint32_t order = 550;
+        float thicknessAt1080 = 1.0f, minThickness = 0.0f;
+        float params[4] = {};
+    };
     enum class ScriptKind : uint32_t
     {
         Global,
@@ -187,6 +198,9 @@ namespace phasma
         // Mirrors primitives.torus (rings and outlines).
         Node (*createTorus)(void *, const char *name, float majorRadius, float minorRadius, uint32_t majorSegments,
                             uint32_t minorSegments) noexcept;
+        // v12: adds (or replaces) the named pass; false for a null/empty name, a missing shader path or a non-finite value.
+        uint32_t (*addFullscreenPass)(void *, const char *name, const FullscreenPass *) noexcept;
+        uint32_t (*removeFullscreenPass)(void *, const char *name) noexcept;
     };
     struct ScriptDesc
     {
@@ -305,6 +319,8 @@ namespace phasma
             return m_api.writeFile(m_api.context, path, data.data(), static_cast<uint32_t>(data.size())) != 0;
         }
         bool SetRenderType(Node node, const char *type) const { return m_api.setRenderType(m_api.context, node, type) != 0; }
+        bool AddFullscreenPass(const char *name, const FullscreenPass &pass) const { return m_api.addFullscreenPass(m_api.context, name, &pass) != 0; }
+        bool RemoveFullscreenPass(const char *name) const { return m_api.removeFullscreenPass(m_api.context, name) != 0; }
         template <uint32_t N>
         bool LaunchOption(const char *name, char (&out)[N]) const
         {

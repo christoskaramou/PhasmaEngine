@@ -367,6 +367,7 @@ Projects/*/Assets/Agent/
 !/tools/tests/native-scripts/check.cpp
 !/tools/tests/native-scripts/module.cpp
 !/tools/tests/native-scripts/editor_smoke.py
+!/tools/tests/native-scripts/FullscreenTest.hlsl
 !/tools/animator_client.py
 !/tools/precommit_validate.py
 !/tools/editor_stress.py

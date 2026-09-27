@@ -1,9 +1,17 @@
 #include "CppScript.h"
+#include "API/Command.h"
+#include "API/Descriptor.h"
+#include "API/Image.h"
+#include "API/Pipeline.h"
+#include "API/RHI.h"
+#include "API/Shader.h"
 #include "Base/GamePack.h"
 #include "Base/Log.h"
 #include "Base/Path.h"
 #include "Camera/Camera.h"
 #include "Particles/ParticleManager.h"
+#include "Render/ScriptRenderPasses.h"
+#include "Render/SceneRendererHost.h"
 #include "Scene/Material.h"
 #include "Scene/Primitives.h"
 #include "Scene/Scene.h"
@@ -577,6 +585,24 @@ namespace pe
                              throw;
                          }
                          return static_cast<CppScriptSystem *>(ctx)->Handle(node); });
+                 },
+                 [](void *ctx, const char *name, const phasma::FullscreenPass *pass) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (!name || !*name || !pass || !pass->shader || !*pass->shader ||
+                             !std::isfinite(pass->thicknessAt1080) || !std::isfinite(pass->minThickness))
+                             return 0;
+                         for (float f : pass->params)
+                             if (!std::isfinite(f)) return 0;
+                         return static_cast<CppScriptSystem *>(ctx)->AddFullscreenPass(name, *pass); });
+                 },
+                 [](void *ctx, const char *name) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (!name || !*name) return 0;
+                         return static_cast<CppScriptSystem *>(ctx)->RemoveFullscreenPass(name); });
                  }};
     }
 
@@ -602,10 +628,139 @@ namespace pe
     void CppScriptSystem::Destroy()
     {
         ClearInstances();
+        ClearFullscreenPasses();
         m_module.Reset();
         m_handles.Clear();
         m_sceneGeneration = m_scriptGeneration = UINT32_MAX;
         m_initialized = false;
+    }
+
+    uint32_t CppScriptSystem::AddFullscreenPass(const std::string &name, const phasma::FullscreenPass &cfg)
+    {
+        FullscreenPassEntry &entry = m_fullscreenPasses[name];
+        // Re-added with another shader, or after its shader failed: rebuilt on next use.
+        if (entry.pass && (entry.failed || entry.shaderPath != cfg.shader))
+        {
+            RHII.WaitDeviceIdle();
+            delete entry.pass;
+            entry.pass = nullptr;
+        }
+        entry.failed = false;
+        entry.shaderPath = cfg.shader;
+        entry.thicknessAt1080 = cfg.thicknessAt1080;
+        entry.minThickness = cfg.minThickness;
+        std::memcpy(entry.params, cfg.params, sizeof(entry.params));
+
+        RegisterScriptRenderPass(
+            name, cfg.order,
+            [this, name](CommandBuffer *cmd)
+            {
+                auto it = m_fullscreenPasses.find(name);
+                if (it == m_fullscreenPasses.end() || it->second.failed)
+                    return;
+                // A shader that fails to load must not take the host down; Lua's protected call
+                // catches the same for render_graph passes.
+                try
+                {
+                    RecordFullscreenPass(name, it->second, cmd);
+                }
+                catch (const std::exception &error)
+                {
+                    it->second.failed = true;
+                    Log::Error("[CppScript] fullscreen pass '" + name + "' failed; pass disabled: " + error.what());
+                }
+            },
+            this);
+        return 1;
+    }
+
+    void CppScriptSystem::RecordFullscreenPass(const std::string &name, FullscreenPassEntry &e, CommandBuffer *cmd)
+    {
+        // Resolved every frame: render targets are recreated on resize.
+        SceneRendererHost *host = GetActiveSceneRendererHost();
+        if (!host)
+            return;
+        Image *target = host->GetRenderTarget("viewport");
+        Image *depth = host->GetDepthStencilTarget("depthStencil");
+        Image *normal = host->GetRenderTarget("normal");
+        if (!target || !depth || !normal)
+            return;
+        if (!e.pass)
+        {
+            e.pass = new PassInfo();
+            e.pass->name = name;
+            e.pass->pVertShader = Shader::Create({.sourcePath = Path::ResolveAsset(e.shaderPath),
+                                                  .entryPoint = "mainVS",
+                                                  .stage = PE_SHADER_STAGE_VERTEX});
+            e.pass->pFragShader = Shader::Create({.sourcePath = Path::ResolveAsset(e.shaderPath),
+                                                  .entryPoint = "mainPS",
+                                                  .stage = PE_SHADER_STAGE_FRAGMENT});
+            e.pass->colorFormats = {target->GetFormat()};
+            e.pass->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
+            e.pass->cullMode = PE_CULL_MODE_NONE;
+            e.pass->depthTestEnable = false;
+            e.pass->depthWriteEnable = false;
+            e.pass->blendEnable = true;
+            e.pass->colorBlendAttachments = {BlendState::Default};
+            e.pass->Update();
+        }
+        const auto &descs = e.pass->GetDescriptors(RHII.GetFrameIndex());
+        if (descs.empty())
+            return;
+        Descriptor *desc = descs[0];
+        desc->SetImageView(0, depth->GetSRV(), depth->GetSampler());
+        desc->SetImageView(1, normal->GetSRV(), normal->GetSampler());
+        desc->Update();
+        ImageBarrierInfo depthBarrier{};
+        depthBarrier.image = depth;
+        depthBarrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        depthBarrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
+        depthBarrier.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
+        cmd->ImageBarrier(depthBarrier);
+        ImageBarrierInfo normalBarrier = depthBarrier;
+        normalBarrier.image = normal;
+        cmd->ImageBarrier(normalBarrier);
+        const float w = target->GetWidth_f(), h = target->GetHeight_f();
+        Attachment att{};
+        att.image = target;
+        att.loadOp = PE_LOAD_OP_LOAD;
+        att.storeOp = PE_STORE_OP_STORE;
+        cmd->BeginPass(1, &att, name);
+        cmd->BindPipeline(*e.pass);
+        cmd->SetViewport(0, 0, w, h, 0.0f, 1.0f);
+        cmd->SetScissor(0, 0, static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+        Scene *scene = GetActiveScene();
+        Camera *camera = scene ? scene->GetActiveCamera() : nullptr;
+        const float nearPlane = camera ? camera->GetNearPlane() : 0.0f;
+        const float thickness = std::max(e.minThickness, e.thicknessAt1080 * h / 1080.0f);
+        cmd->SetConstantAt(0, vec4(1.0f / w, 1.0f / h, thickness, nearPlane));
+        cmd->SetConstantAt(4, vec4(e.params[0], e.params[1], e.params[2], e.params[3]));
+        cmd->PushConstants();
+        cmd->Draw(3, 1, 0, 0);
+        cmd->EndPass();
+    }
+
+    uint32_t CppScriptSystem::RemoveFullscreenPass(const std::string &name)
+    {
+        auto it = m_fullscreenPasses.find(name);
+        if (it == m_fullscreenPasses.end())
+            return 0;
+        UnregisterScriptRenderPass(name);
+        RHII.WaitDeviceIdle();
+        delete it->second.pass;
+        m_fullscreenPasses.erase(it);
+        return 1;
+    }
+
+    void CppScriptSystem::ClearFullscreenPasses()
+    {
+        if (m_fullscreenPasses.empty())
+            return;
+        ClearScriptRenderPasses(this);
+        RHII.WaitDeviceIdle();
+        for (auto &[name, entry] : m_fullscreenPasses)
+            delete entry.pass;
+        m_fullscreenPasses.clear();
     }
 
     std::vector<std::string> CppScriptSystem::ListNodeScripts() const
@@ -647,7 +802,9 @@ namespace pe
 
     void CppScriptSystem::StopPlay()
     {
-        // Called before the editor restores its scene snapshot.
+        // Called before the editor restores its scene snapshot; passes a script registered must not
+        // survive the snapshot restore, so they are cleared here too (not just on full teardown).
+        ClearFullscreenPasses();
         for (auto &instance : m_instances)
         {
             bool playOnly = instance.script->mode == phasma::ScriptMode::Play;

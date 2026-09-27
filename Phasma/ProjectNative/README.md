@@ -103,6 +103,15 @@ ABI 11 adds `ReadFile(path, string)` / `WriteFile(path, string)`, Lua `fs.read` 
 against the project's Assets/ and may not leave it, game-pack assets are read-only, writes create folders.
 It also adds `CreateTorus(name, major, minor, segments...)`, as `primitives.torus`.
 
+ABI 12 adds `AddFullscreenPass(name, FullscreenPass)` / `RemoveFullscreenPass(name)`, a generic fullscreen
+post pass equivalent to a Lua `render_graph.add_pass` that samples `depthStencil` and `normal` and blends
+onto `viewport`. `FullscreenPass::shader` is an asset path providing `mainVS` / `mainPS` (depth at binding 0,
+normal at binding 1); the pass resolves its render targets every frame (resize-safe) and is created lazily
+once they exist. Passes are torn down (with a device-idle wait, like the Lua `render_graph.remove_pass` +
+`rhi.wait_device_idle()` stop sequence) on Play Stop and on native module unload, so a script can never
+leak one past its own lifetime. Re-adding a name with another shader rebuilds the pass; a Lua reload
+keeps it (Lua's `render_graph.has_pass(name)` sees it).
+
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are
 frozen. A module runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5)

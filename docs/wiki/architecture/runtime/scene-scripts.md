@@ -146,6 +146,25 @@ once. `ApiProbe` checks 24-26 publish on the node's z (bits 24+): a write and re
 the runtime project's (`build/Release/DefaultProject/Assets` for a bare editor), so the smoke asks Lua for
 `assets_path` and removes the probe folder in its `finally` (later Play sessions write it again).
 
+ABI 12 (2026-09-27) appends `addFullscreenPass` / `removeFullscreenPass`, a native equivalent of Lua's
+`render_graph.add_pass` fullscreen-post pattern
+([RenderGraphBindings.cpp](../../../../Phasma/Runtime/Code/Script/Bindings/API/RenderGraphBindings.cpp),
+[PipelineBindings.cpp](../../../../Phasma/Runtime/Code/Script/Bindings/API/PipelineBindings.cpp)). The pass
+state (a `PassInfo` per name) is owned by `CppScriptSystem`
+([CppScript.cpp](../../../../Phasma/Runtime/Code/Script/CppScript.cpp)), not by the calling script: the
+`viewport` / `depthStencil` / `normal` targets are re-resolved every frame (resize-safe) and the `PassInfo`
+is created lazily the first frame all three exist, matching the Lua `if not pass then ... end` idiom.
+`RemoveFullscreenPass` and the script-system teardown paths (`StopPlay`, `Destroy`) wait for the device to
+go idle before deleting a pass's shaders, exactly like the Lua stop sequence's `rhi.wait_device_idle()` +
+`destroy_pass_info(pass)`. Script passes carry an owner in the shared registry
+([ScriptRenderPasses.h](../../../../Phasma/Runtime/Code/Render/ScriptRenderPasses.h)): the Lua system's
+teardown clears only Lua's, so a Lua reload keeps the C++ scripts' passes (before 2026-09-27 it cleared
+all of them). A pass whose shader fails to load logs one `[CppScript] fullscreen pass ... failed; pass disabled` error and stays off until re-added, instead of throwing out of the render graph (the editor died on it before 2026-09-27). `ApiProbe` bit 27 adds a pass with a real shader
+([FullscreenTest.hlsl](../../../../tools/tests/native-scripts/FullscreenTest.hlsl), copied into the project
+Assets by the smoke, never shipped) and rejects a null name/shader and a NaN param; the pass draws until
+stage 2, across a Lua reload the smoke checks with `render_graph.has_pass`, and bit 28 removes it and
+rejects removing an unknown name. The bitmask needs 29 bits, inside the `z`-channel's `passed >> 24` split.
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

@@ -21,11 +21,14 @@ namespace pe
         std::string name;
         uint32_t order = 0;
         std::function<void(CommandBuffer *)> execute;
+        const void *owner = nullptr; // nullptr: Lua's; the C++ script system passes itself
     };
 
-    void RegisterScriptRenderPass(const std::string &name, uint32_t order, std::function<void(CommandBuffer *)> execute);
+    void RegisterScriptRenderPass(const std::string &name, uint32_t order, std::function<void(CommandBuffer *)> execute,
+                                  const void *owner = nullptr);
     void UnregisterScriptRenderPass(const std::string &name);
-    void ClearScriptRenderPasses();
+    // Removes only the owner's passes, so a Lua reload keeps the C++ scripts' passes.
+    void ClearScriptRenderPasses(const void *owner = nullptr);
 
     const std::vector<ScriptRenderPass> &GetScriptRenderPasses();
     const ScriptRenderPass *FindScriptRenderPass(const std::string &name);

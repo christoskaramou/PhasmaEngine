@@ -112,10 +112,29 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         # Scene API (added in ABI v4) against real engine state (ApiProbe in module.cpp; x = passed-check bits, y = stage).
         assert lua('local n=scene.add_empty_node("NativeApiProbe"); n:set_script("cpp:ApiProbe", "player"); '
                    'return "created"') == "created"
+        # ApiProbe's fullscreen pass shader lives with the tests, not in the shipped RuntimeAssets.
+        probe_shader_dir = Path(lua("return assets_path")) / "Shaders" / "NativeProbe"
+        probe_shader_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(Path(__file__).with_name("FullscreenTest.hlsl"), probe_shader_dir / "FullscreenTest.hlsl")
         call_tool(client, "invoke_editor_action", {"action": "play.start"})
         wait_for(lambda: position("NativeApiProbe", "y") == 1)
         assert position("NativeApiProbe") == 16772991, position("NativeApiProbe")  # every check but the stage-2 ones
-        assert position("NativeApiProbe", "z") == 7, position("NativeApiProbe", "z")  # bits 24-26: files, torus
+        assert position("NativeApiProbe", "z") == 15, position("NativeApiProbe", "z")  # bits 24-27: files, torus, fullscreen pass
+        # Regression: the Lua system's teardown cleared every script render pass, so a Lua reload dropped the C++
+        # scripts' passes (fixed 2026-09-27: it clears only its own).
+        has_pass = 'return tostring(render_graph.has_pass("NativeProbeFullscreen"))'
+        assert lua(has_pass) == "true"
+        assert lua('reload_scripts(); return "queued"') == "queued"
+        time.sleep(2)
+        assert lua(has_pass) == "true", "a Lua reload dropped the C++ script's render pass"
+        # Regression: a pass whose shader fails to load threw out of the render graph and killed the editor
+        # (fixed 2026-09-27: logged once, the pass disabled, like Lua's protected render_graph calls).
+        log = binary / "PhasmaEngine.log"
+        bad = "[CppScript] fullscreen pass 'NativeProbeBadShader' failed; pass disabled"
+        wait_for(lambda: bad in log.read_text(errors="replace"), 10)
+        time.sleep(1)
+        assert log.read_text(errors="replace").count(bad) == 1
+        assert lua('return "alive"') == "alive"
         probe_file = Path(lua("return assets_path")) / "NativeProbe" / "file_probe.txt"  # the project's Assets
         assert probe_file.read_text() == "hello native"
         probe_dir = probe_file.parent  # removed at the end: later Play sessions write it again
@@ -135,11 +154,18 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         assert lua('scene.add_empty_node("ApiProbeDestroy"); return "signalled"') == "signalled"
         wait_for(lambda: position("NativeApiProbe", "y") == 2)
         assert position("NativeApiProbe") == 16777215, position("NativeApiProbe")
-        assert position("NativeApiProbe", "z") == 7, position("NativeApiProbe", "z")
+        assert position("NativeApiProbe", "z") == 31, position("NativeApiProbe", "z")  # + bit 28: pass removed
+        assert lua(has_pass) == "false"
+        # ABI v12: the pass drew from stage 1 to stage 2 (across the Lua reload); nothing about it or its
+        # shader may have logged an error.
+        log_text = log.read_text(errors="replace")
+        assert not [line for line in log_text.splitlines()
+                    if ("NativeProbeFullscreen" in line or "FullscreenTest" in line)
+                    and ("error" in line.lower() or "validation" in line.lower())], \
+            "fullscreen pass logged an error"
         # Regression: a source added during Play autoplays at once (AudioSystem::AddSource), as the sources of a
         # scene loaded mid-session must; before 2026-09-27 only StartPlayMode started them. A missing clip proves
         # the attempt: PlaySource logs the failed load.
-        log = binary / "PhasmaEngine.log"
         mark = len(log.read_text(errors="replace"))
         assert lua('local n=scene.add_empty_node("AudioAutoplayProbe"); '
                    'audio.add_source(n, "missing_autoplay_probe.wav", {autoplay=true, spatial=false}); '
@@ -182,10 +208,12 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         assert "[CppScript] fault 0x" in segment, segment
         assert "[CppScript] destroy" not in segment, segment
         print("PASS: editor live replacement, scene retained, Lua reload keeps C++ state, rejected ABI retains code, "
-              "node Play/Stop/re-Play, reload status, scene API, UI API, mouse API, animation API, visibility and child lookup, sphere and tint, audio and launch options, autoplay during Play, particles and render type, files, torus, fault containment with destroy skipped")
+              "node Play/Stop/re-Play, reload status, scene API, UI API, mouse API, animation API, visibility and child lookup, sphere and tint, audio and launch options, autoplay during Play, particles and render type, files, torus, fullscreen pass, fault containment with destroy skipped")
     finally:
         if "probe_dir" in locals():
             shutil.rmtree(probe_dir, ignore_errors=True)
+        if "probe_shader_dir" in locals():
+            shutil.rmtree(probe_shader_dir, ignore_errors=True)
         try:
             if "client" in locals():
                 execute_lua(client, "engine.quit()")

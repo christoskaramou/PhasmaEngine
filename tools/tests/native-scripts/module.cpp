@@ -114,12 +114,29 @@ namespace
                 const phasma::Node ring = world.CreateTorus("NativeProbeRing", 0.5f, 0.02f, 32, 4);
                 Check(26, world.Valid(ring) && !world.CreateTorus("NativeProbeRing", 0.0f, 0.02f) &&
                               !world.CreateTorus("NativeProbeRing", 0.5f, 0.02f, 2, 4) && !world.CreateTorus("", 1.0f, 0.1f));
+                phasma::FullscreenPass fsPass;
+                fsPass.shader = "Shaders/NativeProbe/FullscreenTest.hlsl"; // copied in by editor_smoke.py
+                fsPass.params[0] = 1.0f;
+                phasma::FullscreenPass badShader = fsPass;
+                badShader.shader = nullptr;
+                phasma::FullscreenPass badParam = fsPass;
+                badParam.params[1] = std::nanf("");
+                phasma::FullscreenPass missingShader = fsPass; // accepted; fails to load when it first runs
+                missingShader.shader = "Shaders/NativeProbe/Missing.hlsl";
+                Check(27, world.AddFullscreenPass("NativeProbeFullscreen", fsPass) &&
+                              !world.AddFullscreenPass(nullptr, fsPass) && !world.AddFullscreenPass("", fsPass) &&
+                              !world.AddFullscreenPass("NativeProbeFullscreen2", badShader) &&
+                              !world.AddFullscreenPass("NativeProbeFullscreen3", badParam) &&
+                              world.AddFullscreenPass("NativeProbeBadShader", missingShader)); // both run until stage 2
                 stage = 1;
             }
             else if (stage == 1 && world.Find("ApiProbeDestroy"))
             {
                 Check(7, world.Destroy(instance) && !world.Valid(instance) && !world.Destroy(instance));
                 Check(12, world.RemoveWidget("native.probe", "quad"));
+                Check(28, world.RemoveFullscreenPass("NativeProbeFullscreen") &&
+                              world.RemoveFullscreenPass("NativeProbeBadShader") &&
+                              !world.RemoveFullscreenPass("NativeProbeFullscreenMissing"));
                 stage = 2;
             }
             world.SetPosition(node, {static_cast<float>(passed & 0xFFFFFFu), static_cast<float>(stage),

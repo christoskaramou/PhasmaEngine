@@ -8,7 +8,8 @@ namespace pe
         uint64_t s_scriptRenderPassesRevision = 0;
     } // namespace
 
-    void RegisterScriptRenderPass(const std::string &name, uint32_t order, std::function<void(CommandBuffer *)> execute)
+    void RegisterScriptRenderPass(const std::string &name, uint32_t order, std::function<void(CommandBuffer *)> execute,
+                                  const void *owner)
     {
         for (auto &pass : s_scriptRenderPasses)
         {
@@ -16,11 +17,12 @@ namespace pe
             {
                 pass.order = order;
                 pass.execute = std::move(execute);
+                pass.owner = owner;
                 s_scriptRenderPassesRevision++;
                 return;
             }
         }
-        s_scriptRenderPasses.push_back({name, order, std::move(execute)});
+        s_scriptRenderPasses.push_back({name, order, std::move(execute), owner});
         s_scriptRenderPassesRevision++;
     }
 
@@ -35,11 +37,14 @@ namespace pe
         s_scriptRenderPassesRevision++;
     }
 
-    void ClearScriptRenderPasses()
+    void ClearScriptRenderPasses(const void *owner)
     {
-        if (s_scriptRenderPasses.empty())
+        const auto it = std::remove_if(s_scriptRenderPasses.begin(), s_scriptRenderPasses.end(),
+                                       [owner](const ScriptRenderPass &pass)
+                                       { return pass.owner == owner; });
+        if (it == s_scriptRenderPasses.end())
             return;
-        s_scriptRenderPasses.clear();
+        s_scriptRenderPasses.erase(it, s_scriptRenderPasses.end());
         s_scriptRenderPassesRevision++;
     }
 
