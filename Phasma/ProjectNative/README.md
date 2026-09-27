@@ -112,6 +112,10 @@ once they exist. Passes are torn down (with a device-idle wait, like the Lua `re
 leak one past its own lifetime. Re-adding a name with another shader rebuilds the pass; a Lua reload
 keeps it (Lua's `render_graph.has_pass(name)` sees it).
 
+ABI 13 adds `SetVolume(AudioBus, value)` / `GetVolume(AudioBus, value)` over the four buses Lua's
+`audio.set_master_volume` / `set_music_volume` / `set_sfx_volume` / `set_ambient_volume` drive, so a C++
+settings screen can apply and show the live volumes; values clamp to [0, 1].
+
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are
 frozen. A module runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5)

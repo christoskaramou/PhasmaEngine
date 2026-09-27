@@ -128,6 +128,16 @@ namespace
                               !world.AddFullscreenPass("NativeProbeFullscreen2", badShader) &&
                               !world.AddFullscreenPass("NativeProbeFullscreen3", badParam) &&
                               world.AddFullscreenPass("NativeProbeBadShader", missingShader)); // both run until stage 2
+                float music = -1.0f, check = -1.0f, clamped = -1.0f;
+                Check(29, world.GetVolume(phasma::AudioBus::Music, music) &&
+                              world.SetVolume(phasma::AudioBus::Music, 0.25f) &&
+                              world.GetVolume(phasma::AudioBus::Music, check) && check == 0.25f &&
+                              world.SetVolume(phasma::AudioBus::Music, 7.0f) &&
+                              world.GetVolume(phasma::AudioBus::Music, clamped) && clamped == 1.0f &&
+                              world.SetVolume(phasma::AudioBus::Music, music) &&
+                              !world.SetVolume(static_cast<phasma::AudioBus>(9), 0.5f) &&
+                              !world.SetVolume(phasma::AudioBus::Sfx, std::nanf("")) &&
+                              !world.GetVolume(static_cast<phasma::AudioBus>(9), check));
                 stage = 1;
             }
             else if (stage == 1 && world.Find("ApiProbeDestroy"))

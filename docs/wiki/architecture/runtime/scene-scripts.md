@@ -165,6 +165,11 @@ Assets by the smoke, never shipped) and rejects a null name/shader and a NaN par
 stage 2, across a Lua reload the smoke checks with `render_graph.has_pass`, and bit 28 removes it and
 rejects removing an unknown name. The bitmask needs 29 bits, inside the `z`-channel's `passed >> 24` split.
 
+ABI 13 (2026-09-27) appends `setVolume` / `getVolume` over the audio buses (`AudioBus::Master`, `Music`,
+`Sfx`, `Ambient`), the same `AudioSystem` setters Lua's `audio.set_*_volume` calls; values clamp to [0, 1]
+and an unknown bus or a non-finite value is refused. `ApiProbe` bit 29 round-trips the music bus
+(set, read back, clamp, restore) and checks the refusals.
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

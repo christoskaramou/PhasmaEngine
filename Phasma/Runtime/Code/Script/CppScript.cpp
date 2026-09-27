@@ -603,6 +603,36 @@ namespace pe
                                      {
                          if (!name || !*name) return 0;
                          return static_cast<CppScriptSystem *>(ctx)->RemoveFullscreenPass(name); });
+                 },
+                 [](void *, phasma::AudioBus bus, float value) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (static_cast<uint32_t>(bus) > static_cast<uint32_t>(phasma::AudioBus::Ambient) ||
+                             !std::isfinite(value))
+                             return 0;
+                         value = std::clamp(value, 0.0f, 1.0f);
+                         return WithAudio([&](auto &audio)
+                                          {
+                             switch (bus)
+                             {
+                             case phasma::AudioBus::Master: audio.SetMasterVolume(value); break;
+                             case phasma::AudioBus::Music: audio.SetMusicVolume(value); break;
+                             case phasma::AudioBus::Sfx: audio.SetSFXVolume(value); break;
+                             case phasma::AudioBus::Ambient: audio.SetAmbientVolume(value); break;
+                             } }); });
+                 },
+                 [](void *, phasma::AudioBus bus, float *value) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (!value || static_cast<uint32_t>(bus) > static_cast<uint32_t>(phasma::AudioBus::Ambient))
+                             return 0;
+                         return WithAudio([&](auto &audio)
+                                          {
+                             const float volumes[] = {audio.GetMasterVolume(), audio.GetMusicVolume(),
+                                                      audio.GetSFXVolume(), audio.GetAmbientVolume()};
+                             *value = volumes[static_cast<uint32_t>(bus)]; }); });
                  }};
     }
 

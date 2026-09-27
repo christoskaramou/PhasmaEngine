@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 12;
+    inline constexpr uint32_t ScriptAbiVersion = 13;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -78,6 +78,14 @@ namespace phasma
     {
         bool hovered, active, clicked, rightClicked, down, dragging, dragStarted, dragReleased;
         float mouseX, mouseY, dragDeltaX, dragDeltaY;
+    };
+    // The audio buses of audio.set_*_volume (v13).
+    enum class AudioBus : uint32_t
+    {
+        Master,
+        Music,
+        Sfx,
+        Ambient
     };
     // particles.emit_burst: a field overrides the preset only when its bit is in ParticleBurst::set.
     enum BurstField : uint32_t
@@ -201,6 +209,10 @@ namespace phasma
         // v12: adds (or replaces) the named pass; false for a null/empty name, a missing shader path or a non-finite value.
         uint32_t (*addFullscreenPass)(void *, const char *name, const FullscreenPass *) noexcept;
         uint32_t (*removeFullscreenPass)(void *, const char *name) noexcept;
+        // v13: a bus volume, clamped to [0, 1] like the settings sliders; false for an unknown bus, a non-finite
+        // value or a build without audio.
+        uint32_t (*setVolume)(void *, AudioBus bus, float value) noexcept;
+        uint32_t (*getVolume)(void *, AudioBus bus, float *value) noexcept;
     };
     struct ScriptDesc
     {
@@ -321,6 +333,8 @@ namespace phasma
         bool SetRenderType(Node node, const char *type) const { return m_api.setRenderType(m_api.context, node, type) != 0; }
         bool AddFullscreenPass(const char *name, const FullscreenPass &pass) const { return m_api.addFullscreenPass(m_api.context, name, &pass) != 0; }
         bool RemoveFullscreenPass(const char *name) const { return m_api.removeFullscreenPass(m_api.context, name) != 0; }
+        bool SetVolume(AudioBus bus, float value) const { return m_api.setVolume(m_api.context, bus, value) != 0; }
+        bool GetVolume(AudioBus bus, float &value) const { return m_api.getVolume(m_api.context, bus, &value) != 0; }
         template <uint32_t N>
         bool LaunchOption(const char *name, char (&out)[N]) const
         {
