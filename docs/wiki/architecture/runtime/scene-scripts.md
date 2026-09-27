@@ -205,6 +205,14 @@ ABI 18 (2026-09-27) appends `getMousePosition` and `getWindowSize`, `input.get_m
 `SettingsBindings.h`), for a pointer in runtime UI surface pixels (a drag stick). `ApiProbe` bits 39 and 40
 check a non-negative pointer, a non-empty window and the null refusals.
 
+ABI 19 (2026-09-27) appends `playAnimationLayer`, `setAnimationLayerSpeed`, `stopAnimationLayer`,
+`getAnimationLayer`, `getClipMarker` and `setLightIntensity`: `animation.play_layer` / `set_layer_speed` /
+`stop_layer` / `get_layer_state` / `get_markers` over the node's animated tree (the bone mask as one
+`,`-separated string; an empty or blank name is refused, as the engine's layer refuses no bones) and
+`lights.set_property` intensity on every light the node owns, found through `Scene*Light::nodeId`, so a C++
+script drives rig attack layers timed to their markers and prefab lights. `ApiProbe` bits 41-43 check the
+refusals on an empty node.
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

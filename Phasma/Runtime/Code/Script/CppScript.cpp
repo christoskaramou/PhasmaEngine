@@ -111,6 +111,89 @@ namespace pe
             return played;
         }
 
+        bool PlayLayerTree(Scene &scene, AnimationSystem &animation, NodeId *node, const std::string &clip,
+                           const std::vector<std::string> &bones, bool loop, float speed)
+        {
+            bool played = false;
+            for (const auto &candidate : scene.GetAnimationClipsForNode(node))
+                if (candidate.name == clip)
+                {
+                    played |= animation.PlayLayer(scene, node, clip, bones, loop, speed);
+                    break;
+                }
+            for (NodeId *child : scene.GetChildren(node))
+                played |= PlayLayerTree(scene, animation, child, clip, bones, loop, speed);
+            return played;
+        }
+
+        bool LayerSpeedTree(Scene &scene, AnimationSystem &animation, NodeId *node, float speed)
+        {
+            bool any = animation.SetLayerSpeed(node, speed);
+            for (NodeId *child : scene.GetChildren(node))
+                any |= LayerSpeedTree(scene, animation, child, speed);
+            return any;
+        }
+
+        bool StopLayerTree(Scene &scene, AnimationSystem &animation, NodeId *node)
+        {
+            bool any = animation.GetAnimationState(node) != nullptr;
+            if (any)
+                animation.StopLayer(scene, node);
+            for (NodeId *child : scene.GetChildren(node))
+                any |= StopLayerTree(scene, animation, child);
+            return any;
+        }
+
+        // The first node of the tree, depth first, that animates (with `clip`, when one is named).
+        NodeId *FirstAnimated(Scene &scene, AnimationSystem &animation, NodeId *node, const char *clip)
+        {
+            bool fits = animation.GetAnimationState(node) != nullptr;
+            if (clip)
+            {
+                fits = false;
+                for (const auto &candidate : scene.GetAnimationClipsForNode(node))
+                    fits = fits || candidate.name == clip;
+            }
+            if (fits)
+                return node;
+            for (NodeId *child : scene.GetChildren(node))
+                if (NodeId *found = FirstAnimated(scene, animation, child, clip))
+                    return found;
+            return nullptr;
+        }
+
+        // animation.play_layer's bone mask as one string: names separated by ',', none empty.
+        bool ReadMask(const char *mask, std::vector<std::string> &bones)
+        {
+            if (!mask)
+                return false;
+            std::string_view rest(mask);
+            while (!rest.empty())
+            {
+                const size_t comma = rest.find(',');
+                std::string_view name = rest.substr(0, comma);
+                while (!name.empty() && name.front() == ' ')
+                    name.remove_prefix(1);
+                while (!name.empty() && name.back() == ' ')
+                    name.remove_suffix(1);
+                if (name.empty())
+                    return false;
+                bones.emplace_back(name);
+                if (comma == std::string_view::npos)
+                    break;
+                rest.remove_prefix(comma + 1);
+            }
+            return !bones.empty();
+        }
+
+        bool OwnedBy(const Scene &scene, const NodeId *light, const NodeId *node)
+        {
+            for (const NodeId *at = light; at; at = scene.GetParent(at))
+                if (at == node)
+                    return true;
+            return false;
+        }
+
         bool SetSpeedTree(Scene &scene, AnimationSystem &animation, NodeId *node, float speed)
         {
             bool animated = animation.GetAnimationState(node) != nullptr;
@@ -877,6 +960,110 @@ namespace pe
                          *width = static_cast<uint32_t>(std::max(0, w));
                          *height = static_cast<uint32_t>(std::max(0, h));
                          return 1; });
+                 },
+                 [](void *ctx, phasma::Node handle, const char *clip, const char *mask, uint32_t loop,
+                    float speed) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         auto *animation = GetGlobalSystem<AnimationSystem>();
+                         std::vector<std::string> bones;
+                         if (!node || !clip || !animation || !std::isfinite(speed) || !ReadMask(mask, bones)) return 0;
+                         return PlayLayerTree(*GetActiveScene(), *animation, node, clip, bones, loop != 0, speed); });
+                 },
+                 [](void *ctx, phasma::Node handle, float speed) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         auto *animation = GetGlobalSystem<AnimationSystem>();
+                         return node && animation && std::isfinite(speed) &&
+                                LayerSpeedTree(*GetActiveScene(), *animation, node, speed); });
+                 },
+                 [](void *ctx, phasma::Node handle) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         auto *animation = GetGlobalSystem<AnimationSystem>();
+                         return node && animation && StopLayerTree(*GetActiveScene(), *animation, node); });
+                 },
+                 [](void *ctx, phasma::Node handle, uint32_t *active, float *seconds, float *duration) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (!active || !seconds || !duration) return 0;
+                         *active = 0;
+                         *seconds = *duration = 0.0f;
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         auto *animation = GetGlobalSystem<AnimationSystem>();
+                         if (!node || !animation) return 0;
+                         Scene &scene = *GetActiveScene();
+                         NodeId *first = FirstAnimated(scene, *animation, node, nullptr);
+                         if (!first) return 0;
+                         const auto *state = animation->GetAnimationState(first);
+                         const auto &clips = scene.GetAnimationClipsForNode(first);
+                         if (state && state->layer.clipIndex >= 0 && state->layer.clipIndex < static_cast<int>(clips.size()))
+                         {
+                             const auto &clip = clips[state->layer.clipIndex];
+                             *active = 1;
+                             *seconds = static_cast<float>(state->layer.time / clip.ticksPerSecond);
+                             *duration = static_cast<float>(clip.duration / clip.ticksPerSecond);
+                         }
+                         return 1; });
+                 },
+                 [](void *ctx, phasma::Node handle, const char *clip, const char *marker, float *seconds) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         auto *animation = GetGlobalSystem<AnimationSystem>();
+                         if (!node || !clip || !marker || !seconds || !animation) return 0;
+                         Scene &scene = *GetActiveScene();
+                         NodeId *first = FirstAnimated(scene, *animation, node, clip);
+                         if (!first) return 0;
+                         const auto lower = [](std::string s)
+                         {
+                             for (char &c : s)
+                                 c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                             return s;
+                         };
+                         const std::string want = lower(marker);
+                         for (const auto &candidate : scene.GetAnimationClipsForNode(first))
+                         {
+                             if (candidate.name != clip) continue;
+                             const float tps = candidate.ticksPerSecond > 0.f ? candidate.ticksPerSecond : 25.f;
+                             for (const ClipMarker &m : candidate.markers)
+                                 if (lower(m.name) == want)
+                                 {
+                                     *seconds = static_cast<float>(m.time / tps);
+                                     return 1;
+                                 }
+                         }
+                         return 0; });
+                 },
+                 [](void *ctx, phasma::Node handle, float intensity) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         if (!node || !std::isfinite(intensity)) return 0;
+                         Scene &scene = *GetActiveScene();
+                         uint32_t set = 0;
+                         const auto apply = [&](auto &lights)
+                         {
+                             for (auto &light : lights)
+                                 if (light.nodeId && OwnedBy(scene, light.nodeId, node))
+                                 {
+                                     light.color.w = intensity;
+                                     set = 1;
+                                 }
+                         };
+                         apply(scene.GetPointLights());
+                         apply(scene.GetSpotLights());
+                         apply(scene.GetAreaLights());
+                         return set; });
                  }};
     }
 

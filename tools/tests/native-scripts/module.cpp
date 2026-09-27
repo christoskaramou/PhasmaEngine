@@ -185,6 +185,16 @@ namespace
                 float pointerX = -1.0f, pointerY = -1.0f; // wherever the smoke's mouse rests
                 Check(39, world.MousePosition(pointerX, pointerY) && pointerX >= 0.0f && pointerY >= 0.0f &&
                               !api.getMousePosition(api.context, &pointerX, nullptr));
+                bool layerOn = true;
+                float layerT = -1.0f, layerD = -1.0f, markerT = -1.0f;
+                // An empty node animates nothing and owns no light; an empty or blank mask is refused.
+                Check(41, !world.PlayLayer(node, "Idle", "Root") && !world.PlayLayer(node, "Idle", "") &&
+                              !world.PlayLayer(node, "Idle", "Root,,Spine") && !world.SetLayerSpeed(node, 2.0f) &&
+                              !world.StopLayer(node));
+                Check(42, !world.LayerState(node, layerOn, layerT, layerD) && !layerOn && layerT == 0.0f &&
+                              !api.getAnimationLayer(api.context, node, nullptr, &layerT, &layerD));
+                Check(43, !world.ClipMarker(node, "Idle", "impact", markerT) && markerT == -1.0f &&
+                              !world.SetLightIntensity(node, 2.0f) && !world.SetLightIntensity(0xDEAD, 1.0f));
                 uint32_t windowW = 0, windowH = 0;
                 Check(40, world.WindowSize(windowW, windowH) && windowW > 0 && windowH > 0 &&
                               !api.getWindowSize(api.context, nullptr, &windowH));

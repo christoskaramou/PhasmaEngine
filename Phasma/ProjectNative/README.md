@@ -135,7 +135,10 @@ mode in effect, `SetWindowMode` is `engine.set_window_mode` (refused in the edit
 is a quit button: it leaves play mode, else quits. ABI 17 adds `MouseWheel(x, y)`, the frame's wheel steps
 (`input.get_mouse_wheel`). ABI 18 adds `MousePosition(x, y)` (`input.get_mouse_position`: window pixels, 0, 0
 while the runtime UI holds the mouse) and `WindowSize(w, h)` (`engine.get_window_size`); scale the pointer by
-surface / window size for runtime UI pixels.
+surface / window size for runtime UI pixels. ABI 19 adds animation layers and light intensity:
+`PlayLayer(node, clip, mask, loop, speed)` (`animation.play_layer`, the mask's bone names separated by `,`),
+`SetLayerSpeed`, `StopLayer`, `LayerState(node, active, seconds, duration)`, `ClipMarker(node, clip, name,
+seconds)` and `SetLightIntensity(node, value)` (every light the node or a descendant owns).
 
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are

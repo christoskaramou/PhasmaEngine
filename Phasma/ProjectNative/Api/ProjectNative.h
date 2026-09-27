@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 18;
+    inline constexpr uint32_t ScriptAbiVersion = 19;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -304,6 +304,18 @@ namespace phasma
         // engine.get_window_size, which scale a pointer into runtime UI surface pixels.
         uint32_t (*getMousePosition)(void *, float *x, float *y) noexcept;
         uint32_t (*getWindowSize)(void *, uint32_t *width, uint32_t *height) noexcept;
+        // v19: animation layers and light intensity. Mirror animation.play_layer (a rig-space override layer on
+        // the named bones, `mask` separated by ',' and never empty), set_layer_speed and stop_layer on the node
+        // and every animated descendant (play only where the clip exists); get_layer_state (seconds) and
+        // get_markers read the first animated node of the tree. setLightIntensity is lights.set_property
+        // "intensity" on every point, spot and area light the node or a descendant owns.
+        uint32_t (*playAnimationLayer)(void *, Node, const char *clip, const char *mask, uint32_t loop,
+                                       float speed) noexcept;
+        uint32_t (*setAnimationLayerSpeed)(void *, Node, float speed) noexcept;
+        uint32_t (*stopAnimationLayer)(void *, Node) noexcept;
+        uint32_t (*getAnimationLayer)(void *, Node, uint32_t *active, float *seconds, float *duration) noexcept;
+        uint32_t (*getClipMarker)(void *, Node, const char *clip, const char *marker, float *seconds) noexcept;
+        uint32_t (*setLightIntensity)(void *, Node, float intensity) noexcept;
     };
     struct ScriptDesc
     {
@@ -454,6 +466,32 @@ namespace phasma
         bool WindowSize(uint32_t &width, uint32_t &height) const
         {
             return m_api.getWindowSize(m_api.context, &width, &height) != 0;
+        }
+        bool PlayLayer(Node node, const char *clip, const char *mask, bool loop = true, float speed = 1.0f) const
+        {
+            return m_api.playAnimationLayer(m_api.context, node, clip, mask, loop, speed) != 0;
+        }
+        bool SetLayerSpeed(Node node, float speed) const
+        {
+            return m_api.setAnimationLayerSpeed(m_api.context, node, speed) != 0;
+        }
+        bool StopLayer(Node node) const { return m_api.stopAnimationLayer(m_api.context, node) != 0; }
+        // false when nothing in the tree animates; `active` false when no layer plays.
+        bool LayerState(Node node, bool &active, float &seconds, float &duration) const
+        {
+            uint32_t on = 0;
+            const bool ok = m_api.getAnimationLayer(m_api.context, node, &on, &seconds, &duration) != 0;
+            active = on != 0;
+            return ok;
+        }
+        // A named marker's time in seconds (the name compared without case); false if none.
+        bool ClipMarker(Node node, const char *clip, const char *marker, float &seconds) const
+        {
+            return m_api.getClipMarker(m_api.context, node, clip, marker, &seconds) != 0;
+        }
+        bool SetLightIntensity(Node node, float intensity) const
+        {
+            return m_api.setLightIntensity(m_api.context, node, intensity) != 0;
         }
         template <uint32_t N>
         bool LaunchOption(const char *name, char (&out)[N]) const
