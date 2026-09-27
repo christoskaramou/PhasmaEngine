@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 #include <type_traits>
 #if defined(_WIN32)
 #define PHASMA_SCRIPT_EXPORT extern "C" __declspec(dllexport)
@@ -13,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 9;
+    inline constexpr uint32_t ScriptAbiVersion = 11;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -77,6 +78,36 @@ namespace phasma
     {
         bool hovered, active, clicked, rightClicked, down, dragging, dragStarted, dragReleased;
         float mouseX, mouseY, dragDeltaX, dragDeltaY;
+    };
+    // particles.emit_burst: a field overrides the preset only when its bit is in ParticleBurst::set.
+    enum BurstField : uint32_t
+    {
+        BurstCount = 1u << 0,
+        BurstSizeMin = 1u << 1,
+        BurstSizeMax = 1u << 2,
+        BurstLifeMin = 1u << 3,
+        BurstLifeMax = 1u << 4,
+        BurstSpawnRadius = 1u << 5,
+        BurstNoise = 1u << 6,
+        BurstDrag = 1u << 7,
+        BurstCleanupDelay = 1u << 8,
+        BurstVelocity = 1u << 9,
+        BurstGravity = 1u << 10,
+        BurstColorStart = 1u << 11,
+        BurstColorEnd = 1u << 12
+    };
+    // Mirrors particles.emit_burst. preset: hero_take, hero_give, enemy_take or enemy_give (anything else keeps the
+    // engine's defaults). Frozen layout (v10).
+    struct ParticleBurst
+    {
+        const char *preset = nullptr;
+        Vec3 position{};
+        uint32_t set = 0; // BurstField bits
+        uint32_t count = 0;
+        float sizeMin = 0.0f, sizeMax = 0.0f, lifeMin = 0.0f, lifeMax = 0.0f;
+        float spawnRadius = 0.0f, noiseStrength = 0.0f, drag = 0.0f, cleanupDelay = 0.0f;
+        Vec3 velocity{}, gravity{};
+        Color colorStart{}, colorEnd{};
     };
     enum class ScriptKind : uint32_t
     {
@@ -145,6 +176,17 @@ namespace phasma
         // Mirrors script.launch_option: copies PE_SCRIPT_<name> into out, NUL-terminated; false if unset, the name is
         // not [A-Z0-9_]{1,64}, or the value does not fit.
         uint32_t (*launchOption)(void *, const char *name, char *out, uint32_t capacity) noexcept;
+        // v10: particles and render type. False without a particle system or with a non-finite field.
+        uint32_t (*emitBurst)(void *, const ParticleBurst *) noexcept;
+        // Mirrors material.set_render_type on the node's first mesh (alpha_blend makes base color alpha count).
+        uint32_t (*setRenderType)(void *, Node, const char *type) noexcept;
+        // v11: files, as Lua fs.read / fs.write: paths resolve against the project's Assets/ and may not leave it.
+        // readFile copies the file when it fits in capacity; *size gets its length whenever it exists.
+        uint32_t (*readFile)(void *, const char *path, char *out, uint32_t capacity, uint32_t *size) noexcept;
+        uint32_t (*writeFile)(void *, const char *path, const char *data, uint32_t size) noexcept;
+        // Mirrors primitives.torus (rings and outlines).
+        Node (*createTorus)(void *, const char *name, float majorRadius, float minorRadius, uint32_t majorSegments,
+                            uint32_t minorSegments) noexcept;
     };
     struct ScriptDesc
     {
@@ -237,6 +279,32 @@ namespace phasma
         bool PlaySound(const char *clip) const { return m_api.playSound(m_api.context, clip) != 0; }
         bool PlayMusic(const char *clip) const { return m_api.playMusic(m_api.context, clip) != 0; }
         bool StopMusic() const { return m_api.stopMusic(m_api.context) != 0; }
+        bool Burst(const ParticleBurst &burst) const { return m_api.emitBurst(m_api.context, &burst) != 0; }
+        bool ReadFile(const char *path, std::string &out) const
+        {
+            uint32_t size = 0;
+            out.resize(256);
+            if (m_api.readFile(m_api.context, path, out.data(), static_cast<uint32_t>(out.size()), &size) == 0)
+            {
+                if (size <= out.size())
+                    return false; // missing, outside Assets, or empty
+                out.resize(size);
+                if (m_api.readFile(m_api.context, path, out.data(), size, &size) == 0)
+                    return false;
+            }
+            out.resize(size);
+            return true;
+        }
+        Node CreateTorus(const char *name, float majorRadius, float minorRadius, uint32_t majorSegments = 64,
+                         uint32_t minorSegments = 16) const
+        {
+            return m_api.createTorus(m_api.context, name, majorRadius, minorRadius, majorSegments, minorSegments);
+        }
+        bool WriteFile(const char *path, const std::string &data) const
+        {
+            return m_api.writeFile(m_api.context, path, data.data(), static_cast<uint32_t>(data.size())) != 0;
+        }
+        bool SetRenderType(Node node, const char *type) const { return m_api.setRenderType(m_api.context, node, type) != 0; }
         template <uint32_t N>
         bool LaunchOption(const char *name, char (&out)[N]) const
         {

@@ -3,10 +3,13 @@
 #include "Base/Log.h"
 #include "Base/Path.h"
 #include "Camera/Camera.h"
+#include "Particles/ParticleManager.h"
 #include "Scene/Material.h"
 #include "Scene/Primitives.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
+#include "Script/Bindings/Filesystem/FilesystemBindings.h"
+#include "Script/Bindings/Material/MaterialBindings.h"
 #include "Script/NativeScriptGuard.h"
 #include "Script/NativeTrs.h"
 #include "Script/ScriptRuntimeHooks.h"
@@ -487,6 +490,93 @@ namespace pe
                          if (!value || value->size() >= capacity) return 0;
                          std::memcpy(out, value->c_str(), value->size() + 1);
                          return 1; });
+                 },
+                 [](void *, const phasma::ParticleBurst *b) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         Scene *scene = GetActiveScene();
+                         ParticleManager *pm = scene ? scene->GetParticleManager() : nullptr;
+                         if (!pm || !b || !Finite(b->position) || !Finite(b->velocity) || !Finite(b->gravity))
+                             return 0;
+                         const float scalars[] = {b->sizeMin, b->sizeMax, b->lifeMin, b->lifeMax, b->spawnRadius,
+                                                  b->noiseStrength, b->drag, b->cleanupDelay, b->colorStart.r,
+                                                  b->colorStart.g, b->colorStart.b, b->colorStart.a, b->colorEnd.r,
+                                                  b->colorEnd.g, b->colorEnd.b, b->colorEnd.a};
+                         for (float f : scalars)
+                             if (!std::isfinite(f)) return 0;
+                         // particles.emit_burst: the preset, then each field that is set.
+                         ParticleBurstDesc desc{};
+                         if (b->preset) ParticleManager::FillBurstPreset(b->preset, desc);
+                         desc.position = vec3(b->position.x, b->position.y, b->position.z);
+                         const uint32_t set = b->set;
+                         if (set & phasma::BurstCount) desc.count = b->count;
+                         if (set & phasma::BurstSizeMin) desc.sizeMin = b->sizeMin;
+                         if (set & phasma::BurstSizeMax) desc.sizeMax = b->sizeMax;
+                         if (set & phasma::BurstLifeMin) desc.lifeMin = b->lifeMin;
+                         if (set & phasma::BurstLifeMax) desc.lifeMax = b->lifeMax;
+                         if (set & phasma::BurstSpawnRadius) desc.spawnRadius = b->spawnRadius;
+                         if (set & phasma::BurstNoise) desc.noiseStrength = b->noiseStrength;
+                         if (set & phasma::BurstDrag) desc.drag = b->drag;
+                         if (set & phasma::BurstCleanupDelay) desc.cleanupDelay = b->cleanupDelay;
+                         if (set & phasma::BurstVelocity) desc.velocity = vec3(b->velocity.x, b->velocity.y, b->velocity.z);
+                         if (set & phasma::BurstGravity) desc.gravity = vec3(b->gravity.x, b->gravity.y, b->gravity.z);
+                         if (set & phasma::BurstColorStart)
+                             desc.colorStart = vec4(b->colorStart.r, b->colorStart.g, b->colorStart.b, b->colorStart.a);
+                         if (set & phasma::BurstColorEnd)
+                             desc.colorEnd = vec4(b->colorEnd.r, b->colorEnd.g, b->colorEnd.b, b->colorEnd.a);
+                         return pm->EmitBurst(desc) >= 0; });
+                 },
+                 [](void *ctx, phasma::Node handle, const char *type) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         if (!node || !type) return 0;
+                         Scene *scene = GetActiveScene();
+                         return SetNodeRenderTypeByName(scene, node, scene->GetMeshRef(node), type); });
+                 },
+                 [](void *, const char *path, char *out, uint32_t capacity, uint32_t *size) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (size) *size = 0;
+                         if (!path || !size) return 0;
+                         const std::optional<std::string> content = ReadAssetsFile(path);
+                         if (!content || content->empty() || content->size() > UINT32_MAX) return 0;
+                         *size = static_cast<uint32_t>(content->size());
+                         if (!out || content->size() > capacity) return 0;
+                         std::memcpy(out, content->data(), content->size());
+                         return 1; });
+                 },
+                 [](void *, const char *path, const char *data, uint32_t size) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     { return path && data && WriteAssetsFile(path, std::string_view(data, size), false) ? 1u : 0u; });
+                 },
+                 [](void *ctx, const char *name, float majorRadius, float minorRadius, uint32_t majorSegments,
+                    uint32_t minorSegments) noexcept -> phasma::Node
+                 {
+                     return GuardApi([&]() -> phasma::Node
+                                     {
+                         Scene *scene = GetActiveScene();
+                         if (!scene || !name || !*name || !std::isfinite(majorRadius) || !std::isfinite(minorRadius) ||
+                             majorRadius <= 0.0f || minorRadius <= 0.0f || majorSegments < 3 || minorSegments < 3 ||
+                             majorSegments > 512 || minorSegments > 512)
+                             return 0;
+                         NodeId *node = scene->CreateNode(name);
+                         try
+                         {
+                             scene->AttachPrimitiveToNode(node, Primitives::CreateTorus(majorRadius, minorRadius,
+                                                                                        static_cast<int>(majorSegments),
+                                                                                        static_cast<int>(minorSegments)));
+                         }
+                         catch (...)
+                         {
+                             scene->DeleteNode(node);
+                             throw;
+                         }
+                         return static_cast<CppScriptSystem *>(ctx)->Handle(node); });
                  }};
     }
 

@@ -94,6 +94,15 @@ false in builds without audio). Looping per-node sources stay in the scene file 
 `autoplay` starts on Play). `LaunchOption(name, buffer)` reads `PE_SCRIPT_<name>` exactly like Lua
 `script.launch_option`, so scripts need no `getenv`.
 
+ABI 10 adds `Burst(ParticleBurst)`, Lua `particles.emit_burst`: the preset (hero_take, hero_give, enemy_take,
+enemy_give) first, then each field whose `BurstField` bit is set in `set`. `SetRenderType(node, type)` is
+`material.set_render_type` on the node's first mesh (`alpha_blend` makes the base color's alpha count), for
+translucent rings and decals.
+
+ABI 11 adds `ReadFile(path, string)` / `WriteFile(path, string)`, Lua `fs.read` / `fs.write`: paths resolve
+against the project's Assets/ and may not leave it, game-pack assets are read-only, writes create folders.
+It also adds `CreateTorus(name, major, minor, segments...)`, as `primitives.torus`.
+
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are
 frozen. A module runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5)

@@ -31,75 +31,6 @@ namespace pe
         return false;
     }
 
-    static bool FillBurstPreset(const std::string &preset, ParticleBurstDesc &desc)
-    {
-        if (preset == "hero_take")
-        {
-            desc.name = "Hero Hit Taken";
-            desc.velocity = vec3(0.0f, 2.5f, 0.0f);
-            desc.colorStart = vec4(1.0f, 0.16f, 0.08f, 0.95f);
-            desc.colorEnd = vec4(0.55f, 0.02f, 0.01f, 0.0f);
-            desc.count = 48;
-            desc.sizeMin = 0.035f;
-            desc.sizeMax = 0.16f;
-            desc.lifeMin = 0.18f;
-            desc.lifeMax = 0.44f;
-            desc.spawnRadius = 0.22f;
-            desc.noiseStrength = 3.7f;
-            desc.drag = 1.2f;
-            return true;
-        }
-        if (preset == "hero_give")
-        {
-            desc.name = "Hero Hit Given";
-            desc.velocity = vec3(0.0f, 1.8f, 0.0f);
-            desc.colorStart = vec4(1.0f, 0.88f, 0.30f, 0.90f);
-            desc.colorEnd = vec4(1.0f, 0.36f, 0.04f, 0.0f);
-            desc.count = 36;
-            desc.sizeMin = 0.035f;
-            desc.sizeMax = 0.18f;
-            desc.lifeMin = 0.14f;
-            desc.lifeMax = 0.34f;
-            desc.spawnRadius = 0.16f;
-            desc.noiseStrength = 4.4f;
-            desc.drag = 1.0f;
-            return true;
-        }
-        if (preset == "enemy_take")
-        {
-            desc.name = "Enemy Hit Taken";
-            desc.velocity = vec3(0.0f, 1.9f, 0.0f);
-            desc.colorStart = vec4(1.0f, 0.34f, 0.08f, 0.90f);
-            desc.colorEnd = vec4(0.42f, 0.02f, 0.01f, 0.0f);
-            desc.count = 32;
-            desc.sizeMin = 0.03f;
-            desc.sizeMax = 0.14f;
-            desc.lifeMin = 0.14f;
-            desc.lifeMax = 0.32f;
-            desc.spawnRadius = 0.14f;
-            desc.noiseStrength = 3.8f;
-            desc.drag = 1.1f;
-            return true;
-        }
-        if (preset == "enemy_give")
-        {
-            desc.name = "Enemy Hit Given";
-            desc.velocity = vec3(0.0f, 1.5f, 0.0f);
-            desc.colorStart = vec4(0.62f, 0.24f, 1.0f, 0.82f);
-            desc.colorEnd = vec4(0.14f, 0.04f, 0.28f, 0.0f);
-            desc.count = 22;
-            desc.sizeMin = 0.025f;
-            desc.sizeMax = 0.12f;
-            desc.lifeMin = 0.12f;
-            desc.lifeMax = 0.28f;
-            desc.spawnRadius = 0.12f;
-            desc.noiseStrength = 2.8f;
-            desc.drag = 1.3f;
-            return true;
-        }
-        return false;
-    }
-
     static ParticleManager *GetPM()
     {
         Scene *scene = GetActiveScene();
@@ -294,7 +225,7 @@ namespace pe
                     if (opts["preset"].valid())
                     {
                         std::string preset = opts["preset"].get<std::string>();
-                        FillBurstPreset(preset, desc);
+                        ParticleManager::FillBurstPreset(preset, desc);
                     }
 
                     if (opts["name"].valid()) desc.name = opts["name"].get<std::string>();

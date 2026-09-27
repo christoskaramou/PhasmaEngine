@@ -114,11 +114,16 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
                    'return "created"') == "created"
         call_tool(client, "invoke_editor_action", {"action": "play.start"})
         wait_for(lambda: position("NativeApiProbe", "y") == 1)
-        assert position("NativeApiProbe") == 4190079, position("NativeApiProbe")  # every check but the stage-2 ones
+        assert position("NativeApiProbe") == 16772991, position("NativeApiProbe")  # every check but the stage-2 ones
+        assert position("NativeApiProbe", "z") == 7, position("NativeApiProbe", "z")  # bits 24-26: files, torus
+        probe_file = Path(lua("return assets_path")) / "NativeProbe" / "file_probe.txt"  # the project's Assets
+        assert probe_file.read_text() == "hello native"
+        probe_dir = probe_file.parent  # removed at the end: later Play sessions write it again
         assert lua('return tostring(scene.find_model("NativeApiProbe"):is_visible())') == "false"
         assert lua('local m=material.get(scene.find_model("NativeProbeSphere")); local c, e=m.base_color, m.emissive; '
                    'return string.format("%.2f %.2f %.2f %.2f %.2f %.2f %.2f", c.x, c.y, c.z, c.w, e.x, e.y, e.z)') \
             == "0.25 0.50 0.75 1.00 0.50 1.00 1.50"
+        assert lua('return material.get_render_type(scene.find_model("NativeProbeSphere"))') == "alpha_blend"
         ui = 'return tostring(runtime_ui.get_state("native.probe", "%s") ~= nil)'
         assert [lua(ui % id) for id in ("quad", "fallback", "stale")] == ["true", "true", "false"]
         assert lua('for _, e in ipairs(scene.get_entities()) do local p=e.node:get_position(); '
@@ -129,7 +134,8 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         assert near('scene.find_model("NativeApiProbe"):get_scale()', (1, 2, 3))
         assert lua('scene.add_empty_node("ApiProbeDestroy"); return "signalled"') == "signalled"
         wait_for(lambda: position("NativeApiProbe", "y") == 2)
-        assert position("NativeApiProbe") == 4194303, position("NativeApiProbe")
+        assert position("NativeApiProbe") == 16777215, position("NativeApiProbe")
+        assert position("NativeApiProbe", "z") == 7, position("NativeApiProbe", "z")
         # Regression: a source added during Play autoplays at once (AudioSystem::AddSource), as the sources of a
         # scene loaded mid-session must; before 2026-09-27 only StartPlayMode started them. A missing clip proves
         # the attempt: PlaySource logs the failed load.
@@ -176,8 +182,10 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         assert "[CppScript] fault 0x" in segment, segment
         assert "[CppScript] destroy" not in segment, segment
         print("PASS: editor live replacement, scene retained, Lua reload keeps C++ state, rejected ABI retains code, "
-              "node Play/Stop/re-Play, reload status, scene API, UI API, mouse API, animation API, visibility and child lookup, sphere and tint, audio and launch options, autoplay during Play, fault containment with destroy skipped")
+              "node Play/Stop/re-Play, reload status, scene API, UI API, mouse API, animation API, visibility and child lookup, sphere and tint, audio and launch options, autoplay during Play, particles and render type, files, torus, fault containment with destroy skipped")
     finally:
+        if "probe_dir" in locals():
+            shutil.rmtree(probe_dir, ignore_errors=True)
         try:
             if "client" in locals():
                 execute_lua(client, "engine.quit()")

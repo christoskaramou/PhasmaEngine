@@ -1,3 +1,4 @@
+#include "Script/Bindings/Material/MaterialBindings.h"
 #include "Script/ScriptSystem.h"
 #include "API/Command.h"
 #include "API/Image.h"
@@ -309,6 +310,15 @@ namespace pe
         return true;
     }
 
+    bool SetNodeRenderTypeByName(Scene *s, NodeId *nodeId, int meshIdx, std::string_view type)
+    {
+        RenderType rt;
+        if (!s || !s->IsNodeAlive(nodeId) || meshIdx < 0 || !ParseRenderType(type, rt))
+            return false;
+        SetNodeRenderType(s, nodeId, meshIdx, rt);
+        return true;
+    }
+
     static int ResolveMeshIdx(Scene *s, const SceneNodeHandle &h, int slot)
     {
         if (!s || !h.IsValid(*s))
@@ -516,10 +526,7 @@ namespace pe
                     }));
 
                 auto setRenderTypeImpl = [](Scene *s, NodeId *nodeId, int meshIdx, const std::string &type) {
-                    if (!s || !s->IsNodeAlive(nodeId) || meshIdx < 0) return;
-                    RenderType rt;
-                    if (!ParseRenderType(type, rt)) return;
-                    SetNodeRenderType(s, nodeId, meshIdx, rt);
+                    SetNodeRenderTypeByName(s, nodeId, meshIdx, type);
                 };
 
                 mat.set_function("set_render_type", sol::overload(

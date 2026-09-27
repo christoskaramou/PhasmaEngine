@@ -74,6 +74,9 @@ namespace pe
         void UpdateEmitterBuffer(); // Call this when emitters change
         void FlushPendingParticleClears(CommandBuffer *cmd);
         int EmitBurst(const ParticleBurstDesc &desc);
+        // The shared Lua / native burst presets: hero_take, hero_give, enemy_take, enemy_give. False (desc
+        // untouched) for any other name.
+        static bool FillBurstPreset(std::string_view preset, ParticleBurstDesc &desc);
         void KillEmitterParticles(int index);
         void RemoveEmitter(int index);
         void ClearEmitters();

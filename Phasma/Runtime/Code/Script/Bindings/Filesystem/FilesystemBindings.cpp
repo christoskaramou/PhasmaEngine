@@ -1,9 +1,49 @@
+#include "Script/Bindings/Filesystem/FilesystemBindings.h"
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
 #include "Base/GamePack.h"
 
 namespace pe
 {
+    std::optional<std::string> ReadAssetsFile(const std::string &path)
+    {
+        if (path.empty())
+            return std::nullopt;
+        const std::filesystem::path fpath = ResolveAssetsPath(path);
+        if (!IsUnderAssets(fpath))
+            return std::nullopt;
+        if (IsGamePackManagedAsset(fpath))
+            return ReadGamePackAsset(fpath);
+        if (!std::filesystem::exists(fpath))
+            return std::nullopt;
+        std::ifstream file(fpath, std::ios::in);
+        if (!file.is_open())
+            return std::nullopt;
+        return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    }
+
+    bool WriteAssetsFile(const std::string &path, std::string_view content, bool append)
+    {
+        if (path.empty() || content.empty())
+            return false;
+        const std::filesystem::path fpath = ResolveAssetsPath(path);
+        if (!IsUnderAssets(fpath) || IsGamePackManagedAsset(fpath))
+            return false;
+        const std::filesystem::path parentDir = fpath.parent_path();
+        if (!parentDir.empty() && !std::filesystem::exists(parentDir))
+        {
+            std::error_code ec;
+            std::filesystem::create_directories(parentDir, ec);
+            if (ec)
+                return false;
+        }
+        std::ofstream file(fpath, std::ios::out | (append ? std::ios::app : std::ios::trunc));
+        if (!file.is_open())
+            return false;
+        file << content;
+        return static_cast<bool>(file);
+    }
+
     // Convert filesystem path to UTF-8 std::string safely on all platforms.
     // On Windows, path::string() throws if the path contains characters outside
     // the current ANSI code page; u8string() always works.
@@ -135,57 +175,12 @@ namespace pe
                 });
 
                 fs.set_function("read", [](const std::string &path) -> sol::optional<std::string> {
-                    if (path.empty()) return sol::nullopt;
-
-                    std::filesystem::path fpath = ResolveAssetsPath(path);
-
-                    if (!IsUnderAssets(fpath))
-                        return sol::nullopt;
-
-                    if (IsGamePackManagedAsset(fpath))
-                    {
-                        const std::optional<std::string> packed = ReadGamePackAsset(fpath);
-                        return packed ? sol::optional<std::string>(*packed) : sol::nullopt;
-                    }
-
-                    if (!std::filesystem::exists(fpath))
-                        return sol::nullopt;
-
-                    std::ifstream file(fpath, std::ios::in);
-                    if (!file.is_open())
-                        return sol::nullopt;
-
-                    return std::string(std::istreambuf_iterator<char>(file),
-                                      std::istreambuf_iterator<char>());
+                    std::optional<std::string> content = ReadAssetsFile(path);
+                    return content ? sol::optional<std::string>(std::move(*content)) : sol::nullopt;
                 });
 
                 fs.set_function("write", [](const std::string &path, const std::string &content, sol::optional<bool> append) -> bool {
-                    if (path.empty() || content.empty()) return false;
-
-                    std::filesystem::path fpath = ResolveAssetsPath(path);
-
-                    if (!IsUnderAssets(fpath) || IsGamePackManagedAsset(fpath))
-                        return false;
-
-                    // Create parent directories if needed
-                    std::filesystem::path parentDir = fpath.parent_path();
-                    if (!parentDir.empty() && !std::filesystem::exists(parentDir))
-                    {
-                        std::error_code ec;
-                        std::filesystem::create_directories(parentDir, ec);
-                        if (ec) return false;
-                    }
-
-                    auto flags = std::ios::out;
-                    if (append.has_value() && append.value())
-                        flags |= std::ios::app;
-                    else
-                        flags |= std::ios::trunc;
-
-                    std::ofstream file(fpath, flags);
-                    if (!file.is_open()) return false;
-                    file << content;
-                    return true;
+                    return WriteAssetsFile(path, content, append.value_or(false));
                 }); });
         }
     } s_filesystemBindings;

@@ -126,6 +126,26 @@ so Lua `script.launch_option` and the native call share the name check and `_dup
 checks the audio rejections, bit 21 reads `PE_SCRIPT_NATIVE_PROBE`, which the smoke sets on the editor it
 launches (a too-small buffer or a lowercase name returns false with an empty string).
 
+ABI 10 (2026-09-27) appends `emitBurst` and `setRenderType`. Both share code with Lua instead of copying it:
+the four burst presets moved from `ParticleBindings.cpp` to `ParticleManager::FillBurstPreset`
+([ParticleManager.cpp](../../../../Phasma/Runtime/Code/Particles/ParticleManager.cpp)), and the render-type
+name parse plus apply is `SetNodeRenderTypeByName`
+([MaterialBindings.h](../../../../Phasma/Runtime/Code/Script/Bindings/Material/MaterialBindings.h)).
+`ParticleBurst` mirrors `emit_burst`'s optional table with a `set` bitmask; every float and vector is
+finite-checked. `ApiProbe` bit 22 emits a burst and rejects a NaN position, bit 23 sets `alpha_blend` on the
+probe sphere (the smoke reads it back with `material.get_render_type`). The probe bitmask is now 2^24 - 1, the
+last value a float position holds exactly; the next ABI's checks need another channel.
+
+ABI 11 (2026-09-27) appends `readFile` / `writeFile` and `createTorus`. The Lua `fs.read` / `fs.write`
+bodies moved into `ReadAssetsFile` / `WriteAssetsFile`
+([FilesystemBindings.h](../../../../Phasma/Runtime/Code/Script/Bindings/Filesystem/FilesystemBindings.h)), so both
+languages share the Assets sandbox (`ResolveAssetsPath` + `IsUnderAssets`) and the game-pack read path;
+`readFile` reports the file's size even when the buffer is too small, which `World::ReadFile` uses to grow
+once. `ApiProbe` checks 24-26 publish on the node's z (bits 24+): a write and read-back under
+`NativeProbe/`, rejections outside Assets and for a missing file, and the torus. The editor's Assets root is
+the runtime project's (`build/Release/DefaultProject/Assets` for a bare editor), so the smoke asks Lua for
+`assets_path` and removes the probe folder in its `finally` (later Play sessions write it again).
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

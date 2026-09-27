@@ -1,6 +1,7 @@
 #include "ProjectNative.h"
 #include <cmath>
 #include <cstring>
+#include <string>
 #include <stdexcept>
 
 namespace
@@ -33,15 +34,16 @@ namespace
         }
         double elapsed = 0;
     };
-    // Drives the scene API (added in ABI v4), the UI API (v6), mouse input and animation speed (v7), sphere and tint (v8), audio and launch options (v9) against a real engine for
-    // editor_smoke.py. Publishes on its own node: x = bitmask of passed checks (4194303 = all), y = stage (1 = instance up, 2 = instance destroyed).
+    // Drives the scene API (added in ABI v4), the UI API (v6), mouse input and animation speed (v7), sphere and tint (v8), audio and launch options (v9), particles and render type (v10) against a real engine for
+    // editor_smoke.py. Publishes on its own node: x = bitmask of passed checks (16777215 = all), y = stage (1 = instance up, 2 = instance destroyed).
     struct ApiProbe
     {
         phasma::World world;
         phasma::Node node, instance = 0, sphere = 0;
         unsigned passed = 0;
         int stage = 0;
-        ApiProbe(const phasma::ScriptApi &api, phasma::Node node) : world(api), node(node) {}
+        const phasma::ScriptApi &api; // raw calls, for the buffer edge cases
+        ApiProbe(const phasma::ScriptApi &api, phasma::Node node) : world(api), node(node), api(api) {}
         void Check(int bit, bool ok) { passed |= ok ? 1u << bit : 0u; }
         void Update(double)
         {
@@ -90,6 +92,28 @@ namespace
                 Check(21, world.LaunchOption("NATIVE_PROBE", option) && std::strcmp(option, "ok") == 0 &&
                               !world.LaunchOption("NATIVE_PROBE", tiny) && !tiny[0] && !world.LaunchOption("native_probe", option) &&
                               !world.LaunchOption("NATIVE_MISSING", option));
+                phasma::ParticleBurst burst;
+                burst.preset = "enemy_take";
+                burst.position = {0.0f, 1.0f, 0.0f};
+                burst.set = phasma::BurstCount | phasma::BurstColorStart;
+                burst.count = 4;
+                burst.colorStart = {1.0f, 0.0f, 0.0f, 1.0f};
+                phasma::ParticleBurst bad = burst;
+                bad.position.x = std::nanf("");
+                Check(22, world.Burst(burst) && !world.Burst(bad));
+                Check(23, world.SetRenderType(sphere, "alpha_blend") && !world.SetRenderType(sphere, "nope") &&
+                              !world.SetRenderType(node, "opaque"));
+                std::string text;
+                char small[2];
+                uint32_t size = 0;
+                Check(24, world.WriteFile("NativeProbe/file_probe.txt", "hello native") &&
+                              world.ReadFile("NativeProbe/file_probe.txt", text) && text == "hello native" &&
+                              !api.readFile(api.context, "NativeProbe/file_probe.txt", small, 2, &size) && size == 12);
+                Check(25, !world.WriteFile("../outside_probe.txt", "x") && !world.ReadFile("../CMakeLists.txt", text) &&
+                              !world.ReadFile("NativeProbe/missing.txt", text));
+                const phasma::Node ring = world.CreateTorus("NativeProbeRing", 0.5f, 0.02f, 32, 4);
+                Check(26, world.Valid(ring) && !world.CreateTorus("NativeProbeRing", 0.0f, 0.02f) &&
+                              !world.CreateTorus("NativeProbeRing", 0.5f, 0.02f, 2, 4) && !world.CreateTorus("", 1.0f, 0.1f));
                 stage = 1;
             }
             else if (stage == 1 && world.Find("ApiProbeDestroy"))
@@ -98,7 +122,8 @@ namespace
                 Check(12, world.RemoveWidget("native.probe", "quad"));
                 stage = 2;
             }
-            world.SetPosition(node, {static_cast<float>(passed), static_cast<float>(stage), 0});
+            world.SetPosition(node, {static_cast<float>(passed & 0xFFFFFFu), static_cast<float>(stage),
+                                     static_cast<float>(passed >> 24)});
         }
     };
     const phasma::ScriptDesc scripts[] = {
