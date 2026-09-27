@@ -856,6 +856,27 @@ namespace pe
                          *x = static_cast<float>(wheel.x);
                          *y = static_cast<float>(wheel.y);
                          return 1; });
+                 },
+                 [](void *, float *x, float *y) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (!x || !y) return 0;
+                         const InputState::MouseDelta p = InputState::GetMousePosition();
+                         *x = static_cast<float>(p.x);
+                         *y = static_cast<float>(p.y);
+                         return 1; });
+                 },
+                 [](void *, uint32_t *width, uint32_t *height) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (!width || !height) return 0;
+                         int w = 0, h = 0;
+                         GetWindowSize(w, h);
+                         *width = static_cast<uint32_t>(std::max(0, w));
+                         *height = static_cast<uint32_t>(std::max(0, h));
+                         return 1; });
                  }};
     }
 

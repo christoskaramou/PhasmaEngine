@@ -410,6 +410,14 @@ namespace pe
         {
             return !IsMouseCapturedByUi() && (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
         }
+
+        MouseDelta GetMousePosition()
+        {
+            MouseDelta p;
+            if (!IsMouseCapturedByUi())
+                SDL_GetMouseState(&p.x, &p.y);
+            return p;
+        }
     } // namespace InputState
 
     static struct InputBindings
@@ -447,19 +455,10 @@ namespace pe
                 // Mouse state
                 input.set_function("get_mouse_position", [](sol::this_state ts) -> sol::table {
                     sol::state_view lua(ts);
-                    int x, y;
-                    if (InputState::IsMouseCapturedByUi())
-                    {
-                        x = 0;
-                        y = 0;
-                    }
-                    else
-                    {
-                        SDL_GetMouseState(&x, &y);
-                    }
+                    const InputState::MouseDelta p = InputState::GetMousePosition();
                     sol::table t = lua.create_table();
-                    t["x"] = x;
-                    t["y"] = y;
+                    t["x"] = p.x;
+                    t["y"] = p.y;
                     return t;
                 });
 

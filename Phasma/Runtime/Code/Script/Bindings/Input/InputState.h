@@ -38,4 +38,6 @@ namespace pe::InputState
     bool IsKeyboardCapturedByUi();
     bool IsKeyDown(const char *name);
     bool IsLeftMouseDown();
+    // input.get_mouse_position: window pixels, 0, 0 while the runtime UI holds the mouse.
+    MouseDelta GetMousePosition();
 } // namespace pe::InputState

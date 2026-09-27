@@ -15,4 +15,6 @@ namespace pe
     // the editor (the window is the tool), for an unknown token or without a window, and a no-op on Android.
     [[nodiscard]] const char *GetWindowModeToken();
     bool SetWindowModeToken(std::string_view mode);
+    // engine.get_window_size: the window in pixels, 0 x 0 without one.
+    void GetWindowSize(int &width, int &height);
 } // namespace pe

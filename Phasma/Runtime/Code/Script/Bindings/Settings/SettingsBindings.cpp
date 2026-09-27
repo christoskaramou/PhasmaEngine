@@ -148,6 +148,13 @@ namespace pe
         return effective;
     }
 
+    void GetWindowSize(int &width, int &height)
+    {
+        width = height = 0;
+        if (SDL_Window *window = RHII.GetWindow())
+            SDL_GetWindowSize(window, &width, &height);
+    }
+
     const char *GetWindowModeToken()
     {
 #if defined(PE_ANDROID)

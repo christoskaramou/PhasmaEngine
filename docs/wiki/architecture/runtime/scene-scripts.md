@@ -200,6 +200,11 @@ the modes, and check the refusals; `loadScene` and `quit` are only checked for r
 ABI 17 (2026-09-27) appends `getMouseWheel`, `input.get_mouse_wheel`'s frame wheel steps, for script pages
 that scroll by wheel (a hub's feats list). `ApiProbe` bit 38 reads a zero wheel and the null refusal.
 
+ABI 18 (2026-09-27) appends `getMousePosition` and `getWindowSize`, `input.get_mouse_position` and
+`engine.get_window_size` on shared helpers (`InputState::GetMousePosition`, `GetWindowSize` in
+`SettingsBindings.h`), for a pointer in runtime UI surface pixels (a drag stick). `ApiProbe` bits 39 and 40
+check a non-negative pointer, a non-empty window and the null refusals.
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

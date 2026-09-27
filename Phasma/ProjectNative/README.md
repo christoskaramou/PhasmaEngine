@@ -133,7 +133,9 @@ mode in effect, `SetWindowMode` is `engine.set_window_mode` (refused in the edit
 `SetTextScale` are the runtime UI text scale, `FrameSeconds` is the unscaled frame time (`Update`'s dt follows
 `time_scale`), `LoadScene("name.pescene")` is `scene.load` (applied after the frame's C++ updates) and `Quit`
 is a quit button: it leaves play mode, else quits. ABI 17 adds `MouseWheel(x, y)`, the frame's wheel steps
-(`input.get_mouse_wheel`).
+(`input.get_mouse_wheel`). ABI 18 adds `MousePosition(x, y)` (`input.get_mouse_position`: window pixels, 0, 0
+while the runtime UI holds the mouse) and `WindowSize(w, h)` (`engine.get_window_size`); scale the pointer by
+surface / window size for runtime UI pixels.
 
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are

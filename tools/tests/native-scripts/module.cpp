@@ -182,6 +182,12 @@ namespace
                 float wheelX = -1.0f, wheelY = -1.0f; // no wheel turned in the smoke
                 Check(38, world.MouseWheel(wheelX, wheelY) && wheelX == 0.0f && wheelY == 0.0f &&
                               !api.getMouseWheel(api.context, nullptr, &wheelY));
+                float pointerX = -1.0f, pointerY = -1.0f; // wherever the smoke's mouse rests
+                Check(39, world.MousePosition(pointerX, pointerY) && pointerX >= 0.0f && pointerY >= 0.0f &&
+                              !api.getMousePosition(api.context, &pointerX, nullptr));
+                uint32_t windowW = 0, windowH = 0;
+                Check(40, world.WindowSize(windowW, windowH) && windowW > 0 && windowH > 0 &&
+                              !api.getWindowSize(api.context, nullptr, &windowH));
                 stage = 1;
             }
             else if (stage == 1 && world.Find("ApiProbeDestroy"))

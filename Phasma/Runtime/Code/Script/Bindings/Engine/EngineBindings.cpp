@@ -74,9 +74,7 @@ namespace pe
                     sol::table t = lua.create_table();
                     int w = 0;
                     int h = 0;
-                    SDL_Window *window = RHII.GetWindow();
-                    if (window)
-                        SDL_GetWindowSize(window, &w, &h);
+                    GetWindowSize(w, h);
                     t["w"] = w;
                     t["h"] = h;
                     return t;
