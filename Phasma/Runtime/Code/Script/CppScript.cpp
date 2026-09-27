@@ -644,6 +644,95 @@ namespace pe
                              return 0;
                          ui->SetStyleBackground(static_cast<RuntimeUiQuadVisualStyle>(style), image);
                          return 1; });
+                 },
+                 [](void *ctx, phasma::Node handle, const phasma::NodeUi *in) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         NodeRuntimeUiTag *ui = node ? GetActiveScene()->GetRuntimeUiComponent(node) : nullptr;
+                         if (!ui || !in) return 0;
+                         const phasma::NodeUi &u = *in;
+                         const auto has = [&](uint32_t bit) { return (u.set & bit) != 0; };
+                         const auto finite = [](const phasma::Color &c)
+                         { return std::isfinite(c.r) && std::isfinite(c.g) && std::isfinite(c.b) && std::isfinite(c.a); };
+                         // Validate everything first so a refused call changes nothing.
+                         const struct { uint32_t bit; const char *text; } strings[] = {
+                             {phasma::NodeUiBody, u.body},       {phasma::NodeUiTitle, u.title},
+                             {phasma::NodeUiSubtitle, u.subtitle}, {phasma::NodeUiFooter, u.footer},
+                             {phasma::NodeUiLabel, u.label},     {phasma::NodeUiImage, u.image}};
+                         for (const auto &s : strings)
+                             if (has(s.bit) && !s.text) return 0;
+                         const struct { uint32_t bit; const phasma::Color *color; vec4 *dst; } colors[] = {
+                             {phasma::NodeUiFill, &u.fill, &ui->fillColor},
+                             {phasma::NodeUiBorder, &u.border, &ui->borderColor},
+                             {phasma::NodeUiAccent, &u.accent, &ui->accentColor},
+                             {phasma::NodeUiTextColor, &u.textColor, &ui->textColor},
+                             {phasma::NodeUiImageTint, &u.imageTint, &ui->imageTint},
+                             {phasma::NodeUiBackgroundImageTint, &u.backgroundImageTint, &ui->backgroundImageTint}};
+                         for (const auto &c : colors)
+                             if (has(c.bit) && !finite(*c.color)) return 0;
+                         if ((has(phasma::NodeUiFontScale) && !std::isfinite(u.fontScale)) ||
+                             (has(phasma::NodeUiImageWhiten) && !std::isfinite(u.imageWhiten)) ||
+                             (has(phasma::NodeUiOffset) && !(std::isfinite(u.offsetX) && std::isfinite(u.offsetY))) ||
+                             (has(phasma::NodeUiAlignH) && static_cast<uint32_t>(u.alignH) > 3u) ||
+                             (has(phasma::NodeUiAlignV) && static_cast<uint32_t>(u.alignV) > 3u))
+                             return 0;
+                         if (has(phasma::NodeUiBody)) ui->body = u.body;
+                         if (has(phasma::NodeUiTitle)) ui->title = u.title;
+                         if (has(phasma::NodeUiSubtitle)) ui->subtitle = u.subtitle;
+                         if (has(phasma::NodeUiFooter)) ui->footer = u.footer;
+                         if (has(phasma::NodeUiLabel)) ui->label = u.label;
+                         if (has(phasma::NodeUiImage)) ui->imagePath = u.image;
+                         for (const auto &c : colors)
+                             if (has(c.bit)) *c.dst = vec4(c.color->r, c.color->g, c.color->b, c.color->a);
+                         if (has(phasma::NodeUiFontScale)) ui->fontScale = u.fontScale;
+                         if (has(phasma::NodeUiImageWhiten)) ui->imageWhiten = std::clamp(u.imageWhiten, -1.0f, 1.0f);
+                         if (has(phasma::NodeUiAlignH)) ui->textAlignH = static_cast<uint8_t>(u.alignH);
+                         if (has(phasma::NodeUiAlignV)) ui->textAlignV = static_cast<uint8_t>(u.alignV);
+                         if (has(phasma::NodeUiOffset)) ui->textOffset = vec2(u.offsetX, u.offsetY);
+                         if (has(phasma::NodeUiVisible)) ui->visible = u.visible;
+                         if (has(phasma::NodeUiNoInput)) ui->noInput = u.noInput;
+                         if (has(phasma::NodeUiUseBackgroundTint)) ui->useBackgroundTint = u.useBackgroundTint;
+                         return 1; });
+                 },
+                 [](void *ctx, phasma::Node handle, uint32_t enabled) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         if (!node) return 0;
+                         GetActiveScene()->SetNodeEnabled(node, enabled != 0);
+                         return 1; });
+                 },
+                 [](void *ctx, phasma::Node handle) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         return node && GetActiveScene()->IsNodeEnabled(node) ? 1u : 0u; });
+                 },
+                 [](void *ctx, phasma::Node handle, phasma::UiRect *rect) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         RuntimeUiSystem *ui = GetActiveRuntimeUi();
+                         if (!node || !rect || !ui) return 0;
+                         float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+                         if (!ui->GetNodeRect(node, x, y, w, h)) return 0;
+                         *rect = {x, y, w, h};
+                         return 1; });
+                 },
+                 [](void *ctx, phasma::Node handle, phasma::Vec3 *scale) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         if (!node || !scale) return 0;
+                         const mat4 m = GetActiveScene()->GetLocalMatrix(node);
+                         *scale = {glm::length(vec3(m[0])), glm::length(vec3(m[1])), glm::length(vec3(m[2]))};
+                         return 1; });
                  }};
     }
 

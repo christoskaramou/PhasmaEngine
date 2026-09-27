@@ -175,6 +175,16 @@ ABI 14 (2026-09-27) appends `setStyleBackground`, `RuntimeUiSystem::SetStyleBack
 on a Lua theme call earlier in the session (a Lua boot scene) drew on the dark default plates once its scene
 was booted directly; it now sets them itself. `ApiProbe` bit 30 checks the call and its refusals.
 
+ABI 15 (2026-09-27) appends `setNodeUi`, `setNodeEnabled`, `isNodeEnabled`, `getUiRect` and `getScale` so a
+C++ script can drive authored scene UI as Lua does (`node:set_ui` / `set_enabled` / `is_enabled` /
+`get_ui_rect` / `get_scale` in SceneNodeBindings.cpp). `setNodeUi` validates the whole `NodeUi` before it
+writes, so a refused call (no runtime-UI tag, a null string field, a non-finite number, an alignment past 3)
+changes nothing. Authored buttons are polled with `getWidgetState("__scene_ui", id)`; C++ scripts get no
+`action_function` dispatch. A `setQuad` on an authored widget id loses to `RuntimeUiSystem::SyncSceneWidgets`,
+which re-issues every authored widget from its node each frame. The probe's pass mask is 64 bits now
+(`z = passed >> 24`, exact to bit 47); bits 31-34 check node UI, enable, scale and the rect of the probe's
+node-anchored quad.
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

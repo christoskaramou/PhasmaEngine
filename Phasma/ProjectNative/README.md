@@ -120,6 +120,13 @@ ABI 14 adds `SetStyleBackground(UiStyle, image)`, Lua's `runtime_ui.set_style_ba
 every quad of that style draws on (`""` restores the default). A C++ HUD sets its own theme with it rather
 than relying on a Lua script having set it earlier in the session.
 
+ABI 15 lets a C++ script drive a scene's authored UI (the `__scene_ui` widgets a `.pescene` carries) the way
+Lua does: `SetNodeUi(node, NodeUi)` is `node:set_ui{...}` (a field applies only when its `NodeUiField` bit is
+set), `SetEnabled` / `IsEnabled` are `node:set_enabled` / `is_enabled` (a disabled node hides its UI subtree),
+`GetUiRect` is `node:get_ui_rect` and `GetScale` is `node:get_scale`. Authored buttons need nothing new: poll
+`Clicked("__scene_ui", "<widget id>")`, the id the scene gives the node. `SetQuad` on an authored widget id is
+overwritten every frame by the scene's own widget sync, so change authored nodes with `SetNodeUi` instead.
+
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are
 frozen. A module runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5)

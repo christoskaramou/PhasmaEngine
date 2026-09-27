@@ -40,11 +40,11 @@ namespace
     {
         phasma::World world;
         phasma::Node node, instance = 0, sphere = 0;
-        unsigned passed = 0;
+        uint64_t passed = 0; // z carries bits 24+ (exact up to bit 47)
         int stage = 0;
         const phasma::ScriptApi &api; // raw calls, for the buffer edge cases
         ApiProbe(const phasma::ScriptApi &api, phasma::Node node) : world(api), node(node), api(api) {}
-        void Check(int bit, bool ok) { passed |= ok ? 1u << bit : 0u; }
+        void Check(int bit, bool ok) { passed |= ok ? uint64_t{1} << bit : 0u; }
         void Update(double)
         {
             if (stage == 0)
@@ -141,11 +141,34 @@ namespace
                 Check(30, world.SetStyleBackground(phasma::UiStyle::Card, "") &&
                               !world.SetStyleBackground(static_cast<phasma::UiStyle>(99), "") &&
                               !world.SetStyleBackground(phasma::UiStyle::Card, nullptr));
+                // v15 authored UI: the smoke made NativeUiProbe a runtime-UI node before Play.
+                const phasma::Node uiNode = world.Find("NativeUiProbe");
+                phasma::NodeUi nu;
+                nu.set = phasma::NodeUiBody | phasma::NodeUiFill | phasma::NodeUiFontScale | phasma::NodeUiAlignH;
+                nu.body = "native ui";
+                nu.fill = {0.1f, 0.2f, 0.3f, 1.0f};
+                nu.fontScale = 2.0f;
+                nu.alignH = phasma::UiAlignH::Right;
+                phasma::NodeUi badUi = nu;
+                badUi.fontScale = std::nanf("");
+                phasma::NodeUi nullText;
+                nullText.set = phasma::NodeUiTitle;
+                Check(31, world.SetNodeUi(uiNode, nu) && !world.SetNodeUi(uiNode, badUi) &&
+                              !world.SetNodeUi(uiNode, nullText) && !world.SetNodeUi(sphere, nu) &&
+                              !world.SetNodeUi(0xDEAD, nu));
+                Check(32, world.SetEnabled(uiNode, false) && !world.IsEnabled(uiNode) && world.SetEnabled(uiNode, true) &&
+                              world.IsEnabled(uiNode) && !world.SetEnabled(0xDEAD, true) && !world.IsEnabled(0xDEAD));
+                phasma::Vec3 scale{};
+                Check(33, world.GetScale(node, scale) && std::abs(scale.y - 2.0f) < 1e-4f && !world.GetScale(0xDEAD, scale));
                 stage = 1;
             }
             else if (stage == 1 && world.Find("ApiProbeDestroy"))
             {
                 Check(7, world.Destroy(instance) && !world.Valid(instance) && !world.Destroy(instance));
+                // The node-anchored "quad" (bit 9) has been drawn since stage 0.
+                phasma::UiRect rect{};
+                Check(34, world.GetUiRect(node, rect) && rect.width > 0.0f && rect.height > 0.0f &&
+                              !world.GetUiRect(0xDEAD, rect));
                 Check(12, world.RemoveWidget("native.probe", "quad"));
                 Check(28, world.RemoveFullscreenPass("NativeProbeFullscreen") &&
                               world.RemoveFullscreenPass("NativeProbeBadShader") &&

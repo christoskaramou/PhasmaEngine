@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 14;
+    inline constexpr uint32_t ScriptAbiVersion = 15;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -78,6 +78,46 @@ namespace phasma
     {
         bool hovered, active, clicked, rightClicked, down, dragging, dragStarted, dragReleased;
         float mouseX, mouseY, dragDeltaX, dragDeltaY;
+    };
+    // Lua's node:set_ui for an authored scene UI node (v15): a field applies only when its bit is in NodeUi::set.
+    enum NodeUiField : uint32_t
+    {
+        NodeUiBody = 1u << 0,
+        NodeUiTitle = 1u << 1,
+        NodeUiSubtitle = 1u << 2,
+        NodeUiFooter = 1u << 3,
+        NodeUiLabel = 1u << 4,
+        NodeUiImage = 1u << 5,
+        NodeUiFill = 1u << 6,
+        NodeUiBorder = 1u << 7,
+        NodeUiAccent = 1u << 8,
+        NodeUiTextColor = 1u << 9,
+        NodeUiImageTint = 1u << 10,
+        NodeUiBackgroundImageTint = 1u << 11,
+        NodeUiFontScale = 1u << 12,
+        NodeUiImageWhiten = 1u << 13,
+        NodeUiAlignH = 1u << 14,
+        NodeUiAlignV = 1u << 15,
+        NodeUiOffset = 1u << 16,
+        NodeUiVisible = 1u << 17,
+        NodeUiNoInput = 1u << 18,
+        NodeUiUseBackgroundTint = 1u << 19
+    };
+    struct NodeUi
+    {
+        uint32_t set = 0;
+        const char *body = nullptr, *title = nullptr, *subtitle = nullptr, *footer = nullptr, *label = nullptr,
+                   *image = nullptr;
+        Color fill{}, border{}, accent{}, textColor{}, imageTint{}, backgroundImageTint{};
+        float fontScale = 1.0f, imageWhiten = -1.0f, offsetX = 0.0f, offsetY = 0.0f;
+        UiAlignH alignH = UiAlignH::Default;
+        UiAlignV alignV = UiAlignV::Default;
+        bool visible = true, noInput = false, useBackgroundTint = false;
+    };
+    // node:get_ui_rect: the drawn rect of the widgets anchored to a node, in surface pixels.
+    struct UiRect
+    {
+        float x, y, width, height;
     };
     // The audio buses of audio.set_*_volume (v13).
     enum class AudioBus : uint32_t
@@ -216,6 +256,15 @@ namespace phasma
         // v14: mirrors runtime_ui.set_style_background, the theme plate every quad of a style draws on
         // ("" restores the default); false for an unknown style or a null path.
         uint32_t (*setStyleBackground)(void *, UiStyle style, const char *image) noexcept;
+        // v15: authored scene UI (the __scene_ui widgets a .pescene carries), as Lua drives it. setNodeUi is false
+        // for a node without a runtime-UI tag, a set string field that is null or a non-finite number;
+        // setNodeEnabled / isNodeEnabled are node:set_enabled / is_enabled (a disabled node hides its UI subtree);
+        // getUiRect is false while nothing anchored to the node is drawn.
+        uint32_t (*setNodeUi)(void *, Node node, const NodeUi *ui) noexcept;
+        uint32_t (*setNodeEnabled)(void *, Node node, uint32_t enabled) noexcept;
+        uint32_t (*isNodeEnabled)(void *, Node node) noexcept;
+        uint32_t (*getUiRect)(void *, Node node, UiRect *rect) noexcept;
+        uint32_t (*getScale)(void *, Node node, Vec3 *scale) noexcept;
     };
     struct ScriptDesc
     {
@@ -342,6 +391,11 @@ namespace phasma
         {
             return m_api.setStyleBackground(m_api.context, style, image) != 0;
         }
+        bool SetNodeUi(Node node, const NodeUi &ui) const { return m_api.setNodeUi(m_api.context, node, &ui) != 0; }
+        bool SetEnabled(Node node, bool enabled) const { return m_api.setNodeEnabled(m_api.context, node, enabled) != 0; }
+        bool IsEnabled(Node node) const { return m_api.isNodeEnabled(m_api.context, node) != 0; }
+        bool GetUiRect(Node node, UiRect &rect) const { return m_api.getUiRect(m_api.context, node, &rect) != 0; }
+        bool GetScale(Node node, Vec3 &scale) const { return m_api.getScale(m_api.context, node, &scale) != 0; }
         template <uint32_t N>
         bool LaunchOption(const char *name, char (&out)[N]) const
         {
