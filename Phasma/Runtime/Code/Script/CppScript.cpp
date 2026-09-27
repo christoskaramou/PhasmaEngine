@@ -3,6 +3,7 @@
 #include "Base/Log.h"
 #include "Base/Path.h"
 #include "Camera/Camera.h"
+#include "Scene/Material.h"
 #include "Scene/Primitives.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
@@ -408,6 +409,36 @@ namespace pe
                          NodeId *root = self->Resolve(handle);
                          if (!root || !name || !*name) return 0;
                          return self->Handle(FindChildTree(*GetActiveScene(), root, name)); });
+                 },
+                 [](void *ctx, const char *name, float radius) noexcept -> phasma::Node
+                 {
+                     return GuardApi([&]() -> phasma::Node
+                                     {
+                         Scene *scene = GetActiveScene();
+                         if (!scene || !name || !*name || !std::isfinite(radius) || radius <= 0.0f)
+                             return 0;
+                         NodeId *node = scene->CreateNode(name);
+                         try { scene->AttachPrimitiveToNode(node, Primitives::CreateSphere(radius)); }
+                         catch (...) { scene->DeleteNode(node); throw; }
+                         return static_cast<CppScriptSystem *>(ctx)->Handle(node); });
+                 },
+                 [](void *ctx, phasma::Node handle, phasma::Color base, phasma::Vec3 emissive) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         if (!node || !Finite({base.r, base.g, base.b}) || !std::isfinite(base.a) || !Finite(emissive)) return 0;
+                         Scene *scene = GetActiveScene();
+                         const int meshIdx = scene->GetMeshRef(node);
+                         if (meshIdx < 0) return 0;
+                         // Same path as Lua material.set: a per-mesh instance over the shared material.
+                         Mesh &mesh = scene->GetMesh(meshIdx);
+                         if (!mesh.material) return 0;
+                         MaterialInstance *inst = mesh.materialInstance ? mesh.materialInstance : scene->CreateMaterialInstance(mesh);
+                         if (!inst) return 0;
+                         const bool baseChanged = inst->SetBaseColorFactor(vec4(base.r, base.g, base.b, base.a));
+                         if (inst->SetEmissiveFactor(vec3(emissive.x, emissive.y, emissive.z)) || baseChanged) scene->SetMaterialDirty();
+                         return 1; });
                  }};
     }
 

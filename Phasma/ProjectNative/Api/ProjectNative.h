@@ -13,7 +13,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 7;
+    inline constexpr uint32_t ScriptAbiVersion = 8;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -133,6 +133,10 @@ namespace phasma
         uint32_t (*getBonePosition)(void *, Node, const char *bone, Vec3 *out) noexcept;
         // The root or its first descendant (depth-first) named exactly `name`, as a Lua get_children walk finds it; 0 if none.
         Node (*findChild)(void *, Node root, const char *name) noexcept;
+        // v8: primitives and material tint. Mirrors primitives.sphere(radius).
+        Node (*createSphere)(void *, const char *name, float radius) noexcept;
+        // Mirrors material.set base_color + emissive on the node's first mesh; false if it has no mesh or material.
+        uint32_t (*setMaterialColor)(void *, Node, Color baseColor, Vec3 emissive) noexcept;
     };
     struct ScriptDesc
     {
@@ -220,6 +224,8 @@ namespace phasma
         bool SetVisible(Node node, bool visible) const { return m_api.setVisible(m_api.context, node, visible) != 0; }
         bool BonePosition(Node node, const char *bone, Vec3 &position) const { return m_api.getBonePosition(m_api.context, node, bone, &position) != 0; }
         Node FindChild(Node root, const char *name) const { return m_api.findChild(m_api.context, root, name); }
+        Node CreateSphere(const char *name, float radius) const { return m_api.createSphere(m_api.context, name, radius); }
+        bool SetColor(Node node, Color baseColor, Vec3 emissive) const { return m_api.setMaterialColor(m_api.context, node, baseColor, emissive) != 0; }
         bool Clicked(const char *screen, const char *id) const
         {
             UiWidgetState state{};

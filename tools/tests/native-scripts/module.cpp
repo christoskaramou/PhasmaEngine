@@ -1,4 +1,5 @@
 #include "ProjectNative.h"
+#include <cmath>
 #include <stdexcept>
 
 namespace
@@ -31,12 +32,12 @@ namespace
         }
         double elapsed = 0;
     };
-    // Drives the scene API (added in ABI v4), the UI API (v6), mouse input and animation speed (v7) against a real engine for editor_smoke.py. Publishes on
-    // its own node: x = bitmask of passed checks (262143 = all), y = stage (1 = instance up, 2 = instance destroyed).
+    // Drives the scene API (added in ABI v4), the UI API (v6), mouse input and animation speed (v7), sphere and tint (v8) against a real engine for
+    // editor_smoke.py. Publishes on its own node: x = bitmask of passed checks (1048575 = all), y = stage (1 = instance up, 2 = instance destroyed).
     struct ApiProbe
     {
         phasma::World world;
-        phasma::Node node, instance = 0;
+        phasma::Node node, instance = 0, sphere = 0;
         unsigned passed = 0;
         int stage = 0;
         ApiProbe(const phasma::ScriptApi &api, phasma::Node node) : world(api), node(node) {}
@@ -78,6 +79,10 @@ namespace
                               !world.FindChild(node, ""));
                 phasma::Vec3 bone{};
                 Check(17, world.SetVisible(node, false) && !world.SetVisible(0xDEAD, true) && !world.BonePosition(node, "Root", bone));
+                sphere = world.CreateSphere("NativeProbeSphere", 0.5f);
+                Check(18, world.Valid(sphere) && !world.CreateSphere("NativeProbeSphere", 0.0f) && !world.CreateSphere("", 1.0f));
+                Check(19, world.SetColor(sphere, {0.25f, 0.5f, 0.75f, 1.0f}, {0.5f, 1.0f, 1.5f}) && !world.SetColor(node, {1, 1, 1, 1}, {}) &&
+                              !world.SetColor(sphere, {std::nanf(""), 0, 0, 1}, {}));
                 stage = 1;
             }
             else if (stage == 1 && world.Find("ApiProbeDestroy"))

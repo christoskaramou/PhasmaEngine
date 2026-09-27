@@ -105,6 +105,14 @@ stays off the ABI). `ApiProbe` bits 16-17 check lookup, rejection and that the s
 `CppScript.cpp` and `InputBindings.cpp` also compile with MSVC `cl.exe` (2026-09-27, Release objects in the
 MSVC tree; no full `cl.exe` engine link).
 
+ABI 8 (2026-09-27) appends `createSphere` (`World::CreateSphere`, the `createCube` path with
+`Primitives::CreateSphere`) and `setMaterialColor` (`World::SetColor`). The tint follows Lua
+`material.set` in [MaterialBindings.cpp](../../../../Phasma/Runtime/Code/Script/Bindings/Material/MaterialBindings.cpp):
+first mesh (`Scene::GetMeshRef`), per-mesh `MaterialInstance` created on demand,
+`SetMaterialDirty` only when a factor changed, so calling it every frame for a pulse costs a
+material upload only while the color moves. `ApiProbe` bits 18-19 check creation, rejection
+(zero radius, empty name, meshless node, NaN), and the smoke reads the tint back through `material.get`.
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

@@ -83,6 +83,11 @@ first node in the subtree that has the clip). Scale an attack clip to a cooldown
 mirrors `animation.get_bone_position` (model space, last posed frame), and `FindChild(root, name)` returns
 the root or its first depth-first descendant with that exact name, as a Lua `get_children` walk finds it.
 
+ABI 8 adds `CreateSphere(name, radius)` (as `primitives.sphere`) and `SetColor(node, baseColor,
+emissive)`, which mirrors `material.set` for `base_color` and `emissive` on the node's first mesh:
+it creates the per-mesh material instance, so other users of the shared material keep theirs. It
+returns false for a node without a mesh or material, or a non-finite color.
+
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are
 frozen. A module runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5)
