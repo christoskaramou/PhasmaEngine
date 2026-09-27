@@ -179,6 +179,9 @@ namespace
                               !world.SetPresentMode(static_cast<phasma::PresentMode>(9), applied) &&
                               world.GetWindowMode(window) && !world.SetWindowMode(window) && // the editor keeps its window
                               !world.LoadScene(nullptr) && !world.LoadScene(""));
+                float wheelX = -1.0f, wheelY = -1.0f; // no wheel turned in the smoke
+                Check(38, world.MouseWheel(wheelX, wheelY) && wheelX == 0.0f && wheelY == 0.0f &&
+                              !api.getMouseWheel(api.context, nullptr, &wheelY));
                 stage = 1;
             }
             else if (stage == 1 && world.Find("ApiProbeDestroy"))

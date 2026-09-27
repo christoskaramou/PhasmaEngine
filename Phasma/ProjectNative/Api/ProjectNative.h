@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 16;
+    inline constexpr uint32_t ScriptAbiVersion = 17;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -298,6 +298,8 @@ namespace phasma
         uint32_t (*getFrameSeconds)(void *, double *seconds) noexcept;
         uint32_t (*loadScene)(void *, const char *name) noexcept;
         uint32_t (*quit)(void *) noexcept;
+        // v17: input.get_mouse_wheel, this frame's wheel steps (y up is positive).
+        uint32_t (*getMouseWheel)(void *, float *x, float *y) noexcept;
     };
     struct ScriptDesc
     {
@@ -443,6 +445,7 @@ namespace phasma
         bool FrameSeconds(double &seconds) const { return m_api.getFrameSeconds(m_api.context, &seconds) != 0; }
         bool LoadScene(const char *name) const { return m_api.loadScene(m_api.context, name) != 0; }
         bool Quit() const { return m_api.quit(m_api.context) != 0; }
+        bool MouseWheel(float &x, float &y) const { return m_api.getMouseWheel(m_api.context, &x, &y) != 0; }
         template <uint32_t N>
         bool LaunchOption(const char *name, char (&out)[N]) const
         {

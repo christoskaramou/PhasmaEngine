@@ -846,6 +846,16 @@ namespace pe
                          else
                              EventSystem::PushEvent(EventType::Quit);
                          return 1; });
+                 },
+                 [](void *, float *x, float *y) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (!x || !y) return 0;
+                         const InputState::MouseDelta wheel = InputState::GetMouseWheel();
+                         *x = static_cast<float>(wheel.x);
+                         *y = static_cast<float>(wheel.y);
+                         return 1; });
                  }};
     }
 

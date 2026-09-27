@@ -132,7 +132,8 @@ the bool and number keys (a bool as 0 or 1), `SetPresentMode` is `rhi.change_pre
 mode in effect, `SetWindowMode` is `engine.set_window_mode` (refused in the editor), `GetTextScale` /
 `SetTextScale` are the runtime UI text scale, `FrameSeconds` is the unscaled frame time (`Update`'s dt follows
 `time_scale`), `LoadScene("name.pescene")` is `scene.load` (applied after the frame's C++ updates) and `Quit`
-is a quit button: it leaves play mode, else quits.
+is a quit button: it leaves play mode, else quits. ABI 17 adds `MouseWheel(x, y)`, the frame's wheel steps
+(`input.get_mouse_wheel`).
 
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are

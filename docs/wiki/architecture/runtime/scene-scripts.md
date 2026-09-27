@@ -197,6 +197,9 @@ load. `quit` is Lua's `on_quit_app`: leave play mode (the Player then exits), el
 `ApiProbe` bits 35-37 round-trip `fxaa`, `render_scale` (clamped) and the text scale, read the frame time and
 the modes, and check the refusals; `loadScene` and `quit` are only checked for refusing bad input.
 
+ABI 17 (2026-09-27) appends `getMouseWheel`, `input.get_mouse_wheel`'s frame wheel steps, for script pages
+that scroll by wheel (a hub's feats list). `ApiProbe` bit 38 reads a zero wheel and the null refusal.
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.
