@@ -170,6 +170,11 @@ ABI 13 (2026-09-27) appends `setVolume` / `getVolume` over the audio buses (`Aud
 and an unknown bus or a non-finite value is refused. `ApiProbe` bit 29 round-trips the music bus
 (set, read back, clamp, restore) and checks the refusals.
 
+ABI 14 (2026-09-27) appends `setStyleBackground`, `RuntimeUiSystem::SetStyleBackground` behind Lua's
+`runtime_ui.set_style_background`. The plates are global runtime-UI state, so a C++ HUD whose look depended
+on a Lua theme call earlier in the session (a Lua boot scene) drew on the dark default plates once its scene
+was booted directly; it now sets them itself. `ApiProbe` bit 30 checks the call and its refusals.
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

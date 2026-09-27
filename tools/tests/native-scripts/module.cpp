@@ -138,6 +138,9 @@ namespace
                               !world.SetVolume(static_cast<phasma::AudioBus>(9), 0.5f) &&
                               !world.SetVolume(phasma::AudioBus::Sfx, std::nanf("")) &&
                               !world.GetVolume(static_cast<phasma::AudioBus>(9), check));
+                Check(30, world.SetStyleBackground(phasma::UiStyle::Card, "") &&
+                              !world.SetStyleBackground(static_cast<phasma::UiStyle>(99), "") &&
+                              !world.SetStyleBackground(phasma::UiStyle::Card, nullptr));
                 stage = 1;
             }
             else if (stage == 1 && world.Find("ApiProbeDestroy"))

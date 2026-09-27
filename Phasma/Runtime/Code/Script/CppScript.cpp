@@ -633,6 +633,17 @@ namespace pe
                              const float volumes[] = {audio.GetMasterVolume(), audio.GetMusicVolume(),
                                                       audio.GetSFXVolume(), audio.GetAmbientVolume()};
                              *value = volumes[static_cast<uint32_t>(bus)]; }); });
+                 },
+                 [](void *, phasma::UiStyle style, const char *image) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         RuntimeUiSystem *ui = GetActiveRuntimeUi();
+                         if (!ui || !image ||
+                             static_cast<uint32_t>(style) >= static_cast<uint32_t>(RuntimeUiQuadVisualStyle::Count))
+                             return 0;
+                         ui->SetStyleBackground(static_cast<RuntimeUiQuadVisualStyle>(style), image);
+                         return 1; });
                  }};
     }
 

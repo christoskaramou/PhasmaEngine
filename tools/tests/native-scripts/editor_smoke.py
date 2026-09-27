@@ -119,7 +119,7 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         call_tool(client, "invoke_editor_action", {"action": "play.start"})
         wait_for(lambda: position("NativeApiProbe", "y") == 1)
         assert position("NativeApiProbe") == 16772991, position("NativeApiProbe")  # every check but the stage-2 ones
-        assert position("NativeApiProbe", "z") == 47, position("NativeApiProbe", "z")  # bits 24-27, 29: files, torus, fullscreen pass, volume
+        assert position("NativeApiProbe", "z") == 111, position("NativeApiProbe", "z")  # bits 24-27, 29-30: files, torus, fullscreen pass, volume, style plate
         # Regression: the Lua system's teardown cleared every script render pass, so a Lua reload dropped the C++
         # scripts' passes (fixed 2026-09-27: it clears only its own).
         has_pass = 'return tostring(render_graph.has_pass("NativeProbeFullscreen"))'
@@ -154,7 +154,7 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         assert lua('scene.add_empty_node("ApiProbeDestroy"); return "signalled"') == "signalled"
         wait_for(lambda: position("NativeApiProbe", "y") == 2)
         assert position("NativeApiProbe") == 16777215, position("NativeApiProbe")
-        assert position("NativeApiProbe", "z") == 63, position("NativeApiProbe", "z")  # + bit 28: pass removed
+        assert position("NativeApiProbe", "z") == 127, position("NativeApiProbe", "z")  # + bit 28: pass removed
         assert lua(has_pass) == "false"
         # ABI v12: the pass drew from stage 1 to stage 2 (across the Lua reload); nothing about it or its
         # shader may have logged an error.
@@ -208,7 +208,7 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         assert "[CppScript] fault 0x" in segment, segment
         assert "[CppScript] destroy" not in segment, segment
         print("PASS: editor live replacement, scene retained, Lua reload keeps C++ state, rejected ABI retains code, "
-              "node Play/Stop/re-Play, reload status, scene API, UI API, mouse API, animation API, visibility and child lookup, sphere and tint, audio and launch options, autoplay during Play, particles and render type, files, torus, fullscreen pass, bus volume, fault containment with destroy skipped")
+              "node Play/Stop/re-Play, reload status, scene API, UI API, mouse API, animation API, visibility and child lookup, sphere and tint, audio and launch options, autoplay during Play, particles and render type, files, torus, fullscreen pass, bus volume, style plate, fault containment with destroy skipped")
     finally:
         if "probe_dir" in locals():
             shutil.rmtree(probe_dir, ignore_errors=True)

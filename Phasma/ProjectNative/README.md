@@ -116,6 +116,10 @@ ABI 13 adds `SetVolume(AudioBus, value)` / `GetVolume(AudioBus, value)` over the
 `audio.set_master_volume` / `set_music_volume` / `set_sfx_volume` / `set_ambient_volume` drive, so a C++
 settings screen can apply and show the live volumes; values clamp to [0, 1].
 
+ABI 14 adds `SetStyleBackground(UiStyle, image)`, Lua's `runtime_ui.set_style_background`: the theme plate
+every quad of that style draws on (`""` restores the default). A C++ HUD sets its own theme with it rather
+than relying on a Lua script having set it earlier in the session.
+
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are
 frozen. A module runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5)

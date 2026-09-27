@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 13;
+    inline constexpr uint32_t ScriptAbiVersion = 14;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -213,6 +213,9 @@ namespace phasma
         // value or a build without audio.
         uint32_t (*setVolume)(void *, AudioBus bus, float value) noexcept;
         uint32_t (*getVolume)(void *, AudioBus bus, float *value) noexcept;
+        // v14: mirrors runtime_ui.set_style_background, the theme plate every quad of a style draws on
+        // ("" restores the default); false for an unknown style or a null path.
+        uint32_t (*setStyleBackground)(void *, UiStyle style, const char *image) noexcept;
     };
     struct ScriptDesc
     {
@@ -335,6 +338,10 @@ namespace phasma
         bool RemoveFullscreenPass(const char *name) const { return m_api.removeFullscreenPass(m_api.context, name) != 0; }
         bool SetVolume(AudioBus bus, float value) const { return m_api.setVolume(m_api.context, bus, value) != 0; }
         bool GetVolume(AudioBus bus, float &value) const { return m_api.getVolume(m_api.context, bus, &value) != 0; }
+        bool SetStyleBackground(UiStyle style, const char *image) const
+        {
+            return m_api.setStyleBackground(m_api.context, style, image) != 0;
+        }
         template <uint32_t N>
         bool LaunchOption(const char *name, char (&out)[N]) const
         {
