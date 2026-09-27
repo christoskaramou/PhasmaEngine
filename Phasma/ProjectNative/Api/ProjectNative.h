@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 20;
+    inline constexpr uint32_t ScriptAbiVersion = 21;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -318,6 +318,13 @@ namespace phasma
         uint32_t (*setLightIntensity)(void *, Node, float intensity) noexcept;
         // v20: input.vibrate, a haptic pulse of ms milliseconds (12 when ms <= 0); 0 without a vibrator (desktop).
         uint32_t (*vibrate)(void *, int32_t ms) noexcept;
+        // v21: textured sprites. createQuad mirrors primitives.quad; setMaterialTexture is material.set_texture
+        // (slot "base_color", "emissive", "normal", ...; the path asset-relative), setDoubleSided
+        // material.set_double_sided and setAlphaCutoff material.set(node, "alpha_cutoff", value), on the node's mesh.
+        Node (*createQuad)(void *, const char *name, float width, float height) noexcept;
+        uint32_t (*setMaterialTexture)(void *, Node, const char *slot, const char *path) noexcept;
+        uint32_t (*setDoubleSided)(void *, Node, uint32_t doubleSided) noexcept;
+        uint32_t (*setAlphaCutoff)(void *, Node, float cutoff) noexcept;
     };
     struct ScriptDesc
     {
@@ -496,6 +503,19 @@ namespace phasma
             return m_api.setLightIntensity(m_api.context, node, intensity) != 0;
         }
         bool Vibrate(int32_t ms) const { return m_api.vibrate(m_api.context, ms) != 0; }
+        Node CreateQuad(const char *name, float width, float height) const
+        {
+            return m_api.createQuad(m_api.context, name, width, height);
+        }
+        bool SetTexture(Node node, const char *slot, const char *path) const
+        {
+            return m_api.setMaterialTexture(m_api.context, node, slot, path) != 0;
+        }
+        bool SetDoubleSided(Node node, bool doubleSided) const
+        {
+            return m_api.setDoubleSided(m_api.context, node, doubleSided) != 0;
+        }
+        bool SetAlphaCutoff(Node node, float cutoff) const { return m_api.setAlphaCutoff(m_api.context, node, cutoff) != 0; }
         template <uint32_t N>
         bool LaunchOption(const char *name, char (&out)[N]) const
         {

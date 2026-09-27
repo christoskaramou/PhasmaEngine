@@ -217,6 +217,13 @@ ABI 20 (2026-09-28) appends `vibrate`: `input.vibrate`'s haptic pulse through th
 `InputState::Vibrate` (Android's Vibrator over JNI, 12 ms when `ms <= 0`), returning 0 on the desktop, which
 has no vibrator; `ApiProbe` bit 44 checks that.
 
+ABI 21 (2026-09-28) appends `createQuad`, `setMaterialTexture`, `setDoubleSided` and `setAlphaCutoff`:
+`primitives.quad`, `material.set_texture`, `material.set_double_sided` and `material.set(node, "alpha_cutoff")`
+through helpers `MaterialBindings.h` now exports beside `SetNodeRenderTypeByName`, so a C++ script builds the
+textured ground sprites Lua's `Art.part{kind = "quad", texture = ...}` makes. `ApiProbe` bits 45-47 check a made
+quad, its cutoff and two sides, and the refusals (no name or size, no mesh, an unknown slot, an empty path); the
+smoke's z reaches 2^24 - 1, the last bit a float position carries exactly.
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

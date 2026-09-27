@@ -1067,7 +1067,47 @@ namespace pe
                  },
                  [](void *, int32_t ms) noexcept -> uint32_t
                  { return GuardApi([&]() -> uint32_t
-                                   { return InputState::Vibrate(ms) ? 1 : 0; }); }};
+                                   { return InputState::Vibrate(ms) ? 1 : 0; }); },
+                 [](void *ctx, const char *name, float width, float height) noexcept -> phasma::Node
+                 {
+                     return GuardApi([&]() -> phasma::Node
+                                     {
+                         Scene *scene = GetActiveScene();
+                         if (!scene || !name || !*name || !std::isfinite(width) || !std::isfinite(height) ||
+                             width <= 0.0f || height <= 0.0f)
+                             return 0;
+                         NodeId *node = scene->CreateNode(name);
+                         try { scene->AttachPrimitiveToNode(node, Primitives::CreateQuad(width, height)); }
+                         catch (...) { scene->DeleteNode(node); throw; }
+                         return static_cast<CppScriptSystem *>(ctx)->Handle(node); });
+                 },
+                 [](void *ctx, phasma::Node handle, const char *slot, const char *path) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         if (!node || !slot || !path) return 0;
+                         Scene *scene = GetActiveScene();
+                         return SetNodeTextureByName(scene, node, scene->GetMeshRef(node), slot, path); });
+                 },
+                 [](void *ctx, phasma::Node handle, uint32_t doubleSided) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         if (!node) return 0;
+                         Scene *scene = GetActiveScene();
+                         return SetNodeDoubleSidedFlag(scene, node, scene->GetMeshRef(node), doubleSided != 0); });
+                 },
+                 [](void *ctx, phasma::Node handle, float cutoff) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         if (!node) return 0;
+                         Scene *scene = GetActiveScene();
+                         return SetNodeAlphaCutoff(scene, node, scene->GetMeshRef(node), cutoff); });
+                 }};
     }
 
     void CppScriptSystem::Stop(Instance &instance)

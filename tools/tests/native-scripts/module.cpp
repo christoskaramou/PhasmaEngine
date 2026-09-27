@@ -197,6 +197,17 @@ namespace
                               !world.SetLightIntensity(node, 2.0f) && !world.SetLightIntensity(0xDEAD, 1.0f));
                 // The desktop has no vibrator: input.vibrate is a no-op there.
                 Check(44, !world.Vibrate(15) && !world.Vibrate(0));
+                // A textured sprite quad: made, cut out and two-sided; refused without a name, a size, a mesh
+                // or a known slot.
+                const phasma::Node sprite = world.CreateQuad("NativeProbeSprite", 1.0f, 0.5f);
+                Check(45, world.Valid(sprite) && !world.CreateQuad("", 1.0f, 1.0f) &&
+                              !world.CreateQuad("NativeProbeSprite", 0.0f, 1.0f));
+                Check(46, world.SetAlphaCutoff(sprite, 0.1f) && world.SetDoubleSided(sprite, true) &&
+                              !world.SetAlphaCutoff(node, 0.1f) && !world.SetDoubleSided(node, true));
+                Check(47, !world.SetTexture(sprite, "sheen", "Textures/missing.png") &&
+                              !world.SetTexture(sprite, "base_color", "") &&
+                              !world.SetTexture(node, "base_color", "Textures/missing.png"));
+                world.Destroy(sprite);
                 uint32_t windowW = 0, windowH = 0;
                 Check(40, world.WindowSize(windowW, windowH) && windowW > 0 && windowH > 0 &&
                               !api.getWindowSize(api.context, nullptr, &windowH));

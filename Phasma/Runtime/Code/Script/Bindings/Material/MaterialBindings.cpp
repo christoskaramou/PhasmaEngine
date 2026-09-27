@@ -319,6 +319,36 @@ namespace pe
         return true;
     }
 
+    bool SetNodeTextureByName(Scene *s, NodeId *nodeId, int meshIdx, std::string_view type, const std::string &path)
+    {
+        const auto slot = s_texSlots.find(type);
+        if (!s || !s->IsNodeAlive(nodeId) || !s->IsValidMeshIndex(meshIdx) || slot == s_texSlots.end() || path.empty())
+            return false;
+        ResourceHandle<Image> image = LoadTextureForLua(path);
+        return image && ApplyTexture(s, nodeId, meshIdx, slot->second, image);
+    }
+
+    bool SetNodeDoubleSidedFlag(Scene *s, NodeId *nodeId, int meshIdx, bool doubleSided)
+    {
+        if (!s || !s->IsNodeAlive(nodeId) || !s->IsValidMeshIndex(meshIdx) || !s->GetMesh(meshIdx).material)
+            return false;
+        SetNodeDoubleSided(s, nodeId, meshIdx, doubleSided);
+        return true;
+    }
+
+    bool SetNodeAlphaCutoff(Scene *s, NodeId *nodeId, int meshIdx, float cutoff)
+    {
+        if (!s || !s->IsNodeAlive(nodeId) || !s->IsValidMeshIndex(meshIdx) || !std::isfinite(cutoff))
+            return false;
+        Mesh &mesh = s->GetMesh(meshIdx);
+        MaterialInstance *inst = mesh.material ? EnsureInstance(s, mesh) : nullptr;
+        if (!inst)
+            return false;
+        if (inst->SetAlphaCutoff(cutoff))
+            s->SetMaterialDirty();
+        return true;
+    }
+
     static int ResolveMeshIdx(Scene *s, const SceneNodeHandle &h, int slot)
     {
         if (!s || !h.IsValid(*s))
