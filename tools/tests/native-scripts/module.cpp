@@ -1,5 +1,6 @@
 #include "ProjectNative.h"
 #include <cmath>
+#include <cstring>
 #include <stdexcept>
 
 namespace
@@ -32,8 +33,8 @@ namespace
         }
         double elapsed = 0;
     };
-    // Drives the scene API (added in ABI v4), the UI API (v6), mouse input and animation speed (v7), sphere and tint (v8) against a real engine for
-    // editor_smoke.py. Publishes on its own node: x = bitmask of passed checks (1048575 = all), y = stage (1 = instance up, 2 = instance destroyed).
+    // Drives the scene API (added in ABI v4), the UI API (v6), mouse input and animation speed (v7), sphere and tint (v8), audio and launch options (v9) against a real engine for
+    // editor_smoke.py. Publishes on its own node: x = bitmask of passed checks (4194303 = all), y = stage (1 = instance up, 2 = instance destroyed).
     struct ApiProbe
     {
         phasma::World world;
@@ -83,6 +84,12 @@ namespace
                 Check(18, world.Valid(sphere) && !world.CreateSphere("NativeProbeSphere", 0.0f) && !world.CreateSphere("", 1.0f));
                 Check(19, world.SetColor(sphere, {0.25f, 0.5f, 0.75f, 1.0f}, {0.5f, 1.0f, 1.5f}) && !world.SetColor(node, {1, 1, 1, 1}, {}) &&
                               !world.SetColor(sphere, {std::nanf(""), 0, 0, 1}, {}));
+                world.StopMusic(); // true or false by build; never throws
+                Check(20, !world.PlaySound("") && !world.PlaySound(nullptr) && !world.PlayMusic(""));
+                char option[8], tiny[2];
+                Check(21, world.LaunchOption("NATIVE_PROBE", option) && std::strcmp(option, "ok") == 0 &&
+                              !world.LaunchOption("NATIVE_PROBE", tiny) && !tiny[0] && !world.LaunchOption("native_probe", option) &&
+                              !world.LaunchOption("NATIVE_MISSING", option));
                 stage = 1;
             }
             else if (stage == 1 && world.Find("ApiProbeDestroy"))

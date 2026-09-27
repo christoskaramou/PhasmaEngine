@@ -414,6 +414,9 @@ namespace pe
         size_t idx = m_states.size();
         m_states.push_back(std::move(state));
         m_nodeToIndex[node] = idx;
+        // A scene loaded mid-session (scene.load during Play) autoplays like one present at Play.
+        if (m_playMode && desc.autoplay)
+            PlaySource(node);
     }
 
     void AudioSystem::RemoveSource(NodeId *node)
@@ -545,6 +548,7 @@ namespace pe
 
     void AudioSystem::StartPlayMode(Scene &scene)
     {
+        m_playMode = true;
         for (auto &state : m_states)
         {
             if (state.desc.autoplay)
@@ -554,6 +558,7 @@ namespace pe
 
     void AudioSystem::StopPlayMode()
     {
+        m_playMode = false;
         for (auto &state : m_states)
         {
             if (state.sound)

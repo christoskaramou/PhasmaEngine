@@ -88,6 +88,12 @@ emissive)`, which mirrors `material.set` for `base_color` and `emissive` on the 
 it creates the per-mesh material instance, so other users of the shared material keep theirs. It
 returns false for a node without a mesh or material, or a non-finite color.
 
+ABI 9 adds `PlaySound(clip)`, `PlayMusic(clip)` and `StopMusic()`, the same calls as Lua `audio.play`,
+`audio.play_music` and `audio.stop_music` (a bare clip name resolves against the project's `Assets/Audio/`;
+false in builds without audio). Looping per-node sources stay in the scene file (a node's `audio` block with
+`autoplay` starts on Play). `LaunchOption(name, buffer)` reads `PE_SCRIPT_<name>` exactly like Lua
+`script.launch_option`, so scripts need no `getenv`.
+
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are
 frozen. A module runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5)

@@ -13,7 +13,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 8;
+    inline constexpr uint32_t ScriptAbiVersion = 9;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -137,6 +137,14 @@ namespace phasma
         Node (*createSphere)(void *, const char *name, float radius) noexcept;
         // Mirrors material.set base_color + emissive on the node's first mesh; false if it has no mesh or material.
         uint32_t (*setMaterialColor)(void *, Node, Color baseColor, Vec3 emissive) noexcept;
+        // v9: audio and launch options. Mirror audio.play / play_music / stop_music: a bare clip name resolves against
+        // the project's Assets/Audio/; false when the build has no audio. Looping per-node sources belong in the scene.
+        uint32_t (*playSound)(void *, const char *clip) noexcept;
+        uint32_t (*playMusic)(void *, const char *clip) noexcept;
+        uint32_t (*stopMusic)(void *) noexcept;
+        // Mirrors script.launch_option: copies PE_SCRIPT_<name> into out, NUL-terminated; false if unset, the name is
+        // not [A-Z0-9_]{1,64}, or the value does not fit.
+        uint32_t (*launchOption)(void *, const char *name, char *out, uint32_t capacity) noexcept;
     };
     struct ScriptDesc
     {
@@ -226,6 +234,14 @@ namespace phasma
         Node FindChild(Node root, const char *name) const { return m_api.findChild(m_api.context, root, name); }
         Node CreateSphere(const char *name, float radius) const { return m_api.createSphere(m_api.context, name, radius); }
         bool SetColor(Node node, Color baseColor, Vec3 emissive) const { return m_api.setMaterialColor(m_api.context, node, baseColor, emissive) != 0; }
+        bool PlaySound(const char *clip) const { return m_api.playSound(m_api.context, clip) != 0; }
+        bool PlayMusic(const char *clip) const { return m_api.playMusic(m_api.context, clip) != 0; }
+        bool StopMusic() const { return m_api.stopMusic(m_api.context) != 0; }
+        template <uint32_t N>
+        bool LaunchOption(const char *name, char (&out)[N]) const
+        {
+            return m_api.launchOption(m_api.context, name, out, N) != 0;
+        }
         bool Clicked(const char *screen, const char *id) const
         {
             UiWidgetState state{};

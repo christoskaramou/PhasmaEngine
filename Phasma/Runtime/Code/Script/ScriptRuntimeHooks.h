@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 
 namespace pe
@@ -27,4 +28,7 @@ namespace pe
     [[nodiscard]] bool IsEditorHost();
     [[nodiscard]] const std::string &GetEditorScriptAssetsRoot();
     void SetScriptModelLoading(bool loading);
+    // PE_SCRIPT_<name> (or PE_PROJECT_VARIANT) from the environment; nullopt when unset or the name is not
+    // [A-Z0-9_]{1,64}. Backs Lua script.launch_option and the native launchOption call.
+    [[nodiscard]] std::optional<std::string> ReadScriptLaunchOption(const std::string &name);
 } // namespace pe

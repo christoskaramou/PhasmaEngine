@@ -1,6 +1,7 @@
 """Exercise actual native scripts in a disposable editor process; restore its game DLL afterwards."""
 import argparse
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -48,7 +49,8 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
     startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     startup.wShowWindow = 0
     process = subprocess.Popen([str(binary / "PhasmaEditor.exe"), "--api", "vulkan"],
-                               cwd=binary, startupinfo=startup)
+                               cwd=binary, startupinfo=startup,
+                               env={**os.environ, "PE_SCRIPT_NATIVE_PROBE": "ok"})  # ApiProbe bit 21
     try:
         client = wait_for(lambda: connect_mcp("http://127.0.0.1:8765/mcp", 2), 60)
         call_tool(client, "list_editor_actions", {})
@@ -112,7 +114,7 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
                    'return "created"') == "created"
         call_tool(client, "invoke_editor_action", {"action": "play.start"})
         wait_for(lambda: position("NativeApiProbe", "y") == 1)
-        assert position("NativeApiProbe") == 1044351, position("NativeApiProbe")  # every check but the stage-2 ones
+        assert position("NativeApiProbe") == 4190079, position("NativeApiProbe")  # every check but the stage-2 ones
         assert lua('return tostring(scene.find_model("NativeApiProbe"):is_visible())') == "false"
         assert lua('local m=material.get(scene.find_model("NativeProbeSphere")); local c, e=m.base_color, m.emissive; '
                    'return string.format("%.2f %.2f %.2f %.2f %.2f %.2f %.2f", c.x, c.y, c.z, c.w, e.x, e.y, e.z)')             == "0.25 0.50 0.75 1.00 0.50 1.00 1.50"
@@ -126,7 +128,7 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         assert near('scene.find_model("NativeApiProbe"):get_scale()', (1, 2, 3))
         assert lua('scene.add_empty_node("ApiProbeDestroy"); return "signalled"') == "signalled"
         wait_for(lambda: position("NativeApiProbe", "y") == 2)
-        assert position("NativeApiProbe") == 1048575, position("NativeApiProbe")
+        assert position("NativeApiProbe") == 4194303, position("NativeApiProbe")
         assert lua('return tostring(api_probe_instance:is_valid())') == "false"
         assert lua(ui % "quad") == "false"
         call_tool(client, "invoke_editor_action", {"action": "play.stop"})
@@ -165,7 +167,7 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         assert "[CppScript] fault 0x" in segment, segment
         assert "[CppScript] destroy" not in segment, segment
         print("PASS: editor live replacement, scene retained, Lua reload keeps C++ state, rejected ABI retains code, "
-              "node Play/Stop/re-Play, reload status, scene API, UI API, mouse API, animation API, visibility and child lookup, sphere and tint, fault containment with destroy skipped")
+              "node Play/Stop/re-Play, reload status, scene API, UI API, mouse API, animation API, visibility and child lookup, sphere and tint, audio and launch options, fault containment with destroy skipped")
     finally:
         try:
             if "client" in locals():

@@ -97,6 +97,7 @@ namespace pe
         float m_musicVolume = 1.0f;
         float m_sfxVolume = 1.0f;
         float m_ambientVolume = 1.0f;
+        bool m_playMode = false; // between StartPlayMode and StopPlayMode
     };
 } // namespace pe
 

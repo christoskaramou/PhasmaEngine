@@ -113,6 +113,19 @@ first mesh (`Scene::GetMeshRef`), per-mesh `MaterialInstance` created on demand,
 material upload only while the color moves. `ApiProbe` bits 18-19 check creation, rejection
 (zero radius, empty name, meshless node, NaN), and the smoke reads the tint back through `material.get`.
 
+ABI 9 (2026-09-27) appends `playSound` / `playMusic` / `stopMusic` (`AudioSystem::PlaySound` /
+`PlayMusic` / `StopMusic`, as the Lua `audio` table in
+[AudioBindings.cpp](../../../../Phasma/Runtime/Code/Script/Bindings/Audio/AudioBindings.cpp); `WithAudio`
+in `CppScript.cpp` returns false without `PE_AUDIO`) and `launchOption`. Per-node sources were left off the
+ABI: scenes already serialize a node's `audio` block, so a looping bed belongs in the `.pescene`. Autoplay
+used to fire only at `StartPlayMode`, so a scene loaded during Play (a game's `scene.load` from its menu)
+stayed silent; [AudioSystem.cpp](../../../../Phasma/Runtime/Code/Systems/AudioSystem.cpp) `AddSource` now
+plays an autoplay source at once while `m_playMode` is set (fixed 2026-09-27). `ReadScriptLaunchOption` moved from
+`ScriptSystem.cpp` to [ScriptRuntimeHooks.cpp](../../../../Phasma/Runtime/Code/Script/ScriptRuntimeHooks.cpp)
+so Lua `script.launch_option` and the native call share the name check and `_dupenv_s`. `ApiProbe` bit 20
+checks the audio rejections, bit 21 reads `PE_SCRIPT_NATIVE_PROBE`, which the smoke sets on the editor it
+launches (a too-small buffer or a lowercase name returns false with an empty string).
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

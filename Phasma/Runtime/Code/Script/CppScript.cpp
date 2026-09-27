@@ -12,6 +12,9 @@
 #include "Script/ScriptRuntimeHooks.h"
 #include "Script/Bindings/Input/InputState.h"
 #include "Systems/AnimationSystem.h"
+#ifdef PE_AUDIO
+#include "Systems/AudioSystem.h"
+#endif
 #include "UI/RuntimeUi.h"
 #include <cmath>
 #include <unordered_set>
@@ -40,6 +43,20 @@ namespace pe
         bool Finite(phasma::Vec3 v)
         {
             return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+        }
+
+        // Runs fn on the audio system; false when the build has no audio (fn is never instantiated then).
+        template <class Fn>
+        uint32_t WithAudio(Fn &&fn)
+        {
+#ifdef PE_AUDIO
+            if (AudioSystem *audio = GetGlobalSystem<AudioSystem>())
+            {
+                fn(*audio);
+                return 1;
+            }
+#endif
+            return 0;
         }
 
         // Rebuilds the local TRS, replacing rotation (degrees) or scale.
@@ -438,6 +455,37 @@ namespace pe
                          if (!inst) return 0;
                          const bool baseChanged = inst->SetBaseColorFactor(vec4(base.r, base.g, base.b, base.a));
                          if (inst->SetEmissiveFactor(vec3(emissive.x, emissive.y, emissive.z)) || baseChanged) scene->SetMaterialDirty();
+                         return 1; });
+                 },
+                 [](void *, const char *clip) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     { return clip && *clip ? WithAudio([&](auto &audio)
+                                                                        { audio.PlaySound(clip); })
+                                                            : 0; });
+                 },
+                 [](void *, const char *clip) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     { return clip && *clip ? WithAudio([&](auto &audio)
+                                                                        { audio.PlayMusic(clip); })
+                                                            : 0; });
+                 },
+                 [](void *) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     { return WithAudio([](auto &audio)
+                                                        { audio.StopMusic(); }); });
+                 },
+                 [](void *, const char *name, char *out, uint32_t capacity) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (!name || !out || capacity == 0) return 0;
+                         out[0] = '\0';
+                         const std::optional<std::string> value = ReadScriptLaunchOption(name);
+                         if (!value || value->size() >= capacity) return 0;
+                         std::memcpy(out, value->c_str(), value->size() + 1);
                          return 1; });
                  }};
     }
