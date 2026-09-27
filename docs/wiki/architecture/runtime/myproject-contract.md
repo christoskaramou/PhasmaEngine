@@ -33,7 +33,7 @@ The active project selection is stored in executable-local `phasma_settings.json
 
 `startup_scene` may be omitted from the manifest, or set to an empty string, when a project does not have a startup scene yet.
 
-Startup scene precedence is explicit launch setting first, then editor restore, then project manifest fallback. **PhasmaPlayer skips the first two** and always loads `phasma_project.json:startup_scene`, so a play session cannot resume last night's map instead of the title scene.
+Startup scene precedence is explicit launch setting first, then editor restore, then project manifest fallback. **PhasmaPlayer skips the first two** and always loads `phasma_project.json:startup_scene`, so a play session cannot resume last night's map instead of the title scene. A test harness that must boot a player straight into another scene writes a temporary manifest (absolute `assets` and `startup_scene`, both honoured by `NormalizeAgainst`) and points `phasma_settings.json:project_manifest` at it; setting `startup_scene` in the settings does nothing for the player, and the project's own startup scene runs its scripts first (verified 2026-09-27, [PlayerHost.cpp](../../../../Phasma/Runtime/Code/Runtime/PlayerHost.cpp) `allowRuntimeSettings = false`).
 
 Editor / launcher still use:
 
