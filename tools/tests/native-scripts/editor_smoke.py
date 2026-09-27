@@ -117,7 +117,8 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         assert position("NativeApiProbe") == 4190079, position("NativeApiProbe")  # every check but the stage-2 ones
         assert lua('return tostring(scene.find_model("NativeApiProbe"):is_visible())') == "false"
         assert lua('local m=material.get(scene.find_model("NativeProbeSphere")); local c, e=m.base_color, m.emissive; '
-                   'return string.format("%.2f %.2f %.2f %.2f %.2f %.2f %.2f", c.x, c.y, c.z, c.w, e.x, e.y, e.z)')             == "0.25 0.50 0.75 1.00 0.50 1.00 1.50"
+                   'return string.format("%.2f %.2f %.2f %.2f %.2f %.2f %.2f", c.x, c.y, c.z, c.w, e.x, e.y, e.z)') \
+            == "0.25 0.50 0.75 1.00 0.50 1.00 1.50"
         ui = 'return tostring(runtime_ui.get_state("native.probe", "%s") ~= nil)'
         assert [lua(ui % id) for id in ("quad", "fallback", "stale")] == ["true", "true", "false"]
         assert lua('for _, e in ipairs(scene.get_entities()) do local p=e.node:get_position(); '
@@ -129,6 +130,15 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         assert lua('scene.add_empty_node("ApiProbeDestroy"); return "signalled"') == "signalled"
         wait_for(lambda: position("NativeApiProbe", "y") == 2)
         assert position("NativeApiProbe") == 4194303, position("NativeApiProbe")
+        # Regression: a source added during Play autoplays at once (AudioSystem::AddSource), as the sources of a
+        # scene loaded mid-session must; before 2026-09-27 only StartPlayMode started them. A missing clip proves
+        # the attempt: PlaySource logs the failed load.
+        log = binary / "PhasmaEngine.log"
+        mark = len(log.read_text(errors="replace"))
+        assert lua('local n=scene.add_empty_node("AudioAutoplayProbe"); '
+                   'audio.add_source(n, "missing_autoplay_probe.wav", {autoplay=true, spatial=false}); '
+                   'return "added"') == "added"
+        wait_for(lambda: "missing_autoplay_probe.wav" in log.read_text(errors="replace")[mark:], 10)
         assert lua('return tostring(api_probe_instance:is_valid())') == "false"
         assert lua(ui % "quad") == "false"
         call_tool(client, "invoke_editor_action", {"action": "play.stop"})
@@ -142,7 +152,6 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
 
         # An access violation in a script is contained: the editor and this MCP session survive, and the
         # faulted instances are never destroyed (their state may be corrupt) - not on Stop, not on unload.
-        log = binary / "PhasmaEngine.log"
         assert log.exists(), f"{log} is required to check fault handling"
         offset = len(log.read_text(errors="replace"))
         before = status()
@@ -167,7 +176,7 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         assert "[CppScript] fault 0x" in segment, segment
         assert "[CppScript] destroy" not in segment, segment
         print("PASS: editor live replacement, scene retained, Lua reload keeps C++ state, rejected ABI retains code, "
-              "node Play/Stop/re-Play, reload status, scene API, UI API, mouse API, animation API, visibility and child lookup, sphere and tint, audio and launch options, fault containment with destroy skipped")
+              "node Play/Stop/re-Play, reload status, scene API, UI API, mouse API, animation API, visibility and child lookup, sphere and tint, audio and launch options, autoplay during Play, fault containment with destroy skipped")
     finally:
         try:
             if "client" in locals():
