@@ -66,5 +66,6 @@ namespace pe
         uint64_t m_loggedNotices = 0;
         bool m_initialized = false;
         std::unordered_map<std::string, FullscreenPassEntry> m_fullscreenPasses;
+        std::string m_pendingScene; // loadScene, applied after the update loop
     };
 } // namespace pe

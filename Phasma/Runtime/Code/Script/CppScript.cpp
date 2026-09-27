@@ -5,6 +5,8 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#include "API/Surface.h"
+#include "Base/EventSystem.h"
 #include "Base/GamePack.h"
 #include "Base/Log.h"
 #include "Base/Path.h"
@@ -16,8 +18,10 @@
 #include "Scene/Primitives.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
+#include "Scene/SceneHost.h"
 #include "Script/Bindings/Filesystem/FilesystemBindings.h"
 #include "Script/Bindings/Material/MaterialBindings.h"
+#include "Script/Bindings/Settings/SettingsBindings.h"
 #include "Script/NativeScriptGuard.h"
 #include "Script/NativeTrs.h"
 #include "Script/ScriptRuntimeHooks.h"
@@ -49,6 +53,22 @@ namespace pe
             {
                 return {};
             }
+        }
+
+        // phasma::PresentMode / WindowMode order.
+        constexpr PePresentMode kPresentModes[] = {PE_PRESENT_MODE_FIFO, PE_PRESENT_MODE_IMMEDIATE,
+                                                   PE_PRESENT_MODE_MAILBOX, PE_PRESENT_MODE_FIFO_RELAXED};
+        constexpr const char *kWindowModes[] = {"windowed", "borderless", "fullscreen"};
+
+        bool ToAbiPresentMode(PePresentMode mode, phasma::PresentMode &out)
+        {
+            for (uint32_t i = 0; i < std::size(kPresentModes); ++i)
+                if (kPresentModes[i] == mode)
+                {
+                    out = static_cast<phasma::PresentMode>(i);
+                    return true;
+                }
+            return false;
         }
 
         bool Finite(phasma::Vec3 v)
@@ -733,6 +753,99 @@ namespace pe
                          const mat4 m = GetActiveScene()->GetLocalMatrix(node);
                          *scale = {glm::length(vec3(m[0])), glm::length(vec3(m[1])), glm::length(vec3(m[2]))};
                          return 1; });
+                 },
+                 [](void *, const char *name, double *value) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     { return name && value && GetSceneSettingNumber(name, *value) ? 1u : 0u; });
+                 },
+                 [](void *, const char *name, double value) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     { return name && SetSceneSettingNumber(name, value) ? 1u : 0u; });
+                 },
+                 [](void *, phasma::PresentMode *mode) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         Surface *surface = RHII.GetSurface();
+                         return mode && surface && ToAbiPresentMode(surface->GetPresentMode(), *mode) ? 1u : 0u; });
+                 },
+                 [](void *, phasma::PresentMode mode, phasma::PresentMode *applied) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         const uint32_t i = static_cast<uint32_t>(mode);
+                         if (!applied || i >= std::size(kPresentModes)) return 0;
+                         const std::optional<PePresentMode> effective = RequestPresentModeChange(kPresentModes[i]);
+                         return effective && ToAbiPresentMode(*effective, *applied) ? 1u : 0u; });
+                 },
+                 [](void *, phasma::WindowMode *mode) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (!mode) return 0;
+                         const std::string_view token = GetWindowModeToken();
+                         for (uint32_t i = 0; i < std::size(kWindowModes); ++i)
+                             if (token == kWindowModes[i])
+                             {
+                                 *mode = static_cast<phasma::WindowMode>(i);
+                                 return 1;
+                             }
+                         return 0; });
+                 },
+                 [](void *, phasma::WindowMode mode) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         const uint32_t i = static_cast<uint32_t>(mode);
+                         return i < std::size(kWindowModes) && SetWindowModeToken(kWindowModes[i]) ? 1u : 0u; });
+                 },
+                 [](void *, float *scale) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         RuntimeUiSystem *ui = GetActiveRuntimeUi();
+                         if (!ui || !scale) return 0;
+                         *scale = ui->GetTextScale();
+                         return 1; });
+                 },
+                 [](void *, float scale) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         RuntimeUiSystem *ui = GetActiveRuntimeUi();
+                         if (!ui || !std::isfinite(scale)) return 0;
+                         ui->SetTextScale(scale);
+                         return 1; });
+                 },
+                 [](void *, double *seconds) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (!seconds) return 0;
+                         *seconds = FrameTimer::Instance().GetDelta();
+                         return 1; });
+                 },
+                 [](void *ctx, const char *name) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (!name || !*name) return 0;
+                         static_cast<CppScriptSystem *>(ctx)->m_pendingScene = name;
+                         return 1; });
+                 },
+                 [](void *) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         // Lua's quit button (on_quit_app): the editor and the Player leave play mode (the Player
+                         // then exits); outside play mode the engine quits.
+                         if (IsScriptPlayMode())
+                             SetScriptPlayMode(false);
+                         else
+                             EventSystem::PushEvent(EventType::Quit);
+                         return 1; });
                  }};
     }
 
@@ -935,6 +1048,7 @@ namespace pe
         // Called before the editor restores its scene snapshot; passes a script registered must not
         // survive the snapshot restore, so they are cleared here too (not just on full teardown).
         ClearFullscreenPasses();
+        m_pendingScene.clear();
         for (auto &instance : m_instances)
         {
             bool playOnly = instance.script->mode == phasma::ScriptMode::Play;
@@ -1070,6 +1184,12 @@ namespace pe
             }
         }
         m_handles.Maintain();
+        if (!m_pendingScene.empty())
+        {
+            // Never with a script's update on the stack; the next Reconcile sees the new scene's generation.
+            const std::string name = std::exchange(m_pendingScene, {});
+            LoadScene(Path::Assets + "Scenes/" + name);
+        }
 #endif
     }
 } // namespace pe

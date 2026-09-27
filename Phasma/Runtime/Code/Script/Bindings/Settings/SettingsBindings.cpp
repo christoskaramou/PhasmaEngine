@@ -1,5 +1,9 @@
+#include "Script/Bindings/Settings/SettingsBindings.h"
 #include "Script/ScriptSystem.h"
+#include "Script/ScriptRuntimeHooks.h"
 #include "API/RHI.h"
+#include "API/Surface.h"
+#include "Base/EventSystem.h"
 
 namespace pe
 {
@@ -96,6 +100,99 @@ namespace pe
         {"hybrid", RenderMode::Hybrid},
         {"ray_tracing", RenderMode::RayTracing},
     };
+
+    bool GetSceneSettingNumber(std::string_view name, double &value)
+    {
+        const auto &gs = Settings::Get<SceneSettings>();
+        if (const auto it = s_boolSettings.find(name); it != s_boolSettings.end())
+            value = gs.*(it->second) ? 1.0 : 0.0;
+        else if (const auto it = s_floatSettings.find(name); it != s_floatSettings.end())
+            value = gs.*(it->second);
+        else if (const auto it = s_uint32Settings.find(name); it != s_uint32Settings.end())
+            value = gs.*(it->second);
+        else if (const auto it = s_intSettings.find(name); it != s_intSettings.end())
+            value = gs.*(it->second);
+        else
+            return false;
+        return true;
+    }
+
+    bool SetSceneSettingNumber(std::string_view name, double value)
+    {
+        if (!std::isfinite(value))
+            return false;
+        auto &gs = Settings::Get<SceneSettings>();
+        if (const auto it = s_boolSettings.find(name); it != s_boolSettings.end())
+            gs.*(it->second) = value != 0.0;
+        else if (const auto it = s_floatSettings.find(name); it != s_floatSettings.end())
+            gs.*(it->second) = name == "render_scale" ? ClampRenderScale(static_cast<float>(value)) : static_cast<float>(value);
+        else if (const auto it = s_uint32Settings.find(name); it != s_uint32Settings.end())
+            gs.*(it->second) = static_cast<uint32_t>(std::max(0.0, value));
+        else if (const auto it = s_intSettings.find(name); it != s_intSettings.end())
+            gs.*(it->second) = static_cast<int>(value);
+        else
+            return false;
+        return true;
+    }
+
+    std::optional<PePresentMode> RequestPresentModeChange(PePresentMode mode)
+    {
+        Surface *surface = RHII.GetSurface();
+        if (!surface)
+            return std::nullopt;
+
+        surface->SetPresentMode(mode);
+        const PePresentMode effective = surface->GetPresentMode();
+        Settings::Get<SceneSettings>().preferred_present_mode = effective;
+        EventSystem::PushEvent(EventType::PresentMode);
+        return effective;
+    }
+
+    const char *GetWindowModeToken()
+    {
+#if defined(PE_ANDROID)
+        return "fullscreen";
+#else
+        SDL_Window *window = RHII.GetWindow();
+        if (!window)
+            return "windowed";
+        const Uint32 flags = SDL_GetWindowFlags(window);
+        if ((flags & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP)
+            return "borderless";
+        if (flags & SDL_WINDOW_FULLSCREEN)
+            return "fullscreen";
+        return "windowed";
+#endif
+    }
+
+    bool SetWindowModeToken(std::string_view mode)
+    {
+        Uint32 flags = 0;
+        if (mode == "fullscreen")
+            flags = SDL_WINDOW_FULLSCREEN;
+        else if (mode == "borderless")
+            flags = SDL_WINDOW_FULLSCREEN_DESKTOP;
+        else if (mode != "windowed")
+            return false;
+#if defined(PE_ANDROID)
+        return true;
+#else
+        // Fullscreen/borderless belong to the player; in the editor the
+        // window is the tool, so a project script must not take it over.
+        if (IsEditorHost())
+            return false;
+        SDL_Window *window = RHII.GetWindow();
+        if (!window)
+            return false;
+        SDL_SetWindowFullscreen(window, flags);
+        if (flags == 0)
+        {
+            SDL_SetWindowBordered(window, SDL_TRUE);
+            SDL_SetWindowResizable(window, SDL_TRUE);
+        }
+        return true;
+#endif
+    }
 
     static struct SettingsBindings
     {

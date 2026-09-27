@@ -232,6 +232,7 @@ namespace pe
         void SetScreenScrollable(const std::string &screenId, bool scrollable);
         void SetScreenMaxHeight(const std::string &screenId, float maxHeight);
         void SetTextScale(float scale);
+        float GetTextScale() const { return m_textScale; }
         void SetGlobalTint(const RuntimeUiColor &tint);
         void SetElementTint(const RuntimeUiColor &tint);
         void SetBackgroundTint(const RuntimeUiColor &tint);

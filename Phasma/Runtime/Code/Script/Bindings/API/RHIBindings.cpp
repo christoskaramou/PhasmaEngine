@@ -1,4 +1,5 @@
 #include "Script/ScriptSystem.h"
+#include "Script/Bindings/Settings/SettingsBindings.h"
 #include "API/Descriptor.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
@@ -9,17 +10,10 @@
 
 namespace pe
 {
-    static std::string RequestPresentModeChange(PePresentMode mode)
+    static std::string RequestPresentModeToken(PePresentMode mode)
     {
-        Surface *surface = RHII.GetSurface();
-        if (!surface)
-            return "unknown";
-
-        surface->SetPresentMode(mode);
-        const PePresentMode effective = surface->GetPresentMode();
-        Settings::Get<SceneSettings>().preferred_present_mode = effective;
-        EventSystem::PushEvent(EventType::PresentMode);
-        return PresentModeToConfigToken(effective);
+        const std::optional<PePresentMode> effective = RequestPresentModeChange(mode);
+        return effective ? PresentModeToConfigToken(*effective) : "unknown";
     }
 
     static struct RHIBindings
@@ -144,13 +138,13 @@ namespace pe
                 // ChangePresentMode
                 rhi.set_function("change_present_mode", [](const std::string &mode) -> std::string {
                     const std::optional<PePresentMode> parsed = ParsePresentModeToken(mode);
-                    return parsed ? RequestPresentModeChange(*parsed) : "unknown";
+                    return parsed ? RequestPresentModeToken(*parsed) : "unknown";
                 });
 
                 // SetPresentMode - deferred, player-safe alias for change_present_mode.
                 rhi.set_function("set_present_mode", [](const std::string &mode) -> std::string {
                     const std::optional<PePresentMode> parsed = ParsePresentModeToken(mode);
-                    return parsed ? RequestPresentModeChange(*parsed) : "unknown";
+                    return parsed ? RequestPresentModeToken(*parsed) : "unknown";
                 });
 
                 // SetRenderScale — scene renderers detect the change and rebuild only their scaled targets.

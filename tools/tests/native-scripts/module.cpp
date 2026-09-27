@@ -160,6 +160,25 @@ namespace
                               world.IsEnabled(uiNode) && !world.SetEnabled(0xDEAD, true) && !world.IsEnabled(0xDEAD));
                 phasma::Vec3 scale{};
                 Check(33, world.GetScale(node, scale) && std::abs(scale.y - 2.0f) < 1e-4f && !world.GetScale(0xDEAD, scale));
+                // v16: settings round trips (restored), render_scale clamped; loadScene / quit only refuse here.
+                double fxaa = -1.0, got = -1.0, renderScale = -1.0;
+                Check(35, world.GetSetting("fxaa", fxaa) && world.SetSetting("fxaa", fxaa == 0.0 ? 1.0 : 0.0) &&
+                              world.GetSetting("fxaa", got) && got == (fxaa == 0.0 ? 1.0 : 0.0) &&
+                              world.SetSetting("fxaa", fxaa) && world.GetSetting("render_scale", renderScale) &&
+                              world.SetSetting("render_scale", 7.0) && world.GetSetting("render_scale", got) && got == 1.0 &&
+                              world.SetSetting("render_scale", renderScale) && !world.GetSetting("no_such_setting", got) &&
+                              !world.SetSetting("fxaa", std::nan("")) && !world.SetSetting(nullptr, 1.0));
+                float textScale = -1.0f, text2 = -1.0f;
+                Check(36, world.GetTextScale(textScale) && world.SetTextScale(9.0f) && world.GetTextScale(text2) && text2 == 3.0f &&
+                              !world.SetTextScale(std::nanf("")) && world.SetTextScale(textScale));
+                phasma::PresentMode present{}, applied{};
+                phasma::WindowMode window{};
+                double frame = -1.0;
+                Check(37, world.FrameSeconds(frame) && frame > 0.0 && world.GetPresentMode(present) &&
+                              world.SetPresentMode(present, applied) && applied == present &&
+                              !world.SetPresentMode(static_cast<phasma::PresentMode>(9), applied) &&
+                              world.GetWindowMode(window) && !world.SetWindowMode(window) && // the editor keeps its window
+                              !world.LoadScene(nullptr) && !world.LoadScene(""));
                 stage = 1;
             }
             else if (stage == 1 && world.Find("ApiProbeDestroy"))

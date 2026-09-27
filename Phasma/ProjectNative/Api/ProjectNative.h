@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 15;
+    inline constexpr uint32_t ScriptAbiVersion = 16;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -126,6 +126,21 @@ namespace phasma
         Music,
         Sfx,
         Ambient
+    };
+    // rhi present modes (v16): Fifo is vsync, Immediate uncapped.
+    enum class PresentMode : uint32_t
+    {
+        Fifo,
+        Immediate,
+        Mailbox,
+        FifoRelaxed
+    };
+    // engine window modes (v16).
+    enum class WindowMode : uint32_t
+    {
+        Windowed,
+        Borderless,
+        Fullscreen
     };
     // particles.emit_burst: a field overrides the preset only when its bit is in ParticleBurst::set.
     enum BurstField : uint32_t
@@ -265,6 +280,24 @@ namespace phasma
         uint32_t (*isNodeEnabled)(void *, Node node) noexcept;
         uint32_t (*getUiRect)(void *, Node node, UiRect *rect) noexcept;
         uint32_t (*getScale)(void *, Node node, Vec3 *scale) noexcept;
+        // v16: what a settings screen and a quit button reach, as Lua does. getSetting / setSetting are
+        // settings.get / set on the bool and number keys (a bool as 0 or 1; false for other keys or a non-finite
+        // value). setPresentMode is rhi.change_present_mode and reports the mode in effect (a surface may lack
+        // the one asked). setWindowMode is engine.set_window_mode, false in the editor. getTextScale /
+        // setTextScale are runtime_ui's text scale (clamped to [0.5, 3]). getFrameSeconds is the frame's
+        // unscaled time (engine.get_metrics; update's dt follows time_scale). loadScene is scene.load(name),
+        // applied after this frame's C++ updates. quit is a quit button: leave play mode, else quit.
+        uint32_t (*getSetting)(void *, const char *name, double *value) noexcept;
+        uint32_t (*setSetting)(void *, const char *name, double value) noexcept;
+        uint32_t (*getPresentMode)(void *, PresentMode *mode) noexcept;
+        uint32_t (*setPresentMode)(void *, PresentMode mode, PresentMode *applied) noexcept;
+        uint32_t (*getWindowMode)(void *, WindowMode *mode) noexcept;
+        uint32_t (*setWindowMode)(void *, WindowMode mode) noexcept;
+        uint32_t (*getTextScale)(void *, float *scale) noexcept;
+        uint32_t (*setTextScale)(void *, float scale) noexcept;
+        uint32_t (*getFrameSeconds)(void *, double *seconds) noexcept;
+        uint32_t (*loadScene)(void *, const char *name) noexcept;
+        uint32_t (*quit)(void *) noexcept;
     };
     struct ScriptDesc
     {
@@ -396,6 +429,20 @@ namespace phasma
         bool IsEnabled(Node node) const { return m_api.isNodeEnabled(m_api.context, node) != 0; }
         bool GetUiRect(Node node, UiRect &rect) const { return m_api.getUiRect(m_api.context, node, &rect) != 0; }
         bool GetScale(Node node, Vec3 &scale) const { return m_api.getScale(m_api.context, node, &scale) != 0; }
+        bool GetSetting(const char *name, double &value) const { return m_api.getSetting(m_api.context, name, &value) != 0; }
+        bool SetSetting(const char *name, double value) const { return m_api.setSetting(m_api.context, name, value) != 0; }
+        bool GetPresentMode(PresentMode &mode) const { return m_api.getPresentMode(m_api.context, &mode) != 0; }
+        bool SetPresentMode(PresentMode mode, PresentMode &applied) const
+        {
+            return m_api.setPresentMode(m_api.context, mode, &applied) != 0;
+        }
+        bool GetWindowMode(WindowMode &mode) const { return m_api.getWindowMode(m_api.context, &mode) != 0; }
+        bool SetWindowMode(WindowMode mode) const { return m_api.setWindowMode(m_api.context, mode) != 0; }
+        bool GetTextScale(float &scale) const { return m_api.getTextScale(m_api.context, &scale) != 0; }
+        bool SetTextScale(float scale) const { return m_api.setTextScale(m_api.context, scale) != 0; }
+        bool FrameSeconds(double &seconds) const { return m_api.getFrameSeconds(m_api.context, &seconds) != 0; }
+        bool LoadScene(const char *name) const { return m_api.loadScene(m_api.context, name) != 0; }
+        bool Quit() const { return m_api.quit(m_api.context) != 0; }
         template <uint32_t N>
         bool LaunchOption(const char *name, char (&out)[N]) const
         {

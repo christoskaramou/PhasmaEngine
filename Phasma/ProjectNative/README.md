@@ -127,6 +127,13 @@ set), `SetEnabled` / `IsEnabled` are `node:set_enabled` / `is_enabled` (a disabl
 `Clicked("__scene_ui", "<widget id>")`, the id the scene gives the node. `SetQuad` on an authored widget id is
 overwritten every frame by the scene's own widget sync, so change authored nodes with `SetNodeUi` instead.
 
+ABI 16 covers a settings screen and a quit button: `GetSetting` / `SetSetting` are `settings.get` / `set` on
+the bool and number keys (a bool as 0 or 1), `SetPresentMode` is `rhi.change_present_mode` and reports the
+mode in effect, `SetWindowMode` is `engine.set_window_mode` (refused in the editor), `GetTextScale` /
+`SetTextScale` are the runtime UI text scale, `FrameSeconds` is the unscaled frame time (`Update`'s dt follows
+`time_scale`), `LoadScene("name.pescene")` is `scene.load` (applied after the frame's C++ updates) and `Quit`
+is a quit button: it leaves play mode, else quits.
+
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are
 frozen. A module runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5)

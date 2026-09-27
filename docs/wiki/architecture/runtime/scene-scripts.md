@@ -185,6 +185,18 @@ which re-issues every authored widget from its node each frame. The probe's pass
 (`z = passed >> 24`, exact to bit 47); bits 31-34 check node UI, enable, scale and the rect of the probe's
 node-anchored quad.
 
+ABI 16 (2026-09-27) appends what a settings screen and a quit button reach: `getSetting` / `setSetting`
+(Lua `settings.get` / `set` on the bool and number keys, a bool as 0 or 1), `getPresentMode` /
+`setPresentMode` (`rhi.change_present_mode`, reporting the mode in effect), `getWindowMode` /
+`setWindowMode` (false in the editor), `getTextScale` / `setTextScale`, `getFrameSeconds` (the unscaled
+frame time; `update`'s dt follows `time_scale`), `loadScene` and `quit`. The Lua bindings and the ABI share
+one implementation in [SettingsBindings.h](../../../../Phasma/Runtime/Code/Script/Bindings/Settings/SettingsBindings.h)
+(present-mode request and window mode moved there from RHIBindings / EngineBindings). `loadScene` is queued
+and applied after the C++ update loop, never with a script's update on the stack; `StopPlay` drops a queued
+load. `quit` is Lua's `on_quit_app`: leave play mode (the Player then exits), else `EventType::Quit`.
+`ApiProbe` bits 35-37 round-trip `fxaa`, `render_scale` (clamped) and the text scale, read the frame time and
+the modes, and check the refusals; `loadScene` and `quit` are only checked for refusing bad input.
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.
