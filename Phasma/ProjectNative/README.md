@@ -138,7 +138,8 @@ while the runtime UI holds the mouse) and `WindowSize(w, h)` (`engine.get_window
 surface / window size for runtime UI pixels. ABI 19 adds animation layers and light intensity:
 `PlayLayer(node, clip, mask, loop, speed)` (`animation.play_layer`, the mask's bone names separated by `,`),
 `SetLayerSpeed`, `StopLayer`, `LayerState(node, active, seconds, duration)`, `ClipMarker(node, clip, name,
-seconds)` and `SetLightIntensity(node, value)` (every light the node or a descendant owns).
+seconds)` and `SetLightIntensity(node, value)` (every light the node or a descendant owns). ABI 20 adds
+`Vibrate(ms)`, `input.vibrate`'s haptic pulse (Android; false on the desktop, which has no vibrator).
 
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are

@@ -418,6 +418,17 @@ namespace pe
                 SDL_GetMouseState(&p.x, &p.y);
             return p;
         }
+
+        bool Vibrate(int ms)
+        {
+#if defined(__ANDROID__)
+            PlatformVibrate(ms > 0 ? ms : 12);
+            return true;
+#else
+            (void)ms;
+            return false;
+#endif
+        }
     } // namespace InputState
 
     static struct InputBindings
@@ -558,13 +569,7 @@ namespace pe
                 });
 
                 // Haptic pulse (Android Vibrator via JNI); no-op on desktop. ms = duration.
-                input.set_function("vibrate", [](int ms) {
-#if defined(__ANDROID__)
-                    PlatformVibrate(ms > 0 ? ms : 12);
-#else
-                    (void)ms;
-#endif
-                }); });
+                input.set_function("vibrate", [](int ms) { InputState::Vibrate(ms); }); });
         }
     } s_inputBindings;
 } // namespace pe

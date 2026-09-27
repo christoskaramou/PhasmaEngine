@@ -195,6 +195,8 @@ namespace
                               !api.getAnimationLayer(api.context, node, nullptr, &layerT, &layerD));
                 Check(43, !world.ClipMarker(node, "Idle", "impact", markerT) && markerT == -1.0f &&
                               !world.SetLightIntensity(node, 2.0f) && !world.SetLightIntensity(0xDEAD, 1.0f));
+                // The desktop has no vibrator: input.vibrate is a no-op there.
+                Check(44, !world.Vibrate(15) && !world.Vibrate(0));
                 uint32_t windowW = 0, windowH = 0;
                 Check(40, world.WindowSize(windowW, windowH) && windowW > 0 && windowH > 0 &&
                               !api.getWindowSize(api.context, nullptr, &windowH));

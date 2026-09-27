@@ -40,4 +40,6 @@ namespace pe::InputState
     bool IsLeftMouseDown();
     // input.get_mouse_position: window pixels, 0, 0 while the runtime UI holds the mouse.
     MouseDelta GetMousePosition();
+    // input.vibrate: a haptic pulse of ms milliseconds (12 when ms <= 0); false where there is no vibrator.
+    bool Vibrate(int ms);
 } // namespace pe::InputState

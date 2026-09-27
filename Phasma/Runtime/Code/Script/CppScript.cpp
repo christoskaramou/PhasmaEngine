@@ -1064,7 +1064,10 @@ namespace pe
                          apply(scene.GetSpotLights());
                          apply(scene.GetAreaLights());
                          return set; });
-                 }};
+                 },
+                 [](void *, int32_t ms) noexcept -> uint32_t
+                 { return GuardApi([&]() -> uint32_t
+                                   { return InputState::Vibrate(ms) ? 1 : 0; }); }};
     }
 
     void CppScriptSystem::Stop(Instance &instance)

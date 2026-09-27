@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 19;
+    inline constexpr uint32_t ScriptAbiVersion = 20;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -316,6 +316,8 @@ namespace phasma
         uint32_t (*getAnimationLayer)(void *, Node, uint32_t *active, float *seconds, float *duration) noexcept;
         uint32_t (*getClipMarker)(void *, Node, const char *clip, const char *marker, float *seconds) noexcept;
         uint32_t (*setLightIntensity)(void *, Node, float intensity) noexcept;
+        // v20: input.vibrate, a haptic pulse of ms milliseconds (12 when ms <= 0); 0 without a vibrator (desktop).
+        uint32_t (*vibrate)(void *, int32_t ms) noexcept;
     };
     struct ScriptDesc
     {
@@ -493,6 +495,7 @@ namespace phasma
         {
             return m_api.setLightIntensity(m_api.context, node, intensity) != 0;
         }
+        bool Vibrate(int32_t ms) const { return m_api.vibrate(m_api.context, ms) != 0; }
         template <uint32_t N>
         bool LaunchOption(const char *name, char (&out)[N]) const
         {

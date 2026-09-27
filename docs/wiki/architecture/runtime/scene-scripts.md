@@ -213,6 +213,10 @@ ABI 19 (2026-09-27) appends `playAnimationLayer`, `setAnimationLayerSpeed`, `sto
 script drives rig attack layers timed to their markers and prefab lights. `ApiProbe` bits 41-43 check the
 refusals on an empty node.
 
+ABI 20 (2026-09-28) appends `vibrate`: `input.vibrate`'s haptic pulse through the shared
+`InputState::Vibrate` (Android's Vibrator over JNI, 12 ms when `ms <= 0`), returning 0 on the desktop, which
+has no vibrator; `ApiProbe` bit 44 checks that.
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.
