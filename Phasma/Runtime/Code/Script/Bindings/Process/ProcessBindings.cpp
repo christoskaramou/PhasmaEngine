@@ -332,6 +332,12 @@ namespace pe
                         return {false, sol::make_object(lua, "path is outside Assets/")};
                     if (!std::filesystem::is_regular_file(exe))
                         return {false, sol::make_object(lua, "not found: " + exe.string())};
+#if defined(PE_WIN32)
+                    // CreateProcess runs batch files through cmd.exe, which ignores the argv quoting below.
+                    const std::string ext = ToLower(PathUtf8(exe.extension()));
+                    if (ext == ".bat" || ext == ".cmd")
+                        return {false, sol::make_object(lua, "batch files cannot be started")};
+#endif
 
                     std::vector<std::string> args;
                     if (argsTable)

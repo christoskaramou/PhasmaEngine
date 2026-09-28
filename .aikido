@@ -3,6 +3,8 @@ exclude:
   paths:
     - Phasma/Runtime/third_party/luajit
     - Phasma/Runtime/third_party/luajit-cmake
+    # PUC Lua is vendored but not built; the runtime links LuaJIT.
+    - Phasma/Runtime/third_party/lua/
     - Phasma/Core/third_party/zlib
 
 # RapidJSON findings are assessed against the vendored source and supported targets.
@@ -11,4 +13,4 @@ ignore:
     CVE-2024-38517:
       reason: Vendored reader.h contains the upstream negative exponent underflow fix
     CVE-2024-39684:
-      reason: Vendored reader.h contains the upstream numeric overflow check after Strtod conversion
+      reason: Vendored reader.h matches upstream master; no later upstream fix exists for this CVE
