@@ -189,6 +189,8 @@ namespace
                 float layerT = -1.0f, layerD = -1.0f, markerT = -1.0f;
                 // An empty node animates nothing and owns no light; an empty or blank mask is refused.
                 Check(41, !world.PlayLayer(node, "Idle", "Root") && !world.PlayLayer(node, "Idle", "") &&
+                              !world.PlayLayer(node, "Idle", "Root", true, 1.0f, "Root") &&
+                              !api.playAnimationLayerAnchored(api.context, node, "Idle", "Root", 1, 1.0f, "") &&
                               !world.PlayLayer(node, "Idle", "Root,,Spine") && !world.SetLayerSpeed(node, 2.0f) &&
                               !world.StopLayer(node));
                 Check(42, !world.LayerState(node, layerOn, layerT, layerD) && !layerOn && layerT == 0.0f &&

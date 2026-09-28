@@ -141,7 +141,9 @@ surface / window size for runtime UI pixels. ABI 19 adds animation layers and li
 seconds)` and `SetLightIntensity(node, value)` (every light the node or a descendant owns). ABI 20 adds
 `Vibrate(ms)`, `input.vibrate`'s haptic pulse (Android; false on the desktop, which has no vibrator). ABI 21
 adds textured sprites: `CreateQuad(name, width, height)` (`primitives.quad`), `SetTexture(node, slot, path)`
-(`material.set_texture`), `SetDoubleSided(node, on)` and `SetAlphaCutoff(node, value)`.
+(`material.set_texture`), `SetDoubleSided(node, on)` and `SetAlphaCutoff(node, value)`. ABI 22 gives
+`PlayLayer` an optional anchor bone (`animation.play_layer`'s anchor): the masked bones follow that bone of the
+base pose, so an attack layer's upper body rides a running pelvis instead of the attack clip's own hips.
 
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are

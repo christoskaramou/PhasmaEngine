@@ -112,17 +112,17 @@ namespace pe
         }
 
         bool PlayLayerTree(Scene &scene, AnimationSystem &animation, NodeId *node, const std::string &clip,
-                           const std::vector<std::string> &bones, bool loop, float speed)
+                           const std::vector<std::string> &bones, bool loop, float speed, const std::string &anchor = {})
         {
             bool played = false;
             for (const auto &candidate : scene.GetAnimationClipsForNode(node))
                 if (candidate.name == clip)
                 {
-                    played |= animation.PlayLayer(scene, node, clip, bones, loop, speed);
+                    played |= animation.PlayLayer(scene, node, clip, bones, loop, speed, 0.0, anchor);
                     break;
                 }
             for (NodeId *child : scene.GetChildren(node))
-                played |= PlayLayerTree(scene, animation, child, clip, bones, loop, speed);
+                played |= PlayLayerTree(scene, animation, child, clip, bones, loop, speed, anchor);
             return played;
         }
 
@@ -1107,6 +1107,20 @@ namespace pe
                          if (!node) return 0;
                          Scene *scene = GetActiveScene();
                          return SetNodeAlphaCutoff(scene, node, scene->GetMeshRef(node), cutoff); });
+                 },
+                 [](void *ctx, phasma::Node handle, const char *clip, const char *mask, uint32_t loop, float speed,
+                    const char *anchor) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         auto *animation = GetGlobalSystem<AnimationSystem>();
+                         std::vector<std::string> bones;
+                         if (!node || !clip || !anchor || !*anchor || !animation || !std::isfinite(speed) ||
+                             !ReadMask(mask, bones))
+                             return 0;
+                         return PlayLayerTree(*GetActiveScene(), *animation, node, clip, bones, loop != 0, speed,
+                                              anchor); });
                  }};
     }
 

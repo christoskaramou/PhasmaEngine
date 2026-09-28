@@ -224,6 +224,13 @@ textured ground sprites Lua's `Art.part{kind = "quad", texture = ...}` makes. `A
 quad, its cutoff and two sides, and the refusals (no name or size, no mesh, an unknown slot, an empty path); the
 smoke's z reaches 2^24 - 1, the last bit a float position carries exactly.
 
+ABI 22 (2026-09-29) appends `playAnimationLayerAnchored` (`PlayLayer(..., anchor)`): `animation.play_layer`'s anchor
+bone for C++ scripts. `EvaluateStatePose` copies a layer's masked bones as whole rig-space poses, so without an
+anchor an attacking chest keeps the attack clip's hips while the base run moves the real ones (AgainstTheHero's
+running bomb toss sat 5-6 cm off its pelvis); anchored, the group is realigned to the base pose's anchor bone each
+frame. It refuses a rig without the anchor, an empty anchor or mask. No new probe bit (z is full): bit 41 adds the
+anchored refusals.
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 21;
+    inline constexpr uint32_t ScriptAbiVersion = 22;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -325,6 +325,11 @@ namespace phasma
         uint32_t (*setMaterialTexture)(void *, Node, const char *slot, const char *path) noexcept;
         uint32_t (*setDoubleSided)(void *, Node, uint32_t doubleSided) noexcept;
         uint32_t (*setAlphaCutoff)(void *, Node, float cutoff) noexcept;
+        // v22: playAnimationLayer with animation.play_layer's anchor: the masked bones are aligned to that bone of
+        // the base pose, so an attacking upper body rides a running pelvis instead of the attack clip's own hips.
+        // 0 when a node's rig lacks the anchor.
+        uint32_t (*playAnimationLayerAnchored)(void *, Node, const char *clip, const char *mask, uint32_t loop,
+                                               float speed, const char *anchor) noexcept;
     };
     struct ScriptDesc
     {
@@ -476,9 +481,11 @@ namespace phasma
         {
             return m_api.getWindowSize(m_api.context, &width, &height) != 0;
         }
-        bool PlayLayer(Node node, const char *clip, const char *mask, bool loop = true, float speed = 1.0f) const
+        bool PlayLayer(Node node, const char *clip, const char *mask, bool loop = true, float speed = 1.0f,
+                       const char *anchor = nullptr) const
         {
-            return m_api.playAnimationLayer(m_api.context, node, clip, mask, loop, speed) != 0;
+            return (anchor && *anchor ? m_api.playAnimationLayerAnchored(m_api.context, node, clip, mask, loop, speed, anchor)
+                                      : m_api.playAnimationLayer(m_api.context, node, clip, mask, loop, speed)) != 0;
         }
         bool SetLayerSpeed(Node node, float speed) const
         {
