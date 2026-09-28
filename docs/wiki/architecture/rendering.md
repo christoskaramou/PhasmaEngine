@@ -10,6 +10,10 @@ Skinned simplification targets 50%, 25% and 12% of the original indices with a 0
 
 Both main and shadow GPU culling already select the generated index ranges. Scene serialization now preserves `shadow_lod_bias`, with 1.0 as the fallback for older scenes, allowing a scene to choose coarser shadow geometry independently. No animation cadence, gameplay timing, or shader skinning algorithm changes are required. Index-only LODs reduce submitted geometry but retain the original vertex buffers in memory.
 
+## LOD Selection Distance
+
+`CullingCS` and `ShadowCullCS` pick a mesh's LOD from the camera's distance to the nearest point of its world AABB, not the AABB center (`lod_distances`, `lod_bias`, per-mesh `lod_bias`/`lod_shift` unchanged). With the center, a big flat mesh dropped to a coarse LOD while the camera stood over it: AgainstTheHero's 64 m arena floor (a 32-slice cylinder) switched to LOD1 whenever the hero neared its rim, and the simplified disc's chorded edge and twisted side wall read as dark holes in the ground. Small props switch at almost the same distance as before; on the ATH native arena the A/B was within noise (old 1008 fps / 0.992 ms median, new 1036 / 0.965). A project that ships its own `Shaders/Compute/CullingCS.hlsl` overrides the engine copy (project assets win over RuntimeAssets) and has to mirror this change. Verified 2026-09-28.
+
 ## Material Rebuilds
 
 Material-table rebuilds resolve each pass layout by its loaded `PassInfoAsset` identity within the rebuild, avoiding a resource-ID string allocation and string hash per mesh. Shader source checks still run: `ShaderCache::ParseShader` recognizes the existing quoted-include grammar directly rather than invoking a regex on every source line. Recursive expansion and content-based cache invalidation remain unchanged; 64 runtime HLSL sources produce byte-identical expanded text. These reduce rebuild overhead but do not make new instance creation incremental. Pooled ATH respawns avoid creation/rebuild work by reusing valid parked rigs.

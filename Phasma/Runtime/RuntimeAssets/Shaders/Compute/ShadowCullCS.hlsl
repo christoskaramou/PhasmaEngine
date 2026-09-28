@@ -131,8 +131,8 @@ uint WaveAppend(uint counterIndex, bool emit)
     // tolerate it); shadowLodBias<=0 keeps full-res (baseline / A-B toggle).
     if (lodEnabled != 0u && constants.lodMeshEnabled != 0u && constants.lodCount > 1u && pc.shadowLodBias > 0.0)
     {
-        float3 lodCenter = (aabbMin + aabbMax) * 0.5;
-        float lodDist = distance(pc.cameraPos, lodCenter) * lodBias * constants.lodMeshBias * pc.shadowLodBias;
+        float lodDist = distance(pc.cameraPos, clamp(pc.cameraPos, aabbMin, aabbMax)) * lodBias * constants.lodMeshBias *
+                        pc.shadowLodBias;
         uint lod = 0u;
         if (lodDist > lodDistances.x) lod = 1u;
         if (lodDist > lodDistances.y) lod = 2u;

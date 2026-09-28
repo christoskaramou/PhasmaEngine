@@ -276,13 +276,14 @@ uint WaveAppend(uint counterIndex, bool emit)
         aabbMax = asfloat(NodeData.Load3(skinBoundsOffset + 16u));
     }
 
-    // Discrete LOD: pick a level by camera distance to the world AABB center and override this draw's
+    // Discrete LOD: pick a level by camera distance to the world AABB and override this draw's
     // index range. Applies to every variant (frustum, occlusion, phase1/2) since they all emit `cmd`.
     if (lodEnabled != 0u && constants.lodMeshEnabled != 0u && constants.lodCount > 1u)
     {
-        float3 lodCenter = (aabbMin + aabbMax) * 0.5;
+        // Nearest point of the AABB, not its center: a big mesh (an arena floor) stays full-res while the
+        // camera is over it instead of dropping to a coarse LOD whose edge chords open holes underfoot.
         float3 lodCam = float3(pc.cameraPositionX, pc.cameraPositionY, pc.cameraPositionZ);
-        float lodDist = distance(lodCam, lodCenter) * lodBias * constants.lodMeshBias;
+        float lodDist = distance(lodCam, clamp(lodCam, aabbMin, aabbMax)) * lodBias * constants.lodMeshBias;
         uint lod = 0u;
         if (lodDist > lodDistances.x) lod = 1u;
         if (lodDist > lodDistances.y) lod = 2u;
