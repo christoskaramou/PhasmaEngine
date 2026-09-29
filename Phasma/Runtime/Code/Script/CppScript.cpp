@@ -1401,7 +1401,6 @@ namespace pe
 
     void CppScriptSystem::Update(double dt)
     {
-#if defined(PE_PROJECT_NATIVE)
 #if !defined(PE_PROJECT_NATIVE_STATIC)
         // Editors and build-folder Players live-reload; exported Players load the installed module in place once.
         const bool liveReload = ProjectNativeModule::LiveReloadEnabled(IsEditorHost(), Path::Executable);
@@ -1465,6 +1464,5 @@ namespace pe
             const std::string name = std::exchange(m_pendingScene, {});
             LoadScene(Path::Assets + "Scenes/" + name);
         }
-#endif
     }
 } // namespace pe

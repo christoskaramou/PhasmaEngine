@@ -6,7 +6,7 @@ they do not link engine libraries, include engine headers, or use Lua/sol2.
 
 ## Build
 
-Configure the engine with `-DPE_PROJECT_NATIVE=ON`. The default module is the
+C++ scripting is always built. The default module is the
 [Orbit](Sample/Orbit.cpp) and [PlayerController](Sample/PlayerController.cpp) samples. Build independently:
 
 ```sh
@@ -23,10 +23,10 @@ set(PE_PROJECT_NATIVE_INCLUDE_DIRS "${CMAKE_CURRENT_LIST_DIR}")
 ```
 
 The game target has no engine PCH, feature flags, or engine link dependencies.
-Native scripting defaults off. Android builds the same sources as a static library linked
+Android builds the same sources as a static library linked
 into the player. The player validates the linked module at startup and uses the same
 script lifecycle; it does not poll, copy, or reload game libraries. Rebuild the APK to change code.
-For Gradle, pass `-PPE_PROJECT_NATIVE=ON` and optionally
+For Gradle, optionally pass
 `-PPE_PROJECT_NATIVE_DIR=/absolute/path/to/native` (also accepted in `local.properties`).
 
 ## Script contract

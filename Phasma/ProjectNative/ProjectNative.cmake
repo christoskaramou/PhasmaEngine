@@ -5,9 +5,6 @@ set(PE_PROJECT_NATIVE_ROOT "${CMAKE_CURRENT_LIST_DIR}")
 function(pe_project_native_configure_runtime)
     # The runtime header is also included by ScriptSystem consumers.
     target_include_directories(PhasmaRuntime PUBLIC "${PE_PROJECT_NATIVE_ROOT}/Api")
-    if(PE_PROJECT_NATIVE)
-        target_compile_definitions(PhasmaRuntime PRIVATE PE_PROJECT_NATIVE=1)
-    endif()
 endfunction()
 
 # Descriptors carry only the source filename, never the build machine's path (see ScriptModule.h).
@@ -19,9 +16,6 @@ function(pe_project_native_name_sources)
 endfunction()
 
 function(pe_project_native_add_library)
-    if(NOT PE_PROJECT_NATIVE)
-        return()
-    endif()
     set(native_dir "${PE_PROJECT_NATIVE_ROOT}/Sample")
     if(PE_PROJECT_NATIVE_DIR)
         set(native_dir "${PE_PROJECT_NATIVE_DIR}")

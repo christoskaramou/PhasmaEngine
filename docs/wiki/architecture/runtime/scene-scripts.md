@@ -18,8 +18,9 @@ Lua reloads never unload the module or reset C++ state. Rejection preserves the 
 Acceptance destroys old instances before unloading, then recreates eligible instances against
 the existing scene. Private script state resets; migration is not implemented.
 Android player builds statically link the same game sources and validate descriptors at startup;
-they never poll or reload a module. Gradle accepts `-PPE_PROJECT_NATIVE=ON` and optional
-`-PPE_PROJECT_NATIVE_DIR=/absolute/path/to/native`. Code changes require rebuilding the APK.
+they never poll or reload a module. C++ scripting is always built (the `PE_PROJECT_NATIVE` switch was removed 2026-09-29: a build without it ran
+`cpp:` scripts silently as nothing); Gradle accepts an optional
+`-PPE_PROJECT_NATIVE_DIR=/absolute/path/to/native`, and an empty dir builds the Orbit/PlayerController sample. Code changes require rebuilding the APK.
 The API currently covers logging, node lookup/validation, cube creation, local
 position reads/writes, held-key input, and source-file metadata; ABI v4 (verified 2026-09-25) adds
 prefab instantiation, subtree destroy, rotation/scale writes and recursive clip playback. Position
