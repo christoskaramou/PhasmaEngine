@@ -5,6 +5,7 @@
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/Shader.h"
+#include "API/RHI.h"
 
 namespace pe
 {
@@ -16,11 +17,23 @@ namespace pe
         static_assert(kDownsamplerDxil_len == sizeof(kDownsamplerDxil));
 
         std::vector<DescriptorBindingInfo> s_bindingInfos;
+        struct ShaderVariant
+        {
+            ::PeFormat format;
+            const uint8_t *spirv;
+            size_t size;
+        };
+        constexpr ShaderVariant s_variants[] = {
+            {PE_FORMAT_R32G32B32A32_SFLOAT, kDownsamplerSpirv, sizeof(kDownsamplerSpirv)},
+            {PE_FORMAT_R8G8B8A8_UNORM, kDownsamplerSpirvRgba8, sizeof(kDownsamplerSpirvRgba8)},
+            {PE_FORMAT_R16G16B16A16_SFLOAT, kDownsamplerSpirvRgba16f, sizeof(kDownsamplerSpirvRgba16f)},
+            {PE_FORMAT_R16G16_SFLOAT, kDownsamplerSpirvRg16f, sizeof(kDownsamplerSpirvRg16f)},
+        };
+        std::array<std::shared_ptr<PassInfo>, std::size(s_variants)> s_passInfos;
     } // namespace
 
     void Downsampler::Init()
     {
-        UpdatePassInfo();
         CreateUniforms();
     }
 
@@ -28,6 +41,7 @@ namespace pe
     {
         std::lock_guard<std::mutex> guard(s_dispatchMutex);
 
+        PassInfo *passInfo = GetPassInfo(image->GetFormat());
         SetInputImage(image);
 
         // One set per dispatch: a shared ring gets re-written while an unsubmitted or in-flight cmd
@@ -56,7 +70,7 @@ namespace pe
         cmd->BufferBarrier(counterBarrier);
 
         cmd->ImageBarrier(barrier);
-        cmd->BindPipeline(*s_passInfo, false);
+        cmd->BindPipeline(*passInfo, false);
         cmd->BindDescriptors(1, &dSet);
         cmd->SetConstants(s_pushConstants);
         cmd->PushConstants();
@@ -72,24 +86,38 @@ namespace pe
         for (uint32_t i = 0; i < MAX_DESCRIPTORS_PER_CMD; i++)
             Buffer::Destroy(s_atomicCounter[i]);
 
-        s_passInfo.reset();
+        for (auto &passInfo : s_passInfos)
+            passInfo.reset();
     }
 
-    void Downsampler::UpdatePassInfo()
+    PassInfo *Downsampler::GetPassInfo(::PeFormat format)
     {
-        s_passInfo = std::make_shared<PassInfo>();
-        s_passInfo->pCompShader = Shader::CreateFromBytecode({
-            .spirv = kDownsamplerSpirv,
-            .spirvSizeBytes = sizeof(kDownsamplerSpirv),
+        // DXIL's typed UAV uses the view format; SPIR-V requires an exact storage-image format.
+        if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            format = PE_FORMAT_R32G32B32A32_SFLOAT;
+        size_t index = 0;
+        while (index < std::size(s_variants) && s_variants[index].format != format)
+            ++index;
+        PE_ERROR_IF(index == std::size(s_variants), "Downsampler: unsupported storage-image format %u", static_cast<uint32_t>(format));
+        auto &passInfo = s_passInfos[index];
+        if (passInfo)
+            return passInfo.get();
+
+        const std::string name = "Downsample_" + std::to_string(format);
+        passInfo = std::make_shared<PassInfo>();
+        passInfo->pCompShader = Shader::CreateFromBytecode({
+            .spirv = s_variants[index].spirv,
+            .spirvSizeBytes = s_variants[index].size,
             .dxil = kDownsamplerDxil,
             .dxilSizeBytes = sizeof(kDownsamplerDxil),
             .stage = PE_SHADER_STAGE_COMPUTE,
             .entryPoint = "main",
-            .debugName = "Downsample_compute",
+            .debugName = name,
             .reflectionSource = kDownsamplerReflectionSource,
         });
-        s_passInfo->name = "Downsample_pipeline";
-        s_passInfo->Update();
+        passInfo->name = name;
+        passInfo->Update();
+        return passInfo.get();
     }
 
     void Downsampler::CreateUniforms()

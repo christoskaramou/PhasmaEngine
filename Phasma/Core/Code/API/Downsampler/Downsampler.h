@@ -14,7 +14,7 @@ namespace pe
         inline static void ResetCounter() { s_currentIndex = 0; }
 
     private:
-        static void UpdatePassInfo();
+        static PassInfo *GetPassInfo(::PeFormat format);
         static void CreateUniforms();
         static void UpdateDescriptorSet(Descriptor &dSet);
         static uvec2 SpdSetup();
@@ -22,7 +22,6 @@ namespace pe
         static void ResetInputImage();
 
         inline static std::mutex s_dispatchMutex{};
-        inline static std::shared_ptr<PassInfo> s_passInfo{};
         // Atomic-counter ring. Each dispatch zeroes its counter in-cmd behind a buffer barrier, so reuse is
         // GPU-ordered on the queue; the descriptor set is per dispatch (destroyed after the cmd's wait).
         inline static const uint32_t MAX_DESCRIPTORS_PER_CMD = 100;

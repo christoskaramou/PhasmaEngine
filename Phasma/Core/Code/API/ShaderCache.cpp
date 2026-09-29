@@ -88,6 +88,13 @@ namespace pe
         m_tempFilePath += std::to_string(m_hash);
     }
 
+    void ShaderCache::InitFromBytecode(std::string_view bytecode, const std::string &entryPoint, PeShaderStageFlags stage)
+    {
+        m_hash = StringHash(bytecode);
+        m_hash.CombineString(entryPoint);
+        m_hash.CombineValue(stage);
+    }
+
     bool ShaderCache::ShaderNeedsCompile()
     {
         return !std::filesystem::exists(m_tempFilePath);

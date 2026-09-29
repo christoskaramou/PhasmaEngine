@@ -32,7 +32,12 @@ ConstantBuffer<SpdConstants> spdConstants;
 //--------------------------------------------------------------------------------------
 // Texture definitions
 //--------------------------------------------------------------------------------------
+#ifndef SPD_IMAGE_FORMAT
+#define SPD_IMAGE_FORMAT "rgba32f"
+#endif
+[[vk::image_format(SPD_IMAGE_FORMAT)]]
 [[vk::binding(0)]] RWTexture2DArray<float4> imgDst[13] : register(u0); // don't access mip [6]
+[[vk::image_format(SPD_IMAGE_FORMAT)]]
 [[vk::binding(13)]] globallycoherent RWTexture2DArray<float4> imgDst6 : register(u13);
 
 //--------------------------------------------------------------------------------------

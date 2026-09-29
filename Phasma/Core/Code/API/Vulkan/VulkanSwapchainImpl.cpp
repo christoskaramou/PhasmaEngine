@@ -101,7 +101,15 @@ namespace pe
             swapchainUsage |= vk::ImageUsageFlagBits::eTransferSrc;
         swapchainCreateInfo.imageUsage = swapchainUsage;
         swapchainCreateInfo.preTransform = chosenTransform;
-        swapchainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+        for (auto alpha : {vk::CompositeAlphaFlagBitsKHR::eOpaque, vk::CompositeAlphaFlagBitsKHR::eInherit,
+                           vk::CompositeAlphaFlagBitsKHR::ePreMultiplied, vk::CompositeAlphaFlagBitsKHR::ePostMultiplied})
+        {
+            if (capabilities.supportedCompositeAlpha & alpha)
+            {
+                swapchainCreateInfo.compositeAlpha = alpha;
+                break;
+            }
+        }
         swapchainCreateInfo.presentMode = ToVkPresentMode(surface->GetPresentMode());
         swapchainCreateInfo.clipped = VK_TRUE;
 

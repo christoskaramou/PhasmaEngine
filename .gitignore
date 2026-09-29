@@ -359,6 +359,7 @@ Projects/*/Assets/Agent/
 # Tracked validation and MCP tools
 !/tools/
 /tools/*
+!/tools/generate_downsampler_shaders.py
 !/tools/tests/
 /tools/tests/*
 !/tools/tests/native-scripts/

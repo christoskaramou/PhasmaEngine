@@ -65,6 +65,16 @@ Code outside PhasmaCore must clear this cache through `CommandBuffer::ClearFrame
 
 DX12 scaled image blits use the shader path rather than `CopyTextureRegion`. Its source Y scale is negative because the shared DX12 viewport path uses inverted viewport height; the matching bottom-edge offset keeps the result equivalent to Vulkan's top-to-top image blit instead of presenting the final scaled frame upside down.
 
+## Downsampler Storage Formats
+
+[Downsampler](../../../Phasma/Core/Code/API/Downsampler/Downsampler.cpp) selects an embedded Vulkan shader matching the input view: `Rgba8` for RGBA8 UNORM, `Rg16f` for RG16F, `Rgba16f` for RGBA16F, and `Rgba32f` for HDR RGBA32F. Both the mip array and mip-6 storage image use that format. The previous single `Rgba32f` module bound to RGBA8 views produced undefined image values. Unsupported Vulkan storage formats fail explicitly; DX12 retains one DXIL shader whose typed UAV follows its view format. These variants add no storage-image read/write-without-format requirement. The RG16F variant does declare `StorageImageExtendedFormats`, requiring `shaderStorageImageExtendedFormats`; [Vulkan device creation](../../../Phasma/Core/Code/API/RHI.cpp) enables advertised core features. Regenerate the embedded modules with [generate_downsampler_shaders.py](../../../tools/generate_downsampler_shaders.py) and an explicit DXC path; the generated header records the compiler version (verified 2026-09-30).
+
+Direct bytecode shaders must initialize their [ShaderCache](../../../Phasma/Core/Code/API/ShaderCache.cpp) identity from bytecode, entry point and stage. [PassInfo::UpdateHash](../../../Phasma/Core/Code/API/Pipeline.cpp) uses that identity for pipeline reuse. Leaving it zero made the format variants reuse the first RGBA8 pipeline even when their shader modules contained the correct formats. A desktop core-validation/GPU-AV check dispatched all four formats with eight mips and reported no storage-format mismatch after both fixes (verified 2026-09-30).
+
+The retained DXIL path was verified with a Release Sponza smoke on DX12/display 1 and the D3D12 debug layer: the embedded downsampler initialized, scene rendering was visually checked, and no debug-layer error or device loss was reported. This smoke validates the rebuilt bytecode path, not performance or Android stability (verified 2026-09-30).
+
+VVL 1.4.363.0 contains the same-invocation race-report fix from [PR 12418](https://github.com/KhronosGroup/Vulkan-ValidationLayers/pull/12418), but still reports adjacent-invocation races in SPD. The observed `spdIntermediateA` load/store pair maps to the wave-based `SpdDownsampleMip_2` path in [ffx_spd.h](../../../Phasma/Core/Code/API/Downsampler/Shaders/ffx_spd.h): shared reads, subgroup shuffles, then an in-place quad-leader store. No same-invocation reports appeared in the newer-layer run. This confirms that upgrading alone does not clear the warnings; it does not settle whether subgroup-dependent accesses are a real hazard or a remaining instrumentation limitation. No speculative barrier was added (verified 2026-09-30).
+
 ## Cached Pipelines
 
 - `CommandBuffer::GetPipeline()` caches `Pipeline` objects globally from a `PassInfo` hash. Some callers, such as skybox HDR-to-cubemap conversion, build transient `PassInfo` instances and destroy them after the command buffer finishes.

@@ -11,6 +11,7 @@ namespace pe
         // Callers are responsible for folding any other compile-time inputs that affect output bytecode
         // (such as shader stage) into `definesHash` before calling Init — `Shader::Create` does so for stage.
         void Init(const std::string &sourcePath, const std::string &entryPoint, size_t definesHash = 0);
+        void InitFromBytecode(std::string_view bytecode, const std::string &entryPoint, PeShaderStageFlags stage);
         bool ShaderNeedsCompile();
         inline const std::string &GetSourcePath() { return m_sourcePath; }
         inline const std::string &GetShaderCode() { return m_code; }

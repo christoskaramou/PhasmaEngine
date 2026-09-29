@@ -189,6 +189,7 @@ namespace pe
             PE_ERROR_IF(!desc.dxil || desc.dxilSizeBytes == 0,
                         "[Shader] Direct DX12 shader '%s' has no DXIL bytecode",
                         debugName.c_str());
+            shader->m_cache.InitFromBytecode({reinterpret_cast<const char *>(desc.dxil), desc.dxilSizeBytes}, desc.entryPoint, desc.stage);
             std::vector<uint8_t> dxil(desc.dxil, desc.dxil + desc.dxilSizeBytes);
             shader->m_impl = new Dx12ShaderImpl(shader, std::move(dxil));
 #else
@@ -200,6 +201,7 @@ namespace pe
             PE_ERROR_IF(!desc.spirv || desc.spirvSizeBytes == 0 || (desc.spirvSizeBytes % sizeof(uint32_t)) != 0,
                         "[Shader] Direct Vulkan shader '%s' has invalid SPIR-V bytecode",
                         debugName.c_str());
+            shader->m_cache.InitFromBytecode({reinterpret_cast<const char *>(desc.spirv), desc.spirvSizeBytes}, desc.entryPoint, desc.stage);
             const size_t wordCount = desc.spirvSizeBytes / sizeof(uint32_t);
             std::vector<uint32_t> spirv(wordCount);
             memcpy(spirv.data(), desc.spirv, desc.spirvSizeBytes);
