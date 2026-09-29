@@ -86,19 +86,16 @@ namespace pe
     {
         RuntimeStartupSceneSelection selection;
 
+        std::string explicitStartupScene;
         std::string warning;
-        if (options.allowRuntimeSettings)
+        if (TryReadRuntimeStartupScene(options.settingsPath, explicitStartupScene, &warning))
         {
-            std::string explicitStartupScene;
-            if (TryReadRuntimeStartupScene(options.settingsPath, explicitStartupScene, &warning))
-            {
-                selection.source = RuntimeStartupSceneSource::RuntimeSettings;
-                selection.configuredValue = explicitStartupScene;
-                selection.warning = PrefixStartupWarning("settings", warning);
-                if (!explicitStartupScene.empty())
-                    selection.scenePath = ResolveRuntimeStartupPath(explicitStartupScene);
-                return selection;
-            }
+            selection.source = RuntimeStartupSceneSource::RuntimeSettings;
+            selection.configuredValue = explicitStartupScene;
+            selection.warning = PrefixStartupWarning("settings", warning);
+            if (!explicitStartupScene.empty())
+                selection.scenePath = ResolveRuntimeStartupPath(explicitStartupScene);
+            return selection;
         }
         selection.warning = PrefixStartupWarning("settings", warning);
 

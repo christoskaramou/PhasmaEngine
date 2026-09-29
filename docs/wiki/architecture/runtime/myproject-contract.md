@@ -33,9 +33,9 @@ The active project selection is stored in executable-local `phasma_settings.json
 
 `startup_scene` may be omitted from the manifest, or set to an empty string, when a project does not have a startup scene yet.
 
-Startup scene precedence is explicit launch setting first, then editor restore, then project manifest fallback. **PhasmaPlayer skips the first two** and always loads `phasma_project.json:startup_scene`, so a play session cannot resume last night's map instead of the title scene. A test harness that must boot a player straight into another scene writes a temporary manifest (absolute `assets` and `startup_scene`, both honoured by `NormalizeAgainst`) and points `phasma_settings.json:project_manifest` at it; setting `startup_scene` in the settings does nothing for the player, and the project's own startup scene runs its scripts first (verified 2026-09-27, [PlayerHost.cpp](../../../../Phasma/Runtime/Code/Runtime/PlayerHost.cpp) `allowRuntimeSettings = false`).
+Startup scene precedence is explicit launch setting first, then editor restore, then project manifest fallback, for the editor and PhasmaPlayer alike: the scene picked in the launcher boots in the player. (`d5ee9f02` had made the player skip the first two as a temporary test setup; reverted 2026-09-29. Because the editor writes its last opened scene to the same key, an editor session changes what the player boots until the launcher picks again.) A test harness boots a player into a scene by writing that scene's absolute path to `phasma_settings.json:startup_scene` (backed up and restored around the run), never by relying on the key being ignored.
 
-Editor / launcher still use:
+The rules:
 
 - `phasma_settings.json:startup_scene` wins when it is non-empty, so a launcher-selected scene cannot be overwritten by stale editor restore state;
 - an existing `phasma_settings.json:startup_scene` key with an empty value is an explicit "no startup scene" selection and suppresses editor/manifest fallback;
