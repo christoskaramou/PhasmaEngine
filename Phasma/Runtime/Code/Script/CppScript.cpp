@@ -1121,6 +1121,21 @@ namespace pe
                              return 0;
                          return PlayLayerTree(*GetActiveScene(), *animation, node, clip, bones, loop != 0, speed,
                                               anchor); });
+                 },
+                 [](void *, uint32_t index, int64_t *id, float *x, float *y) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         long long finger = 0;
+                         float u = 0.0f, v = 0.0f;
+                         int w = 0, h = 0;
+                         if (!id || !x || !y || index > 1 || !InputState::GetTouch(static_cast<int>(index), finger, u, v))
+                             return 0;
+                         GetWindowSize(w, h);
+                         *id = finger;
+                         *x = u * static_cast<float>(w);
+                         *y = v * static_cast<float>(h);
+                         return 1; });
                  }};
     }
 

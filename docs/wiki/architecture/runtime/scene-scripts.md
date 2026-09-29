@@ -232,6 +232,13 @@ running bomb toss sat 5-6 cm off its pelvis); anchored, the group is realigned t
 frame. It refuses a rig without the anchor, an empty anchor or mask. No new probe bit (z is full): bit 41 adds the
 anchored refusals.
 
+ABI 23 (2026-09-29) appends `getTouch` (`Touch(index, id, x, y)`): the two fingers `InputState` tracks
+(`GetTouch`), with SDL's finger id and window pixels, so a script can run two on-screen sticks (the first finger
+alone also reaches scripts as the synthesized left mouse; a second never did). A finger landing on the runtime UI
+stays the UI's (`PlayerHost` forwards `SDL_FINGERDOWN` only when the UI is not capturing), but a tracked finger's
+motion and lift are always forwarded: a thumb that slid over a HUD button before lifting stayed down before. Bit 44
+adds "no fingers on the desktop" (z is full).
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

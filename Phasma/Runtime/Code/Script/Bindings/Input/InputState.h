@@ -32,6 +32,8 @@ namespace pe::InputState
     void OnFingerMotion(long long fingerId, float x, float y, float dx, float dy);
     TouchState ConsumeTouchState();
     int GetTouchFingerCount();
+    // The index-th finger down (at most two are tracked): its id and normalized [0,1] position; false past the last.
+    bool GetTouch(int index, long long &id, float &x, float &y);
     void SetMouseCapturedByUi(bool captured);
     void SetKeyboardCapturedByUi(bool captured);
     bool IsMouseCapturedByUi();

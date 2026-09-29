@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 22;
+    inline constexpr uint32_t ScriptAbiVersion = 23;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -330,6 +330,9 @@ namespace phasma
         // 0 when a node's rig lacks the anchor.
         uint32_t (*playAnimationLayerAnchored)(void *, Node, const char *clip, const char *mask, uint32_t loop,
                                                float speed, const char *anchor) noexcept;
+        // v23: the fingers on the screen, for on-screen sticks: the index-th finger down (at most two; a finger that
+        // landed on the runtime UI is the UI's), its id and window-pixel position. 0 past the last (the desktop has none).
+        uint32_t (*getTouch)(void *, uint32_t index, int64_t *id, float *x, float *y) noexcept;
     };
     struct ScriptDesc
     {
@@ -510,6 +513,10 @@ namespace phasma
             return m_api.setLightIntensity(m_api.context, node, intensity) != 0;
         }
         bool Vibrate(int32_t ms) const { return m_api.vibrate(m_api.context, ms) != 0; }
+        bool Touch(uint32_t index, int64_t &id, float &x, float &y) const
+        {
+            return m_api.getTouch(m_api.context, index, &id, &x, &y) != 0;
+        }
         Node CreateQuad(const char *name, float width, float height) const
         {
             return m_api.createQuad(m_api.context, name, width, height);

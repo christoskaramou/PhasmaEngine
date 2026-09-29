@@ -217,6 +217,19 @@ namespace pe
             s_prevPinchDist = PinchDistance(); // reset pinch baseline when the 2nd finger lands
         }
 
+        bool GetTouch(int index, long long &id, float &x, float &y)
+        {
+            for (const Finger &f : s_fingers)
+                if (f.active && index-- == 0)
+                {
+                    id = f.id;
+                    x = f.x;
+                    y = f.y;
+                    return true;
+                }
+            return false;
+        }
+
         void OnFingerUp(long long fingerId, float, float)
         {
             const int i = FindFinger(fingerId);

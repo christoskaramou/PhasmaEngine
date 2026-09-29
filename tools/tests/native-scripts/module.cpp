@@ -197,8 +197,11 @@ namespace
                               !api.getAnimationLayer(api.context, node, nullptr, &layerT, &layerD));
                 Check(43, !world.ClipMarker(node, "Idle", "impact", markerT) && markerT == -1.0f &&
                               !world.SetLightIntensity(node, 2.0f) && !world.SetLightIntensity(0xDEAD, 1.0f));
-                // The desktop has no vibrator: input.vibrate is a no-op there.
-                Check(44, !world.Vibrate(15) && !world.Vibrate(0));
+                // The desktop has no vibrator: input.vibrate is a no-op there; nor fingers (ABI 23 touches).
+                int64_t fingerId = 0;
+                float fingerX = 0.0f, fingerY = 0.0f;
+                Check(44, !world.Vibrate(15) && !world.Vibrate(0) && !world.Touch(0, fingerId, fingerX, fingerY) &&
+                              !api.getTouch(api.context, 0, nullptr, &fingerX, &fingerY));
                 // A textured sprite quad: made, cut out and two-sided; refused without a name, a size, a mesh
                 // or a known slot.
                 const phasma::Node sprite = world.CreateQuad("NativeProbeSprite", 1.0f, 0.5f);

@@ -143,7 +143,9 @@ seconds)` and `SetLightIntensity(node, value)` (every light the node or a descen
 adds textured sprites: `CreateQuad(name, width, height)` (`primitives.quad`), `SetTexture(node, slot, path)`
 (`material.set_texture`), `SetDoubleSided(node, on)` and `SetAlphaCutoff(node, value)`. ABI 22 gives
 `PlayLayer` an optional anchor bone (`animation.play_layer`'s anchor): the masked bones follow that bone of the
-base pose, so an attack layer's upper body rides a running pelvis instead of the attack clip's own hips.
+base pose, so an attack layer's upper body rides a running pelvis instead of the attack clip's own hips. ABI 23
+adds `Touch(index, id, x, y)`: the fingers on the screen (at most two), each with its id and window-pixel position,
+for on-screen sticks; a finger landing on the runtime UI is the UI's, and the desktop has none.
 
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are
