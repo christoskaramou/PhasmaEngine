@@ -63,7 +63,10 @@ VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
     float4 inPos            = float4(input.position, 1.0f);
     float4x4 worldTransform = mul(boneTransform, GetMeshMatrix(id));
     output.positionWS       = mul(inPos, worldTransform);
-    output.positionCS       = mul(inPos, mul(boneTransform, mul(GetMeshMatrix(id), GetViewProjection())));
+    // DepthVS's exact maths, precise: this pass depth-tests EQUAL against the depth prepass, and a skinned mesh
+    // multiplied in another order (J*(M*VP)) rounded apart from it and failed the test in speckles on DX12.
+    precise float4 positionCS = mul(inPos, mul(worldTransform, GetViewProjection()));
+    output.positionCS       = positionCS;
     output.prevPositionCS   = mul(inPos, mul(boneTransform, mul(GetMeshPreviousMatrix(id), GetPreviousViewProjection())));
     output.position         = ApplyViewportYConvention(output.positionCS);
     
