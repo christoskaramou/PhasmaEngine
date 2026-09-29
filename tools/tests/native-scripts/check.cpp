@@ -220,10 +220,8 @@ static void CheckInstalledLoad(const char *probe)
         Require(!module.Sync(directory / "Absent.dll", false) && !module.Active());
     }
     {
-        // The editor path still observes first and stages a shadow copy.
+        // The editor path stages a shadow copy, at once for the first module (no poll to settle first).
         pe::ProjectNativeModule module;
-        Require(!module.Sync(game, true));
-        std::this_thread::sleep_for(std::chrono::milliseconds(550));
         Require(module.Sync(game, true));
         module.Commit();
         Require(module.Active() && fileCount() == 2 && module.Status().liveReload);
@@ -592,9 +590,7 @@ static void CheckInPlaceFallback(const char *good, const char *badAbi)
     }
     {
         pe::ProjectNativeModule module;
-        Require(!module.Sync(game, true));
-        std::this_thread::sleep_for(std::chrono::milliseconds(550));
-        Require(module.Sync(game, true)); // copy fails -> in-place load
+        Require(module.Sync(game, true)); // copy fails -> in-place load, at once for the first module
         module.Commit();
         auto status = module.Status();
         Require(status.active && !status.liveReload && status.reloads == 1);
@@ -615,8 +611,6 @@ static void CheckInPlaceFallback(const char *good, const char *badAbi)
     Require(SetFolderWritable(directory, true));
     {
         pe::ProjectNativeModule module;
-        Require(!module.Sync(game, true));
-        std::this_thread::sleep_for(std::chrono::milliseconds(550));
         Require(module.Sync(game, true)); // normal shadow copy
         module.Commit();
         const auto running = module.Status().activeArtifact;

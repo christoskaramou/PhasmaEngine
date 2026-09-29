@@ -559,11 +559,16 @@ namespace pe
             return false;
         if (!m_seen || stamp != m_observed || size != m_observedSize)
         {
+            // A new artifact waits a poll to settle (a build may still be writing it), except the first one seen
+            // with nothing loaded: a scene's C++ scripts must run before its first frame (the bare scene showed
+            // for 0.5 s), and Stage refuses a file that changes while it is copied.
+            const bool initial = !m_seen && !m_active.api;
             m_seen = true;
             m_observed = stamp;
             m_observedSize = size;
             m_retryDelay = std::chrono::milliseconds(500);
-            return false;
+            if (!initial)
+                return false;
         }
         // A tried artifact waits for the next build, except after a transient copy failure (a sharing
         // violation while an antivirus scans the new DLL, say): that is retried with backoff up to 30 s.
