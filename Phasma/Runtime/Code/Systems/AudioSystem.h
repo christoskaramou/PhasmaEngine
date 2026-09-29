@@ -94,6 +94,7 @@ namespace pe
         std::vector<ma_sound *> m_fireAndForget;
 
         float m_masterVolume = 1.0f;
+        bool m_muted = false; // phasma_settings.json "audio_muted": the output stays silent whatever the master
         float m_musicVolume = 1.0f;
         float m_sfxVolume = 1.0f;
         float m_ambientVolume = 1.0f;

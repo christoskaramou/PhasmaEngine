@@ -165,6 +165,17 @@ namespace pe
         return true;
     }
 
+    bool ReadRuntimeAudioMuted(const std::filesystem::path &settingsPath)
+    {
+        rapidjson::Document document;
+        std::string warning;
+        project_detail::TryLoadJsonObject(
+            settingsPath.empty() ? DefaultProjectSettingsPath() : project_detail::NormalizeAbsolute(settingsPath),
+            document, warning);
+        return document.HasMember(kAudioMutedSettingsKey) && document[kAudioMutedSettingsKey].IsBool() &&
+               document[kAudioMutedSettingsKey].GetBool();
+    }
+
     bool WriteProjectSelection(const std::filesystem::path &settingsPath, const ProjectConfig &project, std::string *error)
     {
         const std::filesystem::path normalizedSettingsPath =

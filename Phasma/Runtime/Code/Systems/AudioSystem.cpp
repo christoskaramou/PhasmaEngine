@@ -1,6 +1,7 @@
 #ifdef PE_AUDIO
 
 #include "AudioSystem.h"
+#include "Project/ProjectSelection.h"
 #include "Camera/Camera.h"
 #include "Scene/SceneAccess.h"
 #include "Scene/Scene.h"
@@ -173,7 +174,9 @@ namespace pe
         }
 
         SetEnabled(true);
-        PE_INFO("[Audio] Audio engine initialized");
+        m_muted = ReadRuntimeAudioMuted();
+        SetMasterVolume(m_masterVolume);
+        PE_INFO("[Audio] Audio engine initialized%s", m_muted ? " (muted by phasma_settings.json audio_muted)" : "");
     }
 
     void AudioSystem::Update()
@@ -334,7 +337,7 @@ namespace pe
     {
         m_masterVolume = v;
         if (m_engine)
-            ma_engine_set_volume(m_engine, v);
+            ma_engine_set_volume(m_engine, m_muted ? 0.0f : v);
     }
 
     void AudioSystem::SetMusicVolume(float v)

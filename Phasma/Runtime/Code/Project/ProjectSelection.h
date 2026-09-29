@@ -2,13 +2,13 @@
 
 #include "Project/ProjectConfig.h"
 
-
 namespace pe
 {
     inline constexpr const char *kRuntimeSettingsFileName = "phasma_settings.json";
     inline constexpr const char *kProjectManifestSettingsKey = "project_manifest";
     inline constexpr const char *kProjectPathSettingsKey = "project_path";
     inline constexpr const char *kStartupSceneSettingsKey = "startup_scene";
+    inline constexpr const char *kAudioMutedSettingsKey = "audio_muted";
 
     enum class ProjectSelectionSource : uint8_t
     {
@@ -37,6 +37,8 @@ namespace pe
     [[nodiscard]] bool TryReadRuntimeStartupScene(const std::filesystem::path &settingsPath,
                                                   std::string &startupScene,
                                                   std::string *warning = nullptr);
+    // "audio_muted": true starts every run from these settings silent (test and review launches).
+    [[nodiscard]] bool ReadRuntimeAudioMuted(const std::filesystem::path &settingsPath = {});
     [[nodiscard]] bool WriteProjectSelection(const std::filesystem::path &settingsPath,
                                              const ProjectConfig &project,
                                              std::string *error = nullptr);
