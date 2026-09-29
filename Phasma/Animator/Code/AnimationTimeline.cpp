@@ -1534,6 +1534,27 @@ namespace pe
                 ReevaluatePose(scene, anim);
             };
 
+            if (action == "timeline.clip_delete")
+            {
+                // The Delete Action popup's delete, for scripted rebuilds that retire clips.
+                const std::string name = args.value("name", "");
+                auto &clips = model->GetMutableAnimations();
+                const auto found = std::find_if(clips.begin(), clips.end(), [&](const AnimationClip &entry)
+                                                { return entry.name == name; });
+                if (found == clips.end())
+                    return fail("name must name a clip in this model");
+                if (clips.size() == 1)
+                    return fail("a model keeps at least one clip");
+                for (NodeId *n : m_animatedNodes)
+                    anim->StopAnimation(n);
+                clips.erase(found);
+                m_selectedClip = std::clamp(m_selectedClip, 0, static_cast<int>(clips.size()) - 1);
+                ResetEditState();
+                m_dirty = true;
+                SetFrame(scene, anim, 0.f);
+                return ok({{"deleted", name}, {"clips", clips.size()}});
+            }
+
             if (action == "timeline.clip_copy")
             {
                 const std::string source = args.value("source", "");
