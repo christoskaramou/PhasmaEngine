@@ -31,7 +31,16 @@ param(
     [string]$Scene = "Assets/Scenes/new.pescene",
     [int]$WaitSeconds = 25,
     [string]$VulkanSdkBin = $(if ($env:VULKAN_SDK) { Join-Path $env:VULKAN_SDK "Bin" } else { "" }),
-    [switch]$SkipRuntimeToggleVariants
+    [switch]$SkipRuntimeToggleVariants,
+    # A game project to bake as well. Its scenes run in a temporary copy of the project laid out the way the APK stages
+    # it (the engine's RuntimeAssets Shaders and PassInfo win, the game's own files fill the gaps), so every cache key is
+    # the one the device computes; the game's own copies of engine shaders never reach the device. -ProjectWaitSeconds
+    # gives each -ProjectScene its run time, and -ProjectEnv (NAME=value) sets launch options for those runs, such as a
+    # hands-off match that meets every enemy.
+    [string]$ProjectPath = "",
+    [string[]]$ProjectScene = @(),
+    [int[]]$ProjectWaitSeconds = @(),
+    [string[]]$ProjectEnv = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -63,7 +72,7 @@ function Set-JsonProperty($obj, [string]$name, $value) {
 }
 
 function Get-BakeInputHashes {
-    $files = @(
+    $inputs = @(
         Get-Item (Join-Path $repoRoot "tools/bake_android_shaders.ps1")
         Get-Item (Join-Path $repoRoot "Phasma/Core/Code/Base/Hash.h")
         Get-ChildItem -File -Recurse (Join-Path $repoRoot "Phasma/Core/Code/API") | Where-Object { $_.Extension -in ".cpp", ".h" }
@@ -71,7 +80,16 @@ function Get-BakeInputHashes {
         Get-ChildItem -File -Recurse (Join-Path $repoRoot "Phasma/Runtime/RuntimeAssets/Shaders")
         Get-ChildItem -File -Recurse (Join-Path $repoRoot "Phasma/Runtime/RuntimeAssets/PassInfo")
         Get-ChildItem -File -Recurse (Join-Path $repoRoot "Phasma/Player/android/app/src/main/assets/Assets")
-    ) | Sort-Object FullName -Unique
+    )
+    if ($ProjectPath) {
+        # The game's own shaders and passes are compiled into the cache too (app/build.gradle.kts lists the same).
+        $gameAssets = Join-Path (Resolve-Path $ProjectPath).Path "Assets"
+        foreach ($dir in "Shaders", "PassInfo") {
+            $gameDir = Join-Path $gameAssets $dir
+            if (Test-Path $gameDir) { $inputs += Get-ChildItem -File -Recurse $gameDir }
+        }
+    }
+    $files = $inputs | Sort-Object FullName -Unique
 
     $hashes = [ordered]@{}
     foreach ($file in $files) {
@@ -128,6 +146,7 @@ function Read-SpirvDisassembly([string]$toolPath, [string]$blobPath) {
 Write-Host "[bake] repo            : $repoRoot"
 Write-Host "[bake] bake host       : $player"
 Write-Host "[bake] scene           : $Scene"
+if ($ProjectPath) { Write-Host "[bake] project scenes  : $($ProjectScene -join ', ') in $ProjectPath" }
 Write-Host "[bake] spirv-dis       : $spirvDis"
 Write-Host "[bake] staging target  : $prebaked"
 
@@ -149,6 +168,7 @@ $bakeInputHashes = Get-BakeInputHashes
 $androidSceneSource = Join-Path $repoRoot ("Phasma/Player/android/app/src/main/assets/" + $Scene)
 $bakeHostScene = Join-Path $binDir $Scene
 if (Test-Path $androidSceneSource) {
+    New-Item -ItemType Directory -Force -Path (Split-Path $bakeHostScene -Parent) | Out-Null
     Copy-Item -Path $androidSceneSource -Destination $bakeHostScene -Force
     Write-Host "[bake] copied Android-local scene into bake host: $Scene"
 }
@@ -157,7 +177,25 @@ if (Test-Path $androidSceneSource) {
 #    runtime compiler off, those lazy paths need to be pre-baked too. The second variant bakes the
 #    non-TAA path so toggling TAA off has an Upsample shader in the cache.
 $editorConfig = Join-Path $assetsDir "editor_config.json"
-Set-Content -Path (Join-Path $binDir "phasma_settings.json") -Value (@{ graphics_api = "vulkan" } | ConvertTo-Json -Compress) -Encoding utf8
+# The bake host runs on Vulkan and silent; the build folder's own settings come back after the runs.
+$settingsPath = Join-Path $binDir "phasma_settings.json"
+$settingsBackup = if (Test-Path $settingsPath) { Get-Content $settingsPath -Raw } else { $null }
+function Write-BakeSettings([hashtable]$extra) {
+    Set-Content -Path $settingsPath -Value ((@{ graphics_api = "vulkan"; audio_muted = $true } + $extra) | ConvertTo-Json -Compress) -Encoding utf8
+}
+function Invoke-BakeHost([string]$label, [int]$seconds) {
+    Write-Host "[bake] launching PhasmaPlayer $label (PHASMA_SPIRV_TARGET=1.2, --api vulkan); waiting ${seconds}s for shader compile..."
+    $proc = Start-Process $player -ArgumentList '--api', 'vulkan' -WorkingDirectory $binDir -WindowStyle Hidden -PassThru
+    Start-Sleep -Seconds $seconds
+    if (-not $proc.HasExited) {
+        Stop-Process -Id $proc.Id -Force
+        Write-Host "[bake] bake host still running after ${seconds}s (expected) -> stopped."
+        return $true
+    }
+    Write-Host "[bake] WARNING: bake host exited early (code=0x$('{0:X8}' -f $proc.ExitCode)). Check $logFile." -ForegroundColor Yellow
+    return $false
+}
+Write-BakeSettings @{}
 
 $bakeScenes = @($Scene)
 $temporaryScenes = @()
@@ -190,18 +228,90 @@ if (Test-Path $cacheSpv) { Remove-Item -Recurse -Force $cacheSpv }
 # 3. Run the bake host with the SPIR-V target pinned to the Android value.
 $env:PHASMA_SPIRV_TARGET = "1.2"
 $env:PHASMA_API = "vulkan"
-foreach ($bakeScene in $bakeScenes) {
-    Set-Content -Path $editorConfig -Value (@{ last_scene = $bakeScene } | ConvertTo-Json -Compress) -Encoding utf8
-    Write-Host "[bake] launching PhasmaPlayer scene=$bakeScene (PHASMA_SPIRV_TARGET=1.2, --api vulkan); waiting ${WaitSeconds}s for shader compile..."
-    $proc = Start-Process $player -ArgumentList '--api', 'vulkan' -WorkingDirectory $binDir -WindowStyle Hidden -PassThru
-    Start-Sleep -Seconds $WaitSeconds
-    if (-not $proc.HasExited) {
-        Stop-Process -Id $proc.Id -Force
-        Write-Host "[bake] bake host still running after ${WaitSeconds}s (expected) -> stopped."
+$overlayRoot = $null
+$overlayLinks = @()
+$savedEnv = @{}
+try {
+    foreach ($bakeScene in $bakeScenes) {
+        Set-Content -Path $editorConfig -Value (@{ last_scene = $bakeScene } | ConvertTo-Json -Compress) -Encoding utf8
+        $null = Invoke-BakeHost "scene=$bakeScene" $WaitSeconds
     }
-    else {
-        Write-Host "[bake] WARNING: bake host exited early (code=0x$('{0:X8}' -f $proc.ExitCode)). Check $logFile." -ForegroundColor Yellow
+
+    # 3b. The game project's scenes, in a copy of the project laid out as the APK stages it.
+    if ($ProjectPath) {
+        # The host's C++ scripts must be the project's, or its scenes run without them and bake too little.
+        $projectRoot = (Resolve-Path $ProjectPath).Path
+        $nativeManifest = Join-Path $binDir "NativeScripts.json"
+        if (-not (Test-Path $nativeManifest)) { Fail "No ${nativeManifest}: build the bake host with PE_PROJECT_NATIVE_DIR set to the project's C++ scripts." }
+        $nativeSources = (Get-Content $nativeManifest -Raw | ConvertFrom-Json).sources
+        if (-not $nativeSources -or -not [System.IO.Path]::GetFullPath($nativeSources).StartsWith($projectRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            Fail "The bake host's C++ scripts come from '$nativeSources', not from $projectRoot. Rebuild it with PE_PROJECT_NATIVE_DIR set to the project's scripts."
+        }
+        $projectAssets = Join-Path $projectRoot "Assets"
+        $engineAssets = Join-Path $repoRoot "Phasma/Runtime/RuntimeAssets"
+        $overlayRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("phasma-android-bake-" + [guid]::NewGuid().ToString("N"))
+        $overlayAssets = Join-Path $overlayRoot "Assets"
+        New-Item -ItemType Directory -Force -Path (Join-Path $overlayAssets "Save") | Out-Null
+        foreach ($entry in Get-ChildItem $projectAssets) {
+            if ($entry.Name -in "Shaders", "PassInfo", "Save") { continue }
+            $target = Join-Path $overlayAssets $entry.Name
+            if ($entry.PSIsContainer) {
+                New-Item -ItemType Junction -Path $target -Target $entry.FullName | Out-Null
+                $overlayLinks += $target
+            }
+            else { Copy-Item $entry.FullName $target }
+        }
+        foreach ($dir in "Shaders", "PassInfo") {
+            Copy-Item -Recurse (Join-Path $engineAssets $dir) (Join-Path $overlayAssets $dir)
+            $gameDir = Join-Path $projectAssets $dir
+            if (Test-Path $gameDir) {
+                foreach ($file in Get-ChildItem -Recurse -File $gameDir) {
+                    $target = Join-Path (Join-Path $overlayAssets $dir) ([System.IO.Path]::GetRelativePath($gameDir, $file.FullName))
+                    if (-not (Test-Path $target)) {
+                        New-Item -ItemType Directory -Force -Path (Split-Path $target -Parent) | Out-Null
+                        Copy-Item $file.FullName $target
+                    }
+                }
+            }
+        }
+        $manifest = (Join-Path $overlayRoot "phasma_project.json").Replace("\", "/")
+        Write-TextUtf8NoBom $manifest (@{ version = 1; name = "Android shader bake"; assets = $overlayAssets.Replace("\", "/") } | ConvertTo-Json -Compress)
+        foreach ($pair in $ProjectEnv) {
+            $name, $value = $pair.Split("=", 2)
+            $savedEnv[$name] = [Environment]::GetEnvironmentVariable($name)
+            [Environment]::SetEnvironmentVariable($name, $value)
+        }
+        for ($i = 0; $i -lt $ProjectScene.Count; $i++) {
+            $scenePath = Join-Path $overlayRoot $ProjectScene[$i]
+            if (-not (Test-Path $scenePath)) { Fail "Project scene not found at $scenePath" }
+            $scenePath = (Resolve-Path $scenePath).Path.Replace("\", "/")
+            Write-BakeSettings @{ project_path = $overlayRoot.Replace("\", "/"); project_manifest = $manifest; startup_scene = $scenePath }
+            if (Test-Path $logFile) { Clear-Content $logFile }
+            $sceneName = Split-Path $scenePath -Leaf
+            $ranFull = Invoke-BakeHost "project scene=$($ProjectScene[$i])" $(if ($i -lt $ProjectWaitSeconds.Count) { $ProjectWaitSeconds[$i] } else { $WaitSeconds })
+            if (-not $ranFull) { Fail "The bake host exited early on $sceneName; its later shaders are not baked. Check $logFile." }
+            $log = if (Test-Path $logFile) { @(Get-Content $logFile) } else { @() }
+            if (-not ($log | Where-Object { $_.Contains("Scene loaded from:") -and $_.Contains($sceneName) })) {
+                Fail "The bake host never loaded $sceneName; its shaders are not baked. Check $logFile."
+            }
+            if (-not ($log | Where-Object { $_ -match '\[CppScript\] module (re)?loaded' })) {
+                Fail "The C++ scripts never loaded for $sceneName; its scripted content is not baked. Check $logFile."
+            }
+            $scriptError = $log | Where-Object { $_ -match '\[ERROR\] \[CppScript\]' } | Select-Object -First 1
+            if ($scriptError) { Fail "A C++ script failed in $sceneName ($scriptError); its later shaders are not baked." }
+        }
     }
+}
+finally {
+    foreach ($name in $savedEnv.Keys) { [Environment]::SetEnvironmentVariable($name, $savedEnv[$name]) }
+    $unlinked = $true
+    foreach ($link in $overlayLinks) {
+        try { [System.IO.Directory]::Delete($link) }  # the junction only, never the game folder it points at
+        catch { $unlinked = $false; Write-Host "[bake] WARNING: could not remove junction $link; leaving $overlayRoot in place." -ForegroundColor Yellow }
+    }
+    if ($overlayRoot -and $unlinked -and (Test-Path $overlayRoot)) { Remove-Item -Recurse -Force $overlayRoot }
+    if ($null -ne $settingsBackup) { Set-Content -Path $settingsPath -Value $settingsBackup -NoNewline -Encoding utf8 }
+    else { Remove-Item $settingsPath -ErrorAction SilentlyContinue }
 }
 
 foreach ($temporaryScene in $temporaryScenes) {

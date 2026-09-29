@@ -58,7 +58,8 @@ namespace pe
 
         std::string Identity(uintmax_t size, std::filesystem::file_time_type written)
         {
-            return std::to_string(size) + ":" + std::to_string(written.time_since_epoch().count());
+            // libc++'s file clock counts in __int128, which std::to_string has no overload for.
+            return std::to_string(size) + ":" + std::to_string(static_cast<long long>(written.time_since_epoch().count()));
         }
 
         enum class ShadowTag

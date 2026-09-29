@@ -196,6 +196,8 @@ endif()
 list(APPEND LIB_FILES SDL2 vulkan)
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
     list(APPEND LIB_FILES SDL2main)
+else()
+    list(APPEND LIB_FILES log) # Log.cpp mirrors every line to logcat
 endif()
 if(WIN32)
     list(APPEND LIB_FILES ws2_32)

@@ -1,4 +1,8 @@
 
+#if defined(__ANDROID__)
+#include <android/log.h>
+#endif
+
 namespace pe
 {
     std::vector<Log::Callback> Log::s_callbacks;
@@ -75,6 +79,13 @@ namespace pe
         std::cout << colorCodeCout << finalMsg << resetCodeCout << '\n';
         if (type == LogType::Error)
             std::cout.flush();
+#if defined(__ANDROID__)
+        // stdout goes nowhere on a device and a release build's log file is private: read it with `adb logcat -s Phasma`.
+        __android_log_write(type == LogType::Error  ? ANDROID_LOG_ERROR
+                            : type == LogType::Warn ? ANDROID_LOG_WARN
+                                                    : ANDROID_LOG_INFO,
+                            "Phasma", msg.c_str());
+#endif
 
         // File Output
         if (s_file)
