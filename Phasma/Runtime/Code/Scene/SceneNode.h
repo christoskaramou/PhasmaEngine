@@ -102,7 +102,8 @@ namespace pe
         // aligned; shaders read joints at MESH_DATA_SIZE = sizeof(NodeGpuData) = 144 (keep in sync).
         uint32_t renderVisible = 1u;
         uint32_t skinBoundsOffset = 0u; // optional world AABB after the joint tail; 0 for static nodes
-        uint32_t pad1 = 0u;
+        // Joints in the tail's current pose; the previous frame's pose follows it (skinned motion vectors).
+        uint32_t jointCount = 0u;
         uint32_t pad2 = 0u;
     };
     static_assert(sizeof(NodeGpuData) == 144, "NodeGpuData layout must match shader storage offsets");
@@ -120,6 +121,11 @@ namespace pe
         uint8_t dirtyUniforms = 0;   // bitmask per swapchain frame (max 8); replaces vector<bool>
 
         std::vector<mat4> jointMatrices;
+        // The pose the previous rendered frame showed, and the pose last uploaded (rolled into it on
+        // the node's first upload of a frame), so a skinned mesh's motion vectors follow its bones.
+        std::vector<mat4> prevJointMatrices;
+        std::vector<mat4> shownJointMatrices;
+        uint32_t jointRollFrame = UINT32_MAX;
         vec4 skinBoundsGpu[2]{};
     };
 

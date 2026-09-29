@@ -1236,10 +1236,26 @@ namespace pe
                 const mat4 invRoot = hasMatchingSkeleton ? glm::inverse(skeleton.rootTransform) : mat4(1.f);
                 const size_t offset = rt.dataOffset + sizeof(NodeGpuData);
                 const size_t size = static_cast<size_t>(jointCount) * sizeof(mat4);
-                PE_ERROR_IF(offset > m_storages[frame]->Size() || size > m_storages[frame]->Size() - offset,
+                PE_ERROR_IF(offset > m_storages[frame]->Size() || 2 * size > m_storages[frame]->Size() - offset,
                             "Scene joint palette exceeds its frame buffer");
-                palettes.push_back({static_cast<int>(rt.jointMatrices.size()) == jointCount ? &rt.jointMatrices : nullptr,
-                                    invRoot, offset, static_cast<size_t>(jointCount)});
+                const bool posed = static_cast<int>(rt.jointMatrices.size()) == jointCount;
+                palettes.push_back({posed ? &rt.jointMatrices : nullptr, invRoot, offset, static_cast<size_t>(jointCount)});
+                // The previous frame's pose after the current one, for the G-buffer's motion vectors: rolled on
+                // the node's first upload of a frame (the late script catch-up uploads again in the same frame).
+                const uint32_t frameCounter = RHII.GetFrameCounter();
+                if (rt.jointRollFrame != frameCounter)
+                {
+                    rt.jointRollFrame = frameCounter;
+                    rt.prevJointMatrices = rt.shownJointMatrices.size() == rt.jointMatrices.size() ? rt.shownJointMatrices : rt.jointMatrices;
+                }
+                rt.shownJointMatrices = rt.jointMatrices;
+                const bool prevPosed = posed && rt.prevJointMatrices.size() == rt.jointMatrices.size();
+                palettes.push_back({prevPosed ? &rt.prevJointMatrices : (posed ? &rt.jointMatrices : nullptr), invRoot,
+                                    offset + size, static_cast<size_t>(jointCount)});
+                // A moving pose uploads again next frame even if nothing re-dirties it, so the frame after it
+                // stops sees previous == current instead of keeping its last motion.
+                if (prevPosed && rt.prevJointMatrices != rt.jointMatrices)
+                    rt.dirtyUniforms = 0xFF;
             }
         }
 

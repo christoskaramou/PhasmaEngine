@@ -346,6 +346,7 @@ namespace pe
             m_nodeRuntime[i].hasUniformData = false;
             m_nodeRuntime[i].dataOffset = static_cast<size_t>(-1);
             m_nodeRuntime[i].gpuData.skinBoundsOffset = 0u;
+            m_nodeRuntime[i].gpuData.jointCount = 0u;
 
             if (m_nodeRuntime[i].gpuPending || !IsNodeHierarchyEnabled(m_nodeIds[i]))
                 continue;
@@ -368,7 +369,9 @@ namespace pe
             int jointCount = skinned ? GetJointCountForNode(m_nodeIds[i]) : 0;
             if (jointCount <= 0 && skinned)
                 jointCount = maxJointCount;
-            size_t nodeDataSize = sizeof(NodeGpuData) + jointCount * sizeof(mat4);
+            // The current pose, then the previous frame's (skinned motion vectors).
+            m_nodeRuntime[i].gpuData.jointCount = static_cast<uint32_t>(std::max(jointCount, 0));
+            size_t nodeDataSize = sizeof(NodeGpuData) + 2 * jointCount * sizeof(mat4);
             if (jointCount > 0)
             {
                 m_nodeRuntime[i].gpuData.skinBoundsOffset = static_cast<uint32_t>(storageSize + nodeDataSize);

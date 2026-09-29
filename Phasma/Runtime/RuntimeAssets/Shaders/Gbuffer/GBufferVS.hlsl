@@ -33,6 +33,12 @@ float4x4 GetPreviousViewProjection()          { return LoadMatrix(64); }
 float4x4 GetMeshMatrix(uint id)               { return LoadMatrix(constants[id].meshDataOffset); }
 float4x4 GetMeshPreviousMatrix(uint id)       { return LoadMatrix(constants[id].meshDataOffset + MATRIX_SIZE); }
 float4x4 GetJointMatrix(uint id, uint index)  { return LoadMatrix(constants[id].meshDataOffset + MESH_DATA_SIZE + index * MATRIX_SIZE); }
+// NodeGpuData.jointCount (byte 136): the previous frame's pose follows the current one in the joint tail.
+uint GetJointCount(uint id)                   { return data.Load(constants[id].meshDataOffset + 136u); }
+float4x4 GetPreviousJointMatrix(uint id, uint index)
+{
+    return LoadMatrix(constants[id].meshDataOffset + MESH_DATA_SIZE + (GetJointCount(id) + index) * MATRIX_SIZE);
+}
 
 VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
 {
@@ -46,6 +52,7 @@ VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
     output.id = id;
 
     float4x4 boneTransform = identity_mat;
+    float4x4 prevBoneTransform = identity_mat;
     if (pc.jointsCount && !spriteFrameBlend)
     {
         float weightSum = input.weights[0] + input.weights[1] + input.weights[2] + input.weights[3];
@@ -56,6 +63,11 @@ VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
                             mul(GetJointMatrix(id, input.joints[1]), input.weights[1]) +
                             mul(GetJointMatrix(id, input.joints[2]), input.weights[2]) +
                             mul(GetJointMatrix(id, input.joints[3]), input.weights[3]);
+            // Last frame's pose, so an animated limb's motion reaches the velocity buffer (TAA ghosted it).
+            prevBoneTransform = mul(GetPreviousJointMatrix(id, input.joints[0]), input.weights[0]) +
+                                mul(GetPreviousJointMatrix(id, input.joints[1]), input.weights[1]) +
+                                mul(GetPreviousJointMatrix(id, input.joints[2]), input.weights[2]) +
+                                mul(GetPreviousJointMatrix(id, input.joints[3]), input.weights[3]);
         }
     }
 
@@ -67,7 +79,7 @@ VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
     // multiplied in another order (J*(M*VP)) rounded apart from it and failed the test in speckles on DX12.
     precise float4 positionCS = mul(inPos, mul(worldTransform, GetViewProjection()));
     output.positionCS       = positionCS;
-    output.prevPositionCS   = mul(inPos, mul(boneTransform, mul(GetMeshPreviousMatrix(id), GetPreviousViewProjection())));
+    output.prevPositionCS   = mul(inPos, mul(prevBoneTransform, mul(GetMeshPreviousMatrix(id), GetPreviousViewProjection())));
     output.position         = ApplyViewportYConvention(output.positionCS);
     
     // Normal
