@@ -14,7 +14,7 @@ struct PushConstants
 [[vk::binding(2)]] Texture2D<float2> in_velocity : register(t2);
 [[vk::binding(3)]] Texture2D<float> in_depth : register(t3);
 [[vk::binding(4)]] SamplerState sampler_linear_clamp : register(s4);
-[[vk::binding(5)]] RWTexture2D<float4> out_color : register(u5);
+[[vk::binding(5)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> out_color : register(u5);
 
 // Simple Catmull-Rom sampling for history could be added later for better quality
 // For now using bilinear

@@ -37,6 +37,10 @@ namespace pe
             }
         }
 
+        // Scene colour targets are written as storage images (TAA, RCAS, ray tracing), so they use a format with
+        // mandatory STORAGE support that the shaders declare; BlitSceneImageToSwapchain converts to the swapchain.
+        constexpr ::PeFormat kSceneColorFormat = PE_FORMAT_R8G8B8A8_UNORM;
+
     } // namespace
 
     bool SceneNeedsVelocityRT(bool hasRayTracingGeometry)
@@ -201,7 +205,7 @@ namespace pe
     Image *CreateSceneFSSampledImage(const std::string &name, bool useRenderTargetScale)
     {
         ImageDesc desc{};
-        desc.format = RHII.GetSwapchainFormat();
+        desc.format = kSceneColorFormat;
         desc.width = GetScaledRenderWidth(useRenderTargetScale);
         desc.height = GetScaledRenderHeight(useRenderTargetScale);
         desc.usage = PE_IMAGE_USAGE_TRANSFER_DST | PE_IMAGE_USAGE_SAMPLED;
@@ -227,29 +231,27 @@ namespace pe
         DestroySceneRenderTargets(renderTargets, depthStencilTargets);
         Settings::Get<SceneSettings>().rendering_images.clear();
 
-        const ::PeFormat surfaceFormat = RHII.GetSwapchainFormat();
-
         SceneRenderTargets targets{};
         targets.depthStencil =
             CreateSceneDepthStencilTarget(depthStencilTargets, "depthStencil", RHII.GetDepthFormat(), PE_IMAGE_USAGE_TRANSFER_DST);
         targets.viewport =
-            CreateSceneRenderTarget(renderTargets, "viewport", surfaceFormat, PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST);
+            CreateSceneRenderTarget(renderTargets, "viewport", kSceneColorFormat, PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST);
         targets.display = CreateSceneRenderTarget(renderTargets,
                                                   "display",
-                                                  surfaceFormat,
+                                                  kSceneColorFormat,
                                                   PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST,
                                                   scaleOutput);
         targets.screenshot = CreateSceneRenderTarget(renderTargets,
                                                      "screenshot",
-                                                     surfaceFormat,
+                                                     kSceneColorFormat,
                                                      PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST,
                                                      scaleOutput);
         CreateSceneRenderTarget(renderTargets, "normal", SceneNormalRTFormat());
-        CreateSceneRenderTarget(renderTargets, "albedo", surfaceFormat);
-        CreateSceneRenderTarget(renderTargets, "srm", surfaceFormat);
+        CreateSceneRenderTarget(renderTargets, "albedo", kSceneColorFormat);
+        CreateSceneRenderTarget(renderTargets, "srm", kSceneColorFormat);
         if (SceneNeedsVelocityRT(hasRayTracingGeometry))
             CreateSceneRenderTarget(renderTargets, "velocity", SceneVelocityRTFormat());
-        CreateSceneRenderTarget(renderTargets, "emissive", surfaceFormat);
+        CreateSceneRenderTarget(renderTargets, "emissive", kSceneColorFormat);
         CreateSceneRenderTarget(renderTargets, "transparency", PE_FORMAT_R8_UNORM, PE_IMAGE_USAGE_NONE, true, false, Color::Black);
 
         return targets;

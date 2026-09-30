@@ -34,16 +34,20 @@ struct SSAOUniforms
 // Pass 1: occlusion. Depth/Normal at full res, write half-res raw AO.
 [[vk::binding(0, 0)]] Texture2D<float> Depth : register(t0, space0);
 [[vk::binding(1, 0)]] Texture2D<float4> Normal : register(t1, space0);
-[[vk::binding(2, 0)]] RWTexture2D<float> RawAO : register(u2, space0);
+[[vk::binding(2, 0)]] [[vk::image_format("r16f")]] RWTexture2D<float> RawAO : register(u2, space0);
 [[vk::binding(3, 0)]] cbuffer SSAOConstants : register(b3, space0)
 {
     SSAOUniforms cb;
 };
 #else
 // Passes 2/3 share a layout: half-res AO in (u0), full-res depth (t1), AO out (u2).
-[[vk::binding(0, 0)]] RWTexture2D<float> FilterInput : register(u0, space0);
+[[vk::binding(0, 0)]] [[vk::image_format("r16f")]] RWTexture2D<float> FilterInput : register(u0, space0);
 [[vk::binding(1, 0)]] Texture2D<float> FilterDepth : register(t1, space0);
-[[vk::binding(2, 0)]] RWTexture2D<float> FilterOutput : register(u2, space0);
+#ifdef SSAO_UPSAMPLE_PASS
+[[vk::binding(2, 0)]] [[vk::image_format("r8")]] RWTexture2D<float> FilterOutput : register(u2, space0);
+#else
+[[vk::binding(2, 0)]] [[vk::image_format("r16f")]] RWTexture2D<float> FilterOutput : register(u2, space0);
+#endif
 [[vk::binding(3, 0)]] cbuffer SSAOFilterConstants : register(b3, space0)
 {
     SSAOUniforms cb;

@@ -25,7 +25,7 @@ namespace pe
                 });
 
                 scene.set_function("load", [](const std::string &name) {
-                    LoadScene(Path::Assets + "Scenes/" + name);
+                    LoadScene(std::filesystem::path(std::u8string(name.begin(), name.end())).is_absolute() ? name : Path::Assets + "Scenes/" + name);
                 });
 
                 // Batched transform writes: one Lua->C++ crossing for N nodes instead of N

@@ -25,11 +25,13 @@ namespace pe
         }
 
         // Post that needs STORAGE/UAV or samples display can't target the swapchain
-        // (COLOR_ATTACHMENT|TRANSFER_DST only). Upsample+particles+UI are attachment-only.
+        // (COLOR_ATTACHMENT|TRANSFER_DST only). Upsample+particles+UI are attachment-only, and their
+        // pipelines are built for the display format, so a swapchain of another format needs the blit.
         bool CanDirectPresentToSwapchain(const SceneRendererCore &core)
         {
             Image *display = core.GetDisplayRT();
-            if (!display || display->GetWidth() != RHII.GetWidth() || display->GetHeight() != RHII.GetHeight())
+            if (!display || display->GetWidth() != RHII.GetWidth() || display->GetHeight() != RHII.GetHeight() ||
+                display->GetFormat() != RHII.GetSwapchainFormat())
                 return false;
 
             const auto &pp = Settings::Get<SceneSettings>();

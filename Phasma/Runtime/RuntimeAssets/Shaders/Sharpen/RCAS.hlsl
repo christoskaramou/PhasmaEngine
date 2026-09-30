@@ -9,7 +9,7 @@ struct PushConstants
 [[vk::push_constant]] ConstantBuffer<PushConstants> pc;
 
 [[vk::binding(0)]] Texture2D<float4> in_color : register(t0);
-[[vk::binding(1)]] RWTexture2D<float4> out_color : register(u1);
+[[vk::binding(1)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> out_color : register(u1);
 
 // CAS Algorithm
 // R.C.A.S. - Robust Contrast Adaptive Sharpening

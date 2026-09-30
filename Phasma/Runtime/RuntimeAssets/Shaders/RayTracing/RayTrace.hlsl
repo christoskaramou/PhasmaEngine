@@ -49,7 +49,7 @@ struct Vertex
 
 // Set 0
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure tlas;
-[[vk::binding(1, 0)]] RWTexture2D<float4> output;
+[[vk::binding(1, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> output;
 [[vk::binding(2, 0)]] ByteAddressBuffer data;
 [[vk::binding(3, 0)]] StructuredBuffer<Mesh_Constants> constants;
 [[vk::binding(4, 0)]] SamplerState material_sampler;

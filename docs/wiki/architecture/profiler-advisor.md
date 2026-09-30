@@ -26,6 +26,15 @@ snapshot JSON, returns 2 for malformed input/arguments and 0 for a report
 (including an insufficient-data report). A single snapshot intentionally cannot
 support a tuning recommendation. No Python package or inference runtime is added.
 
+For A/B performance gates, the Player stream's slowest rate is `Hz4` (index 0 of
+`ProfilerRefreshRate` in `Phasma/Core/Code/Base/ProfilerStream.h`; there is no
+1 Hz rate), and the first packet after connecting is a warm-up artifact (about
+30 fps, 0 ms GPU). A one-snapshot-per-second protocol must drop that packet and
+keep one packet per second. A harness that requested index 1 (`Hz10`) and
+averaged ten consecutive packets produced 0.9 s captures dominated by the
+warm-up packet and an unreproducible Sponza baseline. `tools/compare_snapshots.py`
+flags FPS only when the drop is both >5% and >1 fps (verified 2026-09-30).
+
 ## Capture contract
 
 Core `ProfilerSnapshot::CaptureMetadata` supplies the same additive metadata to

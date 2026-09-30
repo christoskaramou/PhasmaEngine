@@ -155,8 +155,8 @@ def _compare_fps(baseline: float, current: float, regression_count: list) -> str
     delta = current - baseline
     pct = (delta / baseline) * 100.0
 
-    # Regression: fps decreases (delta negative) by >5% OR >1 fps
-    is_regression = delta < 0 and (abs(pct) > REGRESSION_PCT or abs(delta) > REGRESSION_ABS_FPS)
+    # Regression: fps decreases (delta negative) by >5% AND >1 fps
+    is_regression = delta < 0 and abs(pct) > REGRESSION_PCT and abs(delta) > REGRESSION_ABS_FPS
     if is_regression:
         regression_count[0] += 1
 
