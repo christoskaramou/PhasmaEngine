@@ -216,7 +216,8 @@ namespace pe
             m_sceneRenderer.SetRenderPassScene(m_scene);
         }
 
-        const bool directPresent = !m_overlay && CanDirectPresentToSwapchain(m_sceneRenderer);
+        // Screenshot frames read the offscreen display: the swapchain may lack TRANSFER_SRC and must reach Present in PRESENT.
+        const bool directPresent = !m_overlay && !m_screenshotRequested && CanDirectPresentToSwapchain(m_sceneRenderer);
         if (directPresent)
             m_sceneRenderer.SetFrameDisplayOverride(RHII.GetSwapchain()->GetImage(imageIndex));
 
