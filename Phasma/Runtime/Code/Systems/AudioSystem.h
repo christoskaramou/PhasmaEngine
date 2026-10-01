@@ -31,7 +31,7 @@ namespace pe
         void Destroy() override;
 
         // Fire-and-forget
-        void PlaySound(const std::string &path);
+        void PlaySound(const std::string &path, float volume = 1.0f, float pitch = 1.0f);
         void PlaySound3D(const std::string &path, const vec3 &pos);
 
         // Music (single looping track)

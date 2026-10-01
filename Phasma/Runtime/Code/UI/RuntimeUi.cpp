@@ -312,6 +312,17 @@ namespace pe
         frameInfo.safeAreaMinY = m_frameSafeAreaMinY;
         frameInfo.safeAreaWidth = m_frameSafeAreaWidth;
         frameInfo.safeAreaHeight = m_frameSafeAreaHeight;
+        // A fitted canvas with no host input rect (the player): the window spans the canvas.
+        int windowW = 0, windowH = 0;
+        if (m_frameFit < 1.0f && m_frameInputEnabled && !m_frameInputRectValid && RHII.GetWindow())
+            SDL_GetWindowSize(RHII.GetWindow(), &windowW, &windowH);
+        if (windowW > 0 && windowH > 0)
+        {
+            frameInfo.inputRectValid = true;
+            frameInfo.inputRectMinX = frameInfo.inputRectMinY = 0.0f;
+            frameInfo.inputRectWidth = static_cast<float>(windowW);
+            frameInfo.inputRectHeight = static_cast<float>(windowH);
+        }
         m_backend->BeginFrame(frameInfo);
         m_frameOpen = true;
     }
@@ -339,10 +350,36 @@ namespace pe
 
     void RuntimeUiSystem::SetFrameSurfaceSize(uint32_t width, uint32_t height)
     {
-        m_frameSurfaceWidth = width;
-        m_frameSurfaceHeight = height;
+        m_physicalSurfaceWidth = width;
+        m_physicalSurfaceHeight = height;
+        ApplyReferenceFit();
         m_frameInputEnabled = true;
         m_frameInputRectValid = false;
+    }
+
+    void RuntimeUiSystem::SetReferenceSurface(float width, float height)
+    {
+        m_referenceWidth = std::isfinite(width) && width > 0.0f ? width : 0.0f;
+        m_referenceHeight = std::isfinite(height) && height > 0.0f ? height : 0.0f;
+        // Applies at once, so a script that sets it then reads the surface size lays out on the canvas.
+        ApplyReferenceFit();
+    }
+
+    void RuntimeUiSystem::GetReferenceSurface(float &width, float &height) const
+    {
+        width = m_referenceWidth;
+        height = m_referenceHeight;
+    }
+
+    void RuntimeUiSystem::ApplyReferenceFit()
+    {
+        const float w = static_cast<float>(m_physicalSurfaceWidth);
+        const float h = static_cast<float>(m_physicalSurfaceHeight);
+        m_frameFit = 1.0f;
+        if (m_referenceWidth > 0.0f && m_referenceHeight > 0.0f && w > 0.0f && h > 0.0f)
+            m_frameFit = std::min({1.0f, w / m_referenceWidth, h / m_referenceHeight});
+        m_frameSurfaceWidth = static_cast<uint32_t>(std::lround(w / m_frameFit));
+        m_frameSurfaceHeight = static_cast<uint32_t>(std::lround(h / m_frameFit));
     }
 
     void RuntimeUiSystem::SetFrameUiScale(float scale)
@@ -357,11 +394,12 @@ namespace pe
 
     void RuntimeUiSystem::SetFrameSafeArea(float minX, float minY, float width, float height)
     {
+        // Given in surface pixels; the UI lays out on the fitted canvas.
         m_frameSafeAreaValid = width > 0.0f && height > 0.0f;
-        m_frameSafeAreaMinX = minX;
-        m_frameSafeAreaMinY = minY;
-        m_frameSafeAreaWidth = width;
-        m_frameSafeAreaHeight = height;
+        m_frameSafeAreaMinX = minX / m_frameFit;
+        m_frameSafeAreaMinY = minY / m_frameFit;
+        m_frameSafeAreaWidth = width / m_frameFit;
+        m_frameSafeAreaHeight = height / m_frameFit;
     }
 
     void RuntimeUiSystem::SetFrameInputRect(float minX, float minY, float width, float height)

@@ -30,8 +30,7 @@ namespace pe
 
     void ParticlePass::UpdatePassInfo()
     {
-        // Depth test but no write (soft particles)
-        // Need depth buffer?
+        // Scene-depth rejection and soft intersection fade happen in the fragment shader.
         m_passInfo->name = "ParticleGraphicsPipeline";
         m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Particle/ParticleVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
         m_passInfo->pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Particle/ParticlePS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
@@ -87,6 +86,8 @@ namespace pe
                     views.push_back(img->GetSRV());
                 descriptors[1]->SetImageViews(0, views);
                 descriptors[1]->SetSampler(1, pm->GetSampler());
+                if (Image *depth = rs->GetDepthStencilTarget("depthStencil"))
+                    descriptors[1]->SetImageView(16, depth->GetSRV());
                 descriptors[1]->Update();
             }
         }
@@ -139,6 +140,18 @@ namespace pe
             descriptors[0]->Update();
         }
 
+        Image *depth = RequireActiveSceneRendererHost().GetDepthStencilTarget("depthStencil");
+        if (!depth || descriptors.size() < 2)
+            return;
+        descriptors[1]->SetImageView(16, depth->GetSRV());
+        descriptors[1]->Update();
+        ImageBarrierInfo depthBarrier{};
+        depthBarrier.image = depth;
+        depthBarrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        depthBarrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
+        depthBarrier.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
+        cmd->ImageBarrier(depthBarrier);
+
         // Honor per-frame display override (direct present to swapchain).
         m_attachments[0].image = RequireActiveSceneRendererHost().GetRenderTarget("display");
 
@@ -167,6 +180,22 @@ namespace pe
             pc.cameraUp = vec4(camera->GetUp(), 0.0f);
             pc.cameraPosition = vec4(camera->GetPosition(), 1.0f);
             pc.cameraForward = vec4(camera->GetFront(), 0.0f);
+        }
+        // Spare .w components carry depth conversion and output resolution without growing the push constants.
+        pc.cameraPosition.w = m_attachments[0].image->GetWidth_f();
+        pc.cameraUp.w = m_attachments[0].image->GetHeight_f();
+        if (camera)
+        {
+            pc.cameraRight.w = camera->GetNearPlane();
+            if (camera->IsOrthographic())
+            {
+                const float farPlane = std::isfinite(camera->GetFarPlane()) && camera->GetFarPlane() > camera->GetNearPlane() &&
+                                               camera->GetFarPlane() < FLT_MAX * 0.5f
+                                           ? camera->GetFarPlane()
+                                           : 1000.f;
+                pc.cameraPosition.w = -pc.cameraPosition.w;
+                pc.cameraRight.w = (farPlane - camera->GetNearPlane()) * (Settings::Get<SceneSettings>().reverse_depth ? 1.f : -1.f);
+            }
         }
         // ParticleVS uses .w as emitterCount for its defensive emitter-index guard.
         pc.cameraForward.w = static_cast<float>(m_scene->GetParticleManager()->GetEmitterCount());

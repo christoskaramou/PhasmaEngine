@@ -206,6 +206,12 @@ namespace pe
         void EndFrame();
         void Render(CommandBuffer *cmd, Image *renderTarget);
         void SetFrameSurfaceSize(uint32_t width, uint32_t height);
+        // Opt-in (0 = off): the UI is authored in pixels for this reference surface. A frame surface smaller
+        // in either axis lays the UI out on surface / fit, fit = min(width / refWidth, height / refHeight),
+        // and draws it scaled back by fit, so authored layouts keep their proportions instead of clipping.
+        // Uniform, so surface-relative math (aim, picks) is unchanged; surfaces that fit are untouched.
+        void SetReferenceSurface(float width, float height);
+        void GetReferenceSurface(float &width, float &height) const;
         void SetFrameUiScale(float scale);
         void SetFrameSafeArea(float minX, float minY, float width, float height);
         void SetFrameInputRect(float minX, float minY, float width, float height);
@@ -370,6 +376,7 @@ namespace pe
         Image *LoadColorizeMask(const std::string &path);
         void SortQuadWidgets(Screen &screen);
         void BuildFrame();
+        void ApplyReferenceFit();
 
         std::unique_ptr<IRuntimeUiBackend> m_backend;
         std::vector<Screen> m_screens;
@@ -384,6 +391,11 @@ namespace pe
         bool m_frameOpen = false;
         uint32_t m_frameSurfaceWidth = 0;
         uint32_t m_frameSurfaceHeight = 0;
+        uint32_t m_physicalSurfaceWidth = 0;
+        uint32_t m_physicalSurfaceHeight = 0;
+        float m_referenceWidth = 0.0f;
+        float m_referenceHeight = 0.0f;
+        float m_frameFit = 1.0f;
         float m_frameUiScale = 1.0f;
         float m_textScale = 1.0f;
         RuntimeUiColor m_elementTint{};

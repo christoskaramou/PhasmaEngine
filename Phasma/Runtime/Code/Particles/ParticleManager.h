@@ -50,6 +50,7 @@ namespace pe
         uint32_t textureIndex = 0;
         uint32_t orientation = 0;
         float cleanupDelay = 0.0f;
+        float stretch = 0.0f;
     };
 
     class ParticleManager

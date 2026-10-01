@@ -254,9 +254,9 @@ namespace pe
         return Path::Assets + "Audio/" + path;
     }
 
-    void AudioSystem::PlaySound(const std::string &path)
+    void AudioSystem::PlaySound(const std::string &path, float volume, float pitch)
     {
-        if (!m_engine)
+        if (!m_engine || !std::isfinite(volume) || !std::isfinite(pitch) || volume < 0.f || pitch <= 0.f)
             return;
 
         std::string fullPath = ResolvePath(path);
@@ -267,7 +267,8 @@ namespace pe
             delete sound;
             return;
         }
-        ma_sound_set_volume(sound, m_sfxVolume);
+        ma_sound_set_volume(sound, m_sfxVolume * std::clamp(volume, 0.f, 1.f));
+        ma_sound_set_pitch(sound, std::clamp(pitch, 0.25f, 4.f));
         // miniaudio spatializes every sound by default. This is the NON-positional
         // entry point, so without this the clip sits at the world origin while the
         // listener follows the camera — a top-down game with a camera 30 units out

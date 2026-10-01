@@ -7,6 +7,13 @@ namespace pe
     struct NodeId;
     class Scene;
 
+    struct AnimationPoseBlend
+    {
+        std::vector<mat4> previous;
+        float duration = 0.0f;
+        float elapsed = 0.0f;
+    };
+
     struct AnimationLayerState
     {
         int clipIndex = -1;
@@ -16,6 +23,7 @@ namespace pe
         bool loop = true;
         std::vector<int> bones;
         int anchorBone = -1;
+        AnimationPoseBlend blend;
     };
 
     struct AnimationNodeState
@@ -26,10 +34,12 @@ namespace pe
         float time = 0.0f;
         float speed = 1.0f;
         bool playing = false;
+        bool paused = false;
         bool loop = true;
         bool rootMotion = true;  // a clip with extracted travel (clip.rootMotion) moves the node as it plays
         float motionTime = 0.0f; // clip time the travel was last applied at
         AnimationLayerState layer;
+        AnimationPoseBlend blend;
     };
 
     class AnimationSystem : public ISystem
@@ -41,8 +51,8 @@ namespace pe
         void Update() override;
         void Destroy() override;
 
-        void PlayAnimation(Scene &scene, NodeId *node, int clipIndex, bool loop = true);
-        void PlayAnimation(Scene &scene, NodeId *node, const std::string &clipName, bool loop = true);
+        void PlayAnimation(Scene &scene, NodeId *node, int clipIndex, bool loop = true, float fadeSeconds = 0.0f);
+        void PlayAnimation(Scene &scene, NodeId *node, const std::string &clipName, bool loop = true, float fadeSeconds = 0.0f);
         void StopAnimation(NodeId *node);
         void RemoveAnimation(NodeId *node);
         void SetSpeed(NodeId *node, float speed);
@@ -50,7 +60,7 @@ namespace pe
         // A named anchor aligns the selected group to that bone in the base pose.
         bool PlayLayer(Scene &scene, NodeId *node, const std::string &clipName,
                        const std::vector<std::string> &bones, bool loop = true, float speed = 1.0f,
-                       double startTimeSeconds = 0.0, const std::string &anchorBone = {});
+                       double startTimeSeconds = 0.0, const std::string &anchorBone = {}, float fadeSeconds = 0.0f);
         bool SetLayerSpeed(NodeId *node, float speed);
         bool SetLayerMask(Scene &scene, NodeId *node, const std::vector<std::string> &bones);
         void StopLayer(Scene &scene, NodeId *node);

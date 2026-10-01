@@ -147,6 +147,19 @@ base pose, so an attack layer's upper body rides a running pelvis instead of the
 adds `Touch(index, id, x, y)`: the fingers on the screen (at most two), each with its id and window-pixel position,
 for on-screen sticks; a finger landing on the runtime UI is the UI's, and the desktop has none.
 
+ABI 24 adds `PlayBlend(node, clip, loop, fadeSeconds)` and
+`PlayLayerBlend(node, clip, mask, loop, speed, anchor, fadeSeconds)`: bone-local translation/scale lerp
+and quaternion slerp from the outgoing pose, including interrupted fades. Zero seconds keeps the hard cut.
+Both calls use the existing node-and-descendant rules; a layer's unmasked bones keep the live base pose.
+`PlaySoundEx(clip, volume, pitch)` scales the SFX bus by volume [0, 1] and uses miniaudio resampling
+for pitch [0.25, 4]. Non-finite/negative volume or fade and non-positive pitch are rejected.
+`ParticleBurst` keeps its v10 prefix and appends `size` and `stretch`; set `BurstStretch` (bit 13)
+to request a camera-facing velocity stretch. The full length is speed times stretch (seconds),
+clamped between the diameter and eight diameters. The host checks module ABI >= 24 and `size`
+before reading stretch; older modules never have their shorter struct's tail read.
+Particles sample scene depth to reject hidden fragments and fade across the last 10 cm in front
+of surfaces. Depth coordinates follow render scale and targets are rebound after resize.
+
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are
 frozen. A module runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5)

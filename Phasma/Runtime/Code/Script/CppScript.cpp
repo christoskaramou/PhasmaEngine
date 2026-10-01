@@ -96,33 +96,33 @@ namespace pe
             scene.SetLocalMatrix(node, ReplaceTrs(scene.GetLocalMatrix(node), rotationDegrees, scale));
         }
 
-        bool PlayTree(Scene &scene, AnimationSystem &animation, NodeId *node, const std::string &clip, bool loop)
+        bool PlayTree(Scene &scene, AnimationSystem &animation, NodeId *node, const std::string &clip, bool loop, float fadeSeconds = 0.0f)
         {
             bool played = false;
             for (const auto &candidate : scene.GetAnimationClipsForNode(node))
                 if (candidate.name == clip)
                 {
-                    animation.PlayAnimation(scene, node, clip, loop);
+                    animation.PlayAnimation(scene, node, clip, loop, fadeSeconds);
                     played = true;
                     break;
                 }
             for (NodeId *child : scene.GetChildren(node))
-                played |= PlayTree(scene, animation, child, clip, loop);
+                played |= PlayTree(scene, animation, child, clip, loop, fadeSeconds);
             return played;
         }
 
         bool PlayLayerTree(Scene &scene, AnimationSystem &animation, NodeId *node, const std::string &clip,
-                           const std::vector<std::string> &bones, bool loop, float speed, const std::string &anchor = {})
+                           const std::vector<std::string> &bones, bool loop, float speed, const std::string &anchor = {}, float fadeSeconds = 0.0f)
         {
             bool played = false;
             for (const auto &candidate : scene.GetAnimationClipsForNode(node))
                 if (candidate.name == clip)
                 {
-                    played |= animation.PlayLayer(scene, node, clip, bones, loop, speed, 0.0, anchor);
+                    played |= animation.PlayLayer(scene, node, clip, bones, loop, speed, 0.0, anchor, fadeSeconds);
                     break;
                 }
             for (NodeId *child : scene.GetChildren(node))
-                played |= PlayLayerTree(scene, animation, child, clip, bones, loop, speed, anchor);
+                played |= PlayLayerTree(scene, animation, child, clip, bones, loop, speed, anchor, fadeSeconds);
             return played;
         }
 
@@ -602,7 +602,7 @@ namespace pe
                          std::memcpy(out, value->c_str(), value->size() + 1);
                          return 1; });
                  },
-                 [](void *, const phasma::ParticleBurst *b) noexcept -> uint32_t
+                 [](void *ctx, const phasma::ParticleBurst *b) noexcept -> uint32_t
                  {
                      return GuardApi([&]() -> uint32_t
                                      {
@@ -636,6 +636,13 @@ namespace pe
                              desc.colorStart = vec4(b->colorStart.r, b->colorStart.g, b->colorStart.b, b->colorStart.a);
                          if (set & phasma::BurstColorEnd)
                              desc.colorEnd = vec4(b->colorEnd.r, b->colorEnd.g, b->colorEnd.b, b->colorEnd.a);
+                         if (set & phasma::BurstStretch)
+                         {
+                             const auto *module = static_cast<CppScriptSystem *>(ctx)->m_module.Active();
+                             if (!module || module->version < 24) return 0;
+                             if (b->size < sizeof(phasma::ParticleBurst) || !std::isfinite(b->stretch) || b->stretch < 0.f) return 0;
+                             desc.stretch = b->stretch;
+                         }
                          return pm->EmitBurst(desc) >= 0; });
                  },
                  [](void *ctx, phasma::Node handle, const char *type) noexcept -> uint32_t
@@ -1136,6 +1143,36 @@ namespace pe
                          *x = u * static_cast<float>(w);
                          *y = v * static_cast<float>(h);
                          return 1; });
+                 },
+                 [](void *ctx, phasma::Node handle, const char *clip, uint32_t loop, float fadeSeconds) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         auto *animation = GetGlobalSystem<AnimationSystem>();
+                         if (!node || !clip || !*clip || !animation || !std::isfinite(fadeSeconds) || fadeSeconds < 0.f) return 0;
+                         return PlayTree(*GetActiveScene(), *animation, node, clip, loop != 0, fadeSeconds); });
+                 },
+                 [](void *ctx, phasma::Node handle, const char *clip, const char *mask, uint32_t loop, float speed,
+                    const char *anchor, float fadeSeconds) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         auto *animation = GetGlobalSystem<AnimationSystem>();
+                         std::vector<std::string> bones;
+                         if (!node || !clip || !*clip || !animation || !std::isfinite(speed) ||
+                             !std::isfinite(fadeSeconds) || fadeSeconds < 0.f || !ReadMask(mask, bones)) return 0;
+                         return PlayLayerTree(*GetActiveScene(), *animation, node, clip, bones, loop != 0, speed,
+                                              anchor ? anchor : "", fadeSeconds); });
+                 },
+                 [](void *, const char *clip, float volume, float pitch) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         if (!clip || !*clip || !std::isfinite(volume) || volume < 0.f ||
+                             !std::isfinite(pitch) || pitch <= 0.f) return 0;
+                         return WithAudio([&](auto &audio) { audio.PlaySound(clip, volume, pitch); }); });
                  }};
     }
 

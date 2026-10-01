@@ -4,6 +4,7 @@
 #include "API/RHI.h"
 #include "API/Surface.h"
 #include "Base/EventSystem.h"
+#include "UI/RuntimeUi.h"
 
 namespace pe
 {
@@ -101,8 +102,28 @@ namespace pe
         {"ray_tracing", RenderMode::RayTracing},
     };
 
+    // ui_reference_width / ui_reference_height: the runtime UI's reference surface (RuntimeUiSystem::SetReferenceSurface).
+    static bool UiReferenceSetting(std::string_view name, const double *set, double &value)
+    {
+        const bool isWidth = name == "ui_reference_width";
+        RuntimeUiSystem *ui = GetActiveRuntimeUi();
+        if ((!isWidth && name != "ui_reference_height") || !ui)
+            return false;
+        float w = 0.0f, h = 0.0f;
+        ui->GetReferenceSurface(w, h);
+        if (set)
+        {
+            (isWidth ? w : h) = static_cast<float>(*set);
+            ui->SetReferenceSurface(w, h);
+        }
+        value = isWidth ? w : h;
+        return true;
+    }
+
     bool GetSceneSettingNumber(std::string_view name, double &value)
     {
+        if (UiReferenceSetting(name, nullptr, value))
+            return true;
         const auto &gs = Settings::Get<SceneSettings>();
         if (const auto it = s_boolSettings.find(name); it != s_boolSettings.end())
             value = gs.*(it->second) ? 1.0 : 0.0;
@@ -121,6 +142,8 @@ namespace pe
     {
         if (!std::isfinite(value))
             return false;
+        if (double applied = 0.0; UiReferenceSetting(name, &value, applied))
+            return true;
         auto &gs = Settings::Get<SceneSettings>();
         if (const auto it = s_boolSettings.find(name); it != s_boolSettings.end())
             gs.*(it->second) = value != 0.0;

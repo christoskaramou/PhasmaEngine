@@ -267,9 +267,17 @@ namespace pe
             const std::vector<AnimationClip> *clips;
             const AnimationNodeState *state;
 
+            // A fade shares too: a rig's meshes start it together, from identical poses.
+            static bool SameBlend(const AnimationPoseBlend &a, const AnimationPoseBlend &b)
+            {
+                return a.previous.empty() ? b.previous.empty()
+                                          : a.elapsed == b.elapsed && a.duration == b.duration && a.previous == b.previous;
+            }
+
             bool operator==(const PoseKey &other) const
             {
-                return skeleton == other.skeleton && clips == other.clips &&
+                return skeleton == other.skeleton && clips == other.clips && SameBlend(state->blend, other.state->blend) &&
+                       SameBlend(state->layer.blend, other.state->layer.blend) &&
                        state->clipIndex == other.state->clipIndex && state->time == other.state->time &&
                        state->layer.clipIndex == other.state->layer.clipIndex &&
                        state->layer.time == other.state->layer.time && state->layer.bones == other.state->layer.bones &&
@@ -284,6 +292,8 @@ namespace pe
                 Hash hash;
                 hash.Combine(reinterpret_cast<size_t>(key.skeleton));
                 hash.Combine(reinterpret_cast<size_t>(key.clips));
+                hash.Combine(key.state->blend.previous.empty() ? -1.f : key.state->blend.elapsed);
+                hash.Combine(key.state->layer.blend.previous.empty() ? -1.f : key.state->layer.blend.elapsed);
                 hash.Combine(key.state->clipIndex);
                 hash.Combine(key.state->time);
                 hash.Combine(key.state->layer.clipIndex);
@@ -295,10 +305,91 @@ namespace pe
             }
         };
 
+        mat4 BlendTransform(const mat4 &from, const mat4 &to, float weight)
+        {
+            vec3 aScale, aPosition, bScale, bPosition, skew;
+            quat aRotation, bRotation;
+            vec4 perspective;
+            if (!glm::decompose(from, aScale, aRotation, aPosition, skew, perspective) ||
+                !glm::decompose(to, bScale, bRotation, bPosition, skew, perspective))
+                return to;
+            return glm::translate(mat4(1.f), glm::mix(aPosition, bPosition, weight)) *
+                   glm::mat4_cast(glm::normalize(glm::slerp(aRotation, bRotation, weight))) *
+                   glm::scale(mat4(1.f), glm::mix(aScale, bScale, weight));
+        }
+
+        void BlendPose(const Skeleton &skeleton, const AnimationPoseBlend &blend, std::vector<mat4> &matrices,
+                       const std::vector<int> *mask = nullptr)
+        {
+            if (blend.previous.size() != matrices.size() || blend.previous.empty() || blend.duration <= 0.f)
+                return;
+            const float weight = std::clamp(blend.elapsed / blend.duration, 0.f, 1.f);
+            static thread_local std::vector<mat4> before, after, local, global;
+            static thread_local std::vector<uint8_t> selected, computed;
+            const size_t count = matrices.size();
+            before.resize(count);
+            after.resize(count);
+            local.resize(count);
+            global.resize(count);
+            selected.assign(count, mask ? 0 : 1);
+            computed.assign(count, 0);
+            if (mask)
+                for (int bone : *mask)
+                    if (bone >= 0 && static_cast<size_t>(bone) < count)
+                        selected[bone] = 1;
+            for (size_t i = 0; i < count; ++i)
+            {
+                const mat4 bind = glm::inverse(skeleton.bones[i].offsetMatrix);
+                before[i] = blend.previous[i] * bind;
+                after[i] = matrices[i] * bind;
+            }
+            for (size_t i = 0; i < count; ++i)
+            {
+                const int parent = skeleton.bones[i].parentIndex;
+                const bool hasParent = parent >= 0 && static_cast<size_t>(parent) < count;
+                local[i] = selected[i] ? BlendTransform(hasParent ? glm::inverse(before[parent]) * before[i] : before[i],
+                                                        hasParent ? glm::inverse(after[parent]) * after[i] : after[i], weight)
+                                       : mat4(1.f);
+            }
+            auto evaluate = [&](auto &&self, size_t bone) -> void
+            {
+                if (computed[bone])
+                    return;
+                computed[bone] = 1;
+                const int parent = skeleton.bones[bone].parentIndex;
+                if (selected[bone] && parent >= 0 && static_cast<size_t>(parent) < count)
+                {
+                    self(self, static_cast<size_t>(parent));
+                    global[bone] = global[parent] * local[bone];
+                }
+                else
+                    global[bone] = selected[bone] ? local[bone] : after[bone];
+                matrices[bone] = global[bone] * skeleton.bones[bone].offsetMatrix;
+            };
+            for (size_t i = 0; i < count; ++i)
+                evaluate(evaluate, i);
+        }
+
+        void AdvanceBlend(AnimationPoseBlend &blend, float dt)
+        {
+            if (blend.previous.empty())
+                return;
+            blend.elapsed += dt;
+            if (blend.elapsed >= blend.duration)
+                blend.previous.clear();
+        }
+
+        void EvaluateBasePose(const Skeleton &skeleton, const std::vector<AnimationClip> &clips,
+                              const AnimationNodeState &state, std::vector<mat4> &matrices)
+        {
+            AnimationEvaluator::EvaluatePose(clips[state.clipIndex], skeleton, state.time, matrices);
+            BlendPose(skeleton, state.blend, matrices);
+        }
+
         void EvaluateStatePose(const Skeleton &skeleton, const std::vector<AnimationClip> &clips,
                                const AnimationNodeState &state, std::vector<mat4> &matrices)
         {
-            AnimationEvaluator::EvaluatePose(clips[state.clipIndex], skeleton, state.time, matrices);
+            EvaluateBasePose(skeleton, clips, state, matrices);
             const auto &layer = state.layer;
             if (layer.clipIndex >= 0 && layer.clipIndex < static_cast<int>(clips.size()))
             {
@@ -314,6 +405,7 @@ namespace pe
                 for (int bone : layer.bones)
                     if (bone >= 0 && bone < static_cast<int>(matrices.size()))
                         matrices[bone] = anchored ? alignment * overlay[bone] : overlay[bone];
+                BlendPose(skeleton, layer.blend, matrices, &layer.bones);
             }
         }
 
@@ -391,7 +483,7 @@ namespace pe
         std::optional<PoseKey> previousPose;
         for (auto &state : m_states)
         {
-            if (!state.playing)
+            if (!state.playing && (state.paused || (state.blend.previous.empty() && state.layer.blend.previous.empty())))
                 continue;
 
             if (!state.nodeId || state.nodeId->revision != state.nodeRevision || !scene->IsNodeAlive(state.nodeId))
@@ -411,7 +503,8 @@ namespace pe
 
             const AnimationClip &clip = clips[state.clipIndex];
 
-            state.time += dt * state.speed * clip.ticksPerSecond;
+            if (state.playing)
+                state.time += dt * state.speed * clip.ticksPerSecond;
 
             int wrapped = 0; // +1 the loop ran past the end, -1 past the start
             if (state.time >= clip.duration)
@@ -463,6 +556,8 @@ namespace pe
                 else
                     layer = {};
             }
+            AdvanceBlend(state.blend, dt);
+            AdvanceBlend(state.layer.blend, dt);
             const bool strip = scene->NodeUsesSkinnedStrip2D(state.nodeId);
             const PoseKey key{&skeleton, &clips, &state};
             NodeId *source = nullptr;
@@ -507,9 +602,10 @@ namespace pe
         };
         {
             PE_PROFILE_SCOPE("Animation Evaluate Poses");
-            // Small scenes stay serial; at most four chunks amortize scheduling for crowds.
+            // Small scenes stay serial; at most four chunks amortize scheduling for crowds. 32 poses a chunk: a
+            // 130-creep ATH horde (~115 poses) took 0.33-0.37 ms here vs 0.49-0.65 ms serial (2026-10-01).
             const size_t chunks = std::min({size_t(4), size_t(std::max(1u, std::thread::hardware_concurrency())),
-                                            std::max(size_t(1), jobs.size() / 128)});
+                                            std::max(size_t(1), jobs.size() / 32)});
             std::vector<std::shared_future<void>> tasks;
             tasks.reserve(chunks - 1);
             try
@@ -545,7 +641,7 @@ namespace pe
         m_nodeToIndex.clear();
     }
 
-    void AnimationSystem::PlayAnimation(Scene &scene, NodeId *node, int clipIndex, bool loop)
+    void AnimationSystem::PlayAnimation(Scene &scene, NodeId *node, int clipIndex, bool loop, float fadeSeconds)
     {
         if (!node || !scene.IsNodeAlive(node))
         {
@@ -572,17 +668,22 @@ namespace pe
             m_nodeToIndex[node] = idx;
             it = m_nodeToIndex.find(node);
         }
-        else
-        {
-            m_states[it->second].nodeRevision = node->revision;
-        }
-
         auto &state = m_states[it->second];
+        AnimationPoseBlend blend;
+        if (std::isfinite(fadeSeconds) && fadeSeconds > 0.f && state.nodeRevision == node->revision &&
+            state.clipIndex >= 0 && state.clipIndex < static_cast<int>(clips.size()))
+        {
+            EvaluateBasePose(scene.GetSkeletonForNode(node), clips, state, blend.previous);
+            blend.duration = fadeSeconds;
+        }
+        state.blend = std::move(blend);
+        state.nodeRevision = node->revision;
         state.clipIndex = clipIndex;
         state.time = 0.0f;
         state.motionTime = 0.0f;
         state.loop = loop;
         state.playing = true;
+        state.paused = false;
     }
 
     static bool ResolveLayerBones(const Skeleton &skeleton, const std::vector<std::string> &names,
@@ -606,7 +707,7 @@ namespace pe
 
     bool AnimationSystem::PlayLayer(Scene &scene, NodeId *node, const std::string &clipName,
                                     const std::vector<std::string> &bones, bool loop, float speed, double startTimeSeconds,
-                                    const std::string &anchorBone)
+                                    const std::string &anchorBone, float fadeSeconds)
     {
         if (!node || !scene.IsNodeAlive(node) || !std::isfinite(speed) || !std::isfinite(startTimeSeconds) || bones.empty())
             return false;
@@ -643,6 +744,11 @@ namespace pe
         if (time < 0.0)
             time += duration;
         layer.time = static_cast<float>(time * clip.ticksPerSecond);
+        if (std::isfinite(fadeSeconds) && fadeSeconds > 0.f)
+        {
+            EvaluateStatePose(skeleton, clips, m_states[it->second], layer.blend.previous);
+            layer.blend.duration = fadeSeconds;
+        }
         m_states[it->second].layer = std::move(layer);
         EvaluateState(scene, m_states[it->second]);
         return true;
@@ -701,7 +807,7 @@ namespace pe
         return it != m_nodeToIndex.end() && m_states[it->second].rootMotion;
     }
 
-    void AnimationSystem::PlayAnimation(Scene &scene, NodeId *node, const std::string &clipName, bool loop)
+    void AnimationSystem::PlayAnimation(Scene &scene, NodeId *node, const std::string &clipName, bool loop, float fadeSeconds)
     {
         if (!node)
             return;
@@ -711,7 +817,7 @@ namespace pe
         {
             if (clips[i].name == clipName)
             {
-                PlayAnimation(scene, node, i, loop);
+                PlayAnimation(scene, node, i, loop, fadeSeconds);
                 return;
             }
         }
@@ -723,6 +829,7 @@ namespace pe
         if (it == m_nodeToIndex.end())
             return;
         m_states[it->second].playing = false;
+        m_states[it->second].paused = true;
     }
 
     void AnimationSystem::RemoveAnimation(NodeId *node)
@@ -785,6 +892,9 @@ namespace pe
         state.time = std::clamp(timeTicks, 0.f, clip.duration);
         state.motionTime = state.time; // a scrub teleports the pose, never the node
         state.playing = false;         // pause during scrub
+        state.paused = true;
+        state.blend.previous.clear();
+        state.layer.blend.previous.clear();
 
         EvaluateState(scene, state);
     }
@@ -795,6 +905,7 @@ namespace pe
         if (it == m_nodeToIndex.end())
             return;
         m_states[it->second].playing = !paused;
+        m_states[it->second].paused = paused;
     }
 
     void AnimationSystem::SetLoop(NodeId *node, bool loop)

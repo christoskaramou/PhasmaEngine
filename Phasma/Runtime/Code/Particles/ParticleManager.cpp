@@ -20,7 +20,7 @@ namespace pe
             const float lifeMax = std::max(lifeMin, desc.lifeMax);
 
             e.position = vec4(desc.position, burstToken);
-            e.velocity = vec4(desc.velocity, 0.0f);
+            e.velocity = vec4(desc.velocity, std::max(desc.stretch, 0.0f));
             e.colorStart = desc.colorStart;
             e.colorEnd = desc.colorEnd;
             e.sizeLife = vec4(std::max(0.0f, desc.sizeMin), std::max(0.0f, desc.sizeMax), lifeMin, lifeMax);

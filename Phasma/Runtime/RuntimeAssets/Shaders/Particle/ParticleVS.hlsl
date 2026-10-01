@@ -4,9 +4,21 @@
 [[vk::binding(0, 0)]] StructuredBuffer<Particle> particles;
 [[vk::binding(1, 0)]] StructuredBuffer<ParticleEmitter> emitters;
 
-VS_OUTPUT_Particle mainVS(uint vertexID : SV_VertexID)
+struct ParticleDepthOutput
 {
-    VS_OUTPUT_Particle output;
+    float4 pos : SV_POSITION;
+    float4 color : COLOR0;
+    float2 uv : TEXCOORD0;
+    nointerpolation float textureIndex : TEXCOORD1;
+    float2 uv2 : TEXCOORD2;
+    float blendFactor : TEXCOORD3;
+    nointerpolation float4 depthParameters : TEXCOORD4;
+};
+
+ParticleDepthOutput mainVS(uint vertexID : SV_VertexID)
+{
+    ParticleDepthOutput output;
+    output.depthParameters = float4(pc.cameraPosition.w, pc.cameraUp.w, pc.cameraRight.w, 0.0);
     
     uint particleIndex = vertexID / 6;
     uint cornerIndex = vertexID % 6;
@@ -86,6 +98,20 @@ VS_OUTPUT_Particle mainVS(uint vertexID : SV_VertexID)
             up = normalize(vel);
             float3 viewDir = normalize(pc.cameraPosition.xyz - center);
             right = normalize(cross(up, viewDir));
+        }
+    }
+
+    // A stretched burst remains camera-facing, even when velocity points into the camera.
+    if (emitter.velocity.w > 0.0)
+    {
+        float2 projected = float2(dot(p.velocity.xyz, pc.cameraRight.xyz), dot(p.velocity.xyz, pc.cameraUp.xyz));
+        float projectedSpeed = length(projected);
+        if (projectedSpeed > 0.001)
+        {
+            float2 axis = projected / projectedSpeed;
+            right = pc.cameraRight.xyz * axis.y - pc.cameraUp.xyz * axis.x;
+            float fullLength = clamp(length(p.velocity.xyz) * emitter.velocity.w, 2.0 * size, 16.0 * size);
+            up = (pc.cameraRight.xyz * axis.x + pc.cameraUp.xyz * axis.y) * (fullLength / (2.0 * size));
         }
     }
 

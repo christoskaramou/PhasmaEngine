@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 23;
+    inline constexpr uint32_t ScriptAbiVersion = 24;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -157,10 +157,11 @@ namespace phasma
         BurstVelocity = 1u << 9,
         BurstGravity = 1u << 10,
         BurstColorStart = 1u << 11,
-        BurstColorEnd = 1u << 12
+        BurstColorEnd = 1u << 12,
+        BurstStretch = 1u << 13
     };
     // Mirrors particles.emit_burst. preset: hero_take, hero_give, enemy_take or enemy_give (anything else keeps the
-    // engine's defaults). Frozen layout (v10).
+    // engine's defaults). v10 prefix is frozen; v24 appends size/stretch.
     struct ParticleBurst
     {
         const char *preset = nullptr;
@@ -171,6 +172,8 @@ namespace phasma
         float spawnRadius = 0.0f, noiseStrength = 0.0f, drag = 0.0f, cleanupDelay = 0.0f;
         Vec3 velocity{}, gravity{};
         Color colorStart{}, colorEnd{};
+        uint32_t size = sizeof(ParticleBurst); // v24 extension; read only from v24 modules with BurstStretch set
+        float stretch = 0.0f;                  // seconds of velocity, full length clamped to [diameter, 8 * diameter]
     };
     // A fullscreen shader pass over the scene's depth and normals, blended onto the viewport after the given
     // render_graph order. The shader (an asset path) provides mainVS / mainPS and reads the depth at binding 0 and
@@ -333,6 +336,11 @@ namespace phasma
         // v23: the fingers on the screen, for on-screen sticks: the index-th finger down (at most two; a finger that
         // landed on the runtime UI is the UI's), its id and window-pixel position. 0 past the last (the desktop has none).
         uint32_t (*getTouch)(void *, uint32_t index, int64_t *id, float *x, float *y) noexcept;
+        // v24: pose crossfades (0 seconds hard-cuts), including an optional anchored attack layer.
+        uint32_t (*playAnimationBlend)(void *, Node, const char *clip, uint32_t loop, float fadeSeconds) noexcept;
+        uint32_t (*playAnimationLayerBlend)(void *, Node, const char *clip, const char *mask, uint32_t loop,
+                                            float speed, const char *anchor, float fadeSeconds) noexcept;
+        uint32_t (*playSoundEx)(void *, const char *clip, float volume, float pitch) noexcept;
     };
     struct ScriptDesc
     {
@@ -539,6 +547,20 @@ namespace phasma
         {
             UiWidgetState state{};
             return WidgetState(screen, id, state) && state.clicked;
+        }
+
+        bool PlayBlend(Node node, const char *clip, bool loop = true, float fadeSeconds = 0.1f) const
+        {
+            return m_api.playAnimationBlend(m_api.context, node, clip, loop, fadeSeconds) != 0;
+        }
+        bool PlayLayerBlend(Node node, const char *clip, const char *mask, bool loop = true, float speed = 1.0f,
+                            const char *anchor = nullptr, float fadeSeconds = 0.1f) const
+        {
+            return m_api.playAnimationLayerBlend(m_api.context, node, clip, mask, loop, speed, anchor, fadeSeconds) != 0;
+        }
+        bool PlaySoundEx(const char *clip, float volume, float pitch) const
+        {
+            return m_api.playSoundEx(m_api.context, clip, volume, pitch) != 0;
         }
 
     private:

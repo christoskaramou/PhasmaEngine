@@ -45,6 +45,9 @@ namespace pmcp
     HttpTransport::HttpTransport(Server *server, HttpTransportConfig config)
         : m_server(server), m_config(std::move(config)), m_http(std::make_unique<httplib::Server>())
     {
+        // One request per connection: an idle keep-alive client (e.g. an IDE's MCP entry) otherwise
+        // parks a worker in its keep-alive wait, and destroying the server waits it out (~9 s on exit).
+        m_http->set_keep_alive_max_count(1);
     }
 
     HttpTransport::~HttpTransport()
