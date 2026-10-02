@@ -12,9 +12,13 @@ Material layouts are cached on the owning `PassInfoAsset` across instance rebuil
 `ReflectMaterialLayout` keys that cache with `ShaderCache`'s resolved source content
 (including recursive includes, global defines, stage and backend), plus the material
 buffer name and annotation. Reloading a pass clears its cached key. The cache retains
-one layout per pass asset and still checks source content on rebuild, so shader edits
-cannot retain stale field offsets; cache hits avoid creating GPU shaders and reflecting
-their resources again. The content hash also guards each material's existing layout copy.
+one layout per pass asset. Hashing that content reads every stage and include from disk
+(~3 ms), so a rebuild re-hashes only when `InvalidateMaterialLayouts` ran (every shader
+hot reload, through `SceneRendererCore::PollShaders`) or the global defines or resolved
+shader paths changed; otherwise it returns the cached layout (each spawn and despawn
+rebuilds instances: 102 of 150 frames over 4 ms in an ATH shards fight, verified
+2026-10-02). Shader edits therefore cannot retain stale field offsets; cache hits avoid
+creating GPU shaders and reflecting their resources again. The content hash also guards each material's existing layout copy.
 Large material rebuilds pack immutable parameter/texture-index data in at most four
 chunks on the Update pool, with distinct output byte arrays. Offsets are assigned in
 the original traversal order and GPU uploads happen on the caller after every job

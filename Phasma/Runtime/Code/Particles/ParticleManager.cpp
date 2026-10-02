@@ -62,6 +62,7 @@ namespace pe
         QueueParticleByteClear(0, m_particleBuffer->Size());
 
         m_emitterDataVersion++;
+        m_bufferVersion++; // a new buffer: the passes write their descriptor sets (textures included) once
     }
 
     void ParticleManager::UpdateEmitterBuffer()
@@ -111,13 +112,14 @@ namespace pe
                 });
                 QueueParticleByteClear(0, m_particleBuffer->Size());
             }
+            // Only a new buffer needs the passes' all-frames descriptor rewrite; both rebind per frame.
+            m_bufferVersion++;
         }
 
         // Update active count for dispatch/draw
         m_particleCount = totalParticles;
 
         m_emitterDataVersion++;
-        m_bufferVersion++;
     }
 
     Buffer *ParticleManager::GetEmitterBuffer(uint32_t frame) const

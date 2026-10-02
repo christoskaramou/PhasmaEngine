@@ -74,6 +74,7 @@ namespace pe
         void SyncListenerToCamera();
         void SyncSourcePositions(Scene &scene);
         std::string ResolvePath(const std::string &path) const;
+        void KeepResident(const std::string &fullPath);
 
         ma_engine *m_engine = nullptr;
         ma_sound *m_musicSound = nullptr;
@@ -92,6 +93,7 @@ namespace pe
 
         // Fire-and-forget sounds (cleaned up when finished)
         std::vector<ma_sound *> m_fireAndForget;
+        std::unordered_set<std::string> m_residentClips; // registered with the resource manager (KeepResident)
 
         float m_masterVolume = 1.0f;
         bool m_muted = false; // phasma_settings.json "audio_muted": the output stays silent whatever the master

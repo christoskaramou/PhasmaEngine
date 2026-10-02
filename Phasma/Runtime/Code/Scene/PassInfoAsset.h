@@ -28,6 +28,8 @@ namespace pe
         friend MaterialLayout ReflectMaterialLayout(const PassInfoAsset &passInfo);
         mutable std::mutex m_materialLayoutMutex;
         mutable std::optional<size_t> m_materialLayoutHash;
+        mutable size_t m_materialLayoutKey = 0;          // defines, resolved shader paths, buffer, annotation
+        mutable uint64_t m_materialLayoutGeneration = 0; // InvalidateMaterialLayouts count it was hashed at
         mutable MaterialLayout m_materialLayout;
         std::string m_name;
         std::filesystem::path m_filePath;

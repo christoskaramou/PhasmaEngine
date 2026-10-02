@@ -440,11 +440,18 @@ namespace phasma
             out.resize(256);
             if (m_api.readFile(m_api.context, path, out.data(), static_cast<uint32_t>(out.size()), &size) == 0)
             {
+                // A failed read leaves out empty: a caller that ignores the result must not see the probe buffer.
                 if (size <= out.size())
+                {
+                    out.clear();
                     return false; // missing, outside Assets, or empty
+                }
                 out.resize(size);
                 if (m_api.readFile(m_api.context, path, out.data(), size, &size) == 0)
+                {
+                    out.clear();
                     return false;
+                }
             }
             out.resize(size);
             return true;

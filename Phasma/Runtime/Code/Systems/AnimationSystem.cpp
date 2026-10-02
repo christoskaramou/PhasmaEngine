@@ -409,6 +409,21 @@ namespace pe
             }
         }
 
+        // The pose a fade starts from: the one the node shows, when Update posed it (a base-only fade needs
+        // no layer on it), else evaluated. A hit react on every mesh of a rig is then a copy, not two poses.
+        void FadeSnapshot(Scene &scene, const Skeleton &skeleton, const std::vector<AnimationClip> &clips,
+                          const AnimationNodeState &state, bool baseOnly, std::vector<mat4> &out)
+        {
+            const std::vector<mat4> &shown = scene.GetNodeRuntime(state.nodeId).jointMatrices;
+            if (state.posed && shown.size() == skeleton.bones.size() && !(baseOnly && state.layer.clipIndex >= 0) &&
+                !scene.NodeUsesSkinnedStrip2D(state.nodeId))
+                out = shown;
+            else if (baseOnly)
+                EvaluateBasePose(skeleton, clips, state, out);
+            else
+                EvaluateStatePose(skeleton, clips, state, out);
+        }
+
         void EvaluateState(Scene &scene, const AnimationNodeState &state)
         {
             const auto &clips = scene.GetAnimationClipsForNode(state.nodeId);
@@ -572,6 +587,7 @@ namespace pe
                         source = it->second;
                 }
             }
+            state.posed = true;
             if (source)
                 copies.emplace_back(state.nodeId, source);
             else if (strip)
@@ -673,10 +689,11 @@ namespace pe
         if (std::isfinite(fadeSeconds) && fadeSeconds > 0.f && state.nodeRevision == node->revision &&
             state.clipIndex >= 0 && state.clipIndex < static_cast<int>(clips.size()))
         {
-            EvaluateBasePose(scene.GetSkeletonForNode(node), clips, state, blend.previous);
+            FadeSnapshot(scene, scene.GetSkeletonForNode(node), clips, state, true, blend.previous);
             blend.duration = fadeSeconds;
         }
         state.blend = std::move(blend);
+        state.posed = state.posed && state.nodeRevision == node->revision;
         state.nodeRevision = node->revision;
         state.clipIndex = clipIndex;
         state.time = 0.0f;
@@ -744,13 +761,17 @@ namespace pe
         if (time < 0.0)
             time += duration;
         layer.time = static_cast<float>(time * clip.ticksPerSecond);
+        auto &state = m_states[it->second];
         if (std::isfinite(fadeSeconds) && fadeSeconds > 0.f)
         {
-            EvaluateStatePose(skeleton, clips, m_states[it->second], layer.blend.previous);
+            FadeSnapshot(scene, skeleton, clips, state, false, layer.blend.previous);
             layer.blend.duration = fadeSeconds;
         }
-        m_states[it->second].layer = std::move(layer);
-        EvaluateState(scene, m_states[it->second]);
+        state.layer = std::move(layer);
+        // A fade starts on the pose the node already shows; Update blends on from there. A node Update never posed
+        // (a fresh, paused state) shows no pose yet, so it is evaluated now.
+        if (state.layer.blend.previous.empty() || !state.posed)
+            EvaluateState(scene, state);
         return true;
     }
 

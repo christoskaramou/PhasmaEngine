@@ -139,6 +139,16 @@ namespace pe
         return layout;
     }
 
+    namespace
+    {
+        std::atomic<uint64_t> g_materialLayoutGeneration{1};
+    }
+
+    void InvalidateMaterialLayouts()
+    {
+        g_materialLayoutGeneration.fetch_add(1, std::memory_order_relaxed);
+    }
+
     MaterialLayout ReflectMaterialLayout(const PassInfoAsset &passInfo)
     {
         std::lock_guard<std::mutex> lock(passInfo.m_materialLayoutMutex);
@@ -146,10 +156,25 @@ namespace pe
         if (!surface || !surface->HasShaders())
             return {};
 
+        // The content hash below reads every stage and include from disk (~3 ms), and every instance
+        // rebuild (each spawn and despawn) asks: keep it until a shader file changes (hot reload calls
+        // InvalidateMaterialLayouts), the defines do or the asset root does (the resolved paths).
+        const size_t definesHash = Shader::GetGlobalDefinesHash();
+        const std::string vertexPath = surface->vertexShader.empty() ? "" : Path::ResolveAsset(surface->vertexShader);
+        const std::string fragmentPath = surface->fragmentShader.empty() ? "" : Path::ResolveAsset(surface->fragmentShader);
+        Hash key(definesHash);
+        key.CombineString(vertexPath);
+        key.CombineString(fragmentPath);
+        key.CombineString(surface->materialBufferName);
+        key.CombineString(surface->materialAnnotation);
+        const uint64_t generation = g_materialLayoutGeneration.load(std::memory_order_relaxed);
+        if (passInfo.m_materialLayoutHash && passInfo.m_materialLayoutKey == static_cast<size_t>(key) &&
+            passInfo.m_materialLayoutGeneration == generation)
+            return passInfo.m_materialLayout;
+
         // Use the compiler's content key, including recursive includes, defines
         // and backend. Hot reload and asset-root changes cannot reuse stale layouts.
         Hash hash;
-        const size_t definesHash = Shader::GetGlobalDefinesHash();
         const auto addStage = [&](const std::string &path, const char *entry, PeShaderStageFlags stage)
         {
             if (path.empty())
@@ -157,11 +182,11 @@ namespace pe
             Hash stageHash(definesHash);
             stageHash.CombineValue(static_cast<uint32_t>(stage));
             ShaderCache source;
-            source.Init(Path::ResolveAsset(path), entry, stageHash);
+            source.Init(path, entry, stageHash);
             hash.Combine(source.GetHash());
         };
-        addStage(surface->vertexShader, "mainVS", PE_SHADER_STAGE_VERTEX);
-        addStage(surface->fragmentShader, "mainPS", PE_SHADER_STAGE_FRAGMENT);
+        addStage(vertexPath, "mainVS", PE_SHADER_STAGE_VERTEX);
+        addStage(fragmentPath, "mainPS", PE_SHADER_STAGE_FRAGMENT);
         hash.CombineString(surface->materialBufferName);
         hash.CombineString(surface->materialAnnotation);
         if (!passInfo.m_materialLayoutHash || *passInfo.m_materialLayoutHash != static_cast<size_t>(hash))
@@ -170,6 +195,8 @@ namespace pe
             passInfo.m_materialLayout.sourceHash = hash;
             passInfo.m_materialLayoutHash = hash;
         }
+        passInfo.m_materialLayoutKey = key;
+        passInfo.m_materialLayoutGeneration = generation;
         return passInfo.m_materialLayout;
     }
 } // namespace pe

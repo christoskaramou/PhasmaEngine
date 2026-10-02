@@ -38,4 +38,6 @@ namespace pe
     };
 
     MaterialLayout ReflectMaterialLayout(const PassInfoAsset &passInfo);
+    // A shader file changed (hot reload): the next ReflectMaterialLayout re-hashes the sources.
+    void InvalidateMaterialLayouts();
 } // namespace pe

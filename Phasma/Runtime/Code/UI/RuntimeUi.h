@@ -396,6 +396,7 @@ namespace pe
         float m_referenceWidth = 0.0f;
         float m_referenceHeight = 0.0f;
         float m_frameFit = 1.0f;
+        std::filesystem::path m_imagesWarmedScene; // SyncSceneWidgets loaded its authored images
         float m_frameUiScale = 1.0f;
         float m_textScale = 1.0f;
         RuntimeUiColor m_elementTint{};

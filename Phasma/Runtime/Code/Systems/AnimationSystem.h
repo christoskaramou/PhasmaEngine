@@ -35,6 +35,7 @@ namespace pe
         float speed = 1.0f;
         bool playing = false;
         bool paused = false;
+        bool posed = false; // Update has written this state's pose to its node (a fade can start from it)
         bool loop = true;
         bool rootMotion = true;  // a clip with extracted travel (clip.rootMotion) moves the node as it plays
         float motionTime = 0.0f; // clip time the travel was last applied at

@@ -877,6 +877,20 @@ namespace pe
         // moving authored node) far heavier than the in-place script set_quad path.
         std::unordered_map<std::string, std::unordered_set<std::string>> current;
 
+        // Hidden authored screens (a hub, a pause menu) decode their images with the scene's first frame, not
+        // in the frame they first open (a 60 ms backdrop mid-run). The whiten matches SetQuad's, so it hits.
+        if (scene.GetScenePath() != m_imagesWarmedScene)
+        {
+            m_imagesWarmedScene = scene.GetScenePath();
+            for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
+                if (const NodeRuntimeUiTag *ui = scene.GetRuntimeUiComponent(scene.GetNodeId(i));
+                    ui && ui->authored && !ui->imagePath.empty())
+                    LoadImageResource(ui->imagePath,
+                                      ui->useBackgroundTint                                       ? 0.0f
+                                      : std::isfinite(ui->imageWhiten) && ui->imageWhiten >= 0.0f ? std::min(ui->imageWhiten, 1.0f)
+                                                                                                  : m_elementWhiten);
+        }
+
         for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
         {
             NodeId *node = scene.GetNodeId(i);

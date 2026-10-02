@@ -8,6 +8,7 @@
 #include "Render/SceneScreenshot.h"
 #include "Render/SceneSky.h"
 #include "Render/ScriptRenderPasses.h"
+#include "Scene/MaterialReflection.h"
 #include "Scene/Scene.h"
 
 namespace pe
@@ -251,6 +252,7 @@ namespace pe
     void SceneRendererCore::PollShaders(std::optional<size_t> hash)
     {
         ReloadRenderPassShaders(m_renderPassComponents, hash);
+        InvalidateMaterialLayouts(); // a shader file changed: material layouts re-hash their sources
     }
 
     void SceneRendererCore::CreateFrameResources(uint32_t imageCount,

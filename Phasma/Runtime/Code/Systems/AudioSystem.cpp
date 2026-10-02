@@ -222,6 +222,7 @@ namespace pe
             delete s;
         }
         m_fireAndForget.clear();
+        m_residentClips.clear(); // the resource manager's uninit below frees their data
 
         for (auto &[node, zs] : m_zoneSounds)
         {
@@ -247,6 +248,14 @@ namespace pe
 
     // --- Fire-and-forget ---
 
+    // A clip's data stays in the resource manager from its first play: each play used to re-open and re-read
+    // the file once its last instance had ended (2-57 ms on the main thread, a gun's shot after a pause).
+    void AudioSystem::KeepResident(const std::string &fullPath)
+    {
+        if (s_resourceManager && m_residentClips.insert(fullPath).second)
+            ma_resource_manager_register_file(s_resourceManager, fullPath.c_str(), 0);
+    }
+
     std::string AudioSystem::ResolvePath(const std::string &path) const
     {
         if (std::filesystem::path(path).is_absolute())
@@ -260,6 +269,7 @@ namespace pe
             return;
 
         std::string fullPath = ResolvePath(path);
+        KeepResident(fullPath);
         auto *sound = new ma_sound();
         if (ma_sound_init_from_file(m_engine, fullPath.c_str(), 0, nullptr, nullptr, sound) != MA_SUCCESS)
         {
@@ -284,6 +294,7 @@ namespace pe
             return;
 
         std::string fullPath = ResolvePath(path);
+        KeepResident(fullPath);
         auto *sound = new ma_sound();
         if (ma_sound_init_from_file(m_engine, fullPath.c_str(), 0, nullptr, nullptr, sound) != MA_SUCCESS)
         {
