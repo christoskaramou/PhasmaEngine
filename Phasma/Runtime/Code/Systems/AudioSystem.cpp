@@ -320,9 +320,10 @@ namespace pe
 
         std::string fullPath = ResolvePath(path);
         m_musicSound = new ma_sound();
-        // Streamed and asynchronous: the init queues the open and decode on the resource manager's job thread
-        // and returns; the track starts when it is ready (a synchronous whole-file init cost a game's first
-        // combat frame ~4.5 ms).
+        // Streamed: the track decodes in pages on the resource manager's job thread instead of whole (a
+        // whole-file init cost a game's first combat frame ~4.5 ms). miniaudio forces WAIT_INIT on a sound, so
+        // the init still waits for the file to open and its first pages to decode: measured 0.4-0.6 ms a switch
+        // (stop 0.05 ms) on a desktop with loose files, 2026-10-04.
         if (ma_sound_init_from_file(m_engine, fullPath.c_str(), MA_SOUND_FLAG_STREAM | MA_SOUND_FLAG_ASYNC, nullptr, nullptr,
                                     m_musicSound) !=
             MA_SUCCESS)
