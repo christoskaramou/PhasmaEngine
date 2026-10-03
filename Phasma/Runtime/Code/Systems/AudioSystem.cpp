@@ -320,7 +320,12 @@ namespace pe
 
         std::string fullPath = ResolvePath(path);
         m_musicSound = new ma_sound();
-        if (ma_sound_init_from_file(m_engine, fullPath.c_str(), 0, nullptr, nullptr, m_musicSound) != MA_SUCCESS)
+        // Streamed and asynchronous: the init queues the open and decode on the resource manager's job thread
+        // and returns; the track starts when it is ready (a synchronous whole-file init cost a game's first
+        // combat frame ~4.5 ms).
+        if (ma_sound_init_from_file(m_engine, fullPath.c_str(), MA_SOUND_FLAG_STREAM | MA_SOUND_FLAG_ASYNC, nullptr, nullptr,
+                                    m_musicSound) !=
+            MA_SUCCESS)
         {
             PE_WARN("[Audio] Failed to load music: %s", fullPath.c_str());
             delete m_musicSound;
