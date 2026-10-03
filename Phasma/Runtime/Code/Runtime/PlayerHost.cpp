@@ -375,6 +375,15 @@ namespace pe
             bool m_initialized = false;
         };
 
+        class PlayerContextCleanup : public NoCopy, public NoMove
+        {
+        public:
+            ~PlayerContextCleanup()
+            {
+                Context::Remove();
+            }
+        };
+
         class PlayerRuntimeCleanup : public NoCopy, public NoMove
         {
         public:
@@ -403,7 +412,6 @@ namespace pe
                     DestroyGlobalSystems();
 
                 ModelAsset::DestroyDefaults();
-                Context::Remove();
                 m_cleaned = true;
             }
 
@@ -904,6 +912,8 @@ namespace pe
                 RHII.InitSwapchain();
 
             {
+                // Scene teardown removes its entities, so the context must outlive it.
+                PlayerContextCleanup contextCleanup;
                 Scene scene;
                 PlayerSceneRegistration sceneRegistration(scene);
                 PlayerRuntimeCleanup runtimeCleanup;
