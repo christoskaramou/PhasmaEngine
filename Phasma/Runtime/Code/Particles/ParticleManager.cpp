@@ -505,6 +505,13 @@ namespace pe
             for (uint32_t i = 0; i < m_textureNames.size(); ++i)
                 if (m_textureNames[i] == name)
                     return i;
+            // ParticlePS binds textures[16], then the scene depth at binding 16: a 17th texture would index past
+            // the table (a DX12 device hang) and its descriptor write would overwrite the depth.
+            if (m_textures.size() >= 16)
+            {
+                PE_ERROR("[Particles] LoadTexture: %s needs a 17th texture; the particle table holds 16", name.c_str());
+                return 0;
+            }
 
             Queue *queue = RHII.GetMainQueue();
             CommandBuffer *cmd = queue->AcquireCommandBuffer();

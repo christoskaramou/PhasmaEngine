@@ -54,6 +54,16 @@ The culler intentionally uses a conservative projected sphere overlap for each l
 
 Forward+ resources are descriptor-sensitive: scene render descriptor refresh must update the culling pass before `LightPass`, because the lighting descriptor set binds the cull buffers as extra read-only resources. When the global option is disabled or the raster path is inactive, `LightPass` binds small fallback storage buffers and the shader uses the original full point/spot loops. The pass also records explicit buffer barriers between compute writes and lighting reads on both Vulkan and DX12.
 
+The light storage buffer is replaced, not resized. `Scene::UpdateLights` destroys a frame's `lights_storage_buffer` and creates one twice as large when the enabled lights outgrow it; it starts at 1 KB, roughly 16-20 point lights. Every pass that binds it must rebind when `Scene::GetLightStorage(frame)` changes:
+- `ForwardPlusLightCullingPass` already did.
+- `LightOpaquePass`, `LightTransparentPass` and `RayTracingPass` did not, and kept the destroyed buffer in their sets until something else (an SSAO target, shadows, Forward+) forced a refresh. They now remember the bound buffer per frame (`m_boundLightStorage`) and rebind when it moves (2026-10-04).
+
+Vulkan tolerated the stale binding. DX12 hung the GPU (`DEVICE_HUNG`) in the opaque lighting draw right after the Forward+ cull. AgainstTheHero's 1,000-enemy fill, whose Blast Buds each carry an ember point light, hit it within seconds with shadows on. Toggling shadows off refreshed the sets, which hid it.
+
+DX12 debug regions now also emit D3D12 `BeginEvent`/`EndEvent`, so PIX shows pass names and DRED breadcrumbs (`PE_DX12_DRED=1`) show where each pass begins and ends. DRED did not return the event strings themselves (no breadcrumb contexts), so the failing pass is read from the event structure.
+
+`ParticleManager::LoadTexture` refuses a 17th particle texture. `ParticlePS` binds `textures[16]` with the scene depth at binding 16, so a 17th would index past the table on DX12, and its descriptor write would overwrite the depth.
+
 ## Present Mode And Framebuffer Cache
 
 Present-mode changes must be treated as resize work, not as an immediate mid-frame swapchain teardown. Editor/runtime requests should update the desired surface present mode, sync the stored preference to the effective supported mode, wait for idle, and queue `EventType::Resize` so swapchain, scene render targets, render-pass components, and frame resources rebuild together. Host window titles should be refreshed after the deferred swapchain recreation and after the active project binds. They should report "Phasma Editor", GPU, API, the recreated swapchain's actual present mode, the build configuration, and the active project folder. Other desktop hosts use the same spaced product name in the window title (`Phasma Player`, `Phasma Animator`, `Phasma Profiler`, `Phasma Cook`, `Phasma Engine`, `Phasma WebGPU`).

@@ -1419,9 +1419,10 @@ namespace pe
 
     void Dx12CommandBufferImpl::BeginDebugRegion(const std::string &name)
     {
-        // PIX label integration is a later slice; the call still drives the
-        // GpuTimer Start that ProfilerWidget/profiler_snapshot read.
+        // Drives the GpuTimer Start that ProfilerWidget/profiler_snapshot read, and a D3D12 event: PIX names
+        // the pass, and DRED breadcrumbs (PE_DX12_DRED=1) show where each pass begins and ends.
         Debug::BeginCmdRegion(m_owner, name);
+        m_cmdList->BeginEvent(1, name.c_str(), static_cast<UINT>(name.size() + 1)); // 1: an ANSI string, no copy
     }
     void Dx12CommandBufferImpl::InsertDebugLabel(const std::string &name)
     {
@@ -1430,6 +1431,7 @@ namespace pe
     void Dx12CommandBufferImpl::EndDebugRegion()
     {
         Debug::EndCmdRegion(m_owner);
+        m_cmdList->EndEvent();
     }
 
 #undef DX12_CMD_CARVE_OUT

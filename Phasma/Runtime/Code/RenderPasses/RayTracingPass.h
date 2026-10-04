@@ -42,8 +42,9 @@ namespace pe
     private:
         Scene *m_scene = nullptr;
         Image *m_display = nullptr;
-        Image *m_rtDepth = nullptr;              // primary-hit depth for RTDepthResolvePass (full RT mode)
-        AccelerationStructure *m_tlas = nullptr; // used to check if tlas is updated
+        Image *m_rtDepth = nullptr;                // primary-hit depth for RTDepthResolvePass (full RT mode)
+        AccelerationStructure *m_tlas = nullptr;   // used to check if tlas is updated
+        std::vector<Buffer *> m_boundLightStorage; // per frame: a grown light buffer replaces the old one
         std::vector<Buffer *> m_uniforms;
         uint64_t m_lastGeometryVersion = 0;
     };

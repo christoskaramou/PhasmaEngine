@@ -63,6 +63,7 @@ namespace pe
         std::vector<ImageView *> m_shadowFallbackViews;
         bool m_boundShadowsAvailable = false;
         bool m_boundForwardPlusEnabled = true;
+        std::vector<Buffer *> m_boundLightStorage; // per frame: a grown light buffer replaces the old one
         LightPassUBO m_ubo;
     };
 
@@ -98,6 +99,7 @@ namespace pe
         std::vector<ImageView *> m_shadowFallbackViews;
         bool m_boundShadowsAvailable = false;
         bool m_boundForwardPlusEnabled = true;
+        std::vector<Buffer *> m_boundLightStorage; // per frame: a grown light buffer replaces the old one
         LightPassUBO m_ubo;
     };
 } // namespace pe

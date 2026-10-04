@@ -337,6 +337,8 @@ namespace pe
             DSet->SetImageView(8, m_transparencyRT->GetSRV(), m_transparencyRT->GetSampler());
             DSet->SetImageView(9, ibl_brdf_lut->GetSRV(), ibl_brdf_lut->GetSampler());
             DSet->SetBuffer(10, scene.GetLightStorage(i));
+            m_boundLightStorage.resize(RHII.GetSwapchainImageCount());
+            m_boundLightStorage[i] = scene.GetLightStorage(i);
             const bool frameBoundForwardPlusResources =
                 SetForwardPlusDescriptors(DSet, i, m_forwardPlusFallbackTileData, m_forwardPlusFallbackLightIndices);
             boundForwardPlusResources = boundForwardPlusResources && frameBoundForwardPlusResources;
@@ -366,9 +368,12 @@ namespace pe
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
         const bool forwardPlusEnabled = gSettings.forward_plus;
+        const uint32_t frame = RHII.GetFrameIndex();
+        const bool lightStorageMoved =
+            frame >= m_boundLightStorage.size() || m_boundLightStorage[frame] != GetActiveScene()->GetLightStorage(frame);
         if (Image *ssaoRT = renderer.GetRenderTarget("ssao");
             ssaoRT != m_ssaoRT || shadowsAvailable != m_boundShadowsAvailable ||
-            forwardPlusEnabled != m_boundForwardPlusEnabled)
+            forwardPlusEnabled != m_boundForwardPlusEnabled || lightStorageMoved)
         {
             m_ssaoRT = ssaoRT;
             UpdateDescriptorSets();
@@ -592,6 +597,8 @@ namespace pe
             auto *ibl_brdf_lut = renderer.GetIBL_LUT();
             DSet->SetImageView(9, ibl_brdf_lut->GetSRV(), ibl_brdf_lut->GetSampler());
             DSet->SetBuffer(10, GetActiveScene()->GetLightStorage(i));
+            m_boundLightStorage.resize(RHII.GetSwapchainImageCount());
+            m_boundLightStorage[i] = GetActiveScene()->GetLightStorage(i);
             const bool frameBoundForwardPlusResources =
                 SetForwardPlusDescriptors(DSet, i, m_forwardPlusFallbackTileData, m_forwardPlusFallbackLightIndices);
             boundForwardPlusResources = boundForwardPlusResources && frameBoundForwardPlusResources;
@@ -621,9 +628,12 @@ namespace pe
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
         const bool forwardPlusEnabled = gSettings.forward_plus;
+        const uint32_t frame = RHII.GetFrameIndex();
+        const bool lightStorageMoved =
+            frame >= m_boundLightStorage.size() || m_boundLightStorage[frame] != GetActiveScene()->GetLightStorage(frame);
         if (Image *ssaoRT = renderer.GetRenderTarget("ssao");
             ssaoRT != m_ssaoRT || shadowsAvailable != m_boundShadowsAvailable ||
-            forwardPlusEnabled != m_boundForwardPlusEnabled)
+            forwardPlusEnabled != m_boundForwardPlusEnabled || lightStorageMoved)
         {
             m_ssaoRT = ssaoRT;
             UpdateDescriptorSets();

@@ -103,6 +103,8 @@ namespace pe
                 desc->SetBuffer(0, scene.GetLightUniform(i));
                 desc->SetBuffer(1, m_uniforms[i]);
                 desc->SetBuffer(2, scene.GetLightStorage(i));
+                m_boundLightStorage.resize(RHII.GetSwapchainImageCount());
+                m_boundLightStorage[i] = scene.GetLightStorage(i);
                 desc->SetImageView(3, m_rtDepth->GetUAV(0));
                 desc->Update();
             }
@@ -143,6 +145,9 @@ namespace pe
         uint64_t geoVersion = scene.GetGeometryVersion();
         bool tlasChanged = tlas && m_tlas != tlas;
         bool geoChanged = geoVersion != m_lastGeometryVersion;
+        const uint32_t frame = RHII.GetFrameIndex();
+        if (!tlasChanged && frame < m_boundLightStorage.size() && m_boundLightStorage[frame] != scene.GetLightStorage(frame))
+            UpdateDescriptorSets(); // the enabled lights outgrew this frame's buffer
 
         if (tlasChanged || geoChanged)
         {
