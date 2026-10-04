@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 25;
+    inline constexpr uint32_t ScriptAbiVersion = 26;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -344,6 +344,9 @@ namespace phasma
         // v25: named profiler scopes around game code (PhasmaProfiler totals, spikes, the Advisor).
         void (*profileBegin)(void *, const char *name) noexcept;
         void (*profileEnd)(void *) noexcept;
+        // v26: position and Euler rotation (degrees) in one call: what SetPosition then SetRotation leave, with one
+        // node lookup and one transform update (a crowd moves every member every frame).
+        uint32_t (*setTransform)(void *, Node node, Vec3 position, Vec3 eulerDegrees) noexcept;
     };
     struct ScriptDesc
     {
@@ -418,6 +421,10 @@ namespace phasma
         Node Instantiate(const char *prefab) const { return m_api.instantiatePrefab(m_api.context, prefab); }
         bool Destroy(Node node) const { return m_api.destroyNode(m_api.context, node) != 0; }
         bool SetRotation(Node node, Vec3 eulerDegrees) const { return m_api.setRotation(m_api.context, node, eulerDegrees) != 0; }
+        bool SetTransform(Node node, Vec3 position, Vec3 eulerDegrees) const
+        {
+            return m_api.setTransform(m_api.context, node, position, eulerDegrees) != 0;
+        }
         bool SetScale(Node node, Vec3 value) const { return m_api.setScale(m_api.context, node, value) != 0; }
         bool Play(Node node, const char *clip, bool loop = true) const { return m_api.playAnimation(m_api.context, node, clip, loop) != 0; }
         bool ShowScreen(const char *screen, bool visible = true, bool overlay = true) const { return m_api.showScreen(m_api.context, screen, visible, overlay) != 0; }

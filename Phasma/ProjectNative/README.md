@@ -164,6 +164,9 @@ ABI 25 adds `ProfileBegin(name)` / `ProfileEnd()` and the RAII `phasma::ProfileS
 phases of the game's update in the engine profiler (PhasmaProfiler, the advisor), nested under `Script System`.
 Names are interned on first use; an end without a begin is ignored, and scopes left open close after the update.
 
+ABI 26 adds `SetTransform(node, position, eulerDegrees)`: the transform `SetPosition` then `SetRotation` leave,
+bit for bit, with one node lookup and one transform update, for code that moves a crowd every frame.
+
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are
 frozen. A module runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5)

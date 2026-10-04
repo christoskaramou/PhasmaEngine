@@ -250,6 +250,11 @@ script API also wraps its costly calls (`Script API Instantiate` / `Destroy` / `
 `Sound` / `Particles`). AgainstTheHero's kernel reports through null-safe `PhaseHooks`, so tests and headless tools
 run unchanged.
 
+ABI 26 (2026-10-04) appends `setTransform` (`World::SetTransform(node, position, eulerDegrees)`): the transform that
+`setPosition` then `setRotation` leave, bit for bit (a scratch check compared 200,000 random transforms), with one
+handle lookup, one `ReplaceTrs` and one `SetLocalMatrix`. On AgainstTheHero's 1,000-enemy fill the two calls cost
+~200 and ~170 ns per enemy per frame (0.35 ms, ~80% of its per-enemy view update).
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

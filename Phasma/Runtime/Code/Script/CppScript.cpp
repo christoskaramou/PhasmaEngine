@@ -1222,6 +1222,26 @@ namespace pe
                          return;
                      --s_openProfileScopes;
                      Profiler::EndScope();
+                 },
+                 [](void *ctx, phasma::Node handle, phasma::Vec3 position, phasma::Vec3 rotation) noexcept -> uint32_t
+                 {
+                     return GuardApi([&]() -> uint32_t
+                                     {
+                         NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                         if (!node || !Finite(position) || !Finite(rotation)) return 0;
+                         Scene *scene = GetActiveScene();
+                         const vec3 degrees(rotation.x, rotation.y, rotation.z);
+                         // Cameras own their transform and overwrite the node every frame.
+                         if (Camera *camera = scene->GetCameraForNode(node))
+                         {
+                             camera->SetPosition(vec3(position.x, position.y, position.z));
+                             camera->SetEuler(glm::radians(degrees));
+                         }
+                         // The rotation keeps the node's scale; the translation is then replaced, as setPosition does.
+                         mat4 matrix = ReplaceTrs(scene->GetLocalMatrix(node), &degrees, nullptr);
+                         matrix[3] = vec4(position.x, position.y, position.z, 1.0f);
+                         scene->SetLocalMatrix(node, matrix);
+                         return 1; });
                  }};
     }
 
