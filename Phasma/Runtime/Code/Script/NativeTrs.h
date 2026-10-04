@@ -15,8 +15,9 @@ namespace pe
 
     // Signed-scale decomposition of an affine matrix. A reflection (negative determinant) is carried
     // by a negative x scale whichever axis was originally mirrored (a matrix cannot tell); zero-scale
-    // axes keep a valid rotation instead of producing NaN.
-    inline LocalTrs DecomposeTrs(const glm::mat4 &m)
+    // axes keep a valid rotation instead of producing NaN. withRotation false leaves the identity rotation
+    // (a caller replacing it skips the quaternion extraction).
+    inline LocalTrs DecomposeTrs(const glm::mat4 &m, bool withRotation = true)
     {
         constexpr float epsilon = 1e-12f;
         LocalTrs trs;
@@ -42,6 +43,8 @@ namespace pe
             trs.scale.x = -trs.scale.x;
             axes[0] = -axes[0];
         }
+        if (!withRotation)
+            return trs;
         if (zeroCount == 1)
         {
             const int missing = zero[0] ? 0 : (zero[1] ? 1 : 2);
@@ -70,15 +73,18 @@ namespace pe
         return trs;
     }
 
+    // T * R * S written by column: the same values without the two matrix products.
     inline glm::mat4 ComposeTrs(const LocalTrs &trs)
     {
-        return glm::translate(glm::mat4(1.0f), trs.translation) * glm::mat4_cast(trs.rotation) * glm::scale(glm::mat4(1.0f), trs.scale);
+        const glm::mat3 r = glm::mat3_cast(trs.rotation);
+        return glm::mat4(glm::vec4(r[0] * trs.scale.x, 0.0f), glm::vec4(r[1] * trs.scale.y, 0.0f), glm::vec4(r[2] * trs.scale.z, 0.0f),
+                         glm::vec4(trs.translation, 1.0f));
     }
 
     // Replaces rotation (Euler degrees) and/or scale, keeping the other components.
     inline glm::mat4 ReplaceTrs(const glm::mat4 &m, const glm::vec3 *rotationDegrees, const glm::vec3 *scale)
     {
-        LocalTrs trs = DecomposeTrs(m);
+        LocalTrs trs = DecomposeTrs(m, !rotationDegrees);
         if (rotationDegrees)
             trs.rotation = glm::quat(glm::radians(*rotationDegrees));
         if (scale)

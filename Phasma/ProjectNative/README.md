@@ -160,6 +160,10 @@ before reading stretch; older modules never have their shorter struct's tail rea
 Particles sample scene depth to reject hidden fragments and fade across the last 10 cm in front
 of surfaces. Depth coordinates follow render scale and targets are rebound after resize.
 
+ABI 25 adds `ProfileBegin(name)` / `ProfileEnd()` and the RAII `phasma::ProfileScope(world, name)`: named
+phases of the game's update in the engine profiler (PhasmaProfiler, the advisor), nested under `Script System`.
+Names are interned on first use; an end without a begin is ignored, and scopes left open close after the update.
+
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are
 frozen. A module runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5)

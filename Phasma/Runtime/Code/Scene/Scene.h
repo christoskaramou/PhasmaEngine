@@ -910,6 +910,9 @@ namespace pe
         // XOR set-signature of the currently selected meshes last published to m_meshConstantsDevice.
         // UpdateMeshSelectionFlags re-copies the DX12 mirror only when this changes (~0ull = force).
         uint64_t m_meshSelectionMirrorSignature = ~0ull;
+        // The last UpdateMeshSelectionFlags pass found nothing selected: with nothing selected since, the
+        // per-mesh flags are already right and the pass is skipped (a geometry rebuild clears it).
+        bool m_meshSelectionClean = false;
         Buffer *m_materialTable = nullptr;
         Buffer *m_materialByteBuffer = nullptr; // ByteAddressBuffer for shader-driven materials
         uint32_t m_materialByteBufferUsed = 0;  // current byte offset (append-only)

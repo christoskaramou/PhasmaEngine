@@ -31,6 +31,22 @@ namespace pe
         }
 
         int GetBoneCount() const { return static_cast<int>(bones.size()); }
+
+        // glm::inverse(rootTransform), recomputed only when rootTransform changes: the per-frame
+        // skinning paths call this for every skinned mesh. Main thread only (the cache is unguarded).
+        const mat4 &InverseRootTransform() const
+        {
+            if (m_inverseRootOf != rootTransform)
+            {
+                m_inverseRootOf = rootTransform;
+                m_inverseRoot = glm::inverse(rootTransform);
+            }
+            return m_inverseRoot;
+        }
+
+    private:
+        mutable mat4 m_inverseRootOf = mat4(1.f);
+        mutable mat4 m_inverseRoot = mat4(1.f);
     };
 
     enum class AnimationInterpolation : uint8_t

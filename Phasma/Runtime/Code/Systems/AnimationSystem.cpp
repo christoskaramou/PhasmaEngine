@@ -618,29 +618,9 @@ namespace pe
         };
         {
             PE_PROFILE_SCOPE("Animation Evaluate Poses");
-            // Small scenes stay serial; at most four chunks amortize scheduling for crowds. 32 poses a chunk: a
+            // Small scenes stay serial; at most eight chunks amortize scheduling for crowds. 32 poses a chunk: a
             // 130-creep ATH horde (~115 poses) took 0.33-0.37 ms here vs 0.49-0.65 ms serial (2026-10-01).
-            const size_t chunks = std::min({size_t(4), size_t(std::max(1u, std::thread::hardware_concurrency())),
-                                            std::max(size_t(1), jobs.size() / 32)});
-            std::vector<std::shared_future<void>> tasks;
-            tasks.reserve(chunks - 1);
-            try
-            {
-                for (size_t chunk = 1; chunk < chunks; ++chunk)
-                    tasks.push_back(ThreadPool::Update.Enqueue(evaluate, jobs.size() * chunk / chunks,
-                                                               jobs.size() * (chunk + 1) / chunks));
-                evaluate(0, jobs.size() / chunks);
-            }
-            catch (...)
-            {
-                for (auto &task : tasks)
-                    task.wait();
-                throw;
-            }
-            for (auto &task : tasks)
-                task.wait();
-            for (auto &task : tasks)
-                task.get();
+            ThreadPool::Update.ParallelFor(jobs.size(), 32, 8, evaluate);
         }
         for (const auto &job : jobs)
             scene->MarkNodeDirty(job.key.state->nodeId);

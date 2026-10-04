@@ -15,6 +15,8 @@ namespace pe
     {
         void (*clearSelection)() = nullptr;
         bool (*isNodeSelected)(const NodeId *node) = nullptr;
+        // False when nothing is selected, so the outline pass skips its scan of every node. Null: unknown.
+        bool (*hasSelection)() = nullptr;
         void (*clearAnimations)() = nullptr;
         void (*removeAnimation)(NodeId *node) = nullptr;
         void (*playAnimation)(Scene &scene, NodeId *node, int clipIndex, bool loop) = nullptr;
@@ -67,6 +69,7 @@ namespace pe
     void SetRuntimeSelectedNodeIndex(int nodeIndex);
     void ClearSceneSelection();
     [[nodiscard]] bool IsSceneNodeSelected(const NodeId *node);
+    [[nodiscard]] bool HasSceneSelection();
     void ClearSceneAnimations();
     void RemoveSceneAnimation(NodeId *node);
     void PlaySceneAnimation(Scene &scene, NodeId *node, int clipIndex, bool loop);

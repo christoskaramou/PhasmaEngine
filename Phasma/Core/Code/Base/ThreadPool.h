@@ -14,6 +14,12 @@ namespace pe
         // Wait until all tasks are done and no workers are active
         void WaitIdle();
 
+        // fn(begin, end) over [0, count) on the calling thread plus up to maxChunks - 1 pool workers (at least
+        // minPerChunk items each). Each takes the next quarter-share as it frees up, so one slow stretch (a run
+        // of crossfading rigs) is shared instead of holding the caller. Returns once all is done, rethrowing a failure.
+        template <class F>
+        void ParallelFor(size_t count, size_t minPerChunk, size_t maxChunks, F &&fn);
+
         static ThreadPool General;
         static ThreadPool Update;
         static ThreadPool Render;
@@ -55,5 +61,37 @@ namespace pe
         }
         m_condition.notify_one();
         return future;
+    }
+
+    template <class F>
+    void ThreadPool::ParallelFor(size_t count, size_t minPerChunk, size_t maxChunks, F &&fn)
+    {
+        const size_t workers = std::min({maxChunks, size_t(std::max(1u, std::thread::hardware_concurrency())),
+                                         std::max(size_t(1), count / std::max(size_t(1), minPerChunk))});
+        const size_t grain = std::max(size_t(1), count / (workers * 4));
+        std::atomic<size_t> next{0}; // outlives every task: all are waited for below
+        auto run = [&]()
+        {
+            for (size_t begin; (begin = next.fetch_add(grain)) < count;)
+                fn(begin, std::min(begin + grain, count));
+        };
+        std::vector<std::shared_future<void>> tasks;
+        tasks.reserve(workers - 1);
+        try
+        {
+            for (size_t worker = 1; worker < workers; ++worker)
+                tasks.push_back(Enqueue(run));
+            run();
+        }
+        catch (...)
+        {
+            for (auto &task : tasks)
+                task.wait();
+            throw;
+        }
+        for (auto &task : tasks)
+            task.wait();
+        for (auto &task : tasks)
+            task.get();
     }
 } // namespace pe

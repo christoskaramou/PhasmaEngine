@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 24;
+    inline constexpr uint32_t ScriptAbiVersion = 25;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -341,6 +341,9 @@ namespace phasma
         uint32_t (*playAnimationLayerBlend)(void *, Node, const char *clip, const char *mask, uint32_t loop,
                                             float speed, const char *anchor, float fadeSeconds) noexcept;
         uint32_t (*playSoundEx)(void *, const char *clip, float volume, float pitch) noexcept;
+        // v25: named profiler scopes around game code (PhasmaProfiler totals, spikes, the Advisor).
+        void (*profileBegin)(void *, const char *name) noexcept;
+        void (*profileEnd)(void *) noexcept;
     };
     struct ScriptDesc
     {
@@ -569,8 +572,23 @@ namespace phasma
         {
             return m_api.playSoundEx(m_api.context, clip, volume, pitch) != 0;
         }
+        // Pair each Begin with an End (ProfileScope does); the host closes any left open after the update.
+        void ProfileBegin(const char *name) const { m_api.profileBegin(m_api.context, name); }
+        void ProfileEnd() const { m_api.profileEnd(m_api.context); }
 
     private:
         const ScriptApi &m_api;
+    };
+
+    // A profiler scope for the rest of a block: ProfileScope scope(world, "Creep View");
+    struct ProfileScope
+    {
+        ProfileScope(const World &world, const char *name) : m_world(world) { m_world.ProfileBegin(name); }
+        ~ProfileScope() { m_world.ProfileEnd(); }
+        ProfileScope(const ProfileScope &) = delete;
+        ProfileScope &operator=(const ProfileScope &) = delete;
+
+    private:
+        const World &m_world;
     };
 } // namespace phasma

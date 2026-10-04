@@ -1184,15 +1184,17 @@ namespace pe
 
         // Batch node data copies; joint palettes write directly to this frame's mapped buffer.
         static thread_local std::vector<BufferRange> nodeRanges;
-        struct JointPalette
+        // One skinned node's palettes: the current pose at offset, the previous one right after it.
+        struct SkinJob
         {
-            const std::vector<mat4> *pose;
+            NodeRuntime *rt;
             mat4 invRoot;
             size_t offset, count;
+            bool roll; // the node's first upload this frame: its shown pose becomes the previous one
         };
-        static thread_local std::vector<JointPalette> palettes;
+        static thread_local std::vector<SkinJob> skins;
         nodeRanges.clear();
-        palettes.clear();
+        skins.clear();
 
         const int maxJointCount = GetMaxJointCount();
 
@@ -1232,74 +1234,62 @@ namespace pe
             if (jointCount > 0)
             {
                 const Skeleton &skeleton = GetSkeletonForNode(m_nodeIds[i]);
-                const bool hasMatchingSkeleton = skeleton.GetBoneCount() == jointCount;
-                const mat4 invRoot = hasMatchingSkeleton ? glm::inverse(skeleton.rootTransform) : mat4(1.f);
+                const mat4 invRoot = skeleton.GetBoneCount() == jointCount ? skeleton.InverseRootTransform() : mat4(1.f);
                 const size_t offset = rt.dataOffset + sizeof(NodeGpuData);
                 const size_t size = static_cast<size_t>(jointCount) * sizeof(mat4);
                 PE_ERROR_IF(offset > m_storages[frame]->Size() || 2 * size > m_storages[frame]->Size() - offset,
                             "Scene joint palette exceeds its frame buffer");
-                const bool posed = static_cast<int>(rt.jointMatrices.size()) == jointCount;
-                palettes.push_back({posed ? &rt.jointMatrices : nullptr, invRoot, offset, static_cast<size_t>(jointCount)});
                 // The previous frame's pose after the current one, for the G-buffer's motion vectors: rolled on
                 // the node's first upload of a frame (the late script catch-up uploads again in the same frame).
                 const uint32_t frameCounter = RHII.GetFrameCounter();
-                if (rt.jointRollFrame != frameCounter)
-                {
-                    rt.jointRollFrame = frameCounter;
-                    rt.prevJointMatrices = rt.shownJointMatrices.size() == rt.jointMatrices.size() ? rt.shownJointMatrices : rt.jointMatrices;
-                }
-                rt.shownJointMatrices = rt.jointMatrices;
-                const bool prevPosed = posed && rt.prevJointMatrices.size() == rt.jointMatrices.size();
-                palettes.push_back({prevPosed ? &rt.prevJointMatrices : (posed ? &rt.jointMatrices : nullptr), invRoot,
-                                    offset + size, static_cast<size_t>(jointCount)});
-                // A moving pose uploads again next frame even if nothing re-dirties it, so the frame after it
-                // stops sees previous == current instead of keeping its last motion.
-                if (prevPosed && rt.prevJointMatrices != rt.jointMatrices)
-                    rt.dirtyUniforms = 0xFF;
+                const bool roll = rt.jointRollFrame != frameCounter;
+                rt.jointRollFrame = frameCounter;
+                skins.push_back({&rt, invRoot, offset, static_cast<size_t>(jointCount), roll});
             }
         }
 
-        if (!palettes.empty())
+        if (!skins.empty())
         {
             PE_PROFILE_SCOPE("Joint Palette Preparation");
             // Strip the skeleton's baked root transform before the shader applies worldMatrix.
-            // The frame's GPU fence was waited before reuse. Workers write disjoint mapped
-            // ranges and join before submission; no intermediate palette copy is needed.
+            // The frame's GPU fence was waited before reuse. Each job owns one node (its pose
+            // vectors and mapped range), so workers neither share data nor need a palette copy.
             auto *mapped = static_cast<uint8_t *>(m_storages[frame]->Data());
             PE_ERROR_IF(!mapped, "Scene joint palette buffer is not mapped");
-            auto prepare = [jobs = std::span<const JointPalette>(palettes), mapped](size_t begin, size_t end)
+            auto prepare = [jobs = std::span<const SkinJob>(skins), mapped](size_t begin, size_t end)
             {
+                auto write = [mapped](size_t offset, const std::vector<mat4> *pose, const mat4 &invRoot, size_t count)
+                {
+                    for (size_t j = 0; j < count; ++j)
+                    {
+                        const mat4 matrix = pose ? invRoot * (*pose)[j] : mat4(1.f);
+                        std::memcpy(mapped + offset + j * sizeof(mat4), &matrix, sizeof(matrix));
+                    }
+                };
                 for (size_t i = begin; i < end; ++i)
                 {
-                    const auto &palette = jobs[i];
-                    for (size_t j = 0; j < palette.count; ++j)
+                    const SkinJob &job = jobs[i];
+                    NodeRuntime &rt = *job.rt;
+                    const bool posed = rt.jointMatrices.size() == job.count;
+                    if (job.roll) // the shown pose becomes the previous one: a swap, not a copy
                     {
-                        const mat4 matrix = palette.pose ? palette.invRoot * (*palette.pose)[j] : mat4(1.f);
-                        std::memcpy(mapped + palette.offset + j * sizeof(mat4), &matrix, sizeof(matrix));
+                        if (rt.shownJointMatrices.size() == rt.jointMatrices.size())
+                            std::swap(rt.prevJointMatrices, rt.shownJointMatrices);
+                        else
+                            rt.prevJointMatrices = rt.jointMatrices;
                     }
+                    rt.shownJointMatrices = rt.jointMatrices;
+                    const bool prevPosed = posed && rt.prevJointMatrices.size() == rt.jointMatrices.size();
+                    write(job.offset, posed ? &rt.jointMatrices : nullptr, job.invRoot, job.count);
+                    write(job.offset + job.count * sizeof(mat4),
+                          prevPosed ? &rt.prevJointMatrices : (posed ? &rt.jointMatrices : nullptr), job.invRoot, job.count);
+                    // A moving pose uploads again next frame even if nothing re-dirties it, so the frame after
+                    // it stops sees previous == current instead of keeping its last motion.
+                    if (prevPosed && rt.prevJointMatrices != rt.jointMatrices)
+                        rt.dirtyUniforms = 0xFF;
                 }
             };
-            const size_t chunks = std::min({size_t(4), size_t(std::max(1u, std::thread::hardware_concurrency())),
-                                            std::max(size_t(1), palettes.size() / 128)});
-            std::vector<std::shared_future<void>> tasks;
-            tasks.reserve(chunks - 1);
-            try
-            {
-                for (size_t chunk = 1; chunk < chunks; ++chunk)
-                    tasks.push_back(ThreadPool::Update.Enqueue(prepare, palettes.size() * chunk / chunks,
-                                                               palettes.size() * (chunk + 1) / chunks));
-                prepare(0, palettes.size() / chunks);
-            }
-            catch (...)
-            {
-                for (auto &task : tasks)
-                    task.wait();
-                throw;
-            }
-            for (auto &task : tasks)
-                task.wait();
-            for (auto &task : tasks)
-                task.get();
+            ThreadPool::Update.ParallelFor(skins.size(), 64, 8, prepare);
         }
 
         if (!nodeRanges.empty())

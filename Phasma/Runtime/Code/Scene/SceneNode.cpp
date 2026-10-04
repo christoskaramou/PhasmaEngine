@@ -1444,6 +1444,18 @@ namespace pe
             MarkNodeDirty(child);
     }
 
+    namespace
+    {
+        // A skinned mesh's world bounds, deferred from UpdateNodeMatrix to UpdateNodeMatrices.
+        struct SkinPose
+        {
+            uint32_t node;
+            int mesh;
+            mat4 basis;
+        };
+        thread_local std::vector<SkinPose> s_skinPoses;
+    } // namespace
+
     void Scene::UpdateNodeMatrix(NodeId *node)
     {
         const uint32_t idx = node->index;
@@ -1468,21 +1480,28 @@ namespace pe
         const auto &refs = m_nodeComponentCache[idx].meshRefs->meshRefs;
         const Skeleton *skeleton = rt.jointMatrices.empty() ? nullptr : &GetSkeletonForNode(node);
         const bool posed = skeleton && skeleton->bones.size() == rt.jointMatrices.size();
-        const mat4 skinBasis = posed ? rt.gpuData.worldMatrix * glm::inverse(skeleton->rootTransform) : rt.gpuData.worldMatrix;
+        const mat4 skinBasis = posed ? rt.gpuData.worldMatrix * skeleton->InverseRootTransform() : rt.gpuData.worldMatrix;
         bool aabbInit = false;
         for (int meshIdx : refs)
         {
             if (meshIdx < 0)
                 continue;
-            AABB meshAABB = TransformAabb(m_meshes[meshIdx].boundingBox, rt.gpuData.worldMatrix);
             if (posed && m_meshes[meshIdx].skinned)
             {
                 const Mesh &mesh = m_meshes[meshIdx];
                 SkinnedBounds &bounds = m_meshRuntimes[meshIdx].skinBounds;
                 if (bounds.joints.size() != rt.jointMatrices.size())
                     bounds.Build(std::span<const Vertex>(m_vertexStore).subspan(mesh.vertexOffset, mesh.vertexCount), rt.jointMatrices.size());
-                meshAABB = bounds.Pose(rt.jointMatrices, skinBasis, rt.gpuData.worldMatrix);
+                // Posed after the walk, in parallel (UpdateNodeMatrices); the empty box keeps the union exact.
+                s_skinPoses.push_back({idx, meshIdx, skinBasis});
+                if (!aabbInit)
+                {
+                    rt.worldAABB = SkinnedBounds::Empty();
+                    aabbInit = true;
+                }
+                continue;
             }
+            const AABB meshAABB = TransformAabb(m_meshes[meshIdx].boundingBox, rt.gpuData.worldMatrix);
             if (!aabbInit)
             {
                 rt.worldAABB = meshAABB;
@@ -1516,6 +1535,7 @@ namespace pe
     {
         if (!m_nodesDirty)
             return;
+        s_skinPoses.clear(); // a walk that threw last time must not leave its queue behind
 
         // Update from the shallowest dirty ancestor in each dirty subtree.
         // A node is an entry point if it is dirty and its parent is either absent (root)
@@ -1528,6 +1548,32 @@ namespace pe
             if (parent && m_nodeRuntime[parent->index].dirty)
                 continue; // parent will recurse here
             UpdateNodeMatrix(m_nodeIds[i]);
+        }
+
+        if (!s_skinPoses.empty())
+        {
+            // Pose only reads the joint matrices and the per-mesh joint boxes (built during the walk above).
+            static thread_local std::vector<AABB> posed;
+            posed.resize(s_skinPoses.size());
+            // Spans, not the thread_locals: a worker naming them would see its own empty copies.
+            auto pose = [this, jobs = std::span<const SkinPose>(s_skinPoses), out = std::span<AABB>(posed)](size_t begin, size_t end)
+            {
+                for (size_t i = begin; i < end; ++i)
+                {
+                    const NodeRuntime &rt = m_nodeRuntime[jobs[i].node];
+                    out[i] = m_meshRuntimes[jobs[i].mesh].skinBounds.Pose(rt.jointMatrices, jobs[i].basis, rt.gpuData.worldMatrix);
+                }
+            };
+            ThreadPool::Update.ParallelFor(s_skinPoses.size(), 64, 8, pose);
+            for (size_t i = 0; i < s_skinPoses.size(); ++i)
+            {
+                NodeRuntime &rt = m_nodeRuntime[s_skinPoses[i].node];
+                rt.worldAABB.min = min(rt.worldAABB.min, posed[i].min);
+                rt.worldAABB.max = max(rt.worldAABB.max, posed[i].max);
+                rt.skinBoundsGpu[0] = vec4(rt.worldAABB.min, 0.f);
+                rt.skinBoundsGpu[1] = vec4(rt.worldAABB.max, 0.f);
+            }
+            s_skinPoses.clear();
         }
 
         m_nodesDirty = false;

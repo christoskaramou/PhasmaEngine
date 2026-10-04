@@ -71,6 +71,8 @@ namespace pe
 
     bool Scene::HasSelectedRenderableMeshes() const
     {
+        if (!HasSceneSelection()) // the Player with nothing selected: no walk over every node
+            return false;
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
             NodeId *node = m_nodeIds[i];
@@ -95,7 +97,7 @@ namespace pe
 
     void Scene::UpdateMeshSelectionFlags()
     {
-        if (!m_meshConstants || m_meshCount == 0)
+        if (!m_meshConstants || m_meshCount == 0 || (m_meshSelectionClean && !HasSceneSelection()))
             return;
 
         // In-place rewrite of the editorFlags field for every mesh, in the SAME iteration order
@@ -153,6 +155,7 @@ namespace pe
 
         m_meshConstants->Flush(offset, 0);
         m_meshConstants->Unmap();
+        m_meshSelectionClean = selectionSignature == 0;
 
         // DX12: the cull pass reads m_meshConstantsDevice (a GPU-cached mirror), so the host writes
         // above are invisible to it — without this the selected bucket keeps whatever was baked at the
@@ -1323,6 +1326,7 @@ namespace pe
         // The mirror was just recreated; force UpdateMeshSelectionFlags to republish the selection next
         // frame regardless of whether the selected set changed (ComputeMeshConstants doesn't bake it).
         m_meshSelectionMirrorSignature = ~0ull;
+        m_meshSelectionClean = false;
         m_pendingTextureMeshUploads.clear();
     }
 

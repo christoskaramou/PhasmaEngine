@@ -347,6 +347,11 @@ namespace pe
         {
             s_runtimeSelectedNodeIndex = -1;
         }
+
+        bool DefaultHasSceneSelection()
+        {
+            return s_runtimeSelectedNodeIndex >= 0;
+        }
     } // namespace
 
     SceneRuntimeHooks CreateDefaultSceneRuntimeHooks()
@@ -354,6 +359,7 @@ namespace pe
         SceneRuntimeHooks hooks{};
         hooks.clearSelection = DefaultClearSceneSelection;
         hooks.isNodeSelected = DefaultIsSceneNodeSelected;
+        hooks.hasSelection = DefaultHasSceneSelection;
         hooks.clearAnimations = DefaultClearSceneAnimations;
         hooks.removeAnimation = DefaultRemoveSceneAnimation;
         hooks.playAnimation = DefaultPlaySceneAnimation;
@@ -414,6 +420,11 @@ namespace pe
     bool IsSceneNodeSelected(const NodeId *node)
     {
         return s_sceneRuntimeHooks.isNodeSelected ? s_sceneRuntimeHooks.isNodeSelected(node) : false;
+    }
+
+    bool HasSceneSelection()
+    {
+        return !s_sceneRuntimeHooks.hasSelection || s_sceneRuntimeHooks.hasSelection();
     }
 
     void ClearSceneAnimations()

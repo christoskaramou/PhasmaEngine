@@ -14,6 +14,7 @@ namespace pe
         }
 
         std::vector<AABB> joints;
+        std::vector<uint32_t> used; // joints with vertices: Pose skips the empty boxes (gear meshes use a few)
         AABB unweighted = Empty();
         float negativeWeight = 0.f;
 
@@ -44,6 +45,10 @@ namespace pe
                 }
                 negativeWeight = std::max(negativeWeight, negative);
             }
+            used.clear();
+            for (uint32_t j = 0; j < joints.size(); ++j)
+                if (joints[j].min.x <= joints[j].max.x)
+                    used.push_back(j);
         }
 
         AABB Pose(std::span<const mat4> matrices, const mat4 &basis, const mat4 &world) const
@@ -60,8 +65,9 @@ namespace pe
                 result.max = max(result.max, center + extent);
             };
             include(unweighted, world);
-            for (size_t j = 0; j < joints.size() && j < matrices.size(); ++j)
-                include(joints[j], basis * matrices[j]);
+            for (const uint32_t j : used)
+                if (j < joints.size() && j < matrices.size())
+                    include(joints[j], basis * matrices[j]);
             if (result.min.x > result.max.x)
                 return result;
             // Signed Catmull-Rom weights can leave the joint-box union by at most N * its extent.

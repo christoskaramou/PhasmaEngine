@@ -243,6 +243,22 @@ namespace pe
         {
             return MatchesCppScript(path, script.name, script.sourceFile);
         }
+
+        // v25 profile scopes: names are interned (the profiler keeps them for a frame or more, past a
+        // module reload), and the open count keeps an unmatched End off the engine's own scopes.
+        struct ProfileNameHash
+        {
+            using is_transparent = void;
+            size_t operator()(std::string_view name) const noexcept { return std::hash<std::string_view>{}(name); }
+        };
+        std::unordered_set<std::string, ProfileNameHash, std::equal_to<>> s_profileNames;
+        uint32_t s_openProfileScopes = 0;
+
+        void CloseScriptProfileScopes()
+        {
+            for (; s_openProfileScopes > 0; --s_openProfileScopes)
+                Profiler::EndScope();
+        }
     } // namespace
 
     CppScriptSystem::~CppScriptSystem()
@@ -334,6 +350,7 @@ namespace pe
                                    { return InputState::IsKeyDown(name); }); },
                  [](void *ctx, const char *path) noexcept -> phasma::Node
                  {
+                     PE_PROFILE_SCOPE("Script API Instantiate");
                      return GuardApi([&]() -> phasma::Node
                                      {
                          Scene *scene = GetActiveScene();
@@ -347,6 +364,7 @@ namespace pe
                  },
                  [](void *ctx, phasma::Node handle) noexcept -> uint32_t
                  {
+                     PE_PROFILE_SCOPE("Script API Destroy");
                      return GuardApi([&]() -> uint32_t
                                      {
                          auto *self = static_cast<CppScriptSystem *>(ctx);
@@ -380,6 +398,7 @@ namespace pe
                  },
                  [](void *ctx, phasma::Node handle, const char *clip, uint32_t loop) noexcept -> uint32_t
                  {
+                     PE_PROFILE_SCOPE("Script API Animation");
                      return GuardApi([&]() -> uint32_t
                                      {
                          NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
@@ -555,6 +574,7 @@ namespace pe
                  },
                  [](void *ctx, phasma::Node handle, phasma::Color base, phasma::Vec3 emissive) noexcept -> uint32_t
                  {
+                     PE_PROFILE_SCOPE("Script API Material Color");
                      return GuardApi([&]() -> uint32_t
                                      {
                          NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
@@ -573,6 +593,7 @@ namespace pe
                  },
                  [](void *, const char *clip) noexcept -> uint32_t
                  {
+                     PE_PROFILE_SCOPE("Script API Sound");
                      return GuardApi([&]() -> uint32_t
                                      { return clip && *clip ? WithAudio([&](auto &audio)
                                                                         { audio.PlaySound(clip); })
@@ -604,6 +625,7 @@ namespace pe
                  },
                  [](void *ctx, const phasma::ParticleBurst *b) noexcept -> uint32_t
                  {
+                     PE_PROFILE_SCOPE("Script API Particles");
                      return GuardApi([&]() -> uint32_t
                                      {
                          Scene *scene = GetActiveScene();
@@ -971,6 +993,7 @@ namespace pe
                  [](void *ctx, phasma::Node handle, const char *clip, const char *mask, uint32_t loop,
                     float speed) noexcept -> uint32_t
                  {
+                     PE_PROFILE_SCOPE("Script API Animation");
                      return GuardApi([&]() -> uint32_t
                                      {
                          NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
@@ -1118,6 +1141,7 @@ namespace pe
                  [](void *ctx, phasma::Node handle, const char *clip, const char *mask, uint32_t loop, float speed,
                     const char *anchor) noexcept -> uint32_t
                  {
+                     PE_PROFILE_SCOPE("Script API Animation");
                      return GuardApi([&]() -> uint32_t
                                      {
                          NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
@@ -1146,6 +1170,7 @@ namespace pe
                  },
                  [](void *ctx, phasma::Node handle, const char *clip, uint32_t loop, float fadeSeconds) noexcept -> uint32_t
                  {
+                     PE_PROFILE_SCOPE("Script API Animation");
                      return GuardApi([&]() -> uint32_t
                                      {
                          NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
@@ -1156,6 +1181,7 @@ namespace pe
                  [](void *ctx, phasma::Node handle, const char *clip, const char *mask, uint32_t loop, float speed,
                     const char *anchor, float fadeSeconds) noexcept -> uint32_t
                  {
+                     PE_PROFILE_SCOPE("Script API Animation");
                      return GuardApi([&]() -> uint32_t
                                      {
                          NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
@@ -1168,11 +1194,34 @@ namespace pe
                  },
                  [](void *, const char *clip, float volume, float pitch) noexcept -> uint32_t
                  {
+                     PE_PROFILE_SCOPE("Script API Sound");
                      return GuardApi([&]() -> uint32_t
                                      {
                          if (!clip || !*clip || !std::isfinite(volume) || volume < 0.f ||
                              !std::isfinite(pitch) || pitch <= 0.f) return 0;
                          return WithAudio([&](auto &audio) { audio.PlaySound(clip, volume, pitch); }); });
+                 },
+                 [](void *, const char *name) noexcept
+                 {
+                     try
+                     {
+                         const std::string_view key = name && *name ? name : "Script Scope";
+                         auto it = s_profileNames.find(key);
+                         if (it == s_profileNames.end())
+                             it = s_profileNames.emplace(key).first;
+                         Profiler::BeginScope(it->c_str());
+                         ++s_openProfileScopes;
+                     }
+                     catch (...)
+                     {
+                     }
+                 },
+                 [](void *) noexcept
+                 {
+                     if (s_openProfileScopes == 0)
+                         return;
+                     --s_openProfileScopes;
+                     Profiler::EndScope();
                  }};
     }
 
@@ -1508,7 +1557,9 @@ namespace pe
                 instance.faulted = fault != 0;
                 ScriptError(instance.script->name, fault);
             }
+            CloseScriptProfileScopes(); // a fault or a missing End leaves none open
         }
+        CloseScriptProfileScopes(); // and a create that faulted before its update
         m_handles.Maintain();
         if (!m_pendingScene.empty())
         {
