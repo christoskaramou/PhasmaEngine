@@ -484,8 +484,12 @@ namespace pe
             return;
 
         // Keys refer only to states already advanced in this update. No pose survives the frame,
-        // so clip editing, scene reloads and independent attack clocks require no invalidation.
-        std::unordered_map<PoseKey, NodeId *, PoseHash> poses;
+        // so clip editing, scene reloads and independent attack clocks require no invalidation. The map's
+        // nodes come from a buffer kept across frames, not the heap (a crowd inserts ~1,000 a frame); past
+        // its end the resource falls back to new/delete.
+        static thread_local std::vector<std::byte> poseArena(256 * 1024);
+        std::pmr::monotonic_buffer_resource poseMemory(poseArena.data(), poseArena.size());
+        std::pmr::unordered_map<PoseKey, NodeId *, PoseHash> poses(&poseMemory);
         poses.reserve(m_states.size());
         struct PoseJob
         {
