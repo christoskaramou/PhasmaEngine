@@ -328,6 +328,12 @@ namespace pe
                 m_gpuSamples.clear();
                 m_latestGpuSamples.clear();
                 m_pendingFrames.clear();
+                m_worstFrame = {};
+                m_worstCpuEntries.clear();
+                m_worstGpuSamples.clear();
+                m_cpuTotals.clear();
+                m_gpuTotals.clear();
+                m_totalFrames = m_totalGpuFrames = 0;
             }
         }
 
@@ -338,12 +344,14 @@ namespace pe
         if (!HasClient())
             return;
 
+        bool newGpuFrame = false;
         {
             std::lock_guard lock(m_gpuMutex);
             if (!m_gpuSamples.empty())
             {
                 m_latestGpuSamples = std::move(m_gpuSamples);
                 m_gpuSamples.clear();
+                newGpuFrame = true;
             }
         }
 
@@ -364,6 +372,37 @@ namespace pe
         m_pendingFrames.push_back(frameSample);
         if (m_pendingFrames.size() > 256)
             m_pendingFrames.erase(m_pendingFrames.begin());
+        // ponytail: at the PerFrame rate the worst frame is the published frame, so its breakdown
+        // is sent twice; skip it when they match if that payload ever matters.
+        if (frameSample.frameMs > m_worstFrame.frameMs)
+        {
+            m_worstFrame = frameSample;
+            m_worstCpuEntries = Profiler::GetEntries();
+            m_worstGpuSamples = m_latestGpuSamples;
+        }
+        // Inclusive time per name, exact with worker-thread scopes interleaved; a name counts once a frame.
+        auto add = [](Total &total, float ms, uint32_t frame)
+        {
+            total.ms += ms;
+            if (total.lastFrame != frame)
+            {
+                total.sq += static_cast<double>(total.frameMs) * total.frameMs; // the previous frame it ran in
+                total.frameMs = 0.f;
+                total.lastFrame = frame;
+                ++total.frames;
+            }
+            total.frameMs += ms;
+        };
+        ++m_totalFrames;
+        for (const Profiler::Entry &entry : Profiler::GetEntries())
+            if (entry.name)
+                add(m_cpuTotals[entry.name], entry.timeMs, m_totalFrames);
+        if (newGpuFrame) // only a new GPU frame: the latest samples repeat until the next one lands
+        {
+            ++m_totalGpuFrames;
+            for (const GpuTimerSample &sample : m_latestGpuSamples)
+                add(m_gpuTotals[sample.name], sample.timeMs, m_totalGpuFrames);
+        }
 
         const double publishInterval = m_publishIntervalSeconds.load(std::memory_order_relaxed);
         if (!m_firstPublish && publishInterval > 0.0 && m_publishTimer.Count() < publishInterval)
@@ -374,6 +413,30 @@ namespace pe
         ProfilerSnapshot snapshot = ProfilerSnapshot::Gather(m_latestGpuSamples, scenePath, viewport);
         snapshot.frameHistory = std::move(m_pendingFrames);
         m_pendingFrames.clear();
+        snapshot.worstFrame = m_worstFrame;
+        snapshot.worstCpuEntries = std::move(m_worstCpuEntries);
+        snapshot.worstGpuSamples = std::move(m_worstGpuSamples);
+        m_worstFrame = {};
+        m_worstCpuEntries.clear();
+        m_worstGpuSamples.clear();
+        snapshot.totalFrames = m_totalFrames;
+        snapshot.totalGpuFrames = m_totalGpuFrames;
+        std::unordered_map<std::string_view, size_t> byText; // two pointers to the same text are one scope
+        for (const auto &[name, total] : m_cpuTotals)
+        {
+            const auto [it, inserted] = byText.try_emplace(name, snapshot.cpuTotals.size());
+            if (inserted)
+                snapshot.cpuTotals.push_back({name});
+            ProfilerTotal &merged = snapshot.cpuTotals[it->second];
+            merged.ms += total.ms;
+            merged.sq += total.sq + static_cast<double>(total.frameMs) * total.frameMs;
+            merged.frames = std::max(merged.frames, total.frames);
+        }
+        for (const auto &[name, total] : m_gpuTotals)
+            snapshot.gpuTotals.push_back({name, total.ms, total.sq + static_cast<double>(total.frameMs) * total.frameMs, total.frames});
+        m_cpuTotals.clear();
+        m_gpuTotals.clear();
+        m_totalFrames = m_totalGpuFrames = 0;
         float sampledMs = 0.f;
         for (const ProfilerFrameSample &sample : snapshot.frameHistory)
             sampledMs += sample.frameMs;

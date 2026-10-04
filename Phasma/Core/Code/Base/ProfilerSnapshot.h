@@ -12,6 +12,16 @@ namespace pe
         float gpuTotalMs = 0.f;
     };
 
+    // One scope's or pass's inclusive time summed over every frame between two publishes, and the
+    // number of those frames it ran in: small costs that add up show here, not in any single frame.
+    struct ProfilerTotal
+    {
+        std::string name;
+        double ms = 0;
+        double sq = 0; // sum of each frame's time squared: how much it varies frame to frame
+        uint32_t frames = 0;
+    };
+
     // In-memory profiler frame for live stream or disk dump. Gather only — no UI.
     struct ProfilerSnapshot
     {
@@ -40,6 +50,16 @@ namespace pe
         std::vector<Profiler::Counter> counters;
         std::vector<GpuTimerSample> gpuSamples;
         std::vector<ProfilerFrameSample> frameHistory;
+        // Slowest frame since the previous publish, with its own breakdown, so a spike between
+        // sampled snapshots keeps its attribution. Serialized only when worstFrame.frameMs > 0.
+        ProfilerFrameSample worstFrame;
+        std::vector<Profiler::Entry> worstCpuEntries;
+        std::vector<GpuTimerSample> worstGpuSamples;
+        // Serialized only when totalFrames > 0.
+        uint32_t totalFrames = 0;
+        uint32_t totalGpuFrames = 0;
+        std::vector<ProfilerTotal> cpuTotals;
+        std::vector<ProfilerTotal> gpuTotals;
 
         // Pulls current Core/RHI metrics. gpuSamples are caller-owned (e.g. drained AfterCommandWait).
         static ProfilerSnapshot Gather(std::vector<GpuTimerSample> gpuSamples = {},

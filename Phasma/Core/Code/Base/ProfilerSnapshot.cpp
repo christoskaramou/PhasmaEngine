@@ -114,6 +114,15 @@ namespace pe
         writer.Bool(settings.occlusion_culling);
         writer.Key("forward_plus");
         writer.Bool(settings.forward_plus);
+        // Effective post-process state: an active volume overrides the scene profile.
+        const PostProcessProfile &post = ActivePostProcessProfile();
+        const std::pair<const char *, bool> effects[] = {
+            {"ssao", post.ssao}, {"ssr", post.ssr}, {"taa", post.taa}, {"fxaa", post.fxaa}, {"cas_sharpening", post.cas_sharpening}, {"bloom", post.bloom}, {"dof", post.dof}, {"motion_blur", post.motion_blur}};
+        for (const auto &[key, enabled] : effects)
+        {
+            writer.Key(key);
+            writer.Bool(enabled);
+        }
         writer.EndObject();
         writer.EndObject();
         writer.EndObject();
@@ -227,40 +236,72 @@ namespace pe
         }
         out += "],";
 
+        auto appendScopes = [&](const auto &scopes)
+        {
+            out += '[';
+            for (size_t i = 0; i < scopes.size(); ++i)
+            {
+                const auto &s = scopes[i];
+                out += "{\"name\":\"";
+                AppendEscaped(out, s.name);
+                std::snprintf(num, sizeof(num), "\",\"depth\":%u,\"cur_ms\":%.3f,\"start_offset_ms\":%.3f}",
+                              static_cast<unsigned>(s.depth), s.timeMs, s.startOffsetMs);
+                out += num;
+                if (i + 1 < scopes.size())
+                    out += ',';
+            }
+            out += ']';
+        };
+
+        if (worstFrame.frameMs > 0.f)
+        {
+            std::snprintf(num, sizeof(num),
+                          "\"worst_frame\":{\"frame_ms\":%.3f,\"cpu_total_ms\":%.3f,\"gpu_total_ms\":%.3f,\"passes\":",
+                          worstFrame.frameMs, worstFrame.cpuTotalMs, worstFrame.gpuTotalMs);
+            out += num;
+            appendScopes(worstGpuSamples);
+            out += ",\"scopes\":";
+            appendScopes(worstCpuEntries);
+            out += "},";
+        }
+
+        if (totalFrames > 0)
+        {
+            auto appendTotals = [&](const std::vector<ProfilerTotal> &totals)
+            {
+                out += '[';
+                for (size_t i = 0; i < totals.size(); ++i)
+                {
+                    out += "{\"name\":\"";
+                    AppendEscaped(out, totals[i].name);
+                    std::snprintf(num, sizeof(num), "\",\"ms\":%.3f,\"sq\":%.4f,\"frames\":%u}", totals[i].ms, totals[i].sq, totals[i].frames);
+                    out += num;
+                    if (i + 1 < totals.size())
+                        out += ',';
+                }
+                out += ']';
+            };
+            std::snprintf(num, sizeof(num), "\"totals\":{\"frames\":%u,\"gpu_frames\":%u,\"cpu\":", totalFrames, totalGpuFrames);
+            out += num;
+            appendTotals(cpuTotals);
+            out += ",\"gpu\":";
+            appendTotals(gpuTotals);
+            out += "},";
+        }
+
         out += "\"gpu\":{";
         std::snprintf(num, sizeof(num), "\"total_ms\":%.3f,", gpuTotalMs);
         out += num;
-        out += "\"passes\":[";
-        for (size_t i = 0; i < gpuSamples.size(); ++i)
-        {
-            const auto &s = gpuSamples[i];
-            out += "{\"name\":\"";
-            AppendEscaped(out, s.name);
-            std::snprintf(num, sizeof(num), "\",\"depth\":%u,\"cur_ms\":%.3f,\"start_offset_ms\":%.3f}",
-                          (unsigned)s.depth, s.timeMs, s.startOffsetMs);
-            out += num;
-            if (i + 1 < gpuSamples.size())
-                out += ',';
-        }
-        out += "]},";
+        out += "\"passes\":";
+        appendScopes(gpuSamples);
+        out += "},";
 
         out += "\"cpu\":{";
         std::snprintf(num, sizeof(num), "\"total_ms\":%.3f,", cpuScopeTotalMs);
         out += num;
-        out += "\"scopes\":[";
-        for (size_t i = 0; i < cpuEntries.size(); ++i)
-        {
-            const auto &e = cpuEntries[i];
-            out += "{\"name\":\"";
-            AppendEscaped(out, e.name);
-            std::snprintf(num, sizeof(num),
-                          "\",\"depth\":%u,\"cur_ms\":%.3f,\"start_offset_ms\":%.3f}",
-                          e.depth, e.timeMs, e.startOffsetMs);
-            out += num;
-            if (i + 1 < cpuEntries.size())
-                out += ',';
-        }
-        out += "]},";
+        out += "\"scopes\":";
+        appendScopes(cpuEntries);
+        out += "},";
 
         out += "\"counters\":[";
         for (size_t i = 0; i < counters.size(); ++i)

@@ -5,10 +5,12 @@ remains the source of truth.
 
 ## Current Layers
 
-- [Phasma AI v0.1 profiler advisor](profiler-advisor.md) adds capture context and
-  rule-based, explainable optimization suggestions to PhasmaProfiler. The same
-  analyzer reads JSONL captures via `PhasmaProfiler --advise`; it never applies
-  settings or runs an LLM/ONNX model.
+- [Phasma AI v0.2 profiler advisor](profiler-advisor.md) adds capture context,
+  every-frame CPU/GPU statistics, spike attribution and rule-based, explainable
+  optimization suggestions to PhasmaProfiler. The same analyzer reads JSONL
+  captures via `PhasmaProfiler --advise`; it never applies settings. An opt-in
+  **Ask Jev** button sends the report's evidence and options to TypeSafe's Jev,
+  which ranks the change to test first.
 
 - **Code quality & performance** — hard rule in `AGENTS.md` (`Rules — code quality & performance (ponytail)`), `.cursor/rules/ponytail-code-quality.mdc`, and `docs/wiki/architecture/code-quality-performance.md`. Every agent change defaults to ponytail **full**: smallest correct diff, reuse before invention, perf gates on hot paths. See the wiki page for the ladder and boundaries.
 

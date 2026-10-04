@@ -1,5 +1,6 @@
 // PhasmaProfiler — live viewer for ProfilerStreamServer (Player --profiler).
 #include "Base/Path.h"
+#include "Base/Process.h"
 #include "Base/ProfilerStream.h"
 #include "Base/WindowIcon.h"
 #include "ProfilerAdvice.h"
@@ -288,12 +289,23 @@ namespace
         }
     };
 
+    // One tools/jev_advise.py run; the worker writes output before setting done.
+    struct JevJob
+    {
+        std::atomic<bool> done{false};
+        std::string output;
+        uint64_t askedAtMs = 0;
+        std::string basis; // the evidence it was asked about (JevBasis)
+    };
+
     struct SessionData
     {
         pe::ProfilerAdvice advice;
         std::string adviceReport;
         uint64_t advicePackets = 0;
         int adviceTargetFps = 0;
+        uint64_t adviceAtMs = 0;
+        std::shared_ptr<JevJob> jevJob;
         LiveFrame live;
         std::deque<FrameSample> history;
         std::unordered_map<std::string, ScopeStats> cpuStats;
@@ -1570,6 +1582,15 @@ namespace
         return file.good();
     }
 
+    // A session's timings outlive its connection: the full report (every 10 s row and spike) is saved.
+    std::string SaveSessionTimings(const SessionData &session, int targetFps)
+    {
+        if (!session.advice.HasSession())
+            return {};
+        const std::string path = TimestampedPath("timings", ".json");
+        return SaveTextFile(path, session.advice.Analyze(targetFps, true)) ? "Saved session timings to " + path : "Failed to save " + path;
+    }
+
     std::string SaveSnapshot(const SessionData &session)
     {
         if (session.latestJson.empty())
@@ -1591,15 +1612,117 @@ namespace
         return SaveTextFile(path, csv.str()) ? "Saved " + path : "Failed to save " + path;
     }
 
+    // Runs tools/jev_advise.py (found above the executable: a dev-tree tool) off the UI thread.
+    // One line of what Jev is shown, to tell a current answer from an outdated one.
+    std::string JevBasis(const rapidjson::Value &report)
+    {
+        if (!report.HasMember("evidence"))
+            return "no evidence";
+        const auto &spikes = report["evidence"]["spikes"];
+        std::string basis = std::string(spikes["verdict"].GetString()) + ", " + std::to_string(spikes["count"].GetUint()) + " hitches";
+        for (const auto &source : spikes["sources"].GetArray())
+            if (std::string_view(source["side"].GetString()) != "wait" && std::string_view(source["name"].GetString()) != "unattributed")
+            {
+                basis += ", spike source " + std::string(source["name"].GetString());
+                break;
+            }
+        const auto &evidence = report["evidence"];
+        if (evidence.HasMember("costs") && !evidence["costs"]["intermittent"].Empty())
+            basis += ", intermittent " + std::string(evidence["costs"]["intermittent"][0]["name"].GetString());
+        return basis;
+    }
+
+    void AskJev(SessionData &session, const std::filesystem::path &reportPath, std::string basis)
+    {
+        auto job = std::make_shared<JevJob>();
+        job->askedAtMs = SDL_GetTicks64();
+        job->basis = std::move(basis);
+        session.jevJob = job;
+        std::filesystem::path script;
+        if (char *base = SDL_GetBasePath())
+        {
+            std::filesystem::path dir(reinterpret_cast<const char8_t *>(base));
+            SDL_free(base);
+            for (int i = 0; i < 8 && script.empty() && dir.has_relative_path(); ++i, dir = dir.parent_path())
+                if (std::filesystem::exists(dir / "tools" / "jev_advise.py"))
+                    script = dir / "tools" / "jev_advise.py";
+        }
+        if (script.empty())
+        {
+            job->output = R"({"error":"tools/jev_advise.py not found above the PhasmaProfiler executable"})";
+            job->done.store(true, std::memory_order_release);
+            return;
+        }
+        std::thread([job, script, reportPath]
+                    {
+        // The py launcher picks an installed Python, not whichever venv leads PATH.
+#ifdef _WIN32
+                        const char *python = "py";
+                        std::vector<std::string> args = {"-3"};
+#else
+                        const char *python = "python3";
+                        std::vector<std::string> args;
+#endif
+                        args.push_back(pe::PathUtf8(script));
+                        args.push_back(pe::PathUtf8(reportPath));
+                        pe::ProcessOptions options;
+                        options.timeoutMs = 90000;
+                        options.captureOutput = true;
+                        const pe::ProcessResult result = pe::RunProcess(python, args, options);
+                        job->output = result.started ? result.output : R"({"error":"could not start Python"})";
+                        job->done.store(true, std::memory_order_release); })
+            .detach();
+    }
+
+    void DrawJevResult(const JevJob &job, const std::string &currentBasis)
+    {
+        const uint64_t ageS = (SDL_GetTicks64() - job.askedAtMs) / 1000;
+        const bool changed = job.basis != currentBasis;
+        ImGui::TextColored(changed ? kWarnColor : kGoodColor, "Asked %llu s ago on: %s%s", static_cast<unsigned long long>(ageS),
+                           job.basis.c_str(), changed ? " (the evidence has changed since: ask again)" : "");
+        const std::string &output = job.output;
+        // The tool prints one JSON object as its last line; anything before it is interpreter noise.
+        const size_t start = output.rfind("\n{");
+        rapidjson::Document result;
+        result.Parse(output.c_str() + (start == std::string::npos ? 0 : start + 1));
+        if (!result.IsObject())
+        {
+            ImGui::TextColored(kBadColor, "No Jev result: %s", output.empty() ? "timed out" : output.c_str());
+            return;
+        }
+        if (result.HasMember("error") && result["error"].IsString())
+        {
+            ImGui::TextColored(kBadColor, "%s", result["error"].GetString());
+            return;
+        }
+        const bool hasChoice = result.HasMember("choice") && result["choice"].IsString();
+        const double confidence = result.HasMember("confidence") && result["confidence"].IsNumber() ? result["confidence"].GetDouble() : 0.0;
+        ImGui::TextColored(kAccent, "Jev picks: %s (confidence %.2f)", hasChoice ? result["choice"].GetString() : "none", confidence);
+        if (!result.HasMember("ranking") || !result["ranking"].IsArray())
+            return;
+        for (const auto &row : result["ranking"].GetArray())
+        {
+            if (!row.IsObject() || !row.HasMember("description") || !row["description"].IsString() || !row.HasMember("probability") || !row["probability"].IsNumber())
+                continue;
+            ImGui::ProgressBar(static_cast<float>(row["probability"].GetDouble()), ImVec2(60.f, 0.f));
+            ImGui::SameLine();
+            ImGui::TextWrapped("%s", row["description"].GetString());
+        }
+    }
+
     void DrawAdviceTab(SessionData &session, int targetFps, std::string &notice)
     {
-        ImGui::TextColored(kAccent, "Phasma AI v0.1");
+        ImGui::TextColored(kAccent, "Phasma AI v0.2");
         ImGui::TextWrapped("Performance suggestions from a recent measurement window. Test one change at a time; no settings are applied.");
-        if (session.adviceReport.empty() || session.advicePackets != session.packets || session.adviceTargetFps != targetFps)
+        // Analyze walks every frame of the window: refresh at most 4 times a second.
+        const uint64_t nowMs = SDL_GetTicks64();
+        if (session.adviceReport.empty() || session.adviceTargetFps != targetFps ||
+            (session.advicePackets != session.packets && nowMs - session.adviceAtMs >= 250))
         {
             session.adviceReport = session.advice.Analyze(targetFps);
             session.advicePackets = session.packets;
             session.adviceTargetFps = targetFps;
+            session.adviceAtMs = nowMs;
         }
         rapidjson::Document report;
         report.Parse(session.adviceReport.c_str());
@@ -1612,7 +1735,7 @@ namespace
         if (ImGui::Button("Save advice report"))
         {
             const std::string path = TimestampedPath("advice", ".json");
-            notice = SaveTextFile(path, session.adviceReport) ? "Saved " + path : "Failed to save " + path;
+            notice = SaveTextFile(path, session.advice.Analyze(targetFps, true)) ? "Saved " + path : "Failed to save " + path;
         }
         ItemTooltip("Save the observations, suggested experiments, tradeoffs and capture context as JSON.");
         if (report.HasMember("context"))
@@ -1635,6 +1758,137 @@ namespace
                 ImGui::Text("GPU %.2f ms", evidence["gpu_median_ms"].GetDouble());
             else
                 ImGui::TextDisabled("GPU timing unavailable or inconsistent");
+
+            const auto &frames = evidence["frames"];
+            ImGui::SeparatorText("Every frame");
+            ItemTooltip("All streamed frames of the window, not only the sampled snapshots. CPU totals include waits on the GPU and presentation.");
+            if (frames["count"].GetUint() > 0 &&
+                ImGui::BeginTable("##advice_frames", 6, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
+            {
+                for (const char *column : {"ms", "Avg", "Median", "P95", "P99", "Max"})
+                    ImGui::TableSetupColumn(column);
+                ImGui::TableHeadersRow();
+                for (const auto &[key, label] : {std::pair{"frame", "Frame"}, std::pair{"cpu", "CPU"}, std::pair{"gpu", "GPU"}})
+                {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(label);
+                    for (const char *stat : {"avg_ms", "median_ms", "p95_ms", "p99_ms", "max_ms"})
+                    {
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%.2f", frames[key][stat].GetDouble());
+                    }
+                }
+                ImGui::EndTable();
+            }
+            ImGui::TextDisabled("%u frames | %u over the %.2f ms budget", frames["count"].GetUint(), frames["over_budget"].GetUint(),
+                                evidence["budget_ms"].GetDouble());
+
+            const auto &spikes = evidence["spikes"];
+            ImGui::SeparatorText("Spikes");
+            ItemTooltip("Over the last minute: frames at least twice the median of the 64 frames before them and 2 ms over it, "
+                        "budget or not. Two or more a minute are recurring. Sources compare the slowest frame of each packet "
+                        "with the steady scope/pass medians.");
+            const unsigned spikeCount = spikes["count"].GetUint();
+            const std::string_view verdict = spikes["verdict"].GetString();
+            ImGui::TextColored(verdict == "recurring" ? kBadColor : spikeCount ? kWarnColor
+                                                                               : kGoodColor,
+                               "%s: %u hitches (%u slow frames) in the last %.0f s (%.1f/min) | local median %.2f ms | worst %.2f ms",
+                               spikes["verdict"].GetString(), spikeCount, spikes["frames"].GetUint(), spikes["window_s"].GetDouble(),
+                               spikes["per_minute"].GetDouble(), spikes["local_median_ms"].GetDouble(), spikes["worst_ms"].GetDouble());
+            const auto &slowdowns = evidence["slowdowns"];
+            ImGui::Text("Time lost: hitches %.0f ms a minute | slowdowns (1.25-2x the local median) %.0f ms a minute over %u frames (%.1f%%)",
+                        spikes["extra_ms_per_minute"].GetDouble(), slowdowns["extra_ms_per_minute"].GetDouble(), slowdowns["frames"].GetUint(),
+                        slowdowns["share_pct"].GetDouble());
+            ItemTooltip("Milliseconds above each frame's local baseline, per minute: many small slowdowns can cost more than the spikes.");
+            if (spikeCount)
+            {
+                ImGui::Text("GPU %u | CPU %u | other %u", spikes["gpu"].GetUint(), spikes["cpu"].GetUint(), spikes["other"].GetUint());
+                if (spikes.HasMember("median_interval_ms"))
+                {
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("| every ~%.1f s", spikes["median_interval_ms"].GetDouble() / 1000.0);
+                }
+            }
+            for (const auto &source : spikes["sources"].GetArray())
+                ImGui::BulletText("%s (%s): %u spikes, +%.2f ms avg, +%.2f ms max, %.0f%% of their extra time", source["name"].GetString(),
+                                  source["side"].GetString(), source["count"].GetUint(), source["avg_excess_ms"].GetDouble(),
+                                  source["max_excess_ms"].GetDouble(), 100.0 * source["avg_share"].GetDouble());
+            if (evidence.HasMember("costs"))
+            {
+                const auto &costs = evidence["costs"];
+                ImGui::SeparatorText("Where the time goes");
+                ItemTooltip("The last minute over every frame, not only the slow ones: each scope's average time per frame, its share "
+                            "of the frame, and how many frames it ran in. Intermittent work runs in under half the frames yet adds up.");
+                auto bullets = [](const char *title, const rapidjson::Value &list)
+                {
+                    ImGui::TextDisabled("%s", title);
+                    for (const auto &item : list.GetArray())
+                        ImGui::BulletText("%s: %.2f ms per frame (%.0f%%), in %.0f%% of frames%s", item["name"].GetString(),
+                                          item["ms_per_frame"].GetDouble(), item["share_pct"].GetDouble(), item["in_frames_pct"].GetDouble(),
+                                          item.HasMember("wait") ? " [wait on GPU/driver]" : "");
+                };
+                auto variation = [](const char *title, const rapidjson::Value &list)
+                {
+                    ImGui::TextDisabled("%s", title);
+                    for (const auto &item : list.GetArray())
+                        ImGui::BulletText("%s: +/-%.2f ms frame to frame (%.2f ms per frame)%s", item["name"].GetString(), item["sd_ms"].GetDouble(),
+                                          item["ms_per_frame"].GetDouble(), item.HasMember("wait") ? " [wait on GPU/driver]" : "");
+                };
+                variation("Most variable CPU scopes (behind slowdowns)", costs["cpu_variation"]);
+                if (costs.HasMember("gpu_variation"))
+                    variation("Most variable GPU passes", costs["gpu_variation"]);
+                bullets("Intermittent", costs["intermittent"]);
+                if (costs["intermittent"].Empty())
+                    ImGui::BulletText("none: no scope that runs in under half the frames costs 0.01 ms per frame or more");
+                bullets("CPU scopes (inclusive)", costs["cpu"]);
+                if (costs.HasMember("gpu"))
+                    bullets("GPU passes", costs["gpu"]);
+            }
+        }
+        if (report.HasMember("session"))
+        {
+            const auto &timeline = report["session"];
+            ImGui::SeparatorText("Session timeline");
+            ItemTooltip("The whole connection in time order, kept across settings changes and stream gaps. Saved as "
+                        "ProfilerCaptures/timings_*.json on disconnect and exit, with every 10 s row and every spike.");
+            ImGui::Text("%.0f s | spikes %s: %.1f/min in the first half, %.1f/min in the second", timeline["duration_s"].GetDouble(),
+                        timeline["trend"].GetString(), timeline["first_half_spikes_per_minute"].GetDouble(),
+                        timeline["second_half_spikes_per_minute"].GetDouble());
+            if (ImGui::BeginTable("##advice_timeline", 9,
+                                  ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp |
+                                      ImGuiTableFlags_ScrollY | ImGuiTableFlags_NoSavedSettings,
+                                  ImVec2(0.f, 200.f)))
+            {
+                ImGui::TableSetupScrollFreeze(0, 1);
+                for (const char *column : {"t (s)", "Frames", "Median", "P99", "Max", "Over budget", "Hitches", "Top spike source", "Top intermittent"})
+                    ImGui::TableSetupColumn(column);
+                ImGui::TableHeadersRow();
+                for (const auto &row : timeline["summary"].GetArray())
+                {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text(row.HasMember("settings_changed") ? "%.0f *" : "%.0f", row["t_s"].GetDouble());
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", row["frames"].GetUint());
+                    for (const char *key : {"median_ms", "p99_ms", "max_ms"})
+                    {
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%.2f", row[key].GetDouble());
+                    }
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", row["over_budget"].GetUint());
+                    ImGui::TableNextColumn();
+                    ImGui::TextColored(row["spikes"].GetUint() ? kWarnColor : kGoodColor, "%u", row["spikes"].GetUint());
+                    ImGui::TableNextColumn();
+                    if (row.HasMember("top_source"))
+                        ImGui::Text("%s (%u)", row["top_source"].GetString(), row["top_source_spikes"].GetUint());
+                    ImGui::TableNextColumn();
+                    if (row.HasMember("top_intermittent"))
+                        ImGui::Text("%s %.2f ms/frame", row["top_intermittent"].GetString(), row["top_intermittent_ms_per_frame"].GetDouble());
+                }
+                ImGui::EndTable();
+            }
         }
         for (const auto &item : report["recommendations"].GetArray())
         {
@@ -1643,6 +1897,35 @@ namespace
             ImGui::TextWrapped("Why: %s", item["reason"].GetString());
             ImGui::TextWrapped("Tradeoff: %s", item["tradeoff"].GetString());
             ImGui::TextWrapped("Verify: %s", item["validation"].GetString());
+        }
+        if (report.HasMember("options"))
+        {
+            ImGui::SeparatorText("Jev");
+            const bool asking = session.jevJob && !session.jevJob->done.load(std::memory_order_acquire);
+            const bool ready = report["jev_ready"].GetBool();
+            ImGui::BeginDisabled(asking || !ready);
+            if (ImGui::Button(asking ? "Asking Jev..." : "Ask Jev"))
+            {
+                const std::string path = TimestampedPath("advice", ".json");
+                if (SaveTextFile(path, session.advice.Analyze(targetFps, true)))
+                {
+                    AskJev(session, std::filesystem::absolute(path), JevBasis(report));
+                    notice = "Saved " + path + " and asked Jev";
+                }
+                else
+                    notice = "Failed to save " + path;
+            }
+            ImGui::EndDisabled();
+            ItemTooltip("Sends this window's evidence, GPU name, settings and change options (never the scene path) to TypeSafe's Jev, "
+                        "which ranks the change to test first. Each call is billed; nothing is applied.",
+                        ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+            if (!ready)
+            {
+                ImGui::SameLine();
+                ImGui::TextDisabled("needs 30 s of frames with unchanged settings");
+            }
+            if (session.jevJob && session.jevJob->done.load(std::memory_order_acquire))
+                DrawJevResult(*session.jevJob, JevBasis(report));
         }
         if (report.HasMember("limitations"))
         {
@@ -1976,6 +2259,7 @@ namespace
         ImGui::SameLine();
         if (ImGui::Button("Reset session"))
         {
+            SaveSessionTimings(session, targetFps);
             session.Reset();
             notice = "Session cleared";
         }
@@ -2114,6 +2398,7 @@ int main(int argc, char *argv[])
     char counterFilter[96] = {};
 
     bool running = true;
+    bool wasConnected = false;
     while (running)
     {
         SDL_Event event{};
@@ -2132,7 +2417,6 @@ int main(int argc, char *argv[])
         {
             if (client.Connect(host, port))
             {
-                session.advice = {};
                 session.adviceReport.clear();
                 status = "LIVE";
                 refreshRateDirty = true;
@@ -2309,6 +2593,11 @@ int main(int argc, char *argv[])
         }
 
         ImGui::End();
+        if (wasConnected && !client.IsConnected())
+            if (const std::string saved = SaveSessionTimings(session, targetFps); !saved.empty())
+                notice = saved;
+        wasConnected = client.IsConnected();
+
         ImGui::Render();
         SDL_SetRenderDrawColor(renderer, 11, 13, 17, 255);
         SDL_RenderClear(renderer);
@@ -2316,6 +2605,8 @@ int main(int argc, char *argv[])
         SDL_RenderPresent(renderer);
     }
 
+    if (client.IsConnected())
+        SaveSessionTimings(session, targetFpsValues[targetFpsIndex]);
     client.Disconnect();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();

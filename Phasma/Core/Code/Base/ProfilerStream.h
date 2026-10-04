@@ -63,6 +63,22 @@ namespace pe
         std::vector<GpuTimerSample> m_gpuSamples;
         std::vector<GpuTimerSample> m_latestGpuSamples;
         std::vector<ProfilerFrameSample> m_pendingFrames;
+        ProfilerFrameSample m_worstFrame;
+        std::vector<Profiler::Entry> m_worstCpuEntries;
+        std::vector<GpuTimerSample> m_worstGpuSamples;
+        // Every frame's scopes and passes summed by name until the next publish (ProfilerTotal).
+        struct Total
+        {
+            double ms = 0;
+            double sq = 0;
+            float frameMs = 0; // this frame's time so far: a name can run several times a frame
+            uint32_t frames = 0;
+            uint32_t lastFrame = 0;
+        };
+        std::unordered_map<const char *, Total> m_cpuTotals; // scope names are stable pointers
+        std::unordered_map<std::string, Total> m_gpuTotals;
+        uint32_t m_totalFrames = 0;
+        uint32_t m_totalGpuFrames = 0;
 
         Timer m_publishTimer;
         std::atomic<double> m_publishIntervalSeconds{0.25};

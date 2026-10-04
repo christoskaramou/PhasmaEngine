@@ -375,6 +375,7 @@ Projects/*/Assets/Agent/
 !/tools/compare_snapshots.py
 !/tools/profiler_capture.py
 !/tools/test_profiler_advice.py
+!/tools/jev_advise.py
 !/tools/perf_cycle.sh
 !/tools/bake_android_shaders.ps1
 !/tools/run_player_monitored.ps1
