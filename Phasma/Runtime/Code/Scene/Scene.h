@@ -190,6 +190,9 @@ namespace pe
         // show/hide (pooled props, LOD popping); set_enabled remains the structural path.
         void SetNodeRenderVisible(NodeId *node, bool visible);
         bool IsNodeRenderVisible(const NodeId *node) const;
+        // The off-screen animation cull (SceneSettings::cull_offscreen_animation), kept apart from the script's choice.
+        void SetNodeViewCulled(NodeId *node, bool culled);
+        bool IsNodeViewCulled(const NodeId *node) const;
         bool IsValidMeshIndex(int meshIndex) const;
         void SetMeshRef(NodeId *node, int meshIndex);    // single mesh (clears others)
         void AddMeshRef(NodeId *node, int meshIndex);    // append mesh ref

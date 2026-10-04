@@ -27,6 +27,7 @@ namespace pe
         {"frustum_culling", &SceneSettings::frustum_culling},
         {"occlusion_culling", &SceneSettings::occlusion_culling},
         {"skinned_instancing", &SceneSettings::skinned_instancing},
+        {"cull_offscreen_animation", &SceneSettings::cull_offscreen_animation},
         {"lod_enabled", &SceneSettings::lod_enabled},
         {"randomize_lights", &SceneSettings::randomize_lights},
         {"physical_point_falloff", &SceneSettings::physical_point_falloff},

@@ -81,12 +81,22 @@ namespace pe
                          glm::vec4(trs.translation, 1.0f));
     }
 
+    // glm::quat(glm::radians(degrees)); a pure yaw (a crowd's facing, every frame) skips the four trig calls
+    // whose angles are zero. Same values: the dropped terms are products with sin(0).
+    inline glm::quat EulerQuat(const glm::vec3 &degrees)
+    {
+        if (degrees.x != 0.0f || degrees.z != 0.0f)
+            return glm::quat(glm::radians(degrees));
+        const float half = glm::radians(degrees.y) * 0.5f;
+        return glm::quat(std::cos(half), 0.0f, std::sin(half), 0.0f);
+    }
+
     // Replaces rotation (Euler degrees) and/or scale, keeping the other components.
     inline glm::mat4 ReplaceTrs(const glm::mat4 &m, const glm::vec3 *rotationDegrees, const glm::vec3 *scale)
     {
         LocalTrs trs = DecomposeTrs(m, !rotationDegrees);
         if (rotationDegrees)
-            trs.rotation = glm::quat(glm::radians(*rotationDegrees));
+            trs.rotation = EulerQuat(*rotationDegrees);
         if (scale)
             trs.scale = *scale;
         return ComposeTrs(trs);

@@ -119,6 +119,9 @@ namespace pe
         bool gpuPending = false;
         bool hasUniformData = false; // cached: node has at least one drawable mesh
         uint8_t dirtyUniforms = 0;   // bitmask per swapchain frame (max 8); replaces vector<bool>
+        // gpuData.renderVisible = !hidden && !viewCulled: a script's choice and the off-screen animation cull.
+        bool hidden = false;
+        bool viewCulled = false;
 
         std::vector<mat4> jointMatrices;
         // The pose the previous rendered frame showed, and the pose last uploaded (rolled into it on

@@ -1231,7 +1231,8 @@ namespace pe
             int jointCount = skinned ? GetJointCountForNode(m_nodeIds[i]) : 0;
             if (jointCount <= 0 && skinned)
                 jointCount = maxJointCount;
-            if (jointCount > 0)
+            // A view-culled rig is drawn nowhere, so its palette waits; un-culling poses and re-dirties it.
+            if (jointCount > 0 && !rt.viewCulled)
             {
                 const Skeleton &skeleton = GetSkeletonForNode(m_nodeIds[i]);
                 const mat4 invRoot = skeleton.GetBoneCount() == jointCount ? skeleton.InverseRootTransform() : mat4(1.f);

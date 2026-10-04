@@ -523,14 +523,14 @@ namespace pe
             return;
 
         NodeRuntime &rt = m_nodeRuntime[node->index];
-        const uint32_t v = visible ? 1u : 0u;
-        if (rt.gpuData.renderVisible == v)
+        if (rt.hidden == !visible)
             return;
 
         // Flip the per-instance cull flag and re-upload this node's NodeGpuData through the
         // existing per-frame dirtyUniforms path. CullingCS skips the draw when 0 — no
         // RebuildRasterInstances and no TLAS rebuild, unlike SetNodeEnabled.
-        rt.gpuData.renderVisible = v;
+        rt.hidden = !visible;
+        rt.gpuData.renderVisible = !rt.hidden && !rt.viewCulled ? 1u : 0u;
         rt.dirtyUniforms = 0xFF;
     }
 
@@ -538,7 +538,25 @@ namespace pe
     {
         if (!IsNodeAlive(node))
             return false;
-        return m_nodeRuntime[node->index].gpuData.renderVisible != 0u;
+        return !m_nodeRuntime[node->index].hidden;
+    }
+
+    void Scene::SetNodeViewCulled(NodeId *node, bool culled)
+    {
+        if (!IsNodeAlive(node))
+            return;
+        NodeRuntime &rt = m_nodeRuntime[node->index];
+        if (rt.viewCulled == culled)
+            return;
+        // CullingCS and ShadowCullCS both skip a node whose renderVisible is 0.
+        rt.viewCulled = culled;
+        rt.gpuData.renderVisible = !rt.hidden && !rt.viewCulled ? 1u : 0u;
+        rt.dirtyUniforms = 0xFF;
+    }
+
+    bool Scene::IsNodeViewCulled(const NodeId *node) const
+    {
+        return IsNodeAlive(node) && m_nodeRuntime[node->index].viewCulled;
     }
 
     bool Scene::IsNodeEnabled(const NodeId *node) const

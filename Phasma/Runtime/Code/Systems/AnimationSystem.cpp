@@ -3,6 +3,7 @@
 #include "Scene/SceneAccess.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
+#include "Camera/Camera.h"
 
 namespace pe
 {
@@ -496,9 +497,15 @@ namespace pe
         size_t proceduralPoses = 0;
         jobs.reserve(m_states.size());
         std::optional<PoseKey> previousPose;
+        // cull_offscreen_animation: rigs outside the view (last frame's bounds, kOffscreenMargin meters wider) skip
+        // their pose. ponytail: one fixed margin for a top-down camera; a setting when a game needs another.
+        constexpr float kOffscreenMargin = 2.f;
+        Camera *view = Settings::Get<SceneSettings>().cull_offscreen_animation ? scene->GetActiveCamera() : nullptr;
         for (auto &state : m_states)
         {
-            if (!state.playing && (state.paused || (state.blend.previous.empty() && state.layer.blend.previous.empty())))
+            // An idle pose hidden by the cull falls through once, to be posed and shown again.
+            if (!state.playing && (state.paused || (state.blend.previous.empty() && state.layer.blend.previous.empty())) &&
+                !scene->IsNodeViewCulled(state.nodeId))
                 continue;
 
             if (!state.nodeId || state.nodeId->revision != state.nodeRevision || !scene->IsNodeAlive(state.nodeId))
@@ -573,6 +580,19 @@ namespace pe
             }
             AdvanceBlend(state.blend, dt);
             AdvanceBlend(state.layer.blend, dt);
+            if (view && state.playing)
+            {
+                const AABB &box = scene->GetNodeRuntime(state.nodeId).worldAABB;
+                if (!view->AABBInFrustum({box.min - vec3(kOffscreenMargin), box.max + vec3(kOffscreenMargin)}))
+                {
+                    // The clocks ran; the pose waits (a fade started meanwhile evaluates its own start).
+                    scene->SetNodeViewCulled(state.nodeId, true);
+                    state.posed = false;
+                    previousPose.reset();
+                    continue;
+                }
+            }
+            scene->SetNodeViewCulled(state.nodeId, false);
             const bool strip = scene->NodeUsesSkinnedStrip2D(state.nodeId);
             const PoseKey key{&skeleton, &clips, &state};
             NodeId *source = nullptr;

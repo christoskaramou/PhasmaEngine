@@ -150,6 +150,10 @@ namespace pe
         // the GPU picks a level by camera distance and swaps the draw's index range. distances are the world-
         // unit switch points LOD0->1, 1->2, 2->3; bias multiplies measured distance (>1 = switch sooner).
         bool skinned_instancing = false;
+        // Skinned rigs outside the camera's view (plus a margin) keep their animation clocks but skip their
+        // pose, palette upload and draws, shadows included: for top-down games, where nothing off screen
+        // casts into view. Off by default (an off-screen tower's shadow can reach the view).
+        bool cull_offscreen_animation = false;
         bool lod_enabled = true;
         uint32_t lod_count = 4;
         float lod_bias = 1.0f;
