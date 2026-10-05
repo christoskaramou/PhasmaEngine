@@ -2,8 +2,12 @@
 #include "API/RHI.h"
 #include "API/Surface.h"
 #include "GUI/Helpers.h"
+#include "GUI/IconsFontAwesome.h"
 #include "RenderPasses/LightPass.h"
 #include "RenderPasses/RayTracingPass.h"
+#include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
+#include "Systems/PhysicsSystem.h"
 
 namespace pe
 {
@@ -230,6 +234,108 @@ namespace pe
         Track(ImGui::SliderScalar(ui::LabelAbove("Physics Rate"), ImGuiDataType_U32, &gSettings.physics_rate, &kPhysicsRateMin,
                                   &kPhysicsRateMax, "%u Hz"));
         ui::ItemTooltip("Fixed 3D physics steps per second. Higher is smoother and more accurate for fast bodies, and costs more CPU.");
+
+        const bool layersOpen = ImGui::TreeNode("Physics Layers");
+        ui::ItemTooltip("Name the 3D physics layers and tick which pairs collide. Unticked pairs pass through each "
+                        "other and trigger no overlap events. Bodies pick their layer in the Physics component.");
+        if (layersOpen)
+        {
+            auto &names = gSettings.physics_layer_names;
+            auto &ignore = gSettings.physics_layer_ignore;
+            uint32_t used[SceneSettings::kPhysicsLayerCount];
+            int count = 0;
+            for (uint32_t i = 0; i < SceneSettings::kPhysicsLayerCount; ++i)
+                if (i == 0 || !names[i].empty())
+                    used[count++] = i;
+            uint32_t removeLayer = 0; // set by a row's remove button; applied after the table
+
+            // Rows are layers (name editable), columns the same layers under angled headers; the lower triangle
+            // shows each pair once.
+            if (ImGui::BeginTable("##physics_layers", count + 1, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerV))
+            {
+                ImGui::TableSetupColumn("##layer", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFontSize() * 8.0f);
+                for (int c = 0; c < count; ++c)
+                    ImGui::TableSetupColumn(names[used[c]].c_str(), ImGuiTableColumnFlags_AngledHeader | ImGuiTableColumnFlags_WidthFixed);
+                ImGui::TableAngledHeadersRow();
+                for (int r = 0; r < count; ++r)
+                {
+                    const uint32_t i = used[r];
+                    ImGui::PushID(static_cast<int>(i));
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    const float removeSize = ImGui::GetFrameHeight();
+                    const float gap = ImGui::GetStyle().ItemInnerSpacing.x;
+                    ImGui::SetNextItemWidth(i == 0 ? -FLT_MIN : -(removeSize + gap));
+                    char name[64];
+                    snprintf(name, sizeof(name), "%s", names[i].c_str());
+                    // A name never goes empty here: an empty name drops the row, mid-edit included.
+                    if (ImGui::InputText("##name", name, sizeof(name), i == 0 ? ImGuiInputTextFlags_ReadOnly : 0) && name[0])
+                    {
+                        names[i] = name;
+                        changed = true;
+                    }
+                    if (i != 0)
+                    {
+                        ImGui::SameLine(0.0f, gap);
+                        if (ui::CenteredIconButton("##remove", ICON_FA_MINUS, ImVec2(removeSize, removeSize)))
+                            removeLayer = i;
+                        ui::ItemTooltip("Remove this layer. Bodies on it in this scene move to Default.");
+                    }
+                    for (int c = 0; c <= r; ++c)
+                    {
+                        ImGui::TableNextColumn();
+                        const uint32_t j = used[c];
+                        bool collide = (((ignore[i] >> j) | (ignore[j] >> i)) & 1u) == 0;
+                        ImGui::PushID(static_cast<int>(j));
+                        if (Track(ImGui::Checkbox("##collide", &collide)))
+                        {
+                            const uint32_t bitI = 1u << i, bitJ = 1u << j;
+                            ignore[i] = collide ? ignore[i] & ~bitJ : ignore[i] | bitJ;
+                            ignore[j] = collide ? ignore[j] & ~bitI : ignore[j] | bitI;
+                        }
+                        ui::ItemTooltip("Do these two layers collide?");
+                        ImGui::PopID();
+                    }
+                    ImGui::PopID();
+                }
+                ImGui::EndTable();
+            }
+            if (removeLayer != 0)
+            {
+                // Free the slot completely, so a later Add Layer reuses it with no old pairs or bodies attached.
+                names[removeLayer].clear();
+                ignore[removeLayer] = 0;
+                for (uint32_t &bits : ignore)
+                    bits &= ~(1u << removeLayer);
+#ifdef PE_PHYSICS
+                PhysicsSystem *physics = GetGlobalSystem<PhysicsSystem>();
+                Scene *scene = GetActiveScene();
+                for (uint32_t n = 0; physics && scene && n < scene->GetNodeCount(); ++n)
+                {
+                    NodeId *node = scene->GetNodeId(n);
+                    if (!(scene->GetComponentFlags(node) & Component_Physics))
+                        continue;
+                    if (const PhysicsBodyDesc *desc = physics->GetBodyDesc(node); desc && desc->layer == removeLayer)
+                        physics->SetBodyLayer(node, 0);
+                }
+#endif
+                changed = true;
+            }
+            if (count < static_cast<int>(SceneSettings::kPhysicsLayerCount) && ImGui::Button("Add Layer"))
+            {
+                for (uint32_t i = 1; i < SceneSettings::kPhysicsLayerCount; ++i)
+                {
+                    if (names[i].empty())
+                    {
+                        names[i] = "Layer " + std::to_string(i);
+                        changed = true;
+                        break;
+                    }
+                }
+            }
+            ui::ItemTooltip("Name the next free layer (up to 32). Rename it in its row.");
+            ImGui::TreePop();
+        }
 
         return changed;
     }

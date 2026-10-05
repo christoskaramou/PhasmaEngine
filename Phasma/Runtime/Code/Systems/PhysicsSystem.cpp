@@ -93,11 +93,24 @@ namespace pe
 
     // --- Jolt layer definitions ---
 
+    // A Jolt object layer is the user layer (SceneSettings::physics_layer_names index) times two plus a moving
+    // bit, so the broadphase keeps its static / moving split and the pair filter reads the layer table.
     namespace Layers
     {
-        static constexpr JPH::ObjectLayer NON_MOVING = 0;
-        static constexpr JPH::ObjectLayer MOVING = 1;
-        static constexpr JPH::ObjectLayer NUM_LAYERS = 2;
+        static constexpr JPH::ObjectLayer ToObjectLayer(uint32_t userLayer, bool moving)
+        {
+            return static_cast<JPH::ObjectLayer>(std::min(userLayer, SceneSettings::kPhysicsLayerCount - 1) * 2u +
+                                                 (moving ? 1u : 0u));
+        }
+        static constexpr uint32_t UserLayer(JPH::ObjectLayer layer)
+        {
+            return layer >> 1;
+        }
+        static constexpr bool IsMoving(JPH::ObjectLayer layer)
+        {
+            return (layer & 1u) != 0;
+        }
+        static constexpr JPH::ObjectLayer NON_MOVING = ToObjectLayer(0, false);
     } // namespace Layers
 
     namespace BroadPhaseLayers
@@ -110,17 +123,11 @@ namespace pe
     class BPLayerInterface final : public JPH::BroadPhaseLayerInterface
     {
     public:
-        BPLayerInterface()
-        {
-            m_objectToBroadPhase[Layers::NON_MOVING] = BroadPhaseLayers::NON_MOVING;
-            m_objectToBroadPhase[Layers::MOVING] = BroadPhaseLayers::MOVING;
-        }
-
         JPH::uint GetNumBroadPhaseLayers() const override { return BroadPhaseLayers::NUM_LAYERS; }
 
         JPH::BroadPhaseLayer GetBroadPhaseLayer(JPH::ObjectLayer layer) const override
         {
-            return m_objectToBroadPhase[layer];
+            return Layers::IsMoving(layer) ? BroadPhaseLayers::MOVING : BroadPhaseLayers::NON_MOVING;
         }
 
 #if defined(JPH_EXTERNAL_PROFILE) || defined(JPH_PROFILE_ENABLED)
@@ -137,9 +144,6 @@ namespace pe
             }
         }
 #endif
-
-    private:
-        JPH::BroadPhaseLayer m_objectToBroadPhase[Layers::NUM_LAYERS];
     };
 
     class ObjectVsBroadPhaseFilter final : public JPH::ObjectVsBroadPhaseLayerFilter
@@ -147,7 +151,7 @@ namespace pe
     public:
         bool ShouldCollide(JPH::ObjectLayer obj, JPH::BroadPhaseLayer bp) const override
         {
-            if (obj == Layers::NON_MOVING)
+            if (!Layers::IsMoving(obj))
                 return bp == BroadPhaseLayers::MOVING;
             return true;
         }
@@ -158,10 +162,25 @@ namespace pe
     public:
         bool ShouldCollide(JPH::ObjectLayer a, JPH::ObjectLayer b) const override
         {
-            if (a == Layers::NON_MOVING && b == Layers::NON_MOVING)
+            if (!Layers::IsMoving(a) && !Layers::IsMoving(b))
                 return false;
-            return true;
+            const uint32_t la = Layers::UserLayer(a), lb = Layers::UserLayer(b);
+            return (((ignore[la] >> lb) | (ignore[lb] >> la)) & 1u) == 0;
         }
+
+        // Copy of SceneSettings::physics_layer_ignore, refreshed before each step (Jolt reads it on its workers).
+        std::array<uint32_t, SceneSettings::kPhysicsLayerCount> ignore{};
+    };
+
+    // Raycast filter: only bodies whose user layer is in the mask.
+    class LayerMaskFilter final : public JPH::ObjectLayerFilter
+    {
+    public:
+        explicit LayerMaskFilter(uint32_t mask) : m_mask(mask) {}
+        bool ShouldCollide(JPH::ObjectLayer layer) const override { return ((m_mask >> Layers::UserLayer(layer)) & 1u) != 0; }
+
+    private:
+        uint32_t m_mask;
     };
 
     // Static instances for Jolt callbacks
@@ -248,7 +267,9 @@ namespace pe
         if (!scene)
             return;
 
-        const float step = 1.0f / static_cast<float>(std::clamp(Settings::Get<SceneSettings>().physics_rate, 10u, 240u));
+        const SceneSettings &settings = Settings::Get<SceneSettings>();
+        s_objLayerPairFilter.ignore = settings.physics_layer_ignore;
+        const float step = 1.0f / static_cast<float>(std::clamp(settings.physics_rate, 10u, 240u));
         const int maxSteps = std::max(1, static_cast<int>(MAX_CATCHUP_SECONDS / step + 0.5f));
         const float rawDt = static_cast<float>(FrameTimer::Instance().GetDelta());
         {
@@ -508,6 +529,19 @@ namespace pe
         m_joltSystem->GetBodyInterface().SetLinearVelocity(bodyId, JPH::Vec3(vel.x, vel.y, vel.z));
     }
 
+    void PhysicsSystem::SetBodyLayer(NodeId *node, uint8_t layer)
+    {
+        PhysicsBodyDesc *desc = GetBodyDesc(node);
+        if (!desc)
+            return;
+        desc->layer = static_cast<uint8_t>(std::min<uint32_t>(layer, SceneSettings::kPhysicsLayerCount - 1));
+        const PhysicsNodeState &state = m_bodies[m_nodeToIndex.at(node)];
+        if (state.inWorld && m_joltSystem)
+            m_joltSystem->GetBodyInterface().SetObjectLayer(
+                JPH::BodyID(state.joltBodyIdRaw),
+                Layers::ToObjectLayer(desc->layer, desc->bodyType != PhysicsBodyType::Static));
+    }
+
     void PhysicsSystem::SetBodyMaterial(NodeId *node, float friction, float restitution)
     {
         auto it = m_nodeToIndex.find(node);
@@ -583,7 +617,8 @@ namespace pe
 
     // --- Raycast ---
 
-    bool PhysicsSystem::Raycast(const vec3 &origin, const vec3 &direction, float maxDistance, RaycastResult &outResult) const
+    bool PhysicsSystem::Raycast(const vec3 &origin, const vec3 &direction, float maxDistance, RaycastResult &outResult,
+                                uint32_t layerMask) const
     {
         PE_PROFILE_SCOPE("Physics Raycast");
 
@@ -595,7 +630,7 @@ namespace pe
         ray.mDirection = JPH::Vec3(direction.x * maxDistance, direction.y * maxDistance, direction.z * maxDistance);
 
         JPH::RayCastResult hit;
-        if (!m_joltSystem->GetNarrowPhaseQuery().CastRay(ray, hit))
+        if (!m_joltSystem->GetNarrowPhaseQuery().CastRay(ray, hit, {}, LayerMaskFilter(layerMask)))
             return false;
 
         JPH::BodyID hitBodyId = hit.mBodyID;
@@ -974,18 +1009,16 @@ namespace pe
         {
         case PhysicsBodyType::Static:
             motionType = JPH::EMotionType::Static;
-            layer = Layers::NON_MOVING;
             break;
         case PhysicsBodyType::Kinematic:
             motionType = JPH::EMotionType::Kinematic;
-            layer = Layers::MOVING;
             break;
         case PhysicsBodyType::Dynamic:
         default:
             motionType = JPH::EMotionType::Dynamic;
-            layer = Layers::MOVING;
             break;
         }
+        layer = Layers::ToObjectLayer(desc.layer, motionType != JPH::EMotionType::Static);
 
         JPH::BodyCreationSettings bodySettings(
             shape, JPH::RVec3(pos.x, pos.y, pos.z),

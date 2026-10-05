@@ -31,6 +31,7 @@ namespace pe
         float capsuleRadius = 0.25f;
         bool autoFitShape = true;
         bool isTrigger = false;
+        uint8_t layer = 0; // index into SceneSettings::physics_layer_names
     };
 
     // Box/Sphere/Capsule size after the node's world scale, exactly as the Jolt shape is built: box half

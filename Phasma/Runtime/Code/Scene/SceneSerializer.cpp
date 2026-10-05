@@ -322,6 +322,14 @@ namespace pe
 
             settings.AddMember("time_scale", gSettings.time_scale, allocator);
             settings.AddMember("physics_rate", gSettings.physics_rate, allocator);
+            rapidjson::Value layerNames(rapidjson::kArrayType), layerIgnore(rapidjson::kArrayType);
+            for (uint32_t i = 0; i < SceneSettings::kPhysicsLayerCount; ++i)
+            {
+                layerNames.PushBack(rapidjson::Value(gSettings.physics_layer_names[i].c_str(), allocator), allocator);
+                layerIgnore.PushBack(gSettings.physics_layer_ignore[i], allocator);
+            }
+            settings.AddMember("physics_layer_names", layerNames.Move(), allocator);
+            settings.AddMember("physics_layer_ignore", layerIgnore.Move(), allocator);
             AddStringVectorMember(settings, "model_list", gSettings.model_list, allocator);
             settings.AddMember("freeze_frustum_culling", gSettings.freeze_frustum_culling, allocator);
             settings.AddMember("draw_aabbs", gSettings.draw_aabbs, allocator);
@@ -342,6 +350,45 @@ namespace pe
             settings.AddMember("physical_point_falloff", gSettings.physical_point_falloff, allocator);
             settings.AddMember("present_mode", static_cast<int>(gSettings.preferred_present_mode), allocator);
             settings.AddMember("scene_view_aspect_mode", static_cast<int>(gSettings.scene_view_aspect_mode), allocator);
+        }
+
+        // The node "physics" block, shared by scene load, prefab instantiation and both snapshot restores. The
+        // JSON is untrusted: a field of the wrong type keeps its default and the layer is clamped to the table.
+        PhysicsBodyDesc ReadPhysicsBodyDesc(const rapidjson::Value &pv)
+        {
+            PhysicsBodyDesc desc;
+            auto number = [&pv](const char *key, float &out)
+            {
+                if (pv.HasMember(key) && pv[key].IsNumber())
+                    out = pv[key].GetFloat();
+            };
+            auto flag = [&pv](const char *key, bool &out)
+            {
+                if (pv.HasMember(key) && pv[key].IsBool())
+                    out = pv[key].GetBool();
+            };
+            if (pv.HasMember("body_type") && pv["body_type"].IsInt())
+                desc.bodyType = static_cast<PhysicsBodyType>(pv["body_type"].GetInt());
+            if (pv.HasMember("shape_type") && pv["shape_type"].IsInt())
+                desc.shapeType = static_cast<PhysicsShapeType>(pv["shape_type"].GetInt());
+            number("mass", desc.mass);
+            number("friction", desc.friction);
+            number("restitution", desc.restitution);
+            flag("auto_fit", desc.autoFitShape);
+            flag("is_trigger", desc.isTrigger);
+            if (pv.HasMember("box_half_extents") && pv["box_half_extents"].IsArray() &&
+                pv["box_half_extents"].Size() >= 3)
+            {
+                const auto &he = pv["box_half_extents"];
+                if (he[0].IsNumber() && he[1].IsNumber() && he[2].IsNumber())
+                    desc.boxHalfExtents = vec3(he[0].GetFloat(), he[1].GetFloat(), he[2].GetFloat());
+            }
+            number("sphere_radius", desc.sphereRadius);
+            number("capsule_half_height", desc.capsuleHalfHeight);
+            number("capsule_radius", desc.capsuleRadius);
+            if (pv.HasMember("layer") && pv["layer"].IsUint())
+                desc.layer = static_cast<uint8_t>(std::min(pv["layer"].GetUint(), SceneSettings::kPhysicsLayerCount - 1));
+            return desc;
         }
 
         SceneViewAspectMode ClampSceneViewAspectMode(int mode)
@@ -570,6 +617,23 @@ namespace pe
             gSettings.physics_rate = settings.HasMember("physics_rate") && settings["physics_rate"].IsUint()
                                          ? settings["physics_rate"].GetUint()
                                          : 30u;
+            // Same rule for the physics layer table: absent = just "Default", everything collides.
+            gSettings.physics_layer_names = {"Default"};
+            gSettings.physics_layer_ignore = {};
+            if (settings.HasMember("physics_layer_names") && settings["physics_layer_names"].IsArray())
+            {
+                const auto &names = settings["physics_layer_names"];
+                for (rapidjson::SizeType i = 0; i < names.Size() && i < SceneSettings::kPhysicsLayerCount; ++i)
+                    if (names[i].IsString())
+                        gSettings.physics_layer_names[i] = names[i].GetString();
+            }
+            if (settings.HasMember("physics_layer_ignore") && settings["physics_layer_ignore"].IsArray())
+            {
+                const auto &ignore = settings["physics_layer_ignore"];
+                for (rapidjson::SizeType i = 0; i < ignore.Size() && i < SceneSettings::kPhysicsLayerCount; ++i)
+                    if (ignore[i].IsUint())
+                        gSettings.physics_layer_ignore[i] = ignore[i].GetUint();
+            }
             ReadStringVectorMember(settings, "model_list", gSettings.model_list);
             if (settings.HasMember("freeze_frustum_culling"))
                 gSettings.freeze_frustum_culling = settings["freeze_frustum_culling"].GetBool();
@@ -1944,6 +2008,7 @@ namespace pe
                         phys.AddMember("restitution", desc->restitution, allocator);
                         phys.AddMember("auto_fit", desc->autoFitShape, allocator);
                         phys.AddMember("is_trigger", desc->isTrigger, allocator);
+                        phys.AddMember("layer", static_cast<unsigned>(desc->layer), allocator);
                         rapidjson::Value halfExtents;
                         SetVec3(halfExtents, desc->boxHalfExtents);
                         phys.AddMember("box_half_extents", halfExtents.Move(), allocator);
@@ -3246,29 +3311,7 @@ namespace pe
                     if (!node || !nv.HasMember("physics"))
                         continue;
                     const auto &pv = nv["physics"];
-                    PhysicsBodyDesc desc;
-                    if (pv.HasMember("body_type"))
-                        desc.bodyType = static_cast<PhysicsBodyType>(pv["body_type"].GetInt());
-                    if (pv.HasMember("shape_type"))
-                        desc.shapeType = static_cast<PhysicsShapeType>(pv["shape_type"].GetInt());
-                    if (pv.HasMember("mass"))
-                        desc.mass = pv["mass"].GetFloat();
-                    if (pv.HasMember("friction"))
-                        desc.friction = pv["friction"].GetFloat();
-                    if (pv.HasMember("restitution"))
-                        desc.restitution = pv["restitution"].GetFloat();
-                    if (pv.HasMember("auto_fit"))
-                        desc.autoFitShape = pv["auto_fit"].GetBool();
-                    if (pv.HasMember("is_trigger"))
-                        desc.isTrigger = pv["is_trigger"].GetBool();
-                    if (pv.HasMember("box_half_extents"))
-                        desc.boxHalfExtents = ReadVec3(pv["box_half_extents"]);
-                    if (pv.HasMember("sphere_radius"))
-                        desc.sphereRadius = pv["sphere_radius"].GetFloat();
-                    if (pv.HasMember("capsule_half_height"))
-                        desc.capsuleHalfHeight = pv["capsule_half_height"].GetFloat();
-                    if (pv.HasMember("capsule_radius"))
-                        desc.capsuleRadius = pv["capsule_radius"].GetFloat();
+                    PhysicsBodyDesc desc = ReadPhysicsBodyDesc(pv);
                     AddScenePhysicsBody(*this, node, desc);
                 }
 
@@ -4065,29 +4108,7 @@ namespace pe
             if (!node || !nv.HasMember("physics"))
                 continue;
             const auto &pv = nv["physics"];
-            PhysicsBodyDesc desc;
-            if (pv.HasMember("body_type"))
-                desc.bodyType = static_cast<PhysicsBodyType>(pv["body_type"].GetInt());
-            if (pv.HasMember("shape_type"))
-                desc.shapeType = static_cast<PhysicsShapeType>(pv["shape_type"].GetInt());
-            if (pv.HasMember("mass"))
-                desc.mass = pv["mass"].GetFloat();
-            if (pv.HasMember("friction"))
-                desc.friction = pv["friction"].GetFloat();
-            if (pv.HasMember("restitution"))
-                desc.restitution = pv["restitution"].GetFloat();
-            if (pv.HasMember("auto_fit"))
-                desc.autoFitShape = pv["auto_fit"].GetBool();
-            if (pv.HasMember("is_trigger"))
-                desc.isTrigger = pv["is_trigger"].GetBool();
-            if (pv.HasMember("box_half_extents"))
-                desc.boxHalfExtents = ReadVec3(pv["box_half_extents"], desc.boxHalfExtents);
-            if (pv.HasMember("sphere_radius"))
-                desc.sphereRadius = pv["sphere_radius"].GetFloat();
-            if (pv.HasMember("capsule_half_height"))
-                desc.capsuleHalfHeight = pv["capsule_half_height"].GetFloat();
-            if (pv.HasMember("capsule_radius"))
-                desc.capsuleRadius = pv["capsule_radius"].GetFloat();
+            PhysicsBodyDesc desc = ReadPhysicsBodyDesc(pv);
             AddScenePhysicsBody(*this, node, desc);
         }
 
@@ -4601,29 +4622,7 @@ namespace pe
                     if (nv.HasMember("physics"))
                     {
                         const auto &pv = nv["physics"];
-                        PhysicsBodyDesc desc;
-                        if (pv.HasMember("body_type"))
-                            desc.bodyType = static_cast<PhysicsBodyType>(pv["body_type"].GetInt());
-                        if (pv.HasMember("shape_type"))
-                            desc.shapeType = static_cast<PhysicsShapeType>(pv["shape_type"].GetInt());
-                        if (pv.HasMember("mass"))
-                            desc.mass = pv["mass"].GetFloat();
-                        if (pv.HasMember("friction"))
-                            desc.friction = pv["friction"].GetFloat();
-                        if (pv.HasMember("restitution"))
-                            desc.restitution = pv["restitution"].GetFloat();
-                        if (pv.HasMember("auto_fit"))
-                            desc.autoFitShape = pv["auto_fit"].GetBool();
-                        if (pv.HasMember("is_trigger"))
-                            desc.isTrigger = pv["is_trigger"].GetBool();
-                        if (pv.HasMember("box_half_extents"))
-                            desc.boxHalfExtents = ReadVec3(pv["box_half_extents"]);
-                        if (pv.HasMember("sphere_radius"))
-                            desc.sphereRadius = pv["sphere_radius"].GetFloat();
-                        if (pv.HasMember("capsule_half_height"))
-                            desc.capsuleHalfHeight = pv["capsule_half_height"].GetFloat();
-                        if (pv.HasMember("capsule_radius"))
-                            desc.capsuleRadius = pv["capsule_radius"].GetFloat();
+                        PhysicsBodyDesc desc = ReadPhysicsBodyDesc(pv);
                         if (!HasScenePhysicsBody(node))
                             AddScenePhysicsBody(*this, node, desc);
                         else if (auto *existing = GetScenePhysicsBodyDesc(node))
@@ -5061,29 +5060,7 @@ namespace pe
                     if (nv.HasMember("physics"))
                     {
                         const auto &pv = nv["physics"];
-                        PhysicsBodyDesc desc;
-                        if (pv.HasMember("body_type"))
-                            desc.bodyType = static_cast<PhysicsBodyType>(pv["body_type"].GetInt());
-                        if (pv.HasMember("shape_type"))
-                            desc.shapeType = static_cast<PhysicsShapeType>(pv["shape_type"].GetInt());
-                        if (pv.HasMember("mass"))
-                            desc.mass = pv["mass"].GetFloat();
-                        if (pv.HasMember("friction"))
-                            desc.friction = pv["friction"].GetFloat();
-                        if (pv.HasMember("restitution"))
-                            desc.restitution = pv["restitution"].GetFloat();
-                        if (pv.HasMember("auto_fit"))
-                            desc.autoFitShape = pv["auto_fit"].GetBool();
-                        if (pv.HasMember("is_trigger"))
-                            desc.isTrigger = pv["is_trigger"].GetBool();
-                        if (pv.HasMember("box_half_extents"))
-                            desc.boxHalfExtents = ReadVec3(pv["box_half_extents"]);
-                        if (pv.HasMember("sphere_radius"))
-                            desc.sphereRadius = pv["sphere_radius"].GetFloat();
-                        if (pv.HasMember("capsule_half_height"))
-                            desc.capsuleHalfHeight = pv["capsule_half_height"].GetFloat();
-                        if (pv.HasMember("capsule_radius"))
-                            desc.capsuleRadius = pv["capsule_radius"].GetFloat();
+                        PhysicsBodyDesc desc = ReadPhysicsBodyDesc(pv);
                         AddScenePhysicsBody(*this, node, desc);
                     }
                 }

@@ -47,6 +47,26 @@ namespace pe
         ImGui::Checkbox("Is Trigger", &desc->isTrigger);
         ui::ItemTooltip("Report overlaps without applying collision response.");
 
+        // Named layers come from Scene Settings > Physics Layers; an unnamed current layer still shows its index.
+        const auto &layerNames = Settings::Get<SceneSettings>().physics_layer_names;
+        auto layerLabel = [&layerNames](uint32_t i)
+        { return layerNames[i].empty() ? "Layer " + std::to_string(i) : layerNames[i]; };
+        if (ImGui::BeginCombo(ui::LabelAbove("Layer"), layerLabel(desc->layer).c_str()))
+        {
+            for (uint32_t i = 0; i < SceneSettings::kPhysicsLayerCount; ++i)
+            {
+                if (layerNames[i].empty() && i != desc->layer)
+                    continue;
+                ImGui::PushID(static_cast<int>(i));
+                if (ImGui::Selectable(layerLabel(i).c_str(), i == desc->layer))
+                    ps->SetBodyLayer(node, static_cast<uint8_t>(i));
+                ImGui::PopID();
+            }
+            ImGui::EndCombo();
+        }
+        ui::ItemTooltip("Physics layer of this body. Scene Settings > Physics Layers names the layers and sets "
+                        "which of them collide (trigger overlaps too).");
+
         bool shapeChanged = false;
         int shapeType = static_cast<int>(desc->shapeType);
         if (ImGui::Combo(ui::LabelAbove("Shape Type"), &shapeType, shapeTypeNames, IM_ARRAYSIZE(shapeTypeNames)))

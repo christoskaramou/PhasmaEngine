@@ -24,6 +24,28 @@ namespace pe
         }
     }
 
+    // A physics layer from Lua: an index (0..31) or a name in the scene's layer table. -1, with a warning, when
+    // it is neither, so the caller changes nothing instead of falling back to Default.
+    static int ResolvePhysicsLayer(const sol::object &value, const char *fn)
+    {
+        if (value.get_type() == sol::type::number)
+        {
+            const double index = value.as<double>();
+            if (index >= 0.0 && index < SceneSettings::kPhysicsLayerCount && index == std::floor(index))
+                return static_cast<int>(index);
+        }
+        else if (value.get_type() == sol::type::string)
+        {
+            const std::string name = value.as<std::string>();
+            const auto &names = Settings::Get<SceneSettings>().physics_layer_names;
+            for (uint32_t i = 0; i < SceneSettings::kPhysicsLayerCount; ++i)
+                if (!name.empty() && names[i] == name)
+                    return static_cast<int>(i);
+        }
+        PE_WARN("[Lua] physics.%s: not a physics layer index or name in this scene's layer table", fn);
+        return -1;
+    }
+
     static struct PhysicsBindings
     {
         PhysicsBindings()
@@ -67,9 +89,52 @@ namespace pe
                             desc.restitution = p["restitution"];
                         if (p["is_trigger"].valid())
                             desc.isTrigger = p["is_trigger"];
+                        if (p["layer"].valid())
+                        {
+                            const int layer = ResolvePhysicsLayer(p.get<sol::object>("layer"), "add_body");
+                            if (layer >= 0)
+                                desc.layer = static_cast<uint8_t>(layer);
+                        }
                     }
 
                     ps->AddBody(*scene, h.nodeId, desc);
+                });
+
+                physics.set_function("set_layer", [](SceneNodeHandle &h, sol::object layer) {
+                    auto *ps = GetGlobalSystem<PhysicsSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (!ps || !scene || !h.IsValid(*scene))
+                        return;
+                    const int index = ResolvePhysicsLayer(layer, "set_layer");
+                    if (index >= 0)
+                        ps->SetBodyLayer(h.nodeId, static_cast<uint8_t>(index));
+                });
+
+                physics.set_function("get_layer", [](SceneNodeHandle &h) -> sol::optional<int> {
+                    auto *ps = GetGlobalSystem<PhysicsSystem>();
+                    const PhysicsBodyDesc *desc = ps && h.nodeId ? ps->GetBodyDesc(h.nodeId) : nullptr;
+                    if (!desc)
+                        return sol::nullopt;
+                    return static_cast<int>(desc->layer);
+                });
+
+                // Collision matrix entry, both directions; the scene's Physics Layers table edits the same bits.
+                physics.set_function("set_layers_collide", [](sol::object a, sol::object b, bool collide) {
+                    const int la = ResolvePhysicsLayer(a, "set_layers_collide");
+                    const int lb = ResolvePhysicsLayer(b, "set_layers_collide");
+                    if (la < 0 || lb < 0)
+                        return;
+                    auto &ignore = Settings::Get<SceneSettings>().physics_layer_ignore;
+                    if (collide)
+                    {
+                        ignore[la] &= ~(1u << lb);
+                        ignore[lb] &= ~(1u << la);
+                    }
+                    else
+                    {
+                        ignore[la] |= 1u << lb;
+                        ignore[lb] |= 1u << la;
+                    }
                 });
 
                 physics.set_function("remove_body", [](SceneNodeHandle &h) {
@@ -157,13 +222,37 @@ namespace pe
 
                 physics.set_function("raycast", [](float ox, float oy, float oz,
                                                     float dx, float dy, float dz,
-                                                    float maxDist, sol::this_state ts) -> sol::object {
+                                                    float maxDist, sol::object layers, sol::this_state ts) -> sol::object {
                     auto *ps = GetGlobalSystem<PhysicsSystem>();
                     if (!ps)
                         return sol::nil;
 
+                    // Optional layers: one layer (index or name) or a table of them; omitted = every layer.
+                    uint32_t mask = 0xFFFFFFFFu;
+                    if (layers.valid() && layers.get_type() != sol::type::lua_nil)
+                    {
+                        mask = 0;
+                        if (layers.get_type() == sol::type::table)
+                        {
+                            for (const auto &entry : layers.as<sol::table>())
+                            {
+                                const int layer = ResolvePhysicsLayer(entry.second, "raycast");
+                                if (layer < 0)
+                                    return sol::nil;
+                                mask |= 1u << layer;
+                            }
+                        }
+                        else
+                        {
+                            const int layer = ResolvePhysicsLayer(layers, "raycast");
+                            if (layer < 0)
+                                return sol::nil;
+                            mask = 1u << layer;
+                        }
+                    }
+
                     RaycastResult result;
-                    if (!ps->Raycast(vec3(ox, oy, oz), vec3(dx, dy, dz), maxDist, result))
+                    if (!ps->Raycast(vec3(ox, oy, oz), vec3(dx, dy, dz), maxDist, result, mask))
                         return sol::nil;
 
                     sol::state_view lua(ts);

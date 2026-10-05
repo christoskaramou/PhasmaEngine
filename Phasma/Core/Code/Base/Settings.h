@@ -195,6 +195,11 @@ namespace pe
         std::array<float, 3> depth_bias{0.0f, 0.0f, -6.2f};
         float time_scale = 1.f;
         uint32_t physics_rate = 30; // fixed 3D physics (Jolt) steps per second; clamped to 10..240 Hz
+        // 3D physics layers: a name per layer (empty = unused; 0 is "Default") and, per layer, the layers it does
+        // NOT collide with (bit j of physics_layer_ignore[i]). All zero = everything collides. Triggers obey it too.
+        static constexpr uint32_t kPhysicsLayerCount = 32;
+        std::array<std::string, kPhysicsLayerCount> physics_layer_names{"Default"};
+        std::array<uint32_t, kPhysicsLayerCount> physics_layer_ignore{};
         std::vector<std::string> model_list{};
         Image *current_rendering_image = nullptr;
         std::vector<Image *> rendering_images{};

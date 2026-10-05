@@ -65,6 +65,8 @@ namespace pe
         void NotifyScaleChanged(Scene &scene, NodeId *node);
         // Update a body's friction/restitution live (no shape re-cook); no-op if the body isn't in-world.
         void SetBodyMaterial(NodeId *node, float friction, float restitution);
+        // Move a body to another SceneSettings::physics_layer_names layer, live if it is in the world.
+        void SetBodyLayer(NodeId *node, uint8_t layer);
 
         // Raw static triangle-mesh colliders (streamed terrain tiles): not node-backed, keyed by the
         // returned Jolt body id. Verts are world-space scene vertices; indices are 0-based triples
@@ -86,7 +88,9 @@ namespace pe
         void ApplyTorque(NodeId *node, const vec3 &torque);
 
         // Raycast
-        bool Raycast(const vec3 &origin, const vec3 &direction, float maxDistance, RaycastResult &outResult) const;
+        // layerMask: bit i = hit bodies on layer i (SceneSettings::physics_layer_names); all set by default.
+        bool Raycast(const vec3 &origin, const vec3 &direction, float maxDistance, RaycastResult &outResult,
+                     uint32_t layerMask = 0xFFFFFFFFu) const;
 
         // Trigger callbacks are invoked on the main thread after the physics step.
         void SetTriggerEnterCallback(NodeId *node, PhysicsTriggerCallback callback);
