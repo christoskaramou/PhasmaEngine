@@ -16,6 +16,7 @@ namespace pe
         void NewFrame();
         void CreateFontsTexture();
         void RenderDrawData(CommandBuffer *cmd);
+        void RenderPlatformWindows();
         void *RegisterImageTexture(Image *image);
         void ReleaseImageTexture(void *&textureID);
     } // namespace GUIBackend

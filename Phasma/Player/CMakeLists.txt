@@ -13,7 +13,7 @@ set(PHASMAPLAYER_RUNTIME_UI_SOURCES
     "${PE_SHARED_THIRD_PARTY_DIR}/imgui/imgui_tables.cpp"
     "${PE_SHARED_THIRD_PARTY_DIR}/imgui/imgui_widgets.cpp"
     "${PE_SHARED_THIRD_PARTY_DIR}/imgui/imgui_impl_sdl2.cpp"
-    "${PE_SHARED_THIRD_PARTY_DIR}/imgui/imgui_impl_vulkan.cpp"
+    "${CMAKE_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/imgui_impl_vulkan.cpp"
 )
 
 if(WIN32)

@@ -21,7 +21,7 @@
 #endif
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_sdl2.h"
-#include "imgui/imgui_impl_vulkan.h"
+#include "imgui_impl_vulkan.h"
 
 namespace pe::GUIBackend
 {
@@ -201,6 +201,17 @@ namespace pe::GUIBackend
             dx12Cmd->InvalidateShaderVisibleHeapBinding();
         }
 #endif
+    }
+
+    void RenderPlatformWindows()
+    {
+        if (!SupportsPlatformWindows())
+            return;
+
+        // The ImGui backends submit, present and wait-idle on the main queue directly, outside pe::Queue.
+        std::lock_guard lock(RHII.GetMainQueue()->GetSubmitMutex());
+        ImGui::UpdatePlatformWindows();
+        ImGui::RenderPlatformWindowsDefault();
     }
 
     void *RegisterImageTexture(Image *image)

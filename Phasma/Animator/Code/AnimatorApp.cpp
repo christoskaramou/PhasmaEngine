@@ -710,6 +710,7 @@ namespace pe
 
         m_renderer.Update();
         m_renderer.Draw();
+        GUIBackend::RenderPlatformWindows();
         FrameTimer::Instance().CountCpuTotalStamp();
         return !m_quit;
     }

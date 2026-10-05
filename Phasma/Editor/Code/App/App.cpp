@@ -683,7 +683,13 @@ namespace pe
             (hasImGuiRenderer && m_runtimeUi && m_runtimeUi->IsInitialized()) ? m_runtimeUi.get() : nullptr;
         const bool runtimeUiFrameOpen = runtimeUi && ConfigureRuntimeUiFrame(*runtimeUi, *rendererSystem);
         if (runtimeUiFrameOpen)
+        {
             runtimeUi->BeginFrame();
+            // The runtime UI's SDL backend releases the global mouse capture every frame it sees no button held
+            // (edit mode feeds it none). Re-apply the editor's, or a dragged ImGui platform window stops receiving
+            // mouse motion once the cursor outruns it.
+            SDL_CaptureMouse(ImGui::IsAnyMouseDown() ? SDL_TRUE : SDL_FALSE);
+        }
 
         {
             PE_PROFILE_SCOPE("Process Events");

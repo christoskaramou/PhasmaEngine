@@ -3486,11 +3486,7 @@ namespace pe
     {
         if (!m_initialized)
             return;
-        if (!GUIBackend::SupportsPlatformWindows())
-            return;
-
-        ImGui::UpdatePlatformWindows();
-        ImGui::RenderPlatformWindowsDefault();
+        GUIBackend::RenderPlatformWindows();
     }
 
     void GUI::PumpMainThreadActions()

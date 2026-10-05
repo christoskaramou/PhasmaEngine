@@ -9,6 +9,7 @@ set(PHASMA_ANIMATOR_SHARED_EDITOR_SOURCES
     "${CMAKE_SOURCE_DIR}/Phasma/Editor/Code/GUI/Widgets/SceneSettingsControls.cpp"
     "${CMAKE_SOURCE_DIR}/Phasma/Editor/Code/GUI/Widgets/PostProcessControls.cpp"
     "${CMAKE_SOURCE_DIR}/Phasma/Editor/Code/Scene/SelectionManager.cpp"
+    "${CMAKE_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/imgui_impl_vulkan.cpp"
 )
 if(WIN32)
     list(APPEND PHASMA_ANIMATOR_SHARED_EDITOR_SOURCES

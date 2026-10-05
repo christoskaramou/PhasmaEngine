@@ -52,6 +52,7 @@ namespace pe
         CommandBuffer *AcquireCommandBuffer(PeCommandPoolCreateFlags flags = PE_COMMAND_POOL_CREATE_TRANSIENT);
         void ReturnCommandBuffer(CommandBuffer *cmd);
         uint64_t GetSubmissionCount() const { return m_submission.load(std::memory_order_acquire); }
+        std::mutex &GetSubmitMutex() { return m_submitMutex; }
 
     private:
         friend struct VulkanQueueImpl;
