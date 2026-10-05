@@ -388,6 +388,42 @@ namespace pe
             number("capsule_radius", desc.capsuleRadius);
             if (pv.HasMember("layer") && pv["layer"].IsUint())
                 desc.layer = static_cast<uint8_t>(std::min(pv["layer"].GetUint(), SceneSettings::kPhysicsLayerCount - 1));
+            if (pv.HasMember("joint") && pv["joint"].IsObject())
+            {
+                const auto &jv = pv["joint"];
+                PhysicsJointDesc &j = desc.joint;
+                auto jnumber = [&jv](const char *key, float &out)
+                {
+                    if (jv.HasMember(key) && jv[key].IsNumber())
+                        out = jv[key].GetFloat();
+                };
+                auto jflag = [&jv](const char *key, bool &out)
+                {
+                    if (jv.HasMember(key) && jv[key].IsBool())
+                        out = jv[key].GetBool();
+                };
+                auto jvec = [&jv](const char *key, vec3 &out)
+                {
+                    if (jv.HasMember(key) && jv[key].IsArray() && jv[key].Size() >= 3 && jv[key][0].IsNumber() &&
+                        jv[key][1].IsNumber() && jv[key][2].IsNumber())
+                        out = vec3(jv[key][0].GetFloat(), jv[key][1].GetFloat(), jv[key][2].GetFloat());
+                };
+                if (jv.HasMember("type") && jv["type"].IsInt() && jv["type"].GetInt() >= 0 &&
+                    jv["type"].GetInt() <= static_cast<int>(PhysicsJointType::Slider))
+                    j.type = static_cast<PhysicsJointType>(jv["type"].GetInt());
+                if (jv.HasMember("connected") && jv["connected"].IsString())
+                    j.connectedNode = jv["connected"].GetString();
+                jvec("anchor", j.anchor);
+                jvec("axis", j.axis);
+                jvec("connected_anchor", j.connectedAnchor);
+                jflag("limits_enabled", j.limitsEnabled);
+                jnumber("limit_min", j.limitMin);
+                jnumber("limit_max", j.limitMax);
+                jflag("motor_enabled", j.motorEnabled);
+                jnumber("motor_speed", j.motorSpeed);
+                jnumber("motor_max_force", j.motorMaxForce);
+                jnumber("break_force", j.breakForce);
+            }
             return desc;
         }
 
@@ -2009,6 +2045,27 @@ namespace pe
                         phys.AddMember("auto_fit", desc->autoFitShape, allocator);
                         phys.AddMember("is_trigger", desc->isTrigger, allocator);
                         phys.AddMember("layer", static_cast<unsigned>(desc->layer), allocator);
+                        if (desc->joint.type != PhysicsJointType::None)
+                        {
+                            const PhysicsJointDesc &j = desc->joint;
+                            rapidjson::Value joint(rapidjson::kObjectType), anchor, axis, connectedAnchor;
+                            joint.AddMember("type", static_cast<int>(j.type), allocator);
+                            joint.AddMember("connected", rapidjson::Value(j.connectedNode.c_str(), allocator), allocator);
+                            SetVec3(anchor, j.anchor);
+                            SetVec3(axis, j.axis);
+                            SetVec3(connectedAnchor, j.connectedAnchor);
+                            joint.AddMember("anchor", anchor.Move(), allocator);
+                            joint.AddMember("axis", axis.Move(), allocator);
+                            joint.AddMember("connected_anchor", connectedAnchor.Move(), allocator);
+                            joint.AddMember("limits_enabled", j.limitsEnabled, allocator);
+                            joint.AddMember("limit_min", j.limitMin, allocator);
+                            joint.AddMember("limit_max", j.limitMax, allocator);
+                            joint.AddMember("motor_enabled", j.motorEnabled, allocator);
+                            joint.AddMember("motor_speed", j.motorSpeed, allocator);
+                            joint.AddMember("motor_max_force", j.motorMaxForce, allocator);
+                            joint.AddMember("break_force", j.breakForce, allocator);
+                            phys.AddMember("joint", joint.Move(), allocator);
+                        }
                         rapidjson::Value halfExtents;
                         SetVec3(halfExtents, desc->boxHalfExtents);
                         phys.AddMember("box_half_extents", halfExtents.Move(), allocator);

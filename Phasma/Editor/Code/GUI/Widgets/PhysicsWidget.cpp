@@ -115,6 +115,82 @@ namespace pe
         ui::ItemTooltip("Surface resistance applied when this body contacts another.");
         ImGui::DragFloat(ui::LabelAbove("Restitution"), &desc->restitution, 0.01f, 0.0f, 1.0f);
         ui::ItemTooltip("Bounciness applied during collisions.");
+
+        // Joint edits take effect when Play starts (Lua physics.add_joint changes it live).
+        ImGui::SeparatorText("Joint");
+        PhysicsJointDesc &joint = desc->joint;
+        static const char *jointTypeNames[] = {"None", "Fixed", "Hinge", "Distance", "Slider"};
+        int jointType = static_cast<int>(joint.type);
+        if (ImGui::Combo(ui::LabelAbove("Type##joint"), &jointType, jointTypeNames, IM_ARRAYSIZE(jointTypeNames)))
+            joint.type = static_cast<PhysicsJointType>(jointType);
+        ui::ItemTooltip("Join this body to another physics body or to the world: Fixed welds, Hinge turns about the "
+                        "axis, Distance keeps a length, Slider moves along the axis. Applies when Play starts.");
+        if (joint.type == PhysicsJointType::None)
+            return;
+
+        if (ImGui::BeginCombo(ui::LabelAbove("Connected Body"),
+                              joint.connectedNode.empty() ? "(World)" : joint.connectedNode.c_str()))
+        {
+            if (ImGui::Selectable("(World)", joint.connectedNode.empty()))
+                joint.connectedNode.clear();
+            for (uint32_t i = 0; i < scene->GetNodeCount(); ++i)
+            {
+                NodeId *other = scene->GetNodeId(i);
+                if (other == node || !(scene->GetComponentFlags(other) & Component_Physics))
+                    continue;
+                const std::string &name = scene->GetNodeName(other);
+                ImGui::PushID(static_cast<int>(i));
+                if (ImGui::Selectable(name.c_str(), name == joint.connectedNode))
+                    joint.connectedNode = name;
+                ImGui::PopID();
+            }
+            ImGui::EndCombo();
+        }
+        ui::ItemTooltip("The body this one is joined to, matched by node name, or the world.");
+
+        ImGui::DragFloat3(ui::LabelAbove("Anchor"), &joint.anchor.x, 0.01f);
+        ui::ItemTooltip("Joint pivot in this node's local space (0,0,0 = the node origin).");
+        const bool hinge = joint.type == PhysicsJointType::Hinge, slider = joint.type == PhysicsJointType::Slider;
+        if (hinge || slider)
+        {
+            ImGui::DragFloat3(ui::LabelAbove("Axis"), &joint.axis.x, 0.01f, -1.0f, 1.0f);
+            ui::ItemTooltip(hinge ? "Axis the body turns about, in this node's local space."
+                                  : "Axis the body slides along, in this node's local space.");
+        }
+        if (joint.type == PhysicsJointType::Distance)
+        {
+            ImGui::DragFloat3(ui::LabelAbove("Connected Anchor"), &joint.connectedAnchor.x, 0.01f);
+            ui::ItemTooltip("The other end: local to the connected body, or a world point when joined to the world.");
+        }
+
+        if (joint.type != PhysicsJointType::Fixed)
+        {
+            ImGui::Checkbox("Limits##joint", &joint.limitsEnabled);
+            ui::ItemTooltip(hinge    ? "Limit the angle (degrees, -180..0 and 0..180) from the pose when Play starts."
+                            : slider ? "Limit the travel (metres, min <= 0 <= max) from the position when Play starts."
+                                     : "Allow a length range (rope-like). Off keeps the starting length (a rigid rod).");
+            if (joint.limitsEnabled)
+                ImGui::DragFloatRange2(ui::LabelAbove(hinge ? "Angle Range" : slider ? "Travel Range"
+                                                                                     : "Length Range"),
+                                       &joint.limitMin, &joint.limitMax, hinge ? 1.0f : 0.01f, hinge ? -180.0f : -1000.0f,
+                                       hinge ? 180.0f : 1000.0f, hinge ? "min %.0f deg" : "min %.2f m",
+                                       hinge ? "max %.0f deg" : "max %.2f m");
+        }
+        if (hinge || slider)
+        {
+            ImGui::Checkbox("Motor##joint", &joint.motorEnabled);
+            ui::ItemTooltip("Drive the joint at a target speed, up to the maximum force.");
+            if (joint.motorEnabled)
+            {
+                ImGui::DragFloat(ui::LabelAbove("Motor Speed"), &joint.motorSpeed, hinge ? 1.0f : 0.01f, 0.0f, 0.0f,
+                                 hinge ? "%.1f deg/s" : "%.2f m/s");
+                ImGui::DragFloat(ui::LabelAbove("Motor Max Force"), &joint.motorMaxForce, 1.0f, 0.0f, 1e7f,
+                                 hinge ? "%.0f N m" : "%.0f N");
+            }
+        }
+        ImGui::DragFloat(ui::LabelAbove("Break Force"), &joint.breakForce, 1.0f, 0.0f, 1e7f,
+                         joint.breakForce > 0.0f ? "%.0f N" : "unbreakable");
+        ui::ItemTooltip("The joint breaks when it has to hold more than this force (0 = never). Lua physics.on_joint_break reports it.");
     }
 } // namespace pe
 

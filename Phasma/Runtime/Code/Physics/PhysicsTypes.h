@@ -18,6 +18,33 @@ namespace pe
         Mesh // exact triangle mesh from the node's mesh refs; static/kinematic only (e.g. voxel terrain)
     };
 
+    enum class PhysicsJointType : uint8_t
+    {
+        None = 0,
+        Fixed,
+        Hinge,
+        Distance,
+        Slider
+    };
+
+    // A joint from this body to another node's body (by name) or to the world (empty name); one per body. Hinge
+    // angle and slider position are measured from the pose when the joint is created (play start).
+    struct PhysicsJointDesc
+    {
+        PhysicsJointType type = PhysicsJointType::None;
+        std::string connectedNode;        // empty = fixed to the world
+        vec3 anchor = vec3(0.f);          // pivot, in this node's local space (scale included)
+        vec3 axis = vec3(0.f, 1.f, 0.f);  // hinge / slider axis, in this node's local space
+        vec3 connectedAnchor = vec3(0.f); // Distance: the other end, local to the connected node (world if none)
+        bool limitsEnabled = false;       // Distance without limits keeps its starting length
+        float limitMin = -90.f;           // hinge degrees, slider and distance metres
+        float limitMax = 90.f;
+        bool motorEnabled = false;    // hinge and slider
+        float motorSpeed = 0.f;       // hinge deg/s, slider m/s
+        float motorMaxForce = 1000.f; // hinge N m, slider N
+        float breakForce = 0.f;       // N; 0 = unbreakable
+    };
+
     struct PhysicsBodyDesc
     {
         PhysicsBodyType bodyType = PhysicsBodyType::Dynamic;
@@ -32,6 +59,7 @@ namespace pe
         bool autoFitShape = true;
         bool isTrigger = false;
         uint8_t layer = 0; // index into SceneSettings::physics_layer_names
+        PhysicsJointDesc joint;
     };
 
     // Box/Sphere/Capsule size after the node's world scale, exactly as the Jolt shape is built: box half

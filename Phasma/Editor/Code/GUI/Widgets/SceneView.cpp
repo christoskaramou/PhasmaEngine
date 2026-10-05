@@ -1781,7 +1781,7 @@ namespace pe
                 scene.GetTriggerZoneForNode(node))
                 return;
             const PhysicsBodyDesc *desc = physics->GetBodyDesc(node);
-            if (!desc || desc->shapeType == PhysicsShapeType::ConvexHull || desc->shapeType == PhysicsShapeType::Mesh)
+            if (!desc)
                 return;
             const mat4 &world = scene.GetWorldMatrix(node);
             const vec3 scale(glm::length(vec3(world[0])), glm::length(vec3(world[1])), glm::length(vec3(world[2])));
@@ -1794,6 +1794,37 @@ namespace pe
             const float thickness = selected ? 2.5f : 1.5f;
             const ImU32 color = desc->isTrigger ? (selected ? IM_COL32(120, 235, 255, 255) : IM_COL32(90, 200, 235, 200))
                                                 : (selected ? IM_COL32(140, 255, 140, 255) : IM_COL32(90, 220, 110, 200));
+
+            // Joint (orange): a ring on the pivot, the hinge / slider axis through it, a line to a distance joint's other end.
+            const PhysicsJointDesc &joint = desc->joint;
+            if (joint.type != PhysicsJointType::None)
+            {
+                const ImU32 jointColor = selected ? IM_COL32(255, 170, 70, 255) : IM_COL32(240, 150, 60, 200);
+                const vec3 pivot = vec3(world * vec4(joint.anchor, 1.0f));
+                auto line = [&](const vec3 &a, const vec3 &b)
+                {
+                    ImVec2 sa, sb;
+                    if (ProjectWorldToViewport(a, viewProj, imageMin, imageSize, sa) &&
+                        ProjectWorldToViewport(b, viewProj, imageMin, imageSize, sb))
+                        drawList->AddLine(sa, sb, jointColor, thickness);
+                };
+                ImVec2 pivotScreen;
+                if (ProjectWorldToViewport(pivot, viewProj, imageMin, imageSize, pivotScreen))
+                    drawList->AddCircle(pivotScreen, 5.0f, jointColor, 12, thickness);
+                if ((joint.type == PhysicsJointType::Hinge || joint.type == PhysicsJointType::Slider) &&
+                    glm::length(joint.axis) > 1e-6f)
+                {
+                    const vec3 dir = glm::normalize(mat3(ax, ay, az) * joint.axis) * 0.6f;
+                    line(pivot - dir, pivot + dir);
+                }
+                else if (joint.type == PhysicsJointType::Distance)
+                {
+                    NodeId *other = scene.FindNodeByName(joint.connectedNode);
+                    line(pivot, other ? vec3(scene.GetWorldMatrix(other) * vec4(joint.connectedAnchor, 1.0f)) : joint.connectedAnchor);
+                }
+            }
+            if (desc->shapeType == PhysicsShapeType::ConvexHull || desc->shapeType == PhysicsShapeType::Mesh)
+                return;
             switch (desc->shapeType)
             {
             case PhysicsShapeType::Sphere:

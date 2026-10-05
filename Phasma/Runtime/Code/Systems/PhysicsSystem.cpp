@@ -45,6 +45,10 @@
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
+#include <Jolt/Physics/Constraints/DistanceConstraint.h>
+#include <Jolt/Physics/Constraints/FixedConstraint.h>
+#include <Jolt/Physics/Constraints/HingeConstraint.h>
+#include <Jolt/Physics/Constraints/SliderConstraint.h>
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/RegisterTypes.h>
@@ -289,6 +293,9 @@ namespace pe
             }
         }
 
+        if (steps > 0 && !m_joints.empty())
+            CheckJointBreaks(step);
+
         if (steps > 0)
         {
             PE_PROFILE_SCOPE("Physics Sync Transforms");
@@ -400,7 +407,10 @@ namespace pe
         m_nodeToIndex[node] = idx;
 
         if (m_simulating)
+        {
             CreateJoltBody(m_bodies.back(), scene);
+            CreateJoint(m_bodies.back(), scene);
+        }
     }
 
     void PhysicsSystem::RemoveBody(NodeId *node)
@@ -682,7 +692,326 @@ namespace pe
         {
             state.triggerEnterCallback = nullptr;
             state.triggerExitCallback = nullptr;
+            state.jointBreakCallback = nullptr;
         }
+    }
+
+    // --- Joints ---
+
+    namespace
+    {
+        // Motor on a live hinge (deg/s, N m) or slider (m/s, N); other joint types have none.
+        void ApplyJointMotor(JPH::TwoBodyConstraint *constraint, PhysicsJointType type, bool enabled, float speed,
+                             float maxForce)
+        {
+            const JPH::EMotorState state = enabled ? JPH::EMotorState::Velocity : JPH::EMotorState::Off;
+            if (type == PhysicsJointType::Hinge)
+            {
+                auto *hinge = static_cast<JPH::HingeConstraint *>(constraint);
+                hinge->GetMotorSettings().SetTorqueLimit(std::max(maxForce, 0.0f));
+                hinge->SetTargetAngularVelocity(glm::radians(speed));
+                hinge->SetMotorState(state);
+            }
+            else if (type == PhysicsJointType::Slider)
+            {
+                auto *slider = static_cast<JPH::SliderConstraint *>(constraint);
+                slider->GetMotorSettings().SetForceLimit(std::max(maxForce, 0.0f));
+                slider->SetTargetVelocity(speed);
+                slider->SetMotorState(state);
+            }
+        }
+    } // namespace
+
+    void PhysicsSystem::CreateJoint(PhysicsNodeState &state, Scene &scene)
+    {
+        const PhysicsJointDesc &j = state.desc.joint;
+        if (j.type == PhysicsJointType::None || !state.inWorld || !m_joltSystem)
+            return;
+        RemoveJointOf(state.nodeId);
+        const std::string &ownerName = scene.GetNodeName(state.nodeId);
+
+        // ponytail: the connected body is the first node with that name, so two instances of a jointed prefab both
+        // connect to the first one's body. Upgrade: prefer a match inside the owner's own subtree.
+        const PhysicsNodeState *other = nullptr;
+        if (!j.connectedNode.empty())
+        {
+            NodeId *otherNode = scene.FindNodeByName(j.connectedNode);
+            const auto it = otherNode && otherNode != state.nodeId ? m_nodeToIndex.find(otherNode) : m_nodeToIndex.end();
+            if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !m_bodies[it->second].inWorld)
+            {
+                PE_WARN("[Physics] Joint on '%s': '%s' is not another physics body in the world, so no joint",
+                        ownerName.c_str(), j.connectedNode.c_str());
+                return;
+            }
+            other = &m_bodies[it->second];
+        }
+        if (state.desc.bodyType != PhysicsBodyType::Dynamic && !(other && other->desc.bodyType == PhysicsBodyType::Dynamic))
+        {
+            PE_WARN("[Physics] Joint on '%s': neither body is dynamic, so it would do nothing; no joint", ownerName.c_str());
+            return;
+        }
+
+        // Pivot through the full node transform (an anchor on a scaled cube's face stays on the face); axis through
+        // the rotation only.
+        const mat4 &world = scene.GetWorldMatrix(state.nodeId);
+        const mat3 rotation(glm::normalize(vec3(world[0])), glm::normalize(vec3(world[1])), glm::normalize(vec3(world[2])));
+        const vec3 pivot = vec3(world * vec4(j.anchor, 1.0f));
+        vec3 axis = vec3(0.0f, 1.0f, 0.0f);
+        if (glm::length(j.axis) > 1e-6f)
+            axis = glm::normalize(rotation * j.axis);
+        else if (j.type == PhysicsJointType::Hinge || j.type == PhysicsJointType::Slider)
+            PE_WARN("[Physics] Joint on '%s': zero axis, using +Y", ownerName.c_str());
+        const JPH::RVec3 pivotJ(pivot.x, pivot.y, pivot.z);
+        const JPH::Vec3 axisJ(axis.x, axis.y, axis.z);
+        const JPH::Vec3 normalJ = axisJ.GetNormalizedPerpendicular();
+
+        JPH::Ref<JPH::TwoBodyConstraintSettings> settings;
+        switch (j.type)
+        {
+        case PhysicsJointType::Fixed:
+        {
+            auto *fixed = new JPH::FixedConstraintSettings();
+            fixed->mAutoDetectPoint = true; // locks the current relative pose
+            settings = fixed;
+            break;
+        }
+        case PhysicsJointType::Hinge:
+        {
+            auto *hinge = new JPH::HingeConstraintSettings();
+            hinge->mPoint1 = hinge->mPoint2 = pivotJ;
+            hinge->mHingeAxis1 = hinge->mHingeAxis2 = axisJ;
+            hinge->mNormalAxis1 = hinge->mNormalAxis2 = normalJ;
+            if (j.limitsEnabled) // Jolt: min in [-pi, 0], max in [0, pi]
+            {
+                hinge->mLimitsMin = glm::radians(std::clamp(j.limitMin, -180.0f, 0.0f));
+                hinge->mLimitsMax = glm::radians(std::clamp(j.limitMax, 0.0f, 180.0f));
+            }
+            settings = hinge;
+            break;
+        }
+        case PhysicsJointType::Slider:
+        {
+            auto *slider = new JPH::SliderConstraintSettings();
+            slider->mPoint1 = slider->mPoint2 = pivotJ;
+            slider->mSliderAxis1 = slider->mSliderAxis2 = axisJ;
+            slider->mNormalAxis1 = slider->mNormalAxis2 = normalJ;
+            if (j.limitsEnabled) // Jolt: min <= 0 <= max, from the starting position
+            {
+                slider->mLimitsMin = std::min(j.limitMin, 0.0f);
+                slider->mLimitsMax = std::max(j.limitMax, 0.0f);
+            }
+            settings = slider;
+            break;
+        }
+        case PhysicsJointType::Distance:
+        {
+            auto *distance = new JPH::DistanceConstraintSettings();
+            const vec3 end = other ? vec3(scene.GetWorldMatrix(other->nodeId) * vec4(j.connectedAnchor, 1.0f)) : j.connectedAnchor;
+            distance->mPoint1 = JPH::RVec3(end.x, end.y, end.z);
+            distance->mPoint2 = pivotJ;
+            if (j.limitsEnabled) // otherwise both stay -1: the length at creation, a rigid rod
+            {
+                distance->mMinDistance = std::max(0.0f, std::min(j.limitMin, j.limitMax));
+                distance->mMaxDistance = std::max(0.0f, std::max(j.limitMin, j.limitMax));
+            }
+            settings = distance;
+            break;
+        }
+        default:
+            return;
+        }
+
+        // Jolt measures body 2 relative to body 1, so the owner is body 2: slider position grows along +axis and the
+        // hinge angle and motor turn right-handed about the axis, as the owner sees it.
+        JPH::BodyInterface &bi = m_joltSystem->GetBodyInterface();
+        const JPH::BodyID bodyA(state.joltBodyIdRaw);
+        const JPH::BodyID bodyB = other ? JPH::BodyID(other->joltBodyIdRaw) : JPH::BodyID(); // invalid = the world
+        JPH::TwoBodyConstraint *constraint = bi.CreateConstraint(settings.GetPtr(), bodyB, bodyA);
+        if (!constraint)
+        {
+            PE_WARN("[Physics] Joint on '%s': Jolt could not create it", ownerName.c_str());
+            return;
+        }
+        constraint->AddRef();
+        m_joltSystem->AddConstraint(constraint);
+        bi.ActivateBody(bodyA);
+        if (other)
+            bi.ActivateBody(bodyB);
+        ApplyJointMotor(constraint, j.type, j.motorEnabled, j.motorSpeed, j.motorMaxForce);
+        m_joints.push_back({state.nodeId, state.joltBodyIdRaw, other ? other->joltBodyIdRaw : 0xFFFFFFFFu, constraint, j.type});
+    }
+
+    void PhysicsSystem::RemoveJointsTouching(uint32_t bodyRaw)
+    {
+        for (size_t i = 0; i < m_joints.size();)
+        {
+            if (m_joints[i].bodyA != bodyRaw && m_joints[i].bodyB != bodyRaw)
+            {
+                ++i;
+                continue;
+            }
+            m_joltSystem->RemoveConstraint(m_joints[i].constraint);
+            m_joints[i].constraint->Release();
+            m_joints[i] = m_joints.back();
+            m_joints.pop_back();
+        }
+    }
+
+    void PhysicsSystem::RemoveJointOf(const NodeId *owner)
+    {
+        for (size_t i = 0; i < m_joints.size(); ++i)
+        {
+            if (m_joints[i].owner != owner)
+                continue;
+            m_joltSystem->RemoveConstraint(m_joints[i].constraint);
+            m_joints[i].constraint->Release();
+            m_joints[i] = m_joints.back();
+            m_joints.pop_back();
+            return; // one joint per body
+        }
+    }
+
+    void PhysicsSystem::RemoveAllJoints()
+    {
+        for (LiveJoint &joint : m_joints)
+        {
+            m_joltSystem->RemoveConstraint(joint.constraint);
+            joint.constraint->Release();
+        }
+        m_joints.clear();
+    }
+
+    void PhysicsSystem::CheckJointBreaks(float step)
+    {
+        // Collect, remove, then call back: a callback may add or remove joints.
+        std::vector<NodeId *> broken;
+        for (size_t i = 0; i < m_joints.size();)
+        {
+            LiveJoint &joint = m_joints[i];
+            const PhysicsBodyDesc *desc = GetBodyDesc(joint.owner);
+            const float limit = desc ? desc->joint.breakForce : 0.0f;
+            const bool settled = joint.settled;
+            joint.settled = true;
+            if (limit <= 0.0f || !settled)
+            {
+                ++i;
+                continue;
+            }
+            float impulse = 0.0f; // last step's positional constraint impulse
+            switch (joint.type)
+            {
+            case PhysicsJointType::Fixed:
+                impulse = static_cast<JPH::FixedConstraint *>(joint.constraint)->GetTotalLambdaPosition().Length();
+                break;
+            case PhysicsJointType::Hinge:
+                impulse = static_cast<JPH::HingeConstraint *>(joint.constraint)->GetTotalLambdaPosition().Length();
+                break;
+            case PhysicsJointType::Slider:
+            {
+                const JPH::Vector<2> lambda = static_cast<JPH::SliderConstraint *>(joint.constraint)->GetTotalLambdaPosition();
+                impulse = std::sqrt(lambda[0] * lambda[0] + lambda[1] * lambda[1]);
+                break;
+            }
+            case PhysicsJointType::Distance:
+                impulse = std::abs(static_cast<JPH::DistanceConstraint *>(joint.constraint)->GetTotalLambdaPosition());
+                break;
+            default:
+                break;
+            }
+            if (impulse / step <= limit)
+            {
+                ++i;
+                continue;
+            }
+            broken.push_back(joint.owner);
+            m_joltSystem->RemoveConstraint(joint.constraint);
+            joint.constraint->Release();
+            m_joints[i] = m_joints.back();
+            m_joints.pop_back();
+        }
+        for (NodeId *node : broken)
+        {
+            const auto it = m_nodeToIndex.find(node);
+            if (it == m_nodeToIndex.end() || it->second >= m_bodies.size())
+                continue;
+            const PhysicsJointBreakCallback callback = m_bodies[it->second].jointBreakCallback; // copy: it may reset itself
+            if (callback)
+                callback(node);
+        }
+    }
+
+    void PhysicsSystem::SetJoint(Scene &scene, NodeId *node, const PhysicsJointDesc &joint)
+    {
+        PhysicsBodyDesc *desc = GetBodyDesc(node);
+        if (!desc)
+            return;
+        desc->joint = joint;
+        if (joint.type == PhysicsJointType::None)
+            RemoveJointOf(node);
+        else if (m_simulating)
+            CreateJoint(m_bodies[m_nodeToIndex.at(node)], scene);
+    }
+
+    void PhysicsSystem::RemoveJoint(NodeId *node)
+    {
+        if (PhysicsBodyDesc *desc = GetBodyDesc(node))
+            desc->joint.type = PhysicsJointType::None;
+        RemoveJointOf(node);
+    }
+
+    void PhysicsSystem::SetJointMotor(NodeId *node, bool enabled, float speed, float maxForce)
+    {
+        PhysicsBodyDesc *desc = GetBodyDesc(node);
+        if (!desc)
+            return;
+        desc->joint.motorEnabled = enabled;
+        desc->joint.motorSpeed = speed;
+        desc->joint.motorMaxForce = maxForce;
+        for (LiveJoint &joint : m_joints)
+        {
+            if (joint.owner != node)
+                continue;
+            ApplyJointMotor(joint.constraint, joint.type, enabled, speed, maxForce);
+            m_joltSystem->GetBodyInterface().ActivateBody(JPH::BodyID(joint.bodyA));
+        }
+    }
+
+    std::optional<float> PhysicsSystem::GetJointValue(const Scene &scene, NodeId *node) const
+    {
+        for (const LiveJoint &joint : m_joints)
+        {
+            if (joint.owner != node)
+                continue;
+            switch (joint.type)
+            {
+            case PhysicsJointType::Hinge:
+                return glm::degrees(static_cast<JPH::HingeConstraint *>(joint.constraint)->GetCurrentAngle());
+            case PhysicsJointType::Slider:
+                return static_cast<JPH::SliderConstraint *>(joint.constraint)->GetCurrentPosition();
+            case PhysicsJointType::Distance:
+            {
+                const PhysicsBodyDesc *desc = GetBodyDesc(node);
+                if (!desc)
+                    return std::nullopt;
+                const vec3 a = vec3(scene.GetWorldMatrix(node) * vec4(desc->joint.anchor, 1.0f));
+                const NodeId *other = scene.FindNodeByName(desc->joint.connectedNode);
+                const vec3 b = other ? vec3(scene.GetWorldMatrix(other) * vec4(desc->joint.connectedAnchor, 1.0f))
+                                     : desc->joint.connectedAnchor;
+                return glm::length(a - b);
+            }
+            default:
+                return 0.0f;
+            }
+        }
+        return std::nullopt;
+    }
+
+    void PhysicsSystem::SetJointBreakCallback(NodeId *node, PhysicsJointBreakCallback callback)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
+            return;
+        m_bodies[it->second].jointBreakCallback = std::move(callback);
     }
 
     // --- Simulation control ---
@@ -709,6 +1038,8 @@ namespace pe
                 if (!state.inWorld)
                     CreateJoltBody(state, scene);
             }
+            for (auto &state : m_bodies)
+                CreateJoint(state, scene);
         }
 
         if (!m_bodies.empty())
@@ -735,6 +1066,7 @@ namespace pe
         // so the next StartSimulation can reuse them without rebuilding.
         {
             PE_PROFILE_SCOPE("Physics Destroy Runtime Bodies");
+            RemoveAllJoints(); // one pass, so the per-body scan in DestroyJoltBody finds nothing
             for (auto &state : m_bodies)
             {
                 if (state.inWorld)
@@ -1069,6 +1401,7 @@ namespace pe
 
         JPH::BodyID bodyId(state.joltBodyIdRaw);
         const uint32_t bodyRaw = state.joltBodyIdRaw;
+        RemoveJointsTouching(bodyRaw);
         JPH::BodyInterface &bi = m_joltSystem->GetBodyInterface();
         bi.RemoveBody(bodyId);
         bi.DestroyBody(bodyId);

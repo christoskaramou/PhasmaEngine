@@ -13,6 +13,7 @@ namespace JPH
     class Body;
     class BodyID;
     class Shape;
+    class TwoBodyConstraint;
 } // namespace JPH
 
 namespace pe
@@ -23,6 +24,7 @@ namespace pe
     class TriggerContactListener;
 
     using PhysicsTriggerCallback = std::function<void(NodeId *trigger, NodeId *other)>;
+    using PhysicsJointBreakCallback = std::function<void(NodeId *node)>;
 
     struct PhysicsNodeState
     {
@@ -35,6 +37,7 @@ namespace pe
         bool inWorld = false;
         PhysicsTriggerCallback triggerEnterCallback;
         PhysicsTriggerCallback triggerExitCallback;
+        PhysicsJointBreakCallback jointBreakCallback;
     };
 
     struct RaycastResult
@@ -92,6 +95,17 @@ namespace pe
         bool Raycast(const vec3 &origin, const vec3 &direction, float maxDistance, RaycastResult &outResult,
                      uint32_t layerMask = 0xFFFFFFFFu) const;
 
+        // Joints (desc.joint): created at StartSimulation once every body is in the world, or at once while
+        // simulating when both bodies are in it. Setting a joint replaces the node's previous one.
+        void SetJoint(Scene &scene, NodeId *node, const PhysicsJointDesc &joint);
+        void RemoveJoint(NodeId *node);
+        void SetJointMotor(NodeId *node, bool enabled, float speed, float maxForce);
+        // Hinge angle (deg) / slider position (m) from the pose at creation, distance length (m); nullopt without
+        // a live joint.
+        std::optional<float> GetJointValue(const Scene &scene, NodeId *node) const;
+        // Called on the main thread when the joint's force exceeds its breakForce; the joint is gone by then.
+        void SetJointBreakCallback(NodeId *node, PhysicsJointBreakCallback callback);
+
         // Trigger callbacks are invoked on the main thread after the physics step.
         void SetTriggerEnterCallback(NodeId *node, PhysicsTriggerCallback callback);
         void SetTriggerExitCallback(NodeId *node, PhysicsTriggerCallback callback);
@@ -108,6 +122,11 @@ namespace pe
         void PruneInvalidBodies(const Scene &scene);
         void CreateJoltBody(PhysicsNodeState &state, Scene &scene);
         void DestroyJoltBody(PhysicsNodeState &state, bool releaseShape = true);
+        void CreateJoint(PhysicsNodeState &state, Scene &scene);
+        void RemoveJointsTouching(uint32_t bodyRaw); // owned by, or connected to, this body
+        void RemoveJointOf(const NodeId *owner);
+        void RemoveAllJoints();
+        void CheckJointBreaks(float step);
         void SyncTransformsFromJolt(Scene &scene);
         void QueueTriggerContact(uint32_t body1Raw, uint32_t body2Raw, bool added);
         void DrainTriggerContacts(Scene &scene);
@@ -148,6 +167,17 @@ namespace pe
         std::unordered_map<uint32_t, size_t> m_bodyIdToIndex;
         std::vector<PhysicsNodeState> m_bodies;
         std::unordered_set<uint32_t> m_staticMeshBodies; // raw (non-node) static colliders, by Jolt body id
+
+        struct LiveJoint
+        {
+            NodeId *owner = nullptr;
+            uint32_t bodyA = 0xFFFFFFFF;                    // owner's body
+            uint32_t bodyB = 0xFFFFFFFF;                    // connected body; 0xFFFFFFFF = the world
+            JPH::TwoBodyConstraint *constraint = nullptr;   // one reference held here, released on removal
+            PhysicsJointType type = PhysicsJointType::None; // at creation; the desc may be edited mid-play
+            bool settled = false;                           // the first step after creation may carry a settling impulse: no break check
+        };
+        std::vector<LiveJoint> m_joints;
 
         // Persistent scratch — reused every frame to avoid per-frame heap alloc/dealloc
         std::unordered_map<const NodeId *, mat4> m_syncWorldMats;

@@ -137,6 +137,118 @@ namespace pe
                     }
                 });
 
+                // physics.add_joint(node, "fixed" | "hinge" | "distance" | "slider", {connected = node or name (else
+                // the world), anchor = vec3, axis = vec3, connected_anchor = vec3, limits = {min, max},
+                // motor_speed = n, motor_max_force = n, break_force = n}). Replaces the node's joint.
+                physics.set_function("add_joint", [](SceneNodeHandle &h, const std::string &type, sol::optional<sol::table> params) {
+                    auto *ps = GetGlobalSystem<PhysicsSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (!ps || !scene || !h.IsValid(*scene))
+                        return;
+                    if (!ps->HasBody(h.nodeId))
+                    {
+                        PE_WARN("[Lua] physics.add_joint: '%s' has no physics body", scene->GetNodeName(h.nodeId).c_str());
+                        return;
+                    }
+                    PhysicsJointDesc joint;
+                    if (type == "fixed")
+                        joint.type = PhysicsJointType::Fixed;
+                    else if (type == "hinge")
+                        joint.type = PhysicsJointType::Hinge;
+                    else if (type == "distance")
+                        joint.type = PhysicsJointType::Distance;
+                    else if (type == "slider")
+                        joint.type = PhysicsJointType::Slider;
+                    else
+                    {
+                        PE_WARN("[Lua] physics.add_joint: unknown joint type '%s'", type.c_str());
+                        return;
+                    }
+                    if (params)
+                    {
+                        sol::table p = *params;
+                        const sol::object connected = p["connected"];
+                        if (connected.is<SceneNodeHandle>())
+                        {
+                            const SceneNodeHandle &other = connected.as<SceneNodeHandle &>();
+                            if (other.IsValid(*scene))
+                                joint.connectedNode = scene->GetNodeName(other.nodeId);
+                        }
+                        else if (connected.get_type() == sol::type::string)
+                            joint.connectedNode = connected.as<std::string>();
+                        if (auto v = p.get<sol::optional<vec3>>("anchor"))
+                            joint.anchor = *v;
+                        if (auto v = p.get<sol::optional<vec3>>("axis"))
+                            joint.axis = *v;
+                        if (auto v = p.get<sol::optional<vec3>>("connected_anchor"))
+                            joint.connectedAnchor = *v;
+                        if (auto limits = p.get<sol::optional<sol::table>>("limits"))
+                        {
+                            joint.limitsEnabled = true;
+                            joint.limitMin = (*limits)[1].get_or(joint.limitMin);
+                            joint.limitMax = (*limits)[2].get_or(joint.limitMax);
+                        }
+                        if (auto v = p.get<sol::optional<float>>("motor_speed"))
+                        {
+                            joint.motorEnabled = true;
+                            joint.motorSpeed = *v;
+                        }
+                        if (auto v = p.get<sol::optional<float>>("motor_max_force"))
+                            joint.motorMaxForce = *v;
+                        if (auto v = p.get<sol::optional<float>>("break_force"))
+                            joint.breakForce = *v;
+                    }
+                    ps->SetJoint(*scene, h.nodeId, joint);
+                });
+
+                physics.set_function("remove_joint", [](SceneNodeHandle &h) {
+                    auto *ps = GetGlobalSystem<PhysicsSystem>();
+                    if (ps && h.nodeId)
+                        ps->RemoveJoint(h.nodeId);
+                });
+
+                // set_joint_motor(node, speed[, max_force]) drives a hinge (deg/s) or slider (m/s); speed = false stops it.
+                physics.set_function("set_joint_motor", [](SceneNodeHandle &h, sol::object speed, sol::optional<float> maxForce) {
+                    auto *ps = GetGlobalSystem<PhysicsSystem>();
+                    const PhysicsBodyDesc *desc = ps && h.nodeId ? ps->GetBodyDesc(h.nodeId) : nullptr;
+                    if (!desc)
+                        return;
+                    const bool enabled = speed.get_type() == sol::type::number;
+                    ps->SetJointMotor(h.nodeId, enabled, enabled ? speed.as<float>() : desc->joint.motorSpeed,
+                                      maxForce.value_or(desc->joint.motorMaxForce));
+                });
+
+                // Hinge angle (deg) / slider position (m) from the pose at play start, distance length (m); nil without a live joint.
+                physics.set_function("get_joint_value", [](SceneNodeHandle &h) -> sol::optional<float> {
+                    auto *ps = GetGlobalSystem<PhysicsSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (!ps || !scene || !h.IsValid(*scene))
+                        return sol::nullopt;
+                    const std::optional<float> value = ps->GetJointValue(*scene, h.nodeId);
+                    if (!value)
+                        return sol::nullopt;
+                    return *value;
+                });
+
+                physics.set_function("on_joint_break", [](SceneNodeHandle &h, sol::function callback) {
+                    auto *ps = GetGlobalSystem<PhysicsSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (!ps || !scene || !h.IsValid(*scene) || !callback.valid())
+                        return;
+                    ps->SetJointBreakCallback(h.nodeId, [callback = std::move(callback)](NodeId *node) {
+                        Scene *active = GetActiveScene();
+                        if (!active || !callback.valid() || !active->IsNodeAlive(node))
+                            return;
+                        sol::protected_function protectedCallback(callback);
+                        sol::protected_function_result result = protectedCallback(active->MakeHandle(node));
+                        if (!result.valid())
+                        {
+                            sol::error err = result;
+                            Log::Error(PeFormat("[Lua] physics.on_joint_break callback error: %s", err.what()));
+                        }
+                    });
+                });
+
                 physics.set_function("remove_body", [](SceneNodeHandle &h) {
                     auto *ps = GetGlobalSystem<PhysicsSystem>();
                     if (ps && h.nodeId)

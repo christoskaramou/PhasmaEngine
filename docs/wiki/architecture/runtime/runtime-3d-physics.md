@@ -57,6 +57,74 @@ Pool test `editor-physics-rate` checks the rate is applied.
 
 Both physics pool tests launch the editor through `.testpool/tests/pe_editor.py`. It waits for the startup scene to finish loading before opening a new scene; a late startup load replaces the new scene. It also restores `phasma_settings.json` (`startup_scene`), which `file.new_scene` rewrites.
 
+## Joints
+
+**Data**
+- A body has at most one joint, `PhysicsBodyDesc::joint` (`PhysicsJointDesc` in [PhysicsTypes.h](../../../../Phasma/Runtime/Code/Physics/PhysicsTypes.h)). It's saved in the node's `physics` block as `"joint"`, only when a joint exists, and read by `ReadPhysicsBodyDesc`.
+- Fields:
+  - type: Fixed, Hinge, Distance or Slider;
+  - `connectedNode`: a node name; empty means the world;
+  - `anchor` and `axis`, in the node's local space;
+  - `connectedAnchor`: the far end of a Distance joint, local to the connected node, or a world point when joined to the world;
+  - limits, a motor, and `breakForce`.
+- Ponytail: one joint per body. A chain is one joint per link.
+
+**Lifetime**
+- `PhysicsSystem` creates the Jolt constraints in `StartSimulation`, after every body is in the world. Mid-play it creates them right away: `AddBody`, `SetJoint`, Lua `add_joint`.
+- If the connected body isn't in the world, or neither body is dynamic, it warns and makes no joint. Nothing is queued for later.
+- The live joints are tracked in `m_joints`, each holding one reference to its constraint. `StopSimulation` removes them all in one pass, and `DestroyJoltBody` removes any joint touching the body being destroyed.
+
+**Sign convention**
+- The owner is Jolt body 2, because Jolt measures body 2 relative to body 1. So:
+  - slider position grows along +axis;
+  - hinge angle and motor are right-handed about the axis, as the owner sees it;
+  - both are measured from the pose when the joint is created.
+- Pitfall, verified 2026-10-05: with the owner as body 1 the signs flip. A box on a downward-limited slider then refuses to fall.
+
+**Limits and clamping.** Jolt asserts only in Debug, so bad values are clamped before they reach it:
+- hinge limits to [-180, 0] / [0, 180] degrees;
+- slider limits to min ≤ 0 ≤ max;
+- motor force to ≥ 0;
+- a zero axis falls back to +Y, with a warning.
+
+A Distance joint without limits keeps its starting length (a rigid rod). With limits it allows a length range, like a rope.
+
+**Breaking**
+- After each frame's steps, a joint whose last-step positional impulse ÷ step exceeds `breakForce` (N) is removed. Its Lua callback runs after the loop, so a callback may add or remove joints.
+- The first step after a joint is created is skipped, because it can carry a settling impulse.
+- Break callbacks are cleared with the trigger callbacks when Play stops.
+
+**Ponytail: the connected body is matched by name** (`FindNodeByName`, first match). Two instances of a jointed prefab therefore both connect to the first one's bodies. Upgrade path: prefer a match inside the owner's own subtree.
+
+**Editor**
+- The Physics component has a Joint section:
+  - type;
+  - Connected Body, listing the other physics nodes plus (World);
+  - anchor and axis;
+  - a range for the limits;
+  - motor speed and maximum force;
+  - break force.
+- Edits apply when Play starts.
+- With colliders shown, the viewport draws joints in orange: a ring on the pivot, the hinge or slider axis through it, and a line to a Distance joint's other end.
+
+**Lua**
+- `physics.add_joint(node, "fixed" | "hinge" | "distance" | "slider", {...})` takes:
+  - `connected`: a node or a name;
+  - `anchor`, `axis`, `connected_anchor` (vec3);
+  - `limits = {min, max}`;
+  - `motor_speed`, `motor_max_force`, `break_force`.
+- `physics.remove_joint(node)`.
+- `physics.set_joint_motor(node, speed | false[, max_force])`.
+- `physics.get_joint_value(node)` returns the hinge angle in degrees, the slider position in m, or the distance length in m.
+- `physics.on_joint_break(node, fn)`.
+
+**Test.** Pool test `editor-physics-joints` joints five boxes to the world and plays. It checks that:
+- Fixed holds;
+- the Hinge motor turns at 90°/s;
+- the Slider stops at its −1 m limit;
+- Distance swings on a 2 m rod;
+- a 1 N break force breaks and calls back.
+
 ## Collider shapes
 
 - `ScaledColliderSize` ([PhysicsTypes.h](../../../../Phasma/Runtime/Code/Physics/PhysicsTypes.h)) is the one formula for Box, Sphere and Capsule sizes after world scale. Jolt shape creation and the editor overlay both use it.
