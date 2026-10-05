@@ -1,5 +1,6 @@
 package dev.phasma.player;
 
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.graphics.Insets;
@@ -41,6 +42,15 @@ public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
     private boolean isHistoryRelaunch() {
         return getIntent() != null
                 && (getIntent().getFlags() & android.content.Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0;
+    }
+
+    // The exported launcher accepts intents from other apps; diagnostic extras are debug-only.
+    private Bundle getDebugLaunchExtras() {
+        if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0
+                || isHistoryRelaunch() || getIntent() == null) {
+            return null;
+        }
+        return getIntent().getExtras();
     }
 
     @Override
@@ -106,13 +116,13 @@ public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
         return new String[] {"SDL2", "main"};
     }
 
-    // Opt-in live profiler: adb shell am start -n dev.phasma.player/.PhasmaPlayerActivity
+    // Debug APK opt-in live profiler: adb shell am start -n dev.phasma.player/.PhasmaPlayerActivity
     //   --ez PE_PROFILER true   OR   --es PE_PROFILER 9876
     // Then: adb forward tcp:9876 tcp:9876 and connect desktop PhasmaProfiler.
     @Override
     protected String[] getArguments() {
         List<String> args = new ArrayList<>();
-        Bundle extras = (getIntent() != null && !isHistoryRelaunch()) ? getIntent().getExtras() : null;
+        Bundle extras = getDebugLaunchExtras();
         if (extras != null && extras.containsKey("PE_PROFILER")) {
             Object value = extras.get("PE_PROFILER");
             boolean enabled = true;
@@ -141,7 +151,7 @@ public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
     }
 
     private void applyProfilerLaunchOptions() {
-        Bundle extras = getIntent() != null ? getIntent().getExtras() : null;
+        Bundle extras = getDebugLaunchExtras();
         if (extras == null || !extras.containsKey("PE_PROFILER")) {
             return;
         }
@@ -176,11 +186,11 @@ public class PhasmaPlayerActivity extends org.libsdl.app.SDLActivity {
         }
     }
 
-    // Intent extras whose keys start with PE_ become process env under the same name.
+    // Debug APK intent extras whose keys start with PE_ become process env under the same name.
     // Script options use the desktop prefix: --es PE_SCRIPT_FOO bar
     // PE_PROFILER is parsed separately so a boolean "1" cannot become profiler port 1.
     private void applyLaunchEnvFromExtras() {
-        Bundle extras = getIntent() != null ? getIntent().getExtras() : null;
+        Bundle extras = getDebugLaunchExtras();
         if (extras == null) {
             return;
         }
